@@ -51,6 +51,59 @@ describe('installModelSelection()', () => {
     }
   })
 
+  it('runs a real Sol plan then Luna Max lead when Kira Max preset starts on the Luna seat', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    ctx.systemPrompt.tools(() => ({ schemas: [
+      { name: 'spawn_teammate', description: 'real specialist', parameters: { type: 'object' } },
+    ] }))
+    const id = SessionId('kira-max-sol-to-luna')
+    const empty = Session.create(id)
+    const session = Session.create(id, undefined, { ...empty.header, agentPreset: 'kira-max' })
+    session.append('turn/start', { turn: 1 })
+    session.append('user/message', createUserMessage({
+      source: { kind: 'user' },
+      content: [{ type: 'text', text: 'Crea UME-PRUEBA.txt con un especialista y verifica su contenido' }],
+    }), { surfaceOp: 'append' })
+    const agent = { id, session, options: { provider: 'openai-codex', model: 'gpt-6-luna' },
+      steer: () => undefined } as unknown as Agent
+    ctx.agent = agent
+    const selection: ModelSelectionRef = {
+      current: { provider: 'openai-codex', model: 'gpt-6-luna' }, assembled: undefined,
+    }
+    const dispose = installModelSelection(ctx, selection, defaultExecutionHandoff)
+    const signal = new AbortController().signal
+    try {
+      const first = await ctx.systemPrompt.assemble()
+      expect(first.sections.find(item => item.name === 'phoenix:auto-visible-handoff')?.text)
+        .toContain('Kira planning with Sol')
+      expect(first.tools).toHaveLength(0)
+      await expect(agentEvents(ctx, agent).waterfall(
+        'agent/request', { turn: 1, step: 1, signal },
+        () => Promise.resolve({ provider: 'seed', model: 'seed' }),
+      )).resolves.toMatchObject({
+        provider: 'openai-codex', model: 'gpt-6.1-sol',
+        reasoningEffort: ReasoningEffortId('xhigh'),
+      })
+      session.append('step/start', { turn: 1, step: 1 })
+      const operational = await ctx.systemPrompt.assemble()
+      expect(operational.tools.map(tool => tool.name)).toContain('spawn_teammate')
+      expect(operational.sections.find(item => item.name === 'phoenix:auto-visible-handoff')?.text)
+        .toContain('Luna Max')
+      await expect(agentEvents(ctx, agent).waterfall(
+        'agent/request', { turn: 1, step: 2, signal },
+        () => Promise.resolve({ provider: 'seed', model: 'seed' }),
+      )).resolves.toMatchObject({
+        provider: 'openai-codex', model: 'gpt-6-luna',
+        reasoningEffort: ReasoningEffortId('max'),
+      })
+      expect(selection.current?.model).toBe('gpt-6-luna')
+    } finally {
+      dispose()
+      await ctx.fiber.dispose()
+    }
+  })
+
   it('keeps an explicitly selected Codex model in charge of every Lead step, even with legacy handoff', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
@@ -243,7 +296,7 @@ describe('installModelSelection()', () => {
         .resolves.toMatchObject({ model: 'gpt-6.1-sol', reasoningEffort: ReasoningEffortId('medium') })
       await expect(agentEvents(ctx, agent).waterfall('agent/request',
         { turn: 1, step: 2, signal }, () => Promise.resolve({ provider: 'seed', model: 'seed' })))
-        .resolves.toMatchObject({ model: 'gpt-6.1-sol', reasoningEffort: ReasoningEffortId('high') })
+        .resolves.toMatchObject({ model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('max') })
     } finally {
       dispose()
       await ctx.fiber.dispose()
@@ -297,7 +350,7 @@ describe('installModelSelection()', () => {
     }
   })
 
-  it('hands off Sol\'s actual visible plan to Kira on Sol exactly once before requiring real Team work', async () => {
+  it('hands off Sol\'s actual visible plan to Kira on Luna Max exactly once before requiring real Team work', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
     ctx.systemPrompt.tools(() => ({
@@ -329,14 +382,14 @@ describe('installModelSelection()', () => {
       expect(JSON.stringify(steered[0])).not.toContain('Phoenix Auto team admission')
       await expect(agentEvents(ctx, agent).waterfall('agent/request',
         { turn: 1, step: 2, signal }, () => Promise.resolve({ provider: 'seed', model: 'seed' })))
-        .resolves.toMatchObject({ model: 'gpt-6.1-sol', reasoningEffort: ReasoningEffortId('high') })
+        .resolves.toMatchObject({ model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('max') })
     } finally {
       dispose()
       await ctx.fiber.dispose()
     }
   })
 
-  it('routes Phoenix Auto from Sol planning to Sol-led orchestration', async () => {
+  it('routes Phoenix Auto from a real Sol planning request to Luna Max orchestration', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
     ctx.systemPrompt.tools(() => ({
@@ -373,8 +426,8 @@ describe('installModelSelection()', () => {
       'agent/request', { turn: 1, step: 2, signal }, () => Promise.resolve(seed),
     )).resolves.toEqual({
       provider: 'openai-codex',
-      model: 'gpt-6.1-sol',
-      reasoningEffort: ReasoningEffortId('high'),
+      model: 'gpt-6-luna',
+      reasoningEffort: ReasoningEffortId('max'),
     })
 
     dispose()
@@ -425,7 +478,7 @@ describe('installModelSelection()', () => {
     await ctx.fiber.dispose()
   })
 
-  it('routes real Kira Team work to Sol coordination and escalates a blocker to Sol xhigh once', async () => {
+  it('routes real Team handoffs to Luna Max and a blocker to Sol xhigh once and escalates a blocker to Sol xhigh once', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
     const selection: ModelSelectionRef = {
@@ -456,8 +509,8 @@ describe('installModelSelection()', () => {
       'agent/request', { turn: 1, step: 1, signal }, () => Promise.resolve(seed),
     )).resolves.toEqual({
       provider: 'openai-codex',
-      model: 'gpt-6.1-sol',
-      reasoningEffort: ReasoningEffortId('high'),
+      model: 'gpt-6-luna',
+      reasoningEffort: ReasoningEffortId('max'),
     })
 
     events.push(
@@ -482,13 +535,13 @@ describe('installModelSelection()', () => {
       model: 'gpt-6.1-sol',
       reasoningEffort: ReasoningEffortId('xhigh'),
     })
-    // One blocker elevates Sol to xhigh once; then Kira continues with Sol/high.
+    // One blocker elevates Sol to xhigh once; then Kira returns to Luna Max.
     await expect(agentEvents(ctx, agent).waterfall(
       'agent/request', { turn: 2, step: 2, signal }, () => Promise.resolve(seed),
     )).resolves.toEqual({
       provider: 'openai-codex',
-      model: 'gpt-6.1-sol',
-      reasoningEffort: ReasoningEffortId('high'),
+      model: 'gpt-6-luna',
+      reasoningEffort: ReasoningEffortId('max'),
     })
 
     dispose()
@@ -552,8 +605,8 @@ describe('installModelSelection()', () => {
       'agent/request', { turn: 1, step: 2, signal }, () => Promise.resolve(seed),
     )).resolves.toEqual({
       provider: 'openai-codex',
-      model: 'gpt-6.1-sol',
-      reasoningEffort: ReasoningEffortId('high'),
+      model: 'gpt-6-luna',
+      reasoningEffort: ReasoningEffortId('max'),
     })
 
     dispose()
