@@ -553,7 +553,7 @@ describe('installModelSelection()', () => {
     await ctx.fiber.dispose()
   })
 
-  it('routes real Team handoffs to Luna Max and one blocker rescue to Sol xhigh', async () => {
+  it('routes real Team handoffs to Luna Max and one low-effort Sol consultation', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
     const selection: ModelSelectionRef = {
@@ -610,7 +610,7 @@ describe('installModelSelection()', () => {
       model: 'gpt-6.1-sol',
       reasoningEffort: ReasoningEffortId('low'),
     })
-    // One blocker elevates Sol to xhigh once; then Kira returns to Luna Max.
+    // One blocker briefly consults Sol at low effort; Kira then returns to Luna Max.
     await expect(agentEvents(ctx, agent).waterfall(
       'agent/request', { turn: 2, step: 2, signal }, () => Promise.resolve(seed),
     )).resolves.toEqual({
