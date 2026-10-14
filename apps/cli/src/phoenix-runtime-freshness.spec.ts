@@ -1,9 +1,9 @@
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { writeClientBuildRecord } from '../../../scripts/client-build-environment.ts'
 import {
   clientArtifactsAreFresh,
   missingHostRuntimeArtifacts,
@@ -52,7 +52,20 @@ function writeFreshClientArtifacts(root: string, head: string): void {
   mkdirSync(join(root, '.dsh-build'), { recursive: true })
   mkdirSync(join(root, 'apps', 'web', 'dist'), { recursive: true })
   writeFileSync(join(root, 'apps', 'web', 'dist', 'index.html'), '<!doctype html>\n', 'utf8')
-  writeClientBuildRecord(root, { DSH_CLIENT_COMMIT_HASH: head.slice(0, 7) })
+  // This isolated fixture has precisely one client artifact.
+  const file = 'apps/web/dist/index.html'
+  const body = readFileSync(join(root, file))
+  const digest = createHash('sha256')
+    .update(`${Buffer.byteLength(file)}:`)
+    .update(file)
+    .update(`${body.byteLength}:`)
+    .update(body)
+    .digest('hex')
+  writeFileSync(join(root, '.dsh-build', 'client-build-environment.json'), JSON.stringify({
+    formatVersion: 1,
+    environment: { DSH_CLIENT_COMMIT_HASH: head.slice(0, 7) },
+    artifacts: { fileCount: 1, sha256: digest },
+  }), 'utf8')
 }
 
 afterEach(() => {
