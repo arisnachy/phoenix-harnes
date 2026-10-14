@@ -19,6 +19,11 @@ function importOrder(css: string): string[] {
 const imports = importOrder(baseCss)
 
 describe('web shell base.css', () => {
+  it('paints the modern warm Phoenix shell before plugins load', () => {
+    expect(baseCss).toContain('background: var(--dsw-alias-bg-base, #f8f7f4)')
+    expect(baseCss).toContain('color: var(--dsw-alias-label-primary, #272522)')
+    expect(baseCss).toContain('body[data-ds-dark-theme]')
+  })
   it('leaves theme styles to the dynamic ui-theme client entry', () => {
     expect(imports).toEqual([])
     expect(baseCss).not.toContain(THEME_PACKAGE)
