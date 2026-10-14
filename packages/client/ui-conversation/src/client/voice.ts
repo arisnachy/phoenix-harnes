@@ -145,6 +145,11 @@ interface CodexRealtimeVoiceSession {
   disconnectTimer?: number
   /** Silence ends only audio, never the owning Phoenix task. */
   inactivityTimer?: number
+  /** V3 may signal completion while authorized WebRTC speech is still buffered. */
+  audioDrainTimer?: number
+  audioDrainUntil?: number
+  /** Ignore one late V3 assistant turn marker belonging to the completed reply. */
+  lateAssistantTurnIgnored?: boolean
   /** Browser/tab termination releases live voice ownership. */
   readonly onPageHide: () => void
 }
@@ -181,6 +186,8 @@ let codexRealtimeVoiceGeneration = 0
 let codexRealtimeVoiceStarting = false
 const CODEX_VOICE_DISCONNECT_GRACE_MS = 30_000
 const CODEX_VOICE_INACTIVITY_MS = 5 * 60_000
+/** Grace for buffered WebRTC speech after Codex finishes generating it. */
+const CODEX_VOICE_AUDIO_DRAIN_MS = 6_000
 const pendingCodexRealtimeUtterances: PendingCodexRealtimeUtterance[] = []
 /** One bounded sentence cursor; never preloads an unbounded answer queue. */
 let nativeSentenceStream: NativeSentenceStreamState | undefined
@@ -201,6 +208,10 @@ function clearCodexRealtimeTimers(session: CodexRealtimeVoiceSession): void {
   if (session.disconnectTimer !== undefined) window.clearTimeout(session.disconnectTimer)
   if (session.inactivityTimer !== undefined) window.clearTimeout(session.inactivityTimer)
   if (session.nativeCancelTimer !== undefined) window.clearTimeout(session.nativeCancelTimer)
+  if (session.audioDrainTimer !== undefined) window.clearTimeout(session.audioDrainTimer)
+  delete session.audioDrainTimer
+  delete session.audioDrainUntil
+  delete session.lateAssistantTurnIgnored
   delete session.disconnectTimer
   delete session.inactivityTimer
   delete session.nativeCancelTimer
@@ -364,12 +375,21 @@ function playCodexRealtimeAudio(audio: HTMLAudioElement): void {
   }
 }
 
+function clearCodexRealtimeAudioDrain(session: CodexRealtimeVoiceSession): void {
+  if (session.audioDrainTimer !== undefined) window.clearTimeout(session.audioDrainTimer)
+  delete session.audioDrainTimer
+  delete session.audioDrainUntil
+  delete session.lateAssistantTurnIgnored
+}
+
 function muteCodexRealtimeAudio(session: CodexRealtimeVoiceSession, reason: string): void {
+  clearCodexRealtimeAudioDrain(session)
   session.audio.muted = true
   document.documentElement.dataset.phoenixVoiceAudioMuteReason = reason
 }
 
 function allowAuthorizedCodexAudio(session: CodexRealtimeVoiceSession): void {
+  clearCodexRealtimeAudioDrain(session)
   session.audio.muted = false
   document.documentElement.dataset.phoenixVoiceAudioMuteReason = 'none'
   session.audio.volume = 1
@@ -463,12 +483,27 @@ function resetNativeSentenceStream(sessionKey?: string): void {
 /** Release speech only after both RPC admission and native generation completion. */
 function finishNativeUtterance(session: CodexRealtimeVoiceSession, utterance: PendingCodexRealtimeUtterance): void {
   if (session.activeUtterance !== utterance || utterance.admission !== 'accepted' || !utterance.terminal) return
+  const cancelled = session.nativeCancelRequested === true
   delete session.activeUtterance
   clearNativeCancelWait(session)
   if (!flushNativeSentenceStream(session)) {
-    publishVoiceIdle()
     flushCodexRealtimeUtterances(session)
   }
+  if (cancelled || session.activeUtterance !== undefined || session.audio.muted) {
+    if (session.activeUtterance === undefined) publishVoiceIdle()
+    return
+  }
+  // Native completion is the END OF GENERATION, not the end of audible WebRTC.
+  // The RTC jitter buffer may still contain the last few words of a sentence.
+  // Leave that already-authorized audio audible for a bounded drain window.
+  clearCodexRealtimeAudioDrain(session)
+  session.audioDrainUntil = Date.now() + CODEX_VOICE_AUDIO_DRAIN_MS
+  session.lateAssistantTurnIgnored = false
+  session.audioDrainTimer = window.setTimeout(() => {
+    if (codexRealtimeVoiceSession !== session || session.activeUtterance !== undefined) return
+    muteCodexRealtimeAudio(session, 'authorized-audio-drained')
+    publishVoiceIdle()
+  }, CODEX_VOICE_AUDIO_DRAIN_MS)
 }
 
 /**
@@ -1133,6 +1168,14 @@ function updateCodexRealtimePhase(payload: string): void {
   }
   const assistantStarted = type === 'response.created' || assistantTurnCreated
   if (assistantStarted && session.activeUtterance === undefined) {
+    // V3 sometimes delivers a trailing assistant turn.created after its terminal
+    // response.done, while the previously authorized speech is still playing.
+    // Do not treat one such delayed marker as fresh, unsolicited speech.
+    if (assistantTurnCreated && session.audioDrainUntil !== undefined
+      && Date.now() < session.audioDrainUntil && !session.lateAssistantTurnIgnored) {
+      session.lateAssistantTurnIgnored = true
+      return
+    }
     muteCodexRealtimeAudio(session, 'unsolicited-response')
     // Some realtime transports can start autonomous VAD replies even with
     // create_response:false. Suppress unverified "sigo en ello" narration.
@@ -1174,6 +1217,9 @@ function updateCodexRealtimePhase(payload: string): void {
     return
   }
   if (type.includes('speech_started')) {
+    // VAD can recognize Kira's own loudspeaker during a buffered response.
+    // It must not prematurely flip her state to listening while she speaks.
+    if (session.activeUtterance !== undefined || session.audioDrainTimer !== undefined) return
     publishVoiceAssistant({ ...voiceAssistantSnapshot, phase: 'listening' })
     return
   }
@@ -1369,7 +1415,8 @@ export function isLikelyVoiceAssistantEcho(text: string): boolean {
 export function cancelVoiceAssistantSentenceStream(messageKey: string, preserveCompleted = false): void {
   const session = codexRealtimeVoiceSession
   if (session === undefined) return
-  if (!preserveCompleted) nativeSentenceFinalMessages.delete(nativeSentenceMessageToken(session.key, messageKey))
+  if (preserveCompleted) return // React unmount/remount is not a human interruption.
+  nativeSentenceFinalMessages.delete(nativeSentenceMessageToken(session.key, messageKey))
   if (nativeSentenceStream?.messageKey !== messageKey) return
   cancelNativeCodexResponse(session)
   resetNativeSentenceStream(session.key)
