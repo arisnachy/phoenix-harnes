@@ -1018,6 +1018,16 @@ function clearActiveRuntime() {
 }
 
 function activatePreparedRuntime(target) {
+  // An already-compiled stable candidate may become obsolete while another
+  // checkout advances. Never downgrade a newer durable source checkout even
+  // when the crash-recovery watcher still holds an older prepared marker.
+  if (activeRuntimeIsSupersededByLiveCheckout(target)) {
+    const liveHead = gitValue(root, ['rev-parse', 'HEAD'])
+    throw new Error(
+      `prepared stable ${target.slice(0, 12)} is older than source ${liveHead?.slice(0, 12) ?? 'unknown'}; `
+      + 'refusing an automatic downgrade during Host recovery',
+    )
+  }
   const alreadyActive = healthyRuntimeForTarget(target)
   if (alreadyActive !== undefined) {
     console.error(`[PHOENIX UPDATE] runtime ${target.slice(0, 12)} is already active and healthy; reusing it without rebuilding.`)
