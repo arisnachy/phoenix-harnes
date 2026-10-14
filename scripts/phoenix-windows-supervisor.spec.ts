@@ -306,6 +306,24 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(source).toContain('relaunching PHOENIX from the verified runtime')
   })
 
+  it('waits for port release after a crash before activating a recovered stable Host', () => {
+    const start = source.indexOf('// A crashed Host can leave its HTTP socket')
+    const recovery = source.indexOf('if (crashPreparedUpdate !== undefined)')
+    expect(start).toBeGreaterThan(0)
+    expect(recovery).toBeGreaterThan(start)
+    const handoff = source.slice(start, recovery)
+    expect(handoff).toContain('if (!shutdownRequested)')
+    expect(handoff).toContain('await existingHostOnPort(handoffPort)')
+    expect(handoff).toContain('await waitForHostPortRelease(handoffPort)')
+    expect(handoff).toContain("plannedHostRestart ? 'planned handoff' : 'unexpected Host exit'")
+    expect(handoff).toContain("writeConfigurationRecoveryReport('post-exit-port-remains-occupied', detail)")
+    expect(handoff).toContain('finalCode = 1')
+    expect(handoff).not.toContain('if (plannedHostRestart && !shutdownRequested)')
+    expect(handoff.indexOf('await waitForHostPortRelease(handoffPort)')).toBeLessThan(
+      handoff.indexOf('finalCode = 1'),
+    )
+  })
+
   it('repairs missing compiled profile artifacts even when dump-config does not load the broken plugin', () => {
     expect(source).toContain('function profileFallbackHasMissingRuntimeArtifact()')
     expect(source).toContain('PROFILE_REQUIRED_RUNTIME_PACKAGES')
