@@ -651,7 +651,7 @@ function phoenixAutoTurnWasUserStopped(
   })
 }
 
-/** A tiny requested Team showcase still gets a real Sol plan, but never pays xhigh effort. */
+/** A tiny requested Team showcase gets a real Sol plan at low effort. */
 export function isBriefTeamDemonstration(text: string): boolean {
   const request = text.normalize('NFKD').replace(/[\u0300-\u036f]/gu, '').toLowerCase().trim()
   if (request.length < 8 || request.length > 240 || request.includes('\n')) return false
