@@ -171,7 +171,9 @@ export class TeamRoster {
     }]
     for (const member of state.members.values()) {
       const live = this.ctx.agents.get(member.id)
-      const model = live?.options.model ?? root.options.model
+      // Never mislabel an inactive worker with the Lead's Sol model.
+      // An unknown worker route must stay unknown until real child evidence exists.
+      const model = live?.options.model
       const usage = liveUsage(live)
       result.push({
         id: member.id,
