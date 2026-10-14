@@ -1934,18 +1934,23 @@ while (true) {
 
   if (hostEvent.kind === 'safe-update-handoff') cleanupObsoleteRuntimes()
 
-  // The old Host child has exited, but Windows may still hold port 3080 for
-  // a short time. Do not attempt a replacement boot until a real bind succeeds.
-  // This also detects an unrelated process on that port without killing it.
-  if (plannedHostRestart && !shutdownRequested) {
+  // A crashed Host can leave its HTTP socket (or another Phoenix child) alive
+  // just as an intentional handoff can. Both paths MUST wait for a real bind
+  // before activating a recovered stable runtime. The old crash-only path
+  // immediately continued and then refused port 3080 on the next iteration.
+  // Never terminate an unknown listener or enter an endless restart loop.
+  if (!shutdownRequested) {
     const handoffPort = defaultPhoenixPort()
-    if (handoffPort !== undefined) {
+    if (handoffPort !== undefined && await existingHostOnPort(handoffPort)) {
       const released = await waitForHostPortRelease(handoffPort)
       if (!released && !shutdownRequested) {
+        const reason = plannedHostRestart ? 'planned handoff' : 'unexpected Host exit'
+        const detail = `127.0.0.1:${String(handoffPort)} remains occupied after ${reason}`
+        writeConfigurationRecoveryReport('post-exit-port-remains-occupied', detail)
         console.error(
-          `[PHOENIX RECOVERY] Host handoff blocked: 127.0.0.1:${String(handoffPort)} `
-          + 'is still occupied after the old Host exited. Refusing a duplicate listener; '
-          + 'the prepared runtime remains available for the next launch.',
+          `[PHOENIX RECOVERY] ${detail}; refusing to launch a second Host or `
+          + 're-enter a crash/update activation loop. Inspect the existing Windows '
+          + 'port owner before restarting PHOENIX.',
         )
         finalCode = 1
         break
