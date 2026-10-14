@@ -8,8 +8,10 @@
  */
 
 import { spawnSync as nodeSpawnSync } from 'node:child_process'
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { existsSync as nodeExistsSync, statSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import process from 'node:process'
 
@@ -30,6 +32,60 @@ export function phoenixDesktopShortcutSpec(root, env = process.env, sourceRoot =
   }
 }
 
+// Multiple full Windows checkouts (e.g. AppData and OneDrive) may run their
+// own postinstall hooks. Persist one canonical shortcut owner OUTSIDE either
+// checkout, and allow a different checkout to replace it only when Git proves
+// that its source commit is a strictly newer descendant. Older installers
+// must never re-point Phoenix.lnk back to an obsolete Host.
+const ownerRecordPath = join(homedir(), '.dsh', 'phoenix-desktop-owner.json')
+
+function gitOutput(root, args) {
+  const result = nodeSpawnSync('git', ['-C', root, ...args], {
+    windowsHide: true, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
+  })
+  return result.status === 0 ? result.stdout?.trim() : undefined
+}
+
+function officialSourceHead(root) {
+  const origin = gitOutput(root, ['remote', 'get-url', 'origin'])
+  const normalized = origin?.replaceAll('\\', '/').replace(/\.git$/iu, '').toLowerCase()
+  if (normalized !== 'https://github.com/arisnachy/phoenix-harnes'
+    && normalized !== 'git@github.com:arisnachy/phoenix-harnes') return undefined
+  const head = gitOutput(root, ['rev-parse', 'HEAD'])
+  return /^[0-9a-f]{40}$/iu.test(head ?? '') ? head : undefined
+}
+
+function desktopOwnershipDecision(root, sourceRoot) {
+  const candidateHead = officialSourceHead(sourceRoot)
+  if (candidateHead === undefined) return { allowed: true }
+  let prior
+  try { prior = JSON.parse(readFileSync(ownerRecordPath, 'utf8')) } catch { /* first install */ }
+  if (prior?.schema === 1 && typeof prior.root === 'string'
+    && resolve(prior.root).toLowerCase() !== resolve(root).toLowerCase()) {
+    const existingHead = officialSourceHead(prior.root)
+    if (existingHead !== undefined) {
+      const newer = existingHead !== candidateHead
+        && nodeSpawnSync('git', ['-C', sourceRoot, 'merge-base', '--is-ancestor', existingHead, candidateHead], {
+          windowsHide: true, stdio: 'ignore',
+        }).status === 0
+      if (!newer) return { allowed: false }
+    }
+  }
+  return { allowed: true, candidateHead }
+}
+
+function persistDesktopOwnership(root, candidateHead) {
+  if (candidateHead === undefined) return
+  try {
+    mkdirSync(dirname(ownerRecordPath), { recursive: true })
+    const temp = `${ownerRecordPath}.${process.pid}.tmp`
+    writeFileSync(temp, JSON.stringify({ schema: 1, root: resolve(root), head: candidateHead }) + '\n')
+    renameSync(temp, ownerRecordPath)
+  } catch (error) {
+    console.error(`[PHOENIX] warning: shortcut ownership marker could not be persisted: ${error instanceof Error ? error.message : String(error)}`)
+  }
+}
+
 /**
  * Create or repair the PHOENIX desktop shortcut.
  *
@@ -45,6 +101,8 @@ export function ensurePhoenixDesktopShortcut(root, options = {}) {
   const spawnSync = options.spawnSync ?? nodeSpawnSync
   const sourceRoot = options.sourceRoot ?? root
   const spec = phoenixDesktopShortcutSpec(root, env, sourceRoot)
+  const ownership = desktopOwnershipDecision(root, sourceRoot)
+  if (!ownership.allowed) return { status: 'skipped-older-checkout' }
 
   if (!existsSync(spec.setupScript)) {
     throw new Error(`desktop shortcut setup script is missing: ${spec.setupScript}`)
@@ -83,6 +141,7 @@ export function ensurePhoenixDesktopShortcut(root, options = {}) {
   }
 
   const shortcut = typeof result.stdout === 'string' ? result.stdout.trim() : ''
+  persistDesktopOwnership(root, ownership.candidateHead)
   return { status: 'ready', shortcut: shortcut.length > 0 ? shortcut : undefined }
 }
 
