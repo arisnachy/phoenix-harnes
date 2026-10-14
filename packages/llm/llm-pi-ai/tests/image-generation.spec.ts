@@ -19,7 +19,13 @@ import {
 } from '../src/image-generation.ts'
 
 type CapturedImageTool = {
-  readonly execute: (args: unknown, exec: { readonly signal: AbortSignal }) => Promise<unknown>
+  readonly execute: (args: unknown, exec: {
+    readonly signal: AbortSignal
+    readonly agent?: {
+      readonly options: { readonly provider?: string }
+      readonly session?: { readonly header: { readonly cwd?: string } }
+    }
+  }) => Promise<unknown>
   readonly output: {
     readonly schema: {
       readonly properties: Record<string, unknown>
