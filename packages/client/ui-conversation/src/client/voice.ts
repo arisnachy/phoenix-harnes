@@ -1155,6 +1155,11 @@ function forwardCodexRealtimeUserTranscript(payload: string): void {
   if (text === undefined || text === '') return
   const session = codexRealtimeVoiceSession
   if (session === undefined) return
+  // V3 can deliver a final user transcript after the local microphone has
+  // already been paused for Kira's answer. It is not a fresh human barge-in:
+  // treating the speaker echo as a user instruction immediately cancels the
+  // authorized appendSpeech. Input is reopened when playback drains.
+  if (session.microphone.getAudioTracks().some(track => !track.enabled)) return
   // One VAD utterance can appear as both turn.done and transcription.completed.
   // Deduplicate across protocols and React remounts without suppressing an
   // intentionally repeated human command after a natural pause.
