@@ -176,10 +176,19 @@ export class TeamChat {
   /** Register a stable persona once, then retain it for all later operational states. */
   private participant(root: Session, header: SessionHeader, events: readonly SessionEvent[], status: string): TeamChatParticipant {
     const existing = this.participants(root).get(header.id)
+    // The last REAL assistant response identifies the model that actually spoke.
+    // Do not infer it from the Lead's planner or an unverified worker preference.
+    const observed = events.findLast(event => event.type === 'assistant/message'
+      && typeof event.data.message.source.provider === 'string'
+      && typeof event.data.message.source.model === 'string')
+    const route = observed?.type === 'assistant/message' ? {
+      modelProvider: observed.data.message.source.provider,
+      model: observed.data.message.source.model,
+    } : undefined
     if (existing !== undefined) {
-      const value = existing
-      if (value.status === status) return value
-      const next = { ...value, status }
+      if (existing.status === status && (route === undefined
+        || existing.modelProvider === route.modelProvider && existing.model === route.model)) return existing
+      const next = { ...existing, status, ...route }
       root.append('team/chat-participant', { version: 1, participant: next })
       return next
     }
@@ -206,7 +215,7 @@ export class TeamChat {
     const collisions = [...this.participants(root).values()].some(person => person.name === selected.name)
     const value: TeamChatParticipant = { id: header.id, name: member === undefined ? (collisions ? `${selected.name} ${occupied.size + 1}` : selected.name) : named === undefined ? member.name : ['la-forja', 'forja', 'forge'].includes(member.name) ? 'La Forja' : named.name,
       role: skill === 'general' ? selected.specialty : `skill.${skill}`, avatar: selected.kind, status, missionId: root.id,
-      ...(task === undefined ? {} : { task }) }
+      ...route, ...(task === undefined ? {} : { task }) }
     root.append('team/chat-participant', { version: 1, participant: value })
     return value
   }
