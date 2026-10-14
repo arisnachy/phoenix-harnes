@@ -367,7 +367,7 @@ describe('installModelSelection()', () => {
     )).resolves.toEqual({
       provider: 'openai-codex',
       model: 'gpt-6.1-sol',
-      reasoningEffort: ReasoningEffortId('xhigh'),
+      reasoningEffort: ReasoningEffortId('medium'),
     })
     await expect(agentEvents(ctx, agent).waterfall(
       'agent/request', { turn: 1, step: 2, signal }, () => Promise.resolve(seed),
@@ -381,7 +381,7 @@ describe('installModelSelection()', () => {
     await ctx.fiber.dispose()
   })
 
-  it('uses Sol xhigh for clearly difficult Phoenix Auto planning', async () => {
+  it('uses Sol medium even for difficult Phoenix Auto planning', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
     ctx.systemPrompt.tools(() => ({
@@ -418,7 +418,7 @@ describe('installModelSelection()', () => {
     )).resolves.toEqual({
       provider: 'openai-codex',
       model: 'gpt-6.1-sol',
-      reasoningEffort: ReasoningEffortId('xhigh'),
+      reasoningEffort: ReasoningEffortId('medium'),
     })
 
     dispose()
@@ -480,9 +480,9 @@ describe('installModelSelection()', () => {
     )).resolves.toEqual({
       provider: 'openai-codex',
       model: 'gpt-6.1-sol',
-      reasoningEffort: ReasoningEffortId('xhigh'),
+      reasoningEffort: ReasoningEffortId('medium'),
     })
-    // One blocker elevates Sol to xhigh once; Kira then resumes Luna Max.
+    // One blocker consults Sol at medium once; Kira then resumes Luna Max.
     await expect(agentEvents(ctx, agent).waterfall(
       'agent/request', { turn: 2, step: 2, signal }, () => Promise.resolve(seed),
     )).resolves.toEqual({
@@ -530,7 +530,7 @@ describe('installModelSelection()', () => {
     )).resolves.toEqual({
       provider: 'openai-codex',
       model: 'gpt-6.1-sol',
-      reasoningEffort: ReasoningEffortId('xhigh'),
+      reasoningEffort: ReasoningEffortId('medium'),
     })
     events.push({
       type: 'assistant/message',
@@ -645,7 +645,7 @@ describe('installModelSelection()', () => {
     )).resolves.toEqual({
       provider: 'openai-codex',
       model: 'gpt-6.1-sol',
-      reasoningEffort: ReasoningEffortId('xhigh'),
+      reasoningEffort: ReasoningEffortId('medium'),
     })
 
     dispose()
@@ -805,7 +805,7 @@ describe('installModelSelection()', () => {
     } })
     await expect(agentEvents(ctx, agent).waterfall('agent/request',
       { turn: 1, step: 1, signal }, () => Promise.resolve(seed))).resolves.toMatchObject({
-      model: 'gpt-6.1-sol', reasoningEffort: ReasoningEffortId('xhigh'),
+      model: 'gpt-6.1-sol', reasoningEffort: ReasoningEffortId('medium'),
     })
     dispose()
     await ctx.fiber.dispose()
@@ -1226,7 +1226,7 @@ describe('installModelSelection()', () => {
     )).resolves.toEqual({
       provider: 'openai-codex',
       model: 'gpt-6.1-sol',
-      reasoningEffort: ReasoningEffortId('xhigh'),
+      reasoningEffort: ReasoningEffortId('medium'),
     })
     await expect(agentEvents(ctx, agent).waterfall(
       'agent/request', { turn: 1, step: 5, signal }, () => Promise.resolve(seed),
