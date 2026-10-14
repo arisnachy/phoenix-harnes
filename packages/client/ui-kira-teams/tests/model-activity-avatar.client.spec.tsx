@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   ModelActivityAvatar,
   modelEngineMark,
+  modelEngineFamily,
   agentAvatarKind,
   modelAvatarKind,
   portraitSrcForKind,
@@ -26,7 +27,12 @@ describe('model engine glyphs', () => {
     expect(modelEngineMark('gpt-6.1-sol')).toBe('☀')
     expect(modelEngineMark('gpt-6-luna')).toBe('☾')
     expect(modelEngineMark('gpt-6-luna-max')).toBe('☾')
+    expect(modelEngineMark('gpt-6-astra')).toBe('★')
+    expect(modelEngineMark('deepseek-v4', 'deepseek')).toBe('ϟ')
     expect(modelEngineMark('some-other-model')).toBeUndefined()
+    expect(modelEngineFamily('gpt-6-luna', 'openai-codex')).toBe('luna')
+    expect(modelEngineFamily('gpt-6-astra', 'openai-codex')).toBe('astra')
+    expect(modelEngineFamily('some-other-model')).toBeUndefined()
     expect(modelEngineMark(undefined)).toBeUndefined()
   })
 
@@ -34,7 +40,9 @@ describe('model engine glyphs', () => {
     const luna = ModelActivityAvatar({ kind: 'atlas', model: 'gpt-6-luna',
       modelProvider: 'openai-codex', activity: undefined, running: true, pending: false })
     const markers = Children.toArray(luna.props.children).filter(isValidElement<Record<string, unknown>>)
-    expect(markers.find(child => child.props['data-engine-model'] === 'gpt-6-luna')?.props['data-engine-mark']).toBe('☾')
+    expect(markers.find(child => child.props['data-engine-model'] === 'gpt-6-luna')?.props).toMatchObject({
+      'data-engine-mark': '☾', 'data-engine-family': 'luna',
+    })
     const unknown = ModelActivityAvatar({ kind: 'atlas', activity: undefined, running: true, pending: false })
     expect(Children.toArray(unknown.props.children).filter(isValidElement<Record<string, unknown>>)
       .some(child => child.props['data-engine-mark'] !== undefined)).toBe(false)
