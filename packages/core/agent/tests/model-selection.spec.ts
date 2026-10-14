@@ -48,6 +48,12 @@ describe('installModelSelection()', () => {
       await agentEvents(ctx, agent).serial('agent/turn-stopping', { turn: 1, signal })
       expect(steered).toHaveLength(1)
       expect(JSON.stringify(steered[0])).toContain('Consult Sol')
+      events.push({ type: 'step/start', data: { turn: 1, step: 1 } },
+        { type: 'step/start', data: { turn: 1, step: 2 } })
+      const strategyAssembly = await ctx.systemPrompt.assemble()
+      expect(strategyAssembly.sections.find(item => item.name === 'phoenix:auto-visible-handoff')?.text)
+        .toContain('Sol 6.1 consulted by Kira')
+      expect(strategyAssembly.tools).toHaveLength(0)
       await expect(agentEvents(ctx, agent).waterfall(
         'agent/request', { turn: 1, step: 3, signal },
         () => Promise.resolve({ provider: 'seed', model: 'seed' }),
@@ -58,6 +64,11 @@ describe('installModelSelection()', () => {
       await agentEvents(ctx, agent).serial('agent/turn-stopping', { turn: 1, signal })
       expect(steered).toHaveLength(2)
       expect(JSON.stringify(steered[1])).toContain('Resume the SAME unfinished mission')
+      events.push({ type: 'step/start', data: { turn: 1, step: 3 } })
+      const resumedAssembly = await ctx.systemPrompt.assemble()
+      expect(resumedAssembly.sections.find(item => item.name === 'phoenix:auto-visible-handoff')?.text)
+        .toContain('Kira coordinating and executing with Luna Max')
+      expect(resumedAssembly.tools.map(tool => tool.name)).toContain('read')
       await expect(agentEvents(ctx, agent).waterfall(
         'agent/request', { turn: 1, step: 4, signal },
         () => Promise.resolve({ provider: 'seed', model: 'seed' }),
