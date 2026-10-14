@@ -271,6 +271,32 @@ describe('CI workflow', () => {
     expect(config).not.toContain("pool: process.platform === 'win32' ? 'threads' : 'forks'")
     expect(config.match(/pool: 'forks'/g)).toHaveLength(2)
   })
+
+  it('restores workspace devDependencies after the Windows production seed', () => {
+    const workflow = loadWorkflow('.github/workflows/phoenix-windows-desktop.yml')
+    const windows = workflowJob(workflow, 'windows-desktop')
+    if (!Array.isArray(windows.steps)) throw new TypeError('Windows desktop workflow must define steps')
+
+    expect(windows.env).toMatchObject({ pnpm_config_verify_deps_before_run: 'false' })
+    const steps = windows.steps.filter(isRecord)
+    const buildIndex = steps.findIndex(step => step.name === 'Build Phoenix production runtime')
+    const restoreIndex = steps.findIndex(step => step.name === 'Restore workspace development dependencies')
+    const guardIndex = steps.findIndex(step => step.name === 'Guard Windows Host handoff, Game Studio build and Filesystem MCP')
+    if (buildIndex < 0 || restoreIndex < 0 || guardIndex < 0) {
+      throw new TypeError('Windows desktop workflow must define the seed, dependency restore, and guard steps')
+    }
+
+    expect(restoreIndex).toBeGreaterThan(buildIndex)
+    expect(restoreIndex).toBeLessThan(guardIndex)
+    const restore = steps[restoreIndex]
+    const guard = steps[guardIndex]
+    if (restore === undefined || guard === undefined) {
+      throw new TypeError('Windows desktop dependency restore and guard steps must be records')
+    }
+    expect(restore.run).toContain('pnpm install --frozen-lockfile --prod=false')
+    expect(restore.run).toContain('pnpm exec vitest --version')
+    expect(guard.run).toContain('pnpm exec vitest run')
+  })
 })
 
 describe('DeepSeek e2e workflow', () => {

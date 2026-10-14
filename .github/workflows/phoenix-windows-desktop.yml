@@ -65,6 +65,12 @@ jobs:
   windows-desktop:
     runs-on: windows-latest
     timeout-minutes: 45
+    env:
+      # The production runtime seed uses pnpm deploy and leaves the workspace
+      # in a production dependency state. Restore devDependencies explicitly
+      # before the remaining checks instead of allowing pnpm exec to mutate the
+      # workspace while a guard is running.
+      pnpm_config_verify_deps_before_run: 'false'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -206,6 +212,14 @@ jobs:
           pnpm run build
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node scripts/build-windows-runtime-seed.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Restore workspace development dependencies
+        shell: pwsh
+        run: |
+          pnpm install --frozen-lockfile --prod=false
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          pnpm exec vitest --version
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Guard Windows Host handoff, Game Studio build and Filesystem MCP
