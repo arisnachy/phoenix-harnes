@@ -170,7 +170,9 @@ export const KiraTeamMessageView = memo(function KiraTeamMessageView({
   if (isToolActivity || text.trim() === '') return null
 
   return (
-    <div className={css.row} data-kira-team-message={data.messageId} data-team-sender-id={data.senderId} data-team-sender-kind={data.senderKind}>
+    <div className={css.row}
+      data-kira-team-message={data.messageId} data-team-sender-id={data.senderId}
+      data-team-sender-kind={data.senderKind}>
       <div className={css.avatar}>
         {data.senderKind === 'user' ? <span aria-label="User">👤</span> : <ModelActivityAvatar
           kind={sender.kind}
@@ -186,38 +188,38 @@ export const KiraTeamMessageView = memo(function KiraTeamMessageView({
       </div>
       <div className={css.column}>
         <div className={data.senderKind === 'user' ? undefined : css.card}>
-        <div className={css.meta}>
-          <strong>{sender.name}</strong>
-          {servingModel !== undefined && <span className={css.modelBadge}
-            data-team-actual-model={servingModel}
-            title={`${servingProvider ?? 'Proveedor no registrado'} · ${servingModel}${servingEffort === undefined ? '' : ` · ${servingEffort}`}`}
-            aria-label={`Modelo real: ${servingModel}${servingEffort === undefined ? '' : ` · ${servingEffort}`}`}>
-            {/sol(?:$|[-_])/iu.test(servingModel) ? '☀'
-              : /luna(?:$|[-_])/iu.test(servingModel) ? '☾'
-                : /astra(?:$|[-_])/iu.test(servingModel) ? '★' : 'ϟ'}
-          </span>}
-          <span>{(data.role ?? participants[data.senderId]?.role) === undefined ? sender.role
-            : t?.((data.role ?? participants[data.senderId]?.role) as import('./locales.ts').KiraTeamsKey) ?? sender.role}</span>
-          {data.purpose !== undefined && !['update', 'assignment', 'result'].includes(data.purpose) && (
-            <span className={css.purpose} data-purpose={data.purpose}>{PURPOSE_LABEL[data.purpose]}</span>
-          )}
-          {target !== undefined && <span className={css.target}>→ {target.name}</span>}
-          {targetStatusKey !== undefined && (
-            <span
-              className={css.assignmentStatus}
-              data-team-target-status={targetStatus ?? 'provisioning'}
-              role="status"
-            >
-              <span className={css.statusDot} aria-hidden="true" />
-              {t?.(targetStatusKey) ?? STATUS_FALLBACK[targetStatusKey] ?? targetStatusKey}
-            </span>
-          )}
-        </div>
-        {data.pendingDelivery === true && <span role="status">{t?.('chat.pendingDelivery') ?? 'Delivery pending; retry on reconnect'}</span>}
-        {data.replyQuote !== undefined && <blockquote>{data.replyQuote}</blockquote>}
-        <div className={css.bubble}>
-          <MarkdownText text={text} />
-        </div>
+          <div className={css.meta}>
+            <strong>{sender.name}</strong>
+            {servingModel !== undefined && <span className={css.modelBadge}
+              data-team-actual-model={servingModel}
+              title={`${servingProvider ?? 'Proveedor no registrado'} · ${servingModel}${servingEffort === undefined ? '' : ` · ${servingEffort}`}`}
+              aria-label={`Modelo real: ${servingModel}${servingEffort === undefined ? '' : ` · ${servingEffort}`}`}>
+              {/sol(?:$|[-_])/iu.test(servingModel) ? '☀'
+                : /luna(?:$|[-_])/iu.test(servingModel) ? '☾'
+                  : /astra(?:$|[-_])/iu.test(servingModel) ? '★' : 'ϟ'}
+            </span>}
+            <span>{(data.role ?? participants[data.senderId]?.role) === undefined ? sender.role
+              : t?.((data.role ?? participants[data.senderId]?.role) as import('./locales.ts').KiraTeamsKey) ?? sender.role}</span>
+            {data.purpose !== undefined && !['update', 'assignment', 'result'].includes(data.purpose) && (
+              <span className={css.purpose} data-purpose={data.purpose}>{PURPOSE_LABEL[data.purpose]}</span>
+            )}
+            {target !== undefined && <span className={css.target}>→ {target.name}</span>}
+            {targetStatusKey !== undefined && (
+              <span
+                className={css.assignmentStatus}
+                data-team-target-status={targetStatus ?? 'provisioning'}
+                role="status"
+              >
+                <span className={css.statusDot} aria-hidden="true" />
+                {t?.(targetStatusKey) ?? STATUS_FALLBACK[targetStatusKey] ?? targetStatusKey}
+              </span>
+            )}
+          </div>
+          {data.pendingDelivery === true && <span role="status">{t?.('chat.pendingDelivery') ?? 'Delivery pending; retry on reconnect'}</span>}
+          {data.replyQuote !== undefined && <blockquote>{data.replyQuote}</blockquote>}
+          <div className={css.bubble}>
+            <MarkdownText text={text} />
+          </div>
         </div>
         {messageActions !== undefined && <div className={css.messageActions}>{messageActions}</div>}
       </div>
