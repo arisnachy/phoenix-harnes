@@ -143,7 +143,7 @@ describe('dsh-tool-team', () => {
     expect(leadPrompt).toContain('prefer spawn_teammate over legacy subagent delegation')
     expect(leadPrompt).toContain('one real teammate is the default for a simple delegated mission')
     expect(leadPrompt).toContain('three for difficult work')
-    expect(leadPrompt).toContain('Five simultaneous teammates is the hard limit')
+    expect(leadPrompt).toContain('Three simultaneous teammates is the hard limit')
     expect(leadPrompt).toContain('spawn at least one genuine bounded Luna Max execution teammate')
     expect(leadPrompt).toContain('immediately switches to Luna Max')
     expect(leadPrompt).toContain('Sol never stays active after the plan')
