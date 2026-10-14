@@ -1325,16 +1325,18 @@ describe('Team mailbox and waiting', () => {
       delivery: 'quiet', signal: SIGNAL,
     })
     expect(sent.status).toBe('accepted')
-    await vi.waitFor(() => expect(steer).toHaveBeenCalledTimes(1))
+    await vi.waitFor(() => { expect(steer).toHaveBeenCalledTimes(1) })
     const input = steer.mock.calls[0]![0]
     expect(input.content.filter(block => block.type === 'text').map(block => block.text).join('\n'))
       .toContain('Respond to argo by name')
     expect(input.content.filter(block => block.type === 'text').map(block => block.text).join('\n'))
       .toContain('Execute that next action in this turn')
-    await vi.waitFor(() => expect(adapter.requests).toHaveLength(2))
-    await vi.waitFor(() => expect(lead.session.events.some(event => event.type === 'assistant/message'
-      && event.data.message.content.some(block => block.type === 'text'
-        && block.text === 'Argo, revisaré la alternativa y te diré cómo seguimos.'))).toBe(true))
+    await vi.waitFor(() => { expect(adapter.requests).toHaveLength(2) })
+    await vi.waitFor(() => {
+      expect(lead.session.events.some(event => event.type === 'assistant/message'
+        && event.data.message.content.some(block => block.type === 'text'
+          && block.text === 'Argo, revisaré la alternativa y te diré cómo seguimos.'))).toBe(true)
+    })
     await ctx.agentTeams.sendMessage(worker, {
       target: 'lead', purpose: 'update', content: content('Sigo buscando.'), delivery: 'quiet', signal: SIGNAL,
     })
