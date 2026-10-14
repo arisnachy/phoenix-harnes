@@ -57,6 +57,29 @@ describe('HARDNESS ProactivityEngine', () => {
     expect((await second.list({ includeHidden: true })).map(task => task.id)).toEqual(['one'])
   })
 
+  it('persists mission-owned automatic tasks without tying explicit user reminders to the mission', async () => {
+    const store = new MemoryProactivityStore()
+    const first = new ProactivityEngine(store, { execute: async () => ({}) }, { id: fixedIds('m1', 'm2', 'reminder') })
+    const base = {
+      title: 'Automatic cleanup', instruction: 'Clean artifacts.',
+      runAt: '2026-11-10T10:00:00.000Z', createdBy: 'harness' as const,
+    }
+    const m1 = await first.create({ ...base, missionScope: {
+      sessionId: 'lead', missionId: 'lead:mission:one', epoch: 0,
+    } })
+    const m2 = await first.create({ ...base, missionScope: {
+      sessionId: 'lead', missionId: 'lead:mission:two', epoch: 0,
+    } })
+    expect(m1.id).not.toBe(m2.id)
+    const restarted = new ProactivityEngine(store, { execute: async () => ({}) })
+    expect((await restarted.list({ includeHidden: true })).map(task => task.missionScope?.missionId))
+      .toEqual(['lead:mission:one', 'lead:mission:two'])
+    const independent = await first.create({ ...base, createdBy: 'user', missionScope: {
+      sessionId: 'lead', missionId: 'lead:mission:one', epoch: 0,
+    } })
+    expect(independent.missionScope).toBeUndefined()
+  })
+
   it('allows the user to explicitly create two reminders with similar content', async () => {
     const engine = new ProactivityEngine(new MemoryProactivityStore(), { execute: async () => ({}) }, { id: fixedIds('a', 'b') })
     const input = { title: 'Reminder', instruction: 'Tell me.', runAt: '2026-11-10T10:00:00.000Z', createdBy: 'user' as const }

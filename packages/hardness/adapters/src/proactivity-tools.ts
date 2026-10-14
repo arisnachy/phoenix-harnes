@@ -6,6 +6,7 @@ import {
   type ToolRunContext,
 } from '@phoenix-ai/dsh-tools'
 import type { ProactivityEngine, ProactivityRecurrence, ProactivityTask } from './proactivity-engine.ts'
+import { activeScheduledMissionScope } from './mission-scope.ts'
 
 /** Optional integrations used by the model-facing proactivity tools. */
 export interface ProactivityToolOptions {
@@ -101,7 +102,11 @@ async function emailRecipient(
 }
 
 function recurrence(args: {
-  everyMinutes?: number; everyWeeks?: number; everyMonths?: number; everyYears?: number; timezone?: string
+  everyMinutes?: number
+  everyWeeks?: number
+  everyMonths?: number
+  everyYears?: number
+  timezone?: string
 }): ProactivityRecurrence | undefined {
   const everyMs = minutesToMs(args.everyMinutes, 'everyMinutes')
   const everyWeeks = positiveInteger(args.everyWeeks, 'everyWeeks')
@@ -181,6 +186,8 @@ export function createProactivityCreateTool(
         throw new ToolArgsError(['preparationInstruction and prepareLeadMinutes must be supplied together'])
       }
       const agentId = targetAgent(exec)
+      const automaticScope = args.requestedByUser === true || exec.agent === undefined
+        ? undefined : activeScheduledMissionScope(exec.agent.session)
       const recipient = await emailRecipient(args.delivery, args.recipient, options)
       const task = await engine.create({
         title: args.title,
@@ -200,6 +207,9 @@ export function createProactivityCreateTool(
         ...(args.attentionPriority === undefined ? {} : { attentionPriority: args.attentionPriority }),
         ...(args.attentionText === undefined ? {} : { attentionText: args.attentionText }),
         ...(agentId === undefined ? {} : { targetAgentId: agentId }),
+        // Explicit human schedules survive the current conversation; model-
+        // initiated followups are fenced to the active UME mission instead.
+        ...(automaticScope === undefined ? {} : { missionScope: automaticScope }),
       })
       return taskView(task)
     },
@@ -232,11 +242,13 @@ export function createProactivityWatchTool(engine: ProactivityEngine): ToolDefin
       render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
     },
     async execute(args, exec) {
-      const everyMs = minutesToMs(args.everyMinutes, 'everyMinutes')!
-      if (everyMs < 60 * 60_000) {
+      const everyMs = minutesToMs(args.everyMinutes, 'everyMinutes')
+      if (everyMs === undefined || everyMs < 60 * 60_000) {
         throw new ToolArgsError(['everyMinutes must be at least 60 for condition watches'])
       }
       const agentId = targetAgent(exec)
+      const automaticScope = args.requestedByUser === true || exec.agent === undefined
+        ? undefined : activeScheduledMissionScope(exec.agent.session)
       const task = await engine.create({
         title: args.title,
         condition: args.condition,
@@ -248,6 +260,9 @@ export function createProactivityWatchTool(engine: ProactivityEngine): ToolDefin
         delivery: 'chat',
         attentionMode: 'off',
         ...(agentId === undefined ? {} : { targetAgentId: agentId }),
+        // Explicit human schedules survive the current conversation; model-
+        // initiated followups are fenced to the active UME mission instead.
+        ...(automaticScope === undefined ? {} : { missionScope: automaticScope }),
       })
       return taskView(task)
     },
