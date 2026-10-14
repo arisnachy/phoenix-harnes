@@ -73,6 +73,16 @@ export function modelAvatarKind(model: string | undefined): ModelAvatarKind {
   return 'generic'
 }
 
+/** Sun/moon indicates the model family observed, never the teammate's persona.
+ * Unknown routes have no badge instead of pretending the Lead's route is theirs.
+ */
+export function modelEngineMark(model: string | undefined): '☀' | '☾' | undefined {
+  if (model === undefined) return undefined
+  if (/^gpt-\\d+(?:\\.\\d+)?-sol(?:$|[-_])/iu.test(model)) return '☀'
+  if (/^gpt-\\d+(?:\\.\\d+)?-luna(?:$|[-_])/iu.test(model)) return '☾'
+  return undefined
+}
+
 /** Resolve one KIRA identity to its standalone public portrait asset. */
 export function portraitSrcForKind(kind: ModelAvatarKind): string {
   if (kind === 'kira') return KIRA_MODERN_STILL_PORTRAITS.kira
@@ -84,6 +94,9 @@ export interface ModelActivityAvatarProps {
   running: boolean
   pending: boolean
   agentId?: string
+  /** Verified model provenance of this teammate. No Lead-model fallback. */
+  model?: string
+  modelProvider?: string
   /** Explicit board persona; wins over the agent-id/model fallbacks. */
   kind?: ModelAvatarKind
   /** A roster persona that is available but not currently occupied by a subagent. */
@@ -106,12 +119,18 @@ export function ModelActivityAvatar({
   pending,
   agentId,
   kind,
+  model,
+  modelProvider,
   ready = false,
   variant = 'compact',
   emotion,
 }: ModelActivityAvatarProps) {
   const resolvedKind = kind
     ?? (agentId === undefined ? modelAvatarKind(activity?.model) : agentAvatarKind(agentId))
+  const observedModel = model ?? activity?.model
+  const engine = modelEngineMark(observedModel)
+  const provenance = observedModel === undefined ? undefined
+    : `${modelProvider ?? 'modelo observado'} · ${observedModel}`
   const phase = running ? (activity?.phase ?? 'preparing') : 'idle'
   const state = pending
     ? 'pending'
@@ -138,6 +157,8 @@ export function ModelActivityAvatar({
         data-agent-portrait-image={true}
       />
       <span className={css.badge} />
+      {engine === undefined ? null : <span className={css.engineBadge}
+        title={provenance} data-engine-model={observedModel} data-engine-mark={engine}>{engine}</span>}
     </span>
   )
 }
