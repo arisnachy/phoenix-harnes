@@ -476,7 +476,9 @@ describe('dsh-tool-subagent', () => {
       const awayParent = { ...fakeAgent('switched-away'), session: awaySession,
         options: { provider: 'openai-codex', model: 'gpt-6.1-sol' } } as Agent
       await callSubagent(ctx, { description: 'd', prompt: 'p' }, { agent: awayParent })
-      expect(seen?.agentOptions).toBeUndefined()
+      expect(seen?.agentOptions).toEqual({
+        provider: 'openrouter', model: 'new-external-model',
+      })
     },
   )
 
