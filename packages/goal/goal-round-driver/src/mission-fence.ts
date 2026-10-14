@@ -22,7 +22,8 @@ export function goalBlockedByClosedUniversalMission(
   session: Pick<Session, 'id' | 'events'>,
 ): boolean {
   let lastHumanSeq = -1
-  let lastTerminalSeq = -1
+  let lastMissionSeq = -1
+  let lastMissionTerminal = false
   for (const event of session.events) {
     if (event.type === 'user/message' && event.data.source.kind === 'user') {
       lastHumanSeq = event.seq
@@ -35,8 +36,9 @@ export function goalBlockedByClosedUniversalMission(
     if (!isRecord(data) || data.version !== 1 || data.teamId !== session.id) continue
     const snapshot = data.snapshot
     if (!isRecord(snapshot) || snapshot.teamId !== session.id
-      || typeof snapshot.phase !== 'string' || !TERMINAL.has(snapshot.phase)) continue
-    lastTerminalSeq = event.seq
+      || typeof snapshot.phase !== 'string') continue
+    lastMissionSeq = event.seq
+    lastMissionTerminal = TERMINAL.has(snapshot.phase)
   }
-  return lastTerminalSeq > lastHumanSeq
+  return lastMissionTerminal && lastMissionSeq > lastHumanSeq
 }
