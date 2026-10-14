@@ -129,7 +129,7 @@ export function isKiraCodexAutoLead(
     || (selection?.provider === 'openai-codex'
       && selection.model === PHOENIX_CODEX_AUTO_WORKER_MODEL
       && agent?.session?.header?.agentPreset === 'kira-max'
-      && agent.session.header.origin !== 'subagent')
+      && agent.session.header?.origin !== 'subagent')
 }
 
 function codexPlannerGeneration(model: string): string | undefined {
@@ -854,8 +854,8 @@ export function installModelSelection(
       // Provider identity is always safe to synchronize and is also the hard
       // capability gate used by provider-specific tools such as Codex Auto-review.
       scopedAgent.options.provider = selected.provider
-      // Phoenix Auto is a virtual picker row rather than an executable model.
-      // Its request router resolves Sol/Luna per step, so keep the existing
+      // Phoenix Auto and Kira Max's Codex Luna seat use the Sol/Luna step router.
+      // Keep the existing
       // concrete model/effort while synchronizing only the provider identity.
       if (!isKiraCodexAutoLead(selected, scopedAgent)) {
         scopedAgent.options.model = selected.model
@@ -922,8 +922,8 @@ export function installModelSelection(
       }
       // Explicit user model choices are the Lead's orchestration brain, even
       // when an older composition still installs a generic Codex handoff.
-      // Only the virtual Fénix Eclipse/Phoenix Auto row may switch Sol -> Luna
-      // internally. Worker model selection is handled by Agent Teams instead.
+      // Phoenix Auto and Kira Max's default Codex Luna seat switch Sol -> Luna
+      // for real planning/execution. Other explicit model choices stay exact.
       const exactUserChoice = scopedAgent === undefined ? false
         : latestModelSelectionPreference(scopedAgent.session)?.source === 'explicit'
       if (!isKiraCodexAutoLead(selected, scopedAgent) && (handoff === undefined || exactUserChoice)) {
