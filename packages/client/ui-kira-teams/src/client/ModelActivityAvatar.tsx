@@ -94,9 +94,11 @@ export interface ModelActivityAvatarProps {
   running: boolean
   pending: boolean
   agentId?: string
-  /** Verified model provenance of this teammate. No Lead-model fallback. */
-  model?: string
-  modelProvider?: string
+  /** Verified model provenance of this teammate. No Lead-model fallback.
+   * Optional values may be undefined while the worker's first result is pending.
+   */
+  model?: string | undefined
+  modelProvider?: string | undefined
   /** Explicit board persona; wins over the agent-id/model fallbacks. */
   kind?: ModelAvatarKind
   /** A roster persona that is available but not currently occupied by a subagent. */
