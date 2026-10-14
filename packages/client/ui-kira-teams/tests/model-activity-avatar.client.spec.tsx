@@ -2,6 +2,7 @@ import { Children, isValidElement, type ReactElement, type ReactNode } from 'rea
 import { describe, expect, it } from 'vitest'
 import {
   ModelActivityAvatar,
+  modelEngineMark,
   agentAvatarKind,
   modelAvatarKind,
   portraitSrcForKind,
@@ -17,6 +18,26 @@ describe('modelAvatarKind', () => {
     [undefined, 'generic'],
   ] as const)('maps %s to %s', (model, expected) => {
     expect(modelAvatarKind(model)).toBe(expected)
+  })
+})
+
+describe('model engine glyphs', () => {
+  it('distinguishes an observed Sol from an observed Luna without guessing unknown routes', () => {
+    expect(modelEngineMark('gpt-6.1-sol')).toBe('☀')
+    expect(modelEngineMark('gpt-6-luna')).toBe('☾')
+    expect(modelEngineMark('gpt-6-luna-max')).toBe('☾')
+    expect(modelEngineMark('some-other-model')).toBeUndefined()
+    expect(modelEngineMark(undefined)).toBeUndefined()
+  })
+
+  it('shows a lunar symbol beside a real worker portrait only when its model is known', () => {
+    const luna = ModelActivityAvatar({ kind: 'atlas', model: 'gpt-6-luna',
+      modelProvider: 'openai-codex', activity: undefined, running: true, pending: false })
+    const markers = Children.toArray(luna.props.children).filter(isValidElement<Record<string, unknown>>)
+    expect(markers.find(child => child.props['data-engine-model'] === 'gpt-6-luna')?.props['data-engine-mark']).toBe('☾')
+    const unknown = ModelActivityAvatar({ kind: 'atlas', activity: undefined, running: true, pending: false })
+    expect(Children.toArray(unknown.props.children).filter(isValidElement<Record<string, unknown>>)
+      .some(child => child.props['data-engine-mark'] !== undefined)).toBe(false)
   })
 })
 
