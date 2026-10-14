@@ -47,7 +47,7 @@ function assetUri(path: string, raw: unknown): string | undefined {
  * Bare URLs, absolute host paths, traversal outside the bundle, and unknown
  * files are never converted into network requests.
  */
-export function inlineBundledImages(entry: string, html: string, files: AssetMap): string {
+export function inlineBundledImages(entry: string, html: string, files: AssetMap, includeStylesheets = true): string {
   const normalizedEntry = normalizedPath(entry)
   if (normalizedEntry === undefined) return html
   const directory = normalizedEntry.includes('/') ? normalizedEntry.slice(0, normalizedEntry.lastIndexOf('/') + 1) : ''
@@ -83,9 +83,24 @@ export function inlineBundledImages(entry: string, html: string, files: AssetMap
     })
     return attribute + '=' + quote + candidates.join(',') + quote
   })
-  return output.replace(/url\(\s*(["']?)([^'"()]+)\1\s*\)/giu, (original, _quote: string, raw: string) => {
+  output = output.replace(/url\(\s*(["']?)([^'"()]+)\1\s*\)/giu, (original, _quote: string, raw: string) => {
     const uri = resolve(raw.trim())
     return uri === undefined ? original : 'url("' + uri + '")'
+  })
+  if (!includeStylesheets) return output
+  // Inline only actual CSS files shipped with this same artifact, preserving
+  // their own relative image paths. Remote stylesheets remain blocked.
+  return output.replace(/<link\b[^>]*>/giu, original => {
+    if (!/\brel\s*=\s*(["'])stylesheet\1/iu.test(original)) return original
+    const match = /\bhref\s*=\s*(["'])(.*?)\1/iu.exec(original)
+    const reference = match?.[2]
+    if (reference === undefined || /^(?:[a-z][a-z\d+.-]*:|\/\/|#)/iu.test(reference)) return original
+    const key = normalizedPath(reference.startsWith('/') ? reference : directory + reference.split(/[?#]/u, 1)[0])
+    if (key === undefined || !/\.css$/iu.test(key)) return original
+    const css = files[key]
+    if (typeof css !== 'string' || css.length > MAX_ASSET_CHARS) return original
+    const safeCss = inlineBundledImages(key, css, files, false).replace(/<\/style/giu, '<\\/style')
+    return '<style data-phoenix-bundled-css="true">' + safeCss + '</style>'
   })
 }
 
