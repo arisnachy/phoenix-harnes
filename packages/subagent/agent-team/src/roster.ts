@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto'
 import type { Context } from '@phoenix-ai/cordis'
 import type { Agent } from '@phoenix-ai/dsh-agent'
 import type { MessageId } from '@phoenix-ai/dsh-llm'
-import { SessionId } from '@phoenix-ai/dsh-session'
+import { foldRequestHeader, SessionId } from '@phoenix-ai/dsh-session'
 import { foldSubagentDescriptor } from '@phoenix-ai/dsh-subagent'
 import type { ContinuableStart } from '@phoenix-ai/dsh-subagent'
 import { errorMessage, TeamError } from './error.ts'
@@ -55,6 +55,20 @@ export function resolveActiveMember(
     throw new TeamError(`active teammate "${name}" not found`, 'TEAM_MEMBER_NOT_FOUND')
   }
   return { id: member.id, name }
+}
+
+/** Prefer the actual serving response over stale creation-time or inherited Lead options. */
+function servingRoute(agent: Agent | undefined): { model?: string; modelProvider?: string } {
+  if (agent === undefined) return {}
+  const response = agent.session.events.findLast(event => event.type === 'assistant/message')
+  const source = response?.type === 'assistant/message' ? response.data.message.source : undefined
+  const request = foldRequestHeader(agent.session.events)?.config
+  const model = source?.model ?? request?.model ?? agent.options.model
+  const provider = source?.provider ?? request?.provider ?? agent.options.provider
+  return {
+    ...(provider === undefined ? {} : { modelProvider: provider }),
+    ...(model === undefined ? {} : { model }),
+  }
 }
 
 /** Sum finalized provider usage for one live Agent without double-counting streaming usage chunks. */
@@ -159,19 +173,19 @@ export class TeamRoster {
     const { root } = membership
     const state = this.journal.state(root)
     const rootUsage = liveUsage(root)
+    const rootModel = servingRoute(root)
     const result: TeamMemberView[] = [{
       id: root.id,
       name: 'lead',
       role: 'lead',
       status: root.status,
-      ...root.options.provider === undefined ? {} : { modelProvider: root.options.provider },
-      ...root.options.model === undefined ? {} : { model: root.options.model },
+      ...rootModel,
       ...rootUsage === undefined ? {} : { usage: rootUsage },
       diagnostics: [],
     }]
     for (const member of state.members.values()) {
       const live = this.ctx.agents.get(member.id)
-      const model = live?.options.model ?? root.options.model
+      const serving = servingRoute(live)
       const usage = liveUsage(live)
       result.push({
         id: member.id,
@@ -185,8 +199,7 @@ export class TeamRoster {
         description: member.description,
         provider: member.provider,
         context: member.context,
-        ...live?.options.provider === undefined ? {} : { modelProvider: live.options.provider },
-        ...model === undefined ? {} : { model },
+        ...serving,
         ...usage === undefined ? {} : { usage },
         diagnostics: member.error === undefined ? [] : [member.error],
       })
@@ -521,6 +534,7 @@ export class TeamRoster {
   private memberView(member: TeamMemberSnapshot & { readonly phase: 'active' }): TeamMemberView {
     const live = this.ctx.agents.get(member.id)
     const usage = liveUsage(live)
+    const serving = servingRoute(live)
     return {
       id: member.id,
       name: member.name,
@@ -529,8 +543,7 @@ export class TeamRoster {
       description: member.description,
       provider: member.provider,
       context: member.context,
-      ...live?.options.provider === undefined ? {} : { modelProvider: live.options.provider },
-      ...live?.options.model === undefined ? {} : { model: live.options.model },
+      ...serving,
       ...usage === undefined ? {} : { usage },
       diagnostics: [],
     }
