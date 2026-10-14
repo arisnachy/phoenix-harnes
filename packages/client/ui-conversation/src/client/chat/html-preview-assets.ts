@@ -1,0 +1,98 @@
+/** Resolve image assets bundled with a HARDNESS HTML mini-app without exposing
+ * arbitrary host paths or relaxing the isolated preview's network policy.
+ */
+type AssetMap = Readonly<Record<string, unknown>>
+
+const MIME_BY_EXTENSION: Readonly<Record<string, string>> = {
+  png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp',
+}
+const IMAGE_DATA = /^data:image\/(?:png|jpeg|gif|webp);base64,[a-z0-9+/=]+$/iu
+const BASE64 = /^[A-Za-z0-9+/]+={0,2}$/u
+const MAX_ASSET_CHARS = 12 * 1024 * 1024
+
+function normalizedPath(value: string): string | undefined {
+  const path = value.replace(/\\/gu, '/').replace(/^\/+/, '')
+  if (path.length === 0 || path.includes('\0')) return undefined
+  const parts: string[] = []
+  for (const item of path.split('/')) {
+    if (item === '' || item === '.') continue
+    if (item === '..') {
+      if (parts.length === 0) return undefined
+      parts.pop()
+    } else {
+      parts.push(item)
+    }
+  }
+  return parts.length === 0 ? undefined : parts.join('/')
+}
+
+function assetUri(path: string, raw: unknown): string | undefined {
+  const ext = /\.([^.]+)$/u.exec(path)?.[1]?.toLowerCase()
+  const mime = ext === undefined ? undefined : MIME_BY_EXTENSION[ext]
+  if (mime === undefined) return undefined
+  let value: unknown = raw
+  if (typeof raw === 'object' && raw !== null && !Array.isArray(raw)) {
+    const record = raw as Readonly<Record<string, unknown>>
+    const declared = record.mime ?? record.mediaType
+    if (declared !== undefined && declared !== mime) return undefined
+    value = record.base64 ?? record.data
+  }
+  if (typeof value !== 'string' || value.length === 0 || value.length > MAX_ASSET_CHARS) return undefined
+  if (IMAGE_DATA.test(value)) return value.startsWith('data:' + mime + ';') ? value : undefined
+  if (!BASE64.test(value) || value.length % 4 !== 0) return undefined
+  return 'data:' + mime + ';base64,' + value
+}
+
+/** Replace only references to known bundled raster images.
+ * Bare URLs, absolute host paths, traversal outside the bundle, and unknown
+ * files are never converted into network requests.
+ */
+export function inlineBundledImages(entry: string, html: string, files: AssetMap): string {
+  const normalizedEntry = normalizedPath(entry)
+  if (normalizedEntry === undefined) return html
+  const directory = normalizedEntry.includes('/') ? normalizedEntry.slice(0, normalizedEntry.lastIndexOf('/') + 1) : ''
+  const resources = new Map<string, string>()
+  for (const [name, raw] of Object.entries(files)) {
+    const normalized = normalizedPath(name)
+    if (normalized === undefined) continue
+    const uri = assetUri(normalized, raw)
+    if (uri !== undefined) resources.set(normalized, uri)
+  }
+  if (resources.size === 0) return html
+  const resolve = (reference: string): string | undefined => {
+    if (/^(?:[a-z][a-z\d+.-]*:|\/\/|#)/iu.test(reference)) return undefined
+    let decoded: string
+    try { decoded = decodeURIComponent(reference.split(/[?#]/u, 1)[0] ?? '') } catch { return undefined }
+    const key = normalizedPath(reference.startsWith('/') ? decoded : directory + decoded)
+    return key === undefined ? undefined : resources.get(key)
+  }
+  // Quoted HTML asset attributes, including picture/srcset (single-candidate).
+  let output = html.replace(/\b(src|poster|href)\s*=\s*(["'])(.*?)\2/giu, (original, attribute: string, quote: string, raw: string) => {
+    // Only resource-bearing attributes are altered. Links to other documents
+    // remain regular links rather than becoming navigable data URLs.
+    if (attribute.toLowerCase() === 'href' && !/\.(?:png|jpe?g|gif|webp)(?:[?#]|$)/iu.test(raw)) return original
+    const uri = resolve(raw)
+    return uri === undefined ? original : attribute + '=' + quote + uri + quote
+  })
+  output = output.replace(/\b(srcset)\s*=\s*(["'])(.*?)\2/giu, (original, attribute: string, quote: string, raw: string) => {
+    const candidates = raw.split(',').map(candidate => {
+      const matched = /^(\s*)(\S+)(\s+.*)?$/u.exec(candidate)
+      if (matched === null) return candidate
+      const uri = resolve(matched[2] ?? '')
+      return uri === undefined ? candidate : (matched[1] ?? '') + uri + (matched[3] ?? '')
+    })
+    return attribute + '=' + quote + candidates.join(',') + quote
+  })
+  return output.replace(/url\(\s*(["']?)([^'"()]+)\1\s*\)/giu, (original, _quote: string, raw: string) => {
+    const uri = resolve(raw.trim())
+    return uri === undefined ? original : 'url("' + uri + '")'
+  })
+}
+
+/** Explicitly consent before enabling outbound image loads in executable HTML.
+ * Scripts retain connect-src 'none', but can request images once authorized.
+ */
+export function hasExternalImageReferences(html: string): boolean {
+  return /https?:\/\//iu.test(html)
+    && /(?:<img\b|<picture\b|\bsrcset\b|background-image|image\s*\(|new\s+Image\s*\(|createElement\(\s*['"]img)/iu.test(html)
+}
