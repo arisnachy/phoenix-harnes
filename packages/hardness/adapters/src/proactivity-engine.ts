@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import type { ScheduledMissionScope } from './mission-scope.ts'
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 
@@ -63,6 +64,8 @@ export interface ProactivityTask {
   readonly senderIdentity: ProactivitySenderIdentity
   readonly recipient?: string
   readonly targetAgentId?: string
+  /** An automatic task that belongs to a finite UME mission (not a user recurring task). */
+  readonly missionScope?: ScheduledMissionScope
   /** Optional home-feed policy; omitted keeps the adaptive default. */
   readonly attentionMode?: ProactivityAttentionMode
   /** Optional home-feed priority; omitted ranks as normal. */
@@ -91,6 +94,8 @@ export interface CreateProactivityTaskInput {
   readonly senderIdentity?: ProactivitySenderIdentity
   readonly recipient?: string
   readonly targetAgentId?: string
+  /** Scope applied only to non-user followups created within an active mission. */
+  readonly missionScope?: ScheduledMissionScope
   /** Optional home-feed policy; omitted keeps the adaptive default. */
   readonly attentionMode?: ProactivityAttentionMode
   /** Optional home-feed priority; omitted ranks as normal. */
@@ -311,7 +316,9 @@ function addCalendar(
 }
 
 function cloneTask(task: ProactivityTask): ProactivityTask {
-  return { ...task, recurrence: { ...task.recurrence }, history: task.history.map(entry => ({ ...entry })) }
+  return { ...task, recurrence: { ...task.recurrence },
+    ...(task.missionScope === undefined ? {} : { missionScope: { ...task.missionScope } }),
+    history: task.history.map(entry => ({ ...entry })) }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -399,6 +406,12 @@ function parseTask(raw: unknown): ProactivityTask {
   if (raw.condition !== undefined && typeof raw.condition !== 'string') throw new Error('invalid condition')
   if (raw.recipient !== undefined && typeof raw.recipient !== 'string') throw new Error('invalid recipient')
   if (raw.targetAgentId !== undefined && typeof raw.targetAgentId !== 'string') throw new Error('invalid targetAgentId')
+  const missionScope = raw.missionScope
+  if (missionScope !== undefined && (!isRecord(missionScope)
+    || typeof missionScope.sessionId !== 'string' || missionScope.sessionId.length === 0
+    || typeof missionScope.missionId !== 'string' || missionScope.missionId.length === 0
+    || typeof missionScope.epoch !== 'number' || !Number.isSafeInteger(missionScope.epoch)
+    || missionScope.epoch < 0)) throw new Error('invalid missionScope')
   if (raw.attentionMode !== undefined
     && raw.attentionMode !== 'auto' && raw.attentionMode !== 'result'
     && raw.attentionMode !== 'upcoming' && raw.attentionMode !== 'off') throw new Error('invalid attentionMode')
@@ -425,6 +438,7 @@ function parseTask(raw: unknown): ProactivityTask {
     senderIdentity: raw.senderIdentity,
     ...(raw.recipient === undefined ? {} : { recipient: nonEmpty(raw.recipient, 'recipient') }),
     ...(raw.targetAgentId === undefined ? {} : { targetAgentId: nonEmpty(raw.targetAgentId, 'targetAgentId') }),
+    ...(missionScope === undefined ? {} : { missionScope: missionScope as unknown as ScheduledMissionScope }),
     ...(raw.attentionMode === undefined ? {} : { attentionMode: raw.attentionMode }),
     ...(raw.attentionPriority === undefined ? {} : { attentionPriority: raw.attentionPriority }),
     ...(raw.attentionText === undefined ? {} : { attentionText: boundedNonEmpty(raw.attentionText, 'attentionText', 320) }),
@@ -612,6 +626,14 @@ export class ProactivityEngine {
         senderIdentity: input.senderIdentity ?? 'auto',
         ...(input.recipient === undefined ? {} : { recipient: nonEmpty(input.recipient, 'recipient') }),
         ...(input.targetAgentId === undefined ? {} : { targetAgentId: nonEmpty(input.targetAgentId, 'targetAgentId') }),
+        ...(input.missionScope === undefined || input.createdBy === 'user' ? {} : {
+          missionScope: {
+            sessionId: nonEmpty(input.missionScope.sessionId, 'missionScope.sessionId'),
+            missionId: nonEmpty(input.missionScope.missionId, 'missionScope.missionId'),
+            epoch: Number.isSafeInteger(input.missionScope.epoch) && input.missionScope.epoch >= 0
+              ? input.missionScope.epoch : (() => { throw new Error('invalid missionScope.epoch') })(),
+          },
+        }),
         ...(input.attentionMode === undefined ? {} : { attentionMode: input.attentionMode }),
         ...(input.attentionPriority === undefined ? {} : { attentionPriority: input.attentionPriority }),
         ...(input.attentionText === undefined ? {} : { attentionText: boundedNonEmpty(input.attentionText, 'attentionText', 320) }),
@@ -630,6 +652,8 @@ export class ProactivityEngine {
           && candidate.delivery === task.delivery
           && candidate.recipient === task.recipient
           && candidate.targetAgentId === task.targetAgentId
+          && candidate.missionScope?.missionId === task.missionScope?.missionId
+          && candidate.missionScope?.epoch === task.missionScope?.epoch
           && JSON.stringify(candidate.recurrence) === JSON.stringify(task.recurrence))
         if (equivalent !== undefined) return cloneTask(equivalent)
       }
