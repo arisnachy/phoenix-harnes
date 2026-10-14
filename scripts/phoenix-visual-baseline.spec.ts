@@ -20,7 +20,11 @@ function fixture() {
     'packages/client/ui-theme/src/theme-settings.ts':
       "export const DEFAULT_PREFERENCE: ThemePreference = 'light'",
     'packages/client/ui-theme/src/client/styles.ts':
-      'installThemeStyles const leases = new Map lease.owners += 1',
+      "installThemeStyles const leases = new Map lease.owners += 1 import designPlatform from '../styles/design-platform.css?inline' ['design-platform.css', designPlatform]",
+    'packages/client/ui-theme/src/styles/design-platform.css':
+      '--dsw-static-phoenix-orange-500: rgb(226, 95, 37); --dsw-alias-bg-base: rgb(248, 247, 244); --dsw-alias-label-primary-bluish: var(--dsw-static-phoenix-orange-600); --dsw-specific-phoenix-accent: var(--dsw-static-phoenix-orange-500);',
+    'apps/web/index.html':
+      '<html><head><meta name="phoenix-ui" content="modern-orange" /></head></html>',
     'packages/client/ui-theme/src/styles/base.css': ':root { color-scheme: light; }',
     'apps/web/dist/index.html': '<!doctype html><html><head><title>PHOENIX</title></head><body><main>Valid compiled Phoenix frontend entry</main></body></html>',
   }
@@ -42,6 +46,18 @@ describe('PHOENIX visual release integrity', () => {
     const path = join(root, 'packages/client/ui-sidebar/src/client/SidebarRoot.module.css')
     writeFileSync(path, readFileSync(path, 'utf8').replace('--phoenix-side-ember: #e76020', ''))
     expect(() => verifyPhoenixVisualBaseline(root)).toThrow('visual integrity check failed')
+  })
+  it('rejects a legacy blue-and-white palette even when the default is still light', () => {
+    const root = fixture()
+    const path = join(root, 'packages/client/ui-theme/src/styles/design-platform.css')
+    writeFileSync(path, readFileSync(path, 'utf8').replace('rgb(226, 95, 37)', 'rgb(37, 99, 235)'))
+    expect(() => verifyPhoenixVisualBaseline(root)).toThrow('visual integrity check failed')
+  })
+  it('rejects the old HTML entry without a Phoenix modern-theme marker', () => {
+    const root = fixture()
+    const path = join(root, 'apps/web/index.html')
+    writeFileSync(path, '<html><head></head></html>')
+    expect(() => verifyPhoenixVisualBaseline(root)).toThrow('modern-orange')
   })
   it('rejects an incomplete web build rather than promoting a white fallback UI', () => {
     const root = fixture()
