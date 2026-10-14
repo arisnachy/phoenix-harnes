@@ -1031,7 +1031,11 @@ export function installModelSelection(
     if ((selection.assembledToolCount ?? 0) === 0) return
 
     const directText = directUserTextForTurn(agent, turn)
-    if (!phoenixAutoTaskRequest(directText) || phoenixAutoTurnWasUserStopped(agent, turn)) return
+    // Team blockers have their own authorized continuation; they need not
+    // coincide with a fresh human message in the same turn.
+    const realTeamBlocker = phoenixAutoTeamSignalForTurn(agent, turn)?.purpose === 'blocker'
+    if ((!phoenixAutoTaskRequest(directText) && !realTeamBlocker)
+      || phoenixAutoTurnWasUserStopped(agent, turn)) return
     // A tool-verified one-shot visual meets the original request. Do not
     // resurrect it with a mandatory team-admission notice.
     if (isStandaloneVisualPreviewRequest(directText)
