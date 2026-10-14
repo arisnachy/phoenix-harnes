@@ -244,6 +244,7 @@ describe('browser voice adapter', () => {
       close(): void { this.connectionState = 'closed' }
     }
 
+    const microphoneTrack = { enabled: true, stop: vi.fn() }
     const rtcDescriptor = Object.getOwnPropertyDescriptor(window, 'RTCPeerConnection')
     const mediaDescriptor = Object.getOwnPropertyDescriptor(navigator, 'mediaDevices')
     const pause = vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => undefined)
@@ -255,8 +256,8 @@ describe('browser voice adapter', () => {
       configurable: true,
       value: {
         getUserMedia: vi.fn(async () => ({
-          getTracks: () => [{ stop: vi.fn() }],
-          getAudioTracks: () => [{ stop: vi.fn() }],
+          getTracks: () => [microphoneTrack],
+          getAudioTracks: () => [microphoneTrack],
         })),
       },
     })
@@ -338,6 +339,7 @@ describe('browser voice adapter', () => {
       expect(channel).toBeDefined()
       const audio = document.querySelector<HTMLAudioElement>('[data-phoenix-codex-voice]')
       expect(audio?.muted).toBe(true)
+      expect(microphoneTrack.enabled).toBe(true)
       channel?.onopen?.()
       // AVAS V3 session configuration belongs to the official app-server.
       // Sending public Realtime VAD fields here causes unknown_parameter.
@@ -399,6 +401,8 @@ describe('browser voice adapter', () => {
       // acknowledgement can arrive after Codex has already streamed its audio.
       expect(document.documentElement.dataset.phoenixVoiceSpeechStatus).toBe('requested')
       expect(audio?.muted).toBe(false)
+      expect(microphoneTrack.enabled).toBe(false)
+      expect(document.documentElement.dataset.phoenixVoiceMicrophone).toBe('paused-for-output')
       expect(document.documentElement.dataset.phoenixVoiceAudioMuteReason).toBe('none')
       await Promise.resolve()
       expect(realtimeSpeak).toHaveBeenLastCalledWith({
@@ -521,6 +525,7 @@ describe('browser voice adapter', () => {
       expect(attention?.text).toContain('Revisa la acción')
 
       expect(interruptVoiceAssistantSpeech()).toBe(true)
+      expect(microphoneTrack.enabled).toBe(true)
       expect(JSON.parse(String(channel?.send.mock.calls[1]?.[0]))).toEqual({ type: 'response.cancel' })
 
       // The Realtime model must not autonomously claim a tool is running:
@@ -619,6 +624,8 @@ describe('browser voice adapter', () => {
       // console manually toggling HTMLAudioElement.muted.
       await vi.advanceTimersByTimeAsync(6_100)
       expect(audio?.muted).toBe(true)
+      expect(microphoneTrack.enabled).toBe(true)
+      expect(document.documentElement.dataset.phoenixVoiceMicrophone).toBe('listening')
       expect(document.documentElement.dataset.phoenixVoiceAudioMuteReason).toBe('authorized-audio-drained')
       vi.useRealTimers()
       // A genuinely new V3 response after the grace must still be cancelled.
@@ -643,6 +650,7 @@ describe('browser voice adapter', () => {
         // Native output arriving before acceptance must remain audible.
         expect(document.documentElement.dataset.phoenixVoiceSpeechStatus).toBe('requested')
         expect(audio?.muted).toBe(false)
+        expect(microphoneTrack.enabled).toBe(false)
         channel?.onmessage?.({ data: JSON.stringify({ type: 'turn.created', turn: { role: 'assistant' } }) })
         expect(audio?.muted).toBe(false)
         channel?.onmessage?.({ data: JSON.stringify({ type: 'output_audio.delta', audio: 'fixture' }) })
@@ -654,6 +662,7 @@ describe('browser voice adapter', () => {
         else resolveAdmission({ ok: true, value: { accepted: outcome === 'accepted', ...(outcome === 'rejected' ? { reason: 'disabled' } : {}) } })
         await vi.waitFor(() => expect(document.documentElement.dataset.phoenixVoiceSpeechStatus).toBe(outcome))
         expect(audio?.muted).toBe(outcome !== 'accepted')
+        expect(microphoneTrack.enabled).toBe(outcome !== 'accepted')
         expect(document.documentElement.dataset.phoenixVoiceAudioMuteReason).toBe(
           outcome === 'accepted' ? 'none' : outcome === 'rejected' ? 'append-speech-rejected' : 'append-speech-failed',
         )
