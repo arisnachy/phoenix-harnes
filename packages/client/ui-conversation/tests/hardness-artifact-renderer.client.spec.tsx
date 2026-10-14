@@ -398,6 +398,39 @@ describe('HARDNESS inline artifact renderer', () => {
     expect(screen.queryByRole('button', { name: /sandboxed interaction/i })).toBeNull()
   })
 
+  it('offers a deliberate external-image opt-in without allowing script network access', () => {
+    render(<HardnessArtifactNodeView {...props({
+      artifactId: 'hero-page', mime: 'text/html', title: 'Landing page',
+      data: '<img src="https://images.example.test/hero.webp" alt="Hero"><script>document.body.dataset.live="1"</script>',
+    })} />)
+    const frame = screen.getByTitle('Landing page')
+    expect(frame.getAttribute('srcdoc')).toContain("img-src data: blob:")
+    expect(frame.getAttribute('srcdoc')).not.toContain('img-src data: blob: https: http:')
+    const enable = screen.getByRole('button', { name: 'Cargar imágenes externas' })
+    expect(enable.getAttribute('aria-pressed')).toBe('false')
+    fireEvent.click(enable)
+    expect(frame.getAttribute('srcdoc')).toContain('img-src data: blob: https: http:')
+    expect(frame.getAttribute('srcdoc')).toContain("connect-src 'none'")
+    expect(frame.getAttribute('sandbox')).toBe('allow-scripts')
+    const disable = screen.getByRole('button', { name: 'Bloquear imágenes externas' })
+    fireEvent.click(disable)
+    expect(frame.getAttribute('srcdoc')).not.toContain('img-src data: blob: https: http:')
+  })
+
+  it('displays image files packed alongside an HTML entry within its isolated iframe', () => {
+    const raster = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4//8/AwAI/AL+e6I6JwAAAABJRU5ErkJggg=='
+    render(<HardnessArtifactNodeView {...props({
+      artifactId: 'mini-app-images', mime: 'application/vnd.hardness.app+json', title: 'Portfolio',
+      data: { entry: 'web/index.html', files: {
+        'web/index.html': '<img src="./images/logo.png" alt="Logo"><h1>Portfolio</h1>',
+        'web/images/logo.png': raster,
+      } },
+    })} />)
+    const frame = screen.getByTitle('Portfolio')
+    expect(frame.getAttribute('srcdoc')).toContain('src="data:image/png;base64,')
+    expect(frame.getAttribute('srcdoc')).toContain("connect-src 'none'")
+  })
+
   it('explains blocked remote Chart.js dependencies instead of silently showing an empty canvas', () => {
     render(<HardnessArtifactNodeView {...props({
       artifactId: 'external-chart-1', mime: 'text/html', title: 'grafica.html',
