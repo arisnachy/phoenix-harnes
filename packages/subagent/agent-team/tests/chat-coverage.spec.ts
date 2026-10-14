@@ -51,6 +51,26 @@ describe('human teamwork without progress spam', () => {
     expect(shouldPublishTeammateSpeech('Otro estado sin cambio significativo.', true, false)).toBe(false)
     expect(shouldPublishTeammateSpeech('', false, false)).toBe(false)
   })
+  it('keeps real teammate dependency questions visible without manufacturing a tool receipt', async () => {
+    const f = await fixture()
+    f.child.append('turn/start', { turn: 1 })
+    const speak = (text: string, step: number) => f.child.append('assistant/message', {
+      turn: 1, step,
+      message: createAssistantMessage({ source: { provider: 'mock', model: 'mock' }, content: content(text) }),
+    }, { surfaceOp: 'append' })
+    speak('Kira, preparo los sprites según el contrato acordado.', 1)
+    await f.chat.capture(f.root, f.child.header, f.child.events)
+    speak('Atlas, necesito tu formato de colisiones para entregar el atlas correcto.', 2)
+    await f.chat.capture(f.root, f.child.header, f.child.events)
+    speak('Atlas, voy a usar otra herramienta.', 3)
+    await f.chat.capture(f.root, f.child.header, f.child.events)
+    const shared = f.chat.messages(f.root).filter(row => row.senderKind === 'agent')
+    expect(shared.map(row => row.text)).toEqual([
+      'Kira, preparo los sprites según el contrato acordado.',
+      'Atlas, necesito tu formato de colisiones para entregar el atlas correcto.',
+    ])
+  })
+
   it('shares one opening and one tool-backed finding with Kira, not a stream of plans', async () => {
     const f = await fixture()
     f.child.append('turn/start', { turn: 1 })
