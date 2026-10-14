@@ -510,6 +510,13 @@ export function KiraTeamsDock({ useList, openChild, t, layout }: KiraTeamsDockPr
             const summary = card.summary
             if (summary === undefined) return null
             const actionKey = activityKeyOf(summary)
+            // The subagentActivity projection reads real request/header records,
+            // not the parent selector or the teammate's human persona.
+            const servingModel = activityOf(summary)?.model
+            const servingGlyph = servingModel === undefined ? undefined
+              : /sol(?:$|[-_])/iu.test(servingModel) ? '☀'
+                : /luna(?:$|[-_])/iu.test(servingModel) ? '☾'
+                  : /astra(?:$|[-_])/iu.test(servingModel) ? '★' : 'ϟ'
             const selected = String(summary.id) === String(selectedSummaryId)
             return (
               <button
@@ -518,7 +525,7 @@ export function KiraTeamsDock({ useList, openChild, t, layout }: KiraTeamsDockPr
                 className={`${css.railAgent} ${selected ? css.railAgentSelected : ''}`}
                 aria-label={`${card.name} · ${t(actionKey)}`}
                 aria-pressed={selected}
-                title={`${card.name} · ${t(actionKey)}`}
+                title={`${card.name} · ${t(actionKey)}${servingModel === undefined ? '' : ` · ${servingModel}`}`}
                 data-kira-agent-rail
                 data-agent-kind={card.kind}
                 data-agent-id={String(summary.id)}
@@ -531,6 +538,13 @@ export function KiraTeamsDock({ useList, openChild, t, layout }: KiraTeamsDockPr
                   running={summary.running}
                   pending={summary.pendingInteraction !== undefined}
                 />
+                {servingModel !== undefined && <span
+                  className={css.railModel}
+                  aria-label={`Modelo real: ${servingModel}`}
+                  data-team-actual-model={servingModel}
+                  title={servingModel}>
+                  {servingGlyph}
+                </span>}
               </button>
             )
           })}
