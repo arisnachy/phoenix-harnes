@@ -78,8 +78,8 @@ export function modelAvatarKind(model: string | undefined): ModelAvatarKind {
  */
 export function modelEngineMark(model: string | undefined): '☀' | '☾' | undefined {
   if (model === undefined) return undefined
-  if (/^gpt-\\d+(?:\\.\\d+)?-sol(?:$|[-_])/iu.test(model)) return '☀'
-  if (/^gpt-\\d+(?:\\.\\d+)?-luna(?:$|[-_])/iu.test(model)) return '☾'
+  if (/^gpt-\d+(?:\.\d+)?-sol(?:$|[-_])/iu.test(model)) return '☀'
+  if (/^gpt-\d+(?:\.\d+)?-luna(?:$|[-_])/iu.test(model)) return '☾'
   return undefined
 }
 
