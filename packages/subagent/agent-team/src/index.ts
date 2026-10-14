@@ -165,10 +165,14 @@ export class TeamService extends TypertRemoteService {
           || (event.data.reason.kind === 'aborted' && event.data.reason.reason.kind === 'user'))) {
         const lead = ctx.agents.get(session.id)
         if (lead?.session === session) {
+          // Capture the identity now: an awaited journal mutation may otherwise
+          // run after a user has started the next mission on this same Lead.
+          const closingMissionId = this.missions.read(lead)?.id
           void this.missions.close(
             lead,
             event.data.reason.kind === 'aborted',
             this.missionCompletionProof(lead),
+            closingMissionId,
           ).catch((error: unknown) => {
             ctx.logger.warn(`Universal mission closure failed: ${errorMessage(error)}`)
           })
