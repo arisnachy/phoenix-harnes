@@ -6,6 +6,7 @@ import {
   agentEvents,
   defaultExecutionHandoff,
   installModelSelection,
+  isKiraCodexAutoLead,
   latestModelSelectionPreference,
   persistModelSelectionPreference,
   isContextualConversationFastPathText,
@@ -19,6 +20,18 @@ import {
 import { ReasoningEffortId, createUserMessage, type LlmCallConfig } from '@phoenix-ai/dsh-llm'
 
 describe('installModelSelection()', () => {
+  it('never restarts Sol planning inside a Team child or other explicit model', () => {
+    const root = { session: { header: { agentPreset: 'kira-max' } } }
+    const child = { session: { header: { agentPreset: 'kira-max', origin: 'subagent' } } }
+    const auto = { provider: 'openai-codex', model: PHOENIX_CODEX_AUTO_MODEL }
+    const luna = { provider: 'openai-codex', model: 'gpt-6-luna' }
+    expect(isKiraCodexAutoLead(luna, root)).toBe(true)
+    expect(isKiraCodexAutoLead(auto, child)).toBe(false)
+    expect(isKiraCodexAutoLead(luna, child)).toBe(false)
+    expect(isKiraCodexAutoLead({ provider: 'deepseek', model: 'deepseek-v4-pro' }, root)).toBe(false)
+    expect(isKiraCodexAutoLead({ provider: 'openai-codex', model: 'gpt-6.1-sol' }, root)).toBe(false)
+  })
+
   it('lets Luna Max consult Sol when stuck, then automatically resumes Luna Max', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
