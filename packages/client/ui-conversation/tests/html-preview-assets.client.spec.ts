@@ -17,6 +17,16 @@ describe('HARDNESS packaged HTML image assets', () => {
     expect(html).not.toContain('./images/hero.png')
   })
 
+  it('embeds companion stylesheets so background images are visible', () => {
+    const html = inlineBundledImages('site/index.html',
+      '<link rel="stylesheet" href="./css/theme.css"><div class="hero">Hello</div>',
+      { 'site/css/theme.css': '.hero{background:url(../images/hero.png)}',
+        'site/images/hero.png': png })
+    expect(html).toContain('<style data-phoenix-bundled-css="true">')
+    expect(html).toContain('background:url("data:image/png;base64,')
+    expect(html).not.toContain('<link rel="stylesheet"')
+  })
+
   it('preserves remote and unknown images without reading host files or escaping its bundle', () => {
     const html = inlineBundledImages('site/index.html',
       '<img src="https://images.example.test/hero.jpg"><img src="../../secret.png"><img src="./missing.jpg"><img src="javascript:alert(1)">',
