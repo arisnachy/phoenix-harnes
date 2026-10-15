@@ -39,7 +39,8 @@ describe('model engine glyphs', () => {
   it('shows a lunar symbol beside a real worker portrait only when its model is known', () => {
     const luna = ModelActivityAvatar({ kind: 'atlas', model: 'gpt-6-luna',
       modelProvider: 'openai-codex', activity: undefined, running: true, pending: false })
-    const markers = Children.toArray(luna.props.children).filter(isValidElement<Record<string, unknown>>)
+    const markers = Children.toArray(luna.props.children)
+      .filter(isValidElement<Record<string, unknown> & { children?: ReactNode }>)
     expect(markers.find(child => child.props['data-engine-model'] === 'gpt-6-luna')?.props).toMatchObject({
       'data-engine-mark': '☾', 'data-engine-family': 'luna',
     })
