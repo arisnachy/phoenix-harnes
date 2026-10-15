@@ -694,6 +694,27 @@ describe('browser voice adapter', () => {
       speakVoiceAssistantResponse('session-b:assistant:turn-1:step-1', 'Otra sesión.', activatedAt, 'session-b')
       expect(realtimeSpeak).toHaveBeenCalledTimes(beforeForeignTail)
 
+      // Regression: the V3 sideband sometimes acknowledges appendSpeech and
+      // delivers the first sentence without response.done/assistant turn.done.
+      // Do not leave the entire rest of Kira's answer blocked forever.
+      vi.useFakeTimers()
+      const beforeStalledSpeech = realtimeSpeak.mock.calls.length
+      streamVoiceAssistantResponse(
+        'assistant:harness:missing-terminal', 'Primera frase. Segunda frase.', activatedAt, true, false, true,
+      )
+      await Promise.resolve()
+      expect(realtimeSpeak).toHaveBeenCalledTimes(beforeStalledSpeech + 1)
+      expect(realtimeSpeak).toHaveBeenLastCalledWith({ key: 'session-harness', text: 'Primera frase.' })
+      expect(microphoneTrack.enabled).toBe(false)
+      await vi.advanceTimersByTimeAsync(16_000)
+      expect(document.documentElement.dataset.phoenixVoiceLastNativeTerminal).toBe('watchdog-missing-terminal')
+      expect(realtimeSpeak).toHaveBeenCalledTimes(beforeStalledSpeech + 2)
+      expect(realtimeSpeak).toHaveBeenLastCalledWith({ key: 'session-harness', text: 'Segunda frase.' })
+      expect(microphoneTrack.enabled).toBe(false)
+      channel?.onmessage?.({ data: JSON.stringify({ type: 'response.completed' }) })
+      await Promise.resolve()
+      vi.useRealTimers()
+
       // Telegram/browser disconnection must never leave voice stuck: grant a
       // short reconnection window, then release the mic and return to text.
       vi.useFakeTimers()
