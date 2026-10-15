@@ -20,6 +20,38 @@ import {
 import { ReasoningEffortId, createUserMessage, type LlmCallConfig } from '@phoenix-ai/dsh-llm'
 
 describe('installModelSelection()', () => {
+  it('never spends another automatic turn recovering an explicitly closed Team mission', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    const selection: ModelSelectionRef = {
+      current: { provider: 'openai-codex', model: PHOENIX_CODEX_AUTO_MODEL }, assembled: undefined,
+    }
+    const dispose = installModelSelection(ctx, selection, defaultExecutionHandoff)
+    const events: { type: string; data: unknown }[] = [
+      { type: 'turn/start', data: { turn: 1 } },
+      { type: 'user/message', data: { source: { kind: 'user' },
+        content: [{ type: 'text', text: 'Haz una prueba rápida con el equipo.' }] } },
+      { type: 'tool/result', data: { turn: 1, step: 2, error: { code: 'TEAM_MISSION_CLOSED' },
+        message: { content: [{ type: 'text', text: 'Kira already closed this Team mission.' }] } } },
+      { type: 'assistant/message', data: { turn: 1, step: 2,
+        message: { source: { model: 'gpt-6-luna' },
+          content: [{ type: 'text', text: 'Voy a probar otra manera.' }] } } },
+    ]
+    const steered: unknown[] = []
+    const agent = { session: { events },
+      steer: (value: unknown) => { steered.push(value) } } as unknown as Agent
+    try {
+      await ctx.systemPrompt.assemble()
+      await agentEvents(ctx, agent).serial('agent/turn-stopping', {
+        turn: 1, signal: new AbortController().signal,
+      })
+      expect(steered).toEqual([])
+    } finally {
+      dispose()
+      await ctx.fiber.dispose()
+    }
+  })
+
   it('resumes Kira on Luna after Sol handles a Team blocker without a human turn', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
@@ -387,7 +419,7 @@ describe('installModelSelection()', () => {
     await ctx.fiber.dispose()
   })
 
-  it('adapts a tiny requested Team demonstration to Sol/medium without sacrificing real work quality', async () => {
+  it('routes a tiny real Team demo to Luna low, preserving Luna Max for substantive workers', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
     const selection: ModelSelectionRef = {
@@ -408,12 +440,15 @@ describe('installModelSelection()', () => {
       expect(isBriefTeamDemonstration('haz una prueba con tu equipo en github repo')).toBe(false)
       expect(isBriefTeamDemonstration('Hola, ¿cómo estás?')).toBe(false)
       await ctx.systemPrompt.assemble()
+      const quickPolicy = await ctx.systemPrompt.assemble()
+      expect(quickPolicy.sections.some(item => item.name === 'phoenix:auto-visible-handoff'
+        && item.text.includes('Kira planning with Sol'))).toBe(false)
       await expect(agentEvents(ctx, agent).waterfall('agent/request',
         { turn: 1, step: 1, signal }, () => Promise.resolve({ provider: 'seed', model: 'seed' })))
-        .resolves.toMatchObject({ model: 'gpt-6.1-sol', reasoningEffort: ReasoningEffortId('low') })
+        .resolves.toMatchObject({ model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('low') })
       await expect(agentEvents(ctx, agent).waterfall('agent/request',
         { turn: 1, step: 2, signal }, () => Promise.resolve({ provider: 'seed', model: 'seed' })))
-        .resolves.toMatchObject({ model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('max') })
+        .resolves.toMatchObject({ model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('low') })
     } finally {
       dispose()
       await ctx.fiber.dispose()
