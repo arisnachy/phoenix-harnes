@@ -23,7 +23,7 @@ const VERIFY_ACTION = /\b(?:verify|check|test|inspect|review|audit|search|resear
 const SEND_NOUN = /(?:\b(?:env[ií]o|delivery|sending)\b.{0,80}\b(?:correo|email|e-mail|mail|mensaje|message)\b|\b(?:correo|email|e-mail|mail|mensaje|message)\b.{0,80}\b(?:env[ií]o|delivery|sending)\b)/iu
 
 // oxlint-disable-next-line @stylistic/max-len -- Keep the non-evidence Team tool set in one visible gate.
-const COORDINATION_TOOL = /^(?:spawn_teammate|send_message|followup_task|team_react|team_chat_react|team_chat_read|team_chat_answer|list_agents|wait_agent|interrupt_agent|team_task_.+|subagent(?:_fork)?|todo_write|ask_user_question|report)$/u
+const COORDINATION_TOOL = /^(?:spawn_teammate|send_message|followup_task|team_react|team_chat_react|team_chat_read|team_chat_answer|team_chat_reply_to_peer|list_agents|wait_agent|interrupt_agent|team_task_.+|subagent(?:_fork)?|todo_write|ask_user_question|report)$/u
 // oxlint-disable-next-line @stylistic/max-len -- Effectful tool verbs are intentionally one auditable allowlist.
 const EFFECT_TOOL = /^(?:send|create|update|edit|modify|write|save|upload|deploy|publish|commit|push|install|uninstall|delete|remove|move|rename|copy|submit|schedule|book|fill|reply|forward|archive|label|merge|apply|set|add|insert|execute|run|bash|pwsh|run_code|click|type|press|select|navigate)(?:_|$)/u
 
@@ -48,6 +48,16 @@ function operationName(toolName: string): string {
 export function teamExecutionRequirement(text: string): TeamExecutionRequirement {
   const candidate = text.trim()
   if (candidate === '' || !OPERATIONAL_OBJECT.test(candidate)) return 'none'
+  // Real coordination is not an external effect. "Send the result to Kira
+  // through send_message" must not force the worker to invent a shell run.
+  // oxlint-disable-next-line @stylistic/max-len -- A single auditable action-family safeguard.
+  const teamHandoff = /\b(?:send_message|followup_task|team_chat_read|team_chat_reply_to_peer)\b/iu.test(candidate)
+    && /\b(?:lead|kira|equipo|team|teammate)\b/iu.test(candidate)
+  // Actual delegated work remains proof-gated even when its handoff also
+  // mentions send_message. This check excludes protocol chatter alone.
+  // oxlint-disable-next-line @stylistic/max-len -- Deliberately explicit operational boundaries.
+  const realWork = /\b(?:email|gmail|correo|file|archivo|repo|repositorio|github|branch|rama|commit|pull\s+request|deploy|despliegue|website|web|sitio|browser|navegador|api|database|base\s+de\s+datos|sql|calendar|calendario|documento|document|sheet|spreadsheet|drive|powershell|pwsh|shell|bash|terminal|script|c[oó]digo|programa|ejecuta\p{L}*|ejecut\p{L}*|calcula\p{L}*|modifica\p{L}*|actualiza\p{L}*|instala\p{L}*|borra\p{L}*|elimina\p{L}*)\b/iu.test(candidate)
+  if (teamHandoff && !realWork) return 'none'
   if (SEND_NOUN.test(candidate) || EFFECT_ACTION.test(candidate)) return 'effect'
   if (VERIFY_ACTION.test(candidate)) return 'evidence'
   return 'none'

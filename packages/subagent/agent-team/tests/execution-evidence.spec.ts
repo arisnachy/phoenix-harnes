@@ -202,3 +202,12 @@ it('does not treat a polite directed action request as a conversational explanat
     userEvent(1, '[Team user message actual-action]\nUser request: "Can you send the email?"\nReply context:\nCan you send the email?'),
   ])).toMatchObject({ requirement: 'effect', assignmentSeq: 1, satisfied: false })
 })
+
+it('does not require an unrelated tool just to hand Kira an internal result', () => {
+  const team = '¿Puedes enviarme ahora tu resultado breve de la prueba de coordinación con send_message a lead, propósito result? Solo confirma lo que realmente hiciste.'
+  expect(teamExecutionRequirement(team)).toBe('none')
+  expect(teamExecutionRequirement('Entrega el resultado de equipo con send_message a Kira.')).toBe('none')
+  expect(teamExecutionRequirement('Ejecuta el cálculo en PowerShell y envíalo a lead mediante send_message.')).toBe('effect')
+  expect(teamExecutionRequirement('Crea un archivo y avisa a Kira usando send_message.')).toBe('effect')
+  expect(teamExecutionRequirement('Envía un correo por Gmail y luego usa send_message a Kira.')).toBe('effect')
+})
