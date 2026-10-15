@@ -1770,7 +1770,7 @@ describe('command launcher chrome and control seats', () => {
     }
   })
 
-  it('steers a new Codex Live instruction into a running harness turn instead of piling up the queue', async () => {
+  it('queues a native Codex Live answer while the previous harness turn settles instead of stopping it', async () => {
     const support = vi.spyOn(voiceAdapter, 'hasCodexRealtimeVoiceSupport').mockReturnValue(true)
     const active = vi.spyOn(voiceAdapter, 'isCodexRealtimeVoiceActive').mockReturnValue(true)
     let transcriptHandler: ((text: string) => void) | undefined
@@ -1789,9 +1789,9 @@ describe('command launcher chrome and control seats', () => {
       const { view, sink } = bench({ running: true })
       fireEvent.click(view.getByRole('button', { name: '开始语音助手' }))
       await act(async () => { await Promise.resolve() })
-      await act(async () => { transcriptHandler?.('Kira, abre YouTube') })
+      await act(async () => { transcriptHandler?.('el de los retos') })
       expect(sink).toHaveBeenCalledWith(
-        'Kira, abre YouTube', [], 'steer', expect.any(AbortSignal),
+        'el de los retos', [], 'queue', expect.any(AbortSignal),
       )
     } finally {
       voiceAdapter.setVoiceAssistantActive(false)
