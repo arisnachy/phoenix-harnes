@@ -79,114 +79,69 @@ function stepProps(
   } as unknown as ComponentProps<typeof AssistantNodeView>
 }
 
-describe('closed harness turn is the only Codex Live speech authority', () => {
-  afterEach(() => { cleanup(); spoken.mockClear() })
+describe('finalized harness reply is the only Codex Live speech source', () => {
+  afterEach(() => { cleanup(); spoken.mockClear(); cancelled.mockClear() })
 
-  it('promotes the final assistant node to a spoken reply after the owning turn closes', () => {
+  it('speaks the exact visible final reply only after the owning turn closes', () => {
     const view = render(<AssistantNodeView {...stepProps('open', 'settled', 9)} />)
-    expect(spoken).toHaveBeenLastCalledWith(
-      'session-a:assistant:turn-1:step-1', 'La tarea terminó correctamente.', now, true, false, false,
-      'session-a',
-    )
+    expect(spoken).not.toHaveBeenCalled()
     view.rerender(<AssistantNodeView {...stepProps('closed', 'settled', 9)} />)
+    expect(spoken).toHaveBeenCalledTimes(1)
     expect(spoken).toHaveBeenLastCalledWith(
-      'session-a:assistant:turn-1:step-1', 'La tarea terminó correctamente.', now, true, true, false,
-      'session-a',
+      'session-a:assistant:turn-1:step-1', 'La tarea terminó correctamente.', now,
+      true, true, false, 'session-a',
     )
   })
 
-  it('does not narrate an earlier settled step, streaming text or interrupted answer', () => {
-    const view = render(<AssistantNodeView {...stepProps('closed', 'settled', 8)} />)
+  it('does not narrate provisional conversational-tail text while a task is running', () => {
+    const view = render(<AssistantNodeView {...stepProps('open', 'running', undefined, 9, {
+      conversationalTail: true,
+    })} />)
+    expect(spoken).not.toHaveBeenCalled()
+    view.rerender(<AssistantNodeView {...stepProps('open', 'settled', 9, 9, {
+      conversationalTail: true,
+    })} />)
+    expect(spoken).not.toHaveBeenCalled()
+    view.rerender(<AssistantNodeView {...stepProps('closed', 'settled', 9, 9, {
+      conversationalTail: true,
+    })} />)
+    expect(spoken).toHaveBeenCalledTimes(1)
     expect(spoken).toHaveBeenLastCalledWith(
-      'session-a:assistant:turn-1:step-1', 'La tarea terminó correctamente.', now, true, false, false,
-      'session-a',
+      'session-a:assistant:turn-1:step-1', 'La tarea terminó correctamente.', now,
+      true, true, false, 'session-a',
     )
+  })
+
+  it('does not voice tool-bearing steps or earlier nonfinal assistant messages', () => {
+    const view = render(<AssistantNodeView {...stepProps('closed', 'settled', 8, 9, { tool: true })} />)
+    expect(spoken).not.toHaveBeenCalled()
     view.rerender(<AssistantNodeView {...stepProps('closed', 'running', 9)} />)
-    expect(spoken).toHaveBeenLastCalledWith(
-      'session-a:assistant:turn-1:step-1', 'La tarea terminó correctamente.', now, false, false, false,
-      'session-a',
-    )
+    expect(spoken).not.toHaveBeenCalled()
     view.rerender(<AssistantNodeView {...stepProps('closed', 'interrupted', 9)} />)
-    expect(spoken).toHaveBeenLastCalledWith(
-      'session-a:assistant:turn-1:step-1', 'La tarea terminó correctamente.', now, true, false, false,
-      'session-a',
-    )
-  })
-
-  it('authorizes pre-close native sentence streaming only from a durable tool-free tail', () => {
-    render(<AssistantNodeView {...stepProps('open', 'running', undefined, 9, { conversationalTail: true })} />)
-    expect(spoken).toHaveBeenLastCalledWith(
-      'session-a:assistant:turn-1:step-1', 'La tarea terminó correctamente.', now, false, false, true,
-      'session-a',
-    )
-
-    spoken.mockClear()
-    render(<AssistantNodeView {...stepProps('open', 'running', undefined, 9, {
-      conversationalTail: true,
-      tool: true,
-    })} />)
-    expect(spoken).toHaveBeenLastCalledWith(
-      'session-a:assistant:turn-1:step-1', 'La tarea terminó correctamente.', now, false, false, false,
-      'session-a',
-    )
-  })
-
-  it('revokes native streaming when a tail becomes interrupted or tool-bearing', () => {
-    const view = render(<AssistantNodeView {...stepProps('open', 'running', undefined, 9, {
-      conversationalTail: true,
-    })} />)
-    expect(spoken).toHaveBeenLastCalledWith(
-      'session-a:assistant:turn-1:step-1', 'La tarea terminó correctamente.', now, false, false, true,
-      'session-a',
-    )
-
-    view.rerender(<AssistantNodeView {...stepProps('open', 'interrupted', undefined, 9, {
-      conversationalTail: true,
-    })} />)
-    expect(cancelled).toHaveBeenCalledWith('session-a:assistant:turn-1:step-1')
-    expect(spoken).toHaveBeenLastCalledWith(
-      'session-a:assistant:turn-1:step-1', 'La tarea terminó correctamente.', now, true, false, false,
-      'session-a',
-    )
-
-    cancelled.mockClear()
-    view.rerender(<AssistantNodeView {...stepProps('open', 'running', undefined, 9, {
-      conversationalTail: true,
-      tool: true,
-    })} />)
+    expect(spoken).not.toHaveBeenCalled()
     expect(cancelled).toHaveBeenCalledWith('session-a:assistant:turn-1:step-1')
   })
 
-  it('cancels a native stream when retry folding removes the assistant node', () => {
-    const view = render(<AssistantNodeView {...stepProps('open', 'running', undefined, 9, {
-      conversationalTail: true,
-    })} />)
-    cancelled.mockClear()
+  it('does not speak reasoning-only or empty final nodes', () => {
+    render(<AssistantNodeView {...stepProps('closed', 'settled', 9, 9, { reasoningOnly: true })} />)
+    expect(spoken).not.toHaveBeenCalled()
+    expect(cancelled).toHaveBeenCalledWith('session-a:assistant:turn-1:step-1')
+  })
+
+  it('preserves completed native speech during a harmless view unmount', () => {
+    const view = render(<AssistantNodeView {...stepProps('closed', 'settled', 9)} />)
+    expect(spoken).toHaveBeenCalledTimes(1)
     view.unmount()
     expect(cancelled).toHaveBeenCalledWith('session-a:assistant:turn-1:step-1', true)
   })
 
-  it('cancels a native tail when reasoning-only projection has no spoken text', () => {
-    render(<AssistantNodeView {...stepProps('open', 'running', undefined, 9, {
-      conversationalTail: true,
-      reasoningOnly: true,
-    })} />)
-    expect(cancelled).toHaveBeenCalledWith('session-a:assistant:turn-1:step-1')
-    expect(spoken).not.toHaveBeenCalled()
-  })
-
-  it('keeps equal turn and step numbers isolated across UI sessions', () => {
-    render(<AssistantNodeView {...stepProps('open', 'running', undefined, 9, {
-      conversationalTail: true,
-      sessionId: 'session-a',
-    })} />)
-    render(<AssistantNodeView {...stepProps('open', 'running', undefined, 9, {
-      conversationalTail: true,
-      sessionId: 'session-b',
-    })} />)
+  it('isolates final spoken replies belonging to different sessions', () => {
+    render(<AssistantNodeView {...stepProps('closed', 'settled', 9, 9, { sessionId: 'session-a' })} />)
+    render(<AssistantNodeView {...stepProps('closed', 'settled', 9, 9, { sessionId: 'session-b' })} />)
     expect(spoken.mock.calls.map(call => call[0])).toEqual([
       'session-a:assistant:turn-1:step-1',
       'session-b:assistant:turn-1:step-1',
     ])
+    expect(spoken.mock.calls.every(call => call[5] === false)).toBe(true)
   })
 })
