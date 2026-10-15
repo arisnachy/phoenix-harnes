@@ -1357,6 +1357,45 @@ export function runCoordinatorContract(name: string, makeFixture: () => Promise<
       }
     })
 
+    it('loads a historical session containing a required universal team/mission checkpoint', async () => {
+      const fix = await makeFixture()
+      const { ctx, fiber } = await freshCtx(fix)
+      try {
+        const id = SessionId('historical-team-mission')
+        await ctx.sessionPersistence.create(meta(id, WORK))
+        const events: SessionEvent[] = [
+          { type: 'turn/start', seq: 0, time: 1, data: { turn: 1 } },
+          {
+            type: 'team/mission', seq: 1, time: 2,
+            data: {
+              version: 1,
+              teamId: id,
+              snapshot: {
+                id: 'mission-1', teamId: id, userMessageId: 'user-1',
+                objective: 'Abrir YouTube', origin: 'chat', phase: 'completed',
+                revision: 1, cancellationEpoch: 0, maxTeammates: 1,
+                evidenceIds: ['tool-receipt-1'], blockers: [], verified: true,
+              },
+            },
+          } as unknown as SessionEvent,
+          { type: 'turn/end', seq: 2, time: 3, data: { turn: 1, reason: { kind: 'completed' } } },
+        ]
+        await ctx.sessionPersistence.append(id, events)
+        // Both history inspection and resumable loading retain the whole log.
+        const inspected = await ctx.sessionPersistence.inspect(id)
+        expect(inspected.events.map(event => event.type))
+          .toEqual(['turn/start', 'team/mission', 'turn/end'])
+        const loaded = await ctx.sessionPersistence.load(id)
+        expect(loaded.events[1]).toMatchObject({
+          type: 'team/mission',
+          data: { version: 1, snapshot: { objective: 'Abrir YouTube', phase: 'completed' } },
+        })
+      } finally {
+        await fiber.dispose()
+        await fix.cleanup()
+      }
+    })
+
     it('rejects an unknown event type on load unless the event is marked ignorable', async () => {
       const fix = await makeFixture()
       const { ctx, fiber } = await freshCtx(fix)
