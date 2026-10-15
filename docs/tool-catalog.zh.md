@@ -2902,7 +2902,7 @@ memory_search and memory_remember expose only bounded, provenance-preserving lea
     },
     "message": {
       "type": "string",
-      "description": "Self-contained message for the target."
+      "description": "Self-contained message for the target in the current user conversational language; preserve exact code and error strings."
     }
   },
   "required": [
@@ -2976,7 +2976,7 @@ memory_search and memory_remember expose only bounded, provenance-preserving lea
     },
     "message": {
       "type": "string",
-      "description": "Self-contained message for the target."
+      "description": "Self-contained message for the target in the current user conversational language; preserve exact code and error strings."
     }
   },
   "required": [
@@ -2991,7 +2991,7 @@ memory_search and memory_remember expose only bounded, provenance-preserving lea
 
 ### `spawn_teammate`
 
-创建一名具名、持久的 teammate。只有 Team Lead 可以调用此工具。
+创建一名真实、持久的专家。Kira 按任务选择必要的最小团队（简单任务 1 名、中等任务 2 名、困难或特殊任务 3 名）；不进行角色扮演，也不创建浪费 token 的 worker。只有 Team Lead 可以调用此工具。
 
 ```json
 {
@@ -3004,6 +3004,16 @@ memory_search and memory_remember expose only bounded, provenance-preserving lea
     "description": {
       "type": "string",
       "description": "Short description of the delegated responsibility."
+    },
+    "mission_complexity": {
+      "type": "string",
+      "description": "Classify the real mission before spawning. The runtime caps teammates at 1/2/3/3 for simple/medium/difficult/exceptional; exceptional never exceeds three independent workstreams. Omit for legacy calls; never inflate the tier to create conversational theater.",
+      "enum": [
+        "simple",
+        "medium",
+        "difficult",
+        "exceptional"
+      ]
     },
     "prompt": {
       "type": "string",
@@ -3299,7 +3309,7 @@ Source: [`packages/subagent/tool-agent-team/src/index.ts`](../packages/subagent/
 
 ### `wait_agent`
 
-等待本次调用开始后下一次 teammate 状态、mailbox 或共享任务变更。它绝不会唤醒 inactive member；若没有其他 member 正在 running 或 provisioning，则立即返回 noProgress。唤醒或超时后应重新列出状态，而不是轮询。
+等待一次新的 Team 活动；不进行无限轮询。实际等待最多为 12000ms。如果连续两次超时且 Team 没有变化，返回 stalled-team，而不是再次等待。
 
 ```json
 {
@@ -3307,7 +3317,7 @@ Source: [`packages/subagent/tool-agent-team/src/index.ts`](../packages/subagent/
   "properties": {
     "timeout_ms": {
       "type": "integer",
-      "description": "Wait duration in milliseconds, from 10000 through 3600000. Defaults to 30000."
+      "description": "Requested wait duration 5000 through 3600000ms, capped internally at 12000ms. Defaults to 5000ms."
     }
   }
 }

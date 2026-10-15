@@ -8,12 +8,17 @@
 
 ### 配置
 
+活动窗口最多保留 64 个名称，模式字符总数最多为 64,000；单个超大匹配项可以单独选中。广泛搜索若匹配多个超大模式，会返回带有 `requiresExact` 标记的名称，供后续按确切名称选中。
+
 ```yaml
 tools:
   mode: native   # native (default) | code | both
+  mcpToolLazyThreshold: 64  # defer MCP schemas only above this visible count
 ```
 
 `native` 以函数定义的形式贡献可见工具。`code` 会提供保留的 `run_code` 传输、生成的 `tools:sdk` 段，以及声明「只有 `run_code` 可被直接调用」的 `tools:code-only` 规则。执行器随后强制执行该规则：模型直接调用其他任何工具时，会在策略运行前将该调用解析为 `UNKNOWN_TOOL`；`both` 同时提供两种形式，且不声明该规则，因为其中的原生调用确实可以执行。没有单独声明呈现模式的 agent 默认采用此配置；agent preset 可通过 [`dsh-agent-tool-presentation`](../agent-tool-presentation/README.zh.md) 自行选择呈现模式。不能注册、遮蔽、限制或移除该保留传输，且无论配置何种模式，该名称都是保留的，因为任何 agent 都可能选择 code 模式。非原生模式要求所加载 `ctx.codeRuntime` 的 `language` 有已注册的 SDK 渲染器——TypeScript 经 [`dsh-code-runtime-worker-thread`](../../code-runtime/code-runtime-worker-thread/README.zh.md) 交付；Python 渲染器内置，驱动任何报告 `language: 'python'` 的运行时（第一方 `dsh-code-runtime-python` 后端另行交付）。没有渲染器的运行时语言会导致提示词组装明确失败；如果 `systemPrompt.toolOrder` 条目指向当前模式未贡献的工具，系统会拒绝组装提示词。`system-prompt/assemble` 监听器可以替换注册表贡献；它返回的组装结果具有权威性，因此该监听器负责保留可用的 Code Mode 协议。
+
+当原生呈现看到超过 `mcpToolLazyThreshold` 个可见的 `mcp__*` 工具，或其 schema 总量超过 32,000 个字符时，它会保留原生工具，并为该 agent 提供作用域隔离的 `tool_search` 发现能力，而不是发送完整 MCP schema 目录。搜索成功后会为该 agent 的下一次请求选择匹配的 MCP 名称；完整 schema 随后仍通过原有提示词提供方进入请求，执行也继续经过限制、审批、守卫和分发流水线。直接调用尚未发现的 MCP 名称会解析为 `UNKNOWN_TOOL`。搜索结果最多包含 16 个名称和 32,000 个字符；超大 schema 在结果中仅显示摘要，但下一次请求仍可获得完整 schema。Code Mode 与 `both` 保留其完整 SDK／原生呈现。
 
 ### 公开 API
 

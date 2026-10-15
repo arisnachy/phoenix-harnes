@@ -10,7 +10,7 @@ import { CompactionEngine, ManualCompactionError } from '@phoenix-ai/dsh-compact
 import type { CompactionResult, CompactionTrigger } from '@phoenix-ai/dsh-compaction'
 import type { TokenMeter } from '@phoenix-ai/dsh-token-meter'
 import type { Session } from '@phoenix-ai/dsh-session'
-import { CONTEXT_WINDOW_EXCEEDED_CODE, assertNever } from '@phoenix-ai/dsh-llm'
+import { CONTEXT_WINDOW_EXCEEDED_CODE, assertNever, createUserMessage } from '@phoenix-ai/dsh-llm'
 import type { LlmCallConfig } from '@phoenix-ai/dsh-llm'
 import type { Agent, PreStepDecision } from '@phoenix-ai/dsh-agent'
 import type { CommandId } from '@phoenix-ai/dsh-commands/brand'
@@ -27,7 +27,7 @@ import {
   compactSurfaceRegion,
   selectCompactableRange,
 } from './region.ts'
-import { summarizeWithLlm } from './summarizer.ts'
+import { frameSummary, summarizeWithLlm } from './summarizer.ts'
 import type { SummarizationInput, SummaryResult } from './summarizer.ts'
 import type {
   BasicCompactionConfig,
@@ -47,6 +47,73 @@ export type {
 
 /** The region transaction's view of this service's dynamically dispatched summarizer. */
 type RegionSummarize = (input: SummarizationInput, agent: Agent, signal?: AbortSignal) => Promise<SummaryResult>
+
+/** Snapshot that identifies an automatic pressure attempt with no useful progress. */
+interface PressureFailureMemo {
+  readonly targetKey: string
+  readonly replaceGeneration: number
+  readonly start: number
+  readonly end: number
+  readonly shadowedTokenCount: number
+  readonly prefixFingerprint: string
+}
+
+/** Build a stable fingerprint for the selected head and its priced content. */
+function pressurePrefixFingerprint(
+  measurement: ReturnType<TokenMeter['measure']>,
+  end: number,
+): string {
+  const endIndex = measurement.nodes.findIndex(node => node.seq === end)
+  if (endIndex === -1) return ''
+  return measurement.nodes
+    .slice(0, endIndex + 1)
+    .map(node => `${node.seq}:${node.tokens}`)
+    .join(',')
+}
+
+/** Return the priced tokens in one selected inclusive surface range. */
+function pressureRangeTokenCount(
+  measurement: ReturnType<TokenMeter['measure']>,
+  range: { readonly start: number; readonly end: number },
+): number {
+  const startIndex = measurement.nodes.findIndex(node => node.seq === range.start)
+  const endIndex = measurement.nodes.findIndex(node => node.seq === range.end)
+  if (startIndex === -1 || endIndex < startIndex) return 0
+  return measurement.nodes
+    .slice(startIndex, endIndex + 1)
+    .reduce((total, node) => total + node.tokens, 0)
+}
+
+/** Price the smallest possible durable checkpoint replacement. */
+function minimumCheckpointTokens(meter: TokenMeter): number {
+  return meter.estimateMessage(createUserMessage({
+    content: frameSummary([]),
+    source: { kind: 'plugin', plugin: 'dsh-compaction-basic' },
+  }))
+}
+
+/** Check whether automatic pressure still targets the unchanged failed span. */
+function matchesPressureFailure(
+  memo: PressureFailureMemo | undefined,
+  targetKey: string,
+  replaceGeneration: number,
+  range: { readonly start: number; readonly end: number },
+  shadowedTokenCount: number,
+  prefixFingerprint: string,
+): boolean {
+  return memo?.targetKey === targetKey
+    && memo.replaceGeneration === replaceGeneration
+    && memo.start === range.start
+    && memo.end === range.end
+    && memo.shadowedTokenCount === shadowedTokenCount
+    && memo.prefixFingerprint === prefixFingerprint
+}
+
+/** Only memoize a deterministic non-shrinking result; provider failures may recover. */
+function isNonShrinkingSummaryFailure(error: unknown): boolean {
+  return error instanceof Error
+    && error.message.startsWith('summary is not smaller than the shadowed content')
+}
 
 /** Resolve the exact provider/model durably routed for the latest request. */
 function routedTarget(
@@ -122,6 +189,7 @@ export class BasicCompactionEngine extends CompactionEngine {
   private readonly warnedPressureConfigTargets = new Set<string>()
   private readonly overflowRetries = new WeakMap<Agent, number>()
   private readonly overflowAgents = new WeakMap<Session, Agent>()
+  private readonly pressureFailureMemos = new WeakMap<Session, PressureFailureMemo>()
 
   constructor(ctx: Context, config: BasicCompactionConfig = {}) {
     super(ctx)
@@ -320,7 +388,40 @@ export class BasicCompactionEngine extends CompactionEngine {
         /* v8 ignore next -- paired with the defensive post-success branch above. */
         break
       }
-      result = await this.compactRegion(range.start, range.end, agent, signal)
+      const shadowedTokenCount = pressureRangeTokenCount(measurement, range)
+      const prefixFingerprint = pressurePrefixFingerprint(measurement, range.end)
+      const failureMemo: PressureFailureMemo = {
+        targetKey,
+        replaceGeneration: agent.session.surface.replaceGeneration,
+        start: range.start,
+        end: range.end,
+        shadowedTokenCount,
+        prefixFingerprint,
+      }
+      if (matchesPressureFailure(
+        this.pressureFailureMemos.get(agent.session),
+        targetKey,
+        failureMemo.replaceGeneration,
+        range,
+        shadowedTokenCount,
+        prefixFingerprint,
+      )) return result
+      // The framing alone is larger than this span, so no non-empty summary
+      // can shrink it. Avoid paying an auxiliary model call until the selected
+      // head grows or a replacement changes the surface generation.
+      if (shadowedTokenCount <= minimumCheckpointTokens(meter)) {
+        this.pressureFailureMemos.set(agent.session, failureMemo)
+        return result
+      }
+      try {
+        result = await this.compactRegion(range.start, range.end, agent, signal)
+      } catch (error: unknown) {
+        if (!signal.aborted && isNonShrinkingSummaryFailure(error)) {
+          this.pressureFailureMemos.set(agent.session, failureMemo)
+        }
+        throw error
+      }
+      this.pressureFailureMemos.delete(agent.session)
       measurement = meter.measure(agent.session)
       if (measurement.totalTokens < spec.thresholdTokens) return result
     }

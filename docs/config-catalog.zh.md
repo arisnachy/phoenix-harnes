@@ -322,7 +322,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/subagent/agent-team/src/types.ts:159`](../packages/subagent/agent-team/src/types.ts)
+Source: [`packages/subagent/agent-team/src/types.ts:160`](../packages/subagent/agent-team/src/types.ts)
 
 <a id="phoenix-aidsh-agent-tool-presentation"></a>
 
@@ -1586,6 +1586,14 @@ export interface StreamableHttpConfig {
   bearerTokenRef?: string
   /** Whether to attach the host-managed OAuth provider when available. */
   oauth?: boolean
+  /** Credential reference containing a fixed OAuth client id for servers that do not support DCR. */
+  oauthClientIdRef?: string
+  /** Credential reference containing the matching fixed OAuth client secret. */
+  oauthClientSecretRef?: string
+  /** Optional deterministic loopback callback port required by a pre-registered OAuth app. */
+  oauthCallbackPort?: number
+  /** Token endpoint client authentication method for a pre-registered OAuth app. */
+  oauthTokenEndpointAuthMethod?: 'none' | 'client_secret_post' | 'client_secret_basic'
   /** Per-tool-call timeout in milliseconds. */
   toolCallTimeoutMs: number
   /** Fail plugin activation when the initial connection or tool synchronization fails. */
@@ -2755,7 +2763,7 @@ export interface TeamModelProfile {
 }
 ```
 
-Source: [`packages/subagent/tool-agent-team/src/index.ts:29`](../packages/subagent/tool-agent-team/src/index.ts)
+Source: [`packages/subagent/tool-agent-team/src/index.ts:41`](../packages/subagent/tool-agent-team/src/index.ts)
 
 <a id="phoenix-aidsh-tool-bash"></a>
 
@@ -3052,7 +3060,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/session-learning/tool-session-learning/src/index.ts:20`](../packages/session-learning/tool-session-learning/src/index.ts)
+Source: [`packages/session-learning/tool-session-learning/src/index.ts:29`](../packages/session-learning/tool-session-learning/src/index.ts)
 
 <a id="phoenix-aidsh-tool-session-query"></a>
 
@@ -3330,13 +3338,20 @@ export interface Config {
    * restores strictly serial dispatch. Must be a positive integer.
    */
   maxParallelSubCalls?: number
+  /**
+   * Number of visible `mcp__*` tools at which native presentation switches to
+   * deferred discovery. Native tools remain in the prompt; MCP schemas are
+   * returned by `tool_search` and become visible only for the calling agent.
+   * Must be a positive integer.
+   */
+  mcpToolLazyThreshold?: number
 }
 
 /** How the registry presents its tools to the model (see {@link Config.mode}). */
 export type ToolPresentationMode = 'native' | 'code' | 'both'
 ```
 
-Source: [`packages/core/tools/src/index.ts:655`](../packages/core/tools/src/index.ts)
+Source: [`packages/core/tools/src/index.ts:794`](../packages/core/tools/src/index.ts)
 
 <a id="phoenix-aidsh-typert-loader"></a>
 
@@ -3450,7 +3465,9 @@ export interface Config {
   readonly naturalRequestTimeoutMs?: number
   /** Maximum characters per semantic neural synthesis chunk. */
   readonly naturalMaxChunkChars?: number
-  /** Optional local Kokoro command; absence leaves Kokoro unavailable. */
+  /** Warm Kokoro in the background when an installed local model is detected. */
+  readonly kokoroPrewarm?: boolean
+  /** Optional local Kokoro command; absence auto-detects a completed PHOENIX install. */
   readonly kokoroCommand?: string
   /** Arguments for the Kokoro command. */
   readonly kokoroArgs?: string[]
@@ -3458,7 +3475,7 @@ export interface Config {
   readonly sttCommand?: string
   /** Arguments for the STT command. */
   readonly sttArgs?: string[]
-  /** Whether to register the platform fallback after neural TTS and Kokoro. */
+  /** Register legacy platform TTS for alerts; off by default on Windows to avoid robotic speech. */
   readonly systemTts?: boolean
 }
 ```

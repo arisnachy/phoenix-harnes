@@ -2984,7 +2984,7 @@ Source: [`packages/subagent/tool-agent-team/src/index.ts`](../packages/subagent/
 
 ### `spawn_teammate`
 
-Create one named, durable teammate. Only the Team Lead may call this tool.
+Create one REAL durable specialist. Kira chooses the smallest warranted team (1 simple, 2 medium, 3 difficult/exceptional); no role-play or token-wasting workers. Only the Team Lead may call this tool.
 
 ```json
 {
@@ -2997,6 +2997,16 @@ Create one named, durable teammate. Only the Team Lead may call this tool.
     "description": {
       "type": "string",
       "description": "Short description of the delegated responsibility."
+    },
+    "mission_complexity": {
+      "type": "string",
+      "description": "Classify the real mission before spawning. The runtime caps teammates at 1/2/3/3 for simple/medium/difficult/exceptional; exceptional never exceeds three independent workstreams. Omit for legacy calls; never inflate the tier to create conversational theater.",
+      "enum": [
+        "simple",
+        "medium",
+        "difficult",
+        "exceptional"
+      ]
     },
     "prompt": {
       "type": "string",
@@ -3292,7 +3302,7 @@ Source: [`packages/subagent/tool-agent-team/src/index.ts`](../packages/subagent/
 
 ### `wait_agent`
 
-Wait once for new Team activity; never poll indefinitely. Actual waiting is capped at 20000ms. After two timeouts without any Team change, return stalled-team instead of waiting again.
+Wait once for new Team activity; never poll indefinitely. Actual waiting is capped at 12000ms. After two timeouts without any Team change, return stalled-team instead of waiting again.
 
 ```json
 {
@@ -3300,7 +3310,7 @@ Wait once for new Team activity; never poll indefinitely. Actual waiting is capp
   "properties": {
     "timeout_ms": {
       "type": "integer",
-      "description": "Requested wait duration 10000 through 3600000ms, capped internally at 20000ms. Defaults to 10000ms."
+      "description": "Requested wait duration 5000 through 3600000ms, capped internally at 12000ms. Defaults to 5000ms."
     }
   }
 }

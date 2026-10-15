@@ -38,7 +38,12 @@ describe('gen-tool-catalog collectToolCatalog', () => {
       'team_task_get', 'team_task_list', 'team_task_update', 'terminal_close', 'terminal_list',
       'terminal_open', 'terminal_read', 'terminal_send', 'terminal_signal', 'todo_write',
       'update_goal', 'wait_agent', 'web_fetch', 'web_search', 'workflow', 'write',
-    ])
+      'fs_status', 'gmail_read', 'gmail_search', 'gmail_send', 'google_calendar_create_event',
+      'google_calendar_list_events', 'google_drive_search', 'google_workspace_request', 'home_control', 'home_list_devices',
+      'living_act', 'living_forget_creation', 'living_get_connector_kit', 'living_inspect_creation', 'living_list_creations',
+      'living_read_state', 'living_register_creation', 'living_verify_creation', 'memory_remember', 'memory_search',
+      'memory_teach', 'organization_forge', 'specialist_lab', 'team_chat_answer', 'team_chat_react', 'team_chat_read', 'team_react',
+    ].sort())
     // Every tool carries a JSON-Schema `parameters` object (what the model sees).
     for (const entry of catalog) {
       for (const schema of entry.schemas) {

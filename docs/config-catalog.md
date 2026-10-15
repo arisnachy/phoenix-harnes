@@ -320,7 +320,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/subagent/agent-team/src/types.ts:159`](../packages/subagent/agent-team/src/types.ts)
+Source: [`packages/subagent/agent-team/src/types.ts:160`](../packages/subagent/agent-team/src/types.ts)
 
 <a id="phoenix-aidsh-agent-tool-presentation"></a>
 
@@ -2761,7 +2761,7 @@ export interface TeamModelProfile {
 }
 ```
 
-Source: [`packages/subagent/tool-agent-team/src/index.ts:39`](../packages/subagent/tool-agent-team/src/index.ts)
+Source: [`packages/subagent/tool-agent-team/src/index.ts:41`](../packages/subagent/tool-agent-team/src/index.ts)
 
 <a id="phoenix-aidsh-tool-bash"></a>
 
@@ -3058,7 +3058,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/session-learning/tool-session-learning/src/index.ts:28`](../packages/session-learning/tool-session-learning/src/index.ts)
+Source: [`packages/session-learning/tool-session-learning/src/index.ts:29`](../packages/session-learning/tool-session-learning/src/index.ts)
 
 <a id="phoenix-aidsh-tool-session-query"></a>
 
@@ -3336,13 +3336,20 @@ export interface Config {
    * restores strictly serial dispatch. Must be a positive integer.
    */
   maxParallelSubCalls?: number
+  /**
+   * Number of visible `mcp__*` tools at which native presentation switches to
+   * deferred discovery. Native tools remain in the prompt; MCP schemas are
+   * returned by `tool_search` and become visible only for the calling agent.
+   * Must be a positive integer.
+   */
+  mcpToolLazyThreshold?: number
 }
 
 /** How the registry presents its tools to the model (see {@link Config.mode}). */
 export type ToolPresentationMode = 'native' | 'code' | 'both'
 ```
 
-Source: [`packages/core/tools/src/index.ts:776`](../packages/core/tools/src/index.ts)
+Source: [`packages/core/tools/src/index.ts:794`](../packages/core/tools/src/index.ts)
 
 <a id="phoenix-aidsh-typert-loader"></a>
 
