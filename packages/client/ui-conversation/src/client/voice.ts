@@ -1388,7 +1388,9 @@ function updateCodexRealtimePhase(payload: string): void {
       }
       session.lastCompletedNativeTerminal = {
         key: utterance.key,
-        streamMessageKey: utterance.streamMessageKey,
+        ...(utterance.streamMessageKey !== undefined
+          ? { streamMessageKey: utterance.streamMessageKey }
+          : {}),
         eventType: type,
         completedAt: Date.now(),
       }
