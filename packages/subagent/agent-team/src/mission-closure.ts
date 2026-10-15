@@ -10,12 +10,6 @@ const EFFECT = /(?:^|__)(?:submit_form|fill_form|send_email|create_file|update_f
 // oxlint-disable-next-line @stylistic/max-len -- Closure needs a distinct actual verification tool receipt.
 const VERIFY = /(?:^|__)(?:wait_for|read_page|verify|check|test|typecheck|build|read|inspect_form|inspect_page|browser_snapshot|browser_inspect|status)$/iu
 
-/**
- * Unfinished work in the current genuine human request must not be mistaken
- * for mission completion just because the model ended a text turn.
- * @param events - Lead session event stream.
- * @returns Whether the last checklist in this human mission still has work.
- */
 /** The beginning of the current durable mission, even after a human steering message. */
 function missionBoundary(events: readonly SessionEvent[]): number {
   const human = events.findLastIndex(event =>
@@ -26,7 +20,12 @@ function missionBoundary(events: readonly SessionEvent[]): number {
   }
   const start = events.findIndex(event => event.type === 'team/mission'
     && event.data.snapshot.id === latest.data.snapshot.id && event.data.snapshot.revision === 1)
-  return start >= 0 ? start : human
+  if (start < 0) return human
+  // Mission opening is asynchronous; the first checklist can precede its
+  // revision-one checkpoint. Scope from the authentic founding human request.
+  const founder = events.slice(0, start + 1).findLastIndex(event =>
+    event.type === 'user/message' && event.data.source.kind === 'user')
+  return founder >= 0 ? founder : start
 }
 
 /**
@@ -47,9 +46,16 @@ export function unfinishedMissionTodos(events: readonly SessionEvent[]): boolean
  * @returns Whether the persisted Goal is still active.
  */
 export function unfinishedMissionGoal(events: readonly SessionEvent[]): boolean {
-  const latest = events.findLast(event => event.type === 'goal/change')
-  return latest !== undefined && latest.data.operation !== 'clear'
-    && latest.data.goal.phase === 'active'
+  // Goal is a sibling capability, not an Agent Teams compile dependency.
+  // Inspect its persisted event boundary without assuming module augmentation.
+  const latest = events.findLast(event => (event.type as string) === 'goal/change')
+  const data: unknown = latest?.data
+  if (typeof data !== 'object' || data === null || Array.isArray(data)) return false
+  const record = data as Record<string, unknown>
+  const goal = record['goal']
+  return record['operation'] !== 'clear' && typeof goal === 'object'
+    && goal !== null && !Array.isArray(goal)
+    && (goal as Record<string, unknown>)['phase'] === 'active'
 }
 
 /**
