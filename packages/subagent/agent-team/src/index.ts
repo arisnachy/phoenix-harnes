@@ -510,7 +510,7 @@ export class TeamService extends TypertRemoteService {
   /**
    * Wait for the next Team-domain or member-status change.
    * @param caller - exact live Team member waiting for activity.
-   * @param timeoutMs - bounded wait duration from ten seconds through one hour.
+   * @param timeoutMs - bounded wait duration from five seconds through one hour.
    * @param signal - caller cancellation for the wait only.
    * @returns one observed change or a timeout result.
    */
