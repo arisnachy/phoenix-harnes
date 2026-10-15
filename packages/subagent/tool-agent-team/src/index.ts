@@ -69,7 +69,7 @@ Operational convergence / anti-loop discipline:
 - Establish the failure using one live status and, if permitted, one nonsecret direct check of the configured endpoint. Do not run a long reconnection loop or create multiple temporary tools just to read the same status.
 - For MCP retry-exhausted, distinguish a generic retry ceiling from the original transport error. A directly observed HTTP 404 "Server not found" from the exact configured endpoint points to an obsolete, incorrect or removed server URL; it does not prove an OAuth credential is missing. Once a direct diagnostic is verified, stop re-investigating previously excluded hypotheses unless new contradictory evidence arrives.
 - Split research into non-overlapping scopes. Ask a single independent specialist only for genuinely separate evidence. The specialist should send one evidenced conclusion, uncertainty and next action using send_message to lead with purpose review/result (or blocker). team_chat_answer is only for a direct *user-authored* question addressed to that worker; it is NEVER a handoff to Kira.
-- A returned accepted or queued peer message has been durably recorded: do not resend it. If a peer result fails an evidence gate, send a truthful review or blocker with concrete cited facts rather than retrying the same prohibited claim. If the channel fails, use one materially different supported handoff and then stop; do not launch a new investigation merely to unblock the reporting channel.
+- Keep short coordination human, not ceremonial: Kira and real teammates may ask one necessary question and answer directly in Spanish with the stable peer name. A user choice belongs to the same living specialist that asked it, never a new simulated worker. Never request a preference merely to manufacture a second round of conversation; choose a concise default for trivial presentation choices. A terminal TEAM_MISSION_CLOSED, no-active-peer or user stop ends automatic attempts in that mission, with one truthful partial report and no alternative delivery probes. A returned accepted or queued peer message has been durably recorded: do not resend it. If a peer result fails an evidence gate, send a truthful review or blocker with concrete cited facts rather than retrying the same prohibited claim. If the channel fails, use one materially different supported handoff and then stop; do not launch a new investigation merely to unblock the reporting channel.
 - Report meaningful findings, questions and blockers, not a stream of "I am checking", statuses, repeated waits or descriptions of tool registration. Give the user a concise outcome as soon as sufficient evidence is available: observed fact, supported cause, uncertainty, one corrective next step. Finish and stop. Do not reopen a delivered investigation without an explicit new request or new relevant evidence.
 - A wait_agent timeout is not evidence of failed research. After two unchanged expirations, stop polling, request the existing specialist's best bounded answer at most once, and finish using available evidence or switch to a different substantive action. Optimize output quality per elapsed minute and token, not the number of steps narrated.
 
@@ -527,20 +527,20 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
 
     register(scoped.tools.register(defineTool({
       name: 'wait_agent',
-      description: 'Wait once for new Team activity; never poll indefinitely. Actual waiting is capped at 20000ms. After two timeouts without any Team change, return stalled-team instead of waiting again.',
+      description: 'Wait once for new Team activity; never poll indefinitely. Actual waiting is capped at 12000ms. After two timeouts without any Team change, return stalled-team instead of waiting again.',
       parameters: {
         timeout_ms: {
           type: 'integer',
-          description: 'Requested wait duration 10000 through 3600000ms, capped internally at 20000ms. Defaults to 10000ms.',
+          description: 'Requested wait duration 5000 through 3600000ms, capped internally at 12000ms. Defaults to 5000ms.',
         },
       },
       output: jsonOutput(WAIT_VALUE_SCHEMA),
       async execute(args, exec) {
         const caller = callingAgent(exec.agent, 'wait_agent')
-        const timeoutMs = args.timeout_ms ?? 10_000
+        const timeoutMs = args.timeout_ms ?? 5_000
         // Preserve TeamService's authoritative timeout validation before the
         // model-only no-progress shortcut.
-        if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 10_000 || timeoutMs > 3_600_000) {
+        if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 5_000 || timeoutMs > 3_600_000) {
           return await ctx.agentTeams.waitForChange(caller, timeoutMs, exec.signal)
         }
         const membership = ctx.agentTeams.membership(caller)
@@ -564,7 +564,7 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
             },
           }
         }
-        const result = await ctx.agentTeams.waitForChange(caller, Math.min(timeoutMs, 20_000), exec.signal)
+        const result = await ctx.agentTeams.waitForChange(caller, Math.min(timeoutMs, 12_000), exec.signal)
         if (result.timedOut) budget.expired += 1
         else budget.expired = 0
         return result
