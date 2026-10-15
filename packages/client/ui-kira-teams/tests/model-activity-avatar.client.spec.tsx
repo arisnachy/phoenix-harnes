@@ -43,6 +43,11 @@ describe('model engine glyphs', () => {
     expect(markers.find(child => child.props['data-engine-model'] === 'gpt-6-luna')?.props).toMatchObject({
       'data-engine-mark': '☾', 'data-engine-family': 'luna',
     })
+    const badge = markers.find(child => child.props['data-engine-model'] === 'gpt-6-luna')
+    const badgeContents = Children.toArray(badge?.props.children).filter(isValidElement<Record<string, unknown>>)
+    expect(badgeContents.some(child => child.type === 'svg')).toBe(true)
+    expect(badgeContents.some(child => child.type === 'span')).toBe(true)
+
     const unknown = ModelActivityAvatar({ kind: 'atlas', activity: undefined, running: true, pending: false })
     expect(Children.toArray(unknown.props.children).filter(isValidElement<Record<string, unknown>>)
       .some(child => child.props['data-engine-mark'] !== undefined)).toBe(false)
