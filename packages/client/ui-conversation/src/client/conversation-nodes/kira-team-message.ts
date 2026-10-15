@@ -25,8 +25,9 @@ function queued(match: ConversationMatch): KiraTeamMessageChatData | undefined {
       ...(typeof message.role === 'string' ? { role: message.role } : {}),
       ...(typeof message.missionId === 'string' ? { missionId: message.missionId } : {}),
       targetId: typeof message.targetId === 'string' ? message.targetId : '',
-      ...(typeof message.targetId === 'string' && message.targetId === message.missionId
-        ? { targetName: 'Kira' } : {}),
+      ...(typeof message.targetName === 'string' ? { targetName: message.targetName }
+        : typeof message.targetId === 'string' && message.targetId === message.missionId
+          ? { targetName: 'Kira' } : {}),
       ...(typeof message.replyTo === 'string' ? { replyTo: message.replyTo } : {}),
       ...(typeof message.replyQuote === 'string' ? { replyQuote: message.replyQuote } : {}),
       pendingDelivery: Array.isArray(message.deliveries) && message.deliveries.some(item => record(item)?.accepted === false),

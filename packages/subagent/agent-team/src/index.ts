@@ -334,6 +334,15 @@ export class TeamService extends TypertRemoteService {
     return await this.trackChat(this.chat.answer(actor, request))
   }
 
+  /** Publish the Lead's own concise reply to a real delivered specialist handoff.
+   * @param actor - exact live Lead.
+   * @param request - durable peer message and bounded reply.
+   * @returns visible reply identity.
+   */
+  async replyToPeer(actor: Agent, request: { readonly messageId: string; readonly text: string }): Promise<{ messageId: string }> {
+    return await this.trackChat(this.chat.replyToPeer(actor, request))
+  }
+
   /** Set/remove a human reaction.
    * @param request - message and Unicode emoji.
    */

@@ -21,6 +21,7 @@ export interface TeamChatMessage {
   readonly time: number
   readonly sourceSeq: number
   readonly targetId?: string | undefined
+  readonly targetName?: string | undefined
   readonly replyTo?: string | undefined
   readonly replyQuote?: string | undefined
   readonly mentions: readonly string[]

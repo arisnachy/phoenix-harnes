@@ -389,3 +389,37 @@ describe('chat durable ownership and delivery', () => {
   })
 
 })
+
+describe('genuine Kira to teammate conversation', () => {
+  it('publishes and replays one direct result acknowledgement without waking the child', async () => {
+    const f = await fixture()
+    f.root.append('team/message/queued', { version: 1, teamId: TeamId(f.root.id),
+      message: { id: 'peer-result', senderId: f.child.id, senderName: 'Eclipse',
+        targetId: f.root.id, purpose: 'result', delivery: 'quiet',
+        content: content('Kira, el resultado es 391.') },
+    })
+    f.root.append('team/message/delivered', { version: 1, teamId: TeamId(f.root.id),
+      messageId: 'peer-result', targetId: f.root.id })
+    const reply = { messageId: 'peer-result', text: 'Eclipse, recibí el 391. Bien, la prueba queda cerrada.' }
+    expect(await f.chat.replyToPeer(f.lead, reply)).toEqual({ messageId: 'root:peer-reply:peer-result' })
+    expect(await f.chat.replyToPeer(f.lead, reply)).toEqual({ messageId: 'root:peer-reply:peer-result' })
+    expect(f.followup).not.toHaveBeenCalled()
+    expect(f.chat.messages(f.root).filter(row => row.replyTo === 'peer-result')).toMatchObject([{
+      senderKind: 'kira', senderName: 'Kira', targetId: f.child.id, targetName: 'Eclipse', text: reply.text,
+    }])
+    await expect(f.chat.replyToPeer(f.lead, { ...reply, text: 'Otra respuesta' }))
+      .rejects.toThrow('identity conflicts')
+    await expect(f.chat.replyToPeer(f.worker, reply)).rejects.toThrow('only the live Team lead')
+  })
+  it('rejects fictional or undelivered results rather than fabricating dialogue', async () => {
+    const f = await fixture()
+    await expect(f.chat.replyToPeer(f.lead, { messageId: 'inventado', text: 'Listo.' }))
+      .rejects.toThrow('requires a real received')
+    f.root.append('team/message/queued', { version: 1, teamId: TeamId(f.root.id),
+      message: { id: 'undelivered', senderId: f.child.id, senderName: 'Eclipse',
+        targetId: f.root.id, purpose: 'result', delivery: 'quiet', content: content('Resultado.') },
+    })
+    await expect(f.chat.replyToPeer(f.lead, { messageId: 'undelivered', text: 'Eclipse, recibido.' }))
+      .rejects.toThrow('was not delivered')
+  })
+})

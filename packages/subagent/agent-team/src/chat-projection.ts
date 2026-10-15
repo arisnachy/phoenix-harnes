@@ -85,7 +85,7 @@ export const teamChatParticipantsDefinition = {
 export const chatMessageSchema = z.object({
   id: z.string().min(1), senderId: z.string().min(1), senderName: z.string(), senderKind: z.enum(['user', 'kira', 'agent']),
   avatar: z.string().optional(), role: z.string().optional(), missionId: z.string().optional(), text: z.string(),
-  time: z.number(), sourceSeq: z.number().int().nonnegative(), targetId: z.string().optional(),
+  time: z.number(), sourceSeq: z.number().int().nonnegative(), targetId: z.string().optional(), targetName: z.string().optional(),
   replyTo: z.string().optional(), replyQuote: z.string().optional(), mentions: z.array(z.string()),
   supervised: z.boolean().optional(),
   deliveries: z.array(z.object({ targetId: z.string(), accepted: z.boolean(), error: z.string().optional() }).strict()).optional(),

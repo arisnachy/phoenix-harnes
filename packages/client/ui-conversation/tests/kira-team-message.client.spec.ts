@@ -185,6 +185,18 @@ describe('KIRA Team conversation node', () => {
     expect(kiraTeamMessageDefinition.buildViewNode?.(context(undefined))).toBeNull()
   })
 
+  it('renders Kira as sender and Eclipse as recipient of a real peer reply', () => {
+    const eventReply = match('team/chat-message', { version: 1, message: {
+      id: 'root:peer-reply:received', senderId: 'root', senderName: 'Kira',
+      senderKind: 'kira', missionId: 'root', targetId: 'worker-a', targetName: 'Eclipse',
+      replyTo: 'received', replyQuote: 'Eclipse: 391',
+      text: 'Eclipse, recibí tu cálculo. Cerramos esta prueba.',
+    } })
+    expect(kiraTeamMessageDefinition.start(context(undefined), eventReply, {} as never))
+      .toMatchObject({ senderKind: 'kira', targetName: 'Eclipse',
+        replyTo: 'received', content: [{ type: 'text', text: 'Eclipse, recibí tu cálculo. Cerramos esta prueba.' }] })
+  })
+
   it('makes a real teammate address to Kira explicit without inventing speech', () => {
     const message = match('team/chat-message', {
       version: 1,

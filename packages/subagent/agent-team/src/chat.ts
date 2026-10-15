@@ -267,7 +267,8 @@ export class TeamChat {
         }
         if (event.type === 'tool/call'
           && event.data.name !== 'send_message' && event.data.name !== 'followup_task'
-          && event.data.name !== 'team_chat_react' && event.data.name !== 'team_task_update'
+          && event.data.name !== 'team_chat_react' && event.data.name !== 'team_chat_reply_to_peer'
+          && event.data.name !== 'team_task_update'
           && event.data.name !== 'wait_agent' && event.data.name !== 'list_agents') {
           workCallIds.add(event.data.callId)
         }
@@ -401,6 +402,53 @@ export class TeamChat {
       if (remaining === 0) break
     }
     return { ...result, messages }
+  }
+
+  /** Publish one actual model-authored Kira-to-worker reply in the shared
+   * transcript. This records the response but does not wake a finished worker.
+   * New work must use send_message or followup_task instead.
+   */
+  async replyToPeer(actor: Agent, request: { readonly messageId: string; readonly text: string }): Promise<{ messageId: string }> {
+    if (this.ctx.agents.get(actor.id) !== actor || actor.session.header.origin === 'subagent') {
+      throw new Error('only the live Team lead can answer a peer handoff')
+    }
+    const root = this.root(actor.id)
+    if (root !== actor.session) throw new Error('team root session changed')
+    const content = request.text.trim()
+    if (!content || Buffer.byteLength(content, 'utf8') > 800) throw new Error('peer reply must contain 1-800 UTF-8 bytes')
+    const id = `${root.id}:peer-reply:${request.messageId}`
+    await this.journal.transact(root.id, async () => {
+      this.assertLive(root)
+      if (this.ctx.agents.get(actor.id) !== actor) throw new Error('stale Team lead')
+      const existing = this.messages(root).find(row => row.id === id)
+      if (existing !== undefined) {
+        if (existing.text !== content) throw new Error('peer reply identity conflicts')
+        return
+      }
+      // Only real received and acknowledged Team messages can be addressed;
+      // never impersonate a peer or reply to an unaccepted/synthetic message.
+      const received = root.events.findLast(event => event.type === 'team/message/queued'
+        && event.data.message.id === request.messageId && event.data.message.targetId === root.id
+        && event.data.message.senderId !== root.id
+        && ['result', 'question', 'blocker', 'review'].includes(event.data.message.purpose ?? ''))
+      if (received?.type !== 'team/message/queued') throw new Error('peer reply requires a real received Team handoff')
+      const lastUser = root.events.findLast(event => event.type === 'user/message' && event.data.source.kind === 'user')
+      if (lastUser !== undefined && received.seq < lastUser.seq) throw new Error('peer handoff belongs to a prior user turn')
+      const delivered = root.events.some(event => event.type === 'team/message/delivered'
+        && event.data.messageId === request.messageId && event.data.targetId === root.id)
+      if (!delivered) throw new Error('peer handoff was not delivered to Kira')
+      const peer = received.data.message
+      const summary = peer.content.flatMap(block => block.type === 'text' ? [block.text] : []).join(' ').slice(0, 180)
+      root.append('team/chat-message', { version: 1, message: {
+        id, senderId: root.id, senderName: 'Kira', senderKind: 'kira',
+        avatar: 'kira', role: 'skill.orchestration', missionId: root.id,
+        text: content, time: Date.now(), sourceSeq: received.seq,
+        targetId: peer.senderId, targetName: peer.senderName, replyTo: request.messageId,
+        replyQuote: `${peer.senderName}: ${summary}`, mentions: [peer.senderId], reactions: [],
+      } })
+      await this.ctx.sessions.flush(root)
+    })
+    return { messageId: id }
   }
 
   /** Publish one answer to an accepted conversational user request without completing the mission.
