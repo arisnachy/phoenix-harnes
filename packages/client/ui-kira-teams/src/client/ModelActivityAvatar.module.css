@@ -55,37 +55,39 @@
   pointer-events: none;
 }
 
+/* Tiny lateral model sigil. Keep the upper portrait and the lower-right
+   activity dot unobstructed, at every avatar size and in either theme. */
 .engineBadge {
   position: absolute;
   z-index: 4;
-  top: -5px;
-  right: -6px;
+  top: 50%;
+  right: -11px;
+  transform: translateY(-50%);
   box-sizing: border-box;
   display: grid;
   place-items: center;
-  width: 22px;
-  height: 22px;
-  border: 1px solid color-mix(in srgb, var(--engine-accent) 33%, var(--dsh-color-surface, #fff));
-  border-radius: 50%;
-  background: radial-gradient(circle at 28% 22%, #fff 0%, var(--engine-tint) 83%);
-  box-shadow: 0 2px 6px rgb(50 37 25 / 13%), inset 0 0 0 1px rgb(255 255 255 / 75%);
+  width: 18px;
+  height: 18px;
+  border: 1px solid color-mix(in srgb, var(--engine-accent) 34%, var(--avatar-surface));
+  border-radius: 7px;
+  background: var(--avatar-surface);
+  box-shadow: 0 1px 4px rgb(50 37 25 / 11%);
   color: var(--engine-accent);
   font-family: ui-sans-serif, system-ui, sans-serif;
-  font-size: 13px;
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 650;
   line-height: 1;
-  text-shadow: 0 1px 0 rgb(255 255 255 / 55%);
   pointer-events: auto;
-  --engine-accent: #bd752e;
+  --engine-accent: #ac7136;
   --engine-tint: #fff0df;
 }
 
-.engineBadge[data-engine-family='luna'] { --engine-accent: #647ca6; --engine-tint: #e9eef8; }
+.engineBadge[data-engine-family='luna'] { --engine-accent: #6079a5; --engine-tint: #e9eef8; }
 .engineBadge[data-engine-family='astra'] { --engine-accent: #9272b9; --engine-tint: #f0eafa; }
 .engineBadge[data-engine-family='other'] { --engine-accent: #9a6d56; --engine-tint: #f5ede6; }
 
 @media (prefers-color-scheme: dark) {
-  .engineBadge { box-shadow: 0 2px 7px rgb(0 0 0 / 22%), inset 0 0 0 1px rgb(255 255 255 / 55%); }
+  .engineBadge { box-shadow: 0 1px 4px rgb(0 0 0 / 25%); }
 }
 
 /* Keep Kira unmistakable, but without the extra animated halo or K badge. */
