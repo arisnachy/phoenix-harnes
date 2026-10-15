@@ -449,6 +449,17 @@ function turnEvents(
 interface PhoenixAutoTeamSignal {
   readonly messageId: string
   readonly purpose: string
+  readonly text: string
+}
+
+/** Presentation-only choices can be decided cheaply; technical, clinical,
+ * security and implementation questions always retain the normal Max route.
+ */
+function isTinyTeamFormatQuestion(signal: PhoenixAutoTeamSignal): boolean {
+  return signal.purpose === 'question'
+    && signal.text.length <= 260
+    && /(?:formato|viñetas|vinetas|una frase|dos frases|breve o|bullets|one sentence|two bullets)/iu.test(signal.text)
+    && !/(?:c[oó]digo|error|seguridad|riesgo|arquitectura|paciente|clinica|cl[ií]nica|implementaci[oó]n|fallo|bug)/iu.test(signal.text)
 }
 
 /** Read the newest real Team message admitted into this turn without another classifier call. */
@@ -466,11 +477,17 @@ function phoenixAutoTeamSignalForTurn(
         readonly messageId?: string
         readonly purpose?: string
       }
+      readonly content?: readonly { readonly type?: string; readonly text?: string }[]
     }
     if (data.source?.kind !== 'team-message'
       || typeof data.source.messageId !== 'string'
       || typeof data.source.purpose !== 'string') continue
-    return { messageId: data.source.messageId, purpose: data.source.purpose }
+    return {
+      messageId: data.source.messageId,
+      purpose: data.source.purpose,
+      text: data.content?.filter(block => block.type === 'text')
+        .map(block => block.text ?? '').join(' ').trim() ?? '',
+    }
   }
   return undefined
 }
@@ -794,7 +811,7 @@ function phoenixAutoRoute(
       return {
         provider: 'openai-codex',
         model: PHOENIX_CODEX_AUTO_WORKER_MODEL,
-        reasoningEffort: ReasoningEffortId('max'),
+        reasoningEffort: ReasoningEffortId(isTinyTeamFormatQuestion(teamSignal) ? 'low' : 'max'),
       }
     }
     if (isConversationalFastPathText(directText) || isContextualConversationFastPathText(directText)) {
