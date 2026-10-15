@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-10-12-native-conversation-speech-streaming.md
-2026-10-12-native-conversation-speech-streaming.md: 12b161812113ab988651c1fdd8e3a0d885d02d19
-2026-10-12-native-conversation-speech-streaming.zh.md: 27cc3f28964abee9bea64c2ecde922c673fdccc1
+2026-10-12-native-conversation-speech-streaming.md: 55e0dddb689e56d270468d5dc904bafa3bd970c2
+2026-10-12-native-conversation-speech-streaming.zh.md: 22266557910163758ae536124de51c6da944a92c
