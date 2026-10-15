@@ -15,13 +15,13 @@ export class TeamActivity {
   /**
    * Wait for one later Team-domain or member-status change.
    * @param id - Team whose next edge wakes the caller.
-   * @param timeoutMs - bounded wait duration from ten seconds through one hour.
+   * @param timeoutMs - bounded wait duration from five seconds through one hour.
    * @param signal - caller cancellation for this wait only.
    * @returns whether the wait ended by timeout.
    */
   async wait(id: TeamId, timeoutMs: number, signal: AbortSignal): Promise<TeamWaitResult> {
-    if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 10_000 || timeoutMs > 3_600_000) {
-      throw new TeamError('timeoutMs must be an integer from 10000 through 3600000', 'TEAM_INVALID_TIMEOUT')
+    if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 5_000 || timeoutMs > 3_600_000) {
+      throw new TeamError('timeoutMs must be an integer from 5000 through 3600000', 'TEAM_INVALID_TIMEOUT')
     }
     signal.throwIfAborted()
     if (this.closed) return { timedOut: false }
