@@ -155,6 +155,8 @@ interface CodexRealtimeVoiceSession {
   inactivityTimer?: number
   /** V3 may signal completion while authorized WebRTC speech is still buffered. */
   audioDrainTimer?: number
+  /** Reopen the human transcript path while RTC finishes playing authorized speech. */
+  inputResumeTimer?: number
   audioDrainUntil?: number
   /** Ignore one late V3 assistant turn marker belonging to the completed reply. */
   lateAssistantTurnIgnored?: boolean
@@ -205,6 +207,8 @@ const CODEX_VOICE_DISCONNECT_GRACE_MS = 30_000
 const CODEX_VOICE_INACTIVITY_MS = 5 * 60_000
 /** Grace for buffered WebRTC speech after Codex finishes generating it. */
 const CODEX_VOICE_AUDIO_DRAIN_MS = 6_000
+/** Reopen recognition before all buffered playback grace expires. */
+const CODEX_VOICE_INPUT_RESUME_MS = 900
 /** Conservative speech budget; a missing V3 terminal must not block all later sentences forever. */
 const CODEX_VOICE_NATIVE_MIN_COMPLETION_MS = 15_000
 /** V3 may repeat a terminal using a different event shape after the next sentence was admitted. */
@@ -234,7 +238,9 @@ function clearCodexRealtimeTimers(session: CodexRealtimeVoiceSession): void {
   delete session.audioStatsTimer
   delete session.nativeGenerationTimer
   if (session.audioDrainTimer !== undefined) window.clearTimeout(session.audioDrainTimer)
+  if (session.inputResumeTimer !== undefined) window.clearTimeout(session.inputResumeTimer)
   delete session.audioDrainTimer
+  delete session.inputResumeTimer
   delete session.audioDrainUntil
   delete session.lateAssistantTurnIgnored
   delete session.lastCompletedNativeTerminal
@@ -425,7 +431,9 @@ function playCodexRealtimeAudio(audio: HTMLAudioElement): void {
 
 function clearCodexRealtimeAudioDrain(session: CodexRealtimeVoiceSession): void {
   if (session.audioDrainTimer !== undefined) window.clearTimeout(session.audioDrainTimer)
+  if (session.inputResumeTimer !== undefined) window.clearTimeout(session.inputResumeTimer)
   delete session.audioDrainTimer
+  delete session.inputResumeTimer
   delete session.audioDrainUntil
   delete session.lateAssistantTurnIgnored
 }
@@ -632,6 +640,14 @@ function finishNativeUtterance(session: CodexRealtimeVoiceSession, utterance: Pe
   clearCodexRealtimeAudioDrain(session)
   session.audioDrainUntil = Date.now() + CODEX_VOICE_AUDIO_DRAIN_MS
   session.lateAssistantTurnIgnored = false
+  // Keep the speaker audible during RTC draining, but do not ignore a natural
+  // short answer for six seconds after the preceding generated sentence ends.
+  session.inputResumeTimer = window.setTimeout(() => {
+    delete session.inputResumeTimer
+    if (codexRealtimeVoiceSession !== session || session.activeUtterance !== undefined
+      || session.audio.muted || session.nativeCancelRequested) return
+    setCodexRealtimeMicOpen(session, true)
+  }, CODEX_VOICE_INPUT_RESUME_MS)
   session.audioDrainTimer = window.setTimeout(() => {
     if (codexRealtimeVoiceSession !== session || session.activeUtterance !== undefined) return
     muteCodexRealtimeAudio(session, 'authorized-audio-drained')
@@ -1579,6 +1595,13 @@ export function interruptVoiceAssistantSpeech(): boolean {
  * @returns Whether the transcript is likely loudspeaker echo.
  */
 export function isLikelyVoiceAssistantEcho(text: string): boolean {
+  // A valid reply may repeat the very words in Kira's question ("el de los
+  // retos"). Native input is only reopened after generation has ended; at that
+  // point a repeated phrase is human speech, not grounds for dropping a turn.
+  if (codexRealtimeVoiceSession !== undefined
+    && codexRealtimeVoiceSession.activeUtterance === undefined
+    && !codexRealtimeVoiceSession.ignoreUserTranscripts) return false
+  if (voiceAssistantSnapshot.phase !== 'speaking') return false
   const heard = normalizeEchoText(text)
   const spoken = normalizeEchoText(voiceAssistantSpokenText)
   if (heard.length < 8 || spoken === '') return false
