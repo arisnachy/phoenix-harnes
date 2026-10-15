@@ -82,6 +82,16 @@
   --engine-tint: #fff0df;
 }
 
+/* Legacy text remains selectable for diagnostics; the actual icon is vector. */
+.engineMarkText {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
+
 .engineBadge[data-engine-family='luna'] { --engine-accent: #6079a5; --engine-tint: #e9eef8; }
 .engineBadge[data-engine-family='astra'] { --engine-accent: #9272b9; --engine-tint: #f0eafa; }
 .engineBadge[data-engine-family='other'] { --engine-accent: #9a6d56; --engine-tint: #f5ede6; }
