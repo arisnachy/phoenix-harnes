@@ -557,13 +557,13 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
       parameters: {
         timeout_ms: {
           type: 'integer',
-          description: 'Requested wait duration 5000 through 3600000ms, capped internally at 12000ms. Defaults to 5000ms.',
+          description: 'Requested wait duration 5000 through 3600000ms, capped internally at 12000ms. Defaults to 12000ms; completes earlier on actual teammate activity.',
         },
       },
       output: jsonOutput(WAIT_VALUE_SCHEMA),
       async execute(args, exec) {
         const caller = callingAgent(exec.agent, 'wait_agent')
-        const timeoutMs = args.timeout_ms ?? 5_000
+        const timeoutMs = args.timeout_ms ?? 12_000
         // Preserve TeamService's authoritative timeout validation before the
         // model-only no-progress shortcut.
         if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 5_000 || timeoutMs > 3_600_000) {

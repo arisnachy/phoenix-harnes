@@ -641,6 +641,12 @@ describe('dsh-tool-team', () => {
     await waitNoAgent(ctx, childId)
   })
 
+  it('advertises an event-driven Team wait that avoids 5-second model polling', async () => {
+    const { ctx, lead } = await setup([])
+    const schema = (await assembly(ctx, lead)).tools.find(tool => tool.name === 'wait_agent')
+    expect(JSON.stringify(schema)).toContain('Defaults to 12000ms')
+  })
+
   it('rejects a teammate result claim until the assigned external action has a real receipt', async () => {
     const { ctx, lead } = await setup(['hang'])
     const spawned = await execute(ctx, lead, 'spawn_teammate', {
