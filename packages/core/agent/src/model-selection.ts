@@ -265,7 +265,7 @@ function kiraNeedsSolStrategy(text: string): boolean {
 }
 
 /** Bound self-healing continuation so a pathological provider cannot create an endless promise loop. */
-const AUTO_CONTINUATION_LIMIT = 4
+const AUTO_CONTINUATION_LIMIT = 2
 const AUTO_EXECUTION_CONTINUATION =
   'Planning or describing the next action is not task completion. ' +
   'Continue the current user request now with the available tools. ' +
@@ -661,7 +661,30 @@ function phoenixAutoTurnWasUserStopped(
   })
 }
 
-/** A tiny requested Team showcase gets a real Sol plan at low effort. */
+/** Stop automatic continuation on an explicit, durable Team admission denial.
+ * A closed mission cannot be repaired by sending more assistant or tool calls.
+ */
+function phoenixAutoTerminalTeamFailure(
+  agent: { readonly session: { readonly events: readonly PhoenixAutoEvent[] } },
+  turn: number,
+): boolean {
+  const events = turnEvents(agent, turn)
+  for (const event of events) {
+    if (event.type !== 'tool/result') continue
+    const result = event.data as { readonly error?: { readonly code?: string; readonly message?: string };
+      readonly message?: { readonly content?: readonly { readonly text?: string; readonly
+        content?: readonly { readonly text?: string }[] }[] } }
+    if (result.error?.code === 'TEAM_MISSION_CLOSED') return true
+    const detail = result.error?.message
+      ?? result.message?.content?.flatMap(block => [
+        block.text ?? '', ...(block.content?.map(child => child.text ?? '') ?? []),
+      ]).join(' ') ?? ''
+    if (/TEAM_MISSION_CLOSED|Kira already closed this (?:Team )?mission/iu.test(detail.slice(0,4096))) return true
+  }
+  return false
+}
+
+/** A tiny requested Team showcase gets one bounded, genuine peer exchange. */
 export function isBriefTeamDemonstration(text: string): boolean {
   const request = text.normalize('NFKD').replace(/[\u0300-\u036f]/gu, '').toLowerCase().trim()
   if (request.length < 8 || request.length > 240 || request.includes('\n')) return false
@@ -789,9 +812,11 @@ function phoenixAutoRoute(
       }
     }
     if (isBriefTeamDemonstration(directText)) {
+      // A tiny requested team chat check needs one real peer, not a separate
+      // Sol plan plus several expensive Luna Max orchestration rounds.
       return {
         provider: 'openai-codex',
-        model: PHOENIX_CODEX_AUTO_PLANNER_MODEL,
+        model: PHOENIX_CODEX_AUTO_WORKER_MODEL,
         reasoningEffort: ReasoningEffortId('low'),
       }
     }
@@ -829,6 +854,16 @@ function phoenixAutoRoute(
     return {
       provider: 'openai-codex',
       model: PHOENIX_CODEX_AUTO_PLANNER_MODEL,
+      reasoningEffort: ReasoningEffortId('low'),
+    }
+  }
+
+  if (isBriefTeamDemonstration(directText)) {
+    // Keep coordination lightweight throughout a bounded conversational demo.
+    // Substantive Team workers still use their independent Luna Max route.
+    return {
+      provider: 'openai-codex',
+      model: PHOENIX_CODEX_AUTO_WORKER_MODEL,
       reasoningEffort: ReasoningEffortId('low'),
     }
   }
@@ -931,7 +966,8 @@ export function installModelSelection(
     const autoPolicy = solRescueStep ? AUTO_SOL_STRATEGY_POLICY
       : autoStep === 1
         && phoenixAutoTaskRequest(currentRequest)
-        && !isStandaloneVisualPreviewRequest(currentRequest) ? AUTO_VISIBLE_PLAN_POLICY
+        && !isStandaloneVisualPreviewRequest(currentRequest)
+        && !isBriefTeamDemonstration(currentRequest) ? AUTO_VISIBLE_PLAN_POLICY
         : autoStep !== undefined && autoStep > 1 ? AUTO_LUNA_COORDINATION_POLICY : undefined
     return {
       ...assembled,
@@ -1035,7 +1071,8 @@ export function installModelSelection(
     // coincide with a fresh human message in the same turn.
     const realTeamBlocker = phoenixAutoTeamSignalForTurn(agent, turn)?.purpose === 'blocker'
     if ((!phoenixAutoTaskRequest(directText) && !realTeamBlocker)
-      || phoenixAutoTurnWasUserStopped(agent, turn)) return
+      || phoenixAutoTurnWasUserStopped(agent, turn)
+      || phoenixAutoTerminalTeamFailure(agent, turn)) return
     // A tool-verified one-shot visual meets the original request. Do not
     // resurrect it with a mandatory team-admission notice.
     if (isStandaloneVisualPreviewRequest(directText)
