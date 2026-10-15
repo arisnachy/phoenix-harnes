@@ -3,9 +3,31 @@
  * Agent Teams owns UME writes. This projection consumes only public Session
  * events, so Goals does not acquire a circular runtime dependency on Teams.
  */
-import type { Session } from '@phoenix-ai/dsh-session'
+import type { Session, SessionEvent } from '@phoenix-ai/dsh-session'
 
 const TERMINAL = new Set(['completed', 'partial', 'failed', 'cancelled'])
+
+/**
+ * Bootstrap durable Goal continuation only after a human-authorized turn
+ * ended with a genuinely unfinished todo checklist and no existing Goal.
+ * @param events - Current Lead session history.
+ * @returns Exact human objective, or undefined when continuation is unjustified.
+ */
+export function unfinishedTodoRecoveryObjective(events: readonly SessionEvent[]): string | undefined {
+  const humanIndex = events.findLastIndex(event =>
+    event.type === 'user/message' && event.data.source.kind === 'user')
+  if (humanIndex < 0) return undefined
+  const human = events[humanIndex]
+  if (human?.type !== 'user/message') return undefined
+  const current = events.slice(humanIndex + 1)
+  const lastEnd = current.findLast(event => event.type === 'turn/end')
+  if (lastEnd === undefined || lastEnd.data.reason.kind !== 'completed') return undefined
+  const lastTodo = current.findLast(event => event.type === 'todo/write')
+  if (lastTodo === undefined || !lastTodo.data.todos.some(todo => todo.status !== 'completed')) return undefined
+  const objective = human.data.content.flatMap(block =>
+    block.type === 'text' ? [block.text] : []).join(' ').trim().slice(0, 2_000)
+  return objective.length > 0 ? objective : undefined
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)

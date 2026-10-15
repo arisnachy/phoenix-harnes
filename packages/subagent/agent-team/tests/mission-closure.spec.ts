@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { SessionEvent } from '@phoenix-ai/dsh-session'
-import { teamMissionClosed } from '../src/mission-closure.ts'
+import { teamMissionClosed, unfinishedMissionTodos } from '../src/mission-closure.ts'
 
 const start = { type: 'turn/start', data: { turn: 1 } } as unknown as SessionEvent
 const finished = { type: 'turn/end', data: { turn: 1, reason: { kind: 'completed' } } } as unknown as SessionEvent
@@ -28,7 +28,28 @@ const kiraAnswer = (text: string) => ({
   },
 }) as unknown as SessionEvent
 
+const checklist = (...statuses: ('pending' | 'in_progress' | 'completed')[]): SessionEvent => ({
+  type: 'todo/write',
+  data: { todos: statuses.map((status, index) => ({ content: `step ${index + 1}`, status })) },
+}) as unknown as SessionEvent
+
 describe('Kira Team closure after verified completion', () => {
+  it('preserves an unfinished mission despite a completed model turn or premature closing prose', () => {
+    const todo = checklist('in_progress', 'pending', 'pending')
+    expect(unfinishedMissionTodos([human, start, todo])).toBe(true)
+    expect(teamMissionClosed([human, start, todo, finished])).toBe(false)
+    expect(teamMissionClosed([
+      human, start, todo,
+      browserCall('send', 'mcp__phoenix_browser__submit_form'), browserResult('send'),
+      browserCall('check', 'mcp__phoenix_browser__wait_for'), browserResult('check'),
+      kiraAnswer('No queda trabajo pendiente que justifique delegar.'),
+    ])).toBe(false)
+    expect(teamMissionClosed([human, start, todo, cancelled])).toBe(true)
+    expect(unfinishedMissionTodos([human, start, todo, checklist('completed', 'completed')])).toBe(false)
+    expect(teamMissionClosed([human, start, todo, checklist('completed', 'completed'), finished])).toBe(true)
+    expect(unfinishedMissionTodos([human, todo, finished, human])).toBe(false)
+  })
+
   it('prevents the redundant Selenium review in the SAME turn after real submit and wait_for receipts', () => {
     const verified = [
       start, browserCall('send', 'mcp__phoenix_browser__submit_form'), browserResult('send'),

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Session, SessionEvent } from '@phoenix-ai/dsh-session'
-import { goalBlockedByClosedUniversalMission } from '../src/mission-fence.ts'
+import { goalBlockedByClosedUniversalMission, unfinishedTodoRecoveryObjective } from '../src/mission-fence.ts'
 
 function human(seq: number, kind = 'user'): SessionEvent {
   return { seq, type: 'user/message', data: { source: { kind } } } as unknown as SessionEvent
@@ -15,6 +15,30 @@ function terminal(seq: number, phase = 'completed', teamId = 'lead'): SessionEve
 function session(events: SessionEvent[]): Pick<Session, 'id' | 'events'> {
   return { id: 'lead' as Session['id'], events }
 }
+describe('Goal recovery for abandoned checklists', () => {
+  const request = { seq: 1, type: 'user/message', data: {
+    source: { kind: 'user' }, content: [{ type: 'text', text: 'Publica el juego probado' }],
+  } } as unknown as SessionEvent
+  const pending = { seq: 2, type: 'todo/write', data: {
+    todos: [{ content: 'Probar el salto', status: 'in_progress' }, { content: 'Publicar', status: 'pending' }],
+  } } as unknown as SessionEvent
+  const done = { seq: 2, type: 'todo/write', data: {
+    todos: [{ content: 'Publicar', status: 'completed' }],
+  } } as unknown as SessionEvent
+  const end = { seq: 3, type: 'turn/end', data: { reason: { kind: 'completed' } } } as unknown as SessionEvent
+  const stop = { seq: 3, type: 'turn/end', data: {
+    reason: { kind: 'aborted', reason: { kind: 'user' } },
+  } } as unknown as SessionEvent
+
+  it('resumes only unfinished, human-authorized work after a completed turn', () => {
+    expect(unfinishedTodoRecoveryObjective([request, pending, end])).toBe('Publica el juego probado')
+    expect(unfinishedTodoRecoveryObjective([request, done, end])).toBeUndefined()
+    expect(unfinishedTodoRecoveryObjective([request, pending, stop])).toBeUndefined()
+    expect(unfinishedTodoRecoveryObjective([pending, end])).toBeUndefined()
+    expect(unfinishedTodoRecoveryObjective([request, pending])).toBeUndefined()
+  })
+})
+
 describe('UME terminal fence for automatic Goal rounds', () => {
   it('allows ordinary Goals when no UME terminal event exists', () => {
     expect(goalBlockedByClosedUniversalMission(session([]))).toBe(false)

@@ -45,6 +45,7 @@ export function renderGoalRoundPrompt(
       + 'A prediction or probabilistic outcome is never guaranteed; do not disguise missing evidence as certainty. '
       + 'If an obstacle is recoverable, repair it, acquire or build a missing capability, or use another route before reporting it. '
       + 'Internal retry, attempt, or execution-window limits never complete the mission; rotate strategy and continue. '
+      + 'A checklist with pending or in-progress items is NOT completed merely because this text turn ends. Finish and verify those items before closing the objective. '
       + 'Only a genuine external dependency may pause autonomous progress: permission, credential, safety policy, exhausted provider quota, '
       + 'or a dependency that cannot be satisfied safely. '
       + 'If `ask_user_question` returns after its deadline, treat the selected recommendation as an '

@@ -12,12 +12,12 @@ import { createUserMessage, isHarnessError, QUOTA_EXCEEDED_CODE } from '@phoenix
 import type { ContentBlock, MessageId, MessageSource } from '@phoenix-ai/dsh-llm'
 import type { Session, SessionEvent, TurnEndCancelCause, UserMessage } from '@phoenix-ai/dsh-session'
 import { renderGoalRoundPrompt } from './prompt.ts'
-import { goalBlockedByClosedUniversalMission } from './mission-fence.ts'
+import { goalBlockedByClosedUniversalMission, unfinishedTodoRecoveryObjective } from './mission-fence.ts'
 import { recordGoalSupervisor, replayGoalSupervisor, type GoalSupervisorState } from './supervisor.ts'
 import { measureGoalVerificationProgress, recordGoalStrategy, replayGoalStrategy, selectNextStrategy } from './strategy.ts'
 
 export { renderGoalRoundPrompt } from './prompt.ts'
-export { goalBlockedByClosedUniversalMission } from './mission-fence.ts'
+export { goalBlockedByClosedUniversalMission, unfinishedTodoRecoveryObjective } from './mission-fence.ts'
 export { recordGoalSupervisor, replayGoalSupervisor } from './supervisor.ts'
 export type { GoalSupervisorState } from './supervisor.ts'
 export { GOAL_STRATEGIES, measureGoalVerificationProgress, recordGoalStrategy, replayGoalStrategy, selectNextStrategy } from './strategy.ts'
@@ -299,7 +299,21 @@ export function apply(ctx: Context): void {
     }
 
     const goal = currentGoal(state)
-    if (goal === undefined || goal.phase !== 'active' || goal.activation !== 'armed') return
+    if (goal === undefined) {
+      // The checklist is durable but some providers end the human turn without
+      // calling create_goal. Start its authorized continuation once; the normal
+      // goal/changed event will schedule the first recovery round.
+      const objective = unfinishedTodoRecoveryObjective(agent.session.events)
+      if (objective !== undefined) {
+        try {
+          ctx.goals.create(agent, { objective })
+        } catch (error: unknown) {
+          ctx.logger.warn(`goal-round-driver: could not recover unfinished todo for agent "${agent.id}": ${renderThrown(error)}`)
+        }
+      }
+      return
+    }
+    if (goal.phase !== 'active' || goal.activation !== 'armed') return
     checkpoint(state, goal, 'active', 'continue')
     if (goal.roundsStarted >= goal.maxGoalRounds) {
       // The cap bounds one execution window, never the mission. Rotate the

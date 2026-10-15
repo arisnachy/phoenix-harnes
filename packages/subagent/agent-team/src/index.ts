@@ -17,7 +17,7 @@ import { TeamMailbox } from './mailbox.ts'
 import { TeamRoster } from './roster.ts'
 import type { TeamMembership } from './roster.ts'
 import { TeamTaskBoard } from './task-board.ts'
-import { teamMissionClosed } from './mission-closure.ts'
+import { teamMissionClosed, unfinishedMissionTodos } from './mission-closure.ts'
 import { UniversalMissionLedger } from './universal-mission.ts'
 import type { UniversalMissionSnapshot } from './universal-mission.ts'
 import { TeamId, TeamTaskId } from './types.ts'
@@ -174,12 +174,14 @@ export class TeamService extends TypertRemoteService {
           }
         }
       }
-      // Kira finishing a turn is terminal for its current Team mission as well.
-      // Late Aegis reviews and handoffs must not keep children working after DONE.
+      // A completed model turn is not a completed mission when a real todo
+      // checklist remains unfinished. Preserve teammate work and Goal recovery.
+      // Late reviews after actual completion must not restart a closed mission.
       // The same teardown applies to explicit user cancellation.
       if (session.header.origin !== 'subagent' && event.type === 'turn/end'
         && (event.data.reason.kind === 'completed'
-          || (event.data.reason.kind === 'aborted' && event.data.reason.reason.kind === 'user'))) {
+          || (event.data.reason.kind === 'aborted' && event.data.reason.reason.kind === 'user'))
+        && !(event.data.reason.kind === 'completed' && unfinishedMissionTodos(session.events))) {
         const lead = ctx.agents.get(session.id)
         if (lead?.session === session) {
           // Capture the identity now: an awaited journal mutation may otherwise

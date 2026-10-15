@@ -19,15 +19,31 @@ const VERIFY = /(?:^|__)(?:wait_for|read_page|verify|check|test|typecheck|build|
  * @param events - Current Lead Session event log.
  * @returns Whether late reviewer spawn and queued wakeup must be refused.
  */
+/**
+ * Unfinished work in the current genuine human request must not be mistaken
+ * for mission completion just because the model ended a text turn.
+ * @param events - Lead session event stream.
+ * @returns Whether the last checklist in this human mission still has work.
+ */
+export function unfinishedMissionTodos(events: readonly SessionEvent[]): boolean {
+  const boundary = events.findLastIndex(event =>
+    event.type === 'user/message' && event.data.source.kind === 'user')
+  const latest = events.slice(boundary + 1).findLast(event => event.type === 'todo/write')
+  return latest !== undefined && latest.data.todos.some(todo => todo.status !== 'completed')
+}
+
 export function teamMissionClosed(events: readonly SessionEvent[]): boolean {
+  const unfinished = unfinishedMissionTodos(events)
   for (let index = events.length - 1; index >= 0; index--) {
     const event = events[index]
     if (event?.type === 'turn/end') {
-      return event.data.reason.kind === 'completed' || event.data.reason.kind === 'aborted'
+      if (event.data.reason.kind === 'aborted' && event.data.reason.reason.kind === 'user') return true
+      return !unfinished && (event.data.reason.kind === 'completed' || event.data.reason.kind === 'aborted')
     }
     if (event?.type === 'user/message' && event.data.source.kind === 'user') break
   }
 
+  if (unfinished) return false
   const boundary = events.findLastIndex(event =>
     event.type === 'user/message' && event.data.source.kind === 'user')
   const current = events.slice(boundary + 1)
