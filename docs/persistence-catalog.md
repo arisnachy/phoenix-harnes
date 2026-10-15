@@ -939,6 +939,17 @@ Types: [TeamId](subsystems/agent-team.md) · [TeamMessageSnapshot](subsystems/ag
 
 Source: [`packages/subagent/agent-team/src/types.ts:261`](../packages/subagent/agent-team/src/types.ts)
 
+<a id="teammission--log-only"></a>
+
+#### `team/mission` — log-only
+
+```ts persistence-catalog
+/** Versioned root-owned universal mission checkpoint. */
+'team/mission': UniversalMissionEvent
+```
+
+Source: [`packages/subagent/agent-team/src/universal-mission.ts:42`](../packages/subagent/agent-team/src/universal-mission.ts)
+
 <a id="teamreaction--log-only"></a>
 
 #### `team/reaction` — log-only
