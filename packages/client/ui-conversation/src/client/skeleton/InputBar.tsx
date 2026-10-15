@@ -445,10 +445,13 @@ export function InputBar({
     if (input.phase !== 'plain' || input.draft.trim() === '') return
     voiceSubmitPendingRef.current = false
     voiceRef.current?.stop()
-    // New spoken instructions during a running ordinary turn steer the
-    // existing harness rather than becoming another deferred queue entry.
-    // Typed messages keep their separate explicit Queue/Steer preference.
-    keyboard.submit(running && subagent === null ? 'steer' : 'queue')
+    // A native Live transcript is often the answer to Kira's preceding
+    // question while its harness Turn is still settling. Steering that answer
+    // stops the previous Turn ("Detenido") instead of continuing dialogue.
+    // Queue it as the next conversational Turn; explicit Stop and typed Steer
+    // remain available. Browser fallback retains its existing barge-in route.
+    keyboard.submit(running && subagent === null && !isCodexRealtimeVoiceActive()
+      ? 'steer' : 'queue')
   }, [input?.draft, input?.phase, keyboard, running, subagent])
 
   // Chrome/WebKit can end a recognition segment after a response or due to a
