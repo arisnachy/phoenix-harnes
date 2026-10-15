@@ -540,10 +540,10 @@ describe('dsh-tool-team', () => {
         message: 'No other Team member is running or provisioning. wait_agent cannot make progress or wake inactive teammates. Re-list with list_agents and team_task_list, then use followup_task to wake each required inactive teammate before waiting again.',
       },
     })
-    for (const timeout_ms of [9_999, 3_600_001, Number.MAX_SAFE_INTEGER + 1]) {
+    for (const timeout_ms of [4_999, 3_600_001, Number.MAX_SAFE_INTEGER + 1]) {
       const invalid = await execute(inactiveSetup.ctx, inactiveSetup.lead, 'wait_agent', { timeout_ms })
       expect(invalid.isError).toBe(true)
-      expect(text(invalid)).toContain('timeoutMs must be an integer from 10000 through 3600000')
+      expect(text(invalid)).toContain('timeoutMs must be an integer from 5000 through 3600000')
     }
 
     const activeSetup = await setup(['hang'])
@@ -581,7 +581,7 @@ describe('dsh-tool-team', () => {
         expect(JSON.parse(text(response))).toEqual({ timedOut: true })
       }
       expect(wait).toHaveBeenCalledTimes(2)
-      expect(wait.mock.calls.every(call => call[1] === 20_000)).toBe(true)
+      expect(wait.mock.calls.every(call => call[1] === 12_000)).toBe(true)
 
       const stalled = await execute(ctx, lead, 'wait_agent', { timeout_ms: 10_000 })
       expect(stalled.isError).toBe(false)
