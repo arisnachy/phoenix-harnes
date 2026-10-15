@@ -30,6 +30,10 @@ This partially extends the [harness finality decision](../bug-fix/2026-10-08-cod
 
 **Switch to a faster model.** A silent route change would alter the selected model without addressing the speech admission delay.
 
+Native Live used to suppress every microphone transcript throughout the full six-second WebRTC playback drain, so a natural spoken reply to Kira's question could be lost. Now the input command path reopens after a brief 900 ms echo guard once native generation ends, without shortening the independent speaker drain. An overlap with the last spoken answer is not treated as echo once that native command path has reopened; while Kira is actually generating speech, feedback suppression remains active.
+
+Native Live replies are queued as their own conversation turns even if the previous harness turn has not finished settling. Automatically steering such a reply could cancel the prior turn and display "Stopped" when the user was merely answering a question. Explicit Stop and keyboard Steer remain available, and browser fallback's active-turn behavior is unchanged. The tradeoff is that a new native voice order during a genuinely busy task waits in the harness queue rather than implicitly cancelling it.
+
 ## Consequences
 
 Strict conversational replies may begin speaking before the remaining text is generated. Tool execution retains its existing final-result wait. Native sentence serialization preserves one active utterance; interrupted or rewritten output cannot leave stale queued sentences. Loading performance requires separate measurements and fixes.
