@@ -139,6 +139,8 @@ interface CodexRealtimeVoiceSession {
   nativeCancelRequested?: boolean
   /** Bound the wait when a peer never returns the cancelled response terminal event. */
   nativeCancelTimer?: number
+  /** Recover a native appendSpeech that never sends a V3 terminal event. */
+  nativeGenerationTimer?: number
   /** Recent distinct human transcripts for this WebRTC call, not per render. */
   readonly recentTranscripts: Map<string, number>
   /** Drop an unrecovered network disconnect instead of leaving voice stuck. */
@@ -188,6 +190,8 @@ const CODEX_VOICE_DISCONNECT_GRACE_MS = 30_000
 const CODEX_VOICE_INACTIVITY_MS = 5 * 60_000
 /** Grace for buffered WebRTC speech after Codex finishes generating it. */
 const CODEX_VOICE_AUDIO_DRAIN_MS = 6_000
+/** Conservative speech budget; a missing V3 terminal must not block all later sentences forever. */
+const CODEX_VOICE_NATIVE_MIN_COMPLETION_MS = 15_000
 const pendingCodexRealtimeUtterances: PendingCodexRealtimeUtterance[] = []
 /** One bounded sentence cursor; never preloads an unbounded answer queue. */
 let nativeSentenceStream: NativeSentenceStreamState | undefined
@@ -208,6 +212,8 @@ function clearCodexRealtimeTimers(session: CodexRealtimeVoiceSession): void {
   if (session.disconnectTimer !== undefined) window.clearTimeout(session.disconnectTimer)
   if (session.inactivityTimer !== undefined) window.clearTimeout(session.inactivityTimer)
   if (session.nativeCancelTimer !== undefined) window.clearTimeout(session.nativeCancelTimer)
+  if (session.nativeGenerationTimer !== undefined) window.clearTimeout(session.nativeGenerationTimer)
+  delete session.nativeGenerationTimer
   if (session.audioDrainTimer !== undefined) window.clearTimeout(session.audioDrainTimer)
   delete session.audioDrainTimer
   delete session.audioDrainUntil
@@ -278,6 +284,9 @@ function sendCodexRealtimeUtterance(
       if (receipt.ok && receipt.value.accepted) {
         utterance.admission = 'accepted'
         document.documentElement.dataset.phoenixVoiceSpeechStatus = 'accepted'
+        if (!utterance.terminal && !session.nativeCancelRequested) {
+          armCodexRealtimeGenerationWatchdog(session, utterance)
+        }
         if (utterance.assistantMessageKey !== undefined && utterance.streamMessageKey === undefined) {
           const token = spokenMessageToken(session.key, utterance.assistantMessageKey)
           pendingNativeAssistantMessages.delete(token)
@@ -490,6 +499,36 @@ function clearNativeCancelWait(session: CodexRealtimeVoiceSession): void {
   delete session.nativeCancelRequested
 }
 
+function clearNativeGenerationWatchdog(session: CodexRealtimeVoiceSession): void {
+  if (session.nativeGenerationTimer !== undefined) window.clearTimeout(session.nativeGenerationTimer)
+  delete session.nativeGenerationTimer
+}
+
+/**
+ * V3 emits native completion independently of the appendSpeech admission RPC.
+ * A lost/changed terminal notification previously left activeUtterance in
+ * flight forever, so the first sentence spoke and no later sentence was sent.
+ * Allow enough time for even slow speech, then release only the completed
+ * admission and continue its already-authorized cursor without canceling RTC.
+ */
+function armCodexRealtimeGenerationWatchdog(
+  session: CodexRealtimeVoiceSession,
+  utterance: PendingCodexRealtimeUtterance,
+): void {
+  clearNativeGenerationWatchdog(session)
+  const budgetMs = Math.max(CODEX_VOICE_NATIVE_MIN_COMPLETION_MS,
+    Math.ceil(utterance.echoText.length / 10) * 1_000 + 10_000)
+  session.nativeGenerationTimer = window.setTimeout(() => {
+    delete session.nativeGenerationTimer
+    if (codexRealtimeVoiceSession !== session || session.activeUtterance !== utterance
+      || utterance.terminal || session.nativeCancelRequested || utterance.admission !== 'accepted') return
+    document.documentElement.dataset.phoenixVoiceLastNativeTerminal = 'watchdog-missing-terminal'
+    document.documentElement.dataset.phoenixVoiceSpeechStatus = 'accepted-recovering'
+    utterance.terminal = true
+    finishNativeUtterance(session, utterance)
+  }, budgetMs)
+}
+
 function resetNativeSentenceStream(sessionKey?: string): void {
   if (sessionKey === undefined || nativeSentenceStream?.sessionKey === sessionKey) {
     nativeSentenceStream = undefined
@@ -499,6 +538,7 @@ function resetNativeSentenceStream(sessionKey?: string): void {
 /** Release speech only after both RPC admission and native generation completion. */
 function finishNativeUtterance(session: CodexRealtimeVoiceSession, utterance: PendingCodexRealtimeUtterance): void {
   if (session.activeUtterance !== utterance || utterance.admission !== 'accepted' || !utterance.terminal) return
+  clearNativeGenerationWatchdog(session)
   const cancelled = session.nativeCancelRequested === true
   delete session.activeUtterance
   clearNativeCancelWait(session)
@@ -1229,7 +1269,9 @@ function updateCodexRealtimePhase(payload: string): void {
     publishVoiceAssistant({ ...voiceAssistantSnapshot, phase: 'speaking' })
     return
   }
-  if (type === 'response.done' || assistantTurnDone) {
+  if (type === 'response.done' || assistantTurnDone
+    || type === 'response.completed' || type === 'turn.completed') {
+    document.documentElement.dataset.phoenixVoiceLastNativeTerminal = type
     // V3 can finish a spoken response as turn.done (role assistant) instead
     // of the older response.done. A user turn.done must NEVER drain output.
     // Realtime signals the end of generation before WebRTC finishes playing
