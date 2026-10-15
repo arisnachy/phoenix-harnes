@@ -653,6 +653,16 @@ describe('browser voice adapter', () => {
       expect(getVoiceAssistantSnapshot().phase).toBe('speaking')
       expect(microphoneTrack.enabled).toBe(true)
       expect(channel?.send).toHaveBeenCalledTimes(sendsBeforeLateTurn ?? 0)
+      // Kira's question can contain the user's exact answer. The first new
+      // human transcript must pass before the six-second audible drain ends,
+      // even if its words also occur in the last spoken reply.
+      await vi.advanceTimersByTimeAsync(950)
+      expect(audio?.muted).toBe(false)
+      expect(document.documentElement.dataset.phoenixVoiceMicrophone).toBe('listening')
+      channel?.onmessage?.({ data: JSON.stringify({
+        type: 'turn.done', turn: { role: 'user', transcript: 'Respuesta corregida.' },
+      }) })
+      expect(transcript).toHaveBeenLastCalledWith('Respuesta corregida.')
       // The permission eventually closes automatically, without the developer
       // console manually toggling HTMLAudioElement.muted.
       await vi.advanceTimersByTimeAsync(6_100)
