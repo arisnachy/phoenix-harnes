@@ -265,7 +265,10 @@ function kiraNeedsSolStrategy(text: string): boolean {
 }
 
 /** Bound self-healing continuation so a pathological provider cannot create an endless promise loop. */
-const AUTO_CONTINUATION_LIMIT = 2
+// Preserve recovery headroom for real implementation work, while capping tiny
+// conversational demonstrations at two total automatic continuations.
+const AUTO_CONTINUATION_LIMIT = 4
+const BRIEF_TEAM_CONTINUATION_LIMIT = 2
 const AUTO_EXECUTION_CONTINUATION =
   'Planning or describing the next action is not task completion. ' +
   'Continue the current user request now with the available tools. ' +
@@ -1084,6 +1087,8 @@ export function installModelSelection(
     if ((selection.assembledToolCount ?? 0) === 0) return
 
     const directText = directUserTextForTurn(agent, turn)
+    const continuationLimit = isBriefTeamDemonstration(directText)
+      ? BRIEF_TEAM_CONTINUATION_LIMIT : AUTO_CONTINUATION_LIMIT
     // Team blockers have their own authorized continuation; they need not
     // coincide with a fresh human message in the same turn.
     const realTeamBlocker = phoenixAutoTeamSignalForTurn(agent, turn)?.purpose === 'blocker'
@@ -1129,7 +1134,7 @@ export function installModelSelection(
     if (latest.step >= 1 && latest.step === phoenixAutoState.lastRescueStep
       && (latest.sourceModel === PHOENIX_CODEX_AUTO_PLANNER_MODEL || latest.sourceModel === undefined)
       && !phoenixAutoExplicitlyClosed(latest.text)
-      && phoenixAutoState.continuationCount < AUTO_CONTINUATION_LIMIT) {
+      && phoenixAutoState.continuationCount < continuationLimit) {
       phoenixAutoState.lastContinuationStep = latest.step
       phoenixAutoState.continuationCount += 1
       agent.steer(createUserMessage({
@@ -1143,7 +1148,7 @@ export function installModelSelection(
     if (latest.step > 1
       && !phoenixAutoExplicitlyClosed(latest.text) && kiraNeedsSolStrategy(latest.text)
       && phoenixAutoState.rescueCount < 2
-      && phoenixAutoState.continuationCount < AUTO_CONTINUATION_LIMIT) {
+      && phoenixAutoState.continuationCount < continuationLimit) {
       phoenixAutoState.lastContinuationStep = latest.step
       phoenixAutoState.continuationCount += 1
       phoenixAutoState.forcePlannerNext = true
@@ -1177,13 +1182,14 @@ export function installModelSelection(
       && latest.text.length > 0
       && phoenixAutoUnfinishedAction(latest.text)
     if (!plannerStoppedBeforeActing && !emptyPlannerStop && !teamStillNeedsDecision && !announcedNextAction) return
-    if (phoenixAutoState.continuationCount >= AUTO_CONTINUATION_LIMIT) return
+    if (phoenixAutoState.continuationCount >= continuationLimit) return
 
     phoenixAutoState.continuationCount += 1
     phoenixAutoState.lastContinuationStep = latest.step
     // The normal Sol→Luna transition gets one chance to execute. If Luna then
     // stops on another promise, make the next step a high-effort Sol rescue.
-    if (phoenixAutoState.continuationCount >= 2) phoenixAutoState.forcePlannerNext = true
+    if (phoenixAutoState.continuationCount >= 2 && continuationLimit > BRIEF_TEAM_CONTINUATION_LIMIT)
+      phoenixAutoState.forcePlannerNext = true
     agent.steer(createUserMessage({
       content: [{ type: 'text', text: AUTO_EXECUTION_CONTINUATION }],
       source: {
