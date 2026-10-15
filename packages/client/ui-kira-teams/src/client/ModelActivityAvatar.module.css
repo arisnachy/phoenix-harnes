@@ -35,19 +35,19 @@
   position: absolute;
   z-index: 2;
   inset: 0;
-  border: 1.5px solid color-mix(in srgb, var(--avatar-accent) 64%, #fff);
+  border: 1.5px solid color-mix(in srgb, var(--avatar-accent) 78%, var(--avatar-surface));
   border-radius: 50%;
-  box-shadow: 0 2px 8px rgb(52 37 19 / 9%), inset 0 0 0 1px var(--avatar-surface);
+  box-shadow: 0 2px 9px rgb(52 37 19 / 11%), inset 0 0 0 2px var(--avatar-surface), 0 0 0 2px color-mix(in srgb, var(--avatar-accent) 12%, transparent);
   pointer-events: none;
 }
 
 .badge {
   position: absolute;
   z-index: 3;
-  right: 0;
-  bottom: 0;
-  width: 9px;
-  height: 9px;
+  right: -1px;
+  bottom: -1px;
+  width: 11px;
+  height: 11px;
   border: 2px solid var(--avatar-surface);
   border-radius: 50%;
   background: #87929b;
@@ -55,13 +55,13 @@
   pointer-events: none;
 }
 
-/* Tiny lateral model sigil. Keep the upper portrait and the lower-right
-   activity dot unobstructed, at every avatar size and in either theme. */
+/* The compact roster mark is physically outside the portrait; conversation
+   headers instead render the full named badge beside the agent name. */
 .engineBadge {
   position: absolute;
   z-index: 4;
   top: 50%;
-  right: -11px;
+  right: -27px;
   transform: translateY(-50%);
   box-sizing: border-box;
   display: grid;
@@ -80,6 +80,32 @@
   pointer-events: auto;
   --engine-accent: #ac7136;
   --engine-tint: #fff0df;
+}
+
+.headerEngineBadge {
+  position: static;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  width: auto;
+  min-width: 0;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  transform: none;
+  background: color-mix(in srgb, var(--engine-tint) 75%, var(--avatar-surface));
+  box-shadow: 0 1px 3px rgb(50 37 25 / 7%);
+}
+
+.headerEngineBadge svg { flex: none; }
+
+.engineName {
+  color: var(--engine-accent);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: .01em;
+  white-space: nowrap;
 }
 
 /* Legacy text remains selectable for diagnostics; the actual icon is vector. */

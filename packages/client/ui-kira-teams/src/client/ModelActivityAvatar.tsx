@@ -112,7 +112,43 @@ function ModelBadgeIcon({ family }: { family: ModelEngineFamily }) {
   if (family === 'astra') return (
     <svg {...base}><path d="m12 2 2.5 7.5L22 12l-7.5 2.5L12 22l-2.5-7.5L2 12l7.5-2.5Z" /></svg>
   )
-  return <svg {...base}><path d="m13 2-8 11h6l-1 9 9-12h-6Z" /></svg>
+  return <svg {...base}><circle cx="12" cy="12" r="2.8" />
+    <ellipse cx="12" cy="12" rx="10" ry="5.2" transform="rotate(-34 12 12)" />
+    <path d="m19 3 .75 1.65L21.5 5.4l-1.75.75L19 7.8l-.75-1.65L16.5 5.4l1.75-.75Z" /></svg>
+}
+
+/** Human-readable model families, independent from the team persona. */
+const MODEL_ENGINE_LABEL: Readonly<Record<ModelEngineFamily, string>> = {
+  sol: 'Sol',
+  luna: 'Luna',
+  astra: 'Astra',
+  other: 'Orión',
+}
+
+/** Display verified model provenance outside the portrait in message headers.
+ * Other providers are visibly called Orión, while the tooltip retains their actual identity.
+ */
+export function ModelEngineBadge({ model, provider, placement = 'avatar' }: {
+  model?: string | undefined
+  provider?: string | undefined
+  placement?: 'avatar' | 'header'
+}) {
+  const family = modelEngineFamily(model, provider)
+  if (family === undefined || model === undefined) return null
+  const label = MODEL_ENGINE_LABEL[family]
+  const provenance = `${provider ?? 'modelo observado'} · ${model}`
+  return <span
+    className={`${css.engineBadge} ${placement === 'header' ? css.headerEngineBadge : ''}`}
+    title={`${label} · ${provenance}`}
+    aria-label={`${label} · ${provenance}`}
+    data-engine-model={model}
+    data-engine-mark={modelEngineMark(model, provider)}
+    data-engine-family={family}
+  >
+    <ModelBadgeIcon family={family} />
+    <span className={css.engineMarkText}>{modelEngineMark(model, provider)}</span>
+    {placement === 'header' && <span className={css.engineName}>{label}</span>}
+  </span>
 }
 
 /** Resolve one KIRA identity to its standalone public portrait asset. */
@@ -131,6 +167,8 @@ export interface ModelActivityAvatarProps {
    */
   model?: string | undefined
   modelProvider?: string | undefined
+  /** The chat header owns its separate model badge; avoid displaying a second one over the portrait. */
+  showEngineBadge?: boolean
   /** Explicit board persona; wins over the agent-id/model fallbacks. */
   kind?: ModelAvatarKind
   /** A roster persona that is available but not currently occupied by a subagent. */
@@ -155,6 +193,7 @@ export function ModelActivityAvatar({
   kind,
   model,
   modelProvider,
+  showEngineBadge = true,
   ready = false,
   variant = 'compact',
   emotion,
@@ -162,10 +201,6 @@ export function ModelActivityAvatar({
   const resolvedKind = kind
     ?? (agentId === undefined ? modelAvatarKind(activity?.model) : agentAvatarKind(agentId))
   const observedModel = model ?? activity?.model
-  const engine = modelEngineMark(observedModel, modelProvider)
-  const engineFamily = modelEngineFamily(observedModel, modelProvider)
-  const provenance = observedModel === undefined ? undefined
-    : `${modelProvider ?? 'modelo observado'} · ${observedModel}`
   const phase = running ? (activity?.phase ?? 'preparing') : 'idle'
   const state = pending
     ? 'pending'
@@ -192,12 +227,7 @@ export function ModelActivityAvatar({
         data-agent-portrait-image={true}
       />
       <span className={css.badge} />
-      {engine === undefined ? null : <span className={css.engineBadge}
-        title={provenance} data-engine-model={observedModel} data-engine-mark={engine}
-        data-engine-family={engineFamily}>
-        <ModelBadgeIcon family={engineFamily ?? 'other'} />
-        <span className={css.engineMarkText}>{engine}</span>
-      </span>}
+      {showEngineBadge ? ModelEngineBadge({ model: observedModel, provider: modelProvider }) : null}
     </span>
   )
 }

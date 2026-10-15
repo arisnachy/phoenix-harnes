@@ -38,6 +38,7 @@
   display: flex;
   min-width: 0;
   align-items: center;
+  flex-wrap: wrap;
   gap: 7px;
   margin-bottom: 4px;
   font-size: 12px;
@@ -51,6 +52,12 @@
 
 .meta > span {
   color: var(--dsw-alias-label-tertiary);
+}
+
+/* Engine provenance is independent from the name and portrait, with its own space. */
+.meta > span[data-engine-family] {
+  color: var(--engine-accent);
+  margin: 0 2px;
 }
 
 .target {
@@ -511,7 +518,7 @@
 
 /* Kira's identity header is intentionally as compact as the ordinary message header. */
 .meta[data-team-author='kira'] { gap: 7px; align-items:center; min-height:42px; }
-.meta[data-team-author='kira'] .avatar { width:42px; height:42px; margin-right:3px; }
+.meta[data-team-author='kira'] .avatar { width:42px; height:42px; margin-right:5px; }
 .meta[data-team-author='kira'] strong { font-size:13px; }
 @media (max-width:620px) {
  .row:not([data-team-sender-kind='user']) .avatar { width:38px; height:38px; margin-right:-11px; }

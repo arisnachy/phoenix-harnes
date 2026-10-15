@@ -6,6 +6,7 @@ import {
 } from './KiraTeamsDock.tsx'
 import {
   ModelActivityAvatar,
+  ModelEngineBadge,
   type ModelAvatarKind,
 } from './ModelActivityAvatar.tsx'
 import type {
@@ -179,12 +180,18 @@ export const KiraTeamMessageView = memo(function KiraTeamMessageView({
             : data.purpose === 'result' ? 'happy'
               : data.purpose === 'review' ? 'focused' : undefined}
           variant="card"
+          showEngineBadge={false}
         />}
       </div>
       <div className={css.column}>
         <div className={data.senderKind === 'user' ? undefined : css.card}>
         <div className={css.meta}>
           <strong>{sender.name}</strong>
+          {data.senderKind !== 'user' && <ModelEngineBadge
+            model={participants[data.senderId]?.model}
+            provider={participants[data.senderId]?.modelProvider}
+            placement="header"
+          />}
           <span>{(data.role ?? participants[data.senderId]?.role) === undefined ? sender.role
             : t?.((data.role ?? participants[data.senderId]?.role) as import('./locales.ts').KiraTeamsKey) ?? sender.role}</span>
           {data.purpose !== undefined && !['update', 'assignment', 'result'].includes(data.purpose) && (
