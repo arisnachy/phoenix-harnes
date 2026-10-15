@@ -1727,7 +1727,7 @@ describe('Team mailbox and waiting', () => {
     const service = ctx.agentTeams
     const lead = ctx.agentLoop.create(SessionId('wait-lead'), {})
 
-    await expect(service.waitForChange(lead, 9_999, SIGNAL))
+    await expect(service.waitForChange(lead, 4_999, SIGNAL))
       .rejects.toMatchObject({ code: 'TEAM_INVALID_TIMEOUT' })
     const alreadyAborted = new AbortController()
     alreadyAborted.abort(new TeamError('cancelled before wait', 'TEST_CANCELLED'))
