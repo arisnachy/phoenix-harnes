@@ -141,6 +141,11 @@ interface CodexRealtimeVoiceSession {
   nativeCancelTimer?: number
   /** Recover a native appendSpeech that never sends a V3 terminal event. */
   nativeGenerationTimer?: number
+  /** Ignore echo transcripts while Codex speaks without pausing RTP. */
+  ignoreUserTranscripts?: boolean
+  /** Safe audio-transport diagnostics: no PCM or user transcript retained. */
+  audioStatsTimer?: number
+  audioInboundBytes?: number
   /** Recent distinct human transcripts for this WebRTC call, not per render. */
   readonly recentTranscripts: Map<string, number>
   /** Drop an unrecovered network disconnect instead of leaving voice stuck. */
@@ -213,6 +218,8 @@ function clearCodexRealtimeTimers(session: CodexRealtimeVoiceSession): void {
   if (session.inactivityTimer !== undefined) window.clearTimeout(session.inactivityTimer)
   if (session.nativeCancelTimer !== undefined) window.clearTimeout(session.nativeCancelTimer)
   if (session.nativeGenerationTimer !== undefined) window.clearTimeout(session.nativeGenerationTimer)
+  if (session.audioStatsTimer !== undefined) window.clearInterval(session.audioStatsTimer)
+  delete session.audioStatsTimer
   delete session.nativeGenerationTimer
   if (session.audioDrainTimer !== undefined) window.clearTimeout(session.audioDrainTimer)
   delete session.audioDrainTimer
@@ -264,6 +271,7 @@ function sendCodexRealtimeUtterance(
       pendingNativeAssistantMessages.add(spokenMessageToken(session.key, utterance.assistantMessageKey))
     }
     document.documentElement.dataset.phoenixVoiceSpeechStatus = 'requested'
+    document.documentElement.dataset.phoenixVoiceLastNativeTerminal = 'awaiting-native-terminal'
     delete document.documentElement.dataset.phoenixVoiceSpeechError
     delete document.documentElement.dataset.phoenixVoiceLastInterruption
     // The harness has already authorized this exact message. Codex may stream
@@ -400,8 +408,11 @@ function clearCodexRealtimeAudioDrain(session: CodexRealtimeVoiceSession): void 
  * after the WebRTC jitter buffer drains or an explicit interruption.
  */
 function setCodexRealtimeMicOpen(session: CodexRealtimeVoiceSession, open: boolean): void {
-  for (const track of session.microphone.getAudioTracks()) track.enabled = open
-  document.documentElement.dataset.phoenixVoiceMicrophone = open ? 'listening' : 'paused-for-output'
+  // Disabling the mic's RTP track prevents audio output on some Codex V3
+  // sessions. Preserve the negotiated WebRTC tracks, and suppress only
+  // the transcript/command path during authorized assistant playback.
+  session.ignoreUserTranscripts = !open
+  document.documentElement.dataset.phoenixVoiceMicrophone = open ? 'listening' : 'echo-filtered-for-output'
 }
 
 function muteCodexRealtimeAudio(session: CodexRealtimeVoiceSession, reason: string): void {
@@ -518,11 +529,13 @@ function armCodexRealtimeGenerationWatchdog(
   clearNativeGenerationWatchdog(session)
   const budgetMs = Math.max(CODEX_VOICE_NATIVE_MIN_COMPLETION_MS,
     Math.ceil(utterance.echoText.length / 10) * 1_000 + 10_000)
+  document.documentElement.dataset.phoenixVoiceNativeWatchdog = String(budgetMs)
   session.nativeGenerationTimer = window.setTimeout(() => {
     delete session.nativeGenerationTimer
     if (codexRealtimeVoiceSession !== session || session.activeUtterance !== utterance
       || utterance.terminal || session.nativeCancelRequested || utterance.admission !== 'accepted') return
     document.documentElement.dataset.phoenixVoiceLastNativeTerminal = 'watchdog-missing-terminal'
+    document.documentElement.dataset.phoenixVoiceNativeWatchdog = 'fired'
     document.documentElement.dataset.phoenixVoiceSpeechStatus = 'accepted-recovering'
     utterance.terminal = true
     finishNativeUtterance(session, utterance)
@@ -1199,7 +1212,7 @@ function forwardCodexRealtimeUserTranscript(payload: string): void {
   // already been paused for Kira's answer. It is not a fresh human barge-in:
   // treating the speaker echo as a user instruction immediately cancels the
   // authorized appendSpeech. Input is reopened when playback drains.
-  if (session.microphone.getAudioTracks().some(track => !track.enabled)) return
+  if (session.ignoreUserTranscripts) return
   // One VAD utterance can appear as both turn.done and transcription.completed.
   // Deduplicate across protocols and React remounts without suppressing an
   // intentionally repeated human command after a natural pause.
@@ -1227,6 +1240,10 @@ function updateCodexRealtimePhase(payload: string): void {
     // Safe browser diagnostic: event names only, no transcripts or SDP data.
     if (type !== '' && !type.includes('audio.delta') && !type.includes('audio_delta')) {
       document.documentElement.dataset.phoenixVoiceLastRealtimeEvent = type.slice(0, 96)
+    }
+    if (type === 'turn.done' || type === 'turn.created') {
+      document.documentElement.dataset.phoenixVoiceLastTurnRole =
+        typeof value.turn?.role === 'string' ? value.turn.role.slice(0, 36) : 'missing'
     }
     assistantTurnDone = type === 'turn.done' && value.turn?.role === 'assistant'
     assistantTurnCreated = type === 'turn.created' && value.turn?.role === 'assistant'
@@ -1272,6 +1289,7 @@ function updateCodexRealtimePhase(payload: string): void {
   if (type === 'response.done' || assistantTurnDone
     || type === 'response.completed' || type === 'turn.completed') {
     document.documentElement.dataset.phoenixVoiceLastNativeTerminal = type
+    document.documentElement.dataset.phoenixVoiceNativeWatchdog = 'terminal-received'
     // V3 can finish a spoken response as turn.done (role assistant) instead
     // of the older response.done. A user turn.done must NEVER drain output.
     // Realtime signals the end of generation before WebRTC finishes playing
