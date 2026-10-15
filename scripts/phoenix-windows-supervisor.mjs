@@ -759,6 +759,9 @@ function cleanupObsoleteRuntimes(extraKeep = [], { reportBusy = false } = {}) {
     // Keep it unconditionally; only stages belonging to other/old checkouts are
     // eligible for age-bounded garbage collection.
     if (key === currentStage) continue
+    // The ordinary janitor may remove only this checkout's registered stages.
+    // Detached old identities go through the age/process-checked legacy path.
+    if (!sameRepository(candidate)) continue
     if (stageProtectedByOwningCheckout(candidate)) continue
     if (managedDirectoryAgeMs(candidate) < STAGE_STORAGE_RETENTION_MS) continue
     if (!removeManagedWorktree(candidate, registeredWorktrees, reportBusy)) continue
