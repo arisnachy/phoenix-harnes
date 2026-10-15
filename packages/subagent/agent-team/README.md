@@ -89,3 +89,7 @@ Initial delegation publishes the real bounded assignment addressed to the teamma
 Material result, blocker, review and question handoffs to the Lead wake an idle driver through steering; an active Lead receives them at the next step. The delivered frame asks Kira to address the sender, assess evidence and decide what follows before releasing work or closing. Ordinary updates remain quiet and no acknowledgement is synthesized.
 
 Ordinary teammates continue executing after the initial update and hand off evidence or a blocker to the Lead. Material handoff guidance directs Kira to perform the next action in the same turn or resume required teammate work through followup_task. Social tone stays contextual and compact; sarcasm targets the situation rather than the user or colleagues.
+
+## Conversational Team result evidence
+
+A simple direct response to Kira, even when its assignment says “prueba de comunicación” and “envía tu respuesta a lead” in ordinary Spanish without the literal tool name, is not a tool-executed external operation. It can use `send_message purpose=result` without running a fake command. External Gmail, filesystem, PowerShell, browser and other effects still require matching genuine tool receipts. Routine waiting does not justify a Sol strategic escalation.

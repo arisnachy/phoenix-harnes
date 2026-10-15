@@ -211,3 +211,16 @@ it('does not require an unrelated tool just to hand Kira an internal result', ()
   expect(teamExecutionRequirement('Crea un archivo y avisa a Kira usando send_message.')).toBe('effect')
   expect(teamExecutionRequirement('Envía un correo por Gmail y luego usa send_message a Kira.')).toBe('effect')
 })
+
+it('recognizes a real natural-language conversational handoff without requiring external receipts', () => {
+  const spoken = 'Eclipse, Kira te pregunta para una prueba breve de comunicación: «¿Prefieres trabajar con música o en silencio?». Contéstale directamente en español, en una sola frase natural, y envía tu respuesta por el canal real del equipo a lead con propósito result. No inventes tareas ni hagas preguntas adicionales.'
+  expect(teamExecutionRequirement(spoken)).toBe('none')
+  expect(teamExecutionRequirement('Eclipse, responde a Kira si prefieres música o silencio y mándale la respuesta.')).toBe('none')
+  expect(teamExecutionRequirement('Astra, cuéntale a Kira qué opinas de este enfoque y entrégalo al equipo.')).toBe('none')
+  expect(teamExecutionRequirement('Run PowerShell and send the outcome to the team lead.')).toBe('effect')
+  expect(teamExecutionRequirement('Calcula 17 × 23 usando PowerShell y entrega el resultado a Kira.')).toBe('effect')
+  expect(teamExecutionRequirement('Envía un correo de Gmail y avisa a Kira.')).toBe('effect')
+  expect(teamExecutionRequirement('Crea un archivo de prueba y envía el resultado a lead.')).toBe('effect')
+  expect(teamExecutionRequirement('Publica el código en GitHub y repórtalo a Kira.')).toBe('effect')
+  expect(teamExecutionRequirement('Envía un mensaje por Slack a Kira.')).toBe('effect')
+})
