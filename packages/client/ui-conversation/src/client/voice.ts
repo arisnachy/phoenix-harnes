@@ -1272,8 +1272,18 @@ function updateCodexRealtimePhase(payload: string): void {
   let assistantTurnDone = false
   let assistantTurnCreated = false
   try {
-    const value = JSON.parse(payload) as { type?: unknown; turn?: { role?: unknown } }
+    const value = JSON.parse(payload) as {
+      type?: unknown
+      turn?: { role?: unknown; status?: unknown }
+      response?: { status?: unknown }
+    }
     if (typeof value.type === 'string') type = value.type
+    if (type === 'response.done' && typeof value.response?.status === 'string') {
+      document.documentElement.dataset.phoenixVoiceLastResponseStatus = value.response.status.slice(0, 36)
+    }
+    if (type === 'turn.done' && typeof value.turn?.status === 'string') {
+      document.documentElement.dataset.phoenixVoiceLastTurnStatus = value.turn.status.slice(0, 36)
+    }
     // Safe browser diagnostic: event names only, no transcripts or SDP data.
     if (type !== '' && !type.includes('audio.delta') && !type.includes('audio_delta')) {
       document.documentElement.dataset.phoenixVoiceLastRealtimeEvent = type.slice(0, 96)
