@@ -52,6 +52,45 @@ describe('installModelSelection()', () => {
     }
   })
 
+  it('answers tiny real team presentation choices on Luna low while keeping technical decisions on Max', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    const selection: ModelSelectionRef = {
+      current: { provider: 'openai-codex', model: PHOENIX_CODEX_AUTO_MODEL }, assembled: undefined,
+    }
+    const dispose = installModelSelection(ctx, selection)
+    const events: { type: string; data: unknown }[] = [
+      { type: 'turn/start', data: { turn: 1 } },
+      { type: 'user/message', data: { source: {
+        kind: 'team-message', purpose: 'question', messageId: 'format-1',
+      }, content: [{ type: 'text',
+        text: 'Eclipse → Kira: ¿Qué formato prefieres para el resultado: una frase o dos viñetas?' }] } },
+    ]
+    const agent = { session: { events }, options: {} } as unknown as Agent
+    const signal = new AbortController().signal
+    try {
+      await ctx.systemPrompt.assemble()
+      await expect(agentEvents(ctx, agent).waterfall('agent/request', { turn: 1, step: 1, signal },
+        () => Promise.resolve({ provider: 'seed', model: 'seed' }))).resolves.toMatchObject({
+        model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('low'),
+      })
+      events.push(
+        { type: 'turn/start', data: { turn: 2 } },
+        { type: 'user/message', data: { source: {
+          kind: 'team-message', purpose: 'question', messageId: 'architecture-1',
+        }, content: [{ type: 'text',
+          text: 'Eclipse: ¿Cómo resolvemos la arquitectura de seguridad y la implementación?' }] } },
+      )
+      await expect(agentEvents(ctx, agent).waterfall('agent/request', { turn: 2, step: 1, signal },
+        () => Promise.resolve({ provider: 'seed', model: 'seed' }))).resolves.toMatchObject({
+        model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('max'),
+      })
+    } finally {
+      dispose()
+      await ctx.fiber.dispose()
+    }
+  })
+
   it('resumes Kira on Luna after Sol handles a Team blocker without a human turn', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
