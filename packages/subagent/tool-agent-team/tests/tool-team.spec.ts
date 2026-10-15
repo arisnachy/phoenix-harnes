@@ -32,6 +32,7 @@ const TOOL_NAMES = [
   'spawn_teammate',
   'send_message',
   'followup_task',
+  'team_chat_reply_to_peer',
   'team_react',
   'list_agents',
   'wait_agent',
@@ -608,6 +609,31 @@ describe('dsh-tool-team', () => {
       await execute(ctx, lead, 'interrupt_agent', { target: 'bounded-worker' })
       await waitNoAgent(ctx, child.id)
     }
+  })
+
+  it('accepts pure Team handoffs and shows a real direct Kira answer without fabricated shell proof', async () => {
+    const { ctx, lead } = await setup(['hang'])
+    const spawned = await execute(ctx, lead, 'spawn_teammate', {
+      name: 'eclipse', description: 'coordination handoff',
+      prompt: 'Envía un resultado breve de coordinación con send_message a lead, purpose result, sin afirmar trabajos externos.',
+    })
+    const childId = spawnedChildId(spawned)
+    const child = await waitRunning(ctx, childId)
+    const sent = await execute(ctx, child, 'send_message', {
+      target: 'lead', purpose: 'result', message: 'Kira, el canal de coordinación recibió mi informe.',
+    })
+    expect(sent.isError).toBe(false)
+    const result = JSON.parse(text(sent)) as { messageId: string; status: string }
+    expect(result.status).toBe('accepted')
+    const reply = await execute(ctx, lead, 'team_chat_reply_to_peer', {
+      message_id: result.messageId, text: 'Eclipse, recibí tu informe. Cerramos esta prueba, gracias.',
+    })
+    expect(reply.isError).toBe(false)
+    const rows = (await ctx.agentTeams.chatMessages({ sessionId: lead.id })).messages
+    expect(rows.some(row => row.senderKind === 'kira' && row.targetId === childId
+      && row.replyTo === result.messageId)).toBe(true)
+    await execute(ctx, lead, 'interrupt_agent', { target: 'eclipse' })
+    await waitNoAgent(ctx, childId)
   })
 
   it('rejects a teammate result claim until the assigned external action has a real receipt', async () => {

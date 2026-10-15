@@ -5,7 +5,7 @@ import type { Agent } from '@phoenix-ai/dsh-agent'
 import { CallId, createAssistantMessage, createToolResultMessage, createUserMessage } from '@phoenix-ai/dsh-llm'
 import { TeamChat, shouldPublishTeammateSpeech } from '../src/chat.ts'
 import { TEAM_PERSONAS } from '../src/personas.ts'
-import { TeamId } from '../src/types.ts'
+import { TeamId, TeamMessageId } from '../src/types.ts'
 import { TeamJournal } from '../src/journal.ts'
 import type { TeamChatMessage } from '../src/chat-types.ts'
 
@@ -394,12 +394,12 @@ describe('genuine Kira to teammate conversation', () => {
   it('publishes and replays one direct result acknowledgement without waking the child', async () => {
     const f = await fixture()
     f.root.append('team/message/queued', { version: 1, teamId: TeamId(f.root.id),
-      message: { id: 'peer-result', senderId: f.child.id, senderName: 'Eclipse',
+      message: { id: TeamMessageId('peer-result'), senderId: f.child.id, senderName: 'Eclipse',
         targetId: f.root.id, purpose: 'result', delivery: 'quiet',
         content: content('Kira, el resultado es 391.') },
     })
     f.root.append('team/message/delivered', { version: 1, teamId: TeamId(f.root.id),
-      messageId: 'peer-result', targetId: f.root.id })
+      messageId: TeamMessageId('peer-result'), targetId: f.root.id })
     const reply = { messageId: 'peer-result', text: 'Eclipse, recibí el 391. Bien, la prueba queda cerrada.' }
     expect(await f.chat.replyToPeer(f.lead, reply)).toEqual({ messageId: 'root:peer-reply:peer-result' })
     expect(await f.chat.replyToPeer(f.lead, reply)).toEqual({ messageId: 'root:peer-reply:peer-result' })
@@ -416,7 +416,7 @@ describe('genuine Kira to teammate conversation', () => {
     await expect(f.chat.replyToPeer(f.lead, { messageId: 'inventado', text: 'Listo.' }))
       .rejects.toThrow('requires a real received')
     f.root.append('team/message/queued', { version: 1, teamId: TeamId(f.root.id),
-      message: { id: 'undelivered', senderId: f.child.id, senderName: 'Eclipse',
+      message: { id: TeamMessageId('undelivered'), senderId: f.child.id, senderName: 'Eclipse',
         targetId: f.root.id, purpose: 'result', delivery: 'quiet', content: content('Resultado.') },
     })
     await expect(f.chat.replyToPeer(f.lead, { messageId: 'undelivered', text: 'Eclipse, recibido.' }))

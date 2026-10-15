@@ -341,7 +341,7 @@ export class TeamMailbox {
     return [
       { type: 'text', text: `Team message ${message.id} from ${message.senderName}${message.purpose === undefined ? '' : ` [${message.purpose}]`}:` },
       ...structuredClone(message.content),
-      ...handoff ? [{ type: 'text' as const, text: `Kira: this is one genuine material Team handoff. Never claim that ${message.senderName}'s handoff has not arrived. Address ${message.senderName} by name in your next natural reply. If a real decision, correction or dependency is required, send one actionable Team reply; otherwise fold only supported evidence into ONE final response to the user and stop. Do not start a ceremonial peer exchange, repeated wait, extra check, duplicate assignment or new model turn. Never claim verification you did not perform.` }] : [],
+      ...handoff ? [{ type: 'text' as const, text: `Kira: this is one genuine material Team handoff. Never claim that ${message.senderName}'s handoff has not arrived. Address ${message.senderName} naturally. Use team_chat_reply_to_peer ONCE with THIS message id to answer a meaningful received result or decision in your own words, then provide ONE final answer to the user. This chat reply does not wake the worker. If more work is needed, use send_message or followup_task instead; do not create ceremonial chatter. Never expose internal tools, lead or purpose=result in visible prose. Never claim verification you did not perform.` }] : [],
     ]
   }
 
