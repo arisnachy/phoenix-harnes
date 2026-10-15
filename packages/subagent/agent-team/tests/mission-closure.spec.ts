@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { SessionEvent } from '@phoenix-ai/dsh-session'
-import { teamMissionClosed, unfinishedMissionTodos } from '../src/mission-closure.ts'
+import { teamMissionClosed, unfinishedMissionTodos, unfinishedMissionGoal, unfinishedMissionTeamTasks, unfinishedMissionWork } from '../src/mission-closure.ts'
 
 const start = { type: 'turn/start', data: { turn: 1 } } as unknown as SessionEvent
 const finished = { type: 'turn/end', data: { turn: 1, reason: { kind: 'completed' } } } as unknown as SessionEvent
@@ -33,7 +33,61 @@ const checklist = (...statuses: ('pending' | 'in_progress' | 'completed')[]): Se
   data: { todos: statuses.map((status, index) => ({ content: `step ${index + 1}`, status })) },
 }) as unknown as SessionEvent
 
+const goalChange = (phase: 'active' | 'complete'): SessionEvent => ({
+  type: 'goal/change', data: {
+    operation: phase === 'active' ? 'create' : 'complete',
+    goal: { id: 'goal-1', objective: 'Publica el juego', phase },
+  },
+}) as unknown as SessionEvent
+const mission = (id = 'mission-1'): SessionEvent => ({
+  type: 'team/mission', data: { version: 1, teamId: 'lead',
+    snapshot: { id, teamId: 'lead', revision: 1, phase: 'running' } },
+}) as unknown as SessionEvent
+const teamTask = (status: 'pending' | 'in_progress' | 'completed', revision: number): SessionEvent => ({
+  type: 'team/task', data: {
+    version: 1, teamId: 'lead',
+    task: { id: 'task-1', revision, status },
+  },
+}) as unknown as SessionEvent
+
 describe('Kira Team closure after verified completion', () => {
+  it('does not equate a model turn end with completion of an active durable Goal', () => {
+    expect(unfinishedMissionGoal([human, goalChange('active')])).toBe(true)
+    expect(unfinishedMissionWork([human, goalChange('active')])).toBe(true)
+    expect(teamMissionClosed([human, start, goalChange('active'), finished])).toBe(false)
+    expect(teamMissionClosed([human, start, goalChange('active'),
+      browserCall('send', 'mcp__phoenix_browser__submit_form'), browserResult('send'),
+      browserCall('check', 'mcp__phoenix_browser__wait_for'), browserResult('check'),
+      kiraAnswer('No queda trabajo pendiente que justifique delegar.')])).toBe(false)
+    expect(teamMissionClosed([human, start, goalChange('active'), cancelled])).toBe(true)
+    expect(unfinishedMissionGoal([human, goalChange('active'), goalChange('complete')])).toBe(false)
+    expect(teamMissionClosed([human, start, goalChange('active'), goalChange('complete'), finished])).toBe(true)
+  })
+
+  it('does not cancel assigned Team tasks until the current mission completes', () => {
+    const pending = [human, mission(), teamTask('pending', 1), start]
+    expect(unfinishedMissionTeamTasks(pending)).toBe(true)
+    expect(teamMissionClosed([...pending, finished])).toBe(false)
+    expect(unfinishedMissionTeamTasks([...pending, teamTask('in_progress', 2)])).toBe(true)
+    expect(unfinishedMissionTeamTasks([...pending, teamTask('completed', 2)])).toBe(false)
+    expect(teamMissionClosed([...pending, teamTask('completed', 2), finished])).toBe(true)
+    expect(teamMissionClosed([...pending, cancelled])).toBe(true)
+  })
+
+  it('retains unfinished checklist items across steering messages in one mission', () => {
+    const active = [human, mission(), checklist('pending'), human]
+    expect(unfinishedMissionTodos(active)).toBe(true)
+    expect(teamMissionClosed([...active, finished])).toBe(false)
+    expect(unfinishedMissionTodos([...active, checklist('completed')])).toBe(false)
+    expect(unfinishedMissionTeamTasks([
+      human, mission('old'), teamTask('pending', 1),
+      { type: 'team/mission', data: { snapshot: {
+        id: 'old', revision: 2, phase: 'partial',
+      } } } as unknown as SessionEvent,
+      human,
+    ])).toBe(false)
+  })
+
   it('preserves an unfinished mission despite a completed model turn or premature closing prose', () => {
     const todo = checklist('in_progress', 'pending', 'pending')
     expect(unfinishedMissionTodos([human, start, todo])).toBe(true)

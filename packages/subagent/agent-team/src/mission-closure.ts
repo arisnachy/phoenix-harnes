@@ -11,29 +11,86 @@ const EFFECT = /(?:^|__)(?:submit_form|fill_form|send_email|create_file|update_f
 const VERIFY = /(?:^|__)(?:wait_for|read_page|verify|check|test|typecheck|build|read|inspect_form|inspect_page|browser_snapshot|browser_inspect|status)$/iu
 
 /**
- * Return whether the current mission is terminal for automatic Team work.
- * A completed or aborted real turn is authoritative. While the turn is still
- * running, an explicit final "no work remaining" statement is accepted only
- * if distinct real successful action AND confirmation tools preceded it.
- * Only a new authentic human request reopens work, not an automatic follow-up turn.
- * @param events - Current Lead Session event log.
- * @returns Whether late reviewer spawn and queued wakeup must be refused.
- */
-/**
  * Unfinished work in the current genuine human request must not be mistaken
  * for mission completion just because the model ended a text turn.
  * @param events - Lead session event stream.
  * @returns Whether the last checklist in this human mission still has work.
  */
-export function unfinishedMissionTodos(events: readonly SessionEvent[]): boolean {
-  const boundary = events.findLastIndex(event =>
+/** The beginning of the current durable mission, even after a human steering message. */
+function missionBoundary(events: readonly SessionEvent[]): number {
+  const human = events.findLastIndex(event =>
     event.type === 'user/message' && event.data.source.kind === 'user')
-  const latest = events.slice(boundary + 1).findLast(event => event.type === 'todo/write')
+  const latest = events.findLast(event => event.type === 'team/mission')
+  if (latest === undefined || !['running', 'verifying', 'blocked'].includes(latest.data.snapshot.phase)) {
+    return human
+  }
+  const start = events.findIndex(event => event.type === 'team/mission'
+    && event.data.snapshot.id === latest.data.snapshot.id && event.data.snapshot.revision === 1)
+  return start >= 0 ? start : human
+}
+
+/**
+ * Check the latest complete todo snapshot within the active mission.
+ * A later human steering instruction does not erase outstanding work.
+ * @param events - Lead session events.
+ * @returns Whether any checklist item remains unfinished.
+ */
+export function unfinishedMissionTodos(events: readonly SessionEvent[]): boolean {
+  const latest = events.slice(missionBoundary(events) + 1).findLast(event => event.type === 'todo/write')
   return latest !== undefined && latest.data.todos.some(todo => todo.status !== 'completed')
 }
 
+/**
+ * Read the last durable Goal snapshot without depending on GoalService's
+ * process-local activation or introducing a circular Team/Goal runtime seam.
+ * @param events - Lead session events.
+ * @returns Whether the persisted Goal is still active.
+ */
+export function unfinishedMissionGoal(events: readonly SessionEvent[]): boolean {
+  const latest = events.findLast(event => event.type === 'goal/change')
+  return latest !== undefined && latest.data.operation !== 'clear'
+    && latest.data.goal.phase === 'active'
+}
+
+/**
+ * Check unfinished Team task snapshots created within this exact mission.
+ * Each task has a revision-one creation receipt and later whole-state updates.
+ * @param events - Lead session events.
+ * @returns Whether a current Team task is pending or in progress.
+ */
+export function unfinishedMissionTeamTasks(events: readonly SessionEvent[]): boolean {
+  const current = events.slice(missionBoundary(events) + 1)
+  const created = new Set<string>()
+  const statuses = new Map<string, string>()
+  for (const event of current) {
+    if (event.type !== 'team/task') continue
+    const { id, revision, status } = event.data.task
+    if (revision === 1) created.add(id)
+    if (created.has(id)) statuses.set(id, status)
+  }
+  return [...statuses.values()].some(status => status === 'pending' || status === 'in_progress')
+}
+
+/**
+ * Preserve automatic Team work while its goal, checklist or task board is
+ * unfinished, even when the Lead model has simply completed a text turn.
+ * @param events - Lead session events.
+ * @returns Whether the current mission has remaining authorized work.
+ */
+export function unfinishedMissionWork(events: readonly SessionEvent[]): boolean {
+  return unfinishedMissionGoal(events) || unfinishedMissionTodos(events) || unfinishedMissionTeamTasks(events)
+}
+
+/**
+ * Return whether the current mission is terminal for automatic Team work.
+ * A completed turn is terminal only with no unfinished work. An explicit user
+ * cancellation remains authoritative even with outstanding tasks. Verified
+ * action plus confirmation receipts cannot override active mission work.
+ * @param events - Current Lead Session event log.
+ * @returns Whether late reviewer spawn and queued wakeup must be refused.
+ */
 export function teamMissionClosed(events: readonly SessionEvent[]): boolean {
-  const unfinished = unfinishedMissionTodos(events)
+  const unfinished = unfinishedMissionWork(events)
   for (let index = events.length - 1; index >= 0; index--) {
     const event = events[index]
     if (event?.type === 'turn/end') {

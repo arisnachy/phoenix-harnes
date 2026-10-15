@@ -1,0 +1,10 @@
+# Prevent premature Team shutdown while a persistent Goal remains active
+
+## Failure
+The Team Lead's `turn/end: completed` is emitted even when Kira provides an interim progress report. The Team runtime previously closed UME on that event, interrupted specialists and published a terminal checkpoint. This disarmed the separate Goal round driver. The first repair checked `todo/write`, but an active Goal or Team task without a checklist still triggered premature shutdown; a later human steering message could also hide an older pending checklist.
+
+## Change
+Read the durable `goal/change` phase, latest checklist and revisioned `team/task` states from the same Lead Session. A model turn cannot terminate the Team mission while any of those surfaces contains active work. Current mission boundaries are based on `team/mission` revision-one receipts rather than replacing work with each steering message. Explicit user cancellation still stops immediately. Fully complete work retains the prior one-time terminal fence; the Goal driver continues to own serialized automatic rounds, bounded strategy changes and quota stops.
+
+## Verification
+Pure regression fixtures now cover active Goal without a checklist, closure prose preceded by effect and check receipts, pending and completed Team tasks, steering without losing older checklist items, and explicit human cancellation. Runtime integration, Windows build and model-provider end-to-end must still be performed before claiming the deployed Phoenix instance repaired.
