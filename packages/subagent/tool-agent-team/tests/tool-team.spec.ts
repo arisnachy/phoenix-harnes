@@ -615,10 +615,15 @@ describe('dsh-tool-team', () => {
     const { ctx, lead } = await setup(['hang'])
     const spawned = await execute(ctx, lead, 'spawn_teammate', {
       name: 'eclipse', description: 'coordination handoff',
-      prompt: 'Envía un resultado breve de coordinación con send_message a lead, purpose result, sin afirmar trabajos externos.',
+      prompt: 'Eclipse, Kira te pregunta para una prueba breve de comunicación: «¿Prefieres trabajar con música o en silencio?». Contéstale directamente en español, en una sola frase natural, y envía tu respuesta por el canal real del equipo a lead con propósito result. No inventes tareas ni hagas preguntas adicionales.',
     })
     const childId = spawnedChildId(spawned)
     const child = await waitRunning(ctx, childId)
+    // Pure conversation cannot be used as cover for an invented external effect.
+    const fabricated = await execute(ctx, child, 'send_message', {
+      target: 'lead', purpose: 'result', message: 'Correo enviado correctamente por Gmail.',
+    })
+    expect(fabricated.isError).toBe(true)
     const sent = await execute(ctx, child, 'send_message', {
       target: 'lead', purpose: 'result', message: 'Kira, el canal de coordinación recibió mi informe.',
     })
