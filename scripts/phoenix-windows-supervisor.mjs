@@ -470,6 +470,10 @@ function stageProtectedByOwningCheckout(path) {
   const head = gitValue(path, ['rev-parse', 'HEAD'])
   if (common === undefined || !existsSync(common) || head === undefined) return false
 
+  // Another live checkout owns this stage, even between updater marker writes.
+  const ourCommon = absoluteGitPath(root, gitValue(root, ['rev-parse', '--git-common-dir']))
+  if (ourCommon === undefined || runtimePathKey(common) !== runtimePathKey(ourCommon)) return true
+
   const marker = join(common, PREPARED_FILE)
   if (existsSync(marker)) {
     try {
@@ -626,6 +630,90 @@ function removeManagedWorktree(path, registeredWorktrees = registeredWorktreePat
   return false
 }
 
+// When a checkout moves, its stageIdentity changes and the old ~/p folders
+// become invisible to ordinary per-checkout cleanup. Reclaim ONLY abandoned
+// directories with missing Git ownership and no referencing Windows process.
+const DETACHED_STORAGE_MIN_AGE_MS = 48 * 60 * 60 * 1000
+const DETACHED_STORAGE_SWEEP_INTERVAL_MS = 60 * 60 * 1000
+let nextDetachedStorageSweepAt = 0
+
+function detachedWorktreeMetadata(path) {
+  const dotGit = join(path, '.git')
+  if (!existsSync(dotGit)) return true
+  try {
+    if (!statSync(dotGit).isFile()) return false
+    const match = /^gitdir:\s*(.+)\s*$/imu.exec(readFileSync(dotGit, 'utf8'))
+    if (!match) return false
+    const gitDir = resolve(path, match[1].trim())
+    if (!existsSync(gitDir)) return true
+    const commonFile = join(gitDir, 'commondir')
+    if (!existsSync(commonFile)) return false
+    const common = readFileSync(commonFile, 'utf8').trim()
+    return common.length > 0 && !existsSync(resolve(gitDir, common))
+  } catch {
+    return false // Unreadable metadata is not proof of abandonment.
+  }
+}
+
+function detachedStorageCandidates(keep) {
+  const base = runtimeBaseDirectory()
+  const ownedRuntimePrefix = ('phoenix-runtime-' + stageIdentity() + '-').toLowerCase()
+  return readdirSync(base, { withFileTypes: true })
+    .filter(entry => entry.isDirectory()
+      && /^(?:phoenix-runtime-[0-9a-f]{10}-[0-9a-f]{12}|phoenix-stage-[0-9a-f]{10}(?:-conflict-\d+-\d+)?)$/iu.test(entry.name)
+      && !entry.name.toLowerCase().startsWith(ownedRuntimePrefix))
+    .map(entry => join(base, entry.name))
+    .filter(candidate => !keep.has(runtimePathKey(candidate))
+      && runtimePathKey(candidate) !== runtimePathKey(persistentStage())
+      && managedDirectoryAgeMs(candidate) >= DETACHED_STORAGE_MIN_AGE_MS
+      && detachedWorktreeMetadata(candidate))
+    .sort((a, b) => managedDirectoryMtimeMs(a) - managedDirectoryMtimeMs(b))
+    .slice(0, 32)
+}
+
+function windowsProcessReferences(paths) {
+  if (process.platform !== 'win32' || paths.length === 0) return undefined
+  const quoted = paths.map(path => "'" + path.replaceAll("'", "''") + "'").join(', ')
+  const script = [
+    "$ErrorActionPreference = 'Stop'",
+    '$paths = @(' + quoted + ')',
+    '$processes = @(Get-CimInstance Win32_Process)',
+    'foreach ($path in $paths) { foreach ($p in $processes) {',
+    'if ($p.ProcessId -eq $PID) { continue }',
+    '$command = [string]$p.CommandLine',
+    '$executable = [string]$p.ExecutablePath',
+    'if ($command.IndexOf($path, [StringComparison]::OrdinalIgnoreCase) -ge 0 -or $executable.IndexOf($path, [StringComparison]::OrdinalIgnoreCase) -ge 0) { Write-Output $path; break }',
+    '} }',
+  ].join('; ')
+  const result = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], {
+    cwd: root, encoding: 'utf8', windowsHide: true, timeout: 20_000,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
+  if (result.error !== undefined || result.status !== 0 || typeof result.stdout !== 'string') return undefined
+  return new Set(result.stdout.split(/\r?\n/u).filter(Boolean).map(runtimePathKey))
+}
+
+function cleanupDetachedLegacyStorage(keep, reportBusy = false) {
+  if (!reportBusy && Date.now() < nextDetachedStorageSweepAt) return
+  nextDetachedStorageSweepAt = Date.now() + DETACHED_STORAGE_SWEEP_INTERVAL_MS
+  const candidates = detachedStorageCandidates(keep)
+  if (candidates.length === 0) return
+  // Fail closed when the Windows process census is unavailable.
+  const busyPaths = windowsProcessReferences(candidates)
+  if (busyPaths === undefined) {
+    if (reportBusy) console.error('[PHOENIX STORAGE] legacy cleanup skipped: process inspection unavailable.')
+    return
+  }
+  for (const candidate of candidates) {
+    if (busyPaths.has(runtimePathKey(candidate))) continue
+    // A different updater may have recreated Git metadata during the census.
+    if (keep.has(runtimePathKey(candidate)) || !detachedWorktreeMetadata(candidate)) continue
+    if (removeOrphanedManagedDirectory(candidate, reportBusy)) {
+      console.error('[PHOENIX STORAGE] reclaimed detached legacy directory: ' + candidate)
+    }
+  }
+}
+
 function cleanupObsoleteRuntimes(extraKeep = [], { reportBusy = false } = {}) {
   const keep = new Set(extraKeep.filter(Boolean).map(runtimePathKey))
   const active = readActiveRuntimeRecord()
@@ -696,6 +784,7 @@ function cleanupObsoleteRuntimes(extraKeep = [], { reportBusy = false } = {}) {
       + `inactive runtime backups kept: ${String(retainedInactiveRuntimes)}.`,
     )
   }
+  cleanupDetachedLegacyStorage(keep, reportBusy)
 }
 
 // A busy orphan must not make the optional rollback cushion permanently block
