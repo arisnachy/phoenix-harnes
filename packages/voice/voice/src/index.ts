@@ -495,20 +495,15 @@ export class VoiceRuntime extends TypertRemoteService {
           reason: probe.reason ?? (probe.available ? 'codex-login-required' : 'codex-unavailable'),
         }
       }
-      // Session history is optional context enrichment for Realtime. Voice must not
-      // depend on SessionStore injection order: Cordis explicitly allows ctx.get()
-      // for optional/late-bound services, while direct ctx.sessions access throws
-      // "cannot get property \"sessions\" without inject" from this plugin fiber.
-      const session = this.ctx.get('sessions')?.get(SessionId(key))
-      const initialItems = session === undefined
-        ? []
-        : phoenixMessagesToCodexRealtimeInitialItems(session.deriveMessages())
+      // Codex Live is microphone transcription + speech transport only.
+      // Its independent ephemeral thread must NOT inherit stale chat history:
+      // the Phoenix harness alone knows tool receipts, browser outcomes and
+      // final answer state. Only explicit appendSpeech receives that final text.
       const identity = realtimeAssistantIdentity(this.ctx)
       const result = await this.codexRealtimeBridge().start({
         key,
         offerSdp,
         ...(model === undefined ? {} : { model }),
-        ...(initialItems.length === 0 ? {} : { initialItems }),
         assistantName: identity.name,
         assistantGender: identity.gender,
         onTranscript: (transcript) => {
