@@ -146,6 +146,7 @@ interface CodexRealtimeVoiceSession {
   /** Safe audio-transport diagnostics: no PCM or user transcript retained. */
   audioStatsTimer?: number
   audioInboundBytes?: number
+  audioRequestInboundBytes?: number
   /** Recent distinct human transcripts for this WebRTC call, not per render. */
   readonly recentTranscripts: Map<string, number>
   /** Drop an unrecovered network disconnect instead of leaving voice stuck. */
@@ -271,6 +272,8 @@ function sendCodexRealtimeUtterance(
       pendingNativeAssistantMessages.add(spokenMessageToken(session.key, utterance.assistantMessageKey))
     }
     document.documentElement.dataset.phoenixVoiceSpeechStatus = 'requested'
+    session.audioRequestInboundBytes = session.audioInboundBytes ?? 0
+    document.documentElement.dataset.phoenixVoiceAudioThisReply = 'awaiting-inbound-rtp'
     document.documentElement.dataset.phoenixVoiceLastNativeTerminal = 'awaiting-native-terminal'
     delete document.documentElement.dataset.phoenixVoiceSpeechError
     delete document.documentElement.dataset.phoenixVoiceLastInterruption
@@ -422,7 +425,41 @@ function muteCodexRealtimeAudio(session: CodexRealtimeVoiceSession, reason: stri
   document.documentElement.dataset.phoenixVoiceAudioMuteReason = reason
 }
 
+function monitorCodexInboundAudio(session: CodexRealtimeVoiceSession): void {
+  if (session.audioStatsTimer !== undefined) return
+  if (typeof session.peer.getStats !== 'function') {
+    document.documentElement.dataset.phoenixVoiceAudioThisReply = 'rtp-stats-unavailable'
+    return
+  }
+  const sample = async (): Promise<void> => {
+    try {
+      const stats = await session.peer.getStats()
+      if (codexRealtimeVoiceSession !== session) return
+      let received = 0
+      stats.forEach((raw) => {
+        const report = raw as { type?: string; kind?: string; mediaType?: string; bytesReceived?: number }
+        if (report.type !== 'inbound-rtp' || (report.kind !== 'audio' && report.mediaType !== 'audio')) return
+        if (typeof report.bytesReceived === 'number') received += report.bytesReceived
+      })
+      if (received > (session.audioInboundBytes ?? 0)) {
+        document.documentElement.dataset.phoenixVoiceLastAudioAt = String(Date.now())
+      }
+      session.audioInboundBytes = received
+      document.documentElement.dataset.phoenixVoiceInboundBytes = String(received)
+      if (session.activeUtterance !== undefined
+        && received > (session.audioRequestInboundBytes ?? 0)) {
+        document.documentElement.dataset.phoenixVoiceAudioThisReply = 'inbound-audio-received'
+      }
+    } catch {
+      document.documentElement.dataset.phoenixVoiceInboundStatus = 'stats-failed'
+    }
+  }
+  session.audioStatsTimer = window.setInterval(() => { void sample() }, 1_000)
+  void sample()
+}
+
 function allowAuthorizedCodexAudio(session: CodexRealtimeVoiceSession): void {
+  monitorCodexInboundAudio(session)
   clearCodexRealtimeAudioDrain(session)
   setCodexRealtimeMicOpen(session, false)
   session.audio.muted = false
