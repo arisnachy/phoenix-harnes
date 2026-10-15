@@ -628,8 +628,9 @@ describe('browser voice adapter', () => {
       await Promise.resolve()
       expect(realtimeSpeak).toHaveBeenLastCalledWith({ key: 'session-harness', text: 'Respuesta corregida.' })
       vi.useFakeTimers()
-      channel?.onmessage?.({ data: JSON.stringify({ type: 'response.done' }) })
+      channel?.onmessage?.({ data: JSON.stringify({ type: 'response.done', response: { status: 'completed' } }) })
       await Promise.resolve()
+      expect(document.documentElement.dataset.phoenixVoiceLastResponseStatus).toBe('completed')
       expect(audio?.muted).toBe(false)
       // Codex V3 can deliver a trailing assistant turn.created after its
       // completion marker. It is not a new unauthorized response and must not
