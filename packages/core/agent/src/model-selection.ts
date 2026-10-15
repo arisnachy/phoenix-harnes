@@ -692,8 +692,8 @@ function phoenixAutoTerminalTeamFailure(
   for (const event of events) {
     if (event.type !== 'tool/result') continue
     const result = event.data as { readonly error?: { readonly code?: string; readonly message?: string };
-      readonly message?: { readonly content?: readonly { readonly text?: string; readonly
-        content?: readonly { readonly text?: string }[] }[] } }
+      readonly message?: { readonly content?: readonly { readonly text?: string;
+        readonly content?: readonly { readonly text?: string }[] }[] } }
     if (result.error?.code === 'TEAM_MISSION_CLOSED') return true
     const detail = result.error?.message
       ?? result.message?.content?.flatMap(block => [
