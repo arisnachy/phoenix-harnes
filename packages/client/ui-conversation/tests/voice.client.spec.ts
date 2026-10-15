@@ -234,6 +234,9 @@ describe('browser voice adapter', () => {
       constructor() { FakePeer.instance = this }
       createDataChannel(): FakeDataChannel { return new FakeDataChannel() }
       addTrack(): void {}
+      async getStats(): Promise<Map<string, { type: string; kind: string; bytesReceived: number }>> {
+        return new Map([['remote-audio', { type: 'inbound-rtp', kind: 'audio', bytesReceived: 4_096 }]])
+      }
       async createOffer(): Promise<{ type: 'offer'; sdp: string }> {
         return { type: 'offer', sdp: 'v=0\r\n' }
       }
@@ -401,16 +404,19 @@ describe('browser voice adapter', () => {
       // acknowledgement can arrive after Codex has already streamed its audio.
       expect(document.documentElement.dataset.phoenixVoiceSpeechStatus).toBe('requested')
       expect(audio?.muted).toBe(false)
-      expect(microphoneTrack.enabled).toBe(false)
-      expect(document.documentElement.dataset.phoenixVoiceMicrophone).toBe('paused-for-output')
+      expect(microphoneTrack.enabled).toBe(true)
+      expect(document.documentElement.dataset.phoenixVoiceMicrophone).toBe('echo-filtered-for-output')
       expect(document.documentElement.dataset.phoenixVoiceAudioMuteReason).toBe('none')
+      await Promise.resolve()
+      expect(document.documentElement.dataset.phoenixVoiceAudioThisReply).toBe('inbound-audio-received')
+      expect(document.documentElement.dataset.phoenixVoiceInboundBytes).toBe('4096')
       // A delayed AVAS transcript while the RTC microphone is disabled must
       // not cancel Kira's authorized speech or steer the harness.
       channel?.onmessage?.({ data: JSON.stringify({
         type: 'turn.done', turn: { role: 'user', transcript: 'falso eco de la bocina' },
       }) })
       expect(transcript).toHaveBeenCalledTimes(2)
-      expect(microphoneTrack.enabled).toBe(false)
+      expect(microphoneTrack.enabled).toBe(true)
       expect(audio?.muted).toBe(false)
       channel?.onmessage?.({ data: JSON.stringify({ type: 'input_audio_buffer.speech_started' }) })
       expect(getVoiceAssistantSnapshot().phase).toBe('speaking')
@@ -519,8 +525,10 @@ describe('browser voice adapter', () => {
       // User turn markers must not complete the assistant's speech.
       channel?.onmessage?.({ data: JSON.stringify({ type: 'turn.done', turn: { role: 'user' } }) })
       expect(realtimeSpeak).toHaveBeenCalledTimes(6)
+      expect(document.documentElement.dataset.phoenixVoiceLastTurnRole).toBe('user')
       // V3 completes spoken output using assistant turn.done.
       channel?.onmessage?.({ data: JSON.stringify({ type: 'turn.done', turn: { role: 'assistant' } }) })
+      expect(document.documentElement.dataset.phoenixVoiceLastTurnRole).toBe('assistant')
       // Generation is finished, but the WebRTC speaker may still be draining
       // previously buffered audio. Keep Kira audible until an explicit cancel.
       expect(audio?.muted).toBe(false)
@@ -630,7 +638,7 @@ describe('browser voice adapter', () => {
       channel?.onmessage?.({ data: JSON.stringify({ type: 'turn.created', turn: { role: 'assistant' } }) })
       expect(audio?.muted).toBe(false)
       expect(getVoiceAssistantSnapshot().phase).toBe('speaking')
-      expect(microphoneTrack.enabled).toBe(false)
+      expect(microphoneTrack.enabled).toBe(true)
       expect(channel?.send).toHaveBeenCalledTimes(sendsBeforeLateTurn ?? 0)
       // The permission eventually closes automatically, without the developer
       // console manually toggling HTMLAudioElement.muted.
@@ -668,7 +676,7 @@ describe('browser voice adapter', () => {
         // Native output arriving before acceptance must remain audible.
         expect(document.documentElement.dataset.phoenixVoiceSpeechStatus).toBe('requested')
         expect(audio?.muted).toBe(false)
-        expect(microphoneTrack.enabled).toBe(false)
+        expect(microphoneTrack.enabled).toBe(true)
         channel?.onmessage?.({ data: JSON.stringify({ type: 'turn.created', turn: { role: 'assistant' } }) })
         expect(audio?.muted).toBe(false)
         channel?.onmessage?.({ data: JSON.stringify({ type: 'output_audio.delta', audio: 'fixture' }) })
@@ -680,7 +688,7 @@ describe('browser voice adapter', () => {
         else resolveAdmission({ ok: true, value: { accepted: outcome === 'accepted', ...(outcome === 'rejected' ? { reason: 'disabled' } : {}) } })
         await vi.waitFor(() => expect(document.documentElement.dataset.phoenixVoiceSpeechStatus).toBe(outcome))
         expect(audio?.muted).toBe(outcome !== 'accepted')
-        expect(microphoneTrack.enabled).toBe(outcome !== 'accepted')
+        expect(microphoneTrack.enabled).toBe(true)
         expect(document.documentElement.dataset.phoenixVoiceAudioMuteReason).toBe(
           outcome === 'accepted' ? 'none' : outcome === 'rejected' ? 'append-speech-rejected' : 'append-speech-failed',
         )
@@ -705,12 +713,12 @@ describe('browser voice adapter', () => {
       await Promise.resolve()
       expect(realtimeSpeak).toHaveBeenCalledTimes(beforeStalledSpeech + 1)
       expect(realtimeSpeak).toHaveBeenLastCalledWith({ key: 'session-harness', text: 'Primera frase.' })
-      expect(microphoneTrack.enabled).toBe(false)
+      expect(microphoneTrack.enabled).toBe(true)
       await vi.advanceTimersByTimeAsync(16_000)
       expect(document.documentElement.dataset.phoenixVoiceLastNativeTerminal).toBe('watchdog-missing-terminal')
       expect(realtimeSpeak).toHaveBeenCalledTimes(beforeStalledSpeech + 2)
       expect(realtimeSpeak).toHaveBeenLastCalledWith({ key: 'session-harness', text: 'Segunda frase.' })
-      expect(microphoneTrack.enabled).toBe(false)
+      expect(microphoneTrack.enabled).toBe(true)
       channel?.onmessage?.({ data: JSON.stringify({ type: 'response.completed' }) })
       await Promise.resolve()
       vi.useRealTimers()
