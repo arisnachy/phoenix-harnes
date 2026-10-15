@@ -158,6 +158,13 @@ interface CodexRealtimeVoiceSession {
   audioDrainUntil?: number
   /** Ignore one late V3 assistant turn marker belonging to the completed reply. */
   lateAssistantTurnIgnored?: boolean
+  /** One native generation can report both response.done and assistant turn.done. */
+  lastCompletedNativeTerminal?: {
+    readonly key: string
+    readonly streamMessageKey?: string
+    readonly eventType: string
+    readonly completedAt: number
+  }
   /** Browser/tab termination releases live voice ownership. */
   readonly onPageHide: () => void
 }
@@ -166,6 +173,8 @@ interface PendingCodexRealtimeUtterance {
   /** RPC admission and native completion belong to the same in-flight operation. */
   admission?: 'pending' | 'accepted'
   terminal?: boolean
+  /** A start marker confirms that subsequent completion belongs to this new response. */
+  nativeResponseStarted?: boolean
   readonly sessionKey: string
   readonly key: string
   readonly instructions: string
@@ -198,6 +207,8 @@ const CODEX_VOICE_INACTIVITY_MS = 5 * 60_000
 const CODEX_VOICE_AUDIO_DRAIN_MS = 6_000
 /** Conservative speech budget; a missing V3 terminal must not block all later sentences forever. */
 const CODEX_VOICE_NATIVE_MIN_COMPLETION_MS = 15_000
+/** V3 may repeat a terminal using a different event shape after the next sentence was admitted. */
+const CODEX_VOICE_DUPLICATE_TERMINAL_GRACE_MS = 1_200
 const pendingCodexRealtimeUtterances: PendingCodexRealtimeUtterance[] = []
 /** One bounded sentence cursor; never preloads an unbounded answer queue. */
 let nativeSentenceStream: NativeSentenceStreamState | undefined
@@ -226,6 +237,7 @@ function clearCodexRealtimeTimers(session: CodexRealtimeVoiceSession): void {
   delete session.audioDrainTimer
   delete session.audioDrainUntil
   delete session.lateAssistantTurnIgnored
+  delete session.lastCompletedNativeTerminal
   delete session.disconnectTimer
   delete session.inactivityTimer
   delete session.nativeCancelTimer
@@ -388,9 +400,17 @@ function sendCodexRealtimeUtterance(
  * response, retry play on the same attached track and report a blocked output.
  */
 function playCodexRealtimeAudio(audio: HTMLAudioElement): void {
+  // Audio deltas can arrive dozens of times per second. A pending/already
+  // running HTMLAudioElement must not receive overlapping play() promises.
+  if (audio.dataset.phoenixAudioPlayback === 'starting'
+    || (!audio.paused && audio.dataset.phoenixAudioPlayback === 'playing')) return
+  audio.dataset.phoenixAudioPlayback = 'starting'
   try {
     const playback = audio.play()
-    if (playback === undefined || typeof playback.catch !== 'function') return
+    if (playback === undefined || typeof playback.catch !== 'function') {
+      audio.dataset.phoenixAudioPlayback = 'playing'
+      return
+    }
     void playback.then(() => {
       audio.dataset.phoenixAudioPlayback = 'playing'
     }, () => {
@@ -1323,6 +1343,7 @@ function updateCodexRealtimePhase(payload: string): void {
     return
   }
   if (assistantStarted && session.activeUtterance !== undefined) {
+    session.activeUtterance.nativeResponseStarted = true
     if (session.nativeCancelRequested) {
       muteCodexRealtimeAudio(session, 'native-cancelled-response')
       // The cancelled response can still emit a late created event. Keep the
@@ -1352,6 +1373,25 @@ function updateCodexRealtimePhase(payload: string): void {
     // mutes immediately; interruption/stop also mute or dispose the stream.
     const utterance = session.activeUtterance
     if (utterance !== undefined) {
+      const previous = session.lastCompletedNativeTerminal
+      if (previous !== undefined && previous.key !== utterance.key
+        && previous.streamMessageKey !== undefined
+        && previous.streamMessageKey === utterance.streamMessageKey
+        && previous.eventType !== type
+        && Date.now() - previous.completedAt < CODEX_VOICE_DUPLICATE_TERMINAL_GRACE_MS
+        && utterance.nativeResponseStarted !== true) {
+        // response.done and assistant turn.done can be two notifications for
+        // the preceding sentence, not two completions. Do not advance the
+        // new sentence cursor or mute its first audio frames.
+        document.documentElement.dataset.phoenixVoiceLastNativeTerminal = 'ignored-duplicate-terminal'
+        return
+      }
+      session.lastCompletedNativeTerminal = {
+        key: utterance.key,
+        streamMessageKey: utterance.streamMessageKey,
+        eventType: type,
+        completedAt: Date.now(),
+      }
       utterance.terminal = true
       finishNativeUtterance(session, utterance)
     }
