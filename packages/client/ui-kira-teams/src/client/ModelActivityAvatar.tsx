@@ -95,6 +95,26 @@ export function modelEngineMark(model: string | undefined, provider?: string): '
   return family === 'other' ? 'ϟ' : undefined
 }
 
+/** Neutral line icons share one visual language with Phoenix's portrait frame.
+ * The existing Unicode mark stays hidden in the DOM for legacy selectors.
+ */
+function ModelBadgeIcon({ family }: { family: ModelEngineFamily }) {
+  const base = { width: 13, height: 13, viewBox: '0 0 24 24', fill: 'none',
+    stroke: 'currentColor', strokeWidth: 1.9, strokeLinecap: 'round' as const,
+    strokeLinejoin: 'round' as const, 'aria-hidden': true as const }
+  if (family === 'sol') return (
+    <svg {...base}><circle cx="12" cy="12" r="4" />
+      <path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42" /></svg>
+  )
+  if (family === 'luna') return (
+    <svg {...base}><path d="M20.4 14.3A8.6 8.6 0 0 1 9.7 3.6 8.6 8.6 0 1 0 20.4 14.3Z" /></svg>
+  )
+  if (family === 'astra') return (
+    <svg {...base}><path d="m12 2 2.5 7.5L22 12l-7.5 2.5L12 22l-2.5-7.5L2 12l7.5-2.5Z" /></svg>
+  )
+  return <svg {...base}><path d="m13 2-8 11h6l-1 9 9-12h-6Z" /></svg>
+}
+
 /** Resolve one KIRA identity to its standalone public portrait asset. */
 export function portraitSrcForKind(kind: ModelAvatarKind): string {
   if (kind === 'kira') return KIRA_MODERN_STILL_PORTRAITS.kira
@@ -174,7 +194,10 @@ export function ModelActivityAvatar({
       <span className={css.badge} />
       {engine === undefined ? null : <span className={css.engineBadge}
         title={provenance} data-engine-model={observedModel} data-engine-mark={engine}
-        data-engine-family={engineFamily}>{engine}</span>}
+        data-engine-family={engineFamily}>
+        <ModelBadgeIcon family={engineFamily ?? 'other'} />
+        <span className={css.engineMarkText}>{engine}</span>
+      </span>}
     </span>
   )
 }
