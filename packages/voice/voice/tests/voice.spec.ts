@@ -974,7 +974,7 @@ describe('Codex realtime optional session context', () => {
     }
     const bridge = {
       probe: vi.fn(async () => ({ available: true, authenticated: true })),
-      start: vi.fn(async () => ({ threadId: 'thread-native-voice', answerSdp: 'v=0\\r\\nanswer' })),
+      start: vi.fn(async (_options: Record<string, unknown>) => ({ threadId: 'thread-native-voice', answerSdp: 'v=0\\r\\nanswer' })),
     }
     vi.spyOn(internal, 'codexRealtimeBridge').mockReturnValue(bridge)
 
@@ -995,6 +995,38 @@ describe('Codex realtime optional session context', () => {
       assistantName: 'KIRA',
       assistantGender: 'feminine',
     }))
+    expect(bridge.start.mock.calls[0]?.[0]).not.toHaveProperty('initialItems')
+  })
+
+  it('does not supply stale Phoenix history to a detached voice-generation thread', async () => {
+    const { ctx, voice } = await mountVoice()
+    const context = ctx as unknown as { get(name: string): unknown }
+    const nativeGet = context.get.bind(context)
+    vi.spyOn(context, 'get').mockImplementation(name => name === 'sessions'
+      ? { get: () => ({ deriveMessages: () => [
+        { role: 'user', source: { kind: 'user' }, content: [{ type: 'text', text: 'Abre YouTube' }] },
+        { role: 'assistant', source: { kind: 'model' }, content: [{ type: 'text', text: 'YouTube abierto.' }] },
+      ] }) }
+      : nativeGet(name))
+    const internal = voice as unknown as {
+      codexRealtimeBridge(): {
+        probe(): Promise<{ available: boolean; authenticated: boolean }>
+        start(options: Record<string, unknown>): Promise<{ threadId: string; answerSdp: string }>
+      }
+    }
+    const start = vi.fn(async (_options: Record<string, unknown>) =>
+      ({ threadId: 'thread-voice-only', answerSdp: 'v=0\\r\\nanswer' }))
+    vi.spyOn(internal, 'codexRealtimeBridge').mockReturnValue({
+      probe: vi.fn(async () => ({ available: true, authenticated: true })),
+      start,
+    })
+    const started = await voice.conversationRealtimeStart({
+      key: 'session-real-harness', offerSdp: 'v=0\\r\\noffer\\r\\n',
+    })
+    expect(started.accepted).toBe(true)
+    expect(start).toHaveBeenCalledTimes(1)
+    expect(start.mock.calls[0]?.[0]).not.toHaveProperty('initialItems')
+    expect(start.mock.calls[0]?.[0]).toHaveProperty('assistantName')
   })
 })
 
