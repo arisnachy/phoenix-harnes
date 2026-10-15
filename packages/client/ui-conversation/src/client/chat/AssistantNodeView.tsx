@@ -35,14 +35,10 @@ export const AssistantNodeView = memo(function AssistantNodeView({
     if (tail?.closing?.finalNode.seq !== data.finalNode.seq) return undefined
     return { turn, seq: data.finalNode.seq, openFile }
   }, [data.finalNode, openFile, tail, turn])
-  // The Host records this projection on the actual step/start event only for
-  // short conversational turns. It is the durable authorization for native
-  // sentence streaming; tool, image, and other blocks remain final-tail-only.
-  const realtimeSentenceStreaming = node.location.kind === 'step'
-    && node.location.step.start?.data.historyProjection?.kind === 'conversational-tail'
-    && data.status !== 'interrupted'
-    && data.blocks.length > 0
-    && data.blocks.every(block => block.kind === 'text' || block.kind === 'reasoning')
+  // Voice follows the same final assistant output shown in this chat.
+  // In-progress conversational tails are not authoritative: an early "sigo
+  // en ello" becomes stale when tools finish during the same harness turn.
+  // Only the final node of a CLOSED owning turn may speak via Codex Live.
   const messageKey = `${String(sessionId)}:assistant:${data.turn}:${data.step}`
   // Retry/rewrite folds may remove the AssistantNode before a replacement is
   // projected. Unmount cleanup is the last client-owned cancellation boundary.
@@ -50,25 +46,15 @@ export const AssistantNodeView = memo(function AssistantNodeView({
     cancelVoiceAssistantSentenceStream(messageKey, true)
   }, [messageKey])
   useEffect(() => {
-    if (!realtimeSentenceStreaming && (owner === undefined || data.status === 'interrupted')) {
-      cancelVoiceAssistantSentenceStream(messageKey)
-    }
-    if (spokenText === '') {
+    if (data.status === 'interrupted' || (owner !== undefined && spokenText === '')) {
       cancelVoiceAssistantSentenceStream(messageKey)
       return
     }
-    streamVoiceAssistantResponse(
-      messageKey,
-      spokenText,
-      data.time,
-      data.status !== 'running',
-      // Codex Live ignores contextual step-local replies. Native sentence
-      // streaming is reserved for the durable conversational-tail mark.
-      owner !== undefined && data.status !== 'interrupted' && data.status !== 'running',
-      realtimeSentenceStreaming,
-      String(sessionId),
-    )
-  }, [data.status, data.step, data.time, data.turn, messageKey, owner, realtimeSentenceStreaming, sessionId, spokenText])
+    // Neither partial prose nor an earlier settled step can represent the
+    // outcome of a running tool. Wait until the actual final chat reply exists.
+    if (owner === undefined || data.status === 'running' || spokenText === '') return
+    streamVoiceAssistantResponse(messageKey, spokenText, data.time, true, true, false, String(sessionId))
+  }, [data.status, data.time, messageKey, owner, sessionId, spokenText])
   const mentions = useMemo(
     () => owner === undefined
       ? workspaceFileMentions?.({ cwd, openFile })
