@@ -266,6 +266,13 @@ function sendCodexRealtimeUtterance(
     utterance.terminal = false
     session.activeUtterance = utterance
     voiceAssistantSpokenText = utterance.echoText
+    // Only durable Phoenix assistant output is authoritative. These safe
+    // labels let QA prove whether Codex is reading the final chat message
+    // or an explicitly separate, user-visible attention notification.
+    document.documentElement.dataset.phoenixVoiceSpeechOrigin =
+      utterance.assistantMessageKey !== undefined ? 'final-harness-chat'
+        : utterance.streamMessageKey !== undefined ? 'provisional-chat-stream' : 'attention'
+    document.documentElement.dataset.phoenixVoiceAuthorizedLength = String(utterance.echoText.length)
     // Reserve the finalized message synchronously so a React closure/tail
     // rerender cannot enqueue the same reply while the RPC is pending.
     if (utterance.assistantMessageKey !== undefined && utterance.streamMessageKey === undefined) {
