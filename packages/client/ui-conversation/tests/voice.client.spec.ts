@@ -407,6 +407,7 @@ describe('browser voice adapter', () => {
       expect(microphoneTrack.enabled).toBe(true)
       expect(document.documentElement.dataset.phoenixVoiceMicrophone).toBe('echo-filtered-for-output')
       expect(document.documentElement.dataset.phoenixVoiceAudioMuteReason).toBe('none')
+      expect(document.documentElement.dataset.phoenixVoiceSpeechOrigin).toBe('provisional-chat-stream')
       await Promise.resolve()
       expect(document.documentElement.dataset.phoenixVoiceAudioThisReply).toBe('inbound-audio-received')
       expect(document.documentElement.dataset.phoenixVoiceInboundBytes).toBe('4096')
@@ -505,6 +506,9 @@ describe('browser voice adapter', () => {
         key: 'session-harness', text: 'La tarea terminó correctamente.',
       })
       expect(document.documentElement.dataset.phoenixVoiceSpeechStatus).toBe('accepted')
+      expect(document.documentElement.dataset.phoenixVoiceSpeechOrigin).toBe('final-harness-chat')
+      expect(document.documentElement.dataset.phoenixVoiceAuthorizedLength)
+        .toBe(String('La tarea terminó correctamente.'.length))
       expect(channel?.send).toHaveBeenCalledTimes(1)
       expect(audio?.muted).toBe(false)
       // V3 may surface first audio frames before the response.created event.
