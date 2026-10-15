@@ -112,6 +112,17 @@ describe('finalized harness reply is the only Codex Live speech source', () => {
     )
   })
 
+  it('voices the confirmed browser result after a prior tool step finishes', () => {
+    const view = render(<AssistantNodeView {...stepProps('open', 'settled', 8, 9, { tool: true })} />)
+    expect(spoken).not.toHaveBeenCalled()
+    view.rerender(<AssistantNodeView {...stepProps('closed', 'settled', 9, 9)} />)
+    expect(spoken).toHaveBeenCalledTimes(1)
+    expect(spoken).toHaveBeenLastCalledWith(
+      'session-a:assistant:turn-1:step-1', 'La tarea terminó correctamente.', now,
+      true, true, false, 'session-a',
+    )
+  })
+
   it('does not voice tool-bearing steps or earlier nonfinal assistant messages', () => {
     const view = render(<AssistantNodeView {...stepProps('closed', 'settled', 8, 9, { tool: true })} />)
     expect(spoken).not.toHaveBeenCalled()
