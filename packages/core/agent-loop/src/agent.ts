@@ -182,7 +182,10 @@ export class ReactLoopAgent implements Agent {
       this.cancel({ kind: 'user' })
       return
     }
-    const shouldInterruptActiveWork = this.phase.kind === 'running'
+    // Only genuine human steering may preempt an active model/tool. Internal
+    // Team handoffs join the next safe step without creating a fake user stop.
+    const shouldInterruptActiveWork = input.source.kind === 'user'
+      && this.phase.kind === 'running'
       && (this.modelBoundaryActive || this.toolBoundaryActive)
       && !this.phase.abort.signal.aborted
     this.send(input, 'next-step', true)

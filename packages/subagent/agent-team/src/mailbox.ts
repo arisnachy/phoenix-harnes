@@ -341,7 +341,7 @@ export class TeamMailbox {
     return [
       { type: 'text', text: `Team message ${message.id} from ${message.senderName}${message.purpose === undefined ? '' : ` [${message.purpose}]`}:` },
       ...structuredClone(message.content),
-      ...handoff ? [{ type: 'text' as const, text: `Kira: this is one genuine material Team handoff. Respond to ${message.senderName} by name only when there is a necessary correction, dependency or decision; otherwise integrate the cited finding directly into the final answer to the user. Check the actual proof, identify a demonstrated cause versus an unknown, and finish the authorized task as soon as sufficient evidence exists. Do not add a new search, repeated status update, peer reply, or wait merely to acknowledge this report. If work is truly missing, use one precise followup_task; otherwise stop. Never claim verification you did not perform.` }] : [],
+      ...handoff ? [{ type: 'text' as const, text: `Kira: this is one genuine material Team handoff. Never claim that ${message.senderName}'s handoff has not arrived. Address ${message.senderName} by name in your next natural reply. If a real decision, correction or dependency is required, send one actionable Team reply; otherwise fold only supported evidence into ONE final response to the user and stop. Do not start a ceremonial peer exchange, repeated wait, extra check, duplicate assignment or new model turn. Never claim verification you did not perform.` }] : [],
     ]
   }
 
