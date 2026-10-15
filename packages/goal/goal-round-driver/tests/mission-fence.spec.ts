@@ -40,6 +40,31 @@ describe('Goal recovery for abandoned checklists', () => {
 })
 
 describe('UME terminal fence for automatic Goal rounds', () => {
+  it('recovers an older prematurely partial mission only while its Goal is still active', () => {
+    const goal = (seq: number, phase: string): SessionEvent => ({
+      seq, type: 'goal/change', data: { operation: phase === 'complete' ? 'complete' : 'create',
+        goal: { phase } },
+    }) as unknown as SessionEvent
+    const end = (kind: string): SessionEvent => ({
+      seq: 3, type: 'turn/end', data: { reason: { kind } },
+    }) as unknown as SessionEvent
+    expect(goalBlockedByClosedUniversalMission(session([
+      human(1), goal(2, 'active'), end('completed'), terminal(4, 'partial'),
+    ]))).toBe(false)
+    expect(goalBlockedByClosedUniversalMission(session([
+      human(1), goal(2, 'blocked'), end('completed'), terminal(4, 'partial'),
+    ]))).toBe(true)
+    expect(goalBlockedByClosedUniversalMission(session([
+      human(1), goal(2, 'active'), end('aborted'), terminal(4, 'partial'),
+    ]))).toBe(true)
+    expect(goalBlockedByClosedUniversalMission(session([
+      human(1), goal(2, 'active'), end('completed'), terminal(4, 'cancelled'),
+    ]))).toBe(true)
+    expect(goalBlockedByClosedUniversalMission(session([
+      human(1), goal(2, 'active'), end('completed'), terminal(4, 'completed'),
+    ]))).toBe(true)
+  })
+
   it('allows ordinary Goals when no UME terminal event exists', () => {
     expect(goalBlockedByClosedUniversalMission(session([]))).toBe(false)
     expect(goalBlockedByClosedUniversalMission(session([human(1)]))).toBe(false)

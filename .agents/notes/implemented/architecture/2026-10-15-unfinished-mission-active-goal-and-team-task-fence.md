@@ -8,3 +8,6 @@ Read the durable `goal/change` phase, latest checklist and revisioned `team/task
 
 ## Verification
 Pure regression fixtures now cover active Goal without a checklist, closure prose preceded by effect and check receipts, pending and completed Team tasks, steering without losing older checklist items, and explicit human cancellation. Runtime integration, Windows build and model-provider end-to-end must still be performed before claiming the deployed Phoenix instance repaired.
+
+## Existing sessions written by the earlier faulty version
+A durable `team/mission: partial` checkpoint created at a normal model `turn/end: completed` could prevent an already-active Goal from waking after upgrade. The Goal fence now admits only that legacy combination (last turn completed and latest Goal snapshot still active). It does **not** reinstate the terminal UME team, revive old children, or bypass explicit cancellation, verified completion or provider-blocked Goals. On Host restart, the normal Goal driver can re-arm and continue solo.

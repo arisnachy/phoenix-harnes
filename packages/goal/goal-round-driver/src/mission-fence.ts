@@ -55,5 +55,23 @@ export function goalBlockedByClosedUniversalMission(
   if (latest === undefined) return false
   const lastHuman = session.events.findLast(event =>
     event.type === 'user/message' && event.data.source.kind === 'user')
-  return TERMINAL.has(validPhase(latest.data) ?? '') && latest.seq > (lastHuman?.seq ?? -1)
+  if (latest.seq <= (lastHuman?.seq ?? -1)) return false
+  const phase = validPhase(latest.data)
+  if (!TERMINAL.has(phase ?? '')) return false
+  if (phase === 'partial') {
+    // Older Team runtimes incorrectly marked an in-progress Goal as partial
+    // merely because Kira ended one model turn. Allow the ordinary Goal driver
+    // to resume this *specific* legacy case on Host restart. UME remains
+    // terminal (no old teammate delegation is revived).
+    const turn = session.events.findLast(event => event.type === 'turn/end')
+    const goalChange = session.events.findLast(event => (event.type as string) === 'goal/change')
+    const data: unknown = goalChange?.data
+    const goal = typeof data === 'object' && data !== null && !Array.isArray(data)
+      ? (data as Record<string, unknown>)['goal']
+      : undefined
+    const active = typeof goal === 'object' && goal !== null && !Array.isArray(goal)
+      && (goal as Record<string, unknown>)['phase'] === 'active'
+    if (turn?.data.reason.kind === 'completed' && active) return false
+  }
+  return true
 }
