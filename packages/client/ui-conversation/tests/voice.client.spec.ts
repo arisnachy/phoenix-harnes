@@ -435,6 +435,14 @@ describe('browser voice adapter', () => {
       expect(realtimeSpeak).toHaveBeenLastCalledWith({
         key: 'session-harness', text: 'Segunda frase.',
       })
+      // Codex V3 can describe one completed first sentence using both
+      // response.done and assistant turn.done. The duplicate MUST NOT
+      // consume the second sentence before Codex has even started it.
+      channel?.onmessage?.({ data: JSON.stringify({ type: 'turn.done', turn: { role: 'assistant' } }) })
+      expect(document.documentElement.dataset.phoenixVoiceLastNativeTerminal)
+        .toBe('ignored-duplicate-terminal')
+      expect(realtimeSpeak).toHaveBeenCalledTimes(2)
+      expect(audio?.muted).toBe(false)
       streamVoiceAssistantResponse(
         'assistant:harness:stream', streamed, activatedAt, true, false, true,
       )
