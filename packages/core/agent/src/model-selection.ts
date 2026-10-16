@@ -956,13 +956,13 @@ export function installModelSelection(
     lastTeamEscalationMessageId: undefined,
   }
   // A rehydrated Phoenix session can temporarily display an empty selector.
-  // Reuse only its own durable AUTO preference, never infer an AUTO route from
-  // the last serving Sol model and never override a current explicit choice.
+  // Reuse only its own durable Auto or Kira-Max Luna preference, never infer
+  // an Auto route from the last serving Sol model or override a live choice.
   function effectiveSelection(agent: Agent | undefined): ModelSelection | undefined {
     if (selection.current !== undefined) return selection.current
     if (agent === undefined) return undefined
     const preference = latestModelSelectionPreference(agent.session)
-    return isPhoenixCodexAutoSelection(preference?.selection) ? preference?.selection : undefined
+    return isKiraCodexAutoLead(preference?.selection, agent) ? preference?.selection : undefined
   }
 
   const disposeAssembly = agentCtx.on('system-prompt/assemble', async (_assembly, _context, next) => {

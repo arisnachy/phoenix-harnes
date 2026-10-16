@@ -222,6 +222,42 @@ describe('installModelSelection()', () => {
     }
   })
 
+  it('rehydrates Kira Max Luna selection but never an unrelated explicit Sol route', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    const selection: ModelSelectionRef = { current: undefined, assembled: undefined }
+    const dispose = installModelSelection(ctx, selection)
+    const events: { type: string; data: unknown }[] = [
+      { type: 'agent/model-selection', data: {
+        selection: { provider: 'openai-codex', model: 'gpt-6-luna' }, source: 'default',
+      } },
+      { type: 'turn/start', data: { turn: 1 } },
+      { type: 'user/message', data: { source: { kind: 'user' },
+        content: [{ type: 'text', text: 'Repara el navegador.' }] } },
+    ]
+    const agent = { session: { header: { agentPreset: 'kira-max' }, events }, options: {} } as unknown as Agent
+    ctx.agent = agent
+    const signal = new AbortController().signal
+    try {
+      await ctx.systemPrompt.assemble()
+      await expect(agentEvents(ctx, agent).waterfall('agent/request',
+        { turn: 1, step: 1, signal }, () => Promise.resolve({ provider: 'seed', model: 'seed' })))
+        .resolves.toMatchObject({ model: 'gpt-6.1-sol', reasoningEffort: ReasoningEffortId('low') })
+      events.push({ type: 'agent/model-selection', data: {
+        selection: { provider: 'openai-codex', model: 'gpt-6.1-sol' }, source: 'explicit',
+      } })
+      await ctx.systemPrompt.assemble()
+      // Stale assembly may retain an earlier route, but a new assembly must
+      // honor the latest persisted explicit selection if the selector is empty.
+      const actual = await agentEvents(ctx, agent).waterfall('agent/request',
+        { turn: 1, step: 2, signal }, () => Promise.resolve({ provider: 'seed', model: 'seed' }))
+      expect(actual.model).not.toBe('gpt-6-luna')
+    } finally {
+      dispose()
+      await ctx.fiber.dispose()
+    }
+  })
+
   it('does not reanimate a completed or cleared goal after Sol finishes', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
