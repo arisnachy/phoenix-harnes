@@ -222,6 +222,28 @@ describe('Kira Max execution contract', () => {
     expect(ctx.agentTeams.listMembers(lead).some(member => member.name === 'conclusion-specialist')).toBe(true)
   }, 30_000)
 
+  it('executes Kira tools through the scoped TypeScript code runtime', async () => {
+    const preset = await readPreset()
+    const presentation = preset.rows.filter(row => row.id === 'tool-presentation')
+    expect(presentation).toHaveLength(1)
+    expect(presentation[0]).toMatchObject({
+      name: '@phoenix-ai/dsh-agent-tool-presentation',
+      config: { mode: 'code' },
+    })
+    expect(preset.persona.config.text).toContain('tu herramienta directa es `run_code`')
+    expect(preset.persona.config.text).toContain('Promise.all')
+    expect(preset.persona.config.text).toContain('no omitas aprobaciones')
+    // Runtime is a host-plane dependency, never duplicated in Kira's scope.
+    expect(preset.rows.find(row => row.id === 'code-runtime')).toBeUndefined()
+    const root = fileURLToPath(new URL('../../../packages/bundle/web-app/cordis.patch.yml', import.meta.url))
+    const web = await readFile(root, 'utf8')
+    expect(web).toContain("name: '@phoenix-ai/dsh-code-runtime-worker-thread'")
+    const codePreset = await readFile(fileURLToPath(new URL(
+      '../config/agent-presets/code/agent.cordis.yml', import.meta.url,
+    )), 'utf8')
+    expect(codePreset).toContain("name: '@phoenix-ai/dsh-agent-tool-presentation'")
+  })
+
   it('keeps memory, HARDNESS, and Kira execution rules in the shipped composition', async () => {
     const preset = await readPreset()
     const memory = preset.rows.find(row => row.id === 'tool-session-learning')
