@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { GoalId } from '@phoenix-ai/dsh-goal'
+import { CallId, createToolResultMessage, createUserMessage } from '@phoenix-ai/dsh-llm'
 import { Session, SessionId } from '@phoenix-ai/dsh-session'
 import {
   GOAL_STRATEGIES,
@@ -22,16 +23,18 @@ describe('progress-aware goal strategies', () => {
     const addRound = (round: number, effect?: { name: string; args: string }) => {
       const turn = round
       session.append('turn/start', { turn })
-      session.append('user/message', {
-        id: `goal-input-${round}`, source: { kind: 'goal', goalId, revision: 1, round },
+      session.append('user/message', createUserMessage({
+        source: { kind: 'goal', goalId, revision: 1, round },
         content: [{ type: 'text', text: 'continue' }],
-      } as never)
+      }), { surfaceOp: 'append' })
       if (effect !== undefined) {
-        const callId = `call-${round}` as never
+        const callId = CallId(`call-${round}`)
         session.append('tool/call', { turn, step: 1, callId, name: effect.name, arguments: effect.args })
-        session.append('tool/result', { turn, step: 1, message: {
-          source: { kind: 'tool', callId }, content: [{ type: 'text', text: 'ok' }],
-        } as never })
+        session.append('tool/result', { turn, step: 1,
+          message: createToolResultMessage({
+            callId, content: [{ type: 'text', text: 'ok' }], isError: false,
+          }),
+        }, { surfaceOp: 'append' })
       }
       session.append('turn/end', { turn, reason: { kind: 'completed' } })
     }
