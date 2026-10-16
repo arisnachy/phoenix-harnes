@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-Model-facing `memory_search` and `memory_remember` tools over PHOENIX's persistent cognitive ledger. Search returns bounded records with layers, stable IDs, project, entities, relations, source URI, temporal coordinates, and explainable confidence/ranking signals. The plugin contributes project-scoped automatic evidence; prompt-variable delimiters inside untrusted text are neutralized before injection. Remember accepts lessons, skills, and preferences and redacts secrets before persistence.
+Model-facing `memory_search` and `memory_remember` tools over PHOENIX's persistent cognitive ledger. Search returns bounded records with layers, stable IDs, project, entities, relations, source URI, temporal coordinates, and explainable confidence/ranking signals. The plugin contributes task- and project-scoped automatic evidence to Kira and direct subagents; prompt-variable delimiters inside untrusted text are neutralized before injection. Ordinary tool-driven turns and blocked tasks retain low-confidence diagnostic experience (duration, tokens, failed tool names) without counting as verified success. Only verified mission completion can promote a successful procedure or habit. Remember accepts lessons, skills, and preferences and redacts secrets before persistence.
 
 ## Composition
 
@@ -11,7 +11,7 @@ Model-facing `memory_search` and `memory_remember` tools over PHOENIX's persiste
   name: '@phoenix-ai/dsh-tool-session-learning'
 ```
 
-The tool requires `tools`, `systemPrompt`, and `learningMemory`. Search is read-only; remember cannot change prompts, permissions, tools, or credentials. Search supports project, layer, time-window, and superseded-history filters. Automatic context is bounded to eight project-scoped cognitive records and excludes raw conversation records.
+The tool requires `tools`, `systemPrompt`, and `learningMemory`. Search is read-only; remember cannot change prompts, permissions, tools, or credentials. Search supports project, layer, time-window, and superseded-history filters. Automatic context is bounded to eight project-scoped cognitive records and excludes raw conversation records. Similar tasks silently reuse verified procedures; incomplete attempts are diagnostic warnings only. No tool arguments, secrets, or form values are stored in the experience metrics.
 
 ## Model Experience
 

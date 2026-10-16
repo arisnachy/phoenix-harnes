@@ -95,6 +95,38 @@ function aggregateWith(maturity: ExperienceMaturity, overrides: Partial<Experien
 }
 
 describe('ExperienceLearningEngine', () => {
+  it('records failed and incomplete ordinary work without ever promoting it as verified', () => {
+    const engine = new ExperienceLearningEngine()
+    engine.beginTask({ sessionId: 'ordinary', text: 'Complete the practice automation form', occurredAt: 100 })
+    engine.observeToolCall('ordinary')
+    engine.observeToolResult('ordinary', true, 'mcp__chrome__interact')
+    engine.observeToolCall('ordinary')
+    const first = engine.finishUnverified('ordinary', 190, true)
+    expect(first).toMatchObject({
+      runs: 1, failures: 1, verifiedSuccesses: 0,
+      recentRuns: [{ verified: false, qualityPassed: false, failedTools: ['mcp__chrome__interact'] }],
+    })
+    expect(engine.completeVerified('ordinary', 200)).toBeUndefined()
+    const stored = experienceMemoryInput(first!, { sessionId: 'ordinary', eventSeq: 7, occurredAt: 190 })
+    expect(stored.sourceEventType).toBe('experience/unverified-attempt')
+    expect(stored.confidence).toBeLessThan(0.8)
+    expect(decodeExperienceAggregate(recordFor(first!))).toBeDefined()
+    engine.beginTask({ sessionId: 'second', text: 'Complete the practice automation form', occurredAt: 210 })
+    engine.observeToolCall('second')
+    const followup = engine.completeVerified('second', 300)
+    expect(followup?.verifiedSuccesses).toBe(1)
+    expect(followup?.failures).toBe(1)
+    expect(followup?.recentRuns[0]?.verified).toBe(false)
+    expect(followup?.recentRuns[1]?.verified).toBe(true)
+  })
+
+  it('does not store greetings or tooling-free chat as unverified task failures', () => {
+    const engine = new ExperienceLearningEngine()
+    engine.beginTask({ sessionId: 'chat', text: 'Hello Phoenix', occurredAt: 1 })
+    expect(engine.finishUnverified('chat', 2)).toBeUndefined()
+    expect(engine.matchTask('Hello Phoenix')).toBeUndefined()
+  })
+
   it('turns repeated verified work into durable habit evidence while counting end-to-end time', () => {
     const state = completeRuns(5, 'clinic')
     expect(state).toMatchObject({

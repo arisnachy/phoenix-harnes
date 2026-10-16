@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { assessHabitExperience, formatHabitGuidance } from '../src/habit.ts'
+import { assessHabitExperience, formatHabitGuidance, formatUnverifiedExperience } from '../src/habit.ts'
 import type { ExperienceAggregate, ExperienceRunMetrics, ExperienceMaturity } from '../src/experience.ts'
 import { fingerprintTask } from '../src/task-context.ts'
 
@@ -47,6 +47,24 @@ function aggregate(
 }
 
 describe('habit learning policy', () => {
+  it('recognizes similar prior mistakes as unverified diagnostics, not executable habits', () => {
+    const prior = aggregate('candidate', {
+      runs: 2,
+      verifiedSuccesses: 0,
+      failures: 1,
+      recentRuns: [
+        run({ verified: false, qualityPassed: false, failedTools: ['chrome_interact'] }),
+        run({ verified: false, qualityPassed: false }),
+      ],
+    })
+    const warning = formatUnverifiedExperience(prior)
+    expect(warning).toContain('previously attempted a similar task')
+    expect(warning).toContain('chrome_interact')
+    expect(warning).toContain('NOT proof')
+    expect(formatHabitGuidance(assessHabitExperience(prior))).toBe('')
+    expect(formatUnverifiedExperience(aggregate('validated'))).toBe('')
+  })
+
   it('stays silent while evidence is immature', () => {
     for (const maturity of ['novel', 'repeated', 'candidate'] as const) {
       const assessment = assessHabitExperience(aggregate(maturity))

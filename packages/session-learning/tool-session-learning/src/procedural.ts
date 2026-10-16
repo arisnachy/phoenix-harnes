@@ -1,6 +1,7 @@
 /** Evidence-backed procedural learning for Phoenix. */
 
 import type { Context } from '@phoenix-ai/cordis'
+import { learningOwnerSessionId } from './team-learning-context.ts'
 import type { CognitiveMemoryHit, CognitiveMemoryRecord } from '@phoenix-ai/dsh-session-learning'
 import {
   decodeTaskFingerprint,
@@ -552,6 +553,7 @@ export function installProceduralLearning(
 
   ctx.on('session/event', (session, event) => {
     const sessionId = String(session.id)
+    const ownerSessionId = learningOwnerSessionId(session)
     const eventType = String(event.type)
     const data = event.data as unknown
     const eventSeq = typeof event.seq === 'number' ? event.seq : 0
@@ -561,22 +563,50 @@ export function installProceduralLearning(
     const run = async (): Promise<void> => {
       if (eventType === 'tool/call' && isRecord(data) && typeof data.name === 'string' && data.name.trim() !== '') {
         if (data.name === 'living_act' && isRecord(data.arguments) && typeof data.arguments.action === 'string') {
-          trace.livingAction(sessionId, data.arguments.action)
+          trace.livingAction(ownerSessionId, data.arguments.action)
         } else {
-          trace.toolCall(sessionId, data.name)
+          trace.toolCall(ownerSessionId, data.name)
         }
         return
       }
       if (eventType === 'hardness/kernel' && isRecord(data)) {
         if (data.kind === 'learning-recorded' && isRecord(data.learning) && typeof data.learning.solution === 'string') {
-          trace.recovery(sessionId, data.learning.solution)
+          trace.recovery(ownerSessionId, data.learning.solution)
           return
         }
         if (data.kind === 'route-selected' && typeof data.strategy === 'string') {
-          trace.decision(sessionId, data.strategy)
+          trace.decision(ownerSessionId, data.strategy)
           return
         }
       }
+      // A delegated team member contributes to the lead's procedure, but its
+      // own turn, failure or completion cannot close the human mission.
+      if (session.header.origin === 'subagent') return
+
+      // Every ordinary tool-driven turn is experience even when no durable
+      // Goal exists. Retain a recoverable CANDIDATE, never an active recipe,
+      // because a normal assistant completion does not prove quality.
+      if (eventType === 'turn/end' && isRecord(data) && isRecord(data.reason)) {
+        const latestGoal = session.events.findLast(item => item.type === 'goal/change')
+        if (latestGoal !== undefined && latestGoal.data.operation !== 'clear') return
+        const steps = trace.complete(sessionId)
+        const currentTask = taskContext?.currentTask(sessionId)
+        if (steps.length === 0 || currentTask === undefined) return
+        await engine.recordExperience({
+          title: `Ordinary task attempt: ${currentTask.slice(0, 160)}`,
+          scope: projectId ?? 'global',
+          trigger: currentTask,
+          steps,
+          evidence: 'Ordinary turn ended without a Goal verification gate; treat this observed sequence as unverified diagnostic history, not a successful recipe.',
+          verified: false,
+          sessionId,
+          eventSeq,
+          occurredAt,
+          ...projectId === undefined ? {} : { projectId },
+        })
+        return
+      }
+
       if (eventType === 'goal/change' && isRecord(data) && data.operation === 'clear') {
         trace.clear(sessionId)
         return

@@ -50,6 +50,18 @@ export function apply(ctx: Context, config: Config): void {
   if (!Number.isSafeInteger(maxResults) || maxResults < 1) throw new TypeError('maxResults must be a positive safe integer')
 
   const tasks = new RecentTaskLedger()
+  // The task being recalled must belong to THIS agent, not another chat's
+  // last user message. Delegated team members inherit their lead's task.
+  const taskSession = (assembly: unknown): string | undefined => {
+    const agent = (assembly as { agent?: {
+      id: unknown
+      session?: Parameters<typeof learningOwnerSessionId>[0]
+    } }).agent
+    return agent === undefined ? undefined
+      : agent.session === undefined ? String(agent.id) : learningOwnerSessionId(agent.session)
+  }
+  const taskForAssembly = (assembly: unknown): string | undefined =>
+    tasks.currentTask(taskSession(assembly))
   const curator = new AutonomousMemoryCurator({
     async remember(input) {
       await ctx.learningMemory.rememberCognitive({ ...input })
@@ -177,7 +189,7 @@ export function apply(ctx: Context, config: Config): void {
   ctx.systemPrompt.context({
     name: 'context:resolved-task-reference',
     order: 117,
-    text: () => formatResolvedTaskReference(tasks.resolvedReference()),
+    text: assembly => formatResolvedTaskReference(tasks.resolvedReference(taskSession(assembly))),
     interpolateVariables: false,
   })
   ctx.systemPrompt.context({
@@ -200,9 +212,9 @@ export function apply(ctx: Context, config: Config): void {
   ctx.systemPrompt.context({
     name: 'context:experiential-learning-memory',
     order: 119,
-    text: () => {
+    text: assembly => {
       const projectId = ctx.learningMemory.currentProjectId()
-      const taskContext = tasks.currentTask()
+      const taskContext = taskForAssembly(assembly)
       const hits = ctx.learningMemory.recallCognitive({
         query: taskContext ?? '',
         limit: 24,
@@ -218,9 +230,9 @@ export function apply(ctx: Context, config: Config): void {
   ctx.systemPrompt.context({
     name: 'context:validated-procedures',
     order: 120,
-    text: () => {
+    text: assembly => {
       const projectId = ctx.learningMemory.currentProjectId()
-      const taskContext = tasks.currentTask()
+      const taskContext = taskForAssembly(assembly)
       return formatProceduralContext(procedural.recommend({
         limit: 4,
         ...projectId === undefined ? {} : { projectId },
@@ -232,8 +244,8 @@ export function apply(ctx: Context, config: Config): void {
   ctx.systemPrompt.context({
     name: 'context:unverified-recovery-experience',
     order: 120.5,
-    text: () => {
-      const taskContext = tasks.currentTask()
+    text: assembly => {
+      const taskContext = taskForAssembly(assembly)
       if (taskContext === undefined) return ''
       const projectId = ctx.learningMemory.currentProjectId()
       return formatRecoveryCandidates(procedural.recoveryCandidates({
@@ -246,8 +258,8 @@ export function apply(ctx: Context, config: Config): void {
   ctx.systemPrompt.context({
     name: 'context:habit-guidance',
     order: 121,
-    text: () => {
-      const taskContext = tasks.currentTask()
+    text: assembly => {
+      const taskContext = taskForAssembly(assembly)
       if (taskContext === undefined) return ''
       const projectId = ctx.learningMemory.currentProjectId()
       const matched = experience.matchTask(taskContext, projectId)

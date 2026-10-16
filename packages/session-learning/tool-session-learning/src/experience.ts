@@ -22,6 +22,8 @@ export interface ExperienceRunMetrics {
   readonly userInterventions: number
   readonly verified: boolean
   readonly qualityPassed: boolean
+  /** Sanitized failure operation names, never tool arguments or secrets. */
+  readonly failedTools?: readonly string[]
 }
 
 /** Durable aggregate for one task fingerprint. */
@@ -63,6 +65,7 @@ interface ActiveEpisode {
   failedToolCalls: number
   retries: number
   userInterventions: number
+  failedTools: string[]
 }
 
 /**
@@ -116,6 +119,7 @@ export class ExperienceLearningEngine {
       failedToolCalls: 0,
       retries: 0,
       userInterventions: 0,
+      failedTools: [],
       ...input.projectId === undefined ? {} : { projectId: input.projectId },
     })
   }
@@ -155,9 +159,15 @@ export class ExperienceLearningEngine {
    * @param sessionId - sessionId supplied to this public operation.
    * @param failed - failed supplied to this public operation.
    */
-  observeToolResult(sessionId: string, failed: boolean): void {
+  observeToolResult(sessionId: string, failed: boolean, toolName?: string): void {
     const episode = this.active.get(sessionId)
-    if (episode !== undefined && failed) episode.failedToolCalls += 1
+    if (episode === undefined || !failed) return
+    episode.failedToolCalls += 1
+    if (toolName !== undefined && /^[a-zA-Z0-9_.:-]{1,96}$/u.test(toolName)
+      && !episode.failedTools.includes(toolName)) {
+      episode.failedTools.push(toolName)
+      if (episode.failedTools.length > 8) episode.failedTools.shift()
+    }
   }
 
   /**
@@ -195,9 +205,28 @@ export class ExperienceLearningEngine {
     * @returns Result produced by this public operation.
    */
   completeVerified(sessionId: string, occurredAt: number): ExperienceAggregate | undefined {
+    return this.finishEpisode(sessionId, occurredAt, true, false)
+  }
+
+  /**
+   * Preserve an ordinary turn or blocked attempt as diagnostic history WITHOUT
+   * claiming that its output passed verification or promoting an unsafe habit.
+   * @param sessionId - Root session owning the work, including child usage.
+   * @param occurredAt - Terminal event time from the append-only session log.
+   * @param failed - Whether the attempt was actually blocked or errored.
+   * @returns A bounded evidence aggregate, or undefined for tool-free chatter.
+   */
+  finishUnverified(sessionId: string, occurredAt: number, failed = false): ExperienceAggregate | undefined {
+    return this.finishEpisode(sessionId, occurredAt, false, failed)
+  }
+
+  private finishEpisode(
+    sessionId: string, occurredAt: number, verified: boolean, failed: boolean,
+  ): ExperienceAggregate | undefined {
     const episode = this.active.get(sessionId)
     if (episode === undefined) return undefined
     this.active.delete(sessionId)
+    if (!verified && episode.toolCalls === 0 && episode.retries === 0) return undefined
 
     const previous = this.bestMatchingAggregate(episode.taskFingerprint, episode.projectId)
     const key = previous?.key ?? fingerprintKey(episode.taskFingerprint)
@@ -210,12 +239,13 @@ export class ExperienceLearningEngine {
       failedToolCalls: episode.failedToolCalls,
       retries: episode.retries,
       userInterventions: episode.userInterventions,
-      verified: true,
-      qualityPassed: true,
+      verified,
+      qualityPassed: verified,
+      ...(episode.failedTools.length === 0 ? {} : { failedTools: [...episode.failedTools] }),
     }
     const runs = (previous?.runs ?? 0) + 1
-    const verifiedSuccesses = (previous?.verifiedSuccesses ?? 0) + 1
-    const failures = previous?.failures ?? 0
+    const verifiedSuccesses = (previous?.verifiedSuccesses ?? 0) + (verified ? 1 : 0)
+    const failures = (previous?.failures ?? 0) + (failed ? 1 : 0)
     const next: ExperienceAggregate = {
       version: STATE_VERSION,
       key,
@@ -290,8 +320,10 @@ export function experienceMemoryInput(
 ): CognitiveMemoryInput {
   const averageMs = state.runs === 0 ? 0 : Math.round(state.totalWallTimeMs / state.runs)
   const averageTokens = state.runs === 0 ? 0 : Math.round(state.totalTokens / state.runs)
+  const verified = state.recentRuns.at(-1)?.verified === true
+  const failedTools = [...new Set(state.recentRuns.flatMap(run => run.failedTools ?? []))].slice(-5)
   const summary = [
-    `Verified repeated-task experience [${state.maturity}] for: ${state.taskSummary}`,
+    `${verified ? 'Verified' : 'Unverified'} repeated-task experience [${state.maturity}] for: ${state.taskSummary}`,
     `runs=${state.runs}`,
     `verified=${state.verifiedSuccesses}`,
     `avgWallMs=${averageMs}`,
@@ -299,6 +331,7 @@ export function experienceMemoryInput(
     `toolFailures=${state.totalFailedToolCalls}`,
     `retries=${state.totalRetries}`,
     `userInterventions=${state.totalUserInterventions}`,
+    ...(failedTools.length > 0 ? [`failedTools=${failedTools.join(',')}`] : []),
   ].join(' · ')
   return {
     sessionId: provenance.sessionId,
@@ -307,12 +340,14 @@ export function experienceMemoryInput(
     layers: ['autobiographical', 'episodic', 'semantic', 'procedural', 'temporal'],
     content: summary,
     summary,
-    sourceEventType: 'experience/verified-completion',
+    sourceEventType: verified ? 'experience/verified-completion' : 'experience/unverified-attempt',
     occurredAt: provenance.occurredAt,
     subject: `${EXPERIENCE_SUBJECT_PREFIX}${state.key}`,
     value: JSON.stringify(state),
-    confidence: confidenceFor(state),
-    importance: state.maturity === 'habitual' ? 0.96 : state.maturity === 'validated' ? 0.9 : 0.76,
+    confidence: verified ? confidenceFor(state) : 0.45,
+    importance: verified
+      ? (state.maturity === 'habitual' ? 0.96 : state.maturity === 'validated' ? 0.9 : 0.76)
+      : 0.45,
     ...state.projectId === undefined ? {} : { projectId: state.projectId },
   }
 }
@@ -433,6 +468,10 @@ function isRunMetrics(value: unknown): value is ExperienceRunMetrics {
     && isCount(value.failedToolCalls)
     && isCount(value.retries)
     && isCount(value.userInterventions)
-    && value.verified === true
-    && value.qualityPassed === true
+    && typeof value.verified === 'boolean'
+    && typeof value.qualityPassed === 'boolean'
+    && (!value.qualityPassed || value.verified)
+    && (value.failedTools === undefined || (Array.isArray(value.failedTools)
+      && value.failedTools.length <= 8
+      && value.failedTools.every(name => typeof name === 'string' && /^[a-zA-Z0-9_.:-]{1,96}$/u.test(name))))
 }
