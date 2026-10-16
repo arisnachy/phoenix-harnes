@@ -5,7 +5,7 @@
  * node examples/game-studio/plan-game-assets.mjs manifest.json plan.json
  */
 import { readFile, writeFile } from 'node:fs/promises'
-import { resolve } from 'node:path'
+import { dirname, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 function entries(value) { return Array.isArray(value) ? value.filter(item => item && typeof item === 'object') : [] }
@@ -15,7 +15,7 @@ function item(family, id, animations, owner, media = 'png') {
 }
 
 /** Return an actionable production plan, not a claim that any resource exists. */
-export function planGameAssets(manifest) {
+export function planGameAssets(manifest, verifiedAssets = { images: [], audio: [] }) {
   if (!manifest || typeof manifest !== 'object' || Array.isArray(manifest)
     || typeof manifest.genre !== 'string' || !manifest.genre.trim()) {
     throw new Error('A real game manifest with genre is required before asset production')
@@ -95,11 +95,30 @@ export function planGameAssets(manifest) {
   if (!cues.length) missing.push('design actual sound effects and runtime cue triggers')
   if (isShooter || isBrawler) add('audio', 'music', ['intro', 'loop', 'pause', 'resume'], 'audio/qa', 'audio-or-WebAudio')
   if (todo.length === 0) missing.push('define gameplay and scene assets for the requested genre')
+  const art = manifest.art && typeof manifest.art === 'object' ? manifest.art : {}
+  const readyImages = new Set(verifiedAssets.images || [])
+  const readyAudio = new Set(verifiedAssets.audio || [])
+  const reused = new Set()
+  for (const task of todo) {
+    if (task.media !== 'png' && task.media !== 'audio-or-WebAudio') continue
+    let imageId
+    if (task.family === 'hero') imageId = art.hero?.imageId
+    else {
+      const group = art[task.family]
+      imageId = Array.isArray(group) ? group.find(entry => entry?.id === task.id)?.imageId : undefined
+    }
+    const id = task.media === 'png' ? imageId : 'phoenix-audio-' + task.id
+    if (typeof id !== 'string' || !(task.media === 'png' ? readyImages : readyAudio).has(id)) continue
+    task.status = 'reusable-needs-integration'
+    task.acceptance = 'Existing verified media; bind it to gameplay and verify actual drawing or playback'
+    reused.add(id)
+  }
   return {
     title: manifest.title || 'Untitled game',
     genre,
     stage: 'NOT BUILT — asset production plan',
     tasks: todo,
+    existingAssets: { reusable: [...reused], unbound: [...readyImages, ...readyAudio].filter(id => !reused.has(id)) },
     missingDesignDecisions: missing,
     acceptance: ['approved character/art bible used by all roles',
       'hero + each enemy + boss animation frames actually drawn by the engine',
@@ -111,14 +130,49 @@ export function planGameAssets(manifest) {
 }
 
 async function main() {
-  const [input, output] = process.argv.slice(2)
-  if (!input || !output || process.argv.length !== 4) {
-    throw new Error('Usage: node examples/game-studio/plan-game-assets.mjs manifest.json output-plan.json')
+  const [input, output, inventoryPath] = process.argv.slice(2)
+  if (!input || !output || (process.argv.length !== 4 && process.argv.length !== 5)) {
+    throw new Error('Usage: node examples/game-studio/plan-game-assets.mjs game.json plan.json [assets.json]')
   }
   const raw = await readFile(input, 'utf8')
-  const plan = planGameAssets(JSON.parse(raw))
+  const ready = { images: [], audio: [] }
+  const invalid = []
+  if (inventoryPath) {
+    const inventory = JSON.parse(await readFile(inventoryPath, 'utf8'))
+    if (!inventory || typeof inventory !== 'object' || Array.isArray(inventory))
+      throw new Error('Expected an asset inventory object')
+    for (const family of ['images', 'audio']) {
+      if (inventory[family] !== undefined && !Array.isArray(inventory[family]))
+        throw new Error('Inventory ' + family + ' must be an array')
+      for (const item of inventory[family] || []) {
+        const id = item?.id, path = item?.path
+        if (typeof id !== 'string' || typeof path !== 'string' || !path.trim()
+          || /^https?:\/\//iu.test(path) || path.includes('\0')) {
+          invalid.push(String(id ?? path ?? 'unnamed'))
+          continue
+        }
+        try {
+          const bytes = await readFile(resolve(dirname(resolve(inventoryPath)), path))
+          const valid = family === 'images'
+            ? bytes.length >= 45 && bytes.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10]))
+              && bytes.includes(Buffer.from('IDAT')) && bytes.includes(Buffer.from('IEND'))
+            : bytes.length >= 44 && bytes.length <= 12 * 1024 * 1024
+              && ((bytes.toString('ascii', 0, 4) === 'RIFF' && bytes.toString('ascii', 8, 12) === 'WAVE')
+                || bytes.toString('ascii', 0, 4) === 'OggS'
+                || bytes.toString('ascii', 0, 3) === 'ID3'
+                || (bytes[0] === 0xff && ((bytes[1] ?? 0) & 0xe0) === 0xe0))
+          if (valid) ready[family].push(id)
+          else invalid.push(id)
+        } catch { invalid.push(id) }
+      }
+    }
+  }
+  const plan = planGameAssets(JSON.parse(raw), ready)
+  plan.existingAssets.invalid = invalid
   await writeFile(output, JSON.stringify(plan, null, 2) + '\n', 'utf8')
-  process.stdout.write('Game Studio created ' + plan.tasks.length + ' PENDING asset tasks; no images or playable game were generated.\n')
+  process.stdout.write('Game Studio: ' + plan.existingAssets.reusable.length
+    + ' reusable assets, ' + plan.existingAssets.unbound.length
+    + ' unbound assets, ' + invalid.length + ' invalid; no media generated.\n')
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {

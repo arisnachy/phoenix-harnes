@@ -29,6 +29,21 @@ describe('Game Studio whole-scene art plan', () => {
     expect(plan.tasks.some((task: { family: string }) => task.family === 'backgrounds')).toBe(true)
   })
 
+  it('reuses mapped existing assets but keeps unbound art and gameplay tasks pending', () => {
+    const source = JSON.parse(readFileSync(resolve(process.cwd(), 'examples/game-studio/jungle-echo.manifest.json'), 'utf8'))
+    const game = { ...source, art: { hero: { imageId: 'hero-png' },
+      backgrounds: [{ id: 'sky', imageId: 'sky-png' }] } }
+    const result = planGameAssets(game, {
+      images: ['hero-png', 'sky-png', 'orphan-png'], audio: ['phoenix-audio-shoot'],
+    })
+    expect(result.tasks.find(task => task.family === 'hero')?.status).toBe('reusable-needs-integration')
+    expect(result.tasks.find(task => task.family === 'backgrounds' && task.id === 'sky')?.status).toBe('reusable-needs-integration')
+    expect(result.tasks.find(task => task.family === 'audio' && task.id === 'shoot')?.status).toBe('reusable-needs-integration')
+    expect(result.tasks.find(task => task.family === 'enemies')?.status).toBe('pending')
+    expect(result.existingAssets.unbound).toContain('orphan-png')
+    expect(result.stage).toMatch(/NOT BUILT/u)
+  })
+
   it('reports a shooter roster lacking enemy/boss/layer designs before image-generation calls', () => {
     const plan = planGameAssets({ title: 'Empty', genre: 'run-and-gun', level: {}, audio: { cues: [] } })
     expect(plan.missingDesignDecisions).toEqual(expect.arrayContaining([
