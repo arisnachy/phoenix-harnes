@@ -15,7 +15,7 @@ export type BrowserTarget = {
 }
 /** Bounded, typed DOM operation and locator accepted by the Chrome connector. */
 export type BrowserInteraction = BrowserTarget & {
-  operation: 'inspect' | 'fill' | 'select' | 'check' | 'click' | 'submit' | 'scroll' | 'wait'
+  operation: 'inspect' | 'fill' | 'select' | 'check' | 'click' | 'submit' | 'scroll' | 'wait' | 'verify'
   value?: string | undefined
   checked?: boolean | undefined
   expectedText?: string | undefined
@@ -46,7 +46,10 @@ export type BrowserInteractionResult = {
  * @param input - Validated locator, operation and bounded user-intended value.
  * @returns A sanitized DOM action result without credentials or field secrets.
  */
-export function executeBrowserInteraction(input: BrowserInteraction): BrowserInteractionResult {
+export function executeBrowserInteraction(
+  input: BrowserInteraction,
+  cache?: { elements?: Element[]; candidates?: Element[] },
+): BrowserInteractionResult {
   const doc = document
   const win = window
   const clean = (value: string | null | undefined) => (value || '').replace(/\s+/g, ' ').trim().slice(0, 250)
@@ -64,9 +67,16 @@ export function executeBrowserInteraction(input: BrowserInteraction): BrowserInt
     visit(root, 0)
     return found
   }
-  const elements = children(doc)
+  // A single 30-field batch shares one DOM snapshot instead of performing
+  // up to 30 full-document traversals, style scans and shadow-root walks.
+  // Detached controls are refused rather than silently updated on a stale DOM.
+  const elements = cache?.elements ?? children(doc)
   const candidate = (el: Element) => el.matches('input,textarea,select,button,a[href],[role="button"],[role="checkbox"],[role="radio"],[contenteditable="true"]')
-  const candidates = elements.filter(candidate)
+  const candidates = cache?.candidates ?? elements.filter(candidate)
+  if (cache !== undefined && cache.elements === undefined) {
+    cache.elements = elements
+    cache.candidates = candidates
+  }
   const fieldLabel = (el: Element): string => {
     const value = el as HTMLInputElement
     const fromLabels = value.labels === undefined || value.labels === null ? '' : Array.from(value.labels)
@@ -103,10 +113,10 @@ export function executeBrowserInteraction(input: BrowserInteraction): BrowserInt
     }
   }
   const basic = { title: clean(doc.title), url: win.location.href }
-  const frames = elements.filter(el => el.tagName.toLowerCase() === 'iframe')
-    .slice(0, 25).map(el => ({ title: el.getAttribute('title') || '', src: el.getAttribute('src') || '',
-      accessible: (() => { try { return Boolean((el as HTMLIFrameElement).contentDocument) } catch { return false } })() }))
   if (input.operation === 'inspect') {
+    const frames = elements.filter(el => el.tagName.toLowerCase() === 'iframe')
+      .slice(0, 25).map(el => ({ title: el.getAttribute('title') || '', src: el.getAttribute('src') || '',
+        accessible: (() => { try { return Boolean((el as HTMLIFrameElement).contentDocument) } catch { return false } })() }))
     const forms = Array.from(doc.forms).slice(0, 30).map(form => ({
       id: form.id, name: form.getAttribute('name') || '',
       method: (form.method || 'get').toLowerCase(), action: form.action,
@@ -143,6 +153,7 @@ export function executeBrowserInteraction(input: BrowserInteraction): BrowserInt
   const node = el as HTMLInputElement
   const kind = (node.type || '').toLowerCase()
   const common = { ...basic, matched: 1, tag: el.tagName.toLowerCase(), type: kind }
+  if (!el.isConnected) return { ...common, ok: false, reason: 'TARGET_CHANGED_DURING_BATCH' }
   if (protectedField(el)) return { ...common, ok: false, disabled: Boolean(node.disabled),
     readOnly: Boolean(node.readOnly), protected: true, reason: 'FIELD_PROTECTED' }
   if (el.getAttribute('type') === 'file' || kind === 'file') {
@@ -152,6 +163,28 @@ export function executeBrowserInteraction(input: BrowserInteraction): BrowserInt
     return { ...common, ok: false, protected: true, reason: 'HIDDEN_FIELD_PROTECTED' }
   }
   try {
+    if (input.operation === 'verify') {
+      // Compare only caller-supplied expectations. Never return actual field
+      // contents; especially no password or hidden-input value oracle.
+      if (kind === 'password') return { ...common, ok: false, reason: 'SENSITIVE_FIELD_VERIFICATION_UNAVAILABLE' }
+      if (typeof input.checked === 'boolean') {
+        if (kind !== 'checkbox' && kind !== 'radio') return { ...common, ok: false, reason: 'NOT_CHECKABLE' }
+        return node.checked === input.checked
+          ? { ...common, ok: true }
+          : { ...common, ok: false, reason: 'CHECKED_MISMATCH' }
+      }
+      if (input.value === undefined) return { ...common, ok: false, reason: 'EXPECTED_VALUE_REQUIRED' }
+      if (kind === 'checkbox' || kind === 'radio') return { ...common, ok: false, reason: 'USE_CHECKED_EXPECTATION' }
+      if (!(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement
+        || el instanceof HTMLSelectElement || (el as HTMLElement).isContentEditable)) {
+        return { ...common, ok: false, reason: 'NOT_READABLE_CONTROL' }
+      }
+      const actual = (el as HTMLElement).isContentEditable ? el.textContent ?? '' : node.value
+      const expected = el instanceof HTMLSelectElement
+        ? Array.from(el.options).find(o => o.value === input.value || clean(o.textContent) === clean(input.value))?.value
+        : input.value
+      return actual === expected ? { ...common, ok: true } : { ...common, ok: false, reason: 'VALUE_MISMATCH' }
+    }
     if (input.operation === 'scroll') {
       el.scrollIntoView({ block: 'center', inline: 'nearest' })
       return { ...common, ok: true }
@@ -235,8 +268,8 @@ export function executeBrowserInteraction(input: BrowserInteraction): BrowserInt
 export function browserBatchExpression(inputs: BrowserInteraction[]): string {
   if (inputs.length === 0 || inputs.length > 30) throw new Error('Expected 1–30 bounded browser actions')
   return '(() => { const run = (' + executeBrowserInteraction.toString() + '); '
-    + 'const actions = ' + JSON.stringify(inputs) + '; const results = []; '
-    + 'for (const action of actions) { const result = run(action); results.push(result); '
+    + 'const actions = ' + JSON.stringify(inputs) + '; const results = []; const cache = {}; '
+    + 'for (const action of actions) { const result = run(action, cache); results.push(result); '
     + 'if (!result.ok) return {ok:false,completed:results.length-1,results}; } '
     + 'return {ok:true,completed:results.length,results}; })()'
 }

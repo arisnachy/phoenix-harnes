@@ -221,7 +221,9 @@ export function MiniBrowser({ requested = false, active = true, onActivate, auto
     if (!active || !show || !snapshot.available || collapsed || playingVideo) return
     let stopped = false
     const load = async () => {
-      if (busy.current) return
+      // Hidden Phoenix tabs need no expensive Chromium JPEG capture.
+      // A visibility event below refreshes the frame when the user returns.
+      if (document.visibilityState === 'hidden' || busy.current) return
       busy.current = true
       try {
         const response = await fetch(API + '/frame', { headers: HEADERS, cache: 'no-store' })
@@ -242,8 +244,13 @@ export function MiniBrowser({ requested = false, active = true, onActivate, auto
       finally { busy.current = false }
     }
     void load()
-    const timer = window.setInterval(() => { void load() }, expanded ? 350 : 600)
-    return () => { stopped = true; window.clearInterval(timer) }
+    // A continuous 350/600 ms JPEG capture loop competed with CDP form
+    // filling for browser time. Keep the preview live but substantially
+    // reduce screenshot overhead. DOM-driven actions are not polled here.
+    const timer = window.setInterval(() => { void load() }, expanded ? 1100 : 1600)
+    const onVisible = () => { if (document.visibilityState === 'visible') void load() }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => { stopped = true; window.clearInterval(timer); document.removeEventListener('visibilitychange', onVisible) }
   }, [active, show, dismissed, snapshot.available, snapshot.tabId, collapsed, playingVideo, expanded])
 
   useEffect(() => () => {

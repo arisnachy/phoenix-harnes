@@ -466,10 +466,26 @@ server.registerTool('inspect_page', {
 })
 
 server.registerTool('fill_form', {
-  description: 'Completa en UNA llamada hasta 30 campos de una pestaña Chromium (textos, contraseña ficticia, fecha, textarea, select, checkbox y radio). Busca por selector CSS, nombre, label o placeholder. Rechaza controles de solo lectura, deshabilitados, ocultos, ambiguos o archivos. Emite eventos input/change y verifica cada valor sin devolver contraseñas. No envía formulario. Respeta permisos; no necesita Computer visible.',
+  description: 'VÍA PREFERIDA Y RÁPIDA para encuestas/formularios: tras UNA inspección inspect_page, completa hasta 30 campos en UNA sola llamada Chromium DOM (sin capturas ni clics por campo). Usa name, label, CSS o placeholder. Verifica cada escritura inmediatamente, rechaza campos protegidos/ambiguos y se detiene ante un error. Después usa verify_form UNA VEZ para comprobar persistencia; captura pantalla solo si el DOM no alcanza. No envía el formulario.',
   inputSchema: { tabId: z.string().optional(), fields: z.array(fieldAction).min(1).max(30) },
 }, async ({ tabId, fields }) => {
   ensureBrowserActionPermission()
+  const tab = await selectedTab(tabId)
+  return formatBrowserResult(await evaluate(tab, browserBatchExpression(fields as BrowserInteraction[])))
+})
+
+server.registerTool('verify_form', {
+  description: 'Comprueba de UNA VEZ hasta 30 campos previamente escritos, sin nuevas capturas y sin devolver los valores reales. Compara expectativas declaradas por el usuario o ya introducidas; informa índice, cantidad y razón del primer desacuerdo. Rechaza campos ocultos, protegidos y contraseñas. Úsalo tras fill_form, especialmente con páginas que recalculan sus campos.',
+  inputSchema: {
+    tabId: z.string().optional(),
+    fields: z.array(z.object({
+      ...targetSchema,
+      operation: z.literal('verify'),
+      value: z.string().max(4096).optional(),
+      checked: z.boolean().optional(),
+    })).min(1).max(30),
+  },
+}, async ({ tabId, fields }) => {
   const tab = await selectedTab(tabId)
   return formatBrowserResult(await evaluate(tab, browserBatchExpression(fields as BrowserInteraction[])))
 })

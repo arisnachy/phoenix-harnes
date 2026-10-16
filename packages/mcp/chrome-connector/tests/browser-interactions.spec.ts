@@ -73,6 +73,40 @@ describe('Kira browser structured controls', () => {
     expect(executeBrowserInteraction({ operation: 'wait', expectedText: 'Received!' }).ok).toBe(true)
     expect(executeBrowserInteraction({ operation: 'wait', expectedText: 'Absent answer' }).ok).toBe(false)
   })
+  it('executes a single DOM-snapshot batch and verifies the whole form without screenshots', () => {
+    const batch = [
+      { operation: 'fill', name: 'my-text', value: 'Kira' },
+      { operation: 'fill', name: 'my-textarea', value: 'Encuesta aprobada' },
+      { operation: 'select', name: 'my-select', value: 'Two' },
+      { operation: 'check', name: 'my-check', checked: false },
+    ] as const
+    const traversal = vi.spyOn(document, 'querySelectorAll')
+    const written = eval(browserBatchExpression([...batch]))
+    expect(written).toMatchObject({ ok: true, completed: 4 })
+    expect(traversal.mock.calls.filter(([selector]) => selector === '*')).toHaveLength(1)
+    traversal.mockRestore()
+    const verification = eval(browserBatchExpression([
+      { operation: 'verify', name: 'my-text', value: 'Kira' },
+      { operation: 'verify', name: 'my-textarea', value: 'Encuesta aprobada' },
+      { operation: 'verify', name: 'my-select', value: 'Two' },
+      { operation: 'verify', name: 'my-check', checked: false },
+    ]))
+    expect(verification).toMatchObject({ ok: true, completed: 4 })
+    ;(document.querySelector('[name="my-text"]') as HTMLInputElement).value = 'Changed by page'
+    const changed = eval(browserBatchExpression([
+      { operation: 'verify', name: 'my-text', value: 'Kira' },
+    ]))
+    expect(changed).toMatchObject({ ok: false, completed: 0, results: [{ reason: 'VALUE_MISMATCH' }] })
+    expect((document.querySelector('[name="my-text"]') as HTMLInputElement).value).toBe('Changed by page')
+  })
+  it('never reveals protected or password values through the verifier', () => {
+    expect(executeBrowserInteraction({ operation: 'verify', name: 'my-password', value: 'fake-test-only' }))
+      .toMatchObject({ ok: false, reason: 'SENSITIVE_FIELD_VERIFICATION_UNAVAILABLE' })
+    expect(executeBrowserInteraction({ operation: 'verify', name: 'secret', value: 'do-not-touch' }))
+      .toMatchObject({ ok: false, reason: 'HIDDEN_FIELD_PROTECTED' })
+    expect(executeBrowserInteraction({ operation: 'verify', name: 'my-disabled', value: 'locked' }))
+      .toMatchObject({ ok: false, reason: 'FIELD_PROTECTED' })
+  })
   it('only serializes bounded declared operations, never free-form model JS', () => {
     expect(browserInteractionExpression({ operation: 'fill', name: 'my-text', value: 'x' })).toContain('executeBrowserInteraction')
     expect(browserBatchExpression([{ operation: 'fill', name: 'my-text', value: 'x' }])).toContain('results')
