@@ -30,3 +30,20 @@ export function isHumanTaskMessage(session: LearningSessionIdentity, data: unkno
   return typeof source === 'object' && source !== null && !Array.isArray(source)
     && (source as { readonly kind?: unknown }).kind === 'user'
 }
+
+/**
+ * Detect a durable Goal from its versioned session history even when this
+ * optional learning package has not imported the Goal event-map augmentation.
+ * Never mistake a verified Goal for an ordinary, unverified task attempt.
+ * @param events - The session's append-only event history.
+ * @returns Whether a Goal has been created and not subsequently cleared.
+ */
+export function hasUnclearedGoal(
+  events: readonly { readonly type: string; readonly data: unknown }[],
+): boolean {
+  const latestGoal = events.findLast(event => event.type === 'goal/change')
+  if (latestGoal === undefined) return false
+  const change = latestGoal.data
+  if (typeof change !== 'object' || change === null || Array.isArray(change)) return true
+  return (change as { readonly operation?: unknown }).operation !== 'clear'
+}

@@ -12,7 +12,7 @@ import type { CognitiveMemoryLayer } from '@phoenix-ai/dsh-session-learning'
 import { filterAdaptiveSearchHits, installAdaptiveLearning } from './adaptive.ts'
 import { ExperienceLearningEngine, experienceMemoryInput } from './experience.ts'
 import { LiveEfficiencyMonitor } from './live-efficiency.ts'
-import { isHumanTaskMessage, learningOwnerSessionId } from './team-learning-context.ts'
+import { hasUnclearedGoal, isHumanTaskMessage, learningOwnerSessionId } from './team-learning-context.ts'
 import { assessHabitExperience, formatHabitGuidance, formatUnverifiedExperience } from './habit.ts'
 import { AutonomousMemoryCurator } from './autonomous-curator.ts'
 import { filterProceduralSearchHits, installProceduralLearning } from './procedural.ts'
@@ -191,8 +191,7 @@ export function apply(ctx: Context, config: Config): void {
     // A normal turn ending does not prove quality, so retain only a low-trust
     // diagnostic attempt. A Goal must rely on its actual completion gate.
     if (eventType === 'turn/end' && isRecord(data) && isRecord(data.reason)) {
-      const latestGoal = session.events.findLast(item => item.type === 'goal/change')
-      if (latestGoal !== undefined && latestGoal.data.operation !== 'clear') return
+      if (hasUnclearedGoal(session.events)) return
       const kind = data.reason.kind
       if (kind === 'completed' || kind === 'blocked' || kind === 'error' || kind === 'aborted') {
         efficiency.clear(sessionId)

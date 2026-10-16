@@ -1,7 +1,7 @@
 /** Evidence-backed procedural learning for Phoenix. */
 
 import type { Context } from '@phoenix-ai/cordis'
-import { learningOwnerSessionId } from './team-learning-context.ts'
+import { hasUnclearedGoal, learningOwnerSessionId } from './team-learning-context.ts'
 import type { CognitiveMemoryHit, CognitiveMemoryRecord } from '@phoenix-ai/dsh-session-learning'
 import {
   decodeTaskFingerprint,
@@ -587,8 +587,7 @@ export function installProceduralLearning(
       // Goal exists. Retain a recoverable CANDIDATE, never an active recipe,
       // because a normal assistant completion does not prove quality.
       if (eventType === 'turn/end' && isRecord(data) && isRecord(data.reason)) {
-        const latestGoal = session.events.findLast(item => item.type === 'goal/change')
-        if (latestGoal !== undefined && latestGoal.data.operation !== 'clear') return
+        if (hasUnclearedGoal(session.events)) return
         const steps = trace.complete(sessionId)
         const currentTask = taskContext?.currentTask(sessionId)
         if (steps.length === 0 || currentTask === undefined) return

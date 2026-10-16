@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { ExperienceLearningEngine } from '../src/experience.ts'
-import { isHumanTaskMessage, learningOwnerSessionId } from '../src/team-learning-context.ts'
+import { hasUnclearedGoal, isHumanTaskMessage, learningOwnerSessionId } from '../src/team-learning-context.ts'
 
 describe('team learning attribution', () => {
   const lead = { id: 'root', header: { origin: 'user' } }
@@ -22,6 +22,26 @@ describe('team learning attribution', () => {
     expect(isHumanTaskMessage(child, human)).toBe(false)
     expect(isHumanTaskMessage(lead, teamAssignment)).toBe(false)
     expect(isHumanTaskMessage(child, teamAssignment)).toBe(false)
+  })
+
+  it('recognizes active and completed Goals from the durable session log', () => {
+    const events: Array<{ type: string; data: unknown }> = [
+      { type: 'user/message', data: { content: [] } },
+    ]
+    expect(hasUnclearedGoal(events)).toBe(false)
+    events.push({ type: 'goal/change', data: { operation: 'create' } })
+    expect(hasUnclearedGoal(events)).toBe(true)
+    events.push({ type: 'turn/end', data: { reason: { kind: 'completed' } } })
+    expect(hasUnclearedGoal(events)).toBe(true)
+    events.push({ type: 'goal/change', data: { operation: 'complete' } })
+    expect(hasUnclearedGoal(events)).toBe(true)
+    events.push({ type: 'goal/change', data: { operation: 'clear' } })
+    expect(hasUnclearedGoal(events)).toBe(false)
+  })
+
+  it('fails closed on corrupt Goal metadata rather than promoting ordinary learning', () => {
+    expect(hasUnclearedGoal([{ type: 'goal/change', data: undefined }])).toBe(true)
+    expect(hasUnclearedGoal([{ type: 'goal/change', data: { operation: 'unknown' } }])).toBe(true)
   })
 
   it('measures delegated tokens, calls and failures in the verified parent episode', () => {
