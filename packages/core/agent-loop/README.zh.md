@@ -12,6 +12,8 @@ agent（智能体）的唯一具体实现插件和循环驱动器。其包内部
 
 创建与恢复属于同一个受回滚保护的事务：构造私有会话、具体 agent 和带作用域的上下文；等待可选 setup；进入两个注册表；依次宣告 `session/created` 和 `agent/created`；发出 `agent/session-start`；此后才启动驱动器。Setup 作为受信任的同进程组合代码，接收完整的带作用域 `Context`，并且不得驱动尚未发布的 agent。普通的类型化身份与选项输入按只读约定借用；seed 事件和会话元数据会跨越持久会话边界，因此系统会对其进行验证并创建快照。可选的 `AbortSignal` 只取消加载／setup／发布，并在返回的 handle 可见前分离。
 
+无声工具续行不再强制模型在每个步骤后向用户播报进度。只有持续进行工具工作且二十秒内没有可见输出时，循环才会注入一次带日志的提醒。实际可见的进度会重置该时间间隔；验证完成后仍正常结束轮次。
+
 调用方 fiber 与 AgentLoop 提供方共同拥有 agent。`AgentFactory.createAgent(ownerCtx, options)` 与 `resume(ownerCtx, options)` 显式接收调用方所有权，而工厂为 `sessions`/`llm`/`tools`/`systemPrompt` 保留自身的依赖上下文；这样，调用方可以只注入 `agents`，而不会缩减新 agent 的服务接口。调用方卸载、handle dispose（资源释放）或提供方卸载都会汇合到同一个记忆化的完全停稳边界。提供方关闭会同时等待资源 teardown，以及已经观测到停用的公开 create/resume 包装层，因此依赖消失后，任何 continuation 都无法继续发布。
 
 每个 agent 与其会话共享一个由调用方选择的 `SessionId`，并假设它在全局唯一；意外的 UUID 冲突不属于受支持模型。两个使用同一 id 的并发操作都可以进行准备，但最终的 `enter()` 调用会裁决发布，所有失败方都会回滚各自的私有资源。每次 detach 都绑定到确切进入的对象，因此陈旧 disposer 无法移除之后出现的同 id 替代项。在同步创建通知期间请求的 detach 会等待该次分发退栈，从而保留 created/disposed 配对。Teardown 按以下顺序执行：停止并排空 → 撤销作用域 → detach agent → detach 会话。私有作用域清理完成后，该 id 即可复用。不具否决能力的普通 `agent/*` 通知通过 `agentEvents(ctx, agent)` 发出；逐步骤组装通过 `assembleContextFor(agent)` 完成。

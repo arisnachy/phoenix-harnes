@@ -84,7 +84,7 @@ turn/end
 
 `turn/*`, `step/*`, `user/message`, `assistant/*`, and `tool/*` are durable session events; the rest are live extension points across three domains. `agent/pre-step`, `agent/request`, `llm/stream`, and the three `tools/*` events are waterfalls, whose listeners must call `next()` to delegate; `agent/turn-stopping` is serial and has no `next()`.
 
-Input reaches the driver through one inbox. Some messages wake it immediately; injected context waits in the inbox until another message does.
+Input reaches the driver through one inbox. Some messages wake it immediately; injected context waits in the inbox until another message does. Tool-only continuations do not request a new visible progress message every step: the loop injects a logged reminder only after twenty seconds without visible progress. It does not change tool permissions or completion authority.
 
 `agent/pre-step` decides what the model sees. Listeners may rewrite the claimed messages or reject them outright; a rejected or empty first claim still closes a durable turn that spent no step, so the log records the attempt. Each step reads the prompt sections and tool schemas that plugins registered.
 

@@ -63,8 +63,13 @@ type Phase =
 
 type StepEndReason = Extract<TurnEndReason, { kind: 'completed' | 'max-tokens' }>
 
-const SILENT_TOOL_PROGRESS_REMINDER = 'Before calling more tools, send the user a brief progress update in their language. Summarize what you just did or found and what you will do next. Do not reveal hidden chain-of-thought or private reasoning.'
-const AUTOMATIC_CONTINUATION_PROMPT = 'Continue the current task from the latest tool result without waiting for a new user prompt. Keep working until the task is complete. Before more tool calls, give the user a brief progress update if you have not done so recently; do not reveal hidden chain-of-thought.'
+const SILENT_TOOL_PROGRESS_REMINDER = 'If substantial work remains, report only a concrete finding, blocker or real milestone in the user\'s language. Do not restate plans or tool steps; continue via the shortest executable path. Do not reveal hidden reasoning.'
+const AUTOMATIC_CONTINUATION_PROMPT = 'Continue the current task from the latest verified tool result. Reuse fresh evidence, skip repetitive planning and narration, and finish when the outcome is verified or genuinely blocked. Do not begin work without an outstanding requirement.'
+/** Only request narration when a tool chain has been quiet for twenty seconds. */
+export function shouldRequestToolProgress(lastUpdateAt: number, now: number, toolsRemaining: boolean): boolean {
+  return toolsRemaining && now - lastUpdateAt >= 20_000
+}
+
 const USER_STEER_RESUME_PROMPT = 'A human message interrupted active work. First address and resolve the latest human request promptly. Then resume the task that was in progress from the existing conversation, goal, and tool context unless the human explicitly changed, replaced, paused, or cancelled that task. Do not ask for permission merely to resume.'
 
 type PreparedStep =
@@ -109,6 +114,8 @@ export class ReactLoopAgent implements Agent {
   private modelBoundaryActive = false
   /** True only while the current step is waiting on model-requested tool work. */
   private toolBoundaryActive = false
+  /** Last visible progress or reminder in the current execution interval. */
+  private lastProgressUpdateAt = Date.now()
   /** One preempted human steer must carry an explicit resume contract into its replay step. */
   private resumeInterruptedWorkAfterSteer = false
 
@@ -377,6 +384,7 @@ export class ReactLoopAgent implements Agent {
       this.throwError(error)
     }
     phase.turn = turn
+    if (phase.step === 0) this.lastProgressUpdateAt = Date.now()
     let turnEnds: TurnEndReason | null = null
     let target: InboxTarget = 'next-turn'
     try {
@@ -566,11 +574,12 @@ export class ReactLoopAgent implements Agent {
       } finally {
         this.toolBoundaryActive = false
       }
-      // Some providers jump straight from hidden reasoning into tool calls.
-      // Nudge the next model step to narrate safe, user-visible progress instead
-      // of letting a long tool chain remain opaque. This is an internal prompt,
-      // never synthetic assistant text and never hidden chain-of-thought.
-      if (!concluded && !hasVisibleProgress) {
+      // Tool-only model steps should not cost another model turn just to narrate
+      // the next call. Keep a periodic progress reminder for long silent work.
+      const now = Date.now()
+      if (hasVisibleProgress) this.lastProgressUpdateAt = now
+      else if (shouldRequestToolProgress(this.lastProgressUpdateAt, now, !concluded)) {
+        this.lastProgressUpdateAt = now
         this.inbox.splice('next-step', this.inbox.nextStep.length, 0, [createUserMessage({
           content: [{ type: 'text', text: SILENT_TOOL_PROGRESS_REMINDER }],
           source: { kind: 'plugin', plugin: 'agent-loop' },
