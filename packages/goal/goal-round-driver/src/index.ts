@@ -14,13 +14,13 @@ import type { Session, SessionEvent, TurnEndCancelCause, UserMessage } from '@ph
 import { renderGoalRoundPrompt } from './prompt.ts'
 import { goalBlockedByClosedUniversalMission, unfinishedTodoRecoveryObjective } from './mission-fence.ts'
 import { recordGoalSupervisor, replayGoalSupervisor, type GoalSupervisorState } from './supervisor.ts'
-import { measureGoalVerificationProgress, recordGoalStrategy, replayGoalStrategy, selectNextStrategy } from './strategy.ts'
+import { measureGoalVerificationProgress, measureGoalWorkProgress, recordGoalStrategy, replayGoalStrategy, selectNextStrategy } from './strategy.ts'
 
 export { renderGoalRoundPrompt } from './prompt.ts'
 export { goalBlockedByClosedUniversalMission, unfinishedTodoRecoveryObjective } from './mission-fence.ts'
 export { recordGoalSupervisor, replayGoalSupervisor } from './supervisor.ts'
 export type { GoalSupervisorState } from './supervisor.ts'
-export { GOAL_STRATEGIES, measureGoalVerificationProgress, recordGoalStrategy, replayGoalStrategy, selectNextStrategy } from './strategy.ts'
+export { GOAL_STRATEGIES, measureGoalVerificationProgress, measureGoalWorkProgress, recordGoalStrategy, replayGoalStrategy, selectNextStrategy } from './strategy.ts'
 export type { GoalStrategyId } from './strategy.ts'
 
 export const name = 'goal-round-driver'
@@ -272,6 +272,11 @@ export function apply(ctx: Context): void {
   }
 
   /** Process admitted work at quiescence, then reserve at most one next round. */
+  // After five complete no-progress Goal rounds, repeating the same approach
+  // only burns quota. The goal remains durably blocked (NOT completed) until a
+  // real human changes the route/inputs and resumes it.
+  const MAX_NO_PROGRESS_ROUNDS = 5
+
   async function drive(state: DriverState): Promise<void> {
     const { agent } = state
     if (!readyToDrive(state)) return
@@ -314,6 +319,19 @@ export function apply(ctx: Context): void {
       return
     }
     if (goal.phase !== 'active' || goal.activation !== 'armed') return
+    const work = measureGoalWorkProgress(agent.session.events, goal.id)
+    if (work.stagnantRounds >= MAX_NO_PROGRESS_ROUNDS) {
+      const repeated = work.repeatedOperations.length === 0
+        ? 'no distinct successful tool or completion evidence'
+        : `repeated operations: ${work.repeatedOperations.join(', ')}`
+      const reason = `Automatic recovery reached ${work.stagnantRounds} consecutive rounds without new operational evidence (${repeated}). No delivery is verified. Change the failing tool/capability or provide the missing dependency, then explicitly resume; the existing work is preserved.`
+      checkpoint(state, goal, 'blocked', 'blocked', reason)
+      ctx.goals.block(agent, goalRef(goal), {
+        code: 'no-progress',
+        message: reason,
+      })
+      return
+    }
     checkpoint(state, goal, 'active', 'continue')
     if (goal.roundsStarted >= goal.maxGoalRounds) {
       // The cap bounds one execution window, never the mission. Rotate the
@@ -327,19 +345,27 @@ export function apply(ctx: Context): void {
 
     const round = goal.roundsStarted + 1
     const progress = measureGoalVerificationProgress(state.agent.session.events, goal.id, goal.revision)
-    const strategy = selectNextStrategy(latestStrategy(state, goal)?.strategy, progress.stagnantRounds)
+    // Do not spend more Sol/planning turns if the model has made no observable
+    // progress. Escalate from the old route to an alternate tool and then the
+    // smallest executable repair before the bounded no-progress fence.
+    const strategy = work.stagnantRounds >= 3 ? 'minimal-change'
+      : work.stagnantRounds >= 2 ? 'alternate-tool'
+        : selectNextStrategy(latestStrategy(state, goal)?.strategy, progress.stagnantRounds)
     recordGoalStrategy(state.agent.session, {
       goalId: goal.id,
       revision: goal.revision,
       round,
       strategy,
-      reason: latestJudge(state, goal) === undefined
-        ? 'continue the active mission with a bounded strategy'
+      reason: work.stagnantRounds >= 2
+        ? `no new operational evidence for ${work.stagnantRounds} rounds; change tool or method`
+        : latestJudge(state, goal) === undefined
+          ? 'continue the active mission with a bounded strategy'
         : progress.stagnantRounds > 0
           ? `verification stalled for ${progress.stagnantRounds} gate round(s); rotate strategy`
           : `verification evidence is still increasing (${progress.verifiedCriteria} criteria, ${progress.passedChecks} checks); keep the productive strategy`,
     })
-    const content = renderGoalRoundPrompt(goal, round, latestJudge(state, goal), strategy)
+    const content = renderGoalRoundPrompt(goal, round, latestJudge(state, goal), strategy,
+      work.stagnantRounds)
     const message = createUserMessage({
       content,
       source: { kind: 'goal', goalId: goal.id, revision: goal.revision, round },

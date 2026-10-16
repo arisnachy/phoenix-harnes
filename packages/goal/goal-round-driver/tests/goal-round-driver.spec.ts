@@ -264,6 +264,16 @@ describe('same-session goal driving', () => {
     expect(requestText(test.adapter.requests[1]!)).toContain('Round: 2/2')
   })
 
+  it('blocks a stale goal after five no-work rounds instead of opening endless windows', async () => {
+    const test = await harness(Array.from({ length: 5 }, () => textResponse('I will review it again.')))
+    test.ctx.goals.create(test.agent, { objective: 'deliver the real artifact', maxGoalRounds: 2 })
+    const goal = await waitForGoal(test.ctx, test.agent, current => current?.phase === 'blocked')
+    expect(goal?.blockedReason?.code).toBe('no-progress')
+    expect(goal?.blockedReason?.message).toContain('No delivery is verified')
+    expect(test.adapter.requests).toHaveLength(5)
+    expect(test.agent.session.events.filter(event => event.type === 'goal/continuation')).toHaveLength(2)
+  })
+
   it('includes a persisted non-passing judge result in the next round', async () => {
     const test = await harness([textResponse('repair round')])
     const continued = stopAfterContinuation(test.ctx, test.agent)

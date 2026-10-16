@@ -20,6 +20,7 @@ export function renderGoalRoundPrompt(
   round: number,
   feedback?: GoalRoundFeedback,
   strategy?: GoalStrategyId,
+  stalledRounds = 0,
 ): ContentBlock[] {
   return [{
     type: 'text',
@@ -27,6 +28,7 @@ export function renderGoalRoundPrompt(
       + `Objective: ${JSON.stringify(goal.objective)}\n`
       + `Round: ${round}/${goal.maxGoalRounds}\n\n`
       + (strategy === undefined ? '' : `Selected strategy: ${strategy}\n\n`)
+      + (stalledRounds < 2 ? '' : `Operational stall: ${stalledRounds} consecutive Goal rounds produced no distinct successful tool or new completion evidence. STOP narrating the same plan or rereading unchanged inputs. Execute ONE new concrete action using a different authorized method, verify its actual result, and preserve previous work. A failed or missing capability is not solved by retrying it with another call ID.\n\n`)
       + (feedback === undefined ? ''
         : `Prior independent judge: ${feedback.verdict}. ${feedback.summary}\n`
           + `Judge findings: ${JSON.stringify(feedback.findings)}\n`
@@ -43,8 +45,8 @@ export function renderGoalRoundPrompt(
       + 'For an as-of or simulated historical request, respect the stated knowledge cutoff and exclude later results or outcomes. '
       + 'If a nonessential source or archived value is unavailable, make a bounded alternate search, then provide the best useful output using verified evidence and explicitly labeled conditional assumptions instead of demanding that the user perform routine research. '
       + 'A prediction or probabilistic outcome is never guaranteed; do not disguise missing evidence as certainty. '
-      + 'If an obstacle is recoverable, repair it, acquire or build a missing capability, or use another route before reporting it. '
-      + 'Internal retry, attempt, or execution-window limits never complete the mission; rotate strategy and continue. '
+      + 'If an obstacle is recoverable, repair it, acquire or build a missing capability, or use another route before reporting it. Do not re-fetch identical files or request duplicate specialist reviews without changed evidence. Transfer large artifacts directly between tools by an authorized file/stream interface where supported, never via dozens of copied model-output fragments. When no such interface exists, disclose the exact publishing capability gap instead of pretending repeated text extraction can solve it. '
+      + 'Execution-window limits do not prove completion. Reuse valid results; if repeated rounds produce no new evidence, choose a different actual tool or smallest executable repair, never an identical planning/review cycle. '
       + 'An active Goal, a checklist with pending or in-progress items, or unfinished Team tasks are NOT completed merely because this text turn ends. Finish and verify those items before closing the objective. '
       + 'Only a genuine external dependency may pause autonomous progress: permission, credential, safety policy, exhausted provider quota, '
       + 'or a dependency that cannot be satisfied safely. '

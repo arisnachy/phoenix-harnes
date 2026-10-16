@@ -65,6 +65,96 @@ export function measureGoalVerificationProgress(
 }
 
 /**
+ * Measurable operational progress, independent of final verification gates.
+ * A model turn, narration, fresh plan or repeated identical read is NOT work.
+ */
+export interface GoalWorkProgress {
+  readonly stagnantRounds: number
+  readonly completedRounds: number
+  readonly repeatedOperations: readonly string[]
+}
+
+/**
+ * Inspect persisted Goal rounds across execution-window revisions. A unique
+ * successful tool invocation, a newly completed task, or fresh verification
+ * evidence advances work. Repeated same-name/same-arguments tool calls do not.
+ * The explicit human-authorized resume resets this recovery window.
+ *
+ * @param events - canonical append-only Lead session.
+ * @param goalId - goal being supervised.
+ * @returns bounded, deterministic stall diagnostics.
+ */
+export function measureGoalWorkProgress(
+  events: readonly SessionEvent[],
+  goalId: GoalId | string,
+): GoalWorkProgress {
+  const first = events.findLastIndex(event => event.type === 'goal/change'
+    && event.data.goal.id === goalId && (event.data.operation === 'create' || event.data.operation === 'resume'))
+  // If the Goal has not been created yet, no automatic round is attributable.
+  if (first < 0) return { stagnantRounds: 0, completedRounds: 0, repeatedOperations: [] }
+  const calls = new Map<string, { name: string; args: string }>()
+  const observed = new Set<string>()
+  const verified = new Set<string>()
+  const completedTasks = new Set<string>()
+  let bestCompletedTodos = 0
+  let bestChecks = 0
+  let completedRounds = 0
+  let stagnantRounds = 0
+  let repeatedOperations: string[] = []
+  let round: { progressed: boolean; repeated: string[] } | undefined
+
+  for (const event of events.slice(first + 1)) {
+    if (event.type === 'user/message' && event.data.source.kind === 'goal'
+      && event.data.source.goalId === goalId && event.data.source.round > 0) {
+      round = { progressed: false, repeated: [] }
+      continue
+    }
+    if (event.type === 'tool/call') {
+      calls.set(String(event.data.callId), { name: event.data.name, args: event.data.arguments })
+    } else if (event.type === 'tool/result'
+      && event.data.error === undefined
+      && event.data.message.content.every(block => block.isError !== true)) {
+      const call = calls.get(String(event.data.message.source.callId))
+      if (call !== undefined) {
+        // Pair with the original arguments rather than the call ID. A new ID
+        // for the same read does not mean the file, answer or artifact changed.
+        const fingerprint = JSON.stringify([call.name, call.args])
+        const novel = !observed.has(fingerprint)
+        if (round !== undefined) {
+          if (novel) round.progressed = true
+          else if (!round.repeated.includes(call.name)) round.repeated.push(call.name)
+        }
+        observed.add(fingerprint)
+      }
+    } else if (event.type === 'todo/write') {
+      const completed = event.data.todos.filter(todo => todo.status === 'completed').length
+      if (round !== undefined && completed > bestCompletedTodos) round.progressed = true
+      bestCompletedTodos = Math.max(bestCompletedTodos, completed)
+    } else if (event.type === 'team/task') {
+      if (event.data.task.status === 'completed' && !completedTasks.has(event.data.task.id)) {
+        if (round !== undefined) round.progressed = true
+        completedTasks.add(event.data.task.id)
+      }
+    } else if (event.type === 'goal/completion-gate' && event.data.goalId === goalId) {
+      const fresh = event.data.evidenceLedger.filter(entry =>
+        entry.mandatory && entry.status === 'verified' && !verified.has(entry.criterionId))
+      const passed = Object.values(event.data.checks).filter(check => check === 'pass').length
+      if (round !== undefined && (fresh.length > 0 || passed > bestChecks)) round.progressed = true
+      for (const entry of fresh) verified.add(entry.criterionId)
+      bestChecks = Math.max(bestChecks, passed)
+    } else if (event.type === 'turn/end' && round !== undefined) {
+      if (event.data.reason.kind === 'completed' || event.data.reason.kind === 'max-tokens') {
+        completedRounds += 1
+        stagnantRounds = round.progressed ? 0 : stagnantRounds + 1
+        repeatedOperations = round.repeated.slice(0, 4)
+      }
+      round = undefined
+    }
+  }
+  return { stagnantRounds, completedRounds, repeatedOperations }
+}
+
+/**
  * Keep the current strategy while independent evidence is still increasing.
  * Rotate only after a verifier round adds no new useful coverage.
  * @param previous - strategy used by the preceding round, when one exists.
