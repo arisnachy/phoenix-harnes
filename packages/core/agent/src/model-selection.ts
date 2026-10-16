@@ -712,6 +712,29 @@ function phoenixAutoTerminalTeamFailure(
   return false
 }
 
+/**
+ * The durable Goal service already authorized this source. Continuation
+ * rounds have no NEW human user/message; do not interpret that as permission
+ * to end an unfinished mission. Reject stale/completed or cleared goals.
+ */
+function authorizedPhoenixAutoGoalTurn(
+  agent: { readonly session: { readonly events: readonly PhoenixAutoEvent[] } },
+  turn: number,
+): boolean {
+  const admitted = turnEvents(agent, turn).findLast(event => event.type === 'user/message'
+    && (event.data as { readonly source?: { readonly kind?: string } }).source?.kind === 'goal')
+  const source = (admitted?.data as { readonly source?: {
+    readonly kind?: string; readonly goalId?: string
+  } } | undefined)?.source
+  if (source?.kind !== 'goal' || typeof source.goalId !== 'string') return false
+  const change = agent.session.events.findLast(event => event.type === 'goal/change')
+  const data = change?.data as { readonly operation?: string; readonly goal?: {
+    readonly id?: string; readonly phase?: string
+  } } | undefined
+  return data?.operation !== 'clear' && data?.goal?.id === source.goalId
+    && data.goal.phase === 'active'
+}
+
 /** A tiny requested Team showcase gets one bounded, genuine peer exchange. */
 export function isBriefTeamDemonstration(text: string): boolean {
   const request = text.normalize('NFKD').replace(/[\u0300-\u036f]/gu, '').toLowerCase().trim()
@@ -932,8 +955,18 @@ export function installModelSelection(
     forcePlannerNext: false,
     lastTeamEscalationMessageId: undefined,
   }
+  // A rehydrated Phoenix session can temporarily display an empty selector.
+  // Reuse only its own durable AUTO preference, never infer an AUTO route from
+  // the last serving Sol model and never override a current explicit choice.
+  function effectiveSelection(agent: Agent | undefined): ModelSelection | undefined {
+    if (selection.current !== undefined) return selection.current
+    if (agent === undefined) return undefined
+    const preference = latestModelSelectionPreference(agent.session)
+    return isPhoenixCodexAutoSelection(preference?.selection) ? preference?.selection : undefined
+  }
+
   const disposeAssembly = agentCtx.on('system-prompt/assemble', async (_assembly, _context, next) => {
-    const selected = selection.current
+    const selected = effectiveSelection(agentCtx.agent)
     // The selector is the authority for the next assembled step. Reused blank
     // sessions can otherwise retain creation-time AgentOptions from a previous
     // provider, which makes delegators spawn teammates on the wrong route.
@@ -1017,7 +1050,7 @@ export function installModelSelection(
     'agent/request',
     async (_payload, next): Promise<LlmCallConfig> => {
       const resolved = await next()
-      const selected = selection.assembled
+      const selected = selection.assembled ?? effectiveSelection(agentCtx.agent)
       if (selected === undefined) return resolved
       const scopedAgent = agentCtx.agent
       if (scopedAgent !== undefined && latestModelSelectionPreference(scopedAgent.session) === undefined) {
@@ -1091,7 +1124,7 @@ export function installModelSelection(
   )
   const disposeAutoContinuation = agentCtx.on('agent/turn-stopping', ({ agent, turn, signal }) => {
     signal.throwIfAborted()
-    if (!isKiraCodexAutoLead(selection.current, agent)) return
+    if (!isKiraCodexAutoLead(effectiveSelection(agent), agent)) return
     if ((selection.assembledToolCount ?? 0) === 0) return
 
     const directText = directUserTextForTurn(agent, turn)
@@ -1100,7 +1133,8 @@ export function installModelSelection(
     // Team blockers have their own authorized continuation; they need not
     // coincide with a fresh human message in the same turn.
     const realTeamBlocker = phoenixAutoTeamSignalForTurn(agent, turn)?.purpose === 'blocker'
-    if ((!phoenixAutoTaskRequest(directText) && !realTeamBlocker)
+    const authorizedGoal = authorizedPhoenixAutoGoalTurn(agent, turn)
+    if ((!phoenixAutoTaskRequest(directText) && !realTeamBlocker && !authorizedGoal)
       || phoenixAutoTurnWasUserStopped(agent, turn)
       || phoenixAutoTerminalTeamFailure(agent, turn)) return
     // A tool-verified one-shot visual meets the original request. Do not
@@ -1138,11 +1172,16 @@ export function installModelSelection(
     }
 
     if (phoenixAutoState.lastContinuationStep === latest.step) return
-    // Sol's strategic rescue is not a completed mission. Hand control to Luna.
-    if (latest.step >= 1 && latest.step === phoenixAutoState.lastRescueStep
-      && (latest.sourceModel === PHOENIX_CODEX_AUTO_PLANNER_MODEL || latest.sourceModel === undefined)
-      && !phoenixAutoExplicitlyClosed(latest.text)
-      && phoenixAutoState.continuationCount < continuationLimit) {
+    // The serving model receipt is stronger than an ephemeral step counter.
+    // On rehydrated Goal turns that counter may be lost even though Sol really
+    // completed its strategy. Every actual Sol rescue hands control back to
+    // Luna, even when the ordinary prose-continuation budget is exhausted.
+    const actualSolRescue = latest.step > 1 && !latestStepHasToolActivity
+      && (latest.sourceModel === PHOENIX_CODEX_AUTO_PLANNER_MODEL
+        || (latest.sourceModel === undefined && latest.step === phoenixAutoState.lastRescueStep))
+    if (actualSolRescue && !phoenixAutoExplicitlyClosed(latest.text)) {
+      phoenixAutoState.lastRescueStep = latest.step
+      phoenixAutoState.rescueCount = Math.min(2, Math.max(1, phoenixAutoState.rescueCount))
       phoenixAutoState.lastContinuationStep = latest.step
       phoenixAutoState.continuationCount += 1
       agent.steer(createUserMessage({

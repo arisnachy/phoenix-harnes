@@ -133,6 +133,90 @@ describe('installModelSelection()', () => {
       await ctx.fiber.dispose()
     }
   })
+  it('returns Sol to Luna in a goal-authorized survey round with no new human message', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    ctx.systemPrompt.tools(() => ({
+      schemas: [{ name: 'browser_fill', description: 'enter approved values', parameters: { type: 'object' } }],
+    }))
+    const selection: ModelSelectionRef = {
+      current: { provider: 'openai-codex', model: PHOENIX_CODEX_AUTO_MODEL }, assembled: undefined,
+    }
+    const dispose = installModelSelection(ctx, selection)
+    const events: { type: string; data: unknown }[] = [
+      { type: 'goal/change', data: { operation: 'create', goal: { id: 'survey-1', phase: 'active' } } },
+      { type: 'turn/start', data: { turn: 7 } },
+      { type: 'user/message', data: {
+        source: { kind: 'goal', goalId: 'survey-1', revision: 1, round: 5 },
+        content: [{ type: 'text', text: 'Continue the same survey objective.' }],
+      } },
+      { type: 'assistant/message', data: { turn: 7, step: 3,
+        message: { source: { provider: 'openai-codex', model: 'gpt-6.1-sol' },
+          content: [{ type: 'text', text: '3TB is confirmed. I will now enter the association and finish the remaining fields.' }] },
+      } },
+    ]
+    const steered: unknown[] = []
+    const agent = { session: { events }, options: {}, steer: (message: unknown) => { steered.push(message) } } as unknown as Agent
+    ctx.agent = agent
+    const signal = new AbortController().signal
+    try {
+      await ctx.systemPrompt.assemble()
+      await agentEvents(ctx, agent).serial('agent/turn-stopping', { turn: 7, signal })
+      expect(steered).toHaveLength(1)
+      expect(JSON.stringify(steered[0])).toContain('Resume the SAME unfinished mission')
+      await agentEvents(ctx, agent).serial('agent/turn-stopping', { turn: 7, signal })
+      expect(steered).toHaveLength(1)
+      events.push({ type: 'step/start', data: { turn: 7, step: 3 } })
+      const assembly = await ctx.systemPrompt.assemble()
+      expect(assembly.tools.map(tool => tool.name)).toContain('browser_fill')
+      await expect(agentEvents(ctx, agent).waterfall('agent/request',
+        { turn: 7, step: 4, signal }, () => Promise.resolve({ provider: 'seed', model: 'seed' })))
+        .resolves.toMatchObject({ model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('max') })
+    } finally {
+      dispose()
+      await ctx.fiber.dispose()
+    }
+  })
+
+  it('does not reanimate a completed or cleared goal after Sol finishes', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    ctx.systemPrompt.tools(() => ({ schemas: [
+      { name: 'browser_fill', description: 'enter fields', parameters: { type: 'object' } },
+    ] }))
+    const selection: ModelSelectionRef = {
+      current: { provider: 'openai-codex', model: PHOENIX_CODEX_AUTO_MODEL }, assembled: undefined,
+    }
+    const dispose = installModelSelection(ctx, selection)
+    const events: { type: string; data: unknown }[] = [
+      { type: 'goal/change', data: { operation: 'complete', goal: { id: 'survey-1', phase: 'complete' } } },
+      { type: 'turn/start', data: { turn: 7 } },
+      { type: 'user/message', data: {
+        source: { kind: 'goal', goalId: 'survey-1', revision: 1, round: 5 },
+        content: [{ type: 'text', text: 'Continue.' }],
+      } },
+      { type: 'assistant/message', data: { turn: 7, step: 3,
+        message: { source: { model: 'gpt-6.1-sol' }, content: [
+          { type: 'text', text: 'I will now fill the form.' },
+        ] } },
+      } },
+    ]
+    const steered: unknown[] = []
+    const agent = { session: { events }, steer: (message: unknown) => { steered.push(message) } } as unknown as Agent
+    try {
+      await ctx.systemPrompt.assemble()
+      await agentEvents(ctx, agent).serial('agent/turn-stopping', { turn: 7, signal: new AbortController().signal })
+      expect(steered).toHaveLength(0)
+      events.unshift({ type: 'goal/change', data: { operation: 'clear' } })
+      events[0] = { type: 'goal/change', data: { operation: 'clear' } }
+      await agentEvents(ctx, agent).serial('agent/turn-stopping', { turn: 7, signal: new AbortController().signal })
+      expect(steered).toHaveLength(0)
+    } finally {
+      dispose()
+      await ctx.fiber.dispose()
+    }
+  })
+
   it('never restarts Sol planning inside a Team child or other explicit model', () => {
     const root = { session: { header: { agentPreset: 'kira-max' } } }
     const child = { session: { header: { agentPreset: 'kira-max', origin: 'subagent' } } }
