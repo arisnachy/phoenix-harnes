@@ -1073,6 +1073,7 @@ export class ToolRuntime extends Service {
     return {
       name: 'tools:sdk',
       order: SDK_SECTION_ORDER,
+      interpolateVariables: false,
       // Regenerate from the calling scope's visible tools in stable order.
       text: (context) => {
         const mode = this.modeFor(context.scope)
