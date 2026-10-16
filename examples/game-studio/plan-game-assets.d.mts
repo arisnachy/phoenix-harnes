@@ -5,7 +5,7 @@ export interface GameAssetTask {
   readonly media: string
   readonly animations: readonly string[]
   readonly owner: string
-  readonly status: 'pending'
+  readonly status: 'pending' | 'reusable-needs-integration'
   readonly acceptance: string
 }
 
@@ -14,9 +14,17 @@ export interface GameAssetPlan {
   readonly genre: string
   readonly stage: string
   readonly tasks: readonly GameAssetTask[]
+  readonly existingAssets: {
+    readonly reusable: readonly string[]
+    readonly unbound: readonly string[]
+    readonly invalid?: readonly string[]
+  }
   readonly missingDesignDecisions: readonly string[]
   readonly acceptance: readonly string[]
 }
 
-/** Derive a pending plan; this function does not generate or verify graphics. */
-export declare function planGameAssets(manifest: Readonly<Record<string, unknown>>): GameAssetPlan
+/** Derive an honest asset plan; verified media remains unintegrated until gameplay QA. */
+export declare function planGameAssets(
+  manifest: Readonly<Record<string, unknown>>,
+  verifiedAssets?: { readonly images?: readonly string[]; readonly audio?: readonly string[] },
+): GameAssetPlan
