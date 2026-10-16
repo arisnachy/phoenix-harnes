@@ -65,7 +65,13 @@ type StepEndReason = Extract<TurnEndReason, { kind: 'completed' | 'max-tokens' }
 
 const SILENT_TOOL_PROGRESS_REMINDER = 'If substantial work remains, report only a concrete finding, blocker or real milestone in the user\'s language. Do not restate plans or tool steps; continue via the shortest executable path. Do not reveal hidden reasoning.'
 const AUTOMATIC_CONTINUATION_PROMPT = 'Continue the current task from the latest verified tool result. Reuse fresh evidence, skip repetitive planning and narration, and finish when the outcome is verified or genuinely blocked. Do not begin work without an outstanding requirement.'
-/** Only request narration when a tool chain has been quiet for twenty seconds. */
+/**
+ * Decide when an ongoing silent tool chain needs one user-facing update.
+ * @param lastUpdateAt - Time of the most recent visible progress or reminder.
+ * @param now - Current monotonic-enough wall-clock reading.
+ * @param toolsRemaining - Whether the model still owes additional tool work.
+ * @returns True only after the twenty-second quiet interval.
+ */
 export function shouldRequestToolProgress(lastUpdateAt: number, now: number, toolsRemaining: boolean): boolean {
   return toolsRemaining && now - lastUpdateAt >= 20_000
 }
