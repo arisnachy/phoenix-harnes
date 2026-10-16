@@ -24,6 +24,10 @@
 
 达到制作完成标准的横版射击游戏中，每个 `art.enemies[].id` 和 `art.bosses[].id` 都必须对应真实的游戏实体，并有不同的 PNG 图集、帧网格和动画。首领的每个阶段需要通过 `phaseAnimations` 关联实际帧索引。每个 `level.layers[].id` 都需要对应 `art.backgrounds[].id`；此外需要 `art.weapons`、`art.projectiles`、`art.powers`、`art.props` 和至少两种不同的 `art.effects`。仅将图片嵌入 HTML 却未真正绘制，不能通过发布检查。音质和视觉完成度仍须在实际运行的游戏中验证。
 
+## 复用已有素材和音效
+
+可使用 `node examples/game-studio/plan-game-assets.mjs manifest.json plan.json assets.json` 读取现有素材清单。规划器会核验本地 PNG/WAV/OGG/MP3 文件签名、游戏美术 ID 及声音事件 ID，并报告 `reusable-needs-integration`、`existingAssets.unbound` 和 `existingAssets.invalid`。优先复用已有文件，生成新资源后立刻接入动画、绘制或音频事件；不可仅凭文件存在就认定游戏完成。打包器拒绝没有可检测绘制或播放路径的素材，动态渲染器仍需实际游戏画面与声音测试。
+
 ## 发布清单与美术资源
 
 Game Studio 通过真正的模型工具 `phoenix_game`，在 Phoenix 聊天中发布可玩的独立 HTML。其 `phoenix-game-manifest` JSON 必须如实描述游戏；缺少清单是**结构错误**，并不能证明 JavaScript 启动失败。白屏问题还需通过运行时和浏览器控制台排查。
