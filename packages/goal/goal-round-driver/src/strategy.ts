@@ -151,7 +151,10 @@ export function measureGoalWorkProgress(
       for (const entry of fresh) verified.add(entry.criterionId)
       bestChecks = Math.max(bestChecks, passed)
     } else if (event.type === 'turn/end' && round !== undefined) {
-      if (event.data.reason.kind === 'completed' || event.data.reason.kind === 'max-tokens') {
+      // Provider failures are also real consumed execution attempts; without
+      // counting them a repeatedly failing model can bypass this fence forever.
+      if (event.data.reason.kind === 'completed' || event.data.reason.kind === 'max-tokens'
+        || event.data.reason.kind === 'error') {
         completedRounds += 1
         stagnantRounds = round.progressed ? 0 : stagnantRounds + 1
         repeatedOperations = round.repeated.slice(0, 4)

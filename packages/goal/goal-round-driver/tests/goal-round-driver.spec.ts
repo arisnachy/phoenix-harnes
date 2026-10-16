@@ -274,6 +274,14 @@ describe('same-session goal driving', () => {
     expect(test.agent.session.events.filter(event => event.type === 'goal/continuation')).toHaveLength(2)
   })
 
+  it('blocks repeating non-quota provider errors after five failed rounds', async () => {
+    const test = await harness(Array.from({ length: 5 }, () => new Error('provider transport failed')))
+    test.ctx.goals.create(test.agent, { objective: 'finish despite provider faults', maxGoalRounds: 2 })
+    const goal = await waitForGoal(test.ctx, test.agent, current => current?.phase === 'blocked')
+    expect(goal?.blockedReason?.code).toBe('no-progress')
+    expect(test.adapter.requests).toHaveLength(5)
+  })
+
   it('includes a persisted non-passing judge result in the next round', async () => {
     const test = await harness([textResponse('repair round')])
     const continued = stopAfterContinuation(test.ctx, test.agent)
