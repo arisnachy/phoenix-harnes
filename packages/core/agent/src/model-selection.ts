@@ -4,6 +4,7 @@
  */
 
 import type { Context } from '@phoenix-ai/cordis'
+import type { Agent } from './runtime-types.ts'
 import type { Session } from '@phoenix-ai/dsh-session'
 import { ReasoningEffortId, createUserMessage, type LlmCallConfig } from '@phoenix-ai/dsh-llm'
 
