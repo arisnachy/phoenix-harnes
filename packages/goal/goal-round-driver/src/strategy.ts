@@ -89,7 +89,8 @@ export function measureGoalWorkProgress(
   goalId: GoalId | string,
 ): GoalWorkProgress {
   const first = events.findLastIndex(event => event.type === 'goal/change'
-    && event.data.goal.id === goalId && (event.data.operation === 'create' || event.data.operation === 'resume'))
+    && (event.data.operation === 'create' || event.data.operation === 'resume')
+    && event.data.goal.id === goalId)
   // If the Goal has not been created yet, no automatic round is attributable.
   if (first < 0) return { stagnantRounds: 0, completedRounds: 0, repeatedOperations: [] }
   const calls = new Map<string, { name: string; args: string }>()
@@ -130,10 +131,17 @@ export function measureGoalWorkProgress(
       const completed = event.data.todos.filter(todo => todo.status === 'completed').length
       if (round !== undefined && completed > bestCompletedTodos) round.progressed = true
       bestCompletedTodos = Math.max(bestCompletedTodos, completed)
-    } else if (event.type === 'team/task') {
-      if (event.data.task.status === 'completed' && !completedTasks.has(event.data.task.id)) {
-        if (round !== undefined) round.progressed = true
-        completedTasks.add(event.data.task.id)
+    } else if ((event.type as string) === 'team/task') {
+      // Agent Teams owns this optional SessionEvent extension. Goal driver
+      // must stay buildable without importing the Team package as a dependency.
+      const payload: unknown = event.data
+      if (typeof payload === 'object' && payload !== null && 'task' in payload) {
+        const task = payload.task
+        if (typeof task === 'object' && task !== null && 'id' in task && 'status' in task
+          && typeof task.id === 'string' && task.status === 'completed' && !completedTasks.has(task.id)) {
+          if (round !== undefined) round.progressed = true
+          completedTasks.add(task.id)
+        }
       }
     } else if (event.type === 'goal/completion-gate' && event.data.goalId === goalId) {
       const fresh = event.data.evidenceLedger.filter(entry =>
