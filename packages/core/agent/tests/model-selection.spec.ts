@@ -178,6 +178,50 @@ describe('installModelSelection()', () => {
     }
   })
 
+  it('restores only a persisted Phoenix Auto model when the live selector is temporarily blank', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    ctx.systemPrompt.tools(() => ({ schemas: [
+      { name: 'browser_fill', description: 'continue existing form', parameters: { type: 'object' } },
+    ] }))
+    const selection: ModelSelectionRef = { current: undefined, assembled: undefined }
+    const dispose = installModelSelection(ctx, selection)
+    const events: { type: string; data: unknown }[] = [
+      { type: 'agent/model-selection', data: {
+        selection: { provider: 'openai-codex', model: PHOENIX_CODEX_AUTO_MODEL }, source: 'default',
+      } },
+      { type: 'goal/change', data: { operation: 'create', goal: { id: 'survey-1', phase: 'active' } } },
+      { type: 'turn/start', data: { turn: 7 } },
+      { type: 'user/message', data: { source: {
+        kind: 'goal', goalId: 'survey-1', revision: 1, round: 5,
+      }, content: [{ type: 'text', text: 'Continue.' }] } },
+      { type: 'assistant/message', data: { turn: 7, step: 3,
+        message: { source: { model: 'gpt-6.1-sol' }, content: [
+          { type: 'text', text: 'I will now finish the remaining ratings.' },
+        ] } },
+      } },
+    ]
+    const steered: unknown[] = []
+    const agent = { session: { events }, options: {},
+      steer: (message: unknown) => { steered.push(message) } } as unknown as Agent
+    ctx.agent = agent
+    const signal = new AbortController().signal
+    try {
+      await ctx.systemPrompt.assemble()
+      await agentEvents(ctx, agent).serial('agent/turn-stopping', { turn: 7, signal })
+      expect(steered).toHaveLength(1)
+      events.push({ type: 'step/start', data: { turn: 7, step: 3 } })
+      await ctx.systemPrompt.assemble()
+      await expect(agentEvents(ctx, agent).waterfall('agent/request',
+        { turn: 7, step: 4, signal }, () => Promise.resolve({ provider: 'seed', model: 'seed' })))
+        .resolves.toMatchObject({ model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('max') })
+      expect(selection.current).toBeUndefined()
+    } finally {
+      dispose()
+      await ctx.fiber.dispose()
+    }
+  })
+
   it('does not reanimate a completed or cleared goal after Sol finishes', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
