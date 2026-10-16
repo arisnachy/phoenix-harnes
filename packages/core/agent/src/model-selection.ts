@@ -1176,7 +1176,8 @@ export function installModelSelection(
     // On rehydrated Goal turns that counter may be lost even though Sol really
     // completed its strategy. Every actual Sol rescue hands control back to
     // Luna, even when the ordinary prose-continuation budget is exhausted.
-    const actualSolRescue = latest.step > 1 && !latestStepHasToolActivity
+    const actualSolRescue = !latestStepHasToolActivity
+      && (latest.step > 1 || latest.step === phoenixAutoState.lastRescueStep)
       && (latest.sourceModel === PHOENIX_CODEX_AUTO_PLANNER_MODEL
         || (latest.sourceModel === undefined && latest.step === phoenixAutoState.lastRescueStep))
     if (actualSolRescue && !phoenixAutoExplicitlyClosed(latest.text)) {
