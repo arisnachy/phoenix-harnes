@@ -67,6 +67,13 @@ export function executeBrowserInteraction(
     visit(root, 0)
     return found
   }
+  const basic = { title: clean(doc.title), url: win.location.href }
+  if (input.operation === 'wait') {
+    const expected = lower(input.expectedText || '')
+    if (!expected) return { ...basic, ok: false, reason: 'EXPECTED_TEXT_REQUIRED' }
+    const foundText = lower(doc.body?.innerText || doc.body?.textContent || '').includes(expected)
+    return { ...basic, ok: foundText, foundText, reason: foundText ? undefined : 'TEXT_NOT_YET_VISIBLE' }
+  }
   // A single 30-field batch shares one DOM snapshot instead of performing
   // up to 30 full-document traversals, style scans and shadow-root walks.
   // Detached controls are refused rather than silently updated on a stale DOM.
@@ -106,13 +113,12 @@ export function executeBrowserInteraction(
       tag: el.tagName.toLowerCase(), type, name: el.getAttribute('name') || '',
       id: el.id || '', label: fieldLabel(el), placeholder: el.getAttribute('placeholder') || '',
       text: clean(el.tagName === 'BUTTON' || el.tagName === 'A' ? el.textContent : ''),
-      required: node.required === true, disabled: protectedField(el),
+      required:  node.required, disabled: protectedField(el),
       readonly: Boolean(node.readOnly || el.hasAttribute('readonly')),
-      checked: node.checked === true, visible: visible(el),
+      checked:  node.checked, visible: visible(el),
       ...(options === undefined ? {} : { options }),
     }
   }
-  const basic = { title: clean(doc.title), url: win.location.href }
   if (input.operation === 'inspect') {
     const frames = elements.filter(el => el.tagName.toLowerCase() === 'iframe')
       .slice(0, 25).map(el => ({ title: el.getAttribute('title') || '', src: el.getAttribute('src') || '',
@@ -120,19 +126,13 @@ export function executeBrowserInteraction(
     const forms = Array.from(doc.forms).slice(0, 30).map(form => ({
       id: form.id, name: form.getAttribute('name') || '',
       method: (form.method || 'get').toLowerCase(), action: form.action,
-      fields: Array.from(form.elements).slice(0, 90).filter(el => el instanceof Element).map(el => describe(el as Element)),
+      fields: Array.from(form.elements).slice(0, 90).filter(el => el instanceof Element).map(el => describe(el)),
     }))
     return { ...basic, ok: true, controls: candidates.filter(visible).slice(0, 100).map(describe), forms, frames }
   }
-  if (input.operation === 'wait') {
-    const expected = lower(input.expectedText || '')
-    if (!expected) return { ...basic, ok: false, reason: 'EXPECTED_TEXT_REQUIRED' }
-    const foundText = lower(doc.body?.innerText || doc.body?.textContent || '').includes(expected)
-    return { ...basic, ok: foundText, foundText, reason: foundText ? undefined : 'TEXT_NOT_YET_VISIBLE' }
-  }
   const findMatches = (all: Element[], controls: Element[]): Element[] => {
     const pool = input.selector ? all.filter(el => el.matches(input.selector || '')) : controls
-    return pool.filter(el => {
+    return pool.filter((el) => {
       if (input.name && lower(el.getAttribute('name')) !== lower(input.name)) return false
       if (input.label && lower(fieldLabel(el)) !== lower(input.label)) return false
       if (input.placeholder && lower(el.getAttribute('placeholder')) !== lower(input.placeholder)) return false
@@ -277,7 +277,9 @@ export function executeBrowserInteraction(
  */
 export function browserBatchExpression(inputs: BrowserInteraction[]): string {
   if (inputs.length === 0 || inputs.length > 30) throw new Error('Expected 1–30 bounded browser actions')
-  return '(() => { const run = (' + executeBrowserInteraction.toString() + '); '
+  // tsx/esm may emit __name calls inside toString(); define the metadata helper
+  // locally so a source-mode expression remains executable in the browser realm.
+  return '(() => { const __name = (fn) => fn; const run = (' + executeBrowserInteraction.toString() + '); '
     + 'const actions = ' + JSON.stringify(inputs) + '; const results = []; const cache = {}; '
     + 'for (const action of actions) { const result = run(action, cache); results.push(result); '
     + 'if (!result.ok) return {ok:false,completed:results.length-1,results}; } '
@@ -289,5 +291,7 @@ export function browserBatchExpression(inputs: BrowserInteraction[]): string {
  * @returns Serializable expression for a single real browser action.
  */
 export function browserInteractionExpression(input: BrowserInteraction): string {
-  return '(' + executeBrowserInteraction.toString() + ')(' + JSON.stringify(input) + ')'
+  // Keep this wrapper self-contained for tsx/esm source fallback and CDP eval.
+  return '(() => { const __name = (fn) => fn; return (' + executeBrowserInteraction.toString() + ')('
+    + JSON.stringify(input) + '); })()'
 }

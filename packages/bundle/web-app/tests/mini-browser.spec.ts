@@ -1,7 +1,168 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { captureBrowserFrameWithFallback, miniBrowserRequestAllowed, miniBrowserSingleHeader, normalizeMiniBrowserAddress, isVerifiedWebmCapture } from '../src/mini-browser.ts'
+import {
+  captureBrowserFrameSingleFlight,
+  captureBrowserFrameWithFallback,
+  isVerifiedWebmCapture,
+  MiniBrowserCdpSession,
+  miniBrowserDescriptorNeedsPublish,
+  miniBrowserRequestAllowed,
+  miniBrowserSingleHeader,
+  normalizeMiniBrowserAddress,
+} from '../src/mini-browser.ts'
 
 afterEach(() => { /* Pure contracts: no live Chrome or network is required. */ })
+
+type FakeListener = (event: { data?: string }) => void
+class FakeSocket {
+  readonly sent: string[] = []
+  closed = false
+  private readonly listeners = new Map<string, FakeListener[]>()
+
+  constructor(private readonly respond = true) {
+    queueMicrotask(() => { this.emit('open', {}) })
+  }
+
+  addEventListener(type: string, listener: FakeListener): void {
+    this.listeners.set(type, [...(this.listeners.get(type) ?? []), listener])
+  }
+
+  send(payload: string): void {
+    this.sent.push(payload)
+    if (!this.respond) return
+    const message = JSON.parse(payload) as { id: number; method: string }
+    queueMicrotask(() => { this.emit('message', {
+      data: JSON.stringify({ id: message.id, result: { method: message.method } }),
+    }) })
+  }
+
+  close(): void {
+    if (this.closed) return
+    this.closed = true
+    this.emit('close', {})
+  }
+
+  emit(type: string, event: { data?: string }): void {
+    for (const listener of this.listeners.get(type) ?? []) listener(event)
+  }
+}
+
+describe('MiniBrowser CDP session lifecycle', () => {
+  it('reuses one socket and multiplexes command ids', async () => {
+    const sockets: FakeSocket[] = []
+    const session = new MiniBrowserCdpSession('ws://127.0.0.1/devtools/page/test', 500, () => {
+      const socket = new FakeSocket()
+      sockets.push(socket)
+      return socket
+    })
+
+    const [first, second] = await Promise.all([
+      session.send<{ method: string }>('Runtime.evaluate'),
+      session.send<{ method: string }>('Page.getNavigationHistory'),
+    ])
+
+    expect(sockets).toHaveLength(1)
+    expect(first.method).toBe('Runtime.evaluate')
+    expect(second.method).toBe('Page.getNavigationHistory')
+    expect(new Set(sockets[0]!.sent.map(payload => (JSON.parse(payload) as { id: number }).id)).size).toBe(2)
+    session.close()
+  })
+
+  it('keeps the viewport setup and capture on the reused socket', async () => {
+    const sockets: FakeSocket[] = []
+    const session = new MiniBrowserCdpSession('ws://127.0.0.1/devtools/page/test', 500, () => {
+      const socket = new FakeSocket()
+      sockets.push(socket)
+      return socket
+    })
+
+    await session.send<{ method: string }>('Page.captureScreenshot', { format: 'jpeg' })
+
+    expect(sockets).toHaveLength(1)
+    expect(sockets[0]!.sent.map(payload => (JSON.parse(payload) as { method: string }).method))
+      .toEqual(['Emulation.setDeviceMetricsOverride', 'Page.captureScreenshot'])
+    session.close()
+  })
+
+  it('rejects pending work immediately when Chromium closes the socket', async () => {
+    const sockets: FakeSocket[] = []
+    const session = new MiniBrowserCdpSession('ws://127.0.0.1/devtools/page/test', 5000, () => {
+      const socket = new FakeSocket(false)
+      sockets.push(socket)
+      return socket
+    })
+    const pending = session.send('Runtime.evaluate')
+    await new Promise(resolve => setTimeout(resolve, 0))
+    sockets[0]!.close()
+
+    await expect(pending).rejects.toThrow('CDP_SESSION_CLOSED')
+  })
+
+  it('closes the timed-out socket and lets the next session reconnect', async () => {
+    const sockets: FakeSocket[] = []
+    const session = new MiniBrowserCdpSession('ws://127.0.0.1/devtools/page/test', 10, () => {
+      const socket = new FakeSocket(sockets.length > 0)
+      sockets.push(socket)
+      return socket
+    })
+    const timedOut = session.send('Runtime.evaluate')
+    const otherPending = session.send('Page.getNavigationHistory')
+
+    await expect(timedOut).rejects.toThrow('Tiempo agotado: Runtime.evaluate')
+    await expect(otherPending).rejects.toThrow()
+    expect(sockets[0]!.closed).toBe(true)
+
+    const replacement = new MiniBrowserCdpSession('ws://127.0.0.1/devtools/page/test', 100, () => {
+      const socket = new FakeSocket(true)
+      sockets.push(socket)
+      return socket
+    })
+    await expect(replacement.send<{ method: string }>('Runtime.evaluate')).resolves.toEqual({ method: 'Runtime.evaluate' })
+    expect(sockets).toHaveLength(2)
+    replacement.close()
+  })
+
+  it('closes the socket when sending a CDP command throws', async () => {
+    class ThrowingSocket extends FakeSocket {
+      override send(_payload: string): void { throw new Error('socket write failed') }
+    }
+    let socket!: ThrowingSocket
+    const session = new MiniBrowserCdpSession('ws://127.0.0.1/devtools/page/test', 100, () => {
+      socket = new ThrowingSocket()
+      return socket
+    })
+
+    await expect(session.send('Runtime.evaluate')).rejects.toThrow('socket write failed')
+    expect(socket.closed).toBe(true)
+  })
+})
+
+describe('MiniBrowser request coalescing', () => {
+  it('shares one in-flight capture for the same target', async () => {
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => { release = resolve })
+    let captures = 0
+    const capture = async () => {
+      captures += 1
+      await gate
+      return Buffer.from([0xff, 0xd8, 0xff, 0xe0])
+    }
+
+    const first = captureBrowserFrameSingleFlight('target-1', capture)
+    const second = captureBrowserFrameSingleFlight('target-1', capture)
+    release()
+
+    const [one, two] = await Promise.all([first, second])
+    expect(captures).toBe(1)
+    expect(one).toEqual(two)
+  })
+
+  it('does not write a descriptor when endpoint and selected tab are unchanged', () => {
+    const current = { pid: 10, endpoint: 'http://127.0.0.1:9222/', selectedTabId: 'tab-1' }
+    expect(miniBrowserDescriptorNeedsPublish(current, { ...current })).toBe(false)
+    expect(miniBrowserDescriptorNeedsPublish(current, { ...current, endpoint: 'http://127.0.0.1:9222' })).toBe(false)
+    expect(miniBrowserDescriptorNeedsPublish(current, { ...current, selectedTabId: 'tab-2' })).toBe(true)
+  })
+})
 
 describe('MiniBrowser capture recovery', () => {
   it('captures the visible viewport without adding black space beyond a clipped page', async () => {

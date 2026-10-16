@@ -59,6 +59,11 @@ Home attention suggestions carry a material revision. Opening or dismissing a su
 
 
 Assistant author contributions receive the actual provider/model provenance for their message. Streaming output uses the prepared `request/header` configuration associated with its Step, including retry changes and a retained route when no new header is emitted. A durable `assistant/message` source takes precedence for settled output; later route changes never relabel historical messages.
+
+## Embedded MiniBrowser
+
+The conversation MiniBrowser renders the same local Chromium tab used by Phoenix through the `/phoenix-mini-browser` client routes. State, action, and frame requests have bounded client deadlines and are cancelled when a card is deactivated or unmounted; response bodies are read before JSON validation so interrupted Host responses produce a recoverable status. The last valid frame stays visible while a later capture is pending or fails, and a completed user action requests an immediate frame refresh. Polling and captures pause while the document is hidden and resume on the next visibility event, which keeps existing localhost applications visible without spending capture work while the conversation is backgrounded. Chrome startup time has a longer explicit deadline; a timed out start is left for a user initiated retry rather than being repeated automatically.
+
 ## Model Experience
 
 None, as the conversation UI renders session history and streams in the browser; nothing here reaches a model request.

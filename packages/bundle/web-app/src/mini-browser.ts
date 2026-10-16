@@ -19,6 +19,13 @@ import type {} from '@phoenix-ai/dsh-host-webserver'
 type Tab = { id: string; url: string; title: string; type?: string; webSocketDebuggerUrl?: string }
 type Descriptor = { pid: number; endpoint: string; selectedTabId?: string }
 type RpcReply = { id: number; result?: Record<string, unknown>; error?: { message?: string } }
+type CdpEvent = { data?: unknown }
+type CdpSocket = {
+  send: (payload: string) => void
+  close: () => void
+  addEventListener: (type: string, listener: (event: CdpEvent) => void) => void
+}
+type CdpSocketFactory = (url: string) => CdpSocket
 type Action = {
   type: string
   url?: string
@@ -36,11 +43,227 @@ const MAX_BODY = 8192
 const MAX_CAPTURE_BYTES = 24 * 1024 * 1024
 const CAPTURE_ROOT = join(tmpdir(), 'phoenix-video-captures')
 const LIMIT_MS = 8000
+const ACTION_LIMIT_MS = 10_000
+const START_ACTION_LIMIT_MS = 20_000
+const ACTION_ABORT_MESSAGE = 'La acción del navegador fue cancelada.'
 let owned: ChildProcess | undefined
 let ownedProfile: string | undefined
 let ownedEndpoint: string | undefined
 let launching: Promise<string> | undefined
 let activeTabId: string | undefined
+
+/**
+ * Compares the complete shared-browser descriptor before touching the file.
+ * @param current - Descriptor currently on disk, if any.
+ * @param next - Descriptor that the current process wants to publish.
+ * @returns True when the descriptor file must be rewritten.
+ */
+export function miniBrowserDescriptorNeedsPublish(current: Descriptor | undefined, next: Descriptor): boolean {
+  return current?.pid !== next.pid
+    || current.endpoint.replace(/\/$/u, '') !== next.endpoint.replace(/\/$/u, '')
+    || current.selectedTabId !== next.selectedTabId
+}
+
+function abortReason(signal: AbortSignal): Error {
+  return signal.reason instanceof Error ? signal.reason : new Error(ACTION_ABORT_MESSAGE)
+}
+function throwIfAborted(signal: AbortSignal | undefined): void {
+  if (signal?.aborted) throw abortReason(signal)
+}
+
+/**
+ * One reusable CDP transport for a browser target. Requests are multiplexed by
+ * numeric ids and a closed socket rejects every pending request immediately.
+ */
+export class MiniBrowserCdpSession {
+  private readonly socket: CdpSocket
+  private readonly pending = new Map<number, {
+    resolve: (value: unknown) => void
+    reject: (error: Error) => void
+    timer: ReturnType<typeof setTimeout>
+    onAbort?: () => void
+    cleanup?: () => void
+  }>()
+  private readonly opened: Promise<void>
+  private rejectOpened!: (reason: Error) => void
+  private resolveOpened!: () => void
+  private readonly openingTimer: ReturnType<typeof setTimeout>
+  private nextId = 0
+  private closedError: Error | undefined
+  private openedSettled = false
+  private viewportReady: Promise<void> | undefined
+
+  /**
+   * @param url - Loopback DevTools WebSocket URL for one page target.
+   * @param timeoutMs - Per-command deadline after the socket opens.
+   * @param socketFactory - Injectable socket constructor for the transport.
+   */
+  constructor(
+    url: string,
+    private readonly timeoutMs = LIMIT_MS,
+    socketFactory: CdpSocketFactory = value => new WebSocket(value),
+  ) {
+    this.socket = socketFactory(url)
+    this.opened = new Promise<void>((resolve, reject) => {
+      this.resolveOpened = resolve
+      this.rejectOpened = reject
+    })
+    this.openingTimer = setTimeout(() => {
+      this.close('CDP_CONNECTION_TIMEOUT')
+    }, Math.min(6000, Math.max(1000, timeoutMs)))
+    this.socket.addEventListener('open', () => {
+      if (this.closedError || this.openedSettled) return
+      this.openedSettled = true
+      clearTimeout(this.openingTimer)
+      this.resolveOpened()
+    })
+    this.socket.addEventListener('message', (event) => { this.receive(event) })
+    this.socket.addEventListener('error', () => {
+      this.close('CDP_SESSION_CLOSED: se perdió la conexión con Chromium')
+    })
+    this.socket.addEventListener('close', () => {
+      this.fail(new Error('CDP_SESSION_CLOSED: Chromium cerró la conexión'))
+    })
+  }
+
+  /** True after the target's CDP socket has failed or been closed. */
+  get closed(): boolean { return this.closedError !== undefined }
+
+  /**
+   * Send one CDP command over this target's persistent socket.
+   * @param method - CDP method name.
+   * @param params - CDP method parameters.
+   * @param signal - Optional caller cancellation signal; abort closes this session.
+   * @returns The CDP result object.
+   */
+  async send<T extends Record<string, unknown> = Record<string, unknown>>(
+    method: string, params: Record<string, unknown> = {}, signal?: AbortSignal,
+  ): Promise<T> {
+    throwIfAborted(signal)
+    if (method === 'Page.captureScreenshot' || method === 'Input.dispatchMouseEvent') {
+      this.viewportReady ??= this.request('Emulation.setDeviceMetricsOverride', {
+        ...VIEWPORT, screenWidth: VIEWPORT.width, screenHeight: VIEWPORT.height,
+        deviceScaleFactor: 1, mobile: false,
+      }, signal).then(() => undefined).catch((error: unknown) => {
+        this.viewportReady = undefined
+        throw error
+      })
+      await this.viewportReady
+      throwIfAborted(signal)
+    }
+    return await this.request<T>(method, params, signal)
+  }
+
+  /**
+   * Close the socket and reject all pending requests immediately.
+   * @param reason - Error text used for pending command rejection.
+   */
+  close(reason = 'CDP_SESSION_CLOSED: sesión descartada'): void {
+    this.fail(new Error(reason))
+    try { this.socket.close() } catch { /* the socket may already be closed */ }
+  }
+
+  private fail(error: Error): void {
+    if (this.closedError === undefined) this.closedError = error
+    clearTimeout(this.openingTimer)
+    if (!this.openedSettled) {
+      this.openedSettled = true
+      this.rejectOpened(this.closedError)
+    }
+    for (const pending of this.pending.values()) {
+      clearTimeout(pending.timer)
+      pending.cleanup?.()
+      pending.reject(this.closedError)
+    }
+    this.pending.clear()
+  }
+
+  private receive(event: CdpEvent): void {
+    let reply: RpcReply
+    try { reply = JSON.parse(String(event.data)) as RpcReply } catch { return }
+    const pending = this.pending.get(reply.id)
+    if (!pending) return
+    this.pending.delete(reply.id)
+    clearTimeout(pending.timer)
+    pending.cleanup?.()
+    if (reply.error) pending.reject(new Error(reply.error.message || 'CDP_COMMAND_FAILED'))
+    else pending.resolve(reply.result ?? {})
+  }
+
+  private request<T extends Record<string, unknown> = Record<string, unknown>>(
+    method: string, params: Record<string, unknown>, signal?: AbortSignal,
+  ): Promise<T> {
+    if (this.closedError !== undefined) return Promise.reject(this.closedError)
+    return this.waitForOpen(signal).then(() => new Promise<T>((resolve, reject) => {
+      if (this.closedError !== undefined) { reject(this.closedError); return }
+      if (signal?.aborted) {
+        const error = abortReason(signal)
+        reject(error)
+        this.close(error.message)
+        return
+      }
+      const id = ++this.nextId
+      const timer = setTimeout(() => {
+        this.close('Tiempo agotado: ' + method)
+      }, this.timeoutMs)
+      const pending = {
+        resolve: (value) => { resolve(value as T) }, reject, timer,
+      } as {
+        resolve: (value: unknown) => void
+        reject: (error: Error) => void
+        timer: ReturnType<typeof setTimeout>
+        onAbort?: () => void
+        cleanup?: () => void
+      }
+      if (signal !== undefined) {
+        const onAbort = (): void => { this.close(abortReason(signal).message) }
+        pending.onAbort = onAbort
+        signal.addEventListener('abort', onAbort, { once: true })
+        pending.cleanup = () => { signal.removeEventListener('abort', onAbort) }
+      }
+      this.pending.set(id, pending)
+      try {
+        this.socket.send(JSON.stringify({ id, method, params }))
+      } catch (error) {
+        this.close(error instanceof Error ? error.message : String(error))
+      }
+    }))
+  }
+
+  private waitForOpen(signal?: AbortSignal): Promise<void> {
+    if (signal === undefined) return this.opened
+    if (signal.aborted) return Promise.reject(abortReason(signal))
+    return new Promise<void>((resolve, reject) => {
+      let settled = false
+      const onAbort = (): void => {
+        if (settled) return
+        settled = true
+        signal.removeEventListener('abort', onAbort)
+        const error = abortReason(signal)
+        this.close(error.message)
+        reject(error)
+      }
+      signal.addEventListener('abort', onAbort, { once: true })
+      this.opened.then(
+        () => {
+          if (settled) return
+          settled = true
+          signal.removeEventListener('abort', onAbort)
+          resolve()
+        },
+        (error: unknown) => {
+          if (settled) return
+          settled = true
+          signal.removeEventListener('abort', onAbort)
+          reject(error instanceof Error ? error : new Error(String(error)))
+        },
+      )
+    })
+  }
+}
+
+const cdpSessions = new Map<string, { url: string; session: MiniBrowserCdpSession }>()
+const frameFlights = new Map<string, Promise<Buffer>>()
 
 function isLoopback(value: string | undefined): boolean {
   return value === '127.0.0.1' || value === '::1' || value === '::ffff:127.0.0.1' || value === 'localhost'
@@ -68,12 +291,17 @@ function publish(endpoint: string, tabId?: string): void {
   const current = readDescriptor()
   const pid = owned?.pid ?? current?.pid
   if (pid === undefined || !validEndpoint(endpoint)) return
-  const data: Descriptor = { pid, endpoint, ...(tabId === undefined ? {} : { selectedTabId: tabId }) }
+  const selectedTabId = tabId ?? current?.selectedTabId
+  const data: Descriptor = { pid, endpoint, ...(selectedTabId === undefined ? {} : { selectedTabId }) }
+  if (!miniBrowserDescriptorNeedsPublish(current, data)) return
   try {
     writeFileSync(SHARED, JSON.stringify(data), { mode: 0o600 })
   } catch { /* Browser remains usable without cross-process collaboration. */ }
 }
 function cleanup(): void {
+  for (const { session } of cdpSessions.values()) session.close()
+  cdpSessions.clear()
+  frameFlights.clear()
   const previous = owned?.pid
   if (previous !== undefined) {
     const ownsDescriptor = readDescriptor()?.pid === previous
@@ -89,13 +317,42 @@ function cleanup(): void {
   ownedEndpoint = undefined
   ownedProfile = undefined
 }
-async function json<T>(url: string, method = 'GET'): Promise<T> {
-  const response = await fetch(url, { method, signal: AbortSignal.timeout(2500) })
-  if (!response.ok) throw new Error('Chromium respondió HTTP ' + String(response.status))
-  return await response.json() as T
+function requestSignal(signal?: AbortSignal): AbortSignal {
+  const deadline = AbortSignal.timeout(2500)
+  return signal === undefined ? deadline : AbortSignal.any([signal, deadline])
 }
-async function isAlive(endpoint: string): Promise<boolean> {
-  try { await json(endpoint + '/json/version'); return true } catch { return false }
+function awaitAbortable<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (signal === undefined) return promise
+  if (signal.aborted) return Promise.reject(abortReason(signal))
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = (): void => {
+      signal.removeEventListener('abort', onAbort)
+      reject(abortReason(signal))
+    }
+    signal.addEventListener('abort', onAbort, { once: true })
+    promise.then(
+      (value) => { signal.removeEventListener('abort', onAbort); resolve(value) },
+      (error: unknown) => {
+        signal.removeEventListener('abort', onAbort)
+        reject(error instanceof Error ? error : new Error(String(error)))
+      },
+    )
+  })
+}
+async function json<T>(url: string, method = 'GET', signal?: AbortSignal): Promise<T> {
+  throwIfAborted(signal)
+  const response = await fetch(url, { method, signal: requestSignal(signal) })
+  throwIfAborted(signal)
+  if (!response.ok) throw new Error('Chromium respondió HTTP ' + String(response.status))
+  const body = await response.json() as T
+  throwIfAborted(signal)
+  return body
+}
+async function isAlive(endpoint: string, signal?: AbortSignal): Promise<boolean> {
+  try { await json(endpoint + '/json/version', 'GET', signal); return true } catch (error) {
+    if (signal?.aborted) throw error
+    return false
+  }
 }
 function chromiumExecutable(): string {
   const specified = process.env.PHOENIX_BROWSER_EXECUTABLE?.trim() || process.env.DSH_CHROME_EXECUTABLE?.trim()
@@ -114,43 +371,50 @@ function chromiumExecutable(): string {
   if (!executable) throw new Error('No se encontró Chrome o Edge; configura PHOENIX_BROWSER_EXECUTABLE.')
   return executable
 }
-async function startChromium(): Promise<string> {
-  if (launching) return launching
+async function startChromium(signal?: AbortSignal): Promise<string> {
+  if (launching) return await awaitAbortable(launching, signal)
+  throwIfAborted(signal)
   launching = (async () => {
-    const executable = chromiumExecutable()
-    const profile = mkdtempSync(join(tmpdir(), 'phoenix-inline-'))
-    ownedProfile = profile
-    const child = spawn(executable, [
-      '--remote-debugging-port=0', '--remote-debugging-address=127.0.0.1',
-      '--user-data-dir=' + profile, '--headless=new', '--mute-audio', '--window-size=1280,820',
-      '--force-device-scale-factor=1', '--no-first-run', '--no-default-browser-check',
-      '--disable-sync', 'about:blank',
-    ], { stdio: 'ignore', windowsHide: true })
-    owned = child
-    let spawnFailure: Error | undefined
-    child.once('error', (error) => { spawnFailure = error })
-    const deadline = Date.now() + LIMIT_MS
-    while (Date.now() < deadline) {
-      try {
-        const port = Number(readFileSync(join(profile, 'DevToolsActivePort'), 'utf8').split(/\r?\n/)[0])
-        if (Number.isInteger(port) && port > 0 && port < 65536) {
-          const endpoint = 'http://127.0.0.1:' + String(port)
-          if (await isAlive(endpoint)) {
-            ownedEndpoint = endpoint
-            publish(endpoint)
-            return endpoint
+    try {
+      const executable = chromiumExecutable()
+      const profile = mkdtempSync(join(tmpdir(), 'phoenix-inline-'))
+      ownedProfile = profile
+      const child = spawn(executable, [
+        '--remote-debugging-port=0', '--remote-debugging-address=127.0.0.1',
+        '--user-data-dir=' + profile, '--headless=new', '--mute-audio', '--window-size=1280,820',
+        '--force-device-scale-factor=1', '--no-first-run', '--no-default-browser-check',
+        '--disable-sync', 'about:blank',
+      ], { stdio: 'ignore', windowsHide: true })
+      owned = child
+      let spawnFailure: Error | undefined
+      child.once('error', (error) => { spawnFailure = error })
+      const deadline = Date.now() + START_ACTION_LIMIT_MS
+      while (Date.now() < deadline) {
+        throwIfAborted(signal)
+        try {
+          const port = Number(readFileSync(join(profile, 'DevToolsActivePort'), 'utf8').split(/\r?\n/)[0])
+          if (Number.isInteger(port) && port > 0 && port < 65536) {
+            const endpoint = 'http://127.0.0.1:' + String(port)
+            if (await isAlive(endpoint, signal)) {
+              ownedEndpoint = endpoint
+              publish(endpoint)
+              return endpoint
+            }
           }
-        }
-      } catch { /* startup still in progress */ }
-      if (child.exitCode !== null || spawnFailure) break
-      await new Promise(resolve => setTimeout(resolve, 100))
+        } catch { /* startup still in progress */ }
+        if (child.exitCode !== null || spawnFailure) break
+        await awaitAbortable(new Promise<void>(resolve => setTimeout(resolve, 100)), signal)
+      }
+      throwIfAborted(signal)
+      throw new Error('Chromium no inició su canal de control CDP.' + (spawnFailure ? ' ' + String(spawnFailure) : ''))
+    } catch (error) {
+      cleanup()
+      throw error
     }
-    cleanup()
-    throw new Error('Chromium no inició su canal de control CDP.' + (spawnFailure ? ' ' + String(spawnFailure) : ''))
   })().finally(() => { launching = undefined })
   return launching
 }
-async function endpoint(launch: boolean): Promise<string | undefined> {
+async function endpoint(launch: boolean, signal?: AbortSignal): Promise<string | undefined> {
   // The in-chat browser must not hijack an independently visible Chrome
   // window. External CDP targets are deliberately opt-in, not auto-discovered.
   const allowVisible = process.env.PHOENIX_BROWSER_ALLOW_VISIBLE_CDP === 'true'
@@ -160,78 +424,53 @@ async function endpoint(launch: boolean): Promise<string | undefined> {
   if (configured) {
     const normalized = configured.replace(/\/$/, '') + '/'
     if (!validEndpoint(normalized)) throw new Error('CDP solo admite una dirección HTTP de loopback.')
-    if (await isAlive(normalized.replace(/\/$/, ''))) return normalized.replace(/\/$/, '')
+    if (await isAlive(normalized.replace(/\/$/, ''), signal)) return normalized.replace(/\/$/, '')
     throw new Error('No se pudo conectar al CDP configurado.')
   }
   const shared = readDescriptor()
-  if (shared !== undefined && await isAlive(shared.endpoint.replace(/\/$/, ''))) return shared.endpoint.replace(/\/$/, '')
-  if (ownedEndpoint && await isAlive(ownedEndpoint)) return ownedEndpoint
+  if (shared !== undefined && await isAlive(shared.endpoint.replace(/\/$/, ''), signal)) return shared.endpoint.replace(/\/$/, '')
+  if (ownedEndpoint && await isAlive(ownedEndpoint, signal)) return ownedEndpoint
   for (const port of (allowVisible ? [9222, 9223, 9224] : [])) {
     const base = 'http://127.0.0.1:' + String(port)
-    if (await isAlive(base)) return base
+    if (await isAlive(base, signal)) return base
   }
-  return launch ? await startChromium() : undefined
+  return launch ? await startChromium(signal) : undefined
 }
-async function listTabs(base: string): Promise<Tab[]> {
-  const rows = await json<Tab[]>(base + '/json/list')
+async function listTabs(base: string, signal?: AbortSignal): Promise<Tab[]> {
+  const rows = await json<Tab[]>(base + '/json/list', 'GET', signal)
+  throwIfAborted(signal)
   return rows.filter(row => row.type === 'page' || row.type === undefined)
 }
-async function selected(base: string, id?: string): Promise<Tab> {
-  const rows = await listTabs(base)
+async function selected(
+  base: string, id?: string, available?: Tab[], signal?: AbortSignal, updateSelection = true,
+): Promise<Tab> {
+  const rows = available ?? await listTabs(base, signal)
+  throwIfAborted(signal)
   const requested = id ?? readDescriptor()?.selectedTabId ?? activeTabId
   const chosen = rows.find(row => row.id === requested) ?? (id === undefined ? rows[0] : undefined)
   if (!chosen?.webSocketDebuggerUrl) throw new Error('No hay una pestaña Chromium disponible.')
-  activeTabId = chosen.id
-  publish(base + '/', chosen.id)
+  if (updateSelection) {
+    activeTabId = chosen.id
+    publish(base + '/', chosen.id)
+  }
   return chosen
 }
-async function cdp<T extends Record<string, unknown>>(tab: Tab, method: string, params: Record<string, unknown> = {}): Promise<T> {
+async function cdp<T extends Record<string, unknown>>(
+  tab: Tab, method: string, params: Record<string, unknown> = {}, signal?: AbortSignal,
+): Promise<T> {
   const url = tab.webSocketDebuggerUrl
   if (!url || !url.startsWith('ws://127.0.0.1:') && !url.startsWith('ws://localhost:')) throw new Error('CDP rechazó el destino de pestaña.')
-  const socket = new WebSocket(url)
-  const id = Math.floor(Math.random() * 2147483647)
-  return await new Promise<T>((resolve, reject) => {
-    let settled = false
-    const settle = (error?: Error, result?: T): void => {
-      if (settled) return
-      settled = true
-      clearTimeout(timer)
-      socket.close()
-      if (error) reject(error)
-      else resolve(result as T)
-    }
-    const timer = setTimeout(() => { settle(new Error('Tiempo agotado: ' + method)) }, LIMIT_MS)
-    // CDP emulation is connection-scoped. The viewport override and the
-    // screenshot/mouse action MUST use the same WebSocket session. Previously
-    // a 1280px screenshot clip captured a real 800px page plus black pixels.
-    const needsViewport = method === 'Page.captureScreenshot' || method === 'Input.dispatchMouseEvent'
-    const viewportId = id + 1
-    const sendAction = (): void => {
-      socket.send(JSON.stringify({ id, method, params }))
-    }
-    socket.addEventListener('open', () => {
-      if (!needsViewport) { sendAction(); return }
-      socket.send(JSON.stringify({
-        id: viewportId, method: 'Emulation.setDeviceMetricsOverride',
-        params: { ...VIEWPORT, screenWidth: VIEWPORT.width, screenHeight: VIEWPORT.height,
-          deviceScaleFactor: 1, mobile: false },
-      }))
-    })
-    socket.addEventListener('message', (event) => {
-      let reply: RpcReply
-      try { reply = JSON.parse(String(event.data)) as RpcReply } catch { return }
-      if (reply.id === viewportId && needsViewport) {
-        if (reply.error && method !== 'Page.captureScreenshot') {
-          settle(new Error('No se pudo ajustar el tamaño del navegador: ' + reply.error.message))
-        } else sendAction()
-        return
-      }
-      if (reply.id !== id) return
-      if (reply.error) settle(new Error(reply.error.message || method + ' falló'))
-      else settle(undefined, (reply.result ?? {}) as T)
-    })
-    socket.addEventListener('error', () => { settle(new Error('Se perdió la conexión con Chromium.')) })
-  })
+  const current = cdpSessions.get(tab.id)
+  if (current?.url !== url || current.session.closed) {
+    current?.session.close()
+    cdpSessions.delete(tab.id)
+  }
+  const session = cdpSessions.get(tab.id)?.session ?? (() => {
+    const created = new MiniBrowserCdpSession(url)
+    cdpSessions.set(tab.id, { url, session: created })
+    return created
+  })()
+  return await session.send<T>(method, params, signal)
 }
 /**
  * Turn a human address/search query into a safe Chromium HTTP(S) target.
@@ -248,12 +487,12 @@ export function normalizeMiniBrowserAddress(value: string): string {
   if (!['http:', 'https:'].includes(result.protocol) || result.username || result.password) throw new Error('Solo se permiten direcciones HTTP(S).')
   return result.href
 }
-async function state(): Promise<Record<string, unknown>> {
-  const base = await endpoint(false)
+async function state(knownBase?: string, tabId?: string, signal?: AbortSignal): Promise<Record<string, unknown>> {
+  const base = knownBase ?? await endpoint(false, signal)
   if (!base) return { available: false, tabs: [] }
-  const tabs = await listTabs(base)
+  const tabs = await listTabs(base, signal)
   if (tabs.length === 0) return { available: false, tabs: [] }
-  const selectedTab = await selected(base)
+  const selectedTab = await selected(base, tabId, tabs, signal, tabId === undefined)
   return {
     available: true, tabId: selectedTab.id, url: selectedTab.url, title: selectedTab.title,
     tabs: tabs.map(({ id, url, title }) => ({ id, url, title })),
@@ -293,12 +532,32 @@ export async function captureBrowserFrameWithFallback(
   }
   throw new Error('CDP_CAPTURE_FAILED: no se pudo obtener un fotograma real. ' + failures.join(' | '))
 }
-async function frame(): Promise<Buffer> {
+/**
+ * Coalesce simultaneous captures for one real Chromium target.
+ * @param targetId - Stable CDP page identifier.
+ * @param capture - One capture operation to run when no capture is active.
+ * @returns The shared verified frame promise.
+ */
+export async function captureBrowserFrameSingleFlight(
+  targetId: string, capture: () => Promise<Buffer>,
+): Promise<Buffer> {
+  const existing = frameFlights.get(targetId)
+  if (existing) return await existing
+  const pending = Promise.resolve().then(capture)
+  frameFlights.set(targetId, pending)
+  try {
+    return await pending
+  } finally {
+    if (frameFlights.get(targetId) === pending) frameFlights.delete(targetId)
+  }
+}
+async function frame(tabId?: string): Promise<Buffer> {
   const base = await endpoint(false)
   if (!base) throw new Error('El navegador no está iniciado.')
-  const tab = await selected(base)
-  return await captureBrowserFrameWithFallback(async params =>
-    await cdp<{ data: string }>(tab, 'Page.captureScreenshot', params))
+  const tab = await selected(base, tabId, undefined, undefined, tabId === undefined)
+  return await captureBrowserFrameSingleFlight(tab.id, async () =>
+    await captureBrowserFrameWithFallback(async params =>
+      await cdp<{ data: string }>(tab, 'Page.captureScreenshot', params)))
 }
 /**
  * A visible OS Chrome/Edge window is never created by Kira's routine CDP
@@ -322,53 +581,71 @@ async function openVisibleDesktopBrowser(rawUrl: string): Promise<void> {
   child.unref()
 }
 
-async function action(input: Action): Promise<Record<string, unknown>> {
+async function action(input: Action, signal?: AbortSignal): Promise<Record<string, unknown>> {
   const type = input.type
-  const base = await endpoint(type === 'open' || type === 'new-tab' || type === 'start')
+  throwIfAborted(signal)
+  const base = await endpoint(type === 'open' || type === 'new-tab' || type === 'start', signal)
+  throwIfAborted(signal)
   if (!base) throw new Error('Inicia el navegador primero.')
-  if (type === 'start') return await state()
+  if (type === 'start') return await state(base, undefined, signal)
   if (type === 'new-tab') {
     const target = normalizeMiniBrowserAddress(input.url ?? 'https://www.google.com')
-    const tab = await json<Tab>(base + '/json/new?' + encodeURIComponent(target), 'PUT')
+    throwIfAborted(signal)
+    const tab = await json<Tab>(base + '/json/new?' + encodeURIComponent(target), 'PUT', signal)
+    throwIfAborted(signal)
     activeTabId = tab.id; publish(base + '/', tab.id)
-    return await state()
+    return await state(base, undefined, signal)
   }
-  const tab = await selected(base, input.tabId)
+  const tab = await selected(base, input.tabId, undefined, signal)
   if (type === 'select-tab') {
     if (typeof input.tabId !== 'string') throw new Error('Falta la pestaña.')
-    const res = await fetch(base + '/json/activate/' + encodeURIComponent(tab.id), { signal: AbortSignal.timeout(2500) })
+    throwIfAborted(signal)
+    const res = await fetch(base + '/json/activate/' + encodeURIComponent(tab.id), { signal: requestSignal(signal) })
+    throwIfAborted(signal)
     if (!res.ok) throw new Error('No se pudo activar la pestaña.')
     activeTabId = tab.id
   } else if (type === 'close-tab') {
-    if ((await listTabs(base)).length < 2) throw new Error('Debes conservar una pestaña abierta.')
-    const res = await fetch(base + '/json/close/' + encodeURIComponent(tab.id), { signal: AbortSignal.timeout(2500) })
+    if ((await listTabs(base, signal)).length < 2) throw new Error('Debes conservar una pestaña abierta.')
+    throwIfAborted(signal)
+    const res = await fetch(base + '/json/close/' + encodeURIComponent(tab.id), { signal: requestSignal(signal) })
+    throwIfAborted(signal)
     if (!res.ok) throw new Error('No se pudo cerrar la pestaña.')
+    cdpSessions.get(tab.id)?.session.close('CDP_SESSION_CLOSED: pestaña cerrada')
+    cdpSessions.delete(tab.id)
+    frameFlights.delete(tab.id)
     activeTabId = undefined
   } else if (type === 'open' || type === 'navigate') {
     const url = normalizeMiniBrowserAddress(input.url ?? 'https://www.google.com')
-    await cdp(tab, 'Page.navigate', { url })
+    throwIfAborted(signal)
+    await cdp(tab, 'Page.navigate', { url }, signal)
   } else if (type === 'open-external') {
     // Never open a separate macro browser until the human explicitly asks
     // from the MiniBrowser's own footer. No background model auto-popup.
     if (!/^https?:\/\//iu.test(tab.url)) throw new Error('No hay una página web para abrir en Chrome.')
+    throwIfAborted(signal)
     await openVisibleDesktopBrowser(tab.url)
   } else if (type === 'back' || type === 'forward') {
-    const history = await cdp<{ currentIndex: number; entries: Array<{ id: number }> }>(tab, 'Page.getNavigationHistory')
+    const history = await cdp<{ currentIndex: number; entries: Array<{ id: number }> }>(tab, 'Page.getNavigationHistory', {}, signal)
     const index = history.currentIndex + (type === 'back' ? -1 : 1)
     const entry = history.entries[index]
-    if (entry) await cdp(tab, 'Page.navigateToHistoryEntry', { entryId: entry.id })
+    if (entry) {
+      throwIfAborted(signal)
+      await cdp(tab, 'Page.navigateToHistoryEntry', { entryId: entry.id }, signal)
+    }
   } else if (type === 'reload') {
-    await cdp(tab, 'Page.reload', { ignoreCache: false })
+    throwIfAborted(signal)
+    await cdp(tab, 'Page.reload', { ignoreCache: false }, signal)
   } else if (type === 'click' || type === 'scroll') {
     const x = input.x, y = input.y
     if (typeof x !== 'number' || typeof y !== 'number' || !Number.isFinite(x) || !Number.isFinite(y)
       || x < 0 || y < 0 || x > VIEWPORT.width || y > VIEWPORT.height) throw new Error('Coordenadas inválidas.')
     if (type === 'click') {
-      await cdp(tab, 'Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', clickCount: 1 })
-      await cdp(tab, 'Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', clickCount: 1 })
+      await cdp(tab, 'Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', clickCount: 1 }, signal)
+      throwIfAborted(signal)
+      await cdp(tab, 'Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', clickCount: 1 }, signal)
     } else {
       const deltaY = Math.max(-1500, Math.min(1500, Number(input.deltaY) || 0))
-      await cdp(tab, 'Input.dispatchMouseEvent', { type: 'mouseWheel', x, y, deltaX: 0, deltaY })
+      await cdp(tab, 'Input.dispatchMouseEvent', { type: 'mouseWheel', x, y, deltaX: 0, deltaY }, signal)
     }
   } else if (type === 'key') {
     const key = input.key ?? ''
@@ -384,14 +661,16 @@ async function action(input: Action): Promise<Record<string, unknown>> {
     const printable = key.length === 1 && modifiers === 0
     const text = printable ? key : key === 'Enter' ? '\r' : undefined
     const params = { key, code: key, windowsVirtualKeyCode: virtual, nativeVirtualKeyCode: virtual, modifiers }
-    await cdp(tab, 'Input.dispatchKeyEvent', { type: 'keyDown', ...params, ...(text === undefined ? {} : { text }) })
-    await cdp(tab, 'Input.dispatchKeyEvent', { type: 'keyUp', ...params })
+    await cdp(tab, 'Input.dispatchKeyEvent', { type: 'keyDown', ...params, ...(text === undefined ? {} : { text }) }, signal)
+    throwIfAborted(signal)
+    await cdp(tab, 'Input.dispatchKeyEvent', { type: 'keyUp', ...params }, signal)
   } else if (type === 'text') {
     const text = input.text
     if (typeof text !== 'string' || text.length > 4096) throw new Error('Texto no válido.')
-    await cdp(tab, 'Input.insertText', { text })
+    await cdp(tab, 'Input.insertText', { text }, signal)
   } else throw new Error('Acción de navegador desconocida.')
-  return await state()
+  throwIfAborted(signal)
+  return await state(base, undefined, signal)
 }
 /**
  * Reject DNS rebinding and cross-origin browser requests, even on localhost.
@@ -416,6 +695,8 @@ export function miniBrowserRequestAllowed(input: {
 /**
  * Node's IncomingHttpHeaders admits string[], but the authorization marker
  * must be a single exact value. Multiple occurrences are not authenticated.
+ * @param value - Header value read from the incoming request.
+ * @returns The marker only when Node received one string value.
  */
 export function miniBrowserSingleHeader(value: string | string[] | undefined): string | undefined {
   return typeof value === 'string' ? value : undefined
@@ -442,6 +723,12 @@ async function readAction(req: IncomingMessage): Promise<Action> {
     || typeof (body as { type?: unknown }).type !== 'string') throw new Error('Acción mal formada.')
   return body as Action
 }
+function requestTabId(req: IncomingMessage): string | undefined {
+  const value = new URL(req.url ?? '/', 'http://127.0.0.1').searchParams.get('tabId')
+  if (value === null) return undefined
+  if (!/^[A-Za-z0-9._:-]{1,256}$/u.test(value)) throw new Error('Identificador de pestaña no válido.')
+  return value
+}
 
 /** Accept only bounded WebM bytes, never arbitrary uploads or web URLs.
  * @param buffer - Binary POST content from the user's authorized tab recording.
@@ -452,7 +739,7 @@ export function isVerifiedWebmCapture(buffer: Buffer): boolean {
     && buffer[0] === 0x1a && buffer[1] === 0x45
     && buffer[2] === 0xdf && buffer[3] === 0xa3
 }
-async function receiveAuthorizedCapture(req: IncomingMessage): Promise<{captureId: string; bytes: number}> {
+async function receiveAuthorizedCapture(req: IncomingMessage): Promise<{ captureId: string; bytes: number }> {
   if (req.headers['content-type']?.startsWith('video/webm') !== true) throw new Error('VIDEO_CAPTURE_TYPE_INVALID')
   const length = Number(req.headers['content-length'])
   if (req.headers['content-length'] !== undefined
@@ -462,31 +749,31 @@ async function receiveAuthorizedCapture(req: IncomingMessage): Promise<{captureI
   const parts: Buffer[] = []
   let total = 0
   for await (const incoming of req) {
-    const bytes = Buffer.isBuffer(incoming) ? incoming : Buffer.from(incoming)
+    const bytes = Buffer.from(incoming as string | Uint8Array)
     total += bytes.length
     if (total > MAX_CAPTURE_BYTES) throw new Error('VIDEO_CAPTURE_TOO_LARGE')
     parts.push(bytes)
   }
   const body = Buffer.concat(parts)
   if (!isVerifiedWebmCapture(body)) throw new Error('VIDEO_CAPTURE_WEBM_INVALID')
-  mkdirSync(CAPTURE_ROOT, {recursive:true,mode:0o700})
+  mkdirSync(CAPTURE_ROOT, { recursive:true,mode:0o700 })
   // Old recordings expire and are removed opportunistically.
   for (const name of readdirSync(CAPTURE_ROOT)) {
     if (!/^capture-[a-f0-9-]{36}\.webm$/i.test(name)) continue
     const path = join(CAPTURE_ROOT,name)
     try {
-      if (Date.now() - statSync(path).mtimeMs > 60 * 60_000) rmSync(path,{force:true})
+      if (Date.now() - statSync(path).mtimeMs > 60 * 60_000) rmSync(path,{ force:true })
     } catch { /* A disappearing expired recording is harmless. */ }
   }
   const captureId = randomUUID()
-  writeFileSync(join(CAPTURE_ROOT,'capture-'+captureId+'.webm'),body,{flag:'wx',mode:0o600})
-  const marker = JSON.stringify({id:captureId,createdAt:Date.now(),bytes:body.length})
+  writeFileSync(join(CAPTURE_ROOT,'capture-'+captureId+'.webm'),body,{ flag:'wx',mode:0o600 })
+  const marker = JSON.stringify({ id:captureId,createdAt:Date.now(),bytes:body.length })
   const staging = join(CAPTURE_ROOT,'latest-'+captureId+'.tmp')
   try {
-    writeFileSync(staging,marker,{flag:'wx',mode:0o600})
+    writeFileSync(staging,marker,{ flag:'wx',mode:0o600 })
     renameSync(staging,join(CAPTURE_ROOT,'latest.json'))
-  } finally { rmSync(staging,{force:true}) }
-  return {captureId,bytes:body.length}
+  } finally { rmSync(staging,{ force:true }) }
+  return { captureId,bytes:body.length }
 }
 
 /**
@@ -502,29 +789,59 @@ export function registerMiniBrowserRoutes(ctx: Context): void {
     ctx.webServer.register({ kind: 'exact', path: '/phoenix-mini-browser/state', handler: async (req, res) => {
       if (!sharedGuard(req, res)) return
       if (req.method !== 'GET') { reply(res, 405, { error: 'Método no permitido.' }); return }
-      try { reply(res, 200, await state()) } catch (error) { reply(res, 503, { error: String(error) }) }
+      try { reply(res, 200, await state(undefined, requestTabId(req))) }
+      catch (error) { if (!res.writableEnded && !res.destroyed) reply(res, 503, { error: String(error) }) }
     } }),
     ctx.webServer.register({ kind: 'exact', path: '/phoenix-mini-browser/frame', handler: async (req, res) => {
       if (!sharedGuard(req, res)) return
       if (req.method !== 'GET') { reply(res, 405, { error: 'Método no permitido.' }); return }
       try {
-        const jpeg = await frame()
+        const jpeg = await frame(requestTabId(req))
         res.writeHead(200, { 'content-type': 'image/jpeg', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' })
         res.end(jpeg)
-      } catch (error) { reply(res, 503, { error: String(error) }) }
+      } catch (error) { if (!res.writableEnded && !res.destroyed) reply(res, 503, { error: String(error) }) }
     } }),
     ctx.webServer.register({ kind: 'exact', path: '/phoenix-mini-browser/capture', handler: async (req, res) => {
       if (!sharedGuard(req, res)) return
-      if (req.method !== 'POST') { reply(res, 405, {error:'Método no permitido.'}); return }
+      if (req.method !== 'POST') { reply(res, 405, { error:'Método no permitido.' }); return }
       try { reply(res, 201, await receiveAuthorizedCapture(req)) }
-      catch (error) { reply(res, 400, {error:String(error)}) }
+      catch (error) { reply(res, 400, { error:String(error) }) }
     } }),
     ctx.webServer.register({ kind: 'exact', path: '/phoenix-mini-browser/action', handler: async (req, res) => {
       if (!sharedGuard(req, res)) return
       if (req.method !== 'POST') { reply(res, 405, { error: 'Método no permitido.' }); return }
       if (!req.headers['content-type']?.startsWith('application/json')) { reply(res, 415, { error: 'Solo JSON.' }); return }
-      try { reply(res, 200, await action(await readAction(req))) }
-      catch (error) { reply(res, 400, { error: String(error) }) }
+      const controller = new AbortController()
+      let timer: ReturnType<typeof setTimeout> | undefined
+      const clientState = { closed: false }
+      const onClose = (): void => {
+        if (!res.writableEnded) {
+          clientState.closed = true
+          controller.abort(new Error(ACTION_ABORT_MESSAGE))
+        }
+      }
+      const armDeadline = (milliseconds: number): void => {
+        if (timer !== undefined) clearTimeout(timer)
+        timer = setTimeout(() => {
+          controller.abort(new Error('Tiempo agotado ejecutando la acción del navegador.'))
+        }, milliseconds)
+      }
+      armDeadline(ACTION_LIMIT_MS)
+      res.once('close', onClose)
+      try {
+        const input = await awaitAbortable(readAction(req), controller.signal)
+        if (input.type === 'start') armDeadline(START_ACTION_LIMIT_MS)
+        throwIfAborted(controller.signal)
+        const result = await action(input, controller.signal)
+        if (!controller.signal.aborted && !res.writableEnded) reply(res, 200, result)
+      } catch (error) {
+        if (!clientState.closed && !res.writableEnded && !res.destroyed) {
+          reply(res, controller.signal.aborted ? 504 : 400, { error: String(error) })
+        }
+      } finally {
+        if (timer !== undefined) clearTimeout(timer)
+        res.off('close', onClose)
+      }
     } }),
   ]
   ctx.effect(() => () => { for (const dispose of disposers) dispose(); cleanup() }, 'web-app: mini browser routes')

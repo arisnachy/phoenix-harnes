@@ -8,6 +8,10 @@ dsh 浏览器表层组合包。[`cordis.patch.yml`](cordis.patch.yml) 叠加在 
 
 Web 使用共享的有界 normal 默认值，在首次请求后最多再重试五次符合条件的失败。`deepseek-official` 与由 settings 新增的 pi-ai 路由在省略 `retryPolicy` 时使用该默认值；显式提供方策略仍然优先。Web 不再增加重试专用的组合覆盖，因此非 Web profile 的省略行为与之相同。
 
+## MiniBrowser CDP 生命周期
+
+内联 MiniBrowser 按 Chromium 标签页复用 loopback CDP WebSocket，并通过请求 ID 匹配并发命令。视口配置保留在同一连接内；同一目标的并发画面请求共享一次截图；目标关闭时立即拒绝未完成操作，使预览可以在下一次请求中恢复。状态读取仅列出一次标签页，只有端点或所选标签变化时才更新共享描述文件。显式标签页标识将预览限定到目标页面。浏览器操作具有统一时限，并在 HTTP 客户端断开时取消尚未完成的 CDP 操作；取消不会重放修改操作。
+
 ## 模型体验
 
 ### Harness 源码与 Web 表层上下文

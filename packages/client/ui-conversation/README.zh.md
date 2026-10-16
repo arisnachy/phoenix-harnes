@@ -59,6 +59,10 @@ Host 带 placement 的 `session/queue` 快照也会携带待处理 steering。Qu
 
 
 Assistant 作者贡献接收对应消息实际 provider/model 的来源信息。流式输出使用所属 Step 的已准备 `request/header` 配置，包括重试时的变更，以及未产生新 header 时保留的路由。已完成输出优先使用持久化 `assistant/message` 的来源；后续路由变更不会改写历史消息的模型标记。
+## 内嵌 MiniBrowser
+
+会话中的 MiniBrowser 通过 `/phoenix-mini-browser` 客户端路由展示 Phoenix 正在操作的同一 Chromium 标签页。状态、操作和画面请求都有客户端时限，并在卡片失活或卸载时取消；先读取响应体再验证 JSON，使中断的 Host 响应成为可恢复状态。后续截图等待或失败时保留最后一张有效画面，用户操作完成后立即请求刷新。文档隐藏时暂停轮询与截图，在下一次可见性事件中恢复，使现有 localhost 应用保持可预览，同时避免会话处于后台时浪费截图资源。Chrome 启动具有更长的明确时限；启动超时后由用户主动重试，不会自动重复启动。
+
 ## 模型体验
 
 无。会话 UI 在浏览器中渲染会话历史与流；这里没有任何内容进入模型请求。

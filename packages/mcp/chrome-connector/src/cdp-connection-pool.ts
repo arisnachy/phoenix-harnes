@@ -18,10 +18,10 @@ interface Connection {
   ready: Promise<void>
   requests: Map<number, Pending>
   nextId: number
+  disconnect: (reason: string) => void
   viewportReady?: Promise<void>
   idleTimer?: ReturnType<typeof setTimeout>
 }
-
 /** Keeps one live DevTools socket per tab instead of reconnecting for every field. */
 export class CdpConnectionPool {
   private readonly connections = new Map<string, Connection>()
@@ -59,9 +59,29 @@ export class CdpConnectionPool {
     return await this.exchange<T>(connection, method, params, timeoutMs)
   }
 
+  /**
+   * Closes one tab transport and rejects every command still in flight.
+   * @param url - WebSocket URL identifying the tab transport.
+   * @param reason - Error text used to reject pending commands.
+   */
+  close(url: string, reason = 'Cierre solicitado de la conexión Chrome CDP'): void {
+    const connection = this.connections.get(url)
+    if (!connection) return
+    connection.disconnect(reason)
+    connection.socket.close()
+  }
+
+  /**
+   * Closes all transports owned by this connector instance.
+   * @param reason - Error text used to reject pending commands.
+   */
+  closeAll(reason = 'Cierre solicitado de las conexiones Chrome CDP'): void {
+    for (const url of [...this.connections.keys()]) this.close(url, reason)
+  }
+
   private get(url: string): Connection {
     const existing = this.connections.get(url)
-    if (existing && existing.socket.readyState <= 1) return existing
+    if (existing && existing.socket.readyState !== 2 && existing.socket.readyState !== 3) return existing
     if (existing) this.connections.delete(url)
 
     const socket = this.createSocket(url)
@@ -71,7 +91,10 @@ export class CdpConnectionPool {
       resolveReady = resolve
       rejectReady = reject
     })
-    const connection: Connection = { socket, ready, requests: new Map(), nextId: 0 }
+    const connection: Connection = {
+      socket, ready, requests: new Map(), nextId: 0,
+      disconnect: () => { /* assigned before any socket event can fire */ },
+    }
     this.connections.set(url, connection)
     let closed = false
     const disconnect = (reason: string) => {
@@ -87,6 +110,7 @@ export class CdpConnectionPool {
       }
       connection.requests.clear()
     }
+    connection.disconnect = disconnect
     const opening = setTimeout(() => {
       if (socket.readyState !== 1) {
         disconnect('Tiempo agotado conectando con Chrome CDP')
@@ -97,7 +121,7 @@ export class CdpConnectionPool {
       clearTimeout(opening)
       resolveReady()
     })
-    socket.addEventListener('message', event => {
+    socket.addEventListener('message', (event) => {
       let packet: CdpPacket
       try { packet = JSON.parse(String(event.data)) as CdpPacket } catch { return }
       if (packet.id === undefined) return
@@ -108,7 +132,10 @@ export class CdpConnectionPool {
       if (packet.error) pending.reject(new Error(packet.error.message))
       else if (packet.result?.exceptionDetails) {
         pending.reject(new Error(packet.result.exceptionDetails.text || 'Error de ejecución del DOM'))
-      } else pending.resolve(packet.result?.result?.value ?? packet.result)
+      } else if (packet.result?.result !== undefined
+        && Object.prototype.hasOwnProperty.call(packet.result.result, 'value')) {
+        pending.resolve(packet.result.result.value)
+      } else pending.resolve(packet.result)
     })
     socket.addEventListener('error', () => {
       clearTimeout(opening)
@@ -128,8 +155,7 @@ export class CdpConnectionPool {
       if (connection.requests.size > 0) {
         this.touch(url, connection)
       } else if (this.connections.get(url) === connection) {
-        this.connections.delete(url)
-        connection.socket.close()
+        this.close(url, 'Conexión Chrome CDP inactiva')
       }
     }, this.idleMs)
   }
@@ -141,10 +167,13 @@ export class CdpConnectionPool {
       const id = ++connection.nextId
       const timer = setTimeout(() => {
         connection.requests.delete(id)
-        reject(new Error(`Tiempo agotado ejecutando ${method}`))
+        const error = new Error(`Tiempo agotado ejecutando ${method}`)
+        reject(error)
+        connection.disconnect(error.message)
+        connection.socket.close()
       }, timeoutMs)
       connection.requests.set(id, {
-        resolve: value => resolve(value as T),
+        resolve: (value) => { resolve(value as T) },
         reject,
         timer,
       })
@@ -153,7 +182,10 @@ export class CdpConnectionPool {
       } catch (error) {
         clearTimeout(timer)
         connection.requests.delete(id)
-        reject(error instanceof Error ? error : new Error(String(error)))
+        const failure = error instanceof Error ? error : new Error(String(error))
+        reject(failure)
+        connection.disconnect(failure.message)
+        connection.socket.close()
       }
     })
   }

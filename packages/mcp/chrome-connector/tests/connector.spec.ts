@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildDedicatedBrowserArgs, youtubeSearchUrl } from '../src/server.ts'
+import { buildDedicatedBrowserArgs, chooseTab, youtubeSearchUrl } from '../src/server.ts'
 
 describe('Chrome/Edge MCP connector entry', () => {
   it('imports without starting the stdio server', async () => {
@@ -28,5 +28,10 @@ describe('Chrome/Edge MCP connector entry', () => {
   it('keeps headless mode explicit instead of forcing it on visual verification', () => {
     expect(buildDedicatedBrowserArgs('/tmp/phoenix-browser-test', true)).toContain('--headless=new')
     expect(buildDedicatedBrowserArgs('/tmp/phoenix-browser-test', true)).toContain('--mute-audio')
+  })
+
+  it('does not fall back to another tab when an explicit id is missing', () => {
+    const first = { id: 'first', title: 'First', url: 'https://example.com', webSocketDebuggerUrl: 'ws://127.0.0.1:9222/devtools/page/first' }
+    expect(() => chooseTab([first], 'missing')).toThrow('No existe la pestaña missing')
   })
 })

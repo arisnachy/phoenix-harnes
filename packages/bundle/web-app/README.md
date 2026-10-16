@@ -8,6 +8,10 @@ The dsh browser-surface bundle. [`cordis.patch.yml`](cordis.patch.yml) rides ove
 
 Web uses the shared bounded normal default of five eligible retries after the initial request. The `deepseek-official` route and settings-added pi-ai routes use that default when they omit `retryPolicy`; explicit provider policies still win. Web adds no retry-specific composition override, so the same omission behavior applies to non-Web profiles.
 
+## MiniBrowser CDP lifecycle
+
+The inline MiniBrowser reuses one loopback CDP WebSocket per Chromium tab and multiplexes commands with request IDs. Viewport setup stays on that connection, concurrent frame requests for the same target share one capture, and a closed target rejects pending work immediately so a stalled preview can recover on the next request. State reads use one tab listing and update the shared descriptor only when its endpoint or selected tab changes. Explicit tab identifiers scope previews to their intended target. Browser actions have a shared deadline and cancel outstanding CDP work when their HTTP client disconnects; cancellation never replays a mutation.
+
 ## Model Experience
 
 ### Harness-source and Web-surface context

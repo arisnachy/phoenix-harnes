@@ -1,5 +1,9 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { execFileSync } from 'node:child_process'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { JSDOM } from 'jsdom'
 import { executeBrowserInteraction, browserBatchExpression, browserInteractionExpression } from '../src/browser-interactions.ts'
 
 beforeEach(() => {
@@ -24,6 +28,30 @@ beforeEach(() => {
 })
 
 describe('Kira browser structured controls', () => {
+  it('serializes source expressions without bundler-only helpers in a fresh DOM realm', () => {
+    const fixture = resolve(dirname(fileURLToPath(import.meta.url)), 'browser-interactions.source-smoke.mjs')
+    const repoRoot = resolve(dirname(fixture), '../../../..')
+    const output = execFileSync(process.execPath, ['--import', 'tsx/esm', fixture], {
+      cwd: repoRoot, encoding: 'utf8', timeout: 30_000,
+    })
+    const expressions = JSON.parse(output.trim()) as Record<'inspect' | 'fill' | 'wait' | 'batch', string>
+    const dom = new JSDOM(`
+      <form><label>Message <input name="message" type="text"></label></form>
+      <p>Received!</p>
+    `, { runScripts: 'outside-only', url: 'https://example.test/' })
+    try {
+      expect(dom.window.eval(expressions.inspect)).toMatchObject({ ok: true })
+      expect(dom.window.eval(expressions.fill)).toMatchObject({ ok: true })
+      expect(dom.window.eval(expressions.wait)).toMatchObject({ ok: true })
+      expect(dom.window.eval(expressions.batch)).toMatchObject({ ok: true, completed: 2 })
+      expect(dom.window.document.querySelector('[name="message"]')?.getAttribute('value')).toBeNull()
+      const message = dom.window.document.querySelector<HTMLInputElement>('[name="message"]')
+      expect(message?.value).toBe('Batch Phoenix')
+    } finally {
+      dom.window.close()
+    }
+  })
+
   it('inspects visible fields and flags readonly/disabled without exposing passwords', () => {
     const value = executeBrowserInteraction({ operation: 'inspect' })
     expect(value.ok).toBe(true)
@@ -66,12 +94,17 @@ describe('Kira browser structured controls', () => {
   })
   it('requires a unique form selector and provides a verifiable wait result', () => {
     const button = document.querySelector('button') as HTMLButtonElement
-    button.addEventListener('click', event => { event.preventDefault(); document.querySelector('#success')?.removeAttribute('hidden') })
+    button.addEventListener('click', (event) => { event.preventDefault(); document.querySelector('#success')?.removeAttribute('hidden') })
     expect(executeBrowserInteraction({ operation: 'click', selector: 'button[type="submit"]' }).reason)
       .toBe('USE_EXPLICIT_SUBMIT_FORM_CONFIRMATION')
     expect(executeBrowserInteraction({ operation: 'submit', selector: 'button[type="submit"]' }).ok).toBe(true)
     expect(executeBrowserInteraction({ operation: 'wait', expectedText: 'Received!' }).ok).toBe(true)
     expect(executeBrowserInteraction({ operation: 'wait', expectedText: 'Absent answer' }).ok).toBe(false)
+  })
+  it('checks wait text without traversing the full control and form tree', () => {
+    const query = vi.spyOn(document, 'querySelectorAll')
+    expect(executeBrowserInteraction({ operation: 'wait', expectedText: 'Received!' }).ok).toBe(true)
+    expect(query).not.toHaveBeenCalled()
   })
   it('executes a single DOM-snapshot batch and verifies the whole form without screenshots', () => {
     const batch = [
@@ -139,8 +172,9 @@ describe('Kira browser structured controls', () => {
   it('never reveals protected or password values through the verifier', () => {
     expect(executeBrowserInteraction({ operation: 'verify', name: 'my-password', value: 'fake-test-only' }))
       .toMatchObject({ ok: false, reason: 'SENSITIVE_FIELD_VERIFICATION_UNAVAILABLE' })
-    expect(executeBrowserInteraction({ operation: 'verify', name: 'secret', value: 'do-not-touch' }))
-      .toMatchObject({ ok: false, reason: 'HIDDEN_FIELD_PROTECTED' })
+    const hidden = executeBrowserInteraction({ operation: 'verify', name: 'secret', value: 'do-not-touch' })
+    expect(hidden).toMatchObject({ ok: false, reason: 'TARGET_NOT_FOUND' })
+    expect(JSON.stringify(hidden)).not.toContain('do-not-touch')
     expect(executeBrowserInteraction({ operation: 'verify', name: 'my-disabled', value: 'locked' }))
       .toMatchObject({ ok: false, reason: 'FIELD_PROTECTED' })
   })

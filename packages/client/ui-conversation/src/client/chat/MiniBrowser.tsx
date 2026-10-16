@@ -20,9 +20,63 @@ type Command = {
   text?: string
   modifiers?: number
 }
+type QueuedAction = { request: Command; resolve: () => void }
 const API = '/phoenix-mini-browser'
 const HEADERS = { 'x-phoenix-mini-browser': '1' }
 const BLANK: Snapshot = { available: false, tabs: [] }
+const STATE_DEADLINE_MS = 4_000
+const ACTION_DEADLINE_MS = 25_000
+const START_DEADLINE_MS = 25_000
+const FRAME_DEADLINE_MS = 2_500
+const STATE_DEADLINE_MESSAGE = 'El navegador tardó demasiado en responder. Phoenix reintentará la conexión.'
+const ACTION_DEADLINE_MESSAGE = 'La acción del navegador tardó demasiado en responder. Phoenix reintentará la conexión.'
+const START_DEADLINE_MESSAGE = 'Chrome tardó demasiado en iniciar. Phoenix mantiene la tarjeta para que puedas reintentar manualmente.'
+const FRAME_DEADLINE_MESSAGE = 'La imagen de la página tardó demasiado en llegar. Phoenix reintentará la captura.'
+
+function abortError(signal: AbortSignal) {
+  return signal.reason instanceof Error ? signal.reason : new DOMException('Solicitud cancelada.', 'AbortError')
+}
+
+function requestIsActive(signal: AbortSignal, mountedRef: { current: boolean }): boolean {
+  return !signal.aborted && mountedRef.current
+}
+
+function route(path: string, tabId?: string): string {
+  return tabId === undefined
+    ? API + path
+    : API + path + '?tabId=' + encodeURIComponent(tabId)
+}
+
+/** Run a browser request with one deadline covering headers and response body. */
+async function withDeadline<T>(operation: (signal: AbortSignal) => Promise<T>, timeoutMs: number,
+  timeoutMessage: string, signal?: AbortSignal): Promise<T> {
+  if (signal?.aborted) throw abortError(signal)
+  const controller = new AbortController()
+  let timer: ReturnType<typeof window.setTimeout> | undefined
+  let relay: (() => void) | undefined
+  const task = operation(controller.signal)
+  const timeout = new Promise<never>((_, reject) => {
+    timer = window.setTimeout(() => {
+      controller.abort(new Error(timeoutMessage))
+      reject(new Error(timeoutMessage))
+    }, timeoutMs)
+  })
+  const cancelled = signal === undefined ? undefined : new Promise<never>((_, reject) => {
+    relay = () => {
+      const reason = abortError(signal)
+      controller.abort(reason)
+      reject(reason)
+    }
+    signal.addEventListener('abort', relay, { once: true })
+  })
+  try {
+    return await Promise.race(cancelled === undefined ? [task, timeout] : [task, timeout, cancelled])
+  } finally {
+    if (timer !== undefined) window.clearTimeout(timer)
+    if (relay !== undefined) signal?.removeEventListener('abort', relay)
+    controller.abort()
+  }
+}
 
 async function decode<T>(response: Response): Promise<T> {
   // Host restarts, interrupted connections and 204 responses may carry no JSON.
@@ -30,13 +84,13 @@ async function decode<T>(response: Response): Promise<T> {
   const body = await response.text()
   const fallback = response.ok
     ? 'El navegador devolvió una respuesta vacía. Phoenix reintentará la conexión.'
-    : 'El servidor del navegador no está disponible (HTTP ' + response.status + '). Phoenix reintentará la conexión.'
+    : `El servidor del navegador no está disponible (HTTP ${response.status}). Phoenix reintentará la conexión.`
   if (!body.trim()) throw new Error(fallback)
   let data: unknown
   try {
     data = JSON.parse(body) as unknown
   } catch {
-    throw new Error('Respuesta incompleta del navegador (HTTP ' + response.status + '). Phoenix reintentará la conexión.')
+    throw new Error(`Respuesta incompleta del navegador (HTTP ${response.status}). Phoenix reintentará la conexión.`)
   }
   if (!response.ok) {
     const message = data !== null && typeof data === 'object' && 'error' in data
@@ -50,20 +104,35 @@ function validSnapshot(value: unknown): value is Snapshot {
   const x = value as Partial<Snapshot>
   return typeof x.available === 'boolean' && Array.isArray(x.tabs)
 }
-async function inspect(signal?: AbortSignal): Promise<Snapshot> {
-  const response = await fetch(API + '/state', { headers: HEADERS, ...(signal === undefined ? {} : { signal }), cache: 'no-store' })
-  const data: unknown = await decode<unknown>(response)
+async function inspect(signal?: AbortSignal, tabId?: string): Promise<Snapshot> {
+  const data = await withDeadline(
+    async (requestSignal) => {
+      const response = await fetch(route('/state', tabId), { headers: HEADERS, signal: requestSignal, cache: 'no-store' })
+      return decode<unknown>(response)
+    }, STATE_DEADLINE_MS, STATE_DEADLINE_MESSAGE, signal)
   if (!validSnapshot(data)) throw new Error('Estado de Chromium no válido.')
   return data
 }
-async function command(input: Command): Promise<Snapshot> {
-  const response = await fetch(API + '/action', {
-    method: 'POST', headers: { ...HEADERS, 'content-type': 'application/json' },
-    body: JSON.stringify(input), cache: 'no-store',
-  })
-  const data: unknown = await decode<unknown>(response)
+async function command(input: Command, signal?: AbortSignal): Promise<Snapshot> {
+  const start = input.type === 'start'
+  const data = await withDeadline(
+    async (requestSignal) => {
+      const response = await fetch(API + '/action', {
+        method: 'POST', headers: { ...HEADERS, 'content-type': 'application/json' },
+        body: JSON.stringify(input), signal: requestSignal, cache: 'no-store',
+      })
+      return decode<unknown>(response)
+    }, start ? START_DEADLINE_MS : ACTION_DEADLINE_MS,
+    start ? START_DEADLINE_MESSAGE : ACTION_DEADLINE_MESSAGE, signal)
   if (!validSnapshot(data)) throw new Error('Respuesta de Chromium no válida.')
   return data
+}
+async function captureFrame(tabId: string, signal?: AbortSignal): Promise<Blob> {
+  return withDeadline(async (requestSignal) => {
+    const response = await fetch(route('/frame', tabId), { headers: HEADERS, signal: requestSignal, cache: 'no-store' })
+    if (!response.ok) throw new Error('La imagen de la página no está disponible.')
+    return response.blob()
+  }, FRAME_DEADLINE_MS, FRAME_DEADLINE_MESSAGE, signal)
 }
 /** Translate an image gesture into Chromium's fixed 1280 × 720 viewport. */
 function point(element: HTMLImageElement, clientX: number, clientY: number) {
@@ -116,9 +185,15 @@ export function MiniBrowser({ requested = false, active = true, onActivate, auto
   const inlineRef = useRef<HTMLDivElement>(null)
   const currentTab = useRef<string | undefined>(undefined)
   const lastObservedUrl = useRef<string | undefined>(undefined)
-  const busy = useRef(false)
   const mounted = useRef(true)
   const frameRef = useRef<string | undefined>(undefined)
+  const frameRequest = useRef<AbortController | undefined>(undefined)
+  const frameRefreshPending = useRef(false)
+  const refreshFrame = useRef<(() => void) | undefined>(undefined)
+  const actionRequest = useRef<AbortController | undefined>(undefined)
+  const actionQueue = useRef<QueuedAction[]>([])
+  const actionQueueRunning = useRef(false)
+  const followGlobal = useRef(true)
   // Each card is bound to the Chromium target it originally displayed.
   // New browser requests never overwrite prior cards with the latest page.
   const cardTabId = useRef<string | undefined>(undefined)
@@ -142,65 +217,116 @@ export function MiniBrowser({ requested = false, active = true, onActivate, auto
       ? { title: snapshot.title ?? '', url: snapshot.url } : null)
   }, [snapshot.available, snapshot.url, snapshot.title, onPageChange])
 
-  const run = useCallback(async (request: Command): Promise<void> => {
+  const drainActions = useCallback(async (): Promise<void> => {
+    if (actionQueueRunning.current) return
+    actionQueueRunning.current = true
     try {
-      setError(undefined)
-      const scoped = request.type === 'new-tab' || request.type === 'start'
-        ? request
-        : { ...request, ...request.tabId === undefined && cardTabId.current !== undefined
-          ? { tabId: cardTabId.current }
-          : {} }
-      const state = await command(scoped)
-      if (state.tabId !== undefined) cardTabId.current = state.tabId
-      setSnapshot(state)
-      if (request.type === 'open' || request.type === 'new-tab' || request.type === 'start') setEnabled(true)
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason))
+      while (actionQueue.current.length > 0 && mounted.current) {
+        const queued = actionQueue.current.shift()
+        if (!queued) continue
+        const controller = new AbortController()
+        actionRequest.current = controller
+        let stopQueue = false
+        try {
+          setError(undefined)
+          const state = await command(queued.request, controller.signal)
+          if (!requestIsActive(controller.signal, mounted)) continue
+          if (state.tabId !== undefined) cardTabId.current = state.tabId
+          setSnapshot(state)
+          if (queued.request.type === 'open' || queued.request.type === 'new-tab' || queued.request.type === 'start') setEnabled(true)
+          refreshFrame.current?.()
+        } catch (reason) {
+          // A failed mutation may have reached Chrome before its response was
+          // lost (including Host-side deadlines). Never replay dependent
+          // gestures after any command error.
+          stopQueue = true
+          if (requestIsActive(controller.signal, mounted)) {
+            setError(reason instanceof Error ? reason.message : String(reason))
+          }
+        } finally {
+          if (actionRequest.current === controller) actionRequest.current = undefined
+          queued.resolve()
+        }
+        // Drop later gestures rather than replaying them out of order after an
+        // error, timeout, cancellation, or unmount.
+        if (stopQueue || !requestIsActive(controller.signal, mounted)) {
+          for (const pending of actionQueue.current.splice(0)) pending.resolve()
+          break
+        }
+      }
+    } finally {
+      actionQueueRunning.current = false
     }
   }, [])
+
+  const run = useCallback((request: Command): Promise<void> => {
+    if (!mounted.current) return Promise.resolve()
+    // Capture the target at enqueue time. A later action may change the active
+    // tab before this gesture reaches Chrome, but it must keep its original tab.
+    const scoped = request.type === 'new-tab' || request.type === 'start'
+      ? request
+      : { ...request, ...request.tabId === undefined && cardTabId.current !== undefined
+        ? { tabId: cardTabId.current }
+        : {} }
+    if (request.type === 'select-tab' && request.tabId !== undefined) {
+      followGlobal.current = false
+      cardTabId.current = request.tabId
+    }
+    return new Promise((resolve) => {
+      actionQueue.current.push({ request: scoped, resolve })
+      void drainActions()
+    })
+  }, [drainActions])
 
   useEffect(() => {
     if (!active || dismissed) return
     mounted.current = true
     const first = new AbortController()
-    const selection = !previousActive.current && cardTabId.current !== undefined
+    const reactivatedTabId = !previousActive.current ? cardTabId.current : undefined
+    const reactivating = reactivatedTabId !== undefined
+    if (reactivating) followGlobal.current = false
+    const selection = reactivatedTabId !== undefined
       // Wait for the old target to become active BEFORE inspecting it; otherwise
       // a race with the newest tab could accidentally overwrite this card.
-      ? command({ type: 'select-tab', tabId: cardTabId.current }).then(() => undefined, () => undefined)
+      ? command({ type: 'select-tab', tabId: reactivatedTabId }, first.signal).then(() => undefined, () => undefined)
       : Promise.resolve()
     previousActive.current = active
     // A requested browser is an instruction to start the embedded Chromium,
     // not merely to show a disconnected card with a manual Connect button.
     // One poll at a time avoids competing CDP sessions during slow Windows boots.
     let polling = false
-    let nextStartAt = 0
+    let startAttempted = false
     const poll = async (): Promise<void> => {
       if (polling) return
       polling = true
       try {
         await selection
-        if (first.signal.aborted) return
+        if (!requestIsActive(first.signal, mounted)) return
         let state: Snapshot | undefined
         let inspectError: unknown
         try {
-          state = await inspect(first.signal)
+          state = await inspect(first.signal, followGlobal.current ? undefined : cardTabId.current)
         } catch (reason) {
           inspectError = reason
         }
-        if (first.signal.aborted) return
-        if (requested && (!state || !state.available) && Date.now() >= nextStartAt) {
-          // Retry a failed/missing CDP instance without hot-looping, and keep
-          // the original card alive across Host restarts.
-          nextStartAt = Date.now() + 10_000
-          state = await command({ type: 'start' })
+        if (!requestIsActive(first.signal, mounted)) return
+        if (requested && (!state || !state.available) && !startAttempted) {
+          // Starting Chrome is a mutation whose timeout may leave the host in
+          // an unknown state. Let the user retry explicitly instead of issuing
+          // the same mutation again from the polling loop.
+          startAttempted = true
+          state = await command({ type: 'start' }, first.signal)
         }
-        if (first.signal.aborted) return
-        if (state === undefined) throw inspectError ?? new Error('Chromium no respondió.')
+        if (!requestIsActive(first.signal, mounted)) return
+        if (state === undefined) {
+          throw inspectError instanceof Error
+            ? inspectError : new Error(typeof inspectError === 'string' ? inspectError : 'Chromium no respondió.')
+        }
         setConnectionError(undefined)
         if (state.tabId !== undefined) cardTabId.current = state.tabId
         setSnapshot(state)
       } catch (reason) {
-        if (!first.signal.aborted) {
+        if (requestIsActive(first.signal, mounted)) {
           setConnectionError(reason instanceof Error ? reason.message : String(reason))
         }
       } finally {
@@ -213,23 +339,30 @@ export function MiniBrowser({ requested = false, active = true, onActivate, auto
       mounted.current = false
       previousActive.current = false
       first.abort()
+      actionRequest.current?.abort()
+      for (const queued of actionQueue.current.splice(0)) queued.resolve()
       window.clearInterval(timer)
     }
   }, [active, dismissed, requested])
 
   useEffect(() => {
     if (!active || !show || !snapshot.available || collapsed || playingVideo) return
+    const tabId = snapshot.tabId
+    if (tabId === undefined) return
     let stopped = false
     const load = async () => {
       // Hidden Phoenix tabs need no expensive Chromium JPEG capture.
       // A visibility event below refreshes the frame when the user returns.
-      if (document.visibilityState === 'hidden' || busy.current) return
-      busy.current = true
+      if (document.hidden || document.visibilityState === 'hidden') return
+      if (frameRequest.current !== undefined) {
+        frameRefreshPending.current = true
+        return
+      }
+      const controller = new AbortController()
+      frameRequest.current = controller
       try {
-        const response = await fetch(API + '/frame', { headers: HEADERS, cache: 'no-store' })
-        if (!response.ok) throw new Error('La imagen de la página no está disponible.')
-        const blob = await response.blob()
-        if (stopped || !mounted.current) return
+        const blob = await captureFrame(tabId, controller.signal)
+        if (stopped || !mounted.current || controller.signal.aborted) return
         const next = URL.createObjectURL(blob)
         const previous = frameRef.current
         frameRef.current = next
@@ -237,22 +370,52 @@ export function MiniBrowser({ requested = false, active = true, onActivate, auto
         setCaptureError(undefined)
         if (previous) URL.revokeObjectURL(previous)
       } catch (reason) {
-        if (!stopped) setCaptureError(reason instanceof Error ? reason.message : String(reason))
+        if (!stopped && !controller.signal.aborted) {
+          setCaptureError(reason instanceof Error ? reason.message : String(reason))
+        }
         // A failed screenshot does not discard the last successful frame,
         // the selected Chromium tab, or the user's navigation controls.
       }
-      finally { busy.current = false }
+      finally {
+        const ownsRequest = frameRequest.current === controller
+        if (ownsRequest) frameRequest.current = undefined
+        if (!ownsRequest) return
+        if (frameRefreshPending.current && !stopped && !controller.signal.aborted) {
+          frameRefreshPending.current = false
+          void load()
+        } else if (stopped || controller.signal.aborted) {
+          frameRefreshPending.current = false
+        }
+      }
     }
+    const refresh = () => {
+      if (!stopped) void load()
+    }
+    refreshFrame.current = refresh
     void load()
     // Render a live preview without competing continuously with Kira's
     // CDP form filling. UI gestures still refresh the frame on their next tick.
     const timer = window.setInterval(() => { void load() }, expanded ? 3000 : 4000)
     const onVisible = () => { if (document.visibilityState === 'visible') void load() }
     document.addEventListener('visibilitychange', onVisible)
-    return () => { stopped = true; window.clearInterval(timer); document.removeEventListener('visibilitychange', onVisible) }
+    return () => {
+      stopped = true
+      window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', onVisible)
+      if (refreshFrame.current === refresh) refreshFrame.current = undefined
+      const request = frameRequest.current
+      request?.abort()
+      if (frameRequest.current === request) {
+        frameRequest.current = undefined
+      }
+    }
   }, [active, show, dismissed, snapshot.available, snapshot.tabId, collapsed, playingVideo, expanded])
 
   useEffect(() => () => {
+    mounted.current = false
+    actionRequest.current?.abort()
+    for (const queued of actionQueue.current.splice(0)) queued.resolve()
+    frameRequest.current?.abort()
     if (frameRef.current) URL.revokeObjectURL(frameRef.current)
   }, [])
 
@@ -310,11 +473,13 @@ export function MiniBrowser({ requested = false, active = true, onActivate, auto
     if (stopMediaCapture.current) return
     let stream: MediaStream | undefined
     try {
-      if (!navigator.mediaDevices?.getDisplayMedia || typeof MediaRecorder === 'undefined') {
+      const mediaDevices = (navigator as unknown as { mediaDevices?: MediaDevices }).mediaDevices
+      if (mediaDevices === undefined || typeof mediaDevices.getDisplayMedia !== 'function'
+        || typeof MediaRecorder === 'undefined') {
         throw new Error('Chrome no permite compartir pestaña desde esta sesión.')
       }
       // The browser MUST show its native tab chooser; no hidden auto-capture.
-      stream = await navigator.mediaDevices.getDisplayMedia({
+      stream = await mediaDevices.getDisplayMedia({
         video: { frameRate: 10 }, audio: true,
       })
       if (stream.getAudioTracks().length === 0) {
@@ -326,13 +491,12 @@ export function MiniBrowser({ requested = false, active = true, onActivate, auto
       const recorder = new MediaRecorder(stream, { mimeType: format, videoBitsPerSecond: 1_200_000 })
       const recorded: Blob[] = []
       let done = false
-      let timer: ReturnType<typeof setTimeout> | undefined
       const cleanup = () => {
-        if (timer !== undefined) clearTimeout(timer)
-        stream?.getTracks().forEach(track => track.stop())
+        clearTimeout(timer)
+        stream?.getTracks().forEach((track) => { track.stop() })
         stopMediaCapture.current = undefined
       }
-      recorder.ondataavailable = event => { if (event.data.size > 0) recorded.push(event.data) }
+      recorder.ondataavailable = (event) => { if (event.data.size > 0) recorded.push(event.data) }
       recorder.onerror = () => {
         done = true
         cleanup()
@@ -369,17 +533,17 @@ export function MiniBrowser({ requested = false, active = true, onActivate, auto
       for (const track of stream.getTracks()) {
         track.addEventListener('ended', () => {
           if (recorder.state !== 'inactive') recorder.stop()
-        }, {once:true})
+        }, { once: true })
       }
       recorder.start(1000)
       stopMediaCapture.current = () => {
         if (recorder.state !== 'inactive') recorder.stop()
       }
-      timer = setTimeout(() => { stopMediaCapture.current?.() }, 30_000)
+      const timer = setTimeout(() => { stopMediaCapture.current?.() }, 30_000)
       setMediaCaptureState('recording')
       setMediaCaptureMessage('Grabando hasta 30 segundos. Reproduce el video en la pestaña seleccionada.')
     } catch (error) {
-      stream?.getTracks().forEach(track => track.stop())
+      stream?.getTracks().forEach((track) => { track.stop() })
       setMediaCaptureState('idle')
       setMediaCaptureMessage(error instanceof Error ? error.message : String(error))
     }
@@ -465,7 +629,10 @@ export function MiniBrowser({ requested = false, active = true, onActivate, auto
               ? stopMediaCapture.current?.() : void startMediaCapture()}>
             {mediaCaptureState === 'recording' ? '■ Detener captura' : '◉ Compartir pestaña para Kira'}
           </button>
-          <span>Si Kira no puede ver ni escuchar el video, abre el video en Chrome normal y pulsa «Compartir pestaña para Kira». Selecciona Pestaña de Chrome y marca «Compartir audio». Grabación máxima: 30 segundos.</span>
+          <span>
+            Si Kira no puede ver ni escuchar el video, abre el video en Chrome normal y pulsa «Compartir pestaña para Kira».
+            Selecciona Pestaña de Chrome y marca «Compartir audio». Grabación máxima: 30 segundos.
+          </span>
         </div>
         {mediaCaptureMessage && <p className={css.captureStatus} role="status">{mediaCaptureMessage}</p>}
         <form className={css.typeRow} onSubmit={(event) => { event.preventDefault(); if (typed) { void run({ type: 'text', text: typed }); setTyped(''); focusRef.current?.focus() } }}>

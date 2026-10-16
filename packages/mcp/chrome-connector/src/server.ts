@@ -147,6 +147,27 @@ function browserExecutable(): string {
 
 type Tab = { id: string; title: string; url: string; webSocketDebuggerUrl?: string; type?: string }
 
+/**
+ * Resolve a deliberate tab id without silently switching to another page.
+ * @param available - Tabs currently reported by Chromium.
+ * @param explicitId - User-selected tab id that must match exactly.
+ * @param preferredId - Previously selected tab id used only when no explicit id is supplied.
+ * @returns The exact explicit tab, the preferred tab, or the first available tab.
+ */
+export function chooseTab(available: readonly Tab[], explicitId?: string, preferredId?: string): Tab {
+  if (explicitId !== undefined) {
+    const requested = available.find(candidate => candidate.id === explicitId)
+    if (!requested) throw new Error(`No existe la pestaña ${explicitId}`)
+    return requested
+  }
+  const preferred = preferredId === undefined
+    ? undefined
+    : available.find(candidate => candidate.id === preferredId)
+  const tab = preferred ?? available[0]
+  if (!tab) throw new Error('El navegador no tiene pestañas web disponibles')
+  return tab
+}
+
 async function json<T>(url: string): Promise<T> {
   const response = await fetch(url, { signal: AbortSignal.timeout(2500) })
   if (!response.ok) throw new Error(`El navegador respondió HTTP ${response.status}`)
@@ -154,6 +175,7 @@ async function json<T>(url: string): Promise<T> {
 }
 
 function cleanupManagedBrowser(): void {
+  cdpPool.closeAll('Cierre del navegador gestionado')
   const oldPid = managedBrowser?.pid
   const ownsDescriptor = oldPid !== undefined && sharedSession()?.pid === oldPid
   try { managedBrowser?.kill() } catch { /* best effort */ }
@@ -281,9 +303,7 @@ async function newBrowserTab(url: string): Promise<Tab> {
 
 async function selectedTab(id?: string): Promise<Tab> {
   const available = await tabs()
-  const requestedId = id ?? sharedSession()?.selectedTabId
-  const tab = available.find(candidate => candidate.id === requestedId) ?? available[0]
-  if (!tab) throw new Error(id ? `No existe la pestaña ${id}` : 'El navegador no tiene pestañas web disponibles')
+  const tab = chooseTab(available, id, sharedSession()?.selectedTabId)
   if (!tab.webSocketDebuggerUrl) throw new Error('La pestaña no ofrece una conexión CDP')
   announceSession(await endpoint(), tab.id)
   return tab
@@ -513,7 +533,10 @@ server.registerTool('submit_form', {
 
 server.registerTool('wait_for', {
   description: 'Espera hasta 8 segundos el texto visible de confirmación tras navegar o enviar un formulario. Consulta el DOM real con pocas comprobaciones; no repite el envío. Informa texto encontrado o timeout y URL final verificada.',
-  inputSchema: { tabId: z.string().optional(), expectedText: z.string().min(1).max(250), timeoutMs: z.number().int().min(200).max(8000).default(5000) },
+  inputSchema: {
+    tabId: z.string().optional(), expectedText: z.string().min(1).max(250),
+    timeoutMs: z.number().int().min(200).max(8000).default(5000),
+  },
 }, async ({ tabId, expectedText, timeoutMs }) => {
   const tab = await selectedTab(tabId)
   const deadline = Date.now() + timeoutMs
@@ -683,15 +706,15 @@ server.registerTool('video_media_inspect', {
     frames: z.number().int().min(0).max(8).default(6),
     audioSeconds: z.number().int().min(0).max(90).default(45),
   },
-}, async ({path,frames,audioSeconds}) => {
+}, async ({ path,frames,audioSeconds }) => {
   try {
     const media = await inspectVideoMedia({
-      ...(path === undefined ? {} : {path}),
+      ...(path === undefined ? {} : { path }),
       frames, audioSeconds,
     })
     const content: Array<
-      | {type:'text';text:string}
-      | {type:'image';data:string;mimeType:'image/jpeg'}
+      | { type:'text';text:string }
+      | { type:'image';data:string;mimeType:'image/jpeg' }
     > = [{
       type: 'text',
       text: JSON.stringify({
@@ -703,22 +726,22 @@ server.registerTool('video_media_inspect', {
       }),
     }]
     for (const image of media.frames) {
-      content.push({type:'text',text:'Fotograma decodificado del segundo '+String(image.atSeconds)})
-      content.push({type:'image',data:image.jpeg,mimeType:'image/jpeg'})
+      content.push({ type:'text',text:'Fotograma decodificado del segundo '+String(image.atSeconds) })
+      content.push({ type:'image',data:image.jpeg,mimeType:'image/jpeg' })
     }
-    return {content, ...(media.frames.length === 0 && media.audio.status !== 'ok' ? {isError:true as const} : {})}
+    return { content, ...(media.frames.length === 0 && media.audio.status !== 'ok' ? { isError:true as const } : {}) }
   } catch (error) {
     const reason = String(error)
     const captureRequired = /VIDEO_CAPTURE_NOT_FOUND|VIDEO_CAPTURE_EXPIRED_OR_INVALID|VIDEO_CAPTURE_PATH_INVALID/u.test(reason)
-    return {isError:true,content:[{type:'text',text:JSON.stringify({
+    return { isError:true,content:[{ type:'text',text:JSON.stringify({
       status: captureRequired ? 'user_capture_required' : 'analysis_failed',
       reason,
       requiredAction: captureRequired
         ? 'Desde el MiniBrowser pulsa «Compartir pestaña para Kira», elige en Chrome la pestaña donde el video realmente se reproduce, activa «Compartir audio» y deja terminar hasta 30 segundos de captura. Después vuelve a ejecutar video_media_inspect SIN path.'
         : 'Revisa el motivo técnico o usa un archivo de medios propio dentro de PHOENIX_VIDEO_ALLOWED_DIRS.',
-      evidence: {heardSeconds:0,decodedFrames:0},
+      evidence: { heardSeconds:0,decodedFrames:0 },
       rule: 'No simules haber escuchado o visto el video. Si falta la grabación autorizada, solicita el paso humano y detente: no presentes una valoración del contenido no examinado.',
-    })}]}
+    }) }] }
   }
 })
 
@@ -821,8 +844,8 @@ server.registerTool('youtube_video_inspect', {
   const realFrames = content.filter(part => part.type === 'image').length
   content.push({ type: 'text', text: 'Fotogramas capturados: ' + String(realFrames) + '/'
     + String(frames) + '. ' + (frames > 0 && !actionsAllowed()
-      ? 'La inspección visual requiere permiso para controlar el navegador.'
-      : realFrames === 0 && frames > 0 ? 'El reproductor no permitió extraer fotogramas verificables; ofrece captura autorizada de pestaña y video_media_inspect.' : '')
+    ? 'La inspección visual requiere permiso para controlar el navegador.'
+    : realFrames === 0 && frames > 0 ? 'El reproductor no permitió extraer fotogramas verificables; ofrece captura autorizada de pestaña y video_media_inspect.' : '')
     + ' No afirmar que se escuchó el video entero; cada segmento de audio y fotograma debe tener evidencia.' })
   return { content, ...(transcript.cues === 0 && sampledSpeech?.status !== 'ok' && realFrames === 0
     ? { isError: true as const } : {}) }
