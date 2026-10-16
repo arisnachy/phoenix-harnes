@@ -61,7 +61,7 @@ describe('MiniBrowser in Phoenix conversation', () => {
     const pending = new Promise<Response>(() => {})
     vi.stubGlobal('fetch', vi.fn((input: string, options?: RequestInit) => {
       if (input.startsWith('/phoenix-mini-browser/state')) {
-        stateSignal = options?.signal
+        stateSignal = options?.signal ?? undefined
         return pending
       }
       return Promise.resolve(new Response(JSON.stringify(state), {
@@ -86,14 +86,14 @@ describe('MiniBrowser in Phoenix conversation', () => {
         }))
       }
       if (input.startsWith('/phoenix-mini-browser/frame')) {
-        frameSignal = options?.signal
+        frameSignal = options?.signal ?? undefined
         return Promise.resolve(new Response(new Uint8Array([255, 216, 255, 217]), {
           status: 200, headers: { 'content-type': 'image/jpeg' },
         }))
       }
       if (input.startsWith('/phoenix-mini-browser/action') && actionPending) {
         actionPending = false
-        actionSignal = options?.signal
+        actionSignal = options?.signal ?? undefined
         return pendingAction
       }
       return Promise.resolve(new Response(JSON.stringify(state), {
@@ -308,7 +308,9 @@ describe('MiniBrowser in Phoenix conversation', () => {
     fireEvent.click(screen.getByTitle('Ampliar navegador'))
     await waitFor(() => { expect(frameCount).toBe(2) })
     await act(async () => {
-      frameResolvers[1](imageResponse())
+      const resolveSecondFrame = frameResolvers[1]
+      if (resolveSecondFrame === undefined) throw new Error('Second frame request was not registered')
+      resolveSecondFrame(imageResponse())
       await Promise.resolve()
     })
     await waitFor(() => { expect(frameCount).toBe(3) })
