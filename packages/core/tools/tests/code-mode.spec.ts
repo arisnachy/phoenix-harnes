@@ -3,7 +3,7 @@ import { Context } from '@phoenix-ai/cordis'
 import { createUserMessage, CallId  } from '@phoenix-ai/dsh-llm'
 import { createScope } from '@phoenix-ai/dsh-scope'
 import type { Scope } from '@phoenix-ai/dsh-scope'
-import SystemPrompt from '@phoenix-ai/dsh-system-prompt'
+import SystemPrompt, { renderPrompt } from '@phoenix-ai/dsh-system-prompt'
 import { CodeRuntime } from '@phoenix-ai/dsh-code-runtime'
 import type { CodeRunRequest, CodeRunResult } from '@phoenix-ai/dsh-code-runtime'
 import ToolRuntime, { CodeRunFailedError, RUN_CODE_NAME, TOOL_ABORTED_BEFORE_DISPATCH, defineContentToolFixture, defineTool } from '@phoenix-ai/dsh-tools'
@@ -218,6 +218,25 @@ describe('mode-aware wire contribution', () => {
     expect(sdk?.text).toContain('declare const tools: {')
     expect(sdk?.text).toContain('echo: {')
     expect(sdk?.text).not.toContain('run_code:')
+  })
+
+  it.each(['code', 'both'] as const)('renders literal SDK examples under %s without OpenRouter-style variable failures', async (mode) => {
+    const { ctx, systemPrompt } = await setup({ mode })
+    ctx.tools.register(defineTool({
+      name: 'templated_tool',
+      description: 'Literal template example {{name}} in tool documentation.',
+      parameters: { value: { type: 'string', required: true, description: 'Use {{name}} literally' } },
+      output: { schema: { type: 'string' }, render: (_args, value) => [{ type: 'text', text: value }] },
+      execute(args) { return Promise.resolve(args.value) },
+    }))
+    systemPrompt.variable('provider', () => 'openrouter')
+    systemPrompt.variable('model', () => 'openrouter/example')
+    systemPrompt.variable('cwd', () => '/workspace')
+    const assembly = await systemPrompt.assemble()
+    expect(assembly.sections.find(section => section.name === 'tools:sdk')?.interpolateVariables).toBe(false)
+    const rendered = renderPrompt(assembly)
+    expect(rendered).toContain('Literal template example {{name}}')
+    expect(rendered).toContain('Use {{name}} literally')
   })
 
   it("mode 'code' states the run_code-only rule BEFORE the per-tool guidance that names each tool", async () => {

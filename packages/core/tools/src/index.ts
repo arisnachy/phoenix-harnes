@@ -1064,7 +1064,12 @@ export class ToolRuntime extends Service {
    * dropped from the rendered prompt.
    * @returns the section registration.
    */
-  private sdkSection(): { name: string; order: number; text: (context: AssembleContext) => string } {
+  private sdkSection(): {
+    name: string
+    order: number
+    text: (context: AssembleContext) => string
+    interpolateVariables: false
+  } {
     return {
       name: 'tools:sdk',
       order: SDK_SECTION_ORDER,

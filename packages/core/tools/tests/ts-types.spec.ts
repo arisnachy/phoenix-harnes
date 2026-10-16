@@ -157,6 +157,17 @@ describe('renderToolsSdk', () => {
     expect(text).toContain('two required arguments')
   })
 
+  it('retains double-brace examples when generating the typed SDK', () => {
+    const tool: ToolSdkSchema = {
+      ...bash,
+      description: 'Templated example {{name}} (literal, not a prompt variable).',
+      parameters: parameterSchemaSpecToJsonSchema({
+        command: { type: 'string', required: true, description: 'Example {{name}}' },
+      }) as unknown as Record<string, unknown>,
+    }
+    expect(renderToolsSdk([tool])).toContain('{{name}}')
+  })
+
   it('is deterministic: same tool set, byte-identical text regardless of input order', () => {
     expect(renderToolsSdk([bash, exotic])).toBe(renderToolsSdk([exotic, bash]))
     // Equal names sort stably (the comparator's equal arm).

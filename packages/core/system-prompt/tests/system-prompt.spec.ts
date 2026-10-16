@@ -399,6 +399,30 @@ describe('SystemPrompt', () => {
     expect(second.tools).toEqual([{ name: 't', description: 'tool', parameters: { type: 'object', properties: {} } }])
   })
 
+  it('preserves literal SDK double braces without weakening normal variable checks', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt, { persona: 'Model: {{model}}.' })
+    ctx.systemPrompt.variable('model', () => 'openrouter-model')
+    ctx.systemPrompt.section({
+      name: 'tools:sdk',
+      order: 150,
+      text: 'Example: {{name}} and {{missing}} are literal SDK documentation.',
+      interpolateVariables: false,
+    })
+    const assembly = await ctx.systemPrompt.assemble()
+    expect(assembly.sections.find(section => section.name === 'tools:sdk')?.interpolateVariables).toBe(false)
+    expect(renderPrompt(assembly)).toContain('Model: openrouter-model.')
+    expect(renderPrompt(assembly)).toContain('Example: {{name}} and {{missing}} are literal SDK documentation.')
+    ctx.systemPrompt.section({
+      name: 'untrusted-persona-reference', order: 151,
+      text: 'Unresolved: {{unknown}}',
+    })
+    const invalid = await ctx.systemPrompt.assemble()
+    expect(() => renderPrompt(invalid)).toThrow(
+      'unknown prompt variable "{{unknown}}" in section "untrusted-persona-reference"',
+    )
+  })
+
   it('filters out empty section text from renderPrompt', () => {
     const result = renderPrompt({
       sections: [

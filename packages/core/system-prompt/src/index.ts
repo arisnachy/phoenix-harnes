@@ -79,6 +79,8 @@ export interface PromptSection {
    * interpolated later, by {@link renderPrompt}.
    */
   readonly text: string | ((context: AssembleContext) => string)
+  /** Whether `{{name}}` references in this section are interpolated (default true). */
+  readonly interpolateVariables?: boolean
   /**
    * Treat this contribution as the complete system prompt. Assembly still
    * runs the cooperative waterfall so tools, contexts, and variables can be
@@ -106,6 +108,8 @@ export interface AssembledSection {
   name: string
   /** The resolved (but not yet interpolated) section text. */
   text: string
+  /** Whether to resolve variables inside this section. False preserves literal code. */
+  interpolateVariables?: boolean
 }
 
 /** One resolved dynamic context contribution. */
@@ -229,7 +233,9 @@ export interface Config {
  */
 export function renderPrompt(assembly: PromptAssembly): string {
   return assembly.sections
-    .map(section => interpolate(section, assembly.variables, 'section'))
+    .map(section => section.interpolateVariables === false
+      ? section.text
+      : interpolate(section, assembly.variables, 'section'))
     .filter(text => text.length > 0)
     .join('\n\n')
 }
@@ -548,6 +554,7 @@ export class SystemPrompt extends Service {
         const assembled = {
           name: section.name,
           text: typeof section.text === 'function' ? section.text(context) : section.text,
+          ...(section.interpolateVariables === undefined ? {} : { interpolateVariables: section.interpolateVariables }),
         }
         if (section.complete === true) completeSection = { ...assembled }
         return assembled
