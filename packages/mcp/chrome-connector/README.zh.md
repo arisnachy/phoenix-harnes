@@ -24,6 +24,7 @@ msedge.exe --remote-debugging-port=9223 --user-data-dir="$env:TEMP\phoenix-edge-
 ### 表单与 Web 应用（无需 Computer 桌面）
 
 - `inspect_page`：一次检查表单控件、标签、类型、下拉选项以及只读与禁用状态，不公开密码。
+- `complete_form`：快速路径：检查表单后，一次工具调用完成最多四个阶段、合计不超过 30 个 DOM 操作，验证最多 30 项输入值和已选标签，并可选择在授权后仅提交一次（`submit:{selector:'#form',confirmation:true}`）。返回耗时、首个错误、验证数量以及不超过 3000 字符的真实回执文本，无需截图。自动补全先在一阶段输入、下一阶段按选择器及文字点击建议，再检查已确认标签。如果未提供明确的 `expectedReceiptText`，回执状态仍标记为未确认，但返回页面摘要供判断。
 - `fill_form`：一项请求内最多填写 30 个字段；可填写文字、勾选、下拉和 ISO 日期，不修改受保护字段。
 - `interact`：通过标签、名称、占位文字或 CSS 选择器针对单个控件执行点击或填写操作。对于「Maths」等建议项，可同时使用 `selector:'button'` 和 `text:'Maths'` 进行精确匹配。
 - `verify_form`：同时验证输入值与已经确认的选择标签；例如 `{operation:'verify', selector:'.subjects-auto-complete__multi-value__label', value:'Maths'}` 验证可见标签，而非自动补全文本草稿。
