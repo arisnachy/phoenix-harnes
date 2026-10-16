@@ -202,6 +202,23 @@ export class ProceduralLearningEngine {
       .map(item => item.state)
   }
 
+  /**
+   * Recover incomplete workflows as diagnostic leads, never as proven recipes.
+   * Called only when the current request matches the stored task.
+   */
+  recoveryCandidates(query: ProceduralRecommendationQuery): ProceduralLearningState[] {
+    if (query.taskContext === undefined || normalizeText(query.taskContext) === '') return []
+    const limit = Math.min(2, query.limit ?? 2)
+    const task = fingerprintTask(query.taskContext)
+    return this.states(query)
+      .filter(state => state.status === 'candidate')
+      .map(state => ({ state, score: taskSimilarity(task, state.taskFingerprint ?? fingerprintProcedure(state)) }))
+      .filter(item => item.score >= TASK_RELEVANCE_THRESHOLD)
+      .sort((a, b) => b.score - a.score || b.state.lastObservedAt - a.state.lastObservedAt)
+      .slice(0, limit)
+      .map(item => item.state)
+  }
+
   private enqueue(task: () => Promise<ProceduralLearningState>): Promise<ProceduralLearningState> {
     const run = this.writeTail.then(task)
     this.writeTail = run.then(() => undefined, () => undefined)

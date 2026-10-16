@@ -7,7 +7,7 @@ import {
   type ProceduralMemoryWrite,
   type ProceduralStoredMemory,
 } from '../src/procedural.ts'
-import { formatProceduralContext } from '../src/procedural-presentation.ts'
+import { formatProceduralContext, formatRecoveryCandidates } from '../src/procedural-presentation.ts'
 
 class MemoryStore implements ProceduralMemoryStore {
   readonly rows: ProceduralStoredMemory[] = []
@@ -50,6 +50,28 @@ function provenance(now: number) {
 }
 
 describe('ProceduralLearningEngine', () => {
+  it('recalls a blocked workflow as a clearly unverified recovery hint, not an active recipe', async () => {
+    const engine = new ProceduralLearningEngine(new MemoryStore())
+    await engine.recordExperience({
+      title: 'Brandpoll browser survey recovery', scope: 'phoenix',
+      trigger: 'Brandpoll survey browser workflow',
+      steps: ['Use tool browser_open', 'Use tool browser_inspect'],
+      evidence: 'Mission blocked before completion.',
+      verified: false, sessionId: 'session-recovery', eventSeq: 4, occurredAt: 500,
+      projectId: 'phoenix',
+    })
+    expect(engine.recommend({ taskContext: 'Brandpoll survey browser workflow', projectId: 'phoenix' })).toEqual([])
+    const recovered = engine.recoveryCandidates({
+      taskContext: 'Brandpoll survey browser workflow', projectId: 'phoenix',
+    })
+    expect(recovered).toHaveLength(1)
+    expect(recovered[0]?.status).toBe('candidate')
+    const text = formatRecoveryCandidates(recovered)
+    expect(text).toContain('UNFINISHED')
+    expect(text).toContain('browser_inspect')
+    expect(engine.recoveryCandidates({ taskContext: 'Prepare a clinical epidemiology lecture', projectId: 'phoenix' })).toEqual([])
+  })
+
   it('activates an explicit guided procedure with structured steps', async () => {
     const engine = new ProceduralLearningEngine(new MemoryStore())
     const learned = await engine.teach({

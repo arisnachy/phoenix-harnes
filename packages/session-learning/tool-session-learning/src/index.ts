@@ -16,7 +16,7 @@ import { isHumanTaskMessage, learningOwnerSessionId } from './team-learning-cont
 import { assessHabitExperience, formatHabitGuidance } from './habit.ts'
 import { AutonomousMemoryCurator } from './autonomous-curator.ts'
 import { filterProceduralSearchHits, installProceduralLearning } from './procedural.ts'
-import { formatProceduralContext } from './procedural-presentation.ts'
+import { formatProceduralContext, formatRecoveryCandidates } from './procedural-presentation.ts'
 import { formatMemorySearchResult, formatRecentMemoryContext } from './presentation.ts'
 import { formatResolvedTaskReference, RecentTaskLedger } from './task-reference.ts'
 
@@ -225,6 +225,20 @@ export function apply(ctx: Context, config: Config): void {
         limit: 4,
         ...projectId === undefined ? {} : { projectId },
         ...taskContext === undefined ? {} : { taskContext },
+      }))
+    },
+    interpolateVariables: false,
+  })
+  ctx.systemPrompt.context({
+    name: 'context:unverified-recovery-experience',
+    order: 120.5,
+    text: () => {
+      const taskContext = tasks.currentTask()
+      if (taskContext === undefined) return ''
+      const projectId = ctx.learningMemory.currentProjectId()
+      return formatRecoveryCandidates(procedural.recoveryCandidates({
+        taskContext, limit: 2,
+        ...projectId === undefined ? {} : { projectId },
       }))
     },
     interpolateVariables: false,
