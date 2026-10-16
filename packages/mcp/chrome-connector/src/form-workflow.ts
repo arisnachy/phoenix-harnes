@@ -91,7 +91,7 @@ export async function runBrowserFormWorkflow(
   }
   const receiptConfirmed = workflow.expectedReceiptText !== undefined
     && Boolean(page?.text.toLocaleLowerCase().includes(workflow.expectedReceiptText.toLocaleLowerCase()))
-  const final = result('receipt', true)
+  const final = result('receipt', !workflow.expectedReceiptText || receiptConfirmed)
   return {
     ...final, ...(page ? { page } : {}), receiptConfirmed,
     ...((workflow.expectedReceiptText && !receiptConfirmed) ? { reason: 'RECEIPT_TEXT_NOT_FOUND' } : {}),

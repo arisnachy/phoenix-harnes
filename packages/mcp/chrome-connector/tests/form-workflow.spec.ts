@@ -78,7 +78,7 @@ describe('one-call form workflow', () => {
       expectedReceiptText: 'Submitted successfully',
     }, evaluate, instantPause)
     expect(result).toMatchObject({
-      ok: true, stage: 'receipt', submitted: true, receiptConfirmed: false,
+      ok: false, stage: 'receipt', submitted: true, receiptConfirmed: false,
       reason: 'RECEIPT_TEXT_NOT_FOUND',
     })
     expect(submit).toHaveBeenCalledTimes(1)
