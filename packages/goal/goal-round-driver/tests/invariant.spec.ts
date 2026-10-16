@@ -87,6 +87,21 @@ describe('goal-round-driver prompt invariants', () => {
     }).not.toThrow()
   })
 
+  it('loads legacy rounds without strategy metadata after the stall prompt was added', async () => {
+    const { ctx, session } = await mount(true)
+    session.append('goal/change', {
+      ...change,
+      goal: { ...change.goal, maxGoalRounds: 4 },
+    })
+    const legacyView = (roundsStarted: number): GoalView => ({ ...view(roundsStarted), maxGoalRounds: 4 })
+    appendRound(session, 2, renderGoalRoundPrompt(legacyView(0), 1))
+    appendRound(session, 3, renderGoalRoundPrompt(legacyView(1), 2))
+    appendRound(session, 4, renderGoalRoundPrompt(legacyView(2), 3))
+
+    await ctx.plugin(InvariantRegistry, { enabled: true })
+    await expect(ctx.plugin(GoalSessionInvariant)).resolves.toBeDefined()
+  })
+
   it('rejects a continuation whose content differs from the package renderer', async () => {
     const { session } = await mount()
     appendChange(session)

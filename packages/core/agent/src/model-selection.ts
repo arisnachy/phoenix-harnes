@@ -615,7 +615,6 @@ function isStandaloneVisualPreviewRequest(text: string): boolean {
   const normalized = request.normalize('NFKD').replace(/[\u0300-\u036f]/gu, '').toLowerCase()
   // oxlint-disable-next-line @stylistic/max-len -- Auditable bilingual task classifier.
   if (!/^(?:crea|crear|genera|generar|haz|hacer|dame|muestra|muestrame|dibuja|create|generate|make|show|draw)\b/u.test(normalized)) return false
-  // oxlint-disable-next-line @stylistic/max-len -- Auditable supported visual vocabulary.
   if (!/\b(?:grafico|grafica|graph|chart|tabla|table|escala|scale|formulario|form|tarjeta|card)\b/u.test(normalized)) return false
   // oxlint-disable-next-line @stylistic/max-len -- Auditable preview intent vocabulary.
   if (!/\b(?:fictici[oa]s?|simulad[oa]s?|ejemplos?|demo|demostracion|sample|fictional|simulated|preview|vista\s+previa|para\s+verlo)\b/u.test(normalized)) return false
@@ -673,6 +672,7 @@ function phoenixAutoExplicitlyClosed(text: string): boolean {
   // This protects finished first-step answers without treating generic
   // progress such as "tests completed; now deploy" as terminal.
   if (phoenixAutoUnfinishedAction(text)) return false
+  // oxlint-disable-next-line @stylistic/max-len -- Auditable bilingual completion vocabulary.
   return /\b(?:tarea\s+(?:ya\s+)?(?:terminada|completada|finalizada)|(?:ya\s+)?(?:termine|finalice|complete|terminado|completado|finalizado)|no\s+(?:queda|hay)\s+(?:trabajo|nada|tareas?)\s+pendiente|sin\s+(?:trabajo|tareas?)\s+pendientes?|done|finished|completed|nothing\s+(?:else\s+)?(?:left|pending))\b/u.test(normalized)
 }
 
@@ -700,8 +700,8 @@ function phoenixAutoTerminalTeamFailure(
   const events = turnEvents(agent, turn)
   for (const event of events) {
     if (event.type !== 'tool/result') continue
-    const result = event.data as { readonly error?: { readonly code?: string; readonly message?: string };
-      readonly message?: { readonly content?: readonly { readonly text?: string;
+    const result = event.data as { readonly error?: { readonly code?: string; readonly message?: string }
+      readonly message?: { readonly content?: readonly { readonly text?: string
         readonly content?: readonly { readonly text?: string }[] }[] } }
     if (result.error?.code === 'TEAM_MISSION_CLOSED') return true
     const detail = result.error?.message
@@ -725,13 +725,16 @@ function authorizedPhoenixAutoGoalTurn(
   const admitted = turnEvents(agent, turn).findLast(event => event.type === 'user/message'
     && (event.data as { readonly source?: { readonly kind?: string } }).source?.kind === 'goal')
   const source = (admitted?.data as { readonly source?: {
-    readonly kind?: string; readonly goalId?: string
+    readonly kind?: string
+    readonly goalId?: string
   } } | undefined)?.source
   if (source?.kind !== 'goal' || typeof source.goalId !== 'string') return false
   const change = agent.session.events.findLast(event => event.type === 'goal/change')
-  const data = change?.data as { readonly operation?: string; readonly goal?: {
-    readonly id?: string; readonly phase?: string
-  } } | undefined
+  const data = change?.data as { readonly operation?: string
+    readonly goal?: {
+      readonly id?: string
+      readonly phase?: string
+    } } | undefined
   return data?.operation !== 'clear' && data?.goal?.id === source.goalId
     && data.goal.phase === 'active'
 }
@@ -743,6 +746,7 @@ export function isBriefTeamDemonstration(text: string): boolean {
   if (!/\b(?:equipo|team|teammates|companeros|agentes)\b/u.test(request)) return false
   if (!/\b(?:demo|demostracion|prueba|ejemplo|accion|action|showcase|show)\b/u.test(request)) return false
   // Real coding, research and external side effects retain deliberate xhigh planning.
+  // oxlint-disable-next-line @stylistic/max-len -- Auditable consequential-work vocabulary.
   return !/(?:https?:\/\/|[a-z]:\\|\b(?:github|repo|codigo|script|archivo\w*|implementa|despliega|production|produccion|email|correo|compra|borra|elimina|contrato|paciente|sql|api|web|sitio|site|investigacion|research)\b)/u.test(request)
 }
 
@@ -911,8 +915,17 @@ function phoenixAutoRoute(
   }
 
   if (isBriefTeamDemonstration(directText)) {
-    // Keep coordination lightweight throughout a bounded conversational demo.
-    // Substantive Team workers still use their independent Luna Max route.
+    // Keep a bounded conversational demo lightweight until Sol has actually
+    // published a plan. A visible plan is an execution brief, so its next
+    // step uses the substantive Luna route.
+    const latestPlan = latestPhoenixAutoAssistantStop(agent, turn)
+    if (latestPlan !== undefined && hasVisibleSolPlan(latestPlan.text)) {
+      return {
+        provider: 'openai-codex',
+        model: PHOENIX_CODEX_AUTO_WORKER_MODEL,
+        reasoningEffort: ReasoningEffortId('max'),
+      }
+    }
     return {
       provider: 'openai-codex',
       model: PHOENIX_CODEX_AUTO_WORKER_MODEL,
@@ -1178,7 +1191,7 @@ export function installModelSelection(
     // completed its strategy. Every actual Sol rescue hands control back to
     // Luna, even when the ordinary prose-continuation budget is exhausted.
     const actualSolRescue = !latestStepHasToolActivity
-      && (latest.step > 1 || latest.step === phoenixAutoState.lastRescueStep)
+      && (authorizedGoal || latest.step === phoenixAutoState.lastRescueStep)
       && (latest.sourceModel === PHOENIX_CODEX_AUTO_PLANNER_MODEL
         || (latest.sourceModel === undefined && latest.step === phoenixAutoState.lastRescueStep))
     if (actualSolRescue && !phoenixAutoExplicitlyClosed(latest.text)) {

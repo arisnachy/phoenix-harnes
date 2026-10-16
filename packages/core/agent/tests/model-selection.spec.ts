@@ -156,7 +156,13 @@ describe('installModelSelection()', () => {
       } },
     ]
     const steered: unknown[] = []
-    const agent = { session: { events }, options: {}, steer: (message: unknown) => { steered.push(message) } } as unknown as Agent
+    const agent = {
+      session: {
+        events,
+        append: (type: string, data: unknown) => { events.push({ type, data }) },
+      }, options: {},
+      steer: (message: unknown) => { steered.push(message) },
+    } as unknown as Agent
     ctx.agent = agent
     const signal = new AbortController().signal
     try {

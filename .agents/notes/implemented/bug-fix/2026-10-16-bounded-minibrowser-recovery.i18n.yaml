@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-10-16-bounded-minibrowser-recovery.md
-2026-10-16-bounded-minibrowser-recovery.md: 1494c721169cbe53ea0560fa7a0f6f7a860d6c73
-2026-10-16-bounded-minibrowser-recovery.zh.md: 0df6804e0645276acdcfa0f47380ace228723392
+2026-10-16-bounded-minibrowser-recovery.md: bfdaed4417329ca9d0f70c2f9ab0e7590c142ce6
+2026-10-16-bounded-minibrowser-recovery.zh.md: 243f2b237b8c9c6209aba9b4c2420783a789d6eb

@@ -24,4 +24,6 @@ The Web bundle reuses CDP connections per target, correlates concurrent commands
 
 ## Consequences
 
+Release validation also exposed existing model-handoff regressions. A brief Team demo remains lightweight until a visible plan requires substantive execution. Sol rescue continuation is restricted to an authorized Goal or a recorded rescue step, preserving ordinary continuation limits and explicit model preferences. The goal-round invariant reconstructs the same stagnant-round count as the continuation producer, so it accepts valid recovery prompts.
+
 Transient preview failures preserve the last image without presenting it as a fresh verification result. An unavailable deliberate target requires a new selection rather than silent fallback. Local HTTP applications remain accessible in the shared browser, and browser DOM tools verify their results directly. Native Computer verification must run through the trusted Host process; an unrelated test process is rejected by the desktop broker.
