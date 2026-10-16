@@ -29,7 +29,7 @@ msedge.exe --remote-debugging-port=9223 --user-data-dir="$env:TEMP\phoenix-edge-
 - `submit_form`：仅在用户明确请求后提交表单；尝试提交不等于已确认成功。
 - `wait_for`：验证实际成功文本和跳转 URL，不重复提交表单。
 
-对 Selenium 官方 Web 表单，先检查字段，再一次填充，获得授权后提交，最后核查反馈。出现验证码、外部登录、跨域 iframe 或原生对话框时，应请求用户介入，不绕过权限。
+对 Selenium 官方 Web 表单，先检查字段，再一次批量填充并验证，获得授权后提交，最后核查反馈。浏览器操作会按标签页复用 CDP 连接；如果动态表单替换或显示了新控件，仅在共享 DOM 快照失效时重新查找。MiniBrowser 降低预览截图频率，避免与表单输入争用资源。出现验证码、外部登录、跨域 iframe 或原生对话框时，应请求用户介入，不绕过权限。
 
 ### YouTube 视频分析与 MiniBrowser 可见性
 

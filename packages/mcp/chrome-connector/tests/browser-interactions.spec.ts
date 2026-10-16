@@ -99,6 +99,20 @@ describe('Kira browser structured controls', () => {
     expect(changed).toMatchObject({ ok: false, completed: 0, results: [{ reason: 'VALUE_MISMATCH' }] })
     expect((document.querySelector('[name="my-text"]') as HTMLInputElement).value).toBe('Changed by page')
   })
+  it('refreshes the shared snapshot if a dynamic form replaces or reveals the next control', () => {
+    const extra = document.createElement('input')
+    extra.name = 'dynamic-answer'
+    const original = document.querySelector('[name="my-text"]') as HTMLInputElement
+    original.addEventListener('input', () => {
+      original.replaceWith(extra)
+    }, { once: true })
+    const result = eval(browserBatchExpression([
+      { operation: 'fill', name: 'my-text', value: 'step one' },
+      { operation: 'fill', name: 'dynamic-answer', value: 'step two' },
+    ]))
+    expect(result).toMatchObject({ ok: true, completed: 2 })
+    expect(extra.value).toBe('step two')
+  })
   it('never reveals protected or password values through the verifier', () => {
     expect(executeBrowserInteraction({ operation: 'verify', name: 'my-password', value: 'fake-test-only' }))
       .toMatchObject({ ok: false, reason: 'SENSITIVE_FIELD_VERIFICATION_UNAVAILABLE' })

@@ -130,12 +130,9 @@ export function executeBrowserInteraction(
     const foundText = lower(doc.body?.innerText || doc.body?.textContent || '').includes(expected)
     return { ...basic, ok: foundText, foundText, reason: foundText ? undefined : 'TEXT_NOT_YET_VISIBLE' }
   }
-  let matches: Element[]
-  if (input.selector) {
-    try { matches = elements.filter(el => el.matches(input.selector || '')) }
-    catch { return { ...basic, ok: false, reason: 'INVALID_SELECTOR' } }
-  } else {
-    matches = candidates.filter(el => {
+  const findMatches = (all: Element[], controls: Element[]): Element[] => {
+    if (input.selector) return all.filter(el => el.matches(input.selector || ''))
+    return controls.filter(el => {
       if (input.name && lower(el.getAttribute('name')) !== lower(input.name)) return false
       if (input.label && lower(fieldLabel(el)) !== lower(input.label)) return false
       if (input.placeholder && lower(el.getAttribute('placeholder')) !== lower(input.placeholder)) return false
@@ -143,7 +140,17 @@ export function executeBrowserInteraction(
       return Boolean(input.name || input.label || input.placeholder || input.text)
     })
   }
-  matches = matches.filter(visible)
+  let matches: Element[]
+  try {
+    matches = findMatches(elements, candidates).filter(visible)
+    // A prior action may synchronously replace/reveal controls in a dynamic form.
+    // Refresh only when the shared snapshot became stale, never per field.
+    if (cache && (matches.length === 0 || matches.some(el => !el.isConnected))) {
+      cache.elements = children(doc)
+      cache.candidates = cache.elements.filter(candidate)
+      matches = findMatches(cache.elements, cache.candidates).filter(visible)
+    }
+  } catch { return { ...basic, ok: false, reason: 'INVALID_SELECTOR' } }
   if (matches.length !== 1) {
     return { ...basic, ok: false, matched: matches.length,
       reason: matches.length === 0 ? 'TARGET_NOT_FOUND' : 'TARGET_AMBIGUOUS' }
