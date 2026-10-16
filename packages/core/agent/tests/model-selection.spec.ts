@@ -179,8 +179,11 @@ describe('installModelSelection()', () => {
       events.push({ type: 'step/start', data: { turn: 1, step: 1 } },
         { type: 'step/start', data: { turn: 1, step: 2 } })
       const strategyAssembly = await ctx.systemPrompt.assemble()
-      expect(strategyAssembly.sections.find(item => item.name === 'phoenix:auto-visible-handoff')?.text)
-        .toContain('Sol 6.1 consulted by Kira')
+      const strategyIdentity = strategyAssembly.sections.find(item => item.name === 'phoenix:auto-visible-handoff')?.text
+      expect(strategyIdentity).toContain('You are Kira herself using Sol 6.1')
+      expect(strategyIdentity).toContain('Speak directly to the user in your own first-person voice')
+      expect(strategyIdentity).toContain('Never address yourself as "Kira, ..."')
+      expect(strategyIdentity).not.toContain('You are Sol 6.1 consulted by Kira')
       expect(strategyAssembly.tools).toHaveLength(0)
       await expect(agentEvents(ctx, agent).waterfall(
         'agent/request', { turn: 1, step: 3, signal },
@@ -192,10 +195,11 @@ describe('installModelSelection()', () => {
       await agentEvents(ctx, agent).serial('agent/turn-stopping', { turn: 1, signal })
       expect(steered).toHaveLength(2)
       expect(JSON.stringify(steered[1])).toContain('Resume the SAME unfinished mission')
+      expect(JSON.stringify(steered[1])).toContain('You are Kira: you just used Sol')
       events.push({ type: 'step/start', data: { turn: 1, step: 3 } })
       const resumedAssembly = await ctx.systemPrompt.assemble()
       expect(resumedAssembly.sections.find(item => item.name === 'phoenix:auto-visible-handoff')?.text)
-        .toContain('Kira coordinating and executing with Luna Max')
+        .toContain('still Kira, now coordinating and executing through Luna Max')
       expect(resumedAssembly.tools.map(tool => tool.name)).toContain('read')
       await expect(agentEvents(ctx, agent).waterfall(
         'agent/request', { turn: 1, step: 4, signal },
@@ -263,8 +267,9 @@ describe('installModelSelection()', () => {
     const signal = new AbortController().signal
     try {
       const first = await ctx.systemPrompt.assemble()
-      expect(first.sections.find(item => item.name === 'phoenix:auto-visible-handoff')?.text)
-        .toContain('Kira planning with Sol')
+      const planIdentity = first.sections.find(item => item.name === 'phoenix:auto-visible-handoff')?.text
+      expect(planIdentity).toContain('you are Kira herself, planning through the Sol model')
+      expect(planIdentity).toContain('Speak as Kira to the user in first person')
       expect(first.tools).toHaveLength(0)
       await expect(agentEvents(ctx, agent).waterfall(
         'agent/request', { turn: 1, step: 1, signal },
@@ -276,8 +281,9 @@ describe('installModelSelection()', () => {
       session.append('step/start', { turn: 1, step: 1 })
       const operational = await ctx.systemPrompt.assemble()
       expect(operational.tools.map(tool => tool.name)).toContain('spawn_teammate')
-      expect(operational.sections.find(item => item.name === 'phoenix:auto-visible-handoff')?.text)
-        .toContain('Luna Max')
+      const operationalIdentity = operational.sections.find(item => item.name === 'phoenix:auto-visible-handoff')?.text
+      expect(operationalIdentity).toContain('Luna Max')
+      expect(operationalIdentity).toContain('still Kira')
       await expect(agentEvents(ctx, agent).waterfall(
         'agent/request', { turn: 1, step: 2, signal },
         () => Promise.resolve({ provider: 'seed', model: 'seed' }),
