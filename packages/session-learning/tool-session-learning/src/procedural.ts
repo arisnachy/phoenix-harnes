@@ -500,6 +500,11 @@ export class ProceduralExperienceTrace {
     return steps
   }
 
+  /** Inspect partial operational steps without falsely certifying task success. */
+  snapshot(sessionId: string): string[] {
+    return [...(this.traces.get(sessionId) ?? [])]
+  }
+
   /**
    * Drop an unfinished trace when its goal is cleared.
    * @param sessionId - Session whose stale work should be discarded.
@@ -557,6 +562,27 @@ export function installProceduralLearning(
       }
       if (eventType === 'goal/change' && isRecord(data) && data.operation === 'clear') {
         trace.clear(sessionId)
+        return
+      }
+      if (eventType === 'goal/change' && isRecord(data) && data.operation === 'block') {
+        // Do not discard learning when a user-authorized mission hit a real
+        // blocker. This is explicitly *candidate* work, never a verified
+        // successful workflow. Keep raw arguments and credentials out of it.
+        const steps = trace.snapshot(sessionId)
+        const currentTask = taskContext?.currentTask(sessionId)
+        if (steps.length === 0 || currentTask === undefined) return
+        await engine.recordExperience({
+          title: `Unfinished recovery: ${currentTask.slice(0, 160)}`,
+          scope: projectId ?? 'global',
+          trigger: currentTask,
+          steps,
+          evidence: 'Goal blocked before verified completion. Partial tool sequence only; diagnose failures and rerun checks before reuse.',
+          verified: false,
+          sessionId,
+          eventSeq,
+          occurredAt,
+          ...projectId === undefined ? {} : { projectId },
+        })
         return
       }
       if (eventType !== 'goal/change' || !isRecord(data) || data.operation !== 'complete') return

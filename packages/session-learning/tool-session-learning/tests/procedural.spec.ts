@@ -228,6 +228,11 @@ describe('ProceduralExperienceTrace', () => {
       'Recovery lesson: Validate the generated file before retrying the renderer.',
     ])
     expect(trace.complete('session-1')).toEqual([])
+    trace.toolCall('session-1', 'browser_open')
+    expect(trace.snapshot('session-1')).toEqual(['Use tool browser_open'])
+    expect(trace.snapshot('session-1')).toEqual(['Use tool browser_open'])
+    expect(trace.complete('session-1')).toEqual(['Use tool browser_open'])
+    expect(trace.snapshot('session-1')).toEqual([])
   })
 })
 
