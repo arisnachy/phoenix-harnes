@@ -279,7 +279,7 @@ describe('installModelSelection()', () => {
         message: { source: { model: 'gpt-6.1-sol' }, content: [
           { type: 'text', text: 'I will now fill the form.' },
         ] } },
-      } },
+      },
     ]
     const steered: unknown[] = []
     const agent = { session: { events }, steer: (message: unknown) => { steered.push(message) } } as unknown as Agent
