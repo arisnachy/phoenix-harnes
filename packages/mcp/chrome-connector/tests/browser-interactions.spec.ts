@@ -113,6 +113,29 @@ describe('Kira browser structured controls', () => {
     expect(result).toMatchObject({ ok: true, completed: 2 })
     expect(extra.value).toBe('step two')
   })
+  it('narrows CSS options by exact text and checks committed autocomplete tags rather than draft input', () => {
+    document.body.insertAdjacentHTML('beforeend', `
+      <section id="subjects">
+        <input id="subjectsInput" value="Maths">
+        <button type="button" id="suggestion">Maths</button>
+        <button type="button">Physics</button>
+        <div class="chosen"><span class="chip">No subject</span></div>
+      </section>
+    `)
+    const subject = document.querySelector('#subjects') as HTMLElement
+    subject.querySelector('#suggestion')?.addEventListener('click', () => {
+      const chip = subject.querySelector('.chip')
+      if (chip) chip.textContent = 'Maths'
+    })
+    expect(executeBrowserInteraction({ operation: 'verify', selector: '#subjectsInput', value: 'Maths' }).ok).toBe(true)
+    expect(executeBrowserInteraction({ operation: 'verify', selector: '#subjects .chip', value: 'Maths' }))
+      .toMatchObject({ ok: false, reason: 'VALUE_MISMATCH' })
+    expect(executeBrowserInteraction({ operation: 'click', selector: '#subjects button', text: 'Maths' }))
+      .toMatchObject({ ok: true, matched: 1 })
+    expect(executeBrowserInteraction({ operation: 'verify', selector: '#subjects .chip', value: 'Maths' }).ok).toBe(true)
+    expect(executeBrowserInteraction({ operation: 'click', selector: '#subjects button', text: 'Math' }))
+      .toMatchObject({ ok: false, reason: 'TARGET_NOT_FOUND' })
+  })
   it('never reveals protected or password values through the verifier', () => {
     expect(executeBrowserInteraction({ operation: 'verify', name: 'my-password', value: 'fake-test-only' }))
       .toMatchObject({ ok: false, reason: 'SENSITIVE_FIELD_VERIFICATION_UNAVAILABLE' })

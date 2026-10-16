@@ -443,7 +443,7 @@ server.registerTool('fill_form', {
 })
 
 server.registerTool('verify_form', {
-  description: 'Comprueba de UNA VEZ hasta 30 campos previamente escritos, sin nuevas capturas y sin devolver los valores reales. Compara expectativas declaradas por el usuario o ya introducidas; informa índice, cantidad y razón del primer desacuerdo. Rechaza campos ocultos, protegidos y contraseñas. Úsalo tras fill_form, especialmente con páginas que recalculan sus campos.',
+  description: 'Comprueba de UNA VEZ hasta 30 campos, sin capturas ni exponer valores. Para autocompletados con etiquetas (por ejemplo Subjects), NO basta verificar el valor del input: usa selector CSS único de la etiqueta/chip seleccionada y value esperado; así se valida que la opción quedó realmente confirmada ANTES de enviar. Informa el primer error y protege contraseñas y campos ocultos.',
   inputSchema: {
     tabId: z.string().optional(),
     fields: z.array(z.object({
@@ -459,7 +459,7 @@ server.registerTool('verify_form', {
 })
 
 server.registerTool('interact', {
-  description: 'Control estructurado de elementos visibles en Chromium: clic, selección, desplazamiento, marcado o escritura, sin JavaScript arbitrario, con comprobación de existencia y ambigüedad. Si hay CAPTCHA, login externo, popup nativo o iframe de otro origen, informa el bloqueo y pide intervención humana.',
+  description: 'Control estructurado de elementos visibles en Chromium sin JavaScript arbitrario. Para sugerencias de autocompletado, combina selector CSS acotado (ej. button o [role=option]) con text EXACTO (ej. Maths) para distinguir la sugerencia de la caja de texto; luego verifica la etiqueta/chip en verify_form antes de enviar. No resuelvas opciones ambiguas a ciegas.',
   inputSchema: { tabId: z.string().optional(), ...targetSchema,
     operation: z.enum(['fill', 'select', 'check', 'click', 'scroll']),
     value: z.string().max(4096).optional(), checked: z.boolean().optional() },
@@ -469,7 +469,7 @@ server.registerTool('interact', {
 })
 
 server.registerTool('submit_form', {
-  description: 'Envía el formulario de una pestaña SOLO si la petición del usuario autorizó explícitamente el envío. Debe inspeccionarse/completarse primero; usa selector=form o un control submit concreto. Devuelve comprobante de intento, no inventa éxito: después usa wait_for para comprobar texto y URL finales. No usar para compras, borrados, envíos de dinero ni acciones sensibles sin confirmación del usuario.',
+  description: 'Envía SOLO con autorización explícita. Previamente verifica TODOS los campos incluidos los tags/autocompletados confirmados (texto en input NO es tag). Un recibo de envío no implica corrección de datos; comprueba el resumen real. No reenvíes automáticamente para reparar un campo faltante: detente, informa la omisión y solicita nueva autorización cuando corresponda. No usar para acciones sensibles sin confirmación.',
   inputSchema: { tabId: z.string().optional(), ...targetSchema,
     confirmation: z.literal(true) },
 }, async ({ tabId, confirmation, ...target }) => {

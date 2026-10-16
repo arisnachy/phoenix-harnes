@@ -131,13 +131,13 @@ export function executeBrowserInteraction(
     return { ...basic, ok: foundText, foundText, reason: foundText ? undefined : 'TEXT_NOT_YET_VISIBLE' }
   }
   const findMatches = (all: Element[], controls: Element[]): Element[] => {
-    if (input.selector) return all.filter(el => el.matches(input.selector || ''))
-    return controls.filter(el => {
+    const pool = input.selector ? all.filter(el => el.matches(input.selector || '')) : controls
+    return pool.filter(el => {
       if (input.name && lower(el.getAttribute('name')) !== lower(input.name)) return false
       if (input.label && lower(fieldLabel(el)) !== lower(input.label)) return false
       if (input.placeholder && lower(el.getAttribute('placeholder')) !== lower(input.placeholder)) return false
       if (input.text && lower(el.textContent || (el as HTMLInputElement).value) !== lower(input.text)) return false
-      return Boolean(input.name || input.label || input.placeholder || input.text)
+      return Boolean(input.selector || input.name || input.label || input.placeholder || input.text)
     })
   }
   let matches: Element[]
@@ -184,7 +184,10 @@ export function executeBrowserInteraction(
       if (kind === 'checkbox' || kind === 'radio') return { ...common, ok: false, reason: 'USE_CHECKED_EXPECTATION' }
       if (!(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement
         || el instanceof HTMLSelectElement || (el as HTMLElement).isContentEditable)) {
-        return { ...common, ok: false, reason: 'NOT_READABLE_CONTROL' }
+        // Autocomplete draft text does not prove the suggestion became a tag.
+        if (!input.selector) return { ...common, ok: false, reason: 'SELECTOR_REQUIRED_FOR_RENDERED_TEXT' }
+        return clean(el.textContent) === clean(input.value)
+          ? { ...common, ok: true } : { ...common, ok: false, reason: 'VALUE_MISMATCH' }
       }
       const actual = (el as HTMLElement).isContentEditable ? el.textContent ?? '' : node.value
       const expected = el instanceof HTMLSelectElement

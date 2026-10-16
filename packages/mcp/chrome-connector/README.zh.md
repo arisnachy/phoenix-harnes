@@ -25,8 +25,9 @@ msedge.exe --remote-debugging-port=9223 --user-data-dir="$env:TEMP\phoenix-edge-
 
 - `inspect_page`：一次检查表单控件、标签、类型、下拉选项以及只读与禁用状态，不公开密码。
 - `fill_form`：一项请求内最多填写 30 个字段；可填写文字、勾选、下拉和 ISO 日期，不修改受保护字段。
-- `interact`：通过标签、名称、占位文字或 CSS 选择器针对单个控件执行点击或填写操作。
-- `submit_form`：仅在用户明确请求后提交表单；尝试提交不等于已确认成功。
+- `interact`：通过标签、名称、占位文字或 CSS 选择器针对单个控件执行点击或填写操作。对于「Maths」等建议项，可同时使用 `selector:'button'` 和 `text:'Maths'` 进行精确匹配。
+- `verify_form`：同时验证输入值与已经确认的选择标签；例如 `{operation:'verify', selector:'.subjects-auto-complete__multi-value__label', value:'Maths'}` 验证可见标签，而非自动补全文本草稿。
+- `submit_form`：仅在用户明确请求后提交表单；提交前须验证所有已选择的项目，若需修复数据不可未经再次授权重复提交。尝试提交不等于已确认成功。
 - `wait_for`：验证实际成功文本和跳转 URL，不重复提交表单。
 
 对 Selenium 官方 Web 表单，先检查字段，再一次批量填充并验证，获得授权后提交，最后核查反馈。浏览器操作会按标签页复用 CDP 连接；如果动态表单替换或显示了新控件，仅在共享 DOM 快照失效时重新查找。MiniBrowser 降低预览截图频率，避免与表单输入争用资源。出现验证码、外部登录、跨域 iframe 或原生对话框时，应请求用户介入，不绕过权限。
