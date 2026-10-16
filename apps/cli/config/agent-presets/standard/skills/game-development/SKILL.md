@@ -79,6 +79,12 @@ Ejecuta `node <base-de-esta-habilidad>/scripts/game-tools.mjs doctor --target we
 
 MCP es opcional: usa conectores ya configurados o herramientas de archivos, shell, navegador, visión y comandos locales. Descubre una capacidad necesaria con `connector_list`/`connector_discover`; valida su origen y la autorización antes de instalarla. La ausencia de MCP no bloquea un juego ejecutable.
 
+## Regla obligatoria de reutilización y uso real de assets
+
+Antes de generar sprites, escenarios, spritesheets, música o efectos, inspecciona los archivos existentes y conserva un inventario `assets.json` con `images`/`audio` y pares `id`/`path`. Ejecuta `node examples/game-studio/plan-game-assets.mjs manifest.json plan.json assets.json`. El plan verifica bytes locales: `reusable-needs-integration` evita regenerar el archivo, pero NO acredita que aparezca en la partida. Revisa `existingAssets.unbound` e `invalid`, vincula cada recurso al elemento real en `art` y al runtime y corrige IDs sin generar sustitutos.
+
+Genera recursos en incrementos pequeños: antes de crear cada nuevo lote, conecta lo ya creado al animador/dibujo/sonido, arranca el juego y prueba el comportamiento. Ejecuta `embed-game-assets.mjs` y luego `prepare-game.ts`: el empaquetador rechaza imágenes y audio sin una ruta de consumo detectable. El preflight es estructural; valida visualmente movimiento, enemigos, jefe, capas parallax y sonidos reales en el navegador/engine. No sigas generando si los recursos existentes sirven. Detente una vez superada la aceptación sin nuevas rondas de auditoría.
+
 ## Construcción y revisión
 
 Kira coordina trabajo real y verifica resultados; delega piezas independientes con criterios y límites claros, y reutiliza evidencia y assets válidos. El modelo/imagen/conector disponible determina la capacidad real. Mantén el layout de Phoenix.

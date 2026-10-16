@@ -12,7 +12,7 @@ describe('Game Studio offline PNG importer', () => {
     const dir = mkdtempSync(join(tmpdir(), 'phoenix-game-assets-'))
     try {
       const input = join(dir, 'game.html'), png = join(dir, 'actor.png'), assets = join(dir, 'images.json'), output = join(dir, 'out.html')
-      writeFileSync(input, '<html><body><canvas id="game"></canvas><script>const actor=document.getElementById("hero-art");</script></body></html>')
+      writeFileSync(input, '<html><body><canvas id="game"></canvas><script>const actor=document.getElementById("hero-art");document.querySelector("canvas").getContext("2d").drawImage(actor,0,0)</script></body></html>')
       writeFileSync(png, Buffer.from(onePixel, 'base64'))
       writeFileSync(assets, JSON.stringify({ images: [{ id: 'hero-art', path: 'actor.png' }] }))
       const result = spawnSync(process.execPath, [command, input, assets, output], { encoding: 'utf8' })
@@ -53,6 +53,26 @@ describe('Game Studio offline PNG importer', () => {
       expect(html).toContain('<audio hidden preload="auto" id="phoenix-audio-shoot" src="data:audio/wav;base64,')
       expect(html.indexOf('id="phoenix-audio-shoot"')).toBeLessThan(html.indexOf('document.getElementById'))
       expect(html).not.toContain('https://')
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('rejects orphan sprites and unbound sampled audio before importing files', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'phoenix-game-orphans-'))
+    try {
+      const input = join(dir, 'game.html'), asset = join(dir, 'sprite.png')
+      const inventory = join(dir, 'assets.json'), output = join(dir, 'output.html')
+      writeFileSync(asset, Buffer.from(onePixel, 'base64'))
+      writeFileSync(input, '<html><body><script>ctx.drawImage(other,0,0)</script></body></html>')
+      writeFileSync(inventory, JSON.stringify({ images: [{ id: 'lost-sprite', path: 'sprite.png' }] }))
+      const imageAttempt = spawnSync(process.execPath, [command, input, inventory, output], { encoding: 'utf8' })
+      expect(imageAttempt.status).toBe(1)
+      expect(imageAttempt.stderr).toContain('Unused image asset "lost-sprite"')
+      writeFileSync(inventory, JSON.stringify({ audio: [{ id: 'phoenix-audio-hit', path: 'missing.wav' }] }))
+      const audioAttempt = spawnSync(process.execPath, [command, input, inventory, output], { encoding: 'utf8' })
+      expect(audioAttempt.status).toBe(1)
+      expect(audioAttempt.stderr).toContain('Unused audio asset "phoenix-audio-hit"')
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }

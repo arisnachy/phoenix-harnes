@@ -90,6 +90,12 @@ For `art.mode="production"` run-and-gun, the publisher requires `art.hero`; per-
 
 The gate is code-structural, not visual inspection: review screenshots of the **rendered protagonist, enemies, boss and world** alongside the approved art. Reject boxes, palettes, empty backgrounds and unused sheets when the user requested detailed art. If generation/import is blocked, report the real blocker and keep the incomplete status instead of faking results. Genre-specific games without combat should not get phantom bosses or weapons.
 
+## Regla obligatoria de reutilización y uso real de assets
+
+Antes de generar sprites, escenarios, spritesheets, música o efectos, inspecciona los archivos existentes y conserva un inventario `assets.json` con `images`/`audio` y pares `id`/`path`. Ejecuta `node examples/game-studio/plan-game-assets.mjs manifest.json plan.json assets.json`. El plan verifica bytes locales: `reusable-needs-integration` evita regenerar el archivo, pero NO acredita que aparezca en la partida. Revisa `existingAssets.unbound` e `invalid`, vincula cada recurso al elemento real en `art` y al runtime y corrige IDs sin generar sustitutos.
+
+Genera recursos en incrementos pequeños: antes de crear cada nuevo lote, conecta lo ya creado al animador/dibujo/sonido, arranca el juego y prueba el comportamiento. Ejecuta `embed-game-assets.mjs` y luego `prepare-game.ts`: el empaquetador rechaza imágenes y audio sin una ruta de consumo detectable. El preflight es estructural; valida visualmente movimiento, enemigos, jefe, capas parallax y sonidos reales en el navegador/engine. No sigas generando si los recursos existentes sirven. Detente una vez superada la aceptación sin nuevas rondas de auditoría.
+
 ## Preset-to-play contract (enforced by Kira for every illustrated action game)
 
 **Presets are input resources, not a complete game.** After a user approves a protagonist, enemy, boss, effect or stage image, Kira MUST store its original exported PNG bytes, create transparent frame-atlas poses, and bind the image ID to an actual runtime actor. Use `examples/game-studio/embed-game-assets.mjs` before publishing. An isolated concept portrait or a metadata-only art object never passes acceptance. The same rule applies when generated art arrives from Canva, an image model, Figma, Godot or an MCP integration.

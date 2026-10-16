@@ -10,6 +10,23 @@ import { pathToFileURL } from 'node:url'
 
 const pngHeader = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])
 
+function assertRuntimeAssetBinding(html, id, kind) {
+  const script = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/giu)]
+    .filter(match => !/\btype\s*=\s*["']application\/json["']/iu.test(match[1] ?? ''))
+    .map(match => match[2] ?? '').join('\n')
+  const literal = script.includes('"' + id + '"') || script.includes("'" + id + "'")
+  const dynamic = kind === 'image'
+    ? /getElementById\s*\(\s*(?:spec|layer|asset)\.imageId\s*\)/u.test(script)
+    : /getElementById\s*\(\s*["']phoenix-audio-["']\s*\+/u.test(script)
+  const consumer = kind === 'image'
+    ? /(?:\.drawImage|\.drawSpriteState|\.drawActorsByDepth)\s*\(/u.test(script)
+    : /(?:\.play|playSoundSample|playSound)\s*\(/u.test(script)
+  if ((!literal && !dynamic) || !consumer) {
+    throw new Error('Unused ' + kind + ' asset "' + id
+      + '": bind it to a drawing/playback path before embedding')
+  }
+}
+
 export async function embedGameAssets(html, manifest, baseDirectory) {
   if (!/<body\b[^>]*>/iu.test(html) || !/<\/body\s*>/iu.test(html)) throw new Error('Game HTML must contain <body> and </body>')
   const images = Array.isArray(manifest.images) ? manifest.images : []
@@ -30,6 +47,7 @@ export async function embedGameAssets(html, manifest, baseDirectory) {
       throw new Error('HTML already declares the image id: ' + id)
     }
     if (/^https?:\/\//iu.test(path) || path.includes('\0')) throw new Error('Only actual local PNG files are allowed')
+    assertRuntimeAssetBinding(html, id, 'image')
     const bytes = await readFile(resolve(baseDirectory, path))
     if (bytes.length < 45 || !bytes.subarray(0, 8).equals(pngHeader)
       || !bytes.includes(Buffer.from('IDAT')) || !bytes.includes(Buffer.from('IEND'))) {
@@ -50,6 +68,7 @@ export async function embedGameAssets(html, manifest, baseDirectory) {
       throw new Error('Duplicate audio asset id: ' + id)
     }
     seen.add(id)
+    assertRuntimeAssetBinding(html, id, 'audio')
     const bytes = await readFile(resolve(baseDirectory, path))
     if (bytes.length < 12 || bytes.length > 12 * 1024 * 1024) throw new Error('Audio size invalid (max 12 MiB): ' + path)
     const wav = bytes.toString('ascii', 0, 4) === 'RIFF' && bytes.toString('ascii', 8, 12) === 'WAVE'
@@ -72,7 +91,7 @@ async function main() {
   const [html, raw] = await Promise.all([readFile(input, 'utf8'), readFile(manifestPath, 'utf8')])
   const prepared = await embedGameAssets(html, JSON.parse(raw), dirname(resolve(manifestPath)))
   await writeFile(output, prepared, 'utf8')
-  process.stdout.write('Images embedded; now validate art manifest and test gameplay in a browser.\n')
+  process.stdout.write('Referenced image/audio bytes embedded; validate the art manifest and real gameplay.\n')
 }
 
 if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {

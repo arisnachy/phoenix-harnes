@@ -24,6 +24,14 @@ Before creating any art for an illustrated run-and-gun, run `node examples/game-
 
 For production run-and-gun, each `art.enemies[].id` and `art.bosses[].id` must match a real gameplay entity, have a distinct PNG sprite image, grid and animation states. Every boss phase must map to real frame indices in `phaseAnimations`. Each `level.layers[].id` needs a matching illustrated `art.backgrounds[].id`; additionally supply `art.weapons`, `art.projectiles`, `art.powers`, `art.props` and at least two illustrated `art.effects`. A PNG that is merely included in the artifact but never rendered fails the publication gate. Audio and visual polish are still verified separately in a running game.
 
+### Reuse existing art and sound instead of regenerating unused presets
+
+Pass the current packer-compatible `assets.json` as the optional third argument to the planner:
+
+    node examples/game-studio/plan-game-assets.mjs manifest.json plan.json assets.json
+
+The planner verifies on-disk PNG/WAV/OGG/MP3 signatures, matches the real game manifest art IDs and sound cue IDs, and reports `reusable-needs-integration`, `existingAssets.unbound`, and `existingAssets.invalid`. Reuse valid files rather than regenerate them. Existing files are **not** automatically part of the running game: bind them to actual drawing/animation or audio events. The packer rejects assets with no detectable runtime draw/play route, while manifest-driven dynamic renderers still require art validation and actual playtesting. Generate, bind, and test in small increments.
+
 ## Godot native Game Studio (automatic on demand)
 
 For complex action / 2.5D / 3D games, Phoenix now has a **real** Godot starter
