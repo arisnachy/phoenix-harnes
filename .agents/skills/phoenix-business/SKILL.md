@@ -50,3 +50,12 @@ Para cursos, software, juegos, diseño, vídeo o investigación, sustituye el pi
 ## Formato final de Kira
 
 **RESULTADO / EVIDENCIA / RIESGO / ESTADO**. Incluye archivos verificables, capítulos/páginas comprobadas, estado del canal, precio recomendado y acciones permitidas para aumentar las ventas. Envía por Gmail o Telegram solamente si el usuario ha autorizado previamente el destino y la integración está operativa. No transmitas datos sensibles en un enlace público.
+
+## Planificación y controles incorporados en Business Studio
+
+- Escribe un plan editorial JSON por obra (schemaVersion 1, premisa, audiencia, género, objetivo total de palabras, personajes con motivaciones/arcos, capítulos consecutivos con títulos, metas y escenas, y opcionalmente serie, reglas y cronología). Consérvalo con `blueprint ID archivo.json`.
+- Consulta `progress ID` después de cada capítulo. Si un capítulo no existe o está bajo su extensión objetivo, complétalo realmente; no alteres las metas para aparentar finalización.
+- `compile` genera EPUB3, DOCX y HTML para impresión, **no** un PDF automáticamente. El archivo HTML precisa renderizado y conteo real de páginas antes de usarlo para imprenta.
+- Si un capítulo o la biblia cambia, cualquier compilación previa queda **stale**. Regenera los formatos. Usa `audit ID` antes de `prepare` para validar las huellas digitales, y detén la publicación ante `integrity-failed`.
+- No declares terminado un libro por superar las métricas cuantitativas: la continuidad, los diálogos, la calidad de edición, originalidad, cubierta y derechos siguen necesitando revisión documental independiente.
+- Mantén la compilación de esta rama separada de `main` y `stable` hasta superar pruebas de producto y escritorio; no des la sincronización por realizada antes de comprobar los SHA reales.

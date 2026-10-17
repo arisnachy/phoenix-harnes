@@ -5,7 +5,7 @@
 ## Ejecución
 
 ```bash
-pnpm business help    # o: node scripts/phoenix-business.mjs help
+node scripts/phoenix-business.mjs help
 node scripts/phoenix-business.mjs init book "Mi primera novela"
 node scripts/phoenix-business.mjs list
 node scripts/phoenix-business.mjs chapter ID 1 path/to/capitulo-1.md
@@ -38,3 +38,22 @@ La `gallery` se guarda en `~/.dsh/business-library/gallery.html` (Windows: `%USE
 - Se necesitan pruebas en Windows y CI de monorepo además de las pruebas autónomas de Node.
 
 La instrucción de operación para Kira está en `.agents/skills/phoenix-business/SKILL.md`, que el proveedor local de habilidades detecta al ejecutar Phoenix desde el repositorio con su configuración predeterminada.
+
+## Iteración en rama `feat/business-engine-studio` — planificación y trazabilidad (sin publicar)
+
+Esta versión añade `scripts/phoenix-business-studio.mjs` y mantiene `main`/`stable` intactas durante la revisión. El registro de productos sigue siendo compatible con la biblioteca versión 1.
+
+```bash
+node scripts/phoenix-business.mjs blueprint PRODUCT_ID path/to/plan.json
+node scripts/phoenix-business.mjs progress PRODUCT_ID
+node scripts/phoenix-business.mjs compile PRODUCT_ID --author "Nombre del autor" --chapters 24 --words 60000
+node scripts/phoenix-business.mjs audit PRODUCT_ID
+```
+
+- **Blueprint persistente:** exige `schemaVersion: 1`, `premise`, `audience`, `genre`, `targetWords`, `characters`, `chapters` con `number`, `title`, `purpose`, `targetWords` y `beats`; admite `series`, `worldRules` y `timeline`. Los objetivos de capítulos deben sumar el total con tolerancia de 15 %. Las secuelas pueden conservar biblia y cronología en la biblioteca sin inventar continuidad.
+- **Progreso comprobable:** señala capítulos ausentes/cortos, palabras redactadas y compilaciones obsoletas. El 85 % del objetivo por capítulo es una regla de gestión, no una garantía literaria.
+- **Compilación mejorada:** EPUB3, manuscrito Markdown, DOCX real con WordprocessingML e interior HTML de 6 × 9 pulgadas listo para impresión a PDF con un motor externo. **No** afirma crear un PDF paginado hasta que un motor de impresión valide páginas, fuentes y sangrado.
+- **Auditoría:** comprueba SHA-256 de capítulos y archivos, detecta alteraciones posteriores, y reporta revisión de derechos/estilo/originalidad todavía requerida. `prepare` bloquea fichas con activos alterados (`integrity-failed`). El código **no publica**, no simula MCP comerciales activos y no inventa ventas.
+- **Pruebas:** `pnpm test:business` ejecuta la batería autónoma de Node, sin red. Se necesita además ejecución de CI del monorepositorio y ensayo de escritorio Windows antes de promoción a ambas ramas.
+
+El trabajo sigue siendo una base para desarrollar una UI nativa de Biblioteca, investigación de oportunidades, conversión a PDF/portadas, conectores MCP con permisos reales y seguimiento conciliado de ventas. Los productos no están listos para publicarse por el simple hecho de contar con EPUB/DOCX.
