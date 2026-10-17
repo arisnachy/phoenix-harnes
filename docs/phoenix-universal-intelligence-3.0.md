@@ -1,5 +1,7 @@
 # Phoenix Universal Intelligence Engine 3.0 — implementation contract
 
+English | [中文](phoenix-universal-intelligence-3.0.zh.md)
+
 This document covers the first integrated vertical slice of Phoenix Universal. The tool suite is mounted into the existing `@phoenix-ai/dsh-tool-web` plugin and respects the current `ctx.web` provider, credentials, timeout policy, AbortSignal and HARDNESS mission/authorization boundaries.
 
 ## Delivered in this change
