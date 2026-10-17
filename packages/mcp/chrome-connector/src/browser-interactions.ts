@@ -174,7 +174,10 @@ export function executeBrowserInteraction(
     if (input.operation === 'verify') {
       // Compare only caller-supplied expectations. Never return actual field
       // contents; especially no password or hidden-input value oracle.
-      if (kind === 'password' || el.closest('form')?.querySelector('input[type="password"]')) {
+      if (kind === 'password' || (el instanceof HTMLInputElement
+        && (el.autocomplete === 'username'
+          || (el.form?.querySelector('input[type="password"]')
+            && /user|email|login|account/i.test((el.name || '') + ' ' + (el.id || '')))))) {
         return { ...common, ok: false, reason: 'SENSITIVE_FIELD_VERIFICATION_UNAVAILABLE' }
       }
       if (typeof input.checked === 'boolean') {
