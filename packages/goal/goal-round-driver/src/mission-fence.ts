@@ -29,6 +29,44 @@ export function unfinishedTodoRecoveryObjective(events: readonly SessionEvent[])
   return objective.length > 0 ? objective : undefined
 }
 
+/**
+ * Recover any unfinished *structured* delegation. The model's words are not
+ * evidence of completion: the durable checklist and team task states are.
+ * Optional Team events are interpreted structurally to avoid runtime coupling.
+ *
+ * A genuine user's most recent turn owns the work; historical tasks from an
+ * earlier human turn cannot silently re-arm themselves.
+ */
+export function unfinishedStructuredWorkRecoveryObjective(events: readonly SessionEvent[]): string | undefined {
+  const todo = unfinishedTodoRecoveryObjective(events)
+  if (todo !== undefined) return todo
+
+  const humanIndex = events.findLastIndex(event =>
+    event.type === 'user/message' && event.data.source.kind === 'user')
+  if (humanIndex < 0) return undefined
+  const human = events[humanIndex]
+  if (human?.type !== 'user/message') return undefined
+  const since = events.slice(humanIndex + 1)
+  const lastEnd = since.findLast(event => event.type === 'turn/end')
+  if (lastEnd?.data.reason.kind !== 'completed') return undefined
+
+  const currentTasks = new Map<string, string>()
+  for (const event of since) {
+    if ((event.type as string) !== 'team/task') continue
+    const payload: unknown = event.data
+    if (!isRecord(payload) || !isRecord(payload['task'])) continue
+    const task = payload['task']
+    if (typeof task['id'] !== 'string' || typeof task['status'] !== 'string') continue
+    currentTasks.set(task['id'], task['status'])
+  }
+  if (![...currentTasks.values()].some(status => status !== 'completed' && status !== 'cancelled')) {
+    return undefined
+  }
+  const objective = human.data.content.flatMap(block =>
+    block.type === 'text' ? [block.text] : []).join(' ').trim().slice(0, 2_000)
+  return objective || undefined
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }

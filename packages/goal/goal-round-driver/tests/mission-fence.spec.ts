@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Session, SessionEvent } from '@phoenix-ai/dsh-session'
-import { goalBlockedByClosedUniversalMission, unfinishedTodoRecoveryObjective } from '../src/mission-fence.ts'
+import { goalBlockedByClosedUniversalMission, unfinishedTodoRecoveryObjective, unfinishedStructuredWorkRecoveryObjective } from '../src/mission-fence.ts'
 
 function human(seq: number, kind = 'user'): SessionEvent {
   return { seq, type: 'user/message', data: { source: { kind } } } as unknown as SessionEvent
@@ -36,6 +36,50 @@ describe('Goal recovery for abandoned checklists', () => {
     expect(unfinishedTodoRecoveryObjective([request, pending, stop])).toBeUndefined()
     expect(unfinishedTodoRecoveryObjective([pending, end])).toBeUndefined()
     expect(unfinishedTodoRecoveryObjective([request, pending])).toBeUndefined()
+  })
+})
+
+
+describe('universal structured work recovery', () => {
+  const message = { seq: 1, type: 'user/message', data: {
+    source: { kind: 'user' }, content: [{ type: 'text', text: 'Termina toda la misión' }],
+  } } as unknown as SessionEvent
+  const end = { seq: 4, type: 'turn/end', data: {
+    reason: { kind: 'completed' },
+  } } as unknown as SessionEvent
+  const task = (seq: number, id: string, status: string): SessionEvent => ({
+    seq, type: 'team/task', data: { task: { id, status } },
+  }) as unknown as SessionEvent
+
+  it('continues incomplete team work without reading assistant prose', () => {
+    const events = [message, task(2, 'task-a', 'in_progress'), end]
+    expect(unfinishedStructuredWorkRecoveryObjective(events)).toBe('Termina toda la misión')
+    expect(unfinishedStructuredWorkRecoveryObjective([message, task(2, 'task-a', 'pending'),
+      task(3, 'task-a', 'completed'), end])).toBeUndefined()
+  })
+
+  it('does not revive cancelled, completed, old or user-stopped work', () => {
+    const completed = [message, task(2, 'task-a', 'completed'), end]
+    expect(unfinishedStructuredWorkRecoveryObjective(completed)).toBeUndefined()
+    expect(unfinishedStructuredWorkRecoveryObjective([message, task(2, 'task-a', 'cancelled'), end]))
+      .toBeUndefined()
+    const aborted = { seq: 4, type: 'turn/end', data: {
+      reason: { kind: 'aborted', reason: { kind: 'user' } },
+    } } as unknown as SessionEvent
+    expect(unfinishedStructuredWorkRecoveryObjective([message, task(2, 'task-a', 'pending'), aborted]))
+      .toBeUndefined()
+    const newer = { seq: 5, type: 'user/message', data: {
+      source: { kind: 'user' }, content: [{ type: 'text', text: 'Solo responde una pregunta' }],
+    } } as unknown as SessionEvent
+    expect(unfinishedStructuredWorkRecoveryObjective([message, task(2, 'task-a', 'pending'),
+      end, newer, { ...end, seq: 6 }])).toBeUndefined()
+  })
+
+  it('falls back to durable incomplete todo lists when no team tasks exist', () => {
+    const pending = { seq: 2, type: 'todo/write', data: {
+      todos: [{ content: 'Publicar', status: 'pending' }],
+    } } as unknown as SessionEvent
+    expect(unfinishedStructuredWorkRecoveryObjective([message, pending, end])).toBe('Termina toda la misión')
   })
 })
 

@@ -12,12 +12,12 @@ import { createUserMessage, isHarnessError, QUOTA_EXCEEDED_CODE } from '@phoenix
 import type { ContentBlock, MessageId, MessageSource } from '@phoenix-ai/dsh-llm'
 import type { Session, SessionEvent, TurnEndCancelCause, UserMessage } from '@phoenix-ai/dsh-session'
 import { renderGoalRoundPrompt } from './prompt.ts'
-import { goalBlockedByClosedUniversalMission, unfinishedTodoRecoveryObjective } from './mission-fence.ts'
+import { goalBlockedByClosedUniversalMission, unfinishedStructuredWorkRecoveryObjective } from './mission-fence.ts'
 import { recordGoalSupervisor, replayGoalSupervisor, type GoalSupervisorState } from './supervisor.ts'
 import { measureGoalVerificationProgress, measureGoalWorkProgress, recordGoalStrategy, replayGoalStrategy, selectNextStrategy } from './strategy.ts'
 
 export { renderGoalRoundPrompt } from './prompt.ts'
-export { goalBlockedByClosedUniversalMission, unfinishedTodoRecoveryObjective } from './mission-fence.ts'
+export { goalBlockedByClosedUniversalMission, unfinishedTodoRecoveryObjective, unfinishedStructuredWorkRecoveryObjective } from './mission-fence.ts'
 export { recordGoalSupervisor, replayGoalSupervisor } from './supervisor.ts'
 export type { GoalSupervisorState } from './supervisor.ts'
 export { GOAL_STRATEGIES, measureGoalVerificationProgress, measureGoalWorkProgress, recordGoalStrategy, replayGoalStrategy, selectNextStrategy } from './strategy.ts'
@@ -305,10 +305,11 @@ export function apply(ctx: Context): void {
 
     const goal = currentGoal(state)
     if (goal === undefined) {
-      // The checklist is durable but some providers end the human turn without
-      // calling create_goal. Start its authorized continuation once; the normal
+      // Structured unfinished tasks are durable but some providers end a turn
+      // without calling create_goal. Start continuation based on state, not
+      // wording. The normal
       // goal/changed event will schedule the first recovery round.
-      const objective = unfinishedTodoRecoveryObjective(agent.session.events)
+      const objective = unfinishedStructuredWorkRecoveryObjective(agent.session.events)
       if (objective !== undefined) {
         try {
           ctx.goals.create(agent, { objective })
