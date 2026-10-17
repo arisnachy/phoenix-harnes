@@ -4,7 +4,7 @@
  * model-generated browser states. Fullscreen is a larger view of SAME tab.
  */
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type WheelEvent } from 'react'
-import { Modal } from '@phoenix-ai/dsh-client-ui-primitives'
+import { Modal, PhoenixLogo } from '@phoenix-ai/dsh-client-ui-primitives'
 import css from './MiniBrowser.module.css'
 
 type Tab = { id: string; title: string; url: string }
@@ -158,9 +158,11 @@ function youtubeId(raw: string | undefined): string | undefined {
   } catch { return undefined }
 }
 /** Human navigation stays in the user-controlled MiniBrowser, never in the model's context. */
-export function MiniBrowser({ requested = false, active = true, onActivate, autoScroll = true, onPageChange }: {
+export function MiniBrowser({ requested = false, active = true, initialTabId, onActivate, autoScroll = true, onPageChange }: {
   requested?: boolean
   active?: boolean
+  /** Bind this card to a child Chromium call's target when one was recorded. */
+  initialTabId?: string
   onActivate?: () => void
   autoScroll?: boolean
   onPageChange?: (page: { title: string; url: string } | null) => void
@@ -193,10 +195,12 @@ export function MiniBrowser({ requested = false, active = true, onActivate, auto
   const actionRequest = useRef<AbortController | undefined>(undefined)
   const actionQueue = useRef<QueuedAction[]>([])
   const actionQueueRunning = useRef(false)
-  const followGlobal = useRef(true)
+  const initialTargetTabId = initialTabId?.trim() === '' ? undefined : initialTabId?.trim()
+  const followGlobal = useRef(initialTargetTabId === undefined)
+  const appliedInitialTarget = useRef(initialTargetTabId)
   // Each card is bound to the Chromium target it originally displayed.
   // New browser requests never overwrite prior cards with the latest page.
-  const cardTabId = useRef<string | undefined>(undefined)
+  const cardTabId = useRef<string | undefined>(initialTargetTabId)
   const previousActive = useRef(active)
   const show = !dismissed && (requested || enabled || (snapshot.available && snapshot.url !== undefined && snapshot.url !== 'about:blank'))
   const videoId = youtubeId(snapshot.url)
@@ -282,6 +286,15 @@ export function MiniBrowser({ requested = false, active = true, onActivate, auto
     if (!active || dismissed) return
     mounted.current = true
     const first = new AbortController()
+    if (initialTargetTabId !== appliedInitialTarget.current) {
+      // A child Chrome call may settle after this card mounted. Its explicit
+      // target outranks any global tab inferred by the first poll.
+      appliedInitialTarget.current = initialTargetTabId
+      if (initialTargetTabId !== undefined) {
+        followGlobal.current = false
+        cardTabId.current = initialTargetTabId
+      }
+    }
     const reactivatedTabId = !previousActive.current ? cardTabId.current : undefined
     const reactivating = reactivatedTabId !== undefined
     if (reactivating) followGlobal.current = false
@@ -310,7 +323,7 @@ export function MiniBrowser({ requested = false, active = true, onActivate, auto
           inspectError = reason
         }
         if (!requestIsActive(first.signal, mounted)) return
-        if (requested && (!state || !state.available) && !startAttempted) {
+        if (requested && followGlobal.current && (!state || !state.available) && !startAttempted) {
           // Starting Chrome is a mutation whose timeout may leave the host in
           // an unknown state. Let the user retry explicitly instead of issuing
           // the same mutation again from the polling loop.
@@ -343,7 +356,7 @@ export function MiniBrowser({ requested = false, active = true, onActivate, auto
       for (const queued of actionQueue.current.splice(0)) queued.resolve()
       window.clearInterval(timer)
     }
-  }, [active, dismissed, requested])
+  }, [active, dismissed, initialTargetTabId, requested])
 
   useEffect(() => {
     if (!active || !show || !snapshot.available || collapsed || playingVideo) return
@@ -555,8 +568,10 @@ export function MiniBrowser({ requested = false, active = true, onActivate, auto
   const viewer = (
     <section className={css.browser} data-mini-browser data-expanded={expanded ? 'true' : undefined} aria-label="Navegador de Kira">
       <div className={css.titlebar}>
-        <span className={css.brand}>◉ <span>Navegador de Kira</span></span>
-        <span className={css.status}>{!active ? 'Vista conservada' : snapshot.available ? 'Chrome · En vivo' : 'Listo para iniciar'}</span>
+        <span className={css.brand}><PhoenixLogo size={18} /> <span>Navegador de Kira</span></span>
+        <span className={css.status} data-state={!active ? 'inactive' : snapshot.available ? 'live' : connectionError ? 'error' : 'connecting'}>
+          {!active ? 'Vista conservada' : snapshot.available ? 'Chrome · En vivo' : 'Listo para iniciar'}
+        </span>
         {!active && <button type="button" title="Reactivar esta página" onClick={() => { onActivate?.() }}>↻ Reactivar</button>}
         <span className={css.grow} />
         <button type="button" title={expanded ? 'Volver al chat' : 'Ampliar navegador'} onClick={() => { setExpanded(value => !value); setCollapsed(false) }}>
@@ -608,7 +623,7 @@ export function MiniBrowser({ requested = false, active = true, onActivate, auto
             <p>{connectionError
               ? 'Phoenix todavía no ha conectado la vista del navegador. Puedes reintentar sin salir del chat.'
               : 'Chrome real dentro de la conversación. Kira y tú utilizáis las mismas pestañas.'}</p>
-            <button type="button" onClick={() => { void run({ type: 'start' }) }}>Conectar navegador</button>
+            {initialTargetTabId === undefined && <button type="button" onClick={() => { void run({ type: 'start' }) }}>Conectar navegador</button>}
           </div>
         )}
         <div className={css.mediaBar}>

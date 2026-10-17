@@ -74,17 +74,23 @@
 /* Browser-native temporary agent sidecar: real ChatNodeSeat content and avatars,
    not a synthetic status feed. It disappears when the browser turn settles. */
 .browserWorkspace {
+  --browser-accent: var(--dsw-specific-phoenix-accent);
+  --browser-surface: var(--dsw-alias-bg-layer-2);
+  --browser-surface-raised: var(--dsw-alias-bg-layer-1);
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   align-items: start;
-  gap: 14px;
+  gap: 16px;
   width: 100%;
   min-width: 0;
 }
 .browserWorkspace[data-activity-open='true'] {
-  grid-template-columns: minmax(0, 1.85fr) minmax(280px, 1fr);
+  grid-template-columns: minmax(0, 1.7fr) minmax(300px, .85fr);
 }
-.browserPane { min-width: 0; }
+.browserPane {
+  min-width: 0;
+  min-height: 0;
+}
 .activityPane {
   display: flex;
   flex-direction: column;
@@ -93,9 +99,10 @@
   overflow: hidden;
   border: 1px solid var(--dsw-alias-border-l2);
   border-radius: 18px;
-  background: var(--dsw-alias-bg-layer-2);
+  border-top: 2px solid var(--browser-accent);
+  background: var(--browser-surface);
   color: var(--dsw-alias-label-primary);
-  box-shadow: 0 10px 30px rgb(0 0 0 / 5%);
+  box-shadow: 0 10px 30px color-mix(in srgb, var(--dsw-alias-bg-mask-1) 12%, transparent);
 }
 .activityHeader {
   display: flex;
@@ -105,7 +112,7 @@
   min-height: 46px;
   padding: 11px 15px;
   border-bottom: 1px solid var(--dsw-alias-border-l2);
-  background: var(--dsw-alias-bg-layer-1);
+  background: var(--browser-surface-raised);
   font-size: 13px;
 }
 .livePill {
@@ -115,20 +122,27 @@
   border: 1px solid var(--dsw-alias-border-l2);
   border-radius: 999px;
   padding: 4px 9px;
+  background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 8%, transparent);
   color: var(--dsw-alias-label-secondary);
   font-size: 11px;
   font-weight: 500;
   white-space: nowrap;
 }
-.livePill > span { width: 7px; height: 7px; border-radius: 50%; background: #279b66; }
+.livePill > span {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--dsw-alias-state-success-primary);
+}
 .pageInfo {
   display: flex;
   flex-direction: column;
   gap: 3px;
   margin: 11px 12px 0;
-  border: 1px solid var(--dsw-alias-border-l2);
+  border: 1px solid color-mix(in srgb, var(--browser-accent) 28%, var(--dsw-alias-border-l2));
   border-radius: 11px;
-  background: var(--dsw-alias-bg-layer-1);
+  background: color-mix(in srgb, var(--browser-accent) 5%, var(--browser-surface-raised));
   padding: 10px 12px;
   font-size: 12px;
   min-width: 0;
@@ -147,6 +161,10 @@
   scrollbar-width: thin;
   font-size: 13px;
 }
+.activityMessages:focus-visible {
+  outline: 2px solid var(--browser-accent);
+  outline-offset: -2px;
+}
 .activityMessages :global([data-chat-flow-kind='assistant-step']) {
   max-width: 100%;
 }
@@ -160,5 +178,12 @@
 @media (max-width: 960px) {
   .browserWorkspace { grid-template-columns: minmax(0, 1fr); }
   .activityPane { max-height: 320px; }
+}
+@media (max-width: 640px) {
+  .browserWorkspace { gap: 10px; }
+  .activityPane { border-radius: 14px; }
+  .activityHeader { padding-inline: 12px; }
+  .pageInfo { margin-inline: 10px; }
+  .activityMessages { padding-inline: 10px; }
 }
 @media (prefers-reduced-motion: reduce) { .browserWorkspace, .activityPane { transition: none; } }

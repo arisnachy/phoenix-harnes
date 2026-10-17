@@ -387,6 +387,86 @@ describe('MiniBrowser in Phoenix conversation', () => {
     })
   })
 
+  it('lets a late explicit child target override the inferred global tab', async () => {
+    const stateUrls: string[] = []
+    const childState = { ...state, tabId: 'child-tab', url: 'https://example.org/', title: 'Child page', tabs: [{ id: 'child-tab', title: 'Child page', url: 'https://example.org/' }] }
+    vi.stubGlobal('fetch', vi.fn(async (input: string) => {
+      if (input.startsWith('/phoenix-mini-browser/state')) {
+        stateUrls.push(input)
+        const scoped = input.includes('?tabId=child-tab')
+        return new Response(JSON.stringify(scoped ? childState : state), { status: 200, headers: { 'content-type': 'application/json' } })
+      }
+      if (input.startsWith('/phoenix-mini-browser/frame')) {
+        return new Response(new Uint8Array([255, 216, 255, 217]), { status: 200, headers: { 'content-type': 'image/jpeg' } })
+      }
+      return new Response(JSON.stringify(state), { status: 200, headers: { 'content-type': 'application/json' } })
+    }))
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn(() => 'blob:late-target') })
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() })
+    const view = render(<MiniBrowser requested />)
+    await screen.findByRole('tab', { name: 'YouTube' })
+    view.rerender(<MiniBrowser requested initialTabId="child-tab" />)
+    await waitFor(() => { expect(stateUrls).toContain('/phoenix-mini-browser/state?tabId=child-tab') })
+    expect(await screen.findByRole('tab', { name: 'Child page' })).toBeTruthy()
+  })
+
+  it('does not start or fall back when an explicit child target is missing', async () => {
+    const actions: string[] = []
+    const stateUrls: string[] = []
+    vi.stubGlobal('fetch', vi.fn(async (input: string, options?: RequestInit) => {
+      if (input.startsWith('/phoenix-mini-browser/state')) {
+        stateUrls.push(input)
+        if (input.includes('?tabId=missing-child')) return new Response(JSON.stringify({ error: 'Pestaña no encontrada.' }), { status: 404 })
+      }
+      if (input.startsWith('/phoenix-mini-browser/action') && typeof options?.body === 'string') {
+        actions.push((JSON.parse(options.body) as { type: string }).type)
+      }
+      return new Response(JSON.stringify(state), { status: 200, headers: { 'content-type': 'application/json' } })
+    }))
+    render(<MiniBrowser requested initialTabId="missing-child" />)
+    await waitFor(() => { expect(screen.getByRole('status').textContent).toContain('Conexión del navegador') })
+    expect(stateUrls[0]).toBe('/phoenix-mini-browser/state?tabId=missing-child')
+    expect(actions).not.toContain('start')
+    expect(screen.queryByRole('tab', { name: 'YouTube' })).toBeNull()
+  })
+
+  it('preserves a manual tab selection when a bound card is reactivated', async () => {
+    const stateUrls: string[] = []
+    const actions: string[] = []
+    let selected = 'child-tab'
+    const tabs = [
+      { id: 'child-tab', title: 'Child page', url: 'https://example.org/' },
+      { id: 'manual-tab', title: 'Manual page', url: 'https://example.net/' },
+    ]
+    const stateFor = (tabId: string) => ({
+      available: true, tabId, url: tabs.find(tab => tab.id === tabId)?.url,
+      title: tabs.find(tab => tab.id === tabId)?.title, tabs,
+    })
+    vi.stubGlobal('fetch', vi.fn(async (input: string, options?: RequestInit) => {
+      if (input.startsWith('/phoenix-mini-browser/state')) stateUrls.push(input)
+      if (input.startsWith('/phoenix-mini-browser/action') && typeof options?.body === 'string') {
+        const request = JSON.parse(options.body) as { type: string; tabId?: string }
+        actions.push(request.type)
+        if (request.type === 'select-tab' && request.tabId !== undefined) selected = request.tabId
+        return new Response(JSON.stringify(stateFor(selected)), { status: 200, headers: { 'content-type': 'application/json' } })
+      }
+      if (input.startsWith('/phoenix-mini-browser/frame')) {
+        return new Response(new Uint8Array([255, 216, 255, 217]), { status: 200, headers: { 'content-type': 'image/jpeg' } })
+      }
+      return new Response(JSON.stringify(stateFor(selected)), { status: 200, headers: { 'content-type': 'application/json' } })
+    }))
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn(() => 'blob:manual-selection') })
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() })
+    const view = render(<MiniBrowser requested initialTabId="child-tab" />)
+    await screen.findByRole('tab', { name: 'Child page' })
+    fireEvent.click(screen.getByRole('tab', { name: 'Manual page' }))
+    await waitFor(() => { expect(actions).toContain('select-tab') })
+    view.rerender(<MiniBrowser requested initialTabId="child-tab" active={false} />)
+    view.rerender(<MiniBrowser requested initialTabId="child-tab" active />)
+    await waitFor(() => { expect(stateUrls).toContain('/phoenix-mini-browser/state?tabId=manual-tab') })
+    expect(screen.getByRole('tab', { name: 'Manual page' }).getAttribute('aria-selected')).toBe('true')
+  })
+
   it('only opens desktop Chrome when the user presses the footer button', async () => {
     const calls = installBrowserMock()
     render(<MiniBrowser />)

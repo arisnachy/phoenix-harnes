@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import type { ComponentProps } from 'react'
 import type { ImageAttachmentRef } from '@phoenix-ai/dsh-attachment'
+import type { ToolCallBlock } from '@phoenix-ai/dsh-client-runtime/client'
 import { PhoenixLogo } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { AssistantChatData, ToolChatData } from '../contract/chat-nodes.ts'
 import { isRunningTool, isSettledTool } from '../contract/chat-nodes.ts'
@@ -52,8 +53,8 @@ type ActivityItem =
   }
 
 type FlowItem =
-  | { readonly kind: 'browser'; readonly key: string; readonly userKey: string }
-  | { readonly kind: 'browser-workspace'; readonly key: string; readonly userKey: string; readonly live: boolean; readonly items: readonly FlowItem[] }
+  | { readonly kind: 'browser'; readonly key: string; readonly userKey: string; readonly tabId?: string }
+  | { readonly kind: 'browser-workspace'; readonly key: string; readonly userKey: string; readonly tabId?: string; readonly live: boolean; readonly items: readonly FlowItem[] }
   | { readonly kind: 'node'; readonly key: string }
   | { readonly kind: 'optimistic'; readonly key: string; readonly text: string }
   | {
@@ -141,7 +142,9 @@ export function isBrowserPrompt(text: string): boolean {
   // "puedes entras a la pagina..." must open the same in-chat browser
   // that Kira controls, rather than silently omitting its card.
   const normalized = text.normalize('NFD').replace(/[\u0300-\u036f]/gu, '').toLowerCase()
-  const verb = /\b(?:abre|abres|abrir|abreme|abrirme|navega|navegas|navegar|entra|entras|entrar|ingresa|ingresas|ingresar|visita|visitas|visitar|accede|accedes|acceder|open|browse|visit)\b/u
+  const verb = /\b(?:abre|abres|abrir|abreme|abrirme|navega|navegas|navegar|entra|entras|entrar|ingresa|ingresas|ingresar)\b/u
+  const verb2 = /\b(?:visita|visitas|visitar|accede|accedes|acceder)\b/u
+  const englishVerb = /\b(?:open|browse|visit)\b/u
   const target = /\b(?:ir a|ve a|busca en|buscar en)\b|https?:\/\//u
   const webContext = /\b(?:pagina|web|sitio|portal|navegador|website|internet|url|enlace)\b|https?:\/\//u
   // "abre el archivo" is not browser navigation; a web context overrides it.
@@ -150,7 +153,8 @@ export function isBrowserPrompt(text: string): boolean {
   const youtubeReview = /\b(?:youtube|youtu\.be)\b/u.test(normalized)
     && /\b(?:video|tutorial|mira|ver|ve|revisa|analiza|estudia|reproduce)\b/u.test(normalized)
   return target.test(normalized) || youtubeReview
-    || (verb.test(normalized) && (webContext.test(normalized) || !localObject.test(normalized)))
+    || ((verb.test(normalized) || verb2.test(normalized) || englishVerb.test(normalized))
+      && (webContext.test(normalized) || !localObject.test(normalized)))
 }
 function isBrowserRequest(node: OrderedChatNode): boolean {
   if (node.kind !== 'user' && node.kind !== 'steering') return false
@@ -165,14 +169,75 @@ function isBrowserRequest(node: OrderedChatNode): boolean {
 }
 
 /**
- * Observe real MCP Chromium navigation during research or another broad task.
+ * Observe real MCP Chromium work during research or another broad task.
  * @param name - Tool name emitted by the active model or MCP bridge.
- * @returns Whether that tool explicitly opens or navigates a Chromium page.
+ * @returns Whether that tool operates on an embedded Chromium page.
  */
 export function isEmbeddedNavigationTool(name: string): boolean {
   const value = name.toLowerCase()
+  // MCP browser bridges add operations over time (read_page, fill_form,
+  // screenshot, and similar). The namespace is the stable signal; restricting
+  // this to a hand-maintained verb list made nested Code calls invisible.
   return /(?:^|[_:./-])(?:browser|chrome)(?:[_:./-]|$)/u.test(value)
-    && /(?:^|[_:./-])(?:navigate|youtube_search|youtube_video_inspect|open_tab)(?:[_:./-]|$)/u.test(value)
+}
+
+interface EmbeddedBrowserUse {
+  readonly found: boolean
+  readonly tabId?: string
+}
+
+function toolCallName(block: ToolCallBlock): string | undefined {
+  if ('kind' in block) return block.call?.name ?? undefined
+  if ('name' in block && typeof block.name === 'string') return block.name
+  if ('call' in block && block.call !== null && typeof block.call === 'object'
+    && 'name' in block.call && typeof block.call.name === 'string') return block.call.name
+  return undefined
+}
+
+function toolCallArguments(block: ToolCallBlock): string | undefined {
+  if ('kind' in block) return block.call?.argsRaw ?? undefined
+  if ('argsRaw' in block && typeof block.argsRaw === 'string') return block.argsRaw
+  if ('call' in block && block.call !== null && typeof block.call === 'object'
+    && 'argsRaw' in block.call && typeof block.call.argsRaw === 'string') return block.call.argsRaw
+  return undefined
+}
+
+function toolCallTabId(block: ToolCallBlock): string | undefined {
+  const raw = toolCallArguments(block)
+  if (raw === undefined) return undefined
+  try {
+    const value = JSON.parse(raw) as { tabId?: unknown }
+    return typeof value.tabId === 'string' && value.tabId.trim() !== '' ? value.tabId : undefined
+  } catch {
+    return undefined
+  }
+}
+
+const MAX_EMBEDDED_BROWSER_DEPTH = 256
+
+function embeddedBrowserUse(block: ToolCallBlock): EmbeddedBrowserUse {
+  const visited = new Set<ToolCallBlock>()
+  const pending: Array<{ readonly block: ToolCallBlock; readonly depth: number }> = [{ block, depth: 0 }]
+  let found = false
+  let tabId: string | undefined
+  while (pending.length > 0) {
+    const current = pending.pop()
+    if (current === undefined || visited.has(current.block)) continue
+    visited.add(current.block)
+    if (isEmbeddedNavigationTool(toolCallName(current.block) ?? '')) {
+      found = true
+      // Traverse in transcript order; the latest explicit nested target owns
+      // the preview card when one parent dispatch contains several Chrome calls.
+      tabId = toolCallTabId(current.block) ?? tabId
+    }
+    if (current.depth >= MAX_EMBEDDED_BROWSER_DEPTH) continue
+    const children = current.block.subCalls ?? []
+    for (let index = children.length - 1; index >= 0; index -= 1) {
+      const child = children[index]
+      if (child !== undefined) pending.push({ block: child, depth: current.depth + 1 })
+    }
+  }
+  return found ? tabId === undefined ? { found: true } : { found: true, tabId } : { found: false }
 }
 
 function buildFlow(nodes: readonly OrderedChatNode[]): FlowItem[] {
@@ -275,15 +340,17 @@ export function addBrowserCards(
   nodes: readonly OrderedChatNode[],
 ): FlowItem[] {
   const requests = new Set(nodes.filter(isBrowserRequest).map(node => node.key))
+  const browserTabIds = new Map<string, string>()
   let currentUserKey: string | undefined
   for (const node of nodes) {
     if (node.kind === 'user' || node.kind === 'steering') currentUserKey = node.key
     if (node.kind === 'tool-call' && currentUserKey !== undefined) {
       const root = (node.data as ToolChatData).root
-      const call = 'call' in root ? root.call : undefined
-      const callName = typeof call === 'object' && call !== null && 'name' in call
-        && typeof call.name === 'string' ? call.name : undefined
-      if (typeof callName === 'string' && isEmbeddedNavigationTool(callName)) requests.add(currentUserKey)
+      const browserUse = embeddedBrowserUse(root)
+      if (browserUse.found) {
+        requests.add(currentUserKey)
+        if (browserUse.tabId !== undefined) browserTabIds.set(currentUserKey, browserUse.tabId)
+      }
     }
   }
   if (requests.size === 0 && !flow.some(item => item.kind === 'optimistic' && isBrowserPrompt(item.text))) return flow
@@ -294,7 +361,9 @@ export function addBrowserCards(
     // the answer. Assistant messages therefore continue below it on completion.
     if (item.kind === 'node' && requests.has(item.key)
       || item.kind === 'optimistic' && isBrowserPrompt(item.text)) {
-      result.push({ kind: 'browser', key: 'browser:' + item.key, userKey: item.key })
+      const tabId = browserTabIds.get(item.key)
+      result.push({ kind: 'browser', key: 'browser:' + item.key, userKey: item.key,
+        ...(tabId === undefined ? {} : { tabId }) })
     }
   }
   return result
@@ -319,9 +388,13 @@ export function groupActiveBrowserFlow(
     || item.kind === 'browser'
     || item.kind === 'node' && userKeys.has(item.key))
   if (nextTurn) return flow
+  const browser = flow[index]
+  const tabId = browser?.kind === 'browser' ? browser.tabId : undefined
   return [
     ...flow.slice(0, index),
-    { kind: 'browser-workspace', key: 'browser-workspace:' + userKey, userKey, live: true, items: flow.slice(index + 1) },
+    { kind: 'browser-workspace', key: 'browser-workspace:' + userKey, userKey,
+      ...(tabId === undefined ? {} : { tabId }),
+      live: true, items: flow.slice(index + 1) },
   ]
 }
 
@@ -498,11 +571,12 @@ function TurnStatus({ startTime, progress, expiresAfterMs, t, centered = false }
 
 /** Same real transcript seats as the ordinary chat, inside the temporary sidecar. */
 function BrowserWorkspace({
-  items, live, selected, onActivate, seatProps, turnStatus,
+  items, live, selected, onActivate, seatProps, turnStatus, tabId,
 }: {
   readonly items: readonly FlowItem[]
   readonly live: boolean
   readonly selected: boolean
+  readonly tabId?: string
   readonly onActivate: () => void
   readonly seatProps: SeatProps
   readonly turnStatus: ToolActivityFlowProps['turnStatus']
@@ -512,7 +586,8 @@ function BrowserWorkspace({
     <div className={css.browserWorkspace} data-browser-workspace={live ? '' : undefined}
       data-activity-open={live ? 'true' : undefined} data-chat-flow-kind="browser-workspace">
       <div className={css.browserPane}>
-        <MiniBrowser requested active={selected} onActivate={onActivate} autoScroll={true} onPageChange={setPage} />
+        <MiniBrowser requested active={selected} {...tabId === undefined ? {} : { initialTabId: tabId }}
+          onActivate={onActivate} autoScroll={true} onPageChange={setPage} />
       </div>
       {live && <aside className={css.activityPane} aria-label="Actividad del agente en este navegador">
         <header className={css.activityHeader}>
@@ -586,7 +661,7 @@ export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, browserT
     // and closes. Changing layouts must never recreate the CDP tab/session.
     return grouped.map(item => item.kind === 'browser'
       ? { kind: 'browser-workspace' as const, key: 'browser-workspace:' + item.userKey,
-        userKey: item.userKey, live: false, items: [] }
+        userKey: item.userKey, ...(item.tabId === undefined ? {} : { tabId: item.tabId }), live: false, items: [] }
       : item)
   }, [ordinaryFlow, newestBrowserKey, nodes, browserTurnRunning])
   const hasBrowserWorkspace = flow.some(item => item.kind === 'browser-workspace' && item.live)
@@ -594,7 +669,7 @@ export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, browserT
   // conversation's first pending answer, never to a continuing transcript.
   const centeredPreparing = turnStatus?.progress?.phase === 'preparing'
     && nodes.filter(node => node.kind === 'user' || node.kind === 'steering').length <= 1
-    && !nodes.some(node => {
+    && !nodes.some((node) => {
       const assistant = assistantData(node)
       return node.kind === 'hardness-artifact'
         || (assistant !== null && hasAssistantSurface(assistant))
@@ -621,6 +696,7 @@ export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, browserT
             ? <BrowserWorkspace
               live={item.live}
               items={item.items}
+              {...item.tabId === undefined ? {} : { tabId: item.tabId }}
               selected={item.userKey === activeBrowserKey}
               onActivate={() => { setSelectedBrowserKey(item.userKey) }}
               seatProps={seatProps}

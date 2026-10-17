@@ -455,22 +455,24 @@ server.registerTool('inspect_page', {
 })
 
 server.registerTool('complete_form', {
-  description: 'VÍA MÁS RÁPIDA para formulario ya inspeccionado: UNA llamada ejecuta 1–4 fases de operaciones DOM (30 acciones en total), espera brevemente tras cada fase React, verifica hasta 30 campos/etiquetas seleccionadas y, SOLO si el usuario autorizó enviar y TODOS los checks pasan, envía exactamente una vez y lee el resumen real. No usa capturas ni vuelve a enviar si el recibo falla. Para autocompletado: fase 1 fill y fase 2 click de sugerencia con selector+text; checks debe incluir el chip seleccionado, no el valor borrador del input. La respuesta distingue envío intentado de recibo confirmado. Para tareas simples NO hagas 10+ turnos de inspect/fill/verify/click/submit/wait por separado; inspecciona una vez y llama complete_form.',
+  description: 'VÍA MÁS RÁPIDA para formulario ya inspeccionado: UNA llamada ejecuta 1–4 fases de operaciones DOM (30 acciones en total), espera brevemente tras cada fase React, verifica hasta 30 campos/etiquetas seleccionadas y, SOLO si el usuario autorizó enviar y TODOS los checks pasan, envía exactamente una vez y lee el resumen real. No usa capturas ni vuelve a enviar si el recibo falla. Para autocompletado: fase 1 fill y fase 2 click de sugerencia con selector+text; checks debe incluir el chip seleccionado, no el valor borrador del input. La respuesta distingue envío intentado de recibo confirmado. Para tareas simples NO hagas 10+ turnos de inspect/fill/verify/click/submit/wait por separado; inspecciona una vez y llama complete_form. Firma mínima ejecutable: {"phases":[[{"operation":"fill","selector":"#taskInput","value":"Preparar café"}]],"checks":[{"operation":"verify","selector":"#taskInput","value":"Preparar café"}]}. `checks` siempre es un array no vacío y cada elemento debe llevar `operation:"verify"`; no uses `fields`, `actions` ni `checks:[]`. Solo añade `submit:{"selector":"#taskForm","confirmation":true}` si el usuario autorizó el envío; `submit:false` no es válido.',
   inputSchema: {
     tabId: z.string().optional(),
     phases: z.array(z.array(fieldAction).min(1).max(30)).min(1).max(4)
       .refine(phases => phases.reduce((sum, phase) => sum + phase.length, 0) <= 30,
-        'El flujo admite hasta 30 acciones en total'),
+        'El flujo admite hasta 30 acciones en total')
+      .describe('Fases ordenadas de acciones DOM. Ejemplo: [[{"operation":"fill","selector":"#taskInput","value":"Preparar café"}]].'),
     checks: z.array(z.object({
       ...targetSchema,
       operation: z.literal('verify'),
       value: z.string().max(4096).optional(),
       checked: z.boolean().optional(),
-    })).min(1).max(30),
+    })).min(1).max(30)
+      .describe('Comprobaciones obligatorias y no vacías. Cada elemento debe llevar operation:"verify"; comprueba el valor o la etiqueta/chip confirmado.'),
     submit: z.object({
       selector: z.string().trim().min(1).max(500),
       confirmation: z.literal(true),
-    }).optional(),
+    }).optional().describe('Opcional y solo con autorización explícita: {selector, confirmation:true}. Nunca uses false ni un booleano.'),
     expectedReceiptText: z.string().trim().min(2).max(200).optional(),
   },
 }, async ({ tabId, phases, checks, submit, expectedReceiptText }) => {

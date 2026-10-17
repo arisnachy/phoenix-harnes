@@ -12,6 +12,12 @@ A pending preview request can prevent every later frame from loading. Repeated t
 
 The MiniBrowser bounds HTTP operations through their response bodies and cancels work when its card becomes inactive. It preserves the last valid image and refreshes after a completed user action. Browser startup receives a separate deadline and an ambiguous timeout does not trigger repeated automatic starts. Hidden conversations suspend polling and capture. A FIFO preserves rapid user gestures; a failed operation stops dependent queued gestures instead of replaying them against uncertain state.
 
+Browser activity detection traverses nested Code Mode calls and recognizes inspection, form interaction, and capture on an existing tab. The conversation opens its browser workspace independently of the collapsed Tools history, so the agent's real browser work is visible without a manual disclosure click.
+
+The form-batch tool publishes an executable input example and field descriptions through MCP discovery. Required verification checks and the authorized submission object stay strict; the model can learn the contract without intentionally sending invalid probe calls.
+
+The browser chrome and its live activity pane use Phoenix theme tokens for surfaces, accent, focus, and connection states. Responsive controls and the expanded viewport preserve the same underlying tab and require no decorative animation or additional polling.
+
 The Web bundle reuses CDP connections per target, correlates concurrent commands, shares concurrent captures, and lists tabs once per state read. It publishes the shared browser descriptor only when its contents change; reading a deliberately scoped preview does not select that tab globally. Action deadlines and HTTP disconnects cancel pending CDP commands and prevent later mutation steps. The Chrome connector closes failed transports and rejects an unavailable explicit target. Text waits read page text without collecting form controls. Serialized DOM operations provide their own compiler naming helper so both source and built launchers execute them in a fresh page context. These changes extend the existing [form transport decision](2026-10-16-browser-form-transport-overhead.md).
 
 ## Alternatives considered

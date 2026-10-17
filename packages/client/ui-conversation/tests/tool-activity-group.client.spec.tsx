@@ -9,6 +9,7 @@ import { AttachmentId } from '@phoenix-ai/dsh-attachment'
 import { bindSnapshotSelector } from '@phoenix-ai/dsh-client-test-runtime'
 import { createSnapshotStore, EMPTY_CONVERSATION_VIEWS } from '@phoenix-ai/dsh-client-runtime/client'
 import type { ChatNodeOwnerProps, ChatViewSlotProps, RenderMessageImages } from '../src/client/contract/slots.ts'
+import type { InputState } from '../src/client/input/contract.ts'
 import { createChatStore } from '../src/client/stores.ts'
 import { ChatView } from '../src/client/chat/ChatView.tsx'
 import { chatSnapshotFixture } from './chat-snapshot-fixture.client.ts'
@@ -126,6 +127,17 @@ function generatedImageTool(): ToolResultNode {
     content: [{ type: 'image', attachment: generatedAttachment }],
   }
 }
+
+function nestedChromeTool(): ToolResultNode {
+  return {
+    ...settledTool('code-1'),
+    call: { name: 'Code', argsRaw: '{}' },
+    subCalls: [{
+      ...settledTool('chrome-1'),
+      call: { name: 'mcp__chrome__complete_form', argsRaw: '{}' },
+    }],
+  }
+}
 function emptySessions() {
   return bindSnapshotSelector(createSnapshotStore<SessionListState>({
     ids: [], byId: {}, current: undefined, phase: 'ready', subagentsByParent: {}, jobsBySession: {}, currentAddress: undefined,
@@ -145,6 +157,9 @@ function renderChat(
   renderMessageImages: RenderMessageImages = () => null,
 ) {
   const source = createSnapshotStore(snapshot(nodes, runningCalls))
+  const input = createSnapshotStore<InputState>({
+    draft: '', imageIds: [], draftRev: 0, phase: 'plain', occurrences: [], queue: [],
+  })
   const chat = createChatStore().create()
   const t = ((key: string) => key === 'context.tools' ? 'Tools' : key) as ChatViewSlotProps['t']
   const renderSlot = ((key: string, owner: object, opts?: { fallback?: React.ReactNode }) => {
@@ -159,7 +174,7 @@ function renderChat(
     useSessions: emptySessions(),
     useWorkspaces: emptyWorkspaces(),
     useProjection: (() => undefined),
-    useInput: (() => { throw new Error('unused') }),
+    useInput: bindSnapshotSelector(input),
     inputActions: { setDraft: () => {}, addImages: () => true, removeImage: () => {}, pruneImages: () => {}, submit: () => {} },
     useStore: bindSnapshotSelector(chat),
     actions: chat.actions,
@@ -186,6 +201,13 @@ afterEach(cleanup)
 beforeEach(() => { localStorage.clear() })
 
 describe('chat tool activity grouping', () => {
+  it('renders the browser workspace for nested Chrome activity while Tools stays collapsed', () => {
+    renderChat([user(1, 'Investiga y completa el formulario en Chrome'), nestedChromeTool()])
+
+    expect(screen.getByRole('region', { name: 'Navegador de Kira' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Tools' })).toBeTruthy()
+  })
+
   it('collapses consecutive context activity behind one Tools disclosure', () => {
     renderChat([context(1, 'system'), context(2, 'skill-catalog')])
 
