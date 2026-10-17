@@ -1,0 +1,14 @@
+.root { display: flex; flex-direction: column; gap: 13px; padding: 14px 15px; overflow-y: auto; min-height: 0; font-size: 13px; }
+.notice { margin: 0; line-height: 1.55; }
+.origin { padding: 10px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 9px; overflow-wrap: anywhere; background: var(--dsw-alias-bg-layer-1); font-weight: 600; }
+.form { display: flex; flex-direction: column; gap: 13px; }
+.form label { display: flex; flex-direction: column; gap: 5px; font-weight: 600; }
+.form label input:not([type="checkbox"]) { width: 100%; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); padding: 10px; border-radius: 8px; box-sizing: border-box; font: inherit; }
+.form .option { display: flex; flex-direction: row; align-items: flex-start; font-weight: 400; gap: 8px; line-height: 1.45; }
+.option input { margin: 3px 0 0; flex: none; }
+.actions { display: flex; flex-wrap: wrap; gap: 7px; }
+.actions button, .saved button { border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; padding: 8px 10px; background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); cursor: pointer; font: inherit; }
+.actions button:disabled { opacity: .5; cursor: not-allowed; }
+.saved { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.feedback { margin: 0; font-size: 12px; }
+.foot { color: var(--dsw-alias-label-secondary); font-size: 11px; margin: 0; line-height: 1.5; }

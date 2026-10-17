@@ -134,7 +134,9 @@ async function captureFrame(tabId: string, signal?: AbortSignal): Promise<Blob> 
     return response.blob()
   }, FRAME_DEADLINE_MS, FRAME_DEADLINE_MESSAGE, signal)
 }
-type SecureStatus = { saved: boolean; automatic: boolean }
+export type SecureStatus = { saved: boolean; automatic: boolean }
+export type SecureLoginTarget = { origin: string; tabId: string; saved: boolean; automatic: boolean }
+type SecureDetection = { required: boolean }
 type SecureUse = { status: string }
 function secureOrigin(value?: string): string | undefined {
   if (!value) return undefined
@@ -144,7 +146,7 @@ function secureOrigin(value?: string): string | undefined {
   } catch { /* Pending navigation. */ }
   return undefined
 }
-async function secureApi<T>(path: string, payload?: Record<string, unknown>): Promise<T> {
+export async function secureApi<T>(path: string, payload?: Record<string, unknown>): Promise<T> {
   const response = await fetch('/phoenix-secure-login' + path, {
     method: payload === undefined ? 'GET' : 'POST',
     headers: { 'x-phoenix-secure-login': '1', ...payload === undefined ? {} : { 'content-type': 'application/json' } },
@@ -178,7 +180,7 @@ function youtubeId(raw: string | undefined): string | undefined {
   } catch { return undefined }
 }
 /** Human navigation stays in the user-controlled MiniBrowser, never in the model's context. */
-export function MiniBrowser({ requested = false, active = true, initialTabId, onActivate, autoScroll = true, onPageChange }: {
+export function MiniBrowser({ requested = false, active = true, initialTabId, onActivate, autoScroll = true, onPageChange, onSecureLoginRequest }: {
   requested?: boolean
   active?: boolean
   /** Bind this card to a child Chromium call's target when one was recorded. */
@@ -186,6 +188,7 @@ export function MiniBrowser({ requested = false, active = true, initialTabId, on
   onActivate?: () => void
   autoScroll?: boolean
   onPageChange?: (page: { title: string; url: string } | null) => void
+  onSecureLoginRequest?: (request: SecureLoginTarget | null) => void
 }) {
   const [snapshot, setSnapshot] = useState<Snapshot>(BLANK)
   const [enabled, setEnabled] = useState(false)
@@ -194,12 +197,6 @@ export function MiniBrowser({ requested = false, active = true, initialTabId, on
   const [dismissed, setDismissed] = useState(false)
   const [address, setAddress] = useState('')
   const [typed, setTyped] = useState('')
-  const [secureOpen, setSecureOpen] = useState(false)
-  const [loginAccount, setLoginAccount] = useState('')
-  const [loginSecret, setLoginSecret] = useState('')
-  const [allowAutoLogin, setAllowAutoLogin] = useState(false)
-  const [loginState, setLoginState] = useState<SecureStatus>()
-  const [loginFeedback, setLoginFeedback] = useState<string>()
   const attemptedLogins = useRef(new Set<string>())
   const [playingVideo, setPlayingVideo] = useState(false)
   const [videoSurface, setVideoSurface] = useState(true)
@@ -233,44 +230,49 @@ export function MiniBrowser({ requested = false, active = true, initialTabId, on
   const videoId = youtubeId(snapshot.url)
   const siteOrigin = secureOrigin(snapshot.url)
 
+  // The MiniBrowser detects access needs, but never renders or stores a secret.
+  // Its parent temporarily replaces the adjacent activity pane with Secure Ask.
   useEffect(() => {
-    setSecureOpen(false)
-    setLoginAccount('')
-    setLoginSecret('')
-    setLoginState(undefined)
-    setLoginFeedback(undefined)
-    if (!siteOrigin || !snapshot.tabId || !active) return
+    if (!siteOrigin || !snapshot.tabId || !active) {
+      onSecureLoginRequest?.(null)
+      return
+    }
+    const tabId = snapshot.tabId
     let stopped = false
-    void secureApi<SecureStatus>('/status?origin=' + encodeURIComponent(siteOrigin)).then(state => {
+    void Promise.all([
+      secureApi<SecureStatus>('/status?origin=' + encodeURIComponent(siteOrigin)),
+      secureApi<SecureDetection>('/detect', { origin: siteOrigin, tabId }),
+    ]).then(async ([saved, detection]) => {
       if (stopped) return
-      setLoginState(state)
-      if (!state.saved || !state.automatic) return
-      const key = snapshot.tabId + '|' + snapshot.url
-      if (attemptedLogins.current.has(key)) return
-      attemptedLogins.current.add(key)
-      return secureApi<SecureUse>('/use', { origin: siteOrigin, tabId: snapshot.tabId }).then(receipt => {
-        if (!stopped && receipt.status === 'submitted') refreshFrame.current?.()
-      })
-    }).catch(() => { /* Browser UI stays usable if the optional vault is unavailable. */ })
-    return () => { stopped = true }
-  }, [siteOrigin, snapshot.url, snapshot.tabId, active])
-
-  const saveAccess = async () => {
-    if (!siteOrigin || !loginAccount.trim() || !loginSecret) return
-    try {
-      const state = await secureApi<SecureStatus>('/save', {
-        origin: siteOrigin, account: loginAccount, secret: loginSecret, automatic: allowAutoLogin,
-      })
-      setLoginState(state)
-      setLoginFeedback('Acceso protegido guardado para este sitio.')
-      setSecureOpen(false)
-      if (allowAutoLogin && snapshot.tabId) {
-        const receipt = await secureApi<SecureUse>('/use', { origin: siteOrigin, tabId: snapshot.tabId, manual: true })
-        if (receipt.status === 'submitted') refreshFrame.current?.()
+      if (!detection.required) {
+        onSecureLoginRequest?.(null)
+        return
       }
-    } catch { setLoginFeedback('No se pudo guardar: comprueba que el servicio seguro esté disponible en Windows.') }
-    finally { setLoginSecret(''); setLoginAccount('') }
-  }
+      const request: SecureLoginTarget = { origin: siteOrigin, tabId,
+        saved: saved.saved, automatic: saved.automatic }
+      if (saved.saved && saved.automatic) {
+        const key = tabId + '|' + snapshot.url
+        if (!attemptedLogins.current.has(key)) {
+          attemptedLogins.current.add(key)
+          try {
+            const result = await secureApi<SecureUse>('/use', { origin: siteOrigin, tabId })
+            if (stopped) return
+            if (result.status === 'submitted') {
+              refreshFrame.current?.()
+              // Submission is not proof of authentication. Wait for navigation.
+              return
+            }
+          } catch { /* Surface the human intervention pane below. */ }
+        } else {
+          // A previous attempt may still be navigating; no duplicate submits.
+          return
+        }
+      }
+      if (!stopped) onSecureLoginRequest?.(request)
+    }).catch(() => { /* Keep the MiniBrowser usable if the vault is offline. */ })
+    return () => { stopped = true }
+  }, [siteOrigin, snapshot.url, snapshot.tabId, active, onSecureLoginRequest])
+
   const pasteIntoPage = async () => {
     try {
       const text = await navigator.clipboard.readText()
@@ -728,6 +730,11 @@ export function MiniBrowser({ requested = false, active = true, initialTabId, on
           </span>
         </div>
         {mediaCaptureMessage && <p className={css.captureStatus} role="status">{mediaCaptureMessage}</p>}
+        {siteOrigin && snapshot.tabId && onSecureLoginRequest && <button type="button"
+          className={css.secureShortcut}
+          onClick={() => { onSecureLoginRequest({ origin: siteOrigin, tabId: snapshot.tabId as string, saved: false, automatic: false }) }}>
+          🔐 Solicitar acceso seguro
+        </button>}
         <form className={css.typeRow} onSubmit={(event) => { event.preventDefault(); if (typed) { void run({ type: 'text', text: typed }); setTyped(''); focusRef.current?.focus() } }}>
           <input aria-label="Escribir en la página" placeholder="Escribe en el campo seleccionado…" value={typed} onChange={(event) => { setTyped(event.currentTarget.value) }} />
           <button type="submit" disabled={!snapshot.available || !typed}>Escribir</button>
@@ -735,37 +742,6 @@ export function MiniBrowser({ requested = false, active = true, initialTabId, on
           <button type="button" disabled={!snapshot.available} onClick={() => { void run({ type: 'key', key: 'Enter' }) }}>Enter</button>
           <button type="button" disabled={!snapshot.available} onClick={() => { void run({ type: 'key', key: 'Tab' }) }}>Tab</button>
         </form>
-        {siteOrigin && <div className={css.secureSection}>
-          <button type="button" className={css.secureToggle}
-            onClick={() => { setSecureOpen(value => !value); setLoginFeedback(undefined) }}>
-            🔒 {loginState?.saved ? 'Acceso protegido guardado' : 'Guardar acceso seguro'}
-          </button>
-          {loginState?.saved && <span className={css.secureStatus}>
-            {loginState.automatic ? 'Inicio automático autorizado' : 'Inicio automático desactivado'}
-          </span>}
-          {secureOpen && <form className={css.secureForm} autoComplete="off"
-            onSubmit={(event) => { event.preventDefault(); void saveAccess() }}>
-            <strong>Formulario protegido · {siteOrigin}</strong>
-            <p>El acceso se envía directamente a la bóveda local y no al chat ni a Kira.</p>
-            <input aria-label="Usuario seguro" value={loginAccount} autoComplete="off" required
-              onChange={event => { setLoginAccount(event.currentTarget.value) }} placeholder="Correo o usuario" />
-            <input aria-label="Contraseña segura" type="password" value={loginSecret} autoComplete="new-password" required
-              onChange={event => { setLoginSecret(event.currentTarget.value) }} placeholder="Pega aquí la contraseña" />
-            <label><input type="checkbox" checked={allowAutoLogin}
-              onChange={event => { setAllowAutoLogin(event.currentTarget.checked) }} />
-              Permitir que Kira inicie sesión aquí en futuras visitas</label>
-            <div className={css.secureActions}>
-              <button type="submit" disabled={!loginAccount.trim() || !loginSecret}>Guardar en bóveda</button>
-              <button type="button" onClick={() => { setSecureOpen(false); setLoginSecret(''); setLoginAccount('') }}>Cancelar</button>
-              {loginState?.saved && <button type="button" onClick={() => {
-                void secureApi<SecureStatus>('/delete', { origin: siteOrigin }).then(state => {
-                  setLoginState(state); setSecureOpen(false); setLoginSecret(''); setLoginAccount('')
-                }).catch(() => { setLoginFeedback('No se pudo revocar este acceso.') })
-              }}>Eliminar acceso</button>}
-            </div>
-          </form>}
-          {loginFeedback && <p className={css.secureFeedback} role="status">{loginFeedback}</p>}
-        </div>}
         {captureError && active && <p className={css.error} role="status">
           La página está abierta, pero su imagen todavía no está disponible: {captureError}. Phoenix reintentará la captura automáticamente.
         </p>}
