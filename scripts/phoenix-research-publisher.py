@@ -273,7 +273,7 @@ def main():
     chunks.append("</ol></html>")
     html_file=output_root/"informe.html"
     html_file.write_text("".join(chunks),encoding="utf-8")
-    result={"state":"REPORT_READY","title":title,"style":style,"source_count":len(cited),"source_verification":"metadata_user_supplied_not_network_verified","files":{"docx":str(docx_file),"pdf":str(pdf_file),"html":str(html_file)},"output_dir":str(output_root)}
+    result={"state":"REPORT_READY","report_id":digest,"title":title,"style":style,"source_count":len(cited),"source_verification":"metadata_user_supplied_not_network_verified","files":{"docx":str(docx_file),"pdf":str(pdf_file),"html":str(html_file)},"output_dir":str(output_root)}
     (output_root/"manifest.json").write_text(json.dumps(result,ensure_ascii=False,indent=2),encoding="utf-8")
     if not docx_file.exists() or not pdf_file.exists() or not docx_file.stat().st_size or not pdf_file.stat().st_size:
         raise RuntimeError("produced files failed existence checks")

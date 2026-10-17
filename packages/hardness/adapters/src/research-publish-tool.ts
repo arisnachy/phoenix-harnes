@@ -97,6 +97,7 @@ function findPublisher(): string {
 
 type PublisherOutcome = {
   state: 'REPORT_READY'
+  report_id: string
   title: string
   files: { docx: string; pdf: string; html: string }
   source_count: number
@@ -120,7 +121,7 @@ async function runAttempt(bin: string, args: string[], payload: string, signal: 
       }
       try {
         const value = JSON.parse(output.trim()) as PublisherOutcome
-        if (value.state !== 'REPORT_READY' || typeof value.files !== 'object') {
+        if (value.state !== 'REPORT_READY' || !/^[0-9a-f]{16}$/u.test(value.report_id) || typeof value.files !== 'object') {
           throw new Error('La respuesta del publicador no confirmó un documento listo.')
         }
         resolveOutcome(value)
