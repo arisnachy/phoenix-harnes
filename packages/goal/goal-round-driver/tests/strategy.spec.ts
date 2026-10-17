@@ -20,7 +20,7 @@ describe('progress-aware goal strategies', () => {
       goal: { id: goalId, revision: 1, objective: 'ship', phase: 'active', maxGoalRounds: 2 },
       roundsStarted: 0, createdAt: 1, updatedAt: 1,
     })
-    const addRound = (round: number, effect?: { name: string; args: string }) => {
+    const addRound = (round: number, effect?: { name: string; args: string; result?: string }) => {
       const turn = round
       session.append('turn/start', { turn })
       session.append('user/message', createUserMessage({
@@ -32,7 +32,7 @@ describe('progress-aware goal strategies', () => {
         session.append('tool/call', { turn, step: 1, callId, name: effect.name, arguments: effect.args })
         session.append('tool/result', { turn, step: 1,
           message: createToolResultMessage({
-            callId, content: [{ type: 'text', text: 'ok' }], isError: false,
+            callId, content: [{ type: 'text', text: effect.result ?? 'ok' }], isError: false,
           }),
         }, { surfaceOp: 'append' })
       }
@@ -51,6 +51,21 @@ describe('progress-aware goal strategies', () => {
     })
     addRound(5, { name: 'edit', args: '{"path":"a","replace":"fixed"}' })
     expect(measureGoalWorkProgress(session.events, goalId).stagnantRounds).toBe(0)
+    // New arguments alone do not make repeated, unchanged tool output useful.
+    addRound(6, { name: 'edit', args: '{"path":"b","replace":"fixed"}' })
+    expect(measureGoalWorkProgress(session.events, goalId)).toMatchObject({
+      stagnantRounds: 1, repeatedOperations: ['edit'],
+    })
+    addRound(7, { name: 'press_key', args: '{"key":"PageDown"}',
+      result: '{"status":"dispatched","verified":false}' })
+    expect(measureGoalWorkProgress(session.events, goalId)).toMatchObject({
+      stagnantRounds: 2,
+    })
+    addRound(8, { name: 'press_key', args: '{"key":"End"}',
+      result: '{"status":"dispatched","verified":false}' })
+    expect(measureGoalWorkProgress(session.events, goalId)).toMatchObject({
+      stagnantRounds: 3, repeatedOperations: ['press_key'],
+    })
   })
 
   it('keeps a productive strategy and rotates only after verification stagnates', () => {

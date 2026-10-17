@@ -76,8 +76,9 @@ export interface GoalWorkProgress {
 
 /**
  * Inspect persisted Goal rounds across execution-window revisions. A unique
- * successful tool invocation, a newly completed task, or fresh verification
- * evidence advances work. Repeated same-name/same-arguments tool calls do not.
+ * successful tools with distinct observable results, newly completed tasks
+ * or fresh verification evidence advance work. Repeated or unchanged tool
+ * results are NOT proof of progress, even if the arguments/call IDs differ.
  * The explicit human-authorized resume resets this recovery window.
  *
  * @param events - canonical append-only Lead session.
@@ -117,13 +118,28 @@ export function measureGoalWorkProgress(
       && event.data.message.content.every(block => block.isError !== true)) {
       const call = calls.get(String(event.data.message.source.callId))
       if (call !== undefined) {
-        // Pair with the original arguments rather than the call ID. A new ID
-        // for the same read does not mean the file, answer or artifact changed.
-        const fingerprint = JSON.stringify([call.name, call.args])
-        const novel = !observed.has(fingerprint)
+        // Treat genuinely different returned evidence as work, rather than
+        // counting repeated reads, screenshot attempts or differently
+        // parameterized clicks as progress. Image bytes and transient tokens
+        // are intentionally excluded from the fingerprint.
+        const stableBlocks = event.data.message.content.map(block =>
+          block.type === 'text' ? block.text.slice(0, 12_000) : block.type)
+        // Tool protocols can explicitly mark dispatch receipts as unverified.
+        // An accepted click/key/submit request is not evidence that its goal
+        // was achieved; a subsequent observation must confirm the effect.
+        const unverified = event.data.message.content.some(block => {
+          if (block.type !== 'text') return false
+          try {
+            const parsed: unknown = JSON.parse(block.text)
+            return typeof parsed === 'object' && parsed !== null
+              && 'verified' in parsed && parsed.verified === false
+          } catch { return false }
+        })
+        const fingerprint = JSON.stringify([call.name, stableBlocks])
+        const novel = !unverified && !observed.has(fingerprint)
         if (round !== undefined) {
           if (novel) round.progressed = true
-          else if (!round.repeated.includes(call.name)) round.repeated.push(call.name)
+          else if (observed.has(fingerprint) && !round.repeated.includes(call.name)) round.repeated.push(call.name)
         }
         observed.add(fingerprint)
       }

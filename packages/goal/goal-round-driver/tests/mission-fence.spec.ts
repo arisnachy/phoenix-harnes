@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Session, SessionEvent } from '@phoenix-ai/dsh-session'
-import { goalBlockedByClosedUniversalMission, unfinishedTodoRecoveryObjective, unfinishedStructuredWorkRecoveryObjective } from '../src/mission-fence.ts'
+import { goalBlockedByClosedUniversalMission, unfinishedTodoRecoveryObjective, unfinishedStructuredWorkRecoveryObjective, unfinishedToolFailureRecoveryObjective } from '../src/mission-fence.ts'
 
 function human(seq: number, kind = 'user'): SessionEvent {
   return { seq, type: 'user/message', data: { source: { kind } } } as unknown as SessionEvent
@@ -80,6 +80,41 @@ describe('universal structured work recovery', () => {
       todos: [{ content: 'Publicar', status: 'pending' }],
     } } as unknown as SessionEvent
     expect(unfinishedStructuredWorkRecoveryObjective([message, pending, end])).toBe('Termina toda la misión')
+  })
+})
+
+
+describe('tool-outcome-based mission recovery', () => {
+  const human = { seq: 1, type: 'user/message', data: {
+    source: { kind: 'user' }, content: [{ type: 'text', text: 'Completa el trabajo con el navegador' }],
+  } } as unknown as SessionEvent
+  const ended = { seq: 9, type: 'turn/end', data: {
+    reason: { kind: 'completed' },
+  } } as unknown as SessionEvent
+  const tool = (seq: number, failed: boolean): SessionEvent => ({
+    seq, type: 'tool/result', data: { error: failed ? { message: 'invalid arguments' } : undefined,
+      message: { content: [{ type: 'text', text: failed ? 'error' : 'success' }] } },
+  }) as unknown as SessionEvent
+
+  it('recovers a failed tool without reading any assistant phrasing', () => {
+    const events = [human, tool(2, true), ended]
+    expect(unfinishedToolFailureRecoveryObjective(events)).toBe('Completa el trabajo con el navegador')
+  })
+  it('does not replay tool attempts after a succeeding alternate route', () => {
+    expect(unfinishedToolFailureRecoveryObjective([human, tool(2, true), tool(3, false), ended]))
+      .toBeUndefined()
+  })
+  it('does not restart a user-cancelled or historical request', () => {
+    const cancelled = { seq: 9, type: 'turn/end', data: {
+      reason: { kind: 'aborted', reason: { kind: 'user' } },
+    } } as unknown as SessionEvent
+    expect(unfinishedToolFailureRecoveryObjective([human, tool(2, true), cancelled]))
+      .toBeUndefined()
+    const later = { seq: 10, type: 'user/message', data: {
+      source: { kind: 'user' }, content: [{ type: 'text', text: 'Una pregunta diferente' }],
+    } } as unknown as SessionEvent
+    expect(unfinishedToolFailureRecoveryObjective([human, tool(2, true), ended, later,
+      { ...ended, seq: 11 }])).toBeUndefined()
   })
 })
 

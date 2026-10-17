@@ -38,5 +38,8 @@ describe('goal-round autonomous continuation guidance', () => {
     expect(text).toContain('browser diagnose_page tool')
     expect(text).toContain('distinguish page failures from cross-origin frame failures')
     expect(text).toContain('Do not bypass website access controls')
+    expect(text).toContain('Tool schemas are executable contracts')
+    expect(text).toContain('Verify a changed page state')
+    expect(text).toContain('An ambiguous submission failure must be verified read-only')
   })
 })

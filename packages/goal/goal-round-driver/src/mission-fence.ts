@@ -67,6 +67,36 @@ export function unfinishedStructuredWorkRecoveryObjective(events: readonly Sessi
   return objective || undefined
 }
 
+/**
+ * Recover a delegated operation when its last observable tool attempt failed.
+ * This inspects durable tool outcomes, never assistant prose or hard-coded
+ * refusal phrases. It does not rerun the failed operation: the Goal driver
+ * decides a safe alternative after checking whether effects actually occurred.
+ */
+export function unfinishedToolFailureRecoveryObjective(events: readonly SessionEvent[]): string | undefined {
+  const index = events.findLastIndex(event =>
+    event.type === 'user/message' && event.data.source.kind === 'user')
+  if (index < 0) return undefined
+  const human = events[index]
+  if (human?.type !== 'user/message') return undefined
+  const current = events.slice(index + 1)
+  const lastEnd = current.findLast(event => event.type === 'turn/end')
+  if (lastEnd?.data.reason.kind !== 'completed') return undefined
+  let unresolvedFailure = false
+  for (const event of current) {
+    if (event.type !== 'tool/result') continue
+    const failed = event.data.error !== undefined
+      || event.data.message.content.some(block => block.isError === true)
+    // A successful alternative clears the recovery trigger. A later failure
+    // opens it again, independent of tool naming or human language.
+    unresolvedFailure = failed
+  }
+  if (!unresolvedFailure) return undefined
+  const objective = human.data.content.flatMap(block =>
+    block.type === 'text' ? [block.text] : []).join(' ').trim().slice(0, 2_000)
+  return objective || undefined
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }

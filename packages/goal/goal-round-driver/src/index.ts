@@ -12,12 +12,12 @@ import { createUserMessage, isHarnessError, QUOTA_EXCEEDED_CODE } from '@phoenix
 import type { ContentBlock, MessageId, MessageSource } from '@phoenix-ai/dsh-llm'
 import type { Session, SessionEvent, TurnEndCancelCause, UserMessage } from '@phoenix-ai/dsh-session'
 import { renderGoalRoundPrompt } from './prompt.ts'
-import { goalBlockedByClosedUniversalMission, unfinishedStructuredWorkRecoveryObjective } from './mission-fence.ts'
+import { goalBlockedByClosedUniversalMission, unfinishedStructuredWorkRecoveryObjective, unfinishedToolFailureRecoveryObjective } from './mission-fence.ts'
 import { recordGoalSupervisor, replayGoalSupervisor, type GoalSupervisorState } from './supervisor.ts'
 import { measureGoalVerificationProgress, measureGoalWorkProgress, recordGoalStrategy, replayGoalStrategy, selectNextStrategy } from './strategy.ts'
 
 export { renderGoalRoundPrompt } from './prompt.ts'
-export { goalBlockedByClosedUniversalMission, unfinishedTodoRecoveryObjective, unfinishedStructuredWorkRecoveryObjective } from './mission-fence.ts'
+export { goalBlockedByClosedUniversalMission, unfinishedTodoRecoveryObjective, unfinishedStructuredWorkRecoveryObjective, unfinishedToolFailureRecoveryObjective } from './mission-fence.ts'
 export { recordGoalSupervisor, replayGoalSupervisor } from './supervisor.ts'
 export type { GoalSupervisorState } from './supervisor.ts'
 export { GOAL_STRATEGIES, measureGoalVerificationProgress, measureGoalWorkProgress, recordGoalStrategy, replayGoalStrategy, selectNextStrategy } from './strategy.ts'
@@ -310,11 +310,12 @@ export function apply(ctx: Context): void {
       // wording. The normal
       // goal/changed event will schedule the first recovery round.
       const objective = unfinishedStructuredWorkRecoveryObjective(agent.session.events)
+        ?? unfinishedToolFailureRecoveryObjective(agent.session.events)
       if (objective !== undefined) {
         try {
           ctx.goals.create(agent, { objective })
         } catch (error: unknown) {
-          ctx.logger.warn(`goal-round-driver: could not recover unfinished todo for agent "${agent.id}": ${renderThrown(error)}`)
+          ctx.logger.warn(`goal-round-driver: could not recover unfinished delegated work for agent "${agent.id}": ${renderThrown(error)}`)
         }
       }
       return

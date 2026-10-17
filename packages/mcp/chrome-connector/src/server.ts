@@ -920,26 +920,99 @@ server.registerTool('mouse_action', {
     + '. Verifica con inspect_page o screenshot antes de afirmar el resultado.' }] }
 })
 
+/** Parse keyboard shorthand without executing page scripts or accessing the clipboard. */
+export interface NormalizedBrowserKey {
+  key: string
+  code: string
+  virtualKeyCode: number
+  modifiers: number
+  text?: string
+}
+const BROWSER_MODIFIERS: Readonly<Record<string, number>> = {
+  alt: 1, option: 1, ctrl: 2, control: 2, ctl: 2,
+  meta: 4, cmd: 4, command: 4, shift: 8,
+}
+const BROWSER_KEY_NAMES: Readonly<Record<string, readonly [string, string, number]>> = {
+  enter: ['Enter', 'Enter', 13], return: ['Enter', 'Enter', 13],
+  tab: ['Tab', 'Tab', 9],
+  escape: ['Escape', 'Escape', 27], esc: ['Escape', 'Escape', 27],
+  backspace: ['Backspace', 'Backspace', 8],
+  delete: ['Delete', 'Delete', 46], del: ['Delete', 'Delete', 46],
+  arrowup: ['ArrowUp', 'ArrowUp', 38], up: ['ArrowUp', 'ArrowUp', 38],
+  arrowdown: ['ArrowDown', 'ArrowDown', 40], down: ['ArrowDown', 'ArrowDown', 40],
+  arrowleft: ['ArrowLeft', 'ArrowLeft', 37], left: ['ArrowLeft', 'ArrowLeft', 37],
+  arrowright: ['ArrowRight', 'ArrowRight', 39], right: ['ArrowRight', 'ArrowRight', 39],
+  home: ['Home', 'Home', 36], end: ['End', 'End', 35],
+  pageup: ['PageUp', 'PageUp', 33], pgup: ['PageUp', 'PageUp', 33],
+  pagedown: ['PageDown', 'PageDown', 34], pgdn: ['PageDown', 'PageDown', 34],
+  space: [' ', 'Space', 32], spacebar: [' ', 'Space', 32], espacio: [' ', 'Space', 32],
+  f3: ['F3', 'F3', 114], f5: ['F5', 'F5', 116],
+}
+function parseBrowserModifier(value: string): number {
+  let bitmask = 0
+  for (const part of value.split(/[+,\s]+/u).filter(Boolean)) {
+    const mask = BROWSER_MODIFIERS[part.toLowerCase()]
+    if (mask === undefined) throw new TypeError('Unknown modifier')
+    bitmask |= mask
+  }
+  return bitmask
+}
+export function normalizeBrowserKey(key: string, modifiers: number | string | string[] = 0): NormalizedBrowserKey {
+  const raw = key.trim()
+  if (!raw) {
+    if (key === ' ') return { key: ' ', code: 'Space', virtualKeyCode: 32, modifiers: 0, text: ' ' }
+    throw new TypeError('Empty key')
+  }
+  const parts = raw.split(/\s*\+\s*/u)
+  const basic = parts.pop()?.trim()
+  if (!basic) throw new TypeError('Missing final key')
+  const embeddedModifiers = parts.length === 0 ? 0 : parseBrowserModifier(parts.join('+'))
+  const explicit = typeof modifiers === 'number' ? modifiers
+    : parseBrowserModifier(Array.isArray(modifiers) ? modifiers.join('+') : modifiers)
+  if (!Number.isInteger(explicit) || explicit < 0 || explicit > 15) throw new TypeError('Invalid modifier mask')
+  const mask = embeddedModifiers | explicit
+  const alias = basic.toLowerCase().replace(/\s/gu, '')
+  const named = BROWSER_KEY_NAMES[alias]
+  if (named !== undefined) {
+    const [name, code, virtual] = named
+    return { key: name, code, virtualKeyCode: virtual, modifiers: mask,
+      ...(mask === 0 && name === ' ' ? { text: ' ' } : {}) }
+  }
+  if (!/^[a-z0-9]$/iu.test(basic)) throw new TypeError('Unsupported browser key')
+  const digit = /^[0-9]$/u.test(basic)
+  const virtualKeyCode = basic.toUpperCase().charCodeAt(0)
+  return { key: basic, code: (digit ? 'Digit' : 'Key') + basic.toUpperCase(),
+    virtualKeyCode, modifiers: mask, ...(mask === 0 ? { text: basic } : {}) }
+}
+
 server.registerTool('press_key', {
-  description: 'Tecla de navegador (Enter, Tab, Escape, Backspace, flechas, letras, dígitos y modificadores). Alternativa CDP a Computer si la ventana de escritorio está oculta. Nunca escribe en otra aplicación del sistema.',
-  inputSchema: { tabId: z.string().optional(), key: z.string().min(1).max(25),
-    modifiers: z.number().int().min(0).max(15).default(0) },
+  description: 'Enviar tecla en la pestaña actual con sintaxis flexible. Ejemplos: {"key":"PageDown"}, {"key":"Shift+Tab"}, {"key":"Ctrl+F"}, {"key":"Space"}. modifiers acepta entero de bits, "Ctrl+Shift" o ["Control","Shift"]. Usa interact para controles DOM y comprueba cualquier cambio antes de afirmar éxito.',
+  inputSchema: { tabId: z.string().optional(), key: z.string().min(1).max(60),
+    modifiers: z.union([z.number().int().min(0).max(15), z.string(), z.array(z.string())]).optional() },
 }, async ({ tabId, key, modifiers }) => {
   ensureBrowserActionPermission()
-  const allowed = new Set(['Enter','Tab','Escape','Backspace','Delete','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Home','End','PageUp','PageDown'])
-  if (!allowed.has(key) && !/^[a-zA-Z0-9 ]$/.test(key)) throw new Error('Tecla no admitida; solo navegación y texto simple.')
-  const tab = await selectedTab(tabId)
-  const virtualCodes: Record<string, number> = {
-    Enter: 13, Tab: 9, Escape: 27, Backspace: 8, Delete: 46,
-    ArrowUp: 38, ArrowDown: 40, ArrowLeft: 37, ArrowRight: 39,
-    Home: 36, End: 35, PageUp: 33, PageDown: 34,
+  let normalized: NormalizedBrowserKey
+  try {
+    normalized = normalizeBrowserKey(key, modifiers)
+  } catch {
+    return { isError: true, content: [{ type: 'text', text: JSON.stringify({
+      code: 'INVALID_BROWSER_KEY',
+      expected: { key: 'PageDown | Shift+Tab | Ctrl+F | Space | End', modifiers: 'optional' },
+      next: 'Corrige el formato de key o utiliza inspect_page e interact para un control DOM real.',
+    }) }] }
   }
-  const virtual = virtualCodes[key] ?? key.toUpperCase().charCodeAt(0)
-  const params = { key, code: key, modifiers, windowsVirtualKeyCode: virtual, nativeVirtualKeyCode: virtual }
+  const tab = await selectedTab(tabId)
+  const params = {
+    key: normalized.key, code: normalized.code, modifiers: normalized.modifiers,
+    windowsVirtualKeyCode: normalized.virtualKeyCode, nativeVirtualKeyCode: normalized.virtualKeyCode,
+  }
   await cdp(tab, 'Input.dispatchKeyEvent', { type: 'keyDown', ...params,
-    ...(key.length === 1 && modifiers === 0 ? { text: key } : key === 'Enter' ? { text: '\r' } : {}) })
+    ...(normalized.text === undefined ? {} : { text: normalized.text }) })
   await cdp(tab, 'Input.dispatchKeyEvent', { type: 'keyUp', ...params })
-  return { content: [{ type: 'text', text: 'Tecla enviada: ' + key + ' en la pestaña ' + tab.id }] }
+  return { content: [{ type: 'text', text: JSON.stringify({
+    status: 'dispatched', key: normalized.key, modifiers: normalized.modifiers, tabId: tab.id,
+    verified: false, next: 'Comprueba el cambio real con inspect_page; una tecla enviada no prueba avance.',
+  }) }] }
 })
 
 server.registerTool('type_text', {
