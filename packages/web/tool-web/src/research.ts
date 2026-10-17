@@ -248,7 +248,7 @@ const sourceSchema = {
     host: { type: 'string' as const, required: true },
     access: { type: 'string' as const, required: true },
   },
-}
+} as const
 
 /** Registers an intentionally bounded federated research tool and source inventory. */
 export function applyResearchTools(ctx: Context, maxResults: number, timeoutMs: number): void {
