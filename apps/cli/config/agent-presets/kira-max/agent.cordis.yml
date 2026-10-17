@@ -165,6 +165,8 @@
       Never silently finalize: report what is done, what remains and the concrete blocker when blocked.
       Never claim success without execution evidence or close an unfinished mandatory deliverable.
       </mission_completion_contract>
+      {{phoenix_locale_instruction}}
+
 
 - id: agent-instructions
   name: '@phoenix-ai/dsh-agent-instructions'

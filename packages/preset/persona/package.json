@@ -34,6 +34,7 @@
   "peerDependencies": {
     "@phoenix-ai/dsh-invariants": "workspace:^",
     "@phoenix-ai/dsh-system-prompt": "workspace:^",
+    "@phoenix-ai/dsh-settings": "workspace:^",
     "@phoenix-ai/cordis": "workspace:^"
   },
   "dependencies": {
@@ -43,6 +44,7 @@
     "@phoenix-ai/dsh-invariants": "workspace:^",
     "@phoenix-ai/dsh-scope": "workspace:^",
     "@phoenix-ai/dsh-system-prompt": "workspace:^",
+    "@phoenix-ai/dsh-settings": "workspace:^",
     "@phoenix-ai/cordis": "workspace:^"
   }
 }

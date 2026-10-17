@@ -6345,6 +6345,9 @@ importers:
       '@phoenix-ai/dsh-system-prompt':
         specifier: workspace:^
         version: link:../../core/system-prompt
+      '@phoenix-ai/dsh-settings':
+        specifier: workspace:^
+        version: link:../../settings/settings
 
   packages/profile/user-profile:
     devDependencies:
