@@ -47,17 +47,19 @@ export async function verifyPublishedDocument(reportId: string, format: Format):
   return { path, bytes }
 }
 
-function receiptPath(reportId: string, channel: Channel, format: Format): string {
-  return join(homedir(), '.dsh', 'research-reports', reportId, 'delivery-' + channel + '-' + format + '.json')
+function receiptPath(reportId: string, channel: Channel, format: Format, recipient: string): string {
+  const destinationId = createHash('sha256').update(recipient).digest('hex').slice(0, 16)
+  return join(homedir(), '.dsh', 'research-reports', reportId, 'delivery-' + channel + '-' + format + '-' + destinationId + '.json')
 }
 
 async function sendExactlyOnce(
   reportId: string,
   channel: Channel,
   format: Format,
+  recipient: string,
   action: () => Promise<string>,
 ): Promise<Receipt> {
-  const path = receiptPath(reportId, channel, format)
+  const path = receiptPath(reportId, channel, format, recipient)
   try {
     const handle = await open(path, 'wx')
     try { await handle.writeFile(JSON.stringify({ state: 'pending', channel, format, createdAt: new Date().toISOString() })) }
@@ -107,7 +109,7 @@ async function sendByEmail(
     throw new Error('El archivo supera el límite seguro de adjunto inline (4 MB); debe usarse un enlace autorizado.')
   }
   const idempotencyKey = createHash('sha256').update(reportId + ':email:' + format + ':' + identity.ownerEmail).digest('hex')
-  return await sendExactlyOnce(reportId, 'email', format, async () => {
+  return await sendExactlyOnce(reportId, 'email', format, identity.ownerEmail, async () => {
     const response = await agentMailRequest(
       '/inboxes/' + encodeURIComponent(identity.inboxId!) + '/messages/send',
       key.value, 30000, fetch,
@@ -141,7 +143,7 @@ async function sendByTelegram(
     throw new Error('Telegram no está vinculado a un chat autorizado del propietario.')
   }
   const file = await verifyPublishedDocument(reportId, format)
-  return await sendExactlyOnce(reportId, 'telegram', format, async () => {
+  return await sendExactlyOnce(reportId, 'telegram', format, chat.value, async () => {
     const form = new FormData()
     form.append('chat_id', chat.value)
     form.append('caption', 'Phoenix Research Studio · Informe ' + reportId)

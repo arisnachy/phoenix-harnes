@@ -2,7 +2,7 @@
  * Authenticated-by-source scholarly metadata: public Europe PMC REST response,
  * not a model-derived citation or a made-up API account connection.
  */
-import { defineTool, ToolArgsError, type ToolDefinition } from '@phoenix-ai/dsh-tools'
+import { defineTool, ToolArgsError, type JsonValue, type ToolDefinition } from '@phoenix-ai/dsh-tools'
 
 /** Original Europe PMC bibliographic record with source identity and retrieval time. */
 export interface ScholarlyRecord {
@@ -113,7 +113,8 @@ export function createScholarlySearchTool(): ToolDefinition {
     output: { schema: { type: 'object', additionalProperties: true },
       render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }] },
     async execute(args, exec) {
-      return await searchEuropePmc(args.query, args.limit ?? 5, exec.signal)
+      const result = await searchEuropePmc(args.query, args.limit ?? 5, exec.signal)
+      return result as unknown as Record<string, JsonValue>
     },
     presentCall(args) {
       return { card: 'generic', title: 'Literatura científica · ' + String(args.query).slice(0, 80), kind: 'search' }
