@@ -28,6 +28,10 @@ La `gallery` se guarda en `~/.dsh/business-library/gallery.html` (Windows: `%USE
 4. Solicitar aprobación interactiva antes de enviar, publicar, iniciar publicidad pagada o aceptar contratos; recopilar comprobante real de la plataforma y guardarlo en el expediente.
 5. Medir visitas, pedidos, regalías y beneficio neto con procedencia. El comando `sale` representa una observación *no verificada* hasta contrastarla con el canal oficial.
 
+## Mi Biblioteca dentro de la interfaz (rama Business Studio)
+
+Phoenix presenta la biblioteca real como una pestaña de los ajustes de Plugins. Usa `pluginInventory.businessLibrary`, una proyección de solo lectura del índice del Host, con búsqueda, filtros, contadores de capítulos, archivos, planificación y frescura de compilación. El cliente recibe **únicamente metadatos depurados**: ni rutas locales, ni pedidos, ni contraseñas, ni textos de los libros. Limita la respuesta a 300 productos y rechaza índices inválidos. Es una integración funcional de consulta, no un nuevo panel comercial público ni una confirmación de ventas.
+
 ## Límites intencionales y siguiente integración
 
 - `compile` produce EPUB3 validado estructuralmente en pruebas locales, **no** una cubierta de impresión, DOCX ni PDF final. El EPUB debe comprobarse en Kindle Previewer y pasar revisión tipográfica y editorial.
