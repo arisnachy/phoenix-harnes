@@ -3,6 +3,8 @@ import { mkdtemp, writeFile, rm, symlink } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createHash } from 'node:crypto'
+import { spawnSync } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
 import { readBusinessLibrarySnapshot } from '../src/business-library.ts'
 const paths:string[]=[]
 async function workspace() { const path=await mkdtemp(join(tmpdir(),'phoenix-business-'));paths.push(path);return path }
@@ -44,4 +46,28 @@ describe('Business Library Host projection',()=>{
     expect(snapshot.truncated).toBe(true)
     expect(snapshot.products).toHaveLength(300)
   })
+  it('reads actual CLI creations and invalidates the shelf when a chapter changes', async () => {
+    const home = await workspace()
+    const cli = fileURLToPath(new URL('../../../../scripts/phoenix-business.mjs', import.meta.url))
+    const invoke = (...args: string[]): Record<string, unknown> => {
+      const result = spawnSync(process.execPath, [cli, ...args], {
+        encoding: 'utf8',
+        env: { ...process.env, PHOENIX_BUSINESS_HOME: home },
+      })
+      expect(result.status).toBe(0)
+      return (JSON.parse(result.stdout) as { result: Record<string, unknown> }).result
+    }
+    const id = invoke('init', 'book', 'Libro de prueba editorial').id as string
+    const chapter = join(home, 'capitulo.md')
+    await writeFile(chapter, 'Escena escrita con continuidad y personajes. '.repeat(110))
+    invoke('chapter', id, '1', chapter)
+    expect((await readBusinessLibrarySnapshot(home)).products[0]?.buildStatus).toBe('not-built')
+    invoke('compile', id, '--author', 'Prueba Editorial', '--chapters', '1', '--words', '100')
+    const compiled = (await readBusinessLibrarySnapshot(home)).products[0]
+    expect(compiled).toMatchObject({ chapterCount: 1, fileCount: 4, buildStatus: 'current' })
+    await writeFile(chapter, 'Una versión distinta de la historia. '.repeat(110))
+    invoke('chapter', id, '1', chapter)
+    expect((await readBusinessLibrarySnapshot(home)).products[0]?.buildStatus).toBe('stale')
+  })
+
 })
