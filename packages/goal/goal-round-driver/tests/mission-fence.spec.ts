@@ -100,6 +100,19 @@ describe('tool-outcome-based mission recovery', () => {
     const events = [human, tool(2, true), ended]
     expect(unfinishedToolFailureRecoveryObjective(events)).toBe('Completa el trabajo con el navegador')
   })
+  it('recognizes an unverified dispatched tool action without matching agent text', () => {
+    const receipt = { seq: 2, type: 'tool/result', data: {
+      message: { content: [{ type: 'tool-result', isError: false,
+        content: [{ type: 'text', text: JSON.stringify({
+          status: 'dispatched', verified: false, key: 'PageDown',
+        }) }],
+      }] },
+    } } as unknown as SessionEvent
+    expect(unfinishedToolFailureRecoveryObjective([human, receipt, ended]))
+      .toBe('Completa el trabajo con el navegador')
+    expect(unfinishedToolFailureRecoveryObjective([human, receipt, tool(3, false), ended]))
+      .toBeUndefined()
+  })
   it('does not replay tool attempts after a succeeding alternate route', () => {
     expect(unfinishedToolFailureRecoveryObjective([human, tool(2, true), tool(3, false), ended]))
       .toBeUndefined()

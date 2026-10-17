@@ -87,9 +87,26 @@ export function unfinishedToolFailureRecoveryObjective(events: readonly SessionE
     if (event.type !== 'tool/result') continue
     const failed = event.data.error !== undefined
       || event.data.message.content.some(block => block.isError === true)
-    // A successful alternative clears the recovery trigger. A later failure
-    // opens it again, independent of tool naming or human language.
-    unresolvedFailure = failed
+    // A transport-level success is not necessarily a completed action.
+    // Accept a structured unverified receipt as unfinished operational work.
+    // Inspect nested LLM tool-result blocks rather than assistant phrasing.
+    const blocks: unknown = event.data.message.content
+    const pendingDispatch = Array.isArray(blocks) && blocks.some(outer => {
+      if (!isRecord(outer)) return false
+      const inner: unknown = outer.type === 'tool-result' ? outer.content : [outer]
+      if (!Array.isArray(inner)) return false
+      return inner.some(part => {
+        if (!isRecord(part) || part.type !== 'text' || typeof part.text !== 'string') return false
+        try {
+          const row: unknown = JSON.parse(part.text)
+          return isRecord(row) && (row.verified === false
+            || row.status === 'dispatched' || row.status === 'pending-verification')
+        } catch { return false }
+      })
+    })
+    // A successful alternative clears a failed-call trigger, but a dispatch
+    // receipt remains unfinished until an actual verified outcome exists.
+    unresolvedFailure = failed || pendingDispatch
   }
   if (!unresolvedFailure) return undefined
   const objective = human.data.content.flatMap(block =>

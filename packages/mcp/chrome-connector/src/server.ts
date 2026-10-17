@@ -17,6 +17,7 @@ import { browserBatchExpression, browserInteractionExpression, type BrowserInter
 import { CdpConnectionPool } from './cdp-connection-pool.ts'
 import { classifySiteHealth, nextSiteRecoveryStep, siteHealthExpression, type SitePageHealth } from './site-health.ts'
 import { runBrowserFormWorkflow } from './form-workflow.ts'
+import { formLayoutKey, recallVerifiedFormLayout, sanitizeFormLayout, saveVerifiedFormLayout } from './form-layout-memory.ts'
 import { chooseYoutubeCaptions, youtubeCaptionUrl, youtubeTranscript, youtubeWatchUrl, type YoutubeCaptionTrack } from './youtube-video.ts'
 import { parseCapturedVideoAudio, transcribeCapturedVideoAudio, videoAudioCaptureExpression } from './video-audio.ts'
 import { inspectVideoMedia } from './video-media.ts'
@@ -478,11 +479,35 @@ const fieldAction = z.object({
 })
 
 server.registerTool('inspect_page', {
-  description: 'Inspección rápida estructurada y de solo lectura de la pestaña real: campos, etiquetas, tipos, opciones, protegido/deshabilitado/readonly, formularios y frames. Una llamada antes de completar un formulario; no requiere escritorio ni captura de pantalla. No incluye contraseñas, cookies ni contenido de campos sensibles.',
+  description: 'Inspección estructurada y de solo lectura de la pestaña real. Si hubo una verificación exitosa previa en esta ruta, agrega learnedLayout con localizadores seguros revalidados contra el DOM actual, NUNCA valores de campos. Reutiliza esas pistas para ahorrar pasos, pero verifica cada entrada y confirma por separado los envíos.',
   inputSchema: { tabId: z.string().optional() },
 }, async ({ tabId }) => {
   const tab = await selectedTab(tabId)
-  return formatBrowserResult(await evaluate(tab, browserInteractionExpression({ operation: 'inspect' })))
+  const observed = await evaluate(tab, browserInteractionExpression({ operation: 'inspect' }))
+  const layout = await recallVerifiedFormLayout(tab.url).catch(() => undefined)
+  const result = observed as BrowserInteractionResult | undefined
+  // Hints do not supply values and cannot stand in for the current DOM.
+  if (!layout || !result?.ok || !Array.isArray(result.controls)) return formatBrowserResult(observed)
+  const controls = result.controls as Array<{ id?: string; name?: string; visible?: boolean; disabled?: boolean; readonly?: boolean; type?: string }>
+  const usable = (locator: { selector?: string; name?: string }): boolean => {
+    const found = controls.filter(control => control.visible && !control.disabled && !control.readonly
+      && control.type !== 'password' && (locator.name !== undefined
+        ? control.name === locator.name
+        : locator.selector?.startsWith('#') && control.id === locator.selector.slice(1)))
+    // Class/tag-and-id selectors are suggestions requiring fresh inspection.
+    return found.length === 1
+  }
+  const suggestions = {
+    ...layout,
+    steps: layout.steps.filter(usable),
+    verifiedChecks: layout.verifiedChecks.filter(usable),
+  }
+  return formatBrowserResult({
+    ...result, ...(suggestions.steps.length || suggestions.verifiedChecks.length
+      ? { learnedLayout: suggestions,
+          warning: 'Memoria de localizadores SIN datos: revalida controles, valores y autorización actual. No reutilices envíos.' }
+      : {}),
+  })
 })
 
 server.registerTool('complete_form', {
@@ -509,22 +534,47 @@ server.registerTool('complete_form', {
 }, async ({ tabId, phases, checks, submit, expectedReceiptText }) => {
   ensureBrowserActionPermission()
   const tab = await selectedTab(tabId)
-  const result = await runBrowserFormWorkflow({
+  const workflow = {
     phases: phases as BrowserInteraction[][],
     checks: checks as BrowserInteraction[],
     ...(submit ? { submit } : {}),
     ...(expectedReceiptText ? { expectedReceiptText } : {}),
-  }, expression => evaluate(tab, expression))
+  }
+  const result = await runBrowserFormWorkflow(workflow, expression => evaluate(tab, expression))
+  if (result.ok && (result.stage === 'verified'
+    || (result.stage === 'receipt' && result.receiptConfirmed))) {
+    // Only proven verification promotes reusable, secret-free locator hints.
+    await saveVerifiedFormLayout(tab.url, workflow.phases, workflow.checks).catch(() => false)
+  }
   return formatBrowserResult(result)
 })
 
+// Transient layout-only candidates. Raw user entries are never stored here.
+// A layout is promoted only after a successful verify_form on the same route.
+const pendingFormLayouts = new Map<string, { pageKey: string; steps: BrowserInteraction[] }>()
 server.registerTool('fill_form', {
   description: 'VÍA PREFERIDA Y RÁPIDA para encuestas/formularios: tras UNA inspección inspect_page, completa hasta 30 campos en UNA sola llamada Chromium DOM (sin capturas ni clics por campo). Usa name, label, CSS o placeholder. Verifica cada escritura inmediatamente, rechaza campos protegidos/ambiguos y se detiene ante un error. Después usa verify_form UNA VEZ para comprobar persistencia; captura pantalla solo si el DOM no alcanza. No envía el formulario.',
   inputSchema: { tabId: z.string().optional(), fields: z.array(fieldAction).min(1).max(30) },
 }, async ({ tabId, fields }) => {
   ensureBrowserActionPermission()
   const tab = await selectedTab(tabId)
-  return formatBrowserResult(await evaluate(tab, browserBatchExpression(fields as BrowserInteraction[])))
+  const result = await evaluate(tab, browserBatchExpression(fields as BrowserInteraction[]))
+  if ((result as { ok?: boolean } | undefined)?.ok === true) {
+    const hints = sanitizeFormLayout(
+      [fields as BrowserInteraction[]],
+      fields.map(field => ({
+        operation: 'verify' as const, ...(field.selector ? { selector: field.selector } : {}),
+        ...(field.name ? { name: field.name } : {}),
+      })),
+    )
+    if (hints !== undefined) {
+      const steps = hints.steps.map(step => ({ ...step } as BrowserInteraction))
+      pendingFormLayouts.set(tab.id, { pageKey: formLayoutKey(tab.url), steps })
+    }
+  } else {
+    pendingFormLayouts.delete(tab.id)
+  }
+  return formatBrowserResult(result)
 })
 
 server.registerTool('verify_form', {
@@ -540,7 +590,14 @@ server.registerTool('verify_form', {
   },
 }, async ({ tabId, fields }) => {
   const tab = await selectedTab(tabId)
-  return formatBrowserResult(await evaluate(tab, browserBatchExpression(fields as BrowserInteraction[])))
+  const result = await evaluate(tab, browserBatchExpression(fields as BrowserInteraction[]))
+  if ((result as { ok?: boolean } | undefined)?.ok === true) {
+    const remembered = pendingFormLayouts.get(tab.id)
+    const steps = remembered?.pageKey === formLayoutKey(tab.url) ? remembered.steps : []
+    await saveVerifiedFormLayout(tab.url, [steps], fields as BrowserInteraction[]).catch(() => false)
+  }
+  pendingFormLayouts.delete(tab.id)
+  return formatBrowserResult(result)
 })
 
 server.registerTool('interact', {
