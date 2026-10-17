@@ -169,6 +169,7 @@ async function injectLogin(tab: BrowserTab, login: LoginContent): Promise<string
     + 'if(!account) return "login-form-not-found";'
     + 'const setter=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value").set;'
     + 'const set=(el,v)=>{setter.call(el,v);el.dispatchEvent(new Event("input",{bubbles:true}));el.dispatchEvent(new Event("change",{bubbles:true}));};'
+    + 'account.style.setProperty("-webkit-text-security","disc","important");'
     + 'set(account,' + JSON.stringify(login.account) + ');'
     + 'set(pass,' + JSON.stringify(login.secret) + ');'
     + 'await new Promise(resolve=>setTimeout(resolve,80));'
