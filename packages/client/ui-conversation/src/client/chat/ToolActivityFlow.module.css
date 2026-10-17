@@ -187,3 +187,18 @@
   .activityMessages { padding-inline: 10px; }
 }
 @media (prefers-reduced-motion: reduce) { .browserWorkspace, .activityPane { transition: none; } }
+
+/* Keep manual reading in charge while live assistant messages keep streaming. */
+.followLatest {
+  align-self: flex-end;
+  margin: 4px 12px 10px;
+  padding: 7px 11px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 999px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+.followLatest:focus-visible { outline: 2px solid var(--browser-accent); }

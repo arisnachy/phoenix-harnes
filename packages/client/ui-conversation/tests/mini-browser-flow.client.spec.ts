@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addBrowserCards, groupActiveBrowserFlow, isBrowserPrompt, isEmbeddedNavigationTool } from '../src/client/chat/ToolActivityFlow.tsx'
+import { addBrowserCards, groupActiveBrowserFlow, isAtActivityTail, isBrowserPrompt, isEmbeddedNavigationTool } from '../src/client/chat/ToolActivityFlow.tsx'
 
 type BrowserFlowNode = { key: string; kind: string; data: unknown }
 const user = (key: string, text: string): BrowserFlowNode => ({
@@ -11,6 +11,14 @@ const assistant = (key: string): BrowserFlowNode => ({
 const flowNodes = (...keys: string[]) => keys.map(key => ({ kind: 'node' as const, key }))
 
 describe('MiniBrowser chronological conversation cards', () => {
+  it('follows fresh streamed activity until the reader scrolls more than 48px away', () => {
+    expect(isAtActivityTail(0, 0, 500)).toBe(true)
+    expect(isAtActivityTail(900, 1400, 500)).toBe(true)
+    expect(isAtActivityTail(851, 1400, 500)).toBe(false)
+    expect(isAtActivityTail(852, 1400, 500)).toBe(true)
+    expect(isAtActivityTail(120, 400, 200)).toBe(false)
+  })
+
   it('recognizes real navigation prompts but not ordinary conversation', () => {
     expect(isBrowserPrompt('Abre Listín Diario en el navegador')).toBe(true)
     expect(isBrowserPrompt('Por favor, navega a youtube.com')).toBe(true)

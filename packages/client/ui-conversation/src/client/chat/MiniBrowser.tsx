@@ -645,8 +645,9 @@ export function MiniBrowser({ requested = false, active = true, initialTabId, on
             {mediaCaptureState === 'recording' ? '■ Detener captura' : '◉ Compartir pestaña para Kira'}
           </button>
           <span>
-            Si Kira no puede ver ni escuchar el video, abre el video en Chrome normal y pulsa «Compartir pestaña para Kira».
-            Selecciona Pestaña de Chrome y marca «Compartir audio». Grabación máxima: 30 segundos.
+            Kira analiza por sí misma el navegador y prueba primero las herramientas nativas de video y audio.
+            Si Chrome impide capturar el audio, puedes autorizar aquí una grabación de hasta 30 segundos:
+            Chrome solicitará seleccionar la pestaña y activar «Compartir audio».
           </span>
         </div>
         {mediaCaptureMessage && <p className={css.captureStatus} role="status">{mediaCaptureMessage}</p>}

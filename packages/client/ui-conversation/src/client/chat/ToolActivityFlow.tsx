@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import type { ComponentProps } from 'react'
 import type { ImageAttachmentRef } from '@phoenix-ai/dsh-attachment'
 import type { ToolCallBlock } from '@phoenix-ai/dsh-client-runtime/client'
@@ -569,6 +569,17 @@ function TurnStatus({ startTime, progress, expiresAfterMs, t, centered = false }
   )
 }
 
+/**
+ * Return whether the reader is close enough to the live activity tail to resume following.
+ * @param scrollTop - Current scroll offset of the sidecar's own scrollport.
+ * @param scrollHeight - Total height of the sidecar's transcript.
+ * @param clientHeight - Visible height of the sidecar.
+ * @returns True when the newest visible text is at most 48px away.
+ */
+export function isAtActivityTail(scrollTop: number, scrollHeight: number, clientHeight: number): boolean {
+  return Math.max(0, scrollHeight - clientHeight - scrollTop) <= 48
+}
+
 /** Same real transcript seats as the ordinary chat, inside the temporary sidecar. */
 function BrowserWorkspace({
   items, live, selected, onActivate, seatProps, turnStatus, tabId,
@@ -582,12 +593,62 @@ function BrowserWorkspace({
   readonly turnStatus: ToolActivityFlowProps['turnStatus']
 }) {
   const [page, setPage] = useState<{ title: string; url: string } | null>(null)
+  const activityRef = useRef<HTMLDivElement | null>(null)
+  const followingRef = useRef(true)
+  const [following, setFollowing] = useState(true)
+  const deliveredTopRef = useRef(0)
+
+  // The sidecar is an independent scrollport. The outer ChatView's bottom
+  // follower cannot follow streamed messages inside this nested overflow pane.
+  useEffect(() => {
+    if (!live) return
+    const scrollport = activityRef.current
+    if (scrollport === null) return
+    const followLatest = (): void => {
+      if (!followingRef.current) return
+      scrollport.scrollTop = scrollport.scrollHeight
+      deliveredTopRef.current = scrollport.scrollTop
+    }
+    const onScroll = (): void => {
+      const floor = Math.max(0, scrollport.scrollHeight - scrollport.clientHeight)
+      const movedByReader = Math.abs(scrollport.scrollTop - Math.min(deliveredTopRef.current, floor)) > 0.5
+      if (movedByReader) {
+        const atTail = isAtActivityTail(scrollport.scrollTop, scrollport.scrollHeight, scrollport.clientHeight)
+        followingRef.current = atTail
+        setFollowing(atTail)
+      }
+      deliveredTopRef.current = scrollport.scrollTop
+    }
+    scrollport.addEventListener('scroll', onScroll, { passive: true })
+    // Character-data updates matter: streaming often extends an existing
+    // assistant bubble without appending a new keyed React message.
+    const mutations = typeof MutationObserver === 'undefined' ? undefined : new MutationObserver(followLatest)
+    mutations?.observe(scrollport, { childList: true, subtree: true, characterData: true })
+    const resize = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(followLatest)
+    resize?.observe(scrollport)
+    followLatest()
+    return () => {
+      mutations?.disconnect()
+      resize?.disconnect()
+      scrollport.removeEventListener('scroll', onScroll)
+    }
+  }, [live])
+
+  const returnToLatest = (): void => {
+    const scrollport = activityRef.current
+    if (scrollport === null) return
+    followingRef.current = true
+    setFollowing(true)
+    scrollport.scrollTop = scrollport.scrollHeight
+    deliveredTopRef.current = scrollport.scrollTop
+  }
+
   return (
     <div className={css.browserWorkspace} data-browser-workspace={live ? '' : undefined}
       data-activity-open={live ? 'true' : undefined} data-chat-flow-kind="browser-workspace">
       <div className={css.browserPane}>
         <MiniBrowser requested active={selected} {...tabId === undefined ? {} : { initialTabId: tabId }}
-          onActivate={onActivate} autoScroll={true} onPageChange={setPage} />
+          onActivate={onActivate} autoScroll={false} onPageChange={setPage} />
       </div>
       {live && <aside className={css.activityPane} aria-label="Actividad del agente en este navegador">
         <header className={css.activityHeader}>
@@ -601,7 +662,7 @@ function BrowserWorkspace({
             <span className={css.pageUrl} title={page.url}>{page.url}</span>
           </div>
         )}
-        <div className={css.activityMessages} aria-live="polite" aria-relevant="additions text">
+        <div ref={activityRef} className={css.activityMessages} aria-live="polite" aria-relevant="additions text">
           {items.map(item => (
             <Fragment key={item.key}>
               {item.kind === 'node'
@@ -626,6 +687,10 @@ function BrowserWorkspace({
               expiresAfterMs={turnStatus.expiresAfterMs} t={seatProps.t} />
           )}
         </div>
+        {!following && <button type="button" className={css.followLatest}
+          onClick={returnToLatest} aria-label="Ir a la última conversación de Kira">
+          ↓ Ir a lo más reciente
+        </button>}
       </aside>}
     </div>
   )
