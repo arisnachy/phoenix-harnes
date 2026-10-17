@@ -17,7 +17,7 @@ import { browserBatchExpression, browserInteractionExpression, type BrowserInter
 import { CdpConnectionPool } from './cdp-connection-pool.ts'
 import { classifySiteHealth, nextSiteRecoveryStep, siteHealthExpression, type SitePageHealth } from './site-health.ts'
 import { runBrowserFormWorkflow } from './form-workflow.ts'
-import { formLayoutKey, recallVerifiedFormLayout, sanitizeFormLayout, saveVerifiedFormLayout } from './form-layout-memory.ts'
+import { formLayoutKey, prepareLearnedFormWorkflow, recallVerifiedFormLayout, sanitizeFormLayout, saveVerifiedFormLayout } from './form-layout-memory.ts'
 import { chooseYoutubeCaptions, youtubeCaptionUrl, youtubeTranscript, youtubeWatchUrl, type YoutubeCaptionTrack } from './youtube-video.ts'
 import { parseCapturedVideoAudio, transcribeCapturedVideoAudio, videoAudioCaptureExpression } from './video-audio.ts'
 import { inspectVideoMedia } from './video-media.ts'
@@ -597,6 +597,46 @@ server.registerTool('verify_form', {
     await saveVerifiedFormLayout(tab.url, [steps], fields as BrowserInteraction[]).catch(() => false)
   }
   pendingFormLayouts.delete(tab.id)
+  return formatBrowserResult(result)
+})
+
+server.registerTool('fill_learned_form', {
+  description: 'Rellena un formulario visitado antes usando localizadores SIN VALORES que fueron aprendidos después de una verificación exitosa. Aporta solo valores ACTUALES, por ejemplo fields:[{"field":"#candidate","value":"Nuevo nombre"},{"field":"department","value":"Ventas"}]. Detecta desajustes DOM y verifica todo en la misma llamada; nunca reutiliza respuestas pasadas ni envía la página. Si no hay memoria o falló la comprobación, usa inspect_page y complete_form.',
+  inputSchema: {
+    tabId: z.string().optional(),
+    fields: z.array(z.object({
+      field: z.string().min(1).max(80),
+      value: z.string().max(4096).optional(),
+      checked: z.boolean().optional(),
+    })).min(1).max(30),
+  },
+}, async ({ tabId, fields }) => {
+  ensureBrowserActionPermission()
+  const tab = await selectedTab(tabId)
+  const layout = await recallVerifiedFormLayout(tab.url)
+  if (!layout) return formatBrowserResult({
+    ok: false, reason: 'NO_VERIFIED_LAYOUT',
+    next: 'Inspecciona una vez y usa complete_form o fill_form/verify_form para aprender la estructura.',
+  })
+  const workflow = prepareLearnedFormWorkflow(layout, fields)
+  if (!workflow) return formatBrowserResult({ ok: false, reason: 'LEARNED_LAYOUT_FIELD_MISMATCH',
+    next: 'No hay un localizador seguro para todos los campos actuales; vuelve a inspect_page.' })
+  const inspect = await evaluate(tab, browserInteractionExpression({ operation: 'inspect' })) as BrowserInteractionResult
+  const controls = Array.isArray(inspect?.controls) ? inspect.controls as Array<{
+    id?: string; name?: string; visible?: boolean; disabled?: boolean; readonly?: boolean; type?: string
+  }> : []
+  const matches = workflow.phases.flat().every(action => {
+    const match = controls.filter(control => control.visible && !control.disabled && !control.readonly
+      && control.type !== 'password' && (action.name !== undefined
+        ? control.name === action.name
+        : action.selector?.startsWith('#') && control.id === action.selector.slice(1)))
+    return match.length === 1
+  })
+  if (!matches) return formatBrowserResult({
+    ok: false, reason: 'LEARNED_LAYOUT_STALE',
+    next: 'Un localizador guardado ya no coincide con un control único y editable; inspecciona el DOM antes de escribir.',
+  })
+  const result = await runBrowserFormWorkflow(workflow, expression => evaluate(tab, expression))
   return formatBrowserResult(result)
 })
 

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { formLayoutKey, recallVerifiedFormLayout, sanitizeFormLayout, saveVerifiedFormLayout } from '../src/form-layout-memory.ts'
+import { formLayoutKey, prepareLearnedFormWorkflow, recallVerifiedFormLayout, sanitizeFormLayout, saveVerifiedFormLayout } from '../src/form-layout-memory.ts'
 
 const folders: string[] = []
 afterEach(async () => { await Promise.all(folders.splice(0).map(x => rm(x, { recursive: true, force: true }))) })
@@ -48,6 +48,30 @@ describe('verified browser form layout learning', () => {
       .toBeUndefined()
     expect(sanitizeFormLayout([], [{ operation: 'verify', selector: '#abc', value: 'secret' }])?.verifiedChecks)
       .toEqual([{ operation: 'verify', selector: '#abc' }])
+  })
+  it('fills only newly supplied values with previously proven locators in one batch', () => {
+    const layout = sanitizeFormLayout(inputs, checks)
+    expect(layout).toBeDefined()
+    const prepared = prepareLearnedFormWorkflow(layout!, [
+      { field: '#candidate', value: 'A different user supplied value' },
+      { field: 'department', value: 'Engineering' },
+    ])
+    expect(prepared).toEqual({
+      phases: [[
+        { operation: 'fill', selector: '#candidate', value: 'A different user supplied value' },
+        { operation: 'select', name: 'department', value: 'Engineering' },
+      ]],
+      checks: [
+        { operation: 'verify', selector: '#candidate', value: 'A different user supplied value' },
+        { operation: 'verify', name: 'department', value: 'Engineering' },
+      ],
+    })
+    expect(prepareLearnedFormWorkflow(layout!, [{ field: 'unknown', value: 'private' }]))
+      .toBeUndefined()
+    expect(prepareLearnedFormWorkflow(layout!, [
+      { field: '#candidate', value: 'a' }, { field: '#candidate', value: 'b' },
+    ])).toBeUndefined()
+    expect(prepareLearnedFormWorkflow(layout!, [{ field: '#candidate' }])).toBeUndefined()
   })
   it('rejects insecure external origins and canonicalizes query changes', () => {
     expect(() => formLayoutKey('http://not-secure.example/form')).toThrow()

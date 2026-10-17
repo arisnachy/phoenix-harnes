@@ -109,3 +109,49 @@ export async function recallVerifiedFormLayout(
     return sanitized
   } catch { return undefined }
 }
+
+/** A fresh value supplied for the *current* form. Never persisted with the layout. */
+export interface LearnedFieldValue {
+  field: string
+  value?: string
+  checked?: boolean
+}
+/** Rebuild a strictly non-submitting form workflow from proven locators.
+ * A stale/unknown/ambiguous field fails before any page mutation.
+ */
+export function prepareLearnedFormWorkflow(
+  layout: LearnedFormLayout,
+  entries: readonly LearnedFieldValue[],
+): { phases: BrowserInteraction[][]; checks: BrowserInteraction[] } | undefined {
+  if (!entries.length || entries.length > MAX_STEPS) return undefined
+  const known = new Map<string, LayoutLocator>()
+  for (const locator of [...layout.steps, ...layout.verifiedChecks]) {
+    const identity = locator.selector ?? locator.name
+    if (!identity) continue
+    if (!known.has(identity)) known.set(identity, locator)
+  }
+  const used = new Set<string>()
+  const actions: BrowserInteraction[] = []
+  const checks: BrowserInteraction[] = []
+  for (const input of entries) {
+    if (used.has(input.field)) return undefined
+    used.add(input.field)
+    const locator = known.get(input.field)
+    if (!locator) return undefined
+    const operation = layout.steps.find(step =>
+      (step.selector ?? step.name) === input.field)?.operation ?? 'fill'
+    const selector = locator.selector
+    const name = locator.name
+    const target = { ...(selector ? { selector } : {}), ...(name ? { name } : {}) }
+    if (operation === 'check' && typeof input.checked === 'boolean') {
+      actions.push({ operation: 'check', ...target, checked: input.checked })
+      checks.push({ operation: 'verify', ...target, checked: input.checked })
+    } else if ((operation === 'fill' || operation === 'select' || operation === 'verify')
+      && typeof input.value === 'string' && input.value.length <= 4096) {
+      // A learned verification-only locator is filled only with NEW supplied data.
+      actions.push({ operation: operation === 'select' ? 'select' : 'fill', ...target, value: input.value })
+      checks.push({ operation: 'verify', ...target, value: input.value })
+    } else return undefined
+  }
+  return { phases: [actions], checks }
+}
