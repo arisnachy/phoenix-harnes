@@ -618,7 +618,12 @@ server.registerTool('fill_learned_form', {
     ok: false, reason: 'NO_VERIFIED_LAYOUT',
     next: 'Inspecciona una vez y usa complete_form o fill_form/verify_form para aprender la estructura.',
   })
-  const workflow = prepareLearnedFormWorkflow(layout, fields)
+  const definedFields = fields.map(({ field, value, checked }) => ({
+    field,
+    ...(value === undefined ? {} : { value }),
+    ...(checked === undefined ? {} : { checked }),
+  }))
+  const workflow = prepareLearnedFormWorkflow(layout, definedFields)
   if (!workflow) return formatBrowserResult({ ok: false, reason: 'LEARNED_LAYOUT_FIELD_MISMATCH',
     next: 'No hay un localizador seguro para todos los campos actuales; vuelve a inspect_page.' })
   const inspect = await evaluate(tab, browserInteractionExpression({ operation: 'inspect' })) as BrowserInteractionResult
