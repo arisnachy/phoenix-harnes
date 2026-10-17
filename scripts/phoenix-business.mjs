@@ -5,6 +5,7 @@ import { join, basename, resolve, sep } from 'node:path'
 import { homedir } from 'node:os'
 import { createHash, randomUUID } from 'node:crypto'
 import { constants as fsConstants } from 'node:fs'
+import { deflateRawSync } from 'node:zlib'
 import { setTimeout as sleep } from 'node:timers/promises'
 
 const root = resolve(process.env.PHOENIX_BUSINESS_HOME || join(process.env.DSH_HOME || join(homedir(), '.dsh'), 'business-library'))
@@ -105,6 +106,84 @@ function route(platform, toolNames) {
   const writes = matches.filter(t => /(?:create|upload|publish|listing|product|update|submit)/i.test(t))
   return {platform, method:writes.length ? 'mcp-candidate' : 'minibrowser-candidate', compatibleTools:writes, inspectedTools:matches.length, capabilities:candidate.capabilities, note: writes.length ? 'Confirmar autenticación, permisos, parámetros y API antes de ejecutar.' : 'Comprobar primero la galería MCP; navegador autorizado solo si la plataforma lo permite.', submissionRequiresHumanApproval:true}
 }
+
+/** Standard ZIP implementation for valid, self-contained EPUB3; no extra dependencies. */
+function crc32(input) {
+  let value = 0xffffffff
+  for (const byte of input) {
+    value ^= byte
+    for(let j=0;j<8;j++) value = (value >>> 1) ^ ((value & 1) ? 0xedb88320 : 0)
+  }
+  return (value ^ 0xffffffff) >>> 0
+}
+function archiveZip(entries) {
+  const out=[], directory=[];let cursor=0
+  for(const {name,bytes,stored=false} of entries){
+    const fileName=Buffer.from(name,'utf8'), raw=Buffer.isBuffer(bytes)?bytes:Buffer.from(bytes,'utf8')
+    const zipped=stored?raw:deflateRawSync(raw), sum=crc32(raw), method=stored?0:8
+    const local=Buffer.alloc(30)
+    local.writeUInt32LE(0x04034b50,0);local.writeUInt16LE(20,4);local.writeUInt16LE(0x800,6)
+    local.writeUInt16LE(method,8);local.writeUInt32LE(sum,14)
+    local.writeUInt32LE(zipped.length,18);local.writeUInt32LE(raw.length,22);local.writeUInt16LE(fileName.length,26)
+    out.push(local,fileName,zipped)
+    const central=Buffer.alloc(46)
+    central.writeUInt32LE(0x02014b50,0);central.writeUInt16LE(20,4);central.writeUInt16LE(20,6)
+    central.writeUInt16LE(0x800,8);central.writeUInt16LE(method,10);central.writeUInt32LE(sum,16)
+    central.writeUInt32LE(zipped.length,20);central.writeUInt32LE(raw.length,24)
+    central.writeUInt16LE(fileName.length,28);central.writeUInt32LE(cursor,42)
+    directory.push(central,fileName)
+    cursor+=local.length+fileName.length+zipped.length
+  }
+  const centralBytes=Buffer.concat(directory), footer=Buffer.alloc(22)
+  footer.writeUInt32LE(0x06054b50,0);footer.writeUInt16LE(entries.length,8);footer.writeUInt16LE(entries.length,10)
+  footer.writeUInt32LE(centralBytes.length,12);footer.writeUInt32LE(cursor,16)
+  return Buffer.concat([...out,centralBytes,footer])
+}
+function chapterHtml(text) {
+  // Fiction-first: all paragraphs become XHTML text nodes; no raw HTML injection.
+  return text.trim().split(/\n\s*\n/u).map(p=>`<p>${esc(p.replace(/^#{1,6}\s*/u,'').replace(/\s*\n\s*/gu,' '))}</p>`).join('\n')
+}
+const xhtml = (title, body, lang) => `<?xml version="1.0" encoding="utf-8"?><!DOCTYPE html><html xmlns="http://www.w3.org/1999/xhtml" xml:lang="${esc(lang)}"><head><meta charset="utf-8"/><title>${esc(title)}</title><link href="style.css" rel="stylesheet" type="text/css"/></head><body>${body}</body></html>`
+async function registerGenerated(product, name, content, role) {
+  const bytes=Buffer.isBuffer(content)?content:Buffer.from(content,'utf8'), digest=hash(bytes)
+  const dir=join(root,'products',product.id,role)
+  await mkdir(dir,{recursive:true,mode:0o700})
+  const path=`products/${product.id}/${role}/${digest.slice(0,12)}-${name}`
+  await writeFile(join(root,path),bytes,{mode:0o600})
+  const entry={role,name,path,sha256:digest,bytes:bytes.length,addedAt:iso()}
+  product.files=product.files.filter(f=>f.role!==role||f.name!==name).concat(entry)
+  product.updatedAt=iso()
+  return entry
+}
+async function compileBook(product,author,lang,opts) {
+  if(product.type!=='book') fail('Solo se compilan proyectos tipo book.')
+  if(author.trim().length<2||author.length>160) fail('Debes indicar el autor real mediante --author.')
+  if(!/^[a-z]{2,3}(?:-[A-Za-z]{2})?$/.test(lang)) fail('Idioma BCP-47 inválido.')
+  const quality=editorialCheck(product,opts)
+  if(!quality.lengthReady) fail(`Manuscrito incompleto (${quality.chapterCount} capítulos; ${quality.chapterWords} palabras).`)
+  const chapters=[]
+  for(const c of [...product.chapters].sort((a,b)=>a.number-b.number)){
+    const content=await readFile(join(root,c.path),'utf8')
+    if(hash(content)!==c.sha256) fail(`Capítulo ${c.number} modificado fuera de Phoenix: bloqueada la compilación.`)
+    chapters.push({number:c.number,text:content})
+  }
+  const manuscript=`# ${product.title}\n\nAutor: ${author}\n\n`+chapters.map(c=>`# Capítulo ${c.number}\n\n${c.text.trim()}\n`).join('\n')
+  const identifier=`urn:uuid:${randomUUID()}`, files=[{name:'mimetype',bytes:'application/epub+zip',stored:true}]
+  files.push({name:'META-INF/container.xml',bytes:'<?xml version="1.0" encoding="UTF-8"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>'})
+  files.push({name:'OEBPS/style.css',bytes:'body{font-family:serif;line-height:1.5;margin:5%}p{text-indent:1em;margin:0 0 .5em}h1{text-align:center;page-break-before:always}'})
+  files.push({name:'OEBPS/title.xhtml',bytes:xhtml(product.title,`<h1>${esc(product.title)}</h1><p>${esc(author)}</p>`,lang)})
+  const nav=chapters.map(c=>`<li><a href="chapter-${String(c.number).padStart(3,'0')}.xhtml">Capítulo ${c.number}</a></li>`).join('')
+  files.push({name:'OEBPS/nav.xhtml',bytes:xhtml('Índice',`<nav xmlns:epub="http://www.idpf.org/2007/ops" epub:type="toc" id="toc"><h1>Índice</h1><ol>${nav}</ol></nav>`,lang)})
+  for(const c of chapters) files.push({name:`OEBPS/chapter-${String(c.number).padStart(3,'0')}.xhtml`,bytes:xhtml(`Capítulo ${c.number}`,`<h1>Capítulo ${c.number}</h1>${chapterHtml(c.text)}`,lang)})
+  const manifest=chapters.map(c=>`<item id="c${c.number}" href="chapter-${String(c.number).padStart(3,'0')}.xhtml" media-type="application/xhtml+xml"/>`).join('')
+  const spine=chapters.map(c=>`<itemref idref="c${c.number}"/>`).join('')
+  const opf=`<?xml version="1.0" encoding="utf-8"?><package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="uid" xml:lang="${esc(lang)}"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="uid">${identifier}</dc:identifier><dc:title>${esc(product.title)}</dc:title><dc:creator>${esc(author)}</dc:creator><dc:language>${esc(lang)}</dc:language><meta property="dcterms:modified">${iso().replace(/\.\d{3}Z$/,'Z')}</meta></metadata><manifest><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/><item id="title" href="title.xhtml" media-type="application/xhtml+xml"/><item id="css" href="style.css" media-type="text/css"/>${manifest}</manifest><spine><itemref idref="title"/>${spine}</spine></package>`
+  files.push({name:'OEBPS/content.opf',bytes:opf})
+  const book=await registerGenerated(product,'manuscript.md',manuscript,'manuscript')
+  const ebook=await registerGenerated(product,'ebook.epub',archiveZip(files),'ebook')
+  return {manuscript:book,ebook,chapters:quality.chapterCount,words:quality.chapterWords,author,lang,validation:'ZIP/EPUB3 built; device-preview, typography and editorial human review remain mandatory'}
+}
+
 function gallery(products) {
   const cards = products.map(p => `<article><span class="kind">${esc(p.type)}</span><h2>${esc(p.title)}</h2><p>${esc(p.id)}</p><p>${p.files.length} archivos · ${p.chapters.length} capítulos · ${p.listings.length} publicaciones preparadas</p><small>Última actualización ${esc(p.updatedAt)}</small></article>`).join('\n')
   return `<!DOCTYPE html><html lang="es"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Mi Biblioteca · Phoenix</title><style>body{font:16px system-ui;background:#faf8f6;color:#26211d;max-width:980px;margin:2rem auto;padding:0 1rem}header{padding:1rem 0;border-bottom:3px solid #ed8a38}main{display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:1rem;margin-top:1.5rem}article{border:1px solid #e6dcd1;background:white;border-radius:14px;padding:1.3rem}h2{font-size:1.1rem}.kind{font-size:.8rem;color:#a6591f;text-transform:uppercase}small,p{color:#736459}</style><header><h1>Mi Biblioteca</h1><p>${products.length} proyectos guardados · Panel local, sin datos comerciales inventados</p></header><main>${cards}</main></html>`
@@ -113,7 +192,7 @@ async function main(args) {
   const [cmd, ...rest] = args
   const option = (flag, fallback) => {const i=rest.indexOf(flag);return i<0?fallback:rest[i+1]??fail(`Falta valor de ${flag}`)}
   const positional = rest.filter((arg,i)=>!(arg.startsWith('--')||i>0&&rest[i-1].startsWith('--')))
-  if (cmd === 'help' || !cmd) return {usage:['init <tipo> <título>', 'list', 'show <id>', 'asset <id> <archivo> --role <source|manuscript|ebook|print|cover|promo>', 'chapter <id> <número> <archivo.md>', 'check <id> [--words 50000] [--chapters 15]', 'route <plataforma> [--tools mcp__servidor__herramienta,...]', 'prepare <id> <plataforma> <precio> [--currency USD]', 'sale <id> <importe_bruto> <unidades> --source <referencia>', 'gallery'], home:root}
+  if (cmd === 'help' || !cmd) return {usage:['init <tipo> <título>', 'list', 'show <id>', 'asset <id> <archivo> --role <source|manuscript|ebook|print|cover|promo>', 'chapter <id> <número> <archivo.md>', 'compile <id> --author <nombre> [--words 50000] [--chapters 15] [--lang es]', 'check <id> [--words 50000] [--chapters 15]', 'route <plataforma> [--tools mcp__servidor__herramienta,...]', 'prepare <id> <plataforma> <precio> [--currency USD]', 'sale <id> <importe_bruto> <unidades> --source <referencia>', 'gallery'], home:root}
   if (cmd === 'init') {
     const [type,...titleParts]=positional; const title=titleParts.join(' ').trim()
     if(!TYPES.has(type)||title.length<3||title.length>180) fail('Tipo o título inválido.')
@@ -133,6 +212,7 @@ async function main(args) {
     const temp=join(folder,`.${randomUUID()}.tmp`);await writeFile(temp,text,{mode:0o600});await rename(temp,join(root,path))
     const item={number,path,words:words(text),sha256:hash(text),updatedAt:iso()};p.chapters=p.chapters.filter(c=>c.number!==number).concat(item).sort((a,b)=>a.number-b.number);p.updatedAt=iso();return item
   })
+  if (cmd === 'compile') return transaction(db=>compileBook(get(db,positional[0]),String(option('--author','')),String(option('--lang','es')), {minWords:Number(option('--words',50000)),minChapters:Number(option('--chapters',15))}))
   if (cmd === 'check') return transaction(db=> editorialCheck(get(db,positional[0]),{minWords:Number(option('--words', undefined)??(get(db,positional[0]).type==='book'?50000:0)),minChapters:Number(option('--chapters', undefined)??(get(db,positional[0]).type==='book'?15:0))}),false)
   if (cmd === 'route') return route(positional[0],String(option('--tools','')).split(',').filter(Boolean))
   if (cmd === 'prepare') return transaction(db=>{
@@ -140,7 +220,7 @@ async function main(args) {
     const currency=String(option('--currency','USD')).toUpperCase();if(!/^[A-Z]{3}$/.test(currency)) fail('Moneda inválida.')
     const price=money(positional[2]), check=editorialCheck(p)
     const files=PLATFORMS[platform].required.every(role=>p.files.some(f=>f.role===role))
-    const ready=p.type==='book'&&platform==='amazon-kdp' ? check.lengthReady && check.ebookFileReady : files
+    const ready=p.type==='book'&&platform==='amazon-kdp' ? check.lengthReady && check.ebookFileReady && p.files.some(f=>f.role==='cover') : files
     const now=iso(), entry={platform,currency,price,stage:ready?'review-required':'assets-missing',publicationConfirmed:false,externalUrl:null,createdAt:now,updatedAt:now,requires:['aprobación explícita del usuario','revisión de derechos/licencias','declaración de IA y requisitos de la plataforma','confirmación de recepción de la tienda'],editorial:check}
     p.listings=p.listings.filter(item=>item.platform!==platform).concat(entry);p.updatedAt=now;return entry
   })

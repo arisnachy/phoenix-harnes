@@ -22,6 +22,7 @@ whenToUse: El usuario pide monetizar, escribir libros completos, publicar en Ama
 - `init book "Título de la obra"` crea el proyecto y devuelve ID.
 - `chapter ID 1 ruta/capitulo-001.md` añade o reemplaza un capítulo. Redacta todos los capítulos previstos y guarda la biblia de personajes, cronología, escenas y reglas del mundo como archivos `source`.
 - `asset ID archivo.ext --role ebook` registra el archivo comercial; roles: `source`, `manuscript`, `ebook`, `print`, `cover`, `promo`, `other`. Nunca guardes contraseñas ni tokens como activos.
+- `compile ID --author "Autor real" --words 60000 --chapters 24 --lang es` ensambla el manuscrito Markdown y un archivo **EPUB3 auténtico** a partir de los capítulos y los añade a la biblioteca.
 - `check ID --words 60000 --chapters 24` informa del umbral **estructural**. No equivale a revisión humana de originalidad, estilo, coherencia ni páginas impresas.
 - `prepare ID amazon-kdp 4.99 --currency USD` abre una ficha comercial **pendiente**. No sube el libro ni confirma una venta.
 - `route amazon-kdp --tools mcp__servidor__publicar,mcp__otro__listar` clasifica candidatos a MCP. Verifica en vivo permisos reales y esquema antes de usarlos.
@@ -37,7 +38,7 @@ Ruta predeterminada: `~/.dsh/business-library`; configurable con `PHOENIX_BUSINE
 3. Escaleta por escenas con dependencias y recuentos objetivo. Evita llenar capítulos artificialmente.
 4. Escribe TODOS los capítulos completos, verificando su coherencia con la biblia antes de cerrar cada uno. Guarda entregables mientras avances, con estados recuperables; no reinicies el manuscrito desde cero por fallo de una etapa.
 5. Ejecuta corrección de estilo, revisión de continuidad, verificación antiplagio y revisión humana cuando corresponda. No declares originalidad comprobada si no hay evidencia.
-6. Prepara manuscrito DOCX, EPUB para digital, PDF interior a tamaño de corte, cubierta del eBook y cubierta de impresión con lomo/sangrado real. Verifica páginas renderizadas, fuentes y sumario. Si no existe una herramienta de conversión, instala o utiliza una permitida; no cambies un archivo de extensión para simular un formato.
+6. Construye EPUB3 mediante `compile` si la novela supera los controles estructurales. Después prepara manuscrito DOCX, PDF interior a tamaño de corte, cubierta del eBook y cubierta de impresión con lomo/sangrado real. Verifica páginas renderizadas, fuentes y sumario. Si no existe una herramienta de conversión, instala o utiliza una permitida; no cambies un archivo de extensión para simular un formato.
 7. Cumple requisitos actuales KDP: contenido generado por IA, licencias, territorios, precio, ISBN cuando corresponda, metadatos, categorías, límite de publicaciones y derechos. Revalida políticas al publicar.
 8. Prepara sinopsis y paquete de marketing; sugiere precio con regalías, comisiones, competencia y costes explícitos. Pide aprobación final al usuario antes de pulsar «Publicar» o comprometer dinero.
 9. Verifica un enlace/identificador REAL de publicación y registra los resultados. Si no se pudo, reporta `pendiente` con causa y próximo paso, no `publicado`.

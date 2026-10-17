@@ -25,6 +25,11 @@ test('biblioteca duradera, galería segura y rutas de publicación', async()=>fi
   assert.equal(invoke('chapter',id,'2',scene).ok,false)
   assert.equal(invoke('chapter',id,'1',scene).result.words,300)
   assert.equal(invoke('check',id,'--chapters','1','--words','300').result.lengthReady,true)
+  const compiled=invoke('compile',id,'--author','Autora de Prueba','--chapters','1','--words','300')
+  assert.equal(compiled.ok,true)
+  const epub=await readFile(join(home,compiled.result.ebook.path))
+  assert.equal(epub.readUInt32LE(0),0x04034b50)
+  assert.equal(epub.toString('utf8',30,38),'mimetype')
   const cover=join(home,'cover.jpg');await writeFile(cover,'cover')
   assert.equal(invoke('asset',id,cover,'--role','cover').ok,false) // refuse input beneath managed home
   assert.equal(invoke('route','amazon-kdp','--tools','mcp__amazon__list_books').result.method,'minibrowser-candidate')
