@@ -136,7 +136,8 @@ export function executeBrowserInteraction(
       if (input.name && lower(el.getAttribute('name')) !== lower(input.name)) return false
       if (input.label && lower(fieldLabel(el)) !== lower(input.label)) return false
       if (input.placeholder && lower(el.getAttribute('placeholder')) !== lower(input.placeholder)) return false
-      if (input.text && lower(el.textContent || (el as HTMLInputElement).value) !== lower(input.text)) return false
+      if (input.text && (el.matches('input,textarea,select,[contenteditable="true"]')
+        || lower(el.textContent) !== lower(input.text))) return false
       return Boolean(input.selector || input.name || input.label || input.placeholder || input.text)
     })
   }
@@ -173,7 +174,9 @@ export function executeBrowserInteraction(
     if (input.operation === 'verify') {
       // Compare only caller-supplied expectations. Never return actual field
       // contents; especially no password or hidden-input value oracle.
-      if (kind === 'password') return { ...common, ok: false, reason: 'SENSITIVE_FIELD_VERIFICATION_UNAVAILABLE' }
+      if (kind === 'password' || el.closest('form')?.querySelector('input[type="password"]')) {
+        return { ...common, ok: false, reason: 'SENSITIVE_FIELD_VERIFICATION_UNAVAILABLE' }
+      }
       if (typeof input.checked === 'boolean') {
         if (kind !== 'checkbox' && kind !== 'radio') return { ...common, ok: false, reason: 'NOT_CHECKABLE' }
         return node.checked === input.checked

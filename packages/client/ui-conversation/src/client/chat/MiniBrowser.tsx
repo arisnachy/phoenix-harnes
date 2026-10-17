@@ -134,6 +134,26 @@ async function captureFrame(tabId: string, signal?: AbortSignal): Promise<Blob> 
     return response.blob()
   }, FRAME_DEADLINE_MS, FRAME_DEADLINE_MESSAGE, signal)
 }
+type SecureStatus = { saved: boolean; automatic: boolean }
+type SecureUse = { status: string }
+function secureOrigin(value?: string): string | undefined {
+  if (!value) return undefined
+  try {
+    const url = new URL(value)
+    if (url.protocol === 'https:' || (url.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname))) return url.origin
+  } catch { /* Pending navigation. */ }
+  return undefined
+}
+async function secureApi<T>(path: string, payload?: Record<string, unknown>): Promise<T> {
+  const response = await fetch('/phoenix-secure-login' + path, {
+    method: payload === undefined ? 'GET' : 'POST',
+    headers: { 'x-phoenix-secure-login': '1', ...payload === undefined ? {} : { 'content-type': 'application/json' } },
+    ...payload === undefined ? {} : { body: JSON.stringify(payload) },
+    cache: 'no-store',
+  })
+  return await decode<T>(response)
+}
+
 /** Translate an image gesture into Chromium's fixed 1280 × 720 viewport. */
 function point(element: HTMLImageElement, clientX: number, clientY: number) {
   const rect = element.getBoundingClientRect()
@@ -174,6 +194,13 @@ export function MiniBrowser({ requested = false, active = true, initialTabId, on
   const [dismissed, setDismissed] = useState(false)
   const [address, setAddress] = useState('')
   const [typed, setTyped] = useState('')
+  const [secureOpen, setSecureOpen] = useState(false)
+  const [loginAccount, setLoginAccount] = useState('')
+  const [loginSecret, setLoginSecret] = useState('')
+  const [allowAutoLogin, setAllowAutoLogin] = useState(false)
+  const [loginState, setLoginState] = useState<SecureStatus>()
+  const [loginFeedback, setLoginFeedback] = useState<string>()
+  const attemptedLogins = useRef(new Set<string>())
   const [playingVideo, setPlayingVideo] = useState(false)
   const [videoSurface, setVideoSurface] = useState(true)
   const [frame, setFrame] = useState<string>()
@@ -204,6 +231,52 @@ export function MiniBrowser({ requested = false, active = true, initialTabId, on
   const previousActive = useRef(active)
   const show = !dismissed && (requested || enabled || (snapshot.available && snapshot.url !== undefined && snapshot.url !== 'about:blank'))
   const videoId = youtubeId(snapshot.url)
+  const siteOrigin = secureOrigin(snapshot.url)
+
+  useEffect(() => {
+    setSecureOpen(false)
+    setLoginAccount('')
+    setLoginSecret('')
+    setLoginState(undefined)
+    setLoginFeedback(undefined)
+    if (!siteOrigin || !snapshot.tabId || !active) return
+    let stopped = false
+    void secureApi<SecureStatus>('/status?origin=' + encodeURIComponent(siteOrigin)).then(state => {
+      if (stopped) return
+      setLoginState(state)
+      if (!state.saved || !state.automatic) return
+      const key = snapshot.tabId + '|' + snapshot.url
+      if (attemptedLogins.current.has(key)) return
+      attemptedLogins.current.add(key)
+      return secureApi<SecureUse>('/use', { origin: siteOrigin, tabId: snapshot.tabId }).then(receipt => {
+        if (!stopped && receipt.status === 'submitted') refreshFrame.current?.()
+      })
+    }).catch(() => { /* Browser UI stays usable if the optional vault is unavailable. */ })
+    return () => { stopped = true }
+  }, [siteOrigin, snapshot.url, snapshot.tabId, active])
+
+  const saveAccess = async () => {
+    if (!siteOrigin || !loginAccount.trim() || !loginSecret) return
+    try {
+      const state = await secureApi<SecureStatus>('/save', {
+        origin: siteOrigin, account: loginAccount, secret: loginSecret, automatic: allowAutoLogin,
+      })
+      setLoginState(state)
+      setLoginFeedback('Acceso protegido guardado para este sitio.')
+      setSecureOpen(false)
+      if (allowAutoLogin && snapshot.tabId) {
+        const receipt = await secureApi<SecureUse>('/use', { origin: siteOrigin, tabId: snapshot.tabId, manual: true })
+        if (receipt.status === 'submitted') refreshFrame.current?.()
+      }
+    } catch { setLoginFeedback('No se pudo guardar: comprueba que el servicio seguro esté disponible en Windows.') }
+    finally { setLoginSecret(''); setLoginAccount('') }
+  }
+  const pasteIntoPage = async () => {
+    try {
+      const text = await navigator.clipboard.readText()
+      if (text) await run({ type: 'text', text: text.slice(0, 4096) })
+    } catch { setError('No fue posible acceder al portapapeles; autoriza el pegado en Chrome.') }
+  }
 
   // The card is mounted after the chat flow. A late CDP connection changes
   // its height without changing chat message IDs; bring the result into view
@@ -473,6 +546,9 @@ export function MiniBrowser({ requested = false, active = true, initialTabId, on
   const keyboard = (event: KeyboardEvent<HTMLImageElement>) => {
     if (!active) { onActivate?.(); return }
     if (event.key === 'F5') { event.preventDefault(); void run({ type: 'reload' }); return }
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'v') {
+      event.preventDefault(); void pasteIntoPage(); return
+    }
     if (event.key === 'Control' || event.key === 'Alt' || event.key === 'Shift' || event.key === 'Meta') return
     event.preventDefault()
     const modifiers = (event.altKey ? 1 : 0) | (event.ctrlKey ? 2 : 0) | (event.metaKey ? 4 : 0) | (event.shiftKey ? 8 : 0)
@@ -616,6 +692,7 @@ export function MiniBrowser({ requested = false, active = true, initialTabId, on
             ) : frame ? <img ref={focusRef} src={frame} alt={'Página actual: ' + (snapshot.title || snapshot.url || '')}
               role="button" aria-label="Controlar página con el ratón y el teclado"
               tabIndex={0} draggable={false} onClick={click} onWheel={wheel} onKeyDown={keyboard}
+              onPaste={(event) => { event.preventDefault(); const value = event.clipboardData.getData('text/plain'); if (value) void run({ type: 'text', text: value.slice(0, 4096) }) }}
               className={css.screen} /> : <div className={css.loading}>Conectando imagen del navegador…</div>}
           </div>
         ) : (
@@ -654,9 +731,41 @@ export function MiniBrowser({ requested = false, active = true, initialTabId, on
         <form className={css.typeRow} onSubmit={(event) => { event.preventDefault(); if (typed) { void run({ type: 'text', text: typed }); setTyped(''); focusRef.current?.focus() } }}>
           <input aria-label="Escribir en la página" placeholder="Escribe en el campo seleccionado…" value={typed} onChange={(event) => { setTyped(event.currentTarget.value) }} />
           <button type="submit" disabled={!snapshot.available || !typed}>Escribir</button>
+          <button type="button" disabled={!snapshot.available} title="Pegar texto en el campo enfocado (no contraseñas)" onClick={() => { void pasteIntoPage() }}>Pegar</button>
           <button type="button" disabled={!snapshot.available} onClick={() => { void run({ type: 'key', key: 'Enter' }) }}>Enter</button>
           <button type="button" disabled={!snapshot.available} onClick={() => { void run({ type: 'key', key: 'Tab' }) }}>Tab</button>
         </form>
+        {siteOrigin && <div className={css.secureSection}>
+          <button type="button" className={css.secureToggle}
+            onClick={() => { setSecureOpen(value => !value); setLoginFeedback(undefined) }}>
+            🔒 {loginState?.saved ? 'Acceso protegido guardado' : 'Guardar acceso seguro'}
+          </button>
+          {loginState?.saved && <span className={css.secureStatus}>
+            {loginState.automatic ? 'Inicio automático autorizado' : 'Inicio automático desactivado'}
+          </span>}
+          {secureOpen && <form className={css.secureForm} autoComplete="off"
+            onSubmit={(event) => { event.preventDefault(); void saveAccess() }}>
+            <strong>Formulario protegido · {siteOrigin}</strong>
+            <p>El acceso se envía directamente a la bóveda local y no al chat ni a Kira.</p>
+            <input aria-label="Usuario seguro" value={loginAccount} autoComplete="off" required
+              onChange={event => { setLoginAccount(event.currentTarget.value) }} placeholder="Correo o usuario" />
+            <input aria-label="Contraseña segura" type="password" value={loginSecret} autoComplete="new-password" required
+              onChange={event => { setLoginSecret(event.currentTarget.value) }} placeholder="Pega aquí la contraseña" />
+            <label><input type="checkbox" checked={allowAutoLogin}
+              onChange={event => { setAllowAutoLogin(event.currentTarget.checked) }} />
+              Permitir que Kira inicie sesión aquí en futuras visitas</label>
+            <div className={css.secureActions}>
+              <button type="submit" disabled={!loginAccount.trim() || !loginSecret}>Guardar en bóveda</button>
+              <button type="button" onClick={() => { setSecureOpen(false); setLoginSecret(''); setLoginAccount('') }}>Cancelar</button>
+              {loginState?.saved && <button type="button" onClick={() => {
+                void secureApi<SecureStatus>('/delete', { origin: siteOrigin }).then(state => {
+                  setLoginState(state); setSecureOpen(false); setLoginSecret(''); setLoginAccount('')
+                }).catch(() => { setLoginFeedback('No se pudo revocar este acceso.') })
+              }}>Eliminar acceso</button>}
+            </div>
+          </form>}
+          {loginFeedback && <p className={css.secureFeedback} role="status">{loginFeedback}</p>}
+        </div>}
         {captureError && active && <p className={css.error} role="status">
           La página está abierta, pero su imagen todavía no está disponible: {captureError}. Phoenix reintentará la captura automáticamente.
         </p>}

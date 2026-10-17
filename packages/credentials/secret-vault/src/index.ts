@@ -1,6 +1,7 @@
 /** Human-only secret entry point over the PHOENIX credential provider. */
 
 import type { Context } from '@phoenix-ai/cordis'
+import { registerSecureLogin } from './secure-login.ts'
 import {
   credentialRef,
   isCredentialRefName,
@@ -46,27 +47,7 @@ async function handleLogin(ctx: Context, parsed: RegExpExecArray): Promise<Comma
 
   try {
     if (operation === 'login-set') {
-      const account = parsed[3]
-      const secret = parsed[4]
-      if (account === undefined || account.length === 0 || secret === undefined || secret.length === 0) {
-        return failure(`Account and login secret are required. ${USAGE}`)
-      }
-
-      const infos = await Promise.all([
-        ctx.credentials.describe(refs.account),
-        ctx.credentials.describe(refs.secret),
-        ctx.credentials.describe(refs.autonomous),
-      ])
-      if (infos.some(info => !info.writable)) {
-        return failure(`Login for ${origin} cannot be stored because one of its vault slots is read-only.`)
-      }
-
-      await ctx.credentials.set(refs.account, account)
-      await ctx.credentials.set(refs.secret, secret)
-      // This origin-bound marker is the user's one-time authorization for
-      // unattended login and form work on this exact origin.
-      await ctx.credentials.set(refs.autonomous, '1')
-      return { kind: 'success', text: `Login for ${origin} stored for unattended Phoenix browser use.` }
+      return failure('Guarda los accesos web desde el formulario protegido del MiniBrowser; el chat no acepta contraseñas.')
     }
 
     if (operation === 'login-delete') {
@@ -76,17 +57,8 @@ async function handleLogin(ctx: Context, parsed: RegExpExecArray): Promise<Comma
       return { kind: 'success', text: `Login for ${origin} removed.` }
     }
 
-    const [account, secret, autonomous] = await Promise.all([
-      ctx.credentials.describe(refs.account),
-      ctx.credentials.describe(refs.secret),
-      ctx.credentials.describe(refs.autonomous),
-    ])
-    return {
-      kind: 'success',
-      text: account.configured && secret.configured && autonomous.configured
-        ? `Login for ${origin} is configured for unattended Phoenix browser use.`
-        : `Login for ${origin} is not fully configured.`,
-    }
+    return { kind: 'success', text: 'Los accesos seguros se administran desde el MiniBrowser.' }
+
   } catch {
     return failure(`Login for ${origin} could not be updated. Check the vault configuration.`)
   }
@@ -94,6 +66,9 @@ async function handleLogin(ctx: Context, parsed: RegExpExecArray): Promise<Comma
 
 /** Register the human-only `/secret` command. */
 export function apply(ctx: Context): void {
+  ctx.inject(['webServer'], (web) => {
+    web.effect(() => registerSecureLogin(web), 'secure user-only website login')
+  })
   ctx.effect(() => ctx.commands.register({
     name: 'secret',
     description: 'Store or inspect a secret without sending its value to the model',
