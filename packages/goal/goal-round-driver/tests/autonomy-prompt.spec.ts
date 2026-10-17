@@ -35,5 +35,8 @@ describe('goal-round autonomous continuation guidance', () => {
     expect(text).toContain('Break the requested objective into allowed preparation')
     expect(text).toContain('preparing an unsubmitted draft are separate from actually staking funds')
     expect(text).toContain('not transaction-specific authorization for staking money')
+    expect(text).toContain('browser diagnose_page tool')
+    expect(text).toContain('distinguish page failures from cross-origin frame failures')
+    expect(text).toContain('Do not bypass website access controls')
   })
 })

@@ -15,6 +15,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
 import { browserBatchExpression, browserInteractionExpression, type BrowserInteraction, type BrowserInteractionResult } from './browser-interactions.ts'
 import { CdpConnectionPool } from './cdp-connection-pool.ts'
+import { classifySiteHealth, nextSiteRecoveryStep, siteHealthExpression, type SitePageHealth } from './site-health.ts'
 import { runBrowserFormWorkflow } from './form-workflow.ts'
 import { chooseYoutubeCaptions, youtubeCaptionUrl, youtubeTranscript, youtubeWatchUrl, type YoutubeCaptionTrack } from './youtube-video.ts'
 import { parseCapturedVideoAudio, transcribeCapturedVideoAudio, videoAudioCaptureExpression } from './video-audio.ts'
@@ -430,6 +431,36 @@ server.registerTool('read_page', {
   const value = await evaluate(tab, 'JSON.stringify({title: document.title, url: location.href, text: document.body?.innerText || \'\'})')
   const page = JSON.parse(String(value)) as { title: string; url: string; text: string }
   return { content: [{ type: 'text', text: JSON.stringify({ ...page, text: page.text.slice(0, maxChars) }, null, 2) }] }
+})
+
+server.registerTool('diagnose_page', {
+  description: 'Diagnóstico pasivo de la pestaña seleccionada cuando un sitio queda en blanco, muestra “Blocked”, falla un iframe o no carga una sección. No lee contraseñas, cookies, saldos ni contenido privado. Distingue problemas locales, carga parcial y denegación del sitio. Úsalo antes de afirmar que una tarea no se puede continuar; nunca lo utilices para eludir restricciones de acceso.',
+  inputSchema: { tabId: z.string().optional() },
+}, async ({ tabId }) => {
+  const tab = await selectedTab(tabId)
+  let sample: SitePageHealth
+  try {
+    const raw = await evaluate(tab, siteHealthExpression, 7_000)
+    if (typeof raw !== 'string') throw new TypeError('Invalid page diagnosis')
+    sample = JSON.parse(raw) as SitePageHealth
+    if (typeof sample.mainTextLength !== 'number' || typeof sample.blockedMarker !== 'boolean') {
+      throw new TypeError('Invalid page health fields')
+    }
+  } catch {
+    return { isError: true, content: [{ type: 'text', text: JSON.stringify({
+      status: 'browser_diagnostic_unavailable',
+      tabId: tab.id,
+      next: 'Revisar la conexión Chrome CDP; conservar la sesión actual, no asumir que el sitio denegó acceso.',
+    }) }] }
+  }
+  const status = classifySiteHealth(sample)
+  return { content: [{ type: 'text', text: JSON.stringify({
+    tabId: tab.id,
+    status,
+    evidence: sample,
+    next: nextSiteRecoveryStep(status),
+    warning: 'Una señal Blocked no prueba que toda la página esté inaccesible. Tampoco demuestra una transacción exitosa.',
+  }) }] }
 })
 
 const targetSchema = {
