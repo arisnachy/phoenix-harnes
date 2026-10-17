@@ -39,6 +39,8 @@ try:
                                  capture_output=True, check=True, timeout=90)
         receipt = json.loads(process.stdout)
         assert receipt["state"] == "REPORT_READY", receipt
+        assert Path(receipt["project_path"]).is_file()
+        assert json.loads(Path(receipt["project_path"]).read_text(encoding="utf-8"))["style"] == style
         assert receipt["source_verification"] == "metadata_user_supplied_not_network_verified"
         paths = {k: Path(v) for k, v in receipt["files"].items()}
         assert all(p.is_file() and p.stat().st_size > 500 for p in paths.values())

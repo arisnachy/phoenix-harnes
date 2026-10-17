@@ -84,6 +84,6 @@ This is the implementation contract for verifiable scientific research, document
 
 ## Current implementation boundary
 
-- This increment repairs sidecar chat-follow and updates Kira's operating protocol for automatic permitted video inspection, scientific deliverables, and governed external delivery.
-- The current research_search capability is a bounded federated search over existing providers, not a full autonomous API-discovery service or certified scholarly document engine.
-- Actual DOCX/PDF research publication, cover editor, AgentMail file attachments, and Telegram distribution must pass phases two through six above before being represented as delivered features.
+- Implemented: the live browser sidecar follows streaming conversation; research_search remains bounded federated web search, and research_scholar retrieves live publication metadata from the official Europe PMC API.
+- Implemented: phoenix_research_publish produces and opens real DOCX/PDF/HTML documents from a structured claim-to-source manuscript; it keeps the project JSON, supports APA/Vancouver citations, a supplied institution logo, and data-backed bar figures. Publication does NOT independently prove the correctness of source metadata or research methods.
+- Implemented code: phoenix_research_deliver uses native approval, a verified Kira mailbox or paired owner Telegram chat, actual provider APIs, independently recorded outcomes, and no blind retries. Live end-to-end owner-account delivery remains unverified until the user's services authenticate and confirm receipts. A full interactive cover designer, general-purpose data extraction and systematic-review engine, and complete cross-model research mission orchestration remain pending.

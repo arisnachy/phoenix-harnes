@@ -274,6 +274,11 @@ def main():
     html_file=output_root/"informe.html"
     html_file.write_text("".join(chunks),encoding="utf-8")
     result={"state":"REPORT_READY","report_id":digest,"title":title,"style":style,"source_count":len(cited),"source_verification":"metadata_user_supplied_not_network_verified","files":{"docx":str(docx_file),"pdf":str(pdf_file),"html":str(html_file)},"output_dir":str(output_root)}
+    # Preserve the exact structured project so model handoffs and revisions do not
+    # need to re-run every source lookup or reconstruct the manuscript from PDF.
+    project = output_root / "project.json"
+    project.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    result["project_path"] = str(project)
     (output_root/"manifest.json").write_text(json.dumps(result,ensure_ascii=False,indent=2),encoding="utf-8")
     if not docx_file.exists() or not pdf_file.exists() or not docx_file.stat().st_size or not pdf_file.stat().st_size:
         raise RuntimeError("produced files failed existence checks")
