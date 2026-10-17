@@ -122,12 +122,13 @@ export function measureGoalWorkProgress(
         // counting repeated reads, screenshot attempts or differently
         // parameterized clicks as progress. Image bytes and transient tokens
         // are intentionally excluded from the fingerprint.
-        const stableBlocks = event.data.message.content.map(block =>
+        const contents = event.data.message.content.flatMap(result => result.content)
+        const stableBlocks = contents.map(block =>
           block.type === 'text' ? block.text.slice(0, 12_000) : block.type)
         // Tool protocols can explicitly mark dispatch receipts as unverified.
         // An accepted click/key/submit request is not evidence that its goal
         // was achieved; a subsequent observation must confirm the effect.
-        const unverified = event.data.message.content.some(block => {
+        const unverified = contents.some(block => {
           if (block.type !== 'text') return false
           try {
             const parsed: unknown = JSON.parse(block.text)
