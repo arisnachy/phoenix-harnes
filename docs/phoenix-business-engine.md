@@ -61,3 +61,24 @@ node scripts/phoenix-business.mjs audit PRODUCT_ID
 - **Pruebas:** `pnpm test:business` ejecuta la batería autónoma de Node, sin red. Se necesita además ejecución de CI del monorepositorio y ensayo de escritorio Windows antes de promoción a ambas ramas.
 
 El trabajo sigue siendo una base para desarrollar una UI nativa de Biblioteca, investigación de oportunidades, conversión a PDF/portadas, conectores MCP con permisos reales y seguimiento conciliado de ventas. Los productos no están listos para publicarse por el simple hecho de contar con EPUB/DOCX.
+## Cola comercial gobernada (fase de preparación)
+
+Se incorpora `scripts/phoenix-business-commerce.mjs` como cola separada y duradera de borradores de publicación; **NO** publica, no invoca tiendas, no inicia anuncios ni declara ventas verificadas. Los comandos son:
+
+```bash
+pnpm business:commerce plan PRODUCTO_ID amazon-kdp
+pnpm business:commerce plan PRODUCTO_ID shopify
+pnpm business:commerce list
+pnpm business:commerce inspect pub-ID
+pnpm business:commerce cancel pub-ID
+pnpm business:commerce route shopify --inventory mcp-snapshot.json
+pnpm test:commerce
+```
+
+- `plan` requiere ficha `review-required`, archivos existentes e íntegros, precio/moneda válidos y, para KDP eBook, EPUB, portada y compilación editorial vigente. Los mínimos internos de 50 000 palabras y 15 capítulos son **criterios conservadores actuales de Phoenix, no requisitos de KDP**; deberán convertirse en objetivos configurables por proyecto.
+- Se registra una revisión por huella SHA-256 del manifiesto. Repetir exactamente el mismo plan devuelve el mismo trabajo; cancelar permite crear otro. `inspect` vuelve a verificar que los archivos, capítulos y precio siguen coincidiendo.
+- El índice `publication-queue.json` se guarda junto a `library.json`, con bloqueo por archivo y escritura atómica. La vista pública de trabajos nunca transporta ruta de archivo, manuscrito, datos del comprador o credenciales.
+- `route` admite un inventario de `pluginInventory.mcpConnectorHubState`; `ready` + nombre de herramienta de escritura solo constituye **candidato MCP**, jamás autorización o publicación confirmada. Si no hay candidato se propone mininavegador, sin abrirlo ni efectuar acciones automáticamente.
+- Esta cola termina en `awaiting-approval`. No existe comando `publish` o `submit`; falta conectar el adaptador con la aprobación interactiva del host, una API real o sesión autenticada de navegador y los recibos de plataforma. No registrar ingresos externos a partir de este estado.
+
+Pruebas: `node --test scripts/phoenix-business-commerce.test.mjs` cubre idempotencia, cancelación, precio cambiante, modificación de activos, symlinks, estructura de índice, rutas y detección MCP. Se mantiene pendiente el CI completo, compilación Windows y pruebas de publicación real.

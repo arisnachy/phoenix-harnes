@@ -59,3 +59,8 @@ Para cursos, software, juegos, diseño, vídeo o investigación, sustituye el pi
 - Si un capítulo o la biblia cambia, cualquier compilación previa queda **stale**. Regenera los formatos. Usa `audit ID` antes de `prepare` para validar las huellas digitales, y detén la publicación ante `integrity-failed`.
 - No declares terminado un libro por superar las métricas cuantitativas: la continuidad, los diálogos, la calidad de edición, originalidad, cubierta y derechos siguen necesitando revisión documental independiente.
 - Mantén la compilación de esta rama separada de `main` y `stable` hasta superar pruebas de producto y escritorio; no des la sincronización por realizada antes de comprobar los SHA reales.
+## Preparación durable de publicación comercial (sin envío todavía)
+
+Tras crear y revisar un producto, ejecuta `pnpm business:commerce plan ID PLATAFORMA`. Usa `inspect pub-ID` antes de proponer aprobación, porque archivos, capítulos o precio pueden cambiar. Si el plan está obsoleto, regenera formatos, repite `business prepare` y crea un plan nuevo; no lo reutilices a ciegas.
+
+La lista MCP se contrasta con la galería **en vivo**; un inventario `ready` con nombre coincidente es solo un candidato. Un envío real futuro deberá exigir autorización interactiva de Phoenix, esquema y autenticación comprobados, idempotencia, recibo remoto y consulta posterior del estado. No inventes ID de publicación, enlace, venta, ingreso ni aval de derechos. La cola no contiene un comando `publish`.
