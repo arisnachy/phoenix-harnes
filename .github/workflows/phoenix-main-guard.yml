@@ -53,7 +53,7 @@ jobs:
       - name: Verify release, MCP recovery, and HARDNESS regressions
         shell: pwsh
         run: |
-          pnpm exec vitest run scripts/ci-workflow.spec.ts packages/host/plugin-inventory/tests/mcp-managed.spec.ts packages/host/plugin-inventory/tests/inventory.spec.ts packages/hardness/hardness/tests/operating-protocol.spec.ts packages/hardness/hardness/tests/resolver.spec.ts packages/hardness/hardness/tests/cognitive-workflow.spec.ts packages/goal/goal-round-driver/tests/strategy.spec.ts packages/goal/goal-round-driver/tests/goal-round-driver.spec.ts packages/core/agent/tests/model-selection.spec.ts packages/mcp/chrome-connector/tests/browser-interactions.spec.ts
+          pnpm exec vitest run scripts/ci-workflow.spec.ts packages/host/plugin-inventory/tests/mcp-managed.spec.ts packages/host/plugin-inventory/tests/inventory.spec.ts packages/hardness/hardness/tests/operating-protocol.spec.ts packages/hardness/hardness/tests/resolver.spec.ts packages/hardness/hardness/tests/cognitive-workflow.spec.ts packages/goal/goal-round-driver/tests/strategy.spec.ts packages/goal/goal-round-driver/tests/goal-round-driver.spec.ts packages/goal/goal-round-driver/tests/mission-fence.spec.ts packages/goal/goal-round-driver/tests/autonomy-prompt.spec.ts packages/core/agent/tests/model-selection.spec.ts packages/mcp/chrome-connector/tests/browser-interactions.spec.ts packages/mcp/chrome-connector/tests/connector.spec.ts
 
       - name: Build the exact main SHA
         shell: pwsh
