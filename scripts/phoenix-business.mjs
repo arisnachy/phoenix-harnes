@@ -20,8 +20,8 @@ const PLATFORMS = Object.freeze({
   gumroad: { matcher: /gumroad/i, required: ['source'], capabilities: ['list', 'upload', 'publish'] },
   itch: { matcher: /(?:itch|gamejolt)/i, required: ['source'], capabilities: ['list', 'upload', 'publish'] },
 })
-const TYPES = new Set(['book', 'course', 'software', 'game', 'design', 'research', 'video', 'audio', 'other'])
-const ROLES = new Set(['source', 'manuscript', 'ebook', 'print', 'cover', 'promo', 'other'])
+const TYPES = new Set(['book', 'course', 'software', 'game', 'design', 'research', 'video', 'audio', 'service', 'other'])
+const ROLES = new Set(['source', 'manuscript', 'ebook', 'print', 'cover', 'promo', 'syllabus', 'lesson', 'assessment', 'package', 'documentation', 'license', 'preview', 'report', 'methodology', 'sources', 'video', 'caption', 'audio', 'transcript', 'proposal', 'scope', 'fulfillment', 'other'])
 const iso = () => new Date().toISOString()
 const fail = message => { throw new Error(message) }
 const safeId = id => /^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(id) ? id : fail('Identificador no válido.')
@@ -251,7 +251,7 @@ async function main(args) {
     const p=get(db,positional[0]), platform=positional[1];if(!(platform in PLATFORMS)) fail('Plataforma no soportada.')
     const currency=String(option('--currency','USD')).toUpperCase();if(!/^[A-Z]{3}$/.test(currency)) fail('Moneda inválida.')
     const price=money(positional[2]), check=editorialCheck(p)
-    const files=PLATFORMS[platform].required.every(role=>p.files.some(f=>f.role===role))
+    const files=p.type === 'book' ? PLATFORMS[platform].required.every(role=>p.files.some(f=>f.role===role)) : p.files.length > 0
     const ready=p.type==='book'&&platform==='amazon-kdp' ? check.lengthReady && check.ebookFileReady && p.files.some(f=>f.role==='cover') : files
     const integrityFailures=[]
     for(const f of p.files) {

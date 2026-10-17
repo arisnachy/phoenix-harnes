@@ -13,6 +13,7 @@ import { basename, join, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { buildFingerprint } from './phoenix-business-studio.mjs'
+import { assessRelease } from './phoenix-business-factory.mjs'
 
 const ROOT = resolve(process.env.PHOENIX_BUSINESS_HOME || join(process.env.DSH_HOME || join(homedir(), '.dsh'), 'business-library'))
 const PRODUCTS = join(ROOT, 'library.json')
@@ -121,7 +122,8 @@ export async function assessProduct(productId, platform) {
   const db = await library(), product = safeProduct(db, productId)
   const listing = currentListing(product, platform)
   const audit = await validateAssets(product)
-  const blockers = [...audit.errors, ...verifyRequirements(product,platform)]
+  const universal = await assessRelease(productId, {platform})
+  const blockers = [...audit.errors, ...verifyRequirements(product,platform), ...universal.blockers]
   if (blockers.length > 0) return { allowed: false, productId, platform, blockers }
   const manifest = {
     productId, platform, price: listing.price, currency: listing.currency,

@@ -14,8 +14,12 @@ const sha = value => createHash('sha256').update(value).digest('hex')
 
 test('cola idempotente conserva el borrador y nunca publica ni atribuye ventas',async()=>fixture(async({root,sources,business,commerce})=>{
   const product=business('init','software','Sistema de inventario').result
-  const file=join(sources,'app.txt');await writeFile(file,'producto comercial versión uno')
+  const file=join(sources,'app.js');await writeFile(file,'producto comercial versión uno')
   assert.equal(business('asset',product.id,file,'--role','source').ok,true)
+  const packageFile=join(sources,'installer.zip');await writeFile(packageFile,Buffer.from('504b0304','hex'))
+  const docs=join(sources,'setup.md');await writeFile(docs,'Instalación y configuración del software de inventarios.')
+  assert.equal(business('asset',product.id,packageFile,'--role','package').ok,true)
+  assert.equal(business('asset',product.id,docs,'--role','documentation').ok,true)
   assert.equal(business('prepare',product.id,'shopify','29.99').result.stage,'review-required')
   const first=commerce('plan',product.id,'shopify')
   assert.equal(first.ok,true,JSON.stringify(first))
@@ -43,6 +47,10 @@ test('detecta alteraciones, cambio de precio y rechaza productos incompletos',as
   assert.equal(commerce('plan',product.id,'etsy').ok,false)
   const source=join(sources,'template.svg');await writeFile(source,'<svg xmlns="http://www.w3.org/2000/svg"/>')
   const asset=business('asset',product.id,source,'--role','source').result
+  const preview=join(sources,'preview.png');await writeFile(preview,Buffer.from('89504e470d0a1a0a','hex'))
+  const bundle=join(sources,'design-package.zip');await writeFile(bundle,Buffer.from('504b0304','hex'))
+  assert.equal(business('asset',product.id,preview,'--role','preview').ok,true)
+  assert.equal(business('asset',product.id,bundle,'--role','package').ok,true)
   assert.equal(business('prepare',product.id,'etsy','12.50').result.stage,'review-required')
   const result=commerce('plan',product.id,'etsy')
   assert.equal(result.result.queued,true)
