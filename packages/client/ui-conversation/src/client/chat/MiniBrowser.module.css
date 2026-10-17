@@ -390,14 +390,5 @@
   .expandedDialog .browser { border-radius: 0; }
 }
 
-/* User-only credential form: never routed through chat or model tool arguments. */
-.secureSection { padding: 8px 12px; border-top: 1px solid var(--border-color, #dedede); }
-.secureToggle { border: 1px solid #b78e46; border-radius: 8px; padding: 7px 12px; background: transparent; cursor: pointer; }
-.secureStatus { font-size: 12px; margin-left: 12px; opacity: .8; }
-.secureForm { display: flex; flex-direction: column; gap: 8px; padding: 12px 0; max-width: 480px; }
-.secureForm p { margin: 0; font-size: 12px; opacity: .8; }
-.secureForm input:not([type='checkbox']) { width: 100%; min-height: 36px; border-radius: 6px; padding: 6px 10px; border: 1px solid #aaa; background: var(--background, #fff); color: var(--foreground, #222); }
-.secureForm label { display: flex; gap: 8px; align-items: center; font-size: 13px; }
-.secureActions { display: flex; flex-wrap: wrap; gap: 8px; }
-.secureActions button { padding: 7px 10px; border: 1px solid #aaa; border-radius: 6px; cursor: pointer; }
-.secureFeedback { font-size: 12px; margin: 6px 0; }
+/* Open the protected ASK in the activity sidecar, never in the browser card. */
+.secureShortcut { margin: 8px 12px; padding: 7px 11px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; background: transparent; color: inherit; cursor: pointer; }

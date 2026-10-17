@@ -154,6 +154,43 @@ async function tabForLogin(tabId: string, origin: string): Promise<BrowserTab> {
   return tab
 }
 
+
+/** Detect a login form in the selected tab without reading any field values. */
+async function detectLogin(tab: BrowserTab): Promise<boolean> {
+  const expression = `(() => {
+    const visible = (e) => !e.disabled && !e.readOnly && e.getClientRects().length > 0;
+    const inputs = Array.from(document.querySelectorAll('input')).filter(visible);
+    const passwords = inputs.filter(e => e.type === 'password');
+    if (passwords.length !== 1) return false;
+    const field = passwords[0];
+    return Boolean(field.form || document.querySelector('input[autocomplete="username"],input[type="email"]'));
+  })()`
+  return await new Promise<boolean>((resolve) => {
+    const ws = new WebSocket(tab.webSocketDebuggerUrl as string)
+    let settled = false
+    const finish = (value: boolean): void => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      ws.close()
+      resolve(value)
+    }
+    const timer = setTimeout(() => finish(false), 5_000)
+    ws.addEventListener('error', () => finish(false))
+    ws.addEventListener('open', () => {
+      ws.send(JSON.stringify({ id: 1, method: 'Runtime.evaluate', params: { expression, returnByValue: true } }))
+    })
+    ws.addEventListener('message', event => {
+      try {
+        const data = JSON.parse(String(event.data)) as {
+          id?: number; result?: { result?: { value?: unknown } }
+        }
+        if (data.id === 1) finish(data.result?.result?.value === true)
+      } catch { finish(false) }
+    })
+  })
+}
+
 /** Only a sanitized result crosses back to the UI. Credentials never enter a tool result. */
 async function injectLogin(tab: BrowserTab, login: LoginContent): Promise<string> {
   const expression = '(async () => {'
@@ -238,6 +275,14 @@ export function registerSecureLogin(ctx: Context): () => void {
         if (req.method !== 'POST') { respond(res, 405, { error: 'Operación no permitida' }); return }
         const payload = await input(req)
         const origin = loginOrigin(String(payload.origin ?? ''))
+        if (route.pathname === PREFIX + '/detect') {
+          if (typeof payload.tabId !== 'string' || !/^[A-Za-z0-9_-]{1,200}$/.test(payload.tabId)) {
+            throw new Error('Pestaña no válida')
+          }
+          const tab = await tabForLogin(payload.tabId, origin)
+          respond(res, 200, { required: await detectLogin(tab) })
+          return
+        }
         if (route.pathname === PREFIX + '/save') {
           const account = payload.account
           const secret = payload.secret
@@ -245,6 +290,12 @@ export function registerSecureLogin(ctx: Context): () => void {
             || typeof secret !== 'string' || !secret || secret.length > 16384) {
             throw new Error('Credenciales incompletas')
           }
+          // Bind enrollment to the actual visible browser tab, not an arbitrary
+          // origin typed in an agent response or a forged sidebar request.
+          if (typeof payload.tabId !== 'string' || !/^[A-Za-z0-9_-]{1,200}$/.test(payload.tabId)) {
+            throw new Error('Pestaña no válida')
+          }
+          await tabForLogin(payload.tabId, origin)
           await store(origin, account, secret, payload.automatic === true)
           respond(res, 200, { saved: true, automatic: payload.automatic === true })
           return

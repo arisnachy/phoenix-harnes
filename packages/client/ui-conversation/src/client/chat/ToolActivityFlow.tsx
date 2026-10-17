@@ -10,7 +10,8 @@ import { ChatNodeSeat } from './ChatNodeSeat.tsx'
 import { PendingSteeringBubble } from './MessageItem.tsx'
 import { formatRunDuration } from './message-chrome.ts'
 import { ReasoningRow } from './ReasoningRow.tsx'
-import { MiniBrowser } from './MiniBrowser.tsx'
+import { MiniBrowser, type SecureLoginTarget } from './MiniBrowser.tsx'
+import { SecureAsk } from './SecureAsk.tsx'
 import type { TurnProgress } from './turn-progress.ts'
 import chatCss from './ChatView.module.css'
 import css from './ToolActivityFlow.module.css'
@@ -593,6 +594,8 @@ function BrowserWorkspace({
   readonly turnStatus: ToolActivityFlowProps['turnStatus']
 }) {
   const [page, setPage] = useState<{ title: string; url: string } | null>(null)
+  const [secureRequest, setSecureRequest] = useState<SecureLoginTarget | null>(null)
+  const showSidecar = live || secureRequest !== null
   const activityRef = useRef<HTMLDivElement | null>(null)
   const followingRef = useRef(true)
   const [following, setFollowing] = useState(true)
@@ -645,15 +648,16 @@ function BrowserWorkspace({
 
   return (
     <div className={css.browserWorkspace} data-browser-workspace={live ? '' : undefined}
-      data-activity-open={live ? 'true' : undefined} data-chat-flow-kind="browser-workspace">
+      data-activity-open={showSidecar ? 'true' : undefined} data-chat-flow-kind="browser-workspace">
       <div className={css.browserPane}>
         <MiniBrowser requested active={selected} {...tabId === undefined ? {} : { initialTabId: tabId }}
-          onActivate={onActivate} autoScroll={false} onPageChange={setPage} />
+          onActivate={onActivate} autoScroll={false} onPageChange={setPage}
+          onSecureLoginRequest={setSecureRequest} />
       </div>
-      {live && <aside className={css.activityPane} aria-label="Actividad del agente en este navegador">
+      {showSidecar && <aside className={css.activityPane} aria-label="Actividad y acceso seguro del agente">
         <header className={css.activityHeader}>
-          <strong>Actividad del agente</strong>
-          <span className={css.livePill}><span aria-hidden="true" /> En vivo</span>
+          <strong>{secureRequest === null ? 'Actividad del agente' : 'Kira · Secure Ask'}</strong>
+          <span className={css.livePill}><span aria-hidden="true" /> {secureRequest === null ? 'En vivo' : 'Protegido'}</span>
         </header>
         {page !== null && (
           <div className={css.pageInfo}>
@@ -662,7 +666,11 @@ function BrowserWorkspace({
             <span className={css.pageUrl} title={page.url}>{page.url}</span>
           </div>
         )}
-        <div ref={activityRef} className={css.activityMessages} aria-live="polite" aria-relevant="additions text">
+        {secureRequest !== null ? <SecureAsk key={secureRequest.origin + ':' + secureRequest.tabId}
+          target={secureRequest}
+          onClose={() => setSecureRequest(null)}
+          onSaved={() => setSecureRequest(null)}
+        /> : <div ref={activityRef} className={css.activityMessages} aria-live="polite" aria-relevant="additions text">
           {items.map(item => (
             <Fragment key={item.key}>
               {item.kind === 'node'
@@ -686,8 +694,8 @@ function BrowserWorkspace({
             <TurnStatus startTime={turnStatus.startTime} progress={turnStatus.progress}
               expiresAfterMs={turnStatus.expiresAfterMs} t={seatProps.t} />
           )}
-        </div>
-        {!following && <button type="button" className={css.followLatest}
+        </div>}
+        {!following && secureRequest === null && <button type="button" className={css.followLatest}
           onClick={returnToLatest} aria-label="Ir a la última conversación de Kira">
           ↓ Ir a lo más reciente
         </button>}

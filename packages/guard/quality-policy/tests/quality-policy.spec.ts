@@ -7,7 +7,7 @@ import { CallId, createUserMessage } from '@phoenix-ai/dsh-llm'
 import { SessionId, type SessionEvent } from '@phoenix-ai/dsh-session'
 import { defineContentToolFixture } from '@phoenix-ai/dsh-tools'
 import * as QualityPolicy from '@phoenix-ai/dsh-quality-policy'
-import { classifyQualityActivity, inferQualityDomains, inferQualitySignals, isUnfinishedResearchHandoff } from '@phoenix-ai/dsh-quality-policy'
+import { classifyQualityActivity, inferQualityDomains, inferQualitySignals, isUnfinishedResearchHandoff, isPrematureAuthorizedTaskRefusal } from '@phoenix-ai/dsh-quality-policy'
 import { MockAdapter, textResponse, toolCallResponse } from '../../../core/agent-loop/tests/mock-adapter.ts'
 
 function waitForIdle(ctx: Context, agent: Agent): Promise<void> {
@@ -102,6 +102,15 @@ describe('classification', () => {
     expect(isUnfinishedResearchHandoff('I could not find archived odds. If you share the data, I can help.')).toBe(true)
     expect(isUnfinishedResearchHandoff('No encontré cuotas exactas. Aquí está una alternativa condicional completa.')).toBe(false)
     expect(isUnfinishedResearchHandoff('No se puede garantizar que las seis selecciones ganen.')).toBe(false)
+  })
+
+  it('detects premature inability while allowing honest verified completion states', () => {
+    expect(isPrematureAuthorizedTaskRefusal(
+      'El ticket no quedó listo y no hay una apuesta confirmada. No puedo armar el cupón en la casa de apuestas, aunque tú hagas el envío final.'
+    )).toBe(true)
+    expect(isPrematureAuthorizedTaskRefusal('No puedo preparar ese formulario. Sigue sin completar.')).toBe(true)
+    expect(isPrematureAuthorizedTaskRefusal('No hay apuesta confirmada; el cupón preparado está listo para tu revisión.')).toBe(false)
+    expect(isPrematureAuthorizedTaskRefusal('No puedo asegurar que el pronóstico se cumpla.')).toBe(false)
   })
 
   it('infers supported domains and generic fallback', () => {

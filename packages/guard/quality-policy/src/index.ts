@@ -275,6 +275,20 @@ export function isUnfinishedResearchHandoff(text: string): boolean {
   return missing.test(text) && asksUserToResearch.test(text)
 }
 
+/**
+ * Detect a premature categorical refusal of an otherwise ongoing authorized task.
+ * A single refusal is not evidence the user objective was completed, but this
+ * nudge never overrides actual tool permissions, site terms or transaction consent.
+ */
+export function isPrematureAuthorizedTaskRefusal(text: string): boolean {
+  const refusal = /(?:no (?:puedo|podr[eé]|es posible) (?:armar|preparar|completar|rellenar|crear|configurar|terminar|continuar|hacer|realizar|enviar|colocar)|i (?:can't|cannot|won't|am unable to) (?:prepare|complete|fill|create|finish|continue|make|place|submit))/iu
+  const unfinished = /(?:no (?:qued[oó]|est[aá]) (?:list[oa]|terminad[oa])|no (?:hay|existe) (?:un[ao]? )?(?:recibo|confirmaci[oó]n)|(?:no puedo|can't|cannot)|(?:sigo|still) (?:sin|without))/iu
+  const prepared = /(?:aqu[ií] (?:tienes|est[aá]) (?:el|la|tu) (?:borrador|cup[oó]n|formulario)|(?:borrador|cup[oó]n|formulario) (?:preparado|listo|completado)|(?:draft|form) (?:is )?(?:ready|prepared))/iu
+  return refusal.test(text) && unfinished.test(text) && !prepared.test(text)
+}
+
+
+
 function assistantTextInTurn(agent: Agent, turn: number): string {
   const last = agent.session.events.findLast(event =>
     event.type === 'assistant/message' && event.data.turn === turn)
@@ -295,6 +309,18 @@ function handoffReminder(): UserMessage {
       + 'Do not move funds or activate unrelated services. A truly indispensable credential, permission '
       + 'or unknown user preference may still require a focused clarification.',
     'research handoff before delivering result',
+  )
+}
+
+/** One bounded continuation after an unsupported, categorical early refusal. */
+function prematureRefusalReminder(): UserMessage {
+  return pluginMessage(
+    'The previous response stopped with a categorical inability statement although the user had asked for task execution. '
+      + 'Do not repeat the refusal. Identify the most specific unavailable final action and perform any remaining authorized preparation with the existing browser or tools. '
+      + 'For example, preparing a selection and leaving a betting slip unsubmitted are distinct from placing a money wager; finish permissible drafting and request transaction-specific confirmation before any monetary commitment. '
+      + 'Keep the user informed about what is prepared, what remains, and the exact missing authorization or capability. '
+      + 'Do not claim success, a booked transaction or a receipt without direct external evidence, and never bypass policy, site restrictions, or a mandatory approval.',
+    'premature task refusal: continue authorized preparation',
   )
 }
 
@@ -391,8 +417,15 @@ export function apply(ctx: Context, config: Config = {}): void {
       agent.steer(failureReminder())
       return
     }
-    if (state.toolAttempts === 0 || state.handoffNudged
-      || !isUnfinishedResearchHandoff(assistantTextInTurn(agent, turn))) return
+    if (state.handoffNudged) return
+    const answer = assistantTextInTurn(agent, turn)
+    if (isPrematureAuthorizedTaskRefusal(answer)) {
+      state.stopNudges += 1
+      state.handoffNudged = true
+      agent.steer(prematureRefusalReminder())
+      return
+    }
+    if (state.toolAttempts === 0 || !isUnfinishedResearchHandoff(answer)) return
     state.stopNudges += 1
     state.handoffNudged = true
     agent.steer(handoffReminder())

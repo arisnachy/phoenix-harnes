@@ -32,5 +32,8 @@ describe('goal-round autonomous continuation guidance', () => {
     expect(text).toContain('respect the stated knowledge cutoff')
     expect(text).toContain('provide the best useful output')
     expect(text).toContain('A prediction or probabilistic outcome is never guaranteed')
+    expect(text).toContain('Break the requested objective into allowed preparation')
+    expect(text).toContain('preparing an unsubmitted draft are separate from actually staking funds')
+    expect(text).toContain('not transaction-specific authorization for staking money')
   })
 })
