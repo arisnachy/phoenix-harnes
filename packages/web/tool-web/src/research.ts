@@ -7,6 +7,7 @@ import type { Context } from '@phoenix-ai/cordis'
 import { defineTool, ToolArgsError } from '@phoenix-ai/dsh-tools'
 import type { WebSearchResult, WebSearchSource } from '@phoenix-ai/dsh-web'
 
+/** Candidate research host metadata. A listing does not grant network or API execution authority. */
 export interface ResearchSource {
   readonly name: string
   readonly host: string
@@ -153,12 +154,19 @@ const DOMAIN_PATTERNS: readonly (readonly [string, RegExp])[] = [
   ['transport', /\b(log[ií]stica|transporte|tracking|paquete|env[ií]o)\b/iu],
 ]
 
+/** Bounded federated query plan, independent of the active web-search provider. */
 export interface ResearchPlan {
   readonly domain: string
   readonly queries: string[]
   readonly candidates: ResearchSource[]
 }
 
+/**
+ * Infer a research domain and create a bounded source-aware search plan.
+ * @param question - user's research question, from 3 to 500 characters.
+ * @param requestedDomain - optional explicit catalogue domain.
+ * @returns broad and authority-scoped queries plus candidate metadata.
+ */
 export function planResearch(question: string, requestedDomain?: string): ResearchPlan {
   const q = question.trim()
   if (q.length < 3 || q.length > 500) throw new ToolArgsError(['question must contain 3–500 characters'])
@@ -185,6 +193,7 @@ function canonicalUrl(raw: string): string | undefined {
   } catch { return undefined }
 }
 
+/** Auditable research leads and explicit partial-failure outcome. */
 export interface ResearchOutcome {
   readonly domain: string
   readonly queries: string[]
@@ -196,7 +205,14 @@ export interface ResearchOutcome {
   readonly note: string
 }
 
-/** Failures do not discard independent successful searches; no response is fabricated. */
+/**
+ * Failures do not discard independent successful searches; no response is fabricated.
+ * @param ctx - host-owned web seam with configured search providers.
+ * @param plan - domain-aware research plan.
+ * @param maxResults - cap on retained result URLs.
+ * @param signal - cancellation signal for all live provider requests.
+ * @returns deduplicated search leads and diagnostic status.
+ */
 export async function executeResearch(
   ctx: Pick<Context, 'web'>,
   plan: ResearchPlan,
@@ -250,7 +266,12 @@ const sourceSchema = {
   },
 } as const
 
-/** Registers an intentionally bounded federated research tool and source inventory. */
+/**
+ * Register bounded federated research and candidate source discovery in the existing tool registry.
+ * @param ctx - Cordis plugin context.
+ * @param maxResults - maximum result URLs per tool call.
+ * @param timeoutMs - existing cooperative web timeout budget.
+ */
 export function applyResearchTools(ctx: Context, maxResults: number, timeoutMs: number): void {
   ctx.systemPrompt.section({
     name: 'tool:research_search',
