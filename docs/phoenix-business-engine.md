@@ -5,7 +5,7 @@
 ## Ejecución
 
 ```bash
-node scripts/phoenix-business.mjs help
+pnpm business help    # o: node scripts/phoenix-business.mjs help
 node scripts/phoenix-business.mjs init book "Mi primera novela"
 node scripts/phoenix-business.mjs list
 node scripts/phoenix-business.mjs chapter ID 1 path/to/capitulo-1.md
