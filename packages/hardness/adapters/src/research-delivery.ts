@@ -145,7 +145,8 @@ async function sendByTelegram(
     const form = new FormData()
     form.append('chat_id', chat.value)
     form.append('caption', 'Phoenix Research Studio · Informe ' + reportId)
-    form.append('document', new Blob([file.bytes], {
+    const ownedBytes = Uint8Array.from(file.bytes)
+    form.append('document', new Blob([ownedBytes.buffer as ArrayBuffer], {
       type: format === 'pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     }), 'informe.' + format)
     let response: Response
