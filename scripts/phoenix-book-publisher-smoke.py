@@ -28,7 +28,10 @@ def main():
             raise AssertionError(process.stderr)
         if not process.stdout.strip():
             raise AssertionError('Renderer returned empty stdout; exit='+str(process.returncode)+'; stderr='+repr(process.stderr[-1600:])+'; file_exists='+str(output.exists()))
-        receipt = json.loads(process.stdout)
+        try:
+            receipt = json.loads(process.stdout)
+        except json.JSONDecodeError as exc:
+            raise AssertionError('Renderer stdout is not JSON: '+repr(process.stdout[:1200])+'; stderr: '+repr(process.stderr[-500:])) from exc
         assert receipt["ok"] is True
         assert receipt["result"]["text_extraction_verified"] is True
         assert receipt["result"]["print_release_approved"] is False
