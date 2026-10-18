@@ -336,7 +336,7 @@ export function createPhoenixGameTool(): ToolDefinition {
           mime: PHOENIX_GAME_MIME,
           title: value.title,
           data: typeof value.html === 'string'
-            ? value.html : preparePhoenixGameSubmission(args.html, args.manifest_json),
+            ? value.html : preparePhoenixGameSubmission(args.html ?? '', args.manifest_json),
           executable: true,
         },
       }),
