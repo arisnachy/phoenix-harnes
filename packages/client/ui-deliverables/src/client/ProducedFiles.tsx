@@ -57,7 +57,7 @@ export interface ProducedFilesInjected {
 }
 
 /** Matched paths plus the opener, locale, and injected Host capability. */
-export type ProducedFilesProps = Pick<TurnTailOwnerProps, 'openFile'> & {
+export type ProducedFilesProps = Pick<TurnTailOwnerProps, 'openFile' | 'sessionId'> & {
   matched: readonly string[]
 } & PropsLocale<typeof NS> & InjectFace<ProducedFilesInjected>
 
@@ -71,7 +71,7 @@ function moreLabel(t: ProducedFilesProps['t'], count: number): string {
  * @returns The produced-files row.
  */
 export function ProducedFiles({
-  matched: paths, openFile, isLoopback, useHostDescription, t,
+  matched: paths, openFile, sessionId, isLoopback, useHostDescription, t,
 }: ProducedFilesProps) {
   const hostCanOpenPath = useHostDescription(description => description?.canOpenPath === true)
   const canOpenPath = isLoopback && hostCanOpenPath
@@ -116,20 +116,29 @@ export function ProducedFiles({
     <div className={css.root}>
       <span className={css.label}>{t('produced.label')}</span>
       <div ref={rowRef} className={css.row} data-produced-files-row>
-        {shown.map(path => (
-          <button
-            key={path}
-            type="button"
-            className={css.file}
-            // The full path is the disambiguator when two turns produce files
-            // that share a basename; the chip itself stays short.
-            title={path}
-            aria-label={t('produced.open', { name: path })}
-            onClick={() => { openFile(path) }}
-          >
-            {basename(path)}
-          </button>
-        ))}
+        {shown.map(path => {
+          const downloadUrl = isLoopback && sessionId !== undefined
+            ? '/api/artifact.download?' + new URLSearchParams({
+              sessionId: String(sessionId), path,
+            }).toString()
+            : undefined
+          return downloadUrl === undefined ? (
+            <button
+              key={path}
+              type="button"
+              className={css.file}
+              title={path}
+              aria-label={t('produced.open', { name: path })}
+              onClick={() => { openFile(path) }}
+            >{basename(path)}</button>
+          ) : (
+            <a key={path} className={css.file} href={downloadUrl}
+              download={basename(path)} title={path}
+              aria-label={t('produced.download', { name: path })}>
+              {basename(path)}
+            </a>
+          )
+        })
         {hidden > 0 && <span className={css.more}>{moreLabel(t, hidden)}</span>}
       </div>
       {hidden > 0 && canOpenPath && (

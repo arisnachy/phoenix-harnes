@@ -411,6 +411,8 @@ declare module '@phoenix-ai/cordis' {
  * and open files through the same opener the tool rows use.
  */
 export interface TurnTailOwnerProps {
+  /** Session that logged the produced mutations; needed by the browser download. */
+  sessionId?: SessionId
   /** Engine-owned closing Turn boundary. */
   turn: TurnLocation
   /** The closing assistant's seq — the anchor the tail renders under. */

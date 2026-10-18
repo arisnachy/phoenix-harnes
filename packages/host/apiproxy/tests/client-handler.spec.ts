@@ -29,6 +29,7 @@ function scriptedApi(overrides: {
   credentials?: Partial<ApiProxy['credentials']>
   llm?: Partial<ApiProxy['llm']>
   authorization?: Partial<ApiProxy['authorization']>
+  downloads?: Partial<ApiProxy['downloads']>
   respond?: ApiProxy['respond']
 } = {}): ApiProxy {
   async function *empty<F>(): AsyncGenerator<RpcRequest<F>> { /* no frames */ }
@@ -140,7 +141,7 @@ function scriptedApi(overrides: {
     },
     events: { mux: () => empty<MuxFrame>(), host: () => empty<HostFrame>(), ...overrides.events },
     respond: overrides.respond ?? (() => Promise.resolve({ accepted: false as const, reason: 'not-pending' as const })),
-    downloads: { sessionLog: async () => new Response('stub', { status: 404 }) },
+    downloads: { sessionLog: async () => new Response('stub', { status: 404 }), ...overrides.downloads },
   }
 }
 
@@ -832,5 +833,27 @@ describe('config unary surface', () => {
     expect(response.result.ok).toBe(false)
     if (response.result.ok) throw new Error('unreachable')
     expect(response.result.error.code).toBe('bad-request')
+  })
+})
+
+describe('verified browser artifact download', () => {
+  it('returns real bytes, rejects malformed requests and preserves HEAD metadata', async () => {
+    const producedFile = vi.fn(async (request: { sessionId: SessionId; path: string }) =>
+      new Response(new Uint8Array([37, 80, 68, 70, 45]), {
+        headers: { 'content-disposition': 'attachment; filename="informe.pdf"' },
+      }))
+    const handler = toFetchHandler(scriptedApi({ downloads: { producedFile } }))
+    const url = 'http://dsh.internal/api/artifact.download?sessionId=s1&path=informe.pdf'
+    const response = await handler.fetch(url)
+    expect(response.status).toBe(200)
+    expect(response.headers.get('content-disposition')).toContain('informe.pdf')
+    expect(await response.text()).toBe('%PDF-')
+    expect(producedFile).toHaveBeenCalledWith({ sessionId: 's1', path: 'informe.pdf' }, expect.any(AbortSignal))
+    const head = await handler.fetch(url, { method: 'HEAD' })
+    expect(head.status).toBe(200)
+    expect(head.body).toBeNull()
+    const missing = await handler.fetch('http://dsh.internal/api/artifact.download?sessionId=s1')
+    expect(missing.status).toBe(400)
+    expect(producedFile).toHaveBeenCalledTimes(2)
   })
 })
