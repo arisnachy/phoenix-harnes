@@ -8,19 +8,20 @@ import os
 import re
 import sys
 import tempfile
+import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
 
 try:
     from docx import Document
-    from docx.shared import Cm, Inches, Pt
+    from docx.shared import Cm, Inches, Pt, RGBColor
     from docx.enum.text import WD_ALIGN_PARAGRAPH
     from reportlab.lib import colors
-    from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY
+    from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY, TA_LEFT
     from reportlab.lib.pagesizes import A4, letter
     from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
     from reportlab.lib.utils import ImageReader
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak, Table, TableStyle, Image as PdfImage
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak, Table, TableStyle, LongTable, HRFlowable, Image as PdfImage
     from reportlab.pdfbase import pdfmetrics
     from reportlab.pdfbase.ttfonts import TTFont
     from PIL import Image, ImageDraw, ImageFont
@@ -31,6 +32,40 @@ except ImportError as error:
 REF_RE = re.compile(r"\[@([A-Za-z0-9_-]{1,64})\]")
 NAME_RE = re.compile(r"[^a-zA-Z0-9_-]+")
 MAX_CONTENT = 100000
+PRESENTATIONS = ("academic", "editorial", "hybrid")
+DOCUMENT_TYPES = ("brief", "narrative_review", "systematic_review", "original_research",
+                  "thesis", "journal_manuscript", "policy_report")
+SECTION_ALIASES = {
+    "abstract": ("resumen", "abstract", "resumen ejecutivo", "resumen estructurado"),
+    "introduction": ("introduccion", "introduction", "planteamiento del problema"),
+    "framework": ("marco teorico", "theoretical framework", "revision bibliografica"),
+    "methods": ("metodos", "metodologia", "methods", "methodology", "materiales y metodos"),
+    "results": ("resultados", "results", "hallazgos", "findings", "sintesis de evidencia"),
+    "discussion": ("discusion", "discussion", "analisis critico", "analisis"),
+    "limitations": ("limitaciones", "limitations", "sesgos y limitaciones"),
+    "conclusions": ("conclusiones", "conclusions", "conclusiones y recomendaciones"),
+    "recommendations": ("recomendaciones", "recommendations", "implicaciones"),
+}
+REQUIRED_SECTIONS = {
+    "narrative_review": ("abstract", "introduction", "methods", "results", "discussion", "limitations", "conclusions"),
+    "systematic_review": ("abstract", "introduction", "methods", "results", "discussion", "limitations", "conclusions"),
+    "original_research": ("abstract", "introduction", "methods", "results", "discussion", "limitations", "conclusions"),
+    "journal_manuscript": ("abstract", "introduction", "methods", "results", "discussion", "limitations", "conclusions"),
+    "thesis": ("abstract", "introduction", "framework", "methods", "results", "discussion", "conclusions", "recommendations"),
+    "policy_report": ("abstract", "introduction", "methods", "results", "discussion", "limitations", "conclusions"),
+}
+
+def section_kind(section):
+    if section.get("kind") in SECTION_ALIASES:
+        return section["kind"]
+    heading = unicodedata.normalize("NFKD", section["heading"])
+    heading = "".join(c for c in heading if not unicodedata.combining(c)).lower().strip()
+    heading = re.sub(r"^[0-9]+[. )-]*", "", heading)
+    for kind, variants in SECTION_ALIASES.items():
+        if heading in variants:
+            return kind
+    return None
+
 
 def validate(data):
     if not isinstance(data, dict):
@@ -44,8 +79,16 @@ def validate(data):
         raise ValueError("report.sections must contain 1 to 36 entries")
     if not isinstance(refs, list) or not (1 <= len(refs) <= 200):
         raise ValueError("report.references must contain 1 to 200 verified-source entries")
-    if data.get("style", "apa") not in ("apa", "vancouver"):
-        raise ValueError("style must be apa or vancouver")
+    if data.get("style", "apa") not in ("apa", "apa7", "vancouver"):
+        raise ValueError("style must be apa, apa7 or vancouver")
+    if data.get("presentation", "academic") not in PRESENTATIONS:
+        raise ValueError("presentation must be academic, editorial or hybrid")
+    if data.get("document_type", "brief") not in DOCUMENT_TYPES:
+        raise ValueError("unsupported document_type")
+    if data.get("paper", "A4") not in ("A4", "Letter"):
+        raise ValueError("paper must be A4 or Letter")
+    if data.get("submission_ready") is True:
+        raise ValueError("submission_ready requires external journal, authorship and human review")
     keys = set()
     for source in refs:
         if not isinstance(source, dict):
@@ -69,9 +112,32 @@ def validate(data):
             raise ValueError("section exceeds safe length")
         cited.update(REF_RE.findall(section["text"]))
     if not cited or cited - keys:
-        raise ValueError("each report must cite real listed source keys with [@key], unknown=" + str(sorted(cited-keys)))
+        raise ValueError("each report must cite registered source keys with [@key], unknown=" + str(sorted(cited-keys)))
+    document_type = data.get("document_type", "brief")
+    section_kinds = {section_kind(section) for section in sections}
+    missing = [kind for kind in REQUIRED_SECTIONS.get(document_type, ()) if kind not in section_kinds]
+    if missing:
+        raise ValueError(document_type + " requires missing sections: " + ", ".join(missing))
+    if document_type == "systematic_review" and not data.get("systematic_review_evidence"):
+        raise ValueError("systematic_review requires documented screening and extraction evidence")
     if len(json.dumps(data, ensure_ascii=False)) > MAX_CONTENT:
         raise ValueError("report payload exceeds limit")
+    tables = data.get("tables", [])
+    if not isinstance(tables, list) or len(tables) > 25:
+        raise ValueError("tables must be an array of up to 25 entries")
+    for entry in tables:
+        if not isinstance(entry, dict) or entry.get("source_key") not in cited:
+            raise ValueError("every table must cite a source_key used in the manuscript")
+        columns, rows = entry.get("columns"), entry.get("rows")
+        if not isinstance(columns, list) or not 2 <= len(columns) <= 9 or not all(isinstance(x, str) and x.strip() for x in columns):
+            raise ValueError("table requires 2-9 nonempty columns")
+        if not isinstance(rows, list) or not 1 <= len(rows) <= 100:
+            raise ValueError("table requires 1-100 data rows")
+        if any(not isinstance(row, list) or len(row) != len(columns)
+               or any(not isinstance(cell, (str, int, float)) for cell in row) for row in rows):
+            raise ValueError("table row must match headers and contain simple values")
+    if not isinstance(data.get("charts", []), list) or len(data.get("charts", [])) > 20:
+        raise ValueError("charts must be an array of up to 20 entries")
     for entry in data.get("charts", []):
         if not isinstance(entry, dict) or entry.get("source_key") not in cited:
             raise ValueError("each data chart must cite a referenced source_key")
