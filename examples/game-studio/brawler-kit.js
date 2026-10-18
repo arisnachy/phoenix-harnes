@@ -88,7 +88,7 @@ const PhoenixBrawlerKit = (() => {
     for (const target of targets) {
       if (target.team === attacker.team || target.hp <= 0 || target.invulnerable > 0
         || attacker.attackHits.has(target.id) || Math.abs(target.y - attacker.y) > data.depth
-        || (target.x - attacker.x) * attacker.face < -10
+        || (target.x - attacker.x) * attacker.face < 0
         || Math.abs(target.x - attacker.x) > data.range) continue;
       attacker.attackHits.add(target.id);
       target.hp = Math.max(0, target.hp - data.damage);
