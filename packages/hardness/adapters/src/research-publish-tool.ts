@@ -75,8 +75,18 @@ export function validateResearchPublication(input: unknown): Report {
     }
   }
   if (!cited) throw new ToolArgsError(['El texto debe vincular afirmaciones y referencias mediante [@clave].'])
-  if (report.style !== undefined && report.style !== 'apa' && report.style !== 'vancouver') {
-    throw new ToolArgsError(['Solo se admiten los estilos apa y vancouver.'])
+  if (report.style !== undefined && !['apa', 'apa7', 'vancouver'].includes(String(report.style))) {
+    throw new ToolArgsError(['Estilo de citas no implementado: elige APA 7 o Vancouver.'])
+  }
+  if (report.presentation !== undefined && !['academic', 'editorial', 'hybrid'].includes(String(report.presentation))) {
+    throw new ToolArgsError(['Presentación inválida: academic, editorial o hybrid.'])
+  }
+  if (report.document_type !== undefined && !['brief', 'narrative_review', 'systematic_review',
+    'original_research', 'thesis', 'journal_manuscript', 'policy_report'].includes(String(report.document_type))) {
+    throw new ToolArgsError(['Tipo de investigación no reconocido.'])
+  }
+  if (report.submission_ready === true) {
+    throw new ToolArgsError(['La publicación en una revista requiere normas de la revista, autoría, declaraciones y revisión humana.'])
   }
   return report
 }
@@ -102,6 +112,10 @@ type PublisherOutcome = {
   files: { docx: string; pdf: string; html: string }
   source_count: number
   source_verification: string
+  presentation?: string
+  document_type?: string
+  quality?: { required_sections_checked: boolean; submission_certified: boolean;
+    bibliographic_metadata_network_verified: boolean; visual_page_review: string }
 }
 
 async function runAttempt(bin: string, args: string[], payload: string, signal: AbortSignal): Promise<PublisherOutcome> {
@@ -174,12 +188,12 @@ export async function publishResearchReport(report: Report, signal: AbortSignal)
 export function createResearchPublishTool(): ToolDefinition {
   return defineTool({
     name: 'phoenix_research_publish',
-    description: 'PUBLICA UN INFORME CIENTÍFICO REAL: genera y verifica DOCX editable, PDF imprimible y HTML para visualizarlo en Phoenix. Úsalo al concluir investigaciones profundas o cuando el usuario pide un trabajo académico. Primero verifica fuentes originales mediante research_search/web_fetch o conectores autorizados; las referencias suministradas aquí NO se verifican en Internet durante la maquetación. report={title:"...",style:"apa"|"vancouver",paper:"A4"|"Letter",cover:{institution,faculty,author,course,lecturer,city,date,logo_path?},sections:[{heading:"Introducción",text:"Resultados reales [@fuente1]."}],references:[{key:"fuente1",authors:"Apellido, A.",year:"2026",title:"Título real",journal:"Revista",url:"https://...",doi?}],charts?:[{title,labels,values,source_key}]}. Todas las citas del cuerpo usan [@clave] para formatearse según APA o Vancouver; rechaza claves desconocidas. Cada gráfico exige datos reales y source_key. Devuelve rutas físicas verificadas y la lista de archivos. NO dice que fueron enviados por correo o Telegram. Para enviar se necesita una acción independiente autorizada y un recibo real del proveedor. La creación suele tardar más si es necesario instalar dependencias gratuitas con uv.',
+    description: 'PUBLICA INVESTIGACIONES CIENTÍFICAS COMPLETAS en DOCX editable + PDF imprimible + HTML. Para peticiones de investigación extensa elige document_type según el diseño real (narrative_review, systematic_review, original_research, thesis, journal_manuscript, policy_report); brief solo para síntesis cortas solicitadas explícitamente. Requiere Resumen/Abstract, Introducción, Métodos, Resultados, Discusión, Limitaciones, Conclusiones; una tesis exige además Marco teórico y Recomendaciones. La revisión sistemática requiere evidencia documentada de búsqueda, selección y extracción; nunca simules PRISMA o forest plots. presentation=academic para manuscrito estricto, editorial para lectura elegante, hybrid para formato científico moderno con colores sobrios. style=apa7 o vancouver gobierna citas/bibliografía de forma independiente del diseño; no confundas una edición híbrida con cumplimiento automático de JAMA. report={title, style:"apa7"|"vancouver", presentation:"academic"|"editorial"|"hybrid", document_type, paper:"A4"|"Letter", cover:{institution,faculty,author,course,lecturer,city,date,logo_path?}, keywords?:string[], sections:[{kind?:"abstract"|"introduction"|"framework"|"methods"|"results"|"discussion"|"limitations"|"conclusions"|"recommendations", heading, text:"... [@fuente1]."}], references:[{key,authors,year,title,journal,url,doi?}], tables?:[{title,columns:string[],rows:(string|number)[][],source_key,note?}], charts?:[{type?:"bar"|"forest",title,labels,values,ci_low?,ci_high?,null_value?,method?,source_key}]}. Cada referencia usada debe citarse [@clave]; cada tabla/gráfico debe declarar fuente de datos. La herramienta no consulta fuentes en Internet: el investigador debe verificar DOI/PMID, retractaciones y afirmaciones antes. Nunca rellenar muestras o estadísticas inexistentes. El recibo indica explícitamente que no certifica envío a revista ni verificación visual completa. El correo/Telegram se envía por herramienta independiente con autorización y recibo real.',
     timeoutMs: 240000,
     parameters: {
       report: {
         type: 'object', required: true, additionalProperties: true,
-        description: 'Informe estructurado: title, style, cover, sections con referencias [@key], references, charts opcionales.',
+        description: 'Informe estructurado y document_type + presentation, APA7/Vancouver, secciones científicas con [@key], tablas y figuras con fuente.',
       },
     },
     output: {
@@ -190,7 +204,7 @@ export function createResearchPublishTool(): ToolDefinition {
           ? 'Informe generado y comprobado. Word: ' + String((value.files as Record<string, unknown>).docx)
             + '; PDF: ' + String((value.files as Record<string, unknown>).pdf)
             + '; vista HTML: ' + String((value.files as Record<string, unknown>).html)
-            + '. Las referencias provienen de los metadatos suministrados: su veracidad debe haberse verificado antes de publicar.'
+            + '. Edición: ' + String(value.presentation ?? 'academic') + '. Las fuentes aportadas no fueron verificadas en red ni certificadas para una revista; se requiere revisión científica y visual antes de presentar.'
           : 'El informe no alcanzó estado REPORT_READY.',
       }],
     },
