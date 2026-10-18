@@ -5,7 +5,7 @@
 // → composer flip); CSS positions it over this shell's glow area during the
 // hero phase.
 
-import { useId } from 'react'
+import { useId, useState } from 'react'
 import type { ReactNode, RefObject } from 'react'
 import {
   IconChevronDownOutline14, IconChevronRightOutline14, IconFolderClose16, IconFolderOpen16,
@@ -14,6 +14,7 @@ import {
 import { workspaceTitleOf } from '@phoenix-ai/dsh-client-runtime/client'
 import type { ConversationSlotProps, ProactivityAttentionItem } from '../contract/slots.ts'
 import css from './HeroShell.module.css'
+import { AcademicCoverEditor } from './AcademicCoverEditor.tsx'
 
 /** The owner's locale seat type, passed to hero chrome as a plain prop. */
 type HeroTranslate = ConversationSlotProps['t']
@@ -200,6 +201,7 @@ export interface HeroShellProps {
   preferredName?: string | undefined
   /** Research shortcuts populate the existing composer without submitting. */
   onResearchSelect?: (entry: ResearchStarter) => void
+  onResearchDraft?: (text: string) => void
   /** Overlay content after the stack (modals). */
   children?: ReactNode
 }
@@ -211,7 +213,8 @@ export interface HeroShellProps {
  * @param props - see {@link HeroShellProps}.
  * @returns the centered hero element tree.
  */
-export function HeroShell({ renderSlot, preferredName, onResearchSelect, children }: HeroShellProps) {
+export function HeroShell({ renderSlot, preferredName, onResearchSelect, onResearchDraft, children }: HeroShellProps) {
+  const [editingCover, setEditingCover] = useState(false)
   const greeting = greetingForHour(new Date().getHours())
   const displayName = preferredNameForHero(preferredName)
 
@@ -238,8 +241,10 @@ export function HeroShell({ renderSlot, preferredName, onResearchSelect, childre
             <button type="button" onClick={() => { onResearchSelect('apa7') }}>Investigación APA 7</button>
             <button type="button" onClick={() => { onResearchSelect('vancouver') }}>Investigación Vancouver</button>
             <button type="button" onClick={() => { onResearchSelect('scientific_article') }}>Artículo científico</button>
+            {onResearchDraft ? <button type="button" onClick={() => { setEditingCover(open => !open) }}>Personalizar portada</button> : null}
           </div>
         )}
+        {editingCover && onResearchDraft ? <AcademicCoverEditor onUse={text => { onResearchDraft(text); setEditingCover(false) }} onClose={() => { setEditingCover(false) }} /> : null}
 
       </div>
       {children}
