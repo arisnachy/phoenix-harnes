@@ -63,6 +63,47 @@ describe('Phoenix Game Studio autonomous production controller', () => {
     expect(state.stages[0].checks).toContain('rules-and-levels')
   })
 
+  it('requires executed runtime bindings for every produced asset before integration passes', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'phoenix-binding-'))
+    try {
+      const state = initializeGameProduction(game, join(dir, 'manifest.json'), join(dir, 'state.json'))
+      for (const stage of state.stages.slice(0, 3)) stage.status = 'complete'
+      const proof = join(dir, 'runtime-trace.json')
+      const source = join(dir, 'scene.gd')
+      writeFileSync(proof, JSON.stringify({ frames: 12, spawned: true }))
+      writeFileSync(source, 'extends Node\n')
+      const bindings = state.assets.map(x => ({
+        family: x.family, id: x.id, source: 'scene.gd',
+        runtimeTarget: 'Godot:' + x.family + ':' + x.id,
+        proof: 'runtime-trace.json', observedCount: 12,
+      }))
+      writeFileSync(join(dir, 'bindings.json'), JSON.stringify({ bindings: bindings.slice(1) }))
+      await expect(recordGameEvidence(state, 'integration', 'runtime-bindings',
+        'bindings.json', 'godot-runtime')).rejects.toThrow('Missing or duplicate runtime binding')
+      writeFileSync(join(dir, 'bindings.json'), JSON.stringify({ bindings }))
+      await recordGameEvidence(state, 'integration', 'runtime-bindings', 'bindings.json', 'godot-runtime')
+      expect(state.stages[3].evidence[0].dependencies?.length).toBe(2)
+      expect(state.stages[3].status).toBe('pending')
+    } finally { rmSync(dir, { recursive: true, force: true }) }
+  })
+
+  it('plans distinct art families for every level and normalizes boss phase ids', () => {
+    const source = { ...game, levels: [
+      { id: 'street', layers: [{ id: 'sky' }, { id: 'shops' }, { id: 'floor' }] },
+      { id: 'factory', layers: [{ id: 'sky' }, { id: 'machines' }, { id: 'floor' }] },
+    ] }
+    const state = initializeGameProduction(source, '/tmp/manifest.json', '/tmp/state.json')
+    const backgrounds = state.assets.filter(x => x.family === 'backgrounds')
+    expect(backgrounds.map(x => x.id)).toEqual([
+      'street/sky', 'street/shops', 'street/floor',
+      'factory/sky', 'factory/machines', 'factory/floor',
+    ])
+    const boss = state.assets.find(x => x.family === 'bosses')
+    expect(boss?.required).toContain('guard')
+    expect(boss?.required).toContain('rage')
+    expect(boss?.required.every(x => typeof x === 'string')).toBe(true)
+  })
+
   it('persists and resumes CLI workflow while detecting tampering or changing manifest', () => {
     const dir = mkdtempSync(join(tmpdir(), 'phoenix-game-cli-'))
     try {
