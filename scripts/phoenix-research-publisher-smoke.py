@@ -252,7 +252,11 @@ try:
          "rows": [[f"test{i}", "Sintética", f"Prueba {i}"] for i in range(8)],
          "source_key": "test0"}
     ]
-    developed["charts"] = []
+    developed["charts"] = [
+        {"title": "Comparación gráfica de valores solo sintéticos",
+         "labels": ["A", "B", "C"], "values": [4, 7, 5],
+         "source_key": "test0"}
+    ]
     output = subprocess.run([sys.executable, str(script)],
                             input=json.dumps(developed, ensure_ascii=False).encode("utf-8"),
                             capture_output=True, timeout=120)
@@ -266,6 +270,8 @@ try:
         fulltext = "\\n".join(page.get_text() for page in publication)
         assert "Índice general" in fulltext
         assert "Matriz de evidencia" in fulltext
+        assert "Comparación gráfica" in fulltext
+        assert any(page.get_images() for page in publication), "El PDF debe incluir una figura real."
         assert "[@" not in fulltext
     print("RESEARCH_PUBLISHER_SMOKE_PASS")
 finally:
