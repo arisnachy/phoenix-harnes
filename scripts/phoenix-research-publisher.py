@@ -109,6 +109,52 @@ def complete_research_profile(data, cited):
 NAME_RE = re.compile(r"[^a-zA-Z0-9_-]+")
 MAX_CONTENT = 1000000
 PRESENTATIONS = ("academic", "editorial", "hybrid")
+# Reusable design tokens: deterministic, offline, provenance-safe, never an invented asset.
+DESIGN_PRESETS = {
+    "editorial_navy": {"navy": "#142b3a", "accent": "#117e84",
+                      "highlight": "#d59a54", "paper": "#f7faf9",
+                      "title": "#142b3a", "shape": "orbit"},
+    "clinical_teal": {"navy": "#123d45", "accent": "#087b76",
+                      "highlight": "#71c1b8", "paper": "#f6fbfa",
+                      "title": "#153a41", "shape": "clinical"},
+    "executive_amber": {"navy": "#262e3c", "accent": "#b47a26",
+                        "highlight": "#e0b866", "paper": "#fcfaf5",
+                        "title": "#262e3c", "shape": "executive"},
+    "minimal_graphite": {"navy": "#282c33", "accent": "#3c5665",
+                         "highlight": "#8a9ba6", "paper": "#ffffff",
+                         "title": "#282c33", "shape": "minimal"},
+    "creative_coral": {"navy": "#442b48", "accent": "#bd5869",
+                       "highlight": "#f0ab83", "paper": "#fff8f5",
+                       "title": "#442b48", "shape": "creative"},
+}
+DESIGN_PRESET_NAMES = ("auto", "academic_classic", *DESIGN_PRESETS)
+
+def resolve_design_preset(data, presentation):
+    """Choose a stable style by context; respect explicit user selection."""
+    if presentation == "academic":
+        return "academic_classic"
+    selected = data.get("design_preset", "auto")
+    if selected != "auto":
+        return selected
+    doc_type = data.get("document_type")
+    if doc_type == "policy_report":
+        return "executive_amber"
+    if doc_type in ("original_research", "systematic_review", "narrative_review",
+                    "journal_manuscript", "research_protocol"):
+        return "clinical_teal"
+    if doc_type == "thesis":
+        return "minimal_graphite"
+    if doc_type == "monograph":
+        return "editorial_navy"
+    title = unicodedata.normalize("NFKD", data.get("title", "")).lower()
+    title = "".join(c for c in title if not unicodedata.combining(c))
+    if any(w in title for w in ("salud", "clinica", "medicina", "neuro", "farmaco")):
+        return "clinical_teal"
+    if any(w in title for w in ("negocio", "empresa", "mercado", "finanza", "estrateg")):
+        return "executive_amber"
+    if any(w in title for w in ("arte", "creativ", "diseno", "cultura", "novela")):
+        return "creative_coral"
+    return "editorial_navy"
 DOCUMENT_TYPES = ("brief", "monograph", "research_protocol", "narrative_review",
                   "systematic_review", "original_research", "thesis", "journal_manuscript", "policy_report")
 SECTION_ALIASES = {
@@ -165,6 +211,13 @@ def validate(data):
         raise ValueError("style must be apa, apa7, vancouver or ama")
     if data.get("presentation", "academic") not in PRESENTATIONS:
         raise ValueError("presentation must be academic, editorial or hybrid")
+    selected_design = data.get("design_preset", "auto")
+    if selected_design not in DESIGN_PRESET_NAMES:
+        raise ValueError("design_preset must be one of the registered modern design names")
+    if data.get("presentation", "academic") == "academic" and selected_design not in ("auto", "academic_classic"):
+        raise ValueError("academic mode cannot have decorative cover presets")
+    if data.get("presentation", "academic") != "academic" and selected_design == "academic_classic":
+        raise ValueError("academic_classic design requires academic presentation")
     if data.get("document_type", "brief") not in DOCUMENT_TYPES:
         raise ValueError("unsupported document_type")
     if data.get("paper", "A4") not in ("A4", "Letter"):
@@ -478,7 +531,12 @@ def main():
     journal = report.get("journal_requirements", {})
     institutional = report.get("institutional_rules", {})
     editorial = presentation in ("editorial", "hybrid")
-    accent = "#117e84" if presentation == "hybrid" else "#a52d37"
+    design_preset = resolve_design_preset(report, presentation)
+    tokens = DESIGN_PRESETS.get(design_preset, {
+        "navy": "#171717", "accent": "#171717", "highlight": "#777777",
+        "paper": "#ffffff", "title": "#171717", "shape": "minimal",
+    })
+    accent = tokens["accent"]
     first_order = []
     for section in [*report["sections"], *report.get("appendices", [])]:
         for key in citation_keys(section["text"]):
@@ -513,7 +571,7 @@ def main():
         normal.font.size = Pt(11)
         heading_style = doc.styles["Heading 1"]
         heading_style.font.name = "Aptos Display"
-        heading_style.font.color.rgb = RGBColor(8, 119, 131) if presentation == "hybrid" else RGBColor(165, 45, 55)
+        heading_style.font.color.rgb = RGBColor.from_string(accent.lstrip("#"))
 
     logo = cover.get("logo_path", "") if isinstance(cover, dict) else ""
     logo_file = None
@@ -656,7 +714,7 @@ def main():
                 except Exception:
                     continue
     styles = getSampleStyleSheet()
-    ink = colors.HexColor("#1d3040") if editorial else colors.black
+    ink = colors.HexColor(tokens["title"]) if editorial else colors.black
     heading_ink = colors.HexColor(accent) if editorial else colors.black
     body = ParagraphStyle("RBody", parent=styles["Normal"], fontName=font,
                           fontSize=10.9 if editorial else (12 if style == "apa" else 10.5),
@@ -822,35 +880,86 @@ def main():
         canvas.drawCentredString(paper[0]/2, 30, str(document.page))
         canvas.restoreState()
     def editorial_cover(canvas, document):
+        """Five genuinely distinct vector compositions, without external imagery."""
         canvas.saveState()
-        navy = colors.HexColor("#142b3a")
-        teal = colors.HexColor("#117e84")
-        gold = colors.HexColor("#d59a54")
-        canvas.setFillColor(colors.HexColor("#f7faf9"))
-        canvas.rect(0, 0, paper[0], paper[1], stroke=0, fill=1)
-        canvas.setFillColor(navy)
-        canvas.rect(0, paper[1]-132, paper[0], 132, stroke=0, fill=1)
-        canvas.setFillColor(teal)
-        canvas.circle(paper[0]+18, paper[1]-67, 105, stroke=0, fill=1)
-        canvas.setStrokeColor(gold)
-        canvas.setLineWidth(2.5)
-        canvas.line(60, paper[1]-70, 111, paper[1]-70)
-        canvas.setFillColor(colors.white)
-        canvas.setFont(heading_font, 11)
-        canvas.drawString(60, paper[1]-54, "PHOENIX / RESEARCH STUDIO")
+        navy = colors.HexColor(tokens["navy"])
+        accent_color = colors.HexColor(tokens["accent"])
+        highlight = colors.HexColor(tokens["highlight"])
+        paper_color = colors.HexColor(tokens["paper"])
+        shape = tokens["shape"]
+        W, H = paper
+        canvas.setFillColor(paper_color)
+        canvas.rect(0, 0, W, H, stroke=0, fill=1)
+        if shape == "orbit":
+            canvas.setFillColor(navy)
+            canvas.rect(0, H-132, W, 132, stroke=0, fill=1)
+            canvas.setFillColor(accent_color)
+            canvas.circle(W+18, H-67, 105, stroke=0, fill=1)
+            canvas.setStrokeColor(highlight)
+            canvas.setLineWidth(2.5)
+            canvas.line(60, H-70, 111, H-70)
+            label_y, label_color = H-54, colors.white
+        elif shape == "clinical":
+            canvas.setFillColor(accent_color)
+            canvas.rect(0, 0, 16, H, stroke=0, fill=1)
+            canvas.setStrokeColor(colors.HexColor("#c9dfde"))
+            canvas.setLineWidth(1.3)
+            for radius in (42, 72, 102):
+                canvas.circle(W-71, H-94, radius, stroke=1, fill=0)
+            canvas.setFillColor(highlight)
+            canvas.circle(W-71, H-94, 13, stroke=0, fill=1)
+            canvas.setStrokeColor(accent_color)
+            canvas.setLineWidth(4)
+            canvas.line(60, H-148, 182, H-148)
+            label_y, label_color = H-54, navy
+        elif shape == "executive":
+            canvas.setFillColor(navy)
+            canvas.rect(0, H-164, W, 164, stroke=0, fill=1)
+            canvas.setFillColor(highlight)
+            canvas.rect(0, H-168, W, 4, stroke=0, fill=1)
+            path = canvas.beginPath()
+            path.moveTo(W-188, H)
+            path.lineTo(W-84, H)
+            path.lineTo(W-215, H-164)
+            path.lineTo(W-319, H-164)
+            path.close()
+            canvas.setFillColor(accent_color)
+            canvas.drawPath(path, stroke=0, fill=1)
+            label_y, label_color = H-60, colors.white
+        elif shape == "minimal":
+            canvas.setStrokeColor(navy)
+            canvas.setLineWidth(1.25)
+            canvas.line(60, H-56, W-60, H-56)
+            canvas.setFillColor(accent_color)
+            canvas.rect(60, H-64, 46, 4, stroke=0, fill=1)
+            label_y, label_color = H-44, navy
+        else:  # creative: asymmetric editorial shapes
+            canvas.setFillColor(navy)
+            canvas.rect(0, H-102, W, 102, stroke=0, fill=1)
+            canvas.setFillColor(accent_color)
+            canvas.circle(W-26, H-121, 114, stroke=0, fill=1)
+            canvas.setFillColor(highlight)
+            canvas.circle(W-115, H-49, 48, stroke=0, fill=1)
+            canvas.setStrokeColor(highlight)
+            canvas.setLineWidth(4)
+            canvas.line(60, H-140, 210, H-140)
+            label_y, label_color = H-47, colors.white
+        canvas.setFillColor(label_color)
+        canvas.setFont(heading_font, 10.5)
+        canvas.drawString(60, label_y, "PHOENIX / RESEARCH STUDIO")
         canvas.setStrokeColor(colors.HexColor("#dae4e4"))
         canvas.setLineWidth(0.6)
-        canvas.line(60, 66, paper[0]-60, 66)
+        canvas.line(60, 66, W-60, 66)
         canvas.setFont(font, 8)
         canvas.setFillColor(colors.HexColor("#516675"))
-        canvas.drawString(60, 47, "DOCUMENTO CIENTÍFICO / EDICIÓN EDITORIAL")
+        canvas.drawString(60, 47, "DOCUMENTO VERIFICABLE / DISEÑO EDITORIAL")
         canvas.restoreState()
     printer.multiBuild(story, onFirstPage=editorial_cover if editorial else footer,
                        onLaterPages=footer)
 
     chunks = []
     chunks.append("<!doctype html><html lang='es'><meta charset='utf-8'><title>"+html.escape(title)+"</title>")
-    chunks.append("<style>body{font:17px/1.65 system-ui,Georgia,serif;max-width:880px;margin:44px auto;padding:0 22px;color:#203043}h1,h2{line-height:1.3}h2{color:"+accent+";border-bottom:1px solid #d9e3e6;padding-bottom:.45em}a{color:"+accent+"}nav{padding:20px 0}.ref{font-size:.88em;margin:9px 0}figure img{width:100%}table{border-collapse:collapse;width:100%;font-size:.88em;display:block;overflow-x:auto}td,th{border-bottom:1px solid #dce5ea;padding:9px;text-align:left}th{background:#e9f3f4}</style>")
+    chunks.append("<style>:root{--ink:"+tokens["title"]+";--accent:"+accent+";--paper:"+tokens["paper"]+"}body{font:17px/1.65 system-ui,Georgia,serif;max-width:880px;margin:44px auto;padding:0 22px;color:var(--ink);background:var(--paper)}h1,h2{line-height:1.3}h2{color:var(--accent);border-bottom:1px solid #d9e3e6;padding-bottom:.45em}a{color:var(--accent)}nav{padding:20px 0}.ref{font-size:.88em;margin:9px 0}figure img{width:100%}table{border-collapse:collapse;width:100%;font-size:.88em;display:block;overflow-x:auto}td,th{border-bottom:1px solid #dce5ea;padding:9px;text-align:left}th{background:#e9f3f4}</style>")
     chunks.append("<h1>"+html.escape(title)+"</h1>")
     chunks.append("<p>"+html.escape(" · ".join(str(cover.get(k,"")) for k in ("institution","faculty","degree","date") if cover.get(k)))+"</p>")
     for author in authors: chunks.append("<p class='ref'>"+html.escape(author)+"</p>")
@@ -916,6 +1025,7 @@ def main():
                         ", objetivo " + str(target_pages) + ". No se añade contenido ficticio.")
     final_state = "REPORT_NEEDS_REVISION" if warnings else "REPORT_READY"
     result={"state":final_state,"report_id":digest,"title":title,"style":style,
+            "design_preset":design_preset,
             "quality_profile": report.get("quality_profile", "professional"),
             "presentation":presentation,"document_type":report.get("document_type", "brief"),
             "quality": {"required_sections_checked": True, "submission_certified": False,
