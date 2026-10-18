@@ -13,6 +13,41 @@ import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { planGameAssets } from './plan-game-assets.mjs'
 
+/** 100-point evidence-oriented review, normalized for noncombat/nonstory genres. */
+const QUALITY_WEIGHTS = Object.freeze({
+  mechanics: 20, animation: 15, enemiesAndBosses: 15, levelDesign: 15,
+  narrative: 10, audio: 10, performance: 10, presentation: 5,
+})
+export function assessGameQuality(manifest, report) {
+  if (!report || typeof report !== 'object' || Array.isArray(report)
+    || !report.scores || typeof report.scores !== 'object'
+    || !Array.isArray(report.criticalFailures)) {
+    throw new Error('Quality report requires scored dimensions and criticalFailures array')
+  }
+  const genre = String(manifest.gameType || manifest.genre || '').toLowerCase()
+  const combat = /platform|shooter|run.and.gun|beat.em.up|brawler|fighting|combat|action|rpg/u.test(genre)
+  const narrative = Boolean(manifest.story?.premise || manifest.production?.storyDriven)
+  const sound = combat || Boolean(manifest.audio?.cues?.length || manifest.audio?.tracks?.length)
+  const keys = Object.keys(QUALITY_WEIGHTS).filter(id =>
+    (id !== 'enemiesAndBosses' || combat) && (id !== 'narrative' || narrative)
+    && (id !== 'audio' || sound))
+  let earned = 0, available = 0
+  for (const id of keys) {
+    const mark = report.scores[id]
+    const max = QUALITY_WEIGHTS[id]
+    if (!Number.isFinite(mark) || mark < 0 || mark > max) {
+      throw new Error('Missing or out-of-range quality rating for ' + id)
+    }
+    earned += mark
+    available += max
+  }
+  const criticalFailures = report.criticalFailures
+  if (!criticalFailures.every(valid)) throw new Error('Critical failure entries must contain reasons')
+  const score = Math.round(100 * earned / available)
+  return { score, evaluated: keys, criticalFailures, candidate: score >= 90 && !criticalFailures.length,
+    certified: false, limitation: 'Human or independent audiovisual QA must verify the supplied ratings.' }
+}
+
 const STEPS = Object.freeze([
   { id: 'design', description: 'Game design document, world, story, cast, mechanics and acceptance criteria',
     checks: ['gdd', 'roster-and-levels'] },
@@ -25,7 +60,7 @@ const STEPS = Object.freeze([
   { id: 'gameplay-qa', description: 'Play through, observe, listen, test regressions and repair',
     checks: ['complete-playthrough', 'visual-review', 'audio-review', 'regression', 'performance'] },
   { id: 'publication', description: 'Package the game and audit ownership/licensing',
-    checks: ['distributable', 'license-audit'] },
+    checks: ['distributable', 'license-audit', 'quality-gate'] },
 ])
 
 const hash = bytes => createHash('sha256').update(bytes).digest('hex')
@@ -199,6 +234,15 @@ export async function recordGameEvidence(state, stageId, check, artifact, runner
   if (!bytes.length) throw new Error('Evidence file is empty')
   const checksum = hash(bytes)
   const dependencies = check === 'runtime-bindings' ? await inspectRuntimeBindings(state, actual) : []
+  if (check === 'quality-gate') {
+    const manifest = JSON.parse(await readFile(state.manifestPath, 'utf8'))
+    const evaluation = assessGameQuality(manifest, JSON.parse(bytes.toString('utf8')))
+    if (!evaluation.candidate) {
+      throw new Error('Quality gate rejected: ' + evaluation.score
+        + '/100, ' + evaluation.criticalFailures.length + ' critical failures')
+    }
+    state.lastQualityAssessment = evaluation
+  }
   const existing = stage.evidence.find(item => item.check === check)
   if (existing) {
     if (existing.artifact === relative(dirname(state.stateFile), path)
