@@ -124,7 +124,7 @@ export function planAcademicResearch(input: unknown) {
     presentation: entry === 'scientific_article' ? 'hybrid' : 'academic',
     level, title: args.title ?? null,
     pages: { target: suggestedPages, explicitly_requested: args.target_pages !== undefined,
-      suggested_range: defaultRange, scope: args.page_scope ?? 'unknown',
+      suggested_range: [...defaultRange], scope: args.page_scope ?? 'unknown',
       page_plan: allocate(outline, suggestedPages), planned_total: suggestedPages,
       verification: 'pending PDF rendering; never pad invented evidence' },
     missing_fields: [...missing],
