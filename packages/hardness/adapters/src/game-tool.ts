@@ -351,8 +351,8 @@ export function createPhoenixGameTool(): ToolDefinition {
       }
       exec.signal.throwIfAborted()
       const html = fromFile
-        ? readWorkspaceGameHtml(args.file_path, exec.agent?.session.header.cwd ?? '')
-        : args.html
+        ? readWorkspaceGameHtml(args.file_path ?? '', exec.agent?.session.header.cwd ?? '')
+        : (args.html ?? '')
       const prepared = preparePhoenixGameSubmission(html, args.manifest_json)
       const source = validateGameHtml(prepared)
       exec.signal.throwIfAborted()
