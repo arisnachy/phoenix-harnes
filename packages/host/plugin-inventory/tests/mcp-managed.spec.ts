@@ -522,6 +522,63 @@ describe('ManagedMcpController', () => {
     }
   })
 
+  it('installs X OAuth MCP independently of the failing public registry, never advertising it authenticated', async () => {
+    const patchPath = tempPatch()
+    const live = loader()
+    live.create.mockResolvedValueOnce('x-api-entry').mockResolvedValueOnce('x-docs-entry')
+    const registrySearch = vi.fn(async () => { throw new Error('official registry unavailable') })
+    const controller = new ManagedMcpController(live, { patchPath, registrySearch })
+    const api = await controller.installCuratedMcp('x')
+    const docs = await controller.installCuratedMcp('x-docs')
+    expect(api.connector).toMatchObject({
+      entryId: 'x-api-entry', serverName: 'x-api',
+      source: { kind: 'curated', connectorId: 'x' },
+    })
+    expect(docs.connector).toMatchObject({
+      entryId: 'x-docs-entry', serverName: 'x-docs',
+      source: { kind: 'curated', connectorId: 'x-docs' },
+    })
+    expect(live.create).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      config: expect.objectContaining({
+        transport: 'stdio', serverName: 'x-api', command: 'npx',
+        args: ['-y', '@xdevplatform/xurl', 'mcp', 'https://api.x.com/mcp'],
+        envCredentialRefs: { CLIENT_ID: 'X_CLIENT_ID', CLIENT_SECRET: 'X_CLIENT_SECRET' },
+      }),
+    }))
+    expect(registrySearch).not.toHaveBeenCalled()
+    await expect(controller.installCuratedMcp('x')).resolves.toMatchObject({ status: 'already-installed' })
+    const rows = JSON.parse(readFileSync(patchPath, 'utf8'))[0].insert
+    expect(JSON.stringify(rows)).not.toContain('oauth_access_token')
+    expect(JSON.stringify(rows)).not.toContain('real_secret_value')
+  })
+
+  it('installs Meta Graph publishing with vault-only token references and no registry lookup', async () => {
+    const patchPath = tempPatch()
+    const live = loader()
+    const registrySearch = vi.fn(async () => { throw new Error('registry unavailable') })
+    const controller = new ManagedMcpController(live, { patchPath, registrySearch })
+    await expect(controller.installCuratedMcp('meta-publishing')).resolves.toMatchObject({
+      connector: { serverName: 'meta-publishing',
+        source: { kind: 'curated', connectorId: 'meta-publishing' } },
+    })
+    expect(live.create).toHaveBeenCalledWith(expect.objectContaining({
+      config: expect.objectContaining({
+        transport: 'stdio', command: 'node', args: ['scripts/phoenix-social-mcp.mjs'],
+        env: {},
+        envCredentialRefs: {
+          PHOENIX_SOCIAL_FACEBOOK_PAGE_TOKEN: 'PHOENIX_META_PAGE_TOKEN',
+          PHOENIX_SOCIAL_FACEBOOK_PAGE_ID: 'PHOENIX_META_PAGE_ID',
+          PHOENIX_SOCIAL_INSTAGRAM_TOKEN: 'PHOENIX_META_INSTAGRAM_TOKEN',
+          PHOENIX_SOCIAL_INSTAGRAM_USER_ID: 'PHOENIX_META_INSTAGRAM_USER_ID',
+        },
+      }),
+    }))
+    expect(registrySearch).not.toHaveBeenCalled()
+    const persisted = readFileSync(patchPath, 'utf8')
+    expect(persisted).not.toContain('actual_page_access_token_value')
+    expect(persisted).toContain('PHOENIX_META_PAGE_TOKEN')
+  })
+
   it('pins Meta DevTools and WhatsApp Business to their exact official endpoints without secrets', async () => {
     const patchPath = tempPatch()
     const live = loader()
@@ -619,6 +676,26 @@ describe('ManagedMcpController', () => {
       writeFileSync(patchPath, JSON.stringify([{ insert: [{ ...original, config }] }]))
       await expect(ctl.snapshot()).rejects.toThrow(/managed MCP patch row/)
     }
+  })
+
+  it('pins Phoenix Social Engine to an audited local CLI and rejects modified launcher', async () => {
+    const patchPath = tempPatch()
+    const live = loader()
+    const controller = new ManagedMcpController(live, { patchPath, registrySearch: registry([]) })
+    await expect(controller.installCuratedMcp('social-engine')).resolves.toMatchObject({
+      connector: {
+        serverName: 'social-engine', url: 'stdio://social-engine',
+        source: { kind: 'curated', connectorId: 'social-engine' },
+      },
+    })
+    expect(live.create).toHaveBeenCalledWith(expect.objectContaining({
+      config: expect.objectContaining({ transport: 'stdio', serverName: 'social-engine',
+        command: 'node', args: ['scripts/phoenix-social-mcp.mjs'],
+        env: {}, envCredentialRefs: {} }),
+    }))
+    const row = JSON.parse(readFileSync(patchPath, 'utf8'))[0].insert[0]
+    writeFileSync(patchPath, JSON.stringify([{ insert: [{ ...row, config: { ...row.config, command: 'cmd.exe' } }] }]))
+    await expect(controller.snapshot()).rejects.toThrow(/managed MCP patch row/)
   })
 
   it('pins Work IQ and Azure to Microsoft-owned local packages, opt-in and distinct', async () => {

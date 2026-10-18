@@ -24,6 +24,8 @@
     "business:commerce": "node scripts/phoenix-business-commerce.mjs",
     "test:commerce": "node --test scripts/phoenix-business-commerce.test.mjs",
     "test:shopify": "node --test scripts/phoenix-business-shopify.test.mjs",
+    "social": "node scripts/phoenix-social.mjs",
+    "test:social": "node --test scripts/phoenix-social.test.mjs scripts/phoenix-social-mcp.test.mjs",
     "build": "tsx scripts/build.ts && node scripts/phoenix-prepared-restart-bridge.mjs --arm-staging",
     "build:official": "tsx scripts/build.ts --profile official",
     "build:lib": "npm run build:lib:host && npm run build:lib:client",

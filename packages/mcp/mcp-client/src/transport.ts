@@ -156,10 +156,23 @@ const CURRENT_MICROSOFT_PERSONAL_MCP = fileURLToPath(
   new URL('../../../../scripts/phoenix-microsoft-personal-mcp.mjs', import.meta.url),
 )
 
-/** Resolve the optional local Graph MCP from the active Phoenix runtime, not process.cwd(). */
+const CURRENT_SOCIAL_ENGINE_MCP = fileURLToPath(
+  new URL('../../../../scripts/phoenix-social-mcp.mjs', import.meta.url),
+)
+
+/** Resolve the locally pinned Microsoft/Social MCP from this active runtime, not the process cwd. */
 export function normalizeMicrosoftPersonalMcpLaunch(
   serverName: string, command: string, args: readonly string[],
 ): { command: string; args: string[] } {
+  if ((serverName === 'social-engine' || serverName === 'meta-publishing')
+    && command === 'node'
+    && args.length === 1
+    && args[0] === 'scripts/phoenix-social-mcp.mjs') {
+    if (!existsSync(CURRENT_SOCIAL_ENGINE_MCP)) {
+      throw new Error('mcp-client: Phoenix Social Engine script missing in the active runtime')
+    }
+    return { command: process.execPath, args: [CURRENT_SOCIAL_ENGINE_MCP] }
+  }
   if (serverName === 'microsoft-personal'
     && command === 'node'
     && args.length === 1
@@ -187,6 +200,17 @@ const WINDOWS_NPX_MCP_PACKAGES = new Set([
   '@modelcontextprotocol/server-memory',
   '@brave/brave-search-mcp-server',
 ])
+
+/** Only Phoenix's exact pinned X bridge invocation may enter a Windows cmd shell. */
+function isPinnedXurlMcpArgs(args: readonly string[]): boolean {
+  if (args[0] !== '-y' || args[1] !== '@xdevplatform/xurl' || args[2] !== 'mcp') return false
+  if (args.length === 4) return args[3] === 'https://api.x.com/mcp'
+  return args.length === 6
+    && args[3] === '-u'
+    && typeof args[4] === 'string'
+    && /^[A-Za-z0-9_]{1,15}$/u.test(args[4])
+    && args[5] === 'https://api.x.com/mcp'
+}
 
 const moduleRequire = createRequire(import.meta.url)
 
@@ -258,6 +282,15 @@ export function normalizeWindowsNpxMcpLaunch(
   }
 
   if (normalizedCommand !== 'npx') return { command, args: normalizedArgs }
+
+  // Windows child_process.spawn cannot launch the bare npx.cmd shim directly.
+  // xurl was omitted from the original Windows allowlist, so the X API MCP
+  // failed before OAuth or tools/list. Match exact official args before using
+  // a command shell: arbitrary registry commands must never gain a shell.
+  if (isPinnedXurlMcpArgs(normalizedArgs)) {
+    return { command: 'cmd.exe', args: ['/d', '/c', 'npx', ...normalizedArgs] }
+  }
+
   const packageName = npxPackageName(normalizedArgs)
   if (packageName === undefined) return { command, args: normalizedArgs }
 

@@ -1,6 +1,7 @@
 /** Read-only Loader inventory plus trusted PHOENIX update and local-model controls. */
 
 import type { Context, FiberState } from '@phoenix-ai/cordis'
+import { credentialRef, type CredentialRef } from '@phoenix-ai/dsh-credentials'
 import type {} from '@phoenix-ai/cordis-plugin-loader'
 import { TypertRemoteService, Remote } from '@phoenix-ai/dsh-typert-protocol'
 // Typert-generated ./typert and ./remote artifacts import Zod at runtime.
@@ -500,15 +501,105 @@ export class PluginInventoryGateway extends TypertRemoteService {
   }
 
   /**
+   * Read the official X MCP bundle state without exposing OAuth application secrets.
+   * @returns Secret-free credential presence plus API/Docs connector lifecycle.
+   */
+  @Remote('xMcpState')
+  async xMcpState(): Promise<{
+    clientIdConfigured: boolean
+    clientSecretConfigured: boolean
+    api: {
+      configured: boolean
+      status?: McpConnectorRuntimeEntry['status']
+      reasonCode?: McpConnectorRuntimeEntry['reasonCode']
+    }
+    phoenixApi: {
+      configured: boolean
+      status?: McpConnectorRuntimeEntry['status']
+      reasonCode?: McpConnectorRuntimeEntry['reasonCode']
+    }
+    docs: {
+      configured: boolean
+      status?: McpConnectorRuntimeEntry['status']
+      reasonCode?: McpConnectorRuntimeEntry['reasonCode']
+    }
+  }> {
+    const credentials = (this.ctx.get as (name: string) => unknown)('credentials') as
+      | { describe(ref: string): Promise<{ configured: boolean }> }
+      | undefined
+    const [clientIdConfigured, clientSecretConfigured] = credentials === undefined
+      ? [false, false]
+      : await Promise.all([
+        credentials.describe(X_CLIENT_ID_REF).then(info => info.configured),
+        credentials.describe(X_CLIENT_SECRET_REF).then(info => info.configured),
+      ])
+    const managed = await this.managedMcp.snapshot()
+    const apiConfigured = managed.some(connector => connector.serverName === X_API_MCP_SERVER_NAME)
+    const phoenixApiConfigured = managed.some(connector =>
+      connector.serverName === X_PHOENIX_API_MCP_SERVER_NAME)
+    const docsConfigured = managed.some(connector => connector.serverName === X_DOCS_MCP_SERVER_NAME)
+    const registry = (this.ctx.get as (name: string) => unknown)('mcpConnectors') as
+      | { list(): readonly McpConnectorRuntimeEntry[] }
+      | undefined
+    const apiRuntime = registry?.list().find(entry => entry.serverName === X_API_MCP_SERVER_NAME)
+    const phoenixApiRuntime = registry?.list().find(entry =>
+      entry.serverName === X_PHOENIX_API_MCP_SERVER_NAME)
+    const docsRuntime = registry?.list().find(entry => entry.serverName === X_DOCS_MCP_SERVER_NAME)
+    const runtimeState = (configured: boolean, runtime: McpConnectorRuntimeEntry | undefined) => ({
+      configured,
+      ...(runtime === undefined ? {} : {
+        status: runtime.status,
+        ...(runtime.reasonCode === undefined ? {} : { reasonCode: runtime.reasonCode }),
+      }),
+    })
+    return {
+      clientIdConfigured,
+      clientSecretConfigured,
+      api: runtimeState(apiConfigured, apiRuntime),
+      phoenixApi: runtimeState(phoenixApiConfigured, phoenixApiRuntime),
+      docs: runtimeState(docsConfigured, docsRuntime),
+    }
+  }
+
+  /**
    * Activate the exact official X API xurl bridge and X Docs MCP pair.
    * @param options - X identity selection and optional cached-account username.
    * @returns Idempotent receipts for both pinned connectors.
    */
-  async enableXMcp(options: { identity?: XMcpIdentity; username?: string } = {}): Promise<{
+  @Remote('enableXMcp')
+  async enableXMcp(options: { identity?: XMcpIdentity; username?: string }): Promise<{
     api: McpRegistryInstallReceipt
     docs: McpRegistryInstallReceipt
   }> {
     return this.managedMcp.installXMcp(options)
+  }
+
+  /**
+   * Store X Developer App credentials in the Host credential provider, never
+   * in an MCP configuration or a chat response. The caller must be a trusted
+   * Settings session; the bridge receives values through envCredentialRefs.
+   */
+  @Remote('configureXDeveloperApplication')
+  async configureXDeveloperApplication(request: {
+    clientId: string
+    clientSecret: string
+  }): Promise<{ saved: true; clientIdConfigured: true; clientSecretConfigured: true }> {
+    if (typeof request.clientId !== 'string'
+      || !/^[A-Za-z0-9_-]{5,256}$/u.test(request.clientId)
+      || typeof request.clientSecret !== 'string'
+      || request.clientSecret.length < 8 || request.clientSecret.length > 2048
+      || /\s/u.test(request.clientSecret)) {
+      throw new Error('Credenciales de aplicación X incompletas o inválidas.')
+    }
+    const credentials = (this.ctx.get as (name: string) => unknown)('credentials') as
+      | { set(ref: CredentialRef, value: string): Promise<void> }
+      | undefined
+    if (credentials === undefined) {
+      throw new Error('El almacén seguro de credenciales no está disponible en este Host.')
+    }
+    await credentials.set(credentialRef(X_CLIENT_ID_REF), request.clientId)
+    await credentials.set(credentialRef(X_CLIENT_SECRET_REF), request.clientSecret)
+    return { saved: true, clientIdConfigured: true, clientSecretConfigured: true }
   }
 
   /**
