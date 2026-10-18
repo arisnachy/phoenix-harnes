@@ -99,7 +99,7 @@ export function initializeGameProduction(manifest, manifestPath, stateFile) {
     throw new Error('A game manifest with title and genre is required')
   }
   const assetPlan = planGameAssets(manifest)
-  return { schemaVersion: 1, manifestPath: resolve(manifestPath), manifestSha256: hash(JSON.stringify(manifest)),
+  return { schemaVersion: 1, revision: 0, manifestPath: resolve(manifestPath), manifestSha256: hash(JSON.stringify(manifest)),
     title: manifest.title, genre: manifest.genre, stateFile: resolve(stateFile),
     stages: stageDefinitions(manifest), assets: assetPlan.tasks.map(task => ({
       family: task.family, id: task.id, status: task.status, owner: task.owner,
@@ -176,6 +176,13 @@ async function saveState(path, state, create = false) {
         if (error.code !== 'ENOENT') throw error
       }
     }
+    if (!create) {
+      const current = JSON.parse(await readFile(path, 'utf8'))
+      if (!Number.isSafeInteger(current.revision) || current.revision !== state.revision) {
+        throw new Error('Production state changed concurrently: reload with next/status before writing')
+      }
+    }
+    state.revision = (state.revision || 0) + 1
     await writeFile(temp, JSON.stringify(state, null, 2) + '\n', 'utf8')
     await rename(temp, path)
   } finally {
@@ -270,6 +277,7 @@ export function invalidateGameStage(state, stageId, reason) {
   }
   state.releaseState = 'not-ready'
   state.releaseCertified = false
+  delete state.lastQualityAssessment
   state.lastFailure = { stage: stageId, reason }
   return state
 }
