@@ -89,6 +89,11 @@ def validate(data):
         raise ValueError("paper must be A4 or Letter")
     if data.get("submission_ready") is True:
         raise ValueError("submission_ready requires external journal, authorship and human review")
+    keywords = data.get("keywords", [])
+    if not isinstance(keywords, list) or len(keywords) > 12 or any(
+        not isinstance(word, str) or not word.strip() or len(word) > 80 for word in keywords
+    ):
+        raise ValueError("keywords must contain up to 12 short strings")
     keys = set()
     for source in refs:
         if not isinstance(source, dict):
@@ -134,19 +139,32 @@ def validate(data):
         if not isinstance(rows, list) or not 1 <= len(rows) <= 100:
             raise ValueError("table requires 1-100 data rows")
         if any(not isinstance(row, list) or len(row) != len(columns)
-               or any(not isinstance(cell, (str, int, float)) for cell in row) for row in rows):
+               or any(not isinstance(cell, (str, int, float)) or len(str(cell)) > 550 for cell in row) for row in rows):
             raise ValueError("table row must match headers and contain simple values")
     if not isinstance(data.get("charts", []), list) or len(data.get("charts", [])) > 20:
         raise ValueError("charts must be an array of up to 20 entries")
     for entry in data.get("charts", []):
         if not isinstance(entry, dict) or entry.get("source_key") not in cited:
             raise ValueError("each data chart must cite a referenced source_key")
+        kind = entry.get("type", "bar")
+        if kind not in ("bar", "forest"):
+            raise ValueError("chart type must be bar or forest")
         vals = entry.get("values", [])
         labs = entry.get("labels", [])
         if not isinstance(labs, list) or not isinstance(vals, list) or not 1 <= len(vals) <= 15 or len(vals) != len(labs):
             raise ValueError("charts need 1-15 matched labels/values")
         if any(not isinstance(v, (int, float)) or isinstance(v, bool) or not math.isfinite(v) for v in vals):
             raise ValueError("chart values must be finite authentic numbers")
+        if kind == "forest":
+            lows, highs = entry.get("ci_low"), entry.get("ci_high")
+            if not isinstance(lows, list) or not isinstance(highs, list) or len(lows) != len(vals) or len(highs) != len(vals):
+                raise ValueError("forest plot requires aligned ci_low and ci_high arrays")
+            if any(not all(isinstance(v, (int,float)) and not isinstance(v,bool) and math.isfinite(v)
+                           for v in (lo, hi)) or not lo <= estimate <= hi
+                   for lo, estimate, hi in zip(lows, vals, highs)):
+                raise ValueError("forest plot requires finite ordered confidence intervals")
+            if not isinstance(entry.get("method"), str) or not entry["method"].strip():
+                raise ValueError("forest plot requires the documented effect/CI estimation method")
     return {s["key"]: s for s in refs}, cited
 
 def citation_string(key, refs, style, index):
@@ -175,6 +193,29 @@ def chart_image(chart, folder, ordinal, accent="#087783"):
     values = chart["values"]
     image = Image.new("RGB", (1000, 480), "white")
     d = ImageDraw.Draw(image)
+    if chart.get("type") == "forest":
+        lows, highs = chart["ci_low"], chart["ci_high"]
+        left, right = min(lows), max(highs)
+        if left == right: right = left + 1
+        pad = (right - left) * 0.10
+        left, right = left - pad, right + pad
+        x_axis = lambda value: 275 + (value - left) / (right - left) * 675
+        null_value = chart.get("null_value", 1)
+        if isinstance(null_value, (int, float)) and left <= null_value <= right:
+            x = x_axis(null_value)
+            d.line((x, 35, x, 430), fill="#98abb1", width=2)
+        for i, (label, value, lo, hi) in enumerate(zip(labels, values, lows, highs)):
+            y = 55 + i * (350 / max(1, len(values) - 1))
+            d.text((15, int(y - 8)), label[:30], fill="#1d3040")
+            d.line((x_axis(lo), y, x_axis(hi), y), fill=accent, width=4)
+            d.line((x_axis(lo), y-6, x_axis(lo), y+6), fill=accent, width=2)
+            d.line((x_axis(hi), y-6, x_axis(hi), y+6), fill=accent, width=2)
+            x = x_axis(value)
+            d.rectangle((x-6, y-6, x+6, y+6), fill=accent)
+            d.text((775, int(y - 19)), f"{value:.2f} [{lo:.2f}, {hi:.2f}]", fill="#1d3040")
+        destination = folder / f"figure-{ordinal}.png"
+        image.save(destination)
+        return destination
     low, high = min(0, min(values)), max(0, max(values))
     if high <= low: high = low + 1
     baseline = 390
