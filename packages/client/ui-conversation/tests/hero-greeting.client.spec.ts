@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  greetingForHour, heroAttentionDetail, heroAttentionPrompt, preferredNameForHero, researchStarterPrompt,
+  greetingForHour, heroAttentionDetail, heroAttentionPrompt, preferredNameForHero,
 } from '../src/client/skeleton/EmptyHero.tsx'
 
 describe('greetingForHour', () => {
@@ -57,12 +57,13 @@ describe('heroAttentionDetail', () => {
   })
 })
 
-describe('research academic hero starter prompts', () => {
-  it('distinguishes citation styles from scientific article type and keeps the draft editable', () => {
-    expect(researchStarterPrompt('apa7')).toContain('APA 7')
-    expect(researchStarterPrompt('vancouver')).toContain('Vancouver')
-    expect(researchStarterPrompt('scientific_article')).toContain('artículo científico')
-    expect(researchStarterPrompt('scientific_article')).toContain('DOCX, PDF')
-    expect(researchStarterPrompt('apa7')).toContain('solo los datos académicos que falten')
+describe('universal Phoenix start', () => {
+  it('preserves the open-ended greeting and proactive, task-specific responses', () => {
+    expect(greetingForHour(13)).toBe('Buenas tardes')
+    expect(heroAttentionDetail({
+      id: 'event', revision: 'r', taskId: 'task', title: 'Cualquier misión',
+      at: '2026-10-18T00:00:00.000Z', score: 2, kind: 'result',
+      detail: 'El resultado de esta misión está listo.',
+    })).toContain('resultado')
   })
 })
