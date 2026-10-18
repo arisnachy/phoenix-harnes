@@ -6,6 +6,7 @@
  */
 import { readFile, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
+import { reviewGameProduction } from './game-production-qa.mjs'
 import { pathToFileURL } from 'node:url'
 
 function entries(value) { return Array.isArray(value) ? value.filter(item => item && typeof item === 'object') : [] }
@@ -167,7 +168,9 @@ async function main() {
       }
     }
   }
-  const plan = planGameAssets(JSON.parse(raw), ready)
+  const manifest = JSON.parse(raw)
+  const plan = planGameAssets(manifest, ready)
+  plan.productionReview = reviewGameProduction(manifest, plan)
   plan.existingAssets.invalid = invalid
   await writeFile(output, JSON.stringify(plan, null, 2) + '\n', 'utf8')
   process.stdout.write('Game Studio: ' + plan.existingAssets.reusable.length

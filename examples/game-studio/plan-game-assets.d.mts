@@ -21,6 +21,16 @@ export interface GameAssetPlan {
   }
   readonly missingDesignDecisions: readonly string[]
   readonly acceptance: readonly string[]
+  readonly productionReview?: {
+    readonly title: string
+    readonly state: 'incomplete' | 'review-candidate-not-certified'
+    readonly releaseCertified: false
+    readonly designIssues: readonly { readonly code: string; readonly detail: string }[]
+    readonly missingAssetBindings: readonly string[]
+    readonly missingPlaytests: readonly string[]
+    readonly phases: readonly { readonly id: string; readonly dependsOn: readonly string[]; readonly status: string }[]
+    readonly note: string
+  }
 }
 
 /** Derive an honest asset plan; verified media remains unintegrated until gameplay QA. */
