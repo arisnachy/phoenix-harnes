@@ -271,6 +271,7 @@ internal static class DesktopSourceCheckout
             // deeper after a zip/worktree migration: ...\phoenix-harnes\phoenix-harnes.
             values.Add(Path.Combine(chatRoot, "Fenix-evolution", "phoenix-harnes", "phoenix-harnes"));
             values.Add(Path.Combine(chatRoot, "Fenix-evolution", "phoenix-harnes"));
+            values.Add(Path.Combine(chatRoot, "Phoenix"));
             values.Add(Path.Combine(chatRoot, "Phoenix", "phoenix-harnes"));
             values.Add(Path.Combine(chatRoot, "phoenix-harnes"));
         }

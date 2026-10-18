@@ -8,6 +8,10 @@ Run the one-line PowerShell installer from the repository README. It installs a 
 
 The bootstrap is operational but not Authenticode-signed. A trusted signed release requires an external publisher certificate and remains a release credential gate.
 
+## Desktop shortcut
+
+The canonical **Phoenix** shortcut launches a supported installed native `Phoenix.exe` (version 1.0.20 or later) with its embedded WebView2 shell and records the durable source checkout for backend selection. The native window attaches to an already-healthy Phoenix at `127.0.0.1:3080` or starts its supervised backend. Without an installed compatible EXE, the shortcut starts the source Web application with PowerShell hidden and uses the regular browser. The shortcut never displays the legacy EXE rejection notice or keeps an interactive PowerShell prompt open.
+
 ## VS Code and Cursor
 
 Run `pnpm run package:vscode`, then install `dist/phoenix-hardness-vscode.vsix` through **Extensions → Install from VSIX**. The Explorer panel can install or update PHOENIX, start the local runtime, and open its Web interface. It never reads provider credentials.

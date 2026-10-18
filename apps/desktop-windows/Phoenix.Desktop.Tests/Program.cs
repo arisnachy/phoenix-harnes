@@ -313,6 +313,10 @@ try
 
     var conventionalRoots = DesktopSourceCheckout.ConventionalRoots(@"C:\Users\arisn");
     True(
+        conventionalRoots.Any(path => path.EndsWith(@"OneDrive\Documentos\ChatGPT\Phoenix", StringComparison.OrdinalIgnoreCase)),
+        "desktop detects the user's direct ChatGPT/Phoenix source checkout",
+        failures);
+    True(
         conventionalRoots.Any(path => path.EndsWith(@"OneDrive\Documentos\ChatGPT\Fenix-evolution\phoenix-harnes\phoenix-harnes", StringComparison.OrdinalIgnoreCase)),
         "desktop discovers the nested Fenix-evolution checkout used by local Phoenix installs",
         failures);

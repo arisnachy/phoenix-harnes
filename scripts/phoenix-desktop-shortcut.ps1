@@ -145,12 +145,53 @@ Get-ChildItem -LiteralPath $phoenixState -Filter 'phoenix-browser-*.ico' -File -
   Where-Object { $_.FullName -ne $iconPath } |
   Remove-Item -Force -ErrorAction SilentlyContinue
 
+# An installed native shell owns the visible window and its WebView2 surface.
+# Only a recent EXE may be used: older installers can boot their own stale
+# backend. Source-only installs retain the quiet supervised browser fallback.
+$registeredExecutable = ''
+$registeredInstallation = Get-ItemProperty -Path 'HKCU:\Software\Phoenix AI\Phoenix' -Name 'ExecutablePath' -ErrorAction SilentlyContinue
+if ($null -ne $registeredInstallation) {
+  $registeredExecutable = [string]$registeredInstallation.ExecutablePath
+}
+$nativeExecutable = $null
+$minimumNativeVersion = [Version]::new(1, 0, 20, 0)
+$installedExecutable = Join-Path $localAppData 'Programs\Phoenix\Phoenix.exe'
+foreach ($candidate in @($registeredExecutable, $installedExecutable)) {
+  if ([string]::IsNullOrWhiteSpace($candidate)) { continue }
+  if (-not (Test-Path -LiteralPath $candidate -PathType Leaf)) { continue }
+  try {
+    $details = [Diagnostics.FileVersionInfo]::GetVersionInfo($candidate)
+    $version = [Version]::new(
+      $details.FileMajorPart,
+      $details.FileMinorPart,
+      $details.FileBuildPart,
+      $details.FilePrivatePart
+    )
+    if ($version -lt $minimumNativeVersion) { continue }
+    $nativeExecutable = (Resolve-Path -LiteralPath $candidate).Path
+    break
+  }
+  catch {
+    # Unknown or invalid installed binaries must not replace the working source launcher.
+  }
+}
+
 $powerShellExe = Join-Path $PSHOME 'powershell.exe'
 $targetPath = $powerShellExe
-$arguments = "-NoLogo -NoProfile -ExecutionPolicy Bypass -NoExit -File `"$launcherPath`""
+$arguments = "-NoLogo -NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$launcherPath`""
+$windowStyle = 7
+if ($null -ne $nativeExecutable) {
+  # The EXE reads these backend pointers on launch and confirms runtime health
+  # before promoting them. Keep the user's durable source checkout authoritative.
+  $utf8 = New-Object System.Text.UTF8Encoding($false)
+  [IO.File]::WriteAllText((Join-Path $phoenixState 'backend-root.txt'), "$rootPath`n", $utf8)
+  [IO.File]::WriteAllText((Join-Path $phoenixState 'source-root.txt'), "$rootPath`n", $utf8)
+  $targetPath = $nativeExecutable
+  $arguments = ''
+  $windowStyle = 1
+}
 $workingDirectory = $rootPath
 $iconLocation = "$iconPath,0"
-$windowStyle = 1
 $shell = New-Object -ComObject WScript.Shell
 
 function Remove-LegacyPhoenixShortcut([string]$ShortcutPath) {
@@ -173,7 +214,7 @@ function Remove-LegacyPhoenixShortcut([string]$ShortcutPath) {
 $taskbarDirectory = Join-Path $env:APPDATA 'Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar'
 
 # Remove only obsolete PHOENIX HARDNESS aliases. Canonical Phoenix.lnk
-# is rewritten below to launch the updated source checkout via PowerShell.
+# selects a supported native desktop EXE or a quiet source-only fallback.
 $legacyLocations = @(
   (Join-Path $desktopPath 'Phoenix.lnk'),
   (Join-Path $desktopPath 'PHOENIX HARDNESS.lnk'),
@@ -206,9 +247,8 @@ function Set-PhoenixShortcut([string]$ShortcutPath) {
   $shortcut.Save()
 }
 
-# One canonical shortcut name everywhere. Always target the checked-out
-# Phoenix PowerShell launcher, not a possibly outdated installed Phoenix.exe.
-# The launcher uses the supervised source checkout and keeps its console visible.
+# One canonical shortcut name everywhere. Native WebView2 is preferred when
+# installed and recent; source-only installs launch without a visible console.
 $shortcutPath = Join-Path $desktopPath 'Phoenix.lnk'
 $startMenuShortcutPath = Join-Path $programsPath 'Phoenix.lnk'
 $taskbarShortcutPath = Join-Path $taskbarDirectory 'Phoenix.lnk'

@@ -30,37 +30,50 @@ function Write-LaunchFailure([string]$Message) {
 try {
   Set-Location -LiteralPath $rootPath
   $env:PHOENIX_DESKTOP_LAUNCH = '1'
-  $env:PHOENIX_DESKTOP_CONSOLE = '1'
-  Write-Host '[PHOENIX] Iniciando con PowerShell visible. El registro se guarda en:' $logPath
-
-  # Always start the current checkout through its supervised pnpm entrypoint.
-  # An outdated Phoenix.exe under LocalAppData can boot a different runtime
-  # and compete for 127.0.0.1:3080. Never auto-delegate to that executable.
+  $env:PHOENIX_DESKTOP_CONSOLE = '0'
   $env:PHOENIX_SOURCE_ROOT = $rootPath
-  Write-Host '[PHOENIX] Iniciando Phoenix desde el repositorio actualizado; no se usará el EXE antiguo.'
+
+  # Reopening the source-only desktop shortcut must not start another Host
+  # when Phoenix is already serving its UI on the normal local port.
+  if (-not $Background) {
+    try {
+      $response = Invoke-WebRequest -Uri 'http://127.0.0.1:3080/' -UseBasicParsing -TimeoutSec 2
+      if ($response.StatusCode -eq 200 -and [string]$response.Content -match '(?i:phoenix|dsh)') {
+        Start-Process -FilePath 'http://127.0.0.1:3080/'
+        exit 0
+      }
+    }
+    catch {
+      # A stopped or unrecognized listener must follow the supervised launch.
+    }
+  }
 
   $launchArgs = @()
   if ($Background) { $launchArgs = @('--no-open') }
 
+  # Prefer the exact pnpm command that starts Phoenix successfully by hand.
+  # Native stderr is diagnostic output, not a PowerShell terminating exception.
+  $pnpm = Get-Command 'pnpm.cmd' -ErrorAction SilentlyContinue
+  if ($null -eq $pnpm) { $pnpm = Get-Command 'pnpm' -ErrorAction SilentlyContinue }
   $corepack = Get-Command 'corepack.cmd' -ErrorAction SilentlyContinue
-  if ($null -eq $corepack) {
-    $corepack = Get-Command 'corepack' -ErrorAction SilentlyContinue
-  }
+  if ($null -eq $corepack) { $corepack = Get-Command 'corepack' -ErrorAction SilentlyContinue }
 
-  if ($null -ne $corepack) {
-    & $corepack.Source pnpm phoenix @launchArgs 2>&1 | Tee-Object -FilePath $logPath -Append
+  $previousErrorAction = $ErrorActionPreference
+  $ErrorActionPreference = 'Continue'
+  try {
+    if ($null -ne $pnpm) {
+      & $pnpm.Source phoenix @launchArgs 2>&1 | Tee-Object -FilePath $logPath -Append
+    }
+    elseif ($null -ne $corepack) {
+      & $corepack.Source pnpm phoenix @launchArgs 2>&1 | Tee-Object -FilePath $logPath -Append
+    }
+    else {
+      throw 'No se encontró pnpm ni Corepack en PATH. Revisa la instalación de Node.js.'
+    }
     $exitCode = $LASTEXITCODE
   }
-  else {
-    $pnpm = Get-Command 'pnpm.cmd' -ErrorAction SilentlyContinue
-    if ($null -eq $pnpm) {
-      $pnpm = Get-Command 'pnpm' -ErrorAction SilentlyContinue
-    }
-    if ($null -eq $pnpm) {
-      throw 'No se encontró Corepack ni pnpm en PATH. Abre PowerShell, instala/activa pnpm y vuelve a intentar.'
-    }
-    & $pnpm.Source phoenix @launchArgs 2>&1 | Tee-Object -FilePath $logPath -Append
-    $exitCode = $LASTEXITCODE
+  finally {
+    $ErrorActionPreference = $previousErrorAction
   }
 
   if ($exitCode -ne 0) {
