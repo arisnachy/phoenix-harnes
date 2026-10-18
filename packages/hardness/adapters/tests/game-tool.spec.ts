@@ -1,4 +1,5 @@
-import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { CallId } from '@phoenix-ai/dsh-llm'
@@ -111,6 +112,28 @@ describe('Phoenix Game Studio publisher', () => {
       expect(presented.artifact?.mime).toBe(PHOENIX_GAME_MIME)
       expect(JSON.stringify(tool.output.render(args, receipt as never))).not.toContain('<canvas')
     } finally { rmSync(folder, { recursive: true, force: true }) }
+  })
+
+  it('publishes the actual shipped one-level brawler without copying it into a model tool argument', async () => {
+    const tool = createPhoenixGameTool()
+    const path = 'examples/game-studio/street-brawler-demo.html'
+    const args = { title: 'Distrito Neón', file_path: path }
+    const exec: ToolRunContext = {
+      ...execution(),
+      agent: { session: { header: { cwd: resolve('.') } } } as never,
+    }
+    const receipt = await tool.execute(args, exec) as {
+      preflight: string
+      html: string
+    }
+    expect(receipt.preflight).toBe('prototype-only')
+    expect(receipt.html).toBe(readFileSync(resolve(path), 'utf8'))
+    const output = tool.output.presentationMeta?.(args, receipt as never) as {
+      artifact?: { mime?: string, data?: string }
+    }
+    expect(output.artifact?.mime).toBe(PHOENIX_GAME_MIME)
+    expect(output.artifact?.data).toContain('PhoenixBrawlerKit')
+    expect(output.artifact?.data).toContain('window.requestAnimationFrame(frame)')
   })
 
   it('rejects workspace escapes, missing game files and ambiguous publishing inputs', async () => {
