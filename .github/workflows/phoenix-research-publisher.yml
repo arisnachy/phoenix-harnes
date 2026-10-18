@@ -6,6 +6,7 @@ on:
     paths:
       - 'scripts/phoenix-research-publisher.py'
       - 'scripts/phoenix-research-publisher-smoke.py'
+      - 'scripts/phoenix-research-editorial-smoke.py'
       - 'scripts/phoenix-research-institution-rules.py'
       - 'scripts/phoenix-research-institution-rules-smoke.py'
       - 'packages/hardness/adapters/src/research-publish-tool.ts'
@@ -15,6 +16,7 @@ on:
     paths:
       - 'scripts/phoenix-research-publisher.py'
       - 'scripts/phoenix-research-publisher-smoke.py'
+      - 'scripts/phoenix-research-editorial-smoke.py'
       - 'scripts/phoenix-research-institution-rules.py'
       - 'scripts/phoenix-research-institution-rules-smoke.py'
       - 'packages/hardness/adapters/src/research-publish-tool.ts'
@@ -42,4 +44,5 @@ jobs:
       - name: Exercise real academic publication
         run: |
           python scripts/phoenix-research-publisher-smoke.py
+          python scripts/phoenix-research-editorial-smoke.py
           python scripts/phoenix-research-institution-rules-smoke.py

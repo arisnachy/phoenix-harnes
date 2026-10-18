@@ -23,6 +23,20 @@ describe('Phoenix research report publisher', () => {
     expect(() => validateResearchPublication({ ...report, references: [{ ...report.references[0], url: 'http://localhost/secret' }] })).toThrow()
     expect(() => validateResearchPublication({ ...report, style: 'inventado' })).toThrow()
   })
+  it('admits named modern design presets but protects strict academic styling', () => {
+    const options = ['editorial_navy', 'clinical_teal', 'executive_amber',
+      'minimal_graphite', 'creative_coral', 'auto']
+    for (const design_preset of options) {
+      expect(validateResearchPublication({ ...report, presentation: 'hybrid', design_preset })).toMatchObject({ design_preset })
+    }
+    expect(validateResearchPublication({ ...report, presentation: 'academic', design_preset: 'academic_classic' }))
+      .toMatchObject({ design_preset: 'academic_classic' })
+    expect(() => validateResearchPublication({ ...report, presentation: 'academic',
+      design_preset: 'creative_coral' })).toThrow(/académica estricta/u)
+    expect(() => validateResearchPublication({ ...report, presentation: 'hybrid',
+      design_preset: 'academic_classic' })).toThrow(/academic_classic/u)
+    expect(() => validateResearchPublication({ ...report, design_preset: 'unknown' })).toThrow(/Diseño desconocido/u)
+  })
   it('derives the same stable and isolated publication paths for identical content', () => {
     const a = researchOutputPaths(report)
     const b = researchOutputPaths({ ...report })
