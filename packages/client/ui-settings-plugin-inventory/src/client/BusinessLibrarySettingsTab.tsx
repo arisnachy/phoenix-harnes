@@ -62,7 +62,7 @@ export function BusinessLibrarySettingsTab({readBusinessLibrary,t}:BusinessLibra
           <option value="book">{t('businessTypeBook')}</option><option value="course">{t('businessTypeCourse')}</option>
           <option value="software">{t('businessTypeSoftware')}</option><option value="game">{t('businessTypeGame')}</option>
           <option value="design">{t('businessTypeDesign')}</option><option value="research">{t('businessTypeResearch')}</option>
-          <option value="video">{t('businessTypeVideo')}</option><option value="audio">{t('businessTypeAudio')}</option><option value="other">{t('businessTypeOther')}</option>
+          <option value="video">{t('businessTypeVideo')}</option><option value="audio">{t('businessTypeAudio')}</option><option value="service">{t('businessTypeService')}</option><option value="other">{t('businessTypeOther')}</option>
         </select>
       </div>
       {products.length===0 && <p className={css.empty}>{t('businessEmpty')}</p>}
