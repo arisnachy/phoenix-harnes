@@ -1,3 +1,6 @@
+import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { CallId } from '@phoenix-ai/dsh-llm'
 import type { ToolRunContext } from '@phoenix-ai/dsh-tools'
 import { describe, expect, it, vi } from 'vitest'
@@ -37,7 +40,7 @@ describe('Phoenix Game Studio publisher', () => {
     expect(tool.name).toBe('phoenix_game')
     expect(tool.description).toContain('actual in-chat game publisher')
     expect(tool.description).toContain('spawn_teammate')
-    expect(tool.parameters).toMatchObject({ type: 'object', required: ['title', 'html'] })
+    expect(tool.parameters).toMatchObject({ type: 'object', required: ['title'] })
   })
 
   it('publishes self-contained game HTML through the renderer’s executable MIME', async () => {
@@ -76,8 +79,74 @@ describe('Phoenix Game Studio publisher', () => {
     expect(output?.artifact?.data).toContain('id="phoenix-game-manifest" type="application/json"')
     expect(output?.artifact?.data).toContain('canvas.getContext')
     expect(output?.artifact?.data).not.toBe(source)
-    expect(tool.parameters).toMatchObject({ type: 'object', required: ['title', 'html'] })
+    expect(tool.parameters).toMatchObject({ type: 'object', required: ['title'] })
     expect(tool.description).toContain('manifest_json')
+  })
+
+  it('publishes authored HTML from the agent workspace without retransmitting its source', async () => {
+    const folder = mkdtempSync(join(tmpdir(), 'phoenix-game-publish-'))
+    try {
+      const filename = 'racer.html'
+      writeFileSync(join(folder, filename), runnable)
+      const tool = createPhoenixGameTool()
+      const args = { title: 'Racer', file_path: filename }
+      const exec: ToolRunContext = {
+        ...execution(),
+        agent: { session: { header: { cwd: folder } } } as never,
+      }
+      const receipt = await tool.execute(args, exec) as {
+        artifactId: string
+        title: string
+        preflight: string
+        html: string
+      }
+      expect(receipt.preflight).toBe('packaging-only')
+      expect(receipt.html).toBe(runnable)
+      // A modified file AFTER the accepted call cannot alter the published artifact.
+      writeFileSync(join(folder, filename), '<html>changed after publication</html>')
+      const presented = tool.output.presentationMeta?.(args, receipt as never) as {
+        artifact?: { data?: string, mime?: string }
+      }
+      expect(presented.artifact?.data).toBe(runnable)
+      expect(presented.artifact?.mime).toBe(PHOENIX_GAME_MIME)
+      expect(JSON.stringify(tool.output.render(args, receipt as never))).not.toContain('<canvas')
+    } finally { rmSync(folder, { recursive: true, force: true }) }
+  })
+
+  it('rejects workspace escapes, missing game files and ambiguous publishing inputs', async () => {
+    const folder = mkdtempSync(join(tmpdir(), 'phoenix-game-scope-'))
+    const outside = mkdtempSync(join(tmpdir(), 'phoenix-game-external-'))
+    try {
+      writeFileSync(join(folder, 'ready.html'), runnable)
+      writeFileSync(join(outside, 'secret.html'), runnable)
+      writeFileSync(join(folder, 'oversize.html'), 'a'.repeat(16 * 1024 * 1024 + 1))
+      mkdirSync(join(folder, 'sub'))
+      const tool = createPhoenixGameTool()
+      const exec: ToolRunContext = {
+        ...execution(),
+        agent: { session: { header: { cwd: folder } } } as never,
+      }
+      const run = (file_path: string): Promise<unknown> =>
+        tool.execute({ title: 'Check', file_path }, exec)
+      await expect(run(join(outside, 'secret.html'))).rejects.toThrow('dentro del espacio de trabajo')
+      await expect(run('../' + outside.split(/[\\/]/u).at(-1) + '/secret.html')).rejects.toThrow('dentro del espacio de trabajo')
+      await expect(run('https://example.org/demo.html')).rejects.toThrow('local')
+      await expect(run('missing.html')).rejects.toThrow('no existe')
+      await expect(run('oversize.html')).rejects.toThrow('16 MiB')
+      await expect(run('sub')).rejects.toThrow('dentro del espacio de trabajo')
+      if (process.platform !== 'win32') {
+        symlinkSync(join(outside, 'secret.html'), join(folder, 'sneaky.html'))
+        await expect(run('sneaky.html')).rejects.toThrow('dentro del espacio de trabajo')
+      }
+      await expect(tool.execute({ title: 'none' }, exec)).rejects.toThrow('exactamente uno')
+      await expect(tool.execute({ title: 'both', html: runnable, file_path: 'ready.html' }, exec))
+        .rejects.toThrow('exactamente uno')
+      await expect(tool.execute({ title: 'no agent', file_path: 'ready.html' }, execution()))
+        .rejects.toThrow('directorio de trabajo')
+    } finally {
+      rmSync(folder, { recursive: true, force: true })
+      rmSync(outside, { recursive: true, force: true })
+    }
   })
 
   it('repairs the manifest wrapper when JSON exists but Kira omitted the exact script id', () => {
