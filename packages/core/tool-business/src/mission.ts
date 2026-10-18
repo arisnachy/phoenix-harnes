@@ -114,7 +114,7 @@ export function planBusinessMission(
       !Array.isArray(entry.toolNames) || entry.toolNames.length > 400) continue
     const server = entry.serverName.toLowerCase()
     if (!matchedServer(server, channel, category, publishing)) continue
-    const names = entry.toolNames.filter((name): name is string => typeof name === 'string' && TOOL_NAME.test(name) && name.startsWith('mcp__'+server+'__') && !DANGEROUS_TOOL.test(name))
+    const names: string[] = (entry.toolNames as readonly unknown[]).filter((name): name is string => typeof name === 'string' && TOOL_NAME.test(name) && name.startsWith('mcp__'+server+'__') && !DANGEROUS_TOOL.test(name))
     const usable = names.filter(name => publishing ? WRITE_ACTION.test(name.split('__').at(-1) ?? '') : WRITE_ACTION.test(name.split('__').at(-1) ?? '') || READ_ACTION.test(name.split('__').at(-1) ?? ''))
     if (usable.length === 0) continue
     const writeNames = usable.filter(name => WRITE_ACTION.test(name.split('__').at(-1) ?? ''))
