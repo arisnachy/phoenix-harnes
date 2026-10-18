@@ -4,6 +4,7 @@ import { researchOutputPaths, validateResearchPublication, createResearchPublish
 const report = {
   title: 'Informe de investigación sobre envejecimiento cognitivo',
   style: 'vancouver',
+  document_type: 'brief', quality_profile: 'educational_brief', user_requested_brief: true,
   cover: { institution: 'Institución de prueba', author: 'Investigador de prueba' },
   sections: [
     { heading: 'Resumen', text: 'Hallazgo sustentado en fuente primaria [@study2026].' },
@@ -38,4 +39,30 @@ describe('Phoenix research report publisher', () => {
     expect(tool.presentCall?.({ report })).toMatchObject({ card: 'generic', kind: 'edit' })
     expect(tool.presentCall?.({ report: {} })).toMatchObject({ card: 'generic', kind: 'execute' })
   })
+  it('resolves all keys in a semicolon-separated or comma-separated citation group', () => {
+    const second = { ...report.references[0]!, key: 'study2025', year: '2025' }
+    const valid = { ...report, references: [...report.references, second],
+      sections: [{ heading: 'Método', text: 'Síntesis conjunta [@study2026; @study2025] y [@study2026, @study2025].' }] }
+    expect(validateResearchPublication(valid)).toEqual(valid)
+    expect(() => validateResearchPublication({ ...valid, references: report.references })).toThrow(/Cita sin fuente/u)
+    expect(() => validateResearchPublication({ ...valid,
+      sections: [{ heading: 'Método', text: 'Fuente mal construida [@study2026; @].' }] })).toThrow()
+  })
+  it('rejects the actual three-page scientific failure instead of claiming report ready', () => {
+    const shortReview = { ...report, document_type: 'narrative_review',
+      quality_profile: 'professional', user_requested_brief: false,
+      sections: [
+        { kind: 'abstract', heading: 'Resumen', text: 'Conclusión breve [@study2026].' },
+        { kind: 'introduction', heading: 'Introducción', text: 'Texto de una línea [@study2026].' },
+        { kind: 'methods', heading: 'Método', text: 'Cuatro estudios mencionados sin examen exhaustivo [@study2026].' },
+        { kind: 'results', heading: 'Resultados', text: 'Un pequeño hallazgo [@study2026].' },
+        { kind: 'discussion', heading: 'Discusión', text: 'Poco análisis [@study2026].' },
+        { kind: 'limitations', heading: 'Limitaciones', text: 'Limitaciones breves [@study2026].' },
+        { kind: 'conclusions', heading: 'Conclusiones', text: 'Sin profundidad [@study2026].' },
+      ] }
+    expect(() => validateResearchPublication(shortReview)).toThrow(/Investigación insuficiente/u)
+    expect(() => validateResearchPublication({ ...report, quality_profile: 'professional' })).toThrow()
+    expect(() => validateResearchPublication({ ...report, user_requested_brief: false })).toThrow()
+  })
+
 })
