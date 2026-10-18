@@ -152,6 +152,45 @@ try:
         assert "Dedicatoria" in word and "Índice de tablas" in word
         assert "Instrumento sintético" in word and "Conflictos de interés" in word
         assert 'TOC ' in word and 'w:fldSimple' in word
+    journal = dict(report)
+    journal["style"] = "ama"
+    journal["document_type"] = "brief"
+    journal["institutional_rules"] = {
+        "reviewed_by_user": True, "margin_cm": 2.54,
+        "font_family": "Arial", "line_spacing": 2,
+    }
+    journal["front_matter"] = {"key_points": [
+        "Pregunta: publicación con evidencia sintética.",
+        "Hallazgos: el diseño genera archivos comprobables.",
+        "Significado: el autor debe verificar resultados verdaderos.",
+    ]}
+    journal["journal_requirements"] = {
+        "journal": "jama", "max_words": 1000, "max_abstract_words": 350,
+        "max_references": 5, "max_tables_figures": 5, "require_key_points": True,
+    }
+    published = subprocess.run([sys.executable, str(script)],
+                               input=json.dumps(journal, ensure_ascii=False).encode("utf-8"),
+                               capture_output=True, check=True, timeout=90)
+    result = json.loads(published.stdout.decode("utf-8"))
+    assert result["state"] == "REPORT_READY"
+    with ZipFile(result["files"]["docx"]) as document:
+        xml = document.read("word/document.xml").decode("utf-8")
+        assert "Key Points" in xml
+    with fitz.open(result["files"]["pdf"]) as document:
+        text = "\n".join(page.get_text() for page in document)
+        assert "Key Points" in text
+    oversized = dict(journal)
+    oversized["journal_requirements"] = {**journal["journal_requirements"], "max_words": 1}
+    rejected = subprocess.run([sys.executable, str(script)],
+                              input=json.dumps(oversized).encode("utf-8"),
+                              capture_output=True, timeout=30)
+    assert rejected.returncode != 0
+    unapproved = dict(journal)
+    unapproved["institutional_rules"] = {"margin_cm": 3}
+    rejected = subprocess.run([sys.executable, str(script)],
+                              input=json.dumps(unapproved).encode("utf-8"),
+                              capture_output=True, timeout=30)
+    assert rejected.returncode != 0
     print("RESEARCH_PUBLISHER_SMOKE_PASS")
 finally:
     logo.unlink(missing_ok=True)

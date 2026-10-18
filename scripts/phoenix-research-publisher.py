@@ -88,8 +88,8 @@ def validate(data):
         raise ValueError("report.sections must contain 1 to 140 entries")
     if not isinstance(refs, list) or not (1 <= len(refs) <= 500):
         raise ValueError("report.references must contain 1 to 500 supplied sources")
-    if data.get("style", "apa") not in ("apa", "apa7", "vancouver"):
-        raise ValueError("style must be apa, apa7 or vancouver")
+    if data.get("style", "apa") not in ("apa", "apa7", "vancouver", "ama"):
+        raise ValueError("style must be apa, apa7, vancouver or ama")
     if data.get("presentation", "academic") not in PRESENTATIONS:
         raise ValueError("presentation must be academic, editorial or hybrid")
     if data.get("document_type", "brief") not in DOCUMENT_TYPES:
@@ -112,6 +112,50 @@ def validate(data):
     for field in ("approval", "originality", "dedication", "acknowledgements", "abstract_en"):
         if field in preliminary and (not isinstance(preliminary[field], str) or len(preliminary[field]) > 20000):
             raise ValueError("front_matter." + field + " must be a bounded text")
+    journal = data.get("journal_requirements", {})
+    if not isinstance(journal, dict):
+        raise ValueError("journal_requirements must be an object")
+    for limit in ("max_words", "max_abstract_words", "max_references", "max_tables_figures"):
+        if limit in journal and (isinstance(journal[limit], bool) or not isinstance(journal[limit], int)
+                                 or not 1 <= journal[limit] <= 100000):
+            raise ValueError("journal " + limit + " must be a positive integer")
+    if "journal" in journal and (not isinstance(journal["journal"], str) or len(journal["journal"]) > 120):
+        raise ValueError("journal identifier invalid")
+    if "max_words" in journal:
+        body_words = sum(len(re.findall(r"\b\w+\b", section["text"], re.UNICODE))
+                         for section in sections if section_kind(section) != "abstract")
+        if body_words > journal["max_words"]:
+            raise ValueError("manuscript text exceeds journal max_words: " + str(body_words))
+    abstract_words = sum(len(re.findall(r"\b\w+\b", section["text"], re.UNICODE))
+                         for section in sections if section_kind(section) == "abstract")
+    if "max_abstract_words" in journal and abstract_words > journal["max_abstract_words"]:
+        raise ValueError("abstract exceeds journal max_abstract_words: " + str(abstract_words))
+    if "max_references" in journal and len(refs) > journal["max_references"]:
+        raise ValueError("references exceed journal max_references")
+    if "max_tables_figures" in journal and len(data.get("tables", [])) + len(data.get("charts", [])) > journal["max_tables_figures"]:
+        raise ValueError("tables and figures exceed journal limit")
+    institutional = data.get("institutional_rules", {})
+    if not isinstance(institutional, dict):
+        raise ValueError("institutional_rules must be an object")
+    if institutional:
+        if institutional.get("reviewed_by_user") is not True:
+            raise ValueError("institutional_rules require user review of source-located candidates")
+        margin = institutional.get("margin_cm")
+        if margin is not None and (not isinstance(margin, (int, float)) or isinstance(margin, bool)
+                                   or not math.isfinite(margin) or not 1.5 <= margin <= 4):
+            raise ValueError("institutional margin_cm must be 1.5 to 4")
+        spacing = institutional.get("line_spacing")
+        if spacing is not None and (spacing not in (1, 1.15, 1.5, 2)):
+            raise ValueError("institutional line_spacing unsupported")
+        if institutional.get("font_family", "Times New Roman") not in ("Times New Roman", "Arial", "Calibri", "Georgia"):
+            raise ValueError("institutional font not allowed")
+    key_points = preliminary.get("key_points", [])
+    if not isinstance(key_points, list) or len(key_points) > 3 or any(
+        not isinstance(point, str) or len(point) > 500 or not point.strip() for point in key_points
+    ):
+        raise ValueError("key_points should have up to 3 nonempty statements")
+    if journal.get("require_key_points") and len(key_points) != 3:
+        raise ValueError("journal requires 3 verified Key Points statements")
     cover = data.get("cover", {})
     if not isinstance(cover, dict):
         raise ValueError("cover must be an object")
@@ -230,6 +274,8 @@ def citation_string(key, refs, style, index):
     ref = refs[key]
     if style == "vancouver":
         return "[" + str(index[key]) + "]"
+    if style == "ama":
+        return str(index[key]).translate(str.maketrans("0123456789", "⁰¹²³⁴⁵⁶⁷⁸⁹"))
     author = ref["authors"].split(",")[0].strip()
     return "(" + author + ", " + ref["year"] + ")"
 
@@ -245,6 +291,12 @@ def bibliography(ref, style, number):
     url = "https://doi.org/" + doi if doi else ref["url"]
     if style == "vancouver":
         return f"{number}. {authors}. {title}. {journal}. {year}. {url}"
+    if style == "ama":
+        volume = str(ref.get("volume", "")).strip()
+        issue = str(ref.get("issue", "")).strip()
+        pages = str(ref.get("pages", "")).strip()
+        detail = (";" + volume if volume else "") + ("(" + issue + ")" if issue else "") + (":" + pages if pages else "")
+        return f"{number}. {authors}. {title}. {ref.get('journal_abbrev') or journal}. {year}{detail}. {('doi:' + doi) if doi else url}"
     return f"{authors} ({year}). {title}. {journal}. {url}"
 
 def chart_image(chart, folder, ordinal, accent="#087783"):
@@ -330,6 +382,8 @@ def main():
     refs, cited = validate(report)
     style = "apa" if report.get("style", "apa") == "apa7" else report.get("style", "apa")
     presentation = report.get("presentation", "academic")
+    journal = report.get("journal_requirements", {})
+    institutional = report.get("institutional_rules", {})
     editorial = presentation in ("editorial", "hybrid")
     accent = "#087783" if presentation == "hybrid" else "#a52d37"
     first_order = []
@@ -337,7 +391,7 @@ def main():
         for key in REF_RE.findall(section["text"]):
             if key not in first_order: first_order.append(key)
     numbers = {key: i+1 for i, key in enumerate(first_order)}
-    ordered_refs = [refs[key] for key in (first_order if style == "vancouver" else sorted(cited, key=lambda k: (refs[k]["authors"], refs[k]["year"])))]
+    ordered_refs = [refs[key] for key in (first_order if style in ("vancouver", "ama") else sorted(cited, key=lambda k: (refs[k]["authors"], refs[k]["year"])))]
     digest = hashlib.sha256(raw).hexdigest()[:16]
     output_root = Path.home() / ".dsh" / "research-reports" / digest
     output_root.mkdir(parents=True, exist_ok=True)
@@ -352,15 +406,17 @@ def main():
     sec = doc.sections[0]
     sec.page_height = Cm(29.7) if paper == A4 else Inches(11)
     sec.page_width = Cm(21) if paper == A4 else Inches(8.5)
-    sec.top_margin = sec.bottom_margin = Cm(2.54)
-    sec.left_margin = sec.right_margin = Cm(2.54)
+    margin_cm = institutional.get("margin_cm", 2.54)
+    sec.top_margin = sec.bottom_margin = Cm(margin_cm)
+    sec.left_margin = sec.right_margin = Cm(margin_cm)
     normal = doc.styles["Normal"]
-    normal.font.name = "Times New Roman"
+    normal.font.name = institutional.get("font_family", "Times New Roman")
     normal.font.size = Pt(12)
-    normal.paragraph_format.line_spacing = (1.38 if editorial else (2 if style == "apa" else 1.4))
+    normal.paragraph_format.line_spacing = institutional.get(
+        "line_spacing", 1.38 if editorial else (2 if style == "apa" else 1.4))
     normal.paragraph_format.space_after = Pt(7 if editorial else (0 if style == "apa" else 6))
     if editorial:
-        normal.font.name = "Aptos"
+        normal.font.name = institutional.get("font_family", "Aptos")
         normal.font.size = Pt(11)
         heading_style = doc.styles["Heading 1"]
         heading_style.font.name = "Aptos Display"
@@ -428,6 +484,9 @@ def main():
     footer_paragraph = sec.footer.paragraphs[0]
     footer_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
     add_word_field(footer_paragraph, "PAGE")
+    if front.get("key_points"):
+        doc.add_heading("Key Points", level=1)
+        for point in front["key_points"]: doc.add_paragraph("• " + point)
     if report.get("keywords"):
         doc.add_paragraph("Palabras clave: " + ", ".join(str(x) for x in report["keywords"]))
     for section in report["sections"]:
@@ -543,6 +602,9 @@ def main():
             for ix, item in enumerate(report["charts"], 1):
                 para("Figura " + str(ix) + ". " + str(item.get("title", "Gráfico")), small)
         story.append(PageBreak())
+    if front.get("key_points"):
+        para("Key Points", h1)
+        for point in front["key_points"]: para("• " + point)
     if report.get("keywords"):
         para("Palabras clave: " + ", ".join(str(x) for x in report["keywords"]), small)
         story.append(Spacer(1, 8))
@@ -601,7 +663,7 @@ def main():
             para(format_text(item["text"], refs, style, numbers))
 
     pdf_file = output_root / "informe.pdf"
-    pdf_margin = 72 if style == "apa" and not editorial else 60
+    pdf_margin = margin_cm * 72 / 2.54 if institutional else (72 if style == "apa" and not editorial else 60)
     printer = IndexedDocTemplate(str(pdf_file), pagesize=paper, rightMargin=pdf_margin,
                                  leftMargin=pdf_margin, topMargin=pdf_margin,
                                  bottomMargin=pdf_margin, title=title, author=", ".join(authors))
@@ -631,6 +693,10 @@ def main():
     chunks.append("<h1>"+html.escape(title)+"</h1>")
     chunks.append("<p>"+html.escape(" · ".join(str(cover.get(k,"")) for k in ("institution","faculty","degree","date") if cover.get(k)))+"</p>")
     for author in authors: chunks.append("<p class='ref'>"+html.escape(author)+"</p>")
+    if front.get("key_points"):
+        chunks.append("<section><h2>Key Points</h2><ul>")
+        for point in front["key_points"]: chunks.append("<li>"+html.escape(point)+"</li>")
+        chunks.append("</ul></section>")
     for key, label in FRONT_LABELS:
         if front.get(key):
             chunks.append("<section><h2>"+html.escape(label)+"</h2><p>"+
