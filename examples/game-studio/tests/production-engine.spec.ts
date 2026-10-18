@@ -153,10 +153,14 @@ describe('Phoenix Game Studio autonomous production controller', () => {
       expect(JSON.parse(readFileSync(state, 'utf8')).stages[0].status).toBe('complete')
       writeFileSync(join(dir, 'GDD.md'), '# Tampered evidence')
       expect(run('next', state).stderr).toContain('Evidence changed')
-      writeFileSync(join(dir, 'GDD.md'), '# Original design')
+      // Recovery must work even when the original proof no longer matches its checksum.
       expect(run('invalidate', state, 'design', 'changed design').status).toBe(0)
+      expect(run('next', state).stdout).toContain('"stage": "design"')
       writeFileSync(manifest, JSON.stringify({ ...game, title: 'Changed' }))
       expect(run('next', state).stderr).toContain('Manifest changed')
+      expect(run('replan', state).status).toBe(0)
+      expect(run('next', state).stdout).toContain('"stage": "design"')
+      expect(JSON.parse(readFileSync(state, 'utf8')).title).toBe('Changed')
       expect(run('record', state, 'gameplay-qa', 'visual-review', '../outside', 'qa').status).not.toBe(0)
     } finally { rmSync(dir, { recursive: true, force: true }) }
   })
