@@ -55,7 +55,7 @@ Prefix-stable while the Team plugin generation, configuration, member role/name,
 
 
 
-## Genuine directed Team conversation
+### Genuine directed Team conversation
 
 `team_chat_reply_to_peer` records one model-authored Kira reply to a real delivered result/question/blocker/review. The bounded idempotent message is displayed under Kira's identity with the recipient's name and original message reference, with no extra child turn. Fictional, late and undelivered handoffs are rejected. New work must use `send_message` or `followup_task`; internal reporting does not require a fake shell action, while external operational claims remain evidence-gated.
 
