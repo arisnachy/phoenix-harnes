@@ -26,6 +26,8 @@ def main():
                                  text=True, capture_output=True, timeout=120)
         if process.returncode != 0:
             raise AssertionError(process.stderr)
+        if not process.stdout.strip():
+            raise AssertionError('Renderer returned empty stdout; exit='+str(process.returncode)+'; stderr='+repr(process.stderr[-1600:])+'; file_exists='+str(output.exists()))
         receipt = json.loads(process.stdout)
         assert receipt["ok"] is True
         assert receipt["result"]["text_extraction_verified"] is True
