@@ -199,7 +199,7 @@ def chart_image(chart, folder, ordinal, accent="#087783"):
         if left == right: right = left + 1
         pad = (right - left) * 0.10
         left, right = left - pad, right + pad
-        x_axis = lambda value: 275 + (value - left) / (right - left) * 675
+        x_axis = lambda value: 275 + (value - left) / (right - left) * 450
         null_value = chart.get("null_value", 1)
         if isinstance(null_value, (int, float)) and left <= null_value <= right:
             x = x_axis(null_value)
