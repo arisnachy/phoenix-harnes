@@ -1,0 +1,50 @@
+name: Phoenix Business generated-doc sync
+on:
+  push:
+    branches: ['feat/business-engine-studio']
+    paths:
+      - '.github/workflows/business-generated-sync.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: phoenix-business-generated-sync
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: true
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Regenerate deterministic source-derived catalogs
+        run: |
+          pnpm run gen-cordis-catalog
+          pnpm run gen-client-catalog
+          pnpm run gen-config-catalog
+          pnpm run gen-tool-catalog
+          pnpm run gen-doc-graphs
+          pnpm run gen-module-graph
+          pnpm run gen-persistence-catalog
+      - name: Commit regenerated documentation on development branch only
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A apps/cli/composition.md docs packages/extensions
+          if git diff --cached --quiet; then
+            echo 'No generated updates required'
+            exit 0
+          fi
+          git commit -m "docs(business): synchronize generated catalogs before release"
+          git push origin HEAD:feat/business-engine-studio
