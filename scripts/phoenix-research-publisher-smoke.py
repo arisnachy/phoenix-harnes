@@ -142,6 +142,7 @@ try:
         pages_text = "\\n".join(page.get_text() for page in actual)
         assert "Índice general" in pages_text and "Autora Uno" in pages_text
         assert "Anexos y apéndices" in pages_text and "Declaraciones de investigación" in pages_text
+    assert receipt["state"] == "REPORT_NEEDS_REVISION"
     assert receipt["pagination"]["target_met"] is False
     assert receipt["quality"]["pagination_review_required"] is True
     assert receipt["warnings"] and "80" in receipt["warnings"][0]
