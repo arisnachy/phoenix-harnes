@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 
 try:
-    import fitz
+    import pymupdf as fitz
     from reportlab.lib import colors
     from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY, TA_LEFT
     from reportlab.lib.units import inch
