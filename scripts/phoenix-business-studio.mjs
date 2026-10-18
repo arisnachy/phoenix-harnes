@@ -19,7 +19,7 @@ export function validateBlueprint(input) {
   if (!Array.isArray(input.chapters) || !input.chapters.length || input.chapters.length > 500) throw new Error('El plan requiere de 1 a 500 capítulos.')
   const chapters=input.chapters.map((c,i)=>{
     if (!Array.isArray(c?.beats) || !c.beats.length || c.beats.length > 50) throw new Error(`Escenas faltantes en capítulo ${i+1}.`)
-    return {number:integer(c.number,`chapter[${i}].number`,1,500),title:required(c.title,`chapter[${i}].title`,160),purpose:required(c.purpose,`chapter[${i}].purpose`),targetWords:integer(c.targetWords,`chapter[${i}].targetWords`,100,100000),beats:c.beats.map((b,j)=>required(b,`chapter[${i}].beats[${j}]`)),...(c.pov === undefined ? {} : {pov:required(c.pov,`chapter[${i}].pov`,160)})}
+    return {number:integer(c.number,`chapter[${i}].number`,1,500),title:required(c.title,`chapter[${i}].title`,160),purpose:required(c.purpose,`chapter[${i}].purpose`),targetWords:integer(c.targetWords,`chapter[${i}].targetWords`,100,100000),beats:c.beats.map((b,j)=>required(b,`chapter[${i}].beats[${j}]`)),...(c.pov === undefined ? {} : {pov:required(c.pov,`chapter[${i}].pov`,160)}),...(c.kind === undefined ? {} : {kind:['chapter','interlude','prologue','epilogue'].includes(c.kind) ? c.kind : (() => {throw new Error('Tipo de capítulo no válido.')})()})}
   }).sort((a,b)=>a.number-b.number)
   if (!chapters.every((c,i)=>c.number===i+1)) throw new Error('Los capítulos deben ser consecutivos y únicos.')
   if (Math.abs(chapters.reduce((s,c)=>s+c.targetWords,0)-targetWords)>targetWords*.15) throw new Error('El objetivo de palabras no coincide con los capítulos (tolerancia 15 %).')
@@ -35,7 +35,8 @@ export function validateBlueprint(input) {
   if (!Array.isArray(timeline) || timeline.length>500) throw new Error('timeline debe ser una lista.')
   const parsedTimeline=timeline.map((event,i)=>({order:integer(event?.order,`timeline[${i}].order`),event:required(event?.event,`timeline[${i}].event`)})).sort((a,b)=>a.order-b.order)
   if(new Set(parsedTimeline.map(e=>e.order)).size!==parsedTimeline.length) throw new Error('Cronología con orden duplicado.')
-  return {schemaVersion:1,premise,audience,genre,targetWords,characters,chapters,worldRules:worldRules.map((s,i)=>required(s,`worldRules[${i}]`)),timeline:parsedTimeline,...(parsedSeries ? {series:parsedSeries}: {})}
+  const editorial = input.editorial === undefined ? undefined : (input.editorial && typeof input.editorial === 'object' && !Array.isArray(input.editorial) && ['novel','novella','nonfiction','children'].includes(input.editorial.format) ? {format:input.editorial.format} : (() => {throw new Error('Formato editorial inválido.')})())
+  return {schemaVersion:1,premise,audience,genre,targetWords,characters,chapters,worldRules:worldRules.map((s,i)=>required(s,`worldRules[${i}]`)),timeline:parsedTimeline,...(parsedSeries ? {series:parsedSeries}: {}),...(editorial ? {editorial} : {})}
 }
 export function sourceFingerprint(chapters) {
   const manifest=chapters.map(({number,sha256,words})=>({number,sha256,words})).sort((a,b)=>a.number-b.number)
