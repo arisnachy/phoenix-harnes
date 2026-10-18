@@ -621,6 +621,26 @@ describe('ManagedMcpController', () => {
     }
   })
 
+  it('pins Phoenix Social Engine to an audited local CLI and rejects modified launcher', async () => {
+    const patchPath = tempPatch()
+    const live = loader()
+    const controller = new ManagedMcpController(live, { patchPath, registrySearch: registry([]) })
+    await expect(controller.installCuratedMcp('social-engine')).resolves.toMatchObject({
+      connector: {
+        serverName: 'social-engine', url: 'stdio://social-engine',
+        source: { kind: 'curated', connectorId: 'social-engine' },
+      },
+    })
+    expect(live.create).toHaveBeenCalledWith(expect.objectContaining({
+      config: expect.objectContaining({ transport: 'stdio', serverName: 'social-engine',
+        command: 'node', args: ['scripts/phoenix-social-mcp.mjs'],
+        env: {}, envCredentialRefs: {} }),
+    }))
+    const row = JSON.parse(readFileSync(patchPath, 'utf8'))[0].insert[0]
+    writeFileSync(patchPath, JSON.stringify([{ insert: [{ ...row, config: { ...row.config, command: 'cmd.exe' } }] }]))
+    await expect(controller.snapshot()).rejects.toThrow(/managed MCP patch row/)
+  })
+
   it('pins Work IQ and Azure to Microsoft-owned local packages, opt-in and distinct', async () => {
     const patchPath = tempPatch()
     const live = loader()

@@ -329,6 +329,22 @@ const CURATED_MCP_SPECS: Readonly<Record<CuratedMcpConnectorId, CuratedMcpSpec>>
   'microsoft-learn': { label: 'Microsoft Learn Docs', config: microsoftLearnMcpConfig },
   // Free Microsoft Graph delegated access; no third-party mail server, Work IQ, or Azure billing.
   // Only a local Node process and a user-owned Entra public-client app registration.
+  'social-engine': {
+    label: 'Phoenix Social Engine (X, Instagram, YouTube, Facebook, TikTok, LinkedIn)',
+    config: () => ({
+      transport: 'stdio',
+      serverName: 'social-engine',
+      command: 'node',
+      args: ['scripts/phoenix-social-mcp.mjs'],
+      env: {},
+      envCredentialRefs: {},
+      cwd: '',
+      toolCallTimeoutMs: 60_000,
+      startupTimeoutMs: 20_000,
+      failOnStartupError: false,
+      reconnect: { enabled: true, initialDelayMs: 1000, maxDelayMs: 30_000, maxAttempts: 3 },
+    }),
+  },
   'microsoft-personal': {
     label: 'Microsoft Personal (Outlook, Calendar, Contacts, OneDrive — free)',
     config: () => ({
@@ -382,6 +398,7 @@ export const CORE_MCP_PACK_IDS: readonly CuratedMcpConnectorId[] = [
   // Metered Work IQ and Azure remain optional and never auto-install.
   'microsoft-learn',
   'microsoft-personal',
+  'social-engine',
   'canva',
   'supabase',
   'heygen',

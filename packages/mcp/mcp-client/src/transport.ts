@@ -156,10 +156,23 @@ const CURRENT_MICROSOFT_PERSONAL_MCP = fileURLToPath(
   new URL('../../../../scripts/phoenix-microsoft-personal-mcp.mjs', import.meta.url),
 )
 
-/** Resolve the optional local Graph MCP from the active Phoenix runtime, not process.cwd(). */
+const CURRENT_SOCIAL_ENGINE_MCP = fileURLToPath(
+  new URL('../../../../scripts/phoenix-social-mcp.mjs', import.meta.url),
+)
+
+/** Resolve the locally pinned Microsoft/Social MCP from this active runtime, not the process cwd. */
 export function normalizeMicrosoftPersonalMcpLaunch(
   serverName: string, command: string, args: readonly string[],
 ): { command: string; args: string[] } {
+  if (serverName === 'social-engine'
+    && command === 'node'
+    && args.length === 1
+    && args[0] === 'scripts/phoenix-social-mcp.mjs') {
+    if (!existsSync(CURRENT_SOCIAL_ENGINE_MCP)) {
+      throw new Error('mcp-client: Phoenix Social Engine script missing in the active runtime')
+    }
+    return { command: process.execPath, args: [CURRENT_SOCIAL_ENGINE_MCP] }
+  }
   if (serverName === 'microsoft-personal'
     && command === 'node'
     && args.length === 1
