@@ -18,7 +18,7 @@
   ],
   "scripts": {
     "business": "node scripts/phoenix-business.mjs",
-    "test:business": "node --test scripts/phoenix-business.test.mjs scripts/phoenix-business-commerce.test.mjs scripts/phoenix-business-factory.test.mjs",
+    "test:business": "node --test scripts/phoenix-business.test.mjs scripts/phoenix-business-commerce.test.mjs scripts/phoenix-business-factory.test.mjs scripts/phoenix-business-mission.test.mjs",
     "business:factory": "node scripts/phoenix-business-factory.mjs",
     "test:business:factory": "node --test scripts/phoenix-business-factory.test.mjs",
     "business:commerce": "node scripts/phoenix-business-commerce.mjs",
@@ -165,7 +165,9 @@
     "demo:acp": "node --import tsx packages/examples/acp-demo/src/bin.ts --config examples/acp-agent/cordis.yml",
     "mock:llm": "node --import tsx packages/test-support/llm-mock-server/src/bin.ts",
     "dev:web": "tsx scripts/dev-web.ts --poll",
-    "postinstall": "node scripts/phoenix-windows-shortcut.mjs --install && node scripts/install-lefthook.mjs"
+    "postinstall": "node scripts/phoenix-windows-shortcut.mjs --install && node scripts/install-lefthook.mjs",
+    "business:mission": "node scripts/phoenix-business-mission.mjs",
+    "test:business:mission": "node --test scripts/phoenix-business-mission.test.mjs"
   },
   "devDependencies": {
     "@agentclientprotocol/sdk": "0.25.1",

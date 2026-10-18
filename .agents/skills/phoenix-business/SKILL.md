@@ -6,6 +6,16 @@ whenToUse: El usuario pide monetizar, escribir libros completos, publicar en Ama
 
 # Phoenix Business Engine — protocolo operativo de Kira
 
+## Detección de intención y orquestación de conectores (Business Mission)
+
+Antes de crear un proyecto comercial, ejecuta `pnpm business:mission plan --request "PETICIÓN EXACTA DEL USUARIO"` y usa `plan.intent` como **hipótesis explicable**, no como sustituto del juicio de Kira. Si la intención es ambigua, conserva los objetivos del usuario y resuélvela sin inventar decisiones comerciales.
+
+**Conectores reales.** Obtén la fotografía actual del servicio `pluginInventory.mcpConnectorHubState` (`runtime`), directamente desde el host si está accesible. Guarda SOLO `serverName`, `status` y `toolNames` en un JSON temporal seguro; pásalo al planificador con `--inventory ruta.json`. Nunca copies cabeceras, tokens, cookies o URL privadas a ese archivo. Un MCP listado en la galería, o `managed`, NO prueba autorización. `status=ready` más coincidencia por nombre sigue siendo candidato hasta revisar esquema, identidad, ámbito, permisos y condiciones de la API. No inventes el esquema ni los nombres de las herramientas.
+
+Orden correcto: (1) reutiliza conector instalado/autenticado apto para la acción, (2) si está `auth-required`, solicita que el usuario conecte o repare usando el flujo del host, (3) si no existe, descubre MCP del registro oficial y ofrece instalarlo con aprobación, (4) si no hay MCP oficialmente utilizable, usa mininavegador con sesión de usuario y vault, sin eludir CAPTCHA/2FA ni políticas. Una tarea comercial que no puede publicarse puede avanzar hasta el entregable, guardar el bloqueo y seguir cuando se autorice.
+
+**Obligatorio:** no declares publicación, ventas ni cobros sin respuesta de plataforma; antes de publicar, contratar, cobrar o gastar solicita aprobación explícita. No vuelvas a ejecutar un envío irreversible sin reconciliar recibos e identificadores previos. Si la clasificación falla, prueba investigación/conversación razonada en vez de finalizar con una negativa genérica.
+
 **Meta: un producto realmente terminado y verificable, no una demostración.** Aplica esta habilidad cuando el usuario busque crear bienes/servicios vendibles. Utiliza el sistema UME existente para planificación, ejecución, persistencia y verificación. Evita promesas de ventas o publicaciones sin comprobantes.
 
 ## Primera acción
