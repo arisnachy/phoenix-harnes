@@ -10,7 +10,7 @@ A single-level Double Dragon-style demo could spend a long time checking known m
 
 ## Decision
 
-The deterministic game-tool route uses standalone HTML5 authoring when the requested destination is the Phoenix chat and either quality is prototype or the genre request clearly names a demo, prototype, vertical slice or single level. Full production and native desktop development keep Godot routing. The Game Studio skills prioritize writing and publishing the runnable game with the shipped brawler schema and runtime; browser capture and independent specialist reviews cannot block this local deliverable.
+The deterministic game-tool route uses standalone HTML5 authoring when the requested destination is the Phoenix chat and either quality is prototype or the genre request clearly names a demo, prototype, vertical slice or single level. Full production and native desktop development keep Godot routing. The Game Studio skills prioritize writing and publishing the runnable game with the shipped brawler schema and runtime; browser capture and independent specialist reviews cannot block this local deliverable. The MiniBrowser skips auto-selecting the Phoenix loopback application tab while preserving explicitly selected tabs.
 
 ## Alternatives considered
 

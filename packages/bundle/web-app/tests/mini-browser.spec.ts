@@ -5,6 +5,7 @@ import {
   isVerifiedWebmCapture,
   MiniBrowserCdpSession,
   miniBrowserDescriptorNeedsPublish,
+  miniBrowserAutomaticTabId,
   miniBrowserRequestAllowed,
   miniBrowserSingleHeader,
   normalizeMiniBrowserAddress,
@@ -224,6 +225,18 @@ describe('MiniBrowser origin and navigation contracts', () => {
     expect(miniBrowserRequestAllowed({ ...allowed, origin: 'https://evil.example' })).toBe(false)
     expect(miniBrowserRequestAllowed({ ...allowed, fetchSite: 'cross-site' })).toBe(false)
   })
+  it('never auto-selects the Phoenix app inside its own MiniBrowser', () => {
+    const tabs = [
+      { id: 'self', url: 'http://127.0.0.1:3080/' },
+      { id: 'work', url: 'https://example.org/demo' },
+      { id: 'blank', url: 'about:blank' },
+    ]
+    expect(miniBrowserAutomaticTabId(tabs, 'self')).toBe('work')
+    expect(miniBrowserAutomaticTabId(tabs, 'work')).toBe('work')
+    expect(miniBrowserAutomaticTabId(tabs.slice(0, 1), 'self')).toBeUndefined()
+    expect(miniBrowserAutomaticTabId(tabs.slice(0, 2).reverse(), 'work')).toBe('work')
+  })
+
   it('converts hostnames and searches but refuses executable schemes and credential URLs', () => {
     expect(normalizeMiniBrowserAddress('youtube.com')).toBe('https://youtube.com/')
     expect(normalizeMiniBrowserAddress('http://127.0.0.1:3080/test')).toBe('http://127.0.0.1:3080/test')

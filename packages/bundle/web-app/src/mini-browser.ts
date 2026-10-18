@@ -441,14 +441,43 @@ async function listTabs(base: string, signal?: AbortSignal): Promise<Tab[]> {
   throwIfAborted(signal)
   return rows.filter(row => row.type === 'page' || row.type === undefined)
 }
+/**
+ * Keep the in-chat browser from selecting the Phoenix UI as its own target.
+ * Explicit tab IDs are respected; only automatic selection avoids self-capture.
+ * @param tabs - Current Chromium page targets.
+ * @param preferred - Previously selected tab, if it is still an external page.
+ * @returns A usable non-Phoenix tab ID, or undefined when none exists.
+ */
+export function miniBrowserAutomaticTabId(
+  tabs: readonly { readonly id: string; readonly url: string }[],
+  preferred?: string,
+): string | undefined {
+  const appPort = process.env.PHOENIX_WEB_PORT?.trim() || '3080'
+  const external = tabs.filter((tab) => {
+    try {
+      const location = new URL(tab.url)
+      return !(location.port === appPort && isLoopback(location.hostname)
+        && ['http:', 'https:'].includes(location.protocol))
+    } catch {
+      return true
+    }
+  })
+  return external.find(tab => tab.id === preferred)?.id ?? external[0]?.id
+}
+
 async function selected(
   base: string, id?: string, available?: Tab[], signal?: AbortSignal, updateSelection = true,
 ): Promise<Tab> {
   const rows = available ?? await listTabs(base, signal)
   throwIfAborted(signal)
   const requested = id ?? readDescriptor()?.selectedTabId ?? activeTabId
-  const chosen = rows.find(row => row.id === requested) ?? (id === undefined ? rows[0] : undefined)
-  if (!chosen?.webSocketDebuggerUrl) throw new Error('No hay una pestaña Chromium disponible.')
+  const chosenId = id === undefined ? miniBrowserAutomaticTabId(rows, requested) : id
+  const chosen = rows.find(row => row.id === chosenId)
+  if (!chosen?.webSocketDebuggerUrl) throw new Error(
+    id === undefined && chosenId === undefined
+      ? 'El navegador solo muestra Phoenix; abre una pestaña externa para evitar autorreferencia.'
+      : 'No hay una pestaña Chromium disponible.',
+  )
   if (updateSelection) {
     activeTabId = chosen.id
     publish(base + '/', chosen.id)
