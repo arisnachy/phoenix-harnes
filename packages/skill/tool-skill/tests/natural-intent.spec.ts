@@ -27,6 +27,7 @@ describe('natural requests for playable game creation', () => {
     'revisa el juego que hice',
     'escribe un libro sobre videojuegos',
     '¿Puedes explicarme cómo hacer un juego?',
+    '¿Un juego tipo Contra es dificil de desarrollar?',
   ])('leaves unrelated requests alone: %s', request => {
     expect(naturalCreationSkill(request)).toBeUndefined()
   })
