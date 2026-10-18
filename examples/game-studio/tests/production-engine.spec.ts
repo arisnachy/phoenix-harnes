@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { initializeGameProduction, invalidateGameStage,
+import { assessGameQuality, initializeGameProduction, invalidateGameStage,
   nextGameWork, recordGameEvidence } from '../production-engine.mjs'
 
 const game = {
@@ -102,6 +102,38 @@ describe('Phoenix Game Studio autonomous production controller', () => {
     expect(boss?.required).toContain('guard')
     expect(boss?.required).toContain('rage')
     expect(boss?.required.every(x => typeof x === 'string')).toBe(true)
+  })
+
+  it('scores applicable genres, rejects below 90 and always vetoes critical defects', async () => {
+    const all = { mechanics: 20, animation: 15, enemiesAndBosses: 15,
+      levelDesign: 15, narrative: 10, audio: 10, performance: 10, presentation: 5 }
+    const passing = assessGameQuality(game, { scores: all, criticalFailures: [] })
+    expect(passing.score).toBe(100)
+    expect(passing.candidate).toBe(true)
+    expect(passing.certified).toBe(false)
+    expect(assessGameQuality(game, { scores: all,
+      criticalFailures: ['Boss cannot be defeated'] }).candidate).toBe(false)
+    expect(assessGameQuality(game, { scores: { ...all, mechanics: 0 },
+      criticalFailures: [] }).candidate).toBe(false)
+    const puzzle = assessGameQuality({ title: 'Puzzle', genre: 'puzzle' },
+      { scores: { mechanics: 20, animation: 15, levelDesign: 15,
+        performance: 10, presentation: 5 }, criticalFailures: [] })
+    expect(puzzle.score).toBe(100)
+    expect(puzzle.evaluated).not.toContain('enemiesAndBosses')
+    const dir = mkdtempSync(join(tmpdir(), 'phoenix-qa-score-'))
+    try {
+      const state = initializeGameProduction(game, join(dir, 'manifest.json'), join(dir, 'state.json'))
+      state.stages.slice(0, -1).forEach(x => { x.status = 'complete' })
+      writeFileSync(join(dir, 'quality.json'), JSON.stringify({
+        scores: { ...all, mechanics: 0 }, criticalFailures: [],
+      }))
+      await expect(recordGameEvidence(state, 'publication', 'quality-gate',
+        'quality.json', 'quality-reviewer')).rejects.toThrow('Quality gate rejected')
+      writeFileSync(join(dir, 'quality.json'), JSON.stringify({ scores: all, criticalFailures: [] }))
+      await recordGameEvidence(state, 'publication', 'quality-gate', 'quality.json', 'quality-reviewer')
+      expect(state.lastQualityAssessment?.score).toBe(100)
+      expect(state.releaseCertified).toBe(false)
+    } finally { rmSync(dir, { recursive: true, force: true }) }
   })
 
   it('persists and resumes CLI workflow while detecting tampering or changing manifest', () => {
