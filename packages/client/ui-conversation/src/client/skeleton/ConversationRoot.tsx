@@ -307,7 +307,8 @@ export function ConversationRoot({
   const composerBar = (
     <div className={clsx(css.composerStack, hero && css.composerHero)}>
       {hero && <HeroGlow className={css.heroGlow} />}
-      {hero && <HeroShell t={t} renderSlot={renderSlot} preferredName={preferredName} onResearchSelect={selectResearch} />}
+      {hero && <HeroShell t={t} renderSlot={renderSlot} preferredName={preferredName} onResearchSelect={selectResearch}
+        onResearchDraft={text => { inputActions?.setDraft(text); requestAnimationFrame(() => { rootRef.current?.querySelector('textarea')?.focus() }) }} />}
       {hero && heroWorkspaceRow}
       {zone !== undefined && renderSlot('conversation.input.dock', zone)}
       {inputBar}
