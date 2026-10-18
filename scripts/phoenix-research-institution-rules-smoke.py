@@ -26,6 +26,7 @@ with tempfile.TemporaryDirectory(prefix="research-rules-ci-") as root:
         process = subprocess.run([sys.executable, str(script)],
                                  input=json.dumps({"path": str(path)}).encode("utf-8"),
                                  capture_output=True, check=True, timeout=40)
+        assert process.stdout.strip(), f"Extractor produced empty output: {path} / stderr={process.stderr.decode('utf-8', errors='replace')!r}"
         result = json.loads(process.stdout.decode("utf-8"))
         assert result["state"] == "RULES_FOR_REVIEW"
         assert result["candidates"] and all(row["source_locator"] and row["source_excerpt"]
