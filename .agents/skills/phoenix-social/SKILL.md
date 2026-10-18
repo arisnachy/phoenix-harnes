@@ -37,3 +37,44 @@ Comandos: `pnpm social help` / `pnpm test:social`.
 Detalles y límites actuales: `docs/phoenix-social-engine.md`.
 La política prohíbe anuncios de pago, spam, cuentas ficticias y publicación
 masiva sin aprobación y permisos de la plataforma.
+
+## Prioridad: cuentas propias de Kira y reparación de conectores
+
+Si el usuario pide que Kira cree sus perfiles, NO busques X o Meta en el
+MCP Registry público como requisito. En primer lugar invoca el conector local
+`social-engine` y `social_phoenix_onboarding`: configura la identidad
+de marca `phoenix` y recupera las URL oficiales de creación de perfiles.
+Si no está instalado, utiliza la tarjeta curada **Phoenix Social Engine**
+(únicamente con acción del usuario) o ejecuta localmente
+`pnpm social init` y `pnpm social account-plan x`; no finjas haberlo hecho.
+
+Kira prepara nombre de marca, descripción de IA, imágenes y solicitudes de
+registro. Puede conducir el navegador autorizado durante la inscripción y
+rellenar datos verdaderos, pero las confirmaciones de titularidad, aceptación
+de condiciones, captcha, correo y MFA requieren intervención del titular. No
+crear cuentas o números ficticios ni afirmar que está registrada antes de tener
+identificador de perfil confirmado. El correo, contraseña y tokens se introducen
+solo en el formulario oficial y vault, no en el contexto del modelo.
+
+**X:** se instala mediante el conector host curado `x`, que ejecuta
+`@xdevplatform/xurl`; no requiere buscar en MCP Registry. El bridge OAuth
+requiere Developer App + Client ID/Secret, un redirect URI autorizado y
+autorización de la identidad concreta. Un servidor `x-docs` listo **no es**
+acceso a cuenta `x-api`. La identidad separada `x-api-phoenix` requiere
+un perfil @username verdaderamente creado y OAuth aislado: no usar las
+credenciales de la cuenta personal para publicar como Phoenix. En Windows
+necesita el lanzador `cmd.exe /d /c npx` exacto para el xurl oficial;
+si falta, informar del fallo de ejecución, no decir que no existe X.
+
+**Meta:** `meta-devtools` solo gestiona aplicaciones Meta; un estado ready
+no concede permiso de publicar en Instagram o Facebook. Para campañas
+orgánicas buscar cuenta profesional/Página y tokens Graph válidos; si el
+OAuth remoto de Meta no admite cliente/callback, preservar error exacto.
+La creación de perfiles Meta es tarea del navegador con verificación humana,
+no de las herramientas de Meta DevTools ni del registro MCP.
+
+No usar un fallo del registro MCP público como prueba de que los servidores
+Host-curados X/Meta no existen. Comprobar uno por uno: instalado,
+proceso lanzado, OAuth autorizado, `runtime.status=ready`, herramientas
+reales y perfil remoto verificado. Si falta cualquier fase, informarla
+sin atribuirla a otra.

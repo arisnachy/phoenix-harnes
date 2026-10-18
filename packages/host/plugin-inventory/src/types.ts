@@ -131,6 +131,8 @@ export type CuratedMcpConnectorId =
   | 'github'
   | 'meta-devtools'
   | 'meta-whatsapp-business'
+  | 'x'
+  | 'x-docs'
   | 'microsoft-learn'
   | 'microsoft-personal'
   | 'social-engine'

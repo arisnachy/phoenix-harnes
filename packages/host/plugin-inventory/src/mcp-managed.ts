@@ -324,6 +324,10 @@ const CURATED_MCP_SPECS: Readonly<Record<CuratedMcpConnectorId, CuratedMcpSpec>>
   heygen: { label: 'HeyGen', config: () => remoteOauthMcpConfig('heygen', HEYGEN_MCP_URL, 120_000) },
   figma: { label: 'Figma', config: () => remoteOauthMcpConfig('figma', FIGMA_MCP_URL) },
   github: { label: 'GitHub repositories', config: githubMcpConfig },
+  // X API uses the official xurl OAuth PKCE bridge. X Docs is public and independent.
+  // Install these from Phoenix Settings; never block on the external MCP registry.
+  x: { label: 'X API (OAuth user)', config: () => xApiMcpConfig('user') },
+  'x-docs': { label: 'X developer documentation', config: xDocsMcpConfig },
   'meta-devtools': { label: 'Meta Social Technologies', config: () => remoteOauthMcpConfig('meta-devtools', META_DEVTOOLS_MCP_URL) },
   'meta-whatsapp-business': { label: 'WhatsApp Business Tools', config: () => remoteOauthMcpConfig('meta-whatsapp-business', META_WHATSAPP_BUSINESS_MCP_URL) },
   'microsoft-learn': { label: 'Microsoft Learn Docs', config: microsoftLearnMcpConfig },
@@ -397,6 +401,7 @@ export const CORE_MCP_PACK_IDS: readonly CuratedMcpConnectorId[] = [
   // Public Microsoft documentation is free and requires no private credentials.
   // Metered Work IQ and Azure remain optional and never auto-install.
   'microsoft-learn',
+  'x-docs',
   'microsoft-personal',
   'social-engine',
   'canva',

@@ -102,3 +102,19 @@ Diagnóstico seguro:
 
 La documentación de Meta de conexión con Claude, Cursor, Codex y ChatGPT no
 garantiza que cualquier Host personalizado soporte sus requisitos de OAuth.
+
+## 5. Coordinación con Phoenix Social Engine
+
+Si Meta DevTools no autentica en un cliente MCP personalizado, no se debe
+reintentar indefinidamente ni suponer que su OAuth sirve para Graph de
+publicaciones. La tarjeta curada `meta-devtools` puede instalarse sin
+consultar el MCP Registry. Que falte la sesión OAuth real es una fase
+separada que exige configuración de la aplicación y consentimiento.
+
+Para abrir perfiles propios de Phoenix, utilizar el MCP local
+`social-engine` → `social_phoenix_onboarding` y los formularios oficiales
+Facebook/Instagram conducidos por navegador con verificación humana. Los
+requisitos de Developer App, Página Facebook, cuenta profesional Instagram
+y permisos Graph de publicación se validan **después** del registro.
+Una cuenta de Facebook/Instagram no equivale a una app Meta Developer
+autorizada y viceversa.

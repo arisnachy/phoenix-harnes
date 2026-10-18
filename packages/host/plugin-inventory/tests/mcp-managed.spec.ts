@@ -522,6 +522,36 @@ describe('ManagedMcpController', () => {
     }
   })
 
+  it('installs X OAuth MCP independently of the failing public registry, never advertising it authenticated', async () => {
+    const patchPath = tempPatch()
+    const live = loader()
+    live.create.mockResolvedValueOnce('x-api-entry').mockResolvedValueOnce('x-docs-entry')
+    const registrySearch = vi.fn(async () => { throw new Error('official registry unavailable') })
+    const controller = new ManagedMcpController(live, { patchPath, registrySearch })
+    const api = await controller.installCuratedMcp('x')
+    const docs = await controller.installCuratedMcp('x-docs')
+    expect(api.connector).toMatchObject({
+      entryId: 'x-api-entry', serverName: 'x-api',
+      source: { kind: 'curated', connectorId: 'x' },
+    })
+    expect(docs.connector).toMatchObject({
+      entryId: 'x-docs-entry', serverName: 'x-docs',
+      source: { kind: 'curated', connectorId: 'x-docs' },
+    })
+    expect(live.create).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      config: expect.objectContaining({
+        transport: 'stdio', serverName: 'x-api', command: 'npx',
+        args: ['-y', '@xdevplatform/xurl', 'mcp', 'https://api.x.com/mcp'],
+        envCredentialRefs: { CLIENT_ID: 'X_CLIENT_ID', CLIENT_SECRET: 'X_CLIENT_SECRET' },
+      }),
+    }))
+    expect(registrySearch).not.toHaveBeenCalled()
+    await expect(controller.installCuratedMcp('x')).resolves.toMatchObject({ status: 'already-installed' })
+    const rows = JSON.parse(readFileSync(patchPath, 'utf8'))[0].insert
+    expect(JSON.stringify(rows)).not.toContain('oauth_access_token')
+    expect(JSON.stringify(rows)).not.toContain('real_secret_value')
+  })
+
   it('pins Meta DevTools and WhatsApp Business to their exact official endpoints without secrets', async () => {
     const patchPath = tempPatch()
     const live = loader()

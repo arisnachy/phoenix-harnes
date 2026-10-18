@@ -11,6 +11,7 @@ const tool=(name,description,inputSchema,readOnly=true)=>({name,description,inpu
   annotations:{readOnlyHint:readOnly,destructiveHint:name==='social_publish_approved'}})
 const TOOLS=[
   tool('social_init','Crea identidad declarada Phoenix IA sin registrar una cuenta externa.',fields({})),
+  tool('social_phoenix_onboarding','Inicia el proceso de perfiles PROPIOS de Phoenix IA y Kira: crea la identidad local de marca y devuelve los registros oficiales X, Instagram, Facebook, YouTube, TikTok y LinkedIn. La titularidad, aceptación de condiciones y verificaciones deben completarse en el navegador legítimo, nunca se finge un alta.',fields({}),false),
   tool('social_account_plan','Devuelve URL de registro oficial y requisitos para abrir un perfil real.',fields({network:string},['network'])),
   tool('social_accounts','Lista identidades declaradas o verificadas; no expone tokens.',fields({})),
   tool('social_account_register','Registra perfil externo DECLARADO, no verificado ni conectado.',fields({brand:string,network:string,handle:string},['brand','network','handle']),false),
@@ -42,6 +43,20 @@ function argumentsValid(s,a){
 async function dispatch(name,a){
   switch(name){
     case 'social_init':return run(['init'])
+    case 'social_phoenix_onboarding':{
+      const initial=await run(['init'])
+      const providers=['x','instagram','facebook','youtube','tiktok','linkedin']
+      const profiles=[]
+      for(const network of providers){
+        const plan=await run(['account-plan',network])
+        profiles.push({network,officialSignup:plan.signup,requirements:plan.requirement||null,
+          stage:'human-verification-required',postSignup:'social_account_register then social_account_verify'})
+      }
+      const saved=await run(['accounts'])
+      return {brand:initial.brand,externallyCreated:0,profiles,
+        existingDeclaredAccounts:saved.filter(item=>item.brandId==='phoenix'),
+        instructions:'Kira puede usar el navegador autorizado para preparar los formularios de alta y explicar la marca Phoenix IA; el titular confirma condiciones, correo, teléfono y MFA. Solo marcar como conectada cuando la plataforma confirme la identidad real mediante OAuth/API.'}
+    }
     case 'social_account_plan':return run(['account-plan',a.network])
     case 'social_accounts':return run(['accounts'])
     case 'social_account_register':return run(['account-register',a.brand,a.network,a.handle])

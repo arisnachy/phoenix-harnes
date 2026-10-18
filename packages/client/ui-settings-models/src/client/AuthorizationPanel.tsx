@@ -103,10 +103,10 @@ export interface JevMcpSnapshot {
   reasonCode?: McpConnectorRuntimeView['reasonCode']
 }
 
-type CuratedMcpConnectorId = 'github' | 'meta-devtools' | 'meta-whatsapp-business' | 'microsoft-learn' | 'microsoft-workiq' | 'microsoft-azure' | 'devpost' | 'canva' | 'supabase' | 'heygen' | 'figma' | 'vercel' | 'notion' | 'linear' | 'cloudflare' | 'slack' | 'brave-search' | 'filesystem' | 'memory' | 'fetch'
+type CuratedMcpConnectorId = 'x' | 'x-docs' | 'social-engine' | 'microsoft-personal' | 'github' | 'meta-devtools' | 'meta-whatsapp-business' | 'microsoft-learn' | 'microsoft-workiq' | 'microsoft-azure' | 'devpost' | 'canva' | 'supabase' | 'heygen' | 'figma' | 'vercel' | 'notion' | 'linear' | 'cloudflare' | 'slack' | 'brave-search' | 'filesystem' | 'memory' | 'fetch'
 
 const CURATED_MCP_CONNECTOR_IDS = new Set<string>([
-  'github', 'meta-devtools', 'meta-whatsapp-business', 'microsoft-learn', 'microsoft-workiq', 'microsoft-azure', 'devpost', 'canva', 'supabase', 'heygen', 'figma', 'vercel', 'notion', 'linear', 'cloudflare',
+  'x', 'x-docs', 'social-engine', 'microsoft-personal', 'github', 'meta-devtools', 'meta-whatsapp-business', 'microsoft-learn', 'microsoft-workiq', 'microsoft-azure', 'devpost', 'canva', 'supabase', 'heygen', 'figma', 'vercel', 'notion', 'linear', 'cloudflare',
   'slack', 'brave-search', 'filesystem', 'memory', 'fetch',
 ])
 
@@ -391,6 +391,11 @@ function serverMatchesDefinition(serverName: string, definition: ConnectorDefini
   if (definition.id === 'github') {
     return server === 'github' || server === 'github-mcp' || server === 'github-mcp-server'
   }
+  // Do not show X Docs or Kira's distinct Phoenix X identity as an authenticated
+  // X user. These have separate OAuth and publishing permissions.
+  if (definition.id === 'x') return server === 'x-api'
+  if (definition.id === 'x-docs') return server === 'x-docs'
+  if (definition.id === 'social-engine') return server === 'social-engine'
   const needles = [definition.id, definition.name, ...(definition.aliases ?? [])]
     .map(normalize)
     .filter(value => value.length >= 3)

@@ -53,6 +53,28 @@ describe('MCP stdio platform compatibility', () => {
     }
   })
 
+  it('launches only the pinned official X bridge via cmd.exe on Windows', () => {
+    expect(normalizeWindowsNpxMcpLaunch(
+      'npx', ['-y', '@xdevplatform/xurl', 'mcp', 'https://api.x.com/mcp'], 'win32',
+    )).toEqual({
+      command: 'cmd.exe',
+      args: ['/d', '/c', 'npx', '-y', '@xdevplatform/xurl', 'mcp', 'https://api.x.com/mcp'],
+    })
+    expect(normalizeWindowsNpxMcpLaunch(
+      'npx', ['-y', '@xdevplatform/xurl', 'mcp', '-u', 'PhoenixAI', 'https://api.x.com/mcp'], 'win32',
+    )).toEqual({
+      command: 'cmd.exe',
+      args: ['/d', '/c', 'npx', '-y', '@xdevplatform/xurl', 'mcp', '-u', 'PhoenixAI', 'https://api.x.com/mcp'],
+    })
+    for (const args of [
+      ['-y', '@xdevplatform/xurl', 'mcp', 'https://attacker.example/mcp'],
+      ['-y', '@xdevplatform/xurl', 'mcp', '-u', 'x&whoami', 'https://api.x.com/mcp'],
+      ['-y', '@xdevplatform/xurl', 'mcp', 'https://api.x.com/mcp', '&whoami'],
+    ]) {
+      expect(normalizeWindowsNpxMcpLaunch('npx', args, 'win32').command).toBe('npx')
+    }
+  })
+
   it('does not introduce a shell for arbitrary registry NPX packages', () => {
     expect(normalizeWindowsNpxMcpLaunch(
       'npx',

@@ -134,3 +134,61 @@ planificador existente para ejecutar el comando cuando venza.
 - Instagram/Meta: https://www.postman.com/meta/instagram/documentation/6yqw8pt/instagram-api
 - YouTube upload: https://developers.google.com/youtube/v3/docs/videos/insert
 - TikTok Direct Post: https://developers.tiktok.com/docs/en/content-posting-api-get-started
+
+## Conexión X/Meta y registro propio de Kira (reparación octubre 2026)
+
+### Diagnóstico de X
+
+Los componentes deben tratarse **separadamente**:
+
+- `x-docs`: MCP público gratuito sin cuenta personal; documentación solamente.
+- `x-api`: MCP vía `@xdevplatform/xurl` con OAuth del usuario conectado.
+  No usa el registro MCP público; aparece en Configuración → Conectores → X.
+- `x-api-phoenix`: identidad **distinta** para una cuenta de X ya creada
+  para la marca. No compartir su token con una identidad personal.
+- `social-engine`: servidor propio de Phoenix para preparar identidad,
+  campañas, borradores y verificación; no es el mismo servidor que X oficial.
+
+En Windows el bridge oficial se ejecuta por un `cmd.exe /d /c npx` con
+argumentos estrictamente permitidos. Esto corrige la antigua ruta que
+intentaba ejecutar el binario `npx` de forma directa, antes de OAuth.
+
+La inicialización del MCP es **opcional**, porque X requiere Developer App,
+OAuth, políticas y posiblemente créditos. La mera instalación no confirma
+una sesión. Instalar X y Meta desde sus tarjetas fijadas funciona incluso
+cuando el MCP Registry público falla.
+
+### Kira crea su identidad y prepara cuentas propias
+
+1. Invoca `social_phoenix_onboarding` desde el MCP local
+   `social-engine`, o `pnpm social init` por la CLI local.
+2. El motor prepara la marca `Phoenix IA` y devuelve enlaces oficiales
+   para X, Instagram, Facebook Page, YouTube, TikTok y LinkedIn.
+3. Kira prepara los formularios por navegador bajo dirección del titular,
+   con nombre de marca y divulgación honesta de la IA. El titular confirma
+   condiciones de servicio, datos del propietario, email/SMS, 2FA y captcha.
+4. Una vez registrado un perfil real, ejecuta
+   `social_account_register` y `social_account_verify`: no se
+   considera conectado hasta que la API oficial confirme identidad.
+5. Para X, utiliza una cuenta OAuth `x-api-phoenix` aislada de `x-api`.
+   Para Meta, el MCP DevTools es distinto del token de publicación Graph
+   y requiere una Página o Instagram Professional autorizados.
+
+`social_phoenix_onboarding` devuelve siempre `externallyCreated:0`
+para la operación actual: **no inventa el registro externo** ni promete
+finalizar MFA automáticamente. La existencia de la cuenta y su titularidad
+solo se certifican al verificarse con el proveedor.
+
+### Pruebas sugeridas
+
+```powershell
+pnpm exec vitest run packages/host/plugin-inventory/tests/mcp-managed.spec.ts
+pnpm exec vitest run packages/mcp/mcp-client/tests/platform.spec.ts
+pnpm exec vitest run packages/client/ui-settings-models/tests/connector-catalog.client.spec.ts
+pnpm test:social
+pnpm exec tsc -b tsconfig.host.json
+```
+
+La validación en producción todavía requiere probar Windows, OAuth X real,
+permiso Meta y herramientas presentes. Ni las pruebas unitarias ni el commit
+prueban que ya existan perfiles de Phoenix en redes externas.

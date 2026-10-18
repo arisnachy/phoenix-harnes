@@ -35,6 +35,16 @@ describe('connector catalog', () => {
     expect(byId.get('canva')?.registryName).toBe('com.canva.mcp/mcp')
   })
 
+  it('exposes direct X install and native Social Engine without confusing three X identities', () => {
+    const map = new Map(CONNECTOR_CATALOG.map(item => [item.id, item]))
+    expect(map.get('x')?.curatedMcp).toBe(true)
+    expect(map.get('x')?.aliases).not.toContain('x-docs')
+    expect(map.get('x-docs')?.curatedMcp).toBe(true)
+    expect(map.get('social-engine')?.curatedMcp).toBe(true)
+    expect(map.get('meta-devtools')?.curatedMcp).toBe(true)
+    expect(map.get('meta-devtools')?.description).toMatch(/does not publish/i)
+  })
+
   it('deduplicates Google Workspace and keeps GitHub separate from GitHub Copilot auth', () => {
     const byId = new Map(CONNECTOR_CATALOG.map(connector => [connector.id, connector]))
     const google = byId.get('google-workspace')
