@@ -53,6 +53,12 @@ Fixed policy and schema cost on every Team member request. Tool calls add compac
 
 Prefix-stable while the Team plugin generation, configuration, member role/name, and schemas remain unchanged. The per-member identity line differs across Agents. Tool results and peer messages append after the reusable request prefix.
 
+
+
+## Genuine directed Team conversation
+
+`team_chat_reply_to_peer` records one model-authored Kira reply to a real delivered result/question/blocker/review. The bounded idempotent message is displayed under Kira's identity with the recipient's name and original message reference, with no extra child turn. Fictional, late and undelivered handoffs are rejected. New work must use `send_message` or `followup_task`; internal reporting does not require a fake shell action, while external operational claims remain evidence-gated.
+
 ## Known Limitations and Deferred Work
 
 - **Prompt policy is coordination, not confinement** — it cannot stop Bash or external processes from writing overlapping files.
@@ -62,7 +68,3 @@ Prefix-stable while the Team plugin generation, configuration, member role/name,
 Kira responds to material teammate handoffs by name, evaluates the evidence and states the next decision before stopping or releasing work. The response belongs in the existing turn; finished workers are not awakened merely for acknowledgement.
 
 Peer conversation advances through a decision and real action rather than repeating a report to the user. Workers must not stop at a plan; the Lead executes the next step or resumes a needed worker. Personality does not add idle turns or replace verification and delivery.
-
-## Genuine directed Team conversation
-
-`team_chat_reply_to_peer` records one model-authored Kira reply to a real delivered result/question/blocker/review. The bounded idempotent message is displayed under Kira's identity with the recipient's name and original message reference, with no extra child turn. Fictional, late and undelivered handoffs are rejected. New work must use `send_message` or `followup_task`; internal reporting does not require a fake shell action, while external operational claims remain evidence-gated.
