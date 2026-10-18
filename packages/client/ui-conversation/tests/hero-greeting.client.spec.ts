@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { academicCoverPrompt } from '../src/client/skeleton/AcademicCoverEditor.tsx'
 import {
-  greetingForHour, heroAttentionDetail, heroAttentionPrompt, preferredNameForHero, researchStarterPrompt,
+  greetingForHour, heroAttentionDetail, heroAttentionPrompt, preferredNameForHero,
 } from '../src/client/skeleton/EmptyHero.tsx'
 
 describe('greetingForHour', () => {
@@ -58,13 +58,14 @@ describe('heroAttentionDetail', () => {
   })
 })
 
-describe('research academic hero starter prompts', () => {
-  it('distinguishes citation styles from scientific article type and keeps the draft editable', () => {
-    expect(researchStarterPrompt('apa7')).toContain('APA 7')
-    expect(researchStarterPrompt('vancouver')).toContain('Vancouver')
-    expect(researchStarterPrompt('scientific_article')).toContain('artículo científico')
-    expect(researchStarterPrompt('scientific_article')).toContain('DOCX, PDF')
-    expect(researchStarterPrompt('apa7')).toContain('solo los datos académicos que falten')
+describe('universal Phoenix welcome', () => {
+  it('has no research-only callbacks or permanent shortcuts', () => {
+    expect(preferredNameForHero('  Ada ')).toBe('Ada')
+    expect(heroAttentionDetail({
+      id: 'task', revision: 'r', taskId: 't', title: 'Una misión cualquiera',
+      at: '2026-10-18T00:00:00.000Z', score: 1, kind: 'result',
+      detail: 'Resultado listo',
+    })).toBe('Resultado listo')
   })
 })
 
