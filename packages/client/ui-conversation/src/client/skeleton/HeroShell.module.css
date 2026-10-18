@@ -427,31 +427,3 @@
   .fish { width: 80px; height: 80px; }
 }
 
-/* Compact optional research starters, not a second composer or a card layout. */
-.researchShortcuts {
-  display: flex;
-  justify-content: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 14px;
-}
-.researchShortcuts button {
-  padding: 6px 12px;
-  border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 20px;
-  background: transparent;
-  color: var(--dsw-alias-label-primary);
-  font: inherit;
-  font-size: 12px;
-  line-height: 20px;
-  cursor: pointer;
-}
-.researchShortcuts button:hover,
-.researchShortcuts button:focus-visible {
-  border-color: var(--dsw-specific-phoenix-accent);
-  background: var(--dsw-alias-interactive-bg-hover);
-}
-@media (max-width: 720px) {
-  .researchShortcuts { gap: 5px; margin-top: 10px; }
-  .researchShortcuts button { padding: 5px 9px; font-size: 11px; }
-}
