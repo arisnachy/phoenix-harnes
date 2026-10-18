@@ -1,7 +1,6 @@
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
-import { resolve } from 'node:path'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { CallId } from '@phoenix-ai/dsh-llm'
 import type { ToolRunContext } from '@phoenix-ai/dsh-tools'
 import { describe, expect, it, vi } from 'vitest'
