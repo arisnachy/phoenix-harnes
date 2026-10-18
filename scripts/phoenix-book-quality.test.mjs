@@ -127,3 +127,50 @@ test('CLI book-guide provides safe genre planning suggestions',()=>{
  assert.equal(parsed.result.genreKey,'horror')
  assert.equal(parsed.result.marketDemandVerified,false)
 })
+
+test('novella: real six-chapter manuscript embeds cover, indexes and remains approval-gated',async()=>{
+ const home=await mkdtemp(join(tmpdir(),'phoenix-book-integration-'))
+ const source=await mkdtemp(join(tmpdir(),'phoenix-book-sources-'))
+ const call=(script,...args)=>{
+  const run=spawnSync(process.execPath,[script,...args],{encoding:'utf8',env:{...process.env,PHOENIX_BUSINESS_HOME:home}})
+  const raw=run.status===0?run.stdout:run.stderr
+  return {...JSON.parse(raw),status:run.status}
+ }
+ try{
+  const created=call('scripts/phoenix-business.mjs','init','book','La promesa de Alba')
+  assert.equal(created.ok,true,JSON.stringify(created))
+  const id=created.result.id,bp=plan()
+  const blueprintFile=join(source,'blueprint.json')
+  await writeFile(blueprintFile,JSON.stringify(bp))
+  assert.equal(call('scripts/phoenix-business.mjs','blueprint',id,blueprintFile).ok,true)
+  for (let number=1;number<=6;number++){
+   const chapterFile=join(source,'chapter-'+number+'.md')
+   await writeFile(chapterFile,prose(100))
+   const attached=call('scripts/phoenix-business.mjs','chapter',id,String(number),chapterFile)
+   assert.equal(attached.ok,true,JSON.stringify(attached))
+  }
+  const coverFile=join(source,'cover.png')
+  await writeFile(coverFile,pngHeader(1600,2560))
+  assert.equal(call('scripts/phoenix-business.mjs','asset',id,coverFile,'--role','cover').ok,true)
+  const quality=call('scripts/phoenix-business.mjs','book-quality',id)
+  assert.equal(quality.ok,true,JSON.stringify(quality))
+  assert.equal(quality.result.structurallyReadyForReview,true,JSON.stringify(quality.result.blockers))
+  const compiled=call('scripts/phoenix-business.mjs','compile',id,'--author','Autora Editorial')
+  assert.equal(compiled.ok,true,JSON.stringify(compiled))
+  assert.equal(compiled.result.editorialStatus,'structural-manuscript-gate-passed-review-required')
+  const epub=await readFile(join(home,compiled.result.ebook.path))
+  assert(epub.includes(Buffer.from('OEBPS/cover.png')))
+  assert(epub.includes(Buffer.from('OEBPS/nav.xhtml')))
+  const html=await readFile(join(home,compiled.result.printSource.path),'utf8')
+  assert.match(html,/<nav class="toc">/)
+  assert.match(html,/href="#chapter-6"/)
+  const released=call('scripts/phoenix-business-factory.mjs','check',id)
+  assert.equal(released.result.structurallyReady,true,JSON.stringify(released))
+  assert.equal(released.result.commerciallyApproved,false)
+  const listing=call('scripts/phoenix-business.mjs','prepare',id,'amazon-kdp','4.99')
+  assert.equal(listing.result.stage,'review-required',JSON.stringify(listing))
+  assert.equal(listing.result.publicationConfirmed,false)
+ } finally {
+  await Promise.all([rm(home,{recursive:true,force:true}),rm(source,{recursive:true,force:true})])
+ }
+})
