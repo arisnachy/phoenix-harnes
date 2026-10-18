@@ -209,14 +209,15 @@ def validate(data):
         raise ValueError("report.references must contain 1 to 500 supplied sources")
     if data.get("style", "apa") not in ("apa", "apa7", "vancouver", "ama"):
         raise ValueError("style must be apa, apa7, vancouver or ama")
-    if data.get("presentation", "academic") not in PRESENTATIONS:
+    resolved_presentation = data.get("presentation", "hybrid" if data.get("quality_profile", "professional") == "professional" else "academic")
+    if resolved_presentation not in PRESENTATIONS:
         raise ValueError("presentation must be academic, editorial or hybrid")
     selected_design = data.get("design_preset", "auto")
     if selected_design not in DESIGN_PRESET_NAMES:
         raise ValueError("design_preset must be one of the registered modern design names")
-    if data.get("presentation", "academic") == "academic" and selected_design not in ("auto", "academic_classic"):
+    if resolved_presentation == "academic" and selected_design not in ("auto", "academic_classic"):
         raise ValueError("academic mode cannot have decorative cover presets")
-    if data.get("presentation", "academic") != "academic" and selected_design == "academic_classic":
+    if resolved_presentation != "academic" and selected_design == "academic_classic":
         raise ValueError("academic_classic design requires academic presentation")
     if data.get("document_type", "brief") not in DOCUMENT_TYPES:
         raise ValueError("unsupported document_type")
@@ -937,9 +938,9 @@ def main():
             canvas.setFillColor(navy)
             canvas.rect(0, H-102, W, 102, stroke=0, fill=1)
             canvas.setFillColor(accent_color)
-            canvas.circle(W-26, H-121, 114, stroke=0, fill=1)
+            canvas.circle(W-26, H-28, 80, stroke=0, fill=1)
             canvas.setFillColor(highlight)
-            canvas.circle(W-115, H-49, 48, stroke=0, fill=1)
+            canvas.circle(W-118, H-32, 35, stroke=0, fill=1)
             canvas.setStrokeColor(highlight)
             canvas.setLineWidth(4)
             canvas.line(60, H-140, 210, H-140)
