@@ -96,6 +96,51 @@ try:
     not_systematic = subprocess.run([sys.executable, str(script)], input=json.dumps(report).encode("utf-8"),
                                      capture_output=True, timeout=30)
     assert not_systematic.returncode != 0
+    thesis = dict(report)
+    thesis["style"] = "apa7"
+    thesis["presentation"] = "hybrid"
+    thesis["document_type"] = "thesis"
+    thesis["cover"] = {
+        "institution": "Universidad de prueba", "faculty": "Ciencias de la Salud",
+        "department": "Investigación", "degree": "Maestría", "advisor": "Tutora de prueba",
+        "course": "Seminario", "course_code": "INV-100", "city": "Santiago",
+        "country": "República Dominicana", "date": "2026-10-18",
+        "authors": [{"name": "Autora Uno", "student_id": "MA-001"},
+                    {"name": "Autor Dos", "student_id": "MA-002"}],
+    }
+    thesis["front_matter"] = {
+        "originality": "Los datos de este ejemplo son sintéticos.",
+        "dedication": "Dedicatoria de prueba.",
+        "acknowledgements": "Agradecimientos de prueba.",
+        "abstract_en": "English abstract for a synthetic publishing test.",
+    }
+    thesis["page_plan"] = {"target_pages": 80, "scope": "all"}
+    thesis["sections"] = [
+        {"kind": kind, "heading": heading, "text": "Ejemplo documentado solo para probar maquetación [@source1]."}
+        for kind, heading in (
+            ("abstract", "Resumen"), ("introduction", "Introducción"),
+            ("problem", "Planteamiento del problema"), ("objectives", "Objetivos"),
+            ("framework", "Marco teórico"), ("methods", "Metodología"),
+            ("results", "Resultados"), ("discussion", "Discusión"),
+            ("conclusions", "Conclusiones"), ("recommendations", "Recomendaciones"),
+        )
+    ]
+    process = subprocess.run([sys.executable, str(script)], input=json.dumps(thesis).encode("utf-8"),
+                             capture_output=True, check=True, timeout=90)
+    receipt = json.loads(process.stdout)
+    with fitz.open(receipt["files"]["pdf"]) as actual:
+        assert receipt["pagination"]["pdf_pages"] == actual.page_count
+        assert actual.page_count < 80
+        pages_text = "\\n".join(page.get_text() for page in actual)
+        assert "Índice general" in pages_text and "Autora Uno" in pages_text
+    assert receipt["pagination"]["target_met"] is False
+    assert receipt["quality"]["pagination_review_required"] is True
+    assert receipt["warnings"] and "80" in receipt["warnings"][0]
+    with ZipFile(receipt["files"]["docx"]) as archive:
+        word = archive.read("word/document.xml").decode("utf-8")
+        assert "MA-001" in word and "MA-002" in word
+        assert "Dedicatoria" in word and "Índice de tablas" in word
+        assert 'TOC ' in word and 'w:fldSimple' in word
     print("RESEARCH_PUBLISHER_SMOKE_PASS")
 finally:
     logo.unlink(missing_ok=True)
