@@ -69,6 +69,7 @@ export const zh = {
   businessTypeResearch: "研究",
   businessTypeVideo: "视频",
   businessTypeAudio: "音频",
+  businessTypeService: "服务",
   businessTypeOther: "其他",
 } satisfies Record<string, string>
 
@@ -144,6 +145,7 @@ export const en = {
   businessTypeResearch: "Research",
   businessTypeVideo: "Videos",
   businessTypeAudio: "Audio",
+  businessTypeService: "Services",
   businessTypeOther: "Other",
 } satisfies Record<PluginInventoryLocaleKey, string>
 
@@ -216,5 +218,6 @@ export const es = {
   businessTypeResearch: "Investigación",
   businessTypeVideo: "Vídeos",
   businessTypeAudio: "Audio",
+  businessTypeService: "Servicios",
   businessTypeOther: "Otros",
 } satisfies Record<PluginInventoryLocaleKey, string>
