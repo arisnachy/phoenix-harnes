@@ -159,6 +159,24 @@ def validate(data):
         cited.update(REF_RE.findall(section["text"]))
     if not cited or cited - keys:
         raise ValueError("each report must cite registered source keys with [@key], unknown=" + str(sorted(cited-keys)))
+    extra_sections = data.get("appendices", [])
+    if not isinstance(extra_sections, list) or len(extra_sections) > 30:
+        raise ValueError("appendices must be an array of up to 30 entries")
+    for appendix in extra_sections:
+        if not isinstance(appendix, dict) or not isinstance(appendix.get("title"), str) or not isinstance(appendix.get("text"), str):
+            raise ValueError("each appendix requires title and text")
+        if not appendix["title"].strip() or len(appendix["title"]) > 180 or len(appendix["text"]) > 35000:
+            raise ValueError("appendix content exceeds safe bounds")
+        cited.update(REF_RE.findall(appendix["text"]))
+    if cited - keys:
+        raise ValueError("appendix contains unknown source keys " + str(sorted(cited-keys)))
+    declarations = data.get("declarations", {})
+    if not isinstance(declarations, dict):
+        raise ValueError("declarations must be an object")
+    if any(field not in ("ethics", "funding", "conflicts", "data_availability", "registration") or
+           not isinstance(value, str) or len(value) > 10000
+           for field, value in declarations.items()):
+        raise ValueError("unsupported or oversized research declaration")
     document_type = data.get("document_type", "brief")
     section_kinds = {section_kind(section) for section in sections}
     missing = [kind for kind in REQUIRED_SECTIONS.get(document_type, ()) if kind not in section_kinds]
@@ -315,7 +333,7 @@ def main():
     editorial = presentation in ("editorial", "hybrid")
     accent = "#087783" if presentation == "hybrid" else "#a52d37"
     first_order = []
-    for section in report["sections"]:
+    for section in [*report["sections"], *report.get("appendices", [])]:
         for key in REF_RE.findall(section["text"]):
             if key not in first_order: first_order.append(key)
     numbers = {key: i+1 for i, key in enumerate(first_order)}
@@ -438,9 +456,23 @@ def main():
             figures.append((chart, path))
             doc.add_paragraph(f"Figura {ix}. {chart.get('title','Gráfico')} — Fuente: {citation_string(chart['source_key'],refs,style,numbers)}")
             doc.add_picture(str(path), width=Inches(5.8))
+    if report.get("declarations"):
+        doc.add_heading("Declaraciones de investigación", level=1)
+        for key, label in (("ethics", "Ética"), ("funding", "Financiación"),
+                           ("conflicts", "Conflictos de interés"), ("data_availability", "Disponibilidad de datos"),
+                           ("registration", "Registro del estudio")):
+            if report["declarations"].get(key):
+                doc.add_heading(label, level=2)
+                doc.add_paragraph(report["declarations"][key])
     doc.add_heading("Referencias", level=1)
     for source in ordered_refs:
         doc.add_paragraph(bibliography(source, style, numbers[source["key"]]))
+    if report.get("appendices"):
+        doc.add_heading("Anexos y apéndices", level=1)
+        for ix, item in enumerate(report["appendices"], 1):
+            doc.add_heading("Anexo " + str(ix) + ". " + item["title"], level=2)
+            for line in format_text(item["text"], refs, style, numbers).split("\\n"):
+                if line.strip(): doc.add_paragraph(line)
     docx_file = output_root / "informe.docx"
     doc.save(docx_file)
 
@@ -543,9 +575,22 @@ def main():
             para(f"Figura {ix}. {chart.get('title','Gráfico')} — Fuente: {citation_string(chart['source_key'],refs,style,numbers)}", small)
             story.append(PdfImage(str(path), width=450, height=216))
             story.append(Spacer(1, 12))
+    if report.get("declarations"):
+        para("Declaraciones de investigación", h1)
+        for key, label in (("ethics", "Ética"), ("funding", "Financiación"),
+                           ("conflicts", "Conflictos de interés"), ("data_availability", "Disponibilidad de datos"),
+                           ("registration", "Registro del estudio")):
+            if report["declarations"].get(key):
+                para(label, h1)
+                para(report["declarations"][key])
     para("Referencias", h1)
     for source in ordered_refs:
         para(bibliography(source, style, numbers[source["key"]]), small)
+    if report.get("appendices"):
+        para("Anexos y apéndices", h1)
+        for ix, item in enumerate(report["appendices"], 1):
+            para("Anexo " + str(ix) + ". " + item["title"], h1)
+            para(format_text(item["text"], refs, style, numbers))
 
     pdf_file = output_root / "informe.pdf"
     printer = IndexedDocTemplate(str(pdf_file), pagesize=paper, rightMargin=60, leftMargin=60, topMargin=64, bottomMargin=62, title=title, author=", ".join(authors))
@@ -595,7 +640,23 @@ def main():
     chunks.append("<h2>Referencias</h2><ol>")
     for src in ordered_refs:
         chunks.append("<li class='ref'>"+html.escape(bibliography(src,style,numbers[src["key"]]))+"</li>")
-    chunks.append("</ol></html>")
+    chunks.append("</ol>")
+    if report.get("declarations"):
+        chunks.append("<section><h2>Declaraciones de investigación</h2>")
+        for key, label in (("ethics", "Ética"), ("funding", "Financiación"),
+                           ("conflicts", "Conflictos de interés"), ("data_availability", "Disponibilidad de datos"),
+                           ("registration", "Registro del estudio")):
+            if report["declarations"].get(key):
+                chunks.append("<h3>"+html.escape(label)+"</h3><p>"+
+                              html.escape(report["declarations"][key])+"</p>")
+        chunks.append("</section>")
+    if report.get("appendices"):
+        chunks.append("<section><h2>Anexos y apéndices</h2>")
+        for ix, item in enumerate(report["appendices"], 1):
+            chunks.append("<h3>Anexo "+str(ix)+". "+html.escape(item["title"])+"</h3><p>"+
+                          html.escape(format_text(item["text"],refs,style,numbers)).replace("\\n","</p><p>")+"</p>")
+        chunks.append("</section>")
+    chunks.append("</html>")
     html_file=output_root/"informe.html"
     html_file.write_text("".join(chunks),encoding="utf-8")
     target_pages = report.get("page_plan", {}).get("target_pages")
