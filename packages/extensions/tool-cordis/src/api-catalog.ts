@@ -328,6 +328,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'Stable visible answer identity.',
       },
       {
+        signature: 'async replyToPeer(actor: Agent, request: { readonly messageId: string; readonly text: string }): Promise<{ messageId: string }>',
+        description: 'Publish the Lead\'s own concise reply to a real delivered specialist handoff.',
+        parameters: [{ name: 'actor', description: 'exact live Lead.' }, { name: 'request', description: 'durable peer message and bounded reply.' }],
+        returns: 'visible reply identity.',
+      },
+      {
         signature: '@Remote(\'chatReact\') async chatReact(request: TeamChatReactRequest): Promise<void>',
         description: 'Set/remove a human reaction.',
         parameters: [{ name: 'request', description: 'message and Unicode emoji.' }],
@@ -360,6 +366,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Create one named, continuable direct child of the Team Lead.',
         parameters: [{ name: 'caller', description: 'exact live Lead Agent.' }, { name: 'request', description: 'immutable name, description, prompt, context mode, provider, and cancellation.' }],
         returns: 'the active roster row.',
+      },
+      {
+        signature: 'missionSnapshot(caller: Agent): UniversalMissionSnapshot | undefined',
+        description: 'Read the authoritative root-owned mission checkpoint without waking workers.',
+        parameters: [{ name: 'caller', description: 'any live teammate or Lead in the mission.' }],
+        returns: 'durable state, or undefined before delegation.',
       },
       {
         signature: 'async sendMessage(caller: Agent, request: SendTeamMessageRequest): Promise<SendTeamMessageResult>',
@@ -400,7 +412,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       {
         signature: 'async waitForChange(caller: Agent, timeoutMs: number, signal: AbortSignal): Promise<TeamWaitResult>',
         description: 'Wait for the next Team-domain or member-status change.',
-        parameters: [{ name: 'caller', description: 'exact live Team member waiting for activity.' }, { name: 'timeoutMs', description: 'bounded wait duration from ten seconds through one hour.' }, { name: 'signal', description: 'caller cancellation for the wait only.' }],
+        parameters: [{ name: 'caller', description: 'exact live Team member waiting for activity.' }, { name: 'timeoutMs', description: 'bounded wait duration from five seconds through one hour.' }, { name: 'signal', description: 'caller cancellation for the wait only.' }],
         returns: 'one observed change or a timeout result.',
       },
       {
@@ -3537,7 +3549,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'AssembledSection',
-    declaration: 'export interface AssembledSection {\n    name: string;\n    text: string;\n}',
+    declaration: 'export interface AssembledSection {\n    name: string;\n    text: string;\n    interpolateVariables?: boolean;\n}',
   },
   {
     name: 'AssistantIdentity',
@@ -4652,6 +4664,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface MessageSourceMap {\n    user: {\n        kind: \'user\';\n    };\n    plugin: {\n        kind: \'plugin\';\n        plugin: string;\n    } & ContextFormed;\n    model: ModelMessageSource;\n    tool: ToolMessageSource;\n}',
   },
   {
+    name: 'MissionComplexity',
+    declaration: 'export type MissionComplexity = keyof typeof MISSION_TEAM_CEILINGS;',
+  },
+  {
     name: 'ModelMessageSource',
     declaration: 'export interface ModelMessageSource extends AssistantProvenance {\n    kind: \'model\';\n}',
   },
@@ -4801,7 +4817,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'PromptSection',
-    declaration: 'export interface PromptSection {\n    readonly name: string;\n    readonly order: number;\n    readonly text: string | ((context: AssembleContext) => string);\n    readonly complete?: boolean;\n}',
+    declaration: 'export interface PromptSection {\n    readonly name: string;\n    readonly order: number;\n    readonly text: string | ((context: AssembleContext) => string);\n    readonly interpolateVariables?: boolean;\n    readonly complete?: boolean;\n}',
   },
   {
     name: 'ProviderRequestId',
@@ -5397,7 +5413,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SpawnTeammateRequest',
-    declaration: 'export interface SpawnTeammateRequest {\n    readonly name: string;\n    readonly description: string;\n    readonly prompt: ContentBlock[];\n    readonly context: \'fresh\' | \'fork\';\n    readonly provider: string;\n    readonly agentOptions?: AgentOptions;\n    readonly signal: AbortSignal;\n}',
+    declaration: 'export interface SpawnTeammateRequest {\n    readonly name: string;\n    readonly description: string;\n    readonly prompt: ContentBlock[];\n    readonly context: \'fresh\' | \'fork\';\n    readonly provider: string;\n    readonly agentOptions?: AgentOptions;\n    readonly missionComplexity?: MissionComplexity;\n    readonly signal: AbortSignal;\n}',
   },
   {
     name: 'SpawnTeammateResult',
@@ -5621,11 +5637,11 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'TeamChatMessage',
-    declaration: 'export interface TeamChatMessage {\n    readonly id: string;\n    readonly senderId: string;\n    readonly senderName: string;\n    readonly senderKind: \'user\' | \'kira\' | \'agent\';\n    readonly avatar?: string | undefined;\n    readonly role?: string | undefined;\n    readonly missionId?: string | undefined;\n    readonly text: string;\n    readonly time: number;\n    readonly sourceSeq: number;\n    readonly targetId?: string | undefined;\n    readonly replyTo?: string | undefined;\n    readonly replyQuote?: string | undefined;\n    readonly mentions: readonly string[];\n    readonly supervised?: boolean | undefined;\n    readonly deliveries?: readonly {\n        readonly targetId: string;\n        readonly accepted: boolean;\n        readonly error?: string | undefined;\n    }[] | undefined;\n    readonly reactions: readonly TeamChatReaction[];\n}',
+    declaration: 'export interface TeamChatMessage {\n    readonly id: string;\n    readonly senderId: string;\n    readonly senderName: string;\n    readonly senderKind: \'user\' | \'kira\' | \'agent\';\n    readonly avatar?: string | undefined;\n    readonly role?: string | undefined;\n    readonly missionId?: string | undefined;\n    readonly text: string;\n    readonly time: number;\n    readonly sourceSeq: number;\n    readonly targetId?: string | undefined;\n    readonly targetName?: string | undefined;\n    readonly replyTo?: string | undefined;\n    readonly replyQuote?: string | undefined;\n    readonly mentions: readonly string[];\n    readonly supervised?: boolean | undefined;\n    readonly deliveries?: readonly {\n        readonly targetId: string;\n        readonly accepted: boolean;\n        readonly error?: string | undefined;\n    }[] | undefined;\n    readonly reactions: readonly TeamChatReaction[];\n}',
   },
   {
     name: 'TeamChatParticipant',
-    declaration: 'export interface TeamChatParticipant {\n    readonly id: string;\n    readonly name: string;\n    readonly role: string;\n    readonly status: string;\n    readonly avatar?: string | undefined;\n    readonly task?: string | undefined;\n    readonly missionId?: string | undefined;\n}',
+    declaration: 'export interface TeamChatParticipant {\n    readonly id: string;\n    readonly name: string;\n    readonly role: string;\n    readonly status: string;\n    readonly avatar?: string | undefined;\n    readonly task?: string | undefined;\n    readonly modelProvider?: string | undefined;\n    readonly model?: string | undefined;\n    readonly missionId?: string | undefined;\n}',
   },
   {
     name: 'TeamChatReaction',
@@ -5974,6 +5990,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'TypertTypeModel',
     declaration: 'export interface TypertTypeModel {\n    readonly name: string;\n    readonly declaration: string;\n}',
+  },
+  {
+    name: 'UniversalMissionPhase',
+    declaration: 'export type UniversalMissionPhase = \'running\' | \'blocked\' | \'verifying\' | \'completed\' | \'partial\' | \'failed\' | \'cancelled\';',
+  },
+  {
+    name: 'UniversalMissionSnapshot',
+    declaration: 'export interface UniversalMissionSnapshot {\n    readonly id: string;\n    readonly teamId: TeamId;\n    readonly userMessageId: string;\n    readonly lastHumanMessageId?: string;\n    readonly objective: string;\n    readonly origin: \'chat\' | \'voice\' | \'telegram\' | \'schedule\' | \'connector\' | \'api\';\n    readonly phase: UniversalMissionPhase;\n    readonly revision: number;\n    readonly cancellationEpoch: number;\n    readonly maxTeammates: number;\n    readonly evidenceIds: readonly string[];\n    readonly blockers: readonly string[];\n    readonly verified: boolean;\n}',
   },
   {
     name: 'UpdateTeamTaskRequest',

@@ -42,10 +42,10 @@ This table connects model-visible tool names to the plugin package and service s
 | `@phoenix-ai/dsh-tool-subagent-control` | `interrupt_agent`, `list_agents`, `send_message` | `ctx.tools`, `ctx.subagents`, `ctx.agents and ctx.sessionProjections (list_agents only)` | `tool/call`, `tool/result`, `child session events through ctx.subagents` | - | The globally named control tools over continuable background subagents: provider-bound `tool-subagent` instances register distinct delegation tools, while this package registers `send_message` and `interrupt_agent` once, plus `list_agents` from its separately loaded `/list-agents` plugin (whose catalog rows use the sessionProjections and live Agent registries). |
 | `@phoenix-ai/dsh-tool-subagent-report` | `report` | `ctx.subagents`, `ctx.systemPrompt`, `a live continuable in-process child Agent` | `tool/call`, `tool/result`, `a user-role message in the direct parent session` | - | Registered per continuable in-process child rather than globally, so this schema is visible only inside such a child and survives its global `toolFilter`. The same contribution installs the child-scoped `tool:report` prompt section, which this catalog does not render. The parent-facing `send_message` tool is installed independently. |
 | `@phoenix-ai/dsh-tool-jobs` | `job_kill`, `job_list`, `job_output` | `ctx.tools`, `ctx.jobs`, `ctx.systemPrompt` | `tool/call`, `tool/result`, `user/message via agent.inject() for background completion notices` | - | The kind-agnostic background-job controller: background bash commands, PTY sends, and subagents are read, listed, and killed through the same three tools. Loading the plugin attaches the controller that arms producers' `ctx.jobs.start()`. |
-| `@phoenix-ai/dsh-tool-agent-team` | `followup_task`, `interrupt_agent`, `list_agents`, `send_message`, `spawn_teammate`, `team_chat_answer`, `team_chat_react`, `team_chat_read`, `team_react`, `team_task_create`, `team_task_get`, `team_task_list`, `team_task_update`, `wait_agent` | `ctx.tools`, `ctx.systemPrompt`, `ctx.agentTeams`, `an exact live Team member Agent` | `tool/call`, `team/member`, `team/message/queued`, `team/message/delivered`, `team/task`, `tool/result` | - | The Team tools are scoped to implicit Team Leads and durable teammates. The shipped dsh-base bundle keeps the package disabled; the documented Agent Teams profile patch enables it while disabling the legacy continuable-child control names. |
+| `@phoenix-ai/dsh-tool-agent-team` | `followup_task`, `interrupt_agent`, `list_agents`, `send_message`, `spawn_teammate`, `team_chat_answer`, `team_chat_react`, `team_chat_read`, `team_chat_reply_to_peer`, `team_react`, `team_task_create`, `team_task_get`, `team_task_list`, `team_task_update`, `wait_agent` | `ctx.tools`, `ctx.systemPrompt`, `ctx.agentTeams`, `an exact live Team member Agent` | `tool/call`, `team/member`, `team/message/queued`, `team/message/delivered`, `team/task`, `tool/result` | - | The Team tools are scoped to implicit Team Leads and durable teammates. The shipped dsh-base bundle keeps the package disabled; the documented Agent Teams profile patch enables it while disabling the legacy continuable-child control names. |
 | `@phoenix-ai/dsh-tool-todo` | `todo_write` | `ctx.tools`, `owning Agent session` | `tool/call`, `todo/write`, `tool/result` | - | todo_write is session-owned state; UIs render the latest todo/write event as a checklist. `allowParallelInProgress` is required with no default, so the catalog states its choice: `true`, whose description invites several `in_progress` items. A deployment choosing `false` receives the same tool with a description asking for exactly one active task. |
 | `@phoenix-ai/dsh-tool-workflow` | `workflow` | `ctx.tools`, `ctx.workflowEngine`, `ctx.systemPrompt`, `a calling Agent (exec.agent parents the script children)` | `tool/call`, `tool/result` | - | - |
-| `@phoenix-ai/dsh-tool-web` | `web_fetch`, `web_search` | `ctx.tools`, `ctx.web`, `ctx.systemPrompt` | `tool/call`, `tool/result` | - | web_search and web_fetch keep provider selection behind ctx.web so model-visible schemas stay stable across backend swaps. |
+| `@phoenix-ai/dsh-tool-web` | `research_scholar`, `research_search`, `research_sources`, `web_fetch`, `web_search` | `ctx.tools`, `ctx.web`, `ctx.systemPrompt` | `tool/call`, `tool/result` | - | web_search and web_fetch keep provider selection behind ctx.web so model-visible schemas stay stable across backend swaps. |
 
 <a id="phoenix-aidsh-tool-ask-user"></a>
 
@@ -1949,6 +1949,33 @@ Source: [`packages/schedule/schedule/src/tools.ts`](../packages/schedule/schedul
 
 Registered only inside live root Agent scopes created after the opt-in Schedule plugin loads. Version 1 accepts after_seconds, explicit absolute at, and bounded fixed-rate every_seconds, and discloses session-local delivery; management reads and mutations require the shared Session persistence barrier.
 
+<a id="phoenix-aidsh-tool-business"></a>
+
+## `@phoenix-ai/dsh-tool-business`
+
+### `business_plan_mission`
+
+Interpreta la intención comercial de una solicitud y consulta el inventario MCP real de Phoenix para sugerir herramientas listas, autorizaciones pendientes y alternativas seguras. Solo planificación, jamás publica ni gasta.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "request": {
+      "type": "string",
+      "description": "La petición comercial exacta del usuario, sin credenciales."
+    }
+  },
+  "required": [
+    "request"
+  ]
+}
+```
+
+Source: [`packages/core/tool-business/src/index.ts`](../packages/core/tool-business/src/index.ts)
+
+Read-only intent and live MCP capability planning. Tool names and connection status never confer publication rights.
+
 <a id="phoenix-aidsh-tool-living"></a>
 
 ## `@phoenix-ai/dsh-tool-living`
@@ -2883,7 +2910,7 @@ Send a durable follow-up task to another Team member and start a turn when neede
     },
     "purpose": {
       "type": "string",
-      "description": "Operational purpose. Use blocker only for a real obstacle that needs the Lead to change strategy.",
+      "description": "Operational purpose. A natural conversational answer to Kira may use result without an external tool. Use blocker only for a genuine unresolved task obstacle, never a routine conversation or wait.",
       "enum": [
         "assignment",
         "question",
@@ -2957,7 +2984,7 @@ Send durable information to another Team member without starting an idle member.
     },
     "purpose": {
       "type": "string",
-      "description": "Operational purpose. Use blocker only for a real obstacle that needs the Lead to change strategy.",
+      "description": "Operational purpose. A natural conversational answer to Kira may use result without an external tool. Use blocker only for a genuine unresolved task obstacle, never a routine conversation or wait.",
       "enum": [
         "assignment",
         "question",
@@ -3096,6 +3123,32 @@ Read recent real user/Kira/agent conversation messages and IDs for replies or re
       "description": "Recent message count, from 1 through 50; default 20."
     }
   }
+}
+```
+
+Source: [`packages/subagent/tool-agent-team/src/index.ts`](../packages/subagent/tool-agent-team/src/index.ts)
+
+### `team_chat_reply_to_peer`
+
+Only Kira: publish one real direct answer to an actually delivered teammate result, question, blocker or review without waking that teammate. Requires the original Team message id, one meaningful acceptance/decision, no invented speech. For new work use send_message or followup_task.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "message_id": {
+      "type": "string",
+      "description": "Id of the actual delivered specialist-to-Kira handoff."
+    },
+    "text": {
+      "type": "string",
+      "description": "Brief answer addressed to the specialist in the user language, maximum 800 UTF-8 bytes."
+    }
+  },
+  "required": [
+    "message_id",
+    "text"
+  ]
 }
 ```
 
@@ -3311,7 +3364,7 @@ Wait once for new Team activity; never poll indefinitely. Actual waiting is capp
   "properties": {
     "timeout_ms": {
       "type": "integer",
-      "description": "Requested wait duration 5000 through 3600000ms, capped internally at 12000ms. Defaults to 5000ms."
+      "description": "Requested wait duration 5000 through 3600000ms, capped internally at 12000ms. Defaults to 12000ms; completes earlier on actual teammate activity."
     }
   }
 }
@@ -3469,6 +3522,73 @@ Source: [`packages/workflow/tool-workflow/src/index.ts`](../packages/workflow/to
 <a id="phoenix-aidsh-tool-web"></a>
 
 ## `@phoenix-ai/dsh-tool-web`
+
+### `research_scholar`
+
+Busca metadatos científicos REALES mediante la API pública oficial Europe PMC: PubMed, PubMed Central, artículos, preprints y otras fuentes indexadas. Devuelve autor, título, año, revista, DOI/PMID/PMCID, URL original, resumen cuando exista y fecha de consulta. Úsala antes de redactar informes biomédicos o al verificar referencias; NO implica que el artículo tenga revisión por pares, texto completo disponible o evidencia clínica sólida. Búsqueda de máximo 10 registros, sin claves API inventadas. La herramienta devuelve estado unavailable si el proveedor falla.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "query": {
+      "type": "string",
+      "description": "Consulta académica, 3 a 400 caracteres."
+    },
+    "limit": {
+      "type": "integer",
+      "description": "Resultados 1 a 10, por defecto 5."
+    }
+  },
+  "required": [
+    "query"
+  ]
+}
+```
+
+Source: [`packages/web/tool-web/src/index.ts`](../packages/web/tool-web/src/index.ts)
+
+### `research_search`
+
+Run bounded multidisciplinary live web research with domain-aware source-scoped queries, deduplication and partial failure recovery. Returns source leads and provenance, not directly verified API data.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "question": {
+      "type": "string"
+    },
+    "domain": {
+      "type": "string",
+      "description": "Optional source domain. Call research_sources to list valid values."
+    }
+  },
+  "required": [
+    "question"
+  ]
+}
+```
+
+Source: [`packages/web/tool-web/src/index.ts`](../packages/web/tool-web/src/index.ts)
+
+### `research_sources`
+
+List candidate authoritative source hosts by research domain. This is metadata, not an API connection, credential or live availability claim.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "domain": {
+      "type": "string",
+      "description": "Optional domain, for example sports, fx, medicine, science, economics, weather, law or general."
+    }
+  }
+}
+```
+
+Source: [`packages/web/tool-web/src/index.ts`](../packages/web/tool-web/src/index.ts)
 
 ### `web_fetch`
 
