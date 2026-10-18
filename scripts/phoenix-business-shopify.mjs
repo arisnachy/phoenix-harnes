@@ -77,3 +77,92 @@ export async function inspectShopifyDraft(settings, product, {fetchImpl=fetch}={
   if (record == null) return {found:false,shop:settings.shop,publiclyPublished:false}
   return {found:true,shop:settings.shop,...productRecord(record,handle)}
 }
+
+
+/**
+ * Price the SINGLE initial Shopify draft variant without activating a sales channel.
+ * Must be called only after the trusted Host verifies a fresh approval. A caller-supplied
+ * approval object is NOT cryptographic authorization, and this module cannot mint one.
+ * The Host must also serialize jobs for each (shop, product, revision).
+ */
+const PRICE_LOOKUP = 'query LookupDraftPrice($identifier: ProductIdentifierInput!) { shop { currencyCode } product: productByIdentifier(identifier: $identifier) { id handle title status variants(first: 2) { nodes { id price } } } }'
+const PRICE_UPDATE = 'mutation SetDraftPrice($productId: ID!, $variants: [ProductVariantsBulkInput!]!) { productVariantsBulkUpdate(productId: $productId, variants: $variants, allowPartialUpdates: false) { product { id } productVariants { id price } userErrors { field message } } }'
+const VARIANT_GID = /^gid:\/\/shopify\/ProductVariant\/[1-9][0-9]*$/
+
+function canonicalPrice(value) {
+  const raw = String(value)
+  insist(/^(?:0|[1-9][0-9]{0,4})(?:\.[0-9]{1,2})?$/.test(raw), 'Precio inválido: se requieren hasta dos decimales.')
+  const number = Number(raw)
+  insist(Number.isFinite(number) && number > 0 && number <= 10000, 'Precio fuera del intervalo permitido.')
+  return number.toFixed(2)
+}
+
+function draftPriceSnapshot(data, product, settings) {
+  insist(data && data.shop && typeof data.shop.currencyCode === 'string', 'No se pudo verificar la moneda de la tienda.')
+  insist(data.shop.currencyCode === product.currency, 'La moneda solicitada no coincide con la moneda de la tienda Shopify.')
+  const expectedHandle = formatHandle(product.id, product.revision)
+  const remote = data.product
+  const identity = productRecord(remote, expectedHandle)
+  insist(remote.title === product.title.trim(), 'El título del producto remoto cambió: se requiere revisión manual.')
+  const nodes = remote.variants?.nodes
+  insist(Array.isArray(nodes) && nodes.length === 1 && VARIANT_GID.test(nodes[0]?.id), 'Se requiere exactamente una variante Shopify válida.')
+  const current = nodes[0]
+  insist(typeof current.price === 'string' && /^(?:0|[1-9][0-9]*)(?:\.[0-9]{1,2})?$/.test(current.price),
+    'El precio remoto no es verificable.')
+  return { ...identity, variantId: current.id, price: Number(current.price).toFixed(2), currency: data.shop.currencyCode }
+}
+
+/**
+ * Configure a price only on an existing DRAFT with its untouched default variant.
+ * Reads before/after mutation and never retries an uncertain write. No orders or
+ * paid amounts are claimed; Shopify publication, taxes and delivery remain separate.
+ */
+export async function configureShopifyDraftPrice(settings, product, { approval, fetchImpl = fetch } = {}) {
+  validate(settings, product)
+  insist(product.currency && /^[A-Z]{3}$/.test(product.currency), 'Moneda ISO 4217 inválida.')
+  const price = canonicalPrice(product.price)
+  insist(approval && approval.granted === true &&
+    approval.action === 'shopify:set-draft-price' &&
+    approval.shop === settings.shop &&
+    approval.productId === product.id &&
+    approval.revision === product.revision &&
+    approval.price === price &&
+    approval.currency === product.currency, AUTH_ERROR)
+  const variables = { identifier: { handle: formatHandle(product.id, product.revision) } }
+  const before = draftPriceSnapshot(await graphql(settings, PRICE_LOOKUP, variables, fetchImpl), product, settings)
+  if (before.price === price) {
+    return { configured: true, reused: true, shop: settings.shop, ...before, publiclyPublished: false, ordersVerified: 0, paid: false }
+  }
+  // Refuse to overwrite a merchant-modified price: default variant starts at zero.
+  insist(before.price === '0.00', 'El precio existente difiere del esperado; revisión manual obligatoria.')
+  const changed = await graphql(settings, PRICE_UPDATE, {
+    productId: before.id, variants: [{ id: before.variantId, price }],
+  }, fetchImpl)
+  const outcome = changed.productVariantsBulkUpdate
+  insist(Array.isArray(outcome?.userErrors) && outcome.userErrors.length === 0 &&
+    outcome.product?.id === before.id &&
+    Array.isArray(outcome.productVariants) && outcome.productVariants.length === 1 &&
+    outcome.productVariants[0]?.id === before.variantId,
+    'Shopify no confirmó la actualización de la variante; conciliar antes de repetir.')
+  const after = draftPriceSnapshot(await graphql(settings, PRICE_LOOKUP, variables, fetchImpl), product, settings)
+  insist(after.id === before.id && after.variantId === before.variantId && after.price === price,
+    'No se verificó el precio final; conciliar antes de repetir.')
+  return { configured: true, reused: false, shop: settings.shop, ...after, publiclyPublished: false, ordersVerified: 0, paid: false }
+}
+
+
+/** Read-only reconciliation after an uncertain update; does not require or consume approval. */
+export async function inspectShopifyDraftPrice(settings, product, { fetchImpl = fetch } = {}) {
+  validate(settings, product)
+  insist(product.currency && /^[A-Z]{3}$/.test(product.currency), 'Moneda ISO 4217 inválida.')
+  const expectedPrice = canonicalPrice(product.price)
+  const data = await graphql(settings, PRICE_LOOKUP, {
+    identifier: { handle: formatHandle(product.id, product.revision) },
+  }, fetchImpl)
+  if (data.product == null) {
+    return { found: false, configured: false, shop: settings.shop, publiclyPublished: false, ordersVerified: 0, paid: false }
+  }
+  const remote = draftPriceSnapshot(data, product, settings)
+  return { found: true, configured: remote.price === expectedPrice, expectedPrice,
+    shop: settings.shop, ...remote, publiclyPublished: false, ordersVerified: 0, paid: false }
+}
