@@ -7,8 +7,10 @@ import type { BusinessLibraryProduct, BusinessLibrarySnapshot } from './types.ts
 
 const LIMIT = 300
 const MAX_BYTES = 8 * 1024 * 1024
-const TYPES = new Set(['book','course','software','game','design','research','video','audio','other'])
-const STAGES = new Set(['assets-missing','review-required','integrity-failed'])
+const TYPES = new Set(['book','course','software','game','design','research','video','audio','service','other'])
+const STAGES = new Set<BusinessLibraryProduct['listingStage']>(['assets-missing','review-required','integrity-failed'])
+const isListingStage = (value: unknown): value is BusinessLibraryProduct['listingStage'] =>
+  typeof value === 'string' && STAGES.has(value as BusinessLibraryProduct['listingStage'])
 const sha = (value: unknown): string => createHash('sha256').update(JSON.stringify(value)).digest('hex')
 const record = (value: unknown): Record<string, unknown> | undefined => value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : undefined
 const array = (value: unknown): unknown[] => Array.isArray(value) ? value : []
@@ -34,7 +36,7 @@ function project(value: unknown): BusinessLibraryProduct | undefined {
     plannedChapters:array(blueprint?.chapters).length, writtenWords,
     targetWords:typeof blueprint?.targetWords === 'number' && Number.isSafeInteger(blueprint.targetWords) && blueprint.targetWords >= 0 ? blueprint.targetWords : null,
     buildStatus:!build || typeof build.fingerprint !== 'string' ? 'not-built' : build.fingerprint === fingerprint ? 'current' : 'stale',
-    listingStage:typeof stage === 'string' && STAGES.has(stage) ? stage : 'not-prepared',
+    listingStage:isListingStage(stage) ? stage : 'not-prepared',
   }
 }
 

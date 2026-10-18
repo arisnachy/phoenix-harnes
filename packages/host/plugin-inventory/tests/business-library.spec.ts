@@ -38,6 +38,16 @@ describe('Business Library Host projection',()=>{
     await symlink(outside,join(home,'library.json'))
     await expect(readBusinessLibrarySnapshot(home)).rejects.toThrow(/inválido/)
   })
+  it('includes services and normalizes unsupported commercial stages', async () => {
+    const home = await workspace()
+    await put(home, [
+      { id:'consulting-service', title:'Servicio de consultoría', type:'service', updatedAt:'2026-10-17', files:[], chapters:[], listings:[{stage:'made-up-status'}] },
+    ])
+    const snapshot = await readBusinessLibrarySnapshot(home)
+    expect(snapshot.products).toHaveLength(1)
+    expect(snapshot.products[0]?.type).toBe('service')
+    expect(snapshot.products[0]?.listingStage).toBe('not-prepared')
+  })
   it('caps response to 300 entries',async()=>{
     const home=await workspace()
     await put(home,Array.from({length:301},(_,i)=>({id:`product-${i}`,title:`Item ${i}`,type:'other',updatedAt:'2026-10-17'})))
