@@ -95,6 +95,9 @@ export function apply(ctx: Context, config: Config = {}): void {
     ? readEnglishOverlayCatalog(englishOverlayRoot)
     : Promise.resolve<Record<string, EnglishSkillOverlay>>({})
   assertPositiveInteger('catalogDescriptionMaxLength', catalogDescriptionMaxLength, 3)
+  // Replaying the same claimed user message must not reinject a large skill
+  // at every model step. A new user message gets a new ID and may reactivate it.
+  const naturalActivations = new WeakMap<Agent, Set<string>>()
 
   const skillTool = defineTool({
     name: 'skill',
@@ -210,13 +213,17 @@ export function apply(ctx: Context, config: Config = {}): void {
     const natural = currentUser === undefined ? undefined : naturalCreationSkill(
       currentUser.content.filter(block => block.type === 'text').map(block => block.text).join(' '),
     )
-    const auto = natural !== undefined && ctx.tools.get(skillTool.name, agent) === skillTool
+    const auto = natural !== undefined
+      && currentUser !== undefined
+      && !naturalActivations.get(agent)?.has(currentUser.id)
+      && ctx.tools.get(skillTool.name, agent) === skillTool
       ? natural : undefined
     const names = [...explicit, ...(auto !== undefined && !explicit.includes(auto) ? [auto] : [])]
     if (names.length === 0) return decision
     signal.throwIfAborted()
     const lookup = { cwd: agent.session.header.cwd, signal, scope: agent }
     const injections: UserMessage[] = []
+    let activatedNatural = false
     for (const name of names) {
       const skill = await ctx.skills.get(name, lookup)
       signal.throwIfAborted()
@@ -230,8 +237,14 @@ export function apply(ctx: Context, config: Config = {}): void {
         content: [{ type: 'text', text: renderSkillContent(adapted) }],
         source,
       }))
+      if (name === auto && !explicit.includes(name)) activatedNatural = true
     }
     if (injections.length === 0) return decision
+    if (activatedNatural && currentUser !== undefined) {
+      const ids = naturalActivations.get(agent) ?? new Set<string>()
+      ids.add(currentUser.id)
+      naturalActivations.set(agent, ids)
+    }
     return { kind: 'enter', messages: [...decision.messages, ...injections] }
   })
 
