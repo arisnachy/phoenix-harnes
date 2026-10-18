@@ -55,7 +55,7 @@ function productRecord(record, handle) {
 /** The caller MUST verify approval at a trusted host boundary; this function checks a bound receipt, not UI text. */
 export async function createShopifyDraft(settings, product, {approval, fetchImpl=fetch}={}) {
   validate(settings, product)
-  insist(approval && approval.granted === true && approval.action === 'shopify:create-draft' && approval.productId === product.id && approval.revision === product.revision, AUTH_ERROR)
+  insist(approval && approval.granted === true && approval.action === 'shopify:create-draft' && approval.shop === settings.shop && approval.productId === product.id && approval.revision === product.revision, AUTH_ERROR)
   const handle = formatHandle(product.id, product.revision)
   const lookup = async () => (await graphql(settings,LOOKUP,{identifier:{handle}},fetchImpl)).product
   const prior=await lookup()
