@@ -55,8 +55,8 @@ test('Phoenix CLI realmente compone y archiva PDF paginado sin aprobar venta ni 
     const planPath=join(source,'blueprint.json'),chapterPath=join(source,'chapter-001.md'),coverPath=join(source,'cover.png')
     await writeFile(planPath,JSON.stringify(blueprint))
     const narrative=Array.from({length:160},(_,i)=>
-      'Ada leyó la anotación '+i+' en el mapa y descubrió una señal diferente. '+
-      'La decisión '+i+' obligó a sus compañeros a reconsiderar el siguiente paso hacia el bosque.').join('\n\n')
+      'Ada'+i+' encontró el símbolo'+i+' cerca del sendero'+i+' y siguió la pista'+i+'. '+
+      'Cada descubrimiento'+i+' cambió el plan'+i+' de su amiga'+i+' mientras avanzaban'+i+' hacia el bosque'+i+'.').join('\n\n')
     await writeFile(chapterPath,narrative)
     await writeFile(coverPath,cover())
     assert.equal(call('blueprint',id,planPath).ok,true)
