@@ -1855,7 +1855,7 @@ function retireVerifiedOlderPhoenixHost(port) {
   const result = invoke()
   if (result.error !== undefined || result.status !== 0
     || !result.stdout?.includes('PHOENIX_STALE_HOST_RETIRED')) return false
-  console.error('[PHOENIX UPDATE] verified older Phoenix Host retired; transferring the port to the newer checkout.')
+  console.error('[PHOENIX STARTUP] verified previous Phoenix Host retired; starting the selected runtime.')
   return true
 }
 

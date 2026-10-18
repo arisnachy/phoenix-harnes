@@ -37,6 +37,8 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(script).toContain('Get-NetTCPConnection -State Listen -LocalPort $Port')
     expect(script).toContain('Test-OfficialCheckout $Root')
     expect(script).toContain('Test-OfficialCheckout $oldRoot')
+    expect(script).toContain('Test-CheckoutOwnedRuntime $oldRoot $newRoot')
+    expect(script).toContain('Get-InstalledPhoenixDesktop $hostProcess')
     expect(script).toContain('merge-base --is-ancestor $oldHead $newHead')
     expect(script).toContain('GetOwner')
     expect(script).toContain('Stop-Process -Id $supervisorPid -Force')

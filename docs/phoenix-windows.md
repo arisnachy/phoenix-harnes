@@ -12,6 +12,10 @@ The bootstrap is operational but not Authenticode-signed. A trusted signed relea
 
 The canonical **Phoenix** shortcut launches a supported installed native `Phoenix.exe` (version 1.0.20 or later) with its embedded WebView2 shell and records the durable source checkout for backend selection. The native window attaches to an already-healthy Phoenix at `127.0.0.1:3080` or starts its supervised backend. Without an installed compatible EXE, the shortcut starts the source Web application with PowerShell hidden and uses the regular browser. The shortcut never displays the legacy EXE rejection notice or keeps an interactive PowerShell prompt open.
 
+## Previous Phoenix instance handoff
+
+On Windows, `pnpm phoenix` verifies a prior Phoenix Host on the same official checkout, in its identity-scoped isolated runtime, or in a provably older official checkout. The prior Host is replaced only after candidate preflight and process identity checks (owner, command, PID, parent and creation time). A known associated Phoenix.exe desktop window is also closed. A non-Phoenix port owner is never terminated.
+
 ## VS Code and Cursor
 
 Run `pnpm run package:vscode`, then install `dist/phoenix-hardness-vscode.vsix` through **Extensions → Install from VSIX**. The Explorer panel can install or update PHOENIX, start the local runtime, and open its Web interface. It never reads provider credentials.
