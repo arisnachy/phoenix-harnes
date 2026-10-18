@@ -1,0 +1,41 @@
+name: PHOENIX book PDF publication smoke
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/phoenix-book-publisher.py'
+      - 'scripts/phoenix-book-publisher-smoke.py'
+      - 'scripts/phoenix-book-pdf.mjs'
+      - 'scripts/phoenix-business.mjs'
+      - '.github/workflows/phoenix-book-publisher.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/phoenix-book-publisher.py'
+      - 'scripts/phoenix-book-publisher-smoke.py'
+      - 'scripts/phoenix-book-pdf.mjs'
+      - 'scripts/phoenix-business.mjs'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  real-book-pdf:
+    name: Real book PDF / 6x9 and TOC
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install type-setting and verification tools
+        run: python -m pip install reportlab pymupdf
+      - name: Verify PDF pagination, text and trim
+        run: python scripts/phoenix-book-publisher-smoke.py
