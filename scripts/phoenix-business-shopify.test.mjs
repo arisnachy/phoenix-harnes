@@ -4,7 +4,7 @@ import {createShopifyDraft, inspectShopifyDraft} from './phoenix-business-shopif
 const revision='a'.repeat(64)
 const product={id:'curso-ejemplo',title:'Curso original de automatización',description:'Aprende <JS>\ny mejora tus procesos',revision}
 const config={shop:'my-test-store.myshopify.com',token:'shpat-test-token-value-not-real'}
-const approval={granted:true,action:'shopify:create-draft',productId:product.id,revision}
+const approval={granted:true,action:'shopify:create-draft',shop:config.shop,productId:product.id,revision}
 const record={id:'gid://shopify/Product/123456',handle:'phoenix-curso-ejemplo-aaaaaaaaaaaa',title:product.title,status:'DRAFT'}
 function mockApi(seq){const calls=[];return {calls,fetchImpl:async (url,opts)=>{const obj=JSON.parse(opts.body);calls.push({url,opts,obj});const data=seq.shift();if(!data)throw Error('Unexpected request');return {ok:true,status:200,json:async()=>({data})}}}}
 test('denies mutations without host approval and never touches network',async()=>{
@@ -23,3 +23,9 @@ test('never retries uncertain writes and never exposes secrets in network failur
  let n=0;const fn=async()=>{n++;if(n===1)return{ok:true,json:async()=>({data:{product:null}})};throw Error('sensitive token shpat-test-token-value-not-real')};await assert.rejects(createShopifyDraft(config,product,{approval,fetchImpl:fn}),err=>{assert(!err.message.includes(config.token));return true});assert.equal(n,2)
 })
 test('read-only inspect does not mutate',async()=>{const x=mockApi([{product:record}]);const res=await inspectShopifyDraft(config,product,{fetchImpl:x.fetchImpl});assert.equal(res.found,true);assert.equal(x.calls.length,1);assert(!x.calls[0].obj.query.includes('mutation'))})
+test('one merchant approval cannot be replayed against a different shop',async()=> {
+ let calls=0
+ await assert.rejects(createShopifyDraft({...config,shop:'another-merchant.myshopify.com'},product,{approval,fetchImpl:()=>{calls++}}),/autorización explícita/)
+ await assert.rejects(createShopifyDraft(config,product,{approval:{...approval,shop:'another-merchant.myshopify.com'},fetchImpl:()=>{calls++}}),/autorización explícita/)
+ assert.equal(calls,0)
+})
