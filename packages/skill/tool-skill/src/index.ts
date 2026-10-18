@@ -5,6 +5,7 @@
  */
 
 import { createHash } from 'node:crypto'
+import { naturalCreationSkill } from './natural-intent.js'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { readFile } from 'node:fs/promises'
@@ -198,7 +199,18 @@ export function apply(ctx: Context, config: Config = {}): void {
   ): Promise<PreStepDecision> => {
     const decision = await next()
     if (decision.kind === 'reject') return decision
-    const names = invokedSkillNames(messages)
+    const explicit = invokedSkillNames(messages)
+    // A plain request such as "haz un juego de carreras" must activate its
+    // installed skill without requiring the user to name skill/tool/path.
+    // Only the LAST genuinely user-authored claim is eligible, never a
+    // tool result, recovered transcript note or retrieved page.
+    const currentUser = messages.findLast(message => message.source.kind === 'user')
+    const natural = currentUser === undefined ? undefined : naturalCreationSkill(
+      currentUser.content.filter(block => block.type === 'text').map(block => block.text).join(' '),
+    )
+    const auto = natural !== undefined && ctx.tools.get(skillTool.name, agent) === skillTool
+      ? natural : undefined
+    const names = [...explicit, ...auto !== undefined && !explicit.includes(auto) ? [auto] : []]
     if (names.length === 0) return decision
     signal.throwIfAborted()
     const lookup = { cwd: agent.session.header.cwd, signal, scope: agent }
@@ -206,11 +218,10 @@ export function apply(ctx: Context, config: Config = {}): void {
     for (const name of names) {
       const skill = await ctx.skills.get(name, lookup)
       signal.throwIfAborted()
-      // Unknown names and user-disabled skills stay plain prose: the
-      // gesture was never a claim this boundary recognizes. The check sits
-      // on the loaded definition — the single lookup that produces what is
-      // actually injected.
-      if (skill === undefined || !isUserInvocable(skill)) continue
+      // Natural selection respects model visibility. Explicit /skill gestures
+      // retain user-invocable policy, including intentional hidden skills.
+      if (skill === undefined
+        || (name === auto && !explicit.includes(name) ? !isModelInvocable(skill) : !isUserInvocable(skill))) continue
       const adapted = await adaptForAgent(ctx, skill, agent, locale, englishOverlays)
       const source: SkillInvocationSource = { kind: 'skill-invocation', name, form: 'instructions' }
       injections.push(createUserMessage({
