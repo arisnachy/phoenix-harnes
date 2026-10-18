@@ -1,0 +1,38 @@
+name: PHOENIX Game Studio production gate
+
+on:
+  pull_request:
+    paths:
+      - 'examples/game-studio/**'
+      - '.agents/skills/phoenix-game-studio/**'
+      - '.github/workflows/phoenix-game-studio-production.yml'
+  push:
+    branches: [main, stable]
+    paths:
+      - 'examples/game-studio/**'
+      - '.agents/skills/phoenix-game-studio/**'
+      - '.github/workflows/phoenix-game-studio-production.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phoenix-game-studio-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  production-tests:
+    name: game manifest, production stages, assets, brawler and publisher
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+      - name: Install immutable workspace
+        run: pnpm install --frozen-lockfile
+      - name: Verify Game Studio regressions
+        run: pnpm exec vitest run examples/game-studio/tests packages/hardness/adapters/tests/game-art.spec.ts
