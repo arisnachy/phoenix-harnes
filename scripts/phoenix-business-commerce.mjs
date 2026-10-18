@@ -14,6 +14,7 @@ import { fileURLToPath } from 'node:url'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { buildFingerprint } from './phoenix-business-studio.mjs'
 import { assessRelease } from './phoenix-business-factory.mjs'
+import { BOOK_FORMATS } from './phoenix-book-quality.mjs'
 
 const ROOT = resolve(process.env.PHOENIX_BUSINESS_HOME || join(process.env.DSH_HOME || join(homedir(), '.dsh'), 'business-library'))
 const PRODUCTS = join(ROOT, 'library.json')
@@ -111,7 +112,8 @@ function verifyRequirements(product, platform) {
     if (!product.files.some(f => f.role === 'ebook' && /\.epub$/i.test(f.name ?? ''))) problems.push('Falta EPUB.')
     if (!product.build || product.build.fingerprint !== buildFingerprint(product)) problems.push('La compilación editorial está desactualizada.')
     const words = product.chapters.reduce((sum,c) => sum+(Number.isSafeInteger(c.words) ? c.words : 0), 0)
-    if (words < 50000 || product.chapters.length < 15) problems.push('No alcanza el mínimo editorial interno de Phoenix (50 000 palabras y 15 capítulos); no es una norma de KDP.')
+    const format=BOOK_FORMATS[product.blueprint?.editorial?.format] ?? BOOK_FORMATS.novel
+    if (words < format.minWords || product.chapters.length < format.minChapters) problems.push('No alcanza el mínimo editorial interno para el formato elegido; no es una norma de KDP.')
   }
   return problems
 }
