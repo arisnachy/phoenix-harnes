@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url'
 import type { ApprovalService } from '@phoenix-ai/dsh-user-approval'
 import { defineTool, ToolArgsError, type ToolDefinition } from '@phoenix-ai/dsh-tools'
 
+type ToolJsonValue = string | number | boolean | null | ToolJsonValue[] | { [key: string]: ToolJsonValue }
 const EXTENSIONS = ['.pdf', '.docx', '.txt', '.md']
 
 /**
@@ -120,7 +121,7 @@ export function createInstitutionRulesTool(approval: ApprovalService): ToolDefin
         risk: 'high', reversible: true, signal: exec.signal,
       })
       if (result !== 'allowed-once') return { state: 'blocked', approved: false }
-      return await extractInstitutionRules(file, exec.signal)
+      return await extractInstitutionRules(file, exec.signal) as Record<string, ToolJsonValue>
     },
     presentCall() { return { card: 'generic', title: 'Leer normas de universidad o revista', kind: 'execute' } },
   })
