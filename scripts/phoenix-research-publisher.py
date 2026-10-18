@@ -274,6 +274,38 @@ def chart_image(chart, folder, ordinal, accent="#087783"):
     image.save(destination)
     return destination
 
+def cover_authors(cover):
+    people = cover.get("authors") or []
+    if people:
+        return [str(p["name"]) +
+                ((" · Matrícula/ID: " + str(p["student_id"])) if p.get("student_id") else "") +
+                ((" · " + str(p["affiliation"])) if p.get("affiliation") else "") +
+                ((" · ORCID: " + str(p["orcid"])) if p.get("orcid") else "")
+                for p in people]
+    return [str(cover["author"])] if cover.get("author") else []
+
+FRONT_LABELS = [
+    ("approval", "Hoja de aprobación"),
+    ("originality", "Declaración de originalidad"),
+    ("dedication", "Dedicatoria"),
+    ("acknowledgements", "Agradecimientos"),
+    ("abstract_en", "Abstract"),
+]
+
+def add_word_field(paragraph, instruction):
+    field = OxmlElement("w:fldSimple")
+    field.set(qn("w:instr"), instruction)
+    paragraph._p.append(field)
+
+class IndexedDocTemplate(SimpleDocTemplate):
+    def afterFlowable(self, flowable):
+        info = getattr(flowable, "_outline_entry", None)
+        if info is not None:
+            key, label = info
+            self.canv.bookmarkPage(key)
+            self.canv.addOutlineEntry(label, key, level=0, closed=False)
+            self.notify("TOCEntry", (0, label, self.page, key))
+
 def main():
     raw = sys.stdin.buffer.read(MAX_CONTENT * 4)
     report = json.loads(raw.decode("utf-8"))
@@ -293,6 +325,10 @@ def main():
     output_root.mkdir(parents=True, exist_ok=True)
     title = report["title"].strip()
     cover = report.get("cover") if isinstance(report.get("cover"), dict) else {}
+    front = report.get("front_matter", {})
+    academic_work = report.get("document_type") in ("monograph", "thesis", "research_protocol")
+    include_toc = report.get("table_of_contents", academic_work)
+    authors = cover_authors(cover)
     paper = A4 if report.get("paper", "A4") == "A4" else letter
     doc = Document()
     sec = doc.sections[0]
@@ -335,17 +371,45 @@ def main():
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
         p.add_run().add_picture(str(logo_file), width=Inches(1.25))
     if cover.get("institution"): center_doc(cover["institution"], True, 14)
-    if cover.get("faculty"): center_doc(cover["faculty"])
+    for field in ("faculty", "department", "degree"):
+        if cover.get(field): center_doc(cover[field])
     doc.add_paragraph("")
     if editorial: center_doc("PHOENIX  |  INVESTIGACIÓN CIENTÍFICA", True, 10)
     center_doc(title, True, 20 if editorial else 17)
-    if cover.get("author"): center_doc("Autor(es): " + str(cover["author"]))
-    if cover.get("course"): center_doc("Asignatura: " + str(cover["course"]))
+    for author in authors: center_doc("Autor(a): " + author)
+    if cover.get("course"): center_doc("Asignatura: " + str(cover["course"]) +
+                                       (" · " + str(cover["course_code"]) if cover.get("course_code") else ""))
     if cover.get("lecturer"): center_doc("Docente: " + str(cover["lecturer"]))
-    if cover.get("city"): center_doc(cover["city"])
+    if cover.get("advisor"): center_doc("Asesor(a): " + str(cover["advisor"]))
+    if cover.get("city") or cover.get("country"):
+        center_doc(", ".join(str(cover[k]) for k in ("city", "country") if cover.get(k)))
     center_doc(cover.get("date", datetime.now(timezone.utc).date().isoformat()))
     doc.add_page_break()
-
+    for key, label in FRONT_LABELS:
+        if front.get(key):
+            doc.add_heading(label, level=1)
+            for value in front[key].split("\\n"):
+                if value.strip(): doc.add_paragraph(value.strip())
+            doc.add_page_break()
+    if include_toc:
+        doc.add_heading("Índice general", level=1)
+        add_word_field(doc.add_paragraph(), 'TOC \\o "1-3" \\h \\z \\u')
+        if report.get("tables"):
+            doc.add_heading("Índice de tablas", level=1)
+            for ix, item in enumerate(report["tables"], 1):
+                doc.add_paragraph("Tabla " + str(ix) + ". " + str(item.get("title", "Resultados")))
+        if report.get("charts"):
+            doc.add_heading("Índice de figuras", level=1)
+            for ix, item in enumerate(report["charts"], 1):
+                doc.add_paragraph("Figura " + str(ix) + ". " + str(item.get("title", "Gráfico")))
+        doc.add_page_break()
+    settings = doc.settings._element
+    update_field = OxmlElement("w:updateFields")
+    update_field.set(qn("w:val"), "true")
+    settings.append(update_field)
+    footer_paragraph = sec.footer.paragraphs[0]
+    footer_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    add_word_field(footer_paragraph, "PAGE")
     if report.get("keywords"):
         doc.add_paragraph("Palabras clave: " + ", ".join(str(x) for x in report["keywords"]))
     for section in report["sections"]:
@@ -407,21 +471,45 @@ def main():
             w, h = picture.size
         story.append(PdfImage(str(logo_file), width=110, height=110*h/max(1,w)))
         story.append(Spacer(1, 16))
-    for key in ("institution", "faculty"):
+    for key in ("institution", "faculty", "department", "degree"):
         if cover.get(key): para(cover[key], center)
     story.append(Spacer(1, 40 if editorial else 46))
     if editorial:
         para("PHOENIX  |  INFORME DE INVESTIGACIÓN", center)
         story.append(HRFlowable(width="100%", thickness=3, color=heading_ink, spaceAfter=20))
     para(title, heading)
-    for key in ("author", "course", "lecturer", "city", "date"):
+    for person in authors: para("Autor(a): " + person, center)
+    for key in ("course", "course_code", "lecturer", "advisor", "city", "country", "date"):
         if cover.get(key): para(cover[key], center)
     story.append(PageBreak())
+    for key, label in FRONT_LABELS:
+        if front.get(key):
+            para(label, h1)
+            for line in front[key].split("\\n"):
+                if line.strip(): para(line)
+            story.append(PageBreak())
+    if include_toc:
+        para("Índice general", h1)
+        toc = TableOfContents()
+        toc.levelStyles = [ParagraphStyle("IndexEntry", parent=body, leftIndent=12,
+                                          firstLineIndent=-10, spaceAfter=5, fontSize=10)]
+        story.append(toc)
+        if report.get("tables"):
+            para("Índice de tablas", h1)
+            for ix, item in enumerate(report["tables"], 1):
+                para("Tabla " + str(ix) + ". " + str(item.get("title", "Resultados")), small)
+        if report.get("charts"):
+            para("Índice de figuras", h1)
+            for ix, item in enumerate(report["charts"], 1):
+                para("Figura " + str(ix) + ". " + str(item.get("title", "Gráfico")), small)
+        story.append(PageBreak())
     if report.get("keywords"):
         para("Palabras clave: " + ", ".join(str(x) for x in report["keywords"]), small)
         story.append(Spacer(1, 8))
-    for section in report["sections"]:
-        para(section["heading"], h1)
+    for ix, section in enumerate(report["sections"]):
+        heading_flowable = Paragraph(html.escape(section["heading"]), h1)
+        heading_flowable._outline_entry = ("section-" + str(ix), section["heading"])
+        story.append(heading_flowable)
         value = format_text(section["text"], refs, style, numbers)
         for piece in value.split("\n"):
             if piece.strip(): para(piece)
@@ -460,8 +548,10 @@ def main():
         para(bibliography(source, style, numbers[source["key"]]), small)
 
     pdf_file = output_root / "informe.pdf"
-    printer = SimpleDocTemplate(str(pdf_file), pagesize=paper, rightMargin=60, leftMargin=60, topMargin=64, bottomMargin=62, title=title, author=str(cover.get("author","")))
+    printer = IndexedDocTemplate(str(pdf_file), pagesize=paper, rightMargin=60, leftMargin=60, topMargin=64, bottomMargin=62, title=title, author=", ".join(authors))
+    rendered_pages = [0]
     def footer(canvas, document):
+        rendered_pages[0] = document.page
         canvas.saveState()
         if editorial:
             canvas.setStrokeColor(heading_ink)
@@ -477,7 +567,7 @@ def main():
         canvas.setFont(font, 9)
         canvas.drawCentredString(paper[0]/2, 30, str(document.page))
         canvas.restoreState()
-    printer.build(story, onFirstPage=footer, onLaterPages=footer)
+    printer.multiBuild(story, onFirstPage=footer, onLaterPages=footer)
 
     chunks = []
     chunks.append("<!doctype html><html lang='es'><meta charset='utf-8'><title>"+html.escape(title)+"</title>")
