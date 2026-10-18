@@ -8,7 +8,7 @@ import { constants as fsConstants } from 'node:fs'
 import { deflateRawSync } from 'node:zlib'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { validateBlueprint, progress, buildFingerprint, docxEntries, printHtml } from './phoenix-business-studio.mjs'
-import { auditBook, buildBookMarketingBrief, genreGuide } from './phoenix-book-quality.mjs'
+import { auditBook, buildBookMarketingBrief, genreGuide, inspectCover } from './phoenix-book-quality.mjs'
 
 const root = resolve(process.env.PHOENIX_BUSINESS_HOME || join(process.env.DSH_HOME || join(homedir(), '.dsh'), 'business-library'))
 const indexFile = join(root, 'library.json')
@@ -186,13 +186,29 @@ async function compileBook(product,author,lang,opts) {
   const identifier=`urn:uuid:${randomUUID()}`, files=[{name:'mimetype',bytes:'application/epub+zip',stored:true}]
   files.push({name:'META-INF/container.xml',bytes:'<?xml version="1.0" encoding="UTF-8"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>'})
   files.push({name:'OEBPS/style.css',bytes:'body{font-family:serif;line-height:1.5;margin:5%}p{text-indent:1em;margin:0 0 .5em}h1{text-align:center;page-break-before:always}'})
+  // Embed an existing verified raster cover; drafts without cover can still compile locally.
+  let epubCover = ''
+  const coverAsset = product.files.find(f => f.role === 'cover' && /\.(jpe?g|png)$/iu.test(f.name))
+  if (coverAsset) {
+    const coverFile = resolve(root,coverAsset.path)
+    if (!coverFile.startsWith(root+sep) || !coverAsset.path.startsWith('products/'+product.id+'/')) fail('Ruta insegura de portada.')
+    const coverBytes = await readFile(coverFile)
+    if (hash(coverBytes) !== coverAsset.sha256) fail('Portada modificada fuera de Phoenix.')
+    const coverInfo = inspectCover(coverBytes)
+    if (!coverInfo.valid) fail('Portada inválida: ' + coverInfo.reason)
+    const ext = coverInfo.format === 'png' ? 'png' : 'jpg'
+    const mediaType = coverInfo.format === 'png' ? 'image/png' : 'image/jpeg'
+    files.push({name:'OEBPS/cover.'+ext,bytes:coverBytes})
+    files.push({name:'OEBPS/cover.xhtml',bytes:xhtml('Portada','<div><img src="cover.'+ext+'" alt="Portada de '+esc(product.title)+'" style="display:block;max-width:100%;height:auto;margin:auto"/></div>',lang)})
+    epubCover = '<item id="cover-img" href="cover.'+ext+'" media-type="'+mediaType+'" properties="cover-image"/><item id="cover-page" href="cover.xhtml" media-type="application/xhtml+xml"/>'
+  }
   files.push({name:'OEBPS/title.xhtml',bytes:xhtml(product.title,`<h1>${esc(product.title)}</h1><p>${esc(author)}</p>`,lang)})
   const nav=chapters.map(c=>`<li><a href="chapter-${String(c.number).padStart(3,'0')}.xhtml">${esc(c.title)}</a></li>`).join('')
   files.push({name:'OEBPS/nav.xhtml',bytes:xhtml('Índice',`<nav xmlns:epub="http://www.idpf.org/2007/ops" epub:type="toc" id="toc"><h1>Índice</h1><ol>${nav}</ol></nav>`,lang)})
   for(const c of chapters) files.push({name:`OEBPS/chapter-${String(c.number).padStart(3,'0')}.xhtml`,bytes:xhtml(c.title,`<h1>${esc(c.title)}</h1>${chapterHtml(c.text)}`,lang)})
   const manifest=chapters.map(c=>`<item id="c${c.number}" href="chapter-${String(c.number).padStart(3,'0')}.xhtml" media-type="application/xhtml+xml"/>`).join('')
   const spine=chapters.map(c=>`<itemref idref="c${c.number}"/>`).join('')
-  const opf=`<?xml version="1.0" encoding="utf-8"?><package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="uid" xml:lang="${esc(lang)}"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="uid">${identifier}</dc:identifier><dc:title>${esc(product.title)}</dc:title><dc:creator>${esc(author)}</dc:creator><dc:language>${esc(lang)}</dc:language><meta property="dcterms:modified">${iso().replace(/\.\d{3}Z$/,'Z')}</meta></metadata><manifest><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/><item id="title" href="title.xhtml" media-type="application/xhtml+xml"/><item id="css" href="style.css" media-type="text/css"/>${manifest}</manifest><spine><itemref idref="title"/>${spine}</spine></package>`
+  const opf=`<?xml version="1.0" encoding="utf-8"?><package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="uid" xml:lang="${esc(lang)}"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="uid">${identifier}</dc:identifier><dc:title>${esc(product.title)}</dc:title><dc:creator>${esc(author)}</dc:creator><dc:language>${esc(lang)}</dc:language><meta property="dcterms:modified">${iso().replace(/\.\d{3}Z$/,'Z')}</meta></metadata><manifest><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/><item id="title" href="title.xhtml" media-type="application/xhtml+xml"/><item id="css" href="style.css" media-type="text/css"/>${epubCover}${manifest}</manifest><spine>${epubCover?'<itemref idref="cover-page"/>':''}<itemref idref="title"/>${spine}</spine></package>`
   files.push({name:'OEBPS/content.opf',bytes:opf})
   const book=await registerGenerated(product,'manuscript.md',manuscript,'manuscript')
   const ebook=await registerGenerated(product,'ebook.epub',archiveZip(files),'ebook')
@@ -283,7 +299,13 @@ async function main(args) {
       const bytes=await readFile(target).catch(()=>null)
       if(bytes===null || hash(bytes)!==f.sha256) integrityFailures.push(f.name)
     }
-    const now=iso(), entry={platform,currency,price,stage:integrityFailures.length?'integrity-failed':ready?'review-required':'assets-missing',integrityFailures,publicationConfirmed:false,externalUrl:null,createdAt:now,updatedAt:now,requires:['aprobación explícita del usuario','revisión de derechos/licencias','declaración de IA y requisitos de la plataforma','confirmación de recepción de la tienda'],editorial:check}
+    let bookQuality=null
+    if(ready && p.type==='book') {
+      try { bookQuality=await auditBook(p,root) }
+      catch(error) { bookQuality={structurallyReadyForReview:false,blockers:[error instanceof Error?error.message:'Error en auditoría editorial.']} }
+    }
+    const stage=integrityFailures.length?'integrity-failed':!ready?'assets-missing':bookQuality && !bookQuality.structurallyReadyForReview?'editorial-incomplete':'review-required'
+    const now=iso(), entry={platform,currency,price,stage,bookQuality,integrityFailures,publicationConfirmed:false,externalUrl:null,createdAt:now,updatedAt:now,requires:['aprobación explícita del usuario','revisión de derechos/licencias','declaración de IA y requisitos de la plataforma','confirmación de recepción de la tienda'],editorial:check}
     p.listings=p.listings.filter(item=>item.platform!==platform).concat(entry);p.updatedAt=now;return entry
   })
   if(cmd==='sale') return transaction(db=>{
