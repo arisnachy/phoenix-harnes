@@ -63,7 +63,7 @@ def publish(data, home, success=True):
     with fitz.open(pdf) as document:
         assert len(document) >= 2, "missing content pages"
         cover = document[0]
-        assert "Informe editorial" in cover.get_text(), "missing real cover title"
+        assert " ".join(data["title"].split()) in " ".join(cover.get_text().split()), "missing real cover title"
         assert "Institución de ensayo" in cover.get_text(), "lost metadata"
         raster = cover.get_pixmap(matrix=fitz.Matrix(0.5, 0.5), alpha=False)
         fingerprint = hashlib.sha256(raster.samples).hexdigest()
