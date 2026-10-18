@@ -12,6 +12,7 @@ import { fileURLToPath } from 'node:url'
 import { deflateRawSync } from 'node:zlib'
 import { buildFingerprint } from './phoenix-business-studio.mjs'
 import { auditBook, BOOK_FORMATS } from './phoenix-book-quality.mjs'
+import { auditStoryLedger } from './phoenix-book-continuity.mjs'
 
 const ROOT = resolve(process.env.PHOENIX_BUSINESS_HOME || join(process.env.DSH_HOME || join(homedir(), '.dsh'), 'business-library'))
 const DB = join(ROOT, 'library.json')
@@ -212,7 +213,18 @@ export async function assessRelease(id,{platform='direct'}={}) {
       blockers.push('No se pudo auditar el libro: '+(error instanceof Error?error.message:'error no identificado'))
     }
   }
-  return {productId:id,type:product.type,platform,structurallyReady:blockers.length===0,editorial,
+  let continuity = null
+  if(product.type==='book' && product.storyLedger) {
+    try {
+      continuity=await auditStoryLedger(product,ROOT)
+      blockers.push(...continuity.issues.map(issue=>'Control de continuidad: '+issue.code))
+    } catch(error) {
+      blockers.push('Diario narrativo inválido: '+(error instanceof Error?error.message:'error no identificado'))
+    }
+  }
+  if(product.type==='book' && product.printProof &&
+    product.printProof.sourceFingerprint!==buildFingerprint(product)) blockers.push('El PDF interior fue generado a partir de una revisión anterior del libro.')
+  return {productId:id,type:product.type,platform,structurallyReady:blockers.length===0,editorial,continuity,
     blockers,checks:result.checks,assetCount:integrity.assets.length,totalBytes:integrity.totalBytes,
     manualReviews:result.manualReviews,commerciallyApproved:false,publicationConfirmed:false,
     salesVerified:false,requiresHumanAuthorization:true}
