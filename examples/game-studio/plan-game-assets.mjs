@@ -75,13 +75,13 @@ export function planGameAssets(manifest, verifiedAssets = { images: [], audio: [
     for (const layer of layers) add('backgrounds', scope + (layer.id || 'unnamed-layer'),
       ['parallax', 'lighting'], 'world-design')
     if ((isShooter || isBrawler) && layers.length < 3) {
-      missing.push('level ' + (level.id || index + 1) + ': design at least 3 independently illustrated parallax layers')
+      missing.push((levels.length === 1 ? '' : 'level ' + (level.id || index + 1) + ': ') + 'design at least 3 independently illustrated parallax layers')
     }
     if (isBrawler) {
       for (const zone of entries(level.zones)) add('zones', scope + (zone.id || 'unnamed-zone'),
         ['backdrop', 'foreground-props', 'lighting', 'camera-transition'], 'world-design')
       if (!Array.isArray(level.zones) || level.zones.length < 2 || !level.belt)
-        missing.push('level ' + (level.id || index + 1) + ': design two distinct street-stage zones and a walkable depth belt')
+        missing.push((levels.length === 1 ? '' : 'level ' + (level.id || index + 1) + ': ') + 'design two distinct street-stage zones and a walkable depth belt')
     }
   }
   if (isShooter) {
