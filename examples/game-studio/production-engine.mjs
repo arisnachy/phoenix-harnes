@@ -100,6 +100,13 @@ async function verifyArtifacts(state) {
     if (hash(bytes) !== item.sha256) {
       throw new Error('Evidence changed: ' + item.artifact + '. Invalidate its stage and rerun checks.')
     }
+    for (const dependency of item.dependencies || []) {
+      const actual = await realpath(project(state.stateFile, dependency.artifact))
+      if (!inside(dirname(state.stateFile), actual)
+        || hash(await readFile(actual)) !== dependency.sha256) {
+        throw new Error('Bound resource changed: ' + dependency.artifact + '. Invalidate integration.')
+      }
+    }
   }
 }
 async function loadState(stateFile) {
@@ -143,6 +150,40 @@ async function saveState(path, state, create = false) {
   }
 }
 
+/**
+ * Integration gate: a preset counts only after its real runtime usage is traced.
+ * Production must provide a complete bindings JSON; a list of file names is not
+ * proof of actual drawing, state activation, spawn or sound playback.
+ */
+async function inspectRuntimeBindings(state, artifact) {
+  const report = JSON.parse(await readFile(artifact, 'utf8'))
+  if (!Array.isArray(report.bindings)) throw new Error('Runtime evidence needs a bindings array')
+  const used = new Set()
+  const dependencies = []
+  for (const task of state.assets) {
+    const key = task.family + ':' + task.id
+    if (used.has(key)) throw new Error('Duplicate required asset in production plan: ' + key)
+    used.add(key)
+    const match = report.bindings.filter(x => x && x.family === task.family && x.id === task.id)
+    if (match.length !== 1) throw new Error('Missing or duplicate runtime binding: ' + key)
+    const entry = match[0]
+    if (!valid(entry.source) || !valid(entry.runtimeTarget) || !valid(entry.proof)
+      || !Number.isInteger(entry.observedCount) || entry.observedCount < 1) {
+      throw new Error('No executed scene/draw/play trace for asset ' + key)
+    }
+    for (const name of [entry.source, entry.proof]) {
+      const location = project(state.stateFile, name)
+      const actual = await realpath(location)
+      if (!inside(dirname(state.stateFile), actual)) throw new Error('Binding file escapes project: ' + name)
+      if (!(await stat(actual)).isFile()) throw new Error('Binding dependency is not a file: ' + name)
+      const bytes = await readFile(actual)
+      if (!bytes.length) throw new Error('Binding dependency is empty: ' + name)
+      dependencies.push({ artifact: relative(dirname(state.stateFile), actual), sha256: hash(bytes) })
+    }
+  }
+  return dependencies.filter((item, i) => dependencies.findIndex(other => other.artifact === item.artifact) === i)
+}
+
 /** Record file-backed evidence only for the current stage, never skip ahead. */
 export async function recordGameEvidence(state, stageId, check, artifact, runner) {
   const expected = nextGameWork(state)
@@ -157,6 +198,7 @@ export async function recordGameEvidence(state, stageId, check, artifact, runner
   const bytes = await readFile(actual)
   if (!bytes.length) throw new Error('Evidence file is empty')
   const checksum = hash(bytes)
+  const dependencies = check === 'runtime-bindings' ? await inspectRuntimeBindings(state, actual) : []
   const existing = stage.evidence.find(item => item.check === check)
   if (existing) {
     if (existing.artifact === relative(dirname(state.stateFile), path)
@@ -164,7 +206,7 @@ export async function recordGameEvidence(state, stageId, check, artifact, runner
     throw new Error('Conflicting evidence for ' + check + '; invalidate and retest')
   }
   stage.evidence.push({ check, artifact: relative(dirname(state.stateFile), path),
-    runner, sha256: checksum, validation: 'existence-and-integrity-only' })
+    runner, sha256: checksum, dependencies, validation: 'existence-and-integrity-only' })
   if (stage.checks.every(id => stage.evidence.some(item => item.check === id))) stage.status = 'complete'
   if (state.stages.every(item => item.status === 'complete')) {
     state.releaseState = 'candidate-awaiting-independent-review'
