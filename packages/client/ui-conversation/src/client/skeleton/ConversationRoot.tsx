@@ -8,7 +8,7 @@ import { IconSearchOutline16 } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { SessionId, WorkspaceId } from '@phoenix-ai/dsh-client-runtime/client'
 import type { ConversationSlotProps, InputZone } from '../contract/slots.ts'
 import {
-  HeroAttentionList, HeroGlow, HeroShell, WorkspaceChip, heroAttentionPrompt, workspaceLabel,
+  HeroAttentionList, HeroGlow, HeroShell, WorkspaceChip, heroAttentionPrompt, researchStarterPrompt, workspaceLabel,
 } from './EmptyHero.tsx'
 import css from './ConversationRoot.module.css'
 
@@ -163,6 +163,14 @@ export function ConversationRoot({
     window.dispatchEvent(new Event('phoenix:open-workspace-search'))
   }, [])
 
+  const selectResearch = useCallback((entry: 'apa7' | 'vancouver' | 'scientific_article'): void => {
+    if (inputActions === undefined) return
+    inputActions.setDraft(researchStarterPrompt(entry))
+    requestAnimationFrame(() => {
+      rootRef.current?.querySelector('textarea')?.focus()
+    })
+  }, [inputActions])
+
   const selectAttention = useCallback((item: (typeof proactiveAttention)[number]): void => {
     if (inputActions === undefined) return
     inputActions.setDraft(heroAttentionPrompt(item))
@@ -299,7 +307,7 @@ export function ConversationRoot({
   const composerBar = (
     <div className={clsx(css.composerStack, hero && css.composerHero)}>
       {hero && <HeroGlow className={css.heroGlow} />}
-      {hero && <HeroShell t={t} renderSlot={renderSlot} preferredName={preferredName} />}
+      {hero && <HeroShell t={t} renderSlot={renderSlot} preferredName={preferredName} onResearchSelect={selectResearch} />}
       {hero && heroWorkspaceRow}
       {zone !== undefined && renderSlot('conversation.input.dock', zone)}
       {inputBar}
