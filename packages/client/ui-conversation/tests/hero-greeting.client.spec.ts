@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
+import { academicCoverPrompt } from '../src/client/skeleton/AcademicCoverEditor.tsx'
 import {
   greetingForHour, heroAttentionDetail, heroAttentionPrompt, preferredNameForHero,
 } from '../src/client/skeleton/EmptyHero.tsx'
@@ -79,5 +80,21 @@ describe('neutral, universal hero architecture', () => {
     expect(source).not.toContain('Investigación Vancouver')
     expect(source).not.toContain('Artículo científico')
     expect(source).not.toContain('Personalizar portada')
+  })
+})
+
+describe('academic cover preview is not a file upload', () => {
+  it('preserves author IDs and explains that logo preview still requires a chat upload', () => {
+    const text = academicCoverPrompt({
+      citation: 'apa7', title: 'Neuropsicología clínica', institution: 'Universidad de prueba',
+      faculty: 'Medicina', degree: 'Maestría', course: 'Investigación',
+      advisor: 'Docente de prueba', authors: 'Ana Pérez | 2026-001\nLuis Díaz | 2026-002',
+      city: 'Santiago, RD', logoName: 'logo.png',
+    })
+    expect(text).toContain('Ana Pérez | 2026-001')
+    expect(text).toContain('Luis Díaz | 2026-002')
+    expect(text).toContain('SOLO para previsualización')
+    expect(text).toContain('adjun')
+    expect(text).toContain('phoenix_research_plan')
   })
 })
