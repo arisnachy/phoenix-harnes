@@ -328,6 +328,30 @@ const CURATED_MCP_SPECS: Readonly<Record<CuratedMcpConnectorId, CuratedMcpSpec>>
   // Install these from Phoenix Settings; never block on the external MCP registry.
   x: { label: 'X API (OAuth user)', config: () => xApiMcpConfig('user') },
   'x-docs': { label: 'X developer documentation', config: xDocsMcpConfig },
+  // Local Facebook Pages + Instagram Professional publishing through Graph API.
+  // Its four Host vault references are injected only into the private MCP child
+  // after explicit user authorization. Meta DevTools is NOT a publishing API.
+  'meta-publishing': {
+    label: 'Meta Graph Publishing (Facebook Page + Instagram Professional)',
+    config: () => ({
+      transport: 'stdio',
+      serverName: 'meta-publishing',
+      command: 'node',
+      args: ['scripts/phoenix-social-mcp.mjs'],
+      env: {},
+      envCredentialRefs: {
+        PHOENIX_SOCIAL_FACEBOOK_PAGE_TOKEN: 'PHOENIX_META_PAGE_TOKEN',
+        PHOENIX_SOCIAL_FACEBOOK_PAGE_ID: 'PHOENIX_META_PAGE_ID',
+        PHOENIX_SOCIAL_INSTAGRAM_TOKEN: 'PHOENIX_META_INSTAGRAM_TOKEN',
+        PHOENIX_SOCIAL_INSTAGRAM_USER_ID: 'PHOENIX_META_INSTAGRAM_USER_ID',
+      },
+      cwd: '',
+      toolCallTimeoutMs: 60_000,
+      startupTimeoutMs: 20_000,
+      failOnStartupError: false,
+      reconnect: { enabled: true, initialDelayMs: 1000, maxDelayMs: 30_000, maxAttempts: 3 },
+    }),
+  },
   'meta-devtools': { label: 'Meta Social Technologies', config: () => remoteOauthMcpConfig('meta-devtools', META_DEVTOOLS_MCP_URL) },
   'meta-whatsapp-business': { label: 'WhatsApp Business Tools', config: () => remoteOauthMcpConfig('meta-whatsapp-business', META_WHATSAPP_BUSINESS_MCP_URL) },
   'microsoft-learn': { label: 'Microsoft Learn Docs', config: microsoftLearnMcpConfig },

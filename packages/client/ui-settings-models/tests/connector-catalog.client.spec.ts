@@ -42,6 +42,7 @@ describe('connector catalog', () => {
     expect(map.get('x-docs')?.curatedMcp).toBe(true)
     expect(map.get('social-engine')?.curatedMcp).toBe(true)
     expect(map.get('meta-devtools')?.curatedMcp).toBe(true)
+    expect(map.get('meta-publishing')?.curatedMcp).toBe(true)
     expect(map.get('meta-devtools')?.description).toMatch(/does not publish/i)
   })
 

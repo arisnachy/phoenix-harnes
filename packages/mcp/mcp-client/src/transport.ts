@@ -164,7 +164,7 @@ const CURRENT_SOCIAL_ENGINE_MCP = fileURLToPath(
 export function normalizeMicrosoftPersonalMcpLaunch(
   serverName: string, command: string, args: readonly string[],
 ): { command: string; args: string[] } {
-  if (serverName === 'social-engine'
+  if ((serverName === 'social-engine' || serverName === 'meta-publishing')
     && command === 'node'
     && args.length === 1
     && args[0] === 'scripts/phoenix-social-mcp.mjs') {

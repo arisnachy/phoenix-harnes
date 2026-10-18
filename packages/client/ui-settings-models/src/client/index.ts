@@ -100,7 +100,7 @@ type PluginInventoryMcpRegistryRemote = {
       source?: { kind: 'registry'; name: string; version?: string } | { kind: 'curated'; connectorId: string }
     }
   }>>
-  installCuratedMcpConnector(request: { connectorId: 'x' | 'x-docs' | 'social-engine' | 'microsoft-personal' | 'devpost' | 'canva' | 'supabase' | 'heygen' | 'figma' | 'github' | 'meta-devtools' | 'meta-whatsapp-business' | 'microsoft-learn' | 'microsoft-workiq' | 'microsoft-azure' | 'vercel' | 'notion' | 'linear' | 'cloudflare' | 'slack' | 'brave-search' | 'filesystem' | 'memory' | 'fetch' }): Promise<PluginInventoryRemoteResult<{
+  installCuratedMcpConnector(request: { connectorId: 'meta-publishing' | 'x' | 'x-docs' | 'social-engine' | 'microsoft-personal' | 'devpost' | 'canva' | 'supabase' | 'heygen' | 'figma' | 'github' | 'meta-devtools' | 'meta-whatsapp-business' | 'microsoft-learn' | 'microsoft-workiq' | 'microsoft-azure' | 'vercel' | 'notion' | 'linear' | 'cloudflare' | 'slack' | 'brave-search' | 'filesystem' | 'memory' | 'fetch' }): Promise<PluginInventoryRemoteResult<{
     status: 'installed' | 'already-installed'
     connector: {
       entryId: string

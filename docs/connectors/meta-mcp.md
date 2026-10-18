@@ -118,3 +118,32 @@ requisitos de Developer App, Página Facebook, cuenta profesional Instagram
 y permisos Graph de publicación se validan **después** del registro.
 Una cuenta de Facebook/Instagram no equivale a una app Meta Developer
 autorizada y viceversa.
+
+## 6. Publicador Meta Graph con vault (sin confundirlo con DevTools)
+
+El conector curado **Meta Graph Publishing** (`meta-publishing`)
+utiliza el MCP local de Phoenix y las APIs oficiales Graph para publicar
+en una Página Facebook o un Instagram Professional cuando el usuario tenga
+permisos legítimos. Ya no depende del MCP Registry público ni del OAuth
+de `meta-devtools`.
+
+En **Configuración → Conectores → Meta Graph Publishing → Instalar**,
+Phoenix registra el servidor local. En **Autorizar** el MCP solicita de
+forma segura, mediante el flujo nativo de credenciales, los cuatro valores
+necesarios. Introducirlos **solo en el diálogo de autorización de Phoenix**:
+
+- `PHOENIX_SOCIAL_FACEBOOK_PAGE_ID`: ID numérico de la Página autorizada.
+- `PHOENIX_SOCIAL_FACEBOOK_PAGE_TOKEN`: Page Access Token obtenido de Meta.
+- `PHOENIX_SOCIAL_INSTAGRAM_USER_ID`: ID numérico IG profesional.
+- `PHOENIX_SOCIAL_INSTAGRAM_TOKEN`: Access Token con permisos de publicación IG.
+
+El Host guarda estos valores en su almacén de credenciales y el runtime
+los introduce en el proceso privado MCP mediante `envCredentialRefs`.
+`managed.patch.yml` conserva únicamente referencias, nunca valores.
+Si faltan permisos, las llamadas Graph fallarán de forma visible y Kira
+no declarará publicaciones sin un ID/recibo real.
+
+Esto **no crea** una cuenta Facebook/Instagram ni concede automáticamente
+permisos a Meta. La app de Meta, el propietario, la Página/cuenta profesional,
+la revisión y las verificaciones humanas siguen siendo obligatorios.
+Publicación orgánica no implica permisos para campañas de anuncios pagados.

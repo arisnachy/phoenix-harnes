@@ -552,6 +552,33 @@ describe('ManagedMcpController', () => {
     expect(JSON.stringify(rows)).not.toContain('real_secret_value')
   })
 
+  it('installs Meta Graph publishing with vault-only token references and no registry lookup', async () => {
+    const patchPath = tempPatch()
+    const live = loader()
+    const registrySearch = vi.fn(async () => { throw new Error('registry unavailable') })
+    const controller = new ManagedMcpController(live, { patchPath, registrySearch })
+    await expect(controller.installCuratedMcp('meta-publishing')).resolves.toMatchObject({
+      connector: { serverName: 'meta-publishing',
+        source: { kind: 'curated', connectorId: 'meta-publishing' } },
+    })
+    expect(live.create).toHaveBeenCalledWith(expect.objectContaining({
+      config: expect.objectContaining({
+        transport: 'stdio', command: 'node', args: ['scripts/phoenix-social-mcp.mjs'],
+        env: {},
+        envCredentialRefs: {
+          PHOENIX_SOCIAL_FACEBOOK_PAGE_TOKEN: 'PHOENIX_META_PAGE_TOKEN',
+          PHOENIX_SOCIAL_FACEBOOK_PAGE_ID: 'PHOENIX_META_PAGE_ID',
+          PHOENIX_SOCIAL_INSTAGRAM_TOKEN: 'PHOENIX_META_INSTAGRAM_TOKEN',
+          PHOENIX_SOCIAL_INSTAGRAM_USER_ID: 'PHOENIX_META_INSTAGRAM_USER_ID',
+        },
+      }),
+    }))
+    expect(registrySearch).not.toHaveBeenCalled()
+    const persisted = readFileSync(patchPath, 'utf8')
+    expect(persisted).not.toContain('actual_page_access_token_value')
+    expect(persisted).toContain('PHOENIX_META_PAGE_TOKEN')
+  })
+
   it('pins Meta DevTools and WhatsApp Business to their exact official endpoints without secrets', async () => {
     const patchPath = tempPatch()
     const live = loader()
