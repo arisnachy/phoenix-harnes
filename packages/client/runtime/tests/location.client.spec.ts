@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 describe('resolvedClientLocation', () => {
   afterEach(() => {
+    vi.useRealTimers()
     vi.resetModules()
     vi.unstubAllGlobals()
     vi.restoreAllMocks()
@@ -51,4 +52,43 @@ describe('resolvedClientLocation', () => {
     })
     expect(getCurrentPosition).toHaveBeenCalledTimes(1)
   })
+
+  it('never blocks prompt admission on an indefinitely pending browser permission query', async () => {
+    vi.useFakeTimers()
+    const getCurrentPosition = vi.fn()
+    const query = vi.fn(() => new Promise<PermissionStatus>(() => {}))
+    vi.stubGlobal('navigator', {
+      permissions: { query },
+      geolocation: { getCurrentPosition },
+    })
+
+    const { resolvedPromptClientLocation } = await import('../src/client/location.ts')
+    const location = resolvedPromptClientLocation()
+    await vi.advanceTimersByTimeAsync(75)
+
+    await expect(location).resolves.toBeUndefined()
+    expect(query).toHaveBeenCalledTimes(1)
+    expect(getCurrentPosition).not.toHaveBeenCalled()
+  })
+
+  it('uses an immediate permitted location without waiting for the budget', async () => {
+    const getCurrentPosition = vi.fn((success: PositionCallback) => {
+      success({
+        coords: { latitude: 19.45, longitude: -70.69, accuracy: 20 },
+        timestamp: Date.now(),
+      } as GeolocationPosition)
+    })
+    vi.stubGlobal('navigator', {
+      permissions: { query: vi.fn(async () => ({ state: 'granted' })) },
+      geolocation: { getCurrentPosition },
+    })
+
+    const { resolvedPromptClientLocation } = await import('../src/client/location.ts')
+    await expect(resolvedPromptClientLocation()).resolves.toMatchObject({
+      latitude: 19.45,
+      longitude: -70.69,
+      accuracyMeters: 20,
+    })
+  })
+
 })
