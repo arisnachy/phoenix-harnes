@@ -16,12 +16,15 @@ try:
     from docx import Document
     from docx.shared import Cm, Inches, Pt, RGBColor
     from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
     from reportlab.lib import colors
     from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY, TA_LEFT
     from reportlab.lib.pagesizes import A4, letter
     from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
     from reportlab.lib.utils import ImageReader
     from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak, Table, TableStyle, LongTable, HRFlowable, Image as PdfImage
+    from reportlab.platypus.tableofcontents import TableOfContents
     from reportlab.pdfbase import pdfmetrics
     from reportlab.pdfbase.ttfonts import TTFont
     from PIL import Image, ImageDraw, ImageFont
@@ -31,27 +34,33 @@ except ImportError as error:
 
 REF_RE = re.compile(r"\[@([A-Za-z0-9_-]{1,64})\]")
 NAME_RE = re.compile(r"[^a-zA-Z0-9_-]+")
-MAX_CONTENT = 100000
+MAX_CONTENT = 1000000
 PRESENTATIONS = ("academic", "editorial", "hybrid")
-DOCUMENT_TYPES = ("brief", "narrative_review", "systematic_review", "original_research",
-                  "thesis", "journal_manuscript", "policy_report")
+DOCUMENT_TYPES = ("brief", "monograph", "research_protocol", "narrative_review",
+                  "systematic_review", "original_research", "thesis", "journal_manuscript", "policy_report")
 SECTION_ALIASES = {
     "abstract": ("resumen", "abstract", "resumen ejecutivo", "resumen estructurado"),
     "introduction": ("introduccion", "introduction", "planteamiento del problema"),
-    "framework": ("marco teorico", "theoretical framework", "revision bibliografica"),
+    "framework": ("marco teorico", "theoretical framework", "revision bibliografica", "marco teorico y estado del arte"),
+    "problem": ("planteamiento del problema", "problema de investigacion", "problem statement", "planteamiento del problema y justificacion"),
+    "objectives": ("objetivos", "objetivos e hipotesis", "objetivo general y especificos", "objectives"),
     "methods": ("metodos", "metodologia", "methods", "methodology", "materiales y metodos"),
     "results": ("resultados", "results", "hallazgos", "findings", "sintesis de evidencia"),
     "discussion": ("discusion", "discussion", "analisis critico", "analisis"),
     "limitations": ("limitaciones", "limitations", "sesgos y limitaciones"),
     "conclusions": ("conclusiones", "conclusions", "conclusiones y recomendaciones"),
     "recommendations": ("recomendaciones", "recommendations", "implicaciones"),
+    "ethics": ("consideraciones eticas", "ethics", "etica y cronograma"),
+    "expected_results": ("resultados esperados", "expected results", "contribuciones esperadas"),
 }
 REQUIRED_SECTIONS = {
     "narrative_review": ("abstract", "introduction", "methods", "results", "discussion", "limitations", "conclusions"),
     "systematic_review": ("abstract", "introduction", "methods", "results", "discussion", "limitations", "conclusions"),
     "original_research": ("abstract", "introduction", "methods", "results", "discussion", "limitations", "conclusions"),
     "journal_manuscript": ("abstract", "introduction", "methods", "results", "discussion", "limitations", "conclusions"),
-    "thesis": ("abstract", "introduction", "framework", "methods", "results", "discussion", "conclusions", "recommendations"),
+    "thesis": ("abstract", "introduction", "problem", "objectives", "framework", "methods", "results", "discussion", "conclusions", "recommendations"),
+    "monograph": ("abstract", "introduction", "problem", "objectives", "framework", "methods", "discussion", "conclusions"),
+    "research_protocol": ("abstract", "introduction", "problem", "objectives", "framework", "methods", "ethics", "expected_results"),
     "policy_report": ("abstract", "introduction", "methods", "results", "discussion", "limitations", "conclusions"),
 }
 
@@ -60,7 +69,7 @@ def section_kind(section):
         return section["kind"]
     heading = unicodedata.normalize("NFKD", section["heading"])
     heading = "".join(c for c in heading if not unicodedata.combining(c)).lower().strip()
-    heading = re.sub(r"^[0-9]+[. )-]*", "", heading)
+    heading = re.sub(r"^(?:capitulo\\s+(?:[ivxlcdm]+|[0-9]+)[. :]*)|^(?:[0-9]+[. )-]*)", "", heading).strip()
     for kind, variants in SECTION_ALIASES.items():
         if heading in variants:
             return kind
@@ -75,10 +84,10 @@ def validate(data):
     refs = data.get("references")
     if not isinstance(title, str) or not (5 <= len(title.strip()) <= 240):
         raise ValueError("report.title must have 5 to 240 characters")
-    if not isinstance(sections, list) or not (1 <= len(sections) <= 36):
-        raise ValueError("report.sections must contain 1 to 36 entries")
-    if not isinstance(refs, list) or not (1 <= len(refs) <= 200):
-        raise ValueError("report.references must contain 1 to 200 verified-source entries")
+    if not isinstance(sections, list) or not (1 <= len(sections) <= 140):
+        raise ValueError("report.sections must contain 1 to 140 entries")
+    if not isinstance(refs, list) or not (1 <= len(refs) <= 500):
+        raise ValueError("report.references must contain 1 to 500 supplied sources")
     if data.get("style", "apa") not in ("apa", "apa7", "vancouver"):
         raise ValueError("style must be apa, apa7 or vancouver")
     if data.get("presentation", "academic") not in PRESENTATIONS:
@@ -89,6 +98,38 @@ def validate(data):
         raise ValueError("paper must be A4 or Letter")
     if data.get("submission_ready") is True:
         raise ValueError("submission_ready requires external journal, authorship and human review")
+    page_plan = data.get("page_plan", {})
+    if not isinstance(page_plan, dict):
+        raise ValueError("page_plan must be an object")
+    target = page_plan.get("target_pages")
+    if target is not None and (isinstance(target, bool) or not isinstance(target, int) or not 1 <= target <= 350):
+        raise ValueError("target_pages must be an integer between 1 and 350")
+    if page_plan.get("scope", "all") not in ("all", "body"):
+        raise ValueError("page_plan.scope must be all or body")
+    preliminary = data.get("front_matter", {})
+    if not isinstance(preliminary, dict):
+        raise ValueError("front_matter must be an object")
+    for field in ("approval", "originality", "dedication", "acknowledgements", "abstract_en"):
+        if field in preliminary and (not isinstance(preliminary[field], str) or len(preliminary[field]) > 20000):
+            raise ValueError("front_matter." + field + " must be a bounded text")
+    cover = data.get("cover", {})
+    if not isinstance(cover, dict):
+        raise ValueError("cover must be an object")
+    authors = cover.get("authors", [])
+    if not isinstance(authors, list) or len(authors) > 30:
+        raise ValueError("cover.authors must be a list of at most 30 authors")
+    for author in authors:
+        if not isinstance(author, dict) or not isinstance(author.get("name"), str) or not author["name"].strip():
+            raise ValueError("each author requires a name")
+        for field in ("student_id", "affiliation", "orcid"):
+            if field in author and (not isinstance(author[field], str) or len(author[field]) > 240):
+                raise ValueError("author " + field + " must be a short text")
+    if data.get("document_type") in ("thesis", "monograph"):
+        if not cover.get("institution"):
+            raise ValueError("academic manuscript requires cover.institution")
+        if not authors and not cover.get("author"):
+            raise ValueError("academic manuscript requires at least one author")
+
     keywords = data.get("keywords", [])
     if not isinstance(keywords, list) or len(keywords) > 12 or any(
         not isinstance(word, str) or not word.strip() or len(word) > 80 for word in keywords
@@ -113,7 +154,7 @@ def validate(data):
     for section in sections:
         if not isinstance(section, dict) or not isinstance(section.get("heading"), str) or not isinstance(section.get("text"), str):
             raise ValueError("sections require heading and text")
-        if len(section["heading"]) > 180 or len(section["text"]) > 30000:
+        if len(section["heading"]) > 180 or len(section["text"]) > 65000:
             raise ValueError("section exceeds safe length")
         cited.update(REF_RE.findall(section["text"]))
     if not cited or cited - keys:
