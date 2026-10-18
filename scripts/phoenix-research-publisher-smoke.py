@@ -216,6 +216,57 @@ try:
                              capture_output=True, timeout=30)
     assert refused.returncode != 0, "A three-page shallow review must not publish."
     assert b"RESEARCH_QUALITY_GATE" in refused.stderr, refused.stderr
+    # Positive integration: a substantial hybrid research report must really render,
+    # not merely satisfy a validator with fake filenames. All data here are synthetic.
+    developed = dict(report)
+    developed["quality_profile"] = "professional"
+    developed["document_type"] = "narrative_review"
+    developed["presentation"] = "hybrid"
+    developed["table_of_contents"] = True
+    developed["references"] = [
+        {"key": f"test{i}", "authors": f"Investigador{i}, A.", "year": "2023",
+         "title": f"Fuente sintética de integración {i}", "journal": "Revista de prueba",
+         "url": f"https://example.org/synthetic/{i}"}
+        for i in range(8)
+    ]
+    chapter_kinds = [
+        ("abstract", "Resumen"), ("introduction", "Introducción"),
+        ("methods", "Método"), ("results", "Resultados"),
+        ("discussion", "Discusión"), ("limitations", "Limitaciones"),
+        ("conclusions", "Conclusiones"),
+    ]
+    developed["sections"] = [
+        {"kind": kind, "heading": heading,
+         "text": " ".join(
+             "Fragmento sintético número " + str(j) + " de " + heading +
+             " donde se explican criterios de prueba documentados, comparaciones conceptuales, "
+             "restricciones metodológicas y requisitos editoriales verificables para la "
+             "integración automática del informe [@test" + str((j+index) % 8) + "]."
+             for j in range(22)
+         )}
+        for index, (kind, heading) in enumerate(chapter_kinds)
+    ]
+    developed["tables"] = [
+        {"title": "Matriz de evidencia exclusivamente sintética",
+         "columns": ["Fuente", "Categoría", "Observación"],
+         "rows": [[f"test{i}", "Sintética", f"Prueba {i}"] for i in range(8)],
+         "source_key": "test0"}
+    ]
+    developed["charts"] = []
+    output = subprocess.run([sys.executable, str(script)],
+                            input=json.dumps(developed, ensure_ascii=False).encode("utf-8"),
+                            capture_output=True, timeout=120)
+    assert output.returncode == 0, output.stderr.decode("utf-8", errors="replace")
+    complete = json.loads(output.stdout.decode("utf-8"))
+    assert complete["state"] == "REPORT_READY", complete
+    assert complete["quality_profile"] == "professional"
+    assert complete["source_count"] == 8
+    with fitz.open(complete["files"]["pdf"]) as publication:
+        assert publication.page_count >= 6
+        fulltext = "\\n".join(page.get_text() for page in publication)
+        assert "Índice general" in fulltext
+        assert "Matriz de evidencia" in fulltext
+        assert "[@" not in fulltext
     print("RESEARCH_PUBLISHER_SMOKE_PASS")
 finally:
     logo.unlink(missing_ok=True)
