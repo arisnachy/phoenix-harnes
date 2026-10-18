@@ -2,8 +2,6 @@
  * No implicit mutation: authorization must be verified by the trusted Phoenix Host beforehand.
  * Sensitive shop token is supplied in memory by the credentials subsystem, not a CLI argument.
  */
-import { createHash } from 'node:crypto'
-
 const VERSION = '2026-10'
 const PRODUCT_ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 const PRODUCT_GID = /^gid:\/\/shopify\/Product\/[1-9][0-9]*$/
