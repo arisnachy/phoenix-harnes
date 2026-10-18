@@ -42,7 +42,7 @@ describe('Scholarly source verification from actual provider metadata', () => {
     const result = await verifyResearchSources([{ key: 'ref', title: verifiedTitle, doi: '10.1000/test.1' }], broken)
     expect(result.sources[0]?.status).toBe('unverified')
     expect(result.sources[0]?.retraction).toBe('not_checked')
-    expect(() => verifyResearchSources([{ key: 'bad', title: verifiedTitle, pmid: '123-456' }], broken)).rejects.toThrow()
+    await expect(verifyResearchSources([{ key: 'bad', title: verifiedTitle, pmid: '123-456' }], broken)).rejects.toThrow()
     const mismatched = vi.fn(async () => ({ ok: true, text: async () => JSON.stringify({
       message: { DOI: '10.1000/test.1', title: ['A completely different paper about trees'] },
     }) })) as unknown as typeof fetch
