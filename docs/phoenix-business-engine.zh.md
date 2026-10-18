@@ -111,3 +111,18 @@ pnpm test:commerce
 **重大限制：** DRAFT 不包含价格、公开发布、数字交付、支付、税务或已验证订单。生产环境需要有权限的 Host 适配器、账户配置、商品变体和价格、媒体、销售渠道、交付、远端收据和真实对账。不能把 `created:true` 当作上线或收入。公开前须在经过认证的开发店铺测试。官方 `productCreate` 需要 `write_products` 权限，公开商品另需独立步骤和权限。技术资料：https://shopify.dev/docs/api/admin-graphql/latest/mutations/productCreate
 
 `pnpm test:shopify` 执行六项本地测试：权限、数据格式、防重复、对账、不确定错误和只读查询。这些测试不能替代使用真实认证店铺的端到端测试。
+
+## Shopify：草稿价格（2026 年 10 月 18 日进展）
+
+适配器 `scripts/phoenix-business-shopify.mjs` 新增 `configureShopifyDraftPrice(settings, product, { approval, fetchImpl })` 和 `inspectShopifyDraftPrice(settings, product, { fetchImpl })`。这是 `createShopifyDraft` 之后的第二步：仅设置**仍处于 DRAFT 状态的商品初始变体价格**。它不会启用销售渠道、登记订单或替代数字商品交付。
+
+- 输入：`id`、`title`、`description`、SHA-256 `revision`、三字母 ISO `currency` 和正数 `price`，最多两位小数，业务上限 10,000。
+- 可信 Host 在调用适配器之前，必须核验新的、单项且不可重用的用户批准。传入凭据绑定 `action: 'shopify:set-draft-price'`、`shop`、`productId`、`revision`、规范化 `price`（`'29.99'`）及 `currency`。**approval 对象本身不能证明授权。** 不允许模型或工具自行构造该对象；Host 必须通过权限、vault 和一次性授权检查。
+- Shopify Admin API 2026-10：先根据修订版本推导的 handle 读取商品状态、初始变体和商店实际货币。拒绝 ACTIVE 商品、标题不同、多个变体或币种不符。只允许将初始价格 `0.00` 更新为批准价格，或者幂等复用已正确设置的价格；商家已修改的其他价格不得覆盖。
+- 正式 `productVariantsBulkUpdate` 变更使用 `allowPartialUpdates: false`，随后再次读取远端状态。网络故障和不确定响应**绝不自动重试写入**。`inspectShopifyDraftPrice` 可在之后以只读模式核对价格是否生效。Host 必须按商店、商品、版本串行化操作，并在重试之前对账。
+- 返回状态保持 `publiclyPublished:false`、`ordersVerified:0`、`paid:false`。价格已确认仅代表**商品目录配置成功**，不是销售或银行结算证明。
+- `pnpm test:shopify` 增加模拟传输确定性测试，覆盖授权与价格变更、幂等、价格漂移、商店币种、多变体和后续读取核验。
+
+API 来源：https://shopify.dev/docs/api/admin-graphql/2026-10/mutations/productVariantsBulkUpdate 和 https://shopify.dev/docs/api/admin-graphql/2026-10/queries/productByIdentifier。
+
+**尚未启用真正的自主商业生产：** 真实店铺安装/授权、Host 一次性批准、媒体及交付资产创建、公开发布、结账、测试订单、签名 webhook、退款和外部财务对账。没有这些步骤和真实凭据/权限，不能保证收到实际款项。
