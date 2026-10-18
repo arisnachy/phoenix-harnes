@@ -15,6 +15,7 @@ export interface ProductionReview {
   readonly designIssues: readonly ProductionIssue[]
   readonly missingAssetBindings: readonly string[]
   readonly missingPlaytests: readonly string[]
+  readonly missingVerticalSliceProbes: readonly string[]
   readonly phases: readonly ProductionPhase[]
   readonly note: string
 }
