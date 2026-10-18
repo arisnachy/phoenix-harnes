@@ -119,7 +119,7 @@ export function planAcademicResearch(input: unknown) {
         : 'estructura, citas y requisitos de institución o revista'
   return {
     state: missing.size ? 'INTAKE_INCOMPLETE' : 'PLAN_READY',
-    entries: ENTRIES,
+    entries: ENTRIES.map(row => ({ ...row })),
     entry, citation_style: citationStyle, document_type: inferredType,
     presentation: entry === 'scientific_article' ? 'hybrid' : 'academic',
     level, title: args.title ?? null,
@@ -142,7 +142,18 @@ export function createResearchPlanTool(): ToolDefinition {
     description: 'PLANIFICA ANTES DE REDACTAR una investigación APA 7, Vancouver o Artículo científico. Detecta la intención y devuelve una SOLA agrupación de datos faltantes, capítulos, presupuesto de páginas (10-250+ según nivel), recomendación académica, advertencias de métodos y alcance de páginas. Artículo científico es un tipo de documento distinto de APA/Vancouver, que son estilos bibliográficos. Si hay guía institucional, léela antes de cerrar el plan; no presumas requisitos universales. Úsalo antes de phoenix_research_publish para tesis, monografías, protocolos, artículos, revisiones y trabajos de 60-120 páginas.',
     parameters: { input: { type: 'object', required: true, additionalProperties: true,
       description: 'intent, entry (apa7/vancouver/scientific_article), citation_style, document_type, level, title, target_pages, page_scope, cover con datos ya conocidos.' } },
-    output: { schema: { type: 'object', additionalProperties: true } },
+    output: {
+      schema: { type: 'object', additionalProperties: true },
+      render: (_args, value) => [{ type: 'text',
+        text: 'Plan académico: ' + String(value.document_type)
+          + '; estilo: ' + String(value.citation_style ?? 'por definir')
+          + '; estado: ' + String(value.state)
+          + '. Extensión estimada, NO páginas escritas: '
+          + String((value.pages as Record<string, unknown>).target)
+          + '. Campos pendientes: ' + (Array.isArray(value.missing_fields)
+            ? value.missing_fields.map(String).join(', ') : 'ninguno'),
+      }],
+    },
     async execute(args) { return planAcademicResearch(args.input) },
     presentCall() { return { card: 'generic', title: 'Plan académico y extensión verificable', kind: 'execute' } },
   })
