@@ -53,7 +53,8 @@ try:
         report["style"] = style
         report["presentation"] = presentation
         process = subprocess.run([sys.executable, str(script)], input=json.dumps(report).encode("utf-8"),
-                                 capture_output=True, check=True, timeout=90)
+                                 capture_output=True, timeout=90)
+        assert process.returncode == 0, process.stderr.decode("utf-8", errors="replace")
         receipt = json.loads(process.stdout)
         assert receipt["state"] == "REPORT_READY", receipt
         assert Path(receipt["project_path"]).is_file()
