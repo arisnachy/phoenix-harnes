@@ -598,6 +598,7 @@ export const FOUNDATION_TYPE_NAMES: ReadonlySet<string> = new Set([
 
 /** Project types deliberately documented outside the subsystems catalog. */
 export const TYPE_LINK_EXEMPTIONS: Readonly<Record<string, string>> = {
+  UniversalMissionSnapshot: 'durable UME mission snapshot is owned by packages/subagent/agent-team/src/universal-mission.ts',
   z: 'schemastery schema constructor is owned by vendor/schemastery (vendored upstream)',
   WakeEvent: 'Phoenix wake-event payload is owned by packages/hardness/adapters/README.md',
   ClientLocation: 'browser geolocation payload is owned by packages/host/apiproxy/src/api/sessions.ts',
