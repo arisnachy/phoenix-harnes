@@ -34,7 +34,6 @@ import {
   JEV_MCP_SERVER_NAME,
   ManagedMcpController,
   recoverManagedMcpOverlay,
-  type XMcpIdentity,
 } from './mcp-managed.ts'
 import type {
   ChatGptWebSnapshot,
