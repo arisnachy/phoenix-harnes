@@ -24,7 +24,7 @@ RULES = [
 def get_pages(path):
     extension = path.suffix.lower()
     if extension == ".pdf":
-        import fitz
+        import pymupdf as fitz
         document = fitz.open(str(path))
         if document.page_count > MAX_PAGES:
             raise ValueError("institutional PDF exceeds 200 pages")
