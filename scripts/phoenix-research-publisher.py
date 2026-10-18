@@ -69,7 +69,7 @@ def section_kind(section):
         return section["kind"]
     heading = unicodedata.normalize("NFKD", section["heading"])
     heading = "".join(c for c in heading if not unicodedata.combining(c)).lower().strip()
-    heading = re.sub(r"^(?:capitulo\\s+(?:[ivxlcdm]+|[0-9]+)[. :]*)|^(?:[0-9]+[. )-]*)", "", heading).strip()
+    heading = re.sub(r"^(?:capitulo\s+(?:[ivxlcdm]+|[0-9]+)[. :]*)|^(?:[0-9]+[. )-]*)", "", heading).strip()
     for kind, variants in SECTION_ALIASES.items():
         if heading in variants:
             return kind
@@ -406,7 +406,7 @@ def main():
     for key, label in FRONT_LABELS:
         if front.get(key):
             doc.add_heading(label, level=1)
-            for value in front[key].split("\\n"):
+            for value in front[key].split("\n"):
                 if value.strip(): doc.add_paragraph(value.strip())
             doc.add_page_break()
     if include_toc:
@@ -471,7 +471,7 @@ def main():
         doc.add_heading("Anexos y apéndices", level=1)
         for ix, item in enumerate(report["appendices"], 1):
             doc.add_heading("Anexo " + str(ix) + ". " + item["title"], level=2)
-            for line in format_text(item["text"], refs, style, numbers).split("\\n"):
+            for line in format_text(item["text"], refs, style, numbers).split("\n"):
                 if line.strip(): doc.add_paragraph(line)
     docx_file = output_root / "informe.docx"
     doc.save(docx_file)
@@ -517,7 +517,7 @@ def main():
     for key, label in FRONT_LABELS:
         if front.get(key):
             para(label, h1)
-            for line in front[key].split("\\n"):
+            for line in front[key].split("\n"):
                 if line.strip(): para(line)
             story.append(PageBreak())
     if include_toc:
@@ -623,7 +623,7 @@ def main():
     for key, label in FRONT_LABELS:
         if front.get(key):
             chunks.append("<section><h2>"+html.escape(label)+"</h2><p>"+
-                          html.escape(front[key]).replace("\\n", "</p><p>")+"</p></section>")
+                          html.escape(front[key]).replace("\n", "</p><p>")+"</p></section>")
     chunks.append("<nav>"+ " · ".join("<a href='#sec-"+str(i)+"'>"+html.escape(v["heading"])+"</a>" for i,v in enumerate(report["sections"]))+"</nav>")
     for i,section in enumerate(report["sections"]):
         rendered=format_text(section["text"],refs,style,numbers)
@@ -654,7 +654,7 @@ def main():
         chunks.append("<section><h2>Anexos y apéndices</h2>")
         for ix, item in enumerate(report["appendices"], 1):
             chunks.append("<h3>Anexo "+str(ix)+". "+html.escape(item["title"])+"</h3><p>"+
-                          html.escape(format_text(item["text"],refs,style,numbers)).replace("\\n","</p><p>")+"</p>")
+                          html.escape(format_text(item["text"],refs,style,numbers)).replace("\n","</p><p>")+"</p>")
         chunks.append("</section>")
     chunks.append("</html>")
     html_file=output_root/"informe.html"
