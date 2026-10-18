@@ -57,8 +57,9 @@ export function SecureAsk({ target, onClose, onSaved }: {
   }
   return (
     <div className={css.root} data-secure-ask="true" role="region" aria-label="Acceso seguro de Kira">
-      <p className={css.notice}>Kira necesita iniciar sesión para continuar. Los datos se envían a la bóveda local, nunca al modelo.</p>
+      <p className={css.notice}>Kira comprobará primero los accesos existentes. Si necesitas registrar uno nuevo, los datos se envían directamente a la bóveda local, nunca al modelo.</p>
       <div className={css.origin} title={target.origin}>🔒 {target.origin}</div>
+      {target.diagnostic && <p role="status" className={css.feedback}>{target.diagnostic}</p>}
       {target.saved && <div className={css.saved}>
         <span>Acceso guardado para este sitio.</span>
         <button type="button" disabled={busy} onClick={() => { void useSaved() }}>Usar acceso guardado</button>

@@ -5,6 +5,7 @@
  */
 import type { Context } from '@phoenix-ai/cordis'
 import type {} from '@phoenix-ai/dsh-host-webserver'
+import { originCredentialRef, type CredentialProvider } from '@phoenix-ai/dsh-credentials'
 import { createHash, randomUUID } from 'node:crypto'
 import { spawn } from 'node:child_process'
 import { homedir, tmpdir } from 'node:os'
@@ -82,6 +83,26 @@ async function dpapi(mode: 'protect' | 'unprotect', body: string, origin: string
     child.stdin.end(JSON.stringify({ mode, body, entropy: entropy(origin) }))
   })
 }
+/** Backward-compatible access to accounts previously saved via Phoenix credentials.
+ * This is read only inside the trusted host; values never cross the model wire.
+ */
+async function legacyLogin(vault: CredentialProvider | undefined, origin: string):
+  Promise<{ login: LoginContent; automatic: boolean } | undefined> {
+  if (!vault) return undefined
+  try {
+    const [account, secret, permission] = await Promise.all([
+      vault.resolve(originCredentialRef(origin, 'account')),
+      vault.resolve(originCredentialRef(origin, 'secret')),
+      vault.resolve(originCredentialRef(origin, 'autonomous')),
+    ])
+    if (!account?.value || !secret?.value) return undefined
+    return {
+      login: { origin, account: account.value, secret: secret.value },
+      automatic: permission?.value === 'true' || permission?.value === '1',
+    }
+  } catch { return undefined }
+}
+
 async function load(origin: string): Promise<LoginRecord | undefined> {
   try {
     const row = JSON.parse(await readFile(filename(origin), 'utf8')) as LoginRecord
@@ -155,38 +176,64 @@ async function tabForLogin(tabId: string, origin: string): Promise<BrowserTab> {
 }
 
 
-/** Detect a login form in the selected tab without reading any field values. */
-async function detectLogin(tab: BrowserTab): Promise<boolean> {
-  const expression = `(() => {
+/** Detect a visible login even when a modal appeared without navigation.
+ * Includes same-origin iframes; never inspect cross-origin frame secrets.
+ * Detection failures are errors, NOT “no login needed”.
+ */
+export function loginDetectionExpression(): string {
+  return `(() => {
+    const roots = [document];
+    for (const frame of document.querySelectorAll('iframe')) {
+      try {
+        const child = frame.contentDocument;
+        if (child && child.location.origin === location.origin) roots.push(child);
+      } catch { /* A cross-origin identity provider is a separate site. */ }
+    }
     const visible = (e) => !e.disabled && !e.readOnly && e.getClientRects().length > 0;
-    const inputs = Array.from(document.querySelectorAll('input')).filter(visible);
-    const passwords = inputs.filter(e => e.type === 'password');
-    if (passwords.length !== 1) return false;
-    const field = passwords[0];
-    return Boolean(field.form || document.querySelector('input[autocomplete="username"],input[type="email"]'));
+    return roots.some(doc => {
+      const fields = Array.from(doc.querySelectorAll('input')).filter(visible);
+      const passwords = fields.filter(e => e.type === 'password');
+      if (passwords.length !== 1) return false;
+      const pass = passwords[0];
+      const account = fields.find(e => e !== pass
+        && (e.autocomplete === 'username' || e.type === 'email'
+          || /user|email|login|account/i.test((e.name||'') + ' ' + (e.id||''))))
+        || fields.find(e => e !== pass && ['text','email','tel'].includes(e.type));
+      return Boolean(account);
+    });
   })()`
-  return await new Promise<boolean>((resolve) => {
+}
+async function detectLogin(tab: BrowserTab): Promise<boolean> {
+  return await new Promise<boolean>((resolve, reject) => {
     const ws = new WebSocket(tab.webSocketDebuggerUrl as string)
     let settled = false
-    const finish = (value: boolean): void => {
+    const finish = (value?: boolean, error?: Error): void => {
       if (settled) return
       settled = true
       clearTimeout(timer)
       ws.close()
-      resolve(value)
+      if (error) reject(error)
+      else resolve(value === true)
     }
-    const timer = setTimeout(() => finish(false), 5_000)
-    ws.addEventListener('error', () => finish(false))
+    const timer = setTimeout(() => finish(undefined, new Error('No se pudo inspeccionar el inicio de sesión')), 5_000)
+    ws.addEventListener('error', () => finish(undefined, new Error('Conexión del formulario no disponible')))
     ws.addEventListener('open', () => {
-      ws.send(JSON.stringify({ id: 1, method: 'Runtime.evaluate', params: { expression, returnByValue: true } }))
+      try {
+        ws.send(JSON.stringify({ id: 1, method: 'Runtime.evaluate',
+          params: { expression: loginDetectionExpression(), returnByValue: true } }))
+      } catch { finish(undefined, new Error('No se pudo enviar la inspección a Chrome')) }
     })
     ws.addEventListener('message', event => {
       try {
         const data = JSON.parse(String(event.data)) as {
-          id?: number; result?: { result?: { value?: unknown } }
+          id?: number; error?: unknown; result?: {
+            exceptionDetails?: unknown; result?: { value?: unknown }
+          }
         }
-        if (data.id === 1) finish(data.result?.result?.value === true)
-      } catch { finish(false) }
+        if (data.id !== 1) return
+        if (data.error || data.result?.exceptionDetails) return finish(undefined, new Error('Inspección fallida'))
+        finish(data.result?.result?.value === true)
+      } catch { finish(undefined, new Error('Respuesta inválida de Chrome')) }
     })
   })
 }
@@ -196,14 +243,16 @@ async function injectLogin(tab: BrowserTab, login: LoginContent): Promise<string
   const expression = '(async () => {'
     + 'const expected=' + JSON.stringify(login.origin) + ';'
     + 'if(location.origin!==expected) return "origin-changed";'
-    + 'const fields=[...document.querySelectorAll("input")].filter(e=>!e.disabled && !e.readOnly && e.getClientRects().length);'
-    + 'const passwords=fields.filter(e=>e.type==="password");'
-    + 'if(passwords.length!==1) return "login-form-not-found";'
-    + 'const pass=passwords[0];'
-    + 'const account=fields.find(e=>e.autocomplete==="username") || fields.find(e=>e.type==="email")'
-    + ' || fields.find(e=>/user|email|login|account/i.test((e.name||"")+" "+(e.id||"")))'
-    + ' || fields.find(e=>e!==pass && (e.type==="text" || e.type==="email"));'
-    + 'if(!account) return "login-form-not-found";'
+    + 'const roots=[document];for(const f of document.querySelectorAll("iframe")){try{const d=f.contentDocument;if(d&&d.location.origin===expected)roots.push(d)}catch{}}'
+    + 'const visible=e=>!e.disabled&&!e.readOnly&&e.getClientRects().length>0;'
+    + 'const candidates=roots.flatMap(d=>{const fields=[...d.querySelectorAll("input")].filter(visible);'
+    + 'const passwords=fields.filter(e=>e.type==="password");if(passwords.length!==1)return [];'
+    + 'const pass=passwords[0];const account=fields.find(e=>e!==pass&&(e.autocomplete==="username"||e.type==="email"'
+    + '||/user|email|login|account/i.test((e.name||"")+" "+(e.id||""))))'
+    + '||fields.find(e=>e!==pass&&["text","email","tel"].includes(e.type));'
+    + 'return account?[{pass,account}]:[];});'
+    + 'if(candidates.length!==1) return "login-form-not-found";'
+    + 'const {pass,account}=candidates[0];'
     + 'const setter=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value").set;'
     + 'const set=(el,v)=>{setter.call(el,v);el.dispatchEvent(new Event("input",{bubbles:true}));el.dispatchEvent(new Event("change",{bubbles:true}));};'
     + 'account.style.setProperty("-webkit-text-security","disc","important");'
@@ -211,9 +260,14 @@ async function injectLogin(tab: BrowserTab, login: LoginContent): Promise<string
     + 'set(pass,' + JSON.stringify(login.secret) + ');'
     + 'await new Promise(resolve=>setTimeout(resolve,80));'
     + 'if(location.origin!==expected) return "origin-changed";'
-    + 'const form=pass.form || account.form; if(!form) return "login-form-not-found";'
-    + 'const button=form.querySelector("button[type=submit],input[type=submit]");'
-    + 'if(button) button.click(); else form.requestSubmit();'
+    + 'const form=pass.form || account.form;'
+    + 'if(form){const button=form.querySelector("button[type=submit],input[type=submit]");'
+    + 'if(button)button.click();else form.requestSubmit();}'
+    + 'else {const root=pass.closest("[role=dialog]")||pass.parentElement?.parentElement;'
+    + 'const buttons=[...(root?.querySelectorAll("button,[role=button],input[type=submit]")||[])]'
+    + '.filter(e=>/^(?:ingresar|iniciar sesi[oó]n|acceder|entrar|log ?in|sign ?in)$/i'
+    + '.test((e.textContent||e.value||"").trim())&&!e.disabled);'
+    + 'if(buttons.length!==1)return "login-form-not-found";buttons[0].click();}'
     + 'return "submitted";'
     + '})()'
   return await new Promise<string>((resolve, reject) => {
@@ -247,18 +301,34 @@ async function injectLogin(tab: BrowserTab, login: LoginContent): Promise<string
     })
   })
 }
-async function useLogin(origin: string, tabId: string, manual: boolean): Promise<string> {
+async function useLogin(origin: string, tabId: string, manual: boolean, vault?: CredentialProvider): Promise<string> {
   const saved = await load(origin)
-  if (!saved || (!saved.automatic && !manual)) return 'not-authorized'
+  const previous = saved ? undefined : await legacyLogin(vault, origin)
+  if ((!saved && !previous)
+    || (!(saved?.automatic ?? previous?.automatic ?? false) && !manual)) return 'not-authorized'
   const tab = await tabForLogin(tabId, origin)
-  const plain = await dpapi('unprotect', saved.sealed, origin)
-  const login = JSON.parse(Buffer.from(plain, 'base64').toString('utf8')) as LoginContent
+  const login = saved
+    ? JSON.parse(Buffer.from(await dpapi('unprotect', saved.sealed, origin), 'base64').toString('utf8')) as LoginContent
+    : previous!.login
   if (login.origin !== origin || !login.account || !login.secret) throw new Error('Registro de bóveda inválido')
-  return await injectLogin(tab, login)
+  const result = await injectLogin(tab, login)
+  if (!saved && previous && result === 'submitted') {
+    // Migrating must not prevent a successfully initiated login. Keep legacy
+    // access in place if DPAPI is unavailable or the migration cannot finish.
+    try {
+      await store(origin, login.account, login.secret, previous.automatic)
+      await Promise.all([
+        vault?.unset(originCredentialRef(origin, 'account')).catch(() => {}),
+        vault?.unset(originCredentialRef(origin, 'secret')).catch(() => {}),
+        vault?.unset(originCredentialRef(origin, 'autonomous')).catch(() => {}),
+      ])
+    } catch { /* A storage problem is not a login failure. */ }
+  }
+  return result
 }
 
 /** Route lives on the host, outside every model-facing MCP tool and session log. */
-export function registerSecureLogin(ctx: Context): () => void {
+export function registerSecureLogin(ctx: Context, vault?: CredentialProvider): () => void {
   return ctx.webServer.register({
     kind: 'prefix',
     path: PREFIX,
@@ -269,7 +339,11 @@ export function registerSecureLogin(ctx: Context): () => void {
         if (req.method === 'GET' && route.pathname === PREFIX + '/status') {
           const origin = loginOrigin(route.searchParams.get('origin') ?? '')
           const record = await load(origin)
-          respond(res, 200, { saved: Boolean(record), automatic: record?.automatic ?? false })
+          const legacy = record ? undefined : await legacyLogin(vault, origin)
+          respond(res, 200, {
+            saved: Boolean(record || legacy), automatic: record?.automatic ?? legacy?.automatic ?? false,
+            source: record ? 'dpapi' : legacy ? 'legacy-vault' : 'none',
+          })
           return
         }
         if (req.method !== 'POST') { respond(res, 405, { error: 'Operación no permitida' }); return }
@@ -309,7 +383,7 @@ export function registerSecureLogin(ctx: Context): () => void {
           if (typeof payload.tabId !== 'string' || !/^[A-Za-z0-9_-]{1,200}$/.test(payload.tabId)) {
             throw new Error('Pestaña no válida')
           }
-          const status = await useLogin(origin, payload.tabId, payload.manual === true)
+          const status = await useLogin(origin, payload.tabId, payload.manual === true, vault)
           respond(res, 200, { status })
           return
         }

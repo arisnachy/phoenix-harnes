@@ -135,7 +135,7 @@ async function captureFrame(tabId: string, signal?: AbortSignal): Promise<Blob> 
   }, FRAME_DEADLINE_MS, FRAME_DEADLINE_MESSAGE, signal)
 }
 export type SecureStatus = { saved: boolean; automatic: boolean }
-export type SecureLoginTarget = { origin: string; tabId: string; saved: boolean; automatic: boolean }
+export type SecureLoginTarget = { origin: string; tabId: string; saved: boolean; automatic: boolean; diagnostic?: string }
 type SecureDetection = { required: boolean }
 type SecureUse = { status: string }
 function secureOrigin(value?: string): string | undefined {
@@ -230,48 +230,75 @@ export function MiniBrowser({ requested = false, active = true, initialTabId, on
   const videoId = youtubeId(snapshot.url)
   const siteOrigin = secureOrigin(snapshot.url)
 
-  // The MiniBrowser detects access needs, but never renders or stores a secret.
-  // Its parent temporarily replaces the adjacent activity pane with Secure Ask.
+  // Secure Ask is re-checked while a modal appears on the SAME URL.
+  // Reactive websites often reveal the password form without navigation:
+  // tying detection only to snapshot.url makes the sidebar never appear.
   useEffect(() => {
-    if (!siteOrigin || !snapshot.tabId || !active) {
+    if (!siteOrigin || !snapshot.tabId || !active || dismissed) {
       onSecureLoginRequest?.(null)
       return
     }
     const tabId = snapshot.tabId
+    const pageUrl = snapshot.url
     let stopped = false
-    void Promise.all([
-      secureApi<SecureStatus>('/status?origin=' + encodeURIComponent(siteOrigin)),
-      secureApi<SecureDetection>('/detect', { origin: siteOrigin, tabId }),
-    ]).then(async ([saved, detection]) => {
-      if (stopped) return
-      if (!detection.required) {
-        onSecureLoginRequest?.(null)
-        return
-      }
-      const request: SecureLoginTarget = { origin: siteOrigin, tabId,
-        saved: saved.saved, automatic: saved.automatic }
-      if (saved.saved && saved.automatic) {
-        const key = tabId + '|' + snapshot.url
-        if (!attemptedLogins.current.has(key)) {
+    let checking = false
+    const check = async (): Promise<void> => {
+      if (checking || stopped) return
+      checking = true
+      try {
+        // Vault presence is independent of Chrome's RPC health.
+        const status = await secureApi<SecureStatus>('/status?origin=' + encodeURIComponent(siteOrigin))
+          .catch(() => ({ saved: false, automatic: false, unavailable: true }))
+        if (stopped) return
+        const detection = await secureApi<SecureDetection>('/detect', { origin: siteOrigin, tabId })
+          .catch(() => undefined)
+        if (stopped) return
+        if (detection?.required === false) {
+          onSecureLoginRequest?.(null)
+          return
+        }
+        if (!detection?.required) {
+          // Never suppress an unavailable detection silently when a saved
+          // credential exists: offer explicit secure recovery in the sidebar.
+          if (status.saved) {
+            onSecureLoginRequest?.({
+              origin: siteOrigin, tabId, saved: true, automatic: status.automatic,
+              diagnostic: 'La comprobación del formulario no respondió. Se conserva el acceso guardado; usa Secure Ask para reintentar.',
+            })
+          }
+          return
+        }
+        const request: SecureLoginTarget = {
+          origin: siteOrigin, tabId, saved: status.saved, automatic: status.automatic,
+          ...('unavailable' in status && status.unavailable ? {
+            diagnostic: 'La bóveda local no respondió; abre Secure Ask y comprueba la conexión.',
+          } : {}),
+        }
+        const key = tabId + '|' + pageUrl
+        if (status.saved && status.automatic && !attemptedLogins.current.has(key)) {
           attemptedLogins.current.add(key)
           try {
             const result = await secureApi<SecureUse>('/use', { origin: siteOrigin, tabId })
             if (stopped) return
             if (result.status === 'submitted') {
               refreshFrame.current?.()
-              // Submission is not proof of authentication. Wait for navigation.
+              // Wait for one later DOM poll. A submitted login is not yet
+              // an authenticated session, and must never be submitted twice.
               return
             }
-          } catch { /* Surface the human intervention pane below. */ }
-        } else {
-          // A previous attempt may still be navigating; no duplicate submits.
-          return
+          } catch {
+            // A broken transport must not hide the in-chat Secure Ask fallback.
+          }
         }
+        if (!stopped) onSecureLoginRequest?.(request)
+      } finally {
+        checking = false
       }
-      if (!stopped) onSecureLoginRequest?.(request)
-    }).catch(() => { /* Keep the MiniBrowser usable if the vault is offline. */ })
-    return () => { stopped = true }
-  }, [siteOrigin, snapshot.url, snapshot.tabId, active, onSecureLoginRequest])
+    }
+    void check()
+    const timer = window.setInterval(() => { void check() }, 3_500)
+    return () => { stopped = true; window.clearInterval(timer) }
+  }, [siteOrigin, snapshot.url, snapshot.tabId, active, dismissed, onSecureLoginRequest])
 
   const pasteIntoPage = async () => {
     try {
@@ -679,6 +706,19 @@ export function MiniBrowser({ requested = false, active = true, initialTabId, on
             placeholder="Buscar o escribir una dirección"
             value={address} onChange={(event) => { setAddress(event.currentTarget.value) }} />
           <button type="submit">Ir</button>
+          {siteOrigin && snapshot.tabId && onSecureLoginRequest && <button type="button"
+            aria-label="Abrir acceso seguro" title="Acceso seguro de Kira en el panel lateral"
+            onClick={() => {
+              const tabId = snapshot.tabId!
+              void secureApi<SecureStatus>('/status?origin=' + encodeURIComponent(siteOrigin))
+                .then(status => onSecureLoginRequest({
+                  origin: siteOrigin, tabId, saved: status.saved, automatic: status.automatic,
+                }))
+                .catch(() => onSecureLoginRequest({
+                  origin: siteOrigin, tabId, saved: false, automatic: false,
+                  diagnostic: 'No se pudo consultar la bóveda. Revisa la conexión local de Phoenix.',
+                }))
+            }}>🔐 Acceso seguro</button>}
         </form>
         {snapshot.available ? (
           <div className={css.viewport}>
