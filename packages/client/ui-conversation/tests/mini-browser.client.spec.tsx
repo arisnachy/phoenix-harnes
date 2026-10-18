@@ -111,6 +111,33 @@ describe('MiniBrowser in Phoenix conversation', () => {
     }))
   })
 
+  it('opens the in-page login dialog before asking for site-specific credentials', async () => {
+    const request = vi.fn()
+    let opened = 0
+    const onSite = { ...state, url: 'https://example.org/sports', title: 'Sports',
+      tabs: [{ id: 'shared-tab', title: 'Sports', url: 'https://example.org/sports' }] }
+    vi.stubGlobal('fetch', vi.fn(async (raw: string) => {
+      const url = String(raw)
+      if (url.startsWith('/phoenix-secure-login/status')) return new Response(
+        JSON.stringify({ saved: false, automatic: false }), { status: 200 })
+      if (url.startsWith('/phoenix-secure-login/detect')) return new Response(
+        JSON.stringify({ required: true, formVisible: false, canOpenInPlace: true }), { status: 200 })
+      if (url.startsWith('/phoenix-secure-login/open')) {
+        opened++
+        return new Response(JSON.stringify({ required: true }), { status: 200 })
+      }
+      if (url.startsWith('/phoenix-mini-browser/frame')) return new Response(
+        new Uint8Array([255, 216, 255, 217]), { status: 200, headers: { 'content-type': 'image/jpeg' } })
+      return new Response(JSON.stringify(onSite), { status: 200,
+        headers: { 'content-type': 'application/json' } })
+    }))
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn(() => 'blob:open-login') })
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() })
+    render(<MiniBrowser requested onSecureLoginRequest={request} />)
+    await waitFor(() => expect(opened).toBe(1))
+    expect(request).not.toHaveBeenCalledWith(expect.objectContaining({ saved: false, origin: 'https://example.org' }))
+  })
+
   it('provides a manual Secure Ask fallback in the browser toolbar', async () => {
     const request = vi.fn()
     const onSite = { ...state, url: 'https://example.org/login', title: 'Acceso',

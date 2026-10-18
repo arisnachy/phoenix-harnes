@@ -108,7 +108,7 @@ export function SecureAsk({ target, onClose, onSaved }: {
             disabled={busy} required={field.required} value={extraValues[field.key] ?? ''}
             autoComplete="off" spellCheck={false}
             placeholder={field.placeholder || field.label}
-            onChange={event => setExtraValues(values => ({ ...values, [field.key]: event.currentTarget.value }))} />
+            onChange={event => { const value = event.currentTarget.value; setExtraValues(values => ({ ...values, [field.key]: value })) }} />
         </label>)}
         <label className={css.option}><input type="checkbox" checked={automatic} disabled={busy}
           onChange={event => setAutomatic(event.currentTarget.checked)} />

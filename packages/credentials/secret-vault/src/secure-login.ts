@@ -488,6 +488,21 @@ export function registerSecureLogin(ctx: Context, vault?: CredentialProvider): (
           respond(res, 200, { ...await inspectLoginGate(tab) })
           return
         }
+        if (route.pathname === PREFIX + '/open') {
+          if (typeof payload.tabId !== 'string' || !/^[A-Za-z0-9_-]{1,200}$/.test(payload.tabId)) {
+            throw new Error('Pestaña no válida')
+          }
+          const tab = await tabForLogin(payload.tabId, origin)
+          const gate = await inspectLoginGate(tab)
+          if (!gate.required || gate.formVisible || !gate.canOpenInPlace) {
+            respond(res, 200, { ...gate })
+            return
+          }
+          // Same-page, unambiguous login trigger only. No navigation or
+          // submission is attempted and no credential ever reaches MCP.
+          respond(res, 200, { ...await inspectLoginGate(tab, 'open') })
+          return
+        }
         if (route.pathname === PREFIX + '/save') {
           const account = payload.account
           const secret = payload.secret

@@ -213,6 +213,7 @@ export function MiniBrowser({ requested = false, active = true, initialTabId, on
   const [typed, setTyped] = useState('')
   const attemptedLogins = useRef(new Set<string>())
   const pendingAutomaticLogin = useRef(new Map<string, number>())
+  const openedLoginGates = useRef(new Set<string>())
   const [playingVideo, setPlayingVideo] = useState(false)
   const [videoSurface, setVideoSurface] = useState(true)
   const [frame, setFrame] = useState<string>()
@@ -274,6 +275,7 @@ export function MiniBrowser({ requested = false, active = true, initialTabId, on
           // present an enrollment form while the login is already satisfied.
           attemptedLogins.current.delete(key)
           pendingAutomaticLogin.current.delete(key)
+          openedLoginGates.current.delete(key)
           onSecureLoginRequest?.(null)
           return
         }
@@ -285,6 +287,21 @@ export function MiniBrowser({ requested = false, active = true, initialTabId, on
             })
           }
           return
+        }
+        // With no stored access, first expose the real same-page form so
+        // Secure Ask can use its labels, input types and required extra fields.
+        // A login dialog is a navigation aid, not a transaction approval.
+        if (!status.saved && detection.formVisible === false && detection.canOpenInPlace
+          && !openedLoginGates.current.has(key)) {
+          openedLoginGates.current.add(key)
+          try {
+            await secureApi<SecureDetection>('/open', { origin: siteOrigin, tabId })
+            if (!stopped) onSecureLoginRequest?.(null)
+            return
+          } catch {
+            // Keep the secure manual route available if Chrome cannot expose
+            // the form; do not repeat the same failed click.
+          }
         }
         const request: SecureLoginTarget = {
           origin: siteOrigin, tabId, saved: status.saved, automatic: status.automatic,
