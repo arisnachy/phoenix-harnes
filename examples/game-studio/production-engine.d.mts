@@ -8,6 +8,7 @@ export interface ProductionEvidence {
 }
 export interface GameProductionState {
   schemaVersion: 1
+  revision: number
   manifestPath: string
   manifestSha256: string
   title: string
