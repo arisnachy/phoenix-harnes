@@ -1,5 +1,7 @@
 # `@phoenix-ai/dsh-tool-business`
 
+English | [中文](README.zh.md)
+
 Model-facing, read-only business mission planner. Kira can categorize a request for books, courses, software, games, designs, research, video, audio or commercial services, then inspect the active MCP runtime inventory without receiving credentials. The planner neither creates products nor publishes or spends money.
 
 ## Model Experience
