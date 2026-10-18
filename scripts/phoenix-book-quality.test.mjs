@@ -27,13 +27,25 @@ const product = (bp=plan()) => ({
   chapters:bp.chapters.map((c)=>({number:c.number,words:0,sha256:'0'.repeat(64),path:'products/un-libro/chapters/'+String(c.number).padStart(3,'0')+'.md'})),
   files:[],
 })
+const coverCache=new Map()
+function pngChunk(name,payload){
+ const kind=Buffer.from(name,'ascii'),size=Buffer.alloc(4),checksum=Buffer.alloc(4)
+ size.writeUInt32BE(payload.length)
+ const buffer=Buffer.concat([kind,payload])
+ let crc=0xffffffff
+ for(const byte of buffer){crc^=byte;for(let i=0;i<8;i++)crc=(crc&1)?(crc>>>1)^0xedb88320:(crc>>>1)}
+ checksum.writeUInt32BE((crc^0xffffffff)>>>0)
+ return Buffer.concat([size,buffer,checksum])
+}
 function pngHeader(width,height){
- const data=Buffer.alloc(36)
- Buffer.from('89504e470d0a1a0a','hex').copy(data)
- data.writeUInt32BE(13,8)
- data.write('IHDR',12)
- data.writeUInt32BE(width,16);data.writeUInt32BE(height,20)
- return data
+ const key=width+'x'+height
+ if(coverCache.has(key))return coverCache.get(key)
+ const ihdr=Buffer.alloc(13)
+ ihdr.writeUInt32BE(width,0);ihdr.writeUInt32BE(height,4);ihdr[8]=8;ihdr[9]=0
+ const pixels=Buffer.alloc(height*(width+1))
+ const image=Buffer.concat([Buffer.from('89504e470d0a1a0a','hex'),pngChunk('IHDR',ihdr),pngChunk('IDAT',deflateSync(pixels)),pngChunk('IEND',Buffer.alloc(0))])
+ coverCache.set(key,image)
+ return image
 }
 test('book format profiles and genre guidance are advisory, never fabricated sales',()=>{
   assert.equal(BOOK_FORMATS.novel.minWords,50000)
