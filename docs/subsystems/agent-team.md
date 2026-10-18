@@ -280,6 +280,7 @@ interface TeamChatMessage {
   readonly time: number
   readonly sourceSeq: number
   readonly targetId?: string | undefined
+  readonly targetName?: string | undefined
   readonly replyTo?: string | undefined
   readonly replyQuote?: string | undefined
   readonly mentions: readonly string[]
@@ -302,6 +303,9 @@ interface TeamChatParticipant {
   readonly status: string
   readonly avatar?: string | undefined
   readonly task?: string | undefined
+  /** Actual provider/model from the child assistant message, not the lead's selector. */
+  readonly modelProvider?: string | undefined
+  readonly model?: string | undefined
   readonly missionId?: string | undefined
 }
 ```
