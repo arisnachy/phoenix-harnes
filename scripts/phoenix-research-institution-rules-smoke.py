@@ -6,7 +6,7 @@ import sys
 import tempfile
 from pathlib import Path
 from docx import Document
-import fitz
+import pymupdf as fitz
 
 script = Path(__file__).with_name("phoenix-research-institution-rules.py")
 with tempfile.TemporaryDirectory(prefix="research-rules-ci-") as root:
