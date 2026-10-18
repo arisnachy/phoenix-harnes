@@ -4,12 +4,13 @@ import { mkdtemp, writeFile, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
 
-const cli = new URL('./phoenix-business.mjs', import.meta.url)
+const cli = fileURLToPath(new URL('./phoenix-business.mjs', import.meta.url))
 async function fixture(run) {
   const home = await mkdtemp(join(tmpdir(), 'phoenix-business-test-'))
   const invoke = (...args) => {
-    const proc = spawnSync(process.execPath, [cli.pathname,...args], {encoding:'utf8', env:{...process.env,PHOENIX_BUSINESS_HOME:home}})
+    const proc = spawnSync(process.execPath, [cli,...args], {encoding:'utf8', env:{...process.env,PHOENIX_BUSINESS_HOME:home}})
     const value = JSON.parse(proc.status===0?proc.stdout:proc.stderr)
     return {...value,status:proc.status}
   }
