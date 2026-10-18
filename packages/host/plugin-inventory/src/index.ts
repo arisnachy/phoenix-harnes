@@ -444,66 +444,6 @@ export class PluginInventoryGateway extends TypertRemoteService {
    * Read the official X MCP bundle state without exposing OAuth application secrets.
    * @returns Secret-free credential presence plus API/Docs connector lifecycle.
    */
-  async xMcpState(): Promise<{
-    clientIdConfigured: boolean
-    clientSecretConfigured: boolean
-    api: {
-      configured: boolean
-      status?: McpConnectorRuntimeEntry['status']
-      reasonCode?: McpConnectorRuntimeEntry['reasonCode']
-    }
-    phoenixApi: {
-      configured: boolean
-      status?: McpConnectorRuntimeEntry['status']
-      reasonCode?: McpConnectorRuntimeEntry['reasonCode']
-    }
-    docs: {
-      configured: boolean
-      status?: McpConnectorRuntimeEntry['status']
-      reasonCode?: McpConnectorRuntimeEntry['reasonCode']
-    }
-  }> {
-    const credentials = (this.ctx.get as (name: string) => unknown)('credentials') as
-      | { describe(ref: string): Promise<{ configured: boolean }> }
-      | undefined
-    const [clientIdConfigured, clientSecretConfigured] = credentials === undefined
-      ? [false, false]
-      : await Promise.all([
-        credentials.describe(X_CLIENT_ID_REF).then(info => info.configured),
-        credentials.describe(X_CLIENT_SECRET_REF).then(info => info.configured),
-      ])
-    const managed = await this.managedMcp.snapshot()
-    const apiConfigured = managed.some(connector => connector.serverName === X_API_MCP_SERVER_NAME)
-    const phoenixApiConfigured = managed.some(connector =>
-      connector.serverName === X_PHOENIX_API_MCP_SERVER_NAME)
-    const docsConfigured = managed.some(connector => connector.serverName === X_DOCS_MCP_SERVER_NAME)
-    const registry = (this.ctx.get as (name: string) => unknown)('mcpConnectors') as
-      | { list(): readonly McpConnectorRuntimeEntry[] }
-      | undefined
-    const apiRuntime = registry?.list().find(entry => entry.serverName === X_API_MCP_SERVER_NAME)
-    const phoenixApiRuntime = registry?.list().find(entry =>
-      entry.serverName === X_PHOENIX_API_MCP_SERVER_NAME)
-    const docsRuntime = registry?.list().find(entry => entry.serverName === X_DOCS_MCP_SERVER_NAME)
-    const runtimeState = (configured: boolean, runtime: McpConnectorRuntimeEntry | undefined) => ({
-      configured,
-      ...(runtime === undefined ? {} : {
-        status: runtime.status,
-        ...(runtime.reasonCode === undefined ? {} : { reasonCode: runtime.reasonCode }),
-      }),
-    })
-    return {
-      clientIdConfigured,
-      clientSecretConfigured,
-      api: runtimeState(apiConfigured, apiRuntime),
-      phoenixApi: runtimeState(phoenixApiConfigured, phoenixApiRuntime),
-      docs: runtimeState(docsConfigured, docsRuntime),
-    }
-  }
-
-  /**
-   * Read the official X MCP bundle state without exposing OAuth application secrets.
-   * @returns Secret-free credential presence plus API/Docs connector lifecycle.
-   */
   @Remote('xMcpState')
   async xMcpState(): Promise<{
     clientIdConfigured: boolean
@@ -567,7 +507,7 @@ export class PluginInventoryGateway extends TypertRemoteService {
    * @returns Idempotent receipts for both pinned connectors.
    */
   @Remote('enableXMcp')
-  async enableXMcp(options: { identity?: XMcpIdentity; username?: string }): Promise<{
+  async enableXMcp(options: { identity?: XMcpIdentity; username?: string } = {}): Promise<{
     api: McpRegistryInstallReceipt
     docs: McpRegistryInstallReceipt
   }> {
