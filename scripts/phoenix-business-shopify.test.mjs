@@ -1,6 +1,6 @@
 import {test} from 'node:test'
 import assert from 'node:assert/strict'
-import {createShopifyDraft, inspectShopifyDraft, configureShopifyDraftPrice} from './phoenix-business-shopify.mjs'
+import {createShopifyDraft, inspectShopifyDraft, configureShopifyDraftPrice, inspectShopifyDraftPrice} from './phoenix-business-shopify.mjs'
 const revision='a'.repeat(64)
 const product={id:'curso-ejemplo',title:'Curso original de automatización',description:'Aprende <JS>\ny mejora tus procesos',revision}
 const config={shop:'my-test-store.myshopify.com',token:'shpat-test-token-value-not-real'}
@@ -120,4 +120,23 @@ test('unconfirmed price update fails without another write or secret leak', asyn
   await assert.rejects(configureShopifyDraftPrice(config, priced, { approval: pricingApproval, fetchImpl: api.fetchImpl }),
     err => { assert.match(err.message, /conciliar/); assert(!err.message.includes(config.token)); return true })
   assert.equal(api.calls.filter(call => call.obj.query.includes('mutation')).length, 1)
+})
+
+
+test('read-only price reconciliation after uncertain response does not mutate', async () => {
+  const api = mockApi([pricedResponse('29.99')])
+  const result = await inspectShopifyDraftPrice(config, priced, { fetchImpl: api.fetchImpl })
+  assert.equal(result.found, true)
+  assert.equal(result.configured, true)
+  assert.equal(result.expectedPrice, '29.99')
+  assert.equal(api.calls.length, 1)
+  assert(!api.calls[0].obj.query.includes('mutation'))
+})
+
+test('read-only price reconciliation detects an absent remote draft', async () => {
+  const api = mockApi([{ shop: { currencyCode: 'USD' }, product: null }])
+  const result = await inspectShopifyDraftPrice(config, priced, { fetchImpl: api.fetchImpl })
+  assert.equal(result.found, false)
+  assert.equal(result.paid, false)
+  assert.equal(api.calls.length, 1)
 })
