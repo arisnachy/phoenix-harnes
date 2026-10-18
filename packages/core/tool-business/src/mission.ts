@@ -1,12 +1,17 @@
 /** Pure, bounded intent/capability planning for Kira. NEVER invokes external services. */
+/** Domain recognized by the business intent heuristic. */
 export type BusinessCategory = 'book' | 'course' | 'software' | 'game' | 'design' | 'research' | 'video' | 'audio' | 'service' | 'unspecified'
+/** Commercial stage requested by the user; not authority to execute it. */
 export type BusinessAction = 'opportunity' | 'create' | 'validate' | 'package' | 'publish' | 'market' | 'analytics'
+/** Public lifecycle state from the connected MCP runtime. */
 export type ConnectorStatus = 'starting' | 'ready' | 'disconnected' | 'failed' | 'auth-required'
+/** Secret-free server state and advertised model-facing tool names. */
 export interface RuntimeConnector {
   readonly serverName: string
   readonly status: ConnectorStatus
   readonly toolNames: readonly string[]
 }
+/** Advisory connector candidate with no implied write permission. */
 export interface BusinessCandidate {
   readonly server: string
   readonly status: ConnectorStatus
@@ -14,6 +19,7 @@ export interface BusinessCandidate {
   readonly capability: 'read' | 'write'
   readonly eligible: boolean
 }
+/** Normalized, non-executing commercial plan and permission blockers. */
 export interface BusinessMissionPlan {
   readonly category: BusinessCategory
   readonly actions: readonly BusinessAction[]
@@ -88,7 +94,12 @@ function matchedServer(server: string, channel: string | null, category: Busines
   return SKILL_SERVERS[category].some(regex => regex.test(server))
 }
 
-/** Returns advisory execution routes, not authority to perform a commercial action. */
+/**
+ * Returns advisory execution routes, not authority to perform a commercial action.
+ * @param request - Original user request, excluding secrets.
+ * @param runtime - Current secret-free MCP inventory, when the runtime is available.
+ * @returns Bounded plan whose connectors are suggestions, never proof of authorization.
+ */
 export function planBusinessMission(
   request: string,
   runtime: readonly RuntimeConnector[] | undefined,
