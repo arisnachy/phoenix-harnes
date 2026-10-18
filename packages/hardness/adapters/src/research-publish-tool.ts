@@ -120,7 +120,7 @@ function findPublisher(): string {
 }
 
 type PublisherOutcome = {
-  state: 'REPORT_READY'
+  state: 'REPORT_READY' | 'REPORT_NEEDS_REVISION'
   report_id: string
   title: string
   files: { docx: string; pdf: string; html: string }
@@ -151,7 +151,7 @@ async function runAttempt(bin: string, args: string[], payload: string, signal: 
       }
       try {
         const value = JSON.parse(output.trim()) as PublisherOutcome
-        if (value.state !== 'REPORT_READY' || !/^[0-9a-f]{16}$/u.test(value.report_id) || typeof value.files !== 'object') {
+        if ((value.state !== 'REPORT_READY' && value.state !== 'REPORT_NEEDS_REVISION') || !/^[0-9a-f]{16}$/u.test(value.report_id) || typeof value.files !== 'object') {
           throw new Error('La respuesta del publicador no confirmó un documento listo.')
         }
         resolveOutcome(value)
@@ -216,8 +216,8 @@ export function createResearchPublishTool(): ToolDefinition {
       schema: { type: 'object', additionalProperties: true },
       render: (_args, value) => [{
         type: 'text',
-        text: value.state === 'REPORT_READY'
-          ? 'Informe generado y comprobado. Word: ' + String((value.files as Record<string, unknown>).docx)
+        text: value.state === 'REPORT_READY' || value.state === 'REPORT_NEEDS_REVISION'
+          ? (value.state === 'REPORT_READY' ? 'Informe completo para revisión académica. Word: ' : 'Informe generado, PERO AÚN NO COMPLETO: la paginación requiere ampliación o revisión. Word: ') + String((value.files as Record<string, unknown>).docx)
             + '; PDF: ' + String((value.files as Record<string, unknown>).pdf)
             + '; vista HTML: ' + String((value.files as Record<string, unknown>).html)
             + '. Edición: ' + String(value.presentation ?? 'academic')
