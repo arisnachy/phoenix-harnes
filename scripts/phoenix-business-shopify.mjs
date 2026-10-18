@@ -149,3 +149,20 @@ export async function configureShopifyDraftPrice(settings, product, { approval, 
     'No se verificó el precio final; conciliar antes de repetir.')
   return { configured: true, reused: false, shop: settings.shop, ...after, publiclyPublished: false, ordersVerified: 0, paid: false }
 }
+
+
+/** Read-only reconciliation after an uncertain update; does not require or consume approval. */
+export async function inspectShopifyDraftPrice(settings, product, { fetchImpl = fetch } = {}) {
+  validate(settings, product)
+  insist(product.currency && /^[A-Z]{3}$/.test(product.currency), 'Moneda ISO 4217 inválida.')
+  const expectedPrice = canonicalPrice(product.price)
+  const data = await graphql(settings, PRICE_LOOKUP, {
+    identifier: { handle: formatHandle(product.id, product.revision) },
+  }, fetchImpl)
+  if (data.product == null) {
+    return { found: false, configured: false, shop: settings.shop, publiclyPublished: false, ordersVerified: 0, paid: false }
+  }
+  const remote = draftPriceSnapshot(data, product, settings)
+  return { found: true, configured: remote.price === expectedPrice, expectedPrice,
+    shop: settings.shop, ...remote, publiclyPublished: false, ordersVerified: 0, paid: false }
+}
