@@ -8,7 +8,7 @@ import { constants as fsConstants } from 'node:fs'
 import { deflateRawSync } from 'node:zlib'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { validateBlueprint, progress, buildFingerprint, docxEntries, printHtml } from './phoenix-business-studio.mjs'
-import { auditBook, buildBookMarketingBrief, genreGuide, inspectCover } from './phoenix-book-quality.mjs'
+import { auditBook, buildBookMarketingBrief, genreGuide, inspectCover, BOOK_FORMATS } from './phoenix-book-quality.mjs'
 
 const root = resolve(process.env.PHOENIX_BUSINESS_HOME || join(process.env.DSH_HOME || join(homedir(), '.dsh'), 'business-library'))
 const indexFile = join(root, 'library.json')
@@ -89,8 +89,9 @@ async function addAsset(product, input, role) {
   return entry
 }
 function editorialCheck(product, opts={}) {
-  const minWords = Number(opts.minWords ?? (product.type === 'book' ? 50000 : 0))
-  const minChapters = Number(opts.minChapters ?? (product.type === 'book' ? 15 : 0))
+  const standard=BOOK_FORMATS[product.blueprint?.editorial?.format] ?? BOOK_FORMATS.novel
+  const minWords = Number(opts.minWords ?? (product.type === 'book' ? standard.minWords : 0))
+  const minChapters = Number(opts.minChapters ?? (product.type === 'book' ? standard.minChapters : 0))
   if (![minWords, minChapters].every(n => Number.isSafeInteger(n) && n >= 0)) fail('Umbrales editoriales inválidos.')
   const ordered = [...product.chapters].sort((a,b)=>a.number-b.number)
   const blueprint = product.blueprint
@@ -170,7 +171,8 @@ async function compileBook(product,author,lang,opts) {
   // Short local builds with explicitly lowered thresholds remain draft-only for tests and prototypes.
   // A commercial-sized default build cannot silently package repetitive/unfinished chapters.
   let editorialGate = null
-  if (opts.minWords >= 50000 && opts.minChapters >= 15) {
+  const standard=BOOK_FORMATS[product.blueprint?.editorial?.format] ?? BOOK_FORMATS.novel
+  if (opts.minWords >= standard.minWords && opts.minChapters >= standard.minChapters) {
     editorialGate = await auditBook(product,root)
     const manuscriptIssues = editorialGate.blockers.filter(issue => !issue.startsWith('Falta portada'))
     if (manuscriptIssues.length) fail('Revisión editorial estructural incompleta: ' + manuscriptIssues.join(' | '))
@@ -283,8 +285,8 @@ async function main(args) {
     if(p.type==='book'&&!check.buildCurrent) issues.push({status:'export-stale-or-missing'})
     return {id:p.id,filesInspected:p.files.length+p.chapters.length,issues,checks:check,filesIntact:!issues.some(i=>['missing','sha256-mismatch','unsafe-path'].includes(i.status)),readyForAutomaticPublication:false,externalPublicationVerified:false,reviewRequired:['Derechos y licencias','Originalidad','Calidad editorial','Declaración de IA','Portada','PDF y paginación reales']}
   },false)
-  if (cmd === 'compile') return transaction(db=>compileBook(get(db,positional[0]),String(option('--author','')),String(option('--lang','es')), {minWords:Number(option('--words',50000)),minChapters:Number(option('--chapters',15))}))
-  if (cmd === 'check') return transaction(db=> editorialCheck(get(db,positional[0]),{minWords:Number(option('--words', undefined)??(get(db,positional[0]).type==='book'?50000:0)),minChapters:Number(option('--chapters', undefined)??(get(db,positional[0]).type==='book'?15:0))}),false)
+  if (cmd === 'compile') return transaction(db=>{const p=get(db,positional[0]),standard=BOOK_FORMATS[p.blueprint?.editorial?.format]??BOOK_FORMATS.novel;return compileBook(p,String(option('--author','')),String(option('--lang','es')),{minWords:Number(option('--words',standard.minWords)),minChapters:Number(option('--chapters',standard.minChapters))})})
+  if (cmd === 'check') return transaction(db=>{const p=get(db,positional[0]),standard=BOOK_FORMATS[p.blueprint?.editorial?.format]??BOOK_FORMATS.novel;return editorialCheck(p,{minWords:Number(option('--words',p.type==='book'?standard.minWords:0)),minChapters:Number(option('--chapters',p.type==='book'?standard.minChapters:0))})},false)
   if (cmd === 'route') return route(positional[0],String(option('--tools','')).split(',').filter(Boolean))
   if (cmd === 'prepare') return transaction(async db=>{
     const p=get(db,positional[0]), platform=positional[1];if(!(platform in PLATFORMS)) fail('Plataforma no soportada.')
