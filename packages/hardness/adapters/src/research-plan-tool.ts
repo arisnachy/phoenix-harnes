@@ -87,6 +87,11 @@ function allocate(input: ReadonlyArray<readonly [string, string, number]>, targe
   for (const row of ranking.slice(0, remaining)) base[row.index]! += 1
   return input.map(([kind, label], index) => ({ kind, label, pages: base[index]! }))
 }
+/**
+ * Construct a source-neutral academic intake and bounded page distribution.
+ * @param input - user intent and optional research/cover/page constraints.
+ * @returns structured intake, chapter plan, missing fields and unverified evidence status.
+ */
 export function planAcademicResearch(input: unknown) {
   const args = parse(input)
   const entry = chooseEntry(args)
@@ -136,6 +141,10 @@ export function planAcademicResearch(input: unknown) {
     guidance: 'Recopila juntos los campos ausentes. Si hay manual o plantilla institucional, extrae primero sus reglas. Verifica cada DOI/PMID y la existencia de los estudios; no inventes resultados, permisos éticos ni bibliografía.',
   }
 }
+/**
+ * Expose the deterministic planner through Phoenix's governed tool registry.
+ * @returns the model-facing academic planning tool.
+ */
 export function createResearchPlanTool(): ToolDefinition {
   return defineTool({
     name: 'phoenix_research_plan',
