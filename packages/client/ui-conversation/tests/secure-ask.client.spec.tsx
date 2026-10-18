@@ -135,6 +135,8 @@ describe('Secure Ask human-only browser sidebar', () => {
     await waitFor(() => expect(calls.some(call => call.path.endsWith('/save')
       && call.data.profile === 'kira' && call.data.account === 'kira-service-user')).toBe(true))
     expect(calls.some(call => call.path.endsWith('/delete'))).toBe(false)
+    await waitFor(() => expect(calls.some(call => call.path.endsWith('/select')
+      && call.data.profile === 'kira')).toBe(true))
   })
 
   it('does not claim login complete if the site still requires authentication', async () => {

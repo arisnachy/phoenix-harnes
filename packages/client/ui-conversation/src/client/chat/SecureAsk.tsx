@@ -69,6 +69,14 @@ export function SecureAsk({ target, onClose, onSaved }: {
         ...(extraFields.length ? { extras: Object.fromEntries(extraFields.map(field => [field.key, extraValues[field.key] ?? ''])) } : {}),
       })
       if (saved.profiles) setProfiles(saved.profiles)
+      if (profile === 'kira') {
+        // The human explicitly chose the Kira identity for this task.
+        // Select it before dispatching the sign-in, without deleting or
+        // changing the existing personal credential.
+        await secureApi<SecureStatus>('/select', {
+          origin: target.origin, tabId: target.tabId, profile,
+        })
+      }
       // Once stored securely, do not leave the credential-entry form exposed.
       setEditing(false)
       // The user's explicit submit authorizes *this* initial login. The

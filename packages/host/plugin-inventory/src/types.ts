@@ -352,3 +352,6 @@ export interface OpenClawConnectorEntry {
 export interface OpenClawConnectorSnapshot {
   readonly connectors: readonly OpenClawConnectorEntry[]
 }
+
+/** Public X connector identity accepted by the Host remote boundary. */
+export type XMcpIdentity = 'user' | 'phoenix'

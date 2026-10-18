@@ -12,6 +12,7 @@ import type {
   McpRegistryInstallReceipt,
   McpRegistryInstallRequest,
   McpRegistrySearchSnapshot,
+  XMcpIdentity,
 } from './types.ts'
 
 const MCP_CLIENT_PACKAGE = '@phoenix-ai/dsh-mcp-client'
@@ -132,7 +133,7 @@ export const X_API_MCP_URL = 'https://api.x.com/mcp'
 /** Dedicated MCP namespace for Phoenix's own X account. */
 export const X_PHOENIX_API_MCP_SERVER_NAME = 'x-api-phoenix'
 /** Public identity kinds supported by the managed X bridge. */
-export type XMcpIdentity = 'user' | 'phoenix'
+export type { XMcpIdentity } from './types.ts'
 /** Stable local MCP namespace for the official X documentation server. */
 export const X_DOCS_MCP_SERVER_NAME = 'x-docs'
 /** Official keyless X documentation MCP endpoint. */
