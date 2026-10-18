@@ -1,6 +1,8 @@
+import { createElement } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import {
-  greetingForHour, heroAttentionDetail, heroAttentionPrompt, preferredNameForHero,
+  HeroShell, greetingForHour, heroAttentionDetail, heroAttentionPrompt, preferredNameForHero,
 } from '../src/client/skeleton/EmptyHero.tsx'
 
 describe('greetingForHour', () => {
@@ -65,5 +67,19 @@ describe('universal Phoenix start', () => {
       at: '2026-10-18T00:00:00.000Z', score: 2, kind: 'result',
       detail: 'El resultado de esta misión está listo.',
     })).toContain('resultado')
+  })
+})
+
+describe('neutral, universal hero architecture', () => {
+  it('shows only a universal welcome, not research or other domain controls', () => {
+    const markup = renderToStaticMarkup(createElement(HeroShell, {
+      t: ((key: string) => key) as never,
+      renderSlot: (() => null) as never,
+    }))
+    expect(markup).toContain('¿En qué podemos trabajar hoy?')
+    expect(markup).not.toContain('Investigación APA 7')
+    expect(markup).not.toContain('Investigación Vancouver')
+    expect(markup).not.toContain('Artículo científico')
+    expect(markup).not.toContain('Personalizar portada')
   })
 })
