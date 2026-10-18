@@ -4,6 +4,7 @@
 import { createHash } from 'node:crypto'
 import { lstat, readFile, realpath } from 'node:fs/promises'
 import { resolve, sep } from 'node:path'
+import { inflateSync } from 'node:zlib'
 
 export const BOOK_FORMATS = Object.freeze({
   novel: { minWords: 50000, minChapters: 15, guidance: 'Novela larga: desarrollar escenas, personajes y desenlace completo.' },
@@ -54,6 +55,27 @@ export function inspectCover(bytes) {
     format = 'png'
     if (bytes.toString('ascii', 12, 16) !== 'IHDR') return { valid: false, reason: 'PNG sin cabecera IHDR.' }
     width = bytes.readUInt32BE(16); height = bytes.readUInt32BE(20)
+    const depth = bytes[24], color = bytes[25]
+    const channels = ({0:1,2:3,3:1,4:2,6:4})[color]
+    if (depth !== 8 || !channels) return {valid:false,format,reason:'PNG debe ser de 8 bits por canal para EPUB.'}
+    let offset=8, idat=[], iend=false, started=false
+    while (offset+12 <= bytes.length) {
+      const length=bytes.readUInt32BE(offset)
+      if (length>40*1024*1024 || offset+length+12>bytes.length) break
+      const kind=bytes.toString('ascii',offset+4,offset+8)
+      if (!started && (kind!=='IHDR'||length!==13)) break
+      started=true
+      if (kind==='IDAT') idat.push(bytes.subarray(offset+8,offset+8+length))
+      offset+=length+12
+      if (kind==='IEND') {iend=length===0 && offset===bytes.length;break}
+    }
+    if (!iend || !idat.length || width>20000 || height>20000) return {valid:false,format,reason:'PNG incompleto o dimensiones inseguras.'}
+    try {
+      const scan=inflateSync(Buffer.concat(idat),{maxOutputLength:60*1024*1024})
+      const row=width*channels+1
+      if (scan.length!==row*height) return {valid:false,format,reason:'PNG no coincide con sus dimensiones.'}
+      for (let y=0;y<height;y++) if (scan[y*row]>4) return {valid:false,format,reason:'PNG con filtros de imagen no válidos.'}
+    } catch {return {valid:false,format,reason:'No se puede descomprimir la portada PNG.'}}
   } else if (bytes[0] === 255 && bytes[1] === 216) {
     format = 'jpeg'
     let offset = 2
@@ -71,6 +93,7 @@ export function inspectCover(bytes) {
       offset += 2 + length
     }
   } else return { valid: false, reason: 'Formato de portada no compatible (se requiere JPG o PNG).' }
+  if (format==='jpeg' && (bytes[bytes.length-2]!==255 || bytes[bytes.length-1]!==217)) return {valid:false,format,reason:'JPEG incompleto.'}
   if (!width || !height) return { valid: false, format, reason: 'No se pudieron verificar dimensiones.' }
   const ratio = height / width
   const valid = width >= 1200 && height >= 1800 && ratio >= 1.30 && ratio <= 1.85
