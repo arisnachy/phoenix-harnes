@@ -68,7 +68,7 @@ try:
             report_text = "\n".join(page.get_text() for page in pdf)
             assert "Referencias" in report_text
             assert "[@" not in report_text
-            assert "[1]; [2]" in report_text if style == "vancouver" else "[@" not in report_text
+            assert "[1,2]" in report_text if style == "vancouver" else "[@" not in report_text
             assert "Tabla 1" in report_text and "Figura 2" in report_text
             for page in pdf:
                 assert page.rect.width >= 500 and page.rect.height >= 700
