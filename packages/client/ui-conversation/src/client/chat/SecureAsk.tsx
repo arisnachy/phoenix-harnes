@@ -13,6 +13,20 @@ export function SecureAsk({ target, onClose, onSaved }: {
   const [automatic, setAutomatic] = useState(target.automatic)
   const [busy, setBusy] = useState(false)
   const [feedback, setFeedback] = useState('')
+  const verifyLogin = async (): Promise<void> => {
+    // The site controls the actual session. Do not close Secure Ask just
+    // because CDP dispatched a submit click.
+    for (let attempt = 0; attempt < 4; attempt++) {
+      await new Promise<void>(resolve => setTimeout(resolve, 600))
+      try {
+        const status = await secureApi<{ required: boolean }>('/detect', {
+          origin: target.origin, tabId: target.tabId,
+        })
+        if (status.required === false) { onSaved(); return }
+      } catch { /* Transient browser transport errors must not imply success. */ }
+    }
+    setFeedback('El acceso se envió, pero el sitio todavía no confirmó la sesión. Conservé el formulario y el cupón.')
+  }
   const save = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (busy || !account.trim() || !secret) return
@@ -26,7 +40,7 @@ export function SecureAsk({ target, onClose, onSaved }: {
       const login = await secureApi<{ status: string }>('/use', {
         origin: target.origin, tabId: target.tabId, manual: true,
       })
-      if (login.status === 'submitted') onSaved()
+      if (login.status === 'submitted') await verifyLogin()
       else setFeedback('Credenciales guardadas. El formulario del sitio requiere intervención adicional.')
     } catch {
       setFeedback('No se pudo guardar o utilizar el acceso. Verifica el navegador y la bóveda.')
@@ -42,7 +56,7 @@ export function SecureAsk({ target, onClose, onSaved }: {
       const result = await secureApi<{ status: string }>('/use', {
         origin: target.origin, tabId: target.tabId, manual: true,
       })
-      if (result.status === 'submitted') onSaved()
+      if (result.status === 'submitted') await verifyLogin()
       else setFeedback('No se confirmó el envío del acceso. Comprueba la página.')
     } catch { setFeedback('No se pudo usar el acceso guardado.') }
     finally { setBusy(false) }
