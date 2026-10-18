@@ -40,7 +40,12 @@ function project(value: unknown): BusinessLibraryProduct | undefined {
   }
 }
 
-/** Never return local paths, story contents, order identifiers, buyer information or raw ledger fields. */
+/**
+ * Read a privacy-filtered snapshot of the persistent business library.
+ * Never return local paths, story contents, order identifiers, buyer information or raw ledger fields.
+ * @param root - Trusted local library directory (defaults to the Phoenix Business home).
+ * @returns A bounded read-only view containing only product metadata.
+ */
 export async function readBusinessLibrarySnapshot(root = process.env.PHOENIX_BUSINESS_HOME || dshHomePath('business-library')): Promise<BusinessLibrarySnapshot> {
   const path=join(root,'library.json')
   let file
