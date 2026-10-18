@@ -104,7 +104,7 @@ export function planGameAssets(manifest, verifiedAssets = { images: [], audio: [
   const cues = Array.isArray(manifest.audio?.cues) ? manifest.audio.cues : []
   for (const cue of cues) add('audio', cue, ['trigger', 'mute', 'mix'], 'audio/qa', 'audio-or-WebAudio')
   if (!cues.length) missing.push('design actual sound effects and runtime cue triggers')
-  if (isShooter || isBrawler) add('audio', 'music', ['intro', 'loop', 'pause', 'resume'], 'audio/qa', 'audio-or-WebAudio')
+  if ((isShooter || isBrawler) && !cues.includes('music')) add('audio', 'music', ['intro', 'loop', 'pause', 'resume'], 'audio/qa', 'audio-or-WebAudio')
   if (todo.length === 0) missing.push('define gameplay and scene assets for the requested genre')
   const art = manifest.art && typeof manifest.art === 'object' ? manifest.art : {}
   const readyImages = new Set(verifiedAssets.images || [])
