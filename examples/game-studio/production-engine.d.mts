@@ -33,6 +33,7 @@ export interface GameProductionState {
   releaseState: string
   warning: string
   lastFailure?: { stage: string; reason: string }
+  lastQualityAssessment?: GameQualityAssessment
 }
 export interface GameWork {
   stage: string | null
@@ -51,3 +52,16 @@ export function recordGameEvidence(
   state: GameProductionState, stageId: string, check: string, artifact: string, runner: string
 ): Promise<GameProductionState>
 export function invalidateGameStage(state: GameProductionState, stageId: string, reason: string): GameProductionState
+
+export interface GameQualityAssessment {
+  score: number
+  evaluated: string[]
+  criticalFailures: string[]
+  candidate: boolean
+  certified: false
+  limitation: string
+}
+export function assessGameQuality(manifest: Record<string, any>, report: {
+  scores: Record<string, number>
+  criticalFailures: string[]
+}): GameQualityAssessment
