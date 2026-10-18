@@ -112,14 +112,19 @@ export function route(genre, delivery, quality) {
   const is3d = /3d|open.world|mundo.abierto|low.poly|racing.3d/u.test(normalized)
   const simple = /snake|pong|tetris|2048|logic.puzzle|juego.de.tablero/u.test(normalized)
   const complexity = brawler || is3d || (!simple && quality === 'production')
+  // A one-level in-chat demo needs runnable HTML first, not Godot installation or browser setup.
+  const shortDemo = /\bdemo\b|\bprototip|\bvertical.slice\b|\b(?:un|one|1)\s+(?:solo\s+)?(?:nivel|level)\b|\bsingle.level\b/u.test(normalized)
+  const fastDemo = delivery === 'chat' && !is3d && (quality === 'prototype' || shortDemo)
   const engine = delivery === 'chat' || !complexity ? 'html5' : 'godot'
-  const authoringEngine = complexity ? 'godot' : 'html5'
-  const tools = authoringEngine === 'godot'
+  const authoringEngine = fastDemo ? 'html5' : complexity ? 'godot' : 'html5'
+  const tools = fastDemo ? [] : authoringEngine === 'godot'
     ? ['godot', ...(is3d ? ['blender'] : ['tiled']), 'ffmpeg']
     : (simple ? [] : ['tiled', 'ffmpeg'])
   return {
     genre, delivery, quality, engine, authoringEngine, tools,
-    action: tools.length ? 'Run doctor for each tool; ensure missing tools only during an authorized game build.' : 'No external editor is required.',
+    action: fastDemo
+      ? 'Create standalone playable HTML5 and manifest first; publish via phoenix_game. No browser, external editor, installation or blocking subagent research.'
+      : tools.length ? 'Run doctor for each tool; ensure missing tools only during an authorized game build.' : 'No external editor is required.',
     renderer: delivery === 'chat' ? 'phoenix_game-single-file-html' : 'native-project-or-hosted-export',
     authoringRule: authoringEngine === 'godot'
       ? 'Run Godot Game Studio bootstrap and real engine smoke; for chat also publish a separate tested standalone HTML5 game.'

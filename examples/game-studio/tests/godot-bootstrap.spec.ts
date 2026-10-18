@@ -43,6 +43,18 @@ describe('PHOENIX Godot Game Studio native engine provisioning', () => {
     expect(route('snake', 'chat', 'production').tools).toEqual([])
   })
 
+  it('keeps Godot for full production but makes a one-stage in-chat brawler immediately authorable as HTML', () => {
+    expect(route('Double Dragon demo de un level', 'chat', 'production')).toMatchObject({
+      engine: 'html5', authoringEngine: 'html5', tools: [],
+    })
+    expect(route('beat-em-up', 'chat', 'prototype')).toMatchObject({
+      engine: 'html5', authoringEngine: 'html5', tools: [],
+    })
+    expect(route('beat-em-up', 'desktop', 'production')).toMatchObject({
+      engine: 'godot', authoringEngine: 'godot',
+    })
+  })
+
   it('uses allowlisted winget Godot package and never a model-supplied installer URL', () => {
     const plan = installation('godot', 'win32')
     expect(plan.command).toBe('winget')
