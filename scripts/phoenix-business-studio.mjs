@@ -43,7 +43,7 @@ export function sourceFingerprint(chapters) {
   return createHash('sha256').update(JSON.stringify(manifest)).digest('hex')
 }
 export function buildFingerprint(product) {
-  return createHash('sha256').update(JSON.stringify({chapters:sourceFingerprint(product.chapters),blueprint:product.blueprint??null})).digest('hex')
+  return createHash('sha256').update(JSON.stringify({chapters:sourceFingerprint(product.chapters),blueprint:product.blueprint??null,covers:(product.files??[]).filter(f=>f.role==='cover').map(f=>f.sha256).sort()})).digest('hex')
 }
 export function progress(product,blueprint) {
   const existing=new Map(product.chapters.map(c=>[c.number,c]))
@@ -54,7 +54,9 @@ export function progress(product,blueprint) {
 }
 const paragraph=(text,style='',pageBreak=false)=>`<w:p>${style||pageBreak?`<w:pPr>${style?`<w:pStyle w:val="${style}"/>`:''}${pageBreak?'<w:pageBreakBefore/>':''}</w:pPr>`:''}<w:r><w:t xml:space="preserve">${xml(text)}</w:t></w:r></w:p>`
 export function docxEntries(title,author,chapters) {
-  const parts=[paragraph(title,'Title'),paragraph(author,'Subtitle')]
+  const parts=[paragraph(title,'Title'),paragraph(author,'Subtitle'),paragraph('Índice','Heading1',true)]
+  for(const c of chapters) parts.push(paragraph('Capítulo '+c.number+' — '+(c.title||'Capítulo '+c.number)))
+
   for(const c of chapters) {
     parts.push(paragraph(c.title||`Capítulo ${c.number}`,'Heading1',true))
     for(const p of c.text.trim().split(/\n\s*\n/u)){const line=p.replace(/^#{1,6}\s*/u,'').replace(/\s*\n\s*/gu,' ').trim();if(line)parts.push(paragraph(line))}
@@ -65,6 +67,6 @@ export function docxEntries(title,author,chapters) {
   return [{name:'[Content_Types].xml',bytes:contentTypes},{name:'_rels/.rels',bytes:'<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/></Relationships>'},{name:'word/_rels/document.xml.rels',bytes:'<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>'},{name:'word/styles.xml',bytes:styles},{name:'word/document.xml',bytes:doc},{name:'docProps/core.xml',bytes:`<?xml version="1.0" encoding="UTF-8"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>${xml(title)}</dc:title><dc:creator>${xml(author)}</dc:creator></cp:coreProperties>`}]
 }
 export function printHtml(title,author,chapters,lang='es') {
-  const section=chapters.map(c=>`<section class="chapter"><h1>${xml(c.title||`Capítulo ${c.number}`)}</h1>${c.text.trim().split(/\n\s*\n/u).filter(Boolean).map(p=>`<p>${xml(p.replace(/^#{1,6}\s*/u,'').replace(/\s*\n\s*/gu,' '))}</p>`).join('')}</section>`).join('')
-  return `<!doctype html><html lang="${xml(lang)}"><head><meta charset="utf-8"><title>${xml(title)} - impresión</title><style>@page{size:6in 9in;margin:.7in .65in .75in}body{font:11pt/1.4 Georgia,'Times New Roman',serif;color:#161616}.title{break-after:page;text-align:center;padding-top:32%}.title h1{font-size:24pt}.chapter{break-before:page}.chapter h1{text-align:center;font-size:16pt;margin:1.5em 0 2.5em;break-after:avoid}.chapter p{text-align:justify;text-indent:1.2em;margin:0 0 .2em;orphans:2;widows:2}</style></head><body><section class="title"><h1>${xml(title)}</h1><p>${xml(author)}</p></section>${section}</body></html>`
+  const section=chapters.map(c=>`<section class="chapter" id="chapter-${c.number}"><h1>${xml(c.title||`Capítulo ${c.number}`)}</h1>${c.text.trim().split(/\n\s*\n/u).filter(Boolean).map(p=>`<p>${xml(p.replace(/^#{1,6}\s*/u,'').replace(/\s*\n\s*/gu,' '))}</p>`).join('')}</section>`).join('')
+  return `<!doctype html><html lang="${xml(lang)}"><head><meta charset="utf-8"><title>${xml(title)} - impresión</title><style>@page{size:6in 9in;margin:.7in .65in .75in}body{font:11pt/1.4 Georgia,'Times New Roman',serif;color:#161616}.title{break-after:page;text-align:center;padding-top:32%}.title h1{font-size:24pt}.toc{break-before:page;break-after:page}.toc h1{text-align:center;font-size:17pt}.toc li{margin:.4em 0}.toc a{color:inherit;text-decoration:none}.chapter{break-before:page}.chapter h1{text-align:center;font-size:16pt;margin:1.5em 0 2.5em;break-after:avoid}.chapter p{text-align:justify;text-indent:1.2em;margin:0 0 .2em;orphans:2;widows:2}</style></head><body><section class="title"><h1>${xml(title)}</h1><p>${xml(author)}</p></section><nav class="toc"><h1>Índice</h1><ol>${chapters.map(c=>`<li><a href="#chapter-${c.number}">${xml(c.title||`Capítulo ${c.number}`)}</a></li>`).join('')}</ol></nav>${section}</body></html>`
 }
