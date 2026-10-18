@@ -1255,6 +1255,12 @@ describe('user-explicit invocation injection', () => {
       expect(activated).toHaveLength(1)
       expect(JSON.stringify(activated[0]?.content)).toContain('Build a fresh playable game')
     }
+    const same = gesture('hazme un juego de carreras')
+    const first = await proposeStep(ctx, agent, [same])
+    const second = await proposeStep(ctx, agent, [same])
+    if (first.kind !== 'enter' || second.kind !== 'enter') throw new Error('expected step')
+    expect(first.messages.filter(message => message.source.kind === 'skill-invocation')).toHaveLength(1)
+    expect(second.messages.filter(message => message.source.kind === 'skill-invocation')).toHaveLength(0)
   })
 
   it('does not activate Game Studio for game discussion, quoted tool text or missing skills', async () => {
