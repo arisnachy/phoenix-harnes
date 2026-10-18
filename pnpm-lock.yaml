@@ -1267,6 +1267,9 @@ importers:
       '@phoenix-ai/dsh-tool-home-gateway':
         specifier: workspace:^
         version: link:../../home/tool-home-gateway
+      '@phoenix-ai/dsh-tool-business':
+        specifier: workspace:^
+        version: link:../../core/tool-business
       '@phoenix-ai/dsh-tool-jobs':
         specifier: workspace:^
         version: link:../../jobs/tool-jobs
@@ -4046,6 +4049,21 @@ importers:
       '@phoenix-ai/dsh-scope':
         specifier: workspace:^
         version: link:../scope
+
+  packages/core/tool-business:
+    devDependencies:
+      '@phoenix-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@phoenix-ai/dsh-invariants':
+        specifier: workspace:^
+        version: link:../../runtime-diagnostics/invariants
+      '@phoenix-ai/dsh-system-prompt':
+        specifier: workspace:^
+        version: link:../system-prompt
+      '@phoenix-ai/dsh-tools':
+        specifier: workspace:^
+        version: link:../tools
 
   packages/core/tool-living:
     devDependencies:

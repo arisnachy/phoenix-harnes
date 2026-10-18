@@ -77,6 +77,10 @@
     - id: tool-living
       name: '@phoenix-ai/dsh-tool-living'
 
+    # Read-only commercial intent and live MCP inventory, exposed to Kira.
+    - id: tool-business
+      name: '@phoenix-ai/dsh-tool-business'
+
     - id: llm-retry
       name: '@phoenix-ai/dsh-llm-retry'
 

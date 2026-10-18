@@ -8,6 +8,8 @@ whenToUse: El usuario pide monetizar, escribir libros completos, publicar en Ama
 
 ## Detección de intención y orquestación de conectores (Business Mission)
 
+Cuando esté expuesta la herramienta nativa `business_plan_mission`, úsala con la petición comercial exacta. Lee en cada llamada el inventario MCP real desde el host y devuelve rutas candidatas por intención, categoría y canal. No pases ni inventes credenciales. Si no aparece, usa el CLI `pnpm business:mission` como alternativa y declara que la conectividad en vivo está sin comprobar. Un MCP `ready` no garantiza permisos ni publicación; comprueba el esquema, la sesión y las condiciones reales antes de operar. Requiere confirmación para publicar, cobrar, contratar o gastar.
+
 Antes de crear un proyecto comercial, ejecuta `pnpm business:mission plan --request "PETICIÓN EXACTA DEL USUARIO"` y usa `plan.intent` como **hipótesis explicable**, no como sustituto del juicio de Kira. Si la intención es ambigua, conserva los objetivos del usuario y resuélvela sin inventar decisiones comerciales.
 
 **Conectores reales.** Obtén la fotografía actual del servicio `pluginInventory.mcpConnectorHubState` (`runtime`), directamente desde el host si está accesible. Guarda SOLO `serverName`, `status` y `toolNames` en un JSON temporal seguro; pásalo al planificador con `--inventory ruta.json`. Nunca copies cabeceras, tokens, cookies o URL privadas a ese archivo. Un MCP listado en la galería, o `managed`, NO prueba autorización. `status=ready` más coincidencia por nombre sigue siendo candidato hasta revisar esquema, identidad, ámbito, permisos y condiciones de la API. No inventes el esquema ni los nombres de las herramientas.
