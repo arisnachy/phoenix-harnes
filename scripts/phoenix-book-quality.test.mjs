@@ -9,7 +9,7 @@ import { spawnSync } from 'node:child_process'
 import { BOOK_FORMATS, genreGuide, evaluateBook, auditBook, inspectCover, buildBookMarketingBrief } from './phoenix-book-quality.mjs'
 
 const sha = value => createHash('sha256').update(value).digest('hex')
-const sampleParagraph = i => 'En la escena '+i+' la protagonista descubre que una decisión previa alteró el destino de su familia y ahora tiene que actuar antes del amanecer.'
+const sampleParagraph = i => 'En la escena '+i+' Alba descubre la pista '+i+' que revela el secreto '+i+' y altera la decisión '+i+' sobre su familia mientras persigue al rival '+i+' hasta el amanecer '+i+'.'
 const prose = (length=145) => Array.from({length},(_,i)=>sampleParagraph(i)).join('\n\n')
 const plan = (format='novella') => ({
   schemaVersion:1,premise:'Una mujer investiga secretos que amenazan a toda su familia.',
