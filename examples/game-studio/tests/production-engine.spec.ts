@@ -44,10 +44,10 @@ describe('Phoenix Game Studio autonomous production controller', () => {
         .rejects.toThrow('Only current stage')
       await recordGameEvidence(state, 'design', 'gdd', 'GDD.md', 'author')
       await recordGameEvidence(state, 'design', 'gdd', 'GDD.md', 'author')
-      expect(state.stages[0].evidence).toHaveLength(1)
-      expect(state.stages[0].status).toBe('pending')
+      expect(state.stages[0]?.evidence).toHaveLength(1)
+      expect(state.stages[0]?.status).toBe('pending')
       await recordGameEvidence(state, 'design', 'roster-and-levels', 'roster.json', 'author')
-      expect(state.stages[0].status).toBe('complete')
+      expect(state.stages[0]?.status).toBe('complete')
       expect(nextGameWork(state).stage).toBe('vertical-slice')
       invalidateGameStage(state, 'design', 'new hero design')
       expect(state.stages.every(x => x.status === 'pending')).toBe(true)
@@ -60,7 +60,7 @@ describe('Phoenix Game Studio autonomous production controller', () => {
     const state = initializeGameProduction({ title: 'Grid', genre: 'puzzle' }, '/tmp/puzzle.json', '/tmp/state.json')
     expect(state.stages.find(x => x.id === 'asset-production')?.checks).not.toContain('audio-assets')
     expect(state.stages.find(x => x.id === 'gameplay-qa')?.checks).not.toContain('audio-review')
-    expect(state.stages[0].checks).toContain('rules-and-levels')
+    expect(state.stages[0]?.checks).toContain('rules-and-levels')
   })
 
   it('requires executed runtime bindings for every produced asset before integration passes', async () => {
@@ -82,8 +82,8 @@ describe('Phoenix Game Studio autonomous production controller', () => {
         'bindings.json', 'godot-runtime')).rejects.toThrow('Missing or duplicate runtime binding')
       writeFileSync(join(dir, 'bindings.json'), JSON.stringify({ bindings }))
       await recordGameEvidence(state, 'integration', 'runtime-bindings', 'bindings.json', 'godot-runtime')
-      expect(state.stages[3].evidence[0].dependencies?.length).toBe(2)
-      expect(state.stages[3].status).toBe('pending')
+      expect(state.stages[3]?.evidence[0]?.dependencies?.length).toBe(2)
+      expect(state.stages[3]?.status).toBe('pending')
     } finally { rmSync(dir, { recursive: true, force: true }) }
   })
 
