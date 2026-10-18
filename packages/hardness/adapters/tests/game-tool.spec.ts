@@ -105,7 +105,7 @@ describe('Phoenix Game Studio publisher', () => {
       // A modified file AFTER the accepted call cannot alter the published artifact.
       writeFileSync(join(folder, filename), '<html>changed after publication</html>')
       const presented = tool.output.presentationMeta?.(args, receipt as never) as {
-        artifact?: { data?: string, mime?: string }
+        artifact?: { data?: string\n          mime?: string }
       }
       expect(presented.artifact?.data).toBe(runnable)
       expect(presented.artifact?.mime).toBe(PHOENIX_GAME_MIME)
@@ -128,7 +128,7 @@ describe('Phoenix Game Studio publisher', () => {
     expect(receipt.preflight).toBe('prototype-only')
     expect(receipt.html).toBe(readFileSync(resolve(path), 'utf8'))
     const output = tool.output.presentationMeta?.(args, receipt as never) as {
-      artifact?: { mime?: string, data?: string }
+      artifact?: { mime?: string\n        data?: string }
     }
     expect(output.artifact?.mime).toBe(PHOENIX_GAME_MIME)
     expect(output.artifact?.data).toContain('PhoenixBrawlerKit')
