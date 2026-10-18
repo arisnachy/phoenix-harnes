@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { loginOrigin, loginDetectionExpression, registerSecureLogin } from '../src/secure-login.ts'
+import { loginOrigin, loginDetectionExpression, loginGateExpression, registerSecureLogin } from '../src/secure-login.ts'
 
 describe('origin-scoped secure login', () => {
   it('canonicalizes full HTTPS URLs without crossing origins', () => {
@@ -45,6 +45,52 @@ describe('origin-scoped secure login', () => {
     const root = { querySelectorAll: (selector: string) => selector === 'iframe' ? [frame] : [] }
     expect(evaluate(root, { origin: 'https://example.org' })).toBe(true)
     expect(evaluate(root, { origin: 'https://other.example.org' })).toBe(false)
+  })
+
+  it('recognizes a session-loss warning and opens only an in-place login modal', () => {
+    const evaluator = (mode: 'inspect' | 'open', root: unknown, pageUrl = 'https://example.org/sports') =>
+      new Function('document', 'location', 'URL', 'return ' + loginGateExpression(mode))(
+        root, { origin: 'https://example.org', href: pageUrl, pathname: '/sports', search: '' }, URL,
+      ) as { required: boolean; formVisible: boolean; gateVisible: boolean; canOpenInPlace: boolean }
+    let clicks = 0
+    const trigger = {
+      tagName: 'BUTTON', textContent: 'INGRESAR', disabled: false, readOnly: false,
+      getClientRects: () => [1], click: () => { clicks++ },
+    }
+    const root = {
+      body: { innerText: 'Por favor ingrese para poder guardar sus apuestas' },
+      querySelectorAll: (query: string) => query === 'iframe' || query === 'input'
+        ? [] : [trigger],
+    }
+    expect(evaluator('inspect', root)).toMatchObject({
+      required: true, formVisible: false, gateVisible: true, canOpenInPlace: true,
+    })
+    expect(clicks).toBe(0)
+    expect(evaluator('open', root).required).toBe(true)
+    expect(clicks).toBe(1)
+
+    const links = {
+      ...root, querySelectorAll: (query: string) => query === 'iframe' || query === 'input'
+        ? [] : [{ ...trigger, tagName: 'A', href: 'https://example.org/account/login',
+          getAttribute: () => '/account/login' }],
+    }
+    expect(evaluator('open', links).canOpenInPlace).toBe(false)
+    expect(clicks).toBe(1)
+  })
+
+  it('detects a sign-in form without submitting any other page action', () => {
+    const evaluator = new Function('document', 'location', 'URL',
+      'return ' + loginGateExpression('open')) as (
+      document: unknown, location: unknown, URL: unknown,
+    ) => { required: boolean; formVisible: boolean }
+    const field = (type: string) => ({ type, readOnly: false, disabled: false,
+      autocomplete: '', getClientRects: () => [1] })
+    const root = { body: { innerText: '' },
+      querySelectorAll: (query: string) => query === 'input'
+        ? [field('text'), field('password')] : [] }
+    expect(evaluator(root, { origin: 'https://example.org' }, URL)).toMatchObject({
+      required: true, formVisible: true,
+    })
   })
 
   it('detects legacy saved account presence without revealing its secret', async () => {

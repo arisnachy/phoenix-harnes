@@ -136,7 +136,7 @@ async function captureFrame(tabId: string, signal?: AbortSignal): Promise<Blob> 
 }
 export type SecureStatus = { saved: boolean; automatic: boolean }
 export type SecureLoginTarget = { origin: string; tabId: string; saved: boolean; automatic: boolean; diagnostic?: string }
-type SecureDetection = { required: boolean }
+type SecureDetection = { required: boolean; formVisible?: boolean; gateVisible?: boolean; canOpenInPlace?: boolean; warningVisible?: boolean }
 type SecureUse = { status: string }
 function secureOrigin(value?: string): string | undefined {
   if (!value) return undefined
@@ -254,6 +254,9 @@ export function MiniBrowser({ requested = false, active = true, initialTabId, on
           .catch(() => undefined)
         if (stopped) return
         if (detection?.required === false) {
+          // The previous authentication episode ended. If the same page
+          // later loses its session, permit one fresh automatic recovery.
+          attemptedLogins.current.delete(tabId + '|' + pageUrl)
           onSecureLoginRequest?.(null)
           return
         }
@@ -282,8 +285,10 @@ export function MiniBrowser({ requested = false, active = true, initialTabId, on
             if (stopped) return
             if (result.status === 'submitted') {
               refreshFrame.current?.()
-              // Wait for one later DOM poll. A submitted login is not yet
-              // an authenticated session, and must never be submitted twice.
+              // Wait for a later DOM poll; the backend may have opened
+              // the site's sign-in modal before securely submitting credentials.
+              // Submission alone is not authentication, nor permission to
+              // replay any earlier purchase, wager or form submission.
               return
             }
           } catch {

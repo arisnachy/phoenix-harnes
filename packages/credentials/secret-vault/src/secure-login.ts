@@ -203,39 +203,120 @@ export function loginDetectionExpression(): string {
     });
   })()`
 }
-async function detectLogin(tab: BrowserTab): Promise<boolean> {
-  return await new Promise<boolean>((resolve, reject) => {
+
+export interface LoginGateState {
+  required: boolean
+  formVisible: boolean
+  gateVisible: boolean
+  canOpenInPlace: boolean
+  warningVisible: boolean
+}
+/** Inspect a login gate without reading fields, or open exactly one in-page login trigger.
+ * Never navigate away, submit an unrelated form, or expose DOM text to the model.
+ */
+export function loginGateExpression(action: 'inspect' | 'open' = 'inspect'): string {
+  const expression = `(() => {
+    const roots = [document];
+    for (const frame of document.querySelectorAll('iframe')) {
+      try {
+        const child = frame.contentDocument;
+        if (child && child.location.origin === location.origin) roots.push(child);
+      } catch {}
+    }
+    const visible = e => !e.disabled && !e.readOnly && e.getClientRects().length > 0;
+    const signIn = /^(?:ingresar|entrar|acceder|iniciar sesi[oó]n|identificarse|log ?in|sign ?in)$/i;
+    const triggers = roots.flatMap(doc =>
+      [...doc.querySelectorAll('button,a,[role="button"],input[type="button"]')]
+        .filter(e => visible(e) && signIn.test((e.innerText||e.textContent||e.value||'').trim())));
+    const forms = roots.filter(doc => {
+      const fields = [...doc.querySelectorAll('input')].filter(visible);
+      return fields.some(e => e.type === 'password')
+        && fields.some(e => ['text','email','tel'].includes(e.type) ||
+          e.autocomplete === 'username');
+    });
+    const warningVisible = roots.some(doc =>
+      /(?:por favor ingrese|debe iniciar sesi[oó]n|inicia sesi[oó]n para|please (?:sign in|log in)|login required|sign in to continue)/i
+        .test((doc.body?.innerText||'').slice(0,12000)));
+    const inPlace = el => {
+      if (el.tagName !== 'A' || !el.getAttribute('href')) return true;
+      try {
+        const target = new URL(el.href, location.href);
+        return target.origin === location.origin
+          && target.pathname === location.pathname
+          && target.search === location.search;
+      } catch { return false; }
+    };
+    const canOpenInPlace = triggers.length === 1 && inPlace(triggers[0]);
+    const formVisible = forms.length > 0;
+    if (__OPEN_LOGIN__ && !formVisible && canOpenInPlace) triggers[0].click();
+    return {
+      required: formVisible || triggers.length > 0 || warningVisible,
+      formVisible,
+      gateVisible: triggers.length > 0,
+      canOpenInPlace,
+      warningVisible,
+    };
+  })()`
+  return expression.replace('__OPEN_LOGIN__', action === 'open' ? 'true' : 'false')
+}
+/** One bounded, trusted-host CDP evaluation against the exact active tab. */
+async function inspectLoginGate(tab: BrowserTab, action: 'inspect' | 'open' = 'inspect'): Promise<LoginGateState> {
+  return await new Promise<LoginGateState>((resolve, reject) => {
     const ws = new WebSocket(tab.webSocketDebuggerUrl as string)
     let settled = false
-    const finish = (value?: boolean, error?: Error): void => {
+    const finish = (value?: LoginGateState, error?: Error): void => {
       if (settled) return
       settled = true
       clearTimeout(timer)
       ws.close()
       if (error) reject(error)
-      else resolve(value === true)
+      else if (value) resolve(value)
+      else reject(new Error('La inspección segura no devolvió un estado'))
     }
-    const timer = setTimeout(() => finish(undefined, new Error('No se pudo inspeccionar el inicio de sesión')), 5_000)
-    ws.addEventListener('error', () => finish(undefined, new Error('Conexión del formulario no disponible')))
+    const timer = setTimeout(() => finish(undefined, new Error('Chrome no respondió al acceso seguro')), 5_000)
+    ws.addEventListener('error', () => finish(undefined, new Error('Conexión segura con Chrome no disponible')))
     ws.addEventListener('open', () => {
-      try {
-        ws.send(JSON.stringify({ id: 1, method: 'Runtime.evaluate',
-          params: { expression: loginDetectionExpression(), returnByValue: true } }))
-      } catch { finish(undefined, new Error('No se pudo enviar la inspección a Chrome')) }
+      try { ws.send(JSON.stringify({ id: 1, method: 'Runtime.evaluate',
+        params: { expression: loginGateExpression(action), returnByValue: true } }))
+      } catch { finish(undefined, new Error('No se pudo consultar el formulario')) }
     })
     ws.addEventListener('message', event => {
       try {
-        const data = JSON.parse(String(event.data)) as {
+        const packet = JSON.parse(String(event.data)) as {
           id?: number; error?: unknown; result?: {
-            exceptionDetails?: unknown; result?: { value?: unknown }
+            exceptionDetails?: unknown; result?: { value?: LoginGateState }
           }
         }
-        if (data.id !== 1) return
-        if (data.error || data.result?.exceptionDetails) return finish(undefined, new Error('Inspección fallida'))
-        finish(data.result?.result?.value === true)
-      } catch { finish(undefined, new Error('Respuesta inválida de Chrome')) }
+        if (packet.id !== 1) return
+        if (packet.error || packet.result?.exceptionDetails) {
+          finish(undefined, new Error('Inspección de acceso rechazada'))
+          return
+        }
+        const value = packet.result?.result?.value
+        if (!value || typeof value.required !== 'boolean'
+          || typeof value.formVisible !== 'boolean' || typeof value.canOpenInPlace !== 'boolean'
+          || typeof value.warningVisible !== 'boolean' || typeof value.gateVisible !== 'boolean') {
+          finish(undefined, new Error('Estado de acceso no válido'))
+          return
+        }
+        finish(value)
+      } catch { finish(undefined, new Error('Respuesta de Chrome no válida')) }
     })
   })
+}
+/** Prepare a sign-in dialog in-place; preserve all existing selections. */
+async function prepareVisibleLogin(tab: BrowserTab): Promise<string | undefined> {
+  let state = await inspectLoginGate(tab)
+  if (state.formVisible) return undefined
+  if (!state.canOpenInPlace) return state.required ? 'login-trigger-requires-attention' : 'login-form-not-found'
+  state = await inspectLoginGate(tab, 'open')
+  if (!state.required) return 'login-form-not-found'
+  for (let attempt = 0; attempt < 5; attempt++) {
+    await new Promise<void>(resolve => setTimeout(resolve, 300))
+    state = await inspectLoginGate(tab)
+    if (state.formVisible) return undefined
+  }
+  return 'login-form-not-found'
 }
 
 /** Only a sanitized result crosses back to the UI. Credentials never enter a tool result. */
@@ -311,6 +392,8 @@ async function useLogin(origin: string, tabId: string, manual: boolean, vault?: 
     ? JSON.parse(Buffer.from(await dpapi('unprotect', saved.sealed, origin), 'base64').toString('utf8')) as LoginContent
     : previous!.login
   if (login.origin !== origin || !login.account || !login.secret) throw new Error('Registro de bóveda inválido')
+  const preparation = await prepareVisibleLogin(tab)
+  if (preparation !== undefined) return preparation
   const result = await injectLogin(tab, login)
   if (!saved && previous && result === 'submitted') {
     // Migrating must not prevent a successfully initiated login. Keep legacy
@@ -354,7 +437,7 @@ export function registerSecureLogin(ctx: Context, vault?: CredentialProvider): (
             throw new Error('Pestaña no válida')
           }
           const tab = await tabForLogin(payload.tabId, origin)
-          respond(res, 200, { required: await detectLogin(tab) })
+          respond(res, 200, await inspectLoginGate(tab))
           return
         }
         if (route.pathname === PREFIX + '/save') {
