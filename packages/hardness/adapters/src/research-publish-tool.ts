@@ -124,7 +124,7 @@ export function validateResearchPublication(input: unknown): Report {
     const thresholds = minima[String(type)]
     if (thresholds) {
       const count = (report.sections as Array<{ text: string }>).reduce(
-        (total, section) => total + (section.text.match(/\b[\p{L}\p{N}_]+\b/gu) ?? []).length, 0)
+        (total, section) => total + (section.text.match(/[\p{L}\p{N}_]+/gu) ?? []).length, 0)
       if (count < thresholds[0] || citedKeys.size < thresholds[1]) {
         throw new ToolArgsError(['Investigación insuficiente: ' + count + ' palabras y '
           + citedKeys.size + ' referencias citadas. Estándar editorial interno para '
