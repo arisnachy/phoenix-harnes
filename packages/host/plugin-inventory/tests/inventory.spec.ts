@@ -264,7 +264,7 @@ describe('PluginInventoryGateway', () => {
         status: 'ready',
       },
     })
-    await expect(inventory.enableXMcp()).resolves.toMatchObject({
+    await expect(inventory.enableXMcp({})).resolves.toMatchObject({
       api: { status: 'installed' },
       docs: { status: 'installed' },
     })
