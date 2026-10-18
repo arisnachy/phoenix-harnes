@@ -56,6 +56,7 @@ import { createPhoenixGameTool } from './game-tool.ts'
 import { createPhoenix3DTool } from './scene3d-tool.ts'
 import { createResearchPublishTool } from './research-publish-tool.ts'
 import { createResearchPlanTool } from './research-plan-tool.ts'
+import { createResearchSourceVerifierTool } from './research-source-verifier.ts'
 import { createResearchDeliverTool } from './research-delivery.ts'
 import { PHOENIX_3D_ROUTING_PROTOCOL } from './scene3d-routing.ts'
 import { createCognitiveWorkflowTool } from './cognitive-workflow-tool.ts'
@@ -412,6 +413,7 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
       disposers.push(ctx.tools.register(createPhoenixGameTool()))
       disposers.push(ctx.tools.register(createPhoenix3DTool()))
       disposers.push(ctx.tools.register(createResearchPlanTool()))
+      disposers.push(ctx.tools.register(createResearchSourceVerifierTool()))
       disposers.push(ctx.tools.register(createResearchPublishTool()))
       disposers.push(ctx.tools.register(createResearchDeliverTool({
         ctx, approval,
