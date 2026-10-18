@@ -32,14 +32,14 @@ export function validateResearchPublication(input: unknown): Report {
   if (typeof report.title !== 'string' || report.title.trim().length < 5 || report.title.length > 240) {
     throw new ToolArgsError(['El título debe tener entre 5 y 240 caracteres.'])
   }
-  if (!Array.isArray(report.sections) || report.sections.length < 1 || report.sections.length > 36) {
-    throw new ToolArgsError(['Se requieren entre 1 y 36 secciones redactadas.'])
+  if (!Array.isArray(report.sections) || report.sections.length < 1 || report.sections.length > 140) {
+    throw new ToolArgsError(['Se requieren entre 1 y 140 secciones redactadas.'])
   }
-  if (!Array.isArray(report.references) || report.references.length < 1 || report.references.length > 200) {
+  if (!Array.isArray(report.references) || report.references.length < 1 || report.references.length > 500) {
     throw new ToolArgsError(['Se requieren fuentes reales con URL y metadatos.'])
   }
   const serialized = JSON.stringify(report)
-  if (serialized.length > 100000) throw new ToolArgsError(['El informe excede el tamaño permitido.'])
+  if (serialized.length > 1000000) throw new ToolArgsError(['El informe excede el tamaño permitido.'])
   const references = report.references as unknown[]
   const keys = new Set<string>()
   for (const source of references) {
@@ -66,8 +66,8 @@ export function validateResearchPublication(input: unknown): Report {
       throw new ToolArgsError(['Sección inválida.'])
     }
     const item = section as Record<string, unknown>
-    if (typeof item.heading !== 'string' || typeof item.text !== 'string' || item.text.length > 30000) {
-      throw new ToolArgsError(['Cada sección requiere heading y text; no más de 30000 caracteres.'])
+    if (typeof item.heading !== 'string' || typeof item.text !== 'string' || item.text.length > 65000) {
+      throw new ToolArgsError(['Cada sección requiere heading y text; no más de 65000 caracteres.'])
     }
     for (const match of item.text.matchAll(/\[@([A-Za-z0-9_-]{1,64})\]/gu)) {
       cited = true
@@ -81,9 +81,23 @@ export function validateResearchPublication(input: unknown): Report {
   if (report.presentation !== undefined && !['academic', 'editorial', 'hybrid'].includes(String(report.presentation))) {
     throw new ToolArgsError(['Presentación inválida: academic, editorial o hybrid.'])
   }
-  if (report.document_type !== undefined && !['brief', 'narrative_review', 'systematic_review',
-    'original_research', 'thesis', 'journal_manuscript', 'policy_report'].includes(String(report.document_type))) {
+  if (report.document_type !== undefined && !['brief', 'monograph', 'research_protocol',
+    'narrative_review', 'systematic_review', 'original_research', 'thesis',
+    'journal_manuscript', 'policy_report'].includes(String(report.document_type))) {
     throw new ToolArgsError(['Tipo de investigación no reconocido.'])
+  }
+  if (report.page_plan !== undefined) {
+    if (typeof report.page_plan !== 'object' || report.page_plan === null || Array.isArray(report.page_plan)) {
+      throw new ToolArgsError(['page_plan debe ser un objeto.'])
+    }
+    const plan = report.page_plan as Record<string, unknown>
+    if (plan.target_pages !== undefined && (typeof plan.target_pages !== 'number'
+      || !Number.isInteger(plan.target_pages) || plan.target_pages < 1 || plan.target_pages > 350)) {
+      throw new ToolArgsError(['target_pages debe ser un entero de 1 a 350.'])
+    }
+    if (plan.scope !== undefined && plan.scope !== 'all' && plan.scope !== 'body') {
+      throw new ToolArgsError(['page_plan.scope debe indicar all o body.'])
+    }
   }
   if (report.submission_ready === true) {
     throw new ToolArgsError(['La publicación en una revista requiere normas de la revista, autoría, declaraciones y revisión humana.'])
@@ -106,12 +120,14 @@ function findPublisher(): string {
 }
 
 type PublisherOutcome = {
-  state: 'REPORT_READY'
+  state: 'REPORT_READY' | 'REPORT_NEEDS_REVISION'
   report_id: string
   title: string
   files: { docx: string; pdf: string; html: string }
   source_count: number
   source_verification: string
+  pagination?: { pdf_pages: number; requested_pages: number | null; scope: string; target_met: boolean | null }
+  warnings?: string[]
   presentation?: string
   document_type?: string
   quality?: { required_sections_checked: boolean; submission_certified: boolean;
@@ -135,7 +151,7 @@ async function runAttempt(bin: string, args: string[], payload: string, signal: 
       }
       try {
         const value = JSON.parse(output.trim()) as PublisherOutcome
-        if (value.state !== 'REPORT_READY' || !/^[0-9a-f]{16}$/u.test(value.report_id) || typeof value.files !== 'object') {
+        if ((value.state !== 'REPORT_READY' && value.state !== 'REPORT_NEEDS_REVISION') || !/^[0-9a-f]{16}$/u.test(value.report_id) || typeof value.files !== 'object') {
           throw new Error('La respuesta del publicador no confirmó un documento listo.')
         }
         resolveOutcome(value)
@@ -188,7 +204,7 @@ export async function publishResearchReport(report: Report, signal: AbortSignal)
 export function createResearchPublishTool(): ToolDefinition {
   return defineTool({
     name: 'phoenix_research_publish',
-    description: 'PUBLICA INVESTIGACIONES CIENTÍFICAS COMPLETAS en DOCX editable + PDF imprimible + HTML. Para peticiones de investigación extensa elige document_type según el diseño real (narrative_review, systematic_review, original_research, thesis, journal_manuscript, policy_report); brief solo para síntesis cortas solicitadas explícitamente. Requiere Resumen/Abstract, Introducción, Métodos, Resultados, Discusión, Limitaciones, Conclusiones; una tesis exige además Marco teórico y Recomendaciones. La revisión sistemática requiere evidencia documentada de búsqueda, selección y extracción; nunca simules PRISMA o forest plots. presentation=academic para manuscrito estricto, editorial para lectura elegante, hybrid para formato científico moderno con colores sobrios. style=apa7 o vancouver gobierna citas/bibliografía de forma independiente del diseño; no confundas una edición híbrida con cumplimiento automático de JAMA. report={title, style:"apa7"|"vancouver", presentation:"academic"|"editorial"|"hybrid", document_type, paper:"A4"|"Letter", cover:{institution,faculty,author,course,lecturer,city,date,logo_path?}, keywords?:string[], sections:[{kind?:"abstract"|"introduction"|"framework"|"methods"|"results"|"discussion"|"limitations"|"conclusions"|"recommendations", heading, text:"... [@fuente1]."}], references:[{key,authors,year,title,journal,url,doi?}], tables?:[{title,columns:string[],rows:(string|number)[][],source_key,note?}], charts?:[{type?:"bar"|"forest",title,labels,values,ci_low?,ci_high?,null_value?,method?,source_key}]}. Cada referencia usada debe citarse [@clave]; cada tabla/gráfico debe declarar fuente de datos. La herramienta no consulta fuentes en Internet: el investigador debe verificar DOI/PMID, retractaciones y afirmaciones antes. Nunca rellenar muestras o estadísticas inexistentes. El recibo indica explícitamente que no certifica envío a revista ni verificación visual completa. El correo/Telegram se envía por herramienta independiente con autorización y recibo real.',
+    description: 'PUBLICA el manuscrito COMPLETO de una investigación en DOCX editable, PDF real y HTML. PARA TESIS, MONOGRAFÍAS, ANTEPROYECTOS O ARTÍCULOS primero ejecuta phoenix_research_plan, recopila una sola vez los datos institucionales faltantes, revisa manual/plantilla si fue suministrado, verifica fuentes y después redacta secciones completas: NO generes 5 páginas cuando se pidieron 80. report={title,document_type:"thesis"|"monograph"|"research_protocol"|"journal_manuscript"|"original_research"|"narrative_review"|"systematic_review"|"brief"|"policy_report",style:"apa7"|"vancouver",presentation:"academic"|"hybrid"|"editorial",paper:"A4"|"Letter",cover:{institution,faculty,department,degree,course,course_code,lecturer,advisor,city,country,date,authors:[{name,student_id?,affiliation?,orcid?}],logo_path?},front_matter:{approval?,originality?,dedication?,acknowledgements?,abstract_en?},table_of_contents?:boolean,page_plan?:{target_pages:number,scope:"all"|"body"},keywords?:string[],sections:[{kind,heading,text:"Texto científico profundo con [@fuente1]"}],references:[{key,authors,year,title,journal,url,doi?}],tables?:[{title,columns,rows,source_key,note?}],charts?:[{type:"bar"|"forest",title,labels,values,ci_low?,ci_high?,method?,source_key}]}. Entrega capítulos académicos ordenados: problema, objetivos, marco teórico, metodología, resultados y discusión si hubo datos reales, conclusiones, recomendaciones y referencias. Un protocolo usa ética y RESULTADOS ESPERADOS, nunca resultados inventados. Incluir solo originales, aprobaciones o dedicatorias facilitados por el usuario. El índice Word es un campo TOC que Word actualiza al abrir; PDF tiene índice paginado. Verifica la paginación REAL después de maquetar; receipt.pagination.pdf_pages compara contra target_pages y warnings informa si falta extensión: NO falsifiques ni rellenes páginas. Los estilos bibliográficos completos de cada revista y la autenticidad de metadatos no están certificados, revisar antes de entregar o enviar. Artículo científico es TIPO de documento, independiente de APA7/Vancouver. Distribución por correo y Telegram es una operación distinta y autorizada.',
     timeoutMs: 240000,
     parameters: {
       report: {
@@ -200,11 +216,14 @@ export function createResearchPublishTool(): ToolDefinition {
       schema: { type: 'object', additionalProperties: true },
       render: (_args, value) => [{
         type: 'text',
-        text: value.state === 'REPORT_READY'
-          ? 'Informe generado y comprobado. Word: ' + String((value.files as Record<string, unknown>).docx)
+        text: value.state === 'REPORT_READY' || value.state === 'REPORT_NEEDS_REVISION'
+          ? (value.state === 'REPORT_READY' ? 'Informe completo para revisión académica. Word: ' : 'Informe generado, PERO AÚN NO COMPLETO: la paginación requiere ampliación o revisión. Word: ') + String((value.files as Record<string, unknown>).docx)
             + '; PDF: ' + String((value.files as Record<string, unknown>).pdf)
             + '; vista HTML: ' + String((value.files as Record<string, unknown>).html)
-            + '. Edición: ' + String(value.presentation ?? 'academic') + '. Las fuentes aportadas no fueron verificadas en red ni certificadas para una revista; se requiere revisión científica y visual antes de presentar.'
+            + '. Edición: ' + String(value.presentation ?? 'academic')
+            + '; páginas PDF: ' + String((value.pagination as Record<string, unknown> | undefined)?.pdf_pages ?? 'sin verificar')
+            + '; observaciones: ' + (Array.isArray(value.warnings) ? value.warnings.map(String).join('; ') : 'ninguna')
+            + '. No se ha certificado la veracidad de las fuentes ni el cumplimiento específico de una revista.'
           : 'El informe no alcanzó estado REPORT_READY.',
       }],
     },

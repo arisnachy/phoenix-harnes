@@ -16,12 +16,15 @@ try:
     from docx import Document
     from docx.shared import Cm, Inches, Pt, RGBColor
     from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
     from reportlab.lib import colors
     from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY, TA_LEFT
     from reportlab.lib.pagesizes import A4, letter
     from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
     from reportlab.lib.utils import ImageReader
     from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak, Table, TableStyle, LongTable, HRFlowable, Image as PdfImage
+    from reportlab.platypus.tableofcontents import TableOfContents
     from reportlab.pdfbase import pdfmetrics
     from reportlab.pdfbase.ttfonts import TTFont
     from PIL import Image, ImageDraw, ImageFont
@@ -31,27 +34,33 @@ except ImportError as error:
 
 REF_RE = re.compile(r"\[@([A-Za-z0-9_-]{1,64})\]")
 NAME_RE = re.compile(r"[^a-zA-Z0-9_-]+")
-MAX_CONTENT = 100000
+MAX_CONTENT = 1000000
 PRESENTATIONS = ("academic", "editorial", "hybrid")
-DOCUMENT_TYPES = ("brief", "narrative_review", "systematic_review", "original_research",
-                  "thesis", "journal_manuscript", "policy_report")
+DOCUMENT_TYPES = ("brief", "monograph", "research_protocol", "narrative_review",
+                  "systematic_review", "original_research", "thesis", "journal_manuscript", "policy_report")
 SECTION_ALIASES = {
     "abstract": ("resumen", "abstract", "resumen ejecutivo", "resumen estructurado"),
     "introduction": ("introduccion", "introduction", "planteamiento del problema"),
-    "framework": ("marco teorico", "theoretical framework", "revision bibliografica"),
+    "framework": ("marco teorico", "theoretical framework", "revision bibliografica", "marco teorico y estado del arte"),
+    "problem": ("planteamiento del problema", "problema de investigacion", "problem statement", "planteamiento del problema y justificacion"),
+    "objectives": ("objetivos", "objetivos e hipotesis", "objetivo general y especificos", "objectives"),
     "methods": ("metodos", "metodologia", "methods", "methodology", "materiales y metodos"),
     "results": ("resultados", "results", "hallazgos", "findings", "sintesis de evidencia"),
     "discussion": ("discusion", "discussion", "analisis critico", "analisis"),
     "limitations": ("limitaciones", "limitations", "sesgos y limitaciones"),
     "conclusions": ("conclusiones", "conclusions", "conclusiones y recomendaciones"),
     "recommendations": ("recomendaciones", "recommendations", "implicaciones"),
+    "ethics": ("consideraciones eticas", "ethics", "etica y cronograma"),
+    "expected_results": ("resultados esperados", "expected results", "contribuciones esperadas"),
 }
 REQUIRED_SECTIONS = {
     "narrative_review": ("abstract", "introduction", "methods", "results", "discussion", "limitations", "conclusions"),
     "systematic_review": ("abstract", "introduction", "methods", "results", "discussion", "limitations", "conclusions"),
     "original_research": ("abstract", "introduction", "methods", "results", "discussion", "limitations", "conclusions"),
     "journal_manuscript": ("abstract", "introduction", "methods", "results", "discussion", "limitations", "conclusions"),
-    "thesis": ("abstract", "introduction", "framework", "methods", "results", "discussion", "conclusions", "recommendations"),
+    "thesis": ("abstract", "introduction", "problem", "objectives", "framework", "methods", "results", "discussion", "conclusions", "recommendations"),
+    "monograph": ("abstract", "introduction", "problem", "objectives", "framework", "methods", "discussion", "conclusions"),
+    "research_protocol": ("abstract", "introduction", "problem", "objectives", "framework", "methods", "ethics", "expected_results"),
     "policy_report": ("abstract", "introduction", "methods", "results", "discussion", "limitations", "conclusions"),
 }
 
@@ -60,7 +69,7 @@ def section_kind(section):
         return section["kind"]
     heading = unicodedata.normalize("NFKD", section["heading"])
     heading = "".join(c for c in heading if not unicodedata.combining(c)).lower().strip()
-    heading = re.sub(r"^[0-9]+[. )-]*", "", heading)
+    heading = re.sub(r"^(?:capitulo\s+(?:[ivxlcdm]+|[0-9]+)[. :]*)|^(?:[0-9]+[. )-]*)", "", heading).strip()
     for kind, variants in SECTION_ALIASES.items():
         if heading in variants:
             return kind
@@ -75,10 +84,10 @@ def validate(data):
     refs = data.get("references")
     if not isinstance(title, str) or not (5 <= len(title.strip()) <= 240):
         raise ValueError("report.title must have 5 to 240 characters")
-    if not isinstance(sections, list) or not (1 <= len(sections) <= 36):
-        raise ValueError("report.sections must contain 1 to 36 entries")
-    if not isinstance(refs, list) or not (1 <= len(refs) <= 200):
-        raise ValueError("report.references must contain 1 to 200 verified-source entries")
+    if not isinstance(sections, list) or not (1 <= len(sections) <= 140):
+        raise ValueError("report.sections must contain 1 to 140 entries")
+    if not isinstance(refs, list) or not (1 <= len(refs) <= 500):
+        raise ValueError("report.references must contain 1 to 500 supplied sources")
     if data.get("style", "apa") not in ("apa", "apa7", "vancouver"):
         raise ValueError("style must be apa, apa7 or vancouver")
     if data.get("presentation", "academic") not in PRESENTATIONS:
@@ -89,6 +98,38 @@ def validate(data):
         raise ValueError("paper must be A4 or Letter")
     if data.get("submission_ready") is True:
         raise ValueError("submission_ready requires external journal, authorship and human review")
+    page_plan = data.get("page_plan", {})
+    if not isinstance(page_plan, dict):
+        raise ValueError("page_plan must be an object")
+    target = page_plan.get("target_pages")
+    if target is not None and (isinstance(target, bool) or not isinstance(target, int) or not 1 <= target <= 350):
+        raise ValueError("target_pages must be an integer between 1 and 350")
+    if page_plan.get("scope", "all") not in ("all", "body"):
+        raise ValueError("page_plan.scope must be all or body")
+    preliminary = data.get("front_matter", {})
+    if not isinstance(preliminary, dict):
+        raise ValueError("front_matter must be an object")
+    for field in ("approval", "originality", "dedication", "acknowledgements", "abstract_en"):
+        if field in preliminary and (not isinstance(preliminary[field], str) or len(preliminary[field]) > 20000):
+            raise ValueError("front_matter." + field + " must be a bounded text")
+    cover = data.get("cover", {})
+    if not isinstance(cover, dict):
+        raise ValueError("cover must be an object")
+    authors = cover.get("authors", [])
+    if not isinstance(authors, list) or len(authors) > 30:
+        raise ValueError("cover.authors must be a list of at most 30 authors")
+    for author in authors:
+        if not isinstance(author, dict) or not isinstance(author.get("name"), str) or not author["name"].strip():
+            raise ValueError("each author requires a name")
+        for field in ("student_id", "affiliation", "orcid"):
+            if field in author and (not isinstance(author[field], str) or len(author[field]) > 240):
+                raise ValueError("author " + field + " must be a short text")
+    if data.get("document_type") in ("thesis", "monograph"):
+        if not cover.get("institution"):
+            raise ValueError("academic manuscript requires cover.institution")
+        if not authors and not cover.get("author"):
+            raise ValueError("academic manuscript requires at least one author")
+
     keywords = data.get("keywords", [])
     if not isinstance(keywords, list) or len(keywords) > 12 or any(
         not isinstance(word, str) or not word.strip() or len(word) > 80 for word in keywords
@@ -113,11 +154,29 @@ def validate(data):
     for section in sections:
         if not isinstance(section, dict) or not isinstance(section.get("heading"), str) or not isinstance(section.get("text"), str):
             raise ValueError("sections require heading and text")
-        if len(section["heading"]) > 180 or len(section["text"]) > 30000:
+        if len(section["heading"]) > 180 or len(section["text"]) > 65000:
             raise ValueError("section exceeds safe length")
         cited.update(REF_RE.findall(section["text"]))
     if not cited or cited - keys:
         raise ValueError("each report must cite registered source keys with [@key], unknown=" + str(sorted(cited-keys)))
+    extra_sections = data.get("appendices", [])
+    if not isinstance(extra_sections, list) or len(extra_sections) > 30:
+        raise ValueError("appendices must be an array of up to 30 entries")
+    for appendix in extra_sections:
+        if not isinstance(appendix, dict) or not isinstance(appendix.get("title"), str) or not isinstance(appendix.get("text"), str):
+            raise ValueError("each appendix requires title and text")
+        if not appendix["title"].strip() or len(appendix["title"]) > 180 or len(appendix["text"]) > 35000:
+            raise ValueError("appendix content exceeds safe bounds")
+        cited.update(REF_RE.findall(appendix["text"]))
+    if cited - keys:
+        raise ValueError("appendix contains unknown source keys " + str(sorted(cited-keys)))
+    declarations = data.get("declarations", {})
+    if not isinstance(declarations, dict):
+        raise ValueError("declarations must be an object")
+    if any(field not in ("ethics", "funding", "conflicts", "data_availability", "registration") or
+           not isinstance(value, str) or len(value) > 10000
+           for field, value in declarations.items()):
+        raise ValueError("unsupported or oversized research declaration")
     document_type = data.get("document_type", "brief")
     section_kinds = {section_kind(section) for section in sections}
     missing = [kind for kind in REQUIRED_SECTIONS.get(document_type, ()) if kind not in section_kinds]
@@ -233,6 +292,38 @@ def chart_image(chart, folder, ordinal, accent="#087783"):
     image.save(destination)
     return destination
 
+def cover_authors(cover):
+    people = cover.get("authors") or []
+    if people:
+        return [str(p["name"]) +
+                ((" · Matrícula/ID: " + str(p["student_id"])) if p.get("student_id") else "") +
+                ((" · " + str(p["affiliation"])) if p.get("affiliation") else "") +
+                ((" · ORCID: " + str(p["orcid"])) if p.get("orcid") else "")
+                for p in people]
+    return [str(cover["author"])] if cover.get("author") else []
+
+FRONT_LABELS = [
+    ("approval", "Hoja de aprobación"),
+    ("originality", "Declaración de originalidad"),
+    ("dedication", "Dedicatoria"),
+    ("acknowledgements", "Agradecimientos"),
+    ("abstract_en", "Abstract"),
+]
+
+def add_word_field(paragraph, instruction):
+    field = OxmlElement("w:fldSimple")
+    field.set(qn("w:instr"), instruction)
+    paragraph._p.append(field)
+
+class IndexedDocTemplate(SimpleDocTemplate):
+    def afterFlowable(self, flowable):
+        info = getattr(flowable, "_outline_entry", None)
+        if info is not None:
+            key, label = info
+            self.canv.bookmarkPage(key)
+            self.canv.addOutlineEntry(label, key, level=0, closed=False)
+            self.notify("TOCEntry", (0, label, self.page, key))
+
 def main():
     raw = sys.stdin.buffer.read(MAX_CONTENT * 4)
     report = json.loads(raw.decode("utf-8"))
@@ -242,7 +333,7 @@ def main():
     editorial = presentation in ("editorial", "hybrid")
     accent = "#087783" if presentation == "hybrid" else "#a52d37"
     first_order = []
-    for section in report["sections"]:
+    for section in [*report["sections"], *report.get("appendices", [])]:
         for key in REF_RE.findall(section["text"]):
             if key not in first_order: first_order.append(key)
     numbers = {key: i+1 for i, key in enumerate(first_order)}
@@ -252,6 +343,10 @@ def main():
     output_root.mkdir(parents=True, exist_ok=True)
     title = report["title"].strip()
     cover = report.get("cover") if isinstance(report.get("cover"), dict) else {}
+    front = report.get("front_matter", {})
+    academic_work = report.get("document_type") in ("monograph", "thesis", "research_protocol")
+    include_toc = report.get("table_of_contents", academic_work)
+    authors = cover_authors(cover)
     paper = A4 if report.get("paper", "A4") == "A4" else letter
     doc = Document()
     sec = doc.sections[0]
@@ -263,7 +358,7 @@ def main():
     normal.font.name = "Times New Roman"
     normal.font.size = Pt(12)
     normal.paragraph_format.line_spacing = (1.38 if editorial else (2 if style == "apa" else 1.4))
-    normal.paragraph_format.space_after = Pt(7 if editorial else 6)
+    normal.paragraph_format.space_after = Pt(7 if editorial else (0 if style == "apa" else 6))
     if editorial:
         normal.font.name = "Aptos"
         normal.font.size = Pt(11)
@@ -294,24 +389,55 @@ def main():
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
         p.add_run().add_picture(str(logo_file), width=Inches(1.25))
     if cover.get("institution"): center_doc(cover["institution"], True, 14)
-    if cover.get("faculty"): center_doc(cover["faculty"])
+    for field in ("faculty", "department", "degree"):
+        if cover.get(field): center_doc(cover[field])
     doc.add_paragraph("")
     if editorial: center_doc("PHOENIX  |  INVESTIGACIÓN CIENTÍFICA", True, 10)
     center_doc(title, True, 20 if editorial else 17)
-    if cover.get("author"): center_doc("Autor(es): " + str(cover["author"]))
-    if cover.get("course"): center_doc("Asignatura: " + str(cover["course"]))
+    for author in authors: center_doc("Autor(a): " + author)
+    if cover.get("course"): center_doc("Asignatura: " + str(cover["course"]) +
+                                       (" · " + str(cover["course_code"]) if cover.get("course_code") else ""))
     if cover.get("lecturer"): center_doc("Docente: " + str(cover["lecturer"]))
-    if cover.get("city"): center_doc(cover["city"])
+    if cover.get("advisor"): center_doc("Asesor(a): " + str(cover["advisor"]))
+    if cover.get("city") or cover.get("country"):
+        center_doc(", ".join(str(cover[k]) for k in ("city", "country") if cover.get(k)))
     center_doc(cover.get("date", datetime.now(timezone.utc).date().isoformat()))
     doc.add_page_break()
-
+    for key, label in FRONT_LABELS:
+        if front.get(key):
+            doc.add_heading(label, level=1)
+            for value in front[key].split("\n"):
+                if value.strip(): doc.add_paragraph(value.strip())
+            doc.add_page_break()
+    if include_toc:
+        doc.add_heading("Índice general", level=1)
+        add_word_field(doc.add_paragraph(), 'TOC \\o "1-3" \\h \\z \\u')
+        if report.get("tables"):
+            doc.add_heading("Índice de tablas", level=1)
+            for ix, item in enumerate(report["tables"], 1):
+                doc.add_paragraph("Tabla " + str(ix) + ". " + str(item.get("title", "Resultados")))
+        if report.get("charts"):
+            doc.add_heading("Índice de figuras", level=1)
+            for ix, item in enumerate(report["charts"], 1):
+                doc.add_paragraph("Figura " + str(ix) + ". " + str(item.get("title", "Gráfico")))
+        doc.add_page_break()
+    settings = doc.settings._element
+    update_field = OxmlElement("w:updateFields")
+    update_field.set(qn("w:val"), "true")
+    settings.append(update_field)
+    footer_paragraph = sec.footer.paragraphs[0]
+    footer_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    add_word_field(footer_paragraph, "PAGE")
     if report.get("keywords"):
         doc.add_paragraph("Palabras clave: " + ", ".join(str(x) for x in report["keywords"]))
     for section in report["sections"]:
         doc.add_heading(section["heading"], level=1)
         text = format_text(section["text"], refs, style, numbers)
         for paragraph in text.split("\n"):
-            if paragraph.strip(): doc.add_paragraph(paragraph.strip())
+            if paragraph.strip():
+                entry = doc.add_paragraph(paragraph.strip())
+                if style == "apa" and not editorial and section_kind(section) != "abstract":
+                    entry.paragraph_format.first_line_indent = Cm(1.27)
     if report.get("tables"):
         doc.add_heading("Tablas", level=1)
         for ix, item in enumerate(report["tables"], 1):
@@ -333,9 +459,26 @@ def main():
             figures.append((chart, path))
             doc.add_paragraph(f"Figura {ix}. {chart.get('title','Gráfico')} — Fuente: {citation_string(chart['source_key'],refs,style,numbers)}")
             doc.add_picture(str(path), width=Inches(5.8))
+    if report.get("declarations"):
+        doc.add_heading("Declaraciones de investigación", level=1)
+        for key, label in (("ethics", "Ética"), ("funding", "Financiación"),
+                           ("conflicts", "Conflictos de interés"), ("data_availability", "Disponibilidad de datos"),
+                           ("registration", "Registro del estudio")):
+            if report["declarations"].get(key):
+                doc.add_heading(label, level=2)
+                doc.add_paragraph(report["declarations"][key])
     doc.add_heading("Referencias", level=1)
     for source in ordered_refs:
-        doc.add_paragraph(bibliography(source, style, numbers[source["key"]]))
+        entry = doc.add_paragraph(bibliography(source, style, numbers[source["key"]]))
+        if style == "apa":
+            entry.paragraph_format.left_indent = Cm(1.27)
+            entry.paragraph_format.first_line_indent = Cm(-1.27)
+    if report.get("appendices"):
+        doc.add_heading("Anexos y apéndices", level=1)
+        for ix, item in enumerate(report["appendices"], 1):
+            doc.add_heading("Anexo " + str(ix) + ". " + item["title"], level=2)
+            for line in format_text(item["text"], refs, style, numbers).split("\n"):
+                if line.strip(): doc.add_paragraph(line)
     docx_file = output_root / "informe.docx"
     doc.save(docx_file)
 
@@ -349,8 +492,10 @@ def main():
     ink = colors.HexColor("#1d3040") if editorial else colors.black
     heading_ink = colors.HexColor(accent) if editorial else colors.black
     body = ParagraphStyle("RBody", parent=styles["Normal"], fontName=font,
-                          fontSize=10.7 if editorial else 10.5, leading=17 if editorial else 16,
-                          alignment=TA_LEFT if editorial else TA_JUSTIFY, textColor=ink, spaceAfter=10)
+                          fontSize=10.7 if editorial else (12 if style == "apa" else 10.5),
+                          leading=17 if editorial else (24 if style == "apa" else 16),
+                          alignment=TA_LEFT if style == "apa" or editorial else TA_JUSTIFY,
+                          textColor=ink, spaceAfter=10)
     h1 = ParagraphStyle("RH1", parent=styles["Heading1"], fontName=font,
                         fontSize=15.5 if editorial else 15, leading=22, textColor=heading_ink,
                         spaceBefore=17, spaceAfter=11, keepWithNext=True)
@@ -366,27 +511,51 @@ def main():
             w, h = picture.size
         story.append(PdfImage(str(logo_file), width=110, height=110*h/max(1,w)))
         story.append(Spacer(1, 16))
-    for key in ("institution", "faculty"):
+    for key in ("institution", "faculty", "department", "degree"):
         if cover.get(key): para(cover[key], center)
     story.append(Spacer(1, 40 if editorial else 46))
     if editorial:
         para("PHOENIX  |  INFORME DE INVESTIGACIÓN", center)
         story.append(HRFlowable(width="100%", thickness=3, color=heading_ink, spaceAfter=20))
     para(title, heading)
-    for key in ("author", "course", "lecturer", "city", "date"):
+    for person in authors: para("Autor(a): " + person, center)
+    for key in ("course", "course_code", "lecturer", "advisor", "city", "country", "date"):
         if cover.get(key): para(cover[key], center)
     story.append(PageBreak())
+    for key, label in FRONT_LABELS:
+        if front.get(key):
+            para(label, h1)
+            for line in front[key].split("\n"):
+                if line.strip(): para(line)
+            story.append(PageBreak())
+    if include_toc:
+        para("Índice general", h1)
+        toc = TableOfContents()
+        toc.levelStyles = [ParagraphStyle("IndexEntry", parent=body, leftIndent=12,
+                                          firstLineIndent=-10, spaceAfter=5, fontSize=10)]
+        story.append(toc)
+        if report.get("tables"):
+            para("Índice de tablas", h1)
+            for ix, item in enumerate(report["tables"], 1):
+                para("Tabla " + str(ix) + ". " + str(item.get("title", "Resultados")), small)
+        if report.get("charts"):
+            para("Índice de figuras", h1)
+            for ix, item in enumerate(report["charts"], 1):
+                para("Figura " + str(ix) + ". " + str(item.get("title", "Gráfico")), small)
+        story.append(PageBreak())
     if report.get("keywords"):
         para("Palabras clave: " + ", ".join(str(x) for x in report["keywords"]), small)
         story.append(Spacer(1, 8))
-    for section in report["sections"]:
-        para(section["heading"], h1)
+    for ix, section in enumerate(report["sections"]):
+        heading_flowable = Paragraph(html.escape(section["heading"]), h1)
+        heading_flowable._outline_entry = ("section-" + str(ix), section["heading"])
+        story.append(heading_flowable)
         value = format_text(section["text"], refs, style, numbers)
         for piece in value.split("\n"):
             if piece.strip(): para(piece)
     if report.get("tables"):
         para("Tablas", h1)
-        content_width = paper[0] - 120
+        content_width = paper[0] - 160
         for ix, item in enumerate(report["tables"], 1):
             para("Tabla " + str(ix) + ". " + str(item.get("title", "Resultados")) + " — Fuente: " +
                  citation_string(item["source_key"], refs, style, numbers), small)
@@ -412,15 +581,33 @@ def main():
         para("Figuras", h1)
         for ix, (chart, path) in enumerate(figures, 1):
             para(f"Figura {ix}. {chart.get('title','Gráfico')} — Fuente: {citation_string(chart['source_key'],refs,style,numbers)}", small)
-            story.append(PdfImage(str(path), width=450, height=216))
+            story.append(PdfImage(str(path), width=420, height=202))
             story.append(Spacer(1, 12))
+    if report.get("declarations"):
+        para("Declaraciones de investigación", h1)
+        for key, label in (("ethics", "Ética"), ("funding", "Financiación"),
+                           ("conflicts", "Conflictos de interés"), ("data_availability", "Disponibilidad de datos"),
+                           ("registration", "Registro del estudio")):
+            if report["declarations"].get(key):
+                para(label, h1)
+                para(report["declarations"][key])
     para("Referencias", h1)
     for source in ordered_refs:
         para(bibliography(source, style, numbers[source["key"]]), small)
+    if report.get("appendices"):
+        para("Anexos y apéndices", h1)
+        for ix, item in enumerate(report["appendices"], 1):
+            para("Anexo " + str(ix) + ". " + item["title"], h1)
+            para(format_text(item["text"], refs, style, numbers))
 
     pdf_file = output_root / "informe.pdf"
-    printer = SimpleDocTemplate(str(pdf_file), pagesize=paper, rightMargin=60, leftMargin=60, topMargin=64, bottomMargin=62, title=title, author=str(cover.get("author","")))
+    pdf_margin = 72 if style == "apa" and not editorial else 60
+    printer = IndexedDocTemplate(str(pdf_file), pagesize=paper, rightMargin=pdf_margin,
+                                 leftMargin=pdf_margin, topMargin=pdf_margin,
+                                 bottomMargin=pdf_margin, title=title, author=", ".join(authors))
+    rendered_pages = [0]
     def footer(canvas, document):
+        rendered_pages[0] = document.page
         canvas.saveState()
         if editorial:
             canvas.setStrokeColor(heading_ink)
@@ -436,13 +623,18 @@ def main():
         canvas.setFont(font, 9)
         canvas.drawCentredString(paper[0]/2, 30, str(document.page))
         canvas.restoreState()
-    printer.build(story, onFirstPage=footer, onLaterPages=footer)
+    printer.multiBuild(story, onFirstPage=footer, onLaterPages=footer)
 
     chunks = []
     chunks.append("<!doctype html><html lang='es'><meta charset='utf-8'><title>"+html.escape(title)+"</title>")
     chunks.append("<style>body{font:17px/1.65 system-ui,Georgia,serif;max-width:880px;margin:44px auto;padding:0 22px;color:#203043}h1,h2{line-height:1.3}h2{color:"+accent+";border-bottom:1px solid #d9e3e6;padding-bottom:.45em}a{color:"+accent+"}nav{padding:20px 0}.ref{font-size:.88em;margin:9px 0}figure img{width:100%}table{border-collapse:collapse;width:100%;font-size:.88em;display:block;overflow-x:auto}td,th{border-bottom:1px solid #dce5ea;padding:9px;text-align:left}th{background:#e9f3f4}</style>")
     chunks.append("<h1>"+html.escape(title)+"</h1>")
-    chunks.append("<p>"+html.escape(" · ".join(str(cover.get(k,"")) for k in ("institution","author","date") if cover.get(k)))+"</p>")
+    chunks.append("<p>"+html.escape(" · ".join(str(cover.get(k,"")) for k in ("institution","faculty","degree","date") if cover.get(k)))+"</p>")
+    for author in authors: chunks.append("<p class='ref'>"+html.escape(author)+"</p>")
+    for key, label in FRONT_LABELS:
+        if front.get(key):
+            chunks.append("<section><h2>"+html.escape(label)+"</h2><p>"+
+                          html.escape(front[key]).replace("\n", "</p><p>")+"</p></section>")
     chunks.append("<nav>"+ " · ".join("<a href='#sec-"+str(i)+"'>"+html.escape(v["heading"])+"</a>" for i,v in enumerate(report["sections"]))+"</nav>")
     for i,section in enumerate(report["sections"]):
         rendered=format_text(section["text"],refs,style,numbers)
@@ -459,13 +651,44 @@ def main():
     chunks.append("<h2>Referencias</h2><ol>")
     for src in ordered_refs:
         chunks.append("<li class='ref'>"+html.escape(bibliography(src,style,numbers[src["key"]]))+"</li>")
-    chunks.append("</ol></html>")
+    chunks.append("</ol>")
+    if report.get("declarations"):
+        chunks.append("<section><h2>Declaraciones de investigación</h2>")
+        for key, label in (("ethics", "Ética"), ("funding", "Financiación"),
+                           ("conflicts", "Conflictos de interés"), ("data_availability", "Disponibilidad de datos"),
+                           ("registration", "Registro del estudio")):
+            if report["declarations"].get(key):
+                chunks.append("<h3>"+html.escape(label)+"</h3><p>"+
+                              html.escape(report["declarations"][key])+"</p>")
+        chunks.append("</section>")
+    if report.get("appendices"):
+        chunks.append("<section><h2>Anexos y apéndices</h2>")
+        for ix, item in enumerate(report["appendices"], 1):
+            chunks.append("<h3>Anexo "+str(ix)+". "+html.escape(item["title"])+"</h3><p>"+
+                          html.escape(format_text(item["text"],refs,style,numbers)).replace("\n","</p><p>")+"</p>")
+        chunks.append("</section>")
+    chunks.append("</html>")
     html_file=output_root/"informe.html"
     html_file.write_text("".join(chunks),encoding="utf-8")
-    result={"state":"REPORT_READY","report_id":digest,"title":title,"style":style,
+    target_pages = report.get("page_plan", {}).get("target_pages")
+    scope = report.get("page_plan", {}).get("scope", "all")
+    page_match = target_pages is None or (scope == "all" and target_pages == rendered_pages[0])
+    warnings = []
+    if target_pages is not None and scope == "body":
+        warnings.append("El límite se refiere solo al cuerpo: el PDF total no permite certificarlo automáticamente.")
+    elif target_pages is not None and not page_match:
+        warnings.append("La extensión solicitada no se alcanzó: PDF real " + str(rendered_pages[0]) +
+                        ", objetivo " + str(target_pages) + ". No se añade contenido ficticio.")
+    final_state = "REPORT_NEEDS_REVISION" if warnings else "REPORT_READY"
+    result={"state":final_state,"report_id":digest,"title":title,"style":style,
             "presentation":presentation,"document_type":report.get("document_type", "brief"),
             "quality": {"required_sections_checked": True, "submission_certified": False,
-                        "bibliographic_metadata_network_verified": False, "visual_page_review": "not_performed"},
+                        "bibliographic_metadata_network_verified": False, "visual_page_review": "not_performed",
+                        "pagination_review_required": bool(warnings),
+                        "references_style_certified": False},
+            "pagination": {"pdf_pages": rendered_pages[0], "requested_pages": target_pages,
+                           "scope": scope, "target_met": page_match if scope == "all" else None},
+            "warnings": warnings,
             "source_count":len(cited),"source_verification":"metadata_user_supplied_not_network_verified","files":{"docx":str(docx_file),"pdf":str(pdf_file),"html":str(html_file)},"output_dir":str(output_root)}
     # Preserve the exact structured project so model handoffs and revisions do not
     # need to re-run every source lookup or reconstruct the manuscript from PDF.
@@ -481,7 +704,7 @@ def main():
             raise RuntimeError("invalid DOCX archive")
     if not pdf_file.read_bytes().startswith(b"%PDF-"):
         raise RuntimeError("PDF header is invalid")
-    print(json.dumps(result,ensure_ascii=False))
+    sys.stdout.buffer.write((json.dumps(result, ensure_ascii=False) + "\n").encode("utf-8"))
 
 if __name__=="__main__":
     try: main()
