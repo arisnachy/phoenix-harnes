@@ -79,7 +79,7 @@ def main():
         "candidates": findings, "warnings": warnings,
         "disclaimer": "Extracción textual heurística con localizadores; no se afirma conformidad institucional hasta revisar y aplicar las reglas.",
     }
-    sys.stdout.buffer.write((json.dumps(result, ensure_ascii=False)+"\n").encode("utf-8"))
+    print(json.dumps(result, ensure_ascii=True), flush=True)
 
 if __name__ == "__main__":
     try: main()
