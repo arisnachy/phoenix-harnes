@@ -132,6 +132,7 @@ export type CuratedMcpConnectorId =
   | 'meta-devtools'
   | 'meta-whatsapp-business'
   | 'microsoft-learn'
+  | 'microsoft-personal'
   | 'microsoft-workiq'
   | 'microsoft-azure'
   | 'vercel'

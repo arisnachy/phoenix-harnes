@@ -596,6 +596,31 @@ describe('ManagedMcpController', () => {
     }
   })
 
+  it('pins the free Microsoft personal Graph MCP to local Node and rejects modified persisted launchers', async () => {
+    const patchPath = tempPatch()
+    const live = loader()
+    const ctl = new ManagedMcpController(live, { patchPath, registrySearch: registry([]) })
+    await expect(ctl.installCuratedMcp('microsoft-personal')).resolves.toMatchObject({
+      connector: { serverName: 'microsoft-personal', url: 'stdio://microsoft-personal',
+        source: { kind: 'curated', connectorId: 'microsoft-personal' } },
+    })
+    expect(live.create).toHaveBeenCalledWith(expect.objectContaining({
+      config: expect.objectContaining({
+        transport: 'stdio', serverName: 'microsoft-personal', command: 'node',
+        args: ['scripts/phoenix-microsoft-personal-mcp.mjs'], env: {}, envCredentialRefs: {},
+      }),
+    }))
+    const original = JSON.parse(readFileSync(patchPath, 'utf8'))[0].insert[0]
+    for (const config of [
+      { ...original.config, command: 'powershell.exe' },
+      { ...original.config, args: ['http://evil.example'] },
+      { ...original.config, env: { ACCESS_TOKEN: 'untrusted' } },
+    ]) {
+      writeFileSync(patchPath, JSON.stringify([{ insert: [{ ...original, config }] }]))
+      await expect(ctl.snapshot()).rejects.toThrow(/managed MCP patch row/)
+    }
+  })
+
   it('pins Work IQ and Azure to Microsoft-owned local packages, opt-in and distinct', async () => {
     const patchPath = tempPatch()
     const live = loader()

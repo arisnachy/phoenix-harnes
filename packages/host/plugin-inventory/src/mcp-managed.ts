@@ -327,6 +327,24 @@ const CURATED_MCP_SPECS: Readonly<Record<CuratedMcpConnectorId, CuratedMcpSpec>>
   'meta-devtools': { label: 'Meta Social Technologies', config: () => remoteOauthMcpConfig('meta-devtools', META_DEVTOOLS_MCP_URL) },
   'meta-whatsapp-business': { label: 'WhatsApp Business Tools', config: () => remoteOauthMcpConfig('meta-whatsapp-business', META_WHATSAPP_BUSINESS_MCP_URL) },
   'microsoft-learn': { label: 'Microsoft Learn Docs', config: microsoftLearnMcpConfig },
+  // Free Microsoft Graph delegated access; no third-party mail server, Work IQ, or Azure billing.
+  // Only a local Node process and a user-owned Entra public-client app registration.
+  'microsoft-personal': {
+    label: 'Microsoft Personal (Outlook, Calendar, Contacts, OneDrive — free)',
+    config: () => ({
+      transport: 'stdio',
+      serverName: 'microsoft-personal',
+      command: 'node',
+      args: ['scripts/phoenix-microsoft-personal-mcp.mjs'],
+      env: {},
+      envCredentialRefs: {},
+      cwd: '',
+      toolCallTimeoutMs: 60_000,
+      startupTimeoutMs: 20_000,
+      failOnStartupError: false,
+      reconnect: { enabled: true, initialDelayMs: 1000, maxDelayMs: 30_000, maxAttempts: 3 },
+    }),
+  },
   'microsoft-workiq': { label: 'Microsoft Work IQ (metered)', config: () => localNpxMcpConfig('microsoft-workiq', '@microsoft/workiq', ['mcp']) },
   'microsoft-azure': { label: 'Microsoft Azure MCP (metered resources)', config: () => localNpxMcpConfig('microsoft-azure', '@azure/mcp@latest', ['server', 'start', '--mode', 'consolidated']) },
   vercel: { label: 'Vercel', config: () => remoteOauthMcpConfig('vercel', VERCEL_MCP_URL) },
@@ -363,6 +381,7 @@ export const CORE_MCP_PACK_IDS: readonly CuratedMcpConnectorId[] = [
   // Public Microsoft documentation is free and requires no private credentials.
   // Metered Work IQ and Azure remain optional and never auto-install.
   'microsoft-learn',
+  'microsoft-personal',
   'canva',
   'supabase',
   'heygen',

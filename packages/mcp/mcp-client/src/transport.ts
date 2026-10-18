@@ -151,6 +151,27 @@ const CURRENT_PHOENIX_STDIO_PROXY = fileURLToPath(
   new URL('../../../../scripts/mcp-stdio-proxy.mjs', import.meta.url),
 )
 
+/** Never persist a staging-specific absolute path to the personal Microsoft MCP. */
+const CURRENT_MICROSOFT_PERSONAL_MCP = fileURLToPath(
+  new URL('../../../../scripts/phoenix-microsoft-personal-mcp.mjs', import.meta.url),
+)
+
+/** Resolve the optional local Graph MCP from the active Phoenix runtime, not process.cwd(). */
+export function normalizeMicrosoftPersonalMcpLaunch(
+  serverName: string, command: string, args: readonly string[],
+): { command: string; args: string[] } {
+  if (serverName === 'microsoft-personal'
+    && command === 'node'
+    && args.length === 1
+    && args[0] === 'scripts/phoenix-microsoft-personal-mcp.mjs') {
+    if (!existsSync(CURRENT_MICROSOFT_PERSONAL_MCP)) {
+      throw new Error('mcp-client: Microsoft Personal MCP script is missing from the active Phoenix runtime')
+    }
+    return { command: process.execPath, args: [CURRENT_MICROSOFT_PERSONAL_MCP] }
+  }
+  return normalizeWindowsNpxMcpLaunch(command, args)
+}
+
 function isPhoenixStdioProxyPath(value: string): boolean {
   return value.replace(/\\/g, '/').toLowerCase().endsWith('/scripts/mcp-stdio-proxy.mjs')
 }
@@ -352,7 +373,8 @@ function credentialRequired(ref: string): Error & { status: number } {
 export function createTransport(config: Config, options: TransportOptions = {}): Transport {
   switch (config.transport) {
     case 'stdio': {
-      const launch = normalizeWindowsNpxMcpLaunch(
+      const launch = normalizeMicrosoftPersonalMcpLaunch(
+        config.serverName,
         config.command,
         repairPhoenixStdioProxyArgs(config.args),
       )
