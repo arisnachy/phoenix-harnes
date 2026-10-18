@@ -1,3 +1,7 @@
+import { spawnSync } from 'node:child_process'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { reviewGameProduction } from '../game-production-qa.mjs'
 
@@ -71,6 +75,24 @@ describe('Phoenix Game Studio production QA planning', () => {
       level: { id: 'puzzle', entry: 'board', exit: 'win' } }, { tasks: [] })
     expect(review.designIssues.some(x => /boss|enemy|music/u.test(x.code))).toBe(false)
     expect(review.missingPlaytests).toEqual(expect.arrayContaining(['interaction']))
+  })
+  it('includes the production review in the actual asset-planner JSON CLI output', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'phoenix-game-production-'))
+    try {
+      const input = join(directory, 'manifest.json')
+      const output = join(directory, 'production-plan.json')
+      writeFileSync(input, JSON.stringify(manifest))
+      const result = spawnSync(process.execPath, [
+        resolve('examples/game-studio/plan-game-assets.mjs'), input, output,
+      ], { encoding: 'utf8', timeout: 15_000 })
+      expect(result.status, result.stderr).toBe(0)
+      const report = JSON.parse(readFileSync(output, 'utf8'))
+      expect(report.productionReview.releaseCertified).toBe(false)
+      expect(report.productionReview.missingAssetBindings.length).toBeGreaterThan(0)
+      expect(report.productionReview.phases.some((phase: { id: string }) => phase.id === 'gameplay-qa')).toBe(true)
+    } finally {
+      rmSync(directory, { recursive: true, force: true })
+    }
   })
   it('rejects missing production inputs explicitly', () => {
     expect(() => reviewGameProduction({}, {})).toThrow('Actual asset-production plan')
