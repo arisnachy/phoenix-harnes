@@ -1,6 +1,6 @@
 import { defineTool, ToolArgsError, type ToolDefinition } from '@phoenix-ai/dsh-tools'
 import { readFileSync, realpathSync, statSync } from 'node:fs'
-import { extname, relative, resolve, sep } from 'node:path'
+import { extname, isAbsolute, relative, resolve, sep } from 'node:path'
 import { validateGameArt } from './game-art.ts'
 
 /** Game Studio's existing sandboxed executable artifact renderer in the Phoenix chat. */
@@ -116,7 +116,7 @@ export function readWorkspaceGameHtml(path: string, cwd: string): string {
   }
   const child = relative(root, target)
   if (child === '' || child === '..' || child.startsWith('..' + sep)
-    || child.startsWith('/') || child.startsWith('\\') || extname(target).toLowerCase() !== '.html') {
+    || isAbsolute(child) || extname(target).toLowerCase() !== '.html') {
     throw new ToolArgsError(['Game Studio: file_path debe apuntar a un HTML dentro del espacio de trabajo, sin enlaces externos.'])
   }
   let size: number
