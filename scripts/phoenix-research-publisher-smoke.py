@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 from zipfile import ZipFile
 from PIL import Image
+import fitz
 
 script = Path(__file__).with_name("phoenix-research-publisher.py")
 logo = Path(__file__).with_name(".phoenix-research-test-logo.png")
@@ -58,6 +59,19 @@ try:
         paths = {k: Path(v) for k, v in receipt["files"].items()}
         assert all(p.is_file() and p.stat().st_size > 500 for p in paths.values())
         assert paths["pdf"].read_bytes().startswith(b"%PDF-")
+        with fitz.open(paths["pdf"]) as pdf:
+            assert pdf.page_count >= 2
+            report_text = "\n".join(page.get_text() for page in pdf)
+            assert "Referencias" in report_text
+            assert "Tabla 1" in report_text and "Figura 2" in report_text
+            for page in pdf:
+                assert page.rect.width >= 500 and page.rect.height >= 700
+                for block in page.get_text("blocks"):
+                    if len(block) > 6 and block[6] != 0:
+                        continue
+                    x0, y0, x1, y1 = block[:4]
+                    assert -1 <= x0 < x1 <= page.rect.width + 1
+                    assert -1 <= y0 < y1 <= page.rect.height + 1
         html_contents = paths["html"].read_text(encoding="utf-8")
         assert "Referencias" in html_contents
         assert "<table>" in html_contents and "Comparación de prueba" in html_contents
