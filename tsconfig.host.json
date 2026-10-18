@@ -205,6 +205,7 @@
     { "path": "./packages/core/living" },
     { "path": "./packages/core/living-local" },
     { "path": "./packages/core/tool-living" },
+    { "path": "./packages/core/tool-business" },
     { "path": "./packages/core/agent-tool-presentation" },
     { "path": "./packages/skill/skill" },
     { "path": "./packages/hardness/hardness" },
