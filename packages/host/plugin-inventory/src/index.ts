@@ -499,7 +499,7 @@ export class PluginInventoryGateway extends TypertRemoteService {
    * @returns Idempotent receipts for both pinned connectors.
    */
   @Remote('enableXMcp')
-  async enableXMcp(options?: { identity?: XMcpIdentity; username?: string }): Promise<{
+  async enableXMcp(options?: { identity?: 'user' | 'phoenix'; username?: string }): Promise<{
     api: McpRegistryInstallReceipt
     docs: McpRegistryInstallReceipt
   }> {
