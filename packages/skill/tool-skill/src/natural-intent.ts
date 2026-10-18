@@ -28,6 +28,7 @@ export function naturalCreationSkill(input: string): 'game-development' | undefi
   const command = new RegExp('(?:^|[.!?]\\s*)\\s*(?:(?:por favor|please|quiero que|necesito que|me puedes|me podrias|puedes|podrias|can you|could you|me gustaria que)\\s+){0,3}' + build + '(?:\\s+\\S+){0,9}?\\s+(?:(?:un|una|el|la|a|an|the|mi|me|some|a simple)\\s+)?' + game + '(?:\\b|$)', 'u')
   const desired = new RegExp('(?:^|[.!?]\\s*)\\s*(?:quiero|necesito|dame|me gustaria|i want|i need|give me|build me|make me)(?:\\s+\\S+){0,4}?\\s+(?:(?:un|una|a|an|the)\\s+)?' + game + '(?:\\b|$)', 'u')
   const short = new RegExp('^(?:(?:un|una|a|an)\\s+)?' + game + '\\s+(?:tipo|estilo|de|sobre|similar|like|about|with|para|for)\\b', 'u')
-  if (command.test(request) || desired.test(request) || short.test(request)) return 'game-development'
+  const shortRequest = request.length < 150 && !/[?？]/u.test(request) && short.test(request)
+  if (command.test(request) || desired.test(request) || shortRequest) return 'game-development'
   return undefined
 }
