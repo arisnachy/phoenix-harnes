@@ -15,7 +15,9 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
 import { browserBatchExpression, browserInteractionExpression, type BrowserInteraction, type BrowserInteractionResult } from './browser-interactions.ts'
 import { CdpConnectionPool } from './cdp-connection-pool.ts'
+import { classifySiteHealth, nextSiteRecoveryStep, siteHealthExpression, type SitePageHealth } from './site-health.ts'
 import { runBrowserFormWorkflow } from './form-workflow.ts'
+import { formLayoutKey, prepareLearnedFormWorkflow, recallVerifiedFormLayout, sanitizeFormLayout, saveVerifiedFormLayout } from './form-layout-memory.ts'
 import { chooseYoutubeCaptions, youtubeCaptionUrl, youtubeTranscript, youtubeWatchUrl, type YoutubeCaptionTrack } from './youtube-video.ts'
 import { parseCapturedVideoAudio, transcribeCapturedVideoAudio, videoAudioCaptureExpression } from './video-audio.ts'
 import { inspectVideoMedia } from './video-media.ts'
@@ -432,6 +434,36 @@ server.registerTool('read_page', {
   return { content: [{ type: 'text', text: JSON.stringify({ ...page, text: page.text.slice(0, maxChars) }, null, 2) }] }
 })
 
+server.registerTool('diagnose_page', {
+  description: 'Diagnóstico pasivo de la pestaña seleccionada cuando un sitio queda en blanco, muestra “Blocked”, falla un iframe o no carga una sección. No lee contraseñas, cookies, saldos ni contenido privado. Distingue problemas locales, carga parcial y denegación del sitio. Úsalo antes de afirmar que una tarea no se puede continuar; nunca lo utilices para eludir restricciones de acceso.',
+  inputSchema: { tabId: z.string().optional() },
+}, async ({ tabId }) => {
+  const tab = await selectedTab(tabId)
+  let sample: SitePageHealth
+  try {
+    const raw = await evaluate(tab, siteHealthExpression, 7_000)
+    if (typeof raw !== 'string') throw new TypeError('Invalid page diagnosis')
+    sample = JSON.parse(raw) as SitePageHealth
+    if (typeof sample.mainTextLength !== 'number' || typeof sample.blockedMarker !== 'boolean') {
+      throw new TypeError('Invalid page health fields')
+    }
+  } catch {
+    return { isError: true, content: [{ type: 'text', text: JSON.stringify({
+      status: 'browser_diagnostic_unavailable',
+      tabId: tab.id,
+      next: 'Revisar la conexión Chrome CDP; conservar la sesión actual, no asumir que el sitio denegó acceso.',
+    }) }] }
+  }
+  const status = classifySiteHealth(sample)
+  return { content: [{ type: 'text', text: JSON.stringify({
+    tabId: tab.id,
+    status,
+    evidence: sample,
+    next: nextSiteRecoveryStep(status),
+    warning: 'Una señal Blocked no prueba que toda la página esté inaccesible. Tampoco demuestra una transacción exitosa.',
+  }) }] }
+})
+
 const targetSchema = {
   selector: z.string().trim().min(1).max(500).optional(),
   name: z.string().trim().min(1).max(150).optional(),
@@ -447,11 +479,35 @@ const fieldAction = z.object({
 })
 
 server.registerTool('inspect_page', {
-  description: 'Inspección rápida estructurada y de solo lectura de la pestaña real: campos, etiquetas, tipos, opciones, protegido/deshabilitado/readonly, formularios y frames. Una llamada antes de completar un formulario; no requiere escritorio ni captura de pantalla. No incluye contraseñas, cookies ni contenido de campos sensibles.',
+  description: 'Inspección estructurada y de solo lectura de la pestaña real. Si hubo una verificación exitosa previa en esta ruta, agrega learnedLayout con localizadores seguros revalidados contra el DOM actual, NUNCA valores de campos. Reutiliza esas pistas para ahorrar pasos, pero verifica cada entrada y confirma por separado los envíos.',
   inputSchema: { tabId: z.string().optional() },
 }, async ({ tabId }) => {
   const tab = await selectedTab(tabId)
-  return formatBrowserResult(await evaluate(tab, browserInteractionExpression({ operation: 'inspect' })))
+  const observed = await evaluate(tab, browserInteractionExpression({ operation: 'inspect' }))
+  const layout = await recallVerifiedFormLayout(tab.url).catch(() => undefined)
+  const result = observed as BrowserInteractionResult | undefined
+  // Hints do not supply values and cannot stand in for the current DOM.
+  if (!layout || !result?.ok || !Array.isArray(result.controls)) return formatBrowserResult(observed)
+  const controls = result.controls as Array<{ id?: string; name?: string; visible?: boolean; disabled?: boolean; readonly?: boolean; type?: string }>
+  const usable = (locator: { selector?: string; name?: string }): boolean => {
+    const found = controls.filter(control => control.visible && !control.disabled && !control.readonly
+      && control.type !== 'password' && (locator.name !== undefined
+        ? control.name === locator.name
+        : locator.selector?.startsWith('#') && control.id === locator.selector.slice(1)))
+    // Class/tag-and-id selectors are suggestions requiring fresh inspection.
+    return found.length === 1
+  }
+  const suggestions = {
+    ...layout,
+    steps: layout.steps.filter(usable),
+    verifiedChecks: layout.verifiedChecks.filter(usable),
+  }
+  return formatBrowserResult({
+    ...result, ...(suggestions.steps.length || suggestions.verifiedChecks.length
+      ? { learnedLayout: suggestions,
+          warning: 'Memoria de localizadores SIN datos: revalida controles, valores y autorización actual. No reutilices envíos.' }
+      : {}),
+  })
 })
 
 server.registerTool('complete_form', {
@@ -478,22 +534,47 @@ server.registerTool('complete_form', {
 }, async ({ tabId, phases, checks, submit, expectedReceiptText }) => {
   ensureBrowserActionPermission()
   const tab = await selectedTab(tabId)
-  const result = await runBrowserFormWorkflow({
+  const workflow = {
     phases: phases as BrowserInteraction[][],
     checks: checks as BrowserInteraction[],
     ...(submit ? { submit } : {}),
     ...(expectedReceiptText ? { expectedReceiptText } : {}),
-  }, expression => evaluate(tab, expression))
+  }
+  const result = await runBrowserFormWorkflow(workflow, expression => evaluate(tab, expression))
+  if (result.ok && (result.stage === 'verified'
+    || (result.stage === 'receipt' && result.receiptConfirmed))) {
+    // Only proven verification promotes reusable, secret-free locator hints.
+    await saveVerifiedFormLayout(tab.url, workflow.phases, workflow.checks).catch(() => false)
+  }
   return formatBrowserResult(result)
 })
 
+// Transient layout-only candidates. Raw user entries are never stored here.
+// A layout is promoted only after a successful verify_form on the same route.
+const pendingFormLayouts = new Map<string, { pageKey: string; steps: BrowserInteraction[] }>()
 server.registerTool('fill_form', {
   description: 'VÍA PREFERIDA Y RÁPIDA para encuestas/formularios: tras UNA inspección inspect_page, completa hasta 30 campos en UNA sola llamada Chromium DOM (sin capturas ni clics por campo). Usa name, label, CSS o placeholder. Verifica cada escritura inmediatamente, rechaza campos protegidos/ambiguos y se detiene ante un error. Después usa verify_form UNA VEZ para comprobar persistencia; captura pantalla solo si el DOM no alcanza. No envía el formulario.',
   inputSchema: { tabId: z.string().optional(), fields: z.array(fieldAction).min(1).max(30) },
 }, async ({ tabId, fields }) => {
   ensureBrowserActionPermission()
   const tab = await selectedTab(tabId)
-  return formatBrowserResult(await evaluate(tab, browserBatchExpression(fields as BrowserInteraction[])))
+  const result = await evaluate(tab, browserBatchExpression(fields as BrowserInteraction[]))
+  if ((result as { ok?: boolean } | undefined)?.ok === true) {
+    const hints = sanitizeFormLayout(
+      [fields as BrowserInteraction[]],
+      fields.map(field => ({
+        operation: 'verify' as const, ...(field.selector ? { selector: field.selector } : {}),
+        ...(field.name ? { name: field.name } : {}),
+      })),
+    )
+    if (hints !== undefined) {
+      const steps = hints.steps.map(step => ({ ...step } as BrowserInteraction))
+      pendingFormLayouts.set(tab.id, { pageKey: formLayoutKey(tab.url), steps })
+    }
+  } else {
+    pendingFormLayouts.delete(tab.id)
+  }
+  return formatBrowserResult(result)
 })
 
 server.registerTool('verify_form', {
@@ -509,7 +590,59 @@ server.registerTool('verify_form', {
   },
 }, async ({ tabId, fields }) => {
   const tab = await selectedTab(tabId)
-  return formatBrowserResult(await evaluate(tab, browserBatchExpression(fields as BrowserInteraction[])))
+  const result = await evaluate(tab, browserBatchExpression(fields as BrowserInteraction[]))
+  if ((result as { ok?: boolean } | undefined)?.ok === true) {
+    const remembered = pendingFormLayouts.get(tab.id)
+    const steps = remembered?.pageKey === formLayoutKey(tab.url) ? remembered.steps : []
+    await saveVerifiedFormLayout(tab.url, [steps], fields as BrowserInteraction[]).catch(() => false)
+  }
+  pendingFormLayouts.delete(tab.id)
+  return formatBrowserResult(result)
+})
+
+server.registerTool('fill_learned_form', {
+  description: 'Rellena un formulario visitado antes usando localizadores SIN VALORES que fueron aprendidos después de una verificación exitosa. Aporta solo valores ACTUALES, por ejemplo fields:[{"field":"#candidate","value":"Nuevo nombre"},{"field":"department","value":"Ventas"}]. Detecta desajustes DOM y verifica todo en la misma llamada; nunca reutiliza respuestas pasadas ni envía la página. Si no hay memoria o falló la comprobación, usa inspect_page y complete_form.',
+  inputSchema: {
+    tabId: z.string().optional(),
+    fields: z.array(z.object({
+      field: z.string().min(1).max(80),
+      value: z.string().max(4096).optional(),
+      checked: z.boolean().optional(),
+    })).min(1).max(30),
+  },
+}, async ({ tabId, fields }) => {
+  ensureBrowserActionPermission()
+  const tab = await selectedTab(tabId)
+  const layout = await recallVerifiedFormLayout(tab.url)
+  if (!layout) return formatBrowserResult({
+    ok: false, reason: 'NO_VERIFIED_LAYOUT',
+    next: 'Inspecciona una vez y usa complete_form o fill_form/verify_form para aprender la estructura.',
+  })
+  const definedFields = fields.map(({ field, value, checked }) => ({
+    field,
+    ...(value === undefined ? {} : { value }),
+    ...(checked === undefined ? {} : { checked }),
+  }))
+  const workflow = prepareLearnedFormWorkflow(layout, definedFields)
+  if (!workflow) return formatBrowserResult({ ok: false, reason: 'LEARNED_LAYOUT_FIELD_MISMATCH',
+    next: 'No hay un localizador seguro para todos los campos actuales; vuelve a inspect_page.' })
+  const inspect = await evaluate(tab, browserInteractionExpression({ operation: 'inspect' })) as BrowserInteractionResult
+  const controls = Array.isArray(inspect?.controls) ? inspect.controls as Array<{
+    id?: string; name?: string; visible?: boolean; disabled?: boolean; readonly?: boolean; type?: string
+  }> : []
+  const matches = workflow.phases.flat().every(action => {
+    const match = controls.filter(control => control.visible && !control.disabled && !control.readonly
+      && control.type !== 'password' && (action.name !== undefined
+        ? control.name === action.name
+        : action.selector?.startsWith('#') && control.id === action.selector.slice(1)))
+    return match.length === 1
+  })
+  if (!matches) return formatBrowserResult({
+    ok: false, reason: 'LEARNED_LAYOUT_STALE',
+    next: 'Un localizador guardado ya no coincide con un control único y editable; inspecciona el DOM antes de escribir.',
+  })
+  const result = await runBrowserFormWorkflow(workflow, expression => evaluate(tab, expression))
+  return formatBrowserResult(result)
 })
 
 server.registerTool('interact', {
@@ -889,26 +1022,99 @@ server.registerTool('mouse_action', {
     + '. Verifica con inspect_page o screenshot antes de afirmar el resultado.' }] }
 })
 
+/** Parse keyboard shorthand without executing page scripts or accessing the clipboard. */
+export interface NormalizedBrowserKey {
+  key: string
+  code: string
+  virtualKeyCode: number
+  modifiers: number
+  text?: string
+}
+const BROWSER_MODIFIERS: Readonly<Record<string, number>> = {
+  alt: 1, option: 1, ctrl: 2, control: 2, ctl: 2,
+  meta: 4, cmd: 4, command: 4, shift: 8,
+}
+const BROWSER_KEY_NAMES: Readonly<Record<string, readonly [string, string, number]>> = {
+  enter: ['Enter', 'Enter', 13], return: ['Enter', 'Enter', 13],
+  tab: ['Tab', 'Tab', 9],
+  escape: ['Escape', 'Escape', 27], esc: ['Escape', 'Escape', 27],
+  backspace: ['Backspace', 'Backspace', 8],
+  delete: ['Delete', 'Delete', 46], del: ['Delete', 'Delete', 46],
+  arrowup: ['ArrowUp', 'ArrowUp', 38], up: ['ArrowUp', 'ArrowUp', 38],
+  arrowdown: ['ArrowDown', 'ArrowDown', 40], down: ['ArrowDown', 'ArrowDown', 40],
+  arrowleft: ['ArrowLeft', 'ArrowLeft', 37], left: ['ArrowLeft', 'ArrowLeft', 37],
+  arrowright: ['ArrowRight', 'ArrowRight', 39], right: ['ArrowRight', 'ArrowRight', 39],
+  home: ['Home', 'Home', 36], end: ['End', 'End', 35],
+  pageup: ['PageUp', 'PageUp', 33], pgup: ['PageUp', 'PageUp', 33],
+  pagedown: ['PageDown', 'PageDown', 34], pgdn: ['PageDown', 'PageDown', 34],
+  space: [' ', 'Space', 32], spacebar: [' ', 'Space', 32], espacio: [' ', 'Space', 32],
+  f3: ['F3', 'F3', 114], f5: ['F5', 'F5', 116],
+}
+function parseBrowserModifier(value: string): number {
+  let bitmask = 0
+  for (const part of value.split(/[+,\s]+/u).filter(Boolean)) {
+    const mask = BROWSER_MODIFIERS[part.toLowerCase()]
+    if (mask === undefined) throw new TypeError('Unknown modifier')
+    bitmask |= mask
+  }
+  return bitmask
+}
+export function normalizeBrowserKey(key: string, modifiers: number | string | string[] = 0): NormalizedBrowserKey {
+  const raw = key.trim()
+  if (!raw) {
+    if (key === ' ') return { key: ' ', code: 'Space', virtualKeyCode: 32, modifiers: 0, text: ' ' }
+    throw new TypeError('Empty key')
+  }
+  const parts = raw.split(/\s*\+\s*/u)
+  const basic = parts.pop()?.trim()
+  if (!basic) throw new TypeError('Missing final key')
+  const embeddedModifiers = parts.length === 0 ? 0 : parseBrowserModifier(parts.join('+'))
+  const explicit = typeof modifiers === 'number' ? modifiers
+    : parseBrowserModifier(Array.isArray(modifiers) ? modifiers.join('+') : modifiers)
+  if (!Number.isInteger(explicit) || explicit < 0 || explicit > 15) throw new TypeError('Invalid modifier mask')
+  const mask = embeddedModifiers | explicit
+  const alias = basic.toLowerCase().replace(/\s/gu, '')
+  const named = BROWSER_KEY_NAMES[alias]
+  if (named !== undefined) {
+    const [name, code, virtual] = named
+    return { key: name, code, virtualKeyCode: virtual, modifiers: mask,
+      ...(mask === 0 && name === ' ' ? { text: ' ' } : {}) }
+  }
+  if (!/^[a-z0-9]$/iu.test(basic)) throw new TypeError('Unsupported browser key')
+  const digit = /^[0-9]$/u.test(basic)
+  const virtualKeyCode = basic.toUpperCase().charCodeAt(0)
+  return { key: basic, code: (digit ? 'Digit' : 'Key') + basic.toUpperCase(),
+    virtualKeyCode, modifiers: mask, ...(mask === 0 ? { text: basic } : {}) }
+}
+
 server.registerTool('press_key', {
-  description: 'Tecla de navegador (Enter, Tab, Escape, Backspace, flechas, letras, dígitos y modificadores). Alternativa CDP a Computer si la ventana de escritorio está oculta. Nunca escribe en otra aplicación del sistema.',
-  inputSchema: { tabId: z.string().optional(), key: z.string().min(1).max(25),
-    modifiers: z.number().int().min(0).max(15).default(0) },
+  description: 'Enviar tecla en la pestaña actual con sintaxis flexible. Ejemplos: {"key":"PageDown"}, {"key":"Shift+Tab"}, {"key":"Ctrl+F"}, {"key":"Space"}. modifiers acepta entero de bits, "Ctrl+Shift" o ["Control","Shift"]. Usa interact para controles DOM y comprueba cualquier cambio antes de afirmar éxito.',
+  inputSchema: { tabId: z.string().optional(), key: z.string().min(1).max(60),
+    modifiers: z.union([z.number().int().min(0).max(15), z.string(), z.array(z.string())]).optional() },
 }, async ({ tabId, key, modifiers }) => {
   ensureBrowserActionPermission()
-  const allowed = new Set(['Enter','Tab','Escape','Backspace','Delete','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Home','End','PageUp','PageDown'])
-  if (!allowed.has(key) && !/^[a-zA-Z0-9 ]$/.test(key)) throw new Error('Tecla no admitida; solo navegación y texto simple.')
-  const tab = await selectedTab(tabId)
-  const virtualCodes: Record<string, number> = {
-    Enter: 13, Tab: 9, Escape: 27, Backspace: 8, Delete: 46,
-    ArrowUp: 38, ArrowDown: 40, ArrowLeft: 37, ArrowRight: 39,
-    Home: 36, End: 35, PageUp: 33, PageDown: 34,
+  let normalized: NormalizedBrowserKey
+  try {
+    normalized = normalizeBrowserKey(key, modifiers)
+  } catch {
+    return { isError: true, content: [{ type: 'text', text: JSON.stringify({
+      code: 'INVALID_BROWSER_KEY',
+      expected: { key: 'PageDown | Shift+Tab | Ctrl+F | Space | End', modifiers: 'optional' },
+      next: 'Corrige el formato de key o utiliza inspect_page e interact para un control DOM real.',
+    }) }] }
   }
-  const virtual = virtualCodes[key] ?? key.toUpperCase().charCodeAt(0)
-  const params = { key, code: key, modifiers, windowsVirtualKeyCode: virtual, nativeVirtualKeyCode: virtual }
+  const tab = await selectedTab(tabId)
+  const params = {
+    key: normalized.key, code: normalized.code, modifiers: normalized.modifiers,
+    windowsVirtualKeyCode: normalized.virtualKeyCode, nativeVirtualKeyCode: normalized.virtualKeyCode,
+  }
   await cdp(tab, 'Input.dispatchKeyEvent', { type: 'keyDown', ...params,
-    ...(key.length === 1 && modifiers === 0 ? { text: key } : key === 'Enter' ? { text: '\r' } : {}) })
+    ...(normalized.text === undefined ? {} : { text: normalized.text }) })
   await cdp(tab, 'Input.dispatchKeyEvent', { type: 'keyUp', ...params })
-  return { content: [{ type: 'text', text: 'Tecla enviada: ' + key + ' en la pestaña ' + tab.id }] }
+  return { content: [{ type: 'text', text: JSON.stringify({
+    status: 'dispatched', key: normalized.key, modifiers: normalized.modifiers, tabId: tab.id,
+    verified: false, next: 'Comprueba el cambio real con inspect_page; una tecla enviada no prueba avance.',
+  }) }] }
 })
 
 server.registerTool('type_text', {

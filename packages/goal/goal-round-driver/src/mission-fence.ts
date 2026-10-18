@@ -29,6 +29,91 @@ export function unfinishedTodoRecoveryObjective(events: readonly SessionEvent[])
   return objective.length > 0 ? objective : undefined
 }
 
+/**
+ * Recover any unfinished *structured* delegation. The model's words are not
+ * evidence of completion: the durable checklist and team task states are.
+ * Optional Team events are interpreted structurally to avoid runtime coupling.
+ *
+ * A genuine user's most recent turn owns the work; historical tasks from an
+ * earlier human turn cannot silently re-arm themselves.
+ */
+export function unfinishedStructuredWorkRecoveryObjective(events: readonly SessionEvent[]): string | undefined {
+  const todo = unfinishedTodoRecoveryObjective(events)
+  if (todo !== undefined) return todo
+
+  const humanIndex = events.findLastIndex(event =>
+    event.type === 'user/message' && event.data.source.kind === 'user')
+  if (humanIndex < 0) return undefined
+  const human = events[humanIndex]
+  if (human?.type !== 'user/message') return undefined
+  const since = events.slice(humanIndex + 1)
+  const lastEnd = since.findLast(event => event.type === 'turn/end')
+  if (lastEnd?.data.reason.kind !== 'completed') return undefined
+
+  const currentTasks = new Map<string, string>()
+  for (const event of since) {
+    if ((event.type as string) !== 'team/task') continue
+    const payload: unknown = event.data
+    if (!isRecord(payload) || !isRecord(payload['task'])) continue
+    const task = payload['task']
+    if (typeof task['id'] !== 'string' || typeof task['status'] !== 'string') continue
+    currentTasks.set(task['id'], task['status'])
+  }
+  if (![...currentTasks.values()].some(status => status !== 'completed' && status !== 'cancelled')) {
+    return undefined
+  }
+  const objective = human.data.content.flatMap(block =>
+    block.type === 'text' ? [block.text] : []).join(' ').trim().slice(0, 2_000)
+  return objective || undefined
+}
+
+/**
+ * Recover a delegated operation when its last observable tool attempt failed.
+ * This inspects durable tool outcomes, never assistant prose or hard-coded
+ * refusal phrases. It does not rerun the failed operation: the Goal driver
+ * decides a safe alternative after checking whether effects actually occurred.
+ */
+export function unfinishedToolFailureRecoveryObjective(events: readonly SessionEvent[]): string | undefined {
+  const index = events.findLastIndex(event =>
+    event.type === 'user/message' && event.data.source.kind === 'user')
+  if (index < 0) return undefined
+  const human = events[index]
+  if (human?.type !== 'user/message') return undefined
+  const current = events.slice(index + 1)
+  const lastEnd = current.findLast(event => event.type === 'turn/end')
+  if (lastEnd?.data.reason.kind !== 'completed') return undefined
+  let unresolvedFailure = false
+  for (const event of current) {
+    if (event.type !== 'tool/result') continue
+    const failed = event.data.error !== undefined
+      || event.data.message.content.some(block => block.isError === true)
+    // A transport-level success is not necessarily a completed action.
+    // Accept a structured unverified receipt as unfinished operational work.
+    // Inspect nested LLM tool-result blocks rather than assistant phrasing.
+    const blocks: unknown = event.data.message.content
+    const pendingDispatch = Array.isArray(blocks) && blocks.some(outer => {
+      if (!isRecord(outer)) return false
+      const inner: unknown = outer.type === 'tool-result' ? outer.content : [outer]
+      if (!Array.isArray(inner)) return false
+      return inner.some(part => {
+        if (!isRecord(part) || part.type !== 'text' || typeof part.text !== 'string') return false
+        try {
+          const row: unknown = JSON.parse(part.text)
+          return isRecord(row) && (row.verified === false
+            || row.status === 'dispatched' || row.status === 'pending-verification')
+        } catch { return false }
+      })
+    })
+    // A successful alternative clears a failed-call trigger, but a dispatch
+    // receipt remains unfinished until an actual verified outcome exists.
+    unresolvedFailure = failed || pendingDispatch
+  }
+  if (!unresolvedFailure) return undefined
+  const objective = human.data.content.flatMap(block =>
+    block.type === 'text' ? [block.text] : []).join(' ').trim().slice(0, 2_000)
+  return objective || undefined
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }

@@ -56,6 +56,58 @@ function installBrowserMock(current: typeof state = state) {
 }
 
 describe('MiniBrowser in Phoenix conversation', () => {
+  it('requests the sidebar Secure Ask for a saved login even if Chrome CDP is unavailable', async () => {
+    const request = vi.fn()
+    const onSite = { ...state, url: 'https://example.org/login', title: 'Iniciar sesión',
+      tabs: [{ id: 'shared-tab', title: 'Iniciar sesión', url: 'https://example.org/login' }] }
+    vi.stubGlobal('fetch', vi.fn(async (raw: string) => {
+      const input = String(raw)
+      if (input.startsWith('/phoenix-secure-login/status')) return new Response(
+        JSON.stringify({ saved: true, automatic: false }), { status: 200 })
+      if (input.startsWith('/phoenix-secure-login/detect')) return new Response(
+        JSON.stringify({ error: 'CDP unavailable' }), { status: 503 })
+      if (input.startsWith('/phoenix-mini-browser/frame')) return new Response(
+        new Uint8Array([255, 216, 255, 217]), { status: 200, headers: { 'content-type': 'image/jpeg' } })
+      return new Response(JSON.stringify(onSite), { status: 200,
+        headers: { 'content-type': 'application/json' } })
+    }))
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn(() => 'blob:secure-ask-test') })
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() })
+    render(<MiniBrowser requested onSecureLoginRequest={request} />)
+    await waitFor(() => {
+      expect(request).toHaveBeenCalledWith(expect.objectContaining({
+        origin: 'https://example.org', tabId: 'shared-tab', saved: true,
+        diagnostic: expect.stringContaining('Se conserva el acceso guardado'),
+      }))
+    })
+  })
+
+  it('provides a manual Secure Ask fallback in the browser toolbar', async () => {
+    const request = vi.fn()
+    const onSite = { ...state, url: 'https://example.org/login', title: 'Acceso',
+      tabs: [{ id: 'shared-tab', title: 'Acceso', url: 'https://example.org/login' }] }
+    vi.stubGlobal('fetch', vi.fn(async (raw: string) => {
+      const input = String(raw)
+      if (input.startsWith('/phoenix-secure-login/status')) return new Response(
+        JSON.stringify({ saved: false, automatic: false }), { status: 200 })
+      if (input.startsWith('/phoenix-secure-login/detect')) return new Response(
+        JSON.stringify({ required: false }), { status: 200 })
+      if (input.startsWith('/phoenix-mini-browser/frame')) return new Response(
+        new Uint8Array([255, 216, 255, 217]), { status: 200, headers: { 'content-type': 'image/jpeg' } })
+      return new Response(JSON.stringify(onSite), { status: 200,
+        headers: { 'content-type': 'application/json' } })
+    }))
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn(() => 'blob:secure-toolbar-test') })
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() })
+    render(<MiniBrowser requested onSecureLoginRequest={request} />)
+    const button = await screen.findByRole('button', { name: 'Abrir acceso seguro' })
+    fireEvent.click(button)
+    await waitFor(() => {
+      expect(request).toHaveBeenCalledWith(expect.objectContaining({
+        origin: 'https://example.org', tabId: 'shared-tab',
+      }))
+    })
+  })
   it('cancels the state request when the browser card is deactivated', async () => {
     let stateSignal: AbortSignal | undefined
     const pending = new Promise<Response>(() => {})

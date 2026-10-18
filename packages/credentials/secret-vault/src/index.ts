@@ -47,7 +47,7 @@ async function handleLogin(ctx: Context, parsed: RegExpExecArray): Promise<Comma
 
   try {
     if (operation === 'login-set') {
-      return failure('Guarda los accesos web desde el formulario protegido del MiniBrowser; el chat no acepta contraseñas.')
+      return failure('Guarda los accesos web desde Secure Ask, en el panel lateral del chat; nunca escribas contraseñas como mensajes.')
     }
 
     if (operation === 'login-delete') {
@@ -57,7 +57,7 @@ async function handleLogin(ctx: Context, parsed: RegExpExecArray): Promise<Comma
       return { kind: 'success', text: `Login for ${origin} removed.` }
     }
 
-    return { kind: 'success', text: 'Los accesos seguros se administran desde el MiniBrowser.' }
+    return { kind: 'success', text: 'Los accesos seguros se administran desde Secure Ask, en el lateral del chat.' }
 
   } catch {
     return failure(`Login for ${origin} could not be updated. Check the vault configuration.`)
@@ -67,7 +67,7 @@ async function handleLogin(ctx: Context, parsed: RegExpExecArray): Promise<Comma
 /** Register the human-only `/secret` command. */
 export function apply(ctx: Context): void {
   ctx.inject(['webServer'], (web) => {
-    web.effect(() => registerSecureLogin(web), 'secure user-only website login')
+    web.effect(() => registerSecureLogin(web, ctx.credentials), 'secure user-only website login')
   })
   ctx.effect(() => ctx.commands.register({
     name: 'secret',

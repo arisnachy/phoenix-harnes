@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   ProceduralExperienceTrace,
   ProceduralLearningEngine,
+  isLearnableToolResult,
   filterProceduralSearchHits,
   type ProceduralMemoryStore,
   type ProceduralMemoryWrite,
@@ -48,6 +49,21 @@ function provenance(now: number) {
     projectId: 'phoenix',
   } as const
 }
+
+describe('evidence-backed tool trace filtering', () => {
+  const outcome = (content: string, isError = false) => ({
+    message: { content: [{ type: 'tool-result', isError,
+      content: [{ type: 'text', text: content }] }] },
+  })
+  it('learns only observed successful steps, never failed or unverified calls', () => {
+    expect(isLearnableToolResult(outcome('{"ok":true,"stage":"verified"}'))).toBe(true)
+    expect(isLearnableToolResult(outcome('{"status":"dispatched","verified":false}'))).toBe(false)
+    expect(isLearnableToolResult(outcome('{"ok":false,"reason":"NOT_FOUND"}'))).toBe(false)
+    expect(isLearnableToolResult(outcome('done', true))).toBe(false)
+    expect(isLearnableToolResult({ error: { code: 'EPIPE' }, ...outcome('ok') })).toBe(false)
+    expect(isLearnableToolResult({ message: { content: [] } })).toBe(false)
+  })
+})
 
 describe('ProceduralLearningEngine', () => {
   it('recalls a blocked workflow as a clearly unverified recovery hint, not an active recipe', async () => {

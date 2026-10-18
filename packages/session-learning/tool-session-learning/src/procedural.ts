@@ -550,6 +550,9 @@ export function installProceduralLearning(
 ): ProceduralLearningEngine {
   const engine = new ProceduralLearningEngine(cognitiveStore(ctx))
   const trace = new ProceduralExperienceTrace()
+  // A tool call is only an *attempt*. Teach reusable procedures from observed
+  // non-error results, never failed, rejected or merely dispatched actions.
+  const pendingTools = new Map<string, Map<string, string>>()
 
   ctx.on('session/event', (session, event) => {
     const sessionId = String(session.id)
@@ -561,12 +564,22 @@ export function installProceduralLearning(
     const projectId = ctx.learningMemory.currentProjectId()
 
     const run = async (): Promise<void> => {
-      if (eventType === 'tool/call' && isRecord(data) && typeof data.name === 'string' && data.name.trim() !== '') {
-        if (data.name === 'living_act' && isRecord(data.arguments) && typeof data.arguments.action === 'string') {
-          trace.livingAction(ownerSessionId, data.arguments.action)
-        } else {
-          trace.toolCall(ownerSessionId, data.name)
-        }
+      if (eventType === 'tool/call' && isRecord(data)
+        && typeof data.name === 'string' && typeof data.callId === 'string') {
+        let perSession = pendingTools.get(sessionId)
+        if (!perSession) { perSession = new Map(); pendingTools.set(sessionId, perSession) }
+        perSession.set(data.callId, data.name)
+        if (perSession.size > 128) perSession.delete(perSession.keys().next().value!)
+        return
+      }
+      if (eventType === 'tool/result' && isRecord(data)) {
+        const message = isRecord(data.message) ? data.message : undefined
+        const source = isRecord(message?.source) ? message.source : undefined
+        const callId = typeof source?.callId === 'string' ? source.callId : undefined
+        const perSession = pendingTools.get(sessionId)
+        const name = callId === undefined ? undefined : perSession?.get(callId)
+        if (callId !== undefined) perSession?.delete(callId)
+        if (name && isLearnableToolResult(data)) trace.toolCall(ownerSessionId, name)
         return
       }
       if (eventType === 'hardness/kernel' && isRecord(data)) {
@@ -607,6 +620,7 @@ export function installProceduralLearning(
       }
 
       if (eventType === 'goal/change' && isRecord(data) && data.operation === 'clear') {
+        pendingTools.delete(sessionId)
         trace.clear(sessionId)
         return
       }
@@ -697,6 +711,31 @@ function cognitiveRow(record: CognitiveMemoryRecord): ProceduralStoredMemory {
     ...record.value === undefined ? {} : { value: record.value },
     ...record.projectId === undefined ? {} : { projectId: record.projectId },
   }
+}
+
+/** Only successful observed tool results may teach an active workflow.
+ * A bare sent/queued/dispatch receipt lacks evidence of an achieved effect.
+ */
+export function isLearnableToolResult(data: unknown): boolean {
+  if (!isRecord(data) || data.error !== undefined || !isRecord(data.message)
+    || !Array.isArray(data.message.content)) return false
+  const blocks = data.message.content as unknown[]
+  if (!blocks.length) return false
+  for (const outer of blocks) {
+    if (!isRecord(outer)) return false
+    if (outer.type === 'tool-result' && outer.isError === true) return false
+    const inner: unknown = outer.type === 'tool-result' ? outer.content : [outer]
+    if (!Array.isArray(inner)) return false
+    for (const block of inner) {
+      if (!isRecord(block) || block.type !== 'text' || typeof block.text !== 'string') continue
+      try {
+        const receipt: unknown = JSON.parse(block.text)
+        if (isRecord(receipt) && (receipt.verified === false || receipt.ok === false
+          || receipt.status === 'dispatched' || receipt.status === 'pending-verification')) return false
+      } catch { /* Ordinary text results are not a structured error receipt. */ }
+    }
+  }
+  return true
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
