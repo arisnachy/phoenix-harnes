@@ -83,6 +83,20 @@ describe('shipped game toolkit', () => {
     expect(record(web.stdout).godotWebNote).toMatch(/WASM|WebAssembly|HTML5/u)
   })
 
+  it('routes a one-level Double Dragon demo directly to a playable chat artifact without Godot or MiniBrowser', () => {
+    const oneLevel = run(['route', '--genre', 'Double Dragon demo de un level', '--delivery', 'chat'])
+    expect(oneLevel.status).toBe(0)
+    expect(record(oneLevel.stdout)).toMatchObject({
+      engine: 'html5', authoringEngine: 'html5', tools: [],
+      renderer: 'phoenix_game-single-file-html',
+    })
+    expect(String(record(oneLevel.stdout).action)).toContain('No browser')
+    const prototype = run(['route', '--genre', 'beat-em-up', '--delivery', 'chat', '--quality', 'prototype'])
+    expect(record(prototype.stdout)).toMatchObject({ engine: 'html5', authoringEngine: 'html5', tools: [] })
+    const production = run(['route', '--genre', 'beat-em-up', '--delivery', 'chat', '--quality', 'production'])
+    expect(record(production.stdout)).toMatchObject({ engine: 'html5', authoringEngine: 'godot', tools: ['godot', 'tiled', 'ffmpeg'] })
+  })
+
   it('plans approved Windows art and audio helper installation without executing it', () => {
     for (const [tool, id] of [['tiled', 'Tiled.Tiled'], ['ffmpeg', 'Gyan.FFmpeg']] as const) {
       const result = run(['plan', '--target', tool, '--platform', 'win32'])
