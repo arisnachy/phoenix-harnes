@@ -13,6 +13,11 @@ export function SecureAsk({ target, onClose, onSaved }: {
   const [automatic, setAutomatic] = useState(target.automatic)
   const [busy, setBusy] = useState(false)
   const [feedback, setFeedback] = useState('')
+  const [editing, setEditing] = useState(!target.saved)
+  const [extraValues, setExtraValues] = useState<Record<string, string>>({})
+  const accountField = target.fields?.find(field => field.role === 'account')
+  const secretField = target.fields?.find(field => field.role === 'secret')
+  const extraFields = target.fields?.filter(field => field.role === 'extra') ?? []
   const verifyLogin = async (): Promise<void> => {
     // The site controls the actual session. Do not close Secure Ask just
     // because CDP dispatched a submit click.
@@ -29,11 +34,12 @@ export function SecureAsk({ target, onClose, onSaved }: {
   }
   const save = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (busy || !account.trim() || !secret) return
+    if (busy || !account.trim() || !secret || extraFields.some(field => field.required && !extraValues[field.key]?.trim())) return
     setBusy(true)
     try {
       await secureApi<SecureStatus>('/save', {
         origin: target.origin, tabId: target.tabId, account, secret, automatic,
+        ...(extraFields.length ? { extras: Object.fromEntries(extraFields.map(field => [field.key, extraValues[field.key] ?? ''])) } : {}),
       })
       // The user's explicit submit authorizes *this* initial login. The
       // separate checkbox controls only future unattended logins.
@@ -47,6 +53,7 @@ export function SecureAsk({ target, onClose, onSaved }: {
     } finally {
       setSecret('')
       setAccount('')
+      setExtraValues({})
       setBusy(false)
     }
   }
@@ -66,6 +73,7 @@ export function SecureAsk({ target, onClose, onSaved }: {
     try {
       await secureApi('/delete', { origin: target.origin })
       setFeedback('Acceso anterior eliminado. Puedes registrar uno nuevo.')
+      setEditing(true)
     } catch { setFeedback('No se pudo eliminar el acceso.') }
     finally { setBusy(false) }
   }
@@ -75,29 +83,45 @@ export function SecureAsk({ target, onClose, onSaved }: {
       <div className={css.origin} title={target.origin}>🔒 {target.origin}</div>
       {target.diagnostic && <p role="status" className={css.feedback}>{target.diagnostic}</p>}
       {target.saved && <div className={css.saved}>
-        <span>Acceso guardado para este sitio.</span>
+        <span>Ya existe un acceso guardado para este sitio. No es necesario escribirlo otra vez.</span>
         <button type="button" disabled={busy} onClick={() => { void useSaved() }}>Usar acceso guardado</button>
+        <button type="button" disabled={busy} onClick={() => setEditing(value => !value)}>
+          {editing ? 'Ocultar formulario' : 'Cambiar o completar credenciales'}
+        </button>
       </div>}
-      <form onSubmit={event => { void save(event) }} autoComplete="off" className={css.form}>
-        <label>Usuario o correo electrónico
+      {editing && <form onSubmit={event => { void save(event) }} autoComplete="off" className={css.form}>
+        <label>{accountField?.label || 'Usuario o correo electrónico'}
           <input value={account} disabled={busy} autoComplete="off" spellCheck={false}
-            onChange={event => setAccount(event.currentTarget.value)} placeholder="Escribe o pega tu usuario" />
+            type={accountField?.inputType === 'email' ? 'email' : accountField?.inputType === 'tel' ? 'tel'
+              : accountField?.inputType === 'number' ? 'text' : 'text'}
+            onChange={event => setAccount(event.currentTarget.value)}
+            placeholder={accountField?.placeholder || 'Escribe o pega tu usuario'} />
         </label>
-        <label>Contraseña
+        <label>{secretField?.label || 'Contraseña'}
           <input type="password" value={secret} disabled={busy} autoComplete="new-password"
             onChange={event => setSecret(event.currentTarget.value)}
-            placeholder="Escribe o pega la contraseña" />
+            placeholder={secretField?.placeholder || 'Escribe o pega la contraseña'} />
         </label>
+        {extraFields.map(field => <label key={field.key}>{field.label}
+          <input type={field.inputType === 'email' ? 'email' : field.inputType === 'tel' ? 'tel'
+            : field.inputType === 'password' ? 'password' : 'text'}
+            disabled={busy} required={field.required} value={extraValues[field.key] ?? ''}
+            autoComplete="off" spellCheck={false}
+            placeholder={field.placeholder || field.label}
+            onChange={event => setExtraValues(values => ({ ...values, [field.key]: event.currentTarget.value }))} />
+        </label>)}
         <label className={css.option}><input type="checkbox" checked={automatic} disabled={busy}
           onChange={event => setAutomatic(event.currentTarget.checked)} />
           Recordar y permitir inicio automático en futuras visitas</label>
         <div className={css.actions}>
-          <button type="submit" disabled={busy || !account.trim() || !secret}>Guardar y continuar</button>
+          <button type="submit" disabled={busy || !account.trim() || !secret
+            || extraFields.some(field => field.required && !extraValues[field.key]?.trim())}>Guardar y continuar</button>
           <button type="button" disabled={busy} onClick={onClose}>Ahora no</button>
           {target.saved && <button type="button" disabled={busy} onClick={() => { void remove() }}>Eliminar acceso</button>}
         </div>
-      </form>
+      </form>}
       {feedback && <p className={css.feedback} role="status">{feedback}</p>}
+      {!editing && <button type="button" disabled={busy} onClick={onClose}>Cerrar acceso seguro</button>}
       <p className={css.foot}>La contraseña no se incorpora a la conversación ni a sus eventos. Puede requerirse MFA, passkey o CAPTCHA.</p>
     </div>
   )

@@ -14,7 +14,7 @@ import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
 interface LoginRecord { version: 1; origin: string; automatic: boolean; sealed: string }
-interface LoginContent { origin: string; account: string; secret: string }
+interface LoginContent { origin: string; account: string; secret: string; extras?: Record<string, string> }
 interface BrowserTab { id: string; type?: string; url: string; webSocketDebuggerUrl?: string }
 const PREFIX = '/phoenix-secure-login'
 const STORE = join(process.env.DSH_HOME || join(homedir(), '.dsh'), 'secure-logins')
@@ -110,8 +110,8 @@ async function load(origin: string): Promise<LoginRecord | undefined> {
       && typeof row.automatic === 'boolean' ? row : undefined
   } catch { return undefined }
 }
-async function store(origin: string, account: string, secret: string, automatic: boolean): Promise<void> {
-  const body = Buffer.from(JSON.stringify({ origin, account, secret } satisfies LoginContent), 'utf8').toString('base64')
+async function store(origin: string, account: string, secret: string, automatic: boolean, extras?: Record<string, string>): Promise<void> {
+  const body = Buffer.from(JSON.stringify({ origin, account, secret, ...(extras === undefined ? {} : { extras }) } satisfies LoginContent), 'utf8').toString('base64')
   const sealed = await dpapi('protect', body, origin)
   const row: LoginRecord = { version: 1, origin, automatic, sealed }
   await mkdir(STORE, { recursive: true, mode: 0o700 })
@@ -204,12 +204,21 @@ export function loginDetectionExpression(): string {
   })()`
 }
 
+export interface LoginInputHint {
+  key: string
+  role: 'account' | 'secret' | 'extra'
+  label: string
+  placeholder: string
+  inputType: 'text' | 'email' | 'tel' | 'password' | 'number'
+  required: boolean
+}
 export interface LoginGateState {
   required: boolean
   formVisible: boolean
   gateVisible: boolean
   canOpenInPlace: boolean
   warningVisible: boolean
+  fields: LoginInputHint[]
 }
 /** Inspect a login gate without reading fields, or open exactly one in-page login trigger.
  * Never navigate away, submit an unrelated form, or expose DOM text to the model.
@@ -248,6 +257,36 @@ export function loginGateExpression(action: 'inspect' | 'open' = 'inspect'): str
     };
     const canOpenInPlace = triggers.length === 1 && inPlace(triggers[0]);
     const formVisible = forms.length > 0;
+    const hints = (() => {
+      if (forms.length !== 1) return [];
+      const doc = forms[0];
+      const fields = [...doc.querySelectorAll('input')].filter(visible);
+      const passwords = fields.filter(el => el.type === 'password');
+      if (passwords.length !== 1) return [];
+      const pass = passwords[0];
+      const account = fields.find(el => el !== pass && (
+        el.autocomplete === 'username' || el.type === 'email'
+        || /(?:user|email|login|account|usuario|correo|tel[eé]fono|documento|c[eé]dula)/i
+          .test((el.name||'') + ' ' + (el.id||''))))
+        || fields.find(el => el !== pass && ['text','email','tel','number'].includes(el.type));
+      if (!account) return [];
+      const hint = (el, role, key) => {
+        const labels = [];
+        const label = el.labels?.[0]?.textContent
+          || (el.id && [...doc.querySelectorAll('label[for]')].find(node => node.htmlFor === el.id)?.textContent)
+          || el.getAttribute?.('aria-label') || el.placeholder || '';
+        const clean = value => String(value||'').replace(/[\\u0000-\\u001f]/g,' ').trim().slice(0,72);
+        return { key, role, label: clean(label) || (role === 'secret' ? 'Contraseña' : role === 'account'
+          ? 'Usuario o identificador' : 'Dato adicional'), placeholder: clean(el.placeholder),
+          inputType: ['email','tel','password','number'].includes(el.type) ? el.type : 'text',
+          required: Boolean(el.required) };
+      };
+      const extra = fields.filter(el => el !== pass && el !== account
+        && ['text','email','tel','number'].includes(el.type)
+        && el.autocomplete !== 'one-time-code').slice(0, 4);
+      return [hint(account,'account','account'), hint(pass,'secret','secret'),
+        ...extra.map((el,i) => hint(el,'extra','extra:' + i))];
+    })();
     if (__OPEN_LOGIN__ && !formVisible && canOpenInPlace) triggers[0].click();
     return {
       required: formVisible || triggers.length > 0 || warningVisible,
@@ -255,6 +294,7 @@ export function loginGateExpression(action: 'inspect' | 'open' = 'inspect'): str
       gateVisible: triggers.length > 0,
       canOpenInPlace,
       warningVisible,
+      fields: hints,
     };
   })()`
   return expression.replace('__OPEN_LOGIN__', action === 'open' ? 'true' : 'false')
@@ -295,7 +335,8 @@ async function inspectLoginGate(tab: BrowserTab, action: 'inspect' | 'open' = 'i
         const value = packet.result?.result?.value
         if (!value || typeof value.required !== 'boolean'
           || typeof value.formVisible !== 'boolean' || typeof value.canOpenInPlace !== 'boolean'
-          || typeof value.warningVisible !== 'boolean' || typeof value.gateVisible !== 'boolean') {
+          || typeof value.warningVisible !== 'boolean' || typeof value.gateVisible !== 'boolean'
+          || !Array.isArray(value.fields)) {
           finish(undefined, new Error('Estado de acceso no válido'))
           return
         }
@@ -339,6 +380,13 @@ async function injectLogin(tab: BrowserTab, login: LoginContent): Promise<string
     + 'account.style.setProperty("-webkit-text-security","disc","important");'
     + 'set(account,' + JSON.stringify(login.account) + ');'
     + 'set(pass,' + JSON.stringify(login.secret) + ');'
+    + 'const extraInputs=roots.flatMap(d=>[...d.querySelectorAll("input")].filter(visible))'
+    + '.filter(el=>el!==account&&el!==pass&&["text","email","tel","number"].includes(el.type)'
+    + '&&el.autocomplete!=="one-time-code").slice(0,4);'
+    + 'const extras=' + JSON.stringify(login.extras ?? {}) + ';'
+    + 'for(let i=0;i<extraInputs.length;i++){const key="extra:"+i;'
+    + 'if(typeof extras[key]!=="string"){if(extraInputs[i].required)return "additional-login-field-required";continue;}'
+    + 'set(extraInputs[i],extras[key]);}'
     + 'await new Promise(resolve=>setTimeout(resolve,80));'
     + 'if(location.origin!==expected) return "origin-changed";'
     + 'const form=pass.form || account.form;'
@@ -399,7 +447,7 @@ async function useLogin(origin: string, tabId: string, manual: boolean, vault?: 
     // Migrating must not prevent a successfully initiated login. Keep legacy
     // access in place if DPAPI is unavailable or the migration cannot finish.
     try {
-      await store(origin, login.account, login.secret, previous.automatic)
+      await store(origin, login.account, login.secret, previous.automatic, login.extras)
       await Promise.all([
         vault?.unset(originCredentialRef(origin, 'account')).catch(() => {}),
         vault?.unset(originCredentialRef(origin, 'secret')).catch(() => {}),
@@ -453,7 +501,16 @@ export function registerSecureLogin(ctx: Context, vault?: CredentialProvider): (
             throw new Error('Pestaña no válida')
           }
           await tabForLogin(payload.tabId, origin)
-          await store(origin, account, secret, payload.automatic === true)
+          const rawExtras = payload.extras
+          if (rawExtras !== undefined && (rawExtras === null || typeof rawExtras !== 'object'
+            || Array.isArray(rawExtras)
+            || Object.keys(rawExtras).length > 4
+            || Object.entries(rawExtras).some(([key, value]) =>
+              !/^extra:[0-3]$/.test(key) || typeof value !== 'string' || value.length > 4096))) {
+            throw new Error('Datos adicionales de acceso no válidos')
+          }
+          const extras = rawExtras as Record<string, string> | undefined
+          await store(origin, account, secret, payload.automatic === true, extras)
           respond(res, 200, { saved: true, automatic: payload.automatic === true })
           return
         }
