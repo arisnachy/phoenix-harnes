@@ -93,6 +93,33 @@ describe('origin-scoped secure login', () => {
     })
   })
 
+  it('builds safe site-specific login fields without exposing entered values', () => {
+    const evaluator = new Function('document', 'location', 'URL',
+      'return ' + loginGateExpression('inspect')) as (d: unknown, l: unknown, u: unknown) => {
+        fields: Array<{ key: string; role: string; label: string; inputType: string }>
+      }
+    const fields = [
+      { type: 'tel', name: 'numero', id: '', placeholder: '809 000 0000', required: true,
+        readOnly: false, disabled: false, autocomplete: '', getClientRects: () => [1],
+        getAttribute: () => null, labels: [{ textContent: 'Número de teléfono' }] },
+      { type: 'password', name: 'pass', id: '', placeholder: 'Clave', required: true,
+        readOnly: false, disabled: false, autocomplete: '', getClientRects: () => [1],
+        getAttribute: () => null, labels: [{ textContent: 'Clave de ingreso' }] },
+      { type: 'text', name: 'company', id: '', placeholder: 'Empresa', required: true,
+        readOnly: false, disabled: false, autocomplete: '', getClientRects: () => [1],
+        getAttribute: () => null, labels: [{ textContent: 'Código de empresa' }] },
+    ]
+    const doc = { body: { innerText: 'INGRESAR' },
+      querySelectorAll: (q: string) => q === 'input' ? fields : [] }
+    const result = evaluator(doc, { origin: 'https://example.org' }, URL)
+    expect(result.fields).toMatchObject([
+      { key: 'account', role: 'account', label: 'Número de teléfono', inputType: 'tel' },
+      { key: 'secret', role: 'secret', label: 'Clave de ingreso', inputType: 'password' },
+      { key: 'extra:0', role: 'extra', label: 'Código de empresa', inputType: 'text' },
+    ])
+    expect(JSON.stringify(result.fields)).not.toContain('secret-value')
+  })
+
   it('detects legacy saved account presence without revealing its secret', async () => {
     let handler: ((req: unknown, res: unknown) => Promise<void>) | undefined
     const webServer = { register: (route: { handler: typeof handler }) => {

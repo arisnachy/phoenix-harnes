@@ -33,6 +33,45 @@ describe('Secure Ask human-only browser sidebar', () => {
     })
     expect(calls[1]?.data).not.toHaveProperty('secret')
   })
+  it('does not show blank credential inputs when saved credentials already exist', () => {
+    render(<SecureAsk target={{ origin: 'https://example.org', tabId: 'known-tab',
+      saved: true, automatic: true }} onSaved={vi.fn()} onClose={vi.fn()} />)
+    expect(screen.getByRole('button', { name: 'Usar acceso guardado' })).toBeTruthy()
+    expect(screen.queryByPlaceholderText('Escribe o pega tu usuario')).toBeNull()
+    expect(screen.queryByPlaceholderText('Escribe o pega la contraseña')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Cambiar o completar credenciales' }))
+    expect(screen.getByPlaceholderText('Escribe o pega tu usuario')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Ocultar formulario' }))
+    expect(screen.queryByPlaceholderText('Escribe o pega la contraseña')).toBeNull()
+  })
+
+  it('adapts protected input labels and additional fields to the real site requirements', async () => {
+    const calls: Array<Record<string, unknown>> = []
+    vi.stubGlobal('fetch', vi.fn(async (url: string, options?: RequestInit) => {
+      if (typeof options?.body === 'string') calls.push(JSON.parse(options.body) as Record<string, unknown>)
+      return new Response(JSON.stringify(url.endsWith('/save') ? { saved: true }
+        : url.endsWith('/detect') ? { required: false } : { status: 'submitted' }), {
+        status: 200, headers: { 'content-type': 'application/json' },
+      })
+    }))
+    render(<SecureAsk target={{ origin: 'https://example.org', tabId: 'fresh-tab',
+      saved: false, automatic: false, fields: [
+        { key: 'account', role: 'account', label: 'Número de afiliado',
+          placeholder: 'Afiliación', inputType: 'text', required: true },
+        { key: 'secret', role: 'secret', label: 'PIN de acceso',
+          placeholder: 'Escribe tu PIN', inputType: 'password', required: true },
+        { key: 'extra:0', role: 'extra', label: 'Código de empresa',
+          placeholder: 'Empresa', inputType: 'text', required: true },
+      ] }} onSaved={vi.fn()} onClose={vi.fn()} />)
+    fireEvent.change(screen.getByPlaceholderText('Afiliación'), { target: { value: 'member-123' } })
+    fireEvent.change(screen.getByPlaceholderText('Escribe tu PIN'), { target: { value: 'not-logged-to-chat' } })
+    expect((screen.getByRole('button', { name: 'Guardar y continuar' }) as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.change(screen.getByPlaceholderText('Empresa'), { target: { value: 'xyz' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar y continuar' }))
+    await waitFor(() => expect(calls.some(call => call.account === 'member-123'
+      && (call.extras as Record<string, string>)?.['extra:0'] === 'xyz')).toBe(true))
+  })
+
   it('does not claim login complete if the site still requires authentication', async () => {
     const onSaved = vi.fn()
     vi.stubGlobal('fetch', vi.fn(async (path: string) => new Response(JSON.stringify(

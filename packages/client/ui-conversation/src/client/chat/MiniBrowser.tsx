@@ -135,8 +135,22 @@ async function captureFrame(tabId: string, signal?: AbortSignal): Promise<Blob> 
   }, FRAME_DEADLINE_MS, FRAME_DEADLINE_MESSAGE, signal)
 }
 export type SecureStatus = { saved: boolean; automatic: boolean }
-export type SecureLoginTarget = { origin: string; tabId: string; saved: boolean; automatic: boolean; diagnostic?: string }
-type SecureDetection = { required: boolean; formVisible?: boolean; gateVisible?: boolean; canOpenInPlace?: boolean; warningVisible?: boolean }
+export type SecureLoginField = {
+  key: string
+  role: 'account' | 'secret' | 'extra'
+  label: string
+  placeholder: string
+  inputType: 'text' | 'email' | 'tel' | 'password' | 'number'
+  required: boolean
+}
+export type SecureLoginTarget = {
+  origin: string; tabId: string; saved: boolean; automatic: boolean
+  diagnostic?: string; fields?: SecureLoginField[]
+}
+type SecureDetection = {
+  required: boolean; formVisible?: boolean; gateVisible?: boolean
+  canOpenInPlace?: boolean; warningVisible?: boolean; fields?: SecureLoginField[]
+}
 type SecureUse = { status: string }
 function secureOrigin(value?: string): string | undefined {
   if (!value) return undefined
@@ -198,6 +212,8 @@ export function MiniBrowser({ requested = false, active = true, initialTabId, on
   const [address, setAddress] = useState('')
   const [typed, setTyped] = useState('')
   const attemptedLogins = useRef(new Set<string>())
+  const pendingAutomaticLogin = useRef(new Map<string, number>())
+  const openedLoginGates = useRef(new Set<string>())
   const [playingVideo, setPlayingVideo] = useState(false)
   const [videoSurface, setVideoSurface] = useState(true)
   const [frame, setFrame] = useState<string>()
@@ -253,47 +269,84 @@ export function MiniBrowser({ requested = false, active = true, initialTabId, on
         const detection = await secureApi<SecureDetection>('/detect', { origin: siteOrigin, tabId })
           .catch(() => undefined)
         if (stopped) return
+        const key = tabId + '|' + pageUrl
         if (detection?.required === false) {
-          // The previous authentication episode ended. If the same page
-          // later loses its session, permit one fresh automatic recovery.
-          attemptedLogins.current.delete(tabId + '|' + pageUrl)
+          // The site now reports that its sign-in gate is gone. Do not
+          // present an enrollment form while the login is already satisfied.
+          attemptedLogins.current.delete(key)
+          pendingAutomaticLogin.current.delete(key)
+          openedLoginGates.current.delete(key)
           onSecureLoginRequest?.(null)
           return
         }
         if (!detection?.required) {
-          // Never suppress an unavailable detection silently when a saved
-          // credential exists: offer explicit secure recovery in the sidebar.
           if (status.saved) {
             onSecureLoginRequest?.({
               origin: siteOrigin, tabId, saved: true, automatic: status.automatic,
-              diagnostic: 'La comprobación del formulario no respondió. Se conserva el acceso guardado; usa Secure Ask para reintentar.',
+              diagnostic: 'No fue posible comprobar el acceso. Usa el acceso guardado o reintenta la conexión.',
             })
           }
           return
         }
+        // With no stored access, first expose the real same-page form so
+        // Secure Ask can use its labels, input types and required extra fields.
+        // A login dialog is a navigation aid, not a transaction approval.
+        if (!status.saved && detection.formVisible === false && detection.canOpenInPlace
+          && !openedLoginGates.current.has(key)) {
+          openedLoginGates.current.add(key)
+          try {
+            await secureApi<SecureDetection>('/open', { origin: siteOrigin, tabId })
+            if (!stopped) onSecureLoginRequest?.(null)
+            return
+          } catch {
+            // Keep the secure manual route available if Chrome cannot expose
+            // the form; do not repeat the same failed click.
+          }
+        }
         const request: SecureLoginTarget = {
           origin: siteOrigin, tabId, saved: status.saved, automatic: status.automatic,
+          ...(detection.fields?.length ? { fields: detection.fields } : {}),
           ...('unavailable' in status && status.unavailable ? {
-            diagnostic: 'La bóveda local no respondió; abre Secure Ask y comprueba la conexión.',
+            diagnostic: 'La bóveda local no respondió. Revisa la conexión antes de guardar un acceso nuevo.',
           } : {}),
         }
-        const key = tabId + '|' + pageUrl
-        if (status.saved && status.automatic && !attemptedLogins.current.has(key)) {
-          attemptedLogins.current.add(key)
-          try {
-            const result = await secureApi<SecureUse>('/use', { origin: siteOrigin, tabId })
-            if (stopped) return
-            if (result.status === 'submitted') {
-              refreshFrame.current?.()
-              // Wait for a later DOM poll; the backend may have opened
-              // the site's sign-in modal before securely submitting credentials.
-              // Submission alone is not authentication, nor permission to
-              // replay any earlier purchase, wager or form submission.
+        if (status.saved && status.automatic) {
+          if (!attemptedLogins.current.has(key)) {
+            attemptedLogins.current.add(key)
+            pendingAutomaticLogin.current.set(key, Date.now())
+            onSecureLoginRequest?.(null)
+            try {
+              const result = await secureApi<SecureUse>('/use', { origin: siteOrigin, tabId })
+              if (stopped) return
+              if (result.status === 'submitted') {
+                refreshFrame.current?.()
+                // A click is not proof of login. Wait for a later gate
+                // inspection, without showing blank credential inputs.
+                return
+              }
+              pendingAutomaticLogin.current.delete(key)
+              onSecureLoginRequest?.({
+                ...request, diagnostic: 'No se completó el inicio automático. Puedes reintentar el acceso guardado.',
+              })
+              return
+            } catch {
+              pendingAutomaticLogin.current.delete(key)
+              onSecureLoginRequest?.({
+                ...request, diagnostic: 'Falló la conexión de inicio automático. El acceso guardado sigue disponible.',
+              })
               return
             }
-          } catch {
-            // A broken transport must not hide the in-chat Secure Ask fallback.
           }
+          const started = pendingAutomaticLogin.current.get(key)
+          if (started !== undefined && Date.now() - started < 8_000) {
+            onSecureLoginRequest?.(null)
+            return
+          }
+          pendingAutomaticLogin.current.delete(key)
+          onSecureLoginRequest?.({
+            ...request, diagnostic: 'No se pudo confirmar el inicio automático. Revisa el acceso guardado.',
+          })
+          return
         }
         if (!stopped) onSecureLoginRequest?.(request)
       } finally {
