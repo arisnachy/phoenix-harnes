@@ -122,6 +122,7 @@ describe('Phoenix Game Studio autonomous production controller', () => {
     expect(puzzle.evaluated).not.toContain('enemiesAndBosses')
     const dir = mkdtempSync(join(tmpdir(), 'phoenix-qa-score-'))
     try {
+      writeFileSync(join(dir, 'manifest.json'), JSON.stringify(game))
       const state = initializeGameProduction(game, join(dir, 'manifest.json'), join(dir, 'state.json'))
       state.stages.slice(0, -1).forEach(x => { x.status = 'complete' })
       writeFileSync(join(dir, 'quality.json'), JSON.stringify({
