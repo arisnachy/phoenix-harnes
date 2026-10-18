@@ -555,7 +555,7 @@ def main():
             if piece.strip(): para(piece)
     if report.get("tables"):
         para("Tablas", h1)
-        content_width = paper[0] - (144 if style == "apa" and not editorial else 120)
+        content_width = paper[0] - 160
         for ix, item in enumerate(report["tables"], 1):
             para("Tabla " + str(ix) + ". " + str(item.get("title", "Resultados")) + " — Fuente: " +
                  citation_string(item["source_key"], refs, style, numbers), small)
@@ -581,7 +581,7 @@ def main():
         para("Figuras", h1)
         for ix, (chart, path) in enumerate(figures, 1):
             para(f"Figura {ix}. {chart.get('title','Gráfico')} — Fuente: {citation_string(chart['source_key'],refs,style,numbers)}", small)
-            story.append(PdfImage(str(path), width=450, height=216))
+            story.append(PdfImage(str(path), width=420, height=202))
             story.append(Spacer(1, 12))
     if report.get("declarations"):
         para("Declaraciones de investigación", h1)
