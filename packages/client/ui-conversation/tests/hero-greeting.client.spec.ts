@@ -1,8 +1,7 @@
-import { createElement } from 'react'
-import { renderToStaticMarkup } from 'react-dom/server'
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import {
-  HeroShell, greetingForHour, heroAttentionDetail, heroAttentionPrompt, preferredNameForHero,
+  greetingForHour, heroAttentionDetail, heroAttentionPrompt, preferredNameForHero,
 } from '../src/client/skeleton/EmptyHero.tsx'
 
 describe('greetingForHour', () => {
@@ -71,15 +70,14 @@ describe('universal Phoenix start', () => {
 })
 
 describe('neutral, universal hero architecture', () => {
-  it('shows only a universal welcome, not research or other domain controls', () => {
-    const markup = renderToStaticMarkup(createElement(HeroShell, {
-      t: ((key: string) => key) as never,
-      renderSlot: (() => null) as never,
-    }))
-    expect(markup).toContain('¿En qué podemos trabajar hoy?')
-    expect(markup).not.toContain('Investigación APA 7')
-    expect(markup).not.toContain('Investigación Vancouver')
-    expect(markup).not.toContain('Artículo científico')
-    expect(markup).not.toContain('Personalizar portada')
+  it('does not embed permanent domain buttons or domain-specific callbacks', () => {
+    const source = readFileSync(new URL('../src/client/skeleton/EmptyHero.tsx', import.meta.url), 'utf8')
+    expect(source).toContain('¿En qué podemos trabajar hoy?')
+    expect(source).not.toContain('onResearchSelect')
+    expect(source).not.toContain('onGameSelect')
+    expect(source).not.toContain('Investigación APA 7')
+    expect(source).not.toContain('Investigación Vancouver')
+    expect(source).not.toContain('Artículo científico')
+    expect(source).not.toContain('Personalizar portada')
   })
 })
