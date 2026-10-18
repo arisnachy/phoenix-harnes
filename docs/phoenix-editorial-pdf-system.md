@@ -10,6 +10,40 @@ Un PDF no está terminado solo porque un motor consiga abrirlo: debe ser legible
 - `editorial`: diseño contemporáneo, portada de alto nivel, retícula consistente, títulos jerarquizados, navegación, gráficos y tablas trazables. Pensado para informes, propuestas, publicaciones divulgativas, diagnósticos, productos comerciales y materiales de negocio.
 - `hybrid`: rigor bibliográfico y redacción científica con una capa editorial discreta. Es la presentación preferida cuando el usuario pide un informe científico profesional con diseño moderno y no está sometido a una plantilla institucional estricta.
 
+
+## Catálogo de estilos modernos (selector `design_preset`)
+
+Se mantienen dos dimensiones independientes: el modo de entrega editorial (`presentation`) y los tokens/ilustración vectorial de la portada (`design_preset`). Así un documento `hybrid` puede usar cualquiera de las cinco identidades sin cambiar el contenido ni las citas.
+
+| Valor | Identidad de portada | Cuándo utilizarlo |
+| --- | --- | --- |
+| `auto` | Selección determinista contextual | Valor recomendado: elegir por tipo de documento y tema del título |
+| `editorial_navy` | Azul tinta, órbita verde y detalle dorado | Revistas, libros, monografías y reportes generales |
+| `clinical_teal` | Fondo limpio, banda vertical, círculos de precisión | Salud, ciencias, clínica y revisiones de evidencia |
+| `executive_amber` | Encabezado oscuro, geometría angular y acento ámbar | Estrategia, políticas públicas, negocios, informes ejecutivos |
+| `minimal_graphite` | Blanco editorial, líneas finas y tipografía sobria | Tesis, análisis técnicos y lectura prolongada |
+| `creative_coral` | Contraste berenjena-coral, formas asimétricas | Cultura, diseño, divulgación y propuestas creativas |
+| `academic_classic` | Sin diseño decorativo | Únicamente `presentation: "academic"` |
+
+La selección automática usa el **tipo de documento** primero y luego palabras clave no sensibles del título. No usa aleatoriedad ni cambia sin aviso de identidad entre reintentos. El usuario puede fijar la misma identidad para varios documentos mediante un preset explícito; el modo `academic` prevalece sobre las preferencias visuales.
+
+Ejemplo de modelo de informe:
+```json
+{
+  "title": "Informe de política sanitaria",
+  "presentation": "hybrid",
+  "design_preset": "executive_amber",
+  "document_type": "policy_report"
+}
+```
+Este ejemplo muestra solo campos de presentación; la publicación real exige las secciones, referencias verificables y demás datos validados por `phoenix_research_publish`.
+
+## Comprobación automatizada
+
+La CI ejecuta el publicador en Windows y Ubuntu y comprueba cinco portadas visualmente diferentes mediante hash del raster PDF, título y metadatos visibles, páginas con contenido dentro de los límites físicos, integridad PDF/DOCX, ruta `auto` y protección del formato académico estricto. No declara `visual_page_review: passed` por el mero hecho de hacer una comparación de píxeles: la inspección visual editorial humana o de un evaluador con capacidad de ver páginas es un paso adicional.
+
+**Alcance real:** estos presets se ejecutan hoy en `phoenix_research_publish`. El contrato permite reutilizar su lenguaje visual en otros productores de Phoenix cuando adopten el servicio de composición; ello no demuestra que todos los productos existentes usen ya estas portadas.
+
 ## Reglas de composición
 
 1. **Portada**: masthead vectorial, título claro, subtítulo cuando exista, metadatos únicamente suministrados, sin inventar logotipos, autores ni afiliaciones. Evitar portadas formadas por una sola línea perdida en medio de la página.
