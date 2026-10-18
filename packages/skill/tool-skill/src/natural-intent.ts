@@ -14,18 +14,20 @@
  */
 export function naturalCreationSkill(input: string): 'game-development' | undefined {
   const normalized = input.normalize('NFD').replace(/[\u0300-\u036f]/gu, '')
-    .toLowerCase().replace(/\s+/gu, ' ').trim()
-  if (normalized.length === 0 || normalized.length > 4000) return undefined
+    .toLowerCase().replace(/\s+/gu, ' ').trim().replace(/^[¿¡]+\s*/u, '')
+  if (normalized.length === 0) return undefined
+  // Read the initial request; long specifications should still route correctly.
+  const request = normalized.slice(0, 4000)
 
   // Explicit refusals and meta questions are not instructions to create.
-  if (/^(?:no\s+(?:quiero|necesito|hagas|crees|generes|programes|hace|make|create|build)|sin\s+(?:crear|hacer|generar)|dont\s+(?:make|create|build)|do\s+not\s+(?:make|create|build))\b/u.test(normalized)) return undefined
+  if (/^(?:no\s+(?:quiero|necesito|hagas|crees|generes|programes|hace|make|create|build)|sin\s+(?:crear|hacer|generar)|dont\s+(?:make|create|build)|do\s+not\s+(?:make|create|build))\b/u.test(request)) return undefined
   if (/^(?:como\s+(?:se\s+)?(?:hace|crear?|programar)|how\s+to\s+(?:make|create|build)|que\s+(?:es|significa))\b/u.test(normalized)) return undefined
 
   const game = '(?:videojuego|video game|juego|game|juegos|games)'
-  const build = '(?:haz(?:me)?|hacer|crea(?:me)?|crear|creame|genera(?:me)?|desarrolla|programa|construye|disena|prepara|arma|make|build|create|generate|develop|code|design)'
-  const command = new RegExp('(?:^|[.!?]\\s*)\\s*(?:(?:por favor|please|quiero que|necesito que|puedes|podrias|can you|could you|me gustaria que)\\s+){0,3}' + build + '(?:\\s+\\S+){0,9}?\\s+(?:(?:un|una|el|la|a|an|the|mi|me|some|a simple)\\s+)?' + game + '(?:\\b|$)', 'u')
+  const build = '(?:haz(?:me)?|hacer(?:me)?|crea(?:me)?|crear|creame|genera(?:me)?|desarrolla|programa|construye|disena|prepara|arma|make|build|create|generate|develop|code|design)'
+  const command = new RegExp('(?:^|[.!?]\\s*)\\s*(?:(?:por favor|please|quiero que|necesito que|me puedes|me podrias|puedes|podrias|can you|could you|me gustaria que)\\s+){0,3}' + build + '(?:\\s+\\S+){0,9}?\\s+(?:(?:un|una|el|la|a|an|the|mi|me|some|a simple)\\s+)?' + game + '(?:\\b|$)', 'u')
   const desired = new RegExp('(?:^|[.!?]\\s*)\\s*(?:quiero|necesito|dame|me gustaria|i want|i need|give me|build me|make me)(?:\\s+\\S+){0,4}?\\s+(?:(?:un|una|a|an|the)\\s+)?' + game + '(?:\\b|$)', 'u')
   const short = new RegExp('^(?:(?:un|una|a|an)\\s+)?' + game + '\\s+(?:tipo|estilo|de|sobre|similar|like|about|with|para|for)\\b', 'u')
-  if (command.test(normalized) || desired.test(normalized) || short.test(normalized)) return 'game-development'
+  if (command.test(request) || desired.test(request) || short.test(request)) return 'game-development'
   return undefined
 }
