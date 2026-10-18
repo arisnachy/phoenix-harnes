@@ -273,7 +273,7 @@ export function MiniBrowser({ requested = false, active = true, initialTabId, on
       try {
         // Vault presence is independent of Chrome's RPC health.
         const status = await secureApi<SecureStatus>('/status?origin=' + encodeURIComponent(siteOrigin))
-          .catch(() => ({ saved: false, automatic: false, unavailable: true }))
+          .catch(() => ({ saved: false, automatic: false, unavailable: true } as SecureStatus & { unavailable: true }))
         if (stopped) return
         const detection = await secureApi<SecureDetection>('/detect', { origin: siteOrigin, tabId })
           .catch(() => undefined)
