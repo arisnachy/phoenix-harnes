@@ -8,6 +8,7 @@ import { constants as fsConstants } from 'node:fs'
 import { deflateRawSync } from 'node:zlib'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { validateBlueprint, progress, buildFingerprint, docxEntries, printHtml } from './phoenix-business-studio.mjs'
+import { auditBook, buildBookMarketingBrief, genreGuide } from './phoenix-book-quality.mjs'
 
 const root = resolve(process.env.PHOENIX_BUSINESS_HOME || join(process.env.DSH_HOME || join(homedir(), '.dsh'), 'business-library'))
 const indexFile = join(root, 'library.json')
@@ -166,6 +167,14 @@ async function compileBook(product,author,lang,opts) {
   if(!/^[a-z]{2,3}(?:-[A-Za-z]{2})?$/.test(lang)) fail('Idioma BCP-47 inválido.')
   const quality=editorialCheck(product,opts)
   if(!quality.lengthReady) fail(`Manuscrito incompleto (${quality.chapterCount} capítulos; ${quality.chapterWords} palabras).`)
+  // Short local builds with explicitly lowered thresholds remain draft-only for tests and prototypes.
+  // A commercial-sized default build cannot silently package repetitive/unfinished chapters.
+  let editorialGate = null
+  if (opts.minWords >= 50000 && opts.minChapters >= 15) {
+    editorialGate = await auditBook(product,root)
+    const manuscriptIssues = editorialGate.blockers.filter(issue => !issue.startsWith('Falta portada'))
+    if (manuscriptIssues.length) fail('Revisión editorial estructural incompleta: ' + manuscriptIssues.join(' | '))
+  }
   const chapters=[]
   for(const c of [...product.chapters].sort((a,b)=>a.number-b.number)){
     const content=await readFile(join(root,c.path),'utf8')
@@ -190,7 +199,7 @@ async function compileBook(product,author,lang,opts) {
   const docx=await registerGenerated(product,'manuscript.docx',archiveZip(docxEntries(product.title,author,chapters)),'manuscript')
   const printSource=await registerGenerated(product,'print-interior.html',printHtml(product.title,author,chapters,lang),'print')
   product.build={fingerprint:buildFingerprint(product),compiledAt:iso(),formatVersion:2,author,lang}
-  return {manuscript:book,ebook,docx,printSource,chapters:quality.chapterCount,words:quality.chapterWords,author,lang,validation:'EPUB3/DOCX and print-ready HTML generated; PDF, rendered pagination, rights, and editorial review remain pending'}
+  return {manuscript:book,ebook,docx,printSource,chapters:quality.chapterCount,words:quality.chapterWords,author,lang,editorialStatus:editorialGate?'structural-manuscript-gate-passed-review-required':'draft-only',validation:'EPUB3/DOCX and print-ready HTML generated; PDF, rendered pagination, rights, and editorial review remain pending'}
 }
 
 function gallery(products) {
@@ -201,7 +210,7 @@ async function main(args) {
   const [cmd, ...rest] = args
   const option = (flag, fallback) => {const i=rest.indexOf(flag);return i<0?fallback:rest[i+1]??fail(`Falta valor de ${flag}`)}
   const positional = rest.filter((arg,i)=>!(arg.startsWith('--')||i>0&&rest[i-1].startsWith('--')))
-  if (cmd === 'help' || !cmd) return {usage:['init <tipo> <título>', 'list', 'show <id>', 'asset <id> <archivo> --role <source|manuscript|ebook|print|cover|promo>', 'chapter <id> <número> <archivo.md>', 'blueprint <id> <plan.json>', 'progress <id>', 'audit <id>', 'compile <id> --author <nombre> [--words 50000] [--chapters 15] [--lang es]', 'check <id> [--words 50000] [--chapters 15]', 'route <plataforma> [--tools mcp__servidor__herramienta,...]', 'prepare <id> <plataforma> <precio> [--currency USD]', 'sale <id> <importe_bruto> <unidades> --source <referencia>', 'gallery'], home:root}
+  if (cmd === 'help' || !cmd) return {usage:['init <tipo> <título>', 'list', 'show <id>', 'asset <id> <archivo> --role <source|manuscript|ebook|print|cover|promo>', 'chapter <id> <número> <archivo.md>', 'blueprint <id> <plan.json>', 'progress <id>', 'audit <id>', 'book-quality <id>', 'book-guide <género>', 'book-marketing <id> <fuentes.json>', 'compile <id> --author <nombre> [--words 50000] [--chapters 15] [--lang es]', 'check <id> [--words 50000] [--chapters 15]', 'route <plataforma> [--tools mcp__servidor__herramienta,...]', 'prepare <id> <plataforma> <precio> [--currency USD]', 'sale <id> <importe_bruto> <unidades> --source <referencia>', 'gallery'], home:root}
   if (cmd === 'init') {
     const [type,...titleParts]=positional; const title=titleParts.join(' ').trim()
     if(!TYPES.has(type)||title.length<3||title.length>180) fail('Tipo o título inválido.')
@@ -230,6 +239,20 @@ async function main(args) {
     return {productId:p.id,chapters:validated.chapters.length,targetWords:validated.targetWords,characters:validated.characters.length,series:validated.series??null}
   })
   if (cmd === 'progress') return transaction(db=>{const p=get(db,positional[0]);return progress(p,p.blueprint)},false)
+  if (cmd === 'book-guide') return genreGuide(positional.join(' '))
+  if (cmd === 'book-quality') return transaction(async db=>{
+    const p=get(db,positional[0])
+    if(p.type!=='book') fail('book-quality requiere un libro.')
+    return auditBook(p,root)
+  },false)
+  if (cmd === 'book-marketing') return transaction(async db=>{
+    const p=get(db,positional[0])
+    if(p.type!=='book') fail('book-marketing requiere un libro.')
+    const evidenceFile=resolve(positional[1]??'')
+    const info=await stat(evidenceFile)
+    if(!info.isFile()||info.size>256*1024) fail('Fuentes de mercado JSON inválidas o demasiado grandes.')
+    return buildBookMarketingBrief(p,JSON.parse(await readFile(evidenceFile,'utf8')))
+  },false)
   if (cmd === 'audit') return transaction(async db=>{
     const p=get(db,positional[0]),issues=[]
     for(const file of [...p.files,...p.chapters]){
