@@ -170,7 +170,7 @@ def bibliography(ref, style, number):
         return f"{number}. {authors}. {title}. {journal}. {year}. {url}"
     return f"{authors} ({year}). {title}. {journal}. {url}"
 
-def chart_image(chart, folder, ordinal):
+def chart_image(chart, folder, ordinal, accent="#087783"):
     labels = [str(s)[:32] for s in chart["labels"]]
     values = chart["values"]
     image = Image.new("RGB", (1000, 480), "white")
@@ -185,7 +185,7 @@ def chart_image(chart, folder, ordinal):
         x0 = 90 + available * i + 12
         x1 = 90 + available * (i + 1) - 12
         y = 60 + (high - value) / (high-low) * 330
-        d.rectangle((x0, min(y, baseline), x1, max(y, baseline)), fill="#b2652b")
+        d.rectangle((x0, min(y, baseline), x1, max(y, baseline)), fill=accent)
         d.text((x0, 400), labels[i][:max(4, int(available/10))], fill="#222222")
         d.text((x0, max(42, y-18)), str(round(value, 2)), fill="#222222")
     destination = folder / f"figure-{ordinal}.png"
@@ -196,7 +196,10 @@ def main():
     raw = sys.stdin.buffer.read(MAX_CONTENT * 4)
     report = json.loads(raw.decode("utf-8"))
     refs, cited = validate(report)
-    style = report.get("style", "apa")
+    style = "apa" if report.get("style", "apa") == "apa7" else report.get("style", "apa")
+    presentation = report.get("presentation", "academic")
+    editorial = presentation in ("editorial", "hybrid")
+    accent = "#087783" if presentation == "hybrid" else "#a52d37"
     first_order = []
     for section in report["sections"]:
         for key in REF_RE.findall(section["text"]):
@@ -218,8 +221,14 @@ def main():
     normal = doc.styles["Normal"]
     normal.font.name = "Times New Roman"
     normal.font.size = Pt(12)
-    normal.paragraph_format.line_spacing = 2 if style == "apa" else 1.4
-    normal.paragraph_format.space_after = Pt(6)
+    normal.paragraph_format.line_spacing = (1.38 if editorial else (2 if style == "apa" else 1.4))
+    normal.paragraph_format.space_after = Pt(7 if editorial else 6)
+    if editorial:
+        normal.font.name = "Aptos"
+        normal.font.size = Pt(11)
+        heading_style = doc.styles["Heading 1"]
+        heading_style.font.name = "Aptos Display"
+        heading_style.font.color.rgb = RGBColor(8, 119, 131) if presentation == "hybrid" else RGBColor(165, 45, 55)
 
     logo = cover.get("logo_path", "") if isinstance(cover, dict) else ""
     logo_file = None
@@ -246,7 +255,8 @@ def main():
     if cover.get("institution"): center_doc(cover["institution"], True, 14)
     if cover.get("faculty"): center_doc(cover["faculty"])
     doc.add_paragraph("")
-    center_doc(title, True, 17)
+    if editorial: center_doc("PHOENIX  |  INVESTIGACIÓN CIENTÍFICA", True, 10)
+    center_doc(title, True, 20 if editorial else 17)
     if cover.get("author"): center_doc("Autor(es): " + str(cover["author"]))
     if cover.get("course"): center_doc("Asignatura: " + str(cover["course"]))
     if cover.get("lecturer"): center_doc("Docente: " + str(cover["lecturer"]))
@@ -254,16 +264,31 @@ def main():
     center_doc(cover.get("date", datetime.now(timezone.utc).date().isoformat()))
     doc.add_page_break()
 
+    if report.get("keywords"):
+        doc.add_paragraph("Palabras clave: " + ", ".join(str(x) for x in report["keywords"]))
     for section in report["sections"]:
         doc.add_heading(section["heading"], level=1)
         text = format_text(section["text"], refs, style, numbers)
         for paragraph in text.split("\n"):
             if paragraph.strip(): doc.add_paragraph(paragraph.strip())
+    if report.get("tables"):
+        doc.add_heading("Tablas", level=1)
+        for ix, item in enumerate(report["tables"], 1):
+            doc.add_paragraph("Tabla " + str(ix) + ". " + str(item.get("title", "Resultados")) +
+                              " — Fuente: " + citation_string(item["source_key"], refs, style, numbers))
+            tab = doc.add_table(rows=1, cols=len(item["columns"]))
+            tab.style = "Table Grid"
+            for cell, value in zip(tab.rows[0].cells, item["columns"]):
+                cell.text = str(value)
+            for row_values in item["rows"]:
+                for cell, value in zip(tab.add_row().cells, row_values):
+                    cell.text = str(value)
+            if item.get("note"): doc.add_paragraph("Nota: " + str(item["note"]))
     figures = []
     if report.get("charts"):
         doc.add_heading("Figuras", level=1)
         for ix, chart in enumerate(report["charts"], 1):
-            path = chart_image(chart, output_root, ix)
+            path = chart_image(chart, output_root, ix, accent)
             figures.append((chart, path))
             doc.add_paragraph(f"Figura {ix}. {chart.get('title','Gráfico')} — Fuente: {citation_string(chart['source_key'],refs,style,numbers)}")
             doc.add_picture(str(path), width=Inches(5.8))
@@ -280,10 +305,17 @@ def main():
             font = "ResearchUnicode"
             break
     styles = getSampleStyleSheet()
-    body = ParagraphStyle("RBody", parent=styles["Normal"], fontName=font, fontSize=10.5, leading=16, alignment=TA_JUSTIFY, spaceAfter=10)
-    h1 = ParagraphStyle("RH1", parent=styles["Heading1"], fontName=font, fontSize=15, leading=21, spaceBefore=14, spaceAfter=11)
+    ink = colors.HexColor("#1d3040") if editorial else colors.black
+    heading_ink = colors.HexColor(accent) if editorial else colors.black
+    body = ParagraphStyle("RBody", parent=styles["Normal"], fontName=font,
+                          fontSize=10.7 if editorial else 10.5, leading=17 if editorial else 16,
+                          alignment=TA_LEFT if editorial else TA_JUSTIFY, textColor=ink, spaceAfter=10)
+    h1 = ParagraphStyle("RH1", parent=styles["Heading1"], fontName=font,
+                        fontSize=15.5 if editorial else 15, leading=22, textColor=heading_ink,
+                        spaceBefore=17, spaceAfter=11, keepWithNext=True)
     center = ParagraphStyle("RCenter", parent=body, alignment=TA_CENTER, fontSize=12)
-    heading = ParagraphStyle("RTitle", parent=center, fontSize=17, leading=25, spaceAfter=22)
+    heading = ParagraphStyle("RTitle", parent=center, fontSize=23 if editorial else 17,
+                             leading=31 if editorial else 25, textColor=ink, spaceAfter=22)
     small = ParagraphStyle("RSmall", parent=body, fontSize=9, leading=13)
     story = []
     def para(value, st=body):
@@ -295,16 +327,46 @@ def main():
         story.append(Spacer(1, 16))
     for key in ("institution", "faculty"):
         if cover.get(key): para(cover[key], center)
-    story.append(Spacer(1, 46))
+    story.append(Spacer(1, 40 if editorial else 46))
+    if editorial:
+        para("PHOENIX  |  INFORME DE INVESTIGACIÓN", center)
+        story.append(HRFlowable(width="100%", thickness=3, color=heading_ink, spaceAfter=20))
     para(title, heading)
     for key in ("author", "course", "lecturer", "city", "date"):
         if cover.get(key): para(cover[key], center)
     story.append(PageBreak())
+    if report.get("keywords"):
+        para("Palabras clave: " + ", ".join(str(x) for x in report["keywords"]), small)
+        story.append(Spacer(1, 8))
     for section in report["sections"]:
         para(section["heading"], h1)
         value = format_text(section["text"], refs, style, numbers)
         for piece in value.split("\n"):
             if piece.strip(): para(piece)
+    if report.get("tables"):
+        para("Tablas", h1)
+        content_width = paper[0] - 120
+        for ix, item in enumerate(report["tables"], 1):
+            para("Tabla " + str(ix) + ". " + str(item.get("title", "Resultados")) + " — Fuente: " +
+                 citation_string(item["source_key"], refs, style, numbers), small)
+            col_width = content_width / len(item["columns"])
+            cell_style = ParagraphStyle("TableCell" + str(ix), parent=small, fontSize=8, leading=11, spaceAfter=0)
+            cells = [[Paragraph(html.escape(str(value)), cell_style) for value in row]
+                     for row in [item["columns"], *item["rows"]]]
+            tab = LongTable(cells, colWidths=[col_width] * len(item["columns"]),
+                            repeatRows=1, hAlign="LEFT")
+            tab.setStyle(TableStyle([
+                ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#e9f3f4") if editorial else colors.HexColor("#eeeeee")),
+                ("TEXTCOLOR", (0,0), (-1,0), heading_ink),
+                ("BOTTOMPADDING", (0,0), (-1,-1), 7),
+                ("TOPPADDING", (0,0), (-1,-1), 7),
+                ("VALIGN", (0,0), (-1,-1), "TOP"),
+                ("LINEBELOW", (0,0), (-1,0), 0.9, heading_ink),
+                ("LINEBELOW", (0,1), (-1,-1), 0.3, colors.HexColor("#cbd5db")),
+            ]))
+            story.append(tab)
+            if item.get("note"): para("Nota: " + str(item["note"]), small)
+            story.append(Spacer(1, 14))
     if figures:
         para("Figuras", h1)
         for ix, (chart, path) in enumerate(figures, 1):
