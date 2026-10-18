@@ -285,7 +285,7 @@ export function invalidateGameStage(state, stageId, reason) {
 async function main(args) {
   const [operation, ...values] = args
   if (operation === 'init' && values.length === 2) {
-    const [manifestPath, stateFile] = values.map(resolve)
+    const [manifestPath, stateFile] = values.map(value => resolve(value))
     const manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
     const state = initializeGameProduction(manifest, manifestPath, stateFile)
     await saveState(stateFile, state, true)
