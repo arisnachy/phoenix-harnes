@@ -34,6 +34,8 @@ export interface GameProductionState {
   releaseState: string
   warning: string
   lastFailure?: { stage: string; reason: string }
+  previousPlanSha256?: string
+  replanNote?: string
   lastQualityAssessment?: GameQualityAssessment
 }
 export interface GameWork {
