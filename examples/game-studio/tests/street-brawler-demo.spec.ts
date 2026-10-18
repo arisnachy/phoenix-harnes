@@ -6,8 +6,13 @@ import { describe, expect, it } from 'vitest'
 const source = readFileSync(resolve('examples/game-studio/street-brawler-demo.html'), 'utf8')
 const scripts = [...source.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gu)].map(match => match[1] ?? '')
 const manifest = JSON.parse(scripts[0] ?? 'null') as {
-  title: string; genre: string; gameType: string; art: { mode: string };
-  enemies: unknown[]; bosses: unknown[]; controls: Record<string, string>
+  title: string
+  genre: string
+  gameType: string
+  art: { mode: string }
+  enemies: unknown[]
+  bosses: unknown[]
+  controls: Record<string, string>
 }
 
 describe('one-level in-chat street brawler playable fallback', () => {
@@ -29,7 +34,11 @@ describe('one-level in-chat street brawler playable fallback', () => {
     const keys = new Map<string, (event: { code: string; repeat: boolean; preventDefault: () => void }) => void>()
     const clicks: Record<string, () => void> = {}
     const state: { __phoenixDemoState?: {
-      frames: number; started: boolean; heroX: number; bossHp: number; enemiesAlive: number
+      frames: number
+      started: boolean
+      heroX: number
+      bossHp: number
+      enemiesAlive: number
     } } = {}
     const paint = {
       fillRect: () => {}, beginPath: () => {}, arc: () => {}, ellipse: () => {},
