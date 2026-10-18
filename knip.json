@@ -216,6 +216,15 @@
         "debug"
       ]
     },
+    "packages/core/tool-business": {
+      "entry": [
+        "tests/**/*.test.mjs"
+      ],
+      "project": [
+        "src/**/*.ts",
+        "tests/**/*.mjs"
+      ]
+    },
     "packages/*/*": {
       "entry": [
         "tests/**/*.spec.ts"

@@ -27,6 +27,27 @@ export interface PluginInventorySnapshot {
   readonly entries: readonly PluginInventoryEntry[]
 }
 
+/** Secret-free Business Engine product projection. No local paths or order identifiers. */
+export interface BusinessLibraryProduct {
+  readonly id: string
+  readonly title: string
+  readonly type: string
+  readonly updatedAt: string
+  readonly fileCount: number
+  readonly chapterCount: number
+  readonly listingCount: number
+  readonly plannedChapters: number
+  readonly writtenWords: number
+  readonly targetWords: number | null
+  readonly buildStatus: 'not-built' | 'current' | 'stale'
+  readonly listingStage: 'not-prepared' | 'assets-missing' | 'review-required' | 'integrity-failed'
+}
+export interface BusinessLibrarySnapshot {
+  readonly totalCount: number
+  readonly truncated: boolean
+  readonly products: readonly BusinessLibraryProduct[]
+}
+
 
 /** Supported transport labels projected from Official MCP Registry metadata. */
 export type McpRegistryTransport = 'stdio' | 'streamable-http' | 'sse'

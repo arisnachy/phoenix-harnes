@@ -20,6 +20,7 @@ import {
   type LocalModelRuntimeSnapshot,
 } from './local-model/index.ts'
 import { searchOfficialMcpRegistry } from './mcp-registry.ts'
+import { readBusinessLibrarySnapshot } from './business-library.ts'
 import { OpenClawConnectorBridge } from './openclaw-connectors.ts'
 import { readTelegramBotState, saveTelegramBot, removeTelegramBot, TelegramInbox } from './telegram-bot.ts'
 import {
@@ -34,9 +35,11 @@ import {
   JEV_MCP_SERVER_NAME,
   ManagedMcpController,
   recoverManagedMcpOverlay,
+  type XMcpIdentity,
 } from './mcp-managed.ts'
 import type {
   ChatGptWebSnapshot,
+  BusinessLibrarySnapshot,
   CuratedMcpInstallRequest,
   JevMcpConfigureRequest,
   JevMcpSnapshot,
@@ -222,6 +225,12 @@ export class PluginInventoryGateway extends TypertRemoteService {
    * Read Phoenix Local state and installable catalog without exposing machine paths.
    * @returns Current sanitized Phoenix Local state and catalog.
    */
+  /** Read local products without exposing contents, orders or filesystem paths. */
+  @Remote('businessLibrary')
+  async businessLibrary(): Promise<BusinessLibrarySnapshot> {
+    return readBusinessLibrarySnapshot()
+  }
+
   @Remote('localModelState')
   async localModelState(): Promise<PhoenixLocalModelSnapshot> {
     return publicLocalSnapshot((await this.localModel).snapshot())
@@ -498,7 +507,7 @@ export class PluginInventoryGateway extends TypertRemoteService {
    * @returns Idempotent receipts for both pinned connectors.
    */
   @Remote('enableXMcp')
-  async enableXMcp(options: { identity?: 'user' | 'phoenix'; username?: string }): Promise<{
+  async enableXMcp(options: { identity?: XMcpIdentity; username?: string }): Promise<{
     api: McpRegistryInstallReceipt
     docs: McpRegistryInstallReceipt
   }> {

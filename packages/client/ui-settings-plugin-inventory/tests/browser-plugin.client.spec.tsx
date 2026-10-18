@@ -8,6 +8,7 @@ import { resolveSlotLabel } from '@phoenix-ai/dsh-client-ui-slots'
 import { usePinnedBrowserLanguages } from '@phoenix-ai/dsh-client-test-runtime'
 import { apply, inject, NS } from '../src/client/index.ts'
 import { PluginInventorySettingsTab } from '../src/client/PluginInventorySettingsTab.tsx'
+import { BusinessLibrarySettingsTab, type BusinessLibraryInjected } from '../src/client/BusinessLibrarySettingsTab.tsx'
 import type { PluginInventorySettingsTabInjected } from '../src/client/PluginInventorySettingsTab.tsx'
 import { UpdateFooterAction, type UpdateFooterActionInjected } from '../src/client/UpdateFooterAction.tsx'
 
@@ -47,7 +48,8 @@ async function bench() {
     .mockResolvedValue({ ok: true, value: { accepted: false, status: 'current' } })
   const refreshForUpdate = vi.fn<() => Promise<RefreshResult>>()
     .mockResolvedValue({ ok: true, value: { accepted: true } })
-  ctx.provide('remote.pluginInventory', { list, updateState, restartForUpdate, refreshForUpdate })
+  const businessLibrary = vi.fn().mockResolvedValue({ ok: true, value: { totalCount: 0, truncated: false, products: [] } })
+  ctx.provide('remote.pluginInventory', { list, businessLibrary, updateState, restartForUpdate, refreshForUpdate })
   return { ctx, slots: ctx.get('slots') as SlotRegistry, locale, list, updateState, restartForUpdate, refreshForUpdate }
 }
 
@@ -84,6 +86,11 @@ describe('ui-settings-plugin-inventory browser plugin', () => {
     expect(entry.options).toMatchObject({ id: 'all', order: 10 })
     expect(entry.locale).toBe(NS)
     expect(resolveSlotLabel(entry.options.label)).toBe('插件列表')
+
+    const businessTab = b.slots.entries('settings.plugins.tab').find(entry => entry.options.id === 'business-library')!
+    expect(businessTab.component).toBe(BusinessLibrarySettingsTab)
+    const businessInjected = (businessTab.inject as unknown as () => BusinessLibraryInjected)()
+    await expect(businessInjected.readBusinessLibrary()).resolves.toEqual({ totalCount: 0, truncated: false, products: [] })
 
     const footer = b.slots.entries('sidebar.footer.action')[0]!
     expect(footer.component).toBe(UpdateFooterAction)
@@ -122,7 +129,7 @@ describe('ui-settings-plugin-inventory browser plugin', () => {
     const stopSettings = declareSettings(b.slots)
     const stopFooter = declareFooter(b.slots)
     await vi.waitFor(() => {
-      expect(b.slots.entries('settings.plugins.tab')).toHaveLength(1)
+      expect(b.slots.entries('settings.plugins.tab')).toHaveLength(2)
       expect(b.slots.entries('sidebar.footer.action')).toHaveLength(1)
     })
     b.locale.setLocale('en')

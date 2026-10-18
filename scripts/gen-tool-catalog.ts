@@ -41,6 +41,7 @@ import * as SkillFileSystem from '@phoenix-ai/dsh-skill-filesystem'
 import LocalJobRegistry from '@phoenix-ai/dsh-jobs-local'
 import LocalLivingRegistry from '@phoenix-ai/dsh-living-local'
 import * as ToolLiving from '@phoenix-ai/dsh-tool-living'
+import * as ToolBusiness from '@phoenix-ai/dsh-tool-business'
 import * as ToolAskUser from '@phoenix-ai/dsh-tool-ask-user'
 import * as ToolBash from '@phoenix-ai/dsh-tool-bash'
 import * as ToolPwsh from '@phoenix-ai/dsh-tool-pwsh'
@@ -433,6 +434,17 @@ const TOOL_PACKAGES: ToolPackage[] = [
       + 'Version 1 accepts after_seconds, explicit absolute at, and bounded fixed-rate every_seconds, '
       + 'and discloses session-local delivery; '
       + 'management reads and mutations require the shared Session persistence barrier.',
+  },
+  {
+    pkg: '@phoenix-ai/dsh-tool-business',
+    dir: 'tool-business',
+    source: 'packages/core/tool-business/src/index.ts',
+    requires: ['ctx.tools', 'ctx.systemPrompt', 'ctx.mcpConnectors (optional at execution)'],
+    writes: ['tool/call', 'tool/result'],
+    async mount(ctx) {
+      await ctx.plugin(ToolBusiness)
+    },
+    note: 'Read-only intent and live MCP capability planning. Tool names and connection status never confer publication rights.',
   },
   {
     pkg: '@phoenix-ai/dsh-tool-living',

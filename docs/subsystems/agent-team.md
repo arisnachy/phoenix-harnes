@@ -117,6 +117,13 @@ async readChatFor(actor: Agent, limit: number): Promise<TeamChatReadResult>
  */
 async answerChat(actor: Agent, request: { readonly messageId: string; readonly text: string }): Promise<{ messageId: string }>
 
+/** Publish the Lead's own concise reply to a real delivered specialist handoff.
+ * @param actor - exact live Lead.
+ * @param request - durable peer message and bounded reply.
+ * @returns visible reply identity.
+ */
+async replyToPeer(actor: Agent, request: { readonly messageId: string; readonly text: string }): Promise<{ messageId: string }>
+
 /** Set/remove a human reaction.
  * @param request - message and Unicode emoji.
  */
@@ -155,6 +162,13 @@ listMembers(agent: Agent): TeamMemberView[]
  * @returns the active roster row.
  */
 async spawnTeammate(caller: Agent, request: SpawnTeammateRequest): Promise<SpawnTeammateResult>
+
+/**
+ * Read the authoritative root-owned mission checkpoint without waking workers.
+ * @param caller - any live teammate or Lead in the mission.
+ * @returns durable state, or undefined before delegation.
+ */
+missionSnapshot(caller: Agent): UniversalMissionSnapshot | undefined
 
 /**
  * Queue one durable peer message, then attempt immediate delivery.
@@ -208,7 +222,7 @@ async updateTask(caller: Agent, request: UpdateTeamTaskRequest): Promise<TeamTas
 /**
  * Wait for the next Team-domain or member-status change.
  * @param caller - exact live Team member waiting for activity.
- * @param timeoutMs - bounded wait duration from ten seconds through one hour.
+ * @param timeoutMs - bounded wait duration from five seconds through one hour.
  * @param signal - caller cancellation for the wait only.
  * @returns one observed change or a timeout result.
  */
@@ -266,6 +280,7 @@ interface TeamChatMessage {
   readonly time: number
   readonly sourceSeq: number
   readonly targetId?: string | undefined
+  readonly targetName?: string | undefined
   readonly replyTo?: string | undefined
   readonly replyQuote?: string | undefined
   readonly mentions: readonly string[]
@@ -288,6 +303,9 @@ interface TeamChatParticipant {
   readonly status: string
   readonly avatar?: string | undefined
   readonly task?: string | undefined
+  /** Actual provider/model from the child assistant message, not the lead's selector. */
+  readonly modelProvider?: string | undefined
+  readonly model?: string | undefined
   readonly missionId?: string | undefined
 }
 ```

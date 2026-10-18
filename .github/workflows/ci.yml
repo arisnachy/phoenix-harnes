@@ -141,6 +141,27 @@ jobs:
           DSH_BUILD_CLIENT_PROFILE: official
         run: pnpm run check:node-compat
 
+  business-engine:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    name: business / production-safety tests
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          dest: ${{ runner.temp }}/setup-pnpm
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.PRIMARY_NODE_VERSION }}
+          cache: pnpm
+      - name: Install immutable workspace
+        run: pnpm install --frozen-lockfile
+      - name: Run business lifecycle and no-false-sales tests
+        run: pnpm run test:business
+
   python-sdk:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
@@ -211,6 +232,9 @@ jobs:
       - name: Install immutable workspace
         shell: pwsh
         run: pnpm install --frozen-lockfile
+      - name: Run Business Engine safety tests on Windows
+        shell: pwsh
+        run: pnpm run test:business
       - name: Run Full Access and embedded-browser regressions
         shell: pwsh
         run: >-
@@ -224,7 +248,7 @@ jobs:
   all-checks-passed:
     name: all checks passed
     runs-on: ubuntu-latest
-    needs: [node-24, node-24-coverage, node-24-consumers, node-compat, python-sdk, windows, windows-native]
+    needs: [node-24, node-24-coverage, node-24-consumers, node-compat, business-engine, python-sdk, windows, windows-native]
     if: always() && github.event_name == 'pull_request'
     steps:
       - name: Fail if any needed job did not succeed
