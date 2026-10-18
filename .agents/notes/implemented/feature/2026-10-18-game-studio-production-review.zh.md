@@ -2,6 +2,8 @@
 
 Status: implemented
 
+[English](2026-10-18-game-studio-production-review.md) | 中文
+
 ## Problem
 
 生成器可能制作人物预设、首领图集、背景和音乐，却没有把它们连接到可玩的场景。清单和素材导入检查不能证明战斗、可到达的平台、关卡通关或音频播放正常。

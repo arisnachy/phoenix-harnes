@@ -2,6 +2,8 @@
 
 Status: implemented
 
+English | [中文](2026-10-18-game-studio-production-review.zh.md)
+
 ## Problem
 
 A generator can produce character presets, boss sprites, scenery and music without attaching them to a playable scene. A manifest and an art import check do not establish good combat, reachable platforms, level completion or audible sound.

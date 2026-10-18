@@ -70,7 +70,7 @@ export function reviewGameProduction(manifest, assetPlan, evidence = {}) {
     const id = level.id || 'level-' + (i + 1)
     if (!named(level.id)) add('level-id', 'Level ' + (i + 1) + ' has no id')
     if (action && !records(level.layers).length) add('world-layers', 'Level ' + id + ' has no environment layers')
-    for (const enemyId of level.enemyIds || []) {
+    for (const enemyId of Array.isArray(level.enemyIds) ? level.enemyIds : []) {
       if (!enemies.has(enemyId)) add('enemy-placement', 'Level ' + id + ' references missing enemy ' + enemyId)
     }
     if (level.bossId && !bosses.has(level.bossId)) add('boss-placement', 'Level ' + id + ' references missing boss ' + level.bossId)
