@@ -18,11 +18,12 @@
   ],
   "scripts": {
     "business": "node scripts/phoenix-business.mjs",
-    "test:business": "node --test scripts/phoenix-business.test.mjs scripts/phoenix-business-commerce.test.mjs scripts/phoenix-business-factory.test.mjs scripts/phoenix-business-mission.test.mjs && node --experimental-strip-types --test packages/core/tool-business/tests/mission.test.mjs",
+    "test:business": "node --test scripts/phoenix-business.test.mjs scripts/phoenix-business-commerce.test.mjs scripts/phoenix-business-factory.test.mjs scripts/phoenix-business-mission.test.mjs scripts/phoenix-business-shopify.test.mjs && node --experimental-strip-types --test packages/core/tool-business/tests/mission.test.mjs",
     "business:factory": "node scripts/phoenix-business-factory.mjs",
     "test:business:factory": "node --test scripts/phoenix-business-factory.test.mjs",
     "business:commerce": "node scripts/phoenix-business-commerce.mjs",
     "test:commerce": "node --test scripts/phoenix-business-commerce.test.mjs",
+    "test:shopify": "node --test scripts/phoenix-business-shopify.test.mjs",
     "build": "tsx scripts/build.ts && node scripts/phoenix-prepared-restart-bridge.mjs --arm-staging",
     "build:official": "tsx scripts/build.ts --profile official",
     "build:lib": "npm run build:lib:host && npm run build:lib:client",
