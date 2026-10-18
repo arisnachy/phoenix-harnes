@@ -39,6 +39,10 @@ try:
         "charts": [
             {"title": "Gráfico sintético", "labels": ["A", "B", "C"],
              "values": [4, 9, 3], "source_key": "source1"},
+            {"title": "Forest plot sintético", "type": "forest", "labels": ["Estudio A", "Estudio B"],
+             "values": [1.2, 0.8], "ci_low": [0.9, 0.6], "ci_high": [1.5, 1.1],
+             "null_value": 1, "method": "Efectos de prueba con IC sintéticos",
+             "source_key": "source1"},
         ],
     }
     for style, presentation in (("apa", "academic"), ("vancouver", "hybrid"), ("apa7", "editorial")):
@@ -57,7 +61,7 @@ try:
         html_contents = paths["html"].read_text(encoding="utf-8")
         assert "Referencias" in html_contents
         assert "<table>" in html_contents and "Comparación de prueba" in html_contents
-        assert "Figura 1" in html_contents and "alt=" in html_contents
+        assert "Figura 2" in html_contents and "Forest plot sintético" in html_contents and "alt=" in html_contents
         assert receipt["presentation"] == presentation
         assert receipt["quality"]["submission_certified"] is False
         with ZipFile(paths["docx"]) as archive:
