@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { BusinessLibrarySettingsTab } from '../src/client/BusinessLibrarySettingsTab.tsx'
+import { BusinessLibrarySettingsTab, type BusinessLibrarySettingsTabProps } from '../src/client/BusinessLibrarySettingsTab.tsx'
 import { es } from '../src/client/locales.ts'
 
 afterEach(cleanup)
@@ -17,7 +17,7 @@ const software = {
   targetWords:null,buildStatus:'not-built' as const,listingStage:'not-prepared' as const,
 }
 function props(readBusinessLibrary: () => Promise<unknown>) {
-  return { ...translations, readBusinessLibrary } as never
+  return { ...translations, readBusinessLibrary } as unknown as BusinessLibrarySettingsTabProps
 }
 describe('Mi Biblioteca tab', () => {
   it('displays host products and filters them without claiming publication', async () => {
