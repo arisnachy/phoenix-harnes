@@ -59,8 +59,8 @@ async function queryJson(url: string, fetcher: Fetcher, signal?: AbortSignal): P
   }
 }
 function retractionFromCrossref(record: Record<string, unknown>): boolean {
-  const updates = record['update-to']
-  const entries = Array.isArray(updates) ? updates : updates ? [updates] : []
+  const fields = [record['updated-by'], record['update-to']]
+  const entries = fields.flatMap(value => Array.isArray(value) ? value : value ? [value] : [])
   return entries.some(update => {
     const type = String(object(update).type ?? '').toLowerCase()
     return /retract|withdraw/iu.test(type)
