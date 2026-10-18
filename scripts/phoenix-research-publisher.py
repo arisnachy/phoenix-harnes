@@ -358,7 +358,7 @@ def main():
     normal.font.name = "Times New Roman"
     normal.font.size = Pt(12)
     normal.paragraph_format.line_spacing = (1.38 if editorial else (2 if style == "apa" else 1.4))
-    normal.paragraph_format.space_after = Pt(7 if editorial else 6)
+    normal.paragraph_format.space_after = Pt(7 if editorial else (0 if style == "apa" else 6))
     if editorial:
         normal.font.name = "Aptos"
         normal.font.size = Pt(11)
@@ -434,7 +434,10 @@ def main():
         doc.add_heading(section["heading"], level=1)
         text = format_text(section["text"], refs, style, numbers)
         for paragraph in text.split("\n"):
-            if paragraph.strip(): doc.add_paragraph(paragraph.strip())
+            if paragraph.strip():
+                entry = doc.add_paragraph(paragraph.strip())
+                if style == "apa" and not editorial and section_kind(section) != "abstract":
+                    entry.paragraph_format.first_line_indent = Cm(1.27)
     if report.get("tables"):
         doc.add_heading("Tablas", level=1)
         for ix, item in enumerate(report["tables"], 1):
@@ -466,7 +469,10 @@ def main():
                 doc.add_paragraph(report["declarations"][key])
     doc.add_heading("Referencias", level=1)
     for source in ordered_refs:
-        doc.add_paragraph(bibliography(source, style, numbers[source["key"]]))
+        entry = doc.add_paragraph(bibliography(source, style, numbers[source["key"]]))
+        if style == "apa":
+            entry.paragraph_format.left_indent = Cm(1.27)
+            entry.paragraph_format.first_line_indent = Cm(-1.27)
     if report.get("appendices"):
         doc.add_heading("Anexos y apéndices", level=1)
         for ix, item in enumerate(report["appendices"], 1):
@@ -486,8 +492,10 @@ def main():
     ink = colors.HexColor("#1d3040") if editorial else colors.black
     heading_ink = colors.HexColor(accent) if editorial else colors.black
     body = ParagraphStyle("RBody", parent=styles["Normal"], fontName=font,
-                          fontSize=10.7 if editorial else 10.5, leading=17 if editorial else 16,
-                          alignment=TA_LEFT if editorial else TA_JUSTIFY, textColor=ink, spaceAfter=10)
+                          fontSize=10.7 if editorial else (12 if style == "apa" else 10.5),
+                          leading=17 if editorial else (24 if style == "apa" else 16),
+                          alignment=TA_LEFT if style == "apa" or editorial else TA_JUSTIFY,
+                          textColor=ink, spaceAfter=10)
     h1 = ParagraphStyle("RH1", parent=styles["Heading1"], fontName=font,
                         fontSize=15.5 if editorial else 15, leading=22, textColor=heading_ink,
                         spaceBefore=17, spaceAfter=11, keepWithNext=True)
@@ -547,7 +555,7 @@ def main():
             if piece.strip(): para(piece)
     if report.get("tables"):
         para("Tablas", h1)
-        content_width = paper[0] - 120
+        content_width = paper[0] - (144 if style == "apa" and not editorial else 120)
         for ix, item in enumerate(report["tables"], 1):
             para("Tabla " + str(ix) + ". " + str(item.get("title", "Resultados")) + " — Fuente: " +
                  citation_string(item["source_key"], refs, style, numbers), small)
@@ -593,7 +601,10 @@ def main():
             para(format_text(item["text"], refs, style, numbers))
 
     pdf_file = output_root / "informe.pdf"
-    printer = IndexedDocTemplate(str(pdf_file), pagesize=paper, rightMargin=60, leftMargin=60, topMargin=64, bottomMargin=62, title=title, author=", ".join(authors))
+    pdf_margin = 72 if style == "apa" and not editorial else 60
+    printer = IndexedDocTemplate(str(pdf_file), pagesize=paper, rightMargin=pdf_margin,
+                                 leftMargin=pdf_margin, topMargin=pdf_margin,
+                                 bottomMargin=pdf_margin, title=title, author=", ".join(authors))
     rendered_pages = [0]
     def footer(canvas, document):
         rendered_pages[0] = document.page
