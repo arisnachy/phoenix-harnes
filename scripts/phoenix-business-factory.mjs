@@ -11,6 +11,7 @@ import { basename, dirname, join, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { deflateRawSync } from 'node:zlib'
 import { buildFingerprint } from './phoenix-business-studio.mjs'
+import { auditBook, BOOK_FORMATS } from './phoenix-book-quality.mjs'
 
 const ROOT = resolve(process.env.PHOENIX_BUSINESS_HOME || join(process.env.DSH_HOME || join(homedir(), '.dsh'), 'business-library'))
 const DB = join(ROOT, 'library.json')
@@ -188,7 +189,8 @@ function validateRecipe(product, assets, platform) {
     const numbers=new Set(product.chapters.map(c=>c.number))
     const count=product.chapters.length
     const words=product.chapters.reduce((sum,c)=>sum+(Number.isSafeInteger(c.words)?c.words:0),0)
-    if(count<15||words<50000||numbers.size!==count||![...numbers].every((n,i)=>numbers.has(i+1))) blockers.push('Libro sin 15 capítulos consecutivos y 50 000 palabras comprobadas.')
+    const format=BOOK_FORMATS[product.blueprint?.editorial?.format] ?? BOOK_FORMATS.novel
+    if(count<format.minChapters||words<format.minWords||numbers.size!==count||![...numbers].every((n,i)=>numbers.has(i+1))) blockers.push('Libro insuficiente para el formato elegido (capítulos consecutivos y longitud mínima interna).')
     if(!isObj(product.build)||product.build.fingerprint!==buildFingerprint(product)) blockers.push('Libro sin compilación editorial vigente.')
   }
   const reviews=recipe.reviews.map(name=>({name,verified:false,requiresEvidence:true}))
@@ -201,7 +203,16 @@ export async function assessRelease(id,{platform='direct'}={}) {
   const integrity=await inspectAssets(product)
   const result=validateRecipe(product,integrity.assets,platform)
   const blockers=[...integrity.issues,...result.blockers]
-  return {productId:id,type:product.type,platform,structurallyReady:blockers.length===0,
+  let editorial = null
+  if(product.type==='book' && integrity.issues.length===0){
+    try {
+      editorial=await auditBook(product,ROOT)
+      blockers.push(...editorial.blockers.map(problem=>'Control editorial: '+problem))
+    } catch(error) {
+      blockers.push('No se pudo auditar el libro: '+(error instanceof Error?error.message:'error no identificado'))
+    }
+  }
+  return {productId:id,type:product.type,platform,structurallyReady:blockers.length===0,editorial,
     blockers,checks:result.checks,assetCount:integrity.assets.length,totalBytes:integrity.totalBytes,
     manualReviews:result.manualReviews,commerciallyApproved:false,publicationConfirmed:false,
     salesVerified:false,requiresHumanAuthorization:true}
