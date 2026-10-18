@@ -5,6 +5,14 @@ description: Build or improve playable 2D/2.5D/3D video games in PHOENIX using K
 
 # PHOENIX GAME STUDIO · La Forja
 
+## Entrada por intención natural, sin instrucciones técnicas del usuario
+
+El usuario solo pide el resultado: «haz un juego de carreras», «crea un juego tipo Double Dragon», «haz un RPG», «quiero un juego de misterio». **Kira interpreta el género, el estilo, el alcance y el destino razonable de la petición, sin pedir nombres de habilidades, rutas de archivos, nombres de herramientas, motores ni manifiestos.** El cargador de habilidades activa Game Studio al reconocer una solicitud explícita de crear un juego; la composición del juego sigue siendo libre y personalizada, no un catálogo de nombres de videojuegos. Nunca conviertas la plantilla de lucha callejera en la respuesta predeterminada de otros géneros.
+
+Distingue solicitudes de diseño, explicación o crítica de las solicitudes de **crear**. Para crear, determina internamente el resultado mínimo jugable fiel al género: carreras requieren conducción y pista; puzles requieren reglas y solución; RPG requiere exploración, decisiones y progresión; beat-em-up requiere combate. Si el usuario pidió un nivel, demo o prototipo en el chat, crea y publica directamente un HTML5 jugable honesto, sin navegador de control ni herramienta nativa innecesaria. Si pidió un videojuego completo y profesional, produce el proyecto y recursos adecuados, con motor de autoría y pruebas reales; no lo rebajes silenciosamente a una demo.
+
+El usuario no debe dirigir los pasos técnicos de Kira. Si hay un bloqueo concreto, busca una ruta viable sin perder el género ni el objetivo y reporta la capacidad específica que falta. Planificación, delegación y auditoría apoyan la entrega, **nunca la sustituyen**.
+
 ## Prioridad de entrega: demo de un nivel (sin bucles de navegador)
 
 Ante «crea un juego tipo Double Dragon, dame un demo de un level» u otra solicitud de **demo de un solo nivel jugable en el chat**, Kira inicia directamente un HTML5 autocontenido para `phoenix_game`, tomando `examples/game-studio/street-brawler.manifest.json` como contrato de género y `examples/game-studio/brawler-kit.js` como biblioteca de combate. Ejecuta `game-tools.mjs route --genre "Double Dragon demo de un level" --delivery chat --quality prototype` y respeta el resultado: ningún editor externo, MCP Godot o MiniBrowser es requisito. El primer paso útil es escribir código del juego, no delegar a Lumen una investigación del contrato que ya se conoce. Toda delegación debe producir un archivo, revisión concreta o prueba sin detener la construcción principal. Cualquier error del navegador se aísla si el encargo es local.

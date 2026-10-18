@@ -5,10 +5,10 @@
  */
 
 import { createHash } from 'node:crypto'
-import { naturalCreationSkill } from './natural-intent.js'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { readFile } from 'node:fs/promises'
+import { naturalCreationSkill } from './natural-intent.js'
 import type { Context } from '@phoenix-ai/cordis'
 import z from '@phoenix-ai/schemastery'
 import type { Agent, PreStepDecision } from '@phoenix-ai/dsh-agent'
@@ -179,7 +179,9 @@ export function apply(ctx: Context, config: Config = {}): void {
   })
   ctx.tools.register(skillTool)
 
-  // User-explicit skill invocation: a claimed user message whose first line
+  // Skill activation: user-explicit /name gestures plus high-confidence
+  // natural user requests (e.g. a newly requested game). A claimed message
+  // whose first line
   // starts with `/<name>` naming a user-invocable skill is a deterministic
   // load gesture. The rendered body enters this step as injected
   // instructions context appended after every other injection — background
@@ -210,7 +212,7 @@ export function apply(ctx: Context, config: Config = {}): void {
     )
     const auto = natural !== undefined && ctx.tools.get(skillTool.name, agent) === skillTool
       ? natural : undefined
-    const names = [...explicit, ...auto !== undefined && !explicit.includes(auto) ? [auto] : []]
+    const names = [...explicit, ...(auto !== undefined && !explicit.includes(auto) ? [auto] : [])]
     if (names.length === 0) return decision
     signal.throwIfAborted()
     const lookup = { cwd: agent.session.header.cwd, signal, scope: agent }
