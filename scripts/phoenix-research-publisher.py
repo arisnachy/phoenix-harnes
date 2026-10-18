@@ -38,7 +38,7 @@ REF_RE = re.compile(r"\[@([A-Za-z0-9_-]{1,64}(?:\s*[,;]\s*@?[A-Za-z0-9_-]{1,64})
 
 def citation_keys(value):
     """Validate and extract *all* source keys, never leave unresolved [@...] in output."""
-    if "[@"+"" in value and not CITE_ANY_RE.findall(value):
+    if "[@" in value and not CITE_ANY_RE.findall(value):
         raise ValueError("Malformed citation marker in manuscript")
     keys = []
     for match in CITE_ANY_RE.finditer(value):
@@ -91,6 +91,17 @@ def complete_research_profile(data, cited):
         words = len(re.findall(r"\b\w+\b", section["text"], re.UNICODE))
         if kind in core_kinds and words < 120:
             problems.append(f"sección {section['heading']} superficial: {words} palabras")
+    # Repeated filler is not substantive writing, even if it meets a word target.
+    sentences = []
+    for section in data["sections"]:
+        for sentence in re.split(r"[.!?]+(?:\s+|$)", section["text"]):
+            canonical = " ".join(sentence.lower().split())
+            if len(canonical) >= 55:
+                sentences.append(canonical)
+    if len(sentences) >= 15:
+        duplicates = len(sentences) - len(set(sentences))
+        if duplicates / len(sentences) > 0.15:
+            problems.append("exceso de texto repetitivo o relleno; desarrollar contenido original y respaldado")
     if problems:
         raise ValueError("RESEARCH_QUALITY_GATE: documento incompleto: " + "; ".join(problems)
                          + ". Continuar investigando y desarrollando antes de publicar.")
@@ -347,7 +358,7 @@ def format_text(value, refs, style, order):
         keys = [part.lstrip("@").strip() for part in re.split(r"[;,]", match.group(1))]
         return "; ".join(citation_string(key, refs, style, order) for key in keys)
     result = REF_RE.sub(replace_group, value)
-    if "[@"+"" in result:
+    if "[@" in result:
         raise ValueError("Unresolved manuscript citations cannot enter PDF/Word/HTML")
     return result
 
@@ -808,7 +819,15 @@ def main():
     target_pages = report.get("page_plan", {}).get("target_pages")
     scope = report.get("page_plan", {}).get("scope", "all")
     page_match = target_pages is None or (scope == "all" and target_pages == rendered_pages[0])
+    page_floors = {"narrative_review": 6, "systematic_review": 8, "original_research": 5,
+                   "journal_manuscript": 5, "thesis": 25, "monograph": 12,
+                   "research_protocol": 5, "policy_report": 5}
+    editorial_minimum_pages = page_floors.get(report.get("document_type"), 5) if report.get("quality_profile", "professional") == "professional" else 0
     warnings = []
+    if rendered_pages[0] < editorial_minimum_pages:
+        warnings.append("El PDF quedó corto para una publicación profesional: " +
+                        str(rendered_pages[0]) + " páginas; piso editorial " +
+                        str(editorial_minimum_pages) + ". Continuar revisión y desarrollo.")
     if target_pages is not None and scope == "body":
         warnings.append("El límite se refiere solo al cuerpo: el PDF total no permite certificarlo automáticamente.")
     elif target_pages is not None and not page_match:
@@ -823,7 +842,7 @@ def main():
                         "pagination_review_required": bool(warnings),
                         "references_style_certified": False,
                         "citation_markers_resolved": True,
-                        "manuscript_word_count": sum(len(re.findall(r"\\b\\w+\\b", sec["text"], re.UNICODE)) for sec in report["sections"])},
+                        "manuscript_word_count": sum(len(re.findall(r"\b\w+\b", sec["text"], re.UNICODE)) for sec in report["sections"])},
             "pagination": {"pdf_pages": rendered_pages[0], "requested_pages": target_pages,
                            "scope": scope, "target_met": page_match if scope == "all" else None},
             "warnings": warnings,
