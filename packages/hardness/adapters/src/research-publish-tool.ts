@@ -75,8 +75,8 @@ export function validateResearchPublication(input: unknown): Report {
     }
   }
   if (!cited) throw new ToolArgsError(['El texto debe vincular afirmaciones y referencias mediante [@clave].'])
-  if (report.style !== undefined && !['apa', 'apa7', 'vancouver'].includes(String(report.style))) {
-    throw new ToolArgsError(['Estilo de citas no implementado: elige APA 7 o Vancouver.'])
+  if (report.style !== undefined && !['apa', 'apa7', 'vancouver', 'ama'].includes(String(report.style))) {
+    throw new ToolArgsError(['Estilo de citas inválido: APA 7, Vancouver o AMA preliminar.'])
   }
   if (report.presentation !== undefined && !['academic', 'editorial', 'hybrid'].includes(String(report.presentation))) {
     throw new ToolArgsError(['Presentación inválida: academic, editorial o hybrid.'])
@@ -98,6 +98,18 @@ export function validateResearchPublication(input: unknown): Report {
     if (plan.scope !== undefined && plan.scope !== 'all' && plan.scope !== 'body') {
       throw new ToolArgsError(['page_plan.scope debe indicar all o body.'])
     }
+  }
+  if (report.institutional_rules !== undefined) {
+    if (typeof report.institutional_rules !== 'object' || report.institutional_rules === null
+      || Array.isArray(report.institutional_rules)
+      || (report.institutional_rules as Record<string, unknown>).reviewed_by_user !== true) {
+      throw new ToolArgsError(['Las normas institucionales extraídas requieren revisión antes de aplicarse.'])
+    }
+  }
+  if (report.journal_requirements !== undefined
+    && (typeof report.journal_requirements !== 'object' || report.journal_requirements === null
+      || Array.isArray(report.journal_requirements))) {
+    throw new ToolArgsError(['Los límites de la revista deben ser un objeto validado.'])
   }
   if (report.submission_ready === true) {
     throw new ToolArgsError(['La publicación en una revista requiere normas de la revista, autoría, declaraciones y revisión humana.'])
@@ -204,7 +216,7 @@ export async function publishResearchReport(report: Report, signal: AbortSignal)
 export function createResearchPublishTool(): ToolDefinition {
   return defineTool({
     name: 'phoenix_research_publish',
-    description: 'PUBLICA el manuscrito COMPLETO de una investigación en DOCX editable, PDF real y HTML. PARA TESIS, MONOGRAFÍAS, ANTEPROYECTOS O ARTÍCULOS primero ejecuta phoenix_research_plan, recopila una sola vez los datos institucionales faltantes, revisa manual/plantilla si fue suministrado, verifica fuentes y después redacta secciones completas: NO generes 5 páginas cuando se pidieron 80. report={title,document_type:"thesis"|"monograph"|"research_protocol"|"journal_manuscript"|"original_research"|"narrative_review"|"systematic_review"|"brief"|"policy_report",style:"apa7"|"vancouver",presentation:"academic"|"hybrid"|"editorial",paper:"A4"|"Letter",cover:{institution,faculty,department,degree,course,course_code,lecturer,advisor,city,country,date,authors:[{name,student_id?,affiliation?,orcid?}],logo_path?},front_matter:{approval?,originality?,dedication?,acknowledgements?,abstract_en?},table_of_contents?:boolean,page_plan?:{target_pages:number,scope:"all"|"body"},keywords?:string[],sections:[{kind,heading,text:"Texto científico profundo con [@fuente1]"}],references:[{key,authors,year,title,journal,url,doi?}],tables?:[{title,columns,rows,source_key,note?}],charts?:[{type:"bar"|"forest",title,labels,values,ci_low?,ci_high?,method?,source_key}]}. Entrega capítulos académicos ordenados: problema, objetivos, marco teórico, metodología, resultados y discusión si hubo datos reales, conclusiones, recomendaciones y referencias. Un protocolo usa ética y RESULTADOS ESPERADOS, nunca resultados inventados. Incluir solo originales, aprobaciones o dedicatorias facilitados por el usuario. El índice Word es un campo TOC que Word actualiza al abrir; PDF tiene índice paginado. Verifica la paginación REAL después de maquetar; receipt.pagination.pdf_pages compara contra target_pages y warnings informa si falta extensión: NO falsifiques ni rellenes páginas. Los estilos bibliográficos completos de cada revista y la autenticidad de metadatos no están certificados, revisar antes de entregar o enviar. Artículo científico es TIPO de documento, independiente de APA7/Vancouver. Distribución por correo y Telegram es una operación distinta y autorizada.',
+    description: 'PUBLICA el manuscrito COMPLETO de una investigación en DOCX editable, PDF real y HTML. PARA TESIS, MONOGRAFÍAS, ANTEPROYECTOS O ARTÍCULOS primero ejecuta phoenix_research_plan, recopila una sola vez los datos institucionales faltantes, revisa manual/plantilla si fue suministrado, verifica fuentes y después redacta secciones completas: NO generes 5 páginas cuando se pidieron 80. report={title,document_type:"thesis"|"monograph"|"research_protocol"|"journal_manuscript"|"original_research"|"narrative_review"|"systematic_review"|"brief"|"policy_report",style:"apa7"|"vancouver"|"ama",presentation:"academic"|"hybrid"|"editorial",paper:"A4"|"Letter",cover:{institution,faculty,department,degree,course,course_code,lecturer,advisor,city,country,date,authors:[{name,student_id?,affiliation?,orcid?}],logo_path?},front_matter:{approval?,originality?,dedication?,acknowledgements?,abstract_en?,key_points?:string[]},table_of_contents?:boolean,page_plan?:{target_pages:number,scope:"all"|"body"},institutional_rules?:{reviewed_by_user:true,margin_cm?,font_family?,line_spacing?},journal_requirements?:{journal,max_words?,max_abstract_words?,max_references?,max_tables_figures?,require_key_points?},keywords?:string[],sections:[{kind,heading,text:"Texto científico profundo con [@fuente1]"}],references:[{key,authors,year,title,journal,url,doi?}],tables?:[{title,columns,rows,source_key,note?}],charts?:[{type:"bar"|"forest",title,labels,values,ci_low?,ci_high?,method?,source_key}]}. Entrega capítulos académicos ordenados: problema, objetivos, marco teórico, metodología, resultados y discusión si hubo datos reales, conclusiones, recomendaciones y referencias. Un protocolo usa ética y RESULTADOS ESPERADOS, nunca resultados inventados. Incluir solo originales, aprobaciones o dedicatorias facilitados por el usuario. El índice Word es un campo TOC que Word actualiza al abrir; PDF tiene índice paginado. Verifica la paginación REAL después de maquetar; receipt.pagination.pdf_pages compara contra target_pages y warnings informa si falta extensión: NO falsifiques ni rellenes páginas. Los estilos bibliográficos completos de cada revista y la autenticidad de metadatos no están certificados, revisar antes de entregar o enviar. Artículo científico es TIPO de documento, independiente de APA7/Vancouver. Antes de reclamar fuentes verificadas usa phoenix_research_verify_sources (Crossref/Europe PMC); lee guías con phoenix_research_institution_rules y consulta límites iniciales de revista con phoenix_research_journal_profile. El editor no certifica AMA completo ni una revista; distribución por correo y Telegram sigue siendo una operación distinta y autorizada.',
     timeoutMs: 240000,
     parameters: {
       report: {
