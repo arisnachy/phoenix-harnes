@@ -37,6 +37,16 @@ describe('Mi Biblioteca tab', () => {
     fireEvent.click(screen.getByRole('button',{name:'Actualizar'}))
     await waitFor(()=>expect(read).toHaveBeenCalledTimes(2))
   })
+  it('includes commercial services and filters them without reporting sales', async () => {
+    const service = { ...software, id: 'service-1', title: 'Consultoría profesional', type: 'service' as const }
+    const read = vi.fn().mockResolvedValue({totalCount:2,truncated:false,products:[software,service]})
+    render(<BusinessLibrarySettingsTab {...props(read)} />)
+    expect(await screen.findByText('Consultoría profesional')).toBeTruthy()
+    fireEvent.change(screen.getByRole('combobox'), {target:{value:'service'}})
+    expect(screen.getByText('Consultoría profesional')).toBeTruthy()
+    expect(screen.queryByText('Panel de turnos')).toBeNull()
+    expect(screen.getByText('Preparar una ficha no significa que el producto esté publicado ni vendido.')).toBeTruthy()
+  })
   it('shows errors without showing fictitious content', async () => {
     const read = vi.fn().mockRejectedValue(new Error('File locked'))
     render(<BusinessLibrarySettingsTab {...props(read)} />)
