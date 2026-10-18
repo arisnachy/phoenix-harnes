@@ -1,5 +1,7 @@
 # Business Mission: intención y conectores comprobables
 
+Español | [中文](phoenix-business-intent-routing.zh.md)
+
 **Alcance:** planificación de misiones comerciales, sin publicar ni gastar. Rama de desarrollo; no constituye integración en producción.
 
 ## Iniciar
