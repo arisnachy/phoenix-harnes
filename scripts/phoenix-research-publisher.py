@@ -573,7 +573,12 @@ def main():
     chunks.append("<!doctype html><html lang='es'><meta charset='utf-8'><title>"+html.escape(title)+"</title>")
     chunks.append("<style>body{font:17px/1.65 system-ui,Georgia,serif;max-width:880px;margin:44px auto;padding:0 22px;color:#203043}h1,h2{line-height:1.3}h2{color:"+accent+";border-bottom:1px solid #d9e3e6;padding-bottom:.45em}a{color:"+accent+"}nav{padding:20px 0}.ref{font-size:.88em;margin:9px 0}figure img{width:100%}table{border-collapse:collapse;width:100%;font-size:.88em;display:block;overflow-x:auto}td,th{border-bottom:1px solid #dce5ea;padding:9px;text-align:left}th{background:#e9f3f4}</style>")
     chunks.append("<h1>"+html.escape(title)+"</h1>")
-    chunks.append("<p>"+html.escape(" · ".join(str(cover.get(k,"")) for k in ("institution","author","date") if cover.get(k)))+"</p>")
+    chunks.append("<p>"+html.escape(" · ".join(str(cover.get(k,"")) for k in ("institution","faculty","degree","date") if cover.get(k)))+"</p>")
+    for author in authors: chunks.append("<p class='ref'>"+html.escape(author)+"</p>")
+    for key, label in FRONT_LABELS:
+        if front.get(key):
+            chunks.append("<section><h2>"+html.escape(label)+"</h2><p>"+
+                          html.escape(front[key]).replace("\\n", "</p><p>")+"</p></section>")
     chunks.append("<nav>"+ " · ".join("<a href='#sec-"+str(i)+"'>"+html.escape(v["heading"])+"</a>" for i,v in enumerate(report["sections"]))+"</nav>")
     for i,section in enumerate(report["sections"]):
         rendered=format_text(section["text"],refs,style,numbers)
@@ -593,10 +598,24 @@ def main():
     chunks.append("</ol></html>")
     html_file=output_root/"informe.html"
     html_file.write_text("".join(chunks),encoding="utf-8")
+    target_pages = report.get("page_plan", {}).get("target_pages")
+    scope = report.get("page_plan", {}).get("scope", "all")
+    page_match = target_pages is None or (scope == "all" and target_pages == rendered_pages[0])
+    warnings = []
+    if target_pages is not None and scope == "body":
+        warnings.append("El límite se refiere solo al cuerpo: el PDF total no permite certificarlo automáticamente.")
+    elif target_pages is not None and not page_match:
+        warnings.append("La extensión solicitada no se alcanzó: PDF real " + str(rendered_pages[0]) +
+                        ", objetivo " + str(target_pages) + ". No se añade contenido ficticio.")
     result={"state":"REPORT_READY","report_id":digest,"title":title,"style":style,
             "presentation":presentation,"document_type":report.get("document_type", "brief"),
             "quality": {"required_sections_checked": True, "submission_certified": False,
-                        "bibliographic_metadata_network_verified": False, "visual_page_review": "not_performed"},
+                        "bibliographic_metadata_network_verified": False, "visual_page_review": "not_performed",
+                        "pagination_review_required": bool(warnings),
+                        "references_style_certified": False},
+            "pagination": {"pdf_pages": rendered_pages[0], "requested_pages": target_pages,
+                           "scope": scope, "target_met": page_match if scope == "all" else None},
+            "warnings": warnings,
             "source_count":len(cited),"source_verification":"metadata_user_supplied_not_network_verified","files":{"docx":str(docx_file),"pdf":str(pdf_file),"html":str(html_file)},"output_dir":str(output_root)}
     # Preserve the exact structured project so model handoffs and revisions do not
     # need to re-run every source lookup or reconstruct the manuscript from PDF.
