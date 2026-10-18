@@ -144,17 +144,17 @@ async function verifyArtifacts(state) {
     }
   }
 }
-async function loadState(stateFile) {
+async function loadState(stateFile, { verify = true, allowManifestChange = false } = {}) {
   const parsed = JSON.parse(await readFile(stateFile, 'utf8'))
   if (parsed.schemaVersion !== 1 || resolve(parsed.stateFile) !== resolve(stateFile)
     || !Array.isArray(parsed.stages) || !valid(parsed.manifestPath)) {
     throw new Error('Invalid or relocated production state')
   }
   const manifest = JSON.parse(await readFile(parsed.manifestPath, 'utf8'))
-  if (hash(JSON.stringify(manifest)) !== parsed.manifestSha256) {
+  if (!allowManifestChange && hash(JSON.stringify(manifest)) !== parsed.manifestSha256) {
     throw new Error('Manifest changed; regenerate the production plan before continuing.')
   }
-  await verifyArtifacts(parsed)
+  if (verify) await verifyArtifacts(parsed)
   return parsed
 }
 async function saveState(path, state, create = false) {
@@ -310,12 +310,24 @@ async function main(args) {
   if (operation === 'invalidate' && values.length === 3) {
     const [stateFile, stage, reason] = values
     const path = resolve(stateFile)
-    const state = await loadState(path)
+    // A broken/deleted evidence file is the very reason to invalidate a stage.
+    const state = await loadState(path, { verify: false })
     invalidateGameStage(state, stage, reason)
     await saveState(path, state)
     return nextGameWork(state)
   }
-  throw new Error('Usage: production-engine.mjs init MANIFEST STATE | next STATE | status STATE | record STATE STAGE CHECK ARTIFACT RUNNER | invalidate STATE STAGE REASON')
+  if (operation === 'replan' && values.length === 1) {
+    const path = resolve(values[0])
+    const previous = await loadState(path, { verify: false, allowManifestChange: true })
+    const manifest = JSON.parse(await readFile(previous.manifestPath, 'utf8'))
+    const fresh = initializeGameProduction(manifest, previous.manifestPath, path)
+    fresh.revision = previous.revision
+    fresh.previousPlanSha256 = previous.manifestSha256
+    fresh.replanNote = 'Preserved source files. Prior stage approvals invalidated; validate reusable assets and rerun only affected checks.'
+    await saveState(path, fresh)
+    return nextGameWork(fresh)
+  }
+  throw new Error('Usage: production-engine.mjs init MANIFEST STATE | next STATE | status STATE | record STATE STAGE CHECK ARTIFACT RUNNER | invalidate STATE STAGE REASON | replan STATE')
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
