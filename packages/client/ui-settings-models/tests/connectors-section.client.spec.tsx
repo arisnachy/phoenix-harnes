@@ -2222,6 +2222,54 @@ describe('connectors settings section', () => {
     await waitFor(() => { expect(remove).toHaveBeenCalledWith({ entryId: 'x' }) })
   })
 
+  it('configures X developer credentials through the vault and isolates Kira identity', async () => {
+    const api = {
+      list: vi.fn(() => Promise.resolve(ok({ entries: [] }))),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const configureX = vi.fn(async () => ({
+      saved: true as const, clientIdConfigured: true as const, clientSecretConfigured: true as const,
+    }))
+    const connectX = vi.fn(async () => ({
+      api: { status: 'installed' as const, connector: {
+        entryId: 'phoenix-x', serverName: 'x-api-phoenix', url: 'https://api.x.com/mcp',
+      } },
+      docs: { status: 'already-installed' as const, connector: {
+        entryId: 'x-docs', serverName: 'x-docs', url: 'https://docs.x.com/mcp',
+      } },
+    }))
+    const registry = {
+      state: vi.fn(async () => ({ managed: [], runtime: [] })),
+      search: vi.fn(), install: vi.fn(), configureX, connectX,
+    }
+    renderHub(api, { mcpRegistry: registry })
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search connectors' }), {
+      target: { value: 'X · cuenta de usuario' },
+    })
+    const card = document.querySelector('[data-connector-id="x"]')
+    expect(card).toBeTruthy()
+    const configure = Array.from(card!.querySelectorAll('button')).find(b => /Configure/i.test(b.textContent || ''))
+    expect(configure).toBeTruthy()
+    fireEvent.click(configure!)
+    fireEvent.change(screen.getByPlaceholderText('Dejar vacío si ya está guardado'), {
+      target: { value: 'publicClient123' },
+    })
+    fireEvent.change(screen.getByPlaceholderText('Se almacena solo en el vault del Host'), {
+      target: { value: 'secretClientValue123' },
+    })
+    fireEvent.change(screen.getByPlaceholderText('@PhoenixIA'), {
+      target: { value: '@PhoenixIA' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Conectar X de Kira' }))
+    await waitFor(() => {
+      expect(configureX).toHaveBeenCalledWith({
+        clientId: 'publicClient123', clientSecret: 'secretClientValue123',
+      })
+      expect(connectX).toHaveBeenCalledWith({ identity: 'phoenix', username: 'PhoenixIA' })
+    })
+    expect(document.body.textContent).not.toContain('secretClientValue123')
+  })
+
   it('rejects unsafe connector links instead of opening a blank or custom-scheme window', () => {
     expect(safeExternalHref('javascript:alert(1)')).toBeUndefined()
     expect(safeExternalHref('http://example.com/setup')).toBeUndefined()

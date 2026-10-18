@@ -192,3 +192,28 @@ pnpm exec tsc -b tsconfig.host.json
 La validación en producción todavía requiere probar Windows, OAuth X real,
 permiso Meta y herramientas presentes. Ni las pruebas unitarias ni el commit
 prueban que ya existan perfiles de Phoenix en redes externas.
+
+### Configuración segura en Phoenix (X OAuth)
+
+Desde **Configuración → Conectores → X · cuenta de usuario → Configurar**
+Phoenix muestra el nuevo formulario de aplicación X. Introduce el **Client
+ID** y **Client Secret** solo en este formulario del Host: se guardan
+mediante `ctx.credentials.set()` con referencias `X_CLIENT_ID` y
+`X_CLIENT_SECRET`; la respuesta no incluye los valores ni se insertan en
+el MCP `managed.patch.yml`.
+
+- **Conectar cuenta X personal**: instala el bridge `x-api` con OAuth del
+  usuario que autorice en el navegador.
+- **Conectar X de Kira**: únicamente después de crear una cuenta oficial
+  de marca Phoenix, introduce su @usuario real e instala
+  `x-api-phoenix` por separado. Usa la misma app de desarrollador, pero
+  la cuenta delegada y el consentimiento son diferentes.
+- El callback inicial recomendado por X para `xurl` es
+  `http://localhost:8080/callback`; ha de registrarse exactamente en
+  X Developer Console. El puente oficial abre el navegador para OAuth
+  en la primera conexión. Configurar no implica que el acceso ya esté
+  autenticado o con permisos de escritura.
+- El registro de una cuenta **sigue requiriendo** titular real,
+  verificación de correo/teléfono, aceptación de condiciones y los pasos
+  oficiales. El motor puede preparar y conducir, pero no falsear un
+  registro.

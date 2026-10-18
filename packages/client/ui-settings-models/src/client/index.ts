@@ -77,6 +77,19 @@ type PluginInventoryChatGptWebRemote = {
 type PluginInventoryMcpRegistryRemote = {
   searchMcpRegistry(request: { query: string; limit?: number }): Promise<PluginInventoryRemoteResult<McpRegistrySearchSnapshot>>
   mcpConnectorHubState(): Promise<PluginInventoryRemoteResult<McpConnectorHubSnapshot>>
+  xMcpState(): Promise<PluginInventoryRemoteResult<{
+    clientIdConfigured: boolean; clientSecretConfigured: boolean;
+    api: { configured: boolean; status?: string };
+    phoenixApi: { configured: boolean; status?: string };
+    docs: { configured: boolean; status?: string };
+  }>>
+  configureXDeveloperApplication(request: { clientId: string; clientSecret: string }): Promise<PluginInventoryRemoteResult<{
+    saved: true; clientIdConfigured: true; clientSecretConfigured: true
+  }>>
+  enableXMcp(request: { identity?: 'user' | 'phoenix'; username?: string }): Promise<PluginInventoryRemoteResult<{
+    api: { status: 'installed' | 'already-installed'; connector: { serverName: string; entryId: string; url: string } };
+    docs: { status: 'installed' | 'already-installed'; connector: { serverName: string; entryId: string; url: string } }
+  }>>
   reconnectMcpConnector(request: { serverName: string }): Promise<PluginInventoryRemoteResult<{ accepted: boolean }>>
   installMcpRegistryServer(request: { name: string; version?: string }): Promise<PluginInventoryRemoteResult<{
     status: 'installed' | 'already-installed'
@@ -182,6 +195,14 @@ function mcpRegistryClient(ctx: ClientContext): McpRegistryClient {
     state: async () => unwrapPluginInventory(
       'mcpConnectorHubState',
       await remote().mcpConnectorHubState(),
+    ),
+    xState: async () => unwrapPluginInventory('xMcpState', await remote().xMcpState()),
+    configureX: async request => unwrapPluginInventory(
+      'configureXDeveloperApplication',
+      await remote().configureXDeveloperApplication(request),
+    ),
+    connectX: async request => unwrapPluginInventory(
+      'enableXMcp', await remote().enableXMcp(request),
     ),
     reconnect: async request => unwrapPluginInventory(
       'reconnectMcpConnector',

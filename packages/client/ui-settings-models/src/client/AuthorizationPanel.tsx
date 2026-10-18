@@ -127,6 +127,22 @@ export interface McpRegistryClient {
    * @returns Runtime and persistent managed connector state.
    */
   state(): Promise<McpConnectorHubSnapshot>
+  /** Secret-free X user/Phoenix account and developer credential status. */
+  xState?(): Promise<{
+    clientIdConfigured: boolean; clientSecretConfigured: boolean;
+    api: { configured: boolean; status?: string };
+    phoenixApi: { configured: boolean; status?: string };
+    docs: { configured: boolean; status?: string };
+  }>
+  /** Save credentials only through the trusted Host vault; never through a chat/tool response. */
+  configureX?(request: { clientId: string; clientSecret: string }): Promise<{
+    saved: true; clientIdConfigured: true; clientSecretConfigured: true
+  }>
+  /** Install one separately authorized X OAuth identity without registry lookup. */
+  connectX?(request: { identity?: 'user' | 'phoenix'; username?: string }): Promise<{
+    api: { status: 'installed' | 'already-installed'; connector: { serverName: string; entryId: string; url: string } };
+    docs: { status: 'installed' | 'already-installed'; connector: { serverName: string; entryId: string; url: string } }
+  }>
   /** Retry one already-installed live MCP without clearing its stored authorization. */
   reconnect?(request: { serverName: string }): Promise<{ accepted: boolean }>
   /**
@@ -1152,6 +1168,12 @@ export function ConnectorsSettingsSection({ api,
   const [jevApiKey, setJevApiKey] = useState('')
   const [jevBusy, setJevBusy] = useState(false)
   const [jevFailure, setJevFailure] = useState<string | undefined>()
+  const [xSetupOpen, setXSetupOpen] = useState(false)
+  const [xClientId, setXClientId] = useState('')
+  const [xClientSecret, setXClientSecret] = useState('')
+  const [xPhoenixUsername, setXPhoenixUsername] = useState('')
+  const [xBusy, setXBusy] = useState(false)
+  const [xNotice, setXNotice] = useState<string | undefined>()
   const [installingRegistryName, setInstallingRegistryName] = useState<string | undefined>()
   const [installingCuratedId, setInstallingCuratedId] = useState<string | undefined>()
   const [repairingEntryId, setRepairingEntryId] = useState<string | undefined>()
@@ -1720,6 +1742,39 @@ export function ConnectorsSettingsSection({ api,
     }).finally(() => { setInstallingRegistryName(undefined) })
   }
 
+  const setupX = (identity: 'user' | 'phoenix'): void => {
+    const xConnector = mcpRegistry
+    if (xBusy || xConnector?.connectX === undefined) return
+    const username = xPhoenixUsername.trim().replace(/^@/u, '')
+    if (identity === 'phoenix' && !/^[A-Za-z0-9_]{1,15}$/u.test(username)) {
+      setXNotice('Primero crea realmente el perfil de marca en X y escribe su @usuario (máximo 15 caracteres).')
+      return
+    }
+    const hasInput = xClientId.trim().length > 0 || xClientSecret.length > 0
+    if (hasInput && (xClientId.trim().length === 0 || xClientSecret.length === 0 || xConnector.configureX === undefined)) {
+      setXNotice('Introduce ambos valores de la aplicación X, o deja ambos vacíos si ya están almacenados.')
+      return
+    }
+    setXBusy(true)
+    setXNotice(undefined)
+    const save = hasInput
+      ? xConnector.configureX!({ clientId: xClientId.trim(), clientSecret: xClientSecret })
+      : Promise.resolve(undefined)
+    void save.then(() => {
+      setXClientId('')
+      setXClientSecret('')
+      return xConnector.connectX!({ identity, ...(identity === 'phoenix' ? { username } : {}) })
+    }).then((receipt) => {
+      setRefresh(current => current + 1)
+      onAuthorized()
+      setXNotice('MCP ' + receipt.api.connector.serverName
+        + ' instalado. Completa la autorización OAuth oficial de X; '
+        + 'la instalación NO demuestra todavía que el perfil esté conectado.')
+    }, (error: unknown) => {
+      setXNotice('No se pudo configurar X: ' + String(error).slice(0, 250))
+    }).finally(() => { setXBusy(false) })
+  }
+
   const disconnect = (key: string): void => {
     if (api === undefined) return
     setCatalogFailure(undefined)
@@ -1995,13 +2050,62 @@ export function ConnectorsSettingsSection({ api,
                     ? undefined : (runtime) => { reconnectMcpConnector(runtime) }}
                   onRepair={mcpRegistry?.repair === undefined ? undefined : repairManagedConnector}
                   onRemove={mcpRegistry?.remove === undefined ? undefined : removeManagedConnector}
-                  onConfigure={row.definition.id === 'jev' && mcpRegistry?.configureJev !== undefined ? () => {
+                  onConfigure={row.definition.id === 'x' && mcpRegistry?.connectX !== undefined ? () => {
+                    setXNotice(undefined)
+                    setXSetupOpen(true)
+                  } : row.definition.id === 'jev' && mcpRegistry?.configureJev !== undefined ? () => {
                     setJevFailure(undefined)
                     setJevSetupOpen(true)
                   } : undefined}
                 />
               )
             })}
+          </div>
+        )}
+        {!xSetupOpen ? null : (
+          <div className={styles['setupCard']} data-connector-setup="x">
+            <div className={styles['editorHeader']}>
+              <strong className={styles['editorTitle']}>Conectar X: cuenta personal o marca Phoenix IA</strong>
+              <span className={styles['advancedHint']}>OAuth del proveedor · Identidades separadas</span>
+            </div>
+            <p className={styles['advancedHint']}>
+              Registra una aplicación en X Developers y configura OAuth 2.0 con callback
+              http://localhost:8080/callback. Introduce los datos de la aplicación
+              solamente aquí, nunca en el chat. La cuenta propia de Phoenix debe
+              existir y haber pasado las verificaciones oficiales antes de enlazarla.
+            </p>
+            <label className={styles['field']}>
+              <span className={styles['fieldLabel']}>X Developer Client ID</span>
+              <input className={styles['input']} type="text" autoComplete="off"
+                value={xClientId} onChange={event => { setXClientId(event.target.value) }}
+                placeholder="Dejar vacío si ya está guardado" />
+            </label>
+            <label className={styles['field']}>
+              <span className={styles['fieldLabel']}>X Developer Client Secret</span>
+              <input className={styles['input']} type="password" autoComplete="new-password"
+                value={xClientSecret} onChange={event => { setXClientSecret(event.target.value) }}
+                placeholder="Se almacena solo en el vault del Host" />
+            </label>
+            <label className={styles['field']}>
+              <span className={styles['fieldLabel']}>Usuario X creado para Phoenix (opcional)</span>
+              <input className={styles['input']} type="text" autoComplete="off"
+                value={xPhoenixUsername} onChange={event => { setXPhoenixUsername(event.target.value) }}
+                placeholder="@PhoenixIA" />
+            </label>
+            {xNotice === undefined ? null : <p role="status" className={styles['advancedHint']}>{xNotice}</p>}
+            <div className={styles['editorActions']}>
+              <a className={connectorStyles['connectorLink']} href="https://console.x.com/" target="_blank" rel="noreferrer">
+                Portal oficial de X
+              </a>
+              <button type="button" className={styles['secondaryButton']} disabled={xBusy}
+                onClick={() => { setXClientId(''); setXClientSecret(''); setXSetupOpen(false); setXNotice(undefined) }}>
+                {t('cancel')}
+              </button>
+              <button type="button" className={styles['secondaryButton']} disabled={xBusy}
+                onClick={() => { setupX('user') }}>Conectar cuenta X personal</button>
+              <button type="button" className={styles['primaryButton']} disabled={xBusy}
+                onClick={() => { setupX('phoenix') }}>Conectar X de Kira</button>
+            </div>
           </div>
         )}
         {!jevSetupOpen ? null : (
