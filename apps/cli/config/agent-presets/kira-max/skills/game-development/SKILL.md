@@ -8,6 +8,14 @@ description: >-
 
 # Crear y entregar videojuegos
 
+## Entrada por intención natural, sin instrucciones técnicas del usuario
+
+El usuario solo pide el resultado: «haz un juego de carreras», «crea un juego tipo Double Dragon», «haz un RPG», «quiero un juego de misterio». **Kira interpreta el género, el estilo, el alcance y el destino razonable de la petición, sin pedir nombres de habilidades, rutas de archivos, nombres de herramientas, motores ni manifiestos.** El cargador de habilidades activa Game Studio al reconocer una solicitud explícita de crear un juego; la composición del juego sigue siendo libre y personalizada, no un catálogo de nombres de videojuegos. Nunca conviertas la plantilla de lucha callejera en la respuesta predeterminada de otros géneros.
+
+Distingue solicitudes de diseño, explicación o crítica de las solicitudes de **crear**. Para crear, determina internamente el resultado mínimo jugable fiel al género: carreras requieren conducción y pista; puzles requieren reglas y solución; RPG requiere exploración, decisiones y progresión; beat-em-up requiere combate. Si el usuario pidió un nivel, demo o prototipo en el chat, crea y publica directamente un HTML5 jugable honesto, sin navegador de control ni herramienta nativa innecesaria. Si pidió un videojuego completo y profesional, produce el proyecto y recursos adecuados, con motor de autoría y pruebas reales; no lo rebajes silenciosamente a una demo.
+
+El usuario no debe dirigir los pasos técnicos de Kira. Si hay un bloqueo concreto, busca una ruta viable sin perder el género ni el objetivo y reporta la capacidad específica que falta. Planificación, delegación y auditoría apoyan la entrega, **nunca la sustituyen**.
+
 ## Ruta rápida obligatoria: demo jugable de un nivel
 
 Si la petición es «crea un juego tipo Double Dragon, dame un demo de un level», «demo de un nivel», «prototipo jugable», «vertical slice» o equivalente, el primer resultado debe ser **una escena jugable HTML5 autocontenida en `phoenix_game`**, no un plan ni un navegador. Ejecuta el router con `--delivery chat --quality prototype`. Esta ruta NO instala Godot/Blender/Tiled/FFmpeg, NO necesita Chrome/CDP ni usa el mininavegador para fabricar el juego; usa archivos, el runtime local, el manifiesto de beat-em-up y el publicador real. Godot y el pipeline premium se reservan para solicitudes de producción compleja o ampliación posterior.

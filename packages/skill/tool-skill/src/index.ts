@@ -8,6 +8,7 @@ import { createHash } from 'node:crypto'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { readFile } from 'node:fs/promises'
+import { naturalCreationSkill } from './natural-intent.js'
 import type { Context } from '@phoenix-ai/cordis'
 import z from '@phoenix-ai/schemastery'
 import type { Agent, PreStepDecision } from '@phoenix-ai/dsh-agent'
@@ -94,6 +95,9 @@ export function apply(ctx: Context, config: Config = {}): void {
     ? readEnglishOverlayCatalog(englishOverlayRoot)
     : Promise.resolve<Record<string, EnglishSkillOverlay>>({})
   assertPositiveInteger('catalogDescriptionMaxLength', catalogDescriptionMaxLength, 3)
+  // Replaying the same claimed user message must not reinject a large skill
+  // at every model step. A new user message gets a new ID and may reactivate it.
+  const naturalActivations = new WeakMap<Agent, Set<string>>()
 
   const skillTool = defineTool({
     name: 'skill',
@@ -178,7 +182,9 @@ export function apply(ctx: Context, config: Config = {}): void {
   })
   ctx.tools.register(skillTool)
 
-  // User-explicit skill invocation: a claimed user message whose first line
+  // Skill activation: user-explicit /name gestures plus high-confidence
+  // natural user requests (e.g. a newly requested game). A claimed message
+  // whose first line
   // starts with `/<name>` naming a user-invocable skill is a deterministic
   // load gesture. The rendered body enters this step as injected
   // instructions context appended after every other injection — background
@@ -198,27 +204,47 @@ export function apply(ctx: Context, config: Config = {}): void {
   ): Promise<PreStepDecision> => {
     const decision = await next()
     if (decision.kind === 'reject') return decision
-    const names = invokedSkillNames(messages)
+    const explicit = invokedSkillNames(messages)
+    // A plain request such as "haz un juego de carreras" must activate its
+    // installed skill without requiring the user to name skill/tool/path.
+    // Only the LAST genuinely user-authored claim is eligible, never a
+    // tool result, recovered transcript note or retrieved page.
+    const currentUser = messages.findLast(message => message.source.kind === 'user')
+    const natural = currentUser === undefined ? undefined : naturalCreationSkill(
+      currentUser.content.filter(block => block.type === 'text').map(block => block.text).join(' '),
+    )
+    const auto = natural !== undefined
+      && currentUser !== undefined
+      && !naturalActivations.get(agent)?.has(currentUser.id)
+      && ctx.tools.get(skillTool.name, agent) === skillTool
+      ? natural : undefined
+    const names = [...explicit, ...(auto !== undefined && !explicit.includes(auto) ? [auto] : [])]
     if (names.length === 0) return decision
     signal.throwIfAborted()
     const lookup = { cwd: agent.session.header.cwd, signal, scope: agent }
     const injections: UserMessage[] = []
+    let activatedNatural = false
     for (const name of names) {
       const skill = await ctx.skills.get(name, lookup)
       signal.throwIfAborted()
-      // Unknown names and user-disabled skills stay plain prose: the
-      // gesture was never a claim this boundary recognizes. The check sits
-      // on the loaded definition — the single lookup that produces what is
-      // actually injected.
-      if (skill === undefined || !isUserInvocable(skill)) continue
+      // Natural selection respects model visibility. Explicit /skill gestures
+      // retain user-invocable policy, including intentional hidden skills.
+      if (skill === undefined
+        || (name === auto && !explicit.includes(name) ? !isModelInvocable(skill) : !isUserInvocable(skill))) continue
       const adapted = await adaptForAgent(ctx, skill, agent, locale, englishOverlays)
       const source: SkillInvocationSource = { kind: 'skill-invocation', name, form: 'instructions' }
       injections.push(createUserMessage({
         content: [{ type: 'text', text: renderSkillContent(adapted) }],
         source,
       }))
+      if (name === auto && !explicit.includes(name)) activatedNatural = true
     }
     if (injections.length === 0) return decision
+    if (activatedNatural && currentUser !== undefined) {
+      const ids = naturalActivations.get(agent) ?? new Set<string>()
+      ids.add(currentUser.id)
+      naturalActivations.set(agent, ids)
+    }
     return { kind: 'enter', messages: [...decision.messages, ...injections] }
   })
 

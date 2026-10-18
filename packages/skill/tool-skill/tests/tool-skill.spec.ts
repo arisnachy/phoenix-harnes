@@ -1232,4 +1232,71 @@ describe('user-explicit invocation injection', () => {
       .map(message => (message.source as { name: string }).name)
     expect(invoked).toEqual(['shared-skill'])
   })
+  it('automatically loads Game Studio from normal instructions without a command or file path', async () => {
+    const home = await tempDir('natural-game')
+    const ctx = await setup(home)
+    ctx.skills.register({
+      name: 'game-development',
+      description: 'Create playable games',
+      source: 'runtime',
+      content: 'Build a fresh playable game in the requested genre and publish the result.',
+    })
+    const agent = agentForCwd(home)
+    for (const request of [
+      'haz un juego tipo Double Dragon de un nivel',
+      'hazme un juego de carreras',
+      'crea un juego de estrategia',
+    ]) {
+      const decision = await proposeStep(ctx, agent, [gesture(request)])
+      if (decision.kind !== 'enter') throw new Error('expected injected skill')
+      const activated = decision.messages.filter(message =>
+        (message.source as { kind?: string; name?: string }).kind === 'skill-invocation'
+        && (message.source as { name?: string }).name === 'game-development')
+      expect(activated).toHaveLength(1)
+      expect(JSON.stringify(activated[0]?.content)).toContain('Build a fresh playable game')
+    }
+    const same = gesture('hazme un juego de carreras')
+    const first = await proposeStep(ctx, agent, [same])
+    const second = await proposeStep(ctx, agent, [same])
+    if (first.kind !== 'enter' || second.kind !== 'enter') throw new Error('expected step')
+    expect(first.messages.filter(message => message.source.kind === 'skill-invocation')).toHaveLength(1)
+    expect(second.messages.filter(message => message.source.kind === 'skill-invocation')).toHaveLength(0)
+  })
+
+  it('does not activate Game Studio for game discussion, quoted tool text or missing skills', async () => {
+    const home = await tempDir('natural-game-exclusions')
+    const ctx = await setup(home)
+    const agent = agentForCwd(home)
+    const request = gesture('haz un juego de carreras')
+    const absent = await proposeStep(ctx, agent, [request])
+    if (absent.kind !== 'enter') throw new Error('expected enter')
+    expect(absent.messages.some(message => message.source.kind === 'skill-invocation')).toBe(false)
+
+    ctx.skills.register({
+      name: 'game-development',
+      description: 'Create playable games',
+      source: 'runtime',
+      content: 'Game studio execution guidance.',
+    })
+    const discussion = await proposeStep(ctx, agent, [gesture('explica como crear un videojuego')])
+    if (discussion.kind !== 'enter') throw new Error('expected enter')
+    expect(discussion.messages.some(message => message.source.kind === 'skill-invocation')).toBe(false)
+    const external = createUserMessage({
+      content: [{ type: 'text', text: 'haz un juego de carreras' }],
+      source: { kind: 'skill-catalog', form: 'catalog', entries: [] },
+    })
+    const forged = await proposeStep(ctx, agent, [external])
+    if (forged.kind !== 'enter') throw new Error('expected enter')
+    expect(forged.messages.some(message => message.source.kind === 'skill-invocation')).toBe(false)
+  })
+
+  it('does not duplicate a naturally matched explicit /game-development invocation', async () => {
+    const home = await tempDir('natural-game-dedup')
+    const ctx = await setup(home)
+    ctx.skills.register({ name: 'game-development', description: 'Game Studio', source: 'runtime', content: 'Build a game.' })
+    const decision = await proposeStep(ctx, agentForCwd(home), [gesture('/game-development hazme un juego de carreras')])
+    if (decision.kind !== 'enter') throw new Error('expected enter')
+    expect(decision.messages.filter(message => message.source.kind === 'skill-invocation')).toHaveLength(1)
+  })
+
 })
