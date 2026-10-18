@@ -1,6 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
 import { createHash } from 'node:crypto'
 import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -10,7 +11,7 @@ import { RECIPES, assessRelease, buildRelease, salesSnapshot } from './phoenix-b
 const factory=new URL('./phoenix-business-factory.mjs',import.meta.url)
 const business=new URL('./phoenix-business.mjs',import.meta.url)
 const digest = v=>createHash('sha256').update(v).digest('hex')
-const call=(url,home,...args)=>{const p=spawnSync(process.execPath,[url.pathname,...args],{encoding:'utf8',env:{...process.env,PHOENIX_BUSINESS_HOME:home}});try{return {...JSON.parse(p.status===0?p.stdout:p.stderr),exitCode:p.status}}catch{return {ok:false,error:p.stderr||p.stdout,exitCode:p.status}}}
+const call=(url,home,...args)=>{const p=spawnSync(process.execPath,[fileURLToPath(url),...args],{encoding:'utf8',env:{...process.env,PHOENIX_BUSINESS_HOME:home}});try{return {...JSON.parse(p.status===0?p.stdout:p.stderr),exitCode:p.status}}catch{return {ok:false,error:p.stderr||p.stdout,exitCode:p.status}}}
 const fixture=async fn=>{
   const home=await mkdtemp(join(tmpdir(),'phoenix-universal-'))
   const src=await mkdtemp(join(tmpdir(),'phoenix-universal-src-'))
