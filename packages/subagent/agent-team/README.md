@@ -80,7 +80,17 @@ Peer messages append after the target's reusable history prefix. Cold resume reu
 
 ### Conversational Team result evidence
 
+#### What the model sees
+
 A simple direct response to Kira, even when its assignment says “prueba de comunicación” and “envía tu respuesta a lead” in ordinary Spanish without the literal tool name, is not a tool-executed external operation. It can use `send_message purpose=result` without running a fake command. External Gmail, filesystem, PowerShell, browser and other effects still require matching genuine tool receipts. Routine waiting does not justify a Sol strategic escalation.
+
+#### Token effect
+
+Genuine messages add one peer result to the receiving agent; no fabricated shell call, extra waiting turn, or unnecessary strategic escalation is required.
+
+#### KV Cache effect
+
+Result handoffs append to the existing conversation rather than rewriting system-prompt prefixes.
 
 ## Known Limitations and Deferred Work
 
