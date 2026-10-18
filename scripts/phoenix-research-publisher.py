@@ -478,7 +478,7 @@ def main():
     journal = report.get("journal_requirements", {})
     institutional = report.get("institutional_rules", {})
     editorial = presentation in ("editorial", "hybrid")
-    accent = "#087783" if presentation == "hybrid" else "#a52d37"
+    accent = "#117e84" if presentation == "hybrid" else "#a52d37"
     first_order = []
     for section in [*report["sections"], *report.get("appendices", [])]:
         for key in citation_keys(section["text"]):
@@ -640,39 +640,76 @@ def main():
             pdfmetrics.registerFont(TTFont("ResearchUnicode", p))
             font = "ResearchUnicode"
             break
+    # Prefer modern local typefaces. Offline and Windows-safe fallback is essential.
+    heading_font = font
+    if editorial:
+        for candidate in (
+            "C:/Windows/Fonts/segoeuib.ttf",
+            "/usr/share/fonts/truetype/lato/Lato-Bold.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        ):
+            if Path(candidate).is_file():
+                try:
+                    pdfmetrics.registerFont(TTFont("ResearchHeading", candidate))
+                    heading_font = "ResearchHeading"
+                    break
+                except Exception:
+                    continue
     styles = getSampleStyleSheet()
     ink = colors.HexColor("#1d3040") if editorial else colors.black
     heading_ink = colors.HexColor(accent) if editorial else colors.black
     body = ParagraphStyle("RBody", parent=styles["Normal"], fontName=font,
-                          fontSize=10.7 if editorial else (12 if style == "apa" else 10.5),
-                          leading=17 if editorial else (24 if style == "apa" else 16),
+                          fontSize=10.9 if editorial else (12 if style == "apa" else 10.5),
+                          leading=17.5 if editorial else (24 if style == "apa" else 16),
                           alignment=TA_LEFT if style == "apa" or editorial else TA_JUSTIFY,
-                          textColor=ink, spaceAfter=10)
-    h1 = ParagraphStyle("RH1", parent=styles["Heading1"], fontName=font,
-                        fontSize=15.5 if editorial else 15, leading=22, textColor=heading_ink,
-                        spaceBefore=17, spaceAfter=11, keepWithNext=True)
-    center = ParagraphStyle("RCenter", parent=body, alignment=TA_CENTER, fontSize=12)
-    heading = ParagraphStyle("RTitle", parent=center, fontSize=23 if editorial else 17,
-                             leading=31 if editorial else 25, textColor=ink, spaceAfter=22)
-    small = ParagraphStyle("RSmall", parent=body, fontSize=9, leading=13)
+                          textColor=ink, spaceAfter=11)
+    h1 = ParagraphStyle("RH1", parent=styles["Heading1"],
+                        fontName=heading_font if editorial else font,
+                        fontSize=17.2 if editorial else 15, leading=24, textColor=heading_ink,
+                        spaceBefore=20, spaceAfter=11, keepWithNext=True)
+    center = ParagraphStyle("RCenter", parent=body, alignment=TA_CENTER, fontSize=11)
+    heading = ParagraphStyle("RTitle", parent=body if editorial else center,
+                             fontName=heading_font if editorial else font,
+                             fontSize=27 if editorial else 17,
+                             leading=35 if editorial else 25, textColor=ink, spaceAfter=19)
+    small = ParagraphStyle("RSmall", parent=body, fontSize=9, leading=13.5)
+    cover_kicker = ParagraphStyle("RCoverKicker", parent=small,
+                                  fontName=heading_font, fontSize=10.5, leading=15,
+                                  textColor=heading_ink, spaceAfter=14)
+    cover_meta = ParagraphStyle("RCoverMeta", parent=small,
+                                fontSize=10, leading=15.5, textColor=ink, spaceAfter=6)
     story = []
     def para(value, st=body):
         story.append(Paragraph(html.escape(str(value)).replace("\n", "<br/>"), st))
-    if logo_file:
-        with Image.open(logo_file) as picture:
-            w, h = picture.size
-        story.append(PdfImage(str(logo_file), width=110, height=110*h/max(1,w)))
-        story.append(Spacer(1, 16))
-    for key in ("institution", "faculty", "department", "degree"):
-        if cover.get(key): para(cover[key], center)
-    story.append(Spacer(1, 40 if editorial else 46))
     if editorial:
-        para("PHOENIX  |  INFORME DE INVESTIGACIÓN", center)
-        story.append(HRFlowable(width="100%", thickness=3, color=heading_ink, spaceAfter=20))
-    para(title, heading)
-    for person in authors: para("Autor(a): " + person, center)
-    for key in ("course", "course_code", "lecturer", "advisor", "city", "country", "date"):
-        if cover.get(key): para(cover[key], center)
+        # Cover content starts beneath the vector masthead, with semantic hierarchy.
+        story.append(Spacer(1, 112))
+        if logo_file:
+            with Image.open(logo_file) as picture:
+                w, h = picture.size
+            story.append(PdfImage(str(logo_file), width=88, height=88*h/max(1,w)))
+            story.append(Spacer(1, 14))
+        para("DOCUMENTO DE INVESTIGACIÓN / EDICIÓN PROFESIONAL", cover_kicker)
+        para(title, heading)
+        story.append(HRFlowable(width=90, thickness=2.5, color=heading_ink, spaceAfter=25, hAlign="LEFT"))
+        for key in ("institution", "faculty", "department", "degree"):
+            if cover.get(key): para(cover[key], cover_meta)
+        for person in authors: para("Autor(a): " + person, cover_meta)
+        for key in ("course", "course_code", "lecturer", "advisor", "city", "country", "date"):
+            if cover.get(key): para(cover[key], cover_meta)
+    else:
+        if logo_file:
+            with Image.open(logo_file) as picture:
+                w, h = picture.size
+            story.append(PdfImage(str(logo_file), width=110, height=110*h/max(1,w)))
+            story.append(Spacer(1, 16))
+        for key in ("institution", "faculty", "department", "degree"):
+            if cover.get(key): para(cover[key], center)
+        story.append(Spacer(1, 46))
+        para(title, heading)
+        for person in authors: para("Autor(a): " + person, center)
+        for key in ("course", "course_code", "lecturer", "advisor", "city", "country", "date"):
+            if cover.get(key): para(cover[key], center)
     story.append(PageBreak())
     for key, label in FRONT_LABELS:
         if front.get(key):
@@ -705,6 +742,8 @@ def main():
         heading_flowable = Paragraph(html.escape(section["heading"]), h1)
         heading_flowable._outline_entry = ("section-" + str(ix), section["heading"])
         story.append(heading_flowable)
+        if editorial:
+            story.append(HRFlowable(width="100%", thickness=0.7, color=colors.HexColor("#dce6e6"), spaceAfter=9))
         value = format_text(section["text"], refs, style, numbers)
         for piece in value.split("\n"):
             if piece.strip(): para(piece)
@@ -714,11 +753,15 @@ def main():
         for ix, item in enumerate(report["tables"], 1):
             para("Tabla " + str(ix) + ". " + str(item.get("title", "Resultados")) + " — Fuente: " +
                  citation_string(item["source_key"], refs, style, numbers), small)
-            col_width = content_width / len(item["columns"])
-            cell_style = ParagraphStyle("TableCell" + str(ix), parent=small, fontSize=8, leading=11, spaceAfter=0)
+            weights = ([0.19, 0.21, 0.29, 0.31] if len(item["columns"]) == 4 and editorial
+                       else [1 / len(item["columns"])] * len(item["columns"]))
+            col_widths = [content_width * weight for weight in weights]
+            cell_style = ParagraphStyle("TableCell" + str(ix), parent=small,
+                                        fontSize=8.5 if editorial else 8,
+                                        leading=12 if editorial else 11, spaceAfter=0)
             cells = [[Paragraph(html.escape(str(value)), cell_style) for value in row]
                      for row in [item["columns"], *item["rows"]]]
-            tab = LongTable(cells, colWidths=[col_width] * len(item["columns"]),
+            tab = LongTable(cells, colWidths=col_widths,
                             repeatRows=1, hAlign="LEFT")
             tab.setStyle(TableStyle([
                 ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#e9f3f4") if editorial else colors.HexColor("#eeeeee")),
@@ -778,7 +821,32 @@ def main():
         canvas.setFont(font, 9)
         canvas.drawCentredString(paper[0]/2, 30, str(document.page))
         canvas.restoreState()
-    printer.multiBuild(story, onFirstPage=footer, onLaterPages=footer)
+    def editorial_cover(canvas, document):
+        canvas.saveState()
+        navy = colors.HexColor("#142b3a")
+        teal = colors.HexColor("#117e84")
+        gold = colors.HexColor("#d59a54")
+        canvas.setFillColor(colors.HexColor("#f7faf9"))
+        canvas.rect(0, 0, paper[0], paper[1], stroke=0, fill=1)
+        canvas.setFillColor(navy)
+        canvas.rect(0, paper[1]-132, paper[0], 132, stroke=0, fill=1)
+        canvas.setFillColor(teal)
+        canvas.circle(paper[0]+18, paper[1]-67, 105, stroke=0, fill=1)
+        canvas.setStrokeColor(gold)
+        canvas.setLineWidth(2.5)
+        canvas.line(60, paper[1]-70, 111, paper[1]-70)
+        canvas.setFillColor(colors.white)
+        canvas.setFont(heading_font, 11)
+        canvas.drawString(60, paper[1]-54, "PHOENIX / RESEARCH STUDIO")
+        canvas.setStrokeColor(colors.HexColor("#dae4e4"))
+        canvas.setLineWidth(0.6)
+        canvas.line(60, 66, paper[0]-60, 66)
+        canvas.setFont(font, 8)
+        canvas.setFillColor(colors.HexColor("#516675"))
+        canvas.drawString(60, 47, "DOCUMENTO CIENTÍFICO / EDICIÓN EDITORIAL")
+        canvas.restoreState()
+    printer.multiBuild(story, onFirstPage=editorial_cover if editorial else footer,
+                       onLaterPages=footer)
 
     chunks = []
     chunks.append("<!doctype html><html lang='es'><meta charset='utf-8'><title>"+html.escape(title)+"</title>")
