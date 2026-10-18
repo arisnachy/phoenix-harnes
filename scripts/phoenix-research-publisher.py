@@ -356,7 +356,13 @@ def citation_string(key, refs, style, index):
 def format_text(value, refs, style, order):
     def replace_group(match):
         keys = [part.strip().lstrip("@") for part in re.split(r"[;,]", match.group(1))]
-        return "; ".join(citation_string(key, refs, style, order) for key in keys)
+        if style == "vancouver":
+            return "[" + ",".join(str(order[key]) for key in keys) + "]"
+        if style == "ama":
+            return ",".join(citation_string(key, refs, style, order) for key in keys)
+        entries = [citation_string(key, refs, style, order)[1:-1]
+                   for key in sorted(keys, key=lambda key: (refs[key]["authors"], refs[key]["year"]))]
+        return "(" + "; ".join(entries) + ")"
     result = REF_RE.sub(replace_group, value)
     if "[@" in result:
         raise ValueError("Unresolved manuscript citations cannot enter PDF/Word/HTML")
@@ -369,15 +375,22 @@ def bibliography(ref, style, number):
     journal = ref.get("journal", "").strip()
     doi = ref.get("doi", "").strip()
     url = "https://doi.org/" + doi if doi else ref["url"]
+    volume = str(ref.get("volume", "")).strip()
+    issue = str(ref.get("issue", "")).strip()
+    pages = str(ref.get("pages", "")).strip()
     if style == "vancouver":
-        return f"{number}. {authors}. {title}. {journal}. {year}. {url}"
+        source = str(ref.get("journal_abbrev") or journal)
+        detail = (";" + volume if volume else "") + ("(" + issue + ")" if issue else "") + (":" + pages if pages else "")
+        return f"{number}. {authors}. {title}. {source}. {year}{detail}. {('doi:' + doi) if doi else url}"
     if style == "ama":
         volume = str(ref.get("volume", "")).strip()
         issue = str(ref.get("issue", "")).strip()
         pages = str(ref.get("pages", "")).strip()
         detail = (";" + volume if volume else "") + ("(" + issue + ")" if issue else "") + (":" + pages if pages else "")
         return f"{number}. {authors}. {title}. {ref.get('journal_abbrev') or journal}. {year}{detail}. {('doi:' + doi) if doi else url}"
-    return f"{authors} ({year}). {title}. {journal}. {url}"
+    detail = (", " + volume if volume else "") + ("(" + issue + ")" if issue else "")
+    if pages: detail += ", " + pages
+    return f"{authors} ({year}). {title}. {journal}{detail}. {url}"
 
 def chart_image(chart, folder, ordinal, accent="#087783"):
     labels = [str(s)[:32] for s in chart["labels"]]
