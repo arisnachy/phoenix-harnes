@@ -39,7 +39,7 @@ def main():
             source = json.dumps(report(profile), ensure_ascii=False)
             run = subprocess.run([sys.executable, str(PUBLISHER)], input=source, text=True,
                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                 timeout=120, env={**__import__("os").environ, "HOME": home})
+                                 timeout=120, env={**__import__("os").environ, "HOME": home, "USERPROFILE": home})
             if run.returncode:
                 raise AssertionError(profile + ": " + run.stderr)
             result = json.loads(run.stdout)
