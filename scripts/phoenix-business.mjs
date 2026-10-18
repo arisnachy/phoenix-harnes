@@ -8,6 +8,7 @@ import { constants as fsConstants } from 'node:fs'
 import { deflateRawSync } from 'node:zlib'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { validateBlueprint, progress, buildFingerprint, docxEntries, printHtml } from './phoenix-business-studio.mjs'
+import { auditBook, buildBookMarketingBrief, genreGuide, inspectCover, BOOK_FORMATS } from './phoenix-book-quality.mjs'
 
 const root = resolve(process.env.PHOENIX_BUSINESS_HOME || join(process.env.DSH_HOME || join(homedir(), '.dsh'), 'business-library'))
 const indexFile = join(root, 'library.json')
@@ -88,8 +89,9 @@ async function addAsset(product, input, role) {
   return entry
 }
 function editorialCheck(product, opts={}) {
-  const minWords = Number(opts.minWords ?? (product.type === 'book' ? 50000 : 0))
-  const minChapters = Number(opts.minChapters ?? (product.type === 'book' ? 15 : 0))
+  const standard=BOOK_FORMATS[product.blueprint?.editorial?.format] ?? BOOK_FORMATS.novel
+  const minWords = Number(opts.minWords ?? (product.type === 'book' ? standard.minWords : 0))
+  const minChapters = Number(opts.minChapters ?? (product.type === 'book' ? standard.minChapters : 0))
   if (![minWords, minChapters].every(n => Number.isSafeInteger(n) && n >= 0)) fail('Umbrales editoriales inválidos.')
   const ordered = [...product.chapters].sort((a,b)=>a.number-b.number)
   const blueprint = product.blueprint
@@ -166,6 +168,15 @@ async function compileBook(product,author,lang,opts) {
   if(!/^[a-z]{2,3}(?:-[A-Za-z]{2})?$/.test(lang)) fail('Idioma BCP-47 inválido.')
   const quality=editorialCheck(product,opts)
   if(!quality.lengthReady) fail(`Manuscrito incompleto (${quality.chapterCount} capítulos; ${quality.chapterWords} palabras).`)
+  // Short local builds with explicitly lowered thresholds remain draft-only for tests and prototypes.
+  // A commercial-sized default build cannot silently package repetitive/unfinished chapters.
+  let editorialGate = null
+  const standard=BOOK_FORMATS[product.blueprint?.editorial?.format] ?? BOOK_FORMATS.novel
+  if (opts.minWords >= standard.minWords && opts.minChapters >= standard.minChapters) {
+    editorialGate = await auditBook(product,root)
+    const manuscriptIssues = editorialGate.blockers.filter(issue => !issue.startsWith('Falta portada'))
+    if (manuscriptIssues.length) fail('Revisión editorial estructural incompleta: ' + manuscriptIssues.join(' | '))
+  }
   const chapters=[]
   for(const c of [...product.chapters].sort((a,b)=>a.number-b.number)){
     const content=await readFile(join(root,c.path),'utf8')
@@ -177,20 +188,36 @@ async function compileBook(product,author,lang,opts) {
   const identifier=`urn:uuid:${randomUUID()}`, files=[{name:'mimetype',bytes:'application/epub+zip',stored:true}]
   files.push({name:'META-INF/container.xml',bytes:'<?xml version="1.0" encoding="UTF-8"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>'})
   files.push({name:'OEBPS/style.css',bytes:'body{font-family:serif;line-height:1.5;margin:5%}p{text-indent:1em;margin:0 0 .5em}h1{text-align:center;page-break-before:always}'})
+  // Embed an existing verified raster cover; drafts without cover can still compile locally.
+  let epubCover = ''
+  const coverAsset = product.files.find(f => f.role === 'cover' && /\.(jpe?g|png)$/iu.test(f.name))
+  if (coverAsset) {
+    const coverFile = resolve(root,coverAsset.path)
+    if (!coverFile.startsWith(root+sep) || !coverAsset.path.startsWith('products/'+product.id+'/')) fail('Ruta insegura de portada.')
+    const coverBytes = await readFile(coverFile)
+    if (hash(coverBytes) !== coverAsset.sha256) fail('Portada modificada fuera de Phoenix.')
+    const coverInfo = inspectCover(coverBytes)
+    if (!coverInfo.valid) fail('Portada inválida: ' + coverInfo.reason)
+    const ext = coverInfo.format === 'png' ? 'png' : 'jpg'
+    const mediaType = coverInfo.format === 'png' ? 'image/png' : 'image/jpeg'
+    files.push({name:'OEBPS/cover.'+ext,bytes:coverBytes})
+    files.push({name:'OEBPS/cover.xhtml',bytes:xhtml('Portada','<div><img src="cover.'+ext+'" alt="Portada de '+esc(product.title)+'" style="display:block;max-width:100%;height:auto;margin:auto"/></div>',lang)})
+    epubCover = '<item id="cover-img" href="cover.'+ext+'" media-type="'+mediaType+'" properties="cover-image"/><item id="cover-page" href="cover.xhtml" media-type="application/xhtml+xml"/>'
+  }
   files.push({name:'OEBPS/title.xhtml',bytes:xhtml(product.title,`<h1>${esc(product.title)}</h1><p>${esc(author)}</p>`,lang)})
   const nav=chapters.map(c=>`<li><a href="chapter-${String(c.number).padStart(3,'0')}.xhtml">${esc(c.title)}</a></li>`).join('')
   files.push({name:'OEBPS/nav.xhtml',bytes:xhtml('Índice',`<nav xmlns:epub="http://www.idpf.org/2007/ops" epub:type="toc" id="toc"><h1>Índice</h1><ol>${nav}</ol></nav>`,lang)})
   for(const c of chapters) files.push({name:`OEBPS/chapter-${String(c.number).padStart(3,'0')}.xhtml`,bytes:xhtml(c.title,`<h1>${esc(c.title)}</h1>${chapterHtml(c.text)}`,lang)})
   const manifest=chapters.map(c=>`<item id="c${c.number}" href="chapter-${String(c.number).padStart(3,'0')}.xhtml" media-type="application/xhtml+xml"/>`).join('')
   const spine=chapters.map(c=>`<itemref idref="c${c.number}"/>`).join('')
-  const opf=`<?xml version="1.0" encoding="utf-8"?><package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="uid" xml:lang="${esc(lang)}"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="uid">${identifier}</dc:identifier><dc:title>${esc(product.title)}</dc:title><dc:creator>${esc(author)}</dc:creator><dc:language>${esc(lang)}</dc:language><meta property="dcterms:modified">${iso().replace(/\.\d{3}Z$/,'Z')}</meta></metadata><manifest><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/><item id="title" href="title.xhtml" media-type="application/xhtml+xml"/><item id="css" href="style.css" media-type="text/css"/>${manifest}</manifest><spine><itemref idref="title"/>${spine}</spine></package>`
+  const opf=`<?xml version="1.0" encoding="utf-8"?><package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="uid" xml:lang="${esc(lang)}"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="uid">${identifier}</dc:identifier><dc:title>${esc(product.title)}</dc:title><dc:creator>${esc(author)}</dc:creator><dc:language>${esc(lang)}</dc:language><meta property="dcterms:modified">${iso().replace(/\.\d{3}Z$/,'Z')}</meta></metadata><manifest><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/><item id="title" href="title.xhtml" media-type="application/xhtml+xml"/><item id="css" href="style.css" media-type="text/css"/>${epubCover}${manifest}</manifest><spine>${epubCover?'<itemref idref="cover-page"/>':''}<itemref idref="title"/>${spine}</spine></package>`
   files.push({name:'OEBPS/content.opf',bytes:opf})
   const book=await registerGenerated(product,'manuscript.md',manuscript,'manuscript')
   const ebook=await registerGenerated(product,'ebook.epub',archiveZip(files),'ebook')
   const docx=await registerGenerated(product,'manuscript.docx',archiveZip(docxEntries(product.title,author,chapters)),'manuscript')
   const printSource=await registerGenerated(product,'print-interior.html',printHtml(product.title,author,chapters,lang),'print')
   product.build={fingerprint:buildFingerprint(product),compiledAt:iso(),formatVersion:2,author,lang}
-  return {manuscript:book,ebook,docx,printSource,chapters:quality.chapterCount,words:quality.chapterWords,author,lang,validation:'EPUB3/DOCX and print-ready HTML generated; PDF, rendered pagination, rights, and editorial review remain pending'}
+  return {manuscript:book,ebook,docx,printSource,chapters:quality.chapterCount,words:quality.chapterWords,author,lang,editorialStatus:editorialGate?'structural-manuscript-gate-passed-review-required':'draft-only',validation:'EPUB3/DOCX and print-ready HTML generated; PDF, rendered pagination, rights, and editorial review remain pending'}
 }
 
 function gallery(products) {
@@ -201,7 +228,7 @@ async function main(args) {
   const [cmd, ...rest] = args
   const option = (flag, fallback) => {const i=rest.indexOf(flag);return i<0?fallback:rest[i+1]??fail(`Falta valor de ${flag}`)}
   const positional = rest.filter((arg,i)=>!(arg.startsWith('--')||i>0&&rest[i-1].startsWith('--')))
-  if (cmd === 'help' || !cmd) return {usage:['init <tipo> <título>', 'list', 'show <id>', 'asset <id> <archivo> --role <source|manuscript|ebook|print|cover|promo>', 'chapter <id> <número> <archivo.md>', 'blueprint <id> <plan.json>', 'progress <id>', 'audit <id>', 'compile <id> --author <nombre> [--words 50000] [--chapters 15] [--lang es]', 'check <id> [--words 50000] [--chapters 15]', 'route <plataforma> [--tools mcp__servidor__herramienta,...]', 'prepare <id> <plataforma> <precio> [--currency USD]', 'sale <id> <importe_bruto> <unidades> --source <referencia>', 'gallery'], home:root}
+  if (cmd === 'help' || !cmd) return {usage:['init <tipo> <título>', 'list', 'show <id>', 'asset <id> <archivo> --role <source|manuscript|ebook|print|cover|promo>', 'chapter <id> <número> <archivo.md>', 'blueprint <id> <plan.json>', 'progress <id>', 'audit <id>', 'book-quality <id>', 'book-guide <género>', 'book-marketing <id> <fuentes.json>', 'compile <id> --author <nombre> [--words 50000] [--chapters 15] [--lang es]', 'check <id> [--words 50000] [--chapters 15]', 'route <plataforma> [--tools mcp__servidor__herramienta,...]', 'prepare <id> <plataforma> <precio> [--currency USD]', 'sale <id> <importe_bruto> <unidades> --source <referencia>', 'gallery'], home:root}
   if (cmd === 'init') {
     const [type,...titleParts]=positional; const title=titleParts.join(' ').trim()
     if(!TYPES.has(type)||title.length<3||title.length>180) fail('Tipo o título inválido.')
@@ -230,6 +257,20 @@ async function main(args) {
     return {productId:p.id,chapters:validated.chapters.length,targetWords:validated.targetWords,characters:validated.characters.length,series:validated.series??null}
   })
   if (cmd === 'progress') return transaction(db=>{const p=get(db,positional[0]);return progress(p,p.blueprint)},false)
+  if (cmd === 'book-guide') return genreGuide(positional.join(' '))
+  if (cmd === 'book-quality') return transaction(async db=>{
+    const p=get(db,positional[0])
+    if(p.type!=='book') fail('book-quality requiere un libro.')
+    return auditBook(p,root)
+  },false)
+  if (cmd === 'book-marketing') return transaction(async db=>{
+    const p=get(db,positional[0])
+    if(p.type!=='book') fail('book-marketing requiere un libro.')
+    const evidenceFile=resolve(positional[1]??'')
+    const info=await stat(evidenceFile)
+    if(!info.isFile()||info.size>256*1024) fail('Fuentes de mercado JSON inválidas o demasiado grandes.')
+    return buildBookMarketingBrief(p,JSON.parse(await readFile(evidenceFile,'utf8')))
+  },false)
   if (cmd === 'audit') return transaction(async db=>{
     const p=get(db,positional[0]),issues=[]
     for(const file of [...p.files,...p.chapters]){
@@ -244,8 +285,8 @@ async function main(args) {
     if(p.type==='book'&&!check.buildCurrent) issues.push({status:'export-stale-or-missing'})
     return {id:p.id,filesInspected:p.files.length+p.chapters.length,issues,checks:check,filesIntact:!issues.some(i=>['missing','sha256-mismatch','unsafe-path'].includes(i.status)),readyForAutomaticPublication:false,externalPublicationVerified:false,reviewRequired:['Derechos y licencias','Originalidad','Calidad editorial','Declaración de IA','Portada','PDF y paginación reales']}
   },false)
-  if (cmd === 'compile') return transaction(db=>compileBook(get(db,positional[0]),String(option('--author','')),String(option('--lang','es')), {minWords:Number(option('--words',50000)),minChapters:Number(option('--chapters',15))}))
-  if (cmd === 'check') return transaction(db=> editorialCheck(get(db,positional[0]),{minWords:Number(option('--words', undefined)??(get(db,positional[0]).type==='book'?50000:0)),minChapters:Number(option('--chapters', undefined)??(get(db,positional[0]).type==='book'?15:0))}),false)
+  if (cmd === 'compile') return transaction(db=>{const p=get(db,positional[0]),standard=BOOK_FORMATS[p.blueprint?.editorial?.format]??BOOK_FORMATS.novel;return compileBook(p,String(option('--author','')),String(option('--lang','es')),{minWords:Number(option('--words',standard.minWords)),minChapters:Number(option('--chapters',standard.minChapters))})})
+  if (cmd === 'check') return transaction(db=>{const p=get(db,positional[0]),standard=BOOK_FORMATS[p.blueprint?.editorial?.format]??BOOK_FORMATS.novel;return editorialCheck(p,{minWords:Number(option('--words',p.type==='book'?standard.minWords:0)),minChapters:Number(option('--chapters',p.type==='book'?standard.minChapters:0))})},false)
   if (cmd === 'route') return route(positional[0],String(option('--tools','')).split(',').filter(Boolean))
   if (cmd === 'prepare') return transaction(async db=>{
     const p=get(db,positional[0]), platform=positional[1];if(!(platform in PLATFORMS)) fail('Plataforma no soportada.')
@@ -260,7 +301,13 @@ async function main(args) {
       const bytes=await readFile(target).catch(()=>null)
       if(bytes===null || hash(bytes)!==f.sha256) integrityFailures.push(f.name)
     }
-    const now=iso(), entry={platform,currency,price,stage:integrityFailures.length?'integrity-failed':ready?'review-required':'assets-missing',integrityFailures,publicationConfirmed:false,externalUrl:null,createdAt:now,updatedAt:now,requires:['aprobación explícita del usuario','revisión de derechos/licencias','declaración de IA y requisitos de la plataforma','confirmación de recepción de la tienda'],editorial:check}
+    let bookQuality=null
+    if(ready && p.type==='book') {
+      try { bookQuality=await auditBook(p,root) }
+      catch(error) { bookQuality={structurallyReadyForReview:false,blockers:[error instanceof Error?error.message:'Error en auditoría editorial.']} }
+    }
+    const stage=integrityFailures.length?'integrity-failed':!ready?'assets-missing':bookQuality && !bookQuality.structurallyReadyForReview?'editorial-incomplete':'review-required'
+    const now=iso(), entry={platform,currency,price,stage,bookQuality,integrityFailures,publicationConfirmed:false,externalUrl:null,createdAt:now,updatedAt:now,requires:['aprobación explícita del usuario','revisión de derechos/licencias','declaración de IA y requisitos de la plataforma','confirmación de recepción de la tienda'],editorial:check}
     p.listings=p.listings.filter(item=>item.platform!==platform).concat(entry);p.updatedAt=now;return entry
   })
   if(cmd==='sale') return transaction(db=>{
