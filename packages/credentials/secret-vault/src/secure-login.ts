@@ -437,7 +437,7 @@ export function registerSecureLogin(ctx: Context, vault?: CredentialProvider): (
             throw new Error('Pestaña no válida')
           }
           const tab = await tabForLogin(payload.tabId, origin)
-          respond(res, 200, await inspectLoginGate(tab))
+          respond(res, 200, { ...await inspectLoginGate(tab) })
           return
         }
         if (route.pathname === PREFIX + '/save') {
