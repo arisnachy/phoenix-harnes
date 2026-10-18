@@ -16,14 +16,14 @@ try:
         "title": "Informe de prueba de Phoenix Research Studio",
         "style": "apa",
         "presentation": "academic",
-        "document_type": "brief",
+        "document_type": "brief", "quality_profile": "educational_brief", "user_requested_brief": True,
         "keywords": ["metodología", "fuentes", "validación"],
         "paper": "A4",
         "cover": {"institution": "Institución de prueba", "faculty": "Facultad de Ciencias",
                   "author": "Investigador de prueba", "date": "2026-10-17",
                   "logo_path": str(logo)},
         "sections": [
-            {"heading": "Resumen", "text": "Cita a una referencia sintética [@source1]."},
+            {"heading": "Resumen", "text": "Dos fuentes de prueba [@source1; @source2] sin marcadores literales."},
             {"heading": "Metodología", "text": "El gráfico contiene datos de prueba [@source1]."},
             {"heading": "Limitaciones", "text": "Esta prueba no valida la evidencia externa [@source1]."},
         ],
@@ -31,6 +31,9 @@ try:
             {"key": "source1", "authors": "Apellido, A.", "year": "2026",
              "title": "Referencia sintética de prueba", "journal": "Revista de prueba",
              "url": "https://example.org/phoenix-research-ci"},
+            {"key": "source2", "authors": "Otro, B.", "year": "2024",
+             "title": "Otra referencia sintética de prueba", "journal": "Revista de prueba",
+             "url": "https://example.org/phoenix-research-ci-2"},
         ],
         "tables": [
             {"title": "Comparación de prueba", "columns": ["Grupo", "Tamaño", "Resultado"],
@@ -63,6 +66,8 @@ try:
             assert pdf.page_count >= 2
             report_text = "\n".join(page.get_text() for page in pdf)
             assert "Referencias" in report_text
+            assert "[@" not in report_text
+            assert "[1]; [2]" in report_text if style == "vancouver" else "[@" not in report_text
             assert "Tabla 1" in report_text and "Figura 2" in report_text
             for page in pdf:
                 assert page.rect.width >= 500 and page.rect.height >= 700
@@ -74,6 +79,7 @@ try:
                     assert -1 <= y0 < y1 <= page.rect.height + 1
         html_contents = paths["html"].read_text(encoding="utf-8")
         assert "Referencias" in html_contents
+        assert "[@" not in html_contents
         assert "<table>" in html_contents and "Comparación de prueba" in html_contents
         assert "Figura 2" in html_contents and "Forest plot sintético" in html_contents and "alt=" in html_contents
         assert receipt["presentation"] == presentation
@@ -84,6 +90,7 @@ try:
             assert any(name.startswith("word/media/") for name in archive.namelist())
             xml = archive.read("word/document.xml").decode("utf-8")
             assert "Referencias" in xml and "Metodología" in xml
+            assert "[@" not in xml
             assert "Comparación de prueba" in xml
             assert ("(Apellido, 2026)" in xml) if style in ("apa", "apa7") else ("[1]" in xml)
         print("OK", style, paths["pdf"], paths["docx"], paths["html"])
@@ -99,7 +106,8 @@ try:
     thesis = dict(report)
     thesis["style"] = "apa7"
     thesis["presentation"] = "hybrid"
-    thesis["document_type"] = "thesis"
+    thesis["document_type"] = "brief"
+    thesis["table_of_contents"] = True
     thesis["cover"] = {
         "institution": "Universidad de prueba", "faculty": "Ciencias de la Salud",
         "department": "Investigación", "degree": "Maestría", "advisor": "Tutora de prueba",
@@ -191,6 +199,22 @@ try:
                               input=json.dumps(unapproved).encode("utf-8"),
                               capture_output=True, timeout=30)
     assert rejected.returncode != 0
+    shallow = dict(report)
+    shallow["quality_profile"] = "professional"
+    shallow["document_type"] = "narrative_review"
+    shallow["sections"] = [
+        {"kind": kind, "heading": label,
+         "text": "Este párrafo no contiene suficiente investigación [@source1; @source2]."}
+        for kind, label in (("abstract", "Resumen"), ("introduction", "Introducción"),
+            ("methods", "Método"), ("results", "Resultados"),
+            ("discussion", "Discusión"), ("limitations", "Limitaciones"),
+            ("conclusions", "Conclusiones"))
+    ]
+    refused = subprocess.run([sys.executable, str(script)],
+                             input=json.dumps(shallow).encode("utf-8"),
+                             capture_output=True, timeout=30)
+    assert refused.returncode != 0, "A three-page shallow review must not publish."
+    assert b"RESEARCH_QUALITY_GATE" in refused.stderr, refused.stderr
     print("RESEARCH_PUBLISHER_SMOKE_PASS")
 finally:
     logo.unlink(missing_ok=True)
