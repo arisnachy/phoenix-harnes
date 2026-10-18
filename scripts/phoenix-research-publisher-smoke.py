@@ -115,6 +115,14 @@ try:
         "abstract_en": "English abstract for a synthetic publishing test.",
     }
     thesis["page_plan"] = {"target_pages": 80, "scope": "all"}
+    thesis["declarations"] = {
+        "ethics": "No hubo participantes humanos en este ejemplo sintético.",
+        "funding": "Sin financiación; ejemplo de prueba.",
+        "conflicts": "Sin conflictos declarados en esta prueba.",
+    }
+    thesis["appendices"] = [
+        {"title": "Instrumento sintético", "text": "Apéndice con fuente de prueba [@source1]."}
+    ]
     thesis["sections"] = [
         {"kind": kind, "heading": heading, "text": "Ejemplo documentado solo para probar maquetación [@source1]."}
         for kind, heading in (
@@ -133,6 +141,7 @@ try:
         assert actual.page_count < 80
         pages_text = "\\n".join(page.get_text() for page in actual)
         assert "Índice general" in pages_text and "Autora Uno" in pages_text
+        assert "Anexos y apéndices" in pages_text and "Declaraciones de investigación" in pages_text
     assert receipt["pagination"]["target_met"] is False
     assert receipt["quality"]["pagination_review_required"] is True
     assert receipt["warnings"] and "80" in receipt["warnings"][0]
@@ -140,6 +149,7 @@ try:
         word = archive.read("word/document.xml").decode("utf-8")
         assert "MA-001" in word and "MA-002" in word
         assert "Dedicatoria" in word and "Índice de tablas" in word
+        assert "Instrumento sintético" in word and "Conflictos de interés" in word
         assert 'TOC ' in word and 'w:fldSimple' in word
     print("RESEARCH_PUBLISHER_SMOKE_PASS")
 finally:
