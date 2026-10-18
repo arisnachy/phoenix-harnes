@@ -95,6 +95,6 @@ describe('Phoenix Game Studio production QA planning', () => {
     }
   })
   it('rejects missing production inputs explicitly', () => {
-    expect(() => reviewGameProduction({}, {})).toThrow('Actual asset-production plan')
+    expect(() => reviewGameProduction({}, null as unknown as { tasks: [] })).toThrow('Actual asset-production plan')
   })
 })
