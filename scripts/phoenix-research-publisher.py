@@ -32,7 +32,69 @@ except ImportError as error:
     sys.stderr.write("RESEARCH_PUBLISH_DEPENDENCIES_MISSING: " + str(error) + "\n")
     sys.exit(4)
 
-REF_RE = re.compile(r"\[@([A-Za-z0-9_-]{1,64})\]")
+# A citation group can contain one or more registry keys, e.g. [@a; @b].
+CITE_ANY_RE = re.compile(r"\[@([^\]\r\n]*)\]")
+REF_RE = re.compile(r"\[@([A-Za-z0-9_-]{1,64}(?:\s*[,;]\s*@?[A-Za-z0-9_-]{1,64})*)\]")
+
+def citation_keys(value):
+    """Validate and extract *all* source keys, never leave unresolved [@...] in output."""
+    if "[@"+"" in value and not CITE_ANY_RE.findall(value):
+        raise ValueError("Malformed citation marker in manuscript")
+    keys = []
+    for match in CITE_ANY_RE.finditer(value):
+        token = match.group(0)
+        if REF_RE.fullmatch(token) is None:
+            raise ValueError("Unsupported citation group " + token[:120] +
+                             ". Use [@a; @b] or [@a].")
+        keys.extend(k.lstrip("@").strip() for k in re.split(r"[;,]", match.group(1)))
+    if value.count("[@") != len(list(CITE_ANY_RE.finditer(value))):
+        raise ValueError("Unclosed citation marker")
+    return keys
+
+def complete_research_profile(data, cited):
+    """Admission gate: research isn't complete because a PDF happens to render."""
+    profile = data.get("quality_profile", "professional")
+    if profile not in ("professional", "educational_brief"):
+        raise ValueError("Invalid quality_profile")
+    if profile == "educational_brief":
+        if data.get("document_type") != "brief" or data.get("user_requested_brief") is not True:
+            raise ValueError("educational_brief requires explicit user_requested_brief and document_type brief")
+        return
+    document_type = data.get("document_type", "brief")
+    if document_type == "brief":
+        raise ValueError("A professional scientific investigation cannot default to a brief. "
+                         "Use narrative_review, journal_manuscript, thesis, etc. "
+                         "An expressly requested short demonstration requires educational_brief.")
+    threshold = {
+        "narrative_review": (2400, 8), "systematic_review": (3000, 10),
+        "original_research": (1500, 8), "journal_manuscript": (1500, 8),
+        "thesis": (8000, 15), "monograph": (4000, 12),
+        "research_protocol": (1800, 8), "policy_report": (1800, 8),
+    }
+    min_words, min_sources = threshold.get(document_type, (2000, 8))
+    total_words = sum(len(re.findall(r"\b\w+\b", sec["text"], re.UNICODE))
+                      for sec in data["sections"])
+    problems = []
+    if total_words < min_words:
+        problems.append(f"solo {total_words} palabras; perfil {document_type} exige mínimo editorial {min_words}")
+    if len(cited) < min_sources:
+        problems.append(f"solo {len(cited)} fuentes citadas; mínimo editorial {min_sources}")
+    if document_type in ("thesis", "monograph") and not data.get("table_of_contents", True):
+        problems.append("falta índice de capítulos")
+    if document_type in ("narrative_review", "systematic_review", "original_research",
+                         "journal_manuscript", "thesis", "monograph"):
+        if not (data.get("tables") or data.get("charts")):
+            problems.append("falta una tabla de evidencia o figura con fuente comprobable")
+    core_kinds = {"methods", "results", "discussion"}
+    for section in data["sections"]:
+        kind = section_kind(section)
+        words = len(re.findall(r"\b\w+\b", section["text"], re.UNICODE))
+        if kind in core_kinds and words < 120:
+            problems.append(f"sección {section['heading']} superficial: {words} palabras")
+    if problems:
+        raise ValueError("RESEARCH_QUALITY_GATE: documento incompleto: " + "; ".join(problems)
+                         + ". Continuar investigando y desarrollando antes de publicar.")
+
 NAME_RE = re.compile(r"[^a-zA-Z0-9_-]+")
 MAX_CONTENT = 1000000
 PRESENTATIONS = ("academic", "editorial", "hybrid")
@@ -200,7 +262,7 @@ def validate(data):
             raise ValueError("sections require heading and text")
         if len(section["heading"]) > 180 or len(section["text"]) > 65000:
             raise ValueError("section exceeds safe length")
-        cited.update(REF_RE.findall(section["text"]))
+        cited.update(citation_keys(section["text"]))
     if not cited or cited - keys:
         raise ValueError("each report must cite registered source keys with [@key], unknown=" + str(sorted(cited-keys)))
     extra_sections = data.get("appendices", [])
@@ -211,7 +273,7 @@ def validate(data):
             raise ValueError("each appendix requires title and text")
         if not appendix["title"].strip() or len(appendix["title"]) > 180 or len(appendix["text"]) > 35000:
             raise ValueError("appendix content exceeds safe bounds")
-        cited.update(REF_RE.findall(appendix["text"]))
+        cited.update(citation_keys(appendix["text"]))
     if cited - keys:
         raise ValueError("appendix contains unknown source keys " + str(sorted(cited-keys)))
     declarations = data.get("declarations", {})
@@ -228,6 +290,7 @@ def validate(data):
         raise ValueError(document_type + " requires missing sections: " + ", ".join(missing))
     if document_type == "systematic_review" and not data.get("systematic_review_evidence"):
         raise ValueError("systematic_review requires documented screening and extraction evidence")
+    complete_research_profile(data, cited)
     if len(json.dumps(data, ensure_ascii=False)) > MAX_CONTENT:
         raise ValueError("report payload exceeds limit")
     tables = data.get("tables", [])
@@ -280,7 +343,13 @@ def citation_string(key, refs, style, index):
     return "(" + author + ", " + ref["year"] + ")"
 
 def format_text(value, refs, style, order):
-    return REF_RE.sub(lambda match: citation_string(match.group(1), refs, style, order), value)
+    def replace_group(match):
+        keys = [part.lstrip("@").strip() for part in re.split(r"[;,]", match.group(1))]
+        return "; ".join(citation_string(key, refs, style, order) for key in keys)
+    result = REF_RE.sub(replace_group, value)
+    if "[@"+"" in result:
+        raise ValueError("Unresolved manuscript citations cannot enter PDF/Word/HTML")
+    return result
 
 def bibliography(ref, style, number):
     authors = ref["authors"].strip()
@@ -381,14 +450,14 @@ def main():
     report = json.loads(raw.decode("utf-8"))
     refs, cited = validate(report)
     style = "apa" if report.get("style", "apa") == "apa7" else report.get("style", "apa")
-    presentation = report.get("presentation", "academic")
+    presentation = report.get("presentation", "hybrid" if report.get("quality_profile", "professional") == "professional" else "academic")
     journal = report.get("journal_requirements", {})
     institutional = report.get("institutional_rules", {})
     editorial = presentation in ("editorial", "hybrid")
     accent = "#087783" if presentation == "hybrid" else "#a52d37"
     first_order = []
     for section in [*report["sections"], *report.get("appendices", [])]:
-        for key in REF_RE.findall(section["text"]):
+        for key in citation_keys(section["text"]):
             if key not in first_order: first_order.append(key)
     numbers = {key: i+1 for i, key in enumerate(first_order)}
     ordered_refs = [refs[key] for key in (first_order if style in ("vancouver", "ama") else sorted(cited, key=lambda k: (refs[k]["authors"], refs[k]["year"])))]
@@ -399,7 +468,7 @@ def main():
     cover = report.get("cover") if isinstance(report.get("cover"), dict) else {}
     front = report.get("front_matter", {})
     academic_work = report.get("document_type") in ("monograph", "thesis", "research_protocol")
-    include_toc = report.get("table_of_contents", academic_work)
+    include_toc = report.get("table_of_contents", academic_work or report.get("quality_profile", "professional") == "professional")
     authors = cover_authors(cover)
     paper = A4 if report.get("paper", "A4") == "A4" else letter
     doc = Document()
@@ -747,11 +816,14 @@ def main():
                         ", objetivo " + str(target_pages) + ". No se añade contenido ficticio.")
     final_state = "REPORT_NEEDS_REVISION" if warnings else "REPORT_READY"
     result={"state":final_state,"report_id":digest,"title":title,"style":style,
+            "quality_profile": report.get("quality_profile", "professional"),
             "presentation":presentation,"document_type":report.get("document_type", "brief"),
             "quality": {"required_sections_checked": True, "submission_certified": False,
                         "bibliographic_metadata_network_verified": False, "visual_page_review": "not_performed",
                         "pagination_review_required": bool(warnings),
-                        "references_style_certified": False},
+                        "references_style_certified": False,
+                        "citation_markers_resolved": True,
+                        "manuscript_word_count": sum(len(re.findall(r"\\b\\w+\\b", sec["text"], re.UNICODE)) for sec in report["sections"])},
             "pagination": {"pdf_pages": rendered_pages[0], "requested_pages": target_pages,
                            "scope": scope, "target_met": page_match if scope == "all" else None},
             "warnings": warnings,
