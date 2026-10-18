@@ -4,6 +4,7 @@
 stdin: one JSON object with title, author, chapters, output. stdout: one JSON receipt.
 No network, generated claims of royalties, publication, covers or originality.
 """
+import contextlib
 import html
 import json
 import os
@@ -169,7 +170,10 @@ def render(data):
 if __name__ == "__main__":
     try:
         payload = json.load(sys.stdin)
-        result = render(payload)
+        # ReportLab multiBuild emits progress to stdout in verbose environments.
+        # Keep stdout a single machine-readable JSON receipt on Linux and Windows.
+        with contextlib.redirect_stdout(sys.stderr):
+            result = render(payload)
         print(json.dumps({"ok": True, "result": result}, ensure_ascii=False))
     except Exception as exc:
         sys.stderr.write("BOOK_PUBLISH_ERROR: " + str(exc)[:400] + "\n")
