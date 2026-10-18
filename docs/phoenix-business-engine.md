@@ -5,7 +5,7 @@
 ## Ejecución
 
 ```bash
-pnpm business help    # o: node scripts/phoenix-business.mjs help
+node scripts/phoenix-business.mjs help
 node scripts/phoenix-business.mjs init book "Mi primera novela"
 node scripts/phoenix-business.mjs list
 node scripts/phoenix-business.mjs chapter ID 1 path/to/capitulo-1.md
@@ -28,6 +28,10 @@ La `gallery` se guarda en `~/.dsh/business-library/gallery.html` (Windows: `%USE
 4. Solicitar aprobación interactiva antes de enviar, publicar, iniciar publicidad pagada o aceptar contratos; recopilar comprobante real de la plataforma y guardarlo en el expediente.
 5. Medir visitas, pedidos, regalías y beneficio neto con procedencia. El comando `sale` representa una observación *no verificada* hasta contrastarla con el canal oficial.
 
+## Mi Biblioteca dentro de la interfaz (rama Business Studio)
+
+Phoenix presenta la biblioteca real como una pestaña de los ajustes de Plugins. Usa `pluginInventory.businessLibrary`, una proyección de solo lectura del índice del Host, con búsqueda, filtros, contadores de capítulos, archivos, planificación y frescura de compilación. El cliente recibe **únicamente metadatos depurados**: ni rutas locales, ni pedidos, ni contraseñas, ni textos de los libros. Limita la respuesta a 300 productos y rechaza índices inválidos. Es una integración funcional de consulta, no un nuevo panel comercial público ni una confirmación de ventas.
+
 ## Límites intencionales y siguiente integración
 
 - `compile` produce EPUB3 validado estructuralmente en pruebas locales, **no** una cubierta de impresión, DOCX ni PDF final. El EPUB debe comprobarse en Kindle Previewer y pasar revisión tipográfica y editorial.
@@ -38,3 +42,54 @@ La `gallery` se guarda en `~/.dsh/business-library/gallery.html` (Windows: `%USE
 - Se necesitan pruebas en Windows y CI de monorepo además de las pruebas autónomas de Node.
 
 La instrucción de operación para Kira está en `.agents/skills/phoenix-business/SKILL.md`, que el proveedor local de habilidades detecta al ejecutar Phoenix desde el repositorio con su configuración predeterminada.
+
+## Iteración en rama `feat/business-engine-studio` — planificación y trazabilidad (sin publicar)
+
+Esta versión añade `scripts/phoenix-business-studio.mjs` y mantiene `main`/`stable` intactas durante la revisión. El registro de productos sigue siendo compatible con la biblioteca versión 1.
+
+```bash
+node scripts/phoenix-business.mjs blueprint PRODUCT_ID path/to/plan.json
+node scripts/phoenix-business.mjs progress PRODUCT_ID
+node scripts/phoenix-business.mjs compile PRODUCT_ID --author "Nombre del autor" --chapters 24 --words 60000
+node scripts/phoenix-business.mjs audit PRODUCT_ID
+```
+
+- **Blueprint persistente:** exige `schemaVersion: 1`, `premise`, `audience`, `genre`, `targetWords`, `characters`, `chapters` con `number`, `title`, `purpose`, `targetWords` y `beats`; admite `series`, `worldRules` y `timeline`. Los objetivos de capítulos deben sumar el total con tolerancia de 15 %. Las secuelas pueden conservar biblia y cronología en la biblioteca sin inventar continuidad.
+- **Progreso comprobable:** señala capítulos ausentes/cortos, palabras redactadas y compilaciones obsoletas. El 85 % del objetivo por capítulo es una regla de gestión, no una garantía literaria.
+- **Compilación mejorada:** EPUB3, manuscrito Markdown, DOCX real con WordprocessingML e interior HTML de 6 × 9 pulgadas listo para impresión a PDF con un motor externo. **No** afirma crear un PDF paginado hasta que un motor de impresión valide páginas, fuentes y sangrado.
+- **Auditoría:** comprueba SHA-256 de capítulos y archivos, detecta alteraciones posteriores, y reporta revisión de derechos/estilo/originalidad todavía requerida. `prepare` bloquea fichas con activos alterados (`integrity-failed`). El código **no publica**, no simula MCP comerciales activos y no inventa ventas.
+- **Pruebas:** `pnpm test:business` ejecuta la batería autónoma de Node, sin red. Se necesita además ejecución de CI del monorepositorio y ensayo de escritorio Windows antes de promoción a ambas ramas.
+
+El trabajo sigue siendo una base para desarrollar una UI nativa de Biblioteca, investigación de oportunidades, conversión a PDF/portadas, conectores MCP con permisos reales y seguimiento conciliado de ventas. Los productos no están listos para publicarse por el simple hecho de contar con EPUB/DOCX.
+## Cola comercial gobernada (fase de preparación)
+
+Se incorpora `scripts/phoenix-business-commerce.mjs` como cola separada y duradera de borradores de publicación; **NO** publica, no invoca tiendas, no inicia anuncios ni declara ventas verificadas. Los comandos son:
+
+```bash
+pnpm business:commerce plan PRODUCTO_ID amazon-kdp
+pnpm business:commerce plan PRODUCTO_ID shopify
+pnpm business:commerce list
+pnpm business:commerce inspect pub-ID
+pnpm business:commerce cancel pub-ID
+pnpm business:commerce route shopify --inventory mcp-snapshot.json
+pnpm test:commerce
+```
+
+- `plan` requiere ficha `review-required`, archivos existentes e íntegros, precio/moneda válidos y, para KDP eBook, EPUB, portada y compilación editorial vigente. Los mínimos internos de 50 000 palabras y 15 capítulos son **criterios conservadores actuales de Phoenix, no requisitos de KDP**; deberán convertirse en objetivos configurables por proyecto.
+- Se registra una revisión por huella SHA-256 del manifiesto. Repetir exactamente el mismo plan devuelve el mismo trabajo; cancelar permite crear otro. `inspect` vuelve a verificar que los archivos, capítulos y precio siguen coincidiendo.
+- El índice `publication-queue.json` se guarda junto a `library.json`, con bloqueo por archivo y escritura atómica. La vista pública de trabajos nunca transporta ruta de archivo, manuscrito, datos del comprador o credenciales.
+- `route` admite un inventario de `pluginInventory.mcpConnectorHubState`; `ready` + nombre de herramienta de escritura solo constituye **candidato MCP**, jamás autorización o publicación confirmada. Si no hay candidato se propone mininavegador, sin abrirlo ni efectuar acciones automáticamente.
+- Esta cola termina en `awaiting-approval`. No existe comando `publish` o `submit`; falta conectar el adaptador con la aprobación interactiva del host, una API real o sesión autenticada de navegador y los recibos de plataforma. No registrar ingresos externos a partir de este estado.
+
+Pruebas: `node --test scripts/phoenix-business-commerce.test.mjs` cubre idempotencia, cancelación, precio cambiante, modificación de activos, symlinks, estructura de índice, rutas y detección MCP. Se mantiene pendiente el CI completo, compilación Windows y pruebas de publicación real.
+
+
+## Product Factory universal — producción verificable por categoría (fase en desarrollo)
+
+Comandos: `pnpm business:factory catalog`, `pnpm business:factory plan ID`, `pnpm business:factory check ID --platform direct`, `pnpm business:factory package ID --platform direct`, `pnpm business:factory metrics ID`. La versión preliminar incorpora requisitos explícitos para `book`, `course`, `software`, `game`, `design`, `research`, `video`, `audio`, `service` y `other`. Permite registrar servicios además de los productos ya presentes.
+
+El catálogo define roles, extensiones y cantidad mínima de materiales por categoría: por ejemplo curso con temario, tres lecciones y evaluación; aplicación con código, paquete y documentación; juego con proyecto, ejecutable y vista previa; investigación con informe, metodología y fuentes; audiovisual con archivo final y accesibilidad; servicio con propuesta, alcance y cumplimiento. Los controles verifican SHA-256 de cada activo, rutas seguras sin symlinks, señales básicas de formatos (PDF, ZIP, PNG, MP4, etc.) y recuentos reales de capítulos. No reemplazan pruebas semánticas, funcionamiento de software, revisión editorial humana, derechos o políticas de plataforma.
+
+`package` solo construye un ZIP local reutilizable con `manifest.json`, huellas verificables y archivos completos en `business-library/releases/ID/`; detecta paquetes existentes modificados en lugar de reutilizarlos. El manifiesto establece explícitamente `externalPublished=false`, `salesVerified=false`, `commerciallyApproved=false`. Los paquetes nunca contienen credenciales, texto de pedidos ni rutas absolutas. Se requiere revisión y aprobación humana para publicaciones, pagos o campañas. `metrics` separa los importes declarados de los recibos realmente verificados, sin afirmar cobros. El modo `direct` significa distribución empaquetada **local**, no una venta realizada.
+
+La cola `business:commerce plan ID PLATAFORMA` invoca ahora los controles del Product Factory antes de aceptar un proyecto comercial: ya no basta un único archivo `source` de apariencia plausible. No se han construido todavía los pipelines de generación autónoma de contenido de las ocho categorías, ni los adaptadores de tienda activos, ni la conciliación bancaria; no marcar estas tareas como completas. Las pruebas estructurales locales se ejecutan con `pnpm test:business`; siguen pendientes build del monorepositorio, Windows y pruebas integrales de publicación real.

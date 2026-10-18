@@ -6,6 +6,16 @@ whenToUse: El usuario pide monetizar, escribir libros completos, publicar en Ama
 
 # Phoenix Business Engine — protocolo operativo de Kira
 
+## Detección de intención y orquestación de conectores (Business Mission)
+
+Antes de crear un proyecto comercial, ejecuta `pnpm business:mission plan --request "PETICIÓN EXACTA DEL USUARIO"` y usa `plan.intent` como **hipótesis explicable**, no como sustituto del juicio de Kira. Si la intención es ambigua, conserva los objetivos del usuario y resuélvela sin inventar decisiones comerciales.
+
+**Conectores reales.** Obtén la fotografía actual del servicio `pluginInventory.mcpConnectorHubState` (`runtime`), directamente desde el host si está accesible. Guarda SOLO `serverName`, `status` y `toolNames` en un JSON temporal seguro; pásalo al planificador con `--inventory ruta.json`. Nunca copies cabeceras, tokens, cookies o URL privadas a ese archivo. Un MCP listado en la galería, o `managed`, NO prueba autorización. `status=ready` más coincidencia por nombre sigue siendo candidato hasta revisar esquema, identidad, ámbito, permisos y condiciones de la API. No inventes el esquema ni los nombres de las herramientas.
+
+Orden correcto: (1) reutiliza conector instalado/autenticado apto para la acción, (2) si está `auth-required`, solicita que el usuario conecte o repare usando el flujo del host, (3) si no existe, descubre MCP del registro oficial y ofrece instalarlo con aprobación, (4) si no hay MCP oficialmente utilizable, usa mininavegador con sesión de usuario y vault, sin eludir CAPTCHA/2FA ni políticas. Una tarea comercial que no puede publicarse puede avanzar hasta el entregable, guardar el bloqueo y seguir cuando se autorice.
+
+**Obligatorio:** no declares publicación, ventas ni cobros sin respuesta de plataforma; antes de publicar, contratar, cobrar o gastar solicita aprobación explícita. No vuelvas a ejecutar un envío irreversible sin reconciliar recibos e identificadores previos. Si la clasificación falla, prueba investigación/conversación razonada en vez de finalizar con una negativa genérica.
+
 **Meta: un producto realmente terminado y verificable, no una demostración.** Aplica esta habilidad cuando el usuario busque crear bienes/servicios vendibles. Utiliza el sistema UME existente para planificación, ejecución, persistencia y verificación. Evita promesas de ventas o publicaciones sin comprobantes.
 
 ## Primera acción
@@ -50,3 +60,22 @@ Para cursos, software, juegos, diseño, vídeo o investigación, sustituye el pi
 ## Formato final de Kira
 
 **RESULTADO / EVIDENCIA / RIESGO / ESTADO**. Incluye archivos verificables, capítulos/páginas comprobadas, estado del canal, precio recomendado y acciones permitidas para aumentar las ventas. Envía por Gmail o Telegram solamente si el usuario ha autorizado previamente el destino y la integración está operativa. No transmitas datos sensibles en un enlace público.
+
+## Planificación y controles incorporados en Business Studio
+
+- Escribe un plan editorial JSON por obra (schemaVersion 1, premisa, audiencia, género, objetivo total de palabras, personajes con motivaciones/arcos, capítulos consecutivos con títulos, metas y escenas, y opcionalmente serie, reglas y cronología). Consérvalo con `blueprint ID archivo.json`.
+- Consulta `progress ID` después de cada capítulo. Si un capítulo no existe o está bajo su extensión objetivo, complétalo realmente; no alteres las metas para aparentar finalización.
+- `compile` genera EPUB3, DOCX y HTML para impresión, **no** un PDF automáticamente. El archivo HTML precisa renderizado y conteo real de páginas antes de usarlo para imprenta.
+- Si un capítulo o la biblia cambia, cualquier compilación previa queda **stale**. Regenera los formatos. Usa `audit ID` antes de `prepare` para validar las huellas digitales, y detén la publicación ante `integrity-failed`.
+- No declares terminado un libro por superar las métricas cuantitativas: la continuidad, los diálogos, la calidad de edición, originalidad, cubierta y derechos siguen necesitando revisión documental independiente.
+- Mantén la compilación de esta rama separada de `main` y `stable` hasta superar pruebas de producto y escritorio; no des la sincronización por realizada antes de comprobar los SHA reales.
+## Preparación durable de publicación comercial (sin envío todavía)
+
+Tras crear y revisar un producto, ejecuta `pnpm business:commerce plan ID PLATAFORMA`. Usa `inspect pub-ID` antes de proponer aprobación, porque archivos, capítulos o precio pueden cambiar. Si el plan está obsoleto, regenera formatos, repite `business prepare` y crea un plan nuevo; no lo reutilices a ciegas.
+
+La lista MCP se contrasta con la galería **en vivo**; un inventario `ready` con nombre coincidente es solo un candidato. Un envío real futuro deberá exigir autorización interactiva de Phoenix, esquema y autenticación comprobados, idempotencia, recibo remoto y consulta posterior del estado. No inventes ID de publicación, enlace, venta, ingreso ni aval de derechos. La cola no contiene un comando `publish`.
+
+
+## Product Factory por categorías: no confundir una intención con un producto terminado
+
+Antes de poner en cola cualquier artículo (libro, curso, software, juego, plantilla, informe, vídeo, audio o servicio), consulta `pnpm business:factory plan ID` y reúne **todos** los roles requeridos de su tipo. Ejecuta `pnpm business:factory check ID --platform direct`; corrige bloqueos y produce archivos completos de verdad, no cabeceras de prueba ni archivos renombrados. Genera después `pnpm business:factory package ID --platform direct` y conserva el ZIP y manifiesto SHA-256 en la biblioteca. La cola comercial `pnpm business:commerce plan ID PLATAFORMA` no aceptará productos estructuralmente incompletos. Los validadores de cabecera son mínimos: se necesita además QA con las herramientas del producto (reproducción, tests de app/juego, citas y método de investigación, revisión pedagógica, maquetación, licencias). `pnpm business:factory metrics ID` distingue declaraciones de ventas de recibos externos, cobros y beneficios. Un ZIP local NO significa que algo esté vendido, publicado o editorialmente aprobado. Para la primera venta efectiva siguen faltando conectores MCP reales o navegación autenticada permitida, confirmación humana y recibos verificables.
