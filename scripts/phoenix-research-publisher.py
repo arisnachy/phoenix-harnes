@@ -631,7 +631,7 @@ def main():
             raise RuntimeError("invalid DOCX archive")
     if not pdf_file.read_bytes().startswith(b"%PDF-"):
         raise RuntimeError("PDF header is invalid")
-    print(json.dumps(result,ensure_ascii=False))
+    sys.stdout.buffer.write((json.dumps(result, ensure_ascii=False) + "\n").encode("utf-8"))
 
 if __name__=="__main__":
     try: main()
