@@ -78,7 +78,7 @@ Peer messages append after the target's reusable history prefix. Cold resume reu
 
 
 
-## Conversational Team result evidence
+### Conversational Team result evidence
 
 A simple direct response to Kira, even when its assignment says “prueba de comunicación” and “envía tu respuesta a lead” in ordinary Spanish without the literal tool name, is not a tool-executed external operation. It can use `send_message purpose=result` without running a fake command. External Gmail, filesystem, PowerShell, browser and other effects still require matching genuine tool receipts. Routine waiting does not justify a Sol strategic escalation.
 
