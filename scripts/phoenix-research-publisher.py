@@ -380,28 +380,52 @@ def main():
     pdf_file = output_root / "informe.pdf"
     printer = SimpleDocTemplate(str(pdf_file), pagesize=paper, rightMargin=60, leftMargin=60, topMargin=64, bottomMargin=62, title=title, author=str(cover.get("author","")))
     def footer(canvas, document):
+        canvas.saveState()
+        if editorial:
+            canvas.setStrokeColor(heading_ink)
+            canvas.setLineWidth(2)
+            canvas.line(60, paper[1] - 41, paper[0] - 60, paper[1] - 41)
+            canvas.setFont(font, 8)
+            canvas.setFillColor(ink)
+            canvas.drawString(60, paper[1] - 31, "PHOENIX  /  INVESTIGACIÓN")
+            canvas.setStrokeColor(colors.HexColor("#ccd6da"))
+            canvas.setLineWidth(0.5)
+            canvas.line(60, 44, paper[0] - 60, 44)
+        canvas.setFillColor(ink)
         canvas.setFont(font, 9)
-        canvas.drawCentredString(paper[0]/2, 32, str(document.page))
+        canvas.drawCentredString(paper[0]/2, 30, str(document.page))
+        canvas.restoreState()
     printer.build(story, onFirstPage=footer, onLaterPages=footer)
 
     chunks = []
     chunks.append("<!doctype html><html lang='es'><meta charset='utf-8'><title>"+html.escape(title)+"</title>")
-    chunks.append("<style>body{font:18px/1.65 Georgia,serif;max-width:760px;margin:44px auto;padding:0 22px;color:#222}h1,h2{line-height:1.3}a{color:#a45017}nav{padding:20px 0}.ref{font-size:.9em}figure img{width:100%}</style>")
+    chunks.append("<style>body{font:17px/1.65 system-ui,Georgia,serif;max-width:880px;margin:44px auto;padding:0 22px;color:#203043}h1,h2{line-height:1.3}h2{color:"+accent+";border-bottom:1px solid #d9e3e6;padding-bottom:.45em}a{color:"+accent+"}nav{padding:20px 0}.ref{font-size:.88em;margin:9px 0}figure img{width:100%}table{border-collapse:collapse;width:100%;font-size:.88em;display:block;overflow-x:auto}td,th{border-bottom:1px solid #dce5ea;padding:9px;text-align:left}th{background:#e9f3f4}</style>")
     chunks.append("<h1>"+html.escape(title)+"</h1>")
     chunks.append("<p>"+html.escape(" · ".join(str(cover.get(k,"")) for k in ("institution","author","date") if cover.get(k)))+"</p>")
     chunks.append("<nav>"+ " · ".join("<a href='#sec-"+str(i)+"'>"+html.escape(v["heading"])+"</a>" for i,v in enumerate(report["sections"]))+"</nav>")
     for i,section in enumerate(report["sections"]):
         rendered=format_text(section["text"],refs,style,numbers)
         chunks.append("<section id='sec-"+str(i)+"'><h2>"+html.escape(section["heading"])+"</h2><p>"+html.escape(rendered).replace("\n","</p><p>")+"</p></section>")
+    for ix,item in enumerate(report.get("tables", []), 1):
+        chunks.append("<figure><figcaption>Tabla "+str(ix)+". "+html.escape(str(item.get("title","Resultados")))+"</figcaption><table><thead><tr>")
+        chunks.extend("<th scope='col'>"+html.escape(str(c))+"</th>" for c in item["columns"])
+        chunks.append("</tr></thead><tbody>")
+        for row in item["rows"]:
+            chunks.append("<tr>"+"".join("<td>"+html.escape(str(cell))+"</td>" for cell in row)+"</tr>")
+        chunks.append("</tbody></table><p class='ref'>Fuente: "+html.escape(citation_string(item["source_key"], refs, style, numbers))+"</p></figure>")
     for ix, (chart,path) in enumerate(figures,1):
-        chunks.append("<figure><figcaption>"+html.escape(str(chart.get("title","Figura")))+"</figcaption><img src='"+html.escape(path.name)+"'></figure>")
+        chunks.append("<figure><figcaption>Figura "+str(ix)+". "+html.escape(str(chart.get("title","Figura")))+"</figcaption><img alt='"+html.escape(str(chart.get("title","Gráfico")))+"' src='"+html.escape(path.name)+"'></figure>")
     chunks.append("<h2>Referencias</h2><ol>")
     for src in ordered_refs:
         chunks.append("<li class='ref'>"+html.escape(bibliography(src,style,numbers[src["key"]]))+"</li>")
     chunks.append("</ol></html>")
     html_file=output_root/"informe.html"
     html_file.write_text("".join(chunks),encoding="utf-8")
-    result={"state":"REPORT_READY","report_id":digest,"title":title,"style":style,"source_count":len(cited),"source_verification":"metadata_user_supplied_not_network_verified","files":{"docx":str(docx_file),"pdf":str(pdf_file),"html":str(html_file)},"output_dir":str(output_root)}
+    result={"state":"REPORT_READY","report_id":digest,"title":title,"style":style,
+            "presentation":presentation,"document_type":report.get("document_type", "brief"),
+            "quality": {"required_sections_checked": True, "submission_certified": False,
+                        "bibliographic_metadata_network_verified": False, "visual_page_review": "not_performed"},
+            "source_count":len(cited),"source_verification":"metadata_user_supplied_not_network_verified","files":{"docx":str(docx_file),"pdf":str(pdf_file),"html":str(html_file)},"output_dir":str(output_root)}
     # Preserve the exact structured project so model handoffs and revisions do not
     # need to re-run every source lookup or reconstruct the manuscript from PDF.
     project = output_root / "project.json"
