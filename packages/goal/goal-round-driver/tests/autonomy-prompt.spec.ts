@@ -40,6 +40,8 @@ describe('goal-round autonomous continuation guidance', () => {
     expect(text).toContain('Do not bypass website access controls')
     expect(text).toContain('Tool schemas are executable contracts')
     expect(text).toContain('MiniBrowser Secure Ask broker')
+    expect(text).toContain('independent personal and Kira service identities')
+    expect(text).toContain('Never interpret user silence as permission to create a new account')
     expect(text).toContain('authentication-gate message or visible INGRESAR control')
     expect(text).toContain('verify that the authentication gate disappeared')
     expect(text).toContain('A broken MCP stdio pipe (EPIPE)')

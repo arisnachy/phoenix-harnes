@@ -142,7 +142,13 @@ describe('origin-scoped secure login', () => {
     }, {
       writeHead() {}, end(value: string) { body = value },
     })
-    expect(JSON.parse(body)).toEqual({ saved: true, automatic: true, source: 'legacy-vault' })
+    expect(JSON.parse(body)).toEqual({
+      saved: true, automatic: true, source: 'legacy-vault', profile: 'personal',
+      profiles: [
+        { id: 'personal', saved: true, automatic: true, source: 'legacy-vault' },
+        { id: 'kira', saved: false, automatic: false, source: 'none' },
+      ],
+    })
     expect(body).not.toContain('private')
   })
 

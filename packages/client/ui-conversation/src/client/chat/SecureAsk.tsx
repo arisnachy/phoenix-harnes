@@ -1,6 +1,6 @@
 /** Secure Ask is a human-only sidebar form, not ask_user_question or an LLM tool result. */
 import { useState, type FormEvent } from 'react'
-import { secureApi, type SecureLoginTarget, type SecureStatus } from './MiniBrowser.tsx'
+import { secureApi, type SecureLoginTarget, type SecureStatus, type SecureLoginProfile, type SecureProfileInfo } from './MiniBrowser.tsx'
 import css from './SecureAsk.module.css'
 
 export function SecureAsk({ target, onClose, onSaved }: {
@@ -14,7 +14,34 @@ export function SecureAsk({ target, onClose, onSaved }: {
   const [busy, setBusy] = useState(false)
   const [feedback, setFeedback] = useState('')
   const [editing, setEditing] = useState(!target.saved)
+  const [profile, setProfile] = useState<SecureLoginProfile>(target.profile ?? 'personal')
+  const [profiles, setProfiles] = useState<SecureProfileInfo[]>(target.profiles ?? [
+    { id: 'personal', saved: target.saved, automatic: target.automatic, source: target.saved ? 'dpapi' : 'none' },
+    { id: 'kira', saved: false, automatic: false, source: 'none' },
+  ])
+  const selectedProfile = profiles.find(item => item.id === profile)
+  const selectedSaved = selectedProfile?.saved ?? false
   const [extraValues, setExtraValues] = useState<Record<string, string>>({})
+  const chooseProfile = async (next: SecureLoginProfile): Promise<void> => {
+    if (busy || next === profile) return
+    const found = profiles.find(item => item.id === next)
+    setProfile(next)
+    setAutomatic(found?.automatic ?? false)
+    setEditing(!found?.saved)
+    setFeedback('')
+    setAccount('')
+    setSecret('')
+    setExtraValues({})
+    if (found?.saved) {
+      try {
+        // Selecting a named identity is an explicit human instruction.
+        const status = await secureApi<SecureStatus>('/select', {
+          origin: target.origin, tabId: target.tabId, profile: next,
+        })
+        if (status.profiles) setProfiles(status.profiles)
+      } catch { setFeedback('No se pudo seleccionar esa identidad. Conservé ambas credenciales.') }
+    }
+  }
   const accountField = target.fields?.find(field => field.role === 'account')
   const secretField = target.fields?.find(field => field.role === 'secret')
   const extraFields = target.fields?.filter(field => field.role === 'extra') ?? []
@@ -37,14 +64,17 @@ export function SecureAsk({ target, onClose, onSaved }: {
     if (busy || !account.trim() || !secret || extraFields.some(field => field.required && !extraValues[field.key]?.trim())) return
     setBusy(true)
     try {
-      await secureApi<SecureStatus>('/save', {
-        origin: target.origin, tabId: target.tabId, account, secret, automatic,
+      const saved = await secureApi<SecureStatus>('/save', {
+        origin: target.origin, tabId: target.tabId, account, secret, automatic, profile,
         ...(extraFields.length ? { extras: Object.fromEntries(extraFields.map(field => [field.key, extraValues[field.key] ?? ''])) } : {}),
       })
+      if (saved.profiles) setProfiles(saved.profiles)
+      // Once stored securely, do not leave the credential-entry form exposed.
+      setEditing(false)
       // The user's explicit submit authorizes *this* initial login. The
       // separate checkbox controls only future unattended logins.
       const login = await secureApi<{ status: string }>('/use', {
-        origin: target.origin, tabId: target.tabId, manual: true,
+        origin: target.origin, tabId: target.tabId, manual: true, profile,
       })
       if (login.status === 'submitted') await verifyLogin()
       else setFeedback('Credenciales guardadas. El formulario del sitio requiere intervención adicional.')
@@ -61,7 +91,7 @@ export function SecureAsk({ target, onClose, onSaved }: {
     setBusy(true)
     try {
       const result = await secureApi<{ status: string }>('/use', {
-        origin: target.origin, tabId: target.tabId, manual: true,
+        origin: target.origin, tabId: target.tabId, manual: true, profile,
       })
       if (result.status === 'submitted') await verifyLogin()
       else setFeedback('No se confirmó el envío del acceso. Comprueba la página.')
@@ -71,8 +101,9 @@ export function SecureAsk({ target, onClose, onSaved }: {
   const remove = async () => {
     setBusy(true)
     try {
-      await secureApi('/delete', { origin: target.origin })
-      setFeedback('Acceso anterior eliminado. Puedes registrar uno nuevo.')
+      const result = await secureApi<SecureStatus>('/delete', { origin: target.origin, profile })
+      if (result.profiles) setProfiles(result.profiles)
+      setFeedback('Se eliminó únicamente la identidad seleccionada. Las demás se conservaron.')
       setEditing(true)
     } catch { setFeedback('No se pudo eliminar el acceso.') }
     finally { setBusy(false) }
@@ -81,8 +112,19 @@ export function SecureAsk({ target, onClose, onSaved }: {
     <div className={css.root} data-secure-ask="true" role="region" aria-label="Acceso seguro de Kira">
       <p className={css.notice}>Kira comprobará primero los accesos existentes. Si necesitas registrar uno nuevo, los datos se envían directamente a la bóveda local, nunca al modelo.</p>
       <div className={css.origin} title={target.origin}>🔒 {target.origin}</div>
+      <div role="group" aria-label="Seleccionar identidad de acceso" className={css.actions}>
+        <button type="button" disabled={busy} aria-pressed={profile === 'personal'}
+          onClick={() => { void chooseProfile('personal') }}>Cuenta personal</button>
+        <button type="button" disabled={busy} aria-pressed={profile === 'kira'}
+          onClick={() => { void chooseProfile('kira') }}>Cuenta de Kira</button>
+      </div>
+      <p className={css.notice}>{selectedSaved
+        ? 'La identidad seleccionada tiene un acceso cifrado disponible.'
+        : profile === 'kira'
+          ? 'Kira aún no tiene acceso guardado a este sitio. Registrar una cuenta requiere autorización y cumplir las reglas del servicio.'
+          : 'Aún no hay un acceso personal guardado para este sitio.'}</p>
       {target.diagnostic && <p role="status" className={css.feedback}>{target.diagnostic}</p>}
-      {target.saved && <div className={css.saved}>
+      {selectedSaved && <div className={css.saved}>
         <span>Ya existe un acceso guardado para este sitio. No es necesario escribirlo otra vez.</span>
         <button type="button" disabled={busy} onClick={() => { void useSaved() }}>Usar acceso guardado</button>
         <button type="button" disabled={busy} onClick={() => setEditing(value => !value)}>
@@ -117,7 +159,7 @@ export function SecureAsk({ target, onClose, onSaved }: {
           <button type="submit" disabled={busy || !account.trim() || !secret
             || extraFields.some(field => field.required && !extraValues[field.key]?.trim())}>Guardar y continuar</button>
           <button type="button" disabled={busy} onClick={onClose}>Ahora no</button>
-          {target.saved && <button type="button" disabled={busy} onClick={() => { void remove() }}>Eliminar acceso</button>}
+          {selectedSaved && <button type="button" disabled={busy} onClick={() => { void remove() }}>Eliminar acceso</button>}
         </div>
       </form>}
       {feedback && <p className={css.feedback} role="status">{feedback}</p>}

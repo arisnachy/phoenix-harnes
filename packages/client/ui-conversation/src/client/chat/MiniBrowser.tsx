@@ -134,7 +134,15 @@ async function captureFrame(tabId: string, signal?: AbortSignal): Promise<Blob> 
     return response.blob()
   }, FRAME_DEADLINE_MS, FRAME_DEADLINE_MESSAGE, signal)
 }
-export type SecureStatus = { saved: boolean; automatic: boolean }
+export type SecureLoginProfile = 'personal' | 'kira'
+export type SecureProfileInfo = {
+  id: SecureLoginProfile; saved: boolean; automatic: boolean
+  source: 'dpapi' | 'legacy-vault' | 'none'
+}
+export type SecureStatus = {
+  saved: boolean; automatic: boolean
+  profile?: SecureLoginProfile; profiles?: SecureProfileInfo[]
+}
 export type SecureLoginField = {
   key: string
   role: 'account' | 'secret' | 'extra'
@@ -146,6 +154,7 @@ export type SecureLoginField = {
 export type SecureLoginTarget = {
   origin: string; tabId: string; saved: boolean; automatic: boolean
   diagnostic?: string; fields?: SecureLoginField[]
+  profile?: SecureLoginProfile; profiles?: SecureProfileInfo[]
 }
 type SecureDetection = {
   required: boolean; formVisible?: boolean; gateVisible?: boolean
@@ -283,6 +292,8 @@ export function MiniBrowser({ requested = false, active = true, initialTabId, on
           if (status.saved) {
             onSecureLoginRequest?.({
               origin: siteOrigin, tabId, saved: true, automatic: status.automatic,
+              ...(status.profile ? { profile: status.profile } : {}),
+              ...(status.profiles ? { profiles: status.profiles } : {}),
               diagnostic: 'No fue posible comprobar el acceso. Usa el acceso guardado o reintenta la conexión.',
             })
           }
@@ -305,6 +316,8 @@ export function MiniBrowser({ requested = false, active = true, initialTabId, on
         }
         const request: SecureLoginTarget = {
           origin: siteOrigin, tabId, saved: status.saved, automatic: status.automatic,
+          ...(status.profile ? { profile: status.profile } : {}),
+          ...(status.profiles ? { profiles: status.profiles } : {}),
           ...(detection.fields?.length ? { fields: detection.fields } : {}),
           ...('unavailable' in status && status.unavailable ? {
             diagnostic: 'La bóveda local no respondió. Revisa la conexión antes de guardar un acceso nuevo.',
@@ -771,6 +784,8 @@ export function MiniBrowser({ requested = false, active = true, initialTabId, on
               void secureApi<SecureStatus>('/status?origin=' + encodeURIComponent(siteOrigin))
                 .then(status => onSecureLoginRequest({
                   origin: siteOrigin, tabId, saved: status.saved, automatic: status.automatic,
+                  ...(status.profile ? { profile: status.profile } : {}),
+                  ...(status.profiles ? { profiles: status.profiles } : {}),
                 }))
                 .catch(() => onSecureLoginRequest({
                   origin: siteOrigin, tabId, saved: false, automatic: false,

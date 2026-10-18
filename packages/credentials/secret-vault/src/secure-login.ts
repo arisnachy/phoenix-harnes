@@ -6,6 +6,7 @@
 import type { Context } from '@phoenix-ai/cordis'
 import type {} from '@phoenix-ai/dsh-host-webserver'
 import { originCredentialRef, type CredentialProvider } from '@phoenix-ai/dsh-credentials'
+import { accountProvisionDecision, loginProfile, preferredLoginProfile, type LoginProfile, type LoginProfileInfo } from './identity-registry.ts'
 import { createHash, randomUUID } from 'node:crypto'
 import { spawn } from 'node:child_process'
 import { homedir, tmpdir } from 'node:os'
@@ -39,15 +40,38 @@ export function loginOrigin(raw: string): string {
   if (parsed.protocol !== 'https:' && !(local && parsed.protocol === 'http:')) throw new Error('Solo HTTPS')
   return parsed.origin
 }
-function filename(origin: string): string {
-  return join(STORE, createHash('sha256').update(origin).digest('hex') + '.dpapi.json')
+function filename(origin: string, profile: LoginProfile = 'personal'): string {
+  const suffix = profile === 'kira' ? '.kira.dpapi.json' : '.dpapi.json'
+  return join(STORE, createHash('sha256').update(origin).digest('hex') + suffix)
 }
-function entropy(origin: string): string {
-  return createHash('sha256').update('phoenix-login-v1:' + origin).digest('base64')
+function primaryFilename(origin: string): string {
+  return join(STORE, createHash('sha256').update(origin).digest('hex') + '.primary.json')
+}
+function entropy(origin: string, profile: LoginProfile = 'personal'): string {
+  // Preserve exact personal-vault entropy for backwards compatibility.
+  return createHash('sha256').update('phoenix-login-v1:' + origin
+    + (profile === 'kira' ? ':kira' : '')).digest('base64')
+}
+async function readPrimary(origin: string): Promise<LoginProfile | undefined> {
+  try {
+    const row: unknown = JSON.parse(await readFile(primaryFilename(origin), 'utf8'))
+    if (row && typeof row === 'object' && 'profile' in row
+      && (row.profile === 'personal' || row.profile === 'kira')) return row.profile
+  } catch { /* Newly discovered sites have no preference yet. */ }
+  return undefined
+}
+async function setPrimary(origin: string, profile: LoginProfile): Promise<void> {
+  await mkdir(STORE, { recursive: true, mode: 0o700 })
+  const path = primaryFilename(origin)
+  const temp = path + '.' + randomUUID() + '.tmp'
+  try {
+    await writeFile(temp, JSON.stringify({ version: 1, profile }), { mode: 0o600, flag: 'wx' })
+    await rename(temp, path)
+  } finally { await rm(temp, { force: true }).catch(() => {}) }
 }
 
 /** Secret data only on child stdin, never in process arguments, stdout errors or logs. */
-async function dpapi(mode: 'protect' | 'unprotect', body: string, origin: string): Promise<string> {
+async function dpapi(mode: 'protect' | 'unprotect', body: string, origin: string, profile: LoginProfile = 'personal'): Promise<string> {
   if (process.platform !== 'win32') throw new Error('Bóveda de Windows no disponible')
   return await new Promise<string>((resolve, reject) => {
     const child = spawn('powershell.exe', [
@@ -80,7 +104,7 @@ async function dpapi(mode: 'protect' | 'unprotect', body: string, origin: string
       else finish()
     })
     child.stdin.on('error', () => { /* Process close reports a sanitized failure. */ })
-    child.stdin.end(JSON.stringify({ mode, body, entropy: entropy(origin) }))
+    child.stdin.end(JSON.stringify({ mode, body, entropy: entropy(origin, profile) }))
   })
 }
 /** Backward-compatible access to accounts previously saved via Phoenix credentials.
@@ -103,25 +127,41 @@ async function legacyLogin(vault: CredentialProvider | undefined, origin: string
   } catch { return undefined }
 }
 
-async function load(origin: string): Promise<LoginRecord | undefined> {
+async function load(origin: string, profile: LoginProfile = 'personal'): Promise<LoginRecord | undefined> {
   try {
-    const row = JSON.parse(await readFile(filename(origin), 'utf8')) as LoginRecord
+    const row = JSON.parse(await readFile(filename(origin, profile), 'utf8')) as LoginRecord
     return row.version === 1 && row.origin === origin && typeof row.sealed === 'string'
       && typeof row.automatic === 'boolean' ? row : undefined
   } catch { return undefined }
 }
-async function store(origin: string, account: string, secret: string, automatic: boolean, extras?: Record<string, string>): Promise<void> {
-  const body = Buffer.from(JSON.stringify({ origin, account, secret, ...(extras === undefined ? {} : { extras }) } satisfies LoginContent), 'utf8').toString('base64')
-  const sealed = await dpapi('protect', body, origin)
+async function store(origin: string, account: string, secret: string, automatic: boolean,
+  extras?: Record<string, string>, profile: LoginProfile = 'personal'): Promise<void> {
+  const body = Buffer.from(JSON.stringify({ origin, account, secret,
+    ...(extras === undefined ? {} : { extras }) } satisfies LoginContent), 'utf8').toString('base64')
+  const sealed = await dpapi('protect', body, origin, profile)
   const row: LoginRecord = { version: 1, origin, automatic, sealed }
   await mkdir(STORE, { recursive: true, mode: 0o700 })
-  const temporary = filename(origin) + '.' + randomUUID() + '.tmp'
+  const temporary = filename(origin, profile) + '.' + randomUUID() + '.tmp'
   try {
     await writeFile(temporary, JSON.stringify(row), { mode: 0o600, flag: 'wx' })
-    await rename(temporary, filename(origin))
+    await rename(temporary, filename(origin, profile))
   } finally {
     await rm(temporary, { force: true }).catch(() => {})
   }
+}
+async function listProfiles(origin: string, vault?: CredentialProvider): Promise<LoginProfileInfo[]> {
+  const [personal, kira] = await Promise.all([load(origin), load(origin, 'kira')])
+  const legacy = personal ? undefined : await legacyLogin(vault, origin)
+  return [
+    { id: 'personal', saved: Boolean(personal || legacy),
+      automatic: personal?.automatic ?? legacy?.automatic ?? false,
+      source: personal ? 'dpapi' : legacy ? 'legacy-vault' : 'none' },
+    { id: 'kira', saved: Boolean(kira), automatic: kira?.automatic ?? false,
+      source: kira ? 'dpapi' : 'none' },
+  ]
+}
+async function activeProfile(origin: string, profiles: readonly LoginProfileInfo[]): Promise<LoginProfile> {
+  return preferredLoginProfile(profiles, await readPrimary(origin))
 }
 function loopbackRequest(req: IncomingMessage): boolean {
   const remote = req.socket.remoteAddress ?? ''
@@ -430,14 +470,15 @@ async function injectLogin(tab: BrowserTab, login: LoginContent): Promise<string
     })
   })
 }
-async function useLogin(origin: string, tabId: string, manual: boolean, vault?: CredentialProvider): Promise<string> {
-  const saved = await load(origin)
-  const previous = saved ? undefined : await legacyLogin(vault, origin)
+async function useLogin(origin: string, tabId: string, manual: boolean,
+  profile: LoginProfile, vault?: CredentialProvider): Promise<string> {
+  const saved = await load(origin, profile)
+  const previous = profile === 'personal' && !saved ? await legacyLogin(vault, origin) : undefined
   if ((!saved && !previous)
     || (!(saved?.automatic ?? previous?.automatic ?? false) && !manual)) return 'not-authorized'
   const tab = await tabForLogin(tabId, origin)
   const login = saved
-    ? JSON.parse(Buffer.from(await dpapi('unprotect', saved.sealed, origin), 'base64').toString('utf8')) as LoginContent
+    ? JSON.parse(Buffer.from(await dpapi('unprotect', saved.sealed, origin, profile), 'base64').toString('utf8')) as LoginContent
     : previous!.login
   if (login.origin !== origin || !login.account || !login.secret) throw new Error('Registro de bóveda inválido')
   const preparation = await prepareVisibleLogin(tab)
@@ -447,12 +488,9 @@ async function useLogin(origin: string, tabId: string, manual: boolean, vault?: 
     // Migrating must not prevent a successfully initiated login. Keep legacy
     // access in place if DPAPI is unavailable or the migration cannot finish.
     try {
-      await store(origin, login.account, login.secret, previous.automatic, login.extras)
-      await Promise.all([
-        vault?.unset(originCredentialRef(origin, 'account')).catch(() => {}),
-        vault?.unset(originCredentialRef(origin, 'secret')).catch(() => {}),
-        vault?.unset(originCredentialRef(origin, 'autonomous')).catch(() => {}),
-      ])
+      await store(origin, login.account, login.secret, previous.automatic, login.extras, 'personal')
+      // Keep legacy records intact until the owner explicitly removes them.
+      // Login migration should never discard a fallback credential.
     } catch { /* A storage problem is not a login failure. */ }
   }
   return result
@@ -469,17 +507,40 @@ export function registerSecureLogin(ctx: Context, vault?: CredentialProvider): (
         const route = new URL(req.url ?? '/', 'http://localhost')
         if (req.method === 'GET' && route.pathname === PREFIX + '/status') {
           const origin = loginOrigin(route.searchParams.get('origin') ?? '')
-          const record = await load(origin)
-          const legacy = record ? undefined : await legacyLogin(vault, origin)
+          const profiles = await listProfiles(origin, vault)
+          const selected = await activeProfile(origin, profiles)
+          const current = profiles.find(p => p.id === selected)!
           respond(res, 200, {
-            saved: Boolean(record || legacy), automatic: record?.automatic ?? legacy?.automatic ?? false,
-            source: record ? 'dpapi' : legacy ? 'legacy-vault' : 'none',
+            saved: current.saved, automatic: current.automatic, source: current.source,
+            profile: selected, profiles,
           })
           return
         }
         if (req.method !== 'POST') { respond(res, 405, { error: 'Operación no permitida' }); return }
         const payload = await input(req)
         const origin = loginOrigin(String(payload.origin ?? ''))
+        if (route.pathname === PREFIX + '/select') {
+          if (typeof payload.tabId !== 'string' || !/^[A-Za-z0-9_-]{1,200}$/.test(payload.tabId)) {
+            throw new Error('Pestaña no válida')
+          }
+          await tabForLogin(payload.tabId, origin)
+          const profile = loginProfile(payload.profile)
+          const profiles = await listProfiles(origin, vault)
+          if (!profiles.some(item => item.id === profile && item.saved)) {
+            throw new Error('Esa identidad no tiene acceso guardado')
+          }
+          await setPrimary(origin, profile)
+          const current = profiles.find(item => item.id === profile)!
+          respond(res, 200, { saved: true, automatic: current.automatic, profile, profiles })
+          return
+        }
+        if (route.pathname === PREFIX + '/provision-eligibility') {
+          // Planning only. Never register accounts merely because a human
+          // did not respond or use a restricted/identity-verified service.
+          const decision = accountProvisionDecision(origin, payload.authorized === true, false)
+          respond(res, 200, { decision, created: false })
+          return
+        }
         if (route.pathname === PREFIX + '/detect') {
           if (typeof payload.tabId !== 'string' || !/^[A-Za-z0-9_-]{1,200}$/.test(payload.tabId)) {
             throw new Error('Pestaña no válida')
@@ -525,21 +586,42 @@ export function registerSecureLogin(ctx: Context, vault?: CredentialProvider): (
             throw new Error('Datos adicionales de acceso no válidos')
           }
           const extras = rawExtras as Record<string, string> | undefined
-          await store(origin, account, secret, payload.automatic === true, extras)
-          respond(res, 200, { saved: true, automatic: payload.automatic === true })
+          const profile = payload.profile === undefined ? 'personal' : loginProfile(payload.profile)
+          await store(origin, account, secret, payload.automatic === true, extras, profile)
+          if (profile === 'personal') await setPrimary(origin, 'personal')
+          const profiles = await listProfiles(origin, vault)
+          const selected = await activeProfile(origin, profiles)
+          respond(res, 200, { saved: true, automatic: payload.automatic === true, profile: selected,
+            profiles })
           return
         }
         if (route.pathname === PREFIX + '/delete') {
-          await rm(filename(origin), { force: true })
-          respond(res, 200, { saved: false, automatic: false })
+          // Deletion is explicit and affects only the named identity.
+          const profile = payload.profile === undefined ? 'personal' : loginProfile(payload.profile)
+          await rm(filename(origin, profile), { force: true })
+          if (profile === 'personal' && vault) {
+            await Promise.all([
+              vault.unset(originCredentialRef(origin, 'account')),
+              vault.unset(originCredentialRef(origin, 'secret')),
+              vault.unset(originCredentialRef(origin, 'autonomous')),
+            ])
+          }
+          const profiles = await listProfiles(origin, vault)
+          const selected = await activeProfile(origin, profiles)
+          const current = profiles.find(item => item.id === selected)!
+          respond(res, 200, { saved: current.saved, automatic: current.automatic,
+            profile: selected, profiles })
           return
         }
         if (route.pathname === PREFIX + '/use') {
           if (typeof payload.tabId !== 'string' || !/^[A-Za-z0-9_-]{1,200}$/.test(payload.tabId)) {
             throw new Error('Pestaña no válida')
           }
-          const status = await useLogin(origin, payload.tabId, payload.manual === true, vault)
-          respond(res, 200, { status })
+          const profiles = await listProfiles(origin, vault)
+          const selected = payload.profile === undefined
+            ? await activeProfile(origin, profiles) : loginProfile(payload.profile)
+          const status = await useLogin(origin, payload.tabId, payload.manual === true, selected, vault)
+          respond(res, 200, { status, profile: selected })
           return
         }
         respond(res, 404, { error: 'Ruta desconocida' })

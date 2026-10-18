@@ -72,6 +72,71 @@ describe('Secure Ask human-only browser sidebar', () => {
       && (call.extras as Record<string, string>)?.['extra:0'] === 'xyz')).toBe(true))
   })
 
+  it('keeps personal and Kira identities independently selectable', async () => {
+    const calls: Array<{ path: string; data: Record<string, unknown> }> = []
+    vi.stubGlobal('fetch', vi.fn(async (path: string, options?: RequestInit) => {
+      const data = JSON.parse(String(options?.body ?? '{}')) as Record<string, unknown>
+      calls.push({ path, data })
+      const profiles = [
+        { id: 'personal', saved: true, automatic: true, source: 'dpapi' },
+        { id: 'kira', saved: true, automatic: false, source: 'dpapi' },
+      ]
+      return new Response(JSON.stringify(path.endsWith('/select')
+        ? { saved: true, automatic: false, profile: 'kira', profiles }
+        : path.endsWith('/detect') ? { required: false }
+          : { status: 'submitted' }), {
+        status: 200, headers: { 'content-type': 'application/json' },
+      })
+    }))
+    const onSaved = vi.fn()
+    render(<SecureAsk target={{ origin: 'https://example.org', tabId: 'test-tab',
+      saved: true, automatic: true, profile: 'personal', profiles: [
+        { id: 'personal', saved: true, automatic: true, source: 'dpapi' },
+        { id: 'kira', saved: true, automatic: false, source: 'dpapi' },
+      ] }} onSaved={onSaved} onClose={vi.fn()} />)
+    expect(screen.queryByPlaceholderText('Escribe o pega tu usuario')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Cuenta de Kira' }))
+    await waitFor(() => expect(calls.some(call => call.path.endsWith('/select')
+      && call.data.profile === 'kira')).toBe(true))
+    expect(screen.queryByPlaceholderText('Escribe o pega la contraseña')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Usar acceso guardado' }))
+    await waitFor(() => expect(calls.some(call => call.path.endsWith('/use')
+      && call.data.profile === 'kira')).toBe(true))
+    await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1), { timeout: 3_500 })
+  })
+
+  it('allows adding Kira credentials without replacing an existing personal account', async () => {
+    const calls: Array<{ path: string; data: Record<string, unknown> }> = []
+    vi.stubGlobal('fetch', vi.fn(async (path: string, options?: RequestInit) => {
+      const data = JSON.parse(String(options?.body ?? '{}')) as Record<string, unknown>
+      calls.push({ path, data })
+      const profiles = [
+        { id: 'personal', saved: true, automatic: true, source: 'dpapi' },
+        { id: 'kira', saved: true, automatic: false, source: 'dpapi' },
+      ]
+      return new Response(JSON.stringify(path.endsWith('/save')
+        ? { saved: true, automatic: false, profile: 'personal', profiles }
+        : path.endsWith('/detect') ? { required: false }
+          : { status: 'submitted' }), {
+        status: 200, headers: { 'content-type': 'application/json' },
+      })
+    }))
+    render(<SecureAsk target={{ origin: 'https://example.org', tabId: 'test-tab',
+      saved: true, automatic: true, profile: 'personal', profiles: [
+        { id: 'personal', saved: true, automatic: true, source: 'dpapi' },
+        { id: 'kira', saved: false, automatic: false, source: 'none' },
+      ] }} onSaved={vi.fn()} onClose={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Cuenta de Kira' }))
+    fireEvent.change(screen.getByPlaceholderText('Escribe o pega tu usuario'),
+      { target: { value: 'kira-service-user' } })
+    fireEvent.change(screen.getByPlaceholderText('Escribe o pega la contraseña'),
+      { target: { value: 'secret-test-not-to-chat' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar y continuar' }))
+    await waitFor(() => expect(calls.some(call => call.path.endsWith('/save')
+      && call.data.profile === 'kira' && call.data.account === 'kira-service-user')).toBe(true))
+    expect(calls.some(call => call.path.endsWith('/delete'))).toBe(false)
+  })
+
   it('does not claim login complete if the site still requires authentication', async () => {
     const onSaved = vi.fn()
     vi.stubGlobal('fetch', vi.fn(async (path: string) => new Response(JSON.stringify(
