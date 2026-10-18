@@ -87,3 +87,62 @@ de SharePoint Embedded; no reemplaza SharePoint convencional.
 
 Todas las identidades y los permisos se gestionan por el proveedor.
 **Microsoft Learn** lee documentación pública, se aprovisiona en el paquete base y no requiere credenciales. **Work IQ y Azure** requieren credenciales y pueden incurrir en facturación aunque el servidor MCP sea software de libre distribución. Cada uno tiene estado separado; **Work IQ y Azure no están en el paquete de arranque automático** (CORE_MCP_PACK_IDS).
+
+
+## 7. Microsoft Personal (Outlook, Calendario, Contactos y OneDrive) — gratis
+
+Phoenix incorpora el servidor local **microsoft-personal**, distinto de
+Microsoft Learn, Microsoft 365 Work IQ y Azure. Usa directamente Microsoft Graph,
+con OAuth delegado **device-code** y sin Microsoft 365 de pago, Copilot,
+Work IQ ni un servidor de terceros que reciba el correo.
+
+**Requisito inicial inevitable:** registrar una aplicación pública propia en
+[Microsoft Entra](https://entra.microsoft.com/) (Application / client ID UUID).
+Microsoft exige un client ID para OAuth: no existe un inicio de sesión anónimo.
+En *App registrations → New registration* elige una aplicación que permita
+cuentas personales Microsoft; en *Authentication* activa **Allow public client
+flows**. Añade los permisos delegados de Graph: User.Read, Mail.Read,
+Calendars.Read, Contacts.Read, Files.Read. Si deseas funciones de escritura,
+añade también Mail.ReadWrite, Mail.Send y Calendars.ReadWrite.
+Consulta la [guía oficial](https://learn.microsoft.com/en-us/graph/auth-register-app-v2).
+Las cuentas corporativas sujetas a administración o Microsoft 365 no son
+el destino de este servidor: usa el flujo de cuentas personales /consumers.
+
+### Activación en Phoenix
+
+1. Actualiza Phoenix y abre Configuración → Conectores → paquete MCP básico
+   (o instala el conector curado `microsoft-personal`).
+2. Pide a Kira usar `microsoft_setup` con tu **Application (client) ID**
+   público. Alternativa: define `PHOENIX_MICROSOFT_CLIENT_ID` en el entorno
+   del Host y reinicia; nunca pegues credenciales privadas en el chat.
+3. Kira llama `microsoft_login_start` con `mode: "read"`. Abre la URL
+   Microsoft oficial que devuelva y escribe allí el código de dispositivo.
+4. Kira llama `microsoft_login_complete` respetando
+   `retryAfterSeconds` hasta confirmar `authorized`, y después verifica
+   `microsoft_profile`. No declares lista la cuenta antes de comprobarlo.
+5. Si necesitas acciones de escritura, repite la autorización con
+   `mode: "write"` para obtener consentimiento explícito adicional.
+
+**Herramientas:** consulta de correo/bandejas y mensajes, perfil, calendario,
+contactos y navegación de carpetas OneDrive; con permisos de escritura:
+borradores de correo, envío de correo y creación de eventos. El envío real
+necesita aprobación explícita del usuario **antes** de que Kira llame a
+`microsoft_mail_send`; el parámetro `confirm` no sustituye la aprobación.
+La API de OneDrive es de lectura en esta versión: listar archivos Office no
+equivale a poder editarlos. Teams empresarial, SharePoint empresarial y
+Microsoft 365 de pago no se habilitan con una cuenta personal gratuita.
+
+**Persistencia y privacidad:** los tokens no se devuelven al agente ni se
+incluyen en el inventario MCP. En Windows, el refresh token se cifra con
+**DPAPI CurrentUser** bajo `~/.dsh/microsoft-personal/refresh.dpapi`. En
+macOS/Linux el servidor conserva tokens solo mientras el proceso esté activo,
+sin volcar secretos en disco. `microsoft_disconnect` borra el token local;
+para revocar el permiso de la aplicación también debes hacerlo en Microsoft.
+No hay facturación de Graph por estas operaciones básicas en condiciones
+normales, aunque se aplican cuotas, límites y políticas de Microsoft.
+
+**Ejecución:** el MCP local se inicia con Node desde
+`scripts/phoenix-microsoft-personal-mcp.mjs` en el directorio de trabajo del
+Host (la raíz de la versión activa de Phoenix). Comprueba `node --version`
+y que el script exista en ese runtime. Nunca confundas instalado con
+autenticado: valida primero las herramientas y luego la cuenta.
