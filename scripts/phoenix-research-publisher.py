@@ -46,7 +46,7 @@ def citation_keys(value):
         if REF_RE.fullmatch(token) is None:
             raise ValueError("Unsupported citation group " + token[:120] +
                              ". Use [@a; @b] or [@a].")
-        keys.extend(k.lstrip("@").strip() for k in re.split(r"[;,]", match.group(1)))
+        keys.extend(k.strip().lstrip("@") for k in re.split(r"[;,]", match.group(1)))
     if value.count("[@") != len(list(CITE_ANY_RE.finditer(value))):
         raise ValueError("Unclosed citation marker")
     return keys
@@ -355,7 +355,7 @@ def citation_string(key, refs, style, index):
 
 def format_text(value, refs, style, order):
     def replace_group(match):
-        keys = [part.lstrip("@").strip() for part in re.split(r"[;,]", match.group(1))]
+        keys = [part.strip().lstrip("@") for part in re.split(r"[;,]", match.group(1))]
         return "; ".join(citation_string(key, refs, style, order) for key in keys)
     result = REF_RE.sub(replace_group, value)
     if "[@" in result:
