@@ -145,6 +145,21 @@ export function validateResearchPublication(input: unknown): Report {
   if (report.presentation !== undefined && !['academic', 'editorial', 'hybrid'].includes(String(report.presentation))) {
     throw new ToolArgsError(['Presentación inválida: academic, editorial o hybrid.'])
   }
+  const designPresets = ['auto', 'academic_classic', 'editorial_navy', 'clinical_teal',
+    'executive_amber', 'minimal_graphite', 'creative_coral'] as const
+  if (report.design_preset !== undefined && (
+    typeof report.design_preset !== 'string' || !designPresets.includes(report.design_preset as typeof designPresets[number])
+  )) {
+    throw new ToolArgsError(['Diseño desconocido. Usa auto, academic_classic, editorial_navy, clinical_teal, executive_amber, minimal_graphite o creative_coral.'])
+  }
+  const presentation = report.presentation ?? (quality === 'professional' ? 'hybrid' : 'academic')
+  if (presentation === 'academic' && report.design_preset !== undefined
+    && report.design_preset !== 'auto' && report.design_preset !== 'academic_classic') {
+    throw new ToolArgsError(['Una presentación académica estricta no admite portada decorativa.'])
+  }
+  if (presentation !== 'academic' && report.design_preset === 'academic_classic') {
+    throw new ToolArgsError(['academic_classic requiere presentación academic.'])
+  }
   if (report.document_type !== undefined && !['brief', 'monograph', 'research_protocol',
     'narrative_review', 'systematic_review', 'original_research', 'thesis',
     'journal_manuscript', 'policy_report'].includes(String(report.document_type))) {
