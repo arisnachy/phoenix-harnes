@@ -9,6 +9,8 @@ import { deflateRawSync } from 'node:zlib'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { validateBlueprint, progress, buildFingerprint, docxEntries, printHtml } from './phoenix-business-studio.mjs'
 import { auditBook, buildBookMarketingBrief, genreGuide, inspectCover, BOOK_FORMATS } from './phoenix-book-quality.mjs'
+import { auditStoryLedger, validateStoryLedger } from './phoenix-book-continuity.mjs'
+import { renderBookPdf } from './phoenix-book-pdf.mjs'
 
 const root = resolve(process.env.PHOENIX_BUSINESS_HOME || join(process.env.DSH_HOME || join(homedir(), '.dsh'), 'business-library'))
 const indexFile = join(root, 'library.json')
@@ -228,7 +230,7 @@ async function main(args) {
   const [cmd, ...rest] = args
   const option = (flag, fallback) => {const i=rest.indexOf(flag);return i<0?fallback:rest[i+1]??fail(`Falta valor de ${flag}`)}
   const positional = rest.filter((arg,i)=>!(arg.startsWith('--')||i>0&&rest[i-1].startsWith('--')))
-  if (cmd === 'help' || !cmd) return {usage:['init <tipo> <título>', 'list', 'show <id>', 'asset <id> <archivo> --role <source|manuscript|ebook|print|cover|promo>', 'chapter <id> <número> <archivo.md>', 'blueprint <id> <plan.json>', 'progress <id>', 'audit <id>', 'book-quality <id>', 'book-guide <género>', 'book-marketing <id> <fuentes.json>', 'compile <id> --author <nombre> [--words 50000] [--chapters 15] [--lang es]', 'check <id> [--words 50000] [--chapters 15]', 'route <plataforma> [--tools mcp__servidor__herramienta,...]', 'prepare <id> <plataforma> <precio> [--currency USD]', 'sale <id> <importe_bruto> <unidades> --source <referencia>', 'gallery'], home:root}
+  if (cmd === 'help' || !cmd) return {usage:['init <tipo> <título>', 'list', 'show <id>', 'asset <id> <archivo> --role <source|manuscript|ebook|print|cover|promo>', 'chapter <id> <número> <archivo.md>', 'blueprint <id> <plan.json>', 'progress <id>', 'audit <id>', 'book-quality <id>', 'book-guide <género>', 'book-marketing <id> <fuentes.json>', 'story-ledger <id> <escenas.json>', 'story-audit <id>', 'book-pdf <id> --author <nombre> [--lang es]', 'compile <id> --author <nombre> [--words 50000] [--chapters 15] [--lang es]', 'check <id> [--words 50000] [--chapters 15]', 'route <plataforma> [--tools mcp__servidor__herramienta,...]', 'prepare <id> <plataforma> <precio> [--currency USD]', 'sale <id> <importe_bruto> <unidades> --source <referencia>', 'gallery'], home:root}
   if (cmd === 'init') {
     const [type,...titleParts]=positional; const title=titleParts.join(' ').trim()
     if(!TYPES.has(type)||title.length<3||title.length>180) fail('Tipo o título inválido.')
@@ -261,8 +263,55 @@ async function main(args) {
   if (cmd === 'book-quality') return transaction(async db=>{
     const p=get(db,positional[0])
     if(p.type!=='book') fail('book-quality requiere un libro.')
-    return auditBook(p,root)
+    const quality=await auditBook(p,root)
+    return {...quality,continuityAudit:p.blueprint?await auditStoryLedger(p,root):null}
   },false)
+  if (cmd === 'story-audit') return transaction(async db=>{
+    const p=get(db,positional[0])
+    if(p.type!=='book') fail('story-audit requiere un proyecto book.')
+    return auditStoryLedger(p,root)
+  },false)
+  if (cmd === 'story-ledger') return transaction(async db=>{
+    const p=get(db,positional[0])
+    if(p.type!=='book') fail('story-ledger requiere un proyecto book.')
+    const file=resolve(positional[1]??'')
+    if(file.startsWith(root+sep)) fail('El diario de entrada debe ser externo a la biblioteca.')
+    const info=await stat(file)
+    if(!info.isFile()||info.size>1024*1024) fail('Diario narrativo JSON inválido o demasiado grande.')
+    const ledger=validateStoryLedger(JSON.parse(await readFile(file,'utf8')),p.blueprint)
+    const receipt=await auditStoryLedger(p,root,ledger)
+    if(receipt.issues.some(item=>item.code!=='missing-scene-evidence')) fail('El diario contiene cambios contradictorios o sin respaldo: '+JSON.stringify(receipt.issues))
+    p.storyLedger=ledger;p.updatedAt=iso()
+    return receipt
+  })
+  if (cmd === 'book-pdf') return transaction(async db=>{
+    const p=get(db,positional[0])
+    if(p.type!=='book') fail('book-pdf requiere un libro.')
+    const author=String(option('--author','')).trim()
+    const lang=String(option('--lang','es'))
+    if(author.length<2||author.length>160||!/^[a-z]{2,3}(?:-[A-Z]{2})?$/u.test(lang)) fail('Autor o idioma inválidos.')
+    const status=editorialCheck(p)
+    if(!status.lengthReady) fail('Libro incompleto: no se genera PDF de impresión definitivo.')
+    const quality=await auditBook(p,root)
+    const manuscriptIssues=quality.blockers.filter(item=>!item.startsWith('Falta portada'))
+    if(manuscriptIssues.length) fail('Manuscrito pendiente de revisión estructural: '+manuscriptIssues.join(' | '))
+    const chapters=[]
+    for(const c of [...p.chapters].sort((a,b)=>a.number-b.number)) {
+      const value=await readFile(join(root,c.path))
+      if(hash(value)!==c.sha256) fail('Capítulo alterado antes del PDF: '+c.number)
+      chapters.push({number:c.number,title:p.blueprint?.chapters.find(x=>x.number===c.number)?.title??('Capítulo '+c.number),text:value.toString('utf8')})
+    }
+    const temporary=join(root,'.book-pdf-'+randomUUID()+'.pdf')
+    try {
+      const receipt=await renderBookPdf({title:p.title,author,chapters,output:temporary,lang,trim:'6x9'})
+      const bytes=await readFile(temporary)
+      if(!bytes.subarray(0,5).equals(Buffer.from('%PDF-'))) fail('El renderizador no produjo un PDF real.')
+      const file=await registerGenerated(p,'interior-6x9.pdf',bytes,'print')
+      p.printProof={...receipt,sha256:file.sha256,sourceFingerprint:buildFingerprint(p),author,lang,verifiedAt:iso()}
+      return {file,pages:receipt.pdf_pages,chaptersVerified:receipt.chapters_verified,
+        proof:p.printProof,publicationConfirmed:false,commerciallyApproved:false}
+    } finally {await rm(temporary,{force:true})}
+  })
   if (cmd === 'book-marketing') return transaction(async db=>{
     const p=get(db,positional[0])
     if(p.type!=='book') fail('book-marketing requiere un libro.')
