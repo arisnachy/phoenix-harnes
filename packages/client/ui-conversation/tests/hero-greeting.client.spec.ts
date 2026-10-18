@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  greetingForHour, heroAttentionDetail, heroAttentionPrompt, preferredNameForHero,
+  greetingForHour, heroAttentionDetail, heroAttentionPrompt, preferredNameForHero, researchStarterPrompt,
 } from '../src/client/skeleton/EmptyHero.tsx'
 
 describe('greetingForHour', () => {
@@ -54,5 +54,15 @@ describe('heroAttentionDetail', () => {
       kind: 'result',
       detail: 'Hay un resultado nuevo.',
     })).toContain('qué requiere mi atención')
+  })
+})
+
+describe('research academic hero starter prompts', () => {
+  it('distinguishes citation styles from scientific article type and keeps the draft editable', () => {
+    expect(researchStarterPrompt('apa7')).toContain('APA 7')
+    expect(researchStarterPrompt('vancouver')).toContain('Vancouver')
+    expect(researchStarterPrompt('scientific_article')).toContain('artículo científico')
+    expect(researchStarterPrompt('scientific_article')).toContain('DOCX, PDF')
+    expect(researchStarterPrompt('apa7')).toContain('solo los datos académicos que falten')
   })
 })
