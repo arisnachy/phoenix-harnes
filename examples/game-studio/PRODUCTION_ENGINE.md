@@ -86,3 +86,5 @@ node examples/game-studio/production-engine.mjs next mi-juego/production-state.j
 ```
 
 Invalidar elimina la evidencia de la etapa afectada y de todas sus sucesoras, no destruye escenas ni activos anteriores. La reparación se concentra en el fallo reproducible y las regresiones invalidadas. Los especialistas trabajan sobre un mismo manifiesto, biblioteca de assets y estado; Kira no vuelve a comenzar con nuevos planes cada vez que cambia de modelo.
+
+Cuando evoluciona la historia, el reparto, las escenas o cualquier requisito del manifiesto, ejecuta `node examples/game-studio/production-engine.mjs replan mi-juego/production-state.json`. No elimines el proyecto ni repitas la producción de archivos válidos: esta operación revoca las puertas anteriores y recupera los recursos existentes para ser verificados de nuevo. Si cambia una prueba ya guardada, `invalidate` permite restablecer la fase sin tener que restaurar primero el archivo corrupto.
