@@ -668,7 +668,8 @@ def main():
     elif target_pages is not None and not page_match:
         warnings.append("La extensión solicitada no se alcanzó: PDF real " + str(rendered_pages[0]) +
                         ", objetivo " + str(target_pages) + ". No se añade contenido ficticio.")
-    result={"state":"REPORT_READY","report_id":digest,"title":title,"style":style,
+    final_state = "REPORT_NEEDS_REVISION" if warnings else "REPORT_READY"
+    result={"state":final_state,"report_id":digest,"title":title,"style":style,
             "presentation":presentation,"document_type":report.get("document_type", "brief"),
             "quality": {"required_sections_checked": True, "submission_certified": False,
                         "bibliographic_metadata_network_verified": False, "visual_page_review": "not_performed",
