@@ -248,7 +248,7 @@ def validate(data):
         raise ValueError("report.references must contain 1 to 500 supplied sources")
     if data.get("style", "apa") not in ("apa", "apa7", "vancouver", "ama"):
         raise ValueError("style must be apa, apa7, vancouver or ama")
-    resolved_presentation = data.get("presentation", "hybrid" if data.get("quality_profile", "professional") == "professional" else "academic")
+    resolved_presentation = data.get("presentation", "journal" if (data.get("document_type") == "journal_manuscript" or data.get("journal_requirements", {}).get("journal")) else ("hybrid" if data.get("quality_profile", "professional") == "professional" else "academic"))
     if resolved_presentation not in PRESENTATIONS:
         raise ValueError("presentation must be academic, journal, editorial or hybrid")
     selected_design = data.get("design_preset", "auto")
@@ -653,7 +653,7 @@ def main():
     report = json.loads(raw.decode("utf-8"))
     refs, cited = validate(report)
     style = "apa" if report.get("style", "apa") == "apa7" else report.get("style", "apa")
-    presentation = report.get("presentation", "hybrid" if report.get("quality_profile", "professional") == "professional" else "academic")
+    presentation = report.get("presentation", "journal" if (report.get("document_type") == "journal_manuscript" or report.get("journal_requirements", {}).get("journal")) else ("hybrid" if report.get("quality_profile", "professional") == "professional" else "academic"))
     journal = report.get("journal_requirements", {})
     institutional = report.get("institutional_rules", {})
     editorial = presentation in ("editorial", "hybrid")
