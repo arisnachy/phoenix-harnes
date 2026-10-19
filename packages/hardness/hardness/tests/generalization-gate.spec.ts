@@ -83,7 +83,7 @@ describe('HARDNESS General Intelligence Lab', () => {
   it('rejects slower or costlier strategies even if aggregate quality improves', () => {
     const gate = new GeneralizationGate()
     for (const domain of ['code', 'research', 'browser']) {
-      gate.record(trial(domain, 'unseen-1', { candidate: { quality: 0.9, cost: 12, latencyMs: 1_100 } }))
+      gate.record(trial(domain, 'unseen-1', { candidate: { quality: 0.9, cost: 14, latencyMs: 1_300 } }))
       gate.record(trial(domain, 'unseen-2'))
     }
     expect(gate.assess('strategy-v2').reasons.join(' ')).toContain('cost regression')
