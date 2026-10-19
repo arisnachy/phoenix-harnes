@@ -1805,12 +1805,19 @@ export function ConnectorsSettingsSection({ api,
       setXClientId('')
       setXClientSecret('')
       return xConnector.connectX!({ identity, ...(identity === 'phoenix' ? { username } : {}) })
-    }).then((receipt) => {
+    }).then(async (receipt) => {
+      // Reinstalling an already-running xurl bridge does not inject newly saved
+      // vault credentials into its existing child. Restart that exact namespace
+      // so it can start the real browser OAuth callback instead of staying broken.
+      if (receipt.api.status === 'already-installed' && xConnector.reconnect !== undefined) {
+        const restarted = await xConnector.reconnect({ serverName: receipt.api.connector.serverName })
+        if (!restarted.accepted) throw new Error('El puente X no pudo reiniciarse con la credencial actualizada.')
+      }
       setRefresh(current => current + 1)
       onAuthorized()
       setXNotice('MCP ' + receipt.api.connector.serverName
-        + ' instalado. Completa la autorización OAuth oficial de X; '
-        + 'la instalación NO demuestra todavía que el perfil esté conectado.')
+        + ' preparado. Comprueba en el navegador la autorización real de X y prueba una lectura; '
+        + 'la instalación no demuestra que la cuenta esté autenticada.')
     }, (error: unknown) => {
       setXNotice('No se pudo configurar X: ' + String(error).slice(0, 250))
     }).finally(() => { setXBusy(false) })
