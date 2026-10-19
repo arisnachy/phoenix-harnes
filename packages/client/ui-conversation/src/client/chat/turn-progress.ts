@@ -82,7 +82,13 @@ function hasAssistantSurface(data: AssistantChatData): boolean {
   })
 }
 
-/** Short first-person updates derived from activity metadata, not model reasoning. */
+/**
+ * Convert one observed activity into a brief first-person update without inventing results.
+ * @param progress - Current visible runtime activity, never raw tool payloads.
+ * @param language - Active interface locale.
+ * @param elapsedMs - Elapsed observed task time for long-wait wording.
+ * @returns Localized status, or undefined when this locale has no voice copy.
+ */
 export function naturalProgressLine(progress: TurnProgress, language: string, elapsedMs = 0): string | undefined {
   const spanish = /^es(?:-|$)/iu.test(language)
   const english = /^en(?:-|$)/iu.test(language)
