@@ -13,6 +13,7 @@ type Command = {
   type: string
   url?: string
   tabId?: string
+  sessionId?: string
   x?: number
   y?: number
   deltaY?: number
@@ -41,10 +42,9 @@ function requestIsActive(signal: AbortSignal, mountedRef: { current: boolean }):
   return !signal.aborted && mountedRef.current
 }
 
-function route(path: string, tabId?: string): string {
-  return tabId === undefined
-    ? API + path
-    : API + path + '?tabId=' + encodeURIComponent(tabId)
+function route(path: string, sessionId: string, tabId?: string): string {
+  return API + path + '?sessionId=' + encodeURIComponent(sessionId)
+    + (tabId === undefined ? '' : '&tabId=' + encodeURIComponent(tabId))
 }
 
 /** Run a browser request with one deadline covering headers and response body. */
@@ -104,10 +104,10 @@ function validSnapshot(value: unknown): value is Snapshot {
   const x = value as Partial<Snapshot>
   return typeof x.available === 'boolean' && Array.isArray(x.tabs)
 }
-async function inspect(signal?: AbortSignal, tabId?: string): Promise<Snapshot> {
+async function inspect(sessionId: string, signal?: AbortSignal, tabId?: string): Promise<Snapshot> {
   const data = await withDeadline(
     async (requestSignal) => {
-      const response = await fetch(route('/state', tabId), { headers: HEADERS, signal: requestSignal, cache: 'no-store' })
+      const response = await fetch(route('/state', sessionId, tabId), { headers: HEADERS, signal: requestSignal, cache: 'no-store' })
       return decode<unknown>(response)
     }, STATE_DEADLINE_MS, STATE_DEADLINE_MESSAGE, signal)
   if (!validSnapshot(data)) throw new Error('Estado de Chromium no válido.')
@@ -127,9 +127,9 @@ async function command(input: Command, signal?: AbortSignal): Promise<Snapshot> 
   if (!validSnapshot(data)) throw new Error('Respuesta de Chromium no válida.')
   return data
 }
-async function captureFrame(tabId: string, signal?: AbortSignal): Promise<Blob> {
+async function captureFrame(tabId: string, sessionId: string, signal?: AbortSignal): Promise<Blob> {
   return withDeadline(async (requestSignal) => {
-    const response = await fetch(route('/frame', tabId), { headers: HEADERS, signal: requestSignal, cache: 'no-store' })
+    const response = await fetch(route('/frame', sessionId, tabId), { headers: HEADERS, signal: requestSignal, cache: 'no-store' })
     if (!response.ok) throw new Error('La imagen de la página no está disponible.')
     return response.blob()
   }, FRAME_DEADLINE_MS, FRAME_DEADLINE_MESSAGE, signal)
@@ -203,7 +203,8 @@ function youtubeId(raw: string | undefined): string | undefined {
   } catch { return undefined }
 }
 /** Human navigation stays in the user-controlled MiniBrowser, never in the model's context. */
-export function MiniBrowser({ requested = false, active = true, initialTabId, onActivate, autoScroll = true, onPageChange, onSecureLoginRequest }: {
+export function MiniBrowser({ sessionId, requested = false, active = true, initialTabId, onActivate, autoScroll = true, onPageChange, onSecureLoginRequest }: {
+  sessionId: string
   requested?: boolean
   active?: boolean
   /** Bind this card to a child Chromium call's target when one was recorded. */
@@ -409,6 +410,7 @@ export function MiniBrowser({ requested = false, active = true, initialTabId, on
           const state = await command(queued.request, controller.signal)
           if (!requestIsActive(controller.signal, mounted)) continue
           if (state.tabId !== undefined) cardTabId.current = state.tabId
+          else { cardTabId.current = undefined; followGlobal.current = true }
           setSnapshot(state)
           if (queued.request.type === 'open' || queued.request.type === 'new-tab' || queued.request.type === 'start') setEnabled(true)
           refreshFrame.current?.()
@@ -450,10 +452,10 @@ export function MiniBrowser({ requested = false, active = true, initialTabId, on
       cardTabId.current = request.tabId
     }
     return new Promise((resolve) => {
-      actionQueue.current.push({ request: scoped, resolve })
+      actionQueue.current.push({ request: { ...scoped, sessionId }, resolve })
       void drainActions()
     })
-  }, [drainActions])
+  }, [drainActions, sessionId])
 
   useEffect(() => {
     if (!active || dismissed) return
@@ -474,7 +476,7 @@ export function MiniBrowser({ requested = false, active = true, initialTabId, on
     const selection = reactivatedTabId !== undefined
       // Wait for the old target to become active BEFORE inspecting it; otherwise
       // a race with the newest tab could accidentally overwrite this card.
-      ? command({ type: 'select-tab', tabId: reactivatedTabId }, first.signal).then(() => undefined, () => undefined)
+      ? command({ type: 'select-tab', sessionId, tabId: reactivatedTabId }, first.signal).then(() => undefined, () => undefined)
       : Promise.resolve()
     previousActive.current = active
     // A requested browser is an instruction to start the embedded Chromium,
@@ -491,7 +493,7 @@ export function MiniBrowser({ requested = false, active = true, initialTabId, on
         let state: Snapshot | undefined
         let inspectError: unknown
         try {
-          state = await inspect(first.signal, followGlobal.current ? undefined : cardTabId.current)
+          state = await inspect(sessionId, first.signal, followGlobal.current ? undefined : cardTabId.current)
         } catch (reason) {
           inspectError = reason
         }
@@ -501,7 +503,7 @@ export function MiniBrowser({ requested = false, active = true, initialTabId, on
           // an unknown state. Let the user retry explicitly instead of issuing
           // the same mutation again from the polling loop.
           startAttempted = true
-          state = await command({ type: 'start' }, first.signal)
+          state = await command({ type: 'start', sessionId }, first.signal)
         }
         if (!requestIsActive(first.signal, mounted)) return
         if (state === undefined) {
@@ -510,6 +512,7 @@ export function MiniBrowser({ requested = false, active = true, initialTabId, on
         }
         setConnectionError(undefined)
         if (state.tabId !== undefined) cardTabId.current = state.tabId
+        else { cardTabId.current = undefined; followGlobal.current = true }
         setSnapshot(state)
       } catch (reason) {
         if (requestIsActive(first.signal, mounted)) {
@@ -529,7 +532,7 @@ export function MiniBrowser({ requested = false, active = true, initialTabId, on
       for (const queued of actionQueue.current.splice(0)) queued.resolve()
       window.clearInterval(timer)
     }
-  }, [active, dismissed, initialTargetTabId, requested])
+  }, [active, dismissed, initialTargetTabId, requested, sessionId])
 
   useEffect(() => {
     if (!active || !show || !snapshot.available || collapsed || playingVideo) return
@@ -547,7 +550,7 @@ export function MiniBrowser({ requested = false, active = true, initialTabId, on
       const controller = new AbortController()
       frameRequest.current = controller
       try {
-        const blob = await captureFrame(tabId, controller.signal)
+        const blob = await captureFrame(tabId, sessionId, controller.signal)
         if (stopped || !mounted.current || controller.signal.aborted) return
         const next = URL.createObjectURL(blob)
         const previous = frameRef.current
@@ -595,7 +598,7 @@ export function MiniBrowser({ requested = false, active = true, initialTabId, on
         frameRequest.current = undefined
       }
     }
-  }, [active, show, dismissed, snapshot.available, snapshot.tabId, collapsed, playingVideo, expanded])
+  }, [active, show, dismissed, snapshot.available, snapshot.tabId, collapsed, playingVideo, expanded, sessionId])
 
   useEffect(() => () => {
     mounted.current = false
