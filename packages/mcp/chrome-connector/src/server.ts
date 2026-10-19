@@ -279,8 +279,11 @@ async function endpoint(sessionId?: string): Promise<string> {
   // A browser tool may run before React mounts the MiniBrowser card. Ask the
   // authenticated local Phoenix host to start THAT conversation's Chromium.
   if (sessionId !== undefined) {
-    try { return chatBrowserSession(sessionId).endpoint.replace(/\/$/, '') }
-    catch {
+    try {
+      const active = chatBrowserSession(sessionId).endpoint.replace(/\/$/, '')
+      await json<Record<string, unknown>>(active + '/json/version')
+      return active
+    } catch {
       const port = Number(process.env.PHOENIX_WEB_PORT || '3080')
       if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Puerto web de Phoenix inválido.')
       const response = await fetch('http://127.0.0.1:' + String(port) + '/phoenix-mini-browser/action', {
