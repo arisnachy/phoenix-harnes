@@ -523,9 +523,10 @@ export function MiniBrowser({ sessionId, requested = false, active = true, initi
           state = await inspect(sessionId, first.signal, followGlobal.current ? undefined : cardTabId.current)
         } catch (reason) {
           inspectError = reason
-          // Saved conversation histories can refer to targets from the old
-          // globally shared Chrome. Never attach that stale ID to this chat.
-          if (cardTabId.current !== undefined) {
+          // Recover only an inferred tab from an old shared Chrome session.
+          // Never silently switch when the agent explicitly requested a tab:
+          // a missing child target must fail instead of showing another page.
+          if (initialTargetTabId === undefined && cardTabId.current !== undefined) {
             try {
               state = await inspect(sessionId, first.signal)
               followGlobal.current = true
