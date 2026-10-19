@@ -7,6 +7,7 @@
  * Mutating actions are controlled by Phoenix's permission-derived PHOENIX_BROWSER_ALLOW_ACTIONS policy.
  */
 import { spawn, type ChildProcess } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -25,6 +26,21 @@ import { inspectVideoMedia } from './video-media.ts'
 const DEFAULT_PORTS = [9222, 9223, 9224]
 /** User-temp discovery lets the in-chat view reuse this exact Chromium tab. */
 const SHARED_BROWSER = join(tmpdir(), 'phoenix-browser-cdp.json')
+const CHAT_BROWSER_ROOT = join(tmpdir(), 'phoenix-mini-browser-cdp')
+function chatBrowserSession(sessionId: string): SharedSession {
+  if (!/^[A-Za-z0-9._:-]{1,256}$/u.test(sessionId)) throw new Error('ID de conversación inválido.')
+  const file = join(CHAT_BROWSER_ROOT, createHash('sha256').update(sessionId).digest('hex') + '.json')
+  let result: SharedSession & { sessionId?: string }
+  try {
+    result = JSON.parse(readFileSync(file, 'utf8')) as SharedSession & { sessionId?: string }
+    const url = new URL(result.endpoint)
+    if (result.sessionId !== sessionId || !Number.isInteger(result.pid) || result.pid < 1
+      || url.protocol !== 'http:' || !isLoopback(url.hostname) || url.username || url.password
+      || url.pathname !== '/' || url.search || url.hash) throw new Error('Descriptor inválido.')
+    process.kill(result.pid, 0)
+  } catch { throw new Error('MiniBrowser independiente no está iniciado para esta conversación.') }
+  return result
+}
 type SharedSession = { pid: number; endpoint: string; selectedTabId?: string }
 function sharedSession(): SharedSession | undefined {
   try {
@@ -248,7 +264,9 @@ async function launchDedicatedBrowser(): Promise<string> {
   return await managedLaunch
 }
 
-async function endpoint(): Promise<string> {
+async function endpoint(sessionId?: string): Promise<string> {
+  // Per-chat routing must never fall back to the global Chrome descriptor.
+  if (sessionId !== undefined) return chatBrowserSession(sessionId).endpoint.replace(/\/$/, '')
   // A visible personal Chrome profile must never become the default target of
   // agent navigation. External CDP attachment requires an explicit opt-in.
   const allowVisible = process.env.PHOENIX_BROWSER_ALLOW_VISIBLE_CDP === 'true'
