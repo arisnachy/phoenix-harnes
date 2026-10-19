@@ -16,6 +16,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
 import { browserBatchExpression, browserInteractionExpression, type BrowserInteraction, type BrowserInteractionResult } from './browser-interactions.ts'
 import { CdpConnectionPool } from './cdp-connection-pool.ts'
+import { classifyNavigationEvidence, type NavigationEvidence, type NavigationVerdict } from './navigation-evidence.ts'
 import { classifySiteHealth, nextSiteRecoveryStep, siteHealthExpression, type SitePageHealth } from './site-health.ts'
 import { runBrowserFormWorkflow } from './form-workflow.ts'
 import { formLayoutKey, prepareLearnedFormWorkflow, recallVerifiedFormLayout, sanitizeFormLayout, saveVerifiedFormLayout } from './form-layout-memory.ts'
@@ -390,6 +391,44 @@ async function evaluate(tab: Tab, expression: string, timeoutMs = 10_000): Promi
   return await cdp(tab, 'Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true }, timeoutMs)
 }
 
+/**
+ * Read the actual URL and rendered DOM from the target belonging to the
+ * conversation. A CDP target creation or Page.navigate receipt is NOT proof.
+ * @param tab - Actual Chrome target to check.
+ * @param requestedUrl - HTTP(S) URL Kira attempted to open.
+ * @returns A bounded receipt with observed URL, page content, and verdict.
+ */
+async function verifyBrowserNavigation(tab: Tab, requestedUrl: string): Promise<{
+  verdict: NavigationVerdict
+  evidence?: NavigationEvidence
+}> {
+  let last: NavigationEvidence | undefined
+  const expression = `JSON.stringify({
+    url: location.href,
+    readyState: document.readyState,
+    title: document.title,
+    visibleTextLength: document.body?.innerText?.trim().length ?? 0,
+    contentElements: document.body?.querySelectorAll(
+      'a,button,input,img,svg,canvas,iframe,video,article,main,p,[role="main"]'
+    ).length ?? 0
+  })`
+  for (let attempt = 0; attempt < 12; attempt++) {
+    try {
+      const value = await evaluate(tab, expression, 3500)
+      const observation = JSON.parse(String(value)) as NavigationEvidence
+      if (typeof observation.url === 'string' && typeof observation.readyState === 'string'
+        && typeof observation.visibleTextLength === 'number'
+        && typeof observation.contentElements === 'number') {
+        last = observation
+        const verdict = classifyNavigationEvidence(requestedUrl, observation)
+        if (verdict === 'verified' || verdict === 'redirected') return { verdict, evidence: observation }
+      }
+    } catch { /* Chrome target may still be navigating. */ }
+    if (attempt < 11) await new Promise<void>(resolve => setTimeout(resolve, 400))
+  }
+  return { verdict: classifyNavigationEvidence(requestedUrl, last), ...(last === undefined ? {} : { evidence: last }) }
+}
+
 function ensureBrowserActionPermission(): void {
   if (!actionsAllowed()) throw new Error('Acción bloqueada por permisos del navegador; no intentar usar Computer para eludirlos.')
 }
@@ -436,8 +475,26 @@ server.registerTool('navigate', {
   const tab = tabId === undefined ? await newBrowserTab(url, sessionId) : await selectedTab(tabId, sessionId)
   // /json/new already navigates the new page, while an explicit tabId must
   // navigate the user's chosen existing tab.
-  if (tabId !== undefined) await cdp(tab, 'Page.navigate', { url })
-  return { content: [{ type: 'text', text: `Navegación iniciada en ${url} (pestaña ${tab.id})` }] }
+  if (tabId !== undefined) {
+    const navigation = await cdp<{ errorText?: string }>(tab, 'Page.navigate', { url })
+    if (navigation.errorText) throw new Error('Chrome rechazó la navegación: ' + navigation.errorText)
+  }
+  const receipt = await verifyBrowserNavigation(tab, url)
+  const verified = receipt.verdict === 'verified'
+  return {
+    ...(verified ? {} : { isError: true as const }),
+    content: [{ type: 'text' as const, text: JSON.stringify({
+      status: verified ? 'verified' : 'unverified',
+      requestedUrl: url,
+      observedUrl: receipt.evidence?.url ?? 'about:blank',
+      tabId: tab.id,
+      title: receipt.evidence?.title ?? '',
+      reason: receipt.verdict,
+      message: verified
+        ? 'La URL y el contenido real de la página están comprobados dentro del navegador de esta conversación.'
+        : 'No se confirmó que la página solicitada cargara con contenido. No afirmes que fue abierta.',
+    }) }],
+  }
 })
 
 server.registerTool('youtube_search', {
@@ -459,22 +516,20 @@ server.registerTool('youtube_search', {
   } catch (error) {
     return { isError: true, content: [{ type: 'text', text: `No se pudo abrir YouTube en Chrome/Edge: ${String(error)}. Enlace directo para el usuario: ${url}. No reintentes automáticamente sin una causa nueva.` }] }
   }
-  // One bounded read of tab metadata, not a scrape, screenshot or second model turn.
-  // A metadata failure after successful Page.navigate must not lose the navigation receipt.
-  const current = await tabs(sessionId).then(rows => rows.find(candidate => candidate.id === tab.id), () => undefined)
-  let verified = false
-  if (current) {
-    try {
-      const found = new URL(current.url)
-      verified = found.hostname === 'www.youtube.com'
-        && found.pathname === '/results'
-        && found.searchParams.get('search_query') === query.trim()
-    } catch { /* A tab can momentarily expose an intermediate URL. */ }
-  }
+  const receipt = await verifyBrowserNavigation(tab, url)
+  const verified = receipt.verdict === 'verified'
   return {
-    content: [{ type: 'text', text: verified
-      ? `Búsqueda abierta en YouTube: ${url} (pestaña ${tab.id}). URL comprobada. Muestra la pestaña al usuario; no se ha reproducido ningún video.`
-      : `Navegación a la búsqueda de YouTube iniciada: ${url} (pestaña ${tab.id}). La URL final todavía no se confirmó; no afirmes que los resultados cargaron. Evita comprobaciones repetidas si el usuario solo pidió abrir la búsqueda.` }],
+    ...(verified ? {} : { isError: true as const }),
+    content: [{ type: 'text', text: JSON.stringify({
+      status: verified ? 'verified' : 'unverified',
+      requestedUrl: url,
+      observedUrl: receipt.evidence?.url ?? 'about:blank',
+      tabId: tab.id,
+      reason: receipt.verdict,
+      message: verified
+        ? 'Búsqueda de YouTube abierta y comprobada en este MiniBrowser. No se ha reproducido ningún video.'
+        : 'No se confirmó que los resultados cargaran. No afirmes haber abierto YouTube.',
+    }) }],
   }
 })
 
