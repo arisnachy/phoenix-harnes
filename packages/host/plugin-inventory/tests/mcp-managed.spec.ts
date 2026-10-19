@@ -653,6 +653,37 @@ describe('ManagedMcpController', () => {
     }
   })
 
+  it('installs independent Microsoft service MCPs with immutable launcher args and namespaces', async () => {
+    const patchPath = tempPatch()
+    const live = loader()
+    let nextId = 0
+    live.create.mockImplementation(async () => `microsoft-scoped-${++nextId}`)
+    const ctl = new ManagedMcpController(live, { patchPath, registrySearch: registry([]) })
+    const services = [
+      ['outlook-mail', 'mail'], ['outlook-calendar', 'calendar'],
+      ['microsoft-contacts', 'contacts'], ['onedrive', 'onedrive'],
+      ['microsoft-teams', 'teams'], ['sharepoint', 'sharepoint'],
+    ] as const
+    for (const [connectorId, service] of services) {
+      const receipt = await ctl.installCuratedMcp(connectorId)
+      expect(receipt.connector.serverName).toBe(connectorId)
+      expect(receipt.connector.source).toMatchObject({ kind: 'curated', connectorId })
+      const config = live.create.mock.lastCall?.[0]?.config
+      expect(config).toMatchObject({
+        transport: 'stdio', serverName: connectorId, command: 'node',
+        args: ['scripts/phoenix-microsoft-personal-mcp.mjs', service],
+        env: {}, envCredentialRefs: {},
+      })
+    }
+    expect((await ctl.snapshot()).map(row => row.serverName)).toEqual(services.map(([name]) => name))
+    const managed = JSON.parse(readFileSync(patchPath, 'utf8'))[0].insert
+    expect(managed).toHaveLength(6)
+    const altered = { ...managed[0], config: { ...managed[0].config,
+      args: ['scripts/phoenix-microsoft-personal-mcp.mjs', 'teams'] } }
+    writeFileSync(patchPath, JSON.stringify([{ insert: [altered, ...managed.slice(1)] }]))
+    await expect(ctl.snapshot()).rejects.toThrow(/managed MCP patch row/)
+  })
+
   it('pins the free Microsoft personal Graph MCP to local Node and rejects modified persisted launchers', async () => {
     const patchPath = tempPatch()
     const live = loader()
