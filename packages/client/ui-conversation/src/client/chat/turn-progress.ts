@@ -83,6 +83,19 @@ function hasAssistantSurface(data: AssistantChatData): boolean {
 }
 
 /**
+ * Represent only an actual Host pending interaction as waiting, not model thought.
+ * @param kind - Domain of the currently pending request from this session.
+ * @returns The trusted waiting status or null when no human action is required.
+ */
+export function pendingTurnProgress(kind: 'approval' | 'question' | undefined): TurnProgress | null {
+  if (kind === undefined) return null
+  return {
+    phase: 'waiting',
+    activity: kind === 'approval' ? 'waiting-approval' : 'waiting-user',
+  }
+}
+
+/**
  * Convert one observed activity into a brief first-person update without inventing results.
  * @param progress - Current visible runtime activity, never raw tool payloads.
  * @param language - Active interface locale.
