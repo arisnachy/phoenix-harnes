@@ -809,7 +809,7 @@ export function MiniBrowser({ sessionId, requested = false, active = true, initi
         {snapshot.available ? (
           <div className={css.viewport}>
             {!hasPage ? <div className={css.loading} role="status">MiniBrowser de esta conversación iniciado. Todavía no se ha comprobado ninguna página. Kira no debe afirmar que la abrió hasta verificarla.</div> : (
-            {videoSurface && videoId ? (
+            videoSurface && videoId ? (
               <iframe className={css.player}
                 title="Reproductor YouTube"
                 src={'https://www.youtube-nocookie.com/embed/' + videoId + '?autoplay=' + (playingVideo ? '1' : '0') + '&playsinline=1'}
