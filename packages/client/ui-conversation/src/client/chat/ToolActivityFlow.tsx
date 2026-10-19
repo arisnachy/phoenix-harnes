@@ -721,7 +721,9 @@ function BrowserWorkspace({
             ? 'Ya tengo un acceso registrado para ' + savedAccessNotice.origin + '. Voy a utilizarlo para iniciar sesión y comprobaré si la página confirma el acceso.'
             : savedAccessNotice.phase === 'available'
               ? 'Ya tengo un acceso registrado para ' + savedAccessNotice.origin + '. No necesitas introducirlo de nuevo; puedes autorizar su uso desde Acceso seguro.'
-              : 'Tengo un acceso registrado para ' + savedAccessNotice.origin + ', pero no puedo confirmar el inicio de sesión. Puedes revisar el acceso guardado.'}</span>
+              : savedAccessNotice.phase === 'vault-unavailable'
+                ? 'No pude consultar los accesos guardados para ' + savedAccessNotice.origin + '. No te pediré las credenciales otra vez hasta recuperar la bóveda.'
+                : 'Tengo un acceso registrado para ' + savedAccessNotice.origin + ', pero no puedo confirmar el inicio de sesión. Puedes revisar el acceso guardado.'}</span>
         </div>}
         {secureRequest !== null ? <SecureAsk key={secureRequest.origin + ':' + secureRequest.tabId}
           target={secureRequest}

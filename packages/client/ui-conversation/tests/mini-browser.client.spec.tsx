@@ -809,4 +809,29 @@ describe('MiniBrowser in Phoenix conversation', () => {
     })))
   })
 
+
+  it('does not ask for new credentials when Vault is temporarily unreachable', async () => {
+    const request = vi.fn(), notice = vi.fn()
+    const site = { ...state, url: 'https://example.org/login',
+      tabs: [{ id: 'shared-tab', title: 'Acceso', url: 'https://example.org/login' }] }
+    vi.stubGlobal('fetch', vi.fn(async (raw: string) => {
+      const url = String(raw)
+      if (url.startsWith('/phoenix-secure-login/status')) return new Response(
+        JSON.stringify({ error: 'vault offline' }), { status: 503 })
+      if (url.startsWith('/phoenix-secure-login/detect')) return new Response(
+        JSON.stringify({ required: true, formVisible: true }), { status: 200 })
+      if (url.startsWith('/phoenix-mini-browser/frame')) return new Response(
+        new Uint8Array([255, 216, 255, 217]), { status: 200, headers: { 'content-type': 'image/jpeg' } })
+      return new Response(JSON.stringify(site), { status: 200,
+        headers: { 'content-type': 'application/json' } })
+    }))
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn(() => 'blob:vault-unavailable') })
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() })
+    render(<MiniBrowser sessionId="vault-down" requested onSecureLoginRequest={request} onSavedAccessNotice={notice} />)
+    await waitFor(() => expect(notice).toHaveBeenCalledWith({
+      origin: 'https://example.org', phase: 'vault-unavailable',
+    }))
+    expect(request).not.toHaveBeenCalledWith(expect.objectContaining({ saved: false }))
+  })
+
 })

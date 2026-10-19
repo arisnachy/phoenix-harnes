@@ -166,7 +166,7 @@ type SecureUse = { status: string }
 /** Safe human-facing status: no account names, passwords or vault values. */
 export type SavedAccessNotice = {
   origin: string
-  phase: 'available' | 'using' | 'needs-attention'
+  phase: 'available' | 'using' | 'needs-attention' | 'vault-unavailable'
 }
 function secureOrigin(value?: string): string | undefined {
   if (!value) return undefined
@@ -298,6 +298,13 @@ export function MiniBrowser({ sessionId, requested = false, active = true, initi
           openedLoginGates.current.delete(key)
           onSecureLoginRequest?.(null)
           onSavedAccessNotice?.(null)
+          return
+        }
+        // A failed Vault lookup must not be interpreted as absent credentials.
+        // Never show a blank enrollment form while saved access is unknown.
+        if ('unavailable' in status && status.unavailable) {
+          onSavedAccessNotice?.({ origin: siteOrigin, phase: 'vault-unavailable' })
+          onSecureLoginRequest?.(null)
           return
         }
         if (!detection?.required) {
@@ -819,10 +826,10 @@ export function MiniBrowser({ sessionId, requested = false, active = true, initi
                   ...(status.profile ? { profile: status.profile } : {}),
                   ...(status.profiles ? { profiles: status.profiles } : {}),
                 }))
-                .catch(() => onSecureLoginRequest({
-                  origin: siteOrigin, tabId, saved: false, automatic: false, explicit: true,
-                  diagnostic: 'No se pudo consultar la bóveda. Revisa la conexión local de Phoenix.',
-                }))
+                .catch(() => {
+                  onSavedAccessNotice?.({ origin: siteOrigin, phase: 'vault-unavailable' })
+                  onSecureLoginRequest(null)
+                })
             }}>🔐 Acceso seguro</button>}
         </form>
         {snapshot.available ? (
@@ -886,10 +893,10 @@ export function MiniBrowser({ sessionId, requested = false, active = true, initi
                 explicit: true, ...(status.profile ? { profile: status.profile } : {}),
                 ...(status.profiles ? { profiles: status.profiles } : {}),
               }))
-              .catch(() => onSecureLoginRequest({
-                origin: siteOrigin, tabId, saved: false, automatic: false, explicit: true,
-                diagnostic: 'No se pudo consultar la bóveda.',
-              }))
+              .catch(() => {
+                onSavedAccessNotice?.({ origin: siteOrigin, phase: 'vault-unavailable' })
+                onSecureLoginRequest(null)
+              })
           }}>
           🔐 Solicitar acceso seguro
         </button>}
