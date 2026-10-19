@@ -694,4 +694,28 @@ describe('MiniBrowser in Phoenix conversation', () => {
     await screen.findByRole('region', { name: 'Navegador de Kira' })
     expect(view.container.querySelector('iframe')).toBeNull()
   })
+  it('always sends the owner conversation for independent browser state, frames and gestures', async () => {
+    const actions = installBrowserMock()
+    render(<>
+      <MiniBrowser sessionId="chat-a" requested />
+      <MiniBrowser sessionId="chat-b" requested />
+    </>)
+    await waitFor(() => {
+      const calls = vi.mocked(fetch).mock.calls.map(call => String(call[0]))
+      expect(calls).toContain('/phoenix-mini-browser/state?sessionId=chat-a')
+      expect(calls).toContain('/phoenix-mini-browser/state?sessionId=chat-b')
+      expect(calls.some(url => url.startsWith('/phoenix-mini-browser/frame?sessionId=chat-a&tabId='))).toBe(true)
+      expect(calls.some(url => url.startsWith('/phoenix-mini-browser/frame?sessionId=chat-b&tabId='))).toBe(true)
+    })
+    const newTabs = screen.getAllByTitle('Nueva pestaña')
+    fireEvent.click(newTabs[0]!)
+    fireEvent.click(newTabs[1]!)
+    await waitFor(() => { expect(actions.filter(item => item.type === 'new-tab')).toHaveLength(2) })
+    const bodies = vi.mocked(fetch).mock.calls
+      .filter(([url]) => String(url).startsWith('/phoenix-mini-browser/action'))
+      .map(([, options]) => JSON.parse(String((options as RequestInit).body)) as { type: string; sessionId: string })
+    expect(bodies).toContainEqual(expect.objectContaining({ type: 'new-tab', sessionId: 'chat-a' }))
+    expect(bodies).toContainEqual(expect.objectContaining({ type: 'new-tab', sessionId: 'chat-b' }))
+  })
+
 })
