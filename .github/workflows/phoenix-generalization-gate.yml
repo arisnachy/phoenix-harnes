@@ -8,6 +8,8 @@ on:
       - 'packages/hardness/hardness/src/index.ts'
       - 'packages/hardness/hardness/tests/generalization-gate.spec.ts'
       - 'packages/hardness/adapters/src/protocol.ts'
+      - 'packages/hardness/adapters/src/generalization-receipts.ts'
+      - 'packages/hardness/adapters/tests/generalization-receipts.spec.ts'
       - 'packages/hardness/adapters/tests/protocol.spec.ts'
 
 permissions:
@@ -29,3 +31,4 @@ jobs:
           pnpm exec vitest run
           packages/hardness/hardness/tests/generalization-gate.spec.ts
           packages/hardness/adapters/tests/protocol.spec.ts
+          packages/hardness/adapters/tests/generalization-receipts.spec.ts
