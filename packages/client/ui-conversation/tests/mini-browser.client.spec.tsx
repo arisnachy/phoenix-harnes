@@ -718,4 +718,26 @@ describe('MiniBrowser in Phoenix conversation', () => {
     expect(bodies).toContainEqual(expect.objectContaining({ type: 'new-tab', sessionId: 'chat-b' }))
   })
 
+  it('renders a distinct MiniBrowser and URL for every Phoenix conversation', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (raw: string) => {
+      const url = String(raw)
+      if (url.startsWith('/phoenix-mini-browser/frame')) {
+        return new Response(new Uint8Array([255, 216, 255, 217]), { status: 200 })
+      }
+      const chat = url.includes('sessionId=chat-b') ? 'B' : 'A'
+      const page = { available: true, tabId: 'own-' + chat, url: 'https://example.org/' + chat,
+        title: 'Portal ' + chat, tabs: [{ id: 'own-' + chat, title: 'Portal ' + chat, url: 'https://example.org/' + chat }] }
+      return new Response(JSON.stringify(page), { status: 200, headers: { 'content-type': 'application/json' } })
+    }))
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn(() => 'blob:per-chat') })
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() })
+    render(<><MiniBrowser sessionId="chat-a" requested /><MiniBrowser sessionId="chat-b" requested /></>)
+    await waitFor(() => {
+      const views = screen.getAllByRole('region', { name: 'Navegador de Kira' })
+      expect(views).toHaveLength(2)
+      expect(views[0]?.querySelector<HTMLInputElement>('[data-mini-address]')?.value).toBe('https://example.org/A')
+      expect(views[1]?.querySelector<HTMLInputElement>('[data-mini-address]')?.value).toBe('https://example.org/B')
+    })
+  })
+
 })
