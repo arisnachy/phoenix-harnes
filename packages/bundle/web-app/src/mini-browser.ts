@@ -9,7 +9,7 @@
  */
 import { spawn, type ChildProcess } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { IncomingMessage, ServerResponse } from 'node:http'
@@ -53,6 +53,51 @@ let ownedProfile: string | undefined
 let ownedEndpoint: string | undefined
 let launching: Promise<string> | undefined
 let activeTabId: string | undefined
+type ScopedBrowser = { child: ChildProcess; profile: string; endpoint?: string }
+const scopedBrowsers = new Map<string, ScopedBrowser>()
+const scopedLaunching = new Map<string, Promise<string>>()
+const SCOPED_BROWSER_ROOT = join(tmpdir(), 'phoenix-mini-browser-cdp')
+function scopedDescriptorPath(sessionId: string): string {
+  return join(SCOPED_BROWSER_ROOT, createHash('sha256').update(sessionId).digest('hex') + '.json')
+}
+function announceScopedBrowser(sessionId: string, browser: ScopedBrowser): void {
+  if (browser.endpoint === undefined || browser.child.pid === undefined) return
+  try {
+    mkdirSync(SCOPED_BROWSER_ROOT, { recursive: true, mode: 0o700 })
+    writeFileSync(scopedDescriptorPath(sessionId), JSON.stringify({
+      sessionId, pid: browser.child.pid, endpoint: browser.endpoint + '/',
+    }), { mode: 0o600 })
+  } catch { /* UI isolation continues even if MCP handoff fails. */ }
+}
+function readScopedSelectedTab(sessionId: string): string | undefined {
+  try {
+    const browser = scopedBrowsers.get(sessionId)
+    const record = JSON.parse(readFileSync(scopedDescriptorPath(sessionId), 'utf8')) as {
+      sessionId?: string; pid?: number; endpoint?: string; selectedTabId?: string
+    }
+    return browser?.endpoint !== undefined && record.sessionId === sessionId
+      && record.pid === browser.child.pid && record.endpoint === browser.endpoint + '/'
+      && validBrowserScopeId(record.selectedTabId) ? record.selectedTabId : undefined
+  } catch { return undefined }
+}
+function publishScopedSelectedTab(sessionId: string, tabId: string): void {
+  const browser = scopedBrowsers.get(sessionId)
+  if (browser?.endpoint === undefined || browser.child.pid === undefined) return
+  try {
+    writeFileSync(scopedDescriptorPath(sessionId), JSON.stringify({
+      sessionId, pid: browser.child.pid, endpoint: browser.endpoint + '/', selectedTabId: tabId,
+    }), { mode: 0o600 })
+  } catch { /* Browser remains isolated even if selection persistence fails. */ }
+}
+function disposeScopedBrowser(sessionId: string): void {
+  const browser = scopedBrowsers.get(sessionId)
+  scopedBrowsers.delete(sessionId)
+  if (browser !== undefined) {
+    try { browser.child.kill() } catch { /* May already be closed. */ }
+    try { rmSync(browser.profile, { recursive: true, force: true }) } catch { /* Chromium may hold a file. */ }
+  }
+  try { rmSync(scopedDescriptorPath(sessionId), { force: true }) } catch { /* best effort */ }
+}
 // Chromium is shared for efficiency; conversations never share targets.
 const BROWSER_SCOPE_FILE = join(tmpdir(), 'phoenix-mini-browser-scopes.json')
 const browserScopes = new MiniBrowserScopes((() => {
@@ -317,10 +362,7 @@ function publish(endpoint: string, tabId?: string): void {
     writeFileSync(SHARED, JSON.stringify(data), { mode: 0o600 })
   } catch { /* Browser remains usable without cross-process collaboration. */ }
 }
-function cleanup(): void {
-  for (const { session } of cdpSessions.values()) session.close()
-  cdpSessions.clear()
-  frameFlights.clear()
+function cleanupLegacyBrowser(): void {
   const previous = owned?.pid
   if (previous !== undefined) {
     const ownsDescriptor = readDescriptor()?.pid === previous
@@ -335,6 +377,13 @@ function cleanup(): void {
   owned = undefined
   ownedEndpoint = undefined
   ownedProfile = undefined
+}
+function cleanup(): void {
+  for (const { session } of cdpSessions.values()) session.close()
+  cdpSessions.clear()
+  frameFlights.clear()
+  for (const sessionId of scopedBrowsers.keys()) disposeScopedBrowser(sessionId)
+  cleanupLegacyBrowser()
 }
 function requestSignal(signal?: AbortSignal): AbortSignal {
   const deadline = AbortSignal.timeout(2500)
@@ -427,13 +476,76 @@ async function startChromium(signal?: AbortSignal): Promise<string> {
       throwIfAborted(signal)
       throw new Error('Chromium no inició su canal de control CDP.' + (spawnFailure ? ' ' + String(spawnFailure) : ''))
     } catch (error) {
-      cleanup()
+      // Failure of legacy global Chrome must not close isolated chat browsers.
+      cleanupLegacyBrowser()
       throw error
     }
   })().finally(() => { launching = undefined })
   return launching
 }
-async function endpoint(launch: boolean, signal?: AbortSignal): Promise<string | undefined> {
+/**
+ * Launch a dedicated hidden Chromium process with its own temporary browser
+ * profile for a single chat; never reuse the global CDP endpoint.
+ */
+async function startScopedChromium(sessionId: string, signal?: AbortSignal): Promise<string> {
+  const pending = scopedLaunching.get(sessionId)
+  if (pending !== undefined) return await awaitAbortable(pending, signal)
+  const launch = (async (): Promise<string> => {
+    const executable = chromiumExecutable()
+    const profile = mkdtempSync(join(tmpdir(), 'phoenix-chat-browser-'))
+    const child = spawn(executable, [
+      '--remote-debugging-port=0', '--remote-debugging-address=127.0.0.1',
+      '--user-data-dir=' + profile, '--headless=new', '--mute-audio',
+      '--window-size=1280,820', '--force-device-scale-factor=1',
+      '--no-first-run', '--no-default-browser-check', '--disable-sync', 'about:blank',
+    ], { stdio: 'ignore', windowsHide: true })
+    const browser: ScopedBrowser = { child, profile }
+    scopedBrowsers.set(sessionId, browser)
+    let spawnFailure: Error | undefined
+    child.once('error', error => { spawnFailure = error })
+    try {
+      const deadline = Date.now() + START_ACTION_LIMIT_MS
+      while (Date.now() < deadline) {
+        throwIfAborted(signal)
+        try {
+          const port = Number(readFileSync(join(profile, 'DevToolsActivePort'), 'utf8').split(/\r?\n/)[0])
+          if (Number.isInteger(port) && port > 0 && port < 65536) {
+            const base = 'http://127.0.0.1:' + String(port)
+            if (await isAlive(base, signal)) {
+              browser.endpoint = base
+              announceScopedBrowser(sessionId, browser)
+              return base
+            }
+          }
+        } catch { /* Browser startup is not complete. */ }
+        if (child.exitCode !== null || spawnFailure !== undefined) break
+        await awaitAbortable(new Promise<void>(resolve => setTimeout(resolve, 100)), signal)
+      }
+      throwIfAborted(signal)
+      throw new Error('No se pudo iniciar el MiniBrowser independiente de esta conversación.'
+        + (spawnFailure === undefined ? '' : ' ' + String(spawnFailure)))
+    } catch (error) {
+      if (scopedBrowsers.get(sessionId) === browser) disposeScopedBrowser(sessionId)
+      throw error
+    }
+  })()
+  scopedLaunching.set(sessionId, launch)
+  try { return await awaitAbortable(launch, signal) }
+  finally { if (scopedLaunching.get(sessionId) === launch) scopedLaunching.delete(sessionId) }
+}
+async function endpoint(launch: boolean, signal?: AbortSignal, sessionId?: string): Promise<string | undefined> {
+  if (sessionId !== undefined) {
+    if (!validBrowserScopeId(sessionId)) throw new Error('Identificador de conversación inválido.')
+    // A poll from another card must not kill Chrome while this chat's launch
+    // is still completing. All launch callers await one in-flight process.
+    const pending = scopedLaunching.get(sessionId)
+    if (pending !== undefined) return launch ? await awaitAbortable(pending, signal) : undefined
+    const browser = scopedBrowsers.get(sessionId)
+    if (browser?.endpoint !== undefined && await isAlive(browser.endpoint, signal)) return browser.endpoint
+    // A dead chat browser is not replaced with another conversation's process.
+    if (browser !== undefined) disposeScopedBrowser(sessionId)
+    return launch ? await startScopedChromium(sessionId, signal) : undefined
+  }
   // The in-chat browser must not hijack an independently visible Chrome
   // window. External CDP targets are deliberately opt-in, not auto-discovered.
   const allowVisible = process.env.PHOENIX_BROWSER_ALLOW_VISIBLE_CDP === 'true'
@@ -536,11 +648,20 @@ export function normalizeMiniBrowserAddress(value: string): string {
   return result.href
 }
 async function state(knownBase?: string, tabId?: string, signal?: AbortSignal, sessionId?: string): Promise<Record<string, unknown>> {
-  const base = knownBase ?? await endpoint(false, signal)
+  const base = knownBase ?? await endpoint(false, signal, sessionId)
   if (!base) return { available: false, tabs: [] }
   const tabs = await listTabs(base, signal)
   if (tabs.length === 0) return { available: false, tabs: [] }
   if (sessionId !== undefined) {
+    // Every target belongs to this dedicated Chromium process's conversation,
+    // including tabs opened by Kira's Chrome MCP in the same isolated instance.
+    for (const tab of tabs) browserScopes.claim(sessionId, tab.id)
+    if (tabId === undefined) {
+      const advertised = readScopedSelectedTab(sessionId)
+      if (advertised !== undefined && tabs.some(tab => tab.id === advertised)) {
+        browserScopes.select(sessionId, advertised)
+      }
+    }
     const chosenId = browserScopes.choose(sessionId, tabs.map(tab => tab.id), tabId)
     persistBrowserScopes()
     if (chosenId === undefined) return { available: false, tabs: [] }
@@ -611,11 +732,10 @@ export async function captureBrowserFrameSingleFlight(
   }
 }
 async function frame(tabId?: string, sessionId?: string): Promise<Buffer> {
-  if (sessionId !== undefined && (tabId === undefined || !browserScopes.owns(sessionId, tabId))) {
-    throw new Error('La pestaña no pertenece a esta conversación.')
-  }
-  const base = await endpoint(false)
+  if (sessionId !== undefined && tabId === undefined) throw new Error('Falta el identificador de pestaña de esta conversación.')
+  const base = await endpoint(false, undefined, sessionId)
   if (!base) throw new Error('El navegador no está iniciado.')
+  if (sessionId !== undefined) await state(base, tabId, undefined, sessionId)
   const tab = await selected(base, tabId, undefined, undefined, sessionId === undefined && tabId === undefined)
   return await captureBrowserFrameSingleFlight(tab.id, async () =>
     await captureBrowserFrameWithFallback(async params =>
@@ -648,12 +768,14 @@ async function action(input: Action, signal?: AbortSignal): Promise<Record<strin
   const sessionId = input.sessionId
   if (sessionId !== undefined && !validBrowserScopeId(sessionId)) throw new Error('Conversación inválida.')
   throwIfAborted(signal)
-  const base = await endpoint(type === 'open' || type === 'new-tab' || type === 'start', signal)
+  const base = await endpoint(type === 'open' || type === 'new-tab' || type === 'start', signal, sessionId)
   throwIfAborted(signal)
   if (!base) throw new Error('Inicia el navegador primero.')
   if (type === 'start') {
     if (sessionId === undefined) return await state(base, undefined, signal)
     const available = await listTabs(base, signal)
+    // The initial Chrome page already belongs to this dedicated instance.
+    for (const tab of available) browserScopes.claim(sessionId, tab.id)
     if (browserScopes.choose(sessionId, available.map(tab => tab.id)) === undefined) {
       // A new conversation gets its own blank target, never Chrome's last global tab.
       const tab = await json<Tab>(base + '/json/new?' + encodeURIComponent('about:blank'), 'PUT', signal)
@@ -668,7 +790,11 @@ async function action(input: Action, signal?: AbortSignal): Promise<Record<strin
     throwIfAborted(signal)
     const tab = await json<Tab>(base + '/json/new?' + encodeURIComponent(target), 'PUT', signal)
     throwIfAborted(signal)
-    if (sessionId !== undefined) browserScopes.claim(sessionId, tab.id)
+    if (sessionId !== undefined) {
+      browserScopes.claim(sessionId, tab.id)
+      browserScopes.select(sessionId, tab.id)
+      publishScopedSelectedTab(sessionId, tab.id)
+    }
     else { activeTabId = tab.id; publish(base + '/', tab.id) }
     persistBrowserScopes()
     return await state(base, undefined, signal, sessionId)
@@ -676,6 +802,7 @@ async function action(input: Action, signal?: AbortSignal): Promise<Record<strin
   let targetTabId = input.tabId
   if (sessionId !== undefined) {
     const available = await listTabs(base, signal)
+    for (const tab of available) browserScopes.claim(sessionId, tab.id)
     const owned = browserScopes.choose(sessionId, available.map(tab => tab.id))
     if (targetTabId !== undefined && !browserScopes.owns(sessionId, targetTabId)) {
       throw new Error('No puedes controlar una pestaña de otra conversación.')
@@ -693,6 +820,7 @@ async function action(input: Action, signal?: AbortSignal): Promise<Record<strin
     throwIfAborted(signal)
     if (!res.ok) throw new Error('No se pudo activar la pestaña.')
     if (sessionId === undefined) activeTabId = tab.id
+    else publishScopedSelectedTab(sessionId, tab.id)
   } else if (type === 'close-tab') {
     if ((await listTabs(base, signal)).length < 2) throw new Error('Debes conservar una pestaña abierta.')
     throwIfAborted(signal)

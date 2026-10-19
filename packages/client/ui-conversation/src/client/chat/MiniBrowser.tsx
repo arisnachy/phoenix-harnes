@@ -496,9 +496,18 @@ export function MiniBrowser({ sessionId, requested = false, active = true, initi
           state = await inspect(sessionId, first.signal, followGlobal.current ? undefined : cardTabId.current)
         } catch (reason) {
           inspectError = reason
+          // Saved conversation histories can refer to targets from the old
+          // globally shared Chrome. Never attach that stale ID to this chat.
+          if (cardTabId.current !== undefined) {
+            try {
+              state = await inspect(sessionId, first.signal)
+              followGlobal.current = true
+              cardTabId.current = undefined
+            } catch { /* Preserve the original diagnostic if the host is down. */ }
+          }
         }
         if (!requestIsActive(first.signal, mounted)) return
-        if (requested && followGlobal.current && (!state || !state.available) && !startAttempted) {
+        if (requested && (!state || !state.available) && !startAttempted) {
           // Starting Chrome is a mutation whose timeout may leave the host in
           // an unknown state. Let the user retry explicitly instead of issuing
           // the same mutation again from the polling loop.

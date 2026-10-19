@@ -11,7 +11,7 @@ import { createHash, randomUUID } from 'node:crypto'
 import { spawn } from 'node:child_process'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
 interface LoginRecord { version: 1; origin: string; automatic: boolean; sealed: string }
@@ -20,6 +20,7 @@ interface BrowserTab { id: string; type?: string; url: string; webSocketDebugger
 const PREFIX = '/phoenix-secure-login'
 const STORE = join(process.env.DSH_HOME || join(homedir(), '.dsh'), 'secure-logins')
 const SHARED_BROWSER = join(tmpdir(), 'phoenix-browser-cdp.json')
+const SCOPED_BROWSER_DIR = join(tmpdir(), 'phoenix-mini-browser-cdp')
 const SCRIPT = [
   '$ErrorActionPreference = "Stop"',
   '$payload = [Console]::In.ReadToEnd() | ConvertFrom-Json',
@@ -196,20 +197,31 @@ function respond(res: ServerResponse, code: number, body: Record<string, unknown
   res.end(JSON.stringify(body))
 }
 async function tabForLogin(tabId: string, origin: string): Promise<BrowserTab> {
-  const shared = JSON.parse(await readFile(SHARED_BROWSER, 'utf8')) as { endpoint?: string }
-  if (!shared.endpoint) throw new Error('Chrome no está disponible')
-  const base = new URL(shared.endpoint)
-  if (base.protocol !== 'http:' || !['localhost', '127.0.0.1', '[::1]'].includes(base.hostname)
-    || base.username || base.password) throw new Error('Conexión de Chrome inválida')
-  const response = await fetch(new URL('/json/list', base), { signal: AbortSignal.timeout(5_000) })
-  if (!response.ok) throw new Error('Chrome no responde')
-  const rows = await response.json() as BrowserTab[]
-  const tab = rows.find(row => row.id === tabId && row.type === 'page')
+  // Secure Ask receives a concrete tabId. Resolve it in the actual chat
+  // Chromium instance, not the global descriptor of whichever chat ran last.
+  const names = await readdir(SCOPED_BROWSER_DIR).catch(() => [] as string[])
+  const descriptors = [SHARED_BROWSER, ...names.filter(name => /^[a-f0-9]{64}\.json$/u.test(name))
+    .map(name => join(SCOPED_BROWSER_DIR, name))]
+  const matches = await Promise.all(descriptors.map(async file => {
+    try {
+      const descriptor = JSON.parse(await readFile(file, 'utf8')) as { endpoint?: string; pid?: number }
+      if (!descriptor.endpoint || !Number.isInteger(descriptor.pid) || (descriptor.pid ?? 0) < 1) return undefined
+      process.kill(descriptor.pid as number, 0)
+      const base = new URL(descriptor.endpoint)
+      if (base.protocol !== 'http:' || !['localhost', '127.0.0.1', '[::1]'].includes(base.hostname)
+        || base.username || base.password || base.pathname !== '/') return undefined
+      const response = await fetch(new URL('/json/list', base), { signal: AbortSignal.timeout(2_500) })
+      if (!response.ok) return undefined
+      const rows = await response.json() as BrowserTab[]
+      return rows.find(row => row.id === tabId && row.type === 'page')
+    } catch { return undefined }
+  }))
+  const tab = matches.find(row => row !== undefined)
   if (!tab?.webSocketDebuggerUrl || loginOrigin(tab.url) !== origin) {
-    throw new Error('La pestaña no coincide con el sitio autorizado')
+    throw new Error('La pestaña no coincide con el sitio autorizado de esta conversación')
   }
   const socket = new URL(tab.webSocketDebuggerUrl)
-  if (!['ws:'].includes(socket.protocol) || !['localhost', '127.0.0.1', '[::1]'].includes(socket.hostname)) {
+  if (socket.protocol !== 'ws:' || !['localhost', '127.0.0.1', '[::1]'].includes(socket.hostname)) {
     throw new Error('Conexión CDP no permitida')
   }
   return tab

@@ -56,4 +56,14 @@ describe('MiniBrowser per-conversation isolation', () => {
     expect(scopes.tabs('chat-a', ['owned', 'own-b'])).toEqual(['owned'])
     expect(scopes.tabs('chat-b', ['owned', 'own-b'])).toEqual(['own-b'])
   })
+  it('does not prune the other chat when Chromium instances have disjoint target lists', () => {
+    const scopes = new MiniBrowserScopes()
+    scopes.claim('chat-a', 'instance-a-page')
+    scopes.claim('chat-b', 'instance-b-page')
+    expect(scopes.choose('chat-a', ['instance-a-page'])).toBe('instance-a-page')
+    expect(scopes.owns('chat-b', 'instance-b-page')).toBe(true)
+    expect(scopes.choose('chat-b', ['instance-b-page'])).toBe('instance-b-page')
+    expect(scopes.owns('chat-a', 'instance-a-page')).toBe(true)
+  })
+
 })
