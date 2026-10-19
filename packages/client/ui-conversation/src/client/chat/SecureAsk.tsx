@@ -3,6 +3,17 @@ import { useState, type FormEvent } from 'react'
 import { secureApi, type SecureLoginTarget, type SecureStatus, type SecureLoginProfile, type SecureProfileInfo } from './MiniBrowser.tsx'
 import css from './SecureAsk.module.css'
 
+/** Human-friendly statuses only: no account or password values cross back to chat. */
+export function describeLoginResult(status: string): string {
+  switch (status) {
+    case 'login-form-not-found': return 'No aparece un formulario de ingreso en esta página. Abre la opción Cuenta o Iniciar sesión y vuelve a intentarlo.'
+    case 'login-trigger-requires-attention': return 'La página requiere abrir manualmente el acceso o continuar en otra pantalla.'
+    case 'additional-login-field-required': return 'La página exige un dato adicional para iniciar sesión.'
+    case 'not-authorized': return 'La identidad seleccionada todavía no tiene un acceso autorizado.'
+    case 'origin-changed': return 'La página cambió de dominio; comprueba el destino antes de utilizar el acceso.'
+    default: return 'El sitio no confirmó el ingreso. Revisa su formulario y vuelve a intentar.'
+  }
+}
 export function SecureAsk({ target, onClose, onSaved }: {
   target: SecureLoginTarget
   onClose: () => void
@@ -13,14 +24,18 @@ export function SecureAsk({ target, onClose, onSaved }: {
   const [automatic, setAutomatic] = useState(target.automatic)
   const [busy, setBusy] = useState(false)
   const [feedback, setFeedback] = useState('')
-  const [editing, setEditing] = useState(!target.saved)
-  const [profile, setProfile] = useState<SecureLoginProfile>(target.profile ?? 'personal')
+  const [editing, setEditing] = useState(!target.saved && !target.relatedOrigin)
+  const [profile, setProfile] = useState<SecureLoginProfile>(
+    !target.saved && target.relatedOrigin ? (target.relatedProfile ?? target.profile ?? 'personal')
+      : (target.profile ?? 'personal'))
   const [profiles, setProfiles] = useState<SecureProfileInfo[]>(target.profiles ?? [
     { id: 'personal', saved: target.saved, automatic: target.automatic, source: target.saved ? 'dpapi' : 'none' },
     { id: 'kira', saved: false, automatic: false, source: 'none' },
   ])
   const selectedProfile = profiles.find(item => item.id === profile)
   const selectedSaved = selectedProfile?.saved ?? false
+  const relatedOrigin = !selectedSaved && profile === (target.relatedProfile ?? 'personal')
+    ? target.relatedOrigin : undefined
   const [extraValues, setExtraValues] = useState<Record<string, string>>({})
   const chooseProfile = async (next: SecureLoginProfile): Promise<void> => {
     if (busy || next === profile) return
@@ -68,26 +83,27 @@ export function SecureAsk({ target, onClose, onSaved }: {
         origin: target.origin, tabId: target.tabId, account, secret, automatic, profile,
         ...(extraFields.length ? { extras: Object.fromEntries(extraFields.map(field => [field.key, extraValues[field.key] ?? ''])) } : {}),
       })
+      if (!saved.saved) throw new Error('Vault did not confirm saving')
       if (saved.profiles) setProfiles(saved.profiles)
-      if (profile === 'kira') {
-        // The human explicitly chose the Kira identity for this task.
-        // Select it before dispatching the sign-in, without deleting or
-        // changing the existing personal credential.
-        await secureApi<SecureStatus>('/select', {
-          origin: target.origin, tabId: target.tabId, profile,
-        })
-      }
-      // Once stored securely, do not leave the credential-entry form exposed.
+      // A DPAPI write succeeded. This fact MUST survive any later login error.
       setEditing(false)
-      // The user's explicit submit authorizes *this* initial login. The
-      // separate checkbox controls only future unattended logins.
-      const login = await secureApi<{ status: string }>('/use', {
-        origin: target.origin, tabId: target.tabId, manual: true, profile,
-      })
-      if (login.status === 'submitted') await verifyLogin()
-      else setFeedback('Credenciales guardadas. El formulario del sitio requiere intervención adicional.')
+      setFeedback('Acceso guardado y cifrado correctamente. Comprobando el inicio de sesión…')
+      try {
+        if (profile === 'kira') {
+          await secureApi<SecureStatus>('/select', {
+            origin: target.origin, tabId: target.tabId, profile,
+          })
+        }
+        const login = await secureApi<{ status: string }>('/use', {
+          origin: target.origin, tabId: target.tabId, manual: true, profile,
+        })
+        if (login.status === 'submitted') await verifyLogin()
+        else setFeedback('Acceso guardado y cifrado. ' + describeLoginResult(login.status))
+      } catch {
+        setFeedback('Acceso guardado y cifrado. La página aún no permitió iniciar sesión; puedes reintentar sin escribir las credenciales.')
+      }
     } catch {
-      setFeedback('No se pudo guardar o utilizar el acceso. Verifica el navegador y la bóveda.')
+      setFeedback('Vault no confirmó el guardado. Comprueba su estado antes de volver a introducir datos.')
     } finally {
       setSecret('')
       setAccount('')
@@ -102,9 +118,36 @@ export function SecureAsk({ target, onClose, onSaved }: {
         origin: target.origin, tabId: target.tabId, manual: true, profile,
       })
       if (result.status === 'submitted') await verifyLogin()
-      else setFeedback('No se confirmó el envío del acceso. Comprueba la página.')
+      else setFeedback('El acceso sigue guardado. ' + describeLoginResult(result.status))
     } catch { setFeedback('No se pudo usar el acceso guardado.') }
     finally { setBusy(false) }
+  }
+  const adoptRelated = async (): Promise<void> => {
+    if (!relatedOrigin || busy) return
+    setBusy(true)
+    try {
+      const accepted = await secureApi<SecureStatus>('/adopt-related', {
+        origin: target.origin, tabId: target.tabId, sourceOrigin: relatedOrigin,
+        profile, consent: true,
+      })
+      if (!accepted.saved) throw new Error('Vault did not confirm copying')
+      if (accepted.profiles) setProfiles(accepted.profiles)
+      setEditing(false)
+      setAutomatic(false)
+      // Reuse is a ONE-TIME human decision, never silent cross-origin authority.
+      setFeedback('Acceso cifrado reutilizado para este sitio con inicio automático desactivado. Comprobando autenticación…')
+      try {
+        const login = await secureApi<{ status: string }>('/use', {
+          origin: target.origin, tabId: target.tabId, manual: true, profile,
+        })
+        if (login.status === 'submitted') await verifyLogin()
+        else setFeedback('Acceso guardado para este sitio. ' + describeLoginResult(login.status))
+      } catch {
+        setFeedback('Acceso copiado y guardado. El formulario de inicio de sesión sigue pendiente; no se perdieron las credenciales.')
+      }
+    } catch {
+      setFeedback('No se pudo reutilizar ese acceso. Los datos originales permanecen protegidos en Vault.')
+    } finally { setBusy(false) }
   }
   const remove = async () => {
     setBusy(true)
@@ -132,6 +175,12 @@ export function SecureAsk({ target, onClose, onSaved }: {
           ? 'Kira aún no tiene acceso guardado a este sitio. Registrar una cuenta requiere autorización y cumplir las reglas del servicio.'
           : 'Aún no hay un acceso personal guardado para este sitio.'}</p>
       {target.diagnostic && <p role="status" className={css.feedback}>{target.diagnostic}</p>}
+      {relatedOrigin && <div className={css.saved} role="status">
+        <span>Ya tienes un acceso cifrado en el módulo relacionado ({relatedOrigin}). Esta página usa otro dominio, por lo que no lo aplicaré automáticamente.</span>
+        <button type="button" disabled={busy} onClick={() => { void adoptRelated() }}>
+          Reutilizar en este sitio
+        </button>
+      </div>}
       {selectedSaved && <div className={css.saved}>
         <span>Ya existe un acceso guardado para este sitio. No es necesario escribirlo otra vez.</span>
         <button type="button" disabled={busy} onClick={() => { void useSaved() }}>Usar acceso guardado</button>

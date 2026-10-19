@@ -30,6 +30,30 @@ export function fullSiteForEmbeddedPage(rawUrl: string): string | undefined {
   } catch { return undefined }
 }
 
+/** Present the publisher's actual navigation, never a synthetic header over an iframe. */
+export function miniBrowserNavigationTarget(rawUrl: string): string {
+  return fullSiteForEmbeddedPage(rawUrl) ?? rawUrl
+}
+const publisherRestoreAttempt = new Map<string, string>()
+async function recoverPublisherShell(tab: Tab, signal?: AbortSignal): Promise<void> {
+  const preferred = fullSiteForEmbeddedPage(tab.url)
+  if (preferred === undefined) {
+    publisherRestoreAttempt.delete(tab.id)
+    return
+  }
+  if (publisherRestoreAttempt.get(tab.id) === tab.url) return
+  // Remember the in-flight redirect. Chrome can still report the child URL
+  // during several state polls; those polls must not restart navigation.
+  publisherRestoreAttempt.set(tab.id, tab.url)
+  try {
+    const result = await cdp<{ errorText?: string }>(tab, 'Page.navigate', { url: preferred }, signal)
+    if (result.errorText) throw new Error(result.errorText)
+  } catch (error) {
+    publisherRestoreAttempt.delete(tab.id)
+    throw new Error('No se pudo restaurar automáticamente el menú original del sitio: '
+      + (error instanceof Error ? error.message : String(error)))
+  }
+}
 type Tab = { id: string; url: string; title: string; type?: string; webSocketDebuggerUrl?: string }
 type Descriptor = { pid: number; endpoint: string; selectedTabId?: string }
 type RpcReply = { id: number; result?: Record<string, unknown>; error?: { message?: string } }
@@ -679,6 +703,7 @@ async function state(knownBase?: string, tabId?: string, signal?: AbortSignal, s
     persistBrowserScopes()
     if (chosenId === undefined) return { available: false, tabs: [] }
     const chosen = await selected(base, chosenId, tabs, signal, false)
+    await recoverPublisherShell(chosen, signal)
     return {
       available: true, tabId: chosen.id, url: chosen.url, title: chosen.title,
       ...(fullSiteForEmbeddedPage(chosen.url) ? { fullSiteUrl: fullSiteForEmbeddedPage(chosen.url) } : {}),
@@ -687,6 +712,7 @@ async function state(knownBase?: string, tabId?: string, signal?: AbortSignal, s
     }
   }
   const selectedTab = await selected(base, tabId, tabs, signal, tabId === undefined)
+  await recoverPublisherShell(selectedTab, signal)
   return {
     available: true, tabId: selectedTab.id, url: selectedTab.url, title: selectedTab.title,
     ...(fullSiteForEmbeddedPage(selectedTab.url) ? { fullSiteUrl: fullSiteForEmbeddedPage(selectedTab.url) } : {}),
@@ -801,7 +827,7 @@ async function action(input: Action, signal?: AbortSignal): Promise<Record<strin
     return await state(base, undefined, signal, sessionId)
   }
   if (type === 'new-tab') {
-    const target = normalizeMiniBrowserAddress(input.url ?? 'https://www.google.com')
+    const target = miniBrowserNavigationTarget(normalizeMiniBrowserAddress(input.url ?? 'https://www.google.com'))
     throwIfAborted(signal)
     const tab = await json<Tab>(base + '/json/new?' + encodeURIComponent(target), 'PUT', signal)
     throwIfAborted(signal)
@@ -845,10 +871,11 @@ async function action(input: Action, signal?: AbortSignal): Promise<Record<strin
     cdpSessions.get(tab.id)?.session.close('CDP_SESSION_CLOSED: pestaña cerrada')
     cdpSessions.delete(tab.id)
     frameFlights.delete(tab.id)
+    publisherRestoreAttempt.delete(tab.id)
     if (sessionId !== undefined) browserScopes.release(sessionId, tab.id)
     else activeTabId = undefined
   } else if (type === 'open' || type === 'navigate') {
-    const url = normalizeMiniBrowserAddress(input.url ?? 'https://www.google.com')
+    const url = miniBrowserNavigationTarget(normalizeMiniBrowserAddress(input.url ?? 'https://www.google.com'))
     throwIfAborted(signal)
     await cdp(tab, 'Page.navigate', { url }, signal)
   } else if (type === 'open-external') {

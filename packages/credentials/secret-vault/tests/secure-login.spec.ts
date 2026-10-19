@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import { loginOrigin, loginDetectionExpression, loginGateExpression, registerSecureLogin } from '../src/secure-login.ts'
+import { loginOrigin, loginDetectionExpression, loginGateExpression, relatedCredentialOrigin, registerSecureLogin } from '../src/secure-login.ts'
 
 describe('origin-scoped secure login', () => {
+  it('only recognizes a fixed verified related origin, without automatic secret sharing', () => {
+    expect(relatedCredentialOrigin('https://www.juancitosport.com.do'))
+      .toBe('https://deportes.juancitosport.com.do')
+    expect(relatedCredentialOrigin('https://deportes.juancitosport.com.do')).toBeUndefined()
+    expect(relatedCredentialOrigin('https://example.com')).toBeUndefined()
+    expect(relatedCredentialOrigin('https://www.juancitosport.com.do.evil.example')).toBeUndefined()
+  })
+
   it('canonicalizes full HTTPS URLs without crossing origins', () => {
     expect(loginOrigin('https://example.org/login?token=hidden')).toBe('https://example.org')
     expect(loginOrigin('https://example.org:8443/login')).toBe('https://example.org:8443')
@@ -199,4 +207,32 @@ describe('origin-scoped secure login', () => {
     })
     expect(status).toBe(403)
   })
+  it('reports related credential existence without exposing it or treating it as site authorization', async () => {
+    let handler: ((req: unknown, res: unknown) => Promise<void>) | undefined
+    registerSecureLogin({ webServer: { register: (route: { handler: typeof handler }) => {
+      handler = route.handler
+      return () => {}
+    } } } as never, {
+      resolve: async (ref: string) => {
+        if (!ref.includes('ACCOUNT') && !ref.includes('SECRET')) return undefined
+        const expected = (await import('@phoenix-ai/dsh-credentials'))
+          .originCredentialRef('https://deportes.juancitosport.com.do',
+            ref.endsWith('_ACCOUNT') ? 'account' : 'secret')
+        return ref === expected ? { value: 'SENSITIVE_TEST_VALUE' } : undefined
+      },
+    } as never)
+    let body = ''
+    await handler?.({
+      method: 'GET',
+      url: '/phoenix-secure-login/status?origin=https%3A%2F%2Fwww.juancitosport.com.do',
+      socket: { remoteAddress: '127.0.0.1' },
+      headers: { host: '127.0.0.1:3080', 'x-phoenix-secure-login': '1' },
+    }, { writeHead() {}, end(value: string) { body = value } })
+    const status = JSON.parse(body) as Record<string, unknown>
+    expect(status.saved).toBe(false)
+    expect(status.relatedSaved).toBe(true)
+    expect(status.relatedOrigin).toBe('https://deportes.juancitosport.com.do')
+    expect(body).not.toContain('SENSITIVE_TEST_VALUE')
+  })
+
 })

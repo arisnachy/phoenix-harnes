@@ -720,7 +720,9 @@ function BrowserWorkspace({
           <span>{savedAccessNotice.phase === 'using'
             ? 'Ya tengo un acceso registrado para ' + savedAccessNotice.origin + '. Voy a utilizarlo para iniciar sesión y comprobaré si la página confirma el acceso.'
             : savedAccessNotice.phase === 'available'
-              ? 'Ya tengo un acceso registrado para ' + savedAccessNotice.origin + '. No necesitas introducirlo de nuevo; puedes autorizar su uso desde Acceso seguro.'
+              ? 'Ya existe un acceso cifrado para ' + savedAccessNotice.origin + '. Lo conservaré y, cuando la página lo requiera, podré utilizarlo con la autorización correspondiente.'
+              : savedAccessNotice.phase === 'related'
+                ? 'Encontré un acceso cifrado de un módulo relacionado. La página principal utiliza otro dominio. Puedes autorizar su reutilización desde Acceso seguro sin escribir de nuevo la contraseña.'
               : savedAccessNotice.phase === 'vault-unavailable'
                 ? 'No pude consultar los accesos guardados para ' + savedAccessNotice.origin + '. No te pediré las credenciales otra vez hasta recuperar la bóveda.'
                 : 'Tengo un acceso registrado para ' + savedAccessNotice.origin + ', pero no puedo confirmar el inicio de sesión. Puedes revisar el acceso guardado.'}</span>

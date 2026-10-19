@@ -834,29 +834,18 @@ describe('MiniBrowser in Phoenix conversation', () => {
     expect(request).not.toHaveBeenCalledWith(expect.objectContaining({ saved: false }))
   })
 
-  it('offers the real top-level site for an embedded module instead of synthesizing its header', async () => {
-    const embedded = { ...state,
-      url: 'https://deportes.juancitosport.com.do/BOSSWagering/Sportsbook/InternetBetTaker20',
-      fullSiteUrl: 'https://www.juancitosport.com.do/deportes/',
-      tabs: [{ id: 'shared-tab', title: 'Sportsbook', url: 'https://deportes.juancitosport.com.do/BOSSWagering/Sportsbook/InternetBetTaker20' }],
-    }
-    const actions: Array<{ type: string; url?: string; sessionId?: string }> = []
-    vi.stubGlobal('fetch', vi.fn(async (raw: string, options?: RequestInit) => {
-      const url = String(raw)
-      if (url.startsWith('/phoenix-mini-browser/action') && typeof options?.body === 'string') {
-        actions.push(JSON.parse(options.body) as { type: string; url?: string; sessionId?: string })
-      }
-      if (url.startsWith('/phoenix-mini-browser/frame')) return new Response(
+  it('does not show a second menu window or intervention button', async () => {
+    const embedded = { ...state, url: 'https://www.juancitosport.com.do/deportes/',
+      tabs: [{ id: 'shared-tab', title: 'Deportes', url: 'https://www.juancitosport.com.do/deportes/' }] }
+    vi.stubGlobal('fetch', vi.fn(async (raw: string) => {
+      if (String(raw).startsWith('/phoenix-mini-browser/frame')) return new Response(
         new Uint8Array([255, 216, 255, 217]), { status: 200, headers: { 'content-type': 'image/jpeg' } })
       return new Response(JSON.stringify(embedded), { status: 200, headers: { 'content-type': 'application/json' } })
     }))
-    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn(() => 'blob:embedded-site') })
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn(() => 'blob:publisher-shell') })
     Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() })
     render(<MiniBrowser sessionId="test-chat" requested />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Ver sitio completo y menú' }))
-    await waitFor(() => expect(actions).toContainEqual(expect.objectContaining({
-      type: 'open', url: 'https://www.juancitosport.com.do/deportes/', sessionId: 'test-chat',
-    })))
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Deportes' })).toBeTruthy())
+    expect(screen.queryByRole('button', { name: 'Ver sitio completo y menú' })).toBeNull()
   })
-
 })

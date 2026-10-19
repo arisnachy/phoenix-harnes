@@ -3,6 +3,7 @@ import {
   captureBrowserFrameSingleFlight,
   captureBrowserFrameWithFallback,
   fullSiteForEmbeddedPage,
+  miniBrowserNavigationTarget,
   isVerifiedWebmCapture,
   MiniBrowserCdpSession,
   miniBrowserDescriptorNeedsPublish,
@@ -270,5 +271,13 @@ describe('Embedded application inside publisher website', () => {
     expect(fullSiteForEmbeddedPage('http://deportes.juancitosport.com.do/BOSSWagering/Sportsbook/')).toBeUndefined()
     expect(fullSiteForEmbeddedPage('https://deportes.juancitosport.com.do.evil.org/BOSSWagering/Sportsbook/')).toBeUndefined()
     expect(fullSiteForEmbeddedPage('https://deportes.juancitosport.com.do/other')).toBeUndefined()
+  })
+})
+
+describe('automatic canonical publisher navigation', () => {
+  it('shows the full original site automatically and leaves unrelated pages alone', () => {
+    const module = 'https://deportes.juancitosport.com.do/BOSSWagering/Sportsbook/InternetBetTaker2024-10/Sportsbook.aspx'
+    expect(miniBrowserNavigationTarget(module)).toBe('https://www.juancitosport.com.do/deportes/')
+    expect(miniBrowserNavigationTarget('https://example.org/login')).toBe('https://example.org/login')
   })
 })

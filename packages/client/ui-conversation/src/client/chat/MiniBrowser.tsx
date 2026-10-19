@@ -141,6 +141,7 @@ export type SecureProfileInfo = {
 }
 export type SecureStatus = {
   saved: boolean; automatic: boolean
+  relatedSaved?: boolean; relatedOrigin?: string; relatedProfile?: SecureLoginProfile
   profile?: SecureLoginProfile; profiles?: SecureProfileInfo[]
 }
 export type SecureLoginField = {
@@ -153,6 +154,7 @@ export type SecureLoginField = {
 }
 export type SecureLoginTarget = {
   origin: string; tabId: string; saved: boolean; automatic: boolean
+  relatedOrigin?: string; relatedProfile?: SecureLoginProfile
   diagnostic?: string; fields?: SecureLoginField[]
   /** True only when a human deliberately opens the secure login controls. */
   explicit?: boolean
@@ -166,7 +168,7 @@ type SecureUse = { status: string }
 /** Safe human-facing status: no account names, passwords or vault values. */
 export type SavedAccessNotice = {
   origin: string
-  phase: 'available' | 'using' | 'needs-attention' | 'vault-unavailable'
+  phase: 'available' | 'using' | 'needs-attention' | 'vault-unavailable' | 'related'
 }
 function secureOrigin(value?: string): string | undefined {
   if (!value) return undefined
@@ -297,7 +299,8 @@ export function MiniBrowser({ sessionId, requested = false, active = true, initi
           pendingAutomaticLogin.current.delete(key)
           openedLoginGates.current.delete(key)
           onSecureLoginRequest?.(null)
-          onSavedAccessNotice?.(null)
+          onSavedAccessNotice?.(status.saved ? { origin: siteOrigin, phase: 'available' }
+            : status.relatedSaved ? { origin: siteOrigin, phase: 'related' } : null)
           return
         }
         // A failed Vault lookup must not be interpreted as absent credentials.
@@ -317,17 +320,17 @@ export function MiniBrowser({ sessionId, requested = false, active = true, initi
               diagnostic: 'No fue posible comprobar el acceso. Usa el acceso guardado o reintenta la conexión.',
             })
           } else {
-            onSavedAccessNotice?.(null)
+            onSavedAccessNotice?.(status.relatedSaved ? { origin: siteOrigin, phase: 'related' } : null)
           }
           return
         }
         onSavedAccessNotice?.(status.saved ? {
           origin: siteOrigin, phase: status.automatic ? 'using' : 'available',
-        } : null)
+        } : status.relatedSaved ? { origin: siteOrigin, phase: 'related' } : null)
         // With no stored access, first expose the real same-page form so
         // Secure Ask can use its labels, input types and required extra fields.
         // A login dialog is a navigation aid, not a transaction approval.
-        if (!status.saved && detection.formVisible === false && detection.canOpenInPlace
+        if (!status.saved && !status.relatedSaved && detection.formVisible === false && detection.canOpenInPlace
           && !openedLoginGates.current.has(key)) {
           openedLoginGates.current.add(key)
           try {
@@ -341,6 +344,7 @@ export function MiniBrowser({ sessionId, requested = false, active = true, initi
         }
         const request: SecureLoginTarget = {
           origin: siteOrigin, tabId, saved: status.saved, automatic: status.automatic,
+          ...(status.relatedOrigin ? { relatedOrigin: status.relatedOrigin, relatedProfile: status.relatedProfile } : {}),
           ...(status.profile ? { profile: status.profile } : {}),
           ...(status.profiles ? { profiles: status.profiles } : {}),
           ...(detection.fields?.length ? { fields: detection.fields } : {}),
@@ -823,6 +827,7 @@ export function MiniBrowser({ sessionId, requested = false, active = true, initi
               void secureApi<SecureStatus>('/status?origin=' + encodeURIComponent(siteOrigin))
                 .then(status => onSecureLoginRequest({
                   origin: siteOrigin, tabId, saved: status.saved, automatic: status.automatic, explicit: true,
+                  ...(status.relatedOrigin ? { relatedOrigin: status.relatedOrigin, relatedProfile: status.relatedProfile } : {}),
                   ...(status.profile ? { profile: status.profile } : {}),
                   ...(status.profiles ? { profiles: status.profiles } : {}),
                 }))
@@ -832,12 +837,6 @@ export function MiniBrowser({ sessionId, requested = false, active = true, initi
                 })
             }}>🔐 Acceso seguro</button>}
         </form>
-        {snapshot.fullSiteUrl && hasPage && <div className={css.siteShellNotice} role="status">
-          <span>Este módulo no contiene el menú superior del sitio principal.</span>
-          <button type="button" onClick={() => { const url = snapshot.fullSiteUrl; if (url !== undefined) void run({ type: 'open', url }) }}>
-            Ver sitio completo y menú
-          </button>
-        </div>}
         {snapshot.available ? (
           <div className={css.viewport}>
             {!hasPage ? <div className={css.loading} role="status">MiniBrowser de esta conversación iniciado. Todavía no se ha comprobado ninguna página. Kira no debe afirmar que la abrió hasta verificarla.</div> : (
@@ -896,7 +895,8 @@ export function MiniBrowser({ sessionId, requested = false, active = true, initi
             void secureApi<SecureStatus>('/status?origin=' + encodeURIComponent(siteOrigin))
               .then(status => onSecureLoginRequest({
                 origin: siteOrigin, tabId, saved: status.saved, automatic: status.automatic,
-                explicit: true, ...(status.profile ? { profile: status.profile } : {}),
+                explicit: true,
+                ...(status.relatedOrigin ? { relatedOrigin: status.relatedOrigin, relatedProfile: status.relatedProfile } : {}), ...(status.profile ? { profile: status.profile } : {}),
                 ...(status.profiles ? { profiles: status.profiles } : {}),
               }))
               .catch(() => {

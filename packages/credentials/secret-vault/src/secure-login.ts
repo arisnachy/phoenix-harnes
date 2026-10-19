@@ -41,6 +41,15 @@ export function loginOrigin(raw: string): string {
   if (parsed.protocol !== 'https:' && !(local && parsed.protocol === 'http:')) throw new Error('Solo HTTPS')
   return parsed.origin
 }
+/**
+ * A previously visited embedded module is a separate, protected origin.
+ * Show only that a related access exists; NEVER share or replay its secret
+ * across origins automatically. The user must approve an explicit copy.
+ */
+export function relatedCredentialOrigin(origin: string): string | undefined {
+  return origin === 'https://www.juancitosport.com.do'
+    ? 'https://deportes.juancitosport.com.do' : undefined
+}
 function filename(origin: string, profile: LoginProfile = 'personal'): string {
   const suffix = profile === 'kira' ? '.kira.dpapi.json' : '.dpapi.json'
   return join(STORE, createHash('sha256').update(origin).digest('hex') + suffix)
@@ -522,9 +531,14 @@ export function registerSecureLogin(ctx: Context, vault?: CredentialProvider): (
           const profiles = await listProfiles(origin, vault)
           const selected = await activeProfile(origin, profiles)
           const current = profiles.find(p => p.id === selected)!
+          const relatedOrigin = !current.saved ? relatedCredentialOrigin(origin) : undefined
+          const relatedProfiles = relatedOrigin ? await listProfiles(relatedOrigin, vault) : []
+          const related = relatedProfiles.some(item => item.saved)
+            ? { relatedOrigin, relatedProfile: preferredLoginProfile(relatedProfiles), relatedSaved: true }
+            : {}
           respond(res, 200, {
             saved: current.saved, automatic: current.automatic, source: current.source,
-            profile: selected, profiles,
+            profile: selected, profiles, ...related,
           })
           return
         }
@@ -605,6 +619,30 @@ export function registerSecureLogin(ctx: Context, vault?: CredentialProvider): (
           const selected = await activeProfile(origin, profiles)
           respond(res, 200, { saved: true, automatic: payload.automatic === true, profile: selected,
             profiles })
+          return
+        }
+        if (route.pathname === PREFIX + '/adopt-related') {
+          // A human-initiated, specific-site copy: verify the destination tab
+          // is genuinely on the intended HTTPS origin before unsealing anything.
+          const source = relatedCredentialOrigin(origin)
+          if (!source || payload.sourceOrigin !== source || payload.consent !== true
+            || typeof payload.tabId !== 'string' || !/^[A-Za-z0-9_-]{1,200}$/.test(payload.tabId)) {
+            throw new Error('Reutilización entre sitios no autorizada')
+          }
+          await tabForLogin(payload.tabId, origin)
+          const profile = loginProfile(payload.profile)
+          const saved = await load(source, profile)
+          const legacy = profile === 'personal' && !saved ? await legacyLogin(vault, source) : undefined
+          if (!saved && !legacy) throw new Error('No existe un acceso guardado en el módulo')
+          const data = saved
+            ? JSON.parse(Buffer.from(await dpapi('unprotect', saved.sealed, source, profile), 'base64').toString('utf8')) as LoginContent
+            : legacy!.login
+          if (data.origin !== source || !data.account || !data.secret) throw new Error('Registro no válido')
+          // Automatic login rights never expand to a new origin.
+          await store(origin, data.account, data.secret, false, data.extras, profile)
+          await setPrimary(origin, profile)
+          const profiles = await listProfiles(origin, vault)
+          respond(res, 200, { saved: true, automatic: false, profile, profiles })
           return
         }
         if (route.pathname === PREFIX + '/delete') {
