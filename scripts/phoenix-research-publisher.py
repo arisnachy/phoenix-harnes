@@ -505,48 +505,115 @@ def bibliography(ref, style, number):
     return f"{authors} ({year}). {title}. {journal}{detail}. {url}"
 
 def chart_image(chart, folder, ordinal, accent="#087783"):
-    labels = [str(s)[:32] for s in chart["labels"]]
-    values = chart["values"]
-    image = Image.new("RGB", (1000, 480), "white")
-    d = ImageDraw.Draw(image)
-    if chart.get("type") == "forest":
-        lows, highs = chart["ci_low"], chart["ci_high"]
-        left, right = min(lows), max(highs)
-        if left == right: right = left + 1
-        pad = (right - left) * 0.10
-        left, right = left - pad, right + pad
-        x_axis = lambda value: 275 + (value - left) / (right - left) * 450
-        null_value = chart.get("null_value", 1)
-        if isinstance(null_value, (int, float)) and left <= null_value <= right:
-            x = x_axis(null_value)
-            d.line((x, 35, x, 430), fill="#98abb1", width=2)
-        for i, (label, value, lo, hi) in enumerate(zip(labels, values, lows, highs)):
-            y = 55 + i * (350 / max(1, len(values) - 1))
-            d.text((15, int(y - 8)), label[:30], fill="#1d3040")
-            d.line((x_axis(lo), y, x_axis(hi), y), fill=accent, width=4)
-            d.line((x_axis(lo), y-6, x_axis(lo), y+6), fill=accent, width=2)
-            d.line((x_axis(hi), y-6, x_axis(hi), y+6), fill=accent, width=2)
-            x = x_axis(value)
-            d.rectangle((x-6, y-6, x+6, y+6), fill=accent)
-            d.text((775, int(y - 19)), f"{value:.2f} [{lo:.2f}, {hi:.2f}]", fill="#1d3040")
-        destination = folder / f"figure-{ordinal}.png"
-        image.save(destination)
-        return destination
-    low, high = min(0, min(values)), max(0, max(values))
-    if high <= low: high = low + 1
-    baseline = 390
-    d.line((85, 45, 85, baseline), fill="#333333", width=3)
-    d.line((85, baseline, 960, baseline), fill="#333333", width=3)
-    available = 830 / len(values)
-    for i, value in enumerate(values):
-        x0 = 90 + available * i + 12
-        x1 = 90 + available * (i + 1) - 12
-        y = 60 + (high - value) / (high-low) * 330
-        d.rectangle((x0, min(y, baseline), x1, max(y, baseline)), fill=accent)
-        d.text((x0, 400), labels[i][:max(4, int(available/10))], fill="#222222")
-        d.text((x0, max(42, y-18)), str(round(value, 2)), fill="#222222")
+    """Draw scientific bars, lines, scatter points and confidence intervals from real inputs."""
+    labels, values = chart["labels"], chart["values"]
+    kind = chart.get("type", "bar")
+    image = Image.new("RGB", (1200, 650), "white")
+    draw = ImageDraw.Draw(image)
+    font_file = next((p for p in (
+        "C:/Windows/Fonts/segoeui.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf",
+    ) if Path(p).is_file()), None)
+    font = ImageFont.truetype(font_file, 19) if font_file else ImageFont.load_default()
+    small = ImageFont.truetype(font_file, 16) if font_file else ImageFont.load_default()
+    ink, grid = "#243442", "#e0e7eb"
+    left, right, top, bottom = 140, 1100, 75, 510
+
+    def fmt(v):
+        return f"{v:.3g}"
+
+    def bounds(numbers, include_zero=False):
+        low, high = min(numbers), max(numbers)
+        if include_zero:
+            low, high = min(0, low), max(0, high)
+        span = high-low
+        if span == 0:
+            span = max(abs(low)*0.10, 1)
+            return low-span/2, high+span/2
+        padding = 0.08*span
+        return low-(0 if include_zero and low == 0 else padding), high+padding
+
+    lows = chart.get("ci_low", values)
+    highs = chart.get("ci_high", values)
+    all_values = [*values, *lows, *highs]
+    if kind in ("forest", "horizontal_bar"):
+        low, high = bounds(all_values, kind == "horizontal_bar")
+        x_left, x_right = 330, 970
+        xx = lambda v: x_left + (v-low)/(high-low)*(x_right-x_left)
+        for i in range(6):
+            v = low+(high-low)*i/5
+            x = xx(v)
+            draw.line((x,top,x,bottom), fill=grid, width=2)
+            draw.text((x-19,bottom+12), fmt(v), fill=ink, font=small)
+        if kind == "forest":
+            null_value = chart.get("null_value", 1)
+            if isinstance(null_value,(int,float)) and not isinstance(null_value,bool) and math.isfinite(null_value) and low <= null_value <= high:
+                draw.line((xx(null_value),top,xx(null_value),bottom), fill="#7c8b96", width=3)
+        elif low <= 0 <= high:
+            draw.line((xx(0),top,xx(0),bottom), fill=ink, width=3)
+        spacing = (bottom-top)/len(values)
+        for i,(label,v) in enumerate(zip(labels,values)):
+            y = top+(i+.5)*spacing
+            draw.text((10,y-10),str(label)[:31],fill=ink,font=small)
+            if kind == "forest":
+                lo,hi = lows[i],highs[i]
+                draw.line((xx(lo),y,xx(hi),y),fill=accent,width=4)
+                for bound in (lo,hi):
+                    draw.line((xx(bound),y-7,xx(bound),y+7),fill=accent,width=2)
+                draw.rectangle((xx(v)-7,y-7,xx(v)+7,y+7),fill=accent)
+                draw.text((985,y-10),f"{fmt(v)} [{fmt(lo)}, {fmt(hi)}]",fill=ink,font=small)
+            else:
+                draw.rectangle((min(xx(0),xx(v)),y-spacing*.25,max(xx(0),xx(v)),y+spacing*.25),fill=accent)
+                draw.text((985,y-10),fmt(v),fill=ink,font=small)
+        draw.text((x_left+150,575),(chart.get("x_label") or chart.get("units") or "Valor")[:65],fill=ink,font=font)
+    else:
+        low,high = bounds(all_values,kind == "bar")
+        yy = lambda v: bottom-(v-low)/(high-low)*(bottom-top)
+        for i in range(6):
+            v=low+(high-low)*i/5
+            y=yy(v)
+            draw.line((left,y,right,y),fill=grid,width=2)
+            draw.text((38,y-10),fmt(v),fill=ink,font=small)
+        draw.line((left,top,left,bottom),fill=ink,width=3)
+        draw.line((left,bottom,right,bottom),fill=ink,width=3)
+        if low<=0<=high:
+            draw.line((left,yy(0),right,yy(0)),fill="#8695a0",width=2)
+        if kind == "scatter":
+            xs=chart["x_values"]
+            x_low,x_high=bounds(xs)
+            xx=lambda v:left+(v-x_low)/(x_high-x_low)*(right-left)
+            points=[(xx(xv),yy(yv)) for xv,yv in zip(xs,values)]
+            for i in range(6):
+                v=x_low+(x_high-x_low)*i/5
+                draw.text((xx(v)-18,bottom+13),fmt(v),fill=ink,font=small)
+        else:
+            step=(right-left)/len(values)
+            points=[(left+(i+.5)*step,yy(v)) for i,v in enumerate(values)]
+            for i,label in enumerate(labels):
+                draw.text((points[i][0]-min(32,step*.30),bottom+13),
+                          str(label)[:max(3,int(step/11))],fill=ink,font=small)
+        if kind == "bar":
+            step=(right-left)/len(values)
+            for x,y in points:
+                draw.rectangle((x-step*.30,min(yy(0),y),x+step*.30,max(yy(0),y)),fill=accent)
+        else:
+            if kind == "line" and len(points)>1:
+                draw.line(points,fill=accent,width=4)
+            for x,y in points:
+                draw.ellipse((x-7,y-7,x+7,y+7),fill=accent)
+        if "ci_low" in chart:
+            for (x,_),lo,hi in zip(points,lows,highs):
+                draw.line((x,yy(lo),x,yy(hi)),fill="#536d81",width=3)
+                for v in (lo,hi):
+                    draw.line((x-6,yy(v),x+6,yy(v)),fill="#536d81",width=2)
+        draw.text((left+170,575),(chart.get("x_label") or "Categoría")[:68],fill=ink,font=font)
+        if chart.get("y_label") or chart.get("units"):
+            draw.text((15,22),(chart.get("y_label") or chart.get("units"))[:70],fill=ink,font=font)
+    if chart.get("series_label"):
+        draw.text((right-330,25),chart["series_label"][:48],fill=accent,font=small)
     destination = folder / f"figure-{ordinal}.png"
-    image.save(destination)
+    image.save(destination, dpi=(220,220))
     return destination
 
 def cover_authors(cover):
