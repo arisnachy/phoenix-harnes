@@ -108,7 +108,7 @@ def complete_research_profile(data, cited):
 
 NAME_RE = re.compile(r"[^a-zA-Z0-9_-]+")
 MAX_CONTENT = 1000000
-PRESENTATIONS = ("academic", "editorial", "hybrid")
+PRESENTATIONS = ("academic", "journal", "editorial", "hybrid")
 # Reusable design tokens: deterministic, offline, provenance-safe, never an invented asset.
 DESIGN_PRESETS = {
     "editorial_navy": {"navy": "#142b3a", "accent": "#117e84",
@@ -126,12 +126,24 @@ DESIGN_PRESETS = {
     "creative_coral": {"navy": "#442b48", "accent": "#bd5869",
                        "highlight": "#f0ab83", "paper": "#fff8f5",
                        "title": "#442b48", "shape": "creative"},
+    "journal_ink": {"navy": "#17212a", "accent": "#334c61",
+                    "highlight": "#a2b6bd", "paper": "#ffffff", "title": "#17212a", "shape": "journal"},
+    "research_violet": {"navy": "#242748", "accent": "#5c5996",
+                        "highlight": "#bbb3da", "paper": "#faf9ff", "title": "#242748", "shape": "matrix"},
+    "biotech_green": {"navy": "#17392e", "accent": "#267b59",
+                      "highlight": "#93c8a6", "paper": "#f8fcf9", "title": "#17392e", "shape": "leaf"},
+    "ocean_blue": {"navy": "#173249", "accent": "#257cac",
+                   "highlight": "#75bfd9", "paper": "#f6fbff", "title": "#173249", "shape": "waves"},
+    "terracotta_report": {"navy": "#402a2a", "accent": "#a15a42",
+                          "highlight": "#d6a38b", "paper": "#fffaf5", "title": "#402a2a", "shape": "stack"},
+    "clinical_white": {"navy": "#273641", "accent": "#24798c",
+                       "highlight": "#8bc9cf", "paper": "#ffffff", "title": "#273641", "shape": "cross"},
 }
 DESIGN_PRESET_NAMES = ("auto", "academic_classic", *DESIGN_PRESETS)
 
 def resolve_design_preset(data, presentation):
     """Choose a stable style by context; respect explicit user selection."""
-    if presentation == "academic":
+    if presentation in ("academic", "journal"):
         return "academic_classic"
     selected = data.get("design_preset", "auto")
     if selected != "auto":
@@ -211,14 +223,14 @@ def validate(data):
         raise ValueError("style must be apa, apa7, vancouver or ama")
     resolved_presentation = data.get("presentation", "hybrid" if data.get("quality_profile", "professional") == "professional" else "academic")
     if resolved_presentation not in PRESENTATIONS:
-        raise ValueError("presentation must be academic, editorial or hybrid")
+        raise ValueError("presentation must be academic, journal, editorial or hybrid")
     selected_design = data.get("design_preset", "auto")
     if selected_design not in DESIGN_PRESET_NAMES:
         raise ValueError("design_preset must be one of the registered modern design names")
-    if resolved_presentation == "academic" and selected_design not in ("auto", "academic_classic"):
-        raise ValueError("academic mode cannot have decorative cover presets")
-    if resolved_presentation != "academic" and selected_design == "academic_classic":
-        raise ValueError("academic_classic design requires academic presentation")
+    if resolved_presentation in ("academic", "journal") and selected_design not in ("auto", "academic_classic"):
+        raise ValueError("academic and journal modes cannot use decorative covers")
+    if resolved_presentation not in ("academic", "journal") and selected_design == "academic_classic":
+        raise ValueError("academic_classic requires academic or journal presentation")
     if data.get("document_type", "brief") not in DOCUMENT_TYPES:
         raise ValueError("unsupported document_type")
     if data.get("paper", "A4") not in ("A4", "Letter"):
@@ -551,7 +563,8 @@ def main():
     cover = report.get("cover") if isinstance(report.get("cover"), dict) else {}
     front = report.get("front_matter", {})
     academic_work = report.get("document_type") in ("monograph", "thesis", "research_protocol")
-    include_toc = report.get("table_of_contents", academic_work or report.get("quality_profile", "professional") == "professional")
+    include_toc = report.get("table_of_contents", False if presentation == "journal" else
+                             (academic_work or report.get("quality_profile", "professional") == "professional"))
     authors = cover_authors(cover)
     paper = A4 if report.get("paper", "A4") == "A4" else letter
     doc = Document()
@@ -600,7 +613,6 @@ def main():
     for field in ("faculty", "department", "degree"):
         if cover.get(field): center_doc(cover[field])
     doc.add_paragraph("")
-    if editorial: center_doc("PHOENIX  |  INVESTIGACIÓN CIENTÍFICA", True, 10)
     center_doc(title, True, 20 if editorial else 17)
     for author in authors: center_doc("Autor(a): " + author)
     if cover.get("course"): center_doc("Asignatura: " + str(cover["course"]) +
@@ -748,7 +760,6 @@ def main():
                 w, h = picture.size
             story.append(PdfImage(str(logo_file), width=88, height=88*h/max(1,w)))
             story.append(Spacer(1, 14))
-        para("DOCUMENTO DE INVESTIGACIÓN / EDICIÓN PROFESIONAL", cover_kicker)
         para(title, heading)
         story.append(HRFlowable(width=90, thickness=2.5, color=heading_ink, spaceAfter=25, hAlign="LEFT"))
         for key in ("institution", "faculty", "department", "degree"):
@@ -872,7 +883,11 @@ def main():
             canvas.line(60, paper[1] - 41, paper[0] - 60, paper[1] - 41)
             canvas.setFont(font, 8)
             canvas.setFillColor(ink)
-            canvas.drawString(60, paper[1] - 31, "PHOENIX  /  INVESTIGACIÓN")
+            short_title = title
+            while short_title and pdfmetrics.stringWidth(short_title, font, 8) > paper[0]-120:
+                short_title = short_title[:-1]
+            if short_title != title: short_title = short_title.rstrip() + "…"
+            canvas.drawString(60, paper[1] - 31, short_title)
             canvas.setStrokeColor(colors.HexColor("#ccd6da"))
             canvas.setLineWidth(0.5)
             canvas.line(60, 44, paper[0] - 60, 44)
@@ -934,6 +949,53 @@ def main():
             canvas.setFillColor(accent_color)
             canvas.rect(60, H-64, 46, 4, stroke=0, fill=1)
             label_y, label_color = H-44, navy
+        elif shape == "journal":
+            canvas.setFillColor(navy)
+            canvas.rect(0, H-24, W, 24, fill=1, stroke=0)
+            canvas.setStrokeColor(accent_color)
+            canvas.setLineWidth(2)
+            canvas.line(60, H-86, W-60, H-86)
+            canvas.line(60, H-94, W-175, H-94)
+        elif shape == "matrix":
+            canvas.setFillColor(navy)
+            canvas.rect(0, H-122, W, 122, fill=1, stroke=0)
+            canvas.setFillColor(highlight)
+            for row in range(4):
+                for col in range(10):
+                    canvas.circle(W-270+col*26, H-23-row*25, 3+(col+row)%3, fill=1, stroke=0)
+        elif shape == "leaf":
+            canvas.setFillColor(accent_color)
+            canvas.rect(0, H-18, W, 18, fill=1, stroke=0)
+            canvas.setStrokeColor(highlight)
+            canvas.setLineWidth(5)
+            canvas.circle(W-100, H-100, 74, fill=0, stroke=1)
+            canvas.setFillColor(accent_color)
+            canvas.ellipse(W-141, H-120, W-70, H-75, fill=1, stroke=0)
+        elif shape == "waves":
+            canvas.setFillColor(navy)
+            canvas.rect(0, H-128, W, 128, fill=1, stroke=0)
+            canvas.setStrokeColor(highlight)
+            canvas.setLineWidth(4)
+            for offset in range(4):
+                wave = canvas.beginPath()
+                wave.moveTo(W-280, H-30-offset*21)
+                wave.curveTo(W-220, H-12-offset*21, W-165, H-63-offset*21, W-100, H-30-offset*21)
+                wave.curveTo(W-40, H-2-offset*21, W+12, H-58-offset*21, W+60, H-30-offset*21)
+                canvas.drawPath(wave, stroke=1)
+        elif shape == "stack":
+            canvas.setFillColor(navy)
+            canvas.rect(0, H-108, W, 108, fill=1, stroke=0)
+            canvas.setFillColor(highlight)
+            canvas.rect(W-280, H-156, 215, 88, fill=1, stroke=0)
+            canvas.setFillColor(accent_color)
+            canvas.rect(W-215, H-140, 215, 88, fill=1, stroke=0)
+        elif shape == "cross":
+            canvas.setStrokeColor(accent_color)
+            canvas.setLineWidth(5)
+            canvas.line(60, H-116, W-60, H-116)
+            canvas.setFillColor(highlight)
+            canvas.rect(W-120, H-123, 27, 77, fill=1, stroke=0)
+            canvas.rect(W-145, H-98, 77, 27, fill=1, stroke=0)
         else:  # creative: asymmetric editorial shapes
             canvas.setFillColor(navy)
             canvas.rect(0, H-102, W, 102, stroke=0, fill=1)
@@ -945,15 +1007,9 @@ def main():
             canvas.setLineWidth(4)
             canvas.line(60, H-140, 210, H-140)
             label_y, label_color = H-47, colors.white
-        canvas.setFillColor(label_color)
-        canvas.setFont(heading_font, 10.5)
-        canvas.drawString(60, label_y, "PHOENIX / RESEARCH STUDIO")
         canvas.setStrokeColor(colors.HexColor("#dae4e4"))
         canvas.setLineWidth(0.6)
         canvas.line(60, 66, W-60, 66)
-        canvas.setFont(font, 8)
-        canvas.setFillColor(colors.HexColor("#516675"))
-        canvas.drawString(60, 47, "DOCUMENTO VERIFICABLE / DISEÑO EDITORIAL")
         canvas.restoreState()
     printer.multiBuild(story, onFirstPage=editorial_cover if editorial else footer,
                        onLaterPages=footer)
