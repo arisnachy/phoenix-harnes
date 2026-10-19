@@ -73,7 +73,7 @@ describe('MiniBrowser in Phoenix conversation', () => {
     }))
     Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn(() => 'blob:secure-ask-test') })
     Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() })
-    render(<MiniBrowser requested onSecureLoginRequest={request} />)
+    render(<MiniBrowser sessionId="test-chat" requested onSecureLoginRequest={request} />)
     await waitFor(() => {
       expect(request).toHaveBeenCalledWith(expect.objectContaining({
         origin: 'https://example.org', tabId: 'shared-tab', saved: true,
@@ -104,7 +104,7 @@ describe('MiniBrowser in Phoenix conversation', () => {
     }))
     Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn(() => 'blob:auto-login-test') })
     Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() })
-    render(<MiniBrowser requested onSecureLoginRequest={request} />)
+    render(<MiniBrowser sessionId="test-chat" requested onSecureLoginRequest={request} />)
     await waitFor(() => expect(uses).toBe(1))
     expect(request).not.toHaveBeenCalledWith(expect.objectContaining({
       origin: 'https://example.org', saved: true,
@@ -133,7 +133,7 @@ describe('MiniBrowser in Phoenix conversation', () => {
     }))
     Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn(() => 'blob:open-login') })
     Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() })
-    render(<MiniBrowser requested onSecureLoginRequest={request} />)
+    render(<MiniBrowser sessionId="test-chat" requested onSecureLoginRequest={request} />)
     await waitFor(() => expect(opened).toBe(1))
     expect(request).not.toHaveBeenCalledWith(expect.objectContaining({ saved: false, origin: 'https://example.org' }))
   })
@@ -155,7 +155,7 @@ describe('MiniBrowser in Phoenix conversation', () => {
     }))
     Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn(() => 'blob:secure-toolbar-test') })
     Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() })
-    render(<MiniBrowser requested onSecureLoginRequest={request} />)
+    render(<MiniBrowser sessionId="test-chat" requested onSecureLoginRequest={request} />)
     const button = await screen.findByRole('button', { name: 'Abrir acceso seguro' })
     fireEvent.click(button)
     await waitFor(() => {
@@ -176,9 +176,9 @@ describe('MiniBrowser in Phoenix conversation', () => {
         status: 200, headers: { 'content-type': 'application/json' },
       }))
     }))
-    const view = render(<MiniBrowser requested />)
+    const view = render(<MiniBrowser sessionId="test-chat" requested />)
     await waitFor(() => { expect(stateSignal).toBeInstanceOf(AbortSignal) })
-    view.rerender(<MiniBrowser requested active={false} />)
+    view.rerender(<MiniBrowser sessionId="test-chat" requested active={false} />)
     await waitFor(() => { expect(stateSignal?.aborted).toBe(true) })
   })
 
@@ -210,13 +210,13 @@ describe('MiniBrowser in Phoenix conversation', () => {
     }))
     Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn(() => 'blob:cancel-test') })
     Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() })
-    const view = render(<MiniBrowser />)
+    const view = render(<MiniBrowser sessionId="test-chat" />)
     const address = await screen.findByRole('textbox', { name: 'Dirección web' })
     await waitFor(() => { expect(frameSignal).toBeInstanceOf(AbortSignal) })
     fireEvent.change(address, { target: { value: 'http://localhost:3000' } })
     fireEvent.click(screen.getByRole('button', { name: 'Ir' }))
     await waitFor(() => { expect(actionSignal).toBeInstanceOf(AbortSignal) })
-    view.rerender(<MiniBrowser active={false} />)
+    view.rerender(<MiniBrowser sessionId="test-chat" active={false} />)
     await waitFor(() => {
       expect(actionSignal?.aborted).toBe(true)
       expect(frameSignal?.aborted).toBe(true)
@@ -248,7 +248,7 @@ describe('MiniBrowser in Phoenix conversation', () => {
     }))
     Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn(() => 'blob:queue-test') })
     Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() })
-    render(<MiniBrowser />)
+    render(<MiniBrowser sessionId="test-chat" />)
     const image = await screen.findByRole('button', { name: 'Controlar página con el ratón y el teclado' })
     fireEvent.keyDown(image, { key: 'a' })
     fireEvent.keyDown(image, { key: 'b' })
@@ -282,7 +282,7 @@ describe('MiniBrowser in Phoenix conversation', () => {
     }))
     Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn(() => 'blob:deadline-test') })
     Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() })
-    render(<MiniBrowser />)
+    render(<MiniBrowser sessionId="test-chat" />)
     const address = await screen.findByRole('textbox', { name: 'Dirección web' })
     vi.useFakeTimers()
     fireEvent.change(address, { target: { value: 'http://localhost:3000' } })
@@ -311,7 +311,7 @@ describe('MiniBrowser in Phoenix conversation', () => {
     }))
     Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn(() => 'blob:visibility-test') })
     Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() })
-    render(<MiniBrowser />)
+    render(<MiniBrowser sessionId="test-chat" />)
     await waitFor(() => { expect(frameCount).toBeGreaterThan(0) })
     vi.useFakeTimers()
     const beforeHidden = frameCount
@@ -342,7 +342,7 @@ describe('MiniBrowser in Phoenix conversation', () => {
     }))
     Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn(() => 'blob:action-refresh-test') })
     Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() })
-    render(<MiniBrowser />)
+    render(<MiniBrowser sessionId="test-chat" />)
     const address = await screen.findByRole('textbox', { name: 'Dirección web' })
     await waitFor(() => { expect(frameCount).toBeGreaterThan(0) })
     const beforeAction = frameCount
@@ -368,7 +368,7 @@ describe('MiniBrowser in Phoenix conversation', () => {
     }))
     Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn(() => 'blob:last-valid-frame') })
     Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() })
-    render(<MiniBrowser />)
+    render(<MiniBrowser sessionId="test-chat" />)
     const address = await screen.findByRole('textbox', { name: 'Dirección web' })
     await waitFor(() => { expect(frameCount).toBe(1) })
     const image = screen.getByRole('button', { name: 'Controlar página con el ratón y el teclado' })
@@ -406,7 +406,7 @@ describe('MiniBrowser in Phoenix conversation', () => {
     }))
     Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn(() => 'blob:frame-race') })
     Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() })
-    render(<MiniBrowser />)
+    render(<MiniBrowser sessionId="test-chat" />)
     await screen.findByRole('textbox', { name: 'Dirección web' })
     await waitFor(() => { expect(frameCount).toBe(1) })
     const address = screen.getByRole('textbox', { name: 'Dirección web' })
@@ -426,7 +426,7 @@ describe('MiniBrowser in Phoenix conversation', () => {
 
   it('does not show a global Abrir navegador button in an unrelated chat', async () => {
     const calls = installBrowserMock({ ...state, available: false, url: 'about:blank', tabs: [] })
-    render(<MiniBrowser />)
+    render(<MiniBrowser sessionId="test-chat" />)
     await waitFor(() => { expect(vi.mocked(fetch)).toHaveBeenCalled() })
     expect(screen.queryByText(/Abrir navegador/)).toBeNull()
     expect(screen.queryByRole('region', { name: 'Navegador de Kira' })).toBeNull()
@@ -437,7 +437,7 @@ describe('MiniBrowser in Phoenix conversation', () => {
     const focus = vi.fn()
     Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { configurable: true, value: focus })
     installBrowserMock()
-    render(<MiniBrowser requested autoScroll />)
+    render(<MiniBrowser sessionId="test-chat" requested autoScroll />)
     await waitFor(() => { expect(focus).toHaveBeenCalled() })
   })
 
@@ -459,7 +459,7 @@ describe('MiniBrowser in Phoenix conversation', () => {
     }))
     Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn(() => 'blob:phoenix-browser-test') })
     Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() })
-    render(<MiniBrowser requested />)
+    render(<MiniBrowser sessionId="test-chat" requested />)
     await waitFor(() => { expect(requests).toContain('start') })
     await screen.findByRole('tab', { name: 'YouTube' })
     expect(requests).not.toContain('open-external')
@@ -483,13 +483,13 @@ describe('MiniBrowser in Phoenix conversation', () => {
     }))
     Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn(() => 'blob:scope-test') })
     Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() })
-    const view = render(<MiniBrowser requested />)
+    const view = render(<MiniBrowser sessionId="test-chat" requested />)
     await waitFor(() => { expect(stateUrls.length).toBeGreaterThan(0) })
     expect(stateUrls[0]).toBe('/phoenix-mini-browser/state')
     await waitFor(() => { expect(frameUrls.length).toBeGreaterThan(0) })
     expect(frameUrls[0]).toContain('?tabId=shared-tab')
-    view.rerender(<MiniBrowser requested active={false} />)
-    view.rerender(<MiniBrowser requested active />)
+    view.rerender(<MiniBrowser sessionId="test-chat" requested active={false} />)
+    view.rerender(<MiniBrowser sessionId="test-chat" requested active />)
     await waitFor(() => {
       expect(stateUrls).toContain('/phoenix-mini-browser/state?tabId=shared-tab')
     })
@@ -511,9 +511,9 @@ describe('MiniBrowser in Phoenix conversation', () => {
     }))
     Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn(() => 'blob:late-target') })
     Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() })
-    const view = render(<MiniBrowser requested />)
+    const view = render(<MiniBrowser sessionId="test-chat" requested />)
     await screen.findByRole('tab', { name: 'YouTube' })
-    view.rerender(<MiniBrowser requested initialTabId="child-tab" />)
+    view.rerender(<MiniBrowser sessionId="test-chat" requested initialTabId="child-tab" />)
     await waitFor(() => { expect(stateUrls).toContain('/phoenix-mini-browser/state?tabId=child-tab') })
     expect(await screen.findByRole('tab', { name: 'Child page' })).toBeTruthy()
   })
@@ -531,7 +531,7 @@ describe('MiniBrowser in Phoenix conversation', () => {
       }
       return new Response(JSON.stringify(state), { status: 200, headers: { 'content-type': 'application/json' } })
     }))
-    render(<MiniBrowser requested initialTabId="missing-child" />)
+    render(<MiniBrowser sessionId="test-chat" requested initialTabId="missing-child" />)
     await waitFor(() => { expect(screen.getByRole('status').textContent).toContain('Conexión del navegador') })
     expect(stateUrls[0]).toBe('/phoenix-mini-browser/state?tabId=missing-child')
     expect(actions).not.toContain('start')
@@ -565,19 +565,19 @@ describe('MiniBrowser in Phoenix conversation', () => {
     }))
     Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn(() => 'blob:manual-selection') })
     Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() })
-    const view = render(<MiniBrowser requested initialTabId="child-tab" />)
+    const view = render(<MiniBrowser sessionId="test-chat" requested initialTabId="child-tab" />)
     await screen.findByRole('tab', { name: 'Child page' })
     fireEvent.click(screen.getByRole('tab', { name: 'Manual page' }))
     await waitFor(() => { expect(actions).toContain('select-tab') })
-    view.rerender(<MiniBrowser requested initialTabId="child-tab" active={false} />)
-    view.rerender(<MiniBrowser requested initialTabId="child-tab" active />)
+    view.rerender(<MiniBrowser sessionId="test-chat" requested initialTabId="child-tab" active={false} />)
+    view.rerender(<MiniBrowser sessionId="test-chat" requested initialTabId="child-tab" active />)
     await waitFor(() => { expect(stateUrls).toContain('/phoenix-mini-browser/state?tabId=manual-tab') })
     expect(screen.getByRole('tab', { name: 'Manual page' }).getAttribute('aria-selected')).toBe('true')
   })
 
   it('only opens desktop Chrome when the user presses the footer button', async () => {
     const calls = installBrowserMock()
-    render(<MiniBrowser />)
+    render(<MiniBrowser sessionId="test-chat" />)
     await screen.findByRole('region', { name: 'Navegador de Kira' })
     expect(calls).toHaveLength(0)
     expect(screen.queryByText('◉ Abrir navegador')).toBeNull()
@@ -591,7 +591,7 @@ describe('MiniBrowser in Phoenix conversation', () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
       error: 'El host todavía no pudo conectar con Chromium.',
     }), { status: 503, headers: { 'content-type': 'application/json' } })))
-    render(<MiniBrowser requested />)
+    render(<MiniBrowser sessionId="test-chat" requested />)
     expect(screen.getByRole('region', { name: 'Navegador de Kira' })).toBeTruthy()
     await waitFor(() => {
       expect(screen.getByRole('status').textContent).toContain('Conexión del navegador')
@@ -601,13 +601,13 @@ describe('MiniBrowser in Phoenix conversation', () => {
 
   it('closing one card does not prevent a later browser card from opening', async () => {
     installBrowserMock()
-    const view = render(<><MiniBrowser key="previous" requested active={false} /></>)
+    const view = render(<><MiniBrowser sessionId="test-chat" key="previous" requested active={false} /></>)
     expect(screen.getByRole('region', { name: 'Navegador de Kira' })).toBeTruthy()
     fireEvent.click(screen.getByTitle('Ocultar microventana'))
     expect(screen.queryByRole('region', { name: 'Navegador de Kira' })).toBeNull()
     view.rerender(<>
-      <MiniBrowser key="previous" requested active={false} />
-      <MiniBrowser key="new-request" requested active />
+      <MiniBrowser sessionId="test-chat" key="previous" requested active={false} />
+      <MiniBrowser sessionId="test-chat" key="new-request" requested active />
     </>)
     expect(screen.getAllByRole('region', { name: 'Navegador de Kira' })).toHaveLength(1)
     expect(await screen.findByRole('button', { name: /Abrir navegador completo/ })).toBeTruthy()
@@ -616,8 +616,8 @@ describe('MiniBrowser in Phoenix conversation', () => {
   it('keeps a previous MiniBrowser card visible alongside a new request', async () => {
     installBrowserMock()
     const view = render(<>
-      <MiniBrowser key="first-request" requested active={false} />
-      <MiniBrowser key="second-request" requested active />
+      <MiniBrowser sessionId="test-chat" key="first-request" requested active={false} />
+      <MiniBrowser sessionId="test-chat" key="second-request" requested active />
     </>)
     expect(screen.getAllByRole('region', { name: 'Navegador de Kira' })).toHaveLength(2)
     expect(screen.getByRole('button', { name: /Reactivar/ })).toBeTruthy()
@@ -626,7 +626,7 @@ describe('MiniBrowser in Phoenix conversation', () => {
 
   it('shows the actual CDP tab and expands without reopening the browser', async () => {
     const calls = installBrowserMock()
-    render(<MiniBrowser />)
+    render(<MiniBrowser sessionId="test-chat" />)
     expect(await screen.findByRole('region', { name: 'Navegador de Kira' })).toBeTruthy()
     expect(screen.getByRole('tab', { name: 'YouTube' })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: /Ampliar/ }))
@@ -640,7 +640,7 @@ describe('MiniBrowser in Phoenix conversation', () => {
   })
   it('sends human URL navigation through the local browser action route', async () => {
     const calls = installBrowserMock()
-    render(<MiniBrowser />)
+    render(<MiniBrowser sessionId="test-chat" />)
     const address = await screen.findByRole('textbox', { name: 'Dirección web' })
     fireEvent.change(address, { target: { value: 'https://example.org' } })
     fireEvent.click(screen.getByRole('button', { name: 'Ir' }))
@@ -653,7 +653,7 @@ describe('MiniBrowser in Phoenix conversation', () => {
       ...state,
       url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
     })
-    render(<MiniBrowser />)
+    render(<MiniBrowser sessionId="test-chat" />)
     await screen.findByRole('region', { name: 'Navegador de Kira' })
     expect(screen.getByTitle('Reproductor YouTube').getAttribute('src'))
       .toBe('https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?autoplay=0&playsinline=1')
@@ -665,7 +665,7 @@ describe('MiniBrowser in Phoenix conversation', () => {
   })
   it('keeps authorized tab capture visible when YouTube has no recognized playable watch URL', async () => {
     installBrowserMock({ ...state, url: 'https://www.youtube.com/', title: 'YouTube (error del reproductor)' })
-    render(<MiniBrowser requested />)
+    render(<MiniBrowser sessionId="test-chat" requested />)
     expect(await screen.findByRole('button', { name: 'Compartir pestaña para Kira' })).toBeTruthy()
     expect(screen.queryByTitle('Reproductor YouTube')).toBeNull()
   })
@@ -680,7 +680,7 @@ describe('MiniBrowser in Phoenix conversation', () => {
     Object.defineProperty(window.navigator, 'mediaDevices', {
       configurable: true, value: { getDisplayMedia: chooser },
     })
-    render(<MiniBrowser requested />)
+    render(<MiniBrowser sessionId="test-chat" requested />)
     const button = screen.getByRole('button', { name: 'Compartir pestaña para Kira' })
     expect(chooser).not.toHaveBeenCalled()
     fireEvent.click(button)
@@ -690,8 +690,32 @@ describe('MiniBrowser in Phoenix conversation', () => {
 
   it('does not embed external websites in an iframe', async () => {
     installBrowserMock()
-    const view = render(<MiniBrowser />)
+    const view = render(<MiniBrowser sessionId="test-chat" />)
     await screen.findByRole('region', { name: 'Navegador de Kira' })
     expect(view.container.querySelector('iframe')).toBeNull()
   })
+  it('always sends the owner conversation for independent browser state, frames and gestures', async () => {
+    const actions = installBrowserMock()
+    render(<>
+      <MiniBrowser sessionId="chat-a" requested />
+      <MiniBrowser sessionId="chat-b" requested />
+    </>)
+    await waitFor(() => {
+      const calls = vi.mocked(fetch).mock.calls.map(call => String(call[0]))
+      expect(calls).toContain('/phoenix-mini-browser/state?sessionId=chat-a')
+      expect(calls).toContain('/phoenix-mini-browser/state?sessionId=chat-b')
+      expect(calls.some(url => url.startsWith('/phoenix-mini-browser/frame?sessionId=chat-a&tabId='))).toBe(true)
+      expect(calls.some(url => url.startsWith('/phoenix-mini-browser/frame?sessionId=chat-b&tabId='))).toBe(true)
+    })
+    const newTabs = screen.getAllByTitle('Nueva pestaña')
+    fireEvent.click(newTabs[0]!)
+    fireEvent.click(newTabs[1]!)
+    await waitFor(() => { expect(actions.filter(item => item.type === 'new-tab')).toHaveLength(2) })
+    const bodies = vi.mocked(fetch).mock.calls
+      .filter(([url]) => String(url).startsWith('/phoenix-mini-browser/action'))
+      .map(([, options]) => JSON.parse(String((options as RequestInit).body)) as { type: string; sessionId: string })
+    expect(bodies).toContainEqual(expect.objectContaining({ type: 'new-tab', sessionId: 'chat-a' }))
+    expect(bodies).toContainEqual(expect.objectContaining({ type: 'new-tab', sessionId: 'chat-b' }))
+  })
+
 })

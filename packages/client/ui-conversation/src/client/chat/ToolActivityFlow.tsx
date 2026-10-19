@@ -25,6 +25,7 @@ interface OrderedChatNode {
 }
 
 interface ToolActivityFlowProps extends SeatProps {
+  readonly sessionId: string
   readonly nodes: readonly OrderedChatNode[]
   /** Runtime-open browser turn, even while Kira is streaming visible prose. */
   readonly browserTurnOpen?: boolean
@@ -594,7 +595,7 @@ export function isAtActivityTail(scrollTop: number, scrollHeight: number, client
 
 /** Same real transcript seats as the ordinary chat, inside the temporary sidecar. */
 function BrowserWorkspace({
-  items, live, selected, onActivate, seatProps, turnStatus, tabId,
+  items, live, selected, onActivate, seatProps, turnStatus, tabId, sessionId,
 }: {
   readonly items: readonly FlowItem[]
   readonly live: boolean
@@ -603,6 +604,7 @@ function BrowserWorkspace({
   readonly onActivate: () => void
   readonly seatProps: SeatProps
   readonly turnStatus: ToolActivityFlowProps['turnStatus']
+  readonly sessionId: string
 }) {
   const [page, setPage] = useState<{ title: string; url: string } | null>(null)
   const [secureRequest, setSecureRequest] = useState<SecureLoginTarget | null>(null)
@@ -661,7 +663,7 @@ function BrowserWorkspace({
     <div className={css.browserWorkspace} data-browser-workspace={live ? '' : undefined}
       data-activity-open={showSidecar ? 'true' : undefined} data-chat-flow-kind="browser-workspace">
       <div className={css.browserPane}>
-        <MiniBrowser requested active={selected} {...tabId === undefined ? {} : { initialTabId: tabId }}
+        <MiniBrowser key={sessionId} sessionId={sessionId} requested active={selected} {...tabId === undefined ? {} : { initialTabId: tabId }}
           onActivate={onActivate} autoScroll={false} onPageChange={setPage}
           onSecureLoginRequest={setSecureRequest} />
       </div>
@@ -723,7 +725,7 @@ function BrowserWorkspace({
  * @param props - Ordered nodes plus the ordinary ChatNodeSeat owner/runtime props.
  * @returns The grouped transcript flow.
  */
-export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, browserTurnOpen, ...seatProps }: ToolActivityFlowProps) {
+export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, browserTurnOpen, sessionId, ...seatProps }: ToolActivityFlowProps) {
   const ordinaryFlow = useMemo(() => addBrowserCards(buildAnchoredFlow(nodes, optimisticSubmit), nodes), [nodes, optimisticSubmit])
   const browserKeys = ordinaryFlow.filter(item => item.kind === 'browser').map(item => item.userKey)
   const [selectedBrowserKey, setSelectedBrowserKey] = useState<string | undefined>()
@@ -766,7 +768,7 @@ export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, browserT
   return (
     <>
       {flow.map((item, index) => (
-        <Fragment key={item.key}>
+        <Fragment key={sessionId + ':' + item.key}>
           {!hasBrowserWorkspace && turnStatus !== undefined && turnStatus.progress !== null && index === statusBeforeIndex && (
             <TurnStatus
               startTime={turnStatus.startTime}
@@ -785,6 +787,7 @@ export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, browserT
               onActivate={() => { setSelectedBrowserKey(item.userKey) }}
               seatProps={seatProps}
               turnStatus={turnStatus}
+              sessionId={sessionId}
             />
             : item.kind === 'node'
               ? <ChatNodeSeat nodeKey={item.key} {...seatProps} />

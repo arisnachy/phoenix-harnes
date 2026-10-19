@@ -15,6 +15,7 @@ import { join } from 'node:path'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Context } from '@phoenix-ai/cordis'
 import type {} from '@phoenix-ai/dsh-host-webserver'
+import { MiniBrowserScopes, validBrowserScopeId } from './mini-browser-scopes.ts'
 
 type Tab = { id: string; url: string; title: string; type?: string; webSocketDebuggerUrl?: string }
 type Descriptor = { pid: number; endpoint: string; selectedTabId?: string }
@@ -30,6 +31,7 @@ type Action = {
   type: string
   url?: string
   tabId?: string
+  sessionId?: string
   x?: number
   y?: number
   deltaY?: number
@@ -51,6 +53,23 @@ let ownedProfile: string | undefined
 let ownedEndpoint: string | undefined
 let launching: Promise<string> | undefined
 let activeTabId: string | undefined
+// Chromium is shared for efficiency; conversations never share targets.
+const BROWSER_SCOPE_FILE = join(tmpdir(), 'phoenix-mini-browser-scopes.json')
+const browserScopes = new MiniBrowserScopes((() => {
+  try { return JSON.parse(readFileSync(BROWSER_SCOPE_FILE, 'utf8')) as unknown }
+  catch { return undefined }
+})())
+let persistedScopeRevision = browserScopes.revision
+function persistBrowserScopes(): void {
+  if (persistedScopeRevision === browserScopes.revision) return
+  const temporary = BROWSER_SCOPE_FILE + '.' + randomUUID() + '.tmp'
+  try {
+    writeFileSync(temporary, JSON.stringify(browserScopes.snapshot()), { flag: 'wx', mode: 0o600 })
+    renameSync(temporary, BROWSER_SCOPE_FILE)
+    persistedScopeRevision = browserScopes.revision
+  } catch { /* Keep in-memory isolation if the temporary directory is unavailable. */ }
+  finally { try { rmSync(temporary, { force: true }) } catch { /* Non-fatal. */ } }
+}
 
 /**
  * Compares the complete shared-browser descriptor before touching the file.
@@ -516,11 +535,22 @@ export function normalizeMiniBrowserAddress(value: string): string {
   if (!['http:', 'https:'].includes(result.protocol) || result.username || result.password) throw new Error('Solo se permiten direcciones HTTP(S).')
   return result.href
 }
-async function state(knownBase?: string, tabId?: string, signal?: AbortSignal): Promise<Record<string, unknown>> {
+async function state(knownBase?: string, tabId?: string, signal?: AbortSignal, sessionId?: string): Promise<Record<string, unknown>> {
   const base = knownBase ?? await endpoint(false, signal)
   if (!base) return { available: false, tabs: [] }
   const tabs = await listTabs(base, signal)
   if (tabs.length === 0) return { available: false, tabs: [] }
+  if (sessionId !== undefined) {
+    const chosenId = browserScopes.choose(sessionId, tabs.map(tab => tab.id), tabId)
+    persistBrowserScopes()
+    if (chosenId === undefined) return { available: false, tabs: [] }
+    const chosen = await selected(base, chosenId, tabs, signal, false)
+    return {
+      available: true, tabId: chosen.id, url: chosen.url, title: chosen.title,
+      tabs: tabs.filter(tab => browserScopes.owns(sessionId, tab.id))
+        .map(({ id, url, title }) => ({ id, url, title })),
+    }
+  }
   const selectedTab = await selected(base, tabId, tabs, signal, tabId === undefined)
   return {
     available: true, tabId: selectedTab.id, url: selectedTab.url, title: selectedTab.title,
@@ -580,10 +610,13 @@ export async function captureBrowserFrameSingleFlight(
     if (frameFlights.get(targetId) === pending) frameFlights.delete(targetId)
   }
 }
-async function frame(tabId?: string): Promise<Buffer> {
+async function frame(tabId?: string, sessionId?: string): Promise<Buffer> {
+  if (sessionId !== undefined && (tabId === undefined || !browserScopes.owns(sessionId, tabId))) {
+    throw new Error('La pestaña no pertenece a esta conversación.')
+  }
   const base = await endpoint(false)
   if (!base) throw new Error('El navegador no está iniciado.')
-  const tab = await selected(base, tabId, undefined, undefined, tabId === undefined)
+  const tab = await selected(base, tabId, undefined, undefined, sessionId === undefined && tabId === undefined)
   return await captureBrowserFrameSingleFlight(tab.id, async () =>
     await captureBrowserFrameWithFallback(async params =>
       await cdp<{ data: string }>(tab, 'Page.captureScreenshot', params)))
@@ -612,27 +645,54 @@ async function openVisibleDesktopBrowser(rawUrl: string): Promise<void> {
 
 async function action(input: Action, signal?: AbortSignal): Promise<Record<string, unknown>> {
   const type = input.type
+  const sessionId = input.sessionId
+  if (sessionId !== undefined && !validBrowserScopeId(sessionId)) throw new Error('Conversación inválida.')
   throwIfAborted(signal)
   const base = await endpoint(type === 'open' || type === 'new-tab' || type === 'start', signal)
   throwIfAborted(signal)
   if (!base) throw new Error('Inicia el navegador primero.')
-  if (type === 'start') return await state(base, undefined, signal)
+  if (type === 'start') {
+    if (sessionId === undefined) return await state(base, undefined, signal)
+    const available = await listTabs(base, signal)
+    if (browserScopes.choose(sessionId, available.map(tab => tab.id)) === undefined) {
+      // A new conversation gets its own blank target, never Chrome's last global tab.
+      const tab = await json<Tab>(base + '/json/new?' + encodeURIComponent('about:blank'), 'PUT', signal)
+      throwIfAborted(signal)
+      browserScopes.claim(sessionId, tab.id)
+    }
+    persistBrowserScopes()
+    return await state(base, undefined, signal, sessionId)
+  }
   if (type === 'new-tab') {
     const target = normalizeMiniBrowserAddress(input.url ?? 'https://www.google.com')
     throwIfAborted(signal)
     const tab = await json<Tab>(base + '/json/new?' + encodeURIComponent(target), 'PUT', signal)
     throwIfAborted(signal)
-    activeTabId = tab.id; publish(base + '/', tab.id)
-    return await state(base, undefined, signal)
+    if (sessionId !== undefined) browserScopes.claim(sessionId, tab.id)
+    else { activeTabId = tab.id; publish(base + '/', tab.id) }
+    persistBrowserScopes()
+    return await state(base, undefined, signal, sessionId)
   }
-  const tab = await selected(base, input.tabId, undefined, signal)
+  let targetTabId = input.tabId
+  if (sessionId !== undefined) {
+    const available = await listTabs(base, signal)
+    const owned = browserScopes.choose(sessionId, available.map(tab => tab.id))
+    if (targetTabId !== undefined && !browserScopes.owns(sessionId, targetTabId)) {
+      throw new Error('No puedes controlar una pestaña de otra conversación.')
+    }
+    targetTabId ??= owned
+    if (targetTabId === undefined) throw new Error('Esta conversación todavía no tiene pestañas.')
+    browserScopes.select(sessionId, targetTabId)
+    persistBrowserScopes()
+  }
+  const tab = await selected(base, targetTabId, undefined, signal, sessionId === undefined)
   if (type === 'select-tab') {
     if (typeof input.tabId !== 'string') throw new Error('Falta la pestaña.')
     throwIfAborted(signal)
     const res = await fetch(base + '/json/activate/' + encodeURIComponent(tab.id), { signal: requestSignal(signal) })
     throwIfAborted(signal)
     if (!res.ok) throw new Error('No se pudo activar la pestaña.')
-    activeTabId = tab.id
+    if (sessionId === undefined) activeTabId = tab.id
   } else if (type === 'close-tab') {
     if ((await listTabs(base, signal)).length < 2) throw new Error('Debes conservar una pestaña abierta.')
     throwIfAborted(signal)
@@ -642,7 +702,8 @@ async function action(input: Action, signal?: AbortSignal): Promise<Record<strin
     cdpSessions.get(tab.id)?.session.close('CDP_SESSION_CLOSED: pestaña cerrada')
     cdpSessions.delete(tab.id)
     frameFlights.delete(tab.id)
-    activeTabId = undefined
+    if (sessionId !== undefined) browserScopes.release(sessionId, tab.id)
+    else activeTabId = undefined
   } else if (type === 'open' || type === 'navigate') {
     const url = normalizeMiniBrowserAddress(input.url ?? 'https://www.google.com')
     throwIfAborted(signal)
@@ -699,7 +760,8 @@ async function action(input: Action, signal?: AbortSignal): Promise<Record<strin
     await cdp(tab, 'Input.insertText', { text }, signal)
   } else throw new Error('Acción de navegador desconocida.')
   throwIfAborted(signal)
-  return await state(base, undefined, signal)
+  persistBrowserScopes()
+  return await state(base, undefined, signal, sessionId)
 }
 /**
  * Reject DNS rebinding and cross-origin browser requests, even on localhost.
@@ -755,7 +817,13 @@ async function readAction(req: IncomingMessage): Promise<Action> {
 function requestTabId(req: IncomingMessage): string | undefined {
   const value = new URL(req.url ?? '/', 'http://127.0.0.1').searchParams.get('tabId')
   if (value === null) return undefined
-  if (!/^[A-Za-z0-9._:-]{1,256}$/u.test(value)) throw new Error('Identificador de pestaña no válido.')
+  if (!validBrowserScopeId(value)) throw new Error('Identificador de pestaña no válido.')
+  return value
+}
+function requestSessionId(req: IncomingMessage): string | undefined {
+  const value = new URL(req.url ?? '/', 'http://127.0.0.1').searchParams.get('sessionId')
+  if (value === null) return undefined
+  if (!validBrowserScopeId(value)) throw new Error('Identificador de conversación no válido.')
   return value
 }
 
@@ -818,14 +886,14 @@ export function registerMiniBrowserRoutes(ctx: Context): void {
     ctx.webServer.register({ kind: 'exact', path: '/phoenix-mini-browser/state', handler: async (req, res) => {
       if (!sharedGuard(req, res)) return
       if (req.method !== 'GET') { reply(res, 405, { error: 'Método no permitido.' }); return }
-      try { reply(res, 200, await state(undefined, requestTabId(req))) }
+      try { reply(res, 200, await state(undefined, requestTabId(req), undefined, requestSessionId(req))) }
       catch (error) { if (!res.writableEnded && !res.destroyed) reply(res, 503, { error: String(error) }) }
     } }),
     ctx.webServer.register({ kind: 'exact', path: '/phoenix-mini-browser/frame', handler: async (req, res) => {
       if (!sharedGuard(req, res)) return
       if (req.method !== 'GET') { reply(res, 405, { error: 'Método no permitido.' }); return }
       try {
-        const jpeg = await frame(requestTabId(req))
+        const jpeg = await frame(requestTabId(req), requestSessionId(req))
         res.writeHead(200, { 'content-type': 'image/jpeg', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' })
         res.end(jpeg)
       } catch (error) { if (!res.writableEnded && !res.destroyed) reply(res, 503, { error: String(error) }) }
