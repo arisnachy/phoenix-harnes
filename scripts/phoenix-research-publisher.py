@@ -207,6 +207,33 @@ def section_kind(section):
     return None
 
 
+VISUAL_TEXT_FIELDS = ("title", "note", "units", "method", "statistical_note",
+                      "abbreviations", "x_label", "y_label", "interval_label", "alt_text", "series_label")
+
+def validate_visual_metadata(item, kind):
+    """Prevent invented or oversized statistical annotation."""
+    for field in VISUAL_TEXT_FIELDS:
+        if field in item and (not isinstance(item[field], str) or len(item[field]) > 1600):
+            raise ValueError(kind + "." + field + " must be bounded text")
+    if "sample_size" in item and (not isinstance(item["sample_size"], int)
+                                  or isinstance(item["sample_size"], bool)
+                                  or not 1 <= item["sample_size"] <= 1000000000):
+        raise ValueError(kind + ".sample_size must be an observed positive integer")
+    if "title" in item and not item["title"].strip():
+        raise ValueError(kind + ".title cannot be empty")
+
+def visual_notes(item, refs, style, numbers):
+    """Print source, actual method and observed sample/units beneath each scientific visual."""
+    result = ["Fuente: " + citation_string(item["source_key"], refs, style, numbers)]
+    for key, label in (("sample_size", "Tamaño muestral (n)"),
+                       ("units", "Unidades"), ("method", "Método"),
+                       ("interval_label", "Intervalos"), ("statistical_note", "Análisis estadístico"),
+                       ("abbreviations", "Abreviaturas"), ("note", "Nota")):
+        value = item.get(key)
+        if value is not None and str(value).strip():
+            result.append(label + ": " + str(value))
+    return result
+
 def validate(data):
     if not isinstance(data, dict):
         raise ValueError("report must be an object")
@@ -384,20 +411,39 @@ def validate(data):
         if any(not isinstance(row, list) or len(row) != len(columns)
                or any(not isinstance(cell, (str, int, float)) or len(str(cell)) > 550 for cell in row) for row in rows):
             raise ValueError("table row must match headers and contain simple values")
+        validate_visual_metadata(entry, "table")
     if not isinstance(data.get("charts", []), list) or len(data.get("charts", [])) > 20:
         raise ValueError("charts must be an array of up to 20 entries")
     for entry in data.get("charts", []):
         if not isinstance(entry, dict) or entry.get("source_key") not in cited:
             raise ValueError("each data chart must cite a referenced source_key")
         kind = entry.get("type", "bar")
-        if kind not in ("bar", "forest"):
-            raise ValueError("chart type must be bar or forest")
+        if kind not in ("bar", "horizontal_bar", "line", "scatter", "forest"):
+            raise ValueError("chart type must be bar, horizontal_bar, line, scatter or forest")
         vals = entry.get("values", [])
         labs = entry.get("labels", [])
         if not isinstance(labs, list) or not isinstance(vals, list) or not 1 <= len(vals) <= 15 or len(vals) != len(labs):
             raise ValueError("charts need 1-15 matched labels/values")
         if any(not isinstance(v, (int, float)) or isinstance(v, bool) or not math.isfinite(v) for v in vals):
             raise ValueError("chart values must be finite authentic numbers")
+        if any(not isinstance(label, str) or not label.strip() or len(label) > 100 for label in labs):
+            raise ValueError("chart labels must be readable text")
+        validate_visual_metadata(entry, "figure")
+        x_values = entry.get("x_values")
+        if kind == "scatter" and x_values is None:
+            raise ValueError("scatter requires actual numeric x_values")
+        if x_values is not None and (not isinstance(x_values, list) or len(x_values) != len(vals) or
+            any(not isinstance(value, (int, float)) or isinstance(value, bool) or not math.isfinite(value) for value in x_values)):
+            raise ValueError("x_values must be finite numbers aligned to observations")
+        if kind != "forest" and ("ci_low" in entry or "ci_high" in entry):
+            lows, highs = entry.get("ci_low"), entry.get("ci_high")
+            if not isinstance(lows, list) or not isinstance(highs, list) or len(lows) != len(vals) or len(highs) != len(vals):
+                raise ValueError("error bars need aligned ci_low and ci_high")
+            if any(not all(isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) for v in (lo, hi))
+                   or not lo <= estimate <= hi for lo, estimate, hi in zip(lows, vals, highs)):
+                raise ValueError("error bars require ordered finite intervals")
+            if not entry.get("interval_label"):
+                raise ValueError("error bars require interval_label documenting the interval type")
         if kind == "forest":
             lows, highs = entry.get("ci_low"), entry.get("ci_high")
             if not isinstance(lows, list) or not isinstance(highs, list) or len(lows) != len(vals) or len(highs) != len(vals):
