@@ -1,8 +1,12 @@
 /** Read-only, live-session mission continuation view shared by every model provider. */
 
 import { verifyEvolutionCheckpoint } from '@phoenix-ai/dsh-hardness'
-import { defineTool, type ToolDefinition } from '@phoenix-ai/dsh-tools'
+import { defineTool, type JsonValue, type ToolDefinition } from '@phoenix-ai/dsh-tools'
 import { recoverEvolutionCheckpoint } from './evolution-runtime.ts'
+
+function jsonOutput(value: unknown): Record<string, JsonValue> {
+  return JSON.parse(JSON.stringify(value)) as Record<string, JsonValue>
+}
 
 /** Create a model-facing status tool backed exclusively by the caller's durable session.
  * @returns Read-only mission-resume diagnostic without permissions or synthetic success.
@@ -21,10 +25,10 @@ export function createEvolutionStatusTool(): ToolDefinition {
     },
     async execute(args, execution) {
       const agent = execution.agent
-      if (agent === undefined) return { available: false, reason: 'no live session; no verification can be claimed' }
+      if (agent === undefined) return jsonOutput({ available: false, reason: 'no live session; no verification can be claimed' })
       const missionId = args.missionId.trim()
       if (!missionId || !Number.isSafeInteger(args.revision) || args.revision < 0) {
-        return { available: false, reason: 'invalid mission identity' }
+        return jsonOutput({ available: false, reason: 'invalid mission identity' })
       }
       const checkpoint = recoverEvolutionCheckpoint(
         agent.session.events,
@@ -34,11 +38,11 @@ export function createEvolutionStatusTool(): ToolDefinition {
       )
       const verdict = verifyEvolutionCheckpoint(checkpoint)
       const available = checkpoint.objective.length > 0 && verdict.allowed
-      return {
+      return jsonOutput({
         available,
         ...(available ? { checkpoint } : {}),
         reasons: [...verdict.reasons, ...checkpoint.objective.length === 0 ? ['no matching mission in this conversation'] : []],
-      }
+      })
     },
     presentCall(args) {
       return { card: 'generic', title: 'Mission continuity · ' + args.missionId, kind: 'read' }
