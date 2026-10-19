@@ -34,8 +34,7 @@ The planner verifies on-disk PNG/WAV/OGG/MP3 signatures, matches the real game m
 
 ## Godot native Game Studio (automatic on demand)
 
-For complex action / 2.5D / 3D games, Phoenix now has a **real** Godot starter
-and CLI bootstrap, plus a separate HTML5 chat delivery path.
+Phoenix now selects by **actual game complexity**, not by whether the user asks to play inside the chat. Classic lightweight retro/logic/board games (Tetris, Snake, Pong, chess, Pac-Man, 2048) use the internal HTML5 engine and the existing `phoenix_game` chat player. Complex action, character games, racing, RPG, 2.5D and 3D are authored in **Godot** and must export from the same project. A separate HTML5 imitation is not considered the same game.
 
 ```sh
 node apps/cli/config/agent-presets/code/skills/game-development/scripts/game-tools.mjs route --genre "beat-em-up" --delivery desktop --quality production
@@ -56,12 +55,17 @@ node examples/game-studio/godot/bootstrap.mjs verify --project "PATH/TO/NEW/GAME
   **art/audio prototype**; Kira must replace geometric drawings with approved
   actor atlases, bosses, effects, scenery, recorded sounds and music, then run
   actual in-editor/capture/listening QA. No sampled voice/audio ships here.
-- For complex **in-chat** games, Godot is the authoring tool while the playable
-  Phoenix message remains a separate single-file HTML5/Canvas artifact.
-  A Godot Web export's HTML alone lacks its JS/WASM/PCK dependencies.
+- The current `phoenix_game` accepts only a **self-contained HTML** game, so retro games can publish directly. Complex Godot Web releases need an isolated **multi-file bundle host/player**; that is a separate pending integration. No HTML-only Godot export or fake second-engine reproduction is allowed.
+- Validate a genuine exported folder with `node examples/game-studio/godot/web-export-preflight.mjs PATH/TO/WEB/EXPORT`. The preflight checks matching HTML, JS, WASM and PCK bytes, but intentionally does **not** claim playable browser delivery.
+- Godot 4 Web exports require Compatibility/WebGL2; prefer single-threaded exports and real device playback tests. Godot C# cannot currently target Web using Godot 4.
 - Godot AI is optional: on Godot 4.7+ use the pinned addon and the authenticated
   dock-created MCP bridge; the setup command does **not** falsely declare a
   Godot AI editor connected just because the native engine works.
+
+
+### Unified in-chat target
+
+The user should be able to **ask naturally for any kind of game** and see it in the Phoenix conversation whenever the target browser supports that game. This is a product target, not a claim that multi-file Godot hosting already works. The real delivery checklist is: native project and assets → Godot Web export → inspect complete bundle → publish inside an origin-isolated sandbox → load WASM/PCK over HTTP → verify controls/audio/graphics on desktop and mobile → provide actionable failure when unsupported. Retro games follow the existing trusted, network-free HTML route. Never mark a Godot Web bundle as successfully published solely because its HTML entry exists.
 
 ## Reusable animated gameplay + sampled audio (October 2026)
 
