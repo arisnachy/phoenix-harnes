@@ -34,8 +34,7 @@ The planner verifies on-disk PNG/WAV/OGG/MP3 signatures, matches the real game m
 
 ## Godot native Game Studio (automatic on demand)
 
-For complex action / 2.5D / 3D games, Phoenix now has a **real** Godot starter
-and CLI bootstrap, plus a separate HTML5 chat delivery path.
+Phoenix now selects by **actual game complexity**, not by whether the user asks to play inside the chat. Classic lightweight retro/logic/board games (Tetris, Snake, Pong, chess, Pac-Man, 2048) use the internal HTML5 engine and the existing `phoenix_game` chat player. Complex action, character games, racing, RPG, 2.5D and 3D are authored in **Godot** and must export from the same project. A separate HTML5 imitation is not considered the same game.
 
 ```sh
 node apps/cli/config/agent-presets/code/skills/game-development/scripts/game-tools.mjs route --genre "beat-em-up" --delivery desktop --quality production
@@ -56,12 +55,20 @@ node examples/game-studio/godot/bootstrap.mjs verify --project "PATH/TO/NEW/GAME
   **art/audio prototype**; Kira must replace geometric drawings with approved
   actor atlases, bosses, effects, scenery, recorded sounds and music, then run
   actual in-editor/capture/listening QA. No sampled voice/audio ships here.
-- For complex **in-chat** games, Godot is the authoring tool while the playable
-  Phoenix message remains a separate single-file HTML5/Canvas artifact.
-  A Godot Web export's HTML alone lacks its JS/WASM/PCK dependencies.
+- `phoenix_game` has **two explicit input forms**: internal retro games use `file_path` (self-contained HTML); Godot Web uses `godot_export_dir` (actual HTML/JS/WASM/PCK folder created by Godot). The player serves the complete bundle under a random capability path and embeds it in an opaque-origin sandboxed iframe. Both inputs must remain under the task workspace.
+- Validate a genuine exported folder with `node examples/game-studio/godot/web-export-preflight.mjs PATH/TO/WEB/EXPORT`. The preflight checks matching HTML, JS, WASM and PCK bytes, but intentionally does **not** claim playable browser delivery.
+- Godot 4 Web exports require Compatibility/WebGL2; prefer single-threaded exports and real device playback tests. Godot C# cannot currently target Web using Godot 4.
 - Godot AI is optional: on Godot 4.7+ use the pinned addon and the authenticated
   dock-created MCP bridge; the setup command does **not** falsely declare a
   Godot AI editor connected just because the native engine works.
+
+
+### Unified in-chat publishing
+
+1. Decide with `game-tools.mjs route`. Retro/board/logic games run immediately as a single offline HTML. Character-heavy, 3D and complex games use Godot as **the only runtime**.
+2. For Godot, export Web from the finished native project (Godot 4.3+ single-thread, Compatibility/WebGL2, GDScript). The result must include `index.html`, `index.js`, `index.wasm`, `index.pck` together in one task-owned folder. Run `node examples/game-studio/godot/web-export-preflight.mjs PATH_TO_EXPORT`.
+3. Publish the real bundle via `phoenix_game` with `title` and `godot_export_dir` (no `html`/`file_path`). The host copies the validated package into a scoped library, serves it under `/phoenix-games/godot/<token>/index.html`, and the conversation renders an origin-opaque sandbox iframe. No manual Chrome or alternate HTML remake is required.
+4. **Do not confuse structural validation with QA.** Test WebGL2 availability, actual gameplay, assets, input, sound and performance. A file-only receipt never certifies a playable game.
 
 ## Reusable animated gameplay + sampled audio (October 2026)
 
@@ -75,7 +82,7 @@ The shooter reference now includes an interactive magic pulse (L, cooldown), sho
 
 ## Publisher manifest and art assets
 
-Game Studio uses the **real** `phoenix_game` model tool to publish playable self-contained HTML in the Phoenix chat. Its `phoenix-game-manifest` JSON must truthfully describe the shipped game; a missing manifest is a **structural error**, not proof that JavaScript failed to start. A blank view must be diagnosed using the game runtime and browser console.
+Game Studio uses the **real** `phoenix_game` model tool to publish retro games as self-contained HTML, and Godot Web games as complete multi-file exports in the Phoenix chat. Its `phoenix-game-manifest` JSON must truthfully describe the shipped game; a missing manifest is a **structural error**, not proof that JavaScript failed to start. A blank view must be diagnosed using the game runtime and browser console.
 
 - Reference metadata files: `jungle-echo.manifest.json` (shooter) and `lumen-circuit.manifest.json` (puzzle). They describe real example implementations; do not copy a shooter manifest into a racing or puzzle game.
 - For sprites, prepare a local `images.json` like `{"images":[{"id":"hero-art","path":"assets/hero-atlas.png"},{"id":"jungle-bg","path":"assets/jungle.png"}]}` and run `node examples/game-studio/embed-game-assets.mjs input.html images.json with-assets.html`. PNG bytes are embedded before gameplay code in the offline HTML.

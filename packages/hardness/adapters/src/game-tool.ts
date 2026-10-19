@@ -2,6 +2,7 @@ import { defineTool, ToolArgsError, type ToolDefinition } from '@phoenix-ai/dsh-
 import { readFileSync, realpathSync, statSync } from 'node:fs'
 import { extname, isAbsolute, relative, resolve, sep } from 'node:path'
 import { validateGameArt } from './game-art.ts'
+import { PHOENIX_GODOT_WEB_MIME, publishGodotWebExport } from './godot-web-bundle.ts'
 
 /** Game Studio's existing sandboxed executable artifact renderer in the Phoenix chat. */
 export const PHOENIX_GAME_MIME = 'application/vnd.phoenix.game+html'
@@ -308,11 +309,12 @@ function validateBrawlerContract(manifest: Record<string, unknown>): void {
 export function createPhoenixGameTool(): ToolDefinition {
   return defineTool({
     name: 'phoenix_game',
-    description: 'For ordinary requests such as "haz un juego de carreras", "crea un juego tipo Double Dragon" or "make a game about space", YOU choose and invoke this publisher; the user never needs to name phoenix_game, skill, game engine, source file or manifest. Match the user-selected genre and gameplay rather than always returning a fixed demo. Publish a COMPLETE self-contained PLAYABLE browser game directly inside this PHOENIX chat (Game Studio). Use for any in-chat 2D/2.5D/3D game, arcade, beat-em-up, shooter, platformer, puzzle, racing, rhythm or simulation. This is the actual in-chat game publisher; image_generation produces assets only and phoenix_canvas is for non-game apps. The fastest route for an authored game is file_path pointing to its generated standalone HTML file in the agent workspace; Phoenix reads and validates that file, no huge HTML tool arguments or separate browser needed. The alternative is html for short code already in memory. Supply HTML with inline CSS and executable JavaScript and interactive Canvas/DOM. ALWAYS author the genuine game manifest FIRST and pass it as manifest_json (a JSON string) alongside HTML; Phoenix inserts the required <script id="phoenix-game-manifest" type="application/json"> automatically if it is absent. The only supported auto-repair is JSON packaging, never made-up gameplay/entities/assets. A correctly typed existing JSON block without id is recovered. Check schemaVersion:1, title, genre, controls, level, audio and genre-specific player/enemies/animations before invoking phoenix_game. The legacy embedded-only manifest remains supported. No "upload rejected, adding manifest" loop. A JSON phoenix-game-manifest (schemaVersion:1, title, genre, controls, level, audio, and genre-appropriate player/enemies/animations). No external CDN, network requests, or remote assets. For representational 2D character games, declare art.mode: production with art.designReference, art.hero sprite PNG atlas frame grid, art.hero.animations and art.backgrounds with actual inline data PNG images referenced by drawImage. A concept/portrait PNG alone is NOT an animated playable character; do not replace an approved character with boxes or primitives. If art is missing, explicitly set art.mode: prototype and say the graphics are UNFINISHED; never present that as a completed professional game. Use the real saved assets and verify screenshot vs approved character. For Double Dragon-inspired beat-em-up games use gameType=beat-em-up, distinct attack/grab/jump sprites, three original enemy archetypes, a mobile boss with two telegraphed attacks, a walkable depth belt, multi-zone streets, hitboxes, combos, pickups and recorded punch/kick/grab/hit samples. A character-only geometric brawler is art.mode=prototype and MUST NOT be called final. A production run-and-gun requires the COMPLETE independently designed cast and world: art.enemies matching every manifest enemy id, art.bosses with animated frames for EVERY boss phase, art.backgrounds matching each level layer, art.weapons, art.projectiles, art.powers, art.props, and two different art.effects. Create these first, use real images in the running Canvas and never stop after hero-only concept art. Use the finite checklist from examples/game-studio/plan-game-assets.mjs before creation. For a shooter with no art object, publishing is rejected. Use real source/graphics/audio assets only if embed-ready. A game declaring audio.mode=sampled-production MUST embed original/licensed audio clips with ids phoenix-audio-<cue> for every audio.cues entry, phoenix-audio-music for the soundtrack, and phoenix-audio-voice-<name> for audio.voices entries, plus an actual playback call. Missing samples make publication fail; procedural tones are prototypes. The tool emits application/vnd.phoenix.game+html, which PHOENIX already renders in its sandboxed Game Studio player with export and structural preflight. The publication receipt is NOT proof of gameplay, audio or visual quality: run independent tests, report what was actually verified, and never call a PNG-only response a finished game. When La Forja is requested, delegate via the real spawn_teammate tool before publishing if available. No automatic mission termination: do not close a broader game mission until mandatory verification is complete.',
+    description: 'For ordinary requests such as "haz un juego de carreras", "crea un juego tipo Double Dragon" or "make a game about space", YOU choose and invoke this publisher; the user never needs to name phoenix_game, skill, game engine, source file or manifest. Match the user-selected genre and gameplay rather than always returning a fixed demo. Publish a COMPLETE self-contained PLAYABLE browser game directly inside this PHOENIX chat (Game Studio). Use for any in-chat 2D/2.5D/3D game, arcade, beat-em-up, shooter, platformer, puzzle, racing, rhythm or simulation. This is the actual in-chat game publisher: for simple retro/board/puzzle use inline/file_path standalone HTML; for complex Godot games provide godot_export_dir pointing to a real multi-file Web export under the workspace. Never replace a Godot project with an unrelated HTML imitation. The native Godot export is served at a scoped local URL and loaded inside a sandboxed game iframe; binary preflight is not proof of successful browser play. image_generation creates assets only. The fastest route for an authored game is file_path pointing to its generated standalone HTML file in the agent workspace; Phoenix reads and validates that file, no huge HTML tool arguments or separate browser needed. The alternative is html for short code already in memory. Supply HTML with inline CSS and executable JavaScript and interactive Canvas/DOM. ALWAYS author the genuine game manifest FIRST and pass it as manifest_json (a JSON string) alongside HTML; Phoenix inserts the required <script id="phoenix-game-manifest" type="application/json"> automatically if it is absent. The only supported auto-repair is JSON packaging, never made-up gameplay/entities/assets. A correctly typed existing JSON block without id is recovered. Check schemaVersion:1, title, genre, controls, level, audio and genre-specific player/enemies/animations before invoking phoenix_game. The legacy embedded-only manifest remains supported. No "upload rejected, adding manifest" loop. A JSON phoenix-game-manifest (schemaVersion:1, title, genre, controls, level, audio, and genre-appropriate player/enemies/animations). No external CDN, network requests, or remote assets. For representational 2D character games, declare art.mode: production with art.designReference, art.hero sprite PNG atlas frame grid, art.hero.animations and art.backgrounds with actual inline data PNG images referenced by drawImage. A concept/portrait PNG alone is NOT an animated playable character; do not replace an approved character with boxes or primitives. If art is missing, explicitly set art.mode: prototype and say the graphics are UNFINISHED; never present that as a completed professional game. Use the real saved assets and verify screenshot vs approved character. For Double Dragon-inspired beat-em-up games use gameType=beat-em-up, distinct attack/grab/jump sprites, three original enemy archetypes, a mobile boss with two telegraphed attacks, a walkable depth belt, multi-zone streets, hitboxes, combos, pickups and recorded punch/kick/grab/hit samples. A character-only geometric brawler is art.mode=prototype and MUST NOT be called final. A production run-and-gun requires the COMPLETE independently designed cast and world: art.enemies matching every manifest enemy id, art.bosses with animated frames for EVERY boss phase, art.backgrounds matching each level layer, art.weapons, art.projectiles, art.powers, art.props, and two different art.effects. Create these first, use real images in the running Canvas and never stop after hero-only concept art. Use the finite checklist from examples/game-studio/plan-game-assets.mjs before creation. For a shooter with no art object, publishing is rejected. Use real source/graphics/audio assets only if embed-ready. A game declaring audio.mode=sampled-production MUST embed original/licensed audio clips with ids phoenix-audio-<cue> for every audio.cues entry, phoenix-audio-music for the soundtrack, and phoenix-audio-voice-<name> for audio.voices entries, plus an actual playback call. Missing samples make publication fail; procedural tones are prototypes. The tool emits application/vnd.phoenix.game+html, which PHOENIX already renders in its sandboxed Game Studio player with export and structural preflight. The publication receipt is NOT proof of gameplay, audio or visual quality: run independent tests, report what was actually verified, and never call a PNG-only response a finished game. When La Forja is requested, delegate via the real spawn_teammate tool before publishing if available. No automatic mission termination: do not close a broader game mission until mandatory verification is complete.',
     parameters: {
       title: { type: 'string', required: true, description: 'Human-facing game title.' },
       html: { type: 'string', description: 'Optional inline complete game HTML. For generated games prefer file_path instead of retransmitting the entire program.' },
       file_path: { type: 'string', description: 'Path to newly created standalone .html inside the current agent workspace. Read, validate and publish this file directly. Do not require the user to provide the path.' },
+      godot_export_dir: { type: 'string', description: 'Godot 4 Web export directory inside the current task workspace, containing a matching index.html, index.js, index.wasm and index.pck. Use this for non-retro games; do not pass html or file_path with it.' },
       manifest_json: { type: 'string', description: 'Strongly recommended for NEW games: complete JSON manifest authored BEFORE gameplay publication (schemaVersion:1, title, genre, gameType, controls, level, audio, and entities matching the actual game). Automatically added to HTML; no second upload attempt.' },
     },
     output: {
@@ -324,32 +326,51 @@ export function createPhoenixGameTool(): ToolDefinition {
           title: { type: 'string', required: true },
           preflight: { type: 'string', required: true },
           html: { type: 'string' },
+          bundleUrl: { type: 'string' },
         },
       },
       render: (_args, value) => [{
         type: 'text',
-        text: `Game Studio: "${value.title}" publicado en el chat. ${value.preflight === 'prototype-only' ? 'PROTOTIPO: faltan los gráficos finales; no está terminado.' : 'Preflight estructural aprobado; el uso de atlas no demuestra fidelidad visual.'} Jugabilidad y audio pendientes de pruebas reales.`,
+        text: typeof value.bundleUrl === 'string'
+          ? 'Game Studio: exportación Godot Web validada y montada para visualizar dentro del chat. No se ha certificado todavía su jugabilidad, audio ni calidad visual en navegador.'
+          : `Game Studio: "${value.title}" publicado en el chat. ${value.preflight === 'prototype-only' ? 'PROTOTIPO: faltan los gráficos finales; no está terminado.' : 'Preflight estructural aprobado; el uso de atlas no demuestra fidelidad visual.'} Jugabilidad y audio pendientes de pruebas reales.`,
       }],
-      presentationMeta: (args, value) => ({
-        artifact: {
-          id: value.artifactId,
-          mime: PHOENIX_GAME_MIME,
-          title: value.title,
-          data: typeof value.html === 'string'
-            ? value.html : preparePhoenixGameSubmission(args.html ?? '', args.manifest_json),
-          executable: true,
-        },
-      }),
+      presentationMeta: (args, value) => {
+        const godot = typeof value.bundleUrl === 'string'
+        return {
+          artifact: {
+            id: value.artifactId,
+            mime: godot ? PHOENIX_GODOT_WEB_MIME : PHOENIX_GAME_MIME,
+            title: value.title,
+            data: godot
+              ? JSON.stringify({ url: value.bundleUrl, engine: 'godot', structureChecked: true, browserPlaybackVerified: false })
+              : typeof value.html === 'string'
+                ? value.html : preparePhoenixGameSubmission(args.html ?? '', args.manifest_json),
+            executable: true,
+          },
+        }
+      },
     },
     execute(args, exec) {
       const title = args.title.trim()
       if (title.length === 0) throw new ToolArgsError(['El título del juego no puede estar vacío.'])
       const fromFile = typeof args.file_path === 'string'
       const fromInline = typeof args.html === 'string'
-      if (fromFile === fromInline) {
-        throw new ToolArgsError(['Game Studio: proporciona file_path O html (exactamente uno).'])
+      const fromGodot = typeof args.godot_export_dir === 'string'
+      if (Number(fromFile) + Number(fromInline) + Number(fromGodot) !== 1) {
+        throw new ToolArgsError(['Game Studio: proporciona exactamente uno: godot_export_dir, file_path o html.'])
       }
       exec.signal.throwIfAborted()
+      if (fromGodot) {
+        const receipt = publishGodotWebExport(
+          args.godot_export_dir ?? '', exec.agent?.session.header.cwd ?? '', title,
+        )
+        exec.signal.throwIfAborted()
+        return Promise.resolve({
+          artifactId: `phoenix-game:${String(exec.callId)}`, title,
+          preflight: 'godot-web-structure-only', bundleUrl: receipt.url,
+        })
+      }
       const html = fromFile
         ? readWorkspaceGameHtml(args.file_path ?? '', exec.agent?.session.header.cwd ?? '')
         : (args.html ?? '')
@@ -368,7 +389,7 @@ export function createPhoenixGameTool(): ToolDefinition {
         card: 'generic',
         title: `Game Studio · ${args.title}`,
         kind: 'read',
-        rawInput: 'HTML5 jugable integrado en el chat',
+        rawInput: typeof args.godot_export_dir === 'string' ? 'Godot Web integrado en el chat' : 'HTML5 jugable integrado en el chat',
       }
     },
   })

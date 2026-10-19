@@ -515,6 +515,40 @@ function GameIcon({ kind }: { readonly kind: 'add' | 'library' | 'window' }) {
   )
 }
 
+/** Godot exports remain multi-file; only scoped, capability-bearing local URLs may load. */
+export function godotWebPreviewUrl(value: unknown): string | undefined {
+  if (!isRecord(value) || value.engine !== 'godot' || value.structureChecked !== true
+    || typeof value.url !== 'string') return undefined
+  return /^\/phoenix-games\/godot\/[0-9a-f]{48}\/index\.html$/u.test(value.url) ? value.url : undefined
+}
+
+function GodotWebGamePreview({ payload, title }: { readonly payload: HardnessArtifactValue; readonly title: string }) {
+  const value = typeof payload === 'string' ? parseJsonArtifact(payload) : payload
+  const url = godotWebPreviewUrl(value)
+  if (url === undefined) return <p className={styles.gameError} role="alert">El paquete Godot no tiene una dirección válida en Phoenix.</p>
+  return (
+    <section className={styles.gameStudio} data-phoenix-game-studio="godot" data-game-engine="godot">
+      <header className={styles.gameHeader}>
+        <h2 className={styles.gameTitle}>{title}</h2>
+        <span className={styles.note}>Godot Web · Motor nativo</span>
+      </header>
+      <div className={styles.gameViewport}>
+        <iframe
+          className={styles.frame}
+          title={title}
+          src={url}
+          sandbox="allow-scripts allow-pointer-lock"
+          allow="autoplay; fullscreen"
+          allowFullScreen
+          referrerPolicy="no-referrer"
+          style={{ width: '100%', minHeight: 480, height: 'min(70vh, 720px)', border: 0 }}
+        />
+      </div>
+      <p className={styles.note}>Proyecto Godot original: el paquete se ha comprobado, pero la experiencia de juego, los gráficos y el sonido requieren pruebas reales.</p>
+    </section>
+  )
+}
+
 function GameStudioPreview({ html, title }: { readonly html: string; readonly title: string }) {
   const audit = useMemo(() => auditGameHtml(html), [html])
   const manifest = useMemo(() => readGameManifest(html), [html])
@@ -678,6 +712,7 @@ function RecordPreview({ record, mime, expanded, title, renderMessageImages }: {
 }
 
 export function HardnessArtifactBody({ mime, data, expanded, title, executable = true, renderMessageImages }: ArtifactBodyProps) {
+  if (mime === 'application/vnd.phoenix.game+godot-web') return <GodotWebGamePreview payload={data} title={title} />
   if (typeof data === 'string') {
     if (mime === 'application/vnd.phoenix.web-preview+json' || mime === 'application/vnd.hardness.web-preview+json') {
       const url = safeWebPreviewUrl(data)

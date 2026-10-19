@@ -4,6 +4,7 @@ import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { auditGameHtml, auditGameManifest, readGameManifest } from '../src/client/chat/game-studio-quality.ts'
 import { UniversalArtifactSurface } from '../src/client/chat/UniversalArtifactSurface.tsx'
+import { godotWebPreviewUrl } from '../src/client/chat/HardnessArtifactBody.tsx'
 import { normalizeHardnessArtifact } from '../src/client/artifact.ts'
 
 const manifest = {
@@ -30,6 +31,38 @@ function gameHtml(): string {
     + '<script id="phoenix-game-manifest" type="application/json">' + JSON.stringify(manifest) + '</script>'
     + '<script>const game = document.querySelector("canvas");</script>'
 }
+
+describe('Real Godot Web game embed', () => {
+  afterEach(() => { cleanup() })
+  const url = '/phoenix-games/godot/' + 'c'.repeat(48) + '/index.html'
+
+  it('renders a verified multi-file Godot export URL without granting same-origin', () => {
+    const payload = { url, engine: 'godot', structureChecked: true, browserPlaybackVerified: false }
+    expect(godotWebPreviewUrl(payload)).toBe(url)
+    const artifact = normalizeHardnessArtifact({
+      id: 'native', title: 'Aventura Godot', mime: 'application/vnd.phoenix.game+godot-web',
+      data: JSON.stringify(payload),
+    })
+    expect(artifact.kind).toBe('html')
+    render(<UniversalArtifactSurface artifact={artifact} onStop={() => {}} />)
+    const frame = screen.getByTitle('Aventura Godot')
+    expect(frame.getAttribute('sandbox')).toBe('allow-scripts allow-pointer-lock')
+    expect(frame.getAttribute('sandbox')).not.toContain('allow-same-origin')
+    expect(frame.getAttribute('src')).toBe(url)
+    expect(document.querySelector('[data-game-engine="godot"]')).toBeTruthy()
+  })
+  it('rejects remote origins, traversals and arbitrary HTML', () => {
+    expect(godotWebPreviewUrl({ url: 'https://bad.example/index.html', engine: 'godot', structureChecked: true })).toBeUndefined()
+    expect(godotWebPreviewUrl({ url: '/phoenix-games/godot/../../admin', engine: 'godot', structureChecked: true })).toBeUndefined()
+    expect(godotWebPreviewUrl({ url, engine: 'godot', structureChecked: false })).toBeUndefined()
+    render(<UniversalArtifactSurface artifact={normalizeHardnessArtifact({
+      id: 'invalid', title: 'Archivo rechazado', mime: 'application/vnd.phoenix.game+godot-web',
+      data: JSON.stringify({ url: '/admin', engine: 'godot', structureChecked: true }),
+    })} onStop={() => {}} />)
+    expect(screen.getByRole('alert')).toBeTruthy()
+    expect(document.querySelector('iframe')).toBeNull()
+  })
+})
 
 describe('Phoenix Game Studio 2D artifact quality', () => {
   afterEach(() => { cleanup() })

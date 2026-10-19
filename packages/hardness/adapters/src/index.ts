@@ -53,6 +53,7 @@ import { createHardnessTool } from './hardness-tool.ts'
 import { createPhoenixVisualizerTool } from './visualize-tool.ts'
 import { createPhoenixCanvasTool } from './canvas-tool.ts'
 import { createPhoenixGameTool } from './game-tool.ts'
+import { mountGodotWebRoute, type GameWebRouteHost } from './godot-web-bundle.ts'
 import { createPhoenix3DTool } from './scene3d-tool.ts'
 import { createResearchPublishTool } from './research-publish-tool.ts'
 import { createResearchPlanTool } from './research-plan-tool.ts'
@@ -342,6 +343,21 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
   } = requiredServices(ctx)
   const modelTools = config.modelTools ?? true
   const disposers: Disposer[] = []
+  if (!modelTools) {
+    // The HOST, not a scoped agent, owns the HTTP route. Late webServer
+    // activation is supported without registering duplicate routes.
+    let removeGodotRoute: (() => void) | undefined
+    const attachGodotRoute = (): void => {
+      if (removeGodotRoute !== undefined) return
+      const service = (ctx.get as unknown as (name: string) => unknown)('webServer') as GameWebRouteHost | undefined
+      if (service && typeof service.register === 'function') removeGodotRoute = mountGodotWebRoute(service)
+    }
+    attachGodotRoute()
+    disposers.push(ctx.on('internal/service', name => {
+      if (name === 'webServer') attachGodotRoute()
+    }))
+    disposers.push(() => { removeGodotRoute?.() })
+  }
   const proactivity = acquireProactivityEngine(taskLedgerPath(config))
   disposers.push(() =>{  proactivity.release() })
   const wake = acquireWakeEngine(wakeLedgerPath(config))
