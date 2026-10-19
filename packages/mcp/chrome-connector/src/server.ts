@@ -395,11 +395,11 @@ const server = new McpServer(
 )
 
 server.registerTool('status', {
-  description: 'Comprueba CDP y, si hace falta, inicia el navegador dedicado aislado de PHOENIX.',
-  inputSchema: {},
-}, async () => {
+  description: 'Comprueba el Chromium de la conversación actual, aislado de los demás chats.',
+  inputSchema: { sessionId: z.string().optional() },
+}, async ({ sessionId }) => {
   try {
-    const base = await endpoint()
+    const base = await endpoint(sessionId)
     const version = await json<Record<string, string>>(`${base}/json/version`)
     return { content: [{ type: 'text', text: `Conectado a ${version.Browser ?? 'navegador Chromium'} en ${base}` }] }
   } catch (error) {
