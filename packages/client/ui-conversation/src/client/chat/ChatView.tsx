@@ -16,7 +16,8 @@ import type {
 import { Button, IconChevronDownOutline14, Modal, PhoenixLogo } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { ChatViewSlotProps, RenderMessageImages } from '../contract/slots.ts'
 import { PendingSteeringBubble } from './MessageItem.tsx'
-import { turnProgress } from './turn-progress.ts'
+import { naturalProgressLine, turnProgress } from './turn-progress.ts'
+import { speakVoiceAssistantProgress } from '../voice.ts'
 import { ToolActivityFlow } from './ToolActivityFlow.tsx'
 import css from './ChatView.module.css'
 
@@ -144,6 +145,9 @@ export function ChatView({
   const [fileOpenBusy, setFileOpenBusy] = useState(false)
   const [completionPulse, setCompletionPulse] = useState(false)
   const previousRunning = useRef(running)
+  const spokenProgress = useRef<{ turn: number | undefined; activity: string | undefined; at: number }>({
+    turn: undefined, activity: undefined, at: 0,
+  })
   // Close/retry must ignore a settlement that started before the latest
   // gesture; otherwise a cancelled in-flight refusal reopens the dialog.
   const fileOpenRequest = useRef(0)
@@ -313,6 +317,36 @@ export function ChatView({
       // Real runtime activity is authoritative and never expires here.
       expiresAfterMs: activeProgress === null ? 30_000 : null,
     }
+
+  const liveTurn = timeline.turnOrder.at(-1)
+  useEffect(() => {
+    if (!running || activeProgress === null || liveTurn === undefined) return
+    if (spokenProgress.current.turn !== liveTurn) {
+      spokenProgress.current = { turn: liveTurn, activity: undefined, at: 0 }
+    }
+    const activity = activeProgress.activity
+    const start = visibleTurnStatus?.startTime ?? Date.now()
+    const check = (): void => {
+      const now = Date.now()
+      const elapsed = Math.max(0, now - start)
+      // Fast turns need no narration. Thinking requires extra patience; tools
+      // need a little time to yield a useful real event before Kira speaks.
+      const threshold = activity === 'thinking' || activity === 'preparing' ? 45_000 : 22_000
+      if (elapsed < threshold) return
+      const last = spokenProgress.current
+      const minimumGap = last.activity === activity ? 140_000 : 40_000
+      if (last.at !== 0 && now - last.at < minimumGap) return
+      const language = /pensando|preparando/iu.test(t('status.thinking'))
+        ? 'es'
+        : typeof document !== 'undefined' ? document.documentElement.lang : 'en'
+      const line = naturalProgressLine(activeProgress, language, elapsed)
+      if (line === undefined || !speakVoiceAssistantProgress(line, String(sessionId))) return
+      spokenProgress.current = { turn: liveTurn, activity, at: now }
+    }
+    check()
+    const timer = window.setInterval(check, 5_000)
+    return () => { window.clearInterval(timer) }
+  }, [activeProgress, liveTurn, running, sessionId, t, visibleTurnStatus?.startTime])
 
   useEffect(() => {
     const finished = previousRunning.current && !running
