@@ -9,13 +9,20 @@ export type BrowserScopeSnapshot = Record<string, { tabIds: string[]; selectedTa
 
 const VALID_ID = /^[A-Za-z0-9._:-]{1,256}$/u
 
+/**
+ * Validate a conversation or Chrome target identifier before using it as a scope key.
+ * @param value - Untrusted identifier from client requests or disk.
+ * @returns Whether the value is a bounded safe identifier.
+ */
 export function validBrowserScopeId(value: unknown): value is string {
   return typeof value === 'string' && VALID_ID.test(value)
 }
 
+/** Stateful registry that assigns every MiniBrowser tab to at most one conversation. */
 export class MiniBrowserScopes {
   private readonly scopes = new Map<string, { tabIds: Set<string>; selectedTabId?: string }>()
   private readonly owners = new Map<string, string>()
+  /** Monotonically increasing version for persistence after state mutations. */
   revision = 0
 
   constructor(saved?: unknown) {
@@ -34,10 +41,22 @@ export class MiniBrowserScopes {
     this.revision = 0
   }
 
+  /**
+   * Determine whether the target belongs to this conversation.
+   * @param scopeId - Owning chat session.
+   * @param tabId - Chrome target ID.
+   * @returns True only for the current owner.
+   */
   owns(scopeId: string, tabId: string): boolean {
     return this.owners.get(tabId) === scopeId
   }
 
+  /**
+   * Associate a newly created or previously unclaimed target with a chat.
+   * @param scopeId - Requesting conversation.
+   * @param tabId - Chrome target ID.
+   * @returns Nothing; rejects cross-chat ownership conflicts.
+   */
   claim(scopeId: string, tabId: string): void {
     if (!validBrowserScopeId(scopeId) || !validBrowserScopeId(tabId)) throw new Error('Identificador de conversación o pestaña inválido.')
     const existing = this.owners.get(tabId)
@@ -57,6 +76,12 @@ export class MiniBrowserScopes {
     this.select(scopeId, tabId)
   }
 
+  /**
+   * Remember the foreground target for one conversation.
+   * @param scopeId - Requesting chat.
+   * @param tabId - Already-owned target.
+   * @returns Nothing; rejects foreign tabs.
+   */
   select(scopeId: string, tabId: string): void {
     if (!this.owns(scopeId, tabId)) throw new Error('La pestaña no pertenece a esta conversación.')
     const scope = this.scopes.get(scopeId)
@@ -66,6 +91,12 @@ export class MiniBrowserScopes {
     }
   }
 
+  /**
+   * Forget a closed or missing target without changing another chat.
+   * @param scopeId - Current owner of this tab.
+   * @param tabId - Target to remove.
+   * @returns Nothing; refuses foreign targets.
+   */
   release(scopeId: string, tabId: string): void {
     if (!this.owns(scopeId, tabId)) throw new Error('La pestaña no pertenece a esta conversación.')
     const scope = this.scopes.get(scopeId)
@@ -80,6 +111,11 @@ export class MiniBrowserScopes {
     this.revision++
   }
 
+  /**
+   * Evict targets that are no longer present in Chromium.
+   * @param available - Currently active page IDs.
+   * @returns Nothing; also updates the persistence revision.
+   */
   prune(available: readonly string[]): void {
     const live = new Set(available)
     for (const [tabId, owner] of [...this.owners]) {
@@ -87,10 +123,23 @@ export class MiniBrowserScopes {
     }
   }
 
+  /**
+   * Filter an unordered Chrome target list to targets owned by one chat.
+   * @param scopeId - Current conversation.
+   * @param available - IDs of available browser targets.
+   * @returns IDs owned by that conversation in Chrome order.
+   */
   tabs(scopeId: string, available: readonly string[]): string[] {
     return available.filter(id => this.owns(scopeId, id))
   }
 
+  /**
+   * Resolve the last selected owned target and prune targets that disappeared.
+   * @param scopeId - Current conversation.
+   * @param available - IDs currently present in Chromium.
+   * @param requestedTabId - Optional explicit tab being attached to the chat.
+   * @returns Selected owned tab, or undefined if the chat has no tabs.
+   */
   choose(scopeId: string, available: readonly string[], requestedTabId?: string): string | undefined {
     this.prune(available)
     if (requestedTabId !== undefined) {
@@ -104,6 +153,10 @@ export class MiniBrowserScopes {
     return chosen
   }
 
+  /**
+   * Serialize only valid target ownership and selected target identifiers.
+   * @returns Persistable mapping of conversation IDs to scoped targets.
+   */
   snapshot(): BrowserScopeSnapshot {
     const saved: BrowserScopeSnapshot = {}
     for (const [id, scope] of this.scopes) {
