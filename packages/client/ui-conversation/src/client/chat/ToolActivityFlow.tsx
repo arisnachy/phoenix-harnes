@@ -543,10 +543,11 @@ function TurnStatus({ startTime, progress, expiresAfterMs, t, centered = false }
     : typeof document !== 'undefined' ? document.documentElement.lang : 'en'
   // An observed tool phase is more informative than a spinner during a long wait.
   // Keep the established localized short label at the beginning of the turn.
-  const humanLabel = elapsedMs >= 15_000
+  const isWaiting = progress.phase === 'waiting'
+  const humanLabel = isWaiting || elapsedMs >= 15_000
     ? naturalProgressLine(progress, interfaceLanguage, elapsedMs)
     : undefined
-  const showClock = elapsedMs >= 15_000
+  const showClock = !isWaiting && elapsedMs >= 15_000
   const technicalTitle = progress.detail === undefined || progress.detail === ''
     ? label
     : `${label} · ${progress.detail}`
@@ -565,9 +566,11 @@ function TurnStatus({ startTime, progress, expiresAfterMs, t, centered = false }
         <PhoenixLogo size={28} />
       </span>
       <span className={chatCss.turnStatusText}>
-        {humanLabel ?? (label.startsWith('Phoenix ') || label.startsWith('PHOENIX ')
-          ? <><strong className={chatCss.turnStatusBrand}>{label.split(' ')[0]}</strong>{label.slice(label.indexOf(' '))}</>
-          : label)}
+        {humanLabel === undefined
+          ? label.startsWith('Phoenix ') || label.startsWith('PHOENIX ')
+            ? <><strong className={chatCss.turnStatusBrand}>{label.split(' ')[0]}</strong>{label.slice(label.indexOf(' '))}</>
+            : label
+          : <><strong className={chatCss.turnStatusBrand}>Kira · </strong>{humanLabel}</>}
       </span>
       {showClock && (
         <span className={chatCss.turnStatusClock} aria-hidden>
