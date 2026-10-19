@@ -355,7 +355,8 @@ const selectedChatTabs = new Map<string, string>()
 
 async function selectedTab(id?: string, sessionId?: string): Promise<Tab> {
   const available = await tabs(sessionId)
-  const preferred = sessionId === undefined ? sharedSession()?.selectedTabId : selectedChatTabs.get(sessionId)
+  const preferred = sessionId === undefined ? sharedSession()?.selectedTabId
+    : selectedChatTabs.get(sessionId) ?? chatBrowserSession(sessionId).selectedTabId
   if (sessionId !== undefined && id === undefined && preferred === undefined && available.length > 1) {
     throw new Error('Indica tabId para seleccionar la pestaña de esta conversación sin confundir trabajos.')
   }
@@ -363,6 +364,25 @@ async function selectedTab(id?: string, sessionId?: string): Promise<Tab> {
   if (!tab.webSocketDebuggerUrl) throw new Error('La pestaña no ofrece una conexión CDP')
   if (sessionId === undefined) announceSession(await endpoint(), tab.id)
   else { selectedChatTabs.set(sessionId, tab.id); announceChatTab(sessionId, tab.id) }
+  return tab
+}
+
+/**
+ * Navigate inside THIS conversation's MiniBrowser instead of spawning a second
+ * target that leaves the embedded browser displaying its initial blank page.
+ * Legacy unscoped calls retain their existing new-tab behavior.
+ * @param url - HTTP(S) destination.
+ * @param tabId - Explicit already-owned target, if supplied.
+ * @param sessionId - Owning Phoenix conversation.
+ * @returns The Chrome tab on which navigation was initiated.
+ */
+async function openConversationPage(url: string, tabId?: string, sessionId?: string): Promise<Tab> {
+  if (sessionId === undefined && tabId === undefined) return await newBrowserTab(url)
+  const available = await tabs(sessionId)
+  if (available.length === 0) return await newBrowserTab(url, sessionId)
+  const tab = await selectedTab(tabId, sessionId)
+  const navigation = await cdp<{ errorText?: string }>(tab, 'Page.navigate', { url })
+  if (navigation.errorText) throw new Error('Chrome rechazó la navegación: ' + navigation.errorText)
   return tab
 }
 
@@ -474,13 +494,7 @@ server.registerTool('navigate', {
   if (!actionsAllowed()) throw new Error('Navegación bloqueada por la política de permisos del navegador (modo read-only o PHOENIX_BROWSER_ALLOW_ACTIONS=false).')
   const parsed = new URL(url)
   if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('Solo se permiten URLs HTTP(S)')
-  const tab = tabId === undefined ? await newBrowserTab(url, sessionId) : await selectedTab(tabId, sessionId)
-  // /json/new already navigates the new page, while an explicit tabId must
-  // navigate the user's chosen existing tab.
-  if (tabId !== undefined) {
-    const navigation = await cdp<{ errorText?: string }>(tab, 'Page.navigate', { url })
-    if (navigation.errorText) throw new Error('Chrome rechazó la navegación: ' + navigation.errorText)
-  }
+  const tab = await openConversationPage(url, tabId, sessionId)
   const receipt = await verifyBrowserNavigation(tab, url)
   const verified = receipt.verdict === 'verified'
   return {
@@ -509,12 +523,7 @@ server.registerTool('youtube_search', {
   }
   let tab: Tab
   try {
-    tab = tabId === undefined ? await newBrowserTab(url, sessionId) : await selectedTab(tabId, sessionId)
-    // Opening a new request cannot replace the website shown by an older card.
-    if (tabId !== undefined) {
-      const navigation = await cdp<{ errorText?: string }>(tab, 'Page.navigate', { url })
-      if (navigation.errorText) throw new Error(navigation.errorText)
-    }
+    tab = await openConversationPage(url, tabId, sessionId)
   } catch (error) {
     return { isError: true, content: [{ type: 'text', text: `No se pudo abrir YouTube en Chrome/Edge: ${String(error)}. Enlace directo para el usuario: ${url}. No reintentes automáticamente sin una causa nueva.` }] }
   }
