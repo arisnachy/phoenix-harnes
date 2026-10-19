@@ -344,7 +344,8 @@ export function MiniBrowser({ sessionId, requested = false, active = true, initi
         }
         const request: SecureLoginTarget = {
           origin: siteOrigin, tabId, saved: status.saved, automatic: status.automatic,
-          ...(status.relatedOrigin ? { relatedOrigin: status.relatedOrigin, relatedProfile: status.relatedProfile } : {}),
+          ...(status.relatedOrigin ? { relatedOrigin: status.relatedOrigin,
+            ...(status.relatedProfile ? { relatedProfile: status.relatedProfile } : {}) } : {}),
           ...(status.profile ? { profile: status.profile } : {}),
           ...(status.profiles ? { profiles: status.profiles } : {}),
           ...(detection.fields?.length ? { fields: detection.fields } : {}),
@@ -827,7 +828,8 @@ export function MiniBrowser({ sessionId, requested = false, active = true, initi
               void secureApi<SecureStatus>('/status?origin=' + encodeURIComponent(siteOrigin))
                 .then(status => onSecureLoginRequest({
                   origin: siteOrigin, tabId, saved: status.saved, automatic: status.automatic, explicit: true,
-                  ...(status.relatedOrigin ? { relatedOrigin: status.relatedOrigin, relatedProfile: status.relatedProfile } : {}),
+                  ...(status.relatedOrigin ? { relatedOrigin: status.relatedOrigin,
+            ...(status.relatedProfile ? { relatedProfile: status.relatedProfile } : {}) } : {}),
                   ...(status.profile ? { profile: status.profile } : {}),
                   ...(status.profiles ? { profiles: status.profiles } : {}),
                 }))
@@ -896,7 +898,8 @@ export function MiniBrowser({ sessionId, requested = false, active = true, initi
               .then(status => onSecureLoginRequest({
                 origin: siteOrigin, tabId, saved: status.saved, automatic: status.automatic,
                 explicit: true,
-                ...(status.relatedOrigin ? { relatedOrigin: status.relatedOrigin, relatedProfile: status.relatedProfile } : {}), ...(status.profile ? { profile: status.profile } : {}),
+                ...(status.relatedOrigin ? { relatedOrigin: status.relatedOrigin,
+            ...(status.relatedProfile ? { relatedProfile: status.relatedProfile } : {}) } : {}), ...(status.profile ? { profile: status.profile } : {}),
                 ...(status.profiles ? { profiles: status.profiles } : {}),
               }))
               .catch(() => {
