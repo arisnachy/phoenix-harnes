@@ -20,6 +20,7 @@ import {
   setVoiceAssistantActive,
   setVoiceAssistantListening,
   speakVoiceAssistantAttention,
+  speakVoiceAssistantProgress,
   speakVoiceAssistantResponse,
   cancelVoiceAssistantSentenceStream,
   streamVoiceAssistantResponse,
@@ -743,6 +744,17 @@ describe('browser voice adapter', () => {
       expect(realtimeSpeak).toHaveBeenLastCalledWith({ key: 'session-harness', text: 'Segunda frase.' })
       expect(microphoneTrack.enabled).toBe(true)
       channel?.onmessage?.({ data: JSON.stringify({ type: 'response.completed' }) })
+      await Promise.resolve()
+
+      // Progress is session-scoped, truly authorized by Phoenix, and never
+      // borrows the microphone or interrupts an existing final speech queue.
+      expect(speakVoiceAssistantProgress('Revisando las pruebas.', 'session-b')).toBe(false)
+      const beforeProgress = realtimeSpeak.mock.calls.length
+      expect(speakVoiceAssistantProgress('Revisando las pruebas.', 'session-harness')).toBe(true)
+      expect(document.documentElement.dataset.phoenixVoiceSpeechOrigin).toBe('observed-progress')
+      expect(realtimeSpeak).toHaveBeenCalledTimes(beforeProgress + 1)
+      expect(speakVoiceAssistantProgress('No debo interrumpir.', 'session-harness')).toBe(false)
+      channel?.onmessage?.({ data: JSON.stringify({ type: 'response.done' }) })
       await Promise.resolve()
       vi.useRealTimers()
 
