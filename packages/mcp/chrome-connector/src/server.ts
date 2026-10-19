@@ -265,8 +265,23 @@ async function launchDedicatedBrowser(): Promise<string> {
 }
 
 async function endpoint(sessionId?: string): Promise<string> {
-  // Per-chat routing must never fall back to the global Chrome descriptor.
-  if (sessionId !== undefined) return chatBrowserSession(sessionId).endpoint.replace(/\/$/, '')
+  // A browser tool may run before React mounts the MiniBrowser card. Ask the
+  // authenticated local Phoenix host to start THAT conversation's Chromium.
+  if (sessionId !== undefined) {
+    try { return chatBrowserSession(sessionId).endpoint.replace(/\/$/, '') }
+    catch {
+      const port = Number(process.env.PHOENIX_WEB_PORT || '3080')
+      if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Puerto web de Phoenix inválido.')
+      const response = await fetch('http://127.0.0.1:' + String(port) + '/phoenix-mini-browser/action', {
+        method: 'POST',
+        headers: { 'x-phoenix-mini-browser': '1', 'content-type': 'application/json' },
+        body: JSON.stringify({ type: 'start', sessionId }),
+        signal: AbortSignal.timeout(23_000),
+      })
+      if (!response.ok) throw new Error('Phoenix no pudo iniciar el MiniBrowser de esta conversación (HTTP ' + response.status + ').')
+      return chatBrowserSession(sessionId).endpoint.replace(/\/$/, '')
+    }
+  }
   // A visible personal Chrome profile must never become the default target of
   // agent navigation. External CDP attachment requires an explicit opt-in.
   const allowVisible = process.env.PHOENIX_BROWSER_ALLOW_VISIBLE_CDP === 'true'
