@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type {
   ChatConversationViewNode, ConversationTimelineSnapshot, RunningToolCall, ToolCallBlock,
 } from '@phoenix-ai/dsh-client-runtime/client'
-import { naturalProgressLine, turnProgress } from '../src/client/chat/turn-progress.ts'
+import { naturalProgressLine, pendingTurnProgress, turnProgress } from '../src/client/chat/turn-progress.ts'
 
 function openTimeline(turn: number): ConversationTimelineSnapshot {
   return {
@@ -100,6 +100,21 @@ function assistantNode(turn: number, status: 'running' | 'settled', blockKind: '
     },
   }
 }
+
+describe('pendingTurnProgress', () => {
+  it('does not invent a wait without a host-owned interaction', () => {
+    expect(pendingTurnProgress(undefined)).toBeNull()
+  })
+
+  it.each([
+    ['question', 'waiting-user'],
+    ['approval', 'waiting-approval'],
+  ] as const)('uses %s to display %s rather than thinking', (kind, activity) => {
+    const progress = pendingTurnProgress(kind)
+    expect(progress).toEqual({ phase: 'waiting', activity })
+    expect(naturalProgressLine(progress!, 'es-DO')).toMatch(/respuesta|autorización/u)
+  })
+})
 
 describe('naturalProgressLine', () => {
   it('renders every observed activity in natural Spanish and English without technical tool identifiers', () => {
