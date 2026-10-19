@@ -14,6 +14,7 @@ export interface GeneralizationMetrics {
   readonly latencyMs: number
 }
 
+/** Immutable task/evaluator receipt pair for one benchmark experiment. */
 export interface GeneralizationTrial {
   readonly id: string
   /** Proposal identity must include the route/strategy revision. */
@@ -31,6 +32,7 @@ export interface GeneralizationTrial {
   readonly candidate: GeneralizationMetrics
 }
 
+/** Read-only judgement of transfer performance, never deployment authority. */
 export interface GeneralizationAssessment {
   readonly proposalId: string
   readonly modelRoute: string | null
@@ -44,6 +46,7 @@ export interface GeneralizationAssessment {
   readonly meanLatencySaving: number | null
 }
 
+/** Versioned, portable trial ledger for trusted callers to persist and restore. */
 export interface GeneralizationSnapshot {
   readonly version: 1
   readonly trials: readonly GeneralizationTrial[]
@@ -103,6 +106,10 @@ function average(values: readonly number[]): number {
 export class GeneralizationGate {
   private readonly trials = new Map<string, GeneralizationTrial>()
 
+  /** Persist one bounded receipt after the Host authenticates it.
+   * @param trial - Host-verified baseline and candidate observation.
+   * @returns Nothing; recording never promotes a proposal.
+   */
   record(trial: GeneralizationTrial): void {
     validate(trial)
     const prior = this.trials.get(trial.id)
@@ -114,6 +121,10 @@ export class GeneralizationGate {
     this.trials.set(trial.id, freezeTrial(trial))
   }
 
+  /** Evaluate held-out performance on independent domains without executing changes.
+   * @param proposalId - Versioned candidate identity to evaluate.
+   * @returns Immutable candidate assessment for independent review.
+   */
   assess(proposalId: string): GeneralizationAssessment {
     label(proposalId, 'proposalId')
     const trials = [...this.trials.values()].filter(value => value.proposalId === proposalId)
@@ -178,10 +189,17 @@ export class GeneralizationGate {
     })
   }
 
+  /** Read a versioned copy of the observation ledger.
+   * @returns Frozen evidence observations ready for caller-owned storage.
+   */
   snapshot(): GeneralizationSnapshot {
     return Object.freeze({ version: 1 as const, trials: Object.freeze([...this.trials.values()]) })
   }
 
+  /** Transactionally restore a validated prior state.
+   * @param snapshot - Versioned evidence observations previously persisted.
+   * @returns Nothing; failed validation preserves the former state.
+   */
   restore(snapshot: GeneralizationSnapshot): void {
     const input: unknown = snapshot
     if (input === null || typeof input !== 'object') throw new TypeError('invalid generalization snapshot')
