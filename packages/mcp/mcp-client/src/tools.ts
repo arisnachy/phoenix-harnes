@@ -480,7 +480,13 @@ function createExecutor(
     // specific "missing required param" error the model can learn from.
     const argsObj = (typeof args === 'object' && args !== null ? args : {}) as Record<string, unknown>
     const wireArgs = transformArguments === undefined ? argsObj : transformArguments(argsObj)
-    const result = await callToolUncached(client, rawName, wireArgs, exec, opts).catch((error: unknown) => {
+    // Route every Chrome tool invocation using the REAL agent's conversation
+    // identity, never a model-supplied sessionId or the global last Chrome tab.
+    // Other MCP integrations are untouched.
+    const chromeScope = /(?:chrome|browser-connector)/iu.test(opts.serverName)
+      && exec.agent?.id !== undefined
+    const routedArgs = chromeScope ? { ...wireArgs, sessionId: exec.agent.id } : wireArgs
+    const result = await callToolUncached(client, rawName, routedArgs, exec, opts).catch((error: unknown) => {
       reportToolAuthorizationFailure(opts, error)
       throw error
     })
