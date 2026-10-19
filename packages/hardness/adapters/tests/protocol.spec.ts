@@ -18,6 +18,8 @@ describe('HARDNESS model protocol prompt adapter', () => {
     })
     const section = systemPrompt.section.mock.calls[0]?.[0]
     expect(section?.text).toContain('<phoenix_cognitive_workflows>')
+    expect(section?.text).toContain('<phoenix_general_intelligence>')
+    expect(section?.text).toContain('independent unseen tasks across multiple domains')
     expect(section?.text).toContain('systematic-debugging')
     expect(section?.text).toContain('verification-gate')
     expect(section?.text).toContain('Run these protocols silently')
@@ -35,6 +37,7 @@ describe('HARDNESS model protocol prompt adapter', () => {
 
     const section = systemPrompt.section.mock.calls[0]?.[0]
     expect(section?.text).toContain('HARDNESS conoce estos flujos cognitivos')
+    expect(section?.text).toContain('No declares AGI ni singularidad')
     expect(section?.text).toContain('Pasos obligatorios')
     expect(section?.text).toContain('Ejecuta estos protocolos de forma silenciosa')
     expect(section?.text).toContain('Interpreta la petición por su objetivo y entregable')
