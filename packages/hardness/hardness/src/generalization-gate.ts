@@ -62,7 +62,8 @@ function label(value: string, field: string): void {
   }
 }
 function metrics(value: GeneralizationMetrics, field: string): void {
-  if (value === null || typeof value !== 'object') throw new TypeError(field + ' is required')
+  const candidate: unknown = value
+  if (candidate === null || typeof candidate !== 'object') throw new TypeError(field + ' is required')
   if (!Number.isFinite(value.quality) || value.quality < 0 || value.quality > 1) {
     throw new TypeError(field + '.quality must be between 0 and 1')
   }
@@ -71,12 +72,15 @@ function metrics(value: GeneralizationMetrics, field: string): void {
   }
 }
 function validate(trial: GeneralizationTrial): void {
-  if (!trial || typeof trial !== 'object') throw new TypeError('trial must be an object')
+  const candidate: unknown = trial
+  if (candidate === null || typeof candidate !== 'object') throw new TypeError('trial must be an object')
   for (const key of ['id', 'proposalId', 'modelRoute', 'domain', 'taskId', 'datasetHash', 'evidenceId'] as const) {
     label(trial[key], key)
   }
-  if (trial.split !== 'development' && trial.split !== 'holdout') throw new TypeError('invalid split')
-  if (typeof trial.verified !== 'boolean') throw new TypeError('verified must be a boolean')
+  const split: unknown = trial.split
+  if (split !== 'development' && split !== 'holdout') throw new TypeError('invalid split')
+  const verified: unknown = trial.verified
+  if (typeof verified !== 'boolean') throw new TypeError('verified must be a boolean')
   metrics(trial.baseline, 'baseline')
   metrics(trial.candidate, 'candidate')
 }
@@ -163,7 +167,7 @@ export class GeneralizationGate {
     const status: GeneralizationAssessment['status'] = reasons.length === 0 ? 'eligible-for-review' : 'blocked'
     return Object.freeze({
       proposalId,
-      modelRoute: routes.size === 1 ? [...routes][0]! : null,
+      modelRoute: routes.size === 1 ? ([...routes][0] ?? null) : null,
       status,
       reasons: Object.freeze([...new Set(reasons)]),
       holdoutTasks: holdout.length,
@@ -179,9 +183,15 @@ export class GeneralizationGate {
   }
 
   restore(snapshot: GeneralizationSnapshot): void {
-    if (snapshot?.version !== 1 || !Array.isArray(snapshot.trials)) throw new TypeError('invalid generalization snapshot')
+    const input: unknown = snapshot
+    if (input === null || typeof input !== 'object') throw new TypeError('invalid generalization snapshot')
+    const decoded = input as { readonly version?: unknown; readonly trials?: unknown }
+    if (decoded.version !== 1 || !Array.isArray(decoded.trials)) throw new TypeError('invalid generalization snapshot')
     const staged = new GeneralizationGate()
-    for (const trial of snapshot.trials) staged.record(trial)
+    for (const entry of decoded.trials as readonly unknown[]) {
+      if (entry === null || typeof entry !== 'object') throw new TypeError('invalid generalization trial')
+      staged.record(entry as GeneralizationTrial)
+    }
     this.trials.clear()
     for (const trial of staged.trials.values()) this.trials.set(trial.id, trial)
   }
