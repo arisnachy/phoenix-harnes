@@ -3,6 +3,7 @@ import { spawnSync } from 'node:child_process'
 import { existsSync, readdirSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { routeGame } from './game-routing.mjs'
 
 const targets = new Set(['web', 'godot', 'blender', 'tiled', 'ffmpeg', 'uv', 'gameboy', 'nes', 'snes', 'genesis', 'sms', 'ps1'])
 function execute(command, args, timeout = 8000) {
@@ -98,42 +99,9 @@ function readiness(target) {
   }
   return probe([['sdcc', ['--version']]], /SDCC/iu)
 }
-/**
- * Routing is a deterministic, read-only decision based on the *delivery target*.
- * Godot's multi-file HTML5 WebAssembly export is NOT a valid single-file
- * phoenix_game payload. A Godot project can still be delivered separately.
- */
+/** Route game intent through the shared universal policy. */
 export function route(genre, delivery, quality) {
-  if (!['chat', 'desktop', 'web'].includes(delivery)) throw new Error('Delivery must be chat, desktop or web.')
-  if (!['prototype', 'production'].includes(quality)) throw new Error('Quality must be prototype or production.')
-  if (!genre.trim()) throw new Error('Genre cannot be empty.')
-  const normalized = genre.toLowerCase()
-  const brawler = /beat.em.up|beat.?em.?up|double.dragon|brawler|street.fight/u.test(normalized)
-  const is3d = /3d|open.world|mundo.abierto|low.poly|racing.3d/u.test(normalized)
-  const simple = /snake|pong|tetris|2048|logic.puzzle|juego.de.tablero/u.test(normalized)
-  const complexity = brawler || is3d || (!simple && quality === 'production')
-  // A one-level in-chat demo needs runnable HTML first, not Godot installation or browser setup.
-  const shortDemo = /\bdemo\b|\bprototip|\bvertical.slice\b|\b(?:un|one|1)\s+(?:solo\s+)?(?:nivel|level)\b|\bsingle.level\b/u.test(normalized)
-  const fastDemo = delivery === 'chat' && !is3d && (quality === 'prototype' || shortDemo)
-  const engine = delivery === 'chat' || !complexity ? 'html5' : 'godot'
-  const authoringEngine = fastDemo ? 'html5' : complexity ? 'godot' : 'html5'
-  const tools = fastDemo ? [] : authoringEngine === 'godot'
-    ? ['godot', ...(is3d ? ['blender'] : ['tiled']), 'ffmpeg']
-    : (simple ? [] : ['tiled', 'ffmpeg'])
-  return {
-    genre, delivery, quality, engine, authoringEngine, tools,
-    action: fastDemo
-      ? 'Create standalone playable HTML5 and manifest first; publish via phoenix_game. No browser, external editor, installation or blocking subagent research.'
-      : tools.length ? 'Run doctor for each tool; ensure missing tools only during an authorized game build.' : 'No external editor is required.',
-    renderer: delivery === 'chat' ? 'phoenix_game-single-file-html' : 'native-project-or-hosted-export',
-    authoringRule: authoringEngine === 'godot'
-      ? 'Run Godot Game Studio bootstrap and real engine smoke; for chat also publish a separate tested standalone HTML5 game.'
-      : 'Keep the small browser game standalone and test it in the chat renderer.',
-    godotWebNote: delivery === 'web' && engine === 'godot'
-      ? 'Godot HTML5 export requires matching templates, JS/WASM/PCK files and real HTTP hosting; never present its index.html alone as an in-chat game.'
-      : undefined,
-    gate: 'Presets require imported atlas/scene IDs, visible runtime animation, original audio and real playtest evidence.',
-  }
+  return routeGame(genre, delivery, quality)
 }
 
 export function installation(target, platform) {
