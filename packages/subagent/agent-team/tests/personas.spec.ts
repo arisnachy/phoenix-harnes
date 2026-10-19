@@ -25,6 +25,9 @@ describe('KIRA Team social personalities', () => {
     expect(style).toContain(KIRA_SOCIAL_STYLE)
     expect(style).toContain('Humor, sarcasm, and emoji are optional and contextual')
     expect(style).toContain('high quality, fast completion, and low cost')
+    expect(style).toContain('Listen to the user\'s intention, concerns, corrections and mood')
+    expect(style).toContain('without generic reassurances')
+    expect(style).toContain('Do not pretend to have a body')
     expect(style).toContain('never degrade any of the three')
   })
 
