@@ -9,7 +9,7 @@
  */
 import { spawn, type ChildProcess } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { IncomingMessage, ServerResponse } from 'node:http'
@@ -53,6 +53,31 @@ let ownedProfile: string | undefined
 let ownedEndpoint: string | undefined
 let launching: Promise<string> | undefined
 let activeTabId: string | undefined
+type ScopedBrowser = { child: ChildProcess; profile: string; endpoint?: string }
+const scopedBrowsers = new Map<string, ScopedBrowser>()
+const scopedLaunching = new Map<string, Promise<string>>()
+const SCOPED_BROWSER_ROOT = join(tmpdir(), 'phoenix-mini-browser-cdp')
+function scopedDescriptorPath(sessionId: string): string {
+  return join(SCOPED_BROWSER_ROOT, createHash('sha256').update(sessionId).digest('hex') + '.json')
+}
+function announceScopedBrowser(sessionId: string, browser: ScopedBrowser): void {
+  if (browser.endpoint === undefined || browser.child.pid === undefined) return
+  try {
+    mkdirSync(SCOPED_BROWSER_ROOT, { recursive: true, mode: 0o700 })
+    writeFileSync(scopedDescriptorPath(sessionId), JSON.stringify({
+      sessionId, pid: browser.child.pid, endpoint: browser.endpoint + '/',
+    }), { mode: 0o600 })
+  } catch { /* UI isolation continues even if MCP handoff fails. */ }
+}
+function disposeScopedBrowser(sessionId: string): void {
+  const browser = scopedBrowsers.get(sessionId)
+  scopedBrowsers.delete(sessionId)
+  if (browser !== undefined) {
+    try { browser.child.kill() } catch { /* May already be closed. */ }
+    try { rmSync(browser.profile, { recursive: true, force: true }) } catch { /* Chromium may hold a file. */ }
+  }
+  try { rmSync(scopedDescriptorPath(sessionId), { force: true }) } catch { /* best effort */ }
+}
 // Chromium is shared for efficiency; conversations never share targets.
 const BROWSER_SCOPE_FILE = join(tmpdir(), 'phoenix-mini-browser-scopes.json')
 const browserScopes = new MiniBrowserScopes((() => {
@@ -321,6 +346,7 @@ function cleanup(): void {
   for (const { session } of cdpSessions.values()) session.close()
   cdpSessions.clear()
   frameFlights.clear()
+  for (const sessionId of scopedBrowsers.keys()) disposeScopedBrowser(sessionId)
   const previous = owned?.pid
   if (previous !== undefined) {
     const ownsDescriptor = readDescriptor()?.pid === previous
