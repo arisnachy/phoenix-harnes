@@ -1,0 +1,31 @@
+name: PHOENIX Generalization Gate
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/phoenix-generalization-gate.yml'
+      - 'packages/hardness/hardness/src/generalization-gate.ts'
+      - 'packages/hardness/hardness/src/index.ts'
+      - 'packages/hardness/hardness/tests/generalization-gate.spec.ts'
+      - 'packages/hardness/adapters/src/protocol.ts'
+      - 'packages/hardness/adapters/tests/protocol.spec.ts'
+
+permissions:
+  contents: read
+
+jobs:
+  trusted-holdout-policy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Verify cross-domain gate and shared provider protocol
+        run: >-
+          pnpm exec vitest run
+          packages/hardness/hardness/tests/generalization-gate.spec.ts
+          packages/hardness/adapters/tests/protocol.spec.ts
