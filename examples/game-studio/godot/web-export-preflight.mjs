@@ -3,8 +3,8 @@
  * Validates the real multi-file shape of a Godot Web export BEFORE attempting to
  * embed it into Phoenix. No browser/rendering success is inferred from bytes.
  */
-import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs'
-import { basename, dirname, join, resolve, sep } from 'node:path'
+import { closeSync, existsSync, openSync, readFileSync, readSync, realpathSync, statSync } from 'node:fs'
+import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const MAX_FILE_BYTES = 1024 * 1024 * 1024
@@ -26,6 +26,15 @@ function regularFileInside(root, name) {
  * A complete export, not its index.html alone, is required for actual Web playback.
  * @returns package structure and explicit pending browser validation.
  */
+function magic(file) {
+  const handle = openSync(file, 'r')
+  try {
+    const head = Buffer.alloc(4)
+    if (readSync(handle, head, 0, 4, 0) !== 4) throw new Error('Truncated binary export: ' + file)
+    return head
+  } finally { closeSync(handle) }
+}
+
 export function inspectGodotWebExport(directory, entry = 'index.html') {
   if (typeof directory !== 'string' || !directory.trim()) throw new Error('Export directory required')
   if (typeof entry !== 'string' || !/^[\w.-]+\.html$/iu.test(entry) || entry.includes('..')) {
@@ -40,8 +49,8 @@ export function inspectGodotWebExport(directory, entry = 'index.html') {
   if (total > MAX_TOTAL_BYTES) throw new Error('Godot Web export package exceeds 2 GiB')
   const html = readFileSync(found[0].target, 'utf8')
   const js = readFileSync(found[1].target, 'utf8')
-  const wasm = readFileSync(found[2].target).subarray(0, 4)
-  const pack = readFileSync(found[3].target).subarray(0, 4)
+  const wasm = magic(found[2].target)
+  const pack = magic(found[3].target)
   if (!/(?:new\s+Engine\b|\bGODOT_CONFIG\b)/u.test(html) || !html.includes(stem + '.js')) {
     throw new Error('Entry HTML does not match a Godot Web bootstrap and its script')
   }
