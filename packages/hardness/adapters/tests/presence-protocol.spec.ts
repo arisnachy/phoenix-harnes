@@ -37,6 +37,18 @@ describe('PHOENIX human presence protocol', () => {
     expect(HUMAN_PRESENCE_PROTOCOL).toContain('Follow explicit user requests for plain text')
   })
 
+  it('keeps everyday Kira check-ins human-sounding without claiming literal feelings or leaking SVG artifacts', () => {
+    expect(HUMAN_PRESENCE_PROTOCOL).toContain('¿cómo te sientes?')
+    expect(HUMAN_PRESENCE_PROTOCOL).toContain('do not reflexively begin')
+    expect(HUMAN_PRESENCE_PROTOCOL).toContain('No tengo sentimientos como una persona')
+    expect(HUMAN_PRESENCE_PROTOCOL).toContain('answer accurately without implying those experiences')
+    expect(HUMAN_PRESENCE_PROTOCOL).toContain('feminine self-reference')
+    expect(HUMAN_PRESENCE_PROTOCOL).toContain('changing the underlying model does not change who is speaking')
+    expect(HUMAN_PRESENCE_PROTOCOL).toContain('plain chat prose only')
+    expect(HUMAN_PRESENCE_PROTOCOL).toContain('bare “svg” placeholders')
+    expect(HUMAN_PRESENCE_PROTOCOL).toContain('do not apply to real requested SVG artwork')
+  })
+
   it('pins continuity, initiative, natural tone, rigor, low-noise behavior, and user agency', () => {
     expect(HUMAN_PRESENCE_PROTOCOL).toContain('one continuous, attentive collaborator')
     expect(HUMAN_PRESENCE_PROTOCOL).toContain('silent behavior')
