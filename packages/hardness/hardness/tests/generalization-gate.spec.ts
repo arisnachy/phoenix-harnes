@@ -113,11 +113,15 @@ describe('HARDNESS General Intelligence Lab', () => {
     const restored = new GeneralizationGate()
     restored.restore(snapshot)
     expect(restored.assess('strategy-v2')).toEqual(gate.assess('strategy-v2'))
-    expect(() => restored.restore({ version: 1, trials: [trial('bad', 'n', {
-      baseline: { quality: 99, cost: 0, latencyMs: 0 },
-    })] })).toThrow('quality')
+    expect(() => {
+      restored.restore({ version: 1, trials: [trial('bad', 'n', {
+        baseline: { quality: 99, cost: 0, latencyMs: 0 },
+      })] })
+    }).toThrow('quality')
     expect(restored.snapshot()).toEqual(snapshot)
-    expect(() => gate.record(trial('code', 'unseen-1', { evidenceId: 'other-receipt' }))).toThrow('conflicting trial')
+    expect(() => {
+      gate.record(trial('code', 'unseen-1', { evidenceId: 'other-receipt' }))
+    }).toThrow('conflicting trial')
   })
 
   it('never interprets a review-ready score as an authority to deploy', () => {
