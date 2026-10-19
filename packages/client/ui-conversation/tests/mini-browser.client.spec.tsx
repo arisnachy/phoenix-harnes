@@ -740,4 +740,13 @@ describe('MiniBrowser in Phoenix conversation', () => {
     })
   })
 
+  it('never labels a blank second-chat MiniBrowser as an opened live page', async () => {
+    installBrowserMock({ ...state, url: 'about:blank', title: '',
+      tabs: [{ id: 'shared-tab', title: '', url: 'about:blank' }] })
+    render(<MiniBrowser sessionId="chat-b" requested />)
+    await screen.findByText(/Todavía no se ha comprobado ninguna página/)
+    expect(screen.getByText('Chrome · Preparando página')).toBeTruthy()
+    expect(screen.queryByText('Chrome · Página activa')).toBeNull()
+  })
+
 })
