@@ -98,6 +98,8 @@ export async function runEvolutionProbe(
   } catch (error) {
     throw new Error('evolution sandbox rollback was not confirmed', { cause: error })
   }
+  const recovered = await host.readBack()
+  if (!recovered.trim() || recovered !== before) throw new Error('evolution sandbox rollback state mismatch')
   if (observedError !== undefined) throw observedError
   return Object.freeze({
     status: before === after ? 'unchanged' : 'observed',
