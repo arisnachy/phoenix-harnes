@@ -112,7 +112,7 @@ describe('pendingTurnProgress', () => {
   ] as const)('uses %s to display %s rather than thinking', (kind, activity) => {
     const progress = pendingTurnProgress(kind)
     expect(progress).toEqual({ phase: 'waiting', activity })
-    expect(naturalProgressLine(progress!, 'es-DO')).toMatch(/respuesta|autorización/u)
+    if (progress !== null) expect(naturalProgressLine(progress, 'es-DO')).toMatch(/respuesta|autorización/u)
   })
 })
 
