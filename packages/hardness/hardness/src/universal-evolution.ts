@@ -180,3 +180,64 @@ export function assessUniversalEvolution(
     deploymentAuthorized: false as const,
   })
 }
+
+/** Host-owned immutable benchmark baseline registry; model text never changes a frozen rubric. */
+export class EvolutionBaselineRegistry {
+  private readonly baselines = new Map<string, EvolutionBaseline>()
+
+  /** Freeze one workspace's domain and rubric contract at first use.
+   * @param input - Host-supplied evaluation contract, not model tool arguments.
+   * @returns Canonical immutable baseline for this workspace.
+   */
+  freeze(input: Omit<EvolutionBaseline, 'locked'>): EvolutionBaseline {
+    const candidate: EvolutionBaseline = {
+      workspaceId: input.workspaceId,
+      datasetHash: input.datasetHash,
+      rubricId: input.rubricId,
+      domains: [...input.domains],
+      locked: true,
+    }
+    const verified = verifyEvolutionBaseline(candidate)
+    if (!verified.allowed) throw new Error('invalid evaluation baseline: ' + verified.reasons.join('; '))
+    const current = this.baselines.get(candidate.workspaceId)
+    if (current !== undefined) {
+      if (current.datasetHash !== candidate.datasetHash || current.rubricId !== candidate.rubricId
+        || JSON.stringify(current.domains) !== JSON.stringify(candidate.domains)) {
+        throw new Error('frozen evaluation baseline cannot be changed in place')
+      }
+      return current
+    }
+    const frozen = Object.freeze({ ...candidate, domains: Object.freeze([...candidate.domains]) })
+    this.baselines.set(candidate.workspaceId, frozen)
+    return frozen
+  }
+
+  /** Retrieve a frozen workspace baseline without mutable references.
+   * @param workspaceId - Owner scope of the immutable benchmark.
+   * @returns Stored baseline or undefined if no Host has frozen it.
+   */
+  get(workspaceId: string): EvolutionBaseline | undefined {
+    return this.baselines.get(workspaceId)
+  }
+
+  /** Export benchmark contracts for Host-owned durable storage.
+   * @returns Immutable array of frozen reference manifests.
+   */
+  snapshot(): readonly EvolutionBaseline[] {
+    return Object.freeze([...this.baselines.values()])
+  }
+
+  /** Restore strictly valid and nonconflicting frozen contracts atomically.
+   * @param source - Trusted Host-owned baseline manifests.
+   * @returns Nothing; invalid input leaves the current registry unchanged.
+   */
+  restore(source: readonly EvolutionBaseline[]): void {
+    const next = new EvolutionBaselineRegistry()
+    for (const item of source) {
+      if (!item.locked) throw new Error('cannot restore unfrozen benchmark baseline')
+      next.freeze(item)
+    }
+    this.baselines.clear()
+    for (const [id, baseline] of next.baselines) this.baselines.set(id, baseline)
+  }
+}
