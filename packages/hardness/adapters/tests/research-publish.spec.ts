@@ -25,14 +25,19 @@ describe('Phoenix research report publisher', () => {
   })
   it('admits named modern design presets but protects strict academic styling', () => {
     const options = ['editorial_navy', 'clinical_teal', 'executive_amber',
-      'minimal_graphite', 'creative_coral', 'auto']
+      'minimal_graphite', 'creative_coral', 'journal_ink', 'research_violet', 'biotech_green',
+      'ocean_blue', 'terracotta_report', 'clinical_white', 'auto']
     for (const design_preset of options) {
       expect(validateResearchPublication({ ...report, presentation: 'hybrid', design_preset })).toMatchObject({ design_preset })
     }
+    expect(validateResearchPublication({ ...report, presentation: 'journal', design_preset: 'academic_classic' }))
+      .toMatchObject({ presentation: 'journal' })
+    expect(() => validateResearchPublication({ ...report, presentation: 'journal',
+      design_preset: 'journal_ink' })).toThrow(/academic y journal/u)
     expect(validateResearchPublication({ ...report, presentation: 'academic', design_preset: 'academic_classic' }))
       .toMatchObject({ design_preset: 'academic_classic' })
     expect(() => validateResearchPublication({ ...report, presentation: 'academic',
-      design_preset: 'creative_coral' })).toThrow(/académica estricta/u)
+      design_preset: 'creative_coral' })).toThrow(/academic y journal/u)
     expect(() => validateResearchPublication({ ...report, presentation: 'hybrid',
       design_preset: 'academic_classic' })).toThrow(/academic_classic/u)
     expect(() => validateResearchPublication({ ...report, design_preset: 'unknown' })).toThrow(/Diseño desconocido/u)
