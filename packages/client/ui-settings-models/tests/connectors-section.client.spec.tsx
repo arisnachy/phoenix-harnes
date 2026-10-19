@@ -844,30 +844,31 @@ describe('connectors settings section', () => {
     }
   })
 
-  it('offers each separate Microsoft service through its real curated install path', async () => {
-    const api = { list: vi.fn(async () => ok({ entries: [] })),
-      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
-    } as unknown as IApiClient['authorization']
-    const installCurated = vi.fn(async ({ connectorId }: { connectorId: string }) => ({
-      status: 'installed' as const,
-      connector: { entryId: connectorId, serverName: connectorId,
-        url: 'stdio://' + connectorId, source: { kind: 'curated' as const, connectorId } },
-    }))
-    renderHub(api, { mcpRegistry: {
-      state: vi.fn(async () => ({ managed: [], runtime: [] })),
-      install: vi.fn(), installCurated, search: vi.fn(),
-    } })
-    for (const id of ['outlook-mail', 'outlook-calendar', 'microsoft-contacts',
-      'onedrive', 'microsoft-teams', 'sharepoint']) {
+  it.each(['outlook-mail', 'outlook-calendar', 'microsoft-contacts',
+    'onedrive', 'microsoft-teams', 'sharepoint'] as const)(
+    'offers %s through an independent scoped curated installer', async (id) => {
+      const api = { list: vi.fn(async () => ok({ entries: [] })),
+        begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+      } as unknown as IApiClient['authorization']
+      const installCurated = vi.fn(async ({ connectorId }: { connectorId: string }) => ({
+        status: 'installed' as const,
+        connector: { entryId: connectorId, serverName: connectorId,
+          url: 'stdio://' + connectorId, source: { kind: 'curated' as const, connectorId } },
+      }))
+      renderHub(api, { mcpRegistry: {
+        state: vi.fn(async () => ({ managed: [], runtime: [] })),
+        install: vi.fn(), installCurated, search: vi.fn(),
+      } })
       const card = document.querySelector(`[data-connector-id="${id}"]`)!
+      expect(card).toBeTruthy()
       const install = Array.from(card.querySelectorAll('button')).find(b => b.textContent === 'Install')
-      expect(install, id).toBeTruthy()
-      expect(install!.disabled, id).toBe(false)
+      expect(install).toBeTruthy()
+      expect(install!.disabled).toBe(false)
       fireEvent.click(install!)
       await waitFor(() => expect(installCurated).toHaveBeenCalledWith({ connectorId: id }))
-    }
-    expect(api.begin).not.toHaveBeenCalled()
-  })
+      expect(api.begin).not.toHaveBeenCalled()
+    },
+  )
 
   it('requires explicit acknowledgement before optionally installing billed Microsoft MCPs', async () => {
     const api = { list: vi.fn(async () => ok({ entries: [] })),
