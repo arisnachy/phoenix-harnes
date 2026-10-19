@@ -71,7 +71,11 @@ export class MiniBrowserScopes {
     const scope = this.scopes.get(scopeId)
     scope?.tabIds.delete(tabId)
     this.owners.delete(tabId)
-    if (scope?.selectedTabId === tabId) scope.selectedTabId = scope.tabIds.values().next().value
+    if (scope?.selectedTabId === tabId) {
+      const next = scope.tabIds.values().next().value
+      if (next === undefined) delete scope.selectedTabId
+      else scope.selectedTabId = next
+    }
     if (scope?.tabIds.size === 0) this.scopes.delete(scopeId)
     this.revision++
   }
