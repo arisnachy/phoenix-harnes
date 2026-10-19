@@ -618,6 +618,8 @@ def main():
     sec.page_height = Cm(29.7) if paper == A4 else Inches(11)
     sec.page_width = Cm(21) if paper == A4 else Inches(8.5)
     margin_cm = institutional.get("margin_cm", 2.54)
+    pdf_margin = margin_cm * 72 / 2.54 if institutional else (72 if style == "apa" and not editorial else 60)
+    content_width = paper[0] - 2 * pdf_margin
     sec.top_margin = sec.bottom_margin = Cm(margin_cm)
     sec.left_margin = sec.right_margin = Cm(margin_cm)
     normal = doc.styles["Normal"]
@@ -710,24 +712,38 @@ def main():
     if report.get("tables"):
         doc.add_heading("Tablas", level=1)
         for ix, item in enumerate(report["tables"], 1):
-            doc.add_paragraph("Tabla " + str(ix) + ". " + str(item.get("title", "Resultados")) +
-                              " — Fuente: " + citation_string(item["source_key"], refs, style, numbers))
+            caption = doc.add_paragraph()
+            caption.add_run("Tabla " + str(ix) + ". ").bold = True
+            caption.add_run(str(item.get("title", "Resultados"))).italic = True
             tab = doc.add_table(rows=1, cols=len(item["columns"]))
             tab.style = "Table Grid"
-            for cell, value in zip(tab.rows[0].cells, item["columns"]):
+            header_row = tab.rows[0]
+            repeat = OxmlElement("w:tblHeader")
+            repeat.set(qn("w:val"), "true")
+            header_row._tr.get_or_add_trPr().append(repeat)
+            for cell, value in zip(header_row.cells, item["columns"]):
                 cell.text = str(value)
+                for run in cell.paragraphs[0].runs: run.bold = True
+                shading = OxmlElement("w:shd")
+                shading.set(qn("w:fill"), "E7EFF2" if editorial else "F0F0F0")
+                cell._tc.get_or_add_tcPr().append(shading)
             for row_values in item["rows"]:
                 for cell, value in zip(tab.add_row().cells, row_values):
                     cell.text = str(value)
-            if item.get("note"): doc.add_paragraph("Nota: " + str(item["note"]))
+            for note_line in visual_notes(item, refs, style, numbers):
+                doc.add_paragraph(note_line)
     figures = []
     if report.get("charts"):
         doc.add_heading("Figuras", level=1)
         for ix, chart in enumerate(report["charts"], 1):
             path = chart_image(chart, output_root, ix, accent)
             figures.append((chart, path))
-            doc.add_paragraph(f"Figura {ix}. {chart.get('title','Gráfico')} — Fuente: {citation_string(chart['source_key'],refs,style,numbers)}")
+            fig_caption = doc.add_paragraph()
+            fig_caption.add_run("Figura " + str(ix) + ". ").bold = True
+            fig_caption.add_run(str(chart.get("title", "Gráfico"))).italic = True
             doc.add_picture(str(path), width=Inches(5.8))
+            for note_line in visual_notes(chart, refs, style, numbers):
+                doc.add_paragraph(note_line)
     if report.get("declarations"):
         doc.add_heading("Declaraciones de investigación", level=1)
         for key, label in (("ethics", "Ética"), ("funding", "Financiación"),
@@ -790,9 +806,10 @@ def main():
                              fontSize=27 if editorial else 17,
                              leading=35 if editorial else 25, textColor=ink, spaceAfter=19)
     small = ParagraphStyle("RSmall", parent=body, fontSize=9, leading=13.5)
-    cover_kicker = ParagraphStyle("RCoverKicker", parent=small,
-                                  fontName=heading_font, fontSize=10.5, leading=15,
-                                  textColor=heading_ink, spaceAfter=14)
+    caption_style = ParagraphStyle("RVisualCaption", parent=small,
+                                   fontName=heading_font, fontSize=10, leading=14,
+                                   textColor=ink, spaceBefore=8, spaceAfter=8,
+                                   keepWithNext=True)
     cover_meta = ParagraphStyle("RCoverMeta", parent=small,
                                 fontSize=10, leading=15.5, textColor=ink, spaceAfter=6)
     story = []
@@ -865,10 +882,8 @@ def main():
             if piece.strip(): para(piece)
     if report.get("tables"):
         para("Tablas", h1)
-        content_width = paper[0] - 160
         for ix, item in enumerate(report["tables"], 1):
-            para("Tabla " + str(ix) + ". " + str(item.get("title", "Resultados")) + " — Fuente: " +
-                 citation_string(item["source_key"], refs, style, numbers), small)
+            para("Tabla " + str(ix) + ". " + str(item.get("title", "Resultados")), caption_style)
             weights = ([0.19, 0.21, 0.29, 0.31] if len(item["columns"]) == 4 and editorial
                        else [1 / len(item["columns"])] * len(item["columns"]))
             col_widths = [content_width * weight for weight in weights]
@@ -889,13 +904,17 @@ def main():
                 ("LINEBELOW", (0,1), (-1,-1), 0.3, colors.HexColor("#cbd5db")),
             ]))
             story.append(tab)
-            if item.get("note"): para("Nota: " + str(item["note"]), small)
+            for note_line in visual_notes(item, refs, style, numbers):
+                para(note_line, small)
             story.append(Spacer(1, 14))
     if figures:
         para("Figuras", h1)
         for ix, (chart, path) in enumerate(figures, 1):
-            para(f"Figura {ix}. {chart.get('title','Gráfico')} — Fuente: {citation_string(chart['source_key'],refs,style,numbers)}", small)
-            story.append(PdfImage(str(path), width=420, height=202))
+            para(f"Figura {ix}. {chart.get('title','Gráfico')}", caption_style)
+            figure_width = min(420, content_width)
+            story.append(PdfImage(str(path), width=figure_width, height=figure_width * 650 / 1200))
+            for note_line in visual_notes(chart, refs, style, numbers):
+                para(note_line, small)
             story.append(Spacer(1, 12))
     if report.get("declarations"):
         para("Declaraciones de investigación", h1)
@@ -915,7 +934,6 @@ def main():
             para(format_text(item["text"], refs, style, numbers))
 
     pdf_file = output_root / "informe.pdf"
-    pdf_margin = margin_cm * 72 / 2.54 if institutional else (72 if style == "apa" and not editorial else 60)
     printer = IndexedDocTemplate(str(pdf_file), pagesize=paper, rightMargin=pdf_margin,
                                  leftMargin=pdf_margin, topMargin=pdf_margin,
                                  bottomMargin=pdf_margin, title=title, author=", ".join(authors))
@@ -1084,9 +1102,15 @@ def main():
         chunks.append("</tr></thead><tbody>")
         for row in item["rows"]:
             chunks.append("<tr>"+"".join("<td>"+html.escape(str(cell))+"</td>" for cell in row)+"</tr>")
-        chunks.append("</tbody></table><p class='ref'>Fuente: "+html.escape(citation_string(item["source_key"], refs, style, numbers))+"</p></figure>")
+        chunks.append("</tbody></table>")
+        for note_line in visual_notes(item, refs, style, numbers):
+            chunks.append("<p class='ref'>"+html.escape(note_line)+"</p>")
+        chunks.append("</figure>")
     for ix, (chart,path) in enumerate(figures,1):
-        chunks.append("<figure><figcaption>Figura "+str(ix)+". "+html.escape(str(chart.get("title","Figura")))+"</figcaption><img alt='"+html.escape(str(chart.get("title","Gráfico")))+"' src='"+html.escape(path.name)+"'></figure>")
+        chunks.append("<figure><figcaption>Figura "+str(ix)+". "+html.escape(str(chart.get("title","Figura")))+"</figcaption><img alt='"+html.escape(str(chart.get("alt_text") or chart.get("title","Gráfico")))+"' src='"+html.escape(path.name)+"'>")
+        for note_line in visual_notes(chart, refs, style, numbers):
+            chunks.append("<p class='ref'>"+html.escape(note_line)+"</p>")
+        chunks.append("</figure>")
     chunks.append("<h2>Referencias</h2><ol>")
     for src in ordered_refs:
         chunks.append("<li class='ref'>"+html.escape(bibliography(src,style,numbers[src["key"]]))+"</li>")
