@@ -72,6 +72,7 @@ export { GeneralizationGate } from './generalization-gate.ts'
 export type { GeneralizationAssessment, GeneralizationMetrics, GeneralizationSnapshot, GeneralizationTrial } from './generalization-gate.ts'
 
 export {
+  EvolutionBaselineRegistry,
   verifyEvolutionBaseline,
   verifyEvolutionCheckpoint,
   verifyEvolutionTransfer,
