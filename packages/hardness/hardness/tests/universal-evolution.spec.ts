@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   assessUniversalEvolution,
+  EvolutionBaselineRegistry,
   verifyEvolutionBaseline,
   verifyEvolutionCheckpoint,
   verifyEvolutionTransfer,
@@ -54,6 +55,26 @@ function passingGeneralization() {
 }
 
 describe('six-phase provider-neutral evolution policy', () => {
+  it('phase 1 keeps a real Host-owned immutable baseline across recovery', () => {
+    const registry = new EvolutionBaselineRegistry()
+    const { locked: _ignored, ...input } = baseline
+    void _ignored
+    const frozen = registry.freeze(input)
+    expect(frozen).toMatchObject({ locked: true, workspaceId: 'workspace-1' })
+    expect(Object.isFrozen(frozen.domains)).toBe(true)
+    expect(registry.freeze(input)).toBe(frozen)
+    expect(() => {
+      registry.freeze({ ...input, datasetHash: 'changed-after-results' })
+    }).toThrow('cannot be changed')
+    const restored = new EvolutionBaselineRegistry()
+    restored.restore(registry.snapshot())
+    expect(restored.get('workspace-1')).toEqual(frozen)
+    expect(() => {
+      restored.restore([{ ...frozen, locked: false }])
+    }).toThrow('unfrozen')
+    expect(restored.get('workspace-1')).toEqual(frozen)
+  })
+
   it('phase 1 freezes scoped multi-domain baseline before results count', () => {
     expect(verifyEvolutionBaseline(baseline).allowed).toBe(true)
     expect(verifyEvolutionBaseline({ ...baseline, locked: false }).allowed).toBe(false)
