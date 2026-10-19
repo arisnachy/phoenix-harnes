@@ -754,7 +754,7 @@ async function action(input: Action, signal?: AbortSignal): Promise<Record<strin
     throwIfAborted(signal)
     const tab = await json<Tab>(base + '/json/new?' + encodeURIComponent(target), 'PUT', signal)
     throwIfAborted(signal)
-    if (sessionId !== undefined) browserScopes.claim(sessionId, tab.id)
+    if (sessionId !== undefined) { browserScopes.claim(sessionId, tab.id); browserScopes.select(sessionId, tab.id) }
     else { activeTabId = tab.id; publish(base + '/', tab.id) }
     persistBrowserScopes()
     return await state(base, undefined, signal, sessionId)
