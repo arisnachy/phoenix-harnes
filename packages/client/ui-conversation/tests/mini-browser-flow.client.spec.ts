@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addBrowserCards, groupActiveBrowserFlow, isAtActivityTail, isBrowserPrompt, isEmbeddedNavigationTool } from '../src/client/chat/ToolActivityFlow.tsx'
+import { addBrowserCards, groupActiveBrowserFlow, isAtActivityTail, isBrowserPrompt, isEmbeddedNavigationTool, isSecureAskDismissed, setSecureAskDismissed } from '../src/client/chat/ToolActivityFlow.tsx'
 
 type BrowserFlowNode = { key: string; kind: string; data: unknown }
 const user = (key: string, text: string): BrowserFlowNode => ({
@@ -134,5 +134,18 @@ describe('MiniBrowser chronological conversation cards', () => {
       user('user-2', 'Gracias'), assistant('assistant-2')]
     const ordered = addBrowserCards(flowNodes(...nodes.map(node => node.key)), nodes)
     expect(groupActiveBrowserFlow(ordered, 'user-1', nodes)).toEqual(ordered)
+  })
+})
+describe('Secure Ask dismissal persists per conversation and website', () => {
+  it('suppresses automatic prompts until the user explicitly reopens them', () => {
+    const session = 'secure-dismiss-' + String(Date.now())
+    const origin = 'https://example.org'
+    expect(isSecureAskDismissed(session, origin)).toBe(false)
+    setSecureAskDismissed(session, origin, true)
+    expect(isSecureAskDismissed(session, origin)).toBe(true)
+    expect(isSecureAskDismissed(session, 'https://other.example')).toBe(false)
+    expect(isSecureAskDismissed(session + '-other', origin)).toBe(false)
+    setSecureAskDismissed(session, origin, false)
+    expect(isSecureAskDismissed(session, origin)).toBe(false)
   })
 })

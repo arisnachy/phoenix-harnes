@@ -154,6 +154,8 @@ export type SecureLoginField = {
 export type SecureLoginTarget = {
   origin: string; tabId: string; saved: boolean; automatic: boolean
   diagnostic?: string; fields?: SecureLoginField[]
+  /** True only when a human deliberately opens the secure login controls. */
+  explicit?: boolean
   profile?: SecureLoginProfile; profiles?: SecureProfileInfo[]
 }
 type SecureDetection = {
@@ -161,6 +163,11 @@ type SecureDetection = {
   canOpenInPlace?: boolean; warningVisible?: boolean; fields?: SecureLoginField[]
 }
 type SecureUse = { status: string }
+/** Safe human-facing status: no account names, passwords or vault values. */
+export type SavedAccessNotice = {
+  origin: string
+  phase: 'available' | 'using' | 'needs-attention'
+}
 function secureOrigin(value?: string): string | undefined {
   if (!value) return undefined
   try {
@@ -203,7 +210,7 @@ function youtubeId(raw: string | undefined): string | undefined {
   } catch { return undefined }
 }
 /** Human navigation stays in the user-controlled MiniBrowser, never in the model's context. */
-export function MiniBrowser({ sessionId, requested = false, active = true, initialTabId, onActivate, autoScroll = true, onPageChange, onSecureLoginRequest }: {
+export function MiniBrowser({ sessionId, requested = false, active = true, initialTabId, onActivate, autoScroll = true, onPageChange, onSecureLoginRequest, onSavedAccessNotice }: {
   sessionId: string
   requested?: boolean
   active?: boolean
@@ -213,6 +220,7 @@ export function MiniBrowser({ sessionId, requested = false, active = true, initi
   autoScroll?: boolean
   onPageChange?: (page: { title: string; url: string } | null) => void
   onSecureLoginRequest?: (request: SecureLoginTarget | null) => void
+  onSavedAccessNotice?: (notice: SavedAccessNotice | null) => void
 }) {
   const [snapshot, setSnapshot] = useState<Snapshot>(BLANK)
   const [enabled, setEnabled] = useState(false)
@@ -263,6 +271,7 @@ export function MiniBrowser({ sessionId, requested = false, active = true, initi
   useEffect(() => {
     if (!siteOrigin || !snapshot.tabId || !active || dismissed) {
       onSecureLoginRequest?.(null)
+      onSavedAccessNotice?.(null)
       return
     }
     const tabId = snapshot.tabId
@@ -288,19 +297,26 @@ export function MiniBrowser({ sessionId, requested = false, active = true, initi
           pendingAutomaticLogin.current.delete(key)
           openedLoginGates.current.delete(key)
           onSecureLoginRequest?.(null)
+          onSavedAccessNotice?.(null)
           return
         }
         if (!detection?.required) {
           if (status.saved) {
+            onSavedAccessNotice?.({ origin: siteOrigin, phase: 'needs-attention' })
             onSecureLoginRequest?.({
               origin: siteOrigin, tabId, saved: true, automatic: status.automatic,
               ...(status.profile ? { profile: status.profile } : {}),
               ...(status.profiles ? { profiles: status.profiles } : {}),
               diagnostic: 'No fue posible comprobar el acceso. Usa el acceso guardado o reintenta la conexión.',
             })
+          } else {
+            onSavedAccessNotice?.(null)
           }
           return
         }
+        onSavedAccessNotice?.(status.saved ? {
+          origin: siteOrigin, phase: status.automatic ? 'using' : 'available',
+        } : null)
         // With no stored access, first expose the real same-page form so
         // Secure Ask can use its labels, input types and required extra fields.
         // A login dialog is a navigation aid, not a transaction approval.
@@ -340,12 +356,14 @@ export function MiniBrowser({ sessionId, requested = false, active = true, initi
                 return
               }
               pendingAutomaticLogin.current.delete(key)
+              onSavedAccessNotice?.({ origin: siteOrigin, phase: 'needs-attention' })
               onSecureLoginRequest?.({
                 ...request, diagnostic: 'No se completó el inicio automático. Puedes reintentar el acceso guardado.',
               })
               return
             } catch {
               pendingAutomaticLogin.current.delete(key)
+              onSavedAccessNotice?.({ origin: siteOrigin, phase: 'needs-attention' })
               onSecureLoginRequest?.({
                 ...request, diagnostic: 'Falló la conexión de inicio automático. El acceso guardado sigue disponible.',
               })
@@ -358,6 +376,7 @@ export function MiniBrowser({ sessionId, requested = false, active = true, initi
             return
           }
           pendingAutomaticLogin.current.delete(key)
+          onSavedAccessNotice?.({ origin: siteOrigin, phase: 'needs-attention' })
           onSecureLoginRequest?.({
             ...request, diagnostic: 'No se pudo confirmar el inicio automático. Revisa el acceso guardado.',
           })
@@ -371,7 +390,7 @@ export function MiniBrowser({ sessionId, requested = false, active = true, initi
     void check()
     const timer = window.setInterval(() => { void check() }, 3_500)
     return () => { stopped = true; window.clearInterval(timer) }
-  }, [siteOrigin, snapshot.url, snapshot.tabId, active, dismissed, onSecureLoginRequest])
+  }, [siteOrigin, snapshot.url, snapshot.tabId, active, dismissed, onSecureLoginRequest, onSavedAccessNotice])
 
   const pasteIntoPage = async () => {
     try {
@@ -796,12 +815,12 @@ export function MiniBrowser({ sessionId, requested = false, active = true, initi
               const tabId = snapshot.tabId!
               void secureApi<SecureStatus>('/status?origin=' + encodeURIComponent(siteOrigin))
                 .then(status => onSecureLoginRequest({
-                  origin: siteOrigin, tabId, saved: status.saved, automatic: status.automatic,
+                  origin: siteOrigin, tabId, saved: status.saved, automatic: status.automatic, explicit: true,
                   ...(status.profile ? { profile: status.profile } : {}),
                   ...(status.profiles ? { profiles: status.profiles } : {}),
                 }))
                 .catch(() => onSecureLoginRequest({
-                  origin: siteOrigin, tabId, saved: false, automatic: false,
+                  origin: siteOrigin, tabId, saved: false, automatic: false, explicit: true,
                   diagnostic: 'No se pudo consultar la bóveda. Revisa la conexión local de Phoenix.',
                 }))
             }}>🔐 Acceso seguro</button>}
@@ -859,7 +878,19 @@ export function MiniBrowser({ sessionId, requested = false, active = true, initi
         {mediaCaptureMessage && <p className={css.captureStatus} role="status">{mediaCaptureMessage}</p>}
         {siteOrigin && snapshot.tabId && onSecureLoginRequest && <button type="button"
           className={css.secureShortcut}
-          onClick={() => { onSecureLoginRequest({ origin: siteOrigin, tabId: snapshot.tabId as string, saved: false, automatic: false }) }}>
+          onClick={() => {
+            const tabId = snapshot.tabId as string
+            void secureApi<SecureStatus>('/status?origin=' + encodeURIComponent(siteOrigin))
+              .then(status => onSecureLoginRequest({
+                origin: siteOrigin, tabId, saved: status.saved, automatic: status.automatic,
+                explicit: true, ...(status.profile ? { profile: status.profile } : {}),
+                ...(status.profiles ? { profiles: status.profiles } : {}),
+              }))
+              .catch(() => onSecureLoginRequest({
+                origin: siteOrigin, tabId, saved: false, automatic: false, explicit: true,
+                diagnostic: 'No se pudo consultar la bóveda.',
+              }))
+          }}>
           🔐 Solicitar acceso seguro
         </button>}
         <form className={css.typeRow} onSubmit={(event) => { event.preventDefault(); if (typed) { void run({ type: 'text', text: typed }); setTyped(''); focusRef.current?.focus() } }}>

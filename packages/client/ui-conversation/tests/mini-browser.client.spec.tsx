@@ -749,4 +749,64 @@ describe('MiniBrowser in Phoenix conversation', () => {
     expect(screen.queryByText('Chrome · Página activa')).toBeNull()
   })
 
+
+  it('announces saved auto-login without asking for its password again', async () => {
+    const request = vi.fn(), notice = vi.fn()
+    const onSite = { ...state, url: 'https://example.org/login',
+      tabs: [{ id: 'shared-tab', title: 'Acceso', url: 'https://example.org/login' }] }
+    let submitted = 0
+    vi.stubGlobal('fetch', vi.fn(async (raw: string) => {
+      const url = String(raw)
+      if (url.startsWith('/phoenix-secure-login/status')) return new Response(
+        JSON.stringify({ saved: true, automatic: true }), { status: 200 })
+      if (url.startsWith('/phoenix-secure-login/detect')) return new Response(
+        JSON.stringify({ required: true, formVisible: true }), { status: 200 })
+      if (url.startsWith('/phoenix-secure-login/use')) {
+        submitted += 1
+        return new Response(JSON.stringify({ status: 'submitted' }), { status: 200 })
+      }
+      if (url.startsWith('/phoenix-mini-browser/frame')) return new Response(
+        new Uint8Array([255, 216, 255, 217]), { status: 200, headers: { 'content-type': 'image/jpeg' } })
+      return new Response(JSON.stringify(onSite), { status: 200,
+        headers: { 'content-type': 'application/json' } })
+    }))
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn(() => 'blob:saved-auto') })
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() })
+    render(<MiniBrowser sessionId="saved-auto" requested onSecureLoginRequest={request} onSavedAccessNotice={notice} />)
+    await waitFor(() => expect(submitted).toBe(1))
+    expect(notice).toHaveBeenCalledWith({ origin: 'https://example.org', phase: 'using' })
+    expect(request).not.toHaveBeenCalledWith(expect.objectContaining({ saved: false }))
+  })
+
+  it('shows saved manual-only access without silently using credentials', async () => {
+    const request = vi.fn(), notice = vi.fn()
+    let submitted = 0
+    const onSite = { ...state, url: 'https://example.org/login',
+      tabs: [{ id: 'shared-tab', title: 'Acceso', url: 'https://example.org/login' }] }
+    vi.stubGlobal('fetch', vi.fn(async (raw: string) => {
+      const url = String(raw)
+      if (url.startsWith('/phoenix-secure-login/status')) return new Response(
+        JSON.stringify({ saved: true, automatic: false }), { status: 200 })
+      if (url.startsWith('/phoenix-secure-login/detect')) return new Response(
+        JSON.stringify({ required: true, formVisible: true }), { status: 200 })
+      if (url.startsWith('/phoenix-secure-login/use')) submitted += 1
+      if (url.startsWith('/phoenix-mini-browser/frame')) return new Response(
+        new Uint8Array([255, 216, 255, 217]), { status: 200, headers: { 'content-type': 'image/jpeg' } })
+      return new Response(JSON.stringify(onSite), { status: 200,
+        headers: { 'content-type': 'application/json' } })
+    }))
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn(() => 'blob:saved-manual') })
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() })
+    render(<MiniBrowser sessionId="saved-manual" requested onSecureLoginRequest={request} onSavedAccessNotice={notice} />)
+    await waitFor(() => expect(notice).toHaveBeenCalledWith({
+      origin: 'https://example.org', phase: 'available',
+    }))
+    expect(request).toHaveBeenCalledWith(expect.objectContaining({ saved: true, automatic: false }))
+    expect(submitted).toBe(0)
+    fireEvent.click(await screen.findByRole('button', { name: 'Abrir acceso seguro' }))
+    await waitFor(() => expect(request).toHaveBeenCalledWith(expect.objectContaining({
+      saved: true, explicit: true,
+    })))
+  })
+
 })

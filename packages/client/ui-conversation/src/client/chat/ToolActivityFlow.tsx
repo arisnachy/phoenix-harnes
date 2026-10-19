@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ComponentProps } from 'react'
 import type { ImageAttachmentRef } from '@phoenix-ai/dsh-attachment'
 import type { ToolCallBlock } from '@phoenix-ai/dsh-client-runtime/client'
@@ -10,7 +10,7 @@ import { ChatNodeSeat } from './ChatNodeSeat.tsx'
 import { PendingSteeringBubble } from './MessageItem.tsx'
 import { formatRunDuration } from './message-chrome.ts'
 import { ReasoningRow } from './ReasoningRow.tsx'
-import { MiniBrowser, type SecureLoginTarget } from './MiniBrowser.tsx'
+import { MiniBrowser, type SavedAccessNotice, type SecureLoginTarget } from './MiniBrowser.tsx'
 import { SecureAsk } from './SecureAsk.tsx'
 import type { TurnProgress } from './turn-progress.ts'
 import chatCss from './ChatView.module.css'
@@ -582,6 +582,38 @@ export function isAtActivityTail(scrollTop: number, scrollHeight: number, client
   return Math.max(0, scrollHeight - clientHeight - scrollTop) <= 48
 }
 
+
+/** "Ahora no" is an explicit user choice; detection polling must not undo it. */
+const dismissedSecureOrigins = new Map<string, Set<string>>()
+function secureDismissStorageKey(sessionId: string): string {
+  return 'phoenix:secure-ask-dismissed:' + sessionId
+}
+/** Read dismissal per conversation and site, including after re-mounts/reloads. */
+export function isSecureAskDismissed(sessionId: string, origin: string): boolean {
+  if (dismissedSecureOrigins.get(sessionId)?.has(origin)) return true
+  try {
+    const raw = window.sessionStorage.getItem(secureDismissStorageKey(sessionId))
+    const saved: unknown = raw === null ? [] : JSON.parse(raw)
+    return Array.isArray(saved) && saved.includes(origin)
+  } catch { return false }
+}
+/** Explicitly reopening a panel is the only way to clear its dismissal. */
+export function setSecureAskDismissed(sessionId: string, origin: string, dismissed: boolean): void {
+  const current = dismissedSecureOrigins.get(sessionId) ?? new Set<string>()
+  if (dismissed) current.add(origin)
+  else current.delete(origin)
+  dismissedSecureOrigins.set(sessionId, current)
+  try {
+    const raw = window.sessionStorage.getItem(secureDismissStorageKey(sessionId))
+    const saved: unknown = raw === null ? [] : JSON.parse(raw)
+    const updated = new Set<string>(Array.isArray(saved)
+      ? saved.filter((entry): entry is string => typeof entry === 'string') : [])
+    if (dismissed) updated.add(origin)
+    else updated.delete(origin)
+    window.sessionStorage.setItem(secureDismissStorageKey(sessionId), JSON.stringify([...updated]))
+  } catch { /* In-memory fallback still prevents reopening during this chat. */ }
+}
+
 /** Same real transcript seats as the ordinary chat, inside the temporary sidecar. */
 function BrowserWorkspace({
   items, live, selected, onActivate, seatProps, turnStatus, tabId, sessionId,
@@ -597,7 +629,22 @@ function BrowserWorkspace({
 }) {
   const [page, setPage] = useState<{ title: string; url: string } | null>(null)
   const [secureRequest, setSecureRequest] = useState<SecureLoginTarget | null>(null)
-  const showSidecar = live || secureRequest !== null
+  const [savedAccessNotice, setSavedAccessNotice] = useState<SavedAccessNotice | null>(null)
+  const handleSecureRequest = useCallback((request: SecureLoginTarget | null) => {
+    if (request === null) { setSecureRequest(null); return }
+    if (request.explicit) setSecureAskDismissed(sessionId, request.origin, false)
+    else if (isSecureAskDismissed(sessionId, request.origin)) return
+    setSecureRequest(request)
+  }, [sessionId])
+  const dismissSecureRequest = useCallback(() => {
+    if (secureRequest !== null) setSecureAskDismissed(sessionId, secureRequest.origin, true)
+    setSecureRequest(null)
+  }, [sessionId, secureRequest])
+  const handleSavedAccessNotice = useCallback((next: SavedAccessNotice | null) => {
+    setSavedAccessNotice(previous => previous?.origin === next?.origin && previous?.phase === next?.phase
+      ? previous : next)
+  }, [])
+  const showSidecar = live || secureRequest !== null || savedAccessNotice !== null
   const activityRef = useRef<HTMLDivElement | null>(null)
   const followingRef = useRef(true)
   const [following, setFollowing] = useState(true)
@@ -654,7 +701,7 @@ function BrowserWorkspace({
       <div className={css.browserPane}>
         <MiniBrowser key={sessionId} sessionId={sessionId} requested active={selected} {...tabId === undefined ? {} : { initialTabId: tabId }}
           onActivate={onActivate} autoScroll={false} onPageChange={setPage}
-          onSecureLoginRequest={setSecureRequest} />
+          onSecureLoginRequest={handleSecureRequest} onSavedAccessNotice={handleSavedAccessNotice} />
       </div>
       {showSidecar && <aside className={css.activityPane} aria-label="Actividad y acceso seguro del agente">
         <header className={css.activityHeader}>
@@ -668,10 +715,18 @@ function BrowserWorkspace({
             <span className={css.pageUrl} title={page.url}>{page.url}</span>
           </div>
         )}
+        {savedAccessNotice !== null && <div className={css.pageInfo} role="status" aria-live="polite">
+          <strong>Kira · Acceso guardado</strong>
+          <span>{savedAccessNotice.phase === 'using'
+            ? 'Ya tengo un acceso registrado para ' + savedAccessNotice.origin + '. Voy a utilizarlo para iniciar sesión y comprobaré si la página confirma el acceso.'
+            : savedAccessNotice.phase === 'available'
+              ? 'Ya tengo un acceso registrado para ' + savedAccessNotice.origin + '. No necesitas introducirlo de nuevo; puedes autorizar su uso desde Acceso seguro.'
+              : 'Tengo un acceso registrado para ' + savedAccessNotice.origin + ', pero no puedo confirmar el inicio de sesión. Puedes revisar el acceso guardado.'}</span>
+        </div>}
         {secureRequest !== null ? <SecureAsk key={secureRequest.origin + ':' + secureRequest.tabId}
           target={secureRequest}
-          onClose={() => setSecureRequest(null)}
-          onSaved={() => setSecureRequest(null)}
+          onClose={dismissSecureRequest}
+          onSaved={dismissSecureRequest}
         /> : <div ref={activityRef} className={css.activityMessages} aria-live="polite" aria-relevant="additions text">
           {items.map(item => (
             <Fragment key={item.key}>
