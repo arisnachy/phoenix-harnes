@@ -160,10 +160,11 @@ export class GeneralizationGate {
       reasons.push('no material quality or cost improvement over baseline')
     }
 
+    const status: GeneralizationAssessment['status'] = reasons.length === 0 ? 'eligible-for-review' : 'blocked'
     return Object.freeze({
       proposalId,
       modelRoute: routes.size === 1 ? [...routes][0]! : null,
-      status: reasons.length === 0 ? 'eligible-for-review' : 'blocked',
+      status,
       reasons: Object.freeze([...new Set(reasons)]),
       holdoutTasks: holdout.length,
       domains: Object.freeze([...perDomain.keys()].sort()),
@@ -174,7 +175,7 @@ export class GeneralizationGate {
   }
 
   snapshot(): GeneralizationSnapshot {
-    return Object.freeze({ version: 1, trials: Object.freeze([...this.trials.values()]) })
+    return Object.freeze({ version: 1 as const, trials: Object.freeze([...this.trials.values()]) })
   }
 
   restore(snapshot: GeneralizationSnapshot): void {
