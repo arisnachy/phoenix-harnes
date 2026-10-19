@@ -409,7 +409,7 @@ async function verifyBrowserNavigation(tab: Tab, requestedUrl: string): Promise<
     title: document.title,
     visibleTextLength: document.body?.innerText?.trim().length ?? 0,
     contentElements: document.body?.querySelectorAll(
-      'a,button,input,img,svg,canvas,iframe,video,article,main,p,[role="main"]'
+      'input,button,textarea,select,img,svg,canvas,iframe,video'
     ).length ?? 0
   })`
   for (let attempt = 0; attempt < 12; attempt++) {
