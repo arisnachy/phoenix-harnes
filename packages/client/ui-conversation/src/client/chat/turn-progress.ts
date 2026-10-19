@@ -101,8 +101,8 @@ export function naturalProgressLine(progress: TurnProgress, language: string, el
       executing: 'Hay una operación en marcha; estoy pendiente de su resultado.',
       'running-tools': 'Estoy utilizando una herramienta para avanzar.',
       verifying: 'Estoy revisando el resultado de la última operación.',
-      'waiting-user': 'Kira · Me falta tu respuesta para seguir. Cuando me contestes, retomaré desde aquí.',
-      'waiting-approval': 'Kira · Espero tu autorización antes de continuar. No ejecutaré esa acción sin confirmación.',
+      'waiting-user': 'Me falta tu respuesta para seguir. Cuando me contestes, retomaré desde aquí.',
+      'waiting-approval': 'Espero tu autorización antes de continuar. No ejecutaré esa acción sin confirmación.',
     }
     return lines[progress.activity]
   }
@@ -119,8 +119,8 @@ export function naturalProgressLine(progress: TurnProgress, language: string, el
     executing: "An operation is running; I'm waiting for its result.",
     'running-tools': "I'm using a tool to move the task forward.",
     verifying: "I'm reviewing the result of the last operation.",
-    'waiting-user': "Kira · I'm waiting for your answer before I continue. The task isn't silently running.",
-    'waiting-approval': "Kira · I'm waiting for your approval before I continue. I won't proceed without it.",
+    'waiting-user': "I'm waiting for your answer before I continue. The task isn't silently running.",
+    'waiting-approval': "I'm waiting for your approval before I continue. I won't proceed without it.",
   }
   return lines[progress.activity]
 }
