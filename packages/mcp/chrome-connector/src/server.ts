@@ -42,6 +42,17 @@ function chatBrowserSession(sessionId: string): SharedSession {
   return result
 }
 type SharedSession = { pid: number; endpoint: string; selectedTabId?: string }
+function announceChatTab(sessionId: string, tabId: string): void {
+  // This is the selected page of this conversation's isolated CDP instance.
+  // Updating its own descriptor never changes another chat's browser.
+  try {
+    const descriptor = chatBrowserSession(sessionId)
+    const file = join(CHAT_BROWSER_ROOT, createHash('sha256').update(sessionId).digest('hex') + '.json')
+    writeFileSync(file, JSON.stringify({
+      sessionId, pid: descriptor.pid, endpoint: descriptor.endpoint, selectedTabId: tabId,
+    }), { mode: 0o600 })
+  } catch { /* CDP still works without a selection hint. */ }
+}
 function sharedSession(): SharedSession | undefined {
   try {
     const value = JSON.parse(readFileSync(SHARED_BROWSER, 'utf8')) as SharedSession
@@ -333,7 +344,7 @@ async function newBrowserTab(url: string, sessionId?: string): Promise<Tab> {
   const tab = await result.json() as Tab
   if (!tab.id || !tab.webSocketDebuggerUrl) throw new Error('Chrome no devolvió un identificador válido')
   if (sessionId === undefined) announceSession(base, tab.id)
-  else selectedChatTabs.set(sessionId, tab.id)
+  else { selectedChatTabs.set(sessionId, tab.id); announceChatTab(sessionId, tab.id) }
   return tab
 }
 const selectedChatTabs = new Map<string, string>()
@@ -347,7 +358,7 @@ async function selectedTab(id?: string, sessionId?: string): Promise<Tab> {
   const tab = chooseTab(available, id, preferred)
   if (!tab.webSocketDebuggerUrl) throw new Error('La pestaña no ofrece una conexión CDP')
   if (sessionId === undefined) announceSession(await endpoint(), tab.id)
-  else selectedChatTabs.set(sessionId, tab.id)
+  else { selectedChatTabs.set(sessionId, tab.id); announceChatTab(sessionId, tab.id) }
   return tab
 }
 
