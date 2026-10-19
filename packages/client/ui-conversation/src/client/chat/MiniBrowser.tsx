@@ -252,7 +252,8 @@ export function MiniBrowser({ sessionId, requested = false, active = true, initi
   // New browser requests never overwrite prior cards with the latest page.
   const cardTabId = useRef<string | undefined>(initialTargetTabId)
   const previousActive = useRef(active)
-  const show = !dismissed && (requested || enabled || (snapshot.available && snapshot.url !== undefined && snapshot.url !== 'about:blank'))
+  const hasPage = snapshot.available && snapshot.url !== undefined && /^https?:\/\//iu.test(snapshot.url)
+  const show = !dismissed && (requested || enabled || hasPage)
   const videoId = youtubeId(snapshot.url)
   const siteOrigin = secureOrigin(snapshot.url)
 
@@ -544,7 +545,7 @@ export function MiniBrowser({ sessionId, requested = false, active = true, initi
   }, [active, dismissed, initialTargetTabId, requested, sessionId])
 
   useEffect(() => {
-    if (!active || !show || !snapshot.available || collapsed || playingVideo) return
+    if (!active || !show || !hasPage || collapsed || playingVideo) return
     const tabId = snapshot.tabId
     if (tabId === undefined) return
     let stopped = false
@@ -607,7 +608,7 @@ export function MiniBrowser({ sessionId, requested = false, active = true, initi
         frameRequest.current = undefined
       }
     }
-  }, [active, show, dismissed, snapshot.available, snapshot.tabId, collapsed, playingVideo, expanded, sessionId])
+  }, [active, show, dismissed, hasPage, snapshot.tabId, collapsed, playingVideo, expanded, sessionId])
 
   useEffect(() => () => {
     mounted.current = false
@@ -757,8 +758,8 @@ export function MiniBrowser({ sessionId, requested = false, active = true, initi
     <section className={css.browser} data-mini-browser data-expanded={expanded ? 'true' : undefined} aria-label="Navegador de Kira">
       <div className={css.titlebar}>
         <span className={css.brand}><PhoenixLogo size={18} /> <span>Navegador de Kira</span></span>
-        <span className={css.status} data-state={!active ? 'inactive' : snapshot.available ? 'live' : connectionError ? 'error' : 'connecting'}>
-          {!active ? 'Vista conservada' : snapshot.available ? 'Chrome · En vivo' : 'Listo para iniciar'}
+        <span className={css.status} data-state={!active ? 'inactive' : hasPage ? 'live' : connectionError ? 'error' : 'connecting'}>
+          {!active ? 'Vista conservada' : hasPage ? 'Chrome · Página activa' : 'Chrome · Preparando página'}
         </span>
         {!active && <button type="button" title="Reactivar esta página" onClick={() => { onActivate?.() }}>↻ Reactivar</button>}
         <span className={css.grow} />
@@ -807,7 +808,8 @@ export function MiniBrowser({ sessionId, requested = false, active = true, initi
         </form>
         {snapshot.available ? (
           <div className={css.viewport}>
-            {videoSurface && videoId ? (
+            {!hasPage ? <div className={css.loading} role="status">MiniBrowser de esta conversación iniciado. Todavía no se ha comprobado ninguna página. Kira no debe afirmar que la abrió hasta verificarla.</div> : (
+            videoSurface && videoId ? (
               <iframe className={css.player}
                 title="Reproductor YouTube"
                 src={'https://www.youtube-nocookie.com/embed/' + videoId + '?autoplay=' + (playingVideo ? '1' : '0') + '&playsinline=1'}
@@ -820,7 +822,7 @@ export function MiniBrowser({ sessionId, requested = false, active = true, initi
               role="button" aria-label="Controlar página con el ratón y el teclado"
               tabIndex={0} draggable={false} onClick={click} onWheel={wheel} onKeyDown={keyboard}
               onPaste={(event) => { event.preventDefault(); const value = event.clipboardData.getData('text/plain'); if (value) void run({ type: 'text', text: value.slice(0, 4096) }) }}
-              className={css.screen} /> : <div className={css.loading}>Conectando imagen del navegador…</div>}
+              className={css.screen} /> : <div className={css.loading}>Conectando imagen del navegador…</div>)}
           </div>
         ) : (
           <div className={css.empty}>
