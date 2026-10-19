@@ -625,6 +625,9 @@ async function state(knownBase?: string, tabId?: string, signal?: AbortSignal, s
   const tabs = await listTabs(base, signal)
   if (tabs.length === 0) return { available: false, tabs: [] }
   if (sessionId !== undefined) {
+    // Every target belongs to this dedicated Chromium process's conversation,
+    // including tabs opened by Kira's Chrome MCP in the same isolated instance.
+    for (const tab of tabs) browserScopes.claim(sessionId, tab.id)
     const chosenId = browserScopes.choose(sessionId, tabs.map(tab => tab.id), tabId)
     persistBrowserScopes()
     if (chosenId === undefined) return { available: false, tabs: [] }
@@ -695,11 +698,10 @@ export async function captureBrowserFrameSingleFlight(
   }
 }
 async function frame(tabId?: string, sessionId?: string): Promise<Buffer> {
-  if (sessionId !== undefined && (tabId === undefined || !browserScopes.owns(sessionId, tabId))) {
-    throw new Error('La pestaña no pertenece a esta conversación.')
-  }
+  if (sessionId !== undefined && tabId === undefined) throw new Error('Falta el identificador de pestaña de esta conversación.')
   const base = await endpoint(false, undefined, sessionId)
   if (!base) throw new Error('El navegador no está iniciado.')
+  if (sessionId !== undefined) await state(base, tabId, undefined, sessionId)
   const tab = await selected(base, tabId, undefined, undefined, sessionId === undefined && tabId === undefined)
   return await captureBrowserFrameSingleFlight(tab.id, async () =>
     await captureBrowserFrameWithFallback(async params =>
@@ -760,6 +762,7 @@ async function action(input: Action, signal?: AbortSignal): Promise<Record<strin
   let targetTabId = input.tabId
   if (sessionId !== undefined) {
     const available = await listTabs(base, signal)
+    for (const tab of available) browserScopes.claim(sessionId, tab.id)
     const owned = browserScopes.choose(sessionId, available.map(tab => tab.id))
     if (targetTabId !== undefined && !browserScopes.owns(sessionId, targetTabId)) {
       throw new Error('No puedes controlar una pestaña de otra conversación.')
