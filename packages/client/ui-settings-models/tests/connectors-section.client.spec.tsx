@@ -810,6 +810,65 @@ describe('connectors settings section', () => {
     expect(api.begin).not.toHaveBeenCalled()
   })
 
+  it('shows six independent Graph installers and never mistakes running tool servers for authorized accounts', async () => {
+    const api = { list: vi.fn(async () => ok({ entries: [] })),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const ids = ['outlook-mail', 'outlook-calendar', 'microsoft-contacts',
+      'onedrive', 'microsoft-teams', 'sharepoint'] as const
+    const managed = [...ids, 'x'].map(id => ({
+      entryId: id + '-entry', serverName: id === 'x' ? 'x-api' : id, url: 'stdio://' + id,
+      source: { kind: 'curated' as const, connectorId: id },
+    }))
+    renderHub(api, { mcpRegistry: {
+      state: vi.fn(async () => ({ managed,
+        runtime: managed.map(row => ({
+          serverName: row.serverName, transport: 'stdio' as const,
+          status: 'ready' as const, toolNames: ['microsoft_status'],
+        })),
+      })),
+      install: vi.fn(), installCurated: vi.fn(), search: vi.fn(),
+    } })
+    for (const id of ids) {
+      const card = document.querySelector(`[data-connector-id="${id}"]`)
+      expect(card).not.toBeNull()
+      await waitFor(() => expect(card?.textContent).toContain('MCP iniciado · verifica OAuth con Kira'))
+      expect(card?.textContent).toContain('microsoft_login_start')
+    }
+    const xCard = document.querySelector('[data-connector-id="x"]')
+    expect(xCard?.textContent).toContain('callback')
+    expect(xCard?.textContent).toContain('MCP iniciado · verifica OAuth con Kira')
+    fireEvent.click(screen.getByRole('button', { name: connectorEn.connected }))
+    for (const id of [...ids, 'x']) {
+      expect(document.querySelector(`[data-connector-id="${id}"]`)).toBeNull()
+    }
+  })
+
+  it('offers each separate Microsoft service through its real curated install path', async () => {
+    const api = { list: vi.fn(async () => ok({ entries: [] })),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const installCurated = vi.fn(async ({ connectorId }: { connectorId: string }) => ({
+      status: 'installed' as const,
+      connector: { entryId: connectorId, serverName: connectorId,
+        url: 'stdio://' + connectorId, source: { kind: 'curated' as const, connectorId } },
+    }))
+    renderHub(api, { mcpRegistry: {
+      state: vi.fn(async () => ({ managed: [], runtime: [] })),
+      install: vi.fn(), installCurated, search: vi.fn(),
+    } })
+    for (const id of ['outlook-mail', 'outlook-calendar', 'microsoft-contacts',
+      'onedrive', 'microsoft-teams', 'sharepoint']) {
+      const card = document.querySelector(`[data-connector-id="${id}"]`)!
+      const install = Array.from(card.querySelectorAll('button')).find(b => b.textContent === 'Install')
+      expect(install, id).toBeTruthy()
+      expect(install!.disabled, id).toBe(false)
+      fireEvent.click(install!)
+      await waitFor(() => expect(installCurated).toHaveBeenCalledWith({ connectorId: id }))
+    }
+    expect(api.begin).not.toHaveBeenCalled()
+  })
+
   it('requires explicit acknowledgement before optionally installing billed Microsoft MCPs', async () => {
     const api = { list: vi.fn(async () => ok({ entries: [] })),
       begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
