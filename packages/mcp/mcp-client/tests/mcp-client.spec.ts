@@ -1680,3 +1680,97 @@ describe('tool execution — non-object args fallback', () => {
     )
   })
 })
+
+describe('Phoenix MiniBrowser MCP conversation isolation', () => {
+  const url = 'https://www.youtube.com/'
+
+  const browserTool: MockTool = {
+    name: 'navigate',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        url: { type: 'string' },
+        sessionId: { type: 'string' },
+      },
+      required: ['url'],
+    },
+  }
+
+  function chatAgent(id: string, origin: string = 'user', parentSession?: string): object {
+    return { id, session: { header: { origin, parentSession }, requestHeader: () => undefined } }
+  }
+
+  it('injects the real chat ID into phoenix_browser even when the model omits it', async () => {
+    const ctx = await mountRegistry()
+    const client = createMockClient([browserTool])
+    await syncTools(client as never, ctx, { ...defaultOpts, serverName: 'phoenix_browser' }, new Map())
+
+    for (const id of ['chat-one', 'chat-two']) {
+      await ctx.tools.execute({
+        signal: testToolSignal,
+        callId: CallId('navigate-' + id),
+        name: 'mcp__phoenix_browser__navigate',
+        arguments: { url },
+        agent: chatAgent(id) as never,
+      })
+      expect(client.callTool).toHaveBeenLastCalledWith(
+        { name: 'navigate', arguments: { url, sessionId: id } },
+        undefined,
+        expect.anything(),
+      )
+    }
+  })
+
+  it('overrides an invented model sessionId and routes a subagent to its parent chat', async () => {
+    const ctx = await mountRegistry()
+    const client = createMockClient([browserTool])
+    await syncTools(client as never, ctx, { ...defaultOpts, serverName: 'phoenix_browser' }, new Map())
+
+    await ctx.tools.execute({
+      signal: testToolSignal,
+      callId: CallId('navigate-child'),
+      name: 'mcp__phoenix_browser__navigate',
+      arguments: { url, sessionId: 'other-chat' },
+      agent: chatAgent('subagent-1', 'subagent', 'parent-chat') as never,
+    })
+
+    expect(client.callTool).toHaveBeenCalledWith(
+      { name: 'navigate', arguments: { url, sessionId: 'parent-chat' } },
+      undefined,
+      expect.anything(),
+    )
+  })
+
+  it('never silently opens the shared browser if the trusted chat identity is absent', async () => {
+    const ctx = await mountRegistry()
+    const client = createMockClient([browserTool])
+    await syncTools(client as never, ctx, { ...defaultOpts, serverName: 'phoenix_browser' }, new Map())
+
+    const result = await ctx.tools.execute({
+      signal: testToolSignal,
+      callId: CallId('navigate-unscoped'),
+      name: 'mcp__phoenix_browser__navigate',
+      arguments: { url },
+    })
+    expect(result.isError).toBe(true)
+    expect(client.callTool).not.toHaveBeenCalled()
+  })
+
+  it('does not inject a chat ID into unrelated MCP integrations', async () => {
+    const ctx = await mountRegistry()
+    const client = createMockClient([browserTool])
+    await syncTools(client as never, ctx, { ...defaultOpts, serverName: 'generic_connector' }, new Map())
+    await ctx.tools.execute({
+      signal: testToolSignal,
+      callId: CallId('generic-nav'),
+      name: 'mcp__generic_connector__navigate',
+      arguments: { url },
+      agent: chatAgent('chat-one') as never,
+    })
+    expect(client.callTool).toHaveBeenCalledWith(
+      { name: 'navigate', arguments: { url } },
+      undefined,
+      expect.anything(),
+    )
+  })
+})

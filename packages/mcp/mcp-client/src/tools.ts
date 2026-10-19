@@ -407,7 +407,10 @@ function createDefinition(
 ): ToolDefinition {
   const projections = new WeakMap<ToolExecution, PreparedProjection>()
   const properties = parameters.properties
-  const scopedChromeTool = /(?:chrome|browser-connector)/iu.test(opts.serverName)
+  // MCP namespaces use both hyphenated and underscored names:
+  // phoenix_browser was previously missing here, so navigation opened a
+  // headless *global* tab while the conversation's MiniBrowser stayed blank.
+  const scopedChromeTool = /(?:^|[-_])(?:chrome|browser)(?:[-_]|$)/iu.test(opts.serverName)
     && properties !== null && typeof properties === 'object'
     && 'sessionId' in properties
   return {
@@ -497,6 +500,11 @@ function createExecutor(
       : agent.session.header.origin === 'subagent'
         ? (agent.session.header.parentSession ?? agent.id)
         : agent.id
+    // Fail closed rather than fall back to shared Chromium when the caller
+    // has no trusted conversation identity. Model-supplied IDs are never trusted.
+    if (scopedChromeTool && ownerId === undefined) {
+      throw new Error('No se identificó la conversación del MiniBrowser; no se abrió ninguna página.')
+    }
     const routedArgs = chromeScope && ownerId !== undefined
       ? { ...wireArgs, sessionId: ownerId } : wireArgs
     const result = await callToolUncached(client, rawName, routedArgs, exec, opts).catch((error: unknown) => {
