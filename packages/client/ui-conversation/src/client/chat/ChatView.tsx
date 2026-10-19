@@ -540,6 +540,7 @@ export function ChatView({
             </div>
           )}
           <ToolActivityFlow
+            sessionId={sessionId}
             nodes={chatNodes}
             optimisticSubmit={optimisticSubmit}
             turnStatus={visibleTurnStatus}
