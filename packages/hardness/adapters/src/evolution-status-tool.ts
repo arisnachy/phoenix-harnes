@@ -23,26 +23,26 @@ export function createEvolutionStatusTool(): ToolDefinition {
       schema: { type: 'object', additionalProperties: true },
       render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
     },
-    async execute(args, execution) {
+    execute(args, execution) {
       const agent = execution.agent
-      if (agent === undefined) return jsonOutput({ available: false, reason: 'no live session; no verification can be claimed' })
+      if (agent === undefined) return Promise.resolve(jsonOutput({ available: false, reason: 'no live session; no verification can be claimed' }))
       const missionId = args.missionId.trim()
       if (!missionId || !Number.isSafeInteger(args.revision) || args.revision < 0) {
-        return jsonOutput({ available: false, reason: 'invalid mission identity' })
+        return Promise.resolve(jsonOutput({ available: false, reason: 'invalid mission identity' }))
       }
       const checkpoint = recoverEvolutionCheckpoint(
         agent.session.events,
         missionId,
         args.revision,
-        agent.options.provider + '/' + agent.options.model,
+        (agent.options.provider ?? 'unknown') + '/' + (agent.options.model ?? 'unknown'),
       )
       const verdict = verifyEvolutionCheckpoint(checkpoint)
       const available = checkpoint.objective.length > 0 && verdict.allowed
-      return jsonOutput({
+      return Promise.resolve(jsonOutput({
         available,
         ...(available ? { checkpoint } : {}),
         reasons: [...verdict.reasons, ...checkpoint.objective.length === 0 ? ['no matching mission in this conversation'] : []],
-      })
+      }))
     },
     presentCall(args) {
       return { card: 'generic', title: 'Mission continuity · ' + args.missionId, kind: 'read' }
