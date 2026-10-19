@@ -740,6 +740,8 @@ async function action(input: Action, signal?: AbortSignal): Promise<Record<strin
   if (type === 'start') {
     if (sessionId === undefined) return await state(base, undefined, signal)
     const available = await listTabs(base, signal)
+    // The initial Chrome page already belongs to this dedicated instance.
+    for (const tab of available) browserScopes.claim(sessionId, tab.id)
     if (browserScopes.choose(sessionId, available.map(tab => tab.id)) === undefined) {
       // A new conversation gets its own blank target, never Chrome's last global tab.
       const tab = await json<Tab>(base + '/json/new?' + encodeURIComponent('about:blank'), 'PUT', signal)
