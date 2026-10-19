@@ -536,6 +536,10 @@ async function startScopedChromium(sessionId: string, signal?: AbortSignal): Pro
 async function endpoint(launch: boolean, signal?: AbortSignal, sessionId?: string): Promise<string | undefined> {
   if (sessionId !== undefined) {
     if (!validBrowserScopeId(sessionId)) throw new Error('Identificador de conversación inválido.')
+    // A poll from another card must not kill Chrome while this chat's launch
+    // is still completing. All launch callers await one in-flight process.
+    const pending = scopedLaunching.get(sessionId)
+    if (pending !== undefined) return launch ? await awaitAbortable(pending, signal) : undefined
     const browser = scopedBrowsers.get(sessionId)
     if (browser?.endpoint !== undefined && await isAlive(browser.endpoint, signal)) return browser.endpoint
     // A dead chat browser is not replaced with another conversation's process.
