@@ -62,6 +62,7 @@ import { createResearchJournalTool } from './research-journal-profiles.ts'
 import { createResearchDeliverTool } from './research-delivery.ts'
 import { PHOENIX_3D_ROUTING_PROTOCOL } from './scene3d-routing.ts'
 import { createCognitiveWorkflowTool } from './cognitive-workflow-tool.ts'
+import { createEvolutionStatusTool } from './evolution-status-tool.ts'
 import { createConnectorListTool } from './connector-list-tool.ts'
 import { createConnectorDiscoverTool } from './connector-discover-tool.ts'
 import type { McpRegistryDiscoveryService } from './connector-discover-tool.ts'
@@ -143,6 +144,9 @@ export { createPhoenixGameTool, PHOENIX_GAME_MIME } from './game-tool.ts'
 export { createPhoenix3DTool, PHOENIX_SCENE3D_MIME, tropicalVillaScene } from './scene3d-tool.ts'
 export { choosePhoenixDesignMedium, PHOENIX_3D_ROUTING_PROTOCOL } from './scene3d-routing.ts'
 export { createCognitiveWorkflowTool } from './cognitive-workflow-tool.ts'
+export { createEvolutionStatusTool } from './evolution-status-tool.ts'
+export { recoverEvolutionCheckpoint, runEvolutionProbe } from './evolution-runtime.ts'
+export type { EvolutionProbeHost, EvolutionProbeResult } from './evolution-runtime.ts'
 export { installOrdinaryCompletionJudgeBridge, reviewOrdinaryCompletion } from './ordinary-completion-judge.ts'
 export type { OrdinaryCompletionJudgeDecision } from './ordinary-completion-judge.ts'
 export { createConnectorListTool } from './connector-list-tool.ts'
@@ -376,7 +380,7 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
       // Capability projections and the mission/proactivity runtimes are host-owned.
       // Do not repeat them when several sessions mount full presets in one process.
       disposers.push(indexOpenClawExtensions(hardness))
-      disposers.push(indexTools(tools, hardness, { events: ctx, exclude: ['hardness_run', 'hardness_workflow', 'phoenix_visualize', 'phoenix_canvas', 'phoenix_game'] }))
+      disposers.push(indexTools(tools, hardness, { events: ctx, exclude: ['hardness_run', 'hardness_workflow', 'hardness_evolution_status', 'phoenix_visualize', 'phoenix_canvas', 'phoenix_game'] }))
       disposers.push(await indexSkills(skills, hardness))
     } else if (authorization !== undefined || mcpConnectors !== undefined) {
       // A preset contributes only its scoped connector inventory/discovery
@@ -410,6 +414,7 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
         }))
       }
       disposers.push(ctx.tools.register(createCognitiveWorkflowTool()))
+      disposers.push(ctx.tools.register(createEvolutionStatusTool()))
       disposers.push(ctx.tools.register(createPhoenixVisualizerTool()))
       disposers.push(ctx.tools.register(createPhoenixCanvasTool()))
       disposers.push(ctx.tools.register(createPhoenixGameTool()))
