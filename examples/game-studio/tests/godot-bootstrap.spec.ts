@@ -18,6 +18,11 @@ type GameToolModule = {
     tools: string[]
     renderer: string
     authoringRule: string
+    action: string
+    publishFormat: 'standalone-html' | 'godot-web-export-bundle'
+    chatPublisherReady: boolean
+    requiresWebBundlePublisher: boolean
+    godotWebNote?: string
   }
   windowsGodotCandidates(env?: NodeJS.ProcessEnv): string[]
 }
