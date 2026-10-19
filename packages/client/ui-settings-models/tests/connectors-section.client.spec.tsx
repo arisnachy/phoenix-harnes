@@ -2329,6 +2329,36 @@ describe('connectors settings section', () => {
     expect(document.body.textContent).not.toContain('secretClientValue123')
   })
 
+  it('restarts an already-installed X bridge when connecting so saved credentials reach xurl', async () => {
+    const api = {
+      list: vi.fn(async () => ok({ entries: [] })),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const connectX = vi.fn(async () => ({
+      api: { status: 'already-installed' as const, connector: {
+        entryId: 'x-1', serverName: 'x-api', url: 'https://api.x.com/mcp',
+      } },
+      docs: { status: 'already-installed' as const, connector: {
+        entryId: 'x-docs-1', serverName: 'x-docs', url: 'https://docs.x.com/mcp',
+      } },
+    }))
+    const reconnect = vi.fn(async () => ({ accepted: true }))
+    renderHub(api, { mcpRegistry: {
+      state: vi.fn(async () => ({ managed: [], runtime: [] })),
+      search: vi.fn(), install: vi.fn(), connectX, reconnect,
+    } })
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search connectors' }), {
+      target: { value: 'X · cuenta de usuario' },
+    })
+    const card = document.querySelector('[data-connector-id="x"]')!
+    const configure = Array.from(card.querySelectorAll('button')).find(b => /Configure/i.test(b.textContent || ''))!
+    fireEvent.click(configure)
+    fireEvent.click(screen.getByRole('button', { name: 'Conectar cuenta X personal' }))
+    await waitFor(() => expect(connectX).toHaveBeenCalledWith({ identity: 'user' }))
+    await waitFor(() => expect(reconnect).toHaveBeenCalledWith({ serverName: 'x-api' }))
+    expect(document.body.textContent).not.toContain('cuenta esté autenticada por instalar')
+  })
+
   it('rejects unsafe connector links instead of opening a blank or custom-scheme window', () => {
     expect(safeExternalHref('javascript:alert(1)')).toBeUndefined()
     expect(safeExternalHref('http://example.com/setup')).toBeUndefined()
