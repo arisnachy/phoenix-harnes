@@ -1730,9 +1730,10 @@ export function speakVoiceAssistantResponse(messageKey: string, text: string, me
 }
 
 /**
- * Speak a short, observed, user-visible status while the harness turn stays in
- * control. Progress never queues behind a real reply or overrides a sentence
- * stream; a missed milestone is better than delayed or misleading speech.
+ * Speak an observed user-visible status while the harness turn stays in control.
+ * @param text - Localized progress derived from observed runtime state.
+ * @param expectedSessionKey - Current session authorized to speak through Codex.
+ * @returns Whether the active native voice transport accepted the status.
  */
 export function speakVoiceAssistantProgress(text: string, expectedSessionKey: string): boolean {
   const session = codexRealtimeVoiceSession
@@ -1746,7 +1747,7 @@ export function speakVoiceAssistantProgress(text: string, expectedSessionKey: st
     key: `progress:${Date.now()}`,
     observedProgress: true,
     echoText: spoken,
-    instructions: `Read only this PHOENIX status, which is grounded in the current observed tool state. Use Kira's same established voice and language. Do not improvise accomplishments, commentary, extra words or personal feelings.\\n\\n${spoken}`,
+    instructions: `Read only this PHOENIX status, which is grounded in the current observed tool state. Use Kira's same established voice and language. Do not improvise accomplishments, commentary, extra words or personal feelings.\n\n${spoken}`,
   }
   return sendCodexRealtimeUtterance(session, utterance)
 }
