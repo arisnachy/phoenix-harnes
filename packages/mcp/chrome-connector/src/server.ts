@@ -300,8 +300,8 @@ async function endpoint(sessionId?: string): Promise<string> {
   )
 }
 
-async function tabs(): Promise<Tab[]> {
-  return (await json<Tab[]>(`${await endpoint()}/json/list`)).filter(tab => tab.type === 'page' || tab.type === undefined)
+async function tabs(sessionId?: string): Promise<Tab[]> {
+  return (await json<Tab[]>(`${await endpoint(sessionId)}/json/list`)).filter(tab => tab.type === 'page' || tab.type === undefined)
 }
 
 /**
@@ -309,23 +309,30 @@ async function tabs(): Promise<Tab[]> {
  * cards tied to their original pages when later chat turns open new sites.
  * Explicit tabId still navigates the supplied tab for deliberate reuse.
  */
-async function newBrowserTab(url: string): Promise<Tab> {
-  const base = await endpoint()
+async function newBrowserTab(url: string, sessionId?: string): Promise<Tab> {
+  const base = await endpoint(sessionId)
   const result = await fetch(base + '/json/new?' + encodeURIComponent(url), {
     method: 'PUT', signal: AbortSignal.timeout(5000),
   })
   if (!result.ok) throw new Error('No se pudo abrir una pestaña Chromium nueva: HTTP ' + String(result.status))
   const tab = await result.json() as Tab
   if (!tab.id || !tab.webSocketDebuggerUrl) throw new Error('Chrome no devolvió un identificador válido')
-  announceSession(base, tab.id)
+  if (sessionId === undefined) announceSession(base, tab.id)
+  else selectedChatTabs.set(sessionId, tab.id)
   return tab
 }
+const selectedChatTabs = new Map<string, string>()
 
-async function selectedTab(id?: string): Promise<Tab> {
-  const available = await tabs()
-  const tab = chooseTab(available, id, sharedSession()?.selectedTabId)
+async function selectedTab(id?: string, sessionId?: string): Promise<Tab> {
+  const available = await tabs(sessionId)
+  const preferred = sessionId === undefined ? sharedSession()?.selectedTabId : selectedChatTabs.get(sessionId)
+  if (sessionId !== undefined && id === undefined && preferred === undefined && available.length > 1) {
+    throw new Error('Indica tabId para seleccionar la pestaña de esta conversación sin confundir trabajos.')
+  }
+  const tab = chooseTab(available, id, preferred)
   if (!tab.webSocketDebuggerUrl) throw new Error('La pestaña no ofrece una conexión CDP')
-  announceSession(await endpoint(), tab.id)
+  if (sessionId === undefined) announceSession(await endpoint(), tab.id)
+  else selectedChatTabs.set(sessionId, tab.id)
   return tab
 }
 
