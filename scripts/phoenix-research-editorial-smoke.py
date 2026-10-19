@@ -14,7 +14,8 @@ import fitz
 ROOT = Path(__file__).resolve().parent
 PUBLISHER = ROOT / "phoenix-research-publisher.py"
 PRESETS = ("editorial_navy", "clinical_teal", "executive_amber",
-           "minimal_graphite", "creative_coral")
+           "minimal_graphite", "creative_coral", "journal_ink", "research_violet",
+           "biotech_green", "ocean_blue", "terracotta_report", "clinical_white")
 
 def report(presentation, preset="auto", title="Informe editorial verificable sobre un hallazgo de prueba"):
     return {
@@ -35,6 +36,15 @@ def report(presentation, preset="auto", title="Informe editorial verificable sob
         "tables": [{"title": "Tabla de demostración", "source_key": "source1",
                     "columns": ["Estudio", "Población", "Resultado", "Limitación"],
                     "rows": [["Ensayo simulado", "Muestra de prueba", "Sin mediciones", "No extrapolar"]]}],
+        "charts": [{"type": "line", "title": "Tendencia observada", "source_key": "source1",
+                    "labels": ["A", "B", "C"], "values": [2, 4, 3], "units": "unidades de prueba",
+                    "sample_size": 3, "method": "Serie sintética",
+                    "statistical_note": "Solo prueba del diseño"},
+                   {"type": "scatter", "title": "Dispersión observada", "source_key": "source1",
+                    "labels": ["A", "B", "C"], "x_values": [0, 2, 4],
+                    "values": [1, 2, 5], "x_label": "Tiempo", "y_label": "Valor"},
+                   {"type": "horizontal_bar", "title": "Barras horizontales", "source_key": "source1",
+                    "labels": ["A", "B", "C"], "values": [2, 4, 3]}],
         "references": [{"key": "source1", "authors": "Equipo de pruebas", "year": "2026",
                         "title": "Fuente ficticia para comprobar maquetación",
                         "url": "https://example.org/placeholder"}]
@@ -65,6 +75,10 @@ def publish(data, home, success=True):
         cover = document[0]
         assert " ".join(data["title"].split()) in " ".join(cover.get_text().split()), "missing real cover title"
         assert "Institución de ensayo" in cover.get_text(), "lost metadata"
+        content = "\n".join(page.get_text() for page in document)
+        for forbidden in ("EDICIÓN PROFESIONAL", "PHOENIX / RESEARCH STUDIO", "PHOENIX  /  INVESTIGACIÓN"):
+            assert forbidden not in content, "unexpected internal publisher branding: " + forbidden
+        assert "Tamaño muestral (n)" in content and "Figura 3" in content
         raster = cover.get_pixmap(matrix=fitz.Matrix(0.5, 0.5), alpha=False)
         fingerprint = hashlib.sha256(raster.samples).hexdigest()
         for page in document:
@@ -86,6 +100,8 @@ def main():
             prints.add(fingerprint)
             print("EDITORIAL_PRESET_PASS", preset, result["pagination"]["pdf_pages"], "pages")
         basic, _ = publish(report("academic"), home)
+        strict_journal, _ = publish(report("journal", "academic_classic"), home)
+        assert strict_journal["presentation"] == "journal"
         assert basic["design_preset"] == "academic_classic"
         automatic, _ = publish(report("editorial", title="Informe de salud comunitaria y neurociencia"), home)
         assert automatic["design_preset"] == "clinical_teal"
@@ -93,7 +109,7 @@ def main():
         assert automatic["design_preset"] == "executive_amber"
         publish(report("academic", "creative_coral"), home, success=False)
         publish(report("hybrid", "unregistered_name"), home, success=False)
-    print("EDITORIAL_FIVE_PRESETS_PASS; PDF and DOCX valid; visual approval is separate")
+    print("EDITORIAL_ELEVEN_PRESETS_PASS; neutral journal and scientific figures verified; visual approval is separate")
 
 if __name__ == "__main__":
     main()
