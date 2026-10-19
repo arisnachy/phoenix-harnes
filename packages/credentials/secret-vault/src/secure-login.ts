@@ -142,7 +142,11 @@ async function load(origin: string, profile: LoginProfile = 'personal'): Promise
     const row = JSON.parse(await readFile(filename(origin, profile), 'utf8')) as LoginRecord
     return row.version === 1 && row.origin === origin && typeof row.sealed === 'string'
       && typeof row.automatic === 'boolean' ? row : undefined
-  } catch { return undefined }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined
+    // An unreadable or damaged record is not an absent credential.
+    throw new Error('No se pudo leer el acceso cifrado')
+  }
 }
 async function store(origin: string, account: string, secret: string, automatic: boolean,
   extras?: Record<string, string>, profile: LoginProfile = 'personal'): Promise<void> {
@@ -158,6 +162,24 @@ async function store(origin: string, account: string, secret: string, automatic:
   } finally {
     await rm(temporary, { force: true }).catch(() => {})
   }
+}
+/** Change explicit auto-login consent without asking for an already saved password. */
+async function setRememberedLogin(origin: string, profile: LoginProfile, automatic: boolean,
+  vault?: CredentialProvider): Promise<void> {
+  const saved = await load(origin, profile)
+  if (!saved) {
+    const legacy = profile === 'personal' ? await legacyLogin(vault, origin) : undefined
+    if (!legacy) throw new Error('No existe un acceso guardado')
+    await store(origin, legacy.login.account, legacy.login.secret, automatic, legacy.login.extras, profile)
+    return
+  }
+  const path = filename(origin, profile)
+  const temporary = path + '.' + randomUUID() + '.tmp'
+  try {
+    await writeFile(temporary, JSON.stringify({ ...saved, automatic } satisfies LoginRecord),
+      { mode: 0o600, flag: 'wx' })
+    await rename(temporary, path)
+  } finally { await rm(temporary, { force: true }).catch(() => {}) }
 }
 async function listProfiles(origin: string, vault?: CredentialProvider): Promise<LoginProfileInfo[]> {
   const [personal, kira] = await Promise.all([load(origin), load(origin, 'kira')])
@@ -295,7 +317,8 @@ export function loginGateExpression(action: 'inspect' | 'open' = 'inspect'): str
       } catch {}
     }
     const visible = e => !e.disabled && !e.readOnly && e.getClientRects().length > 0;
-    const signIn = /^(?:ingresar|entrar|acceder|iniciar sesi[oó]n|identificarse|log ?in|sign ?in|cuenta|mi cuenta|account)$/i;
+    // "Mi cuenta" is frequently visible WHILE logged in; it is not a login requirement.
+    const signIn = /^(?:ingresar|entrar|acceder|iniciar sesi[oó]n|identificarse|log ?in|sign ?in)$/i;
     const triggers = roots.flatMap(doc =>
       [...doc.querySelectorAll('button,a,[role="button"],input[type="button"]')]
         .filter(e => visible(e) && signIn.test((e.innerText||e.textContent||e.value||'').trim())));
@@ -356,7 +379,7 @@ export function loginGateExpression(action: 'inspect' | 'open' = 'inspect'): str
     })();
     if (__OPEN_LOGIN__ && !formVisible && canOpenInPlace) triggers[0].click();
     return {
-      required: formVisible || triggers.length > 0 || warningVisible,
+      required: !authenticated && (formVisible || triggers.length > 0 || warningVisible),
       formVisible, authenticated,
       gateVisible: triggers.length > 0,
       canOpenInPlace,
@@ -625,6 +648,18 @@ export function registerSecureLogin(ctx: Context, vault?: CredentialProvider): (
           const selected = await activeProfile(origin, profiles)
           respond(res, 200, { saved: true, automatic: payload.automatic === true, profile: selected,
             profiles })
+          return
+        }
+        if (route.pathname === PREFIX + '/remember') {
+          // Explicit click in Secure Ask only. Existing DPAPI ciphertext stays sealed.
+          if (typeof payload.tabId !== 'string' || !/^[A-Za-z0-9_-]{1,200}$/.test(payload.tabId)
+            || typeof payload.automatic !== 'boolean') throw new Error('Solicitud no válida')
+          await tabForLogin(payload.tabId, origin)
+          const profile = payload.profile === undefined ? 'personal' : loginProfile(payload.profile)
+          await setRememberedLogin(origin, profile, payload.automatic, vault)
+          await setPrimary(origin, profile)
+          const profiles = await listProfiles(origin, vault)
+          respond(res, 200, { saved: true, automatic: payload.automatic, profile, profiles })
           return
         }
         if (route.pathname === PREFIX + '/adopt-related') {

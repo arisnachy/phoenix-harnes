@@ -56,6 +56,49 @@ function installBrowserMock(current: typeof state = state) {
 }
 
 describe('MiniBrowser in Phoenix conversation', () => {
+  it('keeps the saved-credential login attempt alive when its parent callback changes', async () => {
+    const site = { ...state, url: 'https://example.org/login',
+      tabs: [{ id: 'shared-tab', title: 'Acceso', url: 'https://example.org/login' }] }
+    let resolveUse: ((value: Response) => void) | undefined
+    let used = 0
+    const pending = new Promise<Response>(resolve => { resolveUse = resolve })
+    vi.stubGlobal('fetch', vi.fn(async (raw: string) => {
+      const url = String(raw)
+      if (url.startsWith('/phoenix-secure-login/status')) return new Response(
+        JSON.stringify({ saved: true, automatic: true }), { status: 200 })
+      if (url.startsWith('/phoenix-secure-login/detect')) return new Response(
+        JSON.stringify({ required: true, formVisible: true }), { status: 200 })
+      if (url.startsWith('/phoenix-secure-login/use')) {
+        used++
+        return pending
+      }
+      if (url.startsWith('/phoenix-mini-browser/frame')) return new Response(
+        new Uint8Array([255, 216, 255, 217]), { status: 200,
+          headers: { 'content-type': 'image/jpeg' } })
+      return new Response(JSON.stringify(site), { status: 200,
+        headers: { 'content-type': 'application/json' } })
+    }))
+    Object.defineProperty(URL, 'createObjectURL', {
+      configurable: true, value: vi.fn(() => 'blob:pending-credential-login'),
+    })
+    Object.defineProperty(URL, 'revokeObjectURL', {
+      configurable: true, value: vi.fn(),
+    })
+    const initial = vi.fn()
+    const updated = vi.fn()
+    const view = render(<MiniBrowser sessionId="saved-pending" requested onSecureLoginRequest={initial} />)
+    await waitFor(() => expect(used).toBe(1))
+    view.rerender(<MiniBrowser sessionId="saved-pending" requested onSecureLoginRequest={updated} />)
+    await act(async () => {
+      resolveUse?.(new Response(JSON.stringify({ status: 'login-form-not-found' }), { status: 200 }))
+      await pending
+    })
+    await waitFor(() => expect(updated).toHaveBeenCalledWith(expect.objectContaining({
+      saved: true, diagnostic: expect.stringContaining('No se completó el inicio automático'),
+    })))
+    expect(used).toBe(1)
+  })
+
   it('requests the sidebar Secure Ask for a saved login even if Chrome CDP is unavailable', async () => {
     const request = vi.fn()
     const onSite = { ...state, url: 'https://example.org/login', title: 'Iniciar sesión',

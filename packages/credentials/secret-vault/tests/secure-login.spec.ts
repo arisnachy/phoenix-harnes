@@ -2,6 +2,33 @@ import { describe, expect, it } from 'vitest'
 import { loginOrigin, loginDetectionExpression, loginGateExpression, relatedCredentialOrigin, registerSecureLogin } from '../src/secure-login.ts'
 
 describe('origin-scoped secure login', () => {
+  it('does not mistake a persistent account menu or a logout control for a login requirement', () => {
+    const run = new Function('document', 'location', 'URL', 'return ' + loginGateExpression()) as (
+      doc: unknown, location: unknown, url: typeof URL
+    ) => { required: boolean; gateVisible: boolean; authenticated?: boolean }
+    const makeElement = (text: string) => ({
+      tagName: 'BUTTON', textContent: text, innerText: text,
+      disabled: false, readOnly: false, getClientRects: () => [{}],
+    })
+    const accountMenu = makeElement('Mi cuenta')
+    const logout = makeElement('Cerrar sesión')
+    const root = (controls: unknown[]) => ({
+      querySelectorAll: (selector: string) =>
+        selector === 'iframe' || selector === 'input' ? [] : controls,
+      body: { innerText: '' },
+    })
+    const location = { origin: 'https://example.org', href: 'https://example.org/' }
+    expect(run(root([accountMenu]), location, URL)).toMatchObject({
+      required: false, gateVisible: false,
+    })
+    expect(run(root([makeElement('Iniciar sesión'), logout]), location, URL)).toMatchObject({
+      required: false, authenticated: true,
+    })
+    expect(run(root([makeElement('Iniciar sesión')]), location, URL)).toMatchObject({
+      required: true, gateVisible: true,
+    })
+  })
+
   it('only recognizes a fixed verified related origin, without automatic secret sharing', () => {
     expect(relatedCredentialOrigin('https://www.juancitosport.com.do'))
       .toBe('https://deportes.juancitosport.com.do')

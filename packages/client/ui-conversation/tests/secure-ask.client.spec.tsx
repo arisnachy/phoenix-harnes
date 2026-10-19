@@ -6,6 +6,66 @@ import { SecureAsk } from '../src/client/chat/SecureAsk.tsx'
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 
 describe('Secure Ask human-only browser sidebar', () => {
+  it('enables no-repeat login on an existing saved identity without requesting the secret', async () => {
+    const calls: Array<{ path: string; data: Record<string, unknown> }> = []
+    const onSaved = vi.fn()
+    vi.stubGlobal('fetch', vi.fn(async (path: string, options?: RequestInit) => {
+      const data = JSON.parse(String(options?.body ?? '{}')) as Record<string, unknown>
+      calls.push({ path, data })
+      const body = path.endsWith('/remember')
+        ? { saved: true, automatic: true, profile: 'personal', profiles: [
+          { id: 'personal', saved: true, automatic: true, source: 'dpapi' },
+          { id: 'kira', saved: false, automatic: false, source: 'none' },
+        ] }
+        : path.endsWith('/detect') ? { required: false, authenticated: true } : { status: 'submitted' }
+      return new Response(JSON.stringify(body), { status: 200,
+        headers: { 'content-type': 'application/json' } })
+    }))
+    render(<SecureAsk target={{ origin: 'https://example.org', tabId: 'known-tab',
+      saved: true, automatic: false }} onSaved={onSaved} onClose={vi.fn()} />)
+    expect(screen.queryByPlaceholderText('Escribe o pega la contraseña')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'No volver a preguntar en este sitio' }))
+    await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1), { timeout: 3_000 })
+    expect(calls.map(row => row.path)).toEqual([
+      '/phoenix-secure-login/remember', '/phoenix-secure-login/use', '/phoenix-secure-login/detect',
+    ])
+    expect(calls[0]?.data).toMatchObject({
+      origin: 'https://example.org', tabId: 'known-tab', profile: 'personal', automatic: true,
+    })
+    expect(calls.every(row => !('secret' in row.data) && !('account' in row.data))).toBe(true)
+  })
+
+  it('saves a newly entered password with explicit no-repeat authorization', async () => {
+    const calls: Array<{ path: string; data: Record<string, unknown> }> = []
+    vi.stubGlobal('fetch', vi.fn(async (path: string, options?: RequestInit) => {
+      const data = JSON.parse(String(options?.body ?? '{}')) as Record<string, unknown>
+      calls.push({ path, data })
+      return new Response(JSON.stringify(path.endsWith('/save')
+        ? { saved: true, automatic: true, profiles: [
+          { id: 'personal', saved: true, automatic: true, source: 'dpapi' },
+          { id: 'kira', saved: false, automatic: false, source: 'none' },
+        ] }
+        : path.endsWith('/detect') ? { required: false, authenticated: true }
+          : { status: 'submitted' }), { status: 200,
+        headers: { 'content-type': 'application/json' } })
+    }))
+    const onSaved = vi.fn()
+    render(<SecureAsk target={{ origin: 'https://example.org', tabId: 'new-tab',
+      saved: false, automatic: false }} onSaved={onSaved} onClose={vi.fn()} />)
+    fireEvent.change(screen.getByPlaceholderText('Escribe o pega tu usuario'), {
+      target: { value: 'user' },
+    })
+    fireEvent.change(screen.getByPlaceholderText('Escribe o pega la contraseña'), {
+      target: { value: 'example-only' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar y no volver a preguntar' }))
+    await waitFor(() => expect(onSaved).toHaveBeenCalledOnce(), { timeout: 3_000 })
+    expect(calls[0]?.path).toBe('/phoenix-secure-login/save')
+    expect(calls[0]?.data.automatic).toBe(true)
+    expect(calls[1]?.path).toBe('/phoenix-secure-login/use')
+    expect(calls[1]?.data).not.toHaveProperty('secret')
+  })
+
   it('keeps credential input out of ordinary messages and requests distinct auto-login consent', async () => {
     const onSaved = vi.fn()
     const calls: Array<{ path: string; data: Record<string, unknown> }> = []

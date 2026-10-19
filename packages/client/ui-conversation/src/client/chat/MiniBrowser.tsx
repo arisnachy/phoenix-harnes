@@ -266,14 +266,21 @@ export function MiniBrowser({ sessionId, requested = false, active = true, initi
   const show = !dismissed && (requested || enabled || hasPage)
   const videoId = youtubeId(snapshot.url)
   const siteOrigin = secureOrigin(snapshot.url)
+  // Polling belongs to this tab/origin, not to each parent callback identity.
+  // Otherwise a parent render cancels an in-flight login after it has been
+  // marked as attempted, and the saved password appears to be ignored.
+  const secureLoginCallbackRef = useRef(onSecureLoginRequest)
+  const savedAccessCallbackRef = useRef(onSavedAccessNotice)
+  secureLoginCallbackRef.current = onSecureLoginRequest
+  savedAccessCallbackRef.current = onSavedAccessNotice
 
   // Secure Ask is re-checked while a modal appears on the SAME URL.
   // Reactive websites often reveal the password form without navigation:
   // tying detection only to snapshot.url makes the sidebar never appear.
   useEffect(() => {
     if (!siteOrigin || !snapshot.tabId || !active || dismissed) {
-      onSecureLoginRequest?.(null)
-      onSavedAccessNotice?.(null)
+      secureLoginCallbackRef.current?.(null)
+      savedAccessCallbackRef.current?.(null)
       return
     }
     const tabId = snapshot.tabId
@@ -298,33 +305,33 @@ export function MiniBrowser({ sessionId, requested = false, active = true, initi
           attemptedLogins.current.delete(key)
           pendingAutomaticLogin.current.delete(key)
           openedLoginGates.current.delete(key)
-          onSecureLoginRequest?.(null)
-          onSavedAccessNotice?.(status.saved ? { origin: siteOrigin, phase: 'available' }
+          secureLoginCallbackRef.current?.(null)
+          savedAccessCallbackRef.current?.(status.saved ? { origin: siteOrigin, phase: 'available' }
             : status.relatedSaved ? { origin: siteOrigin, phase: 'related' } : null)
           return
         }
         // A failed Vault lookup must not be interpreted as absent credentials.
         // Never show a blank enrollment form while saved access is unknown.
         if ('unavailable' in status && status.unavailable) {
-          onSavedAccessNotice?.({ origin: siteOrigin, phase: 'vault-unavailable' })
-          onSecureLoginRequest?.(null)
+          savedAccessCallbackRef.current?.({ origin: siteOrigin, phase: 'vault-unavailable' })
+          secureLoginCallbackRef.current?.(null)
           return
         }
         if (!detection?.required) {
           if (status.saved) {
-            onSavedAccessNotice?.({ origin: siteOrigin, phase: 'needs-attention' })
-            onSecureLoginRequest?.({
+            savedAccessCallbackRef.current?.({ origin: siteOrigin, phase: 'needs-attention' })
+            secureLoginCallbackRef.current?.({
               origin: siteOrigin, tabId, saved: true, automatic: status.automatic,
               ...(status.profile ? { profile: status.profile } : {}),
               ...(status.profiles ? { profiles: status.profiles } : {}),
               diagnostic: 'No fue posible comprobar el acceso. Usa el acceso guardado o reintenta la conexión.',
             })
           } else {
-            onSavedAccessNotice?.(status.relatedSaved ? { origin: siteOrigin, phase: 'related' } : null)
+            savedAccessCallbackRef.current?.(status.relatedSaved ? { origin: siteOrigin, phase: 'related' } : null)
           }
           return
         }
-        onSavedAccessNotice?.(status.saved ? {
+        savedAccessCallbackRef.current?.(status.saved ? {
           origin: siteOrigin, phase: status.automatic ? 'using' : 'available',
         } : status.relatedSaved ? { origin: siteOrigin, phase: 'related' } : null)
         // With no stored access, first expose the real same-page form so
@@ -335,7 +342,7 @@ export function MiniBrowser({ sessionId, requested = false, active = true, initi
           openedLoginGates.current.add(key)
           try {
             await secureApi<SecureDetection>('/open', { origin: siteOrigin, tabId })
-            if (!stopped) onSecureLoginRequest?.(null)
+            if (!stopped) secureLoginCallbackRef.current?.(null)
             return
           } catch {
             // Keep the secure manual route available if Chrome cannot expose
@@ -357,7 +364,7 @@ export function MiniBrowser({ sessionId, requested = false, active = true, initi
           if (!attemptedLogins.current.has(key)) {
             attemptedLogins.current.add(key)
             pendingAutomaticLogin.current.set(key, Date.now())
-            onSecureLoginRequest?.(null)
+            secureLoginCallbackRef.current?.(null)
             try {
               const result = await secureApi<SecureUse>('/use', { origin: siteOrigin, tabId })
               if (stopped) return
@@ -368,15 +375,15 @@ export function MiniBrowser({ sessionId, requested = false, active = true, initi
                 return
               }
               pendingAutomaticLogin.current.delete(key)
-              onSavedAccessNotice?.({ origin: siteOrigin, phase: 'needs-attention' })
-              onSecureLoginRequest?.({
+              savedAccessCallbackRef.current?.({ origin: siteOrigin, phase: 'needs-attention' })
+              secureLoginCallbackRef.current?.({
                 ...request, diagnostic: 'No se completó el inicio automático. Puedes reintentar el acceso guardado.',
               })
               return
             } catch {
               pendingAutomaticLogin.current.delete(key)
-              onSavedAccessNotice?.({ origin: siteOrigin, phase: 'needs-attention' })
-              onSecureLoginRequest?.({
+              savedAccessCallbackRef.current?.({ origin: siteOrigin, phase: 'needs-attention' })
+              secureLoginCallbackRef.current?.({
                 ...request, diagnostic: 'Falló la conexión de inicio automático. El acceso guardado sigue disponible.',
               })
               return
@@ -384,17 +391,17 @@ export function MiniBrowser({ sessionId, requested = false, active = true, initi
           }
           const started = pendingAutomaticLogin.current.get(key)
           if (started !== undefined && Date.now() - started < 8_000) {
-            onSecureLoginRequest?.(null)
+            secureLoginCallbackRef.current?.(null)
             return
           }
           pendingAutomaticLogin.current.delete(key)
-          onSavedAccessNotice?.({ origin: siteOrigin, phase: 'needs-attention' })
-          onSecureLoginRequest?.({
+          savedAccessCallbackRef.current?.({ origin: siteOrigin, phase: 'needs-attention' })
+          secureLoginCallbackRef.current?.({
             ...request, diagnostic: 'No se pudo confirmar el inicio automático. Revisa el acceso guardado.',
           })
           return
         }
-        if (!stopped) onSecureLoginRequest?.(request)
+        if (!stopped) secureLoginCallbackRef.current?.(request)
       } finally {
         checking = false
       }
@@ -402,7 +409,7 @@ export function MiniBrowser({ sessionId, requested = false, active = true, initi
     void check()
     const timer = window.setInterval(() => { void check() }, 3_500)
     return () => { stopped = true; window.clearInterval(timer) }
-  }, [siteOrigin, snapshot.url, snapshot.tabId, active, dismissed, onSecureLoginRequest, onSavedAccessNotice])
+  }, [siteOrigin, snapshot.url, snapshot.tabId, active, dismissed])
 
   const pasteIntoPage = async () => {
     try {

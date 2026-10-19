@@ -1,5 +1,5 @@
 /** Secure Ask is a human-only sidebar form, not ask_user_question or an LLM tool result. */
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { secureApi, type SecureLoginTarget, type SecureStatus, type SecureLoginProfile, type SecureProfileInfo } from './MiniBrowser.tsx'
 import css from './SecureAsk.module.css'
 
@@ -32,6 +32,22 @@ export function SecureAsk({ target, onClose, onSaved }: {
     { id: 'personal', saved: target.saved, automatic: target.automatic, source: target.saved ? 'dpapi' : 'none' },
     { id: 'kira', saved: false, automatic: false, source: 'none' },
   ])
+  // Do not keep the previous site's credential form when switching browser tabs.
+  useEffect(() => {
+    const nextProfile = !target.saved && target.relatedOrigin
+      ? (target.relatedProfile ?? target.profile ?? 'personal') : (target.profile ?? 'personal')
+    setProfile(nextProfile)
+    setProfiles(target.profiles ?? [
+      { id: 'personal', saved: target.saved, automatic: target.automatic, source: target.saved ? 'dpapi' : 'none' },
+      { id: 'kira', saved: false, automatic: false, source: 'none' },
+    ])
+    setAutomatic(target.automatic)
+    setEditing(!target.saved && !target.relatedOrigin)
+    setFeedback('')
+    setAccount('')
+    setSecret('')
+    setExtraValues({})
+  }, [target.origin, target.tabId])
   const selectedProfile = profiles.find(item => item.id === profile)
   const selectedSaved = selectedProfile?.saved ?? false
   const relatedOrigin = !selectedSaved && profile === (target.relatedProfile ?? 'personal')
@@ -78,13 +94,13 @@ export function SecureAsk({ target, onClose, onSaved }: {
     }
     setFeedback('El acceso se envió, pero el sitio todavía no confirmó la sesión. Conservé el formulario y el cupón.')
   }
-  const save = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
+  const save = async (event?: FormEvent<HTMLFormElement>, remember = automatic) => {
+    event?.preventDefault()
     if (busy || !account.trim() || !secret || extraFields.some(field => field.required && !extraValues[field.key]?.trim())) return
     setBusy(true)
     try {
       const saved = await secureApi<SecureStatus>('/save', {
-        origin: target.origin, tabId: target.tabId, account, secret, automatic, profile,
+        origin: target.origin, tabId: target.tabId, account, secret, automatic: remember, profile,
         ...(extraFields.length ? { extras: Object.fromEntries(extraFields.map(field => [field.key, extraValues[field.key] ?? ''])) } : {}),
       })
       if (!saved.saved) throw new Error('Vault did not confirm saving')
@@ -114,6 +130,32 @@ export function SecureAsk({ target, onClose, onSaved }: {
       setExtraValues({})
       setBusy(false)
     }
+  }
+  /** Give a previously saved account explicit auto-login consent without re-entry. */
+  const rememberSaved = async (): Promise<void> => {
+    if (busy || !selectedSaved) return
+    setBusy(true)
+    try {
+      const updated = await secureApi<SecureStatus>('/remember', {
+        origin: target.origin, tabId: target.tabId, profile, automatic: true,
+      })
+      if (!updated.saved) throw new Error('Remember was not confirmed')
+      if (updated.profiles) setProfiles(updated.profiles)
+      setAutomatic(true)
+      setEditing(false)
+      setFeedback('Acceso guardado: inicio automático habilitado para este sitio. Comprobando la sesión…')
+      try {
+        const login = await secureApi<{ status: string }>('/use', {
+          origin: target.origin, tabId: target.tabId, manual: true, profile,
+        })
+        if (login.status === 'submitted') await verifyLogin()
+        else setFeedback('Inicio automático habilitado. ' + describeLoginResult(login.status))
+      } catch {
+        setFeedback('Inicio automático habilitado. La página no permitió iniciar sesión todavía; el acceso permanece guardado.')
+      }
+    } catch {
+      setFeedback('No pude confirmar el inicio automático. La contraseña guardada no se modificó.')
+    } finally { setBusy(false) }
   }
   const useSaved = async () => {
     setBusy(true)
@@ -188,6 +230,8 @@ export function SecureAsk({ target, onClose, onSaved }: {
       {selectedSaved && <div className={css.saved}>
         <span>Ya existe un acceso guardado para este sitio. No es necesario escribirlo otra vez.</span>
         <button type="button" disabled={busy} onClick={() => { void useSaved() }}>Usar acceso guardado</button>
+        {!selectedProfile?.automatic && <button type="button" disabled={busy}
+          onClick={() => { void rememberSaved() }}>No volver a preguntar en este sitio</button>}
         <button type="button" disabled={busy} onClick={() => setEditing(value => !value)}>
           {editing ? 'Ocultar formulario' : 'Cambiar o completar credenciales'}
         </button>
@@ -219,6 +263,9 @@ export function SecureAsk({ target, onClose, onSaved }: {
         <div className={css.actions}>
           <button type="submit" disabled={busy || !account.trim() || !secret
             || extraFields.some(field => field.required && !extraValues[field.key]?.trim())}>Guardar y continuar</button>
+          {!automatic && <button type="button" disabled={busy || !account.trim() || !secret
+            || extraFields.some(field => field.required && !extraValues[field.key]?.trim())}
+            onClick={() => { void save(undefined, true) }}>Guardar y no volver a preguntar</button>}
           <button type="button" disabled={busy} onClick={onClose}>Ahora no</button>
           {selectedSaved && <button type="button" disabled={busy} onClick={() => { void remove() }}>Eliminar acceso</button>}
         </div>
