@@ -808,7 +808,8 @@ def main():
             fig_caption = doc.add_paragraph()
             fig_caption.add_run("Figura " + str(ix) + ". ").bold = True
             fig_caption.add_run(str(chart.get("title", "Gráfico"))).italic = True
-            doc.add_picture(str(path), width=Inches(5.8))
+            usable_inches = max(2.0, (paper[0] - 2 * margin_cm * 72 / 2.54) / 72)
+            doc.add_picture(str(path), width=Inches(min(5.8, usable_inches)))
             for note_line in visual_notes(chart, refs, style, numbers):
                 doc.add_paragraph(note_line)
     if report.get("declarations"):
