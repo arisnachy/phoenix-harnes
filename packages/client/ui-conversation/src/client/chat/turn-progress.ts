@@ -80,6 +80,45 @@ function hasAssistantSurface(data: AssistantChatData): boolean {
   })
 }
 
+/** Short first-person updates derived from activity metadata, not model reasoning. */
+export function naturalProgressLine(progress: TurnProgress, language: string, elapsedMs = 0): string | undefined {
+  const spanish = /^es(?:-|$)/iu.test(language)
+  const english = /^en(?:-|$)/iu.test(language)
+  if (!spanish && !english) return undefined
+  if (spanish) {
+    if (elapsedMs >= 90_000 && (progress.activity === 'thinking' || progress.activity === 'preparing')) {
+      return 'Sigo con la tarea; todavía no tengo un resultado nuevo confirmado. Te contaré cuando haya un avance real.'
+    }
+    const lines: Record<TurnActivity, string> = {
+      preparing: 'Estoy organizando el siguiente paso; todavía no hay un resultado confirmado.',
+      thinking: 'Estoy analizando cómo continuar. Te contaré lo importante cuando esté comprobado.',
+      searching: 'Estoy buscando información para continuar con la tarea.',
+      browsing: 'Estoy revisando la página o el recurso que necesito.',
+      reading: 'Estoy leyendo el material disponible antes de decidir el siguiente paso.',
+      writing: 'Estoy trabajando en los archivos de esta tarea.',
+      executing: 'Hay una operación en marcha; estoy pendiente de su resultado.',
+      'running-tools': 'Estoy utilizando una herramienta para avanzar.',
+      verifying: 'Estoy revisando el resultado de la última operación.',
+    }
+    return lines[progress.activity]
+  }
+  if (elapsedMs >= 90_000 && (progress.activity === 'thinking' || progress.activity === 'preparing')) {
+    return "I'm still on this task, but I don't have a newly verified result yet. I'll share a meaningful update when I do."
+  }
+  const lines: Record<TurnActivity, string> = {
+    preparing: "I'm arranging the next step; there's no confirmed outcome yet.",
+    thinking: "I'm working out how to proceed. I'll share what matters once it's verified.",
+    searching: "I'm searching for the information this task needs.",
+    browsing: "I'm checking the page or resource I need.",
+    reading: "I'm reading the available material before choosing the next step.",
+    writing: "I'm working on the files for this task.",
+    executing: "An operation is running; I'm waiting for its result.",
+    'running-tools': "I'm using a tool to move the task forward.",
+    verifying: "I'm reviewing the result of the last operation.",
+  }
+  return lines[progress.activity]
+}
+
 /**
  * Derive a safe progress label from the existing chat projection.
  * Tool arguments and result payloads are intentionally never inspected. Once
