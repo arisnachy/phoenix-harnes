@@ -704,7 +704,7 @@ describe('connectors settings section', () => {
     expect(screen.getByText('Phoenix knows which MCPs you already have')).toBeTruthy()
     expect(screen.queryByText('Capability presets')).toBeNull()
     expect(screen.getByText('Devpost Hackathons')).toBeTruthy()
-    expect(screen.getByText('Microsoft Teams')).toBeTruthy()
+    expect(screen.getByText('Microsoft Teams · canales')).toBeTruthy()
     expect(screen.getByText('Firebase')).toBeTruthy()
     expect(screen.getAllByText('Official adapter not available in this build').length).toBeGreaterThan(0)
     expect(screen.getAllByRole('button', { name: 'Find official / install' }).length).toBeGreaterThan(0)
