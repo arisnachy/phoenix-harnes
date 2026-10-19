@@ -318,6 +318,23 @@ interface CuratedMcpSpec {
   readonly config: () => ManagedMcpConfig
 }
 
+/** One auditable, immutable launcher shape per Graph service. */
+function microsoftScopedMcpConfig(serverName: string, service: 'mail' | 'calendar' | 'contacts' | 'onedrive' | 'teams' | 'sharepoint'): ManagedStdioMcpConfig {
+  return {
+    transport: 'stdio',
+    serverName,
+    command: 'node',
+    args: ['scripts/phoenix-microsoft-personal-mcp.mjs', service],
+    env: {},
+    envCredentialRefs: {},
+    cwd: '',
+    toolCallTimeoutMs: 60_000,
+    startupTimeoutMs: 20_000,
+    failOnStartupError: false,
+    reconnect: { enabled: true, initialDelayMs: 1000, maxDelayMs: 30_000, maxAttempts: 3 },
+  }
+}
+
 const CURATED_MCP_SPECS: Readonly<Record<CuratedMcpConnectorId, CuratedMcpSpec>> = {
   devpost: { label: 'Devpost Hackathons', config: devpostHackathonsMcpConfig },
   canva: { label: 'Canva', config: canvaMcpConfig },
@@ -390,32 +407,13 @@ const CURATED_MCP_SPECS: Readonly<Record<CuratedMcpConnectorId, CuratedMcpSpec>>
       reconnect: { enabled: true, initialDelayMs: 1000, maxDelayMs: 30_000, maxAttempts: 3 },
     }),
   },
-  // Each service has its own MCP namespace, OAuth consent, encrypted Windows
-  // refresh token and selected Graph scopes. The Entra public client ID is
-  // shared only as non-secret setup metadata, never as a shared user grant.
-  ...Object.fromEntries(([
-    ['outlook-mail', 'mail', 'Outlook Mail'],
-    ['outlook-calendar', 'calendar', 'Outlook Calendar'],
-    ['microsoft-contacts', 'contacts', 'Microsoft Contacts'],
-    ['onedrive', 'onedrive', 'OneDrive'],
-    ['microsoft-teams', 'teams', 'Microsoft Teams (work/school)'],
-    ['sharepoint', 'sharepoint', 'SharePoint (work/school)'],
-  ] as const).map(([connectorId, service, label]) => [connectorId, {
-    label,
-    config: () => ({
-      transport: 'stdio' as const,
-      serverName: connectorId,
-      command: 'node',
-      args: ['scripts/phoenix-microsoft-personal-mcp.mjs', service],
-      env: {},
-      envCredentialRefs: {},
-      cwd: '',
-      toolCallTimeoutMs: 60_000,
-      startupTimeoutMs: 20_000,
-      failOnStartupError: false,
-      reconnect: { enabled: true, initialDelayMs: 1000, maxDelayMs: 30_000, maxAttempts: 3 },
-    }),
-  }])),
+  // Independent account scopes and credential storage; managed stdio specs are pinned.
+  'outlook-mail': { label: 'Outlook Mail', config: () => microsoftScopedMcpConfig('outlook-mail', 'mail') },
+  'outlook-calendar': { label: 'Outlook Calendar', config: () => microsoftScopedMcpConfig('outlook-calendar', 'calendar') },
+  'microsoft-contacts': { label: 'Microsoft Contacts', config: () => microsoftScopedMcpConfig('microsoft-contacts', 'contacts') },
+  onedrive: { label: 'OneDrive', config: () => microsoftScopedMcpConfig('onedrive', 'onedrive') },
+  'microsoft-teams': { label: 'Microsoft Teams (work/school)', config: () => microsoftScopedMcpConfig('microsoft-teams', 'teams') },
+  sharepoint: { label: 'SharePoint (work/school)', config: () => microsoftScopedMcpConfig('sharepoint', 'sharepoint') },
   'microsoft-workiq': { label: 'Microsoft Work IQ (metered)', config: () => localNpxMcpConfig('microsoft-workiq', '@microsoft/workiq', ['mcp']) },
   'microsoft-azure': { label: 'Microsoft Azure MCP (metered resources)', config: () => localNpxMcpConfig('microsoft-azure', '@azure/mcp@latest', ['server', 'start', '--mode', 'consolidated']) },
   vercel: { label: 'Vercel', config: () => remoteOauthMcpConfig('vercel', VERCEL_MCP_URL) },
