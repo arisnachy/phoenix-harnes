@@ -16,7 +16,7 @@ import type {
 import { Button, IconChevronDownOutline14, Modal, PhoenixLogo } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { ChatViewSlotProps, RenderMessageImages } from '../contract/slots.ts'
 import { PendingSteeringBubble } from './MessageItem.tsx'
-import { naturalProgressLine, turnProgress } from './turn-progress.ts'
+import { naturalProgressLine, pendingTurnProgress, turnProgress } from './turn-progress.ts'
 import { speakVoiceAssistantProgress } from '../voice.ts'
 import { ToolActivityFlow } from './ToolActivityFlow.tsx'
 import css from './ChatView.module.css'
@@ -303,11 +303,7 @@ export function ChatView({
     : null
   // A real, Host-owned question or approval takes precedence over a still-open
   // agent turn. Without this fence a pending question looks like endless thought.
-  const waiting = pendingInteractions.at(-1)
-  const waitingProgress = waiting === undefined ? null : {
-    phase: 'waiting' as const,
-    activity: waiting.kind === 'approval' ? 'waiting-approval' as const : 'waiting-user' as const,
-  }
+  const waitingProgress = pendingTurnProgress(pendingInteractions.at(-1)?.kind)
   const visibleProgress = waitingProgress ?? activeProgress ?? admissionProgress
   // Session.running can remain true while Host-side settlement, logging, or
   // verification finishes after user-visible assistant output has arrived.
