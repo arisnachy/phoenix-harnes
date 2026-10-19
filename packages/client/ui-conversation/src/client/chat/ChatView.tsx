@@ -147,8 +147,8 @@ export function ChatView({
   const [completionPulse, setCompletionPulse] = useState(false)
   const previousRunning = useRef(running)
   const spokenProgress = useRef<{
-    session: string | undefined; turn: number | undefined; activity: string | undefined; at: number
-  }>({ session: undefined, turn: undefined, activity: undefined, at: 0 })
+    session: string | undefined; turn: number | undefined; activity: string | undefined; at: number; repeats: number
+  }>({ session: undefined, turn: undefined, activity: undefined, at: 0, repeats: 0 })
   // Close/retry must ignore a settlement that started before the latest
   // gesture; otherwise a cancelled in-flight refusal reopens the dialog.
   const fileOpenRequest = useRef(0)
@@ -326,7 +326,7 @@ export function ChatView({
   useEffect(() => {
     if (!running || waitingProgress !== null || activeProgress === null || liveTurn === undefined) return
     if (spokenProgress.current.session !== String(sessionId) || spokenProgress.current.turn !== liveTurn) {
-      spokenProgress.current = { session: String(sessionId), turn: liveTurn, activity: undefined, at: 0 }
+      spokenProgress.current = { session: String(sessionId), turn: liveTurn, activity: undefined, at: 0, repeats: 0 }
     }
     const activity = activeProgress.activity
     const start = visibleTurnStatus?.startTime ?? Date.now()
@@ -338,14 +338,22 @@ export function ChatView({
       const threshold = activity === 'thinking' || activity === 'preparing' ? 45_000 : 22_000
       if (elapsed < threshold) return
       const last = spokenProgress.current
-      const minimumGap = last.activity === activity ? 140_000 : 40_000
+      const repeated = last.activity === activity
+      const minimumGap = repeated ? 140_000 : 40_000
+      if (repeated && last.repeats >= 1) return
       if (last.at !== 0 && now - last.at < minimumGap) return
       const language = /pensando|preparando/iu.test(t('status.thinking'))
         ? 'es'
         : typeof document !== 'undefined' ? document.documentElement.lang : 'en'
-      const line = naturalProgressLine(activeProgress, language, elapsed)
+      const line = repeated
+        ? /^es(?:-|$)/iu.test(language)
+          ? 'Sigo pendiente de esa operación. Todavía no hay un resultado nuevo confirmado.'
+          : 'I am still waiting for that operation. There is no new verified result yet.'
+        : naturalProgressLine(activeProgress, language, elapsed)
       if (line === undefined || !speakVoiceAssistantProgress(line, String(sessionId))) return
-      spokenProgress.current = { session: String(sessionId), turn: liveTurn, activity, at: now }
+      spokenProgress.current = {
+        session: String(sessionId), turn: liveTurn, activity, at: now, repeats: repeated ? last.repeats + 1 : 0,
+      }
     }
     check()
     const timer = window.setInterval(check, 5_000)
