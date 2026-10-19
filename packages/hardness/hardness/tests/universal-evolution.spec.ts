@@ -102,7 +102,9 @@ describe('six-phase provider-neutral evolution policy', () => {
 
   it('phase 4 confines environment exploration to reversible bounded experiments', () => {
     expect(verifyEvolutionProbe(probe).allowed).toBe(true)
-    expect(verifyEvolutionProbe({ ...probe, rollbackId: undefined }).allowed).toBe(false)
+    const { rollbackId: _removedRollback, ...withoutRollback } = probe
+    void _removedRollback
+    expect(verifyEvolutionProbe(withoutRollback).allowed).toBe(false)
     expect(verifyEvolutionProbe({ ...probe, sandboxed: false }).allowed).toBe(false)
     expect(verifyEvolutionProbe({ ...probe, attempt: 4 }).allowed).toBe(false)
     expect(verifyEvolutionProbe({ ...probe, action: 'external-write' }).allowed).toBe(false)
