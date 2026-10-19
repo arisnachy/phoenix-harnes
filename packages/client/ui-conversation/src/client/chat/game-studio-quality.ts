@@ -33,12 +33,15 @@ function missing(set: Set<string>, required: readonly string[], prefix: string, 
   for (const name of required) if (!set.has(name)) issues.push(prefix + ':' + name)
 }
 
-type GameProfile = 'beat-em-up' | 'run-and-gun' | 'platformer' | 'top-down-action' | 'racing' | 'puzzle' | 'strategy' | 'rpg' | 'rhythm' | 'simulation' | '3d' | 'custom'
+type GameProfile = 'retro' | 'beat-em-up' | 'run-and-gun' | 'platformer' | 'top-down-action' | 'racing' | 'puzzle' | 'strategy' | 'rpg' | 'rhythm' | 'simulation' | '3d' | 'custom'
 
 function profileFor(manifest: RecordValue, warnings: string[], issues: string[]): GameProfile {
   const raw = nonempty(manifest.gameType) ? manifest.gameType : nonempty(manifest.genre) ? manifest.genre : 'custom'
   const value = raw.toLowerCase().trim()
   const explicit = nonempty(manifest.gameType)
+  // These classic games need complete rules, not fabricated bosses, guns or parallax.
+  if (/\b3d\b|first.person|third.person|webgl/u.test(value)) return '3d'
+  if (/tetris|snake|pong|pac.man|pacman|arkanoid|breakout|chess|ajedrez|damas|checkers|domino|solitario|solitaire|sudoku|buscaminas|minesweeper|2048|tic.tac.toe|tres.en.raya/u.test(value)) return 'retro'
   if (/beat.em.up|beat.?em.?up|brawler|double.dragon|street.fight|pelea.{0,9}callej|lucha.{0,9}callej/u.test(value)) return 'beat-em-up'
   if (/run.and.gun|contra|shooter|shoot.em.up/u.test(value)) return 'run-and-gun'
   if (/platform|metroidvania/u.test(value)) return 'platformer'
@@ -133,9 +136,9 @@ export function auditGameManifest(value: unknown): GameStudioAudit {
   else {
     const level = value.level
     const layers = level.layers
-    const requiredLayers = (profile === 'run-and-gun' || profile === 'beat-em-up') ? 3 : profile === 'platformer' ? 2 : 1
-    if (!Array.isArray(layers) || layers.length < requiredLayers) issues.push('level-requires-' + (requiredLayers === 3 ? 'parallax-layers' : 'scene-layers'))
-    else if (layers.some(layer => !object(layer) || !nonempty(layer.id)
+    const requiredLayers = profile === 'retro' ? 0 : (profile === 'run-and-gun' || profile === 'beat-em-up') ? 3 : profile === 'platformer' ? 2 : 1
+    if (requiredLayers > 0 && (!Array.isArray(layers) || layers.length < requiredLayers)) issues.push('level-requires-' + (requiredLayers === 3 ? 'parallax-layers' : 'scene-layers'))
+    else if (Array.isArray(layers) && layers.some(layer => !object(layer) || !nonempty(layer.id)
       || typeof layer.scrollFactor !== 'number' || !Number.isFinite(layer.scrollFactor)
       || layer.scrollFactor < 0 || layer.scrollFactor > 1)) issues.push('invalid-parallax-layer')
     if ((profile === 'run-and-gun' || profile === 'platformer')
@@ -153,6 +156,7 @@ export function auditGameManifest(value: unknown): GameStudioAudit {
     if (profile === 'simulation' && !Array.isArray(level.systems)) issues.push('missing-simulation-systems')
   }
   const controlRequirements: Record<GameProfile, readonly string[]> = {
+    retro: [],
     'beat-em-up': ['move', 'punch', 'kick', 'jump', 'grab'],
     'run-and-gun': ['move', 'jump', 'shoot'],
     platformer: ['move', 'jump'],
