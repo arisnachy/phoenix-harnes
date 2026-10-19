@@ -20,7 +20,7 @@ function generalIntelligenceGuide(locale: 'en' | 'es'): string {
       'Antes de cambiar estrategias globales o rutas de modelos, exige evaluacion independiente con tareas desconocidas de varios dominios y compara calidad, tiempo y costo con la version anterior.',
       'Una recomendacion de laboratorio nunca autoriza desplegar codigo, gastar dinero, enviar mensajes ni ampliar permisos. Conserva consentimiento, limites y restauracion. No declares AGI ni singularidad.',
       '</phoenix_general_intelligence>',
-    ].join('\\n')
+    ].join('\n')
     : [
       '<phoenix_general_intelligence>',
       'Use one objective, plan, authorized tools, evidence, evaluation, learning, and recovery cycle across every model and domain.',
@@ -28,7 +28,7 @@ function generalIntelligenceGuide(locale: 'en' | 'es'): string {
       'Before changing shared strategies or model routes, require independent unseen tasks across multiple domains and compare quality, latency, and cost against baseline.',
       'Lab recommendations never authorize deployment, spending, messaging, or permission escalation. Preserve consent, limits, and rollback. Do not claim AGI or singularity.',
       '</phoenix_general_intelligence>',
-    ].join('\\n')
+    ].join('\n')
 }
 
 /** Install the stable HARDNESS cognitive and lifecycle guides into the model system prompt.
