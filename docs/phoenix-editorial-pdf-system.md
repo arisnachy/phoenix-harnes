@@ -6,6 +6,16 @@ Un PDF no está terminado solo porque un motor consiga abrirlo: debe ser legible
 
 ## Perfiles de presentación
 
+**Principio de publicación:** las portadas, páginas, encabezados y pies destinados a terceros nunca llevan las etiquetas internas «Phoenix Research Studio», «Edición profesional» o afirmaciones publicitarias como «documento verificable». El autor, título, institución, revista y afiliaciones reales son la identidad visible del documento. La procedencia técnica pertenece al recibo interno de generación, no al manuscrito.
+
+**Modos disponibles:**
+- `academic`: documentación universitaria rigurosa, APA 7 u otras reglas institucionales, sin portada decorativa.
+- `journal`: manuscrito neutro para revisión editorial, sin diseño comercial ni índice forzado; se elige por defecto con `document_type: "journal_manuscript"` o revista objetivo identificada, salvo decisión explícita del usuario.
+- `hybrid`: informe científico de lectura, con figuras y tablas sustentadas y una portada editorial sobria.
+- `editorial`: informe, divulgación o producto para terceros con identidad visual más marcada.
+
+
+
 - `academic`: prioriza las reglas editoriales obligatorias del usuario, universidad o revista. No incorporar portada creativa, colores ni gráficos adicionales que infrinjan APA, Vancouver/ICMJE o instrucciones institucionales.
 - `editorial`: diseño contemporáneo, portada de alto nivel, retícula consistente, títulos jerarquizados, navegación, gráficos y tablas trazables. Pensado para informes, propuestas, publicaciones divulgativas, diagnósticos, productos comerciales y materiales de negocio.
 - `hybrid`: rigor bibliográfico y redacción científica con una capa editorial discreta. Es la presentación preferida cuando el usuario pide un informe científico profesional con diseño moderno y no está sometido a una plantilla institucional estricta.
@@ -23,6 +33,13 @@ Se mantienen dos dimensiones independientes: el modo de entrega editorial (`pres
 | `executive_amber` | Encabezado oscuro, geometría angular y acento ámbar | Estrategia, políticas públicas, negocios, informes ejecutivos |
 | `minimal_graphite` | Blanco editorial, líneas finas y tipografía sobria | Tesis, análisis técnicos y lectura prolongada |
 | `creative_coral` | Contraste berenjena-coral, formas asimétricas | Cultura, diseño, divulgación y propuestas creativas |
+| `journal_ink` | Blanco y retícula fina de tinta, acento gris azulado | Informe científico de lectura editorial |
+| `research_violet` | Violeta académico y matriz de puntos | Ciencia de datos, educación, análisis cuantitativo |
+| `biotech_green` | Verde botánico y círculo vectorial | Biotecnología, ciencias naturales, salud ambiental |
+| `ocean_blue` | Azul oceánico, geometrías de ondas | Medio ambiente, ingeniería y tecnología |
+| `terracotta_report` | Tierra y bloques asimétricos | Ciencias sociales, reportes y humanidades |
+| `clinical_white` | Blanco limpio con acento turquesa discreto | Salud y reportes clínicos de lectura |
+
 | `academic_classic` | Sin diseño decorativo | Únicamente `presentation: "academic"` |
 
 La selección automática usa el **tipo de documento** primero y luego palabras clave no sensibles del título. No usa aleatoriedad ni cambia sin aviso de identidad entre reintentos. El usuario puede fijar la misma identidad para varios documentos mediante un preset explícito; el modo `academic` prevalece sobre las preferencias visuales.
@@ -65,3 +82,12 @@ La verificación de fidelidad tiene prioridad sobre el diseño. Una estética mo
 ## Continuidad
 
 La presentación forma parte de un esquema universal de documentos. El productor científico puede seguir usando su modelo de datos actual, pero el mismo motor de composición debe poder servir a libros, informes financieros, documentos técnicos, proyectos, planes de negocio y propuestas comerciales. La fuente de verdad es el documento estructurado; la salida PDF es un render, no la fuente primaria.
+
+## Tablas, gráficos y preparación científica
+
+La presentación es independiente de la norma de citación. Cada tabla y figura registra un número y título legible, fuente bibliográfica trazable, notas y, cuando existen datos originales declarados por el autor, unidades, tamaño muestral `sample_size`, método, abreviaturas, intervalos `interval_label` y `statistical_note`. El editor **no inventa valores, porcentajes, tamaño de muestra, intervalos de confianza, significación estadística ni afiliaciones** para llenar espacios visuales.
+
+Gráficos admitidos: `bar`, `horizontal_bar`, `line`, `scatter` (requiere `x_values` numéricos alineados con `values`) y `forest` (requiere estimaciones, extremos `ci_low`/`ci_high` y `method`). Para otras figuras, buscar un creador de artefactos gráfico especializado en lugar de falsificar datos. Los errores se dibujan únicamente si se aportan extremos reales y `interval_label`; no llamar automáticamente «IC 95 %» a un intervalo no identificado. El PDF y el HTML incluyen pies; el Word editable conserva sus datos y marca las filas de encabezado como repetibles.
+
+Este proceso deja documentos maquetados para **revisión editorial**, pero no afirma aceptación, revisión por pares, verificación independiente de datos o conformidad automática con una revista concreta. Antes del envío, comprobar la guía vigente de autores, ética, consentimiento, autoría, palabras máximas, resumen estructurado, tablas/figuras como archivos independientes y la revisión humana final.
+
