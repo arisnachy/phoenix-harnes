@@ -166,8 +166,8 @@ export function serveGodotWebFile(req: IncomingMessage, res: ServerResponse): vo
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
   if (extname(name).toLowerCase() === '.html') {
-    res.setHeader('Content-Security-Policy', "default-src 'none'; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob:; " +
-      "style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; media-src 'self' data: blob:; " +
+    res.setHeader('Content-Security-Policy', "default-src 'none'; script-src " + origin + " 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob:; " +
+      "style-src " + origin + " 'unsafe-inline'; img-src " + origin + " data: blob:; font-src " + origin + " data:; media-src " + origin + " data: blob:; " +
       'connect-src ' + origin + "; worker-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'")
   }
   res.statusCode = 200
