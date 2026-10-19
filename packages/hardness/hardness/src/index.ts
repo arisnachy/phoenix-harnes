@@ -71,6 +71,24 @@ export type {
 export { GeneralizationGate } from './generalization-gate.ts'
 export type { GeneralizationAssessment, GeneralizationMetrics, GeneralizationSnapshot, GeneralizationTrial } from './generalization-gate.ts'
 
+export {
+  EvolutionBaselineRegistry,
+  verifyEvolutionBaseline,
+  verifyEvolutionCheckpoint,
+  verifyEvolutionTransfer,
+  verifyEvolutionProbe,
+  assessUniversalEvolution,
+} from './universal-evolution.ts'
+export type {
+  EvolutionPhase,
+  EvolutionBaseline,
+  EvolutionCheckpoint,
+  EvolutionTransfer,
+  EvolutionProbe,
+  EvolutionVerdict,
+  EvolutionReadiness,
+} from './universal-evolution.ts'
+
 export type * from './types.ts'
 
 function sameDescriptorRevision(left: CapabilityDescriptor, right: CapabilityDescriptor): boolean {

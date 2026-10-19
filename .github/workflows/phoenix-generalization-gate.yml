@@ -6,8 +6,15 @@ on:
       - '.github/workflows/phoenix-generalization-gate.yml'
       - 'packages/hardness/hardness/src/generalization-gate.ts'
       - 'packages/hardness/hardness/src/index.ts'
+      - 'packages/hardness/hardness/src/universal-evolution.ts'
+      - 'packages/hardness/hardness/tests/universal-evolution.spec.ts'
       - 'packages/hardness/hardness/tests/generalization-gate.spec.ts'
       - 'packages/hardness/adapters/src/protocol.ts'
+      - 'packages/hardness/adapters/src/index.ts'
+      - 'packages/hardness/adapters/src/evolution-runtime.ts'
+      - 'packages/hardness/adapters/src/evolution-status-tool.ts'
+      - 'packages/hardness/adapters/tests/evolution-runtime.spec.ts'
+      - 'packages/hardness/adapters/tests/evolution-status-tool.spec.ts'
       - 'packages/hardness/adapters/src/generalization-receipts.ts'
       - 'packages/hardness/adapters/tests/generalization-receipts.spec.ts'
       - 'packages/hardness/adapters/tests/protocol.spec.ts'
@@ -32,3 +39,6 @@ jobs:
           packages/hardness/hardness/tests/generalization-gate.spec.ts
           packages/hardness/adapters/tests/protocol.spec.ts
           packages/hardness/adapters/tests/generalization-receipts.spec.ts
+          packages/hardness/hardness/tests/universal-evolution.spec.ts
+          packages/hardness/adapters/tests/evolution-runtime.spec.ts
+          packages/hardness/adapters/tests/evolution-status-tool.spec.ts
