@@ -7,7 +7,7 @@ import { dirname, join } from 'node:path'
 
 const executable = join(dirname(fileURLToPath(import.meta.url)), 'phoenix-microsoft-personal-mcp.mjs')
 const services = {
-  mail: ['microsoft_mail_list', 'microsoft_mail_read', 'microsoft_mail_send'],
+  mail: ['microsoft_mail_list', 'microsoft_mail_read', 'microsoft_mail_draft', 'microsoft_mail_send'],
   calendar: ['microsoft_calendar_list', 'microsoft_calendar_create'],
   contacts: ['microsoft_contacts_list'],
   onedrive: ['microsoft_onedrive_list'],
