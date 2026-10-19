@@ -73,7 +73,7 @@ describe('HARDNESS General Intelligence Lab', () => {
     const regressed = new GeneralizationGate()
     for (const domain of ['code', 'research', 'browser']) {
       regressed.record(trial(domain, 'unseen-1', domain === 'code'
-        ? { candidate: { quality: 0.65, cost: 8, latencyMs: 900 } }
+        ? { candidate: { quality: 0.40, cost: 8, latencyMs: 900 } }
         : {}))
       regressed.record(trial(domain, 'unseen-2'))
     }
