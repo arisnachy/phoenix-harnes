@@ -36,7 +36,10 @@ const SERVICE_TOOL_PREFIX = {
 const GLOBAL_TOOLS = new Set(['microsoft_setup', 'microsoft_login_start', 'microsoft_login_complete',
   'microsoft_status', 'microsoft_disconnect', 'microsoft_profile'])
 function toolAllowed(name) {
-  return GLOBAL_TOOLS.has(name) || service === 'all' || name.startsWith(SERVICE_TOOL_PREFIX[service] ?? '__none__')
+  if (GLOBAL_TOOLS.has(name)) return true
+  if (service === 'all') return ['mail', 'calendar', 'contacts', 'onedrive']
+    .some(legacyService => name.startsWith(SERVICE_TOOL_PREFIX[legacyService]))
+  return name.startsWith(SERVICE_TOOL_PREFIX[service] ?? '__none__')
 }
 const guid = s => typeof s === 'string' && /^[a-f\d]{8}(-[a-f\d]{4}){3}-[a-f\d]{12}$/i.test(s)
 const text = (s, max=300) => typeof s === 'string' && s.trim().length > 0 && s.length <= max
