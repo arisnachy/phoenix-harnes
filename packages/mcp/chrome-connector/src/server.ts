@@ -855,7 +855,7 @@ server.registerTool('youtube_video_listen', {
   },
 }, async ({ url, tabId, startSeconds, durationSeconds, sessionId }) => {
   ensureBrowserActionPermission()
-  const tab = url === undefined ? await selectedTab(tabId, sessionId) : await newBrowserTab(youtubeWatchUrl(url, sessionId))
+  const tab = url === undefined ? await selectedTab(tabId, sessionId) : await newBrowserTab(youtubeWatchUrl(url), sessionId)
   const expected = youtubeWatchUrl(url ?? tab.url)
   let verified = false
   for (let attempt = 0; attempt < 8; attempt++) {
