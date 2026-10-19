@@ -493,9 +493,10 @@ function createExecutor(
     const agent = exec.agent
     // Delegated specialists use the coordinator's parent conversation.
     // A user-created fork (no subagent origin) remains a separate browser.
-    const ownerId = agent?.session.header.origin === 'subagent'
-      ? (agent.session.header.parentSession ?? agent.id)
-      : agent?.id
+    const ownerId = agent === undefined ? undefined
+      : agent.session.header.origin === 'subagent'
+        ? (agent.session.header.parentSession ?? agent.id)
+        : agent.id
     const routedArgs = chromeScope && ownerId !== undefined
       ? { ...wireArgs, sessionId: ownerId } : wireArgs
     const result = await callToolUncached(client, rawName, routedArgs, exec, opts).catch((error: unknown) => {
