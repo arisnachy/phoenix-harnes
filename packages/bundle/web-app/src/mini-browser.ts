@@ -362,11 +362,7 @@ function publish(endpoint: string, tabId?: string): void {
     writeFileSync(SHARED, JSON.stringify(data), { mode: 0o600 })
   } catch { /* Browser remains usable without cross-process collaboration. */ }
 }
-function cleanup(): void {
-  for (const { session } of cdpSessions.values()) session.close()
-  cdpSessions.clear()
-  frameFlights.clear()
-  for (const sessionId of scopedBrowsers.keys()) disposeScopedBrowser(sessionId)
+function cleanupLegacyBrowser(): void {
   const previous = owned?.pid
   if (previous !== undefined) {
     const ownsDescriptor = readDescriptor()?.pid === previous
@@ -381,6 +377,13 @@ function cleanup(): void {
   owned = undefined
   ownedEndpoint = undefined
   ownedProfile = undefined
+}
+function cleanup(): void {
+  for (const { session } of cdpSessions.values()) session.close()
+  cdpSessions.clear()
+  frameFlights.clear()
+  for (const sessionId of scopedBrowsers.keys()) disposeScopedBrowser(sessionId)
+  cleanupLegacyBrowser()
 }
 function requestSignal(signal?: AbortSignal): AbortSignal {
   const deadline = AbortSignal.timeout(2500)
@@ -473,7 +476,8 @@ async function startChromium(signal?: AbortSignal): Promise<string> {
       throwIfAborted(signal)
       throw new Error('Chromium no inició su canal de control CDP.' + (spawnFailure ? ' ' + String(spawnFailure) : ''))
     } catch (error) {
-      cleanup()
+      // Failure of legacy global Chrome must not close isolated chat browsers.
+      cleanupLegacyBrowser()
       throw error
     }
   })().finally(() => { launching = undefined })
