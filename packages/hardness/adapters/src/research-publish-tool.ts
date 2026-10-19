@@ -153,7 +153,11 @@ export function validateResearchPublication(input: unknown): Report {
   )) {
     throw new ToolArgsError(['Diseño desconocido. Usa auto, academic_classic o uno de los 11 estilos visuales registrados.'])
   }
-  const presentation = report.presentation ?? (quality === 'professional' ? 'hybrid' : 'academic')
+  const journalMode = report.document_type === 'journal_manuscript'
+    || (typeof report.journal_requirements === 'object' && report.journal_requirements !== null
+      && !Array.isArray(report.journal_requirements)
+      && typeof (report.journal_requirements as Record<string, unknown>).journal === 'string')
+  const presentation = report.presentation ?? (journalMode ? 'journal' : quality === 'professional' ? 'hybrid' : 'academic')
   if (['academic', 'journal'].includes(String(presentation)) && report.design_preset !== undefined
     && report.design_preset !== 'auto' && report.design_preset !== 'academic_classic') {
     throw new ToolArgsError(['Los modos academic y journal no admiten una portada decorativa.'])
