@@ -33,7 +33,10 @@ describe('provider-neutral evolution status model tool', () => {
 
   it('cannot inspect a foreign mission or manufacture evidence without a live agent', async () => {
     const tool = createEvolutionStatusTool()
-    const missing = await tool.execute({ missionId: 'foreign', revision: 1 }, context(mission()))
+    const missing = await tool.execute({ missionId: 'foreign', revision: 1 }, context(mission())) as {
+      readonly available: boolean
+      readonly reasons: readonly string[]
+    }
     expect(missing.available).toBe(false)
     expect(missing.reasons).toContain('no matching mission in this conversation')
     await expect(tool.execute({ missionId: 'mission-1', revision: -1 }, context(mission()))).resolves.toMatchObject({
