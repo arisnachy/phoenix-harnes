@@ -15,7 +15,7 @@ describe('Secure Ask human-only browser sidebar', () => {
       calls.push({ path, data })
       return new Response(JSON.stringify(path.endsWith('/save')
         ? { saved: true, automatic: data.automatic }
-        : path.endsWith('/detect') ? { required: false }
+        : path.endsWith('/detect') ? { required: false, authenticated: true }
           : { status: 'submitted' }), { status: 200, headers: { 'content-type': 'application/json' } })
     }))
     render(<SecureAsk
@@ -50,7 +50,7 @@ describe('Secure Ask human-only browser sidebar', () => {
     vi.stubGlobal('fetch', vi.fn(async (url: string, options?: RequestInit) => {
       if (typeof options?.body === 'string') calls.push(JSON.parse(options.body) as Record<string, unknown>)
       return new Response(JSON.stringify(url.endsWith('/save') ? { saved: true }
-        : url.endsWith('/detect') ? { required: false } : { status: 'submitted' }), {
+        : url.endsWith('/detect') ? { required: false, authenticated: true } : { status: 'submitted' }), {
         status: 200, headers: { 'content-type': 'application/json' },
       })
     }))
@@ -83,7 +83,7 @@ describe('Secure Ask human-only browser sidebar', () => {
       ]
       return new Response(JSON.stringify(path.endsWith('/select')
         ? { saved: true, automatic: false, profile: 'kira', profiles }
-        : path.endsWith('/detect') ? { required: false }
+        : path.endsWith('/detect') ? { required: false, authenticated: true }
           : { status: 'submitted' }), {
         status: 200, headers: { 'content-type': 'application/json' },
       })
@@ -116,7 +116,7 @@ describe('Secure Ask human-only browser sidebar', () => {
       ]
       return new Response(JSON.stringify(path.endsWith('/save')
         ? { saved: true, automatic: false, profile: 'personal', profiles }
-        : path.endsWith('/detect') ? { required: false }
+        : path.endsWith('/detect') ? { required: false, authenticated: true }
           : { status: 'submitted' }), {
         status: 200, headers: { 'content-type': 'application/json' },
       })

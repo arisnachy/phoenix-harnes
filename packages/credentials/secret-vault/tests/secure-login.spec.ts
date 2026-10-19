@@ -71,7 +71,7 @@ describe('origin-scoped secure login', () => {
         ? [] : [trigger],
     }
     expect(evaluator('inspect', root)).toMatchObject({
-      required: true, formVisible: false, gateVisible: true, canOpenInPlace: true,
+      required: true, formVisible: false, authenticated: false, gateVisible: true, canOpenInPlace: true,
     })
     expect(clicks).toBe(0)
     expect(evaluator('open', root).required).toBe(true)

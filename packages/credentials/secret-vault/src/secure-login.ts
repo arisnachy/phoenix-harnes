@@ -276,6 +276,7 @@ export interface LoginInputHint {
 export interface LoginGateState {
   required: boolean
   formVisible: boolean
+  authenticated?: boolean
   gateVisible: boolean
   canOpenInPlace: boolean
   warningVisible: boolean
@@ -294,7 +295,7 @@ export function loginGateExpression(action: 'inspect' | 'open' = 'inspect'): str
       } catch {}
     }
     const visible = e => !e.disabled && !e.readOnly && e.getClientRects().length > 0;
-    const signIn = /^(?:ingresar|entrar|acceder|iniciar sesi[oó]n|identificarse|log ?in|sign ?in)$/i;
+    const signIn = /^(?:ingresar|entrar|acceder|iniciar sesi[oó]n|identificarse|log ?in|sign ?in|cuenta|mi cuenta|account)$/i;
     const triggers = roots.flatMap(doc =>
       [...doc.querySelectorAll('button,a,[role="button"],input[type="button"]')]
         .filter(e => visible(e) && signIn.test((e.innerText||e.textContent||e.value||'').trim())));
@@ -318,6 +319,11 @@ export function loginGateExpression(action: 'inspect' | 'open' = 'inspect'): str
     };
     const canOpenInPlace = triggers.length === 1 && inPlace(triggers[0]);
     const formVisible = forms.length > 0;
+    // A disappeared password field is not sufficient proof of authentication.
+    const signOut = /^(?:cerrar sesi[oó]n|finalizar sesi[oó]n|salir de la cuenta|log ?out|sign ?out)$/i;
+    const authenticated = !formVisible && roots.some(doc =>
+      [...doc.querySelectorAll('button,a,[role="button"]')]
+        .some(e => visible(e) && signOut.test((e.innerText||e.textContent||e.value||'').trim())));
     const hints = (() => {
       if (forms.length !== 1) return [];
       const doc = forms[0];
@@ -351,7 +357,7 @@ export function loginGateExpression(action: 'inspect' | 'open' = 'inspect'): str
     if (__OPEN_LOGIN__ && !formVisible && canOpenInPlace) triggers[0].click();
     return {
       required: formVisible || triggers.length > 0 || warningVisible,
-      formVisible,
+      formVisible, authenticated,
       gateVisible: triggers.length > 0,
       canOpenInPlace,
       warningVisible,

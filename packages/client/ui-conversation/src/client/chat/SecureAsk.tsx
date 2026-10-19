@@ -66,10 +66,14 @@ export function SecureAsk({ target, onClose, onSaved }: {
     for (let attempt = 0; attempt < 4; attempt++) {
       await new Promise<void>(resolve => setTimeout(resolve, 600))
       try {
-        const status = await secureApi<{ required: boolean }>('/detect', {
+        const status = await secureApi<{ required: boolean; authenticated?: boolean }>('/detect', {
           origin: target.origin, tabId: target.tabId,
         })
-        if (status.required === false) { onSaved(); return }
+        if (status.authenticated === true) { onSaved(); return }
+        if (status.required === false) {
+          setFeedback('Credenciales guardadas. El formulario desapareció, pero el sitio aún no confirmó una sesión autenticada.')
+          return
+        }
       } catch { /* Transient browser transport errors must not imply success. */ }
     }
     setFeedback('El acceso se envió, pero el sitio todavía no confirmó la sesión. Conservé el formulario y el cupón.')
