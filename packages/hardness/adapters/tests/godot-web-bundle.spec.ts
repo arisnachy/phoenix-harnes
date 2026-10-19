@@ -80,10 +80,12 @@ describe('Godot Web project playback host', () => {
     expect(() => publishGodotWebExport('web', root, 'Fake')).toThrow('Invalid Godot PCK')
     writeFileSync(join(dir, 'index.pck'), Buffer.from('GDPC0123'))
     rmSync(join(dir, 'index.wasm'))
-    const outside = join(root, 'outside.wasm')
-    writeFileSync(outside, Buffer.from([0, 97, 115, 109]))
-    symlinkSync(outside, join(dir, 'index.wasm'))
-    expect(() => publishGodotWebExport('web', root, 'Escape')).toThrow('escaping')
+    if (process.platform !== 'win32') {
+      const outside = join(root, 'outside.wasm')
+      writeFileSync(outside, Buffer.from([0, 97, 115, 109]))
+      symlinkSync(outside, join(dir, 'index.wasm'))
+      expect(() => publishGodotWebExport('web', root, 'Escape')).toThrow('escaping')
+    }
     expect(() => publishGodotWebExport('../', root, 'Outside')).toThrow('inside')
   })
 })
