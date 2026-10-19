@@ -485,13 +485,13 @@ describe('MiniBrowser in Phoenix conversation', () => {
     Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() })
     const view = render(<MiniBrowser sessionId="test-chat" requested />)
     await waitFor(() => { expect(stateUrls.length).toBeGreaterThan(0) })
-    expect(stateUrls[0]).toBe('/phoenix-mini-browser/state')
+    expect(stateUrls[0]).toBe('/phoenix-mini-browser/state?sessionId=test-chat')
     await waitFor(() => { expect(frameUrls.length).toBeGreaterThan(0) })
-    expect(frameUrls[0]).toContain('?tabId=shared-tab')
+    expect(frameUrls[0]).toContain('?sessionId=test-chat&tabId=shared-tab')
     view.rerender(<MiniBrowser sessionId="test-chat" requested active={false} />)
     view.rerender(<MiniBrowser sessionId="test-chat" requested active />)
     await waitFor(() => {
-      expect(stateUrls).toContain('/phoenix-mini-browser/state?tabId=shared-tab')
+      expect(stateUrls).toContain('/phoenix-mini-browser/state?sessionId=test-chat&tabId=shared-tab')
     })
   })
 
@@ -501,7 +501,7 @@ describe('MiniBrowser in Phoenix conversation', () => {
     vi.stubGlobal('fetch', vi.fn(async (input: string) => {
       if (input.startsWith('/phoenix-mini-browser/state')) {
         stateUrls.push(input)
-        const scoped = input.includes('?tabId=child-tab')
+        const scoped = input.includes('?sessionId=test-chat&tabId=child-tab')
         return new Response(JSON.stringify(scoped ? childState : state), { status: 200, headers: { 'content-type': 'application/json' } })
       }
       if (input.startsWith('/phoenix-mini-browser/frame')) {
@@ -514,7 +514,7 @@ describe('MiniBrowser in Phoenix conversation', () => {
     const view = render(<MiniBrowser sessionId="test-chat" requested />)
     await screen.findByRole('tab', { name: 'YouTube' })
     view.rerender(<MiniBrowser sessionId="test-chat" requested initialTabId="child-tab" />)
-    await waitFor(() => { expect(stateUrls).toContain('/phoenix-mini-browser/state?tabId=child-tab') })
+    await waitFor(() => { expect(stateUrls).toContain('/phoenix-mini-browser/state?sessionId=test-chat&tabId=child-tab') })
     expect(await screen.findByRole('tab', { name: 'Child page' })).toBeTruthy()
   })
 
@@ -524,7 +524,7 @@ describe('MiniBrowser in Phoenix conversation', () => {
     vi.stubGlobal('fetch', vi.fn(async (input: string, options?: RequestInit) => {
       if (input.startsWith('/phoenix-mini-browser/state')) {
         stateUrls.push(input)
-        if (input.includes('?tabId=missing-child')) return new Response(JSON.stringify({ error: 'Pestaña no encontrada.' }), { status: 404 })
+        if (input.includes('?sessionId=test-chat&tabId=missing-child')) return new Response(JSON.stringify({ error: 'Pestaña no encontrada.' }), { status: 404 })
       }
       if (input.startsWith('/phoenix-mini-browser/action') && typeof options?.body === 'string') {
         actions.push((JSON.parse(options.body) as { type: string }).type)
@@ -533,7 +533,7 @@ describe('MiniBrowser in Phoenix conversation', () => {
     }))
     render(<MiniBrowser sessionId="test-chat" requested initialTabId="missing-child" />)
     await waitFor(() => { expect(screen.getByRole('status').textContent).toContain('Conexión del navegador') })
-    expect(stateUrls[0]).toBe('/phoenix-mini-browser/state?tabId=missing-child')
+    expect(stateUrls[0]).toBe('/phoenix-mini-browser/state?sessionId=test-chat&tabId=missing-child')
     expect(actions).not.toContain('start')
     expect(screen.queryByRole('tab', { name: 'YouTube' })).toBeNull()
   })
@@ -571,7 +571,7 @@ describe('MiniBrowser in Phoenix conversation', () => {
     await waitFor(() => { expect(actions).toContain('select-tab') })
     view.rerender(<MiniBrowser sessionId="test-chat" requested initialTabId="child-tab" active={false} />)
     view.rerender(<MiniBrowser sessionId="test-chat" requested initialTabId="child-tab" active />)
-    await waitFor(() => { expect(stateUrls).toContain('/phoenix-mini-browser/state?tabId=manual-tab') })
+    await waitFor(() => { expect(stateUrls).toContain('/phoenix-mini-browser/state?sessionId=test-chat&tabId=manual-tab') })
     expect(screen.getByRole('tab', { name: 'Manual page' }).getAttribute('aria-selected')).toBe('true')
   })
 
@@ -583,7 +583,7 @@ describe('MiniBrowser in Phoenix conversation', () => {
     expect(screen.queryByText('◉ Abrir navegador')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: /Abrir navegador completo/ }))
     await waitFor(() => {
-      expect(calls).toContainEqual({ type: 'open-external', tabId: 'shared-tab' })
+      expect(calls).toContainEqual({ type: 'open-external', tabId: 'shared-tab', sessionId: 'test-chat' })
     })
   })
 
@@ -645,7 +645,7 @@ describe('MiniBrowser in Phoenix conversation', () => {
     fireEvent.change(address, { target: { value: 'https://example.org' } })
     fireEvent.click(screen.getByRole('button', { name: 'Ir' }))
     await waitFor(() => {
-      expect(calls).toContainEqual({ type: 'open', url: 'https://example.org', tabId: 'shared-tab' })
+      expect(calls).toContainEqual({ type: 'open', url: 'https://example.org', tabId: 'shared-tab', sessionId: 'test-chat' })
     })
   })
   it('plays a YouTube watch URL with sound without replacing Kira\'s CDP tab', async () => {
