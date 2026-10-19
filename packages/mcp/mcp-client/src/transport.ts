@@ -160,6 +160,16 @@ const CURRENT_SOCIAL_ENGINE_MCP = fileURLToPath(
   new URL('../../../../scripts/phoenix-social-mcp.mjs', import.meta.url),
 )
 
+/** Exact Phoenix-owned Graph service namespaces and entrypoint args. */
+const MICROSOFT_GRAPH_SCOPED_SERVICES: Readonly<Record<string, string>> = {
+  'outlook-mail': 'mail',
+  'outlook-calendar': 'calendar',
+  'microsoft-contacts': 'contacts',
+  onedrive: 'onedrive',
+  'microsoft-teams': 'teams',
+  sharepoint: 'sharepoint',
+}
+
 /** Resolve the locally pinned Microsoft/Social MCP from this active runtime, not the process cwd. */
 export function normalizeMicrosoftPersonalMcpLaunch(
   serverName: string, command: string, args: readonly string[],
@@ -173,14 +183,16 @@ export function normalizeMicrosoftPersonalMcpLaunch(
     }
     return { command: process.execPath, args: [CURRENT_SOCIAL_ENGINE_MCP] }
   }
-  if (serverName === 'microsoft-personal'
-    && command === 'node'
-    && args.length === 1
-    && args[0] === 'scripts/phoenix-microsoft-personal-mcp.mjs') {
+  const scopedService = MICROSOFT_GRAPH_SCOPED_SERVICES[serverName]
+  if (command === 'node'
+    && args[0] === 'scripts/phoenix-microsoft-personal-mcp.mjs'
+    && ((serverName === 'microsoft-personal' && args.length === 1)
+      || (scopedService !== undefined && args.length === 2 && args[1] === scopedService))) {
     if (!existsSync(CURRENT_MICROSOFT_PERSONAL_MCP)) {
-      throw new Error('mcp-client: Microsoft Personal MCP script is missing from the active Phoenix runtime')
+      throw new Error('mcp-client: Microsoft Graph MCP script is missing from the active Phoenix runtime')
     }
-    return { command: process.execPath, args: [CURRENT_MICROSOFT_PERSONAL_MCP] }
+    return { command: process.execPath,
+      args: [CURRENT_MICROSOFT_PERSONAL_MCP, ...(scopedService === undefined ? [] : [scopedService])] }
   }
   return normalizeWindowsNpxMcpLaunch(command, args)
 }

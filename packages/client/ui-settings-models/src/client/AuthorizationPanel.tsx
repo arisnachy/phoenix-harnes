@@ -103,10 +103,10 @@ export interface JevMcpSnapshot {
   reasonCode?: McpConnectorRuntimeView['reasonCode']
 }
 
-type CuratedMcpConnectorId = 'meta-publishing' | 'x' | 'x-docs' | 'social-engine' | 'microsoft-personal' | 'github' | 'meta-devtools' | 'meta-whatsapp-business' | 'microsoft-learn' | 'microsoft-workiq' | 'microsoft-azure' | 'devpost' | 'canva' | 'supabase' | 'heygen' | 'figma' | 'vercel' | 'notion' | 'linear' | 'cloudflare' | 'slack' | 'brave-search' | 'filesystem' | 'memory' | 'fetch'
+type CuratedMcpConnectorId = 'meta-publishing' | 'x' | 'x-docs' | 'social-engine' | 'microsoft-personal' | 'outlook-mail' | 'outlook-calendar' | 'microsoft-contacts' | 'onedrive' | 'microsoft-teams' | 'sharepoint' | 'github' | 'meta-devtools' | 'meta-whatsapp-business' | 'microsoft-learn' | 'microsoft-workiq' | 'microsoft-azure' | 'devpost' | 'canva' | 'supabase' | 'heygen' | 'figma' | 'vercel' | 'notion' | 'linear' | 'cloudflare' | 'slack' | 'brave-search' | 'filesystem' | 'memory' | 'fetch'
 
 const CURATED_MCP_CONNECTOR_IDS = new Set<string>([
-  'meta-publishing', 'x', 'x-docs', 'social-engine', 'microsoft-personal', 'github', 'meta-devtools', 'meta-whatsapp-business', 'microsoft-learn', 'microsoft-workiq', 'microsoft-azure', 'devpost', 'canva', 'supabase', 'heygen', 'figma', 'vercel', 'notion', 'linear', 'cloudflare',
+  'meta-publishing', 'x', 'x-docs', 'social-engine', 'microsoft-personal', 'outlook-mail', 'outlook-calendar', 'microsoft-contacts', 'onedrive', 'microsoft-teams', 'sharepoint', 'github', 'meta-devtools', 'meta-whatsapp-business', 'microsoft-learn', 'microsoft-workiq', 'microsoft-azure', 'devpost', 'canva', 'supabase', 'heygen', 'figma', 'vercel', 'notion', 'linear', 'cloudflare',
   'slack', 'brave-search', 'filesystem', 'memory', 'fetch',
 ])
 
@@ -412,6 +412,10 @@ function serverMatchesDefinition(serverName: string, definition: ConnectorDefini
   if (definition.id === 'x') return server === 'x-api'
   if (definition.id === 'x-docs') return server === 'x-docs'
   if (definition.id === 'social-engine') return server === 'social-engine'
+  // Distinct Graph grants must never inherit the old combined Microsoft personal runtime.
+  if (['outlook-mail', 'outlook-calendar', 'microsoft-contacts', 'onedrive', 'microsoft-teams', 'sharepoint'].includes(definition.id)) {
+    return server === definition.id
+  }
   const needles = [definition.id, definition.name, ...(definition.aliases ?? [])]
     .map(normalize)
     .filter(value => value.length >= 3)
@@ -579,6 +583,9 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
   const [microsoftBillingAcknowledged, setMicrosoftBillingAcknowledged] = useState(false)
   const microsoftRequiresBillingAcknowledgement = definition.id === 'microsoft-workiq'
     || definition.id === 'microsoft-azure'
+  const serviceGraph = ['microsoft-personal', 'outlook-mail', 'outlook-calendar',
+    'microsoft-contacts', 'onedrive', 'microsoft-teams', 'sharepoint'].includes(definition.id)
+  const needsIndependentVerification = serviceGraph || definition.id === 'x'
   const connectedByAccount = managed === undefined
     && mcpRuntime === undefined
     && accountGrantConnectsCatalogEntry(account)
@@ -586,7 +593,9 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
   const liveStatus = live === undefined ? undefined : connectorStatus(live, t)
   const mcpStatus = mcpRuntime?.status === 'ready'
     ? mcpRuntime.toolNames.length > 0
-      ? { text: t('callableStatus'), className: connectorStyles['connectorStatusReady'] ?? '' }
+      ? needsIndependentVerification
+        ? { text: 'MCP iniciado · verifica OAuth con Kira', className: connectorStyles['connectorStatusWarn'] ?? '' }
+        : { text: t('callableStatus'), className: connectorStyles['connectorStatusReady'] ?? '' }
       : { text: t('registryNoToolsStatus'), className: connectorStyles['connectorStatusWarn'] ?? '' }
     : mcpRuntime?.status === 'starting'
       ? { text: t('connectingStatus'), className: connectorStyles['connectorStatusInfo'] ?? '' }
@@ -729,6 +738,28 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
             antes de cualquier envío o cambio de facturación.</p>
         </div>
       ) : null}
+      {definition.id === 'x' ? (
+        <div className={styles['advancedHint']}>
+          <p><strong>OAuth oficial de X no es OAuth MCP genérico.</strong> El puente xurl necesita
+            una aplicación X registrada, Client ID y Client Secret guardados en el vault,
+            el callback exacto <code>http://localhost:8080/callback</code> autorizado
+            en la configuración de la aplicación y acceso API habilitado.
+            El primer inicio abre la autorización del navegador desde Windows;
+            el servidor MCP iniciado no prueba que haya una sesión válida.</p>
+          <details>
+            <summary>Diagnosticar autorización que no abre o falla</summary>
+            <ol>
+              <li>Verifica el callback en el portal de desarrolladores X, incluido puerto 8080.</li>
+              <li>Comprueba que el puerto 8080 está libre y que el navegador puede acceder al equipo donde corre Phoenix.</li>
+              <li>En la terminal del mismo usuario Windows, ejecuta <code>npx -y @xdevplatform/xurl auth status</code> para ver el estado (sin copiar tokens al chat).</li>
+              <li>Si no aparece la ventana de autorización, usa la ruta oficial <code>npx -y @xdevplatform/xurl auth oauth2 --headless</code> y sigue las instrucciones locales. El código de retorno no debe pegarse en el chat.</li>
+              <li>Si OAuth funciona pero X devuelve <code>client-not-enrolled</code>, revisa la asignación del plan de API y el entorno Production en el portal X; pueden existir costes.</li>
+            </ol>
+            <p>Después reconecta el MCP y prueba una lectura real. No marcar como cuenta conectada solamente por ver herramientas.</p>
+            <a href="https://github.com/xdevplatform/xurl" target="_blank" rel="noopener noreferrer">Documentación oficial xurl</a>
+          </details>
+        </div>
+      ) : null}
       {definition.id === 'microsoft-learn' ? (
         <p className={styles['advancedHint']}>
           Gratuito: documentación pública oficial sin inicio de sesión ni acceso a correos privados.
@@ -762,14 +793,22 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
               target="_blank" rel="noopener noreferrer">Guía Phoenix</a></p>
         </div>
       ) : null}
-      {['outlook-mail', 'outlook-calendar', 'onedrive', 'sharepoint', 'microsoft-teams'].includes(definition.id)
-        && managed === undefined && authorizationAccount === undefined ? (
-          <p className={styles['advancedHint']}>
-            Para consultar datos de Microsoft 365, instala Microsoft 365 Work IQ
-            (requiere plan de facturación y permisos Entra) o conecta un adaptador
-            Graph con los permisos de tu cuenta. Esta tarjeta no es un OAuth operativo independiente.
-          </p>
-        ) : null}
+      {serviceGraph ? (
+        <div className={styles['advancedHint']}>
+          <p><strong>OAuth Microsoft independiente:</strong> pulsa Instalar y luego pide a Kira
+            «Conecta {definition.name} con Microsoft». Kira debe ejecutar <code>microsoft_status</code>,
+            solicitar una sola vez el Application (client) ID público si falta mediante
+            <code>microsoft_setup</code>, iniciar <code>microsoft_login_start</code>, mostrar
+            el código y la URL oficial, completar <code>microsoft_login_complete</code> y
+            comprobar <code>microsoft_profile</code>. El dispositivo pide tu consentimiento;
+            no se debe pedir contraseña ni mostrar el conector como autenticado por iniciar su MCP.</p>
+          <p><a href="https://entra.microsoft.com/" target="_blank" rel="noopener noreferrer">Registrar aplicación Microsoft</a>
+            {' '}·{' '}<a href="https://github.com/arisnachy/phoenix-harnes/blob/stable/docs/connectors/microsoft-mcp.md"
+              target="_blank" rel="noopener noreferrer">Guía de autorización</a>.
+            {' '}Entra debe permitir cuentas personales y/o de organización, cliente público y flujo de dispositivo.
+            Teams y SharePoint requieren cuenta de trabajo/educación y pueden necesitar autorización administrativa.</p>
+        </div>
+      ) : null}
       {microsoftRequiresBillingAcknowledgement && managed === undefined ? (
         <label className={styles['advancedHint']}>
           <input type="checkbox" checked={microsoftBillingAcknowledged}
@@ -1420,6 +1459,8 @@ export function ConnectorsSettingsSection({ api,
     const connected = (openClawRoute?.connected === true && !runtimeAuthoritative)
       || (runtimeAuthoritative
         ? mcpRuntime?.status === 'ready' && mcpRuntime.toolNames.length > 0
+          && !(['microsoft-personal','outlook-mail','outlook-calendar','microsoft-contacts',
+            'onedrive','microsoft-teams','sharepoint','x'].includes(definition.id))
         : live?.callable === true || accountConnected)
       || definition.id === 'binance'
     return { definition, live, account, mcpRuntime, managed, openClaw: openClawRoute, connected }
@@ -1764,12 +1805,19 @@ export function ConnectorsSettingsSection({ api,
       setXClientId('')
       setXClientSecret('')
       return xConnector.connectX!({ identity, ...(identity === 'phoenix' ? { username } : {}) })
-    }).then((receipt) => {
+    }).then(async (receipt) => {
+      // Reinstalling an already-running xurl bridge does not inject newly saved
+      // vault credentials into its existing child. Restart that exact namespace
+      // so it can start the real browser OAuth callback instead of staying broken.
+      if (receipt.api.status === 'already-installed' && xConnector.reconnect !== undefined) {
+        const restarted = await xConnector.reconnect({ serverName: receipt.api.connector.serverName })
+        if (!restarted.accepted) throw new Error('El puente X no pudo reiniciarse con la credencial actualizada.')
+      }
       setRefresh(current => current + 1)
       onAuthorized()
       setXNotice('MCP ' + receipt.api.connector.serverName
-        + ' instalado. Completa la autorización OAuth oficial de X; '
-        + 'la instalación NO demuestra todavía que el perfil esté conectado.')
+        + ' preparado. Comprueba en el navegador la autorización real de X y prueba una lectura; '
+        + 'la instalación no demuestra que la cuenta esté autenticada.')
     }, (error: unknown) => {
       setXNotice('No se pudo configurar X: ' + String(error).slice(0, 250))
     }).finally(() => { setXBusy(false) })

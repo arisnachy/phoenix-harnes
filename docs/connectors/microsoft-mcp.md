@@ -1,6 +1,6 @@
 # Microsoft MCP en Phoenix (octubre de 2026)
 
-Phoenix ofrece tres servidores **oficiales** de Microsoft, cada uno instalable
+Phoenix ofrece integraciones Microsoft separadas: Microsoft Learn, Graph gratuito por servicio (implementación local Phoenix), Work IQ y Azure. Los servidores **oficiales** de Microsoft Learn, Work IQ y Azure siguen instalables
 desde Configuración → Conectores. **Microsoft Learn Docs** se prepara automáticamente como MCP público y gratuito en el paquete básico de Phoenix; **Work IQ y Azure** son opcionales y no se instalan ni usan sin una acción del usuario y sus requisitos. El equipo Windows necesita actualizar el Host para recibir estos cambios.
 
 ## 1. Microsoft Learn Docs MCP — público y gratuito
@@ -146,3 +146,33 @@ normales, aunque se aplican cuotas, límites y políticas de Microsoft.
 Host (la raíz de la versión activa de Phoenix). Comprueba `node --version`
 y que el script exista en ese runtime. Nunca confundas instalado con
 autenticado: valida primero las herramientas y luego la cuenta.
+
+
+## 8. Outlook y Microsoft Graph por servicio: seis conexiones independientes
+
+En **Configuración → Conectores**, las siguientes tarjetas son instalables sin Work IQ:
+
+| Tarjeta | MCP interno | Permisos delegados solicitados por el servicio |
+| --- | --- | --- |
+| Outlook · correo | `outlook-mail` | `User.Read`, `Mail.Read`; para borradores/envío `Mail.ReadWrite`, `Mail.Send` |
+| Outlook · calendario | `outlook-calendar` | `User.Read`, `Calendars.Read`; para crear eventos `Calendars.ReadWrite` |
+| Microsoft · contactos | `microsoft-contacts` | `User.Read`, `Contacts.Read` |
+| OneDrive · archivos | `onedrive` | `User.Read`, `Files.Read` |
+| Microsoft Teams · canales | `microsoft-teams` | `User.Read`, `Team.ReadBasic.All`, `Channel.ReadBasic.All`, `ChannelMessage.Read.All` |
+| SharePoint · sitios | `sharepoint` | `User.Read`, `Sites.Read.All` |
+
+Todas solicitan `offline_access` para renovar la sesión. **Seis tarjetas ≠ seis autorizaciones automáticas.** Cada servicio utiliza un proceso MCP, una lista de herramientas filtrada por servicio, consentimiento delegado independiente y su propio token de actualización Windows cifrado por DPAPI (`~/.dsh/microsoft-personal/refresh-<service>.dpapi`). Comparten *solamente* un Application (client) ID público en `client.json`, sin compartir tokens.
+
+**Autorización real, sin ventanas OAuth falsas:**
+
+1. Registra una aplicación de cliente público en [Microsoft Entra](https://entra.microsoft.com/): selecciona los tipos de cuenta que usarás (personal, organizacional, o ambas), habilita el flujo de dispositivo/cliente público, agrega los permisos delegados del servicio.
+2. En Phoenix instala **la tarjeta concreta**, o pídele a Kira: «Conecta Outlook correo», «Conecta Outlook calendario», «Conecta OneDrive», etc. `connector_install` tiene rutas específicas para esos MCP.
+3. Kira solicita el **Application (client) ID** si aún falta (es un identificador público, no contraseña ni secret), llama `microsoft_setup` una vez y luego `microsoft_login_start` en el **MCP de ese servicio**. Devuelve la URL Microsoft oficial y un código temporal.
+4. Abre la URL y escribe el código **en Microsoft**, acepta los permisos concedidos por ti. Kira usa `microsoft_login_complete` respetando `retryAfterSeconds` y confirma acceso mediante `microsoft_profile`. Nunca se envían contraseñas al chat.
+5. El siguiente servicio requiere su propio paso de autorización. No se da por conectado Outlook Calendario por haber autorizado Outlook Correo. `microsoft_status` informa credenciales almacenadas, **no** da fe por sí solo de un acceso Graph actual.
+
+El servidor usa la autoridad Microsoft `common` en los servicios personales compatibles con cuentas personales o de trabajo/educativas. **Teams y SharePoint** usan `organizations`: no son compatibles con una cuenta gratuita Outlook.com personal y su organización puede exigir permisos aprobados por un administrador. El conector de Teams implementa **lectura de equipos, canales y mensajes de canales**, no chats privados ni llamadas. SharePoint implementa **búsqueda de sitios y enumeración de bibliotecas**, no edición de documentos. OneDrive implementa enumeración de archivos y carpetas, no modificación de documentos. No se promete acceso empresarial donde Microsoft imponga restricciones.
+
+El conector heredado `microsoft-personal` se conserva para compatibilidad, pero su autenticación no desbloquea automáticamente las nuevas identidades. La suite es una *capacidad transversal* de Phoenix, no un modo específico del agente.
+
+**Pruebas:** `node --test scripts/phoenix-microsoft-personal-mcp.test.mjs scripts/phoenix-microsoft-scoped-mcp.test.mjs`. Esas pruebas no sustituyen una autorización real con una cuenta Microsoft en Windows. Los tokens de una cuenta concreta no están accesibles desde GitHub CI.

@@ -704,7 +704,7 @@ describe('connectors settings section', () => {
     expect(screen.getByText('Phoenix knows which MCPs you already have')).toBeTruthy()
     expect(screen.queryByText('Capability presets')).toBeNull()
     expect(screen.getByText('Devpost Hackathons')).toBeTruthy()
-    expect(screen.getByText('Microsoft Teams')).toBeTruthy()
+    expect(screen.getByText('Microsoft Teams · canales')).toBeTruthy()
     expect(screen.getByText('Firebase')).toBeTruthy()
     expect(screen.getAllByText('Official adapter not available in this build').length).toBeGreaterThan(0)
     expect(screen.getAllByRole('button', { name: 'Find official / install' }).length).toBeGreaterThan(0)
@@ -809,6 +809,66 @@ describe('connectors settings section', () => {
     await waitFor(() => expect(installCurated).toHaveBeenCalledWith({ connectorId: 'microsoft-learn' }))
     expect(api.begin).not.toHaveBeenCalled()
   })
+
+  it('shows six independent Graph installers and never mistakes running tool servers for authorized accounts', async () => {
+    const api = { list: vi.fn(async () => ok({ entries: [] })),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const ids = ['outlook-mail', 'outlook-calendar', 'microsoft-contacts',
+      'onedrive', 'microsoft-teams', 'sharepoint'] as const
+    const managed = [...ids, 'x'].map(id => ({
+      entryId: id + '-entry', serverName: id === 'x' ? 'x-api' : id, url: 'stdio://' + id,
+      source: { kind: 'curated' as const, connectorId: id },
+    }))
+    renderHub(api, { mcpRegistry: {
+      state: vi.fn(async () => ({ managed,
+        runtime: managed.map(row => ({
+          serverName: row.serverName, transport: 'stdio' as const,
+          status: 'ready' as const, toolNames: ['microsoft_status'],
+        })),
+      })),
+      install: vi.fn(), installCurated: vi.fn(), search: vi.fn(),
+    } })
+    for (const id of ids) {
+      const card = document.querySelector(`[data-connector-id="${id}"]`)
+      expect(card).not.toBeNull()
+      await waitFor(() => expect(card?.textContent).toContain('MCP iniciado · verifica OAuth con Kira'))
+      expect(card?.textContent).toContain('microsoft_login_start')
+    }
+    const xCard = document.querySelector('[data-connector-id="x"]')
+    expect(xCard?.textContent).toContain('callback')
+    expect(xCard?.textContent).toContain('MCP iniciado · verifica OAuth con Kira')
+    fireEvent.click(screen.getByRole('button', { name: connectorEn.connected }))
+    for (const id of [...ids, 'x']) {
+      expect(document.querySelector(`[data-connector-id="${id}"]`)).toBeNull()
+    }
+  })
+
+  it.each(['outlook-mail', 'outlook-calendar', 'microsoft-contacts',
+    'onedrive', 'microsoft-teams', 'sharepoint'] as const)(
+    'offers %s through an independent scoped curated installer', async (id) => {
+      const api = { list: vi.fn(async () => ok({ entries: [] })),
+        begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+      } as unknown as IApiClient['authorization']
+      const installCurated = vi.fn(async ({ connectorId }: { connectorId: string }) => ({
+        status: 'installed' as const,
+        connector: { entryId: connectorId, serverName: connectorId,
+          url: 'stdio://' + connectorId, source: { kind: 'curated' as const, connectorId } },
+      }))
+      renderHub(api, { mcpRegistry: {
+        state: vi.fn(async () => ({ managed: [], runtime: [] })),
+        install: vi.fn(), installCurated, search: vi.fn(),
+      } })
+      const card = document.querySelector(`[data-connector-id="${id}"]`)!
+      expect(card).toBeTruthy()
+      const install = Array.from(card.querySelectorAll('button')).find(b => b.textContent === 'Install')
+      expect(install).toBeTruthy()
+      expect(install!.disabled).toBe(false)
+      fireEvent.click(install!)
+      await waitFor(() => expect(installCurated).toHaveBeenCalledWith({ connectorId: id }))
+      expect(api.begin).not.toHaveBeenCalled()
+    },
+  )
 
   it('requires explicit acknowledgement before optionally installing billed Microsoft MCPs', async () => {
     const api = { list: vi.fn(async () => ok({ entries: [] })),
@@ -2268,6 +2328,36 @@ describe('connectors settings section', () => {
       expect(connectX).toHaveBeenCalledWith({ identity: 'phoenix', username: 'PhoenixIA' })
     })
     expect(document.body.textContent).not.toContain('secretClientValue123')
+  })
+
+  it('restarts an already-installed X bridge when connecting so saved credentials reach xurl', async () => {
+    const api = {
+      list: vi.fn(async () => ok({ entries: [] })),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const connectX = vi.fn(async () => ({
+      api: { status: 'already-installed' as const, connector: {
+        entryId: 'x-1', serverName: 'x-api', url: 'https://api.x.com/mcp',
+      } },
+      docs: { status: 'already-installed' as const, connector: {
+        entryId: 'x-docs-1', serverName: 'x-docs', url: 'https://docs.x.com/mcp',
+      } },
+    }))
+    const reconnect = vi.fn(async () => ({ accepted: true }))
+    renderHub(api, { mcpRegistry: {
+      state: vi.fn(async () => ({ managed: [], runtime: [] })),
+      search: vi.fn(), install: vi.fn(), connectX, reconnect,
+    } })
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search connectors' }), {
+      target: { value: 'X · cuenta de usuario' },
+    })
+    const card = document.querySelector('[data-connector-id="x"]')!
+    const configure = Array.from(card.querySelectorAll('button')).find(b => /Configure/i.test(b.textContent || ''))!
+    fireEvent.click(configure)
+    fireEvent.click(screen.getByRole('button', { name: 'Conectar cuenta X personal' }))
+    await waitFor(() => expect(connectX).toHaveBeenCalledWith({ identity: 'user' }))
+    await waitFor(() => expect(reconnect).toHaveBeenCalledWith({ serverName: 'x-api' }))
+    expect(document.body.textContent).not.toContain('cuenta esté autenticada por instalar')
   })
 
   it('rejects unsafe connector links instead of opening a blank or custom-scheme window', () => {
