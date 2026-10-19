@@ -113,13 +113,14 @@ export class MiniBrowserScopes {
 
   /**
    * Evict targets that are no longer present in Chromium.
-   * @param available - Currently active page IDs.
+   * @param scopeId - Conversation whose Chrome instance was inspected.
+   * @param available - Currently active page IDs in that instance.
    * @returns Nothing; also updates the persistence revision.
    */
-  prune(available: readonly string[]): void {
+  prune(scopeId: string, available: readonly string[]): void {
     const live = new Set(available)
     for (const [tabId, owner] of [...this.owners]) {
-      if (!live.has(tabId)) this.release(owner, tabId)
+      if (owner === scopeId && !live.has(tabId)) this.release(owner, tabId)
     }
   }
 
@@ -141,7 +142,7 @@ export class MiniBrowserScopes {
    * @returns Selected owned tab, or undefined if the chat has no tabs.
    */
   choose(scopeId: string, available: readonly string[], requestedTabId?: string): string | undefined {
-    this.prune(available)
+    this.prune(scopeId, available)
     if (requestedTabId !== undefined) {
       if (!available.includes(requestedTabId)) throw new Error('No hay una pestaña Chromium disponible.')
       this.claim(scopeId, requestedTabId)
