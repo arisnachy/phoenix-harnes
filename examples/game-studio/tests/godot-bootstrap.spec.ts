@@ -29,30 +29,44 @@ afterEach(() => { for (const dir of temp.splice(0)) rmSync(dir, { recursive: tru
 const temporary = (): string => { const d = mkdtempSync(join(tmpdir(), 'phoenix-godot-')); temp.push(d); return d }
 
 describe('PHOENIX Godot Game Studio native engine provisioning', () => {
-  it('routes complex production for chat through Godot authoring but keeps a separate HTML5 runtime', () => {
+  it('routes lightweight retro and board games to the actual in-chat internal player', () => {
+    for (const genre of ['Tetris', 'Snake', 'Pong', 'Pac-Man', 'ajedrez', 'damas', '2048', 'sudoku', 'solitario']) {
+      const game = route(genre, 'chat', 'production')
+      expect(game).toMatchObject({
+        engine: 'html5', authoringEngine: 'html5', tools: [],
+        renderer: 'phoenix_game-single-file-html',
+        chatPublisherReady: true,
+      })
+    }
+    expect(route('snake', 'desktop', 'production').engine).toBe('html5')
+  })
+
+  it('uses Godot for complex games regardless of a chat demo or prototype request', () => {
     const desktop = route('beat-em-up', 'desktop', 'production')
     expect(desktop).toMatchObject({ engine: 'godot', authoringEngine: 'godot' })
     expect(desktop.tools).toEqual(['godot', 'tiled', 'ffmpeg'])
-    const chat = route('run-and-gun', 'chat', 'production')
-    expect(chat).toMatchObject({
-      engine: 'html5', authoringEngine: 'godot',
-      renderer: 'phoenix_game-single-file-html',
-    })
-    expect(chat.tools).toContain('godot')
-    expect(chat.authoringRule).toContain('standalone HTML5')
-    expect(route('snake', 'chat', 'production').tools).toEqual([])
+    for (const genre of ['Double Dragon demo de un level', 'beat-em-up', 'run-and-gun', 'Tetris 3D', 'ajedrez multijugador 3D']) {
+      const chat = route(genre, 'chat', 'prototype')
+      expect(chat).toMatchObject({
+        engine: 'godot', authoringEngine: 'godot',
+        renderer: 'godot-web-bundle-host-required',
+        chatPublisherReady: false,
+        requiresWebBundlePublisher: true,
+      })
+      expect(chat.tools).toContain('godot')
+      expect(chat.authoringRule).toContain('Godot')
+      expect(chat.godotWebNote).toContain('NOT certified')
+    }
+    expect(route('mundo abierto 3D', 'desktop', 'production').tools).toEqual(['godot', 'blender', 'ffmpeg'])
   })
 
-  it('keeps Godot for full production but makes a one-stage in-chat brawler immediately authorable as HTML', () => {
-    expect(route('Double Dragon demo de un level', 'chat', 'production')).toMatchObject({
-      engine: 'html5', authoringEngine: 'html5', tools: [],
-    })
-    expect(route('beat-em-up', 'chat', 'prototype')).toMatchObject({
-      engine: 'html5', authoringEngine: 'html5', tools: [],
-    })
-    expect(route('beat-em-up', 'desktop', 'production')).toMatchObject({
-      engine: 'godot', authoringEngine: 'godot',
-    })
+  it('never claims Godot Web playback is available through the single-file publisher', () => {
+    const game = route('RPG de aventuras', 'chat', 'production')
+    expect(game.renderer).not.toBe('phoenix_game-single-file-html')
+    expect(game.action).toContain('Never silently rewrite')
+    expect(game.publishFormat).toBe('godot-web-export-bundle')
+    expect(() => route('', 'chat', 'production')).toThrow('Genre cannot be empty')
+    expect(() => route('snake', 'unknown' as 'chat', 'production')).toThrow('Delivery must be')
   })
 
   it('uses allowlisted winget Godot package and never a model-supplied installer URL', () => {
