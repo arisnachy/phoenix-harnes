@@ -485,7 +485,14 @@ function createExecutor(
     // Other MCP integrations are untouched.
     const chromeScope = /(?:chrome|browser-connector)/iu.test(opts.serverName)
       && exec.agent?.id !== undefined
-    const routedArgs = chromeScope ? { ...wireArgs, sessionId: exec.agent.id } : wireArgs
+    const agent = exec.agent
+    // Delegated specialists use the coordinator's parent conversation.
+    // A user-created fork (no subagent origin) remains a separate browser.
+    const ownerId = agent?.session.header.origin === 'subagent'
+      ? (agent.session.header.parentSession ?? agent.id)
+      : agent?.id
+    const routedArgs = chromeScope && ownerId !== undefined
+      ? { ...wireArgs, sessionId: ownerId } : wireArgs
     const result = await callToolUncached(client, rawName, routedArgs, exec, opts).catch((error: unknown) => {
       reportToolAuthorizationFailure(opts, error)
       throw error
