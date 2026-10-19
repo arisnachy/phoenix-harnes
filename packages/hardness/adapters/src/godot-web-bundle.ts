@@ -6,11 +6,11 @@
  */
 import { randomBytes } from 'node:crypto'
 import {
-  copyFileSync, createReadStream, existsSync, mkdirSync, readFileSync, readdirSync,
-  realpathSync, statSync, writeFileSync,
+  closeSync, copyFileSync, createReadStream, mkdirSync, openSync, readFileSync, readSync,
+  readdirSync, realpathSync, rmSync, statSync, writeFileSync,
 } from 'node:fs'
 import { homedir } from 'node:os'
-import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
 export const PHOENIX_GODOT_WEB_MIME = 'application/vnd.phoenix.game+godot-web'
@@ -59,25 +59,14 @@ function exactFile(dir: string, name: string): string {
   return target
 }
 function magic(file: string): Buffer {
-  const buffer = Buffer.alloc(4)
-  // Read just the header; some real WASM/PCK files are hundreds of megabytes.
-  const handle = createReadStream(file, { start: 0, end: 3 })
-  // Header is already available in the first four bytes of readFileSync when
-  // bounded by the 4-byte range; avoid loading a complete game in memory.
-  handle.destroy()
-  const fd = requireReadOnly(file)
+  const header = Buffer.alloc(4)
+  const handle = openSync(file, 'r')
   try {
-    const { readSync } = require('node:fs') as typeof import('node:fs')
-    if (readSync(fd, buffer, 0, 4, 0) !== 4) throw new Error('Truncated Godot binary.')
+    if (readSync(handle, header, 0, 4, 0) !== 4) throw new Error('Truncated Godot binary.')
   } finally {
-    const { closeSync } = require('node:fs') as typeof import('node:fs')
-    closeSync(fd)
+    closeSync(handle)
   }
-  return buffer
-}
-function requireReadOnly(path: string): number {
-  const { openSync } = require('node:fs') as typeof import('node:fs')
-  return openSync(path, 'r')
+  return header
 }
 function validateExport(exportDir: string): { files: Array<{ name: string; source: string; bytes: number }>; bytes: number } {
   const names = readdirSync(exportDir)
@@ -123,7 +112,6 @@ export function publishGodotWebExport(exportPath: string, workspace: string, tit
     for (const file of plan.files) copyFileSync(file.source, join(folder, file.name))
     writeFileSync(join(folder, 'manifest.json.phoenix'), JSON.stringify({ title, entry: 'index.html', bytes: plan.bytes }), { flag: 'wx', mode: 0o600 })
   } catch (error) {
-    const { rmSync } = require('node:fs') as typeof import('node:fs')
     rmSync(folder, { recursive: true, force: true })
     throw error
   }
