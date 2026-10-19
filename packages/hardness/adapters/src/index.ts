@@ -556,3 +556,6 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
     disposeAll(disposers)
   }
 }
+
+export { GeneralizationReceiptBridge, verifyTrustedMissionReceipt } from './generalization-receipts.ts'
+export type { TrustedEvaluationReceipt, GeneralizationReceiptReader, GeneralizationComparison } from './generalization-receipts.ts'
