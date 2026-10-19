@@ -13,6 +13,7 @@ import { homedir } from 'node:os'
 import { dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
+/** Executable artifact MIME for a real multi-file Godot Web export. */
 export const PHOENIX_GODOT_WEB_MIME = 'application/vnd.phoenix.game+godot-web'
 const ROUTE = '/phoenix-games/godot'
 const ROOT = join(homedir(), '.dsh', 'game-studio-web')
@@ -31,6 +32,7 @@ const MIME: Record<string, string> = {
   '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.webp': 'image/webp',
   '.woff': 'font/woff', '.woff2': 'font/woff2', '.ttf': 'font/ttf',
 }
+/** Immutable host receipt for a checked, staged Godot Web package. */
 export interface GodotBundleReceipt {
   readonly url: string
   readonly title: string
@@ -41,6 +43,7 @@ export interface GodotBundleReceipt {
   readonly bytes: number
 }
 type HttpHandler = (req: IncomingMessage, res: ServerResponse) => void | Promise<void>
+/** Minimal Phoenix HTTP route-registration capability used by Game Studio. */
 export interface GameWebRouteHost {
   register(route: { readonly kind: 'prefix'; readonly path: string; readonly handler: HttpHandler }): () => void
 }
@@ -96,7 +99,13 @@ function validateExport(exportDir: string): { files: Array<{ name: string; sourc
   }
   return { files, bytes }
 }
-/** Package an export inside the Phoenix host cache, not under arbitrary URL paths. */
+/**
+ * Package an export in the Phoenix host cache, never under an arbitrary URL.
+ * @param exportPath - Export folder relative to the agent workspace.
+ * @param workspace - Agent-owned working directory.
+ * @param title - Game name displayed in the chat.
+ * @returns Staged bundle receipt without claiming browser playtesting.
+ */
 export function publishGodotWebExport(exportPath: string, workspace: string, title: string): GodotBundleReceipt {
   if (!routeIsMounted) throw new Error('Godot Web publisher is unavailable: the Phoenix web host route is not mounted.')
   if (!workspace?.trim() || !exportPath?.trim() || !title?.trim()) throw new Error('Workspace, Godot export path and game title are required.')
@@ -122,13 +131,22 @@ export function publishGodotWebExport(exportPath: string, workspace: string, tit
   }
 }
 let routeIsMounted = false
-/** Registration should occur exactly once in the host scope, not per agent. */
+/**
+ * Register a single host-owned route, never one route per agent.
+ * @param server - Phoenix HTTP route registration service.
+ * @returns Disposer that unmounts the scoped game route.
+ */
 export function mountGodotWebRoute(server: GameWebRouteHost): () => void {
   if (routeIsMounted) return () => {}
   const dispose = server.register({ kind: 'prefix', path: ROUTE, handler: serveGodotWebFile })
   routeIsMounted = true
   return () => { routeIsMounted = false; dispose() }
 }
+/**
+ * Serve only allowlisted game assets from a token-specific export directory.
+ * @param req - Incoming HTTP request.
+ * @param res - Response that owns the complete asset stream.
+ */
 export function serveGodotWebFile(req: IncomingMessage, res: ServerResponse): void {
   const url = new URL(req.url ?? '/', 'http://localhost')
   const parts = url.pathname.split('/')
