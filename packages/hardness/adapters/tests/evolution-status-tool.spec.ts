@@ -33,9 +33,9 @@ describe('provider-neutral evolution status model tool', () => {
 
   it('cannot inspect a foreign mission or manufacture evidence without a live agent', async () => {
     const tool = createEvolutionStatusTool()
-    await expect(tool.execute({ missionId: 'foreign', revision: 1 }, context(mission()))).resolves.toMatchObject({
-      available: false, reasons: expect.arrayContaining(['no matching mission in this conversation']),
-    })
+    const missing = await tool.execute({ missionId: 'foreign', revision: 1 }, context(mission()))
+    expect(missing.available).toBe(false)
+    expect(missing.reasons).toContain('no matching mission in this conversation')
     await expect(tool.execute({ missionId: 'mission-1', revision: -1 }, context(mission()))).resolves.toMatchObject({
       available: false, reason: 'invalid mission identity',
     })
