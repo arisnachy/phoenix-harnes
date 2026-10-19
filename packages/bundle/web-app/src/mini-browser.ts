@@ -69,6 +69,26 @@ function announceScopedBrowser(sessionId: string, browser: ScopedBrowser): void 
     }), { mode: 0o600 })
   } catch { /* UI isolation continues even if MCP handoff fails. */ }
 }
+function readScopedSelectedTab(sessionId: string): string | undefined {
+  try {
+    const browser = scopedBrowsers.get(sessionId)
+    const record = JSON.parse(readFileSync(scopedDescriptorPath(sessionId), 'utf8')) as {
+      sessionId?: string; pid?: number; endpoint?: string; selectedTabId?: string
+    }
+    return browser?.endpoint !== undefined && record.sessionId === sessionId
+      && record.pid === browser.child.pid && record.endpoint === browser.endpoint + '/'
+      && validBrowserScopeId(record.selectedTabId) ? record.selectedTabId : undefined
+  } catch { return undefined }
+}
+function publishScopedSelectedTab(sessionId: string, tabId: string): void {
+  const browser = scopedBrowsers.get(sessionId)
+  if (browser?.endpoint === undefined || browser.child.pid === undefined) return
+  try {
+    writeFileSync(scopedDescriptorPath(sessionId), JSON.stringify({
+      sessionId, pid: browser.child.pid, endpoint: browser.endpoint + '/', selectedTabId: tabId,
+    }), { mode: 0o600 })
+  } catch { /* Browser remains isolated even if selection persistence fails. */ }
+}
 function disposeScopedBrowser(sessionId: string): void {
   const browser = scopedBrowsers.get(sessionId)
   scopedBrowsers.delete(sessionId)
@@ -628,6 +648,12 @@ async function state(knownBase?: string, tabId?: string, signal?: AbortSignal, s
     // Every target belongs to this dedicated Chromium process's conversation,
     // including tabs opened by Kira's Chrome MCP in the same isolated instance.
     for (const tab of tabs) browserScopes.claim(sessionId, tab.id)
+    if (tabId === undefined) {
+      const advertised = readScopedSelectedTab(sessionId)
+      if (advertised !== undefined && tabs.some(tab => tab.id === advertised)) {
+        browserScopes.select(sessionId, advertised)
+      }
+    }
     const chosenId = browserScopes.choose(sessionId, tabs.map(tab => tab.id), tabId)
     persistBrowserScopes()
     if (chosenId === undefined) return { available: false, tabs: [] }
@@ -756,7 +782,11 @@ async function action(input: Action, signal?: AbortSignal): Promise<Record<strin
     throwIfAborted(signal)
     const tab = await json<Tab>(base + '/json/new?' + encodeURIComponent(target), 'PUT', signal)
     throwIfAborted(signal)
-    if (sessionId !== undefined) { browserScopes.claim(sessionId, tab.id); browserScopes.select(sessionId, tab.id) }
+    if (sessionId !== undefined) {
+      browserScopes.claim(sessionId, tab.id)
+      browserScopes.select(sessionId, tab.id)
+      publishScopedSelectedTab(sessionId, tab.id)
+    }
     else { activeTabId = tab.id; publish(base + '/', tab.id) }
     persistBrowserScopes()
     return await state(base, undefined, signal, sessionId)
@@ -782,6 +812,7 @@ async function action(input: Action, signal?: AbortSignal): Promise<Record<strin
     throwIfAborted(signal)
     if (!res.ok) throw new Error('No se pudo activar la pestaña.')
     if (sessionId === undefined) activeTabId = tab.id
+    else publishScopedSelectedTab(sessionId, tab.id)
   } else if (type === 'close-tab') {
     if ((await listTabs(base, signal)).length < 2) throw new Error('Debes conservar una pestaña abierta.')
     throwIfAborted(signal)
