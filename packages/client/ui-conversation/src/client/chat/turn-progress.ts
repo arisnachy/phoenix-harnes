@@ -5,7 +5,7 @@ import type { AssistantChatData, ToolChatData } from '../contract/chat-nodes.ts'
 import { isRunningTool } from '../contract/chat-nodes.ts'
 
 /** High-level lifecycle label shown to the user. */
-export type TurnPhase = 'preparing' | 'thinking' | 'running-tools' | 'verifying'
+export type TurnPhase = 'preparing' | 'thinking' | 'running-tools' | 'verifying' | 'waiting'
 
 /** Visual activity used by the PHOENIX emblem. Every value comes from observed runtime state. */
 export type TurnActivity =
@@ -18,6 +18,8 @@ export type TurnActivity =
   | 'executing'
   | 'running-tools'
   | 'verifying'
+  | 'waiting-user'
+  | 'waiting-approval'
 
 /** Compact, truthful progress for the currently open turn. */
 export interface TurnProgress {
@@ -99,6 +101,8 @@ export function naturalProgressLine(progress: TurnProgress, language: string, el
       executing: 'Hay una operación en marcha; estoy pendiente de su resultado.',
       'running-tools': 'Estoy utilizando una herramienta para avanzar.',
       verifying: 'Estoy revisando el resultado de la última operación.',
+      'waiting-user': 'Kira · Me falta tu respuesta para seguir. Cuando me contestes, retomaré desde aquí.',
+      'waiting-approval': 'Kira · Espero tu autorización antes de continuar. No ejecutaré esa acción sin confirmación.',
     }
     return lines[progress.activity]
   }
@@ -115,6 +119,8 @@ export function naturalProgressLine(progress: TurnProgress, language: string, el
     executing: "An operation is running; I'm waiting for its result.",
     'running-tools': "I'm using a tool to move the task forward.",
     verifying: "I'm reviewing the result of the last operation.",
+    'waiting-user': "Kira · I'm waiting for your answer before I continue. The task isn't silently running.",
+    'waiting-approval': "Kira · I'm waiting for your approval before I continue. I won't proceed without it.",
   }
   return lines[progress.activity]
 }
