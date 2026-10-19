@@ -181,6 +181,8 @@ interface PendingCodexRealtimeUtterance {
   readonly key: string
   readonly instructions: string
   readonly echoText: string
+  /** Spoken lifecycle message, never a claim of task completion. */
+  readonly observedProgress?: boolean
   readonly assistantMessageKey?: string
   /** Strict conversational-tail stream identity; one segment is in flight at a time. */
   readonly streamMessageKey?: string
@@ -289,7 +291,8 @@ function sendCodexRealtimeUtterance(
     // or an explicitly separate, user-visible attention notification.
     document.documentElement.dataset.phoenixVoiceSpeechOrigin =
       utterance.assistantMessageKey !== undefined ? 'final-harness-chat'
-        : utterance.streamMessageKey !== undefined ? 'provisional-chat-stream' : 'attention'
+        : utterance.streamMessageKey !== undefined ? 'provisional-chat-stream'
+          : utterance.observedProgress === true ? 'observed-progress' : 'attention'
     document.documentElement.dataset.phoenixVoiceAuthorizedLength = String(utterance.echoText.length)
     // Reserve the finalized message synchronously so a React closure/tail
     // rerender cannot enqueue the same reply while the RPC is pending.
@@ -1724,6 +1727,28 @@ export function streamVoiceAssistantResponse(
  */
 export function speakVoiceAssistantResponse(messageKey: string, text: string, messageTime: number, expectedSessionKey?: string): void {
   streamVoiceAssistantResponse(messageKey, text, messageTime, true, true, false, expectedSessionKey)
+}
+
+/**
+ * Speak a short, observed, user-visible status while the harness turn stays in
+ * control. Progress never queues behind a real reply or overrides a sentence
+ * stream; a missed milestone is better than delayed or misleading speech.
+ */
+export function speakVoiceAssistantProgress(text: string, expectedSessionKey: string): boolean {
+  const session = codexRealtimeVoiceSession
+  if (!voiceAssistantSnapshot.active || session === undefined || session.key !== expectedSessionKey
+    || session.events.readyState !== 'open' || session.activeUtterance !== undefined
+    || nativeSentenceStream !== undefined || pendingCodexRealtimeUtterances.length > 0) return false
+  const spoken = conversationalSpeechText(text)
+  if (spoken === '') return false
+  const utterance: PendingCodexRealtimeUtterance = {
+    sessionKey: session.key,
+    key: `progress:${Date.now()}`,
+    observedProgress: true,
+    echoText: spoken,
+    instructions: `Read only this PHOENIX status, which is grounded in the current observed tool state. Use Kira's same established voice and language. Do not improvise accomplishments, commentary, extra words or personal feelings.\\n\\n${spoken}`,
+  }
+  return sendCodexRealtimeUtterance(session, utterance)
 }
 
 /**
