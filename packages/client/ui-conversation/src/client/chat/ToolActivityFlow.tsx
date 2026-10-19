@@ -12,7 +12,7 @@ import { formatRunDuration } from './message-chrome.ts'
 import { ReasoningRow } from './ReasoningRow.tsx'
 import { MiniBrowser, type SecureLoginTarget } from './MiniBrowser.tsx'
 import { SecureAsk } from './SecureAsk.tsx'
-import type { TurnProgress } from './turn-progress.ts'
+import { naturalProgressLine, type TurnProgress } from './turn-progress.ts'
 import chatCss from './ChatView.module.css'
 import css from './ToolActivityFlow.module.css'
 
@@ -539,7 +539,16 @@ function TurnStatus({ startTime, progress, expiresAfterMs, t, centered = false }
                   ? 'status.preparing'
                   : 'status.thinking'
   const label = t(statusKey)
-  const showClock = elapsedMs >= 15_000
+  const interfaceLanguage = /pensando|preparando/iu.test(t('status.thinking'))
+    ? 'es'
+    : typeof document !== 'undefined' ? document.documentElement.lang : 'en'
+  // An observed tool phase is more informative than a spinner during a long wait.
+  // Keep the established localized short label at the beginning of the turn.
+  const isWaiting = progress.phase === 'waiting'
+  const humanLabel = isWaiting || elapsedMs >= 15_000
+    ? naturalProgressLine(progress, interfaceLanguage, elapsedMs)
+    : undefined
+  const showClock = !isWaiting && elapsedMs >= 15_000
   const technicalTitle = progress.detail === undefined || progress.detail === ''
     ? label
     : `${label} · ${progress.detail}`
@@ -558,9 +567,11 @@ function TurnStatus({ startTime, progress, expiresAfterMs, t, centered = false }
         <PhoenixLogo size={28} />
       </span>
       <span className={chatCss.turnStatusText}>
-        {label.startsWith('Phoenix ') || label.startsWith('PHOENIX ')
-          ? <><strong className={chatCss.turnStatusBrand}>{label.split(' ')[0]}</strong>{label.slice(label.indexOf(' '))}</>
-          : label}
+        {humanLabel === undefined
+          ? label.startsWith('Phoenix ') || label.startsWith('PHOENIX ')
+            ? <><strong className={chatCss.turnStatusBrand}>{label.split(' ')[0]}</strong>{label.slice(label.indexOf(' '))}</>
+            : label
+          : <><strong className={chatCss.turnStatusBrand}>Kira · </strong>{humanLabel}</>}
       </span>
       {showClock && (
         <span className={chatCss.turnStatusClock} aria-hidden>
@@ -587,13 +598,13 @@ function BrowserWorkspace({
   items, live, selected, onActivate, seatProps, turnStatus, tabId, sessionId,
 }: {
   readonly items: readonly FlowItem[]
-  readonly sessionId: string
   readonly live: boolean
   readonly selected: boolean
   readonly tabId?: string
   readonly onActivate: () => void
   readonly seatProps: SeatProps
   readonly turnStatus: ToolActivityFlowProps['turnStatus']
+  readonly sessionId: string
 }) {
   const [page, setPage] = useState<{ title: string; url: string } | null>(null)
   const [secureRequest, setSecureRequest] = useState<SecureLoginTarget | null>(null)
@@ -769,7 +780,6 @@ export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, browserT
           )}
           {item.kind === 'browser-workspace'
             ? <BrowserWorkspace
-              sessionId={sessionId}
               live={item.live}
               items={item.items}
               {...item.tabId === undefined ? {} : { tabId: item.tabId }}
@@ -777,6 +787,7 @@ export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, browserT
               onActivate={() => { setSelectedBrowserKey(item.userKey) }}
               seatProps={seatProps}
               turnStatus={turnStatus}
+              sessionId={sessionId}
             />
             : item.kind === 'node'
               ? <ChatNodeSeat nodeKey={item.key} {...seatProps} />

@@ -16,7 +16,8 @@ import type {
 import { Button, IconChevronDownOutline14, Modal, PhoenixLogo } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { ChatViewSlotProps, RenderMessageImages } from '../contract/slots.ts'
 import { PendingSteeringBubble } from './MessageItem.tsx'
-import { turnProgress } from './turn-progress.ts'
+import { naturalProgressLine, pendingTurnProgress, turnProgress } from './turn-progress.ts'
+import { speakVoiceAssistantProgress } from '../voice.ts'
 import { ToolActivityFlow } from './ToolActivityFlow.tsx'
 import css from './ChatView.module.css'
 
@@ -129,6 +130,7 @@ export function ChatView({
   const order = useSession(s => s.chat.order)
   const nodeStore = useSession(s => s.chat.nodes)
   const timeline = useSession(s => s.chat.timeline)
+  const pendingInteractions = useSession(s => s.pending)
   const inbox = useSession(s => s.queue)
   const pendingSubmit = useInput(s => s.pendingSubmit)
   const inputPhase = useInput(s => s.phase)
@@ -144,6 +146,9 @@ export function ChatView({
   const [fileOpenBusy, setFileOpenBusy] = useState(false)
   const [completionPulse, setCompletionPulse] = useState(false)
   const previousRunning = useRef(running)
+  const spokenProgress = useRef<{
+    session: string | undefined; turn: number | undefined; activity: string | undefined; at: number; repeats: number
+  }>({ session: undefined, turn: undefined, activity: undefined, at: 0, repeats: 0 })
   // Close/retry must ignore a settlement that started before the latest
   // gesture; otherwise a cancelled in-flight refusal reopens the dialog.
   const fileOpenRequest = useRef(0)
@@ -296,7 +301,10 @@ export function ChatView({
       startedAt: visiblePendingSubmit.startedAt,
     }
     : null
-  const visibleProgress = activeProgress ?? admissionProgress
+  // A real, Host-owned question or approval takes precedence over a still-open
+  // agent turn. Without this fence a pending question looks like endless thought.
+  const waitingProgress = pendingTurnProgress(pendingInteractions.at(-1)?.kind)
+  const visibleProgress = waitingProgress ?? activeProgress ?? admissionProgress
   // Session.running can remain true while Host-side settlement, logging, or
   // verification finishes after user-visible assistant output has arrived.
   // Render status only for an observable activity, never from running alone,
@@ -304,15 +312,53 @@ export function ChatView({
   const visibleTurnStatus = visibleProgress === null
     ? undefined
     : {
-      startTime: activeProgress?.startedAt
+      startTime: waitingProgress !== null ? null : activeProgress?.startedAt
         ?? (running ? runningTurnStart : null)
         ?? visiblePendingSubmit?.startedAt
         ?? null,
       progress: visibleProgress,
       // A lost Host admission settlement must not leave an eternal animation.
       // Real runtime activity is authoritative and never expires here.
-      expiresAfterMs: activeProgress === null ? 30_000 : null,
+      expiresAfterMs: waitingProgress !== null ? null : activeProgress === null ? 30_000 : null,
     }
+
+  const liveTurn = timeline.turnOrder.at(-1)
+  useEffect(() => {
+    if (!running || waitingProgress !== null || activeProgress === null || liveTurn === undefined) return
+    if (spokenProgress.current.session !== String(sessionId) || spokenProgress.current.turn !== liveTurn) {
+      spokenProgress.current = { session: String(sessionId), turn: liveTurn, activity: undefined, at: 0, repeats: 0 }
+    }
+    const activity = activeProgress.activity
+    const start = visibleTurnStatus?.startTime ?? Date.now()
+    const check = (): void => {
+      const now = Date.now()
+      const elapsed = Math.max(0, now - start)
+      // Fast turns need no narration. Thinking requires extra patience; tools
+      // need a little time to yield a useful real event before Kira speaks.
+      const threshold = activity === 'thinking' || activity === 'preparing' ? 45_000 : 22_000
+      if (elapsed < threshold) return
+      const last = spokenProgress.current
+      const repeated = last.activity === activity
+      const minimumGap = repeated ? 140_000 : 40_000
+      if (repeated && last.repeats >= 1) return
+      if (last.at !== 0 && now - last.at < minimumGap) return
+      const language = /pensando|preparando/iu.test(t('status.thinking'))
+        ? 'es'
+        : typeof document !== 'undefined' ? document.documentElement.lang : 'en'
+      const line = repeated
+        ? /^es(?:-|$)/iu.test(language)
+          ? 'Sigo pendiente de esa operación. Todavía no hay un resultado nuevo confirmado.'
+          : 'I am still waiting for that operation. There is no new verified result yet.'
+        : naturalProgressLine(activeProgress, language, elapsed)
+      if (line === undefined || !speakVoiceAssistantProgress(line, String(sessionId))) return
+      spokenProgress.current = {
+        session: String(sessionId), turn: liveTurn, activity, at: now, repeats: repeated ? last.repeats + 1 : 0,
+      }
+    }
+    check()
+    const timer = window.setInterval(check, 5_000)
+    return () => { window.clearInterval(timer) }
+  }, [activeProgress, liveTurn, running, sessionId, t, visibleTurnStatus?.startTime, waitingProgress?.activity])
 
   useEffect(() => {
     const finished = previousRunning.current && !running

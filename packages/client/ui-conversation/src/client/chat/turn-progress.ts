@@ -5,7 +5,7 @@ import type { AssistantChatData, ToolChatData } from '../contract/chat-nodes.ts'
 import { isRunningTool } from '../contract/chat-nodes.ts'
 
 /** High-level lifecycle label shown to the user. */
-export type TurnPhase = 'preparing' | 'thinking' | 'running-tools' | 'verifying'
+export type TurnPhase = 'preparing' | 'thinking' | 'running-tools' | 'verifying' | 'waiting'
 
 /** Visual activity used by the PHOENIX emblem. Every value comes from observed runtime state. */
 export type TurnActivity =
@@ -18,6 +18,8 @@ export type TurnActivity =
   | 'executing'
   | 'running-tools'
   | 'verifying'
+  | 'waiting-user'
+  | 'waiting-approval'
 
 /** Compact, truthful progress for the currently open turn. */
 export interface TurnProgress {
@@ -78,6 +80,68 @@ function hasAssistantSurface(data: AssistantChatData): boolean {
     if (block.kind === 'text') return block.text.trim() !== ''
     return true
   })
+}
+
+/**
+ * Represent only an actual Host pending interaction as waiting, not model thought.
+ * @param kind - Domain of the currently pending request from this session.
+ * @returns The trusted waiting status or null when no human action is required.
+ */
+export function pendingTurnProgress(kind: 'approval' | 'question' | undefined): TurnProgress | null {
+  if (kind === undefined) return null
+  return {
+    phase: 'waiting',
+    activity: kind === 'approval' ? 'waiting-approval' : 'waiting-user',
+  }
+}
+
+/**
+ * Convert one observed activity into a brief first-person update without inventing results.
+ * @param progress - Current visible runtime activity, never raw tool payloads.
+ * @param language - Active interface locale.
+ * @param elapsedMs - Elapsed observed task time for long-wait wording.
+ * @returns Localized status, or undefined when this locale has no voice copy.
+ */
+export function naturalProgressLine(progress: TurnProgress, language: string, elapsedMs = 0): string | undefined {
+  const spanish = /^es(?:-|$)/iu.test(language)
+  const english = /^en(?:-|$)/iu.test(language)
+  if (!spanish && !english) return undefined
+  if (spanish) {
+    if (elapsedMs >= 90_000 && (progress.activity === 'thinking' || progress.activity === 'preparing')) {
+      return 'Sigo con la tarea; todavía no tengo un resultado nuevo confirmado. Te contaré cuando haya un avance real.'
+    }
+    const lines: Record<TurnActivity, string> = {
+      preparing: 'Estoy organizando el siguiente paso; todavía no hay un resultado confirmado.',
+      thinking: 'Estoy analizando cómo continuar. Te contaré lo importante cuando esté comprobado.',
+      searching: 'Estoy buscando información para continuar con la tarea.',
+      browsing: 'Estoy revisando la página o el recurso que necesito.',
+      reading: 'Estoy leyendo el material disponible antes de decidir el siguiente paso.',
+      writing: 'Estoy trabajando en los archivos de esta tarea.',
+      executing: 'Hay una operación en marcha; estoy pendiente de su resultado.',
+      'running-tools': 'Estoy utilizando una herramienta para avanzar.',
+      verifying: 'Estoy revisando el resultado de la última operación.',
+      'waiting-user': 'Me falta tu respuesta para seguir. Cuando me contestes, retomaré desde aquí.',
+      'waiting-approval': 'Espero tu autorización antes de continuar. No ejecutaré esa acción sin confirmación.',
+    }
+    return lines[progress.activity]
+  }
+  if (elapsedMs >= 90_000 && (progress.activity === 'thinking' || progress.activity === 'preparing')) {
+    return "I'm still on this task, but I don't have a newly verified result yet. I'll share a meaningful update when I do."
+  }
+  const lines: Record<TurnActivity, string> = {
+    preparing: "I'm arranging the next step; there's no confirmed outcome yet.",
+    thinking: "I'm working out how to proceed. I'll share what matters once it's verified.",
+    searching: "I'm searching for the information this task needs.",
+    browsing: "I'm checking the page or resource I need.",
+    reading: "I'm reading the available material before choosing the next step.",
+    writing: "I'm working on the files for this task.",
+    executing: "An operation is running; I'm waiting for its result.",
+    'running-tools': "I'm using a tool to move the task forward.",
+    verifying: "I'm reviewing the result of the last operation.",
+    'waiting-user': "I'm waiting for your answer before I continue. The task isn't silently running.",
+    'waiting-approval': "I'm waiting for your approval before I continue. I won't proceed without it.",
+  }
+  return lines[progress.activity]
 }
 
 /**

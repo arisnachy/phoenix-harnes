@@ -51,6 +51,15 @@ describe('PHOENIX human presence protocol', () => {
 
   it('pins continuity, initiative, natural tone, rigor, low-noise behavior, and user agency', () => {
     expect(HUMAN_PRESENCE_PROTOCOL).toContain('one continuous, attentive collaborator')
+    expect(HUMAN_PRESENCE_PROTOCOL).toContain('Express grounded interpersonal warmth')
+    expect(HUMAN_PRESENCE_PROTOCOL).toContain('Kira across planning, execution, delegation and recovery')
+    expect(HUMAN_PRESENCE_PROTOCOL).toContain('only narrate observable lifecycle evidence')
+    expect(HUMAN_PRESENCE_PROTOCOL).toContain('A progress message is not evidence that a step finished')
+    expect(HUMAN_PRESENCE_PROTOCOL).toContain('Waiting for a user response must not be disguised as "thinking"')
+    expect(HUMAN_PRESENCE_PROTOCOL).toContain('Avoid repeating "still working"')
+    expect(HUMAN_PRESENCE_PROTOCOL).toContain('ask one clear question through the real user-question mechanism')
+    expect(HUMAN_PRESENCE_PROTOCOL).toContain('end the assistant turn with the question')
+    expect(HUMAN_PRESENCE_PROTOCOL).toContain('An optional preference is not a blocker')
     expect(HUMAN_PRESENCE_PROTOCOL).toContain('silent behavior')
     expect(HUMAN_PRESENCE_PROTOCOL).toContain('no meta preamble')
     expect(HUMAN_PRESENCE_PROTOCOL).toContain('dry wit, mild sarcasm or irony')
