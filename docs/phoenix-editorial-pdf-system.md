@@ -23,7 +23,7 @@ Un PDF no está terminado solo porque un motor consiga abrirlo: debe ser legible
 
 ## Catálogo de estilos modernos (selector `design_preset`)
 
-Se mantienen dos dimensiones independientes: el modo de entrega editorial (`presentation`) y los tokens/ilustración vectorial de la portada (`design_preset`). Así un documento `hybrid` puede usar cualquiera de las cinco identidades sin cambiar el contenido ni las citas.
+Se mantienen dos dimensiones independientes: el modo de entrega editorial (`presentation`) y los tokens/ilustración vectorial de la portada (`design_preset`). Así un documento `hybrid` puede usar cualquiera de las once identidades sin cambiar el contenido ni las citas.
 
 | Valor | Identidad de portada | Cuándo utilizarlo |
 | --- | --- | --- |
