@@ -31,5 +31,11 @@ export function classifyNavigationEvidence(requestedUrl: string, evidence: Navig
   const meaningful = evidence.visibleTextLength > 0 || evidence.contentElements > 0
   if (!meaningful) return 'empty'
   const stripWww = (host: string): string => host.replace(/^www\./iu, '')
-  return stripWww(actual.hostname) === stripWww(requested.hostname) ? 'verified' : 'redirected'
+  if (stripWww(actual.hostname) !== stripWww(requested.hostname)) return 'redirected'
+  const path = (url: URL): string => url.pathname.replace(/\\/+$/u, '') || '/'
+  if (path(actual) !== path(requested)) return 'redirected'
+  for (const [key, value] of requested.searchParams) {
+    if (actual.searchParams.get(key) !== value) return 'redirected'
+  }
+  return 'verified'
 }
