@@ -406,12 +406,16 @@ function createDefinition(
   transformArguments?: (args: Record<string, unknown>) => Record<string, unknown>,
 ): ToolDefinition {
   const projections = new WeakMap<ToolExecution, PreparedProjection>()
+  const properties = parameters.properties
+  const scopedChromeTool = /(?:chrome|browser-connector)/iu.test(opts.serverName)
+    && properties !== null && typeof properties === 'object'
+    && 'sessionId' in properties
   return {
     name: publicName,
     description,
     parameters,
     output: createOutput(rawName, structuredSchema),
-    execute: createExecutor(client, ctx, rawName, taskRequired, opts, projections, transformArguments),
+    execute: createExecutor(client, ctx, rawName, taskRequired, opts, projections, transformArguments, scopedChromeTool),
     finalizeContent(exec: Readonly<ToolExecution>, result: Readonly<ToolExecutionResult>) {
       const projection = projections.get(exec)
       if (projection === undefined) return undefined
@@ -459,6 +463,7 @@ function createOutput(rawName: string, structuredSchema: JsonSchemaNode | undefi
  * @param opts - bridge timeout and namespace options.
  * @param projections - execution-local rich result projections.
  * @param transformArguments - optional local argument-envelope unwrapping before the wire call.
+ * @param scopedChromeTool - true only when the browser tool explicitly supports conversation IDs.
  * @returns the ToolRuntime execute callback for this remote tool.
  */
 function createExecutor(
@@ -469,6 +474,7 @@ function createExecutor(
   opts: ToolBridgeOptions,
   projections: WeakMap<ToolExecution, PreparedProjection>,
   transformArguments?: (args: Record<string, unknown>) => Record<string, unknown>,
+  scopedChromeTool = false,
 ): ToolDefinition['execute'] {
   return async (args: unknown, exec: ToolExecution) => {
     if (taskRequired) {
@@ -483,8 +489,7 @@ function createExecutor(
     // Route every Chrome tool invocation using the REAL agent's conversation
     // identity, never a model-supplied sessionId or the global last Chrome tab.
     // Other MCP integrations are untouched.
-    const chromeScope = /(?:chrome|browser-connector)/iu.test(opts.serverName)
-      && exec.agent?.id !== undefined
+    const chromeScope = scopedChromeTool && exec.agent?.id !== undefined
     const agent = exec.agent
     // Delegated specialists use the coordinator's parent conversation.
     // A user-created fork (no subagent origin) remains a separate browser.
