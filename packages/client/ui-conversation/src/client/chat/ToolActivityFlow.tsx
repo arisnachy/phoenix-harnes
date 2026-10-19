@@ -12,7 +12,7 @@ import { formatRunDuration } from './message-chrome.ts'
 import { ReasoningRow } from './ReasoningRow.tsx'
 import { MiniBrowser, type SecureLoginTarget } from './MiniBrowser.tsx'
 import { SecureAsk } from './SecureAsk.tsx'
-import type { TurnProgress } from './turn-progress.ts'
+import { naturalProgressLine, type TurnProgress } from './turn-progress.ts'
 import chatCss from './ChatView.module.css'
 import css from './ToolActivityFlow.module.css'
 
@@ -538,6 +538,14 @@ function TurnStatus({ startTime, progress, expiresAfterMs, t, centered = false }
                   ? 'status.preparing'
                   : 'status.thinking'
   const label = t(statusKey)
+  const interfaceLanguage = /pensando|preparando/iu.test(t('status.thinking'))
+    ? 'es'
+    : typeof document !== 'undefined' ? document.documentElement.lang : 'en'
+  // An observed tool phase is more informative than a spinner during a long wait.
+  // Keep the established localized short label at the beginning of the turn.
+  const humanLabel = elapsedMs >= 15_000
+    ? naturalProgressLine(progress, interfaceLanguage, elapsedMs)
+    : undefined
   const showClock = elapsedMs >= 15_000
   const technicalTitle = progress.detail === undefined || progress.detail === ''
     ? label
@@ -557,9 +565,9 @@ function TurnStatus({ startTime, progress, expiresAfterMs, t, centered = false }
         <PhoenixLogo size={28} />
       </span>
       <span className={chatCss.turnStatusText}>
-        {label.startsWith('Phoenix ') || label.startsWith('PHOENIX ')
+        {humanLabel ?? (label.startsWith('Phoenix ') || label.startsWith('PHOENIX ')
           ? <><strong className={chatCss.turnStatusBrand}>{label.split(' ')[0]}</strong>{label.slice(label.indexOf(' '))}</>
-          : label}
+          : label)}
       </span>
       {showClock && (
         <span className={chatCss.turnStatusClock} aria-hidden>
