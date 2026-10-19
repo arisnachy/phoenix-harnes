@@ -33,7 +33,7 @@ function receipt(domain: string, task: string, variant: 'baseline' | 'candidate'
   }
 }
 
-function event<T>(type: string, data: T): SessionEvent {
+function event(type: string, data: unknown): SessionEvent {
   return { type, data } as unknown as SessionEvent
 }
 
