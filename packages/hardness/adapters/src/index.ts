@@ -106,6 +106,8 @@ export { createSubagentMissionJudge, MISSION_JUDGE_OUTPUT_SCHEMA, MISSION_JUDGE_
 export { createHardnessMissionAudit, replayHardnessMissionAudit } from './mission-audit.ts'
 export type { HardnessMissionAuditEntry, HardnessMissionAuditOutcome, HardnessMissionAuditWriter } from './mission-audit.ts'
 export { createHardnessMissionTelemetry, replayHardnessMissionTelemetry } from './mission-telemetry.ts'
+export { GeneralizationReceiptBridge, verifyTrustedMissionReceipt } from './generalization-receipts.ts'
+export type { TrustedEvaluationReceipt, GeneralizationReceiptReader, GeneralizationComparison } from './generalization-receipts.ts'
 export type { HardnessMissionStepTelemetry, HardnessMissionTelemetry, HardnessMissionTelemetrySnapshot } from './mission-telemetry.ts'
 export {
   MISSION_AUTHORITY_PRECEDENCE,
