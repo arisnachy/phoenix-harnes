@@ -412,9 +412,11 @@ async function verifyBrowserNavigation(tab: Tab, requestedUrl: string): Promise<
       'input,button,textarea,select,img,svg,canvas,iframe,video'
     ).length ?? 0
   })`
-  for (let attempt = 0; attempt < 12; attempt++) {
+  const deadline = Date.now() + 5_500
+  for (let attempt = 0; attempt < 12 && Date.now() < deadline; attempt++) {
     try {
-      const value = await evaluate(tab, expression, 3500)
+      const remaining = Math.max(200, deadline - Date.now())
+      const value = await evaluate(tab, expression, Math.min(1_200, remaining))
       const observation = JSON.parse(String(value)) as NavigationEvidence
       if (typeof observation.url === 'string' && typeof observation.readyState === 'string'
         && typeof observation.visibleTextLength === 'number'
@@ -424,7 +426,7 @@ async function verifyBrowserNavigation(tab: Tab, requestedUrl: string): Promise<
         if (verdict === 'verified' || verdict === 'redirected') return { verdict, evidence: observation }
       }
     } catch { /* Chrome target may still be navigating. */ }
-    if (attempt < 11) await new Promise<void>(resolve => setTimeout(resolve, 400))
+    if (attempt < 11 && Date.now() < deadline) await new Promise<void>(resolve => setTimeout(resolve, 300))
   }
   return { verdict: classifyNavigationEvidence(requestedUrl, last), ...(last === undefined ? {} : { evidence: last }) }
 }
