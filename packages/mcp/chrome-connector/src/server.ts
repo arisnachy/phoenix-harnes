@@ -393,18 +393,18 @@ server.registerTool('status', {
 })
 
 server.registerTool('tabs', {
-  description: 'Lista las pestañas web visibles en la sesión Chrome/Edge conectada.',
-  inputSchema: {},
-}, async () => ({ content: [{ type: 'text', text: JSON.stringify(await tabs(), null, 2) }] }))
+  description: 'Lista las pestañas exclusivas de la conversación indicada (sessionId).',
+  inputSchema: { sessionId: z.string().optional() },
+}, async ({ sessionId }) => ({ content: [{ type: 'text', text: JSON.stringify(await tabs(sessionId), null, 2) }] }))
 
 server.registerTool('navigate', {
   description: 'Navega una pestaña a una URL HTTP(S). No envía formularios ni ejecuta acciones de cuenta.',
-  inputSchema: { url: z.url(), tabId: z.string().optional() },
-}, async ({ url, tabId }) => {
+  inputSchema: { url: z.url(), tabId: z.string().optional(), sessionId: z.string().optional() },
+}, async ({ url, tabId, sessionId }) => {
   if (!actionsAllowed()) throw new Error('Navegación bloqueada por la política de permisos del navegador (modo read-only o PHOENIX_BROWSER_ALLOW_ACTIONS=false).')
   const parsed = new URL(url)
   if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('Solo se permiten URLs HTTP(S)')
-  const tab = tabId === undefined ? await newBrowserTab(url) : await selectedTab(tabId)
+  const tab = tabId === undefined ? await newBrowserTab(url, sessionId) : await selectedTab(tabId, sessionId)
   // /json/new already navigates the new page, while an explicit tabId must
   // navigate the user's chosen existing tab.
   if (tabId !== undefined) await cdp(tab, 'Page.navigate', { url })
@@ -413,15 +413,15 @@ server.registerTool('navigate', {
 
 server.registerTool('youtube_search', {
   description: 'Acción rápida: abre YouTube directamente en los resultados de búsqueda de la frase solicitada, usando la sesión de Chrome/Edge y sus permisos actuales. Úsala en UNA sola llamada para peticiones como "abre YouTube y busca Bob Esponja"; no hace falta status, tabs, navigate, click_text, read_page, navegador adicional, subagentes ni review profundo. Tras una comprobación breve de URL, informa el resultado real y termina; no reproduzcas un video si no te lo pidieron. Si falta autorización, informa la restricción una vez, no repitas intentos.',
-  inputSchema: { query: z.string().trim().min(1).max(256), tabId: z.string().optional() },
-}, async ({ query, tabId }) => {
+  inputSchema: { query: z.string().trim().min(1).max(256), tabId: z.string().optional(), sessionId: z.string().optional() },
+}, async ({ query, tabId, sessionId }) => {
   const url = youtubeSearchUrl(query)
   if (!actionsAllowed()) {
     return { isError: true, content: [{ type: 'text', text: `Navegación no autorizada por la política actual. No se abrió YouTube. Enlace directo para el usuario: ${url}. No repitas ni eludas el permiso; informa este bloqueo una sola vez.` }] }
   }
   let tab: Tab
   try {
-    tab = tabId === undefined ? await newBrowserTab(url) : await selectedTab(tabId)
+    tab = tabId === undefined ? await newBrowserTab(url, sessionId) : await selectedTab(tabId, sessionId)
     // Opening a new request cannot replace the website shown by an older card.
     if (tabId !== undefined) {
       const navigation = await cdp<{ errorText?: string }>(tab, 'Page.navigate', { url })
@@ -432,7 +432,7 @@ server.registerTool('youtube_search', {
   }
   // One bounded read of tab metadata, not a scrape, screenshot or second model turn.
   // A metadata failure after successful Page.navigate must not lose the navigation receipt.
-  const current = await tabs().then(rows => rows.find(candidate => candidate.id === tab.id), () => undefined)
+  const current = await tabs(sessionId).then(rows => rows.find(candidate => candidate.id === tab.id), () => undefined)
   let verified = false
   if (current) {
     try {
@@ -451,9 +451,9 @@ server.registerTool('youtube_search', {
 
 server.registerTool('read_page', {
   description: 'Lee el título, URL y texto visible de una pestaña. No accede a cookies ni almacenamiento.',
-  inputSchema: { tabId: z.string().optional(), maxChars: z.number().int().min(1).max(100000).default(30000) },
-}, async ({ tabId, maxChars }) => {
-  const tab = await selectedTab(tabId)
+  inputSchema: { tabId: z.string().optional(), sessionId: z.string().optional(), maxChars: z.number().int().min(1).max(100000).default(30000) },
+}, async ({ tabId, maxChars, sessionId }) => {
+  const tab = await selectedTab(tabId, sessionId)
   const value = await evaluate(tab, 'JSON.stringify({title: document.title, url: location.href, text: document.body?.innerText || \'\'})')
   const page = JSON.parse(String(value)) as { title: string; url: string; text: string }
   return { content: [{ type: 'text', text: JSON.stringify({ ...page, text: page.text.slice(0, maxChars) }, null, 2) }] }
@@ -461,9 +461,9 @@ server.registerTool('read_page', {
 
 server.registerTool('diagnose_page', {
   description: 'Diagnóstico pasivo de la pestaña seleccionada cuando un sitio queda en blanco, muestra “Blocked”, falla un iframe o no carga una sección. No lee contraseñas, cookies, saldos ni contenido privado. Distingue problemas locales, carga parcial y denegación del sitio. Úsalo antes de afirmar que una tarea no se puede continuar; nunca lo utilices para eludir restricciones de acceso.',
-  inputSchema: { tabId: z.string().optional() },
-}, async ({ tabId }) => {
-  const tab = await selectedTab(tabId)
+  inputSchema: { tabId: z.string().optional(), sessionId: z.string().optional() },
+}, async ({ tabId, sessionId }) => {
+  const tab = await selectedTab(tabId, sessionId)
   let sample: SitePageHealth
   try {
     const raw = await evaluate(tab, siteHealthExpression, 7_000)
@@ -505,9 +505,9 @@ const fieldAction = z.object({
 
 server.registerTool('inspect_page', {
   description: 'Inspección estructurada y de solo lectura de la pestaña real. Si hubo una verificación exitosa previa en esta ruta, agrega learnedLayout con localizadores seguros revalidados contra el DOM actual, NUNCA valores de campos. Reutiliza esas pistas para ahorrar pasos, pero verifica cada entrada y confirma por separado los envíos.',
-  inputSchema: { tabId: z.string().optional() },
-}, async ({ tabId }) => {
-  const tab = await selectedTab(tabId)
+  inputSchema: { tabId: z.string().optional(), sessionId: z.string().optional() },
+}, async ({ tabId, sessionId }) => {
+  const tab = await selectedTab(tabId, sessionId)
   const observed = await evaluate(tab, browserInteractionExpression({ operation: 'inspect' }))
   const layout = await recallVerifiedFormLayout(tab.url).catch(() => undefined)
   const result = observed as BrowserInteractionResult | undefined
@@ -538,7 +538,7 @@ server.registerTool('inspect_page', {
 server.registerTool('complete_form', {
   description: 'VÍA MÁS RÁPIDA para formulario ya inspeccionado: UNA llamada ejecuta 1–4 fases de operaciones DOM (30 acciones en total), espera brevemente tras cada fase React, verifica hasta 30 campos/etiquetas seleccionadas y, SOLO si el usuario autorizó enviar y TODOS los checks pasan, envía exactamente una vez y lee el resumen real. No usa capturas ni vuelve a enviar si el recibo falla. Para autocompletado: fase 1 fill y fase 2 click de sugerencia con selector+text; checks debe incluir el chip seleccionado, no el valor borrador del input. La respuesta distingue envío intentado de recibo confirmado. Para tareas simples NO hagas 10+ turnos de inspect/fill/verify/click/submit/wait por separado; inspecciona una vez y llama complete_form. Firma mínima ejecutable: {"phases":[[{"operation":"fill","selector":"#taskInput","value":"Preparar café"}]],"checks":[{"operation":"verify","selector":"#taskInput","value":"Preparar café"}]}. `checks` siempre es un array no vacío y cada elemento debe llevar `operation:"verify"`; no uses `fields`, `actions` ni `checks:[]`. Solo añade `submit:{"selector":"#taskForm","confirmation":true}` si el usuario autorizó el envío; `submit:false` no es válido.',
   inputSchema: {
-    tabId: z.string().optional(),
+    tabId: z.string().optional(), sessionId: z.string().optional(),
     phases: z.array(z.array(fieldAction).min(1).max(30)).min(1).max(4)
       .refine(phases => phases.reduce((sum, phase) => sum + phase.length, 0) <= 30,
         'El flujo admite hasta 30 acciones en total')
@@ -556,9 +556,9 @@ server.registerTool('complete_form', {
     }).optional().describe('Opcional y solo con autorización explícita: {selector, confirmation:true}. Nunca uses false ni un booleano.'),
     expectedReceiptText: z.string().trim().min(2).max(200).optional(),
   },
-}, async ({ tabId, phases, checks, submit, expectedReceiptText }) => {
+}, async ({ tabId, phases, checks, submit, expectedReceiptText, sessionId }) => {
   ensureBrowserActionPermission()
-  const tab = await selectedTab(tabId)
+  const tab = await selectedTab(tabId, sessionId)
   const workflow = {
     phases: phases as BrowserInteraction[][],
     checks: checks as BrowserInteraction[],
@@ -579,10 +579,10 @@ server.registerTool('complete_form', {
 const pendingFormLayouts = new Map<string, { pageKey: string; steps: BrowserInteraction[] }>()
 server.registerTool('fill_form', {
   description: 'VÍA PREFERIDA Y RÁPIDA para encuestas/formularios: tras UNA inspección inspect_page, completa hasta 30 campos en UNA sola llamada Chromium DOM (sin capturas ni clics por campo). Usa name, label, CSS o placeholder. Verifica cada escritura inmediatamente, rechaza campos protegidos/ambiguos y se detiene ante un error. Después usa verify_form UNA VEZ para comprobar persistencia; captura pantalla solo si el DOM no alcanza. No envía el formulario.',
-  inputSchema: { tabId: z.string().optional(), fields: z.array(fieldAction).min(1).max(30) },
-}, async ({ tabId, fields }) => {
+  inputSchema: { tabId: z.string().optional(), sessionId: z.string().optional(), fields: z.array(fieldAction).min(1).max(30) },
+}, async ({ tabId, fields, sessionId }) => {
   ensureBrowserActionPermission()
-  const tab = await selectedTab(tabId)
+  const tab = await selectedTab(tabId, sessionId)
   const result = await evaluate(tab, browserBatchExpression(fields as BrowserInteraction[]))
   if ((result as { ok?: boolean } | undefined)?.ok === true) {
     const hints = sanitizeFormLayout(
@@ -605,7 +605,7 @@ server.registerTool('fill_form', {
 server.registerTool('verify_form', {
   description: 'Comprueba de UNA VEZ hasta 30 campos, sin capturas ni exponer valores. Para autocompletados con etiquetas (por ejemplo Subjects), NO basta verificar el valor del input: usa selector CSS único de la etiqueta/chip seleccionada y value esperado; así se valida que la opción quedó realmente confirmada ANTES de enviar. Informa el primer error y protege contraseñas y campos ocultos.',
   inputSchema: {
-    tabId: z.string().optional(),
+    tabId: z.string().optional(), sessionId: z.string().optional(),
     fields: z.array(z.object({
       ...targetSchema,
       operation: z.literal('verify'),
@@ -613,8 +613,8 @@ server.registerTool('verify_form', {
       checked: z.boolean().optional(),
     })).min(1).max(30),
   },
-}, async ({ tabId, fields }) => {
-  const tab = await selectedTab(tabId)
+}, async ({ tabId, fields, sessionId }) => {
+  const tab = await selectedTab(tabId, sessionId)
   const result = await evaluate(tab, browserBatchExpression(fields as BrowserInteraction[]))
   if ((result as { ok?: boolean } | undefined)?.ok === true) {
     const remembered = pendingFormLayouts.get(tab.id)
@@ -628,16 +628,16 @@ server.registerTool('verify_form', {
 server.registerTool('fill_learned_form', {
   description: 'Rellena un formulario visitado antes usando localizadores SIN VALORES que fueron aprendidos después de una verificación exitosa. Aporta solo valores ACTUALES, por ejemplo fields:[{"field":"#candidate","value":"Nuevo nombre"},{"field":"department","value":"Ventas"}]. Detecta desajustes DOM y verifica todo en la misma llamada; nunca reutiliza respuestas pasadas ni envía la página. Si no hay memoria o falló la comprobación, usa inspect_page y complete_form.',
   inputSchema: {
-    tabId: z.string().optional(),
+    tabId: z.string().optional(), sessionId: z.string().optional(),
     fields: z.array(z.object({
       field: z.string().min(1).max(80),
       value: z.string().max(4096).optional(),
       checked: z.boolean().optional(),
     })).min(1).max(30),
   },
-}, async ({ tabId, fields }) => {
+}, async ({ tabId, fields, sessionId }) => {
   ensureBrowserActionPermission()
-  const tab = await selectedTab(tabId)
+  const tab = await selectedTab(tabId, sessionId)
   const layout = await recallVerifiedFormLayout(tab.url)
   if (!layout) return formatBrowserResult({
     ok: false, reason: 'NO_VERIFIED_LAYOUT',
@@ -672,33 +672,33 @@ server.registerTool('fill_learned_form', {
 
 server.registerTool('interact', {
   description: 'Control estructurado de elementos visibles en Chromium sin JavaScript arbitrario. Para sugerencias de autocompletado, combina selector CSS acotado (ej. button o [role=option]) con text EXACTO (ej. Maths) para distinguir la sugerencia de la caja de texto; luego verifica la etiqueta/chip en verify_form antes de enviar. No resuelvas opciones ambiguas a ciegas.',
-  inputSchema: { tabId: z.string().optional(), ...targetSchema,
+  inputSchema: { tabId: z.string().optional(), sessionId: z.string().optional(), ...targetSchema,
     operation: z.enum(['fill', 'select', 'check', 'click', 'scroll']),
     value: z.string().max(4096).optional(), checked: z.boolean().optional() },
-}, async ({ tabId, ...input }) => {
+}, async ({ tabId, sessionId, ...input }) => {
   ensureBrowserActionPermission()
-  return formatBrowserResult(await evaluate(await selectedTab(tabId), browserInteractionExpression(input as BrowserInteraction)))
+  return formatBrowserResult(await evaluate(await selectedTab(tabId, sessionId), browserInteractionExpression(input as BrowserInteraction)))
 })
 
 server.registerTool('submit_form', {
   description: 'Envía SOLO con autorización explícita. Previamente verifica TODOS los campos incluidos los tags/autocompletados confirmados (texto en input NO es tag). Un recibo de envío no implica corrección de datos; comprueba el resumen real. No reenvíes automáticamente para reparar un campo faltante: detente, informa la omisión y solicita nueva autorización cuando corresponda. No usar para acciones sensibles sin confirmación.',
-  inputSchema: { tabId: z.string().optional(), ...targetSchema,
+  inputSchema: { tabId: z.string().optional(), sessionId: z.string().optional(), ...targetSchema,
     confirmation: z.literal(true) },
-}, async ({ tabId, confirmation, ...target }) => {
+}, async ({ tabId, confirmation, sessionId, ...target }) => {
   ensureBrowserActionPermission()
   if (!confirmation) throw new Error('Se requiere confirmación del usuario para enviar el formulario.')
-  const tab = await selectedTab(tabId)
+  const tab = await selectedTab(tabId, sessionId)
   return formatBrowserResult(await evaluate(tab, browserInteractionExpression({ ...target, operation: 'submit' })))
 })
 
 server.registerTool('wait_for', {
   description: 'Espera hasta 8 segundos el texto visible de confirmación tras navegar o enviar un formulario. Consulta el DOM real con pocas comprobaciones; no repite el envío. Informa texto encontrado o timeout y URL final verificada.',
   inputSchema: {
-    tabId: z.string().optional(), expectedText: z.string().min(1).max(250),
+    tabId: z.string().optional(), sessionId: z.string().optional(), expectedText: z.string().min(1).max(250),
     timeoutMs: z.number().int().min(200).max(8000).default(5000),
   },
-}, async ({ tabId, expectedText, timeoutMs }) => {
-  const tab = await selectedTab(tabId)
+}, async ({ tabId, expectedText, timeoutMs, sessionId }) => {
+  const tab = await selectedTab(tabId, sessionId)
   const deadline = Date.now() + timeoutMs
   let last: BrowserInteractionResult | undefined
   do {
@@ -823,13 +823,13 @@ server.registerTool('youtube_video_listen', {
   description: 'ESCUCHA audio real del video público y transcribe localmente con faster-whisper. Procesa un segmento de 3-9 s del Chromium ya abierto; repite por tramos hasta cubrir el contenido solicitado, sin inventar lo no escuchado. Auto-instala el motor vía uv y usa CPU sin API de pago. Requiere permiso de acciones y una pista de audio capturable. No descarga videos ni intenta evadir DRM; devuelve la limitación específica cuando el navegador bloquea audio.',
   inputSchema: {
     url: z.url().optional(),
-    tabId: z.string().optional(),
+    tabId: z.string().optional(), sessionId: z.string().optional(),
     startSeconds: z.number().min(0).max(86400).default(0),
     durationSeconds: z.number().int().min(3).max(9).default(8),
   },
-}, async ({ url, tabId, startSeconds, durationSeconds }) => {
+}, async ({ url, tabId, startSeconds, durationSeconds, sessionId }) => {
   ensureBrowserActionPermission()
-  const tab = url === undefined ? await selectedTab(tabId) : await newBrowserTab(youtubeWatchUrl(url))
+  const tab = url === undefined ? await selectedTab(tabId, sessionId) : await newBrowserTab(youtubeWatchUrl(url, sessionId))
   const expected = youtubeWatchUrl(url ?? tab.url)
   let verified = false
   for (let attempt = 0; attempt < 8; attempt++) {
@@ -909,20 +909,20 @@ server.registerTool('youtube_video_inspect', {
   description: 'Analiza video público real de YouTube, con hasta 12 fotogramas Chromium, subtítulos temporizados y un intento de escuchar hasta 9 segundos mediante faster-whisper local cuando faltan subtítulos. Para otros fragmentos usa youtube_video_listen en la misma pestaña. No declara haber oído partes sin captura; respeta permisos, DRM y bloqueo de reproducción, sin descargas ni API de pago.',
   inputSchema: {
     url: z.url().optional(),
-    tabId: z.string().optional(),
+    tabId: z.string().optional(), sessionId: z.string().optional(),
     maxChars: z.number().int().min(1000).max(80000).default(45000),
     frames: z.number().int().min(0).max(12).default(6),
     audioSeconds: z.number().int().min(0).max(9).default(8),
   },
-}, async ({ url, tabId, maxChars, frames, audioSeconds }) => {
+}, async ({ url, tabId, maxChars, frames, audioSeconds, sessionId }) => {
   let tab: Tab
   let expectedVideoUrl: string
   if (url !== undefined) {
     expectedVideoUrl = youtubeWatchUrl(url)
     ensureBrowserActionPermission()
-    tab = await newBrowserTab(expectedVideoUrl)
+    tab = await newBrowserTab(expectedVideoUrl, sessionId)
   } else {
-    tab = await selectedTab(tabId)
+    tab = await selectedTab(tabId, sessionId)
     expectedVideoUrl = youtubeWatchUrl(tab.url)
   }
 
@@ -1013,9 +1013,9 @@ server.registerTool('youtube_video_inspect', {
 
 server.registerTool('screenshot', {
   description: 'Vista visual REAL de Chromium (JPEG 1280x720) únicamente cuando la inspección DOM no sea suficiente. Permite reconocer canvas, menús, diseños, errores y diálogos web. Puede costar más tokens que inspect_page; evita capturas repetidas.',
-  inputSchema: { tabId: z.string().optional() },
-}, async ({ tabId }) => {
-  const tab = await selectedTab(tabId)
+  inputSchema: { tabId: z.string().optional(), sessionId: z.string().optional() },
+}, async ({ tabId, sessionId }) => {
+  const tab = await selectedTab(tabId, sessionId)
   const shot = await cdp<{ data: string }>(tab, 'Page.captureScreenshot', {
     format: 'jpeg', quality: 65, captureBeyondViewport: false, fromSurface: true,
   })
@@ -1031,12 +1031,12 @@ server.registerTool('screenshot', {
 
 server.registerTool('mouse_action', {
   description: 'Control visual alternativo sobre una captura REAL de Chromium: clic o desplazamiento en coordenadas 1280x720. Úsalo solo si no existe control DOM accesible; nunca hagas clic a ciegas sin una captura reciente.',
-  inputSchema: { tabId: z.string().optional(), action: z.enum(['click','scroll']),
+  inputSchema: { tabId: z.string().optional(), sessionId: z.string().optional(), action: z.enum(['click','scroll']),
     x: z.number().min(0).max(1280), y: z.number().min(0).max(720),
     deltaY: z.number().min(-1500).max(1500).optional() },
-}, async ({ tabId, action, x, y, deltaY }) => {
+}, async ({ tabId, action, x, y, deltaY, sessionId }) => {
   ensureBrowserActionPermission()
-  const tab = await selectedTab(tabId)
+  const tab = await selectedTab(tabId, sessionId)
   if (action === 'scroll') {
     await cdp(tab, 'Input.dispatchMouseEvent', { type: 'mouseWheel', x, y, deltaX: 0, deltaY: deltaY ?? 480 })
   } else {
@@ -1114,9 +1114,9 @@ export function normalizeBrowserKey(key: string, modifiers: number | string | st
 
 server.registerTool('press_key', {
   description: 'Enviar tecla en la pestaña actual con sintaxis flexible. Ejemplos: {"key":"PageDown"}, {"key":"Shift+Tab"}, {"key":"Ctrl+F"}, {"key":"Space"}. modifiers acepta entero de bits, "Ctrl+Shift" o ["Control","Shift"]. Usa interact para controles DOM y comprueba cualquier cambio antes de afirmar éxito.',
-  inputSchema: { tabId: z.string().optional(), key: z.string().min(1).max(60),
+  inputSchema: { tabId: z.string().optional(), sessionId: z.string().optional(), key: z.string().min(1).max(60),
     modifiers: z.union([z.number().int().min(0).max(15), z.string(), z.array(z.string())]).optional() },
-}, async ({ tabId, key, modifiers }) => {
+}, async ({ tabId, key, modifiers, sessionId }) => {
   ensureBrowserActionPermission()
   let normalized: NormalizedBrowserKey
   try {
@@ -1128,7 +1128,7 @@ server.registerTool('press_key', {
       next: 'Corrige el formato de key o utiliza inspect_page e interact para un control DOM real.',
     }) }] }
   }
-  const tab = await selectedTab(tabId)
+  const tab = await selectedTab(tabId, sessionId)
   const params = {
     key: normalized.key, code: normalized.code, modifiers: normalized.modifiers,
     windowsVirtualKeyCode: normalized.virtualKeyCode, nativeVirtualKeyCode: normalized.virtualKeyCode,
@@ -1144,10 +1144,10 @@ server.registerTool('press_key', {
 
 server.registerTool('type_text', {
   description: 'Escribe texto en el campo actualmente enfocado del Chromium del chat mediante CDP, sin ventana visible. Inspecciona y enfoca antes: no escribir a ciegas. Para formularios normales usar fill_form es más rápido y fiable.',
-  inputSchema: { tabId: z.string().optional(), text: z.string().max(4096) },
-}, async ({ tabId, text }) => {
+  inputSchema: { tabId: z.string().optional(), sessionId: z.string().optional(), text: z.string().max(4096) },
+}, async ({ tabId, text, sessionId }) => {
   ensureBrowserActionPermission()
-  const tab = await selectedTab(tabId)
+  const tab = await selectedTab(tabId, sessionId)
   const focused = await evaluate(tab, 'Boolean(document.activeElement && (document.activeElement.matches("input:not([type=hidden]):not([disabled]):not([readonly]),textarea:not([disabled]):not([readonly]),[contenteditable=true]")))')
   if (focused !== true) throw new Error('No hay campo editable enfocado en Chromium. Usa inspect_page e interact primero.')
   await cdp(tab, 'Input.insertText', { text })
@@ -1156,10 +1156,10 @@ server.registerTool('type_text', {
 
 server.registerTool('click_text', {
   description: 'Hace clic en un elemento cuyo texto coincide cuando la política de permisos del navegador permite acciones.',
-  inputSchema: { text: z.string().min(1), tabId: z.string().optional() },
-}, async ({ text, tabId }) => {
+  inputSchema: { text: z.string().min(1), tabId: z.string().optional(), sessionId: z.string().optional() },
+}, async ({ text, tabId, sessionId }) => {
   if (!actionsAllowed()) throw new Error('Acción bloqueada por la política de permisos del navegador (modo read-only o PHOENIX_BROWSER_ALLOW_ACTIONS=false).')
-  const tab = await selectedTab(tabId)
+  const tab = await selectedTab(tabId, sessionId)
   const escaped = JSON.stringify(text)
   const result = await evaluate(tab, `(() => { const wanted=${escaped}; const el=[...document.querySelectorAll('button,a,[role="button"],input[type="submit"]')].find(e => (e.innerText || e.value || '').trim().includes(wanted)); if (!el) return 'No encontrado'; if (el.type === 'submit') return 'Usa submit_form con confirmación explícita'; el.click(); return 'Clic realizado'; })()`)
   return { content: [{ type: 'text', text: String(result) }] }
