@@ -130,6 +130,7 @@ export function ChatView({
   const order = useSession(s => s.chat.order)
   const nodeStore = useSession(s => s.chat.nodes)
   const timeline = useSession(s => s.chat.timeline)
+  const pendingInteractions = useSession(s => s.pending)
   const inbox = useSession(s => s.queue)
   const pendingSubmit = useInput(s => s.pendingSubmit)
   const inputPhase = useInput(s => s.phase)
@@ -300,7 +301,14 @@ export function ChatView({
       startedAt: visiblePendingSubmit.startedAt,
     }
     : null
-  const visibleProgress = activeProgress ?? admissionProgress
+  // A real, Host-owned question or approval takes precedence over a still-open
+  // agent turn. Without this fence a pending question looks like endless thought.
+  const waiting = pendingInteractions.at(-1)
+  const waitingProgress = waiting === undefined ? null : {
+    phase: 'waiting' as const,
+    activity: waiting.kind === 'approval' ? 'waiting-approval' as const : 'waiting-user' as const,
+  }
+  const visibleProgress = waitingProgress ?? activeProgress ?? admissionProgress
   // Session.running can remain true while Host-side settlement, logging, or
   // verification finishes after user-visible assistant output has arrived.
   // Render status only for an observable activity, never from running alone,
@@ -308,19 +316,19 @@ export function ChatView({
   const visibleTurnStatus = visibleProgress === null
     ? undefined
     : {
-      startTime: activeProgress?.startedAt
+      startTime: waitingProgress !== null ? null : activeProgress?.startedAt
         ?? (running ? runningTurnStart : null)
         ?? visiblePendingSubmit?.startedAt
         ?? null,
       progress: visibleProgress,
       // A lost Host admission settlement must not leave an eternal animation.
       // Real runtime activity is authoritative and never expires here.
-      expiresAfterMs: activeProgress === null ? 30_000 : null,
+      expiresAfterMs: waitingProgress !== null ? null : activeProgress === null ? 30_000 : null,
     }
 
   const liveTurn = timeline.turnOrder.at(-1)
   useEffect(() => {
-    if (!running || activeProgress === null || liveTurn === undefined) return
+    if (!running || waitingProgress !== null || activeProgress === null || liveTurn === undefined) return
     if (spokenProgress.current.turn !== liveTurn) {
       spokenProgress.current = { turn: liveTurn, activity: undefined, at: 0 }
     }
@@ -346,7 +354,7 @@ export function ChatView({
     check()
     const timer = window.setInterval(check, 5_000)
     return () => { window.clearInterval(timer) }
-  }, [activeProgress, liveTurn, running, sessionId, t, visibleTurnStatus?.startTime])
+  }, [activeProgress, liveTurn, running, sessionId, t, visibleTurnStatus?.startTime, waitingProgress?.activity])
 
   useEffect(() => {
     const finished = previousRunning.current && !running
