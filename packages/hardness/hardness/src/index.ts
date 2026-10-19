@@ -68,6 +68,9 @@ export type {
   CognitiveWorkflowPlan,
 } from './cognitive-workflow.ts'
 
+export { GeneralizationGate } from './generalization-gate.ts'
+export type { GeneralizationAssessment, GeneralizationMetrics, GeneralizationSnapshot, GeneralizationTrial } from './generalization-gate.ts'
+
 export type * from './types.ts'
 
 function sameDescriptorRevision(left: CapabilityDescriptor, right: CapabilityDescriptor): boolean {
