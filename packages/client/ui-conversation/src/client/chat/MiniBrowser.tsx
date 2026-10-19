@@ -523,9 +523,8 @@ export function MiniBrowser({ sessionId, requested = false, active = true, initi
           state = await inspect(sessionId, first.signal, followGlobal.current ? undefined : cardTabId.current)
         } catch (reason) {
           inspectError = reason
-          // Recover only an inferred tab from an old shared Chrome session.
-          // Never silently switch when the agent explicitly requested a tab:
-          // a missing child target must fail instead of showing another page.
+          // Saved conversation histories can refer to targets from the old
+          // globally shared Chrome. Never attach that stale ID to this chat.
           if (initialTargetTabId === undefined && cardTabId.current !== undefined) {
             try {
               state = await inspect(sessionId, first.signal)
@@ -535,7 +534,7 @@ export function MiniBrowser({ sessionId, requested = false, active = true, initi
           }
         }
         if (!requestIsActive(first.signal, mounted)) return
-        if (requested && (!state || !state.available) && !startAttempted) {
+        if (requested && initialTargetTabId === undefined && (!state || !state.available) && !startAttempted) {
           // Starting Chrome is a mutation whose timeout may leave the host in
           // an unknown state. Let the user retry explicitly instead of issuing
           // the same mutation again from the polling loop.
