@@ -40,7 +40,7 @@ export function recoverEvolutionCheckpoint(
     objective: started ? state.goal.objective : '',
     status: state.status,
     verified,
-    evidence: Object.freeze(verified ? [...(state.judge?.evidence ?? [])] : []),
+    evidence: Object.freeze(verified ? [...state.judge.evidence] : []),
   })
 }
 
@@ -100,7 +100,9 @@ export async function runEvolutionProbe(
   }
   const recovered = await host.readBack()
   if (!recovered.trim() || recovered !== before) throw new Error('evolution sandbox rollback state mismatch')
-  if (observedError !== undefined) throw observedError
+  if (observedError !== undefined) {
+    throw observedError instanceof Error ? observedError : new Error('evolution sandbox action failed', { cause: observedError })
+  }
   return Object.freeze({
     status: before === after ? 'unchanged' : 'observed',
     before,
