@@ -18,6 +18,7 @@ import { browserBatchExpression, browserInteractionExpression, type BrowserInter
 import { CdpConnectionPool } from './cdp-connection-pool.ts'
 import { classifyNavigationEvidence, type NavigationEvidence, type NavigationVerdict } from './navigation-evidence.ts'
 import { fullSiteForEmbeddedPage } from './site-shell.ts'
+import { inspectVaultPresence } from './vault-presence.ts'
 import { classifySiteHealth, nextSiteRecoveryStep, siteHealthExpression, type SitePageHealth } from './site-health.ts'
 import { runBrowserFormWorkflow } from './form-workflow.ts'
 import { formLayoutKey, prepareLearnedFormWorkflow, recallVerifiedFormLayout, sanitizeFormLayout, saveVerifiedFormLayout } from './form-layout-memory.ts'
@@ -557,7 +558,8 @@ server.registerTool('read_page', {
   const tab = await selectedTab(tabId, sessionId)
   const value = await evaluate(tab, 'JSON.stringify({title: document.title, url: location.href, text: document.body?.innerText || \'\'})')
   const page = JSON.parse(String(value)) as { title: string; url: string; text: string }
-  return { content: [{ type: 'text', text: JSON.stringify({ ...page, text: page.text.slice(0, maxChars) }, null, 2) }] }
+  const credentialState = await inspectVaultPresence(tab.url)
+  return { content: [{ type: 'text', text: JSON.stringify({ ...page, text: page.text.slice(0, maxChars), credentialState }, null, 2) }] }
 })
 
 server.registerTool('diagnose_page', {
@@ -610,6 +612,7 @@ server.registerTool('inspect_page', {
 }, async ({ tabId, sessionId }) => {
   const tab = await selectedTab(tabId, sessionId)
   const observed = await evaluate(tab, browserInteractionExpression({ operation: 'inspect' }))
+  const credentialState = await inspectVaultPresence(tab.url)
   const layout = await recallVerifiedFormLayout(tab.url).catch(() => undefined)
   const result = observed as BrowserInteractionResult | undefined
   const frames = Array.isArray(result?.frames) ? result.frames as Array<{ src?: string; accessible?: boolean }> : []
@@ -618,7 +621,7 @@ server.registerTool('inspect_page', {
     crossOriginFrameCount: crossOriginCount,
     iframeInspectionNote: 'Los controles del sitio superior, incluidos menú y cuenta, son visibles. El contenido de iframes externos no está demostrado desde este DOM: utiliza screenshot para evidencia visual; no afirmes que leíste controles internos no accesibles.',
   } : {}
-  const observedWithFrames = result?.ok ? { ...result, ...frameContext } : observed
+  const observedWithFrames = result?.ok ? { ...result, ...frameContext, credentialState } : observed
   // Hints do not supply values and cannot stand in for the current DOM.
   if (!layout || !result?.ok || !Array.isArray(result.controls)) return formatBrowserResult(observedWithFrames)
   const controls = result.controls as Array<{ id?: string; name?: string; visible?: boolean; disabled?: boolean; readonly?: boolean; type?: string }>
@@ -636,7 +639,7 @@ server.registerTool('inspect_page', {
     verifiedChecks: layout.verifiedChecks.filter(usable),
   }
   return formatBrowserResult({
-    ...result, ...frameContext, ...(suggestions.steps.length || suggestions.verifiedChecks.length
+    ...result, ...frameContext, credentialState, ...(suggestions.steps.length || suggestions.verifiedChecks.length
       ? { learnedLayout: suggestions,
           warning: 'Memoria de localizadores SIN datos: revalida controles, valores y autorización actual. No reutilices envíos.' }
       : {}),
