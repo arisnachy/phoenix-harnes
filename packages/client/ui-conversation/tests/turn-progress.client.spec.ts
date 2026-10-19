@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type {
   ChatConversationViewNode, ConversationTimelineSnapshot, RunningToolCall, ToolCallBlock,
 } from '@phoenix-ai/dsh-client-runtime/client'
-import { turnProgress } from '../src/client/chat/turn-progress.ts'
+import { naturalProgressLine, turnProgress } from '../src/client/chat/turn-progress.ts'
 
 function openTimeline(turn: number): ConversationTimelineSnapshot {
   return {
@@ -100,6 +100,21 @@ function assistantNode(turn: number, status: 'running' | 'settled', blockKind: '
     },
   }
 }
+
+describe('naturalProgressLine', () => {
+  it('turns observed activity into truthful human-readable speech without completion claims', () => {
+    expect(naturalProgressLine({ phase: 'thinking', activity: 'thinking' }, 'es-DO', 20_000))
+      .toContain('analizando')
+    expect(naturalProgressLine({ phase: 'thinking', activity: 'thinking' }, 'es-DO', 100_000))
+      .toContain('todavía no tengo un resultado nuevo confirmado')
+    expect(naturalProgressLine({ phase: 'running-tools', activity: 'searching', detail: 'web_search' }, 'es-DO'))
+      .toContain('buscando información')
+    expect(naturalProgressLine({ phase: 'running-tools', activity: 'writing' }, 'en-US'))
+      .toContain('working on the files')
+    expect(naturalProgressLine({ phase: 'running-tools', activity: 'writing' }, 'fr-FR'))
+      .toBeUndefined()
+  })
+})
 
 describe('turnProgress', () => {
   it('returns preparing when the open turn has no tool node', () => {
