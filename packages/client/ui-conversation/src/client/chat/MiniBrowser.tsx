@@ -834,7 +834,7 @@ export function MiniBrowser({ sessionId, requested = false, active = true, initi
         </form>
         {snapshot.fullSiteUrl && hasPage && <div className={css.siteShellNotice} role="status">
           <span>Este módulo no contiene el menú superior del sitio principal.</span>
-          <button type="button" onClick={() => { void run({ type: 'open', url: snapshot.fullSiteUrl }) }}>
+          <button type="button" onClick={() => { const url = snapshot.fullSiteUrl; if (url !== undefined) void run({ type: 'open', url }) }}>
             Ver sitio completo y menú
           </button>
         </div>}
