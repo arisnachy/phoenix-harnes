@@ -158,7 +158,9 @@ export function createConnectorInstallTool(
           ? connectorId !== undefined && (connectorId.startsWith('outlook-') || ['microsoft-personal','microsoft-contacts','onedrive','microsoft-teams','sharepoint'].includes(connectorId))
             ? `Installed ${label}. Next: use this MCP server's microsoft_status; if unconfigured, ask once for Entra public client ID and run microsoft_setup. Use microsoft_login_start to show the official device-code URL and code, then microsoft_login_complete after the user consents, and verify microsoft_profile. Do not claim a live Microsoft account from MCP tool availability alone.`
             : `Installed ${label}. Use connector_list to check whether it is ready or needs authorization.`
-          : `${label} is already installed. Check its actual authorization with the provider's tools, not merely connector_list.`,
+          : connectorId !== undefined && (connectorId.startsWith('outlook-') || ['microsoft-personal','microsoft-contacts','onedrive','microsoft-teams','sharepoint'].includes(connectorId))
+            ? `${label} is already installed. Use microsoft_status and a real Microsoft profile/Graph read to verify the service's current authorization.`
+            : `${label} is already installed. Use connector_list to check its current authorization state.`,
       }
     },
     presentCall(args) {
