@@ -52,7 +52,7 @@ export class MiniBrowserScopes {
   }
 
   /**
-   * Associate a newly created or previously unclaimed target with a chat.
+   * Associate a target with its chat without changing its selected page.
    * @param scopeId - Requesting conversation.
    * @param tabId - Chrome target ID.
    * @returns Nothing; rejects cross-chat ownership conflicts.
@@ -73,7 +73,7 @@ export class MiniBrowserScopes {
       this.owners.set(tabId, scopeId)
       this.revision++
     }
-    this.select(scopeId, tabId)
+    if (scope.selectedTabId === undefined) this.select(scopeId, tabId)
   }
 
   /**
