@@ -86,6 +86,25 @@ describe('Phoenix Game Studio 2D artifact quality', () => {
 })
 
 
+describe('Phoenix classic game contracts in chat', () => {
+  for (const gameType of ['tetris', 'snake', 'pong', 'pac-man', 'ajedrez', 'chess', 'solitario', 'sudoku', '2048']) {
+    it('recognizes ' + gameType + ' without imposing boss or parallax schemas', () => {
+      const value = {
+        schemaVersion: 1, title: 'Classic ' + gameType,
+        genre: gameType, gameType,
+        controls: { interact: 'Keyboard/Touch' },
+        level: { board: { rows: 20, columns: 10 } },
+        audio: { cues: ['select'], music: 'optional' },
+      }
+      const audit = auditGameManifest(value)
+      expect(audit.valid).toBe(true)
+      expect(audit.issues).toEqual([])
+      expect(audit.issues).not.toContain('missing-boss')
+      expect(audit.issues).not.toContain('level-requires-scene-layers')
+    })
+  }
+})
+
 describe('Phoenix Game Studio cross-genre contracts', () => {
   const scene = { layers: [{ id: 'board', scrollFactor: 0 }] }
   const assets = [{ path: 'game.html', license: 'original' }]
