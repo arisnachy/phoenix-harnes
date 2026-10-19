@@ -8,7 +8,7 @@ import { Modal, PhoenixLogo } from '@phoenix-ai/dsh-client-ui-primitives'
 import css from './MiniBrowser.module.css'
 
 type Tab = { id: string; title: string; url: string }
-type Snapshot = { available: boolean; tabId?: string; url?: string; title?: string; tabs: Tab[] }
+type Snapshot = { available: boolean; tabId?: string; url?: string; title?: string; fullSiteUrl?: string; tabs: Tab[] }
 type Command = {
   type: string
   url?: string
@@ -832,6 +832,12 @@ export function MiniBrowser({ sessionId, requested = false, active = true, initi
                 })
             }}>🔐 Acceso seguro</button>}
         </form>
+        {snapshot.fullSiteUrl && hasPage && <div className={css.siteShellNotice} role="status">
+          <span>Este módulo no contiene el menú superior del sitio principal.</span>
+          <button type="button" onClick={() => { void run({ type: 'open', url: snapshot.fullSiteUrl }) }}>
+            Ver sitio completo y menú
+          </button>
+        </div>}
         {snapshot.available ? (
           <div className={css.viewport}>
             {!hasPage ? <div className={css.loading} role="status">MiniBrowser de esta conversación iniciado. Todavía no se ha comprobado ninguna página. Kira no debe afirmar que la abrió hasta verificarla.</div> : (

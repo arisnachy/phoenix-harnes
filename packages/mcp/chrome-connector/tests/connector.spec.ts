@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { buildDedicatedBrowserArgs, chooseTab, normalizeBrowserKey, youtubeSearchUrl } from '../src/server.ts'
+import { fullSiteForEmbeddedPage } from '../src/site-shell.ts'
 
 describe('Chrome/Edge MCP connector entry', () => {
   it('imports without starting the stdio server', async () => {
@@ -59,5 +60,14 @@ describe('Chrome/Edge MCP connector entry', () => {
   it('does not fall back to another tab when an explicit id is missing', () => {
     const first = { id: 'first', title: 'First', url: 'https://example.com', webSocketDebuggerUrl: 'ws://127.0.0.1:9222/devtools/page/first' }
     expect(() => chooseTab([first], 'missing')).toThrow('No existe la pestaña missing')
+  })
+})
+
+describe('Full-site shell recovery in Chrome MCP', () => {
+  it('resolves the publisher website but not unrelated or impersonated domains', () => {
+    expect(fullSiteForEmbeddedPage('https://deportes.juancitosport.com.do/BOSSWagering/Sportsbook/InternetBetTaker20'))
+      .toBe('https://www.juancitosport.com.do/deportes/')
+    expect(fullSiteForEmbeddedPage('https://www.juancitosport.com.do/deportes/')).toBeUndefined()
+    expect(fullSiteForEmbeddedPage('https://bad.juancitosport.com.do/BOSSWagering/Sportsbook/')).toBeUndefined()
   })
 })

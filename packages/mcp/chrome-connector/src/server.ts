@@ -17,6 +17,7 @@ import { z } from 'zod'
 import { browserBatchExpression, browserInteractionExpression, type BrowserInteraction, type BrowserInteractionResult } from './browser-interactions.ts'
 import { CdpConnectionPool } from './cdp-connection-pool.ts'
 import { classifyNavigationEvidence, type NavigationEvidence, type NavigationVerdict } from './navigation-evidence.ts'
+import { fullSiteForEmbeddedPage } from './site-shell.ts'
 import { classifySiteHealth, nextSiteRecoveryStep, siteHealthExpression, type SitePageHealth } from './site-health.ts'
 import { runBrowserFormWorkflow } from './form-workflow.ts'
 import { formLayoutKey, prepareLearnedFormWorkflow, recallVerifiedFormLayout, sanitizeFormLayout, saveVerifiedFormLayout } from './form-layout-memory.ts'
@@ -488,26 +489,31 @@ server.registerTool('tabs', {
 }, async ({ sessionId }) => ({ content: [{ type: 'text', text: JSON.stringify(await tabs(sessionId), null, 2) }] }))
 
 server.registerTool('navigate', {
-  description: 'Navega una pestaña a una URL HTTP(S). No envía formularios ni ejecuta acciones de cuenta.',
-  inputSchema: { url: z.url(), tabId: z.string().optional(), sessionId: z.string().optional() },
-}, async ({ url, tabId, sessionId }) => {
+  description: 'Navega una pestaña HTTP(S). Cuando se conoce un módulo incrustado sin el menú del sitio, abre por defecto la página oficial completa que lo contiene. Usa preferFullSite:false para una URL interna solicitada expresamente. No envía formularios ni ejecuta acciones de cuenta.',
+  inputSchema: { url: z.url(), tabId: z.string().optional(), sessionId: z.string().optional(), preferFullSite: z.boolean().default(true) },
+}, async ({ url, tabId, sessionId, preferFullSite }) => {
   if (!actionsAllowed()) throw new Error('Navegación bloqueada por la política de permisos del navegador (modo read-only o PHOENIX_BROWSER_ALLOW_ACTIONS=false).')
   const parsed = new URL(url)
   if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('Solo se permiten URLs HTTP(S)')
-  const tab = await openConversationPage(url, tabId, sessionId)
-  const receipt = await verifyBrowserNavigation(tab, url)
+  const navigationUrl = preferFullSite ? (fullSiteForEmbeddedPage(url) ?? url) : url
+  const tab = await openConversationPage(navigationUrl, tabId, sessionId)
+  const receipt = await verifyBrowserNavigation(tab, navigationUrl)
   const verified = receipt.verdict === 'verified'
   return {
     ...(verified ? {} : { isError: true as const }),
     content: [{ type: 'text' as const, text: JSON.stringify({
       status: verified ? 'verified' : 'unverified',
       requestedUrl: url,
+      navigatedUrl: navigationUrl,
+      ...(navigationUrl !== url ? { embeddedAppUrl: url, siteShellRestored: true } : {}),
       observedUrl: receipt.evidence?.url ?? 'about:blank',
       tabId: tab.id,
       title: receipt.evidence?.title ?? '',
       reason: receipt.verdict,
       message: verified
-        ? 'La URL y el contenido real de la página están comprobados dentro del navegador de esta conversación.'
+        ? navigationUrl !== url
+          ? 'Página oficial completa comprobada con su menú superior. El módulo de deportes está dentro de un iframe. Usa inspect_page para ver controles del sitio y screenshot para comprobar la vista completa.'
+          : 'La URL y el contenido real de la página están comprobados dentro del navegador de esta conversación.'
         : 'No se confirmó que la página solicitada cargara con contenido. No afirmes que fue abierta.',
     }) }],
   }
@@ -606,8 +612,15 @@ server.registerTool('inspect_page', {
   const observed = await evaluate(tab, browserInteractionExpression({ operation: 'inspect' }))
   const layout = await recallVerifiedFormLayout(tab.url).catch(() => undefined)
   const result = observed as BrowserInteractionResult | undefined
+  const frames = Array.isArray(result?.frames) ? result.frames as Array<{ src?: string; accessible?: boolean }> : []
+  const crossOriginCount = frames.filter(frame => frame.accessible === false && /^https?:\/\//iu.test(frame.src ?? '')).length
+  const frameContext = crossOriginCount ? {
+    crossOriginFrameCount: crossOriginCount,
+    iframeInspectionNote: 'Los controles del sitio superior, incluidos menú y cuenta, son visibles. El contenido de iframes externos no está demostrado desde este DOM: utiliza screenshot para evidencia visual; no afirmes que leíste controles internos no accesibles.',
+  } : {}
+  const observedWithFrames = result?.ok ? { ...result, ...frameContext } : observed
   // Hints do not supply values and cannot stand in for the current DOM.
-  if (!layout || !result?.ok || !Array.isArray(result.controls)) return formatBrowserResult(observed)
+  if (!layout || !result?.ok || !Array.isArray(result.controls)) return formatBrowserResult(observedWithFrames)
   const controls = result.controls as Array<{ id?: string; name?: string; visible?: boolean; disabled?: boolean; readonly?: boolean; type?: string }>
   const usable = (locator: { selector?: string; name?: string }): boolean => {
     const found = controls.filter(control => control.visible && !control.disabled && !control.readonly
@@ -623,7 +636,7 @@ server.registerTool('inspect_page', {
     verifiedChecks: layout.verifiedChecks.filter(usable),
   }
   return formatBrowserResult({
-    ...result, ...(suggestions.steps.length || suggestions.verifiedChecks.length
+    ...result, ...frameContext, ...(suggestions.steps.length || suggestions.verifiedChecks.length
       ? { learnedLayout: suggestions,
           warning: 'Memoria de localizadores SIN datos: revalida controles, valores y autorización actual. No reutilices envíos.' }
       : {}),

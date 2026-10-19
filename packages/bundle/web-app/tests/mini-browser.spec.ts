@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import {
   captureBrowserFrameSingleFlight,
   captureBrowserFrameWithFallback,
+  fullSiteForEmbeddedPage,
   isVerifiedWebmCapture,
   MiniBrowserCdpSession,
   miniBrowserDescriptorNeedsPublish,
@@ -258,5 +259,16 @@ describe('User-authorized Chrome tab capture boundary', () => {
     const bytes = Buffer.alloc(256)
     bytes.set([0x1a, 0x45, 0xdf, 0xa3])
     expect(isVerifiedWebmCapture(bytes)).toBe(true)
+  })
+})
+
+describe('Embedded application inside publisher website', () => {
+  it('recovers only a verified parent and never invents a website header', () => {
+    expect(fullSiteForEmbeddedPage('https://deportes.juancitosport.com.do/BOSSWagering/Sportsbook/InternetBetTaker20'))
+      .toBe('https://www.juancitosport.com.do/deportes/')
+    expect(fullSiteForEmbeddedPage('https://www.juancitosport.com.do/deportes/')).toBeUndefined()
+    expect(fullSiteForEmbeddedPage('http://deportes.juancitosport.com.do/BOSSWagering/Sportsbook/')).toBeUndefined()
+    expect(fullSiteForEmbeddedPage('https://deportes.juancitosport.com.do.evil.org/BOSSWagering/Sportsbook/')).toBeUndefined()
+    expect(fullSiteForEmbeddedPage('https://deportes.juancitosport.com.do/other')).toBeUndefined()
   })
 })

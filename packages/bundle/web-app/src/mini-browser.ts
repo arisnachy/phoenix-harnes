@@ -17,6 +17,19 @@ import type { Context } from '@phoenix-ai/cordis'
 import type {} from '@phoenix-ai/dsh-host-webserver'
 import { MiniBrowserScopes, validBrowserScopeId } from './mini-browser-scopes.ts'
 
+/**
+ * The website header belongs to the containing publisher page, not a child
+ * iframe. Map only publisher-verified HTTPS frame URLs, never guess origins.
+ */
+export function fullSiteForEmbeddedPage(rawUrl: string): string | undefined {
+  try {
+    const url = new URL(rawUrl)
+    if (url.protocol !== 'https:' || url.hostname !== 'deportes.juancitosport.com.do'
+      || !/^\/BOSSWagering\/Sportsbook(?:\/|$)/iu.test(url.pathname)) return undefined
+    return 'https://www.juancitosport.com.do/deportes/'
+  } catch { return undefined }
+}
+
 type Tab = { id: string; url: string; title: string; type?: string; webSocketDebuggerUrl?: string }
 type Descriptor = { pid: number; endpoint: string; selectedTabId?: string }
 type RpcReply = { id: number; result?: Record<string, unknown>; error?: { message?: string } }
@@ -668,6 +681,7 @@ async function state(knownBase?: string, tabId?: string, signal?: AbortSignal, s
     const chosen = await selected(base, chosenId, tabs, signal, false)
     return {
       available: true, tabId: chosen.id, url: chosen.url, title: chosen.title,
+      ...(fullSiteForEmbeddedPage(chosen.url) ? { fullSiteUrl: fullSiteForEmbeddedPage(chosen.url) } : {}),
       tabs: tabs.filter(tab => browserScopes.owns(sessionId, tab.id))
         .map(({ id, url, title }) => ({ id, url, title })),
     }
@@ -675,6 +689,7 @@ async function state(knownBase?: string, tabId?: string, signal?: AbortSignal, s
   const selectedTab = await selected(base, tabId, tabs, signal, tabId === undefined)
   return {
     available: true, tabId: selectedTab.id, url: selectedTab.url, title: selectedTab.title,
+    ...(fullSiteForEmbeddedPage(selectedTab.url) ? { fullSiteUrl: fullSiteForEmbeddedPage(selectedTab.url) } : {}),
     tabs: tabs.map(({ id, url, title }) => ({ id, url, title })),
   }
 }
