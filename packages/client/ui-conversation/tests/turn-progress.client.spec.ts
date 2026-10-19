@@ -102,15 +102,34 @@ function assistantNode(turn: number, status: 'running' | 'settled', blockKind: '
 }
 
 describe('naturalProgressLine', () => {
-  it('turns observed activity into truthful human-readable speech without completion claims', () => {
-    expect(naturalProgressLine({ phase: 'thinking', activity: 'thinking' }, 'es-DO', 20_000))
-      .toContain('analizando')
-    expect(naturalProgressLine({ phase: 'thinking', activity: 'thinking' }, 'es-DO', 100_000))
-      .toContain('todavía no tengo un resultado nuevo confirmado')
-    expect(naturalProgressLine({ phase: 'running-tools', activity: 'searching', detail: 'web_search' }, 'es-DO'))
+  it('renders every observed activity in natural Spanish and English without technical tool identifiers', () => {
+    const activities = [
+      'preparing', 'thinking', 'searching', 'browsing', 'reading',
+      'writing', 'executing', 'running-tools', 'verifying',
+    ] as const
+    for (const activity of activities) {
+      for (const language of ['es-DO', 'en-US']) {
+        const line = naturalProgressLine({ phase: 'running-tools', activity, detail: 'secret_tool_xyz' },
+          language, 20_000)
+        expect(line?.length).toBeGreaterThan(15)
+        expect(line).not.toContain('secret_tool_xyz')
+      }
+    }
+    expect(naturalProgressLine({ phase: 'running-tools', activity: 'searching' }, 'es-DO'))
       .toContain('buscando información')
     expect(naturalProgressLine({ phase: 'running-tools', activity: 'writing' }, 'en-US'))
       .toContain('working on the files')
+  })
+
+  it('acknowledges long thinking or preparation without fictional accomplishments', () => {
+    for (const activity of ['thinking', 'preparing'] as const) {
+      expect(naturalProgressLine({ phase: 'thinking', activity }, 'es-DO', 100_000))
+        .toContain('todavía no tengo un resultado nuevo confirmado')
+      expect(naturalProgressLine({ phase: 'thinking', activity }, 'en-US', 100_000))
+        .toContain("don't have a newly verified result")
+    }
+    expect(naturalProgressLine({ phase: 'thinking', activity: 'thinking' }, 'es-DO', 20_000))
+      .toContain('analizando')
     expect(naturalProgressLine({ phase: 'running-tools', activity: 'writing' }, 'fr-FR'))
       .toBeUndefined()
   })
