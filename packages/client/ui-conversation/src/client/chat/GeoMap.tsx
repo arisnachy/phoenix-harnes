@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { CanvasAction } from './GenerativeCanvas.tsx'
 import css from './GeoMap.module.css'
+import { Geo3DView } from './Geo3DView.tsx'
 
 type Position = readonly [number, number] // [longitude, latitude], GeoJSON order
 type Kind = 'points' | 'line' | 'polygon' | 'heat'
@@ -165,6 +166,7 @@ export function GeoMap({ spec, onAction, conversationId }: { spec: GeoMapSpec; o
   const [view, setView] = useState<View>(() => initialView(spec, effectiveConversationId))
   const [size, setSize] = useState({ w: 780, h: 430 })
   const [visible, setVisible] = useState<readonly string[]>(() => p.layers.map(l => l.id))
+  const [show3D, setShow3D] = useState(false)
   const [selected, setSelected] = useState<{ layer: GeoLayer; feature: GeoFeature } | null>(null)
   const frame = useRef<HTMLDivElement>(null)
   const drag = useRef<{ x: number; y: number; view: View } | null>(null)
@@ -264,8 +266,10 @@ export function GeoMap({ spec, onAction, conversationId }: { spec: GeoMapSpec; o
           save(fileName(p.title,'csv'), '\uFEFF' + lines.join('\r\n'), 'text/csv;charset=utf-8')
         }}>CSV</button>
         <button type="button" onClick={exportSvg} title="Geometrías vectoriales para informes, sin mapa base">SVG para informe</button>
+        <button type="button" onClick={() => setShow3D(v => !v)} aria-pressed={show3D}>{show3D ? "Mapa 2D" : "Mapa 3D"}</button>
       </div>
-      <div className={css.map} ref={frame} role="region" aria-label={'Mapa interactivo: ' + p.title}
+      {show3D && <Geo3DView layers={active} onSelect={select} />}
+      <div className={css.map} ref={frame} style={show3D ? { display: "none" } : undefined} role="region" aria-label={'Mapa interactivo: ' + p.title}
         onPointerDown={e => {
           if (e.button !== 0 || (e.target as HTMLElement).closest('button')) return
           drag.current = { x: e.clientX, y: e.clientY, view }
