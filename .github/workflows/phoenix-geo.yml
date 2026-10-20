@@ -1,0 +1,27 @@
+name: PHOENIX Geo Intelligence
+on:
+  push:
+    paths:
+      - "scripts/phoenix-geo.mjs"
+      - "scripts/phoenix-geo.test.mjs"
+      - "packages/client/ui-conversation/src/client/chat/GeoMap.tsx"
+      - "packages/client/ui-conversation/tests/geo-map.client.spec.ts"
+      - ".github/workflows/phoenix-geo.yml"
+  pull_request:
+    paths:
+      - "scripts/phoenix-geo.mjs"
+      - "scripts/phoenix-geo.test.mjs"
+      - "packages/client/ui-conversation/src/client/chat/GeoMap.tsx"
+      - "packages/client/ui-conversation/tests/geo-map.client.spec.ts"
+      - ".github/workflows/phoenix-geo.yml"
+jobs:
+  geo-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Verify actual geographic data compiler
+        run: node --test scripts/phoenix-geo.test.mjs

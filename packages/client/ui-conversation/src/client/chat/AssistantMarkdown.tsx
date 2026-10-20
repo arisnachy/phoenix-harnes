@@ -28,11 +28,12 @@ export interface AssistantMarkdownProps {
   t: ChatViewSlotProps['t']
   /** User-clicked generative controls route through the session composer. */
   onUiAction?: CanvasAction | undefined
+  conversationId?: string | undefined
 }
 
 /** User-facing assistant prose/media; technical reasoning is owned by ToolActivityFlow. */
 export const AssistantMarkdown = memo(function AssistantMarkdown({
-  blocks, streaming, interrupted, renderMessageImages, mentions, t, onUiAction,
+  blocks, streaming, interrupted, renderMessageImages, mentions, t, onUiAction, conversationId,
 }: AssistantMarkdownProps) {
   // Stable per locale revision (t identity changes on switch): a fresh object
   // per render would rebuild MarkdownText's component table every chunk.
@@ -53,7 +54,7 @@ export const AssistantMarkdown = memo(function AssistantMarkdown({
         // transcript order. Incomplete streaming fences remain hidden.
         const segments = splitGenerativeUiText(block.text, { streaming })
         rendered.push(...segments.map((segment, index) => segment.kind === 'ui'
-          ? <GenerativeUi key={`${i}:ui:${index}`} block={segment.block} onAction={onUiAction} />
+          ? <GenerativeUi key={`${i}:ui:${index}`} block={segment.block} onAction={onUiAction} conversationId={conversationId} />
           : <MarkdownText
               key={`${i}:markdown:${index}`}
               text={segment.text}
