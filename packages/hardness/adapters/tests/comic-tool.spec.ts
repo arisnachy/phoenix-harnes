@@ -11,7 +11,7 @@ const art = 'iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAIAAABMXPacAAABMElEQVR4nO3RMQ0AIAD
 const html = '<!doctype html><html lang="es"><head><title>Una aventura</title></head><body>'
   + '<main class="edition"><section class="comic-cover-page cover-front" data-comic-cover="front">'
   + '<img alt="Portada" src="data:image/png;base64,' + art + '"></section>'
-  + '<main class="edition"><section class="comic-page" aria-label="Página 1">'
+  + '<section class="comic-page" aria-label="Página 1">'
   + '<article class="panel" role="group"><img class="art" alt="Luna señala la ciudad" src="data:image/png;base64,'
   + art + '"><div class="dialogues"><div class="bubble">¡Vamos!</div></div></article>'
   + '<div class="page-number">1</div></section>'
@@ -43,7 +43,7 @@ describe('Phoenix Comic Studio: actual in-chat publication', () => {
         data: html, executable: false },
     })
     expect(validateComicHtml(html)).toEqual({ pages: 3, panels: 1 })
-    expect(() => validateComicHtml(html.replace(/<section class="comic-cover-page cover-back"[\\s\\S]*?<\\/section>/u, ''))).toThrow(/contraportada|portada/);
+    expect(() => validateComicHtml(html.replace('data-comic-cover="back"', 'data-comic-cover="missing"'))).toThrow(/contraportada|portada/)
   })
 
   it('rejects recursive localhost browsing, empty comics, script injection and dummy pictures', async () => {
