@@ -35,7 +35,12 @@ export interface EclipseRoutingSettings {
   readonly maxTeammates?: number
 }
 
-/** Apply a user-selected route at a real dispatch boundary, never to virtual ids. */
+/** Apply a user-selected route at a real dispatch boundary, never to virtual ids.
+ * @param profile - Optional saved routing configuration.
+ * @param role - Planning, coordination or default teammate responsibility.
+ * @param fallback - Shipped route when the role is not overridden.
+ * @returns Concrete serving route, with only the selected model's requested effort.
+ */
 export function resolveEclipseRoleRoute(
   profile: EclipseRoutingSettings | undefined,
   role: 'planner' | 'coordinator' | 'subagent',
@@ -780,7 +785,10 @@ function authorizedPhoenixAutoGoalTurn(
     && data.goal.phase === 'active'
 }
 
-/** A tiny requested Team showcase gets one bounded, genuine peer exchange. */
+/** A tiny requested Team showcase gets one bounded, genuine peer exchange.
+ * @param text - The direct user request being classified.
+ * @returns Whether the request is a tiny team demonstration rather than implementation work.
+ */
 export function isBriefTeamDemonstration(text: string): boolean {
   const request = text.normalize('NFKD').replace(/[\u0300-\u036f]/gu, '').toLowerCase().trim()
   if (request.length < 8 || request.length > 240 || request.includes('\n')) return false
