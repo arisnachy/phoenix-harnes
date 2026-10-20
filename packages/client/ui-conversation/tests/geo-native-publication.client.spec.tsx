@@ -46,7 +46,7 @@ describe('native geographic map delivery and recovery',()=>{
       streaming={false}
       renderMessageImages={()=>null}
       onUiAction={action}
-      t={((key:string)=>key) as ComponentProps<typeof AssistantMarkdown>['t']}
+      t={((key:string)=>key) as unknown as ComponentProps<typeof AssistantMarkdown>['t']}
     />)
     expect(screen.getByRole('alert')).toBeTruthy()
     fireEvent.click(screen.getByRole('button',{name:'Solicitar visor geográfico'}))
@@ -55,13 +55,13 @@ describe('native geographic map delivery and recovery',()=>{
   })
   it('keeps fictional-map recovery routed to the narrative engine',()=>{
     const action=vi.fn()
+    const blocks=[{kind:'text',text:'El mapa de Isla Bruma quedó publicado.'}]
     render(<AssistantMarkdown
-      blocks={[{kind:'text',text:'El mapa de Isla Bruma quedó publicado.'}]
-        as unknown as ComponentProps<typeof AssistantMarkdown>['blocks']}
+      blocks={blocks as unknown as ComponentProps<typeof AssistantMarkdown>['blocks']}
       streaming={false}
       renderMessageImages={()=>null}
       onUiAction={action}
-      t={((key:string)=>key) as ComponentProps<typeof AssistantMarkdown>['t']}
+      t={((key:string)=>key) as unknown as ComponentProps<typeof AssistantMarkdown>['t']}
     />)
     fireEvent.click(screen.getByRole('button',{name:'Solicitar visor narrativo'}))
     expect(action).toHaveBeenCalledWith(expect.stringContaining('phoenix_scene_map'),'draft')
