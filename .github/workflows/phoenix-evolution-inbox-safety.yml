@@ -1,0 +1,30 @@
+name: PHOENIX Evolution Inbox Safety
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/phoenix-evolution-watch.yml'
+      - '.github/workflows/phoenix-evolution-inbox-safety.yml'
+      - 'scripts/phoenix-evolution-watch.test.mjs'
+  push:
+    branches: [main, stable]
+    paths:
+      - '.github/workflows/phoenix-evolution-watch.yml'
+      - '.github/workflows/phoenix-evolution-inbox-safety.yml'
+      - 'scripts/phoenix-evolution-watch.test.mjs'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  reconcile-safety:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.19.0'
+      - name: Exercise conflict, deduplication and fast-forward against local Git remotes
+        run: node --test scripts/phoenix-evolution-watch.test.mjs
