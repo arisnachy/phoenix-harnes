@@ -47,8 +47,11 @@ const themes:readonly Theme[]=['business','health','research','logistics','neutr
 const color=(v:unknown):boolean=>v===undefined||(typeof v==='string'&&/^#[a-f0-9]{6}$/iu.test(v))
 function invalid(reason:string):never {throw new ToolArgsError([reason])}
 function viewport(coords:readonly Position[]):{center:{lng:number;lat:number};zoom:number}{
-  const west=Math.min(...coords.map(p=>p[0])),east=Math.max(...coords.map(p=>p[0]))
-  const south=Math.min(...coords.map(p=>p[1])),north=Math.max(...coords.map(p=>p[1]))
+  let west=180,east=-180,south=85,north=-85
+  for(const [lng,lat] of coords){
+    west=Math.min(west,lng);east=Math.max(east,lng)
+    south=Math.min(south,lat);north=Math.max(north,lat)
+  }
   const mercator=(lat:number):number=>{
     const r=lat*Math.PI/180
     return (1-Math.log(Math.tan(Math.PI/4+r/2))/Math.PI)/2
@@ -122,7 +125,10 @@ export function admitPhoenixGeoMap(raw:unknown,title:string):PhoenixGeoMap {
     ...(raw.theme===undefined?{}:{theme:raw.theme as Theme}),
   }}
 }
-/** Real-world geographic map publisher with durable native-artifact projection. */
+/**
+ * Register the real-world WGS84 map publisher as a native artifact tool.
+ * @returns An executable tool definition that emits a replayable map receipt.
+ */
 export function createPhoenixGeoMapTool():ToolDefinition {
   return defineTool({
     name:'phoenix_geo_map',
