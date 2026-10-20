@@ -8,6 +8,7 @@ const sample={type:'FeatureCollection',features:[
 test('compila mapa válido, sin coordenadas inventadas',()=>{
   const r=compileGeoJson(sample,{source:'CSV auditado',title:'Santiago',theme:'business',polarity:'higher-better'})
   assert.equal(r.spec.component,'geo_map')
+  assert.equal(r.spec.props.id, compileGeoJson(sample,{source:'CSV auditado',title:'Santiago'}).spec.props.id)
   assert.deepEqual(r.spec.props.layers[0].features[0].coordinates,[[-70.70,19.45]])
   assert.equal(r.statistics.mean,15)
   assert.equal(r.spec.props.layers[0].features[0].color,'#ce493f')

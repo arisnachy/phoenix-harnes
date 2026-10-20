@@ -7,6 +7,7 @@
 import { readFile, writeFile } from 'node:fs/promises'
 import { resolve, extname } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { createHash } from 'node:crypto'
 
 const MAX_FEATURES = 3000
 const MAX_POINTS = 400
@@ -36,12 +37,17 @@ function flatten(input) {
     const g = feature.geometry
     const properties = feature.properties && typeof feature.properties === 'object' && !Array.isArray(feature.properties)
       ? feature.properties : {}
-    const push = (kind, coord, suffix = '') => result.push({
+    const push = (kind, coord, suffix = '') => {
+      const minVertices = kind === 'polygon' ? 3 : kind === 'line' ? 2 : 1
+      if (!Array.isArray(coord) || coord.length < minVertices)
+        throw new Error('Geometría ' + kind + ' sin vértices suficientes')
+      result.push({
       kind, coordinates: normalizeCoordinates(coord), id: uniqueId(feature.id ?? properties.id, index + 1) + suffix,
       label: text(properties.name ?? properties.label ?? properties.nombre ?? feature.id ?? 'Elemento ' + (index+1)).slice(0,150),
       value: properties.value, color: properties.color,
       detail: text(properties.detail ?? properties.descripcion).slice(0,360),
     })
+    }
     if (g.type === 'Point') push('points', [g.coordinates])
     else if (g.type === 'MultiPoint') g.coordinates.forEach((p, i) => push('points',[p],'-'+(i+1)))
     else if (g.type === 'LineString') push('line',g.coordinates)
@@ -150,7 +156,7 @@ export function compileGeoJson(input, opts={}){
     return features.length?[{id:kind,name:kind==='points'?'Lugares':kind==='line'?'Rutas y líneas':'Áreas territoriales',kind,features}]:[]
   })
   const spec={component:'geo_map',version:1,props:{
-    id:text(opts.id)||'geo-'+Date.now(),title,source,theme,
+    id:text(opts.id)||'geo-'+createHash('sha256').update(source+'\0'+title).digest('hex').slice(0,12),title,source,theme,
     ...(opts.subtitle?{subtitle:text(opts.subtitle)}:{}),
     ...(opts.metric?{metric:text(opts.metric)}:{}),
     ...(opts.conversationId?{conversationId:text(opts.conversationId)}:{}),
