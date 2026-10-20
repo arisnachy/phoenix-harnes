@@ -105,10 +105,27 @@ export const AssistantMarkdown = memo(function AssistantMarkdown({
         )
     }
   }
+  // A prose success claim does NOT prove native map delivery. Warn visibly when
+  // the response contains no renderable map contract (no auto-fabricated map).
+  const claimsPublishedMap = !streaming && blocks.some(block => block.kind === 'text'
+    && /(?:cre[eé]|publiqu[eé]|publicad[oa]|qued[oó] publicad[oa]|mapa interactivo).{0,140}(?:mapa|atlas|artefacto|interactiv[oa]|publicad[oa])|(?:mapa|atlas).{0,90}(?:qued[oó] publicad[oa]|fue publicad[oa]|est[aá] publicad[oa])/i.test(block.text))
+  const containsNativeMap = blocks.some(block => block.kind === 'text'
+    && splitGenerativeUiText(block.text, { streaming: false }).some(segment => segment.kind === 'ui'
+      && (segment.block.component === 'scene_map' || segment.block.component === 'geo_map')))
+  const missingMap = claimsPublishedMap && !containsNativeMap
   return (
     <div className={css.root} data-assistant-body="" data-streaming={streaming || undefined}>
       <div className={css.body}>
         {rendered}
+        {missingMap && <p role="alert" data-phoenix-missing-map="" style={{
+          border: '1px solid #e7bb76', borderRadius: 10, background: '#fff7e8',
+          color: '#694319', padding: '11px 13px', fontSize: 12,
+        }}>El texto afirma que se publicó un mapa, pero esta respuesta no contiene un componente cartográfico nativo visible. No se ha comprobado su publicación.
+          {onUiAction && <button type="button" onClick={() => onUiAction(
+            'Kira, genera AHORA el mapa solicitado dentro de este mismo chat con un bloque ```generative-ui que contenga un scene_map versión 1 válido, con lugares y descripciones. No afirmes publicación sin incluir el componente real.',
+            'draft',
+          )} style={{ display: 'block', marginTop: 8, cursor: 'pointer' }}>Solicitar mapa nativo</button>}
+        </p>}
         {interrupted && <span className={css.stopped}>{t('message.stopped')}</span>}
       </div>
     </div>
