@@ -87,6 +87,8 @@ export function admitPhoenixDiagram(raw: unknown, title: string): PhoenixDiagram
       ...(node.detail === undefined ? {} : { detail: node.detail as string }),
     })
   }
+  if (nodes.filter(node => node.shape !== 'point').length < 2)
+    invalid('El diagrama requiere al menos dos nodos visibles, además de los puntos de unión ocultos.')
   if (raw.edges !== undefined && (!Array.isArray(raw.edges) || raw.edges.length > 140))
     invalid('edges debe tener 140 conexiones como máximo.')
   const edges: DiagramEdge[] = []
