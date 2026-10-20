@@ -1,0 +1,32 @@
+name: Phoenix Design Intelligence
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/phoenix-design-intelligence*'
+      - '.agents/skills/phoenix-design-intelligence/**'
+      - '.github/workflows/phoenix-design-intelligence.yml'
+  push:
+    branches: [main, stable]
+    paths:
+      - 'scripts/phoenix-design-intelligence*'
+      - '.agents/skills/phoenix-design-intelligence/**'
+      - '.github/workflows/phoenix-design-intelligence.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  design-integrity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.19.0'
+      - name: Planificador y verificación de archivos
+        run: node --test scripts/phoenix-design-intelligence.test.mjs
+      - name: CLI sin credenciales
+        run: node scripts/phoenix-design-intelligence.mjs plan --request "Crea un cómic profesional y expórtalo a PDF"
