@@ -111,12 +111,18 @@ export class AgentDefaultModelConfig extends Service {
    * @param next - resolved selection accepted by an entry point.
    * @returns fulfillment after the optional settings write settles.
    */
-  /** Resolve Eclipse settings live so a saved change affects the next model request. */
+  /** Resolve Eclipse settings live so a saved change affects the next model request.
+   * @returns Detached Eclipse settings, or undefined when no user overrides exist.
+   */
   currentEclipseProfile(): EclipseRoutingSettings | undefined {
     const saved = this.source().eclipse
     return saved === undefined ? undefined : structuredClone(saved)
   }
 
+  /** Persist a new model default without erasing user-owned Eclipse configuration.
+   * @param next - Selected default provider, model and optional reasoning.
+   * @returns Completion after the settings write.
+   */
   async saveSelection(next: ModelSelection): Promise<void> {
     await this.ctx.get('settings')?.replace(AGENT_DEFAULT_MODEL_SETTINGS_NAMESPACE, {
       provider: next.provider,
