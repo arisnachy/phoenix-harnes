@@ -1,19 +1,25 @@
-# ASK Clinical Longitudinal — 2026-10-20
+# Agent Note: Sensitive ASK and encrypted clinical timeline
 
-## Intent
-Keep Phoenix universal. Clinical conversations use the existing ASK service rather than adding a second medical UI. Questions marked `sensitive` never acquire invented clinical statements or consent at the 60-second deadline.
+Status: implemented
 
-## Scope shipped
-- ASK wire question `sensitive` attribute, common automatic-answer policy, consumer schema and tests.
-- Opt-in model tool `clinical_longitudinal` with `create_patient`, `record`, `timeline`.
-- Patient pseudonym IDs, explicit confirmation using ASK, AES-256-GCM authenticated encryption in a separate local vault, atomic file replacement with exclusive writer lock.
-- Attributed observations (patient-reported, document-extracted, clinician-verified), lab deltas only for identical analyte and units.
-- Failure when the key is absent, wrong or the patient ID invalid; no auto-consent and no automatic diagnosis.
+English | [中文](2026-10-20-ask-clinical-longitudinal.zh.md)
 
-## Security and limitations
-`PHOENIX_CLINICAL_VAULT_KEY` must be a locally generated 32-byte hex key; optionally configure `PHOENIX_CLINICAL_VAULT_PATH`. The key must never enter chat, model arguments, the repository or version control. Model/tool conversations may still be recorded in ordinary Phoenix session logs; deploying with real protected health information requires a separate session-retention, RBAC, audit, key-rotation, deletion, backup, and threat-model review. No clinical production compliance is asserted.
+## Problem
 
-No OCR, radiology interpretation, interoperable FHIR mapping, standardized lab unit conversion or diagnostic decision support is provided in this incremental change. Those are separate adapter layers with source provenance and clinical validation.
+ASK currently infers an option after 60 seconds, which cannot represent a patient's testimony or informed consent. Clinical follow-up also needs a patient-isolated encrypted timeline without turning Phoenix into a medical-only system.
 
-## Verification
-Added keyless unit tests for safe ASK expiration, provider forwarding, encryption, patient separation, comparable trends, invalid dates and wrong keys. CI and an interactive browser run must validate integration before a clinical production rollout.
+## Decision
+
+Sensitive ASK questions expire unanswered. A clinical timeline tool registers only when a local vault key is configured. It can create pseudonyms, request ASK authorization before read/write, save attributed dated observations through AES-256-GCM, and compare numeric results with identical analyte and unit.
+
+## Alternatives considered
+
+A second medical-only questionnaire duplicates ASK. Defaulting to consent risks unauthorized recording. Plain-text JSON would expose health information. Always registering the clinical tool would add irrelevant cost to nonclinical sessions.
+
+## Consequences
+
+The feature is opt-in and fails closed. Session transcripts may still contain PHI outside the separate encrypted vault, requiring retention rules, RBAC, key rotation and patient deletion before any real deployment. No diagnostic certification, document OCR or FHIR export is claimed.
+
+## Testing
+
+Keyless tests cover ASK timeouts, question forwarding, vault encryption, patient isolation, date validation, compatible lab trends and incorrect key rejection. Production rollout still requires a privacy and clinical review.

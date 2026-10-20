@@ -8,7 +8,10 @@ import type { Context } from '@phoenix-ai/cordis'
 import { defineTool } from '@phoenix-ai/dsh-tools'
 import { configuredClinicalLedger, type ClinicalInput } from './clinical-ledger.ts'
 
-/** Register one intent-triggered longitudinal clinical tool on the normal tool registry. */
+/**
+ * Register the opt-in clinical timeline tool on the normal tool registry.
+ * @param ctx - Root context with the tools and ASK services.
+ */
 export function registerClinicalLongitudinalTool(ctx: Context): void {
   ctx.tools.register(defineTool({
     name: 'clinical_longitudinal',

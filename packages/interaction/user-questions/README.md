@@ -50,6 +50,7 @@ No direct invalidation; the named consumer owns any request-prefix changes.
 - **One provider per context** — there is no routing or fan-out to multiple UIs; a second registration throws `DUPLICATE_PROVIDER`, and with none registered `ask()` throws `NO_PROVIDER` rather than degrading.
 - **The vocabulary is the question-form shape only** — selectable options plus optional custom text; richer interaction shapes (file pickers, diff-preview confirmations) have no seam vocabulary yet.
 
-## Sensitive questions
+
+**Sensitive questions.**
 
 Each question may declare `sensitive: true`. When its deadline expires, the automatic answer carries an empty `selected` array regardless of recommended labels. UI, reconnect recovery, and the model-facing consumer share the same policy; `automatic: true` is never proof that a patient answered or consented.

@@ -117,5 +117,5 @@ export function apply(ctx: Context): void {
       return result.automatic === true ? { ...output, automatic: true } : output
     },
   }))
-  registerClinicalLongitudinalTool(ctx)
+  if (process.env.PHOENIX_CLINICAL_VAULT_KEY !== undefined) registerClinicalLongitudinalTool(ctx)
 }

@@ -57,7 +57,8 @@ Append-only; newly visible content follows the reusable request prefix and does 
 - **Runtime-owned subagents cannot ask the user** — `ask_user_question` rejects a live child owned by another agent with `DELEGATED_CALLER`; the child must include the unresolved question or decision in its final result. Durable lineage does not decide this boundary, so a lineage-bearing session resumed as a runtime root may ask normally.
 - **Native answers render as JSON text** — the canonical value remains structured, but the model-facing result uses compact JSON rather than a richer content-block vocabulary.
 
-## Sensitive ASK and clinical workflows
+
+**Sensitive questions.**
 
 Set `sensitive: true` for symptoms, clinical history, treatments, consent, identity or any question whose answer must come from a human. The existing 60-second ASK countdown remains visible; on expiry it returns `{ selected: [] }` and `automatic: true` rather than choosing a diagnosis, symptom, drug or consent. The ordinary decision flow is unchanged.
 

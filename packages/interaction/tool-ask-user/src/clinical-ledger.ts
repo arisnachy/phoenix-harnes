@@ -77,7 +77,11 @@ function assertValidInput(input: ClinicalInput): void {
   }
 }
 
-/** Produce only strictly comparable consecutive numeric changes, without diagnosing. */
+/**
+ * Produce consecutive differences for the same analyte and unit without diagnosis.
+ * @param entries - Dated clinical observations for one patient.
+ * @returns Comparable laboratory value changes.
+ */
 export function clinicalTrends(entries: readonly ClinicalEntry[]): ClinicalTrend[] {
   const latest = new Map<string, ClinicalEntry>()
   const trends: ClinicalTrend[] = []
@@ -142,7 +146,11 @@ export class ClinicalLedger {
     }
   }
 
-  /** Append an observation only after the caller has confirmed patient consent. */
+  /**
+   * Persist one observation after explicit human approval.
+   * @param input - Validated, patient-scoped observation.
+   * @returns The saved observation with its generated ID.
+   */
   async append(input: ClinicalInput): Promise<ClinicalEntry> {
     assertValidInput(input)
     await mkdir(dirname(this.path), { recursive: true, mode: 0o700 })
@@ -159,7 +167,11 @@ export class ClinicalLedger {
     }
   }
 
-  /** Read only one pseudonymous patient's history, newest entry last. */
+  /**
+   * Read chronological observations isolated by pseudonymous patient ID.
+   * @param patientId - An exact pseudonymous patient identifier.
+   * @returns Chronological events and directly comparable trends.
+   */
   async timeline(patientId: string): Promise<{ events: ClinicalEntry[]; trends: ClinicalTrend[] }> {
     if (!/^P-[A-Z0-9_-]{5,64}$/.test(patientId)) throw new Error('CLINICAL_PATIENT_ID_REQUIRED')
     const events = (await this.readAll())
@@ -169,7 +181,10 @@ export class ClinicalLedger {
   }
 }
 
-/** Require an explicit hex key so protected medical storage is never silently enabled. */
+/**
+ * Open a locally configured clinical vault; fail closed when unconfigured.
+ * @returns An AES-256-GCM clinical vault.
+ */
 export function configuredClinicalLedger(): ClinicalLedger {
   const hex = process.env.PHOENIX_CLINICAL_VAULT_KEY
   if (hex === undefined || !/^[a-f0-9]{64}$/i.test(hex)) {
