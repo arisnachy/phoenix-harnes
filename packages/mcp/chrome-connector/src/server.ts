@@ -18,7 +18,7 @@ import { browserBatchExpression, browserInteractionExpression, type BrowserInter
 import { CdpConnectionPool } from './cdp-connection-pool.ts'
 import { classifyNavigationEvidence, type NavigationEvidence, type NavigationVerdict } from './navigation-evidence.ts'
 import { fullSiteForEmbeddedPage } from './site-shell.ts'
-import { inspectVaultPresence } from './vault-presence.ts'
+import { browserVaultHint, inspectVaultPresence } from './vault-presence.ts'
 import { classifySiteHealth, nextSiteRecoveryStep, siteHealthExpression, type SitePageHealth } from './site-health.ts'
 import { runBrowserFormWorkflow } from './form-workflow.ts'
 import { formLayoutKey, prepareLearnedFormWorkflow, recallVerifiedFormLayout, sanitizeFormLayout, saveVerifiedFormLayout } from './form-layout-memory.ts'
@@ -552,14 +552,14 @@ server.registerTool('youtube_search', {
 })
 
 server.registerTool('read_page', {
-  description: 'Lee el título, URL y texto visible de una pestaña. No accede a cookies ni almacenamiento.',
+  description: 'Lee título, URL, texto visible y disponibilidad de accesos cifrados del dominio y módulo relacionado. Si credentialState.relatedSaved=true, NO afirmes que faltan credenciales: abre Acceso seguro para solicitar reutilización; nunca pidas la contraseña en el chat. No accede a cookies ni almacenamiento.',
   inputSchema: { tabId: z.string().optional(), sessionId: z.string().optional(), maxChars: z.number().int().min(1).max(100000).default(30000) },
 }, async ({ tabId, maxChars, sessionId }) => {
   const tab = await selectedTab(tabId, sessionId)
   const value = await evaluate(tab, 'JSON.stringify({title: document.title, url: location.href, text: document.body?.innerText || \'\'})')
   const page = JSON.parse(String(value)) as { title: string; url: string; text: string }
   const credentialState = await inspectVaultPresence(tab.url)
-  return { content: [{ type: 'text', text: JSON.stringify({ ...page, text: page.text.slice(0, maxChars), credentialState }, null, 2) }] }
+  return { content: [{ type: 'text', text: JSON.stringify({ ...page, text: page.text.slice(0, maxChars), credentialState, credentialHint: browserVaultHint(credentialState) }, null, 2) }] }
 })
 
 server.registerTool('diagnose_page', {
@@ -607,7 +607,7 @@ const fieldAction = z.object({
 })
 
 server.registerTool('inspect_page', {
-  description: 'Inspección estructurada y de solo lectura de la pestaña real. Si hubo una verificación exitosa previa en esta ruta, agrega learnedLayout con localizadores seguros revalidados contra el DOM actual, NUNCA valores de campos. Reutiliza esas pistas para ahorrar pasos, pero verifica cada entrada y confirma por separado los envíos.',
+  description: 'Inspección estructurada y de solo lectura de la pestaña real. Interpreta credentialState: relatedSaved=true indica acceso disponible en un módulo relacionado; known=false es desconocido, nunca ausencia. Si hubo una verificación exitosa previa en esta ruta, agrega learnedLayout con localizadores seguros revalidados contra el DOM actual, NUNCA valores de campos. Reutiliza esas pistas para ahorrar pasos, pero verifica cada entrada y confirma por separado los envíos.',
   inputSchema: { tabId: z.string().optional(), sessionId: z.string().optional() },
 }, async ({ tabId, sessionId }) => {
   const tab = await selectedTab(tabId, sessionId)
@@ -621,7 +621,9 @@ server.registerTool('inspect_page', {
     crossOriginFrameCount: crossOriginCount,
     iframeInspectionNote: 'Los controles del sitio superior, incluidos menú y cuenta, son visibles. El contenido de iframes externos no está demostrado desde este DOM: utiliza screenshot para evidencia visual; no afirmes que leíste controles internos no accesibles.',
   } : {}
-  const observedWithFrames = result?.ok ? { ...result, ...frameContext, credentialState } : observed
+  const observedWithFrames = result?.ok
+    ? { ...result, ...frameContext, credentialState, credentialHint: browserVaultHint(credentialState) }
+    : observed
   // Hints do not supply values and cannot stand in for the current DOM.
   if (!layout || !result?.ok || !Array.isArray(result.controls)) return formatBrowserResult(observedWithFrames)
   const controls = result.controls as Array<{ id?: string; name?: string; visible?: boolean; disabled?: boolean; readonly?: boolean; type?: string }>

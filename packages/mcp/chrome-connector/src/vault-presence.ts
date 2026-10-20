@@ -6,6 +6,17 @@
 export type BrowserVaultPresence =
   | { known: false; reason: 'vault-unavailable' | 'no-web-origin' }
   | { known: true; saved: boolean; automatic: boolean; relatedSaved: boolean; relatedOrigin?: string }
+/** Agent-readable instruction derived only from verified Vault metadata. */
+export function browserVaultHint(state: BrowserVaultPresence): string {
+  if (!state.known) return 'Estado de bóveda desconocido: no afirmes que faltan credenciales; usa Acceso seguro para verificar.'
+  if (state.saved) return state.automatic
+    ? 'Hay un acceso cifrado autorizado para este dominio. MiniBrowser debe intentar el inicio automático y comprobar la sesión.'
+    : 'Hay un acceso cifrado para este dominio. Usa Acceso seguro y la opción de reutilización sin pedir la contraseña.'
+  if (state.relatedSaved) return 'Hay un acceso cifrado en un dominio relacionado (' + state.relatedOrigin
+    + '). NO afirmes que faltan credenciales. Abre Acceso seguro para autorizar su reutilización; no lo copies silenciosamente.'
+  return 'No hay un acceso guardado para este origen exacto en Phoenix; esto no demuestra que el navegador o un dominio distinto carezcan de credenciales.'
+}
+
 export async function inspectVaultPresence(
   pageUrl: string,
   query: typeof fetch = fetch,

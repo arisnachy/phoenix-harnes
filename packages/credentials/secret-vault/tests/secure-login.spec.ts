@@ -32,7 +32,8 @@ describe('origin-scoped secure login', () => {
   it('only recognizes a fixed verified related origin, without automatic secret sharing', () => {
     expect(relatedCredentialOrigin('https://www.juancitosport.com.do'))
       .toBe('https://deportes.juancitosport.com.do')
-    expect(relatedCredentialOrigin('https://deportes.juancitosport.com.do')).toBeUndefined()
+    expect(relatedCredentialOrigin('https://deportes.juancitosport.com.do'))
+      .toBe('https://www.juancitosport.com.do')
     expect(relatedCredentialOrigin('https://example.com')).toBeUndefined()
     expect(relatedCredentialOrigin('https://www.juancitosport.com.do.evil.example')).toBeUndefined()
   })
@@ -113,6 +114,29 @@ describe('origin-scoped secure login', () => {
     expect(clicks).toBe(1)
   })
 
+  it('opens one safe login dialog even with duplicated responsive sign-in buttons', () => {
+    const evaluate = (mode: 'inspect' | 'open', root: unknown) =>
+      new Function('document', 'location', 'URL', 'return ' + loginGateExpression(mode))(
+        root, { origin: 'https://example.org', href: 'https://example.org/',
+          pathname: '/', search: '' }, URL,
+      ) as { required: boolean; canOpenInPlace: boolean }
+    let clicks = 0
+    const trigger = (text: string) => ({
+      tagName: 'BUTTON', type: 'button', textContent: text, innerText: text,
+      disabled: false, readOnly: false, getClientRects: () => [1],
+      closest: () => null, click: () => { clicks++ },
+    })
+    const root = {
+      body: { innerText: '' },
+      querySelectorAll: (query: string) => query === 'iframe' || query === 'input'
+        ? [] : [trigger('INGRESAR'), trigger('Iniciar sesión')],
+    }
+    expect(evaluate('inspect', root).canOpenInPlace).toBe(true)
+    expect(clicks).toBe(0)
+    expect(evaluate('open', root).required).toBe(true)
+    expect(clicks).toBe(1)
+  })
+
   it('detects a sign-in form without submitting any other page action', () => {
     const evaluator = new Function('document', 'location', 'URL',
       'return ' + loginGateExpression('open')) as (
@@ -185,6 +209,35 @@ describe('origin-scoped secure login', () => {
       ],
     })
     expect(body).not.toContain('private')
+  })
+
+  it('recognizes saved parent-portal access while Kira visits the embedded sports module', async () => {
+    let handler: ((req: unknown, res: unknown) => Promise<void>) | undefined
+    const original = 'https://www.juancitosport.com.do'
+    registerSecureLogin({ webServer: { register: (route: { handler: typeof handler }) => {
+      handler = route.handler
+      return () => {}
+    } } } as never, {
+      resolve: async (ref: string) => {
+        if (!ref.endsWith('_ACCOUNT') && !ref.endsWith('_SECRET')) return undefined
+        const expected = (await import('@phoenix-ai/dsh-credentials'))
+          .originCredentialRef(original, ref.endsWith('_ACCOUNT') ? 'account' : 'secret')
+        return ref === expected ? { value: 'SECRET_MUST_NOT_APPEAR' } : undefined
+      },
+    } as never)
+    let body = ''
+    await handler?.({
+      method: 'GET',
+      url: '/phoenix-secure-login/status?origin=https%3A%2F%2Fdeportes.juancitosport.com.do',
+      socket: { remoteAddress: '127.0.0.1' },
+      headers: { host: '127.0.0.1:3080', 'x-phoenix-secure-login': '1' },
+    }, { writeHead() {}, end(value: string) { body = value } })
+    const status = JSON.parse(body) as Record<string, unknown>
+    expect(status).toMatchObject({
+      saved: false, relatedSaved: true, relatedOrigin: original,
+      relatedProfile: 'personal',
+    })
+    expect(body).not.toContain('SECRET_MUST_NOT_APPEAR')
   })
 
   it('rejects non-loopback requests before even accessing the vault', async () => {

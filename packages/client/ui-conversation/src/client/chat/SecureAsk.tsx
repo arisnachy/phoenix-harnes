@@ -168,20 +168,22 @@ export function SecureAsk({ target, onClose, onSaved }: {
     } catch { setFeedback('No se pudo usar el acceso guardado.') }
     finally { setBusy(false) }
   }
-  const adoptRelated = async (): Promise<void> => {
+  const adoptRelated = async (remember = false): Promise<void> => {
     if (!relatedOrigin || busy) return
     setBusy(true)
     try {
       const accepted = await secureApi<SecureStatus>('/adopt-related', {
         origin: target.origin, tabId: target.tabId, sourceOrigin: relatedOrigin,
-        profile, consent: true,
+        profile, consent: true, automatic: remember,
       })
       if (!accepted.saved) throw new Error('Vault did not confirm copying')
       if (accepted.profiles) setProfiles(accepted.profiles)
       setEditing(false)
-      setAutomatic(false)
-      // Reuse is a ONE-TIME human decision, never silent cross-origin authority.
-      setFeedback('Acceso cifrado reutilizado para este sitio con inicio automático desactivado. Comprobando autenticación…')
+      setAutomatic(remember)
+      // Consent is limited to the two named origins; never implicit or silent.
+      setFeedback(remember
+        ? 'Acceso cifrado reutilizado con tu autorización de inicio automático para este sitio. Comprobando autenticación…'
+        : 'Acceso cifrado reutilizado para este sitio con inicio automático desactivado. Comprobando autenticación…')
       try {
         const login = await secureApi<{ status: string }>('/use', {
           origin: target.origin, tabId: target.tabId, manual: true, profile,
@@ -225,6 +227,9 @@ export function SecureAsk({ target, onClose, onSaved }: {
         <span>Ya tienes un acceso cifrado en el módulo relacionado ({relatedOrigin}). Esta página usa otro dominio, por lo que no lo aplicaré automáticamente.</span>
         <button type="button" disabled={busy} onClick={() => { void adoptRelated() }}>
           Reutilizar en este sitio
+        </button>
+        <button type="button" disabled={busy} onClick={() => { void adoptRelated(true) }}>
+          Reutilizar y no volver a preguntar en este sitio
         </button>
       </div>}
       {selectedSaved && <div className={css.saved}>

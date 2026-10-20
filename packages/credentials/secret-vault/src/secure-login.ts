@@ -340,7 +340,11 @@ export function loginGateExpression(action: 'inspect' | 'open' = 'inspect'): str
           && target.search === location.search;
       } catch { return false; }
     };
-    const canOpenInPlace = triggers.length === 1 && inPlace(triggers[0]);
+    // Responsive layouts can expose multiple equivalent "Ingresar" controls.
+    // Prefer a safe same-page entry point; never click a form submit here.
+    const inPlaceTriggers = triggers.filter(el => inPlace(el)
+      && !(el.tagName === 'BUTTON' && el.type === 'submit') && !el.closest?.('form'));
+    const canOpenInPlace = inPlaceTriggers.length > 0;
     const formVisible = forms.length > 0;
     // A disappeared password field is not sufficient proof of authentication.
     const signOut = /^(?:cerrar sesi[oó]n|finalizar sesi[oó]n|salir de la cuenta|log ?out|sign ?out)$/i;
@@ -377,7 +381,7 @@ export function loginGateExpression(action: 'inspect' | 'open' = 'inspect'): str
       return [hint(account,'account','account'), hint(pass,'secret','secret'),
         ...extra.map((el,i) => hint(el,'extra','extra:' + i))];
     })();
-    if (__OPEN_LOGIN__ && !formVisible && canOpenInPlace) triggers[0].click();
+    if (__OPEN_LOGIN__ && !formVisible && canOpenInPlace) inPlaceTriggers[0].click();
     return {
       required: !authenticated && (formVisible || triggers.length > 0 || warningVisible),
       formVisible, authenticated,
@@ -460,14 +464,14 @@ async function injectLogin(tab: BrowserTab, login: LoginContent): Promise<string
     + 'const candidates=roots.flatMap(d=>{const fields=[...d.querySelectorAll("input")].filter(visible);'
     + 'const passwords=fields.filter(e=>e.type==="password");if(passwords.length!==1)return [];'
     + 'const pass=passwords[0];const account=fields.find(e=>e!==pass&&(e.autocomplete==="username"||e.type==="email"'
-    + '||/user|email|login|account/i.test((e.name||"")+" "+(e.id||""))))'
-    + '||fields.find(e=>e!==pass&&["text","email","tel"].includes(e.type));'
+    + '||/user|email|login|account|usuario|correo|tel[eé]fono|documento|c[eé]dula/i.test((e.name||"")+" "+(e.id||""))))'
+    + '||fields.find(e=>e!==pass&&["text","email","tel","number"].includes(e.type));'
     + 'return account?[{pass,account}]:[];});'
     + 'if(candidates.length!==1) return "login-form-not-found";'
     + 'const {pass,account}=candidates[0];'
-    + 'const setter=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value").set;'
-    + 'const set=(el,v)=>{setter.call(el,v);el.dispatchEvent(new Event("input",{bubbles:true}));el.dispatchEvent(new Event("change",{bubbles:true}));};'
-    + 'account.style.setProperty("-webkit-text-security","disc","important");'
+    + 'const set=(el,v)=>{const win=el.ownerDocument.defaultView||window;'
+    + 'const setter=Object.getOwnPropertyDescriptor(win.HTMLInputElement.prototype,"value").set;'
+    + 'setter.call(el,v);el.dispatchEvent(new win.Event("input",{bubbles:true}));el.dispatchEvent(new win.Event("change",{bubbles:true}));};'
     + 'set(account,' + JSON.stringify(login.account) + ');'
     + 'set(pass,' + JSON.stringify(login.secret) + ');'
     + 'const extraInputs=roots.flatMap(d=>[...d.querySelectorAll("input")].filter(visible))'
@@ -482,11 +486,13 @@ async function injectLogin(tab: BrowserTab, login: LoginContent): Promise<string
     + 'const form=pass.form || account.form;'
     + 'if(form){const button=form.querySelector("button[type=submit],input[type=submit]");'
     + 'if(button)button.click();else form.requestSubmit();}'
-    + 'else {const root=pass.closest("[role=dialog]")||pass.parentElement?.parentElement;'
-    + 'const buttons=[...(root?.querySelectorAll("button,[role=button],input[type=submit]")||[])]'
+    + 'else {let root=pass;let clicked=false;for(let depth=0;depth<8;depth++){'
+    + 'root=root.parentElement;if(!root)break;'
+    + 'const buttons=[...root.querySelectorAll("button,[role=button],input[type=submit]")]'
     + '.filter(e=>/^(?:ingresar|iniciar sesi[oó]n|acceder|entrar|log ?in|sign ?in)$/i'
-    + '.test((e.textContent||e.value||"").trim())&&!e.disabled);'
-    + 'if(buttons.length!==1)return "login-form-not-found";buttons[0].click();}'
+    + '.test((e.textContent||e.value||"").trim())&&!e.disabled&&e.getClientRects().length>0);'
+    + 'if(buttons.length===1){buttons[0].click();clicked=true;break;}}'
+    + 'if(!clicked)return "login-form-not-found";}'
     + 'return "submitted";'
     + '})()'
   return await new Promise<string>((resolve, reject) => {
@@ -679,11 +685,13 @@ export function registerSecureLogin(ctx: Context, vault?: CredentialProvider): (
             ? JSON.parse(Buffer.from(await dpapi('unprotect', saved.sealed, source, profile), 'base64').toString('utf8')) as LoginContent
             : legacy!.login
           if (data.origin !== source || !data.account || !data.secret) throw new Error('Registro no válido')
-          // Automatic login rights never expand to a new origin.
-          await store(origin, data.account, data.secret, false, data.extras, profile)
+          // Automatic login never transfers silently. It is granted only
+          // when the person explicitly clicks the separate "never ask" option.
+          const automatic = payload.automatic === true
+          await store(origin, data.account, data.secret, automatic, data.extras, profile)
           await setPrimary(origin, profile)
           const profiles = await listProfiles(origin, vault)
-          respond(res, 200, { saved: true, automatic: false, profile, profiles })
+          respond(res, 200, { saved: true, automatic, profile, profiles })
           return
         }
         if (route.pathname === PREFIX + '/delete') {

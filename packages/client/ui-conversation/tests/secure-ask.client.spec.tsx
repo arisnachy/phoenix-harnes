@@ -229,7 +229,40 @@ describe('Secure Ask human-only browser sidebar', () => {
     expect(screen.getByRole('button', { name: 'Usar acceso guardado' })).toBeTruthy()
   })
 
-  it('reuses related credentials only after clicking consent and never enables automatic login', async () => {
+  it('allows a separately authorized no-repeat reuse across the two named domains', async () => {
+    const calls: Array<{ path: string; args: Record<string, unknown> }> = []
+    const onSaved = vi.fn()
+    vi.stubGlobal('fetch', vi.fn(async (path: string, options?: RequestInit) => {
+      const args = JSON.parse(String(options?.body || '{}')) as Record<string, unknown>
+      calls.push({ path, args })
+      return new Response(JSON.stringify(path.endsWith('/adopt-related')
+        ? { saved: true, automatic: true, profile: 'personal', profiles: [
+          { id: 'personal', saved: true, automatic: true, source: 'dpapi' },
+        ] }
+        : path.endsWith('/detect') ? { required: false, authenticated: true }
+          : { status: 'submitted' }), { status: 200,
+        headers: { 'content-type': 'application/json' } })
+    }))
+    render(<SecureAsk target={{ origin: 'https://deportes.juancitosport.com.do', tabId: 'verified-tab',
+      saved: false, automatic: false, relatedOrigin: 'https://www.juancitosport.com.do',
+      relatedProfile: 'personal' }} onClose={vi.fn()} onSaved={onSaved} />)
+    expect(screen.queryByPlaceholderText('Escribe o pega la contraseña')).toBeNull()
+    fireEvent.click(screen.getByRole('button', {
+      name: 'Reutilizar y no volver a preguntar en este sitio',
+    }))
+    await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1), { timeout: 3_000 })
+    expect(calls[0]).toMatchObject({
+      path: '/phoenix-secure-login/adopt-related',
+      args: {
+        origin: 'https://deportes.juancitosport.com.do',
+        sourceOrigin: 'https://www.juancitosport.com.do',
+        consent: true, automatic: true, profile: 'personal', tabId: 'verified-tab',
+      },
+    })
+    expect(calls.every(call => !('secret' in call.args) && !('account' in call.args))).toBe(true)
+  })
+
+  it('reuses related credentials manually only after explicit consent', async () => {
     const calls: Array<{ path: string; args: Record<string, unknown> }> = []
     vi.stubGlobal('fetch', vi.fn(async (path: string, options?: RequestInit) => {
       const args = JSON.parse(String(options?.body || '{}')) as Record<string, unknown>

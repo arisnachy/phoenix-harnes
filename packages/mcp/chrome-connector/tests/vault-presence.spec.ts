@@ -1,7 +1,17 @@
 import { describe, expect, it, vi } from 'vitest'
-import { inspectVaultPresence } from '../src/vault-presence.ts'
+import { browserVaultHint, inspectVaultPresence } from '../src/vault-presence.ts'
 
 describe('read-only model-safe Vault status tied to the inspected tab', () => {
+  it('informs Kira about related saved credentials and never equates unknown with absent', () => {
+    expect(browserVaultHint({ known: true, saved: false, automatic: false,
+      relatedSaved: true, relatedOrigin: 'https://www.juancitosport.com.do' }))
+      .toContain('NO afirmes que faltan credenciales')
+    expect(browserVaultHint({ known: false, reason: 'vault-unavailable' }))
+      .toContain('no afirmes que faltan credenciales')
+    expect(browserVaultHint({ known: true, saved: true, automatic: true, relatedSaved: false }))
+      .toContain('inicio automático')
+  })
+
   it('reports an actual saved origin without exposing any account or password', async () => {
     const query = vi.fn(async (_url: string) => new Response(JSON.stringify({
       saved: true, automatic: false, source: 'dpapi',
