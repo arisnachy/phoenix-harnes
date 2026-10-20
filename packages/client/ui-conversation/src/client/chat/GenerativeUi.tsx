@@ -3,6 +3,7 @@ import { PhoenixStatusPill, PhoenixAgentLine, type PhoenixUiIconName, type Phoen
 import { ScaleForm, parseScaleForm, type ScaleFormSpec } from './ScaleForm.tsx'
 import { SpreadsheetSurface, parseSpreadsheet, type SpreadsheetSpec } from './SpreadsheetSurface.tsx'
 import { GeoMap, parseGeoMapSpec, type GeoMapSpec } from './GeoMap.tsx'
+import { SceneMap, parseSceneMapSpec, type SceneMapSpec } from './SceneMap.tsx'
 import { GenerativeCanvas, parseCanvasSpec, type CanvasAction, type CanvasSpec } from './GenerativeCanvas.tsx'
 import css from './GenerativeUi.module.css'
 
@@ -94,7 +95,7 @@ const supportedIcons: readonly PhoenixUiIconName[] = [
 const supportedTones: readonly PhoenixStatusTone[] = ['positive', 'warning', 'negative', 'info', 'neutral']
 
 export type GenerativeUiBlock = EventCard | MetricCard | ComparisonCard | TimelineCard | SmartCard
-  | CanvasSpec | ScaleFormSpec | SpreadsheetSpec | GeoMapSpec | StatusPillBlock | AgentLineBlock
+  | CanvasSpec | ScaleFormSpec | SpreadsheetSpec | GeoMapSpec | SceneMapSpec | StatusPillBlock | AgentLineBlock
 
 export type GenerativeUiSegment =
   | { kind: 'markdown'; text: string }
@@ -220,6 +221,7 @@ export function parseGenerativeUiBlock(value: unknown): GenerativeUiBlock | null
     case 'scale_form': return parseScaleForm(value)
     case 'spreadsheet': return parseSpreadsheet(value)
     case 'geo_map': return parseGeoMapSpec(value)
+    case 'scene_map': return parseSceneMapSpec(value)
     case 'status_pill':
       return isRecord(value.props) && hasOnlyKeys(value.props, ['label','tone'])
         && isText(value.props.label, 100)
@@ -275,7 +277,7 @@ export function splitGenerativeUiText(
       }
     }
     if (parsed === null) {
-      if (/"component"\s*:\s*"(?:ui_canvas|scale_form|spreadsheet|geo_map|status_pill|agent_line)"/.test(body ?? ''))
+      if (/"component"\s*:\s*"(?:ui_canvas|scale_form|spreadsheet|geo_map|scene_map|status_pill|agent_line)"/.test(body ?? ''))
         segments.push({ kind: 'notice', text: 'Esta interfaz no pudo mostrarse. Pide a Kira que la actualice.' })
       else appendMarkdown(segments, raw)
     }
@@ -289,7 +291,7 @@ export function splitGenerativeUiText(
   let tail = text.slice(cursor)
   if (options.streaming === true) {
     const lastJsonFence = tail.lastIndexOf('```json')
-    const relevantJson = lastJsonFence >= 0 && /"component"\s*:\s*"(?:ui_canvas|scale_form|spreadsheet|geo_map|status_pill|agent_line)"/.test(tail.slice(lastJsonFence))
+    const relevantJson = lastJsonFence >= 0 && /"component"\s*:\s*"(?:ui_canvas|scale_form|spreadsheet|geo_map|scene_map|status_pill|agent_line)"/.test(tail.slice(lastJsonFence))
       ? lastJsonFence : -1
     const unfinishedFence = Math.max(tail.lastIndexOf('```generative-ui'), relevantJson)
     if (unfinishedFence >= 0) tail = tail.slice(0, unfinishedFence)
@@ -317,7 +319,7 @@ function expandRawCanvases(segments: GenerativeUiSegment[], streaming: boolean):
       continue
     }
     const source = segment.text
-    const startPattern = /^[ \t]*\{\s*"component"\s*:\s*"(?:ui_canvas|scale_form|spreadsheet|geo_map|status_pill|agent_line)"/gm
+    const startPattern = /^[ \t]*\{\s*"component"\s*:\s*"(?:ui_canvas|scale_form|spreadsheet|geo_map|scene_map|status_pill|agent_line)"/gm
     let cursor = 0
     for (const match of source.matchAll(startPattern)) {
       if (count >= MAX_UI_BLOCKS) break
@@ -394,6 +396,7 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
     case 'scale_form': return <ScaleForm spec={block} />
     case 'spreadsheet': return <SpreadsheetSurface key={block.props.id} spec={block} />
     case 'geo_map': return <GeoMap key={(conversationId ?? block.props.conversationId ?? 'ephemeral') + ':' + block.props.id} spec={block} onAction={onAction} {...(conversationId === undefined ? {} : { conversationId })} />
+    case 'scene_map': return <SceneMap key={(conversationId ?? 'ephemeral') + ':' + block.props.id} spec={block} onAction={onAction} />
     case 'status_pill': return <PhoenixStatusPill label={block.props.label} {...block.props.tone === undefined ? {} : { tone: block.props.tone }} />
     case 'agent_line': return <PhoenixAgentLine {...block.props} />
     case 'event_card': {

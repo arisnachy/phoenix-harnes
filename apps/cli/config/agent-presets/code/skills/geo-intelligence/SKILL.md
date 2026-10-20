@@ -83,3 +83,35 @@ Record source/year/unit/denominator and spatial resolution. For H3 geometry
 the PostGIS H3 extension is authoritative, not a planar imitation.
 Always distinguish 2D basemap, map 3D extrusions and actual DEM terrain.
 Validate output PDFs and GeoJSON before declaring them ready.
+
+
+## Mapas ficticios y narrativos (Isla Bruma, mundos de fantasía, videojuegos)
+
+**No usar geo_map con OpenStreetMap para mundos inventados.** En su lugar,
+emitir un componente `scene_map` en un bloque de respuesta **`generative-ui`**
+válido (o artefacto JSON con MIME `application/vnd.phoenix.scene-map+json`).
+Es un motor SVG interactivo nativo que funciona sin internet ni navegador.
+
+Para un mapa ficticio solicitado en el chat, **entregar el mapa renderizable
+en el mismo turno**, no solo declarar «lo publiqué». Ejemplo MÍNIMO — adaptar
+nombres, historia y puntos a la solicitud del usuario:
+
+```generative-ui
+{"component":"scene_map","version":1,"props":{"id":"isla-bruma","title":"Isla Bruma","subtitle":"Atlas exploratorio de un mundo imaginario","theme":"fantasy","description":"Cartografía narrativa ficticia, no geografía real.","places":[{"id":"puerto","name":"Puerto de la Niebla","x":22,"y":67,"kind":"port","description":"El puerto donde llegan las barcas al amanecer."},{"id":"bosque","name":"Bosque Susurrante","x":37,"y":62,"kind":"forest","description":"Árboles milenarios y senderos cubiertos de musgo."},{"id":"torre","name":"Torre del Viento","x":66,"y":32,"kind":"tower","description":"Una torre antigua domina los pasos montañosos."},{"id":"ruinas","name":"Ruinas del Alba","x":68,"y":69,"kind":"ruins","description":"Restos de un santuario perdido."},{"id":"ciudad","name":"Ciudad de Sal","x":52,"y":49,"kind":"city","description":"Capital de los cartógrafos de Bruma."}],"routes":[{"from":"puerto","to":"bosque","label":"Senda de musgo"},{"from":"bosque","to":"ciudad"},{"from":"ciudad","to":"torre"},{"from":"ciudad","to":"ruinas"}]}}
+```
+
+Parámetros estrictos: lugares en coordenadas artísticas `x,y` entre 5 y
+95 (no latitud/longitud), tipos `city`, `port`, `forest`, `mountain`,
+`ruins`, `castle`, `tower`, `temple`, `cave`, `village`, 2 a 35
+lugares, con `description` para cada uno. Se pueden añadir
+`coast` como 8 a 64 pares `[x,y]` y `routes` entre identificadores
+válidos. Evita iniciar navegadores. El usuario puede seleccionar sitios,
+consultarlos a Kira y exportar SVG vectorial.
+
+**Regla anti-falsos positivos:** Si no se ha entregado explícitamente
+el bloque `scene_map`/artefacto válido y no hay evidencia del render,
+NO responder «publicado», «probado» o «funciona». Entregar el contrato
+nativo y comprobar lo emitido en el transcript. Si no se puede verificar
+el clic, comunicar esa limitación, pero no confundir emisión de JSON
+con render confirmado. Nunca sustituir el mapa solicitado por una
+descripción de lo que supuestamente creaste.
