@@ -56,7 +56,7 @@
 
 ### `ask_user_question`
 
-继续操作前，如果需要确认、选择或缺失的信息，请向用户提出简明问题。发送一个或多个问题，每个问题都带一个稳定 id，该 id 会在答案中原样返回。如果用户在一分钟内没有回答，Phoenix 会采用最安全的推荐选项；请使用 `recommended=true` 标记该选项。
+继续操作前，如果需要确认、选择或缺失的信息，请向用户提出简明问题。发送一个或多个问题，每个问题都带一个稳定 id，该 id 会在答案中原样返回。如果用户在一分钟内没有回答，Phoenix 会采用最安全的推荐选项；请使用 `recommended=true` 标记该选项。 对症状、病史、用药、医疗授权、财务或其他敏感问题设置 `sensitive=true`，超时只返回空答案，不能猜测事实或同意。
 
 ```json
 {
@@ -105,6 +105,10 @@
                 "label"
               ]
             }
+          },
+          "sensitive": {
+            "type": "boolean",
+            "description": "Mark sensitive clinical, identity, consent, or other personal questions. On expiration, no option is selected; do not treat an automatic answer as a patient statement."
           },
           "multi_select": {
             "type": "boolean",
