@@ -1,24 +1,27 @@
-# Phoenix Design Intelligence — integration without claiming remote completion
+# Agent Note: Durable Canva-aware visual production without fake exports
+
+Status: implemented
+
+[English](2026-10-20-phoenix-design-intelligence.md) | [中文](2026-10-20-phoenix-design-intelligence.zh.md)
+
+## Problem
+
+Visual production had no single durable receipt distinguishing an MCP generation request from an existing Canva design or an exported file. Canva capabilities also vary by account and exposed tool list. Treating a Canva link as a finished PDF could mislead the user and lose work after an interruption.
 
 ## Decision
 
-Add a narrow CLI-backed, durable visual job ledger plus a discoverable Kira skill. Reuse the existing MCP inventory and any genuinely exposed Canva tools rather than creating a fake Canva API client or modifying the universal agent loop. Keep visual work composable with book, comic, research, course and business engines.
+A zero-dependency CLI at scripts/phoenix-design-intelligence.mjs classifies design intent, inspects a small secret-free MCP inventory, and stores a durable mission record. The CLI records valid Canva design identifiers and URLs separately from copied export files. Each exported file has an extension, a file signature check, a byte count and SHA-256; a later inspection detects missing or altered copies.
 
-## Why
+Kira uses the discoverable phoenix-design-intelligence skill to call the actual MCP tools. It can also use authorized local generation and export alternatives. Existing comic, editorial, research and business engines retain control of narrative continuity, source data, publication and licensing. The CLI does not modify the agent loop, invoke Canva APIs or pretend to supply a missing export tool.
 
-Visual creation was previously an informal instruction. A returned Canva link, an asynchronous generation job and an exported PDF were easily conflated. A durable job ID with explicit statuses makes recovery and accurate deliverable reporting possible. The source engines remain responsible for character canon, manuscript content, scientific evidence, and product rights.
+## Alternatives considered
 
-## Alternatives rejected
+**Build an isolated Canva-only product engine.** Rejected because it would duplicate book, comic, course and business production and weaken universal task routing.
 
-- A separate full publishing or comic engine tightly coupled to Canva: would duplicate existing durable engines and break universal routing.
-- Pretend an export API is available because Canva supports export elsewhere: the active MCP tool list may not expose it.
-- Treat ready or a listed tool as proof of authorization or premium entitlement.
-- Mark a generated design or file signature as proof of publication, graphic quality or commercial licensing.
+**Treat ready connectors as full authorization.** Rejected because server readiness says nothing about specific permissions, Pro entitlements, credits or licensing.
 
-## Delivered components
+**Mark a Canva URL as a downloadable file.** Rejected because links, asynchronous jobs and actual local files provide different evidence.
 
-scripts/phoenix-design-intelligence.mjs implements planning and verifiable file receipts. .agents/skills/phoenix-design-intelligence/SKILL.md provides Kira's workflow. docs/phoenix-design-intelligence.md documents CLI expectations and remaining live integrations. The components use the existing MCP/skill system.
+## Consequences
 
-## Limitations and verification
-
-The CLI does not execute Canva jobs. Genuine E2E success still depends on host authorization, reachable MCP operations, Canva quotas, previews, and a viable export method. Run the standalone Node tests and a live design/export smoke on Windows; do not claim full production readiness from the unit tests alone.
+Design work now has an auditable, resumable mission identifier, capability-driven plans and genuine file-integrity receipts without committing credentials or spending money. The visual quality, content semantics, Canva access, premium quota, complete export validation, publishing rights and live E2E tests remain separate checks. A signature-valid PDF is not certified print-ready and the plan is not itself an MCP execution.
