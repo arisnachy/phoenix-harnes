@@ -89,7 +89,8 @@ export function Geo3DView({ layers, onSelect }: Props) {
             const xy = flat(point)
             return xy[0] * si + xy[1] * co
           }
-          return depth(b) - depth(a)
+          const rank = (kind:string):number => kind==='polygon'?0:kind==='line'?1:2
+          return rank(a.layer.kind)-rank(b.layer.kind) || depth(b)-depth(a)
         }).map(({layer,feature}) => {
           const first = feature.coordinates[0]
           if (!first) return null
@@ -107,9 +108,9 @@ export function Geo3DView({ layers, onSelect }: Props) {
                 const next=base[(i+1)%base.length],t=top[i],u=top[(i+1)%top.length]
                 if(!next||!t||!u)return null
                 return <polygon key={i} points={[p,next,u,t].map(pt=>pt.join(',')).join(' ')}
-                  fill={c} opacity=".55" stroke="#ffffff" strokeWidth=".9"/>
+                  fill={c} opacity=".24" stroke="#ffffff" strokeWidth=".9"/>
               })}
-              <polygon points={top.map(p=>p.join(',')).join(' ')} fill={c} opacity=".9" stroke="#fff" strokeWidth="2"/>
+              <polygon points={top.map(p=>p.join(',')).join(' ')} fill={c} opacity=".40" stroke="#fff" strokeWidth="2"/>
               <title>{feature.label}: {feature.value ?? 'sin métrica'}</title>
             </g>
           )

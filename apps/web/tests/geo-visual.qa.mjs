@@ -42,6 +42,7 @@ try {
     if(!(await page.locator('[aria-label="Leyenda cartográfica"]').isVisible()))throw Error('Missing map legend')
     await page.getByRole('button',{name:'Vista 3D'}).click()
     await page.locator('[data-phoenix-geo-3d="true"]').waitFor()
+    await page.waitForTimeout(220) // stable CSS transition for deterministic screenshot and contrast
     await page.screenshot({path:output+'/'+name+'-3d.png',fullPage:true})
     await page.getByRole('button',{name:'Volver a 2D'}).click()
     if(name==='desktop'){

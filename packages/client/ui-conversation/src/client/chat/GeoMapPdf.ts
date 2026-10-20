@@ -1,4 +1,5 @@
 import type { GeoLayer } from './GeoMap.tsx'
+import { buildGeoLegend } from './GeoMapLayout.ts'
 
 /**
  * Two-page original vector map report. No fabricated basemap or elevation;
@@ -122,14 +123,14 @@ function firstPage(layers:readonly GeoLayer[],title:string,source:string,metric?
   p+=label('LEYENDA',52,303,11,true,accent)
   p+=label('INDICADORES',320,303,11,true,accent)
   const entries=layers.filter(l=>l.features.length>0)
+  const legend=buildGeoLegend(layers)
   let y=281
-  for(const layer of entries.slice(0,9)){
-    const sample=layer.features[0]
-    p+=rect(53,y-2,10,10,sample?.color??'#d26634')
-    p+=label(plain(layer.name,37),70,y,9)
-    p+=label(numbers(layer.features.length),266,y,9,true)
+  for(const item of legend.slice(0,9)){
+    p+=rect(53,y-2,10,10,item.color)
+    p+=label(plain(item.label,38),70,y,9)
     y-=19
   }
+  if(legend.length>9)p+=label('Otras categorias en el GeoJSON',70,y,8,false,'#697781')
   const features=layers.flatMap(layer=>layer.features)
   const data=features.flatMap(x=>x.value===undefined?[]:[x.value])
   const sum=data.reduce((n,v)=>n+v,0)

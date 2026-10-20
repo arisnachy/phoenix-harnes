@@ -16,3 +16,5 @@
 @media(max-width:420px){.scene{height:345px;min-height:345px}.controls{left:10px;right:10px;bottom:10px;justify-content:end}.controls button{padding:5px 8px}}
 
 .empty{min-height:320px;display:grid;place-items:center;padding:26px;color:#4a5662;font-size:13px;text-align:center}
+
+@media(max-width:420px){.scene{transform:scale(1.25);transform-origin:center}}
