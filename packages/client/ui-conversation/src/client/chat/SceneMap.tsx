@@ -5,6 +5,7 @@ import css from './SceneMap.module.css'
 type Position = readonly [number,number]
 type SceneTheme = 'fantasy' | 'treasure' | 'atlas'
 type PlaceKind = 'city' | 'port' | 'forest' | 'mountain' | 'ruins' | 'castle' | 'tower' | 'temple' | 'cave' | 'village'
+/** Named narrative landmark on a fictional world atlas. */
 export interface ScenePlace {
   readonly id: string
   readonly name: string
@@ -13,11 +14,13 @@ export interface ScenePlace {
   readonly kind: PlaceKind
   readonly description: string
 }
+/** A route joining two fictional landmarks by stable ID. */
 export interface SceneRoute {
   readonly from: string
   readonly to: string
   readonly label?: string
 }
+/** Bounded scene-map specification rendered natively in the conversation. */
 export interface SceneMapSpec {
   readonly component: 'scene_map'
   readonly version: 1
@@ -43,7 +46,11 @@ const defaultCoast:readonly Position[]=[
   [78,53],[85,66],[77,81],[65,86],[56,80],[43,88],[28,82],[18,72],
   [13,57],[17,45],
 ]
-/** Validate bounded, offline-ready fictional map schema. No geographic coordinates or scripts. */
+/**
+ * Validate a bounded, offline-ready fictional map schema.
+ * @param value - Untrusted declarative map data from Kira or an artifact.
+ * @returns A validated map or null, without granting script execution.
+ */
 export function parseSceneMapSpec(value:unknown):SceneMapSpec|null {
   if(!validRecord(value)||!keys(value,['component','version','props'])
     ||value.component!=='scene_map'||value.version!==1||!validRecord(value.props))return null
@@ -109,7 +116,12 @@ function saveSvg(svg:SVGSVGElement|null,name:string):void{
   a.click()
   window.setTimeout(()=>URL.revokeObjectURL(url),1000)
 }
-/** Real, interactive, fully offline fantasy/fiction map in the native chat surface. */
+/**
+ * Render a real, interactive fictional atlas without third-party map services.
+ * @param spec - Validated narrative map contract.
+ * @param onAction - Optional composer action for selected place continuity.
+ * @returns Native React SVG atlas and interactive controls.
+ */
 export function SceneMap({spec,onAction}:{spec:SceneMapSpec;onAction?:CanvasAction|undefined}){
   const p=spec.props
   const gradientId=useId().replaceAll(':','-')
