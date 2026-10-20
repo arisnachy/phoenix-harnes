@@ -1,0 +1,48 @@
+name: PHOENIX Geo Visual Quality
+on:
+  pull_request:
+    paths:
+      - 'packages/client/ui-conversation/src/client/chat/Geo*'
+      - 'packages/client/ui-conversation/tests/geo-visual-quality.client.spec.tsx'
+      - 'apps/web/geo-visual-qa*'
+      - 'apps/web/tests/geo-visual.qa.mjs'
+      - '.github/workflows/phoenix-geo-visual.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'packages/client/ui-conversation/src/client/chat/Geo*'
+      - 'packages/client/ui-conversation/tests/geo-visual-quality.client.spec.tsx'
+      - 'apps/web/geo-visual-qa*'
+      - 'apps/web/tests/geo-visual.qa.mjs'
+      - '.github/workflows/phoenix-geo-visual.yml'
+jobs:
+  viewport-contracts:
+    name: Desktop/tablet/mobile visual regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Test actual React map layout and behavior
+        run: pnpm exec vitest run packages/client/ui-conversation/tests/geo-visual-quality.client.spec.tsx
+      - name: Install Chromium for actual screenshots
+        run: pnpm --dir apps/web exec playwright install --with-deps chromium
+      - name: Start private Vite visual QA fixture
+        run: |
+          pnpm --dir apps/web exec vite --config geo-visual-qa.config.ts > /tmp/phoenix-geo-vite.log 2>&1 &
+      - name: Screenshot every viewport and validate PDF downloads
+        run: node apps/web/tests/geo-visual.qa.mjs
+        env:
+          GEO_VISUAL_ARTIFACTS: artifacts/geo-visual
+      - name: Attach real 2D/3D visual evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: geo-visual-qa
+          path: artifacts/geo-visual/
+          if-no-files-found: ignore
