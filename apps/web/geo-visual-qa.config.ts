@@ -16,5 +16,9 @@ export default defineConfig({
      {find:/^react\/jsx-dev-runtime$/,replacement:require.resolve('react/jsx-dev-runtime')},
    ],
  },
+ base: './',
+ build: { outDir: 'dist-geo-visual', emptyOutDir: true,
+   rollupOptions: { input: new URL('./geo-visual-qa.html', import.meta.url).pathname } },
+ preview: { host: '127.0.0.1', port: 5187, strictPort: true },
  server: { host: '127.0.0.1', port: 5187, strictPort: true },
 })
