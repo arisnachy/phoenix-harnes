@@ -1163,7 +1163,7 @@ export function installModelSelection(
           ...withoutInheritedEffort,
           provider: routed.provider,
           model: routed.model,
-          reasoningEffort: routed.reasoningEffort,
+          ...routed.reasoningEffort === undefined ? {} : { reasoningEffort: routed.reasoningEffort },
         }
       }
       const resolvedHandoff = typeof handoff === 'function' ? handoff(selected) : handoff
