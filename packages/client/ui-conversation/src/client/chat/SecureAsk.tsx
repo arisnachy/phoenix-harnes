@@ -103,9 +103,13 @@ export function SecureAsk({ target, onClose, onSaved }: {
         origin: target.origin, tabId: target.tabId, account, secret, automatic: remember, profile,
         ...(extraFields.length ? { extras: Object.fromEntries(extraFields.map(field => [field.key, extraValues[field.key] ?? ''])) } : {}),
       })
-      if (!saved.saved) throw new Error('Vault did not confirm saving')
+      if (!saved.saved || (saved.profiles && !saved.profiles.some(item => item.id === profile && item.saved))) {
+        throw new Error('La bóveda no confirmó el perfil seleccionado')
+      }
       if (saved.profiles) setProfiles(saved.profiles)
-      // A DPAPI write succeeded. This fact MUST survive any later login error.
+      setAutomatic(remember)
+      // The host read back the record after writing. A later site-login error
+      // must NOT erase its successfully saved credential.
       setEditing(false)
       setFeedback('Acceso guardado y cifrado correctamente. Comprobando el inicio de sesión…')
       try {
@@ -122,8 +126,10 @@ export function SecureAsk({ target, onClose, onSaved }: {
       } catch {
         setFeedback('Acceso guardado y cifrado. La página aún no permitió iniciar sesión; puedes reintentar sin escribir las credenciales.')
       }
-    } catch {
-      setFeedback('Vault no confirmó el guardado. Comprueba su estado antes de volver a introducir datos.')
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : 'No se pudo comprobar la bóveda.'
+      setFeedback('No se confirmó el guardado para ' + target.origin + '. ' + detail
+        + ' No introduzcas otra vez tu contraseña hasta comprobar el estado del acceso.')
     } finally {
       setSecret('')
       setAccount('')

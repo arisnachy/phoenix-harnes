@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { loginOrigin, loginDetectionExpression, loginGateExpression, relatedCredentialOrigin, registerSecureLogin } from '../src/secure-login.ts'
+import { loginOrigin, loginDetectionExpression, loginGateExpression, relatedCredentialOrigin, registerSecureLogin, safeSecureLoginFailure } from '../src/secure-login.ts'
 
 describe('origin-scoped secure login', () => {
   it('does not mistake a persistent account menu or a logout control for a login requirement', () => {
@@ -27,6 +27,16 @@ describe('origin-scoped secure login', () => {
     expect(run(root([makeElement('Iniciar sesión')]), location, URL)).toMatchObject({
       required: true, gateVisible: true,
     })
+  })
+
+  it('returns diagnostic errors without exposing underlying credentials or process details', () => {
+    const secret = 'DO_NOT_PRINT_THIS_PASSWORD'
+    const damaged = safeSecureLoginFailure(new Error('Operación segura rechazada: ' + secret))
+    expect(damaged.code).toBe(503)
+    expect(damaged.body.reason).toBe('vault-unavailable')
+    expect(JSON.stringify(damaged)).not.toContain(secret)
+    expect(safeSecureLoginFailure(new Error('La pestaña no coincide con el sitio autorizado')).body.reason)
+      .toBe('browser-origin-mismatch')
   })
 
   it('only recognizes a fixed verified related origin, without automatic secret sharing', () => {
@@ -254,7 +264,8 @@ describe('origin-scoped secure login', () => {
       socket: { remoteAddress: '127.0.0.1' },
       headers: { host: '127.0.0.1:3080', 'x-phoenix-secure-login': '1' },
     }, { writeHead(status: number) { code = status }, end(value: string) { body = value } })
-    expect(code).toBe(400)
+    expect(code).toBe(503)
+    expect(body).toContain('vault-unavailable')
     expect(body).not.toContain('"saved":false')
     expect(body).not.toContain('offline')
   })

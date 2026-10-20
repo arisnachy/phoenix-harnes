@@ -561,6 +561,21 @@ async function useLogin(origin: string, tabId: string, manual: boolean,
   return result
 }
 
+/** Stable human-readable failure codes. Never reflect raw secrets or CDP payloads. */
+export function safeSecureLoginFailure(error: unknown): { code: number; body: { error: string; reason: string } } {
+  const message = error instanceof Error ? error.message : ''
+  if (/bóveda|vault|no se pudo leer el acceso cifrado|registro de acceso dañado|operación segura rechazada|powershell|windows|la verificación posterior al guardado/i.test(message)) {
+    return { code: 503, body: { reason: 'vault-unavailable',
+      error: 'La bóveda no confirmó el cifrado y la recuperación del acceso. El guardado no está verificado; revisa Windows y la identidad activa.' } }
+  }
+  if (/pestaña|chrome|cdp|dominio|origen|no coincide/i.test(message)) {
+    return { code: 409, body: { reason: 'browser-origin-mismatch',
+      error: 'El navegador cambió de pestaña o dominio durante el acceso. Vuelve a abrir Acceso seguro en la página correcta.' } }
+  }
+  return { code: 400, body: { reason: 'secure-login-failed',
+    error: 'No se pudo completar la operación segura. Comprueba los datos y el estado de la bóveda.' } }
+}
+
 /** Route lives on the host, outside every model-facing MCP tool and session log. */
 export function registerSecureLogin(ctx: Context, vault?: CredentialProvider): () => void {
   return ctx.webServer.register({
@@ -741,9 +756,10 @@ export function registerSecureLogin(ctx: Context, vault?: CredentialProvider): (
           return
         }
         respond(res, 404, { error: 'Ruta desconocida' })
-      } catch {
+      } catch (error) {
         // NEVER reflect secrets, CDP expressions, PowerShell errors or original payloads.
-        respond(res, 400, { error: 'No se pudo completar la operación segura; verifica el sitio y la bóveda.' })
+        const safe = safeSecureLoginFailure(error)
+        respond(res, safe.code, safe.body)
       }
     },
   })
