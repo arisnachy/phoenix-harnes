@@ -88,6 +88,16 @@ Validate output PDFs and GeoJSON before declaring them ready.
 
 ## Mapas ficticios y narrativos (Isla Bruma, mundos de fantasía, videojuegos)
 
+**Ruta de entrega obligatoria:** el motor ahora expone `phoenix_scene_map` como
+herramienta model-facing. **Llamar a esa herramienta** para crear y publicar
+mapas narrativos; el propio adaptador valida el esquema y adjunta un artefacto
+con MIME `application/vnd.phoenix.scene-map+json`. Para Isla Bruma demo:
+`phoenix_scene_map({title:"Isla Bruma",demo:true})`. No basta escribir JSON
+ni un párrafo; no se considera "publicado" hasta que la herramienta devuelva
+`artifactId`. Eso confirma emisión, NO render del cliente.
+Si la herramienta no está disponible, entregar un `scene_map` válido inline
+como alternativa e informar que no hubo publicación de artefacto.
+
 **No usar geo_map con OpenStreetMap para mundos inventados.** En su lugar,
 emitir un componente `scene_map` en un bloque de respuesta **`generative-ui`**
 válido (o artefacto JSON con MIME `application/vnd.phoenix.scene-map+json`).

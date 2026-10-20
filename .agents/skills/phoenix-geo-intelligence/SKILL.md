@@ -88,6 +88,12 @@ Validate output PDFs and GeoJSON before declaring them ready.
 
 ## Mapas ficticios y narrativos (Isla Bruma, mundos de fantasía, videojuegos)
 
+**Ruta de entrega obligatoria:** `phoenix_scene_map` publica el contrato
+validado como un artefacto inline real, no solamente texto. Usa
+`phoenix_scene_map({title:"Isla Bruma",demo:true})` para un ejemplo de
+fantasía. Confirma solo emisión con artifactId, nunca render visual sin
+comprobación del cliente.
+
 **No usar geo_map con OpenStreetMap para mundos inventados.** En su lugar,
 emitir un componente `scene_map` en un bloque de respuesta **`generative-ui`**
 válido (o artefacto JSON con MIME `application/vnd.phoenix.scene-map+json`).
