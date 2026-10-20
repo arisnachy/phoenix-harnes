@@ -52,7 +52,7 @@ export function planDesign(request, inventory) {
   if (inventory !== undefined && (!Array.isArray(inventory) || inventory.length > 200)) fail('Inventario MCP inválido.')
   const normalized = norm(brief)
   const kind = categories.find(([, re]) => re.test(normalized))?.[0] || 'design'
-  const matches = (inventory || []).filter(item => item && SERVER.test(item.serverName || '') && /canva/i.test(item.serverName) && ['ready','starting','auth-required','failed','disconnected'].includes(item.status) && Array.isArray(item.toolNames) && item.toolNames.length <= 400)
+  const matches = (inventory || []).filter(item => item && typeof item.serverName === 'string' && SERVER.test(item.serverName) && /canva/i.test(item.serverName) && ['ready','starting','auth-required','failed','disconnected'].includes(item.status) && Array.isArray(item.toolNames) && item.toolNames.length <= 400)
   const chosen = matches.find(x => x.status === 'ready') || matches[0]
   const toolNames = (chosen?.toolNames || []).filter(t => typeof t === 'string' && TOOL.test(t) && t.toLowerCase().startsWith(('mcp__' + chosen.serverName + '__').toLowerCase()))
   const available = Object.fromEntries(Object.entries(names).map(([capability, variants]) => [capability, variants.filter(n => toolNames.some(t => t.toLowerCase().endsWith('__' + n)))]))
@@ -162,11 +162,15 @@ async function digestFile(path) {
   return hash.digest('hex')
 }
 function sniff(format, bytes) {
-  if (format === 'pdf') return bytes.subarray(0,5).toString() === '%PDF-' && bytes.lastIndexOf(Buffer.from('%%EOF')) >= bytes.length - 1024
+  if (format === 'pdf') { const end = bytes.lastIndexOf(Buffer.from('%%EOF')); return bytes.subarray(0,5).toString() === '%PDF-' && end >= 0 && bytes.length - end <= 1024 }
   if (format === 'png') return bytes.subarray(0,8).equals(Buffer.from('89504e470d0a1a0a','hex')) && bytes.length > 24 && bytes.toString('ascii',12,16) === 'IHDR'
   if (format === 'jpg' || format === 'jpeg') return bytes[0] === 255 && bytes[1] === 216 && bytes.at(-2) === 255 && bytes.at(-1) === 217
   if (format === 'webp') return bytes.toString('ascii',0,4) === 'RIFF' && bytes.toString('ascii',8,12) === 'WEBP'
-  if (format === 'pptx' || format === 'docx' || format === 'epub') return bytes[0] === 80 && bytes[1] === 75 && [3,5,7].includes(bytes[2])
+  if (format === 'pptx' || format === 'docx' || format === 'epub') {
+    if (bytes[0] !== 80 || bytes[1] !== 75 || bytes[2] !== 3 || bytes[3] !== 4) return false
+    const filename = format === 'pptx' ? 'ppt/presentation.xml' : format === 'docx' ? 'word/document.xml' : 'META-INF/container.xml'
+    return bytes.includes(Buffer.from(filename)) && (format === 'epub' ? bytes.includes(Buffer.from('mimetype')) : bytes.includes(Buffer.from('[Content_Types].xml')))
+  }
   if (format === 'mp4') return bytes.toString('ascii',4,8) === 'ftyp'
   if (format === 'svg') return /<svg(?:\s|>)/u.test(bytes.toString('utf8',0,2048)) && /<\/svg>/u.test(bytes.toString('utf8',Math.max(bytes.length - 2048,0)))
   return false
