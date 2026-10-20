@@ -23,7 +23,7 @@ export interface GeoMapSpec {
   readonly version: 1
   readonly props: {
     readonly id: string
-    readonly conversationId: string
+    readonly conversationId?: string
     readonly title: string
     readonly subtitle?: string
     readonly source: string
@@ -64,7 +64,7 @@ export function parseGeoMapSpec(x: unknown): GeoMapSpec | null {
   const p = x.props
   if (!allowed(p, ['id', 'conversationId', 'title', 'subtitle', 'source', 'updatedAt',
     'metric', 'theme', 'center', 'zoom', 'layers'])
-    || !short(p.id, 100) || !short(p.conversationId, 140) || !short(p.title, 180)
+    || !short(p.id, 100) || (p.conversationId !== undefined && !short(p.conversationId, 140)) || !short(p.title, 180)
     || !short(p.source, 400)
     || (p.subtitle !== undefined && !short(p.subtitle, 400))
     || (p.metric !== undefined && !short(p.metric, 120))
@@ -140,15 +140,17 @@ function csvCell(raw: string): string {
   const safe = /^[=+\-@\t\r]/.test(raw) ? "'" + raw : raw
   return '"' + safe.replace(/"/g, '""') + '"'
 }
-function localKey(spec: GeoMapSpec): string {
-  return 'phoenix:geo:v1:' + encodeURIComponent(spec.props.conversationId) + ':' + encodeURIComponent(spec.props.id)
+function localKey(spec: GeoMapSpec, conversationId?: string): string | undefined {
+  if (!conversationId) return undefined
+  return 'phoenix:geo:v1:' + encodeURIComponent(conversationId) + ':' + encodeURIComponent(spec.props.id)
 }
 type View = { lng: number; lat: number; zoom: number }
-function initialView(spec: GeoMapSpec): View {
+function initialView(spec: GeoMapSpec, conversationId?: string): View {
   const fallback = { ...spec.props.center, zoom: spec.props.zoom ?? 11 }
-  if (typeof localStorage === 'undefined') return fallback
+  const key = localKey(spec, conversationId)
+  if (!key || typeof localStorage === 'undefined') return fallback
   try {
-    const raw = localStorage.getItem(localKey(spec))
+    const raw = localStorage.getItem(key)
     if (!raw) return fallback
     const v: unknown = JSON.parse(raw)
     if (record(v) && coordinate([v.lng, v.lat]) && finite(v.zoom) && v.zoom >= 2 && v.zoom <= 17)
@@ -157,9 +159,10 @@ function initialView(spec: GeoMapSpec): View {
   return fallback
 }
 
-export function GeoMap({ spec, onAction }: { spec: GeoMapSpec; onAction?: CanvasAction | undefined }) {
+export function GeoMap({ spec, onAction, conversationId }: { spec: GeoMapSpec; onAction?: CanvasAction | undefined; conversationId?: string }) {
   const p = spec.props
-  const [view, setView] = useState<View>(() => initialView(spec))
+  const effectiveConversationId = conversationId ?? p.conversationId
+  const [view, setView] = useState<View>(() => initialView(spec, effectiveConversationId))
   const [size, setSize] = useState({ w: 780, h: 430 })
   const [visible, setVisible] = useState<readonly string[]>(() => p.layers.map(l => l.id))
   const [selected, setSelected] = useState<{ layer: GeoLayer; feature: GeoFeature } | null>(null)
@@ -175,8 +178,10 @@ export function GeoMap({ spec, onAction }: { spec: GeoMapSpec; onAction?: Canvas
     return () => observer.disconnect()
   }, [])
   useEffect(() => {
-    try { localStorage.setItem(localKey(spec), JSON.stringify(view)) } catch { /* private browsing */ }
-  }, [spec, view])
+    const key = localKey(spec, effectiveConversationId)
+    if (!key) return
+    try { localStorage.setItem(key, JSON.stringify(view)) } catch { /* private browsing */ }
+  }, [spec, effectiveConversationId, view])
   const active = useMemo(() => p.layers.filter(l => visible.includes(l.id)), [p.layers, visible])
   const center = toWorld(view.lng, view.lat, view.zoom)
   const project = (pos: Position): Position => {
@@ -237,7 +242,7 @@ export function GeoMap({ spec, onAction }: { spec: GeoMapSpec; onAction?: Canvas
   const metricValues = active.flatMap(l => l.features.flatMap(f => f.value === undefined ? [] : [f.value]))
   const total = metricValues.reduce((sum, v) => sum + v, 0)
   return (
-    <section className={css.root} data-phoenix-geo-map={p.id} data-geo-conversation={p.conversationId}>
+    <section className={css.root} data-phoenix-geo-map={p.id} data-geo-conversation={effectiveConversationId} data-geo-theme={p.theme ?? 'neutral'}>
       <header className={css.header}>
         <div><span className={css.eyebrow}>PHOENIX GEO INTELLIGENCE</span><h3>{p.title}</h3>
           {p.subtitle && <p>{p.subtitle}</p>}</div>

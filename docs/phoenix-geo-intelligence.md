@@ -13,7 +13,7 @@ Cuando haya **coordenadas verificadas** y el usuario requiera una visualización
   "version": 1,
   "props": {
     "id": "sucursales-octubre",
-    "conversationId": "identificador-real-de-la-conversacion",
+    "conversationId": "id-opcional-si-se-conoce",
     "title": "Rendimiento de sucursales",
     "subtitle": "Selección territorial",
     "theme": "business",
@@ -51,3 +51,5 @@ Para informes académicos, exportar SVG y adjuntar leyenda completa, fuente, fec
 ## Criterios de aceptación v1
 
 Validar especificaciones inválidas sin ejecutar código, dos conversaciones con IDs distintos, carga visible de teselas con red, desplazamiento y zoom, selección que alimenta el compositor, desactivación de capas, SVG vectorial, GeoJSON válido, CSV protegido contra inyección de fórmulas y aislamiento de viewport en localStorage.
+
+La UI aplica **automáticamente el ID real de la sesión** desde `AssistantNodeView` al renderer; el campo opcional de la especificación no puede sustituir ni invalidar el aislamiento del host. También puede renderizarse un artefacto JSON con MIME `application/vnd.phoenix.geo+json`, sin ejecutarse scripts.

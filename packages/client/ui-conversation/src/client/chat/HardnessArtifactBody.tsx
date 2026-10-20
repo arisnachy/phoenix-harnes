@@ -5,6 +5,7 @@ import type { RenderMessageImages } from '../contract/slots.ts'
 import styles from './HardnessArtifactNodeView.module.css'
 import { PhoenixVisualizer, supportsPhoenixVisual } from './PhoenixVisualizer.tsx'
 import { Scene3DView } from './Scene3DView.tsx'
+import { GeoMap, parseGeoMapSpec } from './GeoMap.tsx'
 import { auditGameHtml, readGameManifest } from './game-studio-quality.ts'
 import { hasExternalImageReferences, inlineBundledImages } from './html-preview-assets.ts'
 import {
@@ -698,6 +699,12 @@ function RecordPreview({ record, mime, expanded, title, renderMessageImages }: {
     )
   }
   if (mime === 'application/vnd.phoenix.scene3d+json') return <Scene3DView spec={record} expanded={expanded} />
+  if (mime === 'application/vnd.phoenix.geo+json' || record.component === 'geo_map') {
+    const geo = parseGeoMapSpec(record)
+    return geo === null
+      ? <p className={styles.note} role="alert">El mapa geográfico no tiene un contrato válido.</p>
+      : <GeoMap spec={geo} />
+  }
   if (mime === 'application/vnd.hardness.ui+json' || isRecord(record.root)) return <DeclarativeUi record={record} />
   const visual = embeddedVisual(record)
   if (mime === 'application/vnd.phoenix.visual+json'

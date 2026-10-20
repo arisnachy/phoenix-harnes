@@ -69,6 +69,7 @@ export const AssistantNodeView = memo(function AssistantNodeView({
       renderMessageImages={renderMessageImages}
       mentions={mentions}
       onUiAction={onUiAction}
+      conversationId={String(sessionId)}
       t={t}
     />
   )

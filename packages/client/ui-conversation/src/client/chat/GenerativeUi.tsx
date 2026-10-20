@@ -388,12 +388,12 @@ const Header = ({ title, subtitle, badge }: HeaderProps) => (
 const statusClass = (status: Status | undefined): string =>
   status === undefined ? '' : (css[status] ?? '')
 
-export function GenerativeUi({ block, onAction }: { block: GenerativeUiBlock; onAction?: CanvasAction | undefined }): ReactNode {
+export function GenerativeUi({ block, onAction, conversationId }: { block: GenerativeUiBlock; onAction?: CanvasAction | undefined; conversationId?: string }): ReactNode {
   switch (block.component) {
     case 'ui_canvas': return <GenerativeCanvas spec={block} onAction={onAction} />
     case 'scale_form': return <ScaleForm spec={block} />
     case 'spreadsheet': return <SpreadsheetSurface key={block.props.id} spec={block} />
-    case 'geo_map': return <GeoMap key={block.props.conversationId + ':' + block.props.id} spec={block} onAction={onAction} />
+    case 'geo_map': return <GeoMap key={(conversationId ?? block.props.conversationId ?? 'ephemeral') + ':' + block.props.id} spec={block} onAction={onAction} conversationId={conversationId} />
     case 'status_pill': return <PhoenixStatusPill label={block.props.label} {...block.props.tone === undefined ? {} : { tone: block.props.tone }} />
     case 'agent_line': return <PhoenixAgentLine {...block.props} />
     case 'event_card': {

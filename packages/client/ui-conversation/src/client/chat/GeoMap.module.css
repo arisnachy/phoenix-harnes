@@ -1,4 +1,4 @@
-.root{width:100%;max-width:100%;box-sizing:border-box;overflow:hidden;background:var(--dsw-alias-bg-primary,#fff);border:1px solid var(--dsw-alias-border-subtle,#e3dfd8);border-radius:16px;color:var(--dsw-alias-label-primary,#292723);font:inherit}
+.root{--geo-accent:#d75b21;width:100%;max-width:100%;box-sizing:border-box;overflow:hidden;background:var(--dsw-alias-bg-primary,#fff);border:1px solid var(--dsw-alias-border-subtle,#e3dfd8);border-radius:16px;color:var(--dsw-alias-label-primary,#292723);font:inherit}
 .header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:16px 17px 12px}
 .header h3{font-size:18px;line-height:1.3;margin:3px 0;font-weight:680}
 .header p{margin:4px 0 0;color:var(--dsw-alias-label-secondary,#766f68);font-size:13px}
@@ -24,3 +24,11 @@
 .selection small{color:var(--dsw-alias-label-secondary,#777)}
 .footer{display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;padding:11px 16px;border-top:1px solid var(--dsw-alias-border-subtle,#e3dfd8);color:var(--dsw-alias-label-secondary,#777);font-size:11px}
 @media(max-width:540px){.header{padding:12px}.map{height:430px}.toolbar{padding:0 10px 10px}.footer,.bottom{padding:9px 11px}}
+
+.root[data-geo-theme="health"]{--geo-accent:#168767}
+.root[data-geo-theme="research"]{--geo-accent:#4d66b5}
+.root[data-geo-theme="logistics"]{--geo-accent:#226fa8}
+.root[data-geo-theme="business"]{--geo-accent:#d75b21}
+.eyebrow{color:var(--geo-accent)}
+.selection{border-left-color:var(--geo-accent)}
+.theme{color:var(--geo-accent)}
