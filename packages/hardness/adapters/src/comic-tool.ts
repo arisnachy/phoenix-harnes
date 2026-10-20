@@ -27,6 +27,13 @@ export function validateComicHtml(html: string): { pages: number; panels: number
   }
   const pages = [...html.matchAll(/<section\b[^>]*class\s*=\s*["'][^"']*\bcomic-page\b[^"']*["'][^>]*>/giu)]
   const panels = [...html.matchAll(/<article\b[^>]*class\s*=\s*["'][^"']*\bpanel\b[^"']*["'][^>]*>[\s\S]*?<\/article>/giu)]
+  for (const side of ['front', 'back']) {
+    const mark = new RegExp('<section\\b[^>]*data-comic-cover="' + side + '"[^>]*>([\\s\\S]*?)<\\/section>', 'iu')
+    const cover = mark.exec(html)
+    if (!cover || !/<img\\b[^>]*\\bsrc\\s*=\\s*(["'])data:image\\/(png|jpeg|webp);base64,[A-Za-z0-9+/]{100,}={0,2}\\1/iu.test(cover[1]!)) {
+      return reject('Comic Studio: faltan imágenes reales de portada y contraportada; no se permite publicar una edición incompleta.')
+    }
+  }
   if (pages.length < 1 || pages.length > 100 || panels.length < pages.length || panels.length > 600) {
     return reject('Comic Studio: faltan páginas con viñetas reales.')
   }
@@ -51,7 +58,7 @@ export function validateComicHtml(html: string): { pages: number; panels: number
   if (/class=["'][^"']*\bmissing\b/iu.test(html) || /arte pendiente|imagen pendiente|placeholder/iu.test(html)) {
     return reject('Comic Studio: la entrega tiene ilustraciones pendientes.')
   }
-  return { pages: pages.length, panels: panels.length }
+  return { pages: pages.length + 2, panels: panels.length }
 }
 
 function readHtml(path: string): string {
@@ -97,7 +104,7 @@ export function readComicRelease(seriesId: string, issueId: string): string {
     const manifest = JSON.parse(readFileSync(manifestFile, 'utf8')) as Record<string, unknown>
     const digests = manifest.sha256 as Record<string, unknown> | undefined
     if (manifest.seriesId !== seriesId || manifest.issueId !== issueId
-      || manifest.structurallyValid !== true || manifest.draft !== false
+      || manifest.structurallyValid !== true || manifest.draft !== false || manifest.editorialComplete !== true
       || !Array.isArray(manifest.formats) || !manifest.formats.includes('html')
       || typeof digests?.html !== 'string' || !SHA.test(digests.html)) {
       return reject('Comic Studio: la edición todavía no tiene un recibo editorial válido.')
