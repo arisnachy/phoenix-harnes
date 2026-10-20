@@ -3,6 +3,7 @@ import type { CanvasAction } from './GenerativeCanvas.tsx'
 import css from './GeoMap.module.css'
 import { Geo3DView } from './Geo3DView.tsx'
 import { generateGeoPdf } from './GeoMapPdf.ts'
+import { fitGeoView, buildGeoLegend } from './GeoMapLayout.ts'
 
 type Position = readonly [number, number] // [longitude, latitude], GeoJSON order
 type Kind = 'points' | 'line' | 'polygon' | 'heat'
@@ -168,6 +169,7 @@ export function GeoMap({ spec, onAction, conversationId }: { spec: GeoMapSpec; o
   const [size, setSize] = useState({ w: 780, h: 430 })
   const [visible, setVisible] = useState<readonly string[]>(() => p.layers.map(l => l.id))
   const [show3D, setShow3D] = useState(false)
+  const [tileFailures, setTileFailures] = useState<readonly string[]>([])
   const [selected, setSelected] = useState<{ layer: GeoLayer; feature: GeoFeature } | null>(null)
   const frame = useRef<HTMLDivElement>(null)
   const drag = useRef<{ x: number; y: number; view: View } | null>(null)
@@ -244,18 +246,37 @@ export function GeoMap({ spec, onAction, conversationId }: { spec: GeoMapSpec; o
   }
   const metricValues = active.flatMap(l => l.features.flatMap(f => f.value === undefined ? [] : [f.value]))
   const total = metricValues.reduce((sum, v) => sum + v, 0)
+  const mean = metricValues.length ? total / metricValues.length : null
+  const legend = buildGeoLegend(active)
+  const number = (value: number): string => value.toLocaleString('es-DO', { maximumFractionDigits: 1 })
+  const empty = active.every(layer => layer.features.length === 0)
+  const offline = tiles.length > 0 && tileFailures.length >= Math.min(3, tiles.length)
+  const themeName = ({ business: 'Comercial', health: 'Salud', research: 'Investigación', logistics: 'Logística', neutral: 'Territorial' } as const)[p.theme ?? 'neutral']
   return (
     <section className={css.root} data-phoenix-geo-map={p.id} data-geo-conversation={effectiveConversationId} data-geo-theme={p.theme ?? 'neutral'}>
       <header className={css.header}>
         <div><span className={css.eyebrow}>PHOENIX GEO INTELLIGENCE</span><h3>{p.title}</h3>
           {p.subtitle && <p>{p.subtitle}</p>}</div>
-        <span className={css.theme}>{p.theme ?? 'mapa'}</span>
+        <span className={css.theme}>{themeName}</span>
       </header>
+      <div className={css.summary} aria-label="Indicadores del mapa">
+        <div className={css.summaryItem}><span className={css.summaryLabel}>Ubicaciones y áreas</span>
+          <strong className={css.summaryValue}>{number(active.reduce((n,l) => n + l.features.length, 0))}</strong></div>
+        <div className={css.summaryItem}><span className={css.summaryLabel}>Capas visibles</span>
+          <strong className={css.summaryValue}>{number(active.length)}</strong></div>
+        <div className={css.summaryItem}><span className={css.summaryLabel}>{p.metric ? 'Media · ' + p.metric : 'Valores numéricos'}</span>
+          <strong className={css.summaryValue}>{mean === null ? '—' : number(mean)}</strong></div>
+      </div>
       <div className={css.toolbar} aria-label="Controles cartográficos">
-        <button type="button" onClick={() => zoom(1)} aria-label="Acercar mapa">+</button>
-        <button type="button" onClick={() => zoom(-1)} aria-label="Alejar mapa">−</button>
-        <button type="button" onClick={() => setView({ ...p.center, zoom: p.zoom ?? 11 })}>Centrar</button>
-        <button type="button" onClick={() => save(fileName(p.title,'geojson'), JSON.stringify(toGeoJson(active), null, 2), 'application/geo+json')}>GeoJSON</button>
+        <div className={css.viewControls} role="group" aria-label="Navegación del mapa">
+          <button type="button" onClick={() => zoom(1)} aria-label="Acercar mapa">+</button>
+          <button type="button" onClick={() => zoom(-1)} aria-label="Alejar mapa">−</button>
+          <button type="button" onClick={() => setView(fitGeoView(active, size))} disabled={empty}>Ver todo</button>
+          <button type="button" onClick={() => setView({ ...p.center, zoom: p.zoom ?? 11 })}>Centrar</button>
+        </div>
+        <div className={css.exportControls} role="group" aria-label="Exportar datos e informes">
+        <span className={css.toolbarCaption}>Exportar</span>
+        <button type="button" disabled={empty} onClick={() => save(fileName(p.title,'geojson'), JSON.stringify(toGeoJson(active), null, 2), 'application/geo+json')}>GeoJSON</button>
         <button type="button" onClick={() => {
           const lines = [['capa','id','lugar','longitud','latitud','valor','detalle'].map(csvCell).join(',')]
           active.forEach(l => l.features.forEach(f => {
@@ -265,9 +286,9 @@ export function GeoMap({ spec, onAction, conversationId }: { spec: GeoMapSpec; o
             lines.push([l.name,f.id,f.label,String(coord[0]),String(coord[1]),String(f.value ?? ''),f.detail ?? ''].map(csvCell).join(','))
           }))
           save(fileName(p.title,'csv'), '\uFEFF' + lines.join('\r\n'), 'text/csv;charset=utf-8')
-        }}>CSV</button>
-        <button type="button" onClick={exportSvg} title="Geometrías vectoriales para informes, sin mapa base">SVG para informe</button>
-        <button type="button" title="Descargar mapa vectorial PDF con fuente y leyenda" onClick={() => {
+        }} disabled={empty}>CSV</button>
+        <button type="button" onClick={exportSvg} disabled={empty} title="Geometrías vectoriales para informes, sin mapa base">SVG</button>
+        <button type="button" disabled={empty} title="Descargar mapa vectorial PDF con fuente y leyenda" onClick={() => {
           if (active.every(layer => layer.features.length === 0)) return
           const url = URL.createObjectURL(generateGeoPdf(active,p.title,p.source,p.metric))
           const anchor = document.createElement('a')
@@ -275,8 +296,11 @@ export function GeoMap({ spec, onAction, conversationId }: { spec: GeoMapSpec; o
           anchor.download=fileName(p.title,'pdf')
           anchor.click()
           window.setTimeout(() => URL.revokeObjectURL(url),1000)
-        }}>PDF para informe</button>
-        <button type="button" onClick={() => setShow3D(v => !v)} aria-pressed={show3D}>{show3D ? "Mapa 2D" : "Mapa 3D"}</button>
+        }}>PDF · Informe</button>
+        </div>
+        <div className={css.modeControls} role="group" aria-label="Modo de visualización">
+          <button type="button" onClick={() => setShow3D(v => !v)} aria-pressed={show3D}>{show3D ? 'Volver a 2D' : 'Vista 3D'}</button>
+        </div>
       </div>
       {show3D && <Geo3DView layers={active} onSelect={select} />}
       <div className={css.map} ref={frame} style={show3D ? { display: "none" } : undefined} role="region" aria-label={'Mapa interactivo: ' + p.title}
@@ -294,8 +318,12 @@ export function GeoMap({ spec, onAction, conversationId }: { spec: GeoMapSpec; o
         }}
         onPointerUp={() => { drag.current = null }}
         onPointerCancel={() => { drag.current = null }}>
+        <div className={css.mapHud}><span className={css.mapHudDot} />
+          <span className={css.mapHudText}>{p.metric ?? 'Mapa temático'} · {view.zoom.toFixed(0)}×</span></div>
         {tiles.map(tile => <img key={tile.key} className={css.tile} src={tile.src} alt="" draggable={false}
-          loading="lazy" style={{ left: tile.x, top: tile.y }} />)}
+          loading="lazy" style={{ left: tile.x, top: tile.y }}
+          onError={() => setTileFailures(old => old.includes(tile.key) ? old : [...old, tile.key].slice(-64))} />)}
+        {offline && <div className={css.tileWarning} role="status">Mapa base no disponible. Las ubicaciones y capas vectoriales siguen visibles.</div>}
         <svg className={css.overlay} width={size.w} height={size.h} viewBox={'0 0 ' + size.w + ' ' + size.h} aria-hidden="true">
           {active.flatMap(layer => layer.features.map(f => {
             if (layer.kind === 'points' || layer.kind === 'heat') return null
@@ -315,12 +343,22 @@ export function GeoMap({ spec, onAction, conversationId }: { spec: GeoMapSpec; o
           return [<button key={layer.id + ':' + f.id} className={layer.kind === 'heat' ? css.heat : css.marker}
             style={{ left: pt[0], top: pt[1], backgroundColor: featureColor(f,layer.kind) }}
             type="button" title={f.label} aria-label={'Seleccionar ' + f.label}
+            aria-pressed={selected?.layer.id === layer.id && selected.feature.id === f.id}
             onClick={() => select(layer,f)} />]
         }))}
         <span className={css.attribution}>© OpenStreetMap contributors</span>
       </div>
+      <div className={css.legend} aria-label="Leyenda cartográfica">
+        <span className={css.legendTitle}>Leyenda</span>
+        {legend.map(entry => <span className={css.legendEntry} key={entry.key} title={entry.label}>
+          <span className={css.legendSwatch} style={{ backgroundColor: entry.color }} />
+          <span>{entry.label}</span>
+        </span>)}
+        {legend.length === 0 && <span className={css.legendMore}>Activa una capa para mostrar sus categorías</span>}
+      </div>
       <div className={css.bottom}>
         <div className={css.layers} aria-label="Capas del mapa">
+          <span className={css.layersTitle}>Capas</span>
           {p.layers.map(l => <label key={l.id}><input type="checkbox" checked={visible.includes(l.id)}
             onChange={e => setVisible(old => e.target.checked ? [...old, l.id] : old.filter(id => id !== l.id))} />
             <span>{l.name}</span><small>{l.features.length}</small></label>)}
@@ -335,7 +373,7 @@ export function GeoMap({ spec, onAction, conversationId }: { spec: GeoMapSpec; o
       </div>
       <footer className={css.footer}>
         <span>{active.reduce((n,l) => n + l.features.length, 0).toLocaleString('es-DO')} elementos
-          {metricValues.length ? ' · Σ ' + total.toLocaleString('es-DO') : ''}</span>
+          {metricValues.length ? ' · ' + metricValues.length + ' con datos numéricos' : ''} · WGS84</span>
         <span>Fuente: {p.source}{p.updatedAt ? ' · ' + p.updatedAt : ''}</span>
       </footer>
     </section>
