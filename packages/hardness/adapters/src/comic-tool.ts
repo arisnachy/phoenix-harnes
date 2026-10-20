@@ -11,7 +11,10 @@ const KEY = /^[a-z][a-z0-9-]{1,63}$/u
 const SHA = /^[a-f0-9]{64}$/u
 function reject(reason: string): never { throw new ToolArgsError([reason]) }
 
-/** Validate actual sequential illustration bytes; this cannot certify visual character likeness. */
+/** Validate genuine sequential raster panels, not perceptual identity or editorial quality.
+ * @param html - Self-contained rendered comic HTML.
+ * @returns Observed page and panel counts for a publishable static edition.
+ */
 export function validateComicHtml(html: string): { pages: number; panels: number } {
   if (typeof html !== 'string' || Buffer.byteLength(html) > MAX_BYTES
     || !/<!doctype html>/iu.test(html) || !/<html\b/iu.test(html) || !/<body\b/iu.test(html)) {
@@ -57,7 +60,11 @@ function readHtml(path: string): string {
   return readFileSync(path, 'utf8')
 }
 
-/** Read only current agent-owned HTML files, without symlink escapes. */
+/** Read only HTML inside the agent workspace, resolving symlinks before authorization.
+ * @param path - Workspace-relative or contained absolute HTML path.
+ * @param cwd - Owner agent's workspace directory.
+ * @returns UTF-8 source bytes of the admitted comic edition.
+ */
 export function readWorkspaceComicHtml(path: string, cwd: string): string {
   if (typeof path !== 'string' || !/\.html$/iu.test(path) || path.length > 4096
     || /[\u0000-\u001f]/u.test(path) || !cwd) return reject('Comic Studio: file_path inválido.')
@@ -72,7 +79,11 @@ export function readWorkspaceComicHtml(path: string, cwd: string): string {
   return readHtml(target)
 }
 
-/** Admit an immutable Comic Studio release only after checking its recorded SHA-256. */
+/** Reopen a non-draft Comic Studio release and verify its recorded SHA-256.
+ * @param seriesId - Durable series identifier.
+ * @param issueId - Durable issue identifier.
+ * @returns Unchanged HTML edition from persistent storage.
+ */
 export function readComicRelease(seriesId: string, issueId: string): string {
   if (!KEY.test(seriesId) || !KEY.test(issueId)) return reject('Comic Studio: identificadores inválidos.')
   const home = resolve(process.env.PHOENIX_COMICS_HOME
@@ -102,7 +113,9 @@ export function readComicRelease(seriesId: string, issueId: string): string {
   }
 }
 
-/** Model-facing publisher: an actual artifact receipt, not a guess that a browser displayed something. */
+/** Create the governed model-facing publisher for direct inline comic artifacts.
+ * @returns Phoenix Comic Studio tool definition with structural admission checks.
+ */
 export function createPhoenixComicTool(): ToolDefinition {
   return defineTool({
     name: 'phoenix_comic',
