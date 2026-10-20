@@ -2,7 +2,10 @@
 
 import type { Context } from '@phoenix-ai/cordis'
 import z from '@phoenix-ai/schemastery'
-import { PHOENIX_CODEX_AUTO_WORKER_MODEL } from '@phoenix-ai/dsh-agent'
+import {
+  PHOENIX_CODEX_AUTO_WORKER_MODEL, isKiraCodexAutoLead, latestModelSelectionPreference,
+} from '@phoenix-ai/dsh-agent'
+import type { EclipseRoutingSettings } from '@phoenix-ai/dsh-agent'
 import type { Agent, AgentOptions } from '@phoenix-ai/dsh-agent'
 import {
   selectTeamPersonaName,
@@ -35,6 +38,16 @@ export interface TeamModelProfile {
   readonly maxTokens?: number
   /** Optional provider reasoning tier for the teammate. */
   readonly reasoningEffort?: string
+}
+
+/** User-owned Eclipse routing overrides deployment profiles only when explicitly enabled. */
+export function resolveEclipseTeammateProfile(
+  settings: EclipseRoutingSettings | undefined,
+  memberName: string,
+  fallback: TeamModelProfile | undefined,
+): TeamModelProfile | undefined {
+  if (settings?.mode === undefined || settings.mode === 'automatic') return fallback
+  return settings.specialists?.[memberName] ?? settings.subagent ?? fallback
 }
 
 /** Tool routing configuration. */
@@ -417,6 +430,22 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
             )
           }
         }
+        const preference = latestModelSelectionPreference(agent.session)?.selection
+        const eclipseEnabled = isKiraCodexAutoLead(preference, agent)
+        const settingsAuthority = ctx.get('agentDefaultModel') as {
+          currentEclipseProfile?: () => EclipseRoutingSettings | undefined
+        } | undefined
+        const eclipse = eclipseEnabled ? settingsAuthority?.currentEclipseProfile?.() : undefined
+        const occupiedNames = ctx.agentTeams.listMembers(agent)
+          .filter(member => member.role === 'teammate')
+          .map(member => member.name)
+        const memberName = args.name ?? selectTeamPersonaName(args.description, occupiedNames)
+        if (eclipse?.maxTeammates !== undefined && occupiedNames.length >= eclipse.maxTeammates) {
+          throw new TeamError(
+            'Eclipse reached the configured concurrent specialist limit.',
+            'TEAM_MEMBER_LIMIT',
+          )
+        }
         const context = args.context ?? 'fresh'
         // Agent.options is the creation-time route and may be stale after the
         // user changes the live model selector. The latest request/header is
@@ -430,9 +459,18 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
         // regardless of an obsolete model_profile sent by the Lead. The Lead
         // keeps the explicitly selected orchestrator model; only Eclipse
         // rotates Sol -> Luna internally. Other providers inherit exactly.
-        const profile: TeamModelProfile | undefined = activeProvider === 'openai-codex'
+        const codexDefault: TeamModelProfile | undefined = activeProvider === 'openai-codex'
           ? { provider: 'openai-codex', model: PHOENIX_CODEX_AUTO_WORKER_MODEL, reasoningEffort: 'max' }
           : undefined
+        const namedProfile = args.model_profile === undefined
+          ? undefined : config.modelProfiles[args.model_profile]
+        const profile = eclipseEnabled
+          ? resolveEclipseTeammateProfile(
+            eclipse,
+            memberName,
+            namedProfile ?? config.modelProfiles[config.defaultModelProfile] ?? codexDefault,
+          )
+          : codexDefault
         const agentOptions: AgentOptions | undefined = profile !== undefined
           ? {
             provider: profile.provider,
@@ -450,10 +488,6 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
               ...activeMaxTokens === undefined ? {} : { maxTokens: activeMaxTokens },
               ...activeReasoningEffort === undefined ? {} : { reasoningEffort: activeReasoningEffort },
             }
-        const occupiedNames = ctx.agentTeams.listMembers(agent)
-          .filter(member => member.role === 'teammate')
-          .map(member => member.name)
-        const memberName = args.name ?? selectTeamPersonaName(args.description, occupiedNames)
         return await ctx.agentTeams.spawnTeammate(agent, {
           name: memberName,
           description: args.description,
