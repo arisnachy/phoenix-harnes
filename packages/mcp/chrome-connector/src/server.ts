@@ -551,6 +551,24 @@ server.registerTool('youtube_search', {
   }
 })
 
+// Read-only credential check exposed to the agent. Never returns account,
+// password, DPAPI records, browser cookies or authentication tokens.
+server.registerTool('secure_login_status', {
+  description: 'Consulta si la bóveda de Phoenix reconoce un acceso guardado para la página ACTUAL o su módulo relacionado. Úsala antes de afirmar que no hay credenciales, especialmente si el usuario acaba de guardarlas. saved=false solo significa que no hay una credencial para el origen exacto; relatedSaved=true significa que hay una en un dominio relacionado. known=false significa consulta fallida, NO credenciales ausentes. Nunca solicites contraseñas por chat; el usuario usa Acceso seguro.',
+  inputSchema: { tabId: z.string().optional(), sessionId: z.string().optional() },
+}, async ({ tabId, sessionId }) => {
+  const tab = await selectedTab(tabId, sessionId)
+  const state = await inspectVaultPresence(tab.url)
+  let origin: string | undefined
+  try { origin = new URL(tab.url).origin } catch { /* about:blank */ }
+  return { content: [{ type: 'text', text: JSON.stringify({
+    tabId: tab.id, origin: origin ?? null, credentialState: state,
+    conclusion: browserVaultHint(state),
+    verifiedSession: 'unknown',
+    note: 'Guardar una contraseña NO demuestra que el sitio ya haya autenticado la sesión.',
+  }) }] }
+})
+
 server.registerTool('read_page', {
   description: 'Lee título, URL, texto visible y disponibilidad de accesos cifrados del dominio y módulo relacionado. Si credentialState.relatedSaved=true, NO afirmes que faltan credenciales: abre Acceso seguro para solicitar reutilización; nunca pidas la contraseña en el chat. No accede a cookies ni almacenamiento.',
   inputSchema: { tabId: z.string().optional(), sessionId: z.string().optional(), maxChars: z.number().int().min(1).max(100000).default(30000) },

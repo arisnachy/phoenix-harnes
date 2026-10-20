@@ -240,6 +240,25 @@ describe('origin-scoped secure login', () => {
     expect(body).not.toContain('SECRET_MUST_NOT_APPEAR')
   })
 
+  it('does not interpret a legacy Vault outage as missing credentials', async () => {
+    let handler: ((req: unknown, res: unknown) => Promise<void>) | undefined
+    registerSecureLogin({ webServer: { register: (route: { handler: typeof handler }) => {
+      handler = route.handler
+      return () => {}
+    } } } as never, { resolve: async () => { throw new Error('offline') } } as never)
+    let code = 0
+    let body = ''
+    await handler?.({
+      method: 'GET',
+      url: '/phoenix-secure-login/status?origin=https%3A%2F%2Fexample.org',
+      socket: { remoteAddress: '127.0.0.1' },
+      headers: { host: '127.0.0.1:3080', 'x-phoenix-secure-login': '1' },
+    }, { writeHead(status: number) { code = status }, end(value: string) { body = value } })
+    expect(code).toBe(400)
+    expect(body).not.toContain('"saved":false')
+    expect(body).not.toContain('offline')
+  })
+
   it('rejects non-loopback requests before even accessing the vault', async () => {
     let handler: ((req: unknown, res: unknown) => Promise<void>) | undefined
     const webServer = {

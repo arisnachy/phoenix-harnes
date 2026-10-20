@@ -47,8 +47,11 @@ export function loginOrigin(raw: string): string {
  * across origins automatically. The user must approve an explicit copy.
  */
 export function relatedCredentialOrigin(origin: string): string | undefined {
-  return origin === 'https://www.juancitosport.com.do'
-    ? 'https://deportes.juancitosport.com.do' : undefined
+  // Explicitly known portal/module pair. Presence may be disclosed in either
+  // direction, but the actual secret NEVER moves without user approval.
+  if (origin === 'https://www.juancitosport.com.do') return 'https://deportes.juancitosport.com.do'
+  if (origin === 'https://deportes.juancitosport.com.do') return 'https://www.juancitosport.com.do'
+  return undefined
 }
 function filename(origin: string, profile: LoginProfile = 'personal'): string {
   const suffix = profile === 'kira' ? '.kira.dpapi.json' : '.dpapi.json'
@@ -134,14 +137,20 @@ async function legacyLogin(vault: CredentialProvider | undefined, origin: string
       login: { origin, account: account.value, secret: secret.value },
       automatic: permission?.value === 'true' || permission?.value === '1',
     }
-  } catch { return undefined }
+  } catch {
+    // A provider outage does NOT mean that the user lacks stored credentials.
+    throw new Error('Bóveda heredada temporalmente no disponible')
+  }
 }
 
 async function load(origin: string, profile: LoginProfile = 'personal'): Promise<LoginRecord | undefined> {
   try {
     const row = JSON.parse(await readFile(filename(origin, profile), 'utf8')) as LoginRecord
-    return row.version === 1 && row.origin === origin && typeof row.sealed === 'string'
-      && typeof row.automatic === 'boolean' ? row : undefined
+    if (row.version !== 1 || row.origin !== origin || typeof row.sealed !== 'string'
+      || !row.sealed || typeof row.automatic !== 'boolean') {
+      throw new Error('Registro de acceso dañado')
+    }
+    return row
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined
     // An unreadable or damaged record is not an absent credential.
@@ -649,10 +658,18 @@ export function registerSecureLogin(ctx: Context, vault?: CredentialProvider): (
           const extras = rawExtras as Record<string, string> | undefined
           const profile = payload.profile === undefined ? 'personal' : loginProfile(payload.profile)
           await store(origin, account, secret, payload.automatic === true, extras, profile)
-          if (profile === 'personal') await setPrimary(origin, 'personal')
+          // Enrollment explicitly selected an identity; subsequent checks must
+          // refer to that identity, including the named Kira profile.
+          await setPrimary(origin, profile)
           const profiles = await listProfiles(origin, vault)
           const selected = await activeProfile(origin, profiles)
-          respond(res, 200, { saved: true, automatic: payload.automatic === true, profile: selected,
+          // Do not tell the interface "saved" until read-back proves that
+          // the selected identity and persisted flags match this enrollment.
+          const persisted = profiles.find(item => item.id === profile)
+          if (selected !== profile || !persisted?.saved || persisted.automatic !== (payload.automatic === true)) {
+            throw new Error('La verificación posterior al guardado no coincidió')
+          }
+          respond(res, 200, { saved: true, automatic: persisted.automatic, profile: selected,
             profiles })
           return
         }
