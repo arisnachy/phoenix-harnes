@@ -9,10 +9,14 @@ import { createPhoenixComicTool, PHOENIX_COMIC_MIME, readComicRelease, readWorks
 
 const art = 'iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAIAAABMXPacAAABMElEQVR4nO3RMQ0AIADAMMAZPvCDbWT0YFWwZPPsO+IsHfC7BmANwBqANQBrANYArAFYA7AGYA3AGoA1AGsA1gCsAVgDsAZgDcAagDUAawDWAKwBWAOwBmANwBqANQBrANYArAFYA7AGYA3AGoA1AGsA1gCsAVgDsAZgDcAagDUAawDWAKwBWAOwBmANwBqANQBrANYArAFYA7AGYA3AGoA1AGsA1gCsAVgDsAZgDcAagDUAawDWAKwBWAOwBmANwBqANQBrANYArAFYA7AGYA3AGoA1AGsA1gCsAVgDsAZgDcAagDUAawDWAKwBWAOwBmANwBqANQBrANYA7AGikQIkd+ic2QAAAABJRU5ErkJggg=='
 const html = '<!doctype html><html lang="es"><head><title>Una aventura</title></head><body>'
+  + '<main class="edition"><section class="comic-cover-page cover-front" data-comic-cover="front">'
+  + '<img alt="Portada" src="data:image/png;base64,' + art + '"></section>'
   + '<main class="edition"><section class="comic-page" aria-label="Página 1">'
   + '<article class="panel" role="group"><img class="art" alt="Luna señala la ciudad" src="data:image/png;base64,'
   + art + '"><div class="dialogues"><div class="bubble">¡Vamos!</div></div></article>'
-  + '<div class="page-number">1</div></section></main></body></html>'
+  + '<div class="page-number">1</div></section>'
+  + '<section class="comic-cover-page cover-back" data-comic-cover="back">'
+  + '<img alt="Contraportada" src="data:image/png;base64,' + art + '"></section></main></body></html>'
 function execContext(cwd?: string): ToolRunContext {
   const callId = CallId('comic-1')
   return {
@@ -32,21 +36,22 @@ describe('Phoenix Comic Studio: actual in-chat publication', () => {
       artifactId: string; title: string; pages: number; panels: number; html: string
     }
     expect(receipt).toEqual({
-      artifactId: 'phoenix-comic:comic-1', title: 'Una aventura', pages: 1, panels: 1, html,
+      artifactId: 'phoenix-comic:comic-1', title: 'Una aventura', pages: 3, panels: 1, html,
     })
     expect(tool.output.presentationMeta?.({ title: receipt.title, html }, receipt as never)).toEqual({
       artifact: { id: receipt.artifactId, title: receipt.title, mime: PHOENIX_COMIC_MIME,
         data: html, executable: false },
     })
-    expect(validateComicHtml(html)).toEqual({ pages: 1, panels: 1 })
+    expect(validateComicHtml(html)).toEqual({ pages: 3, panels: 1 })
+    expect(() => validateComicHtml(html.replace(/<section class="comic-cover-page cover-back"[\\s\\S]*?<\\/section>/u, ''))).toThrow(/contraportada|portada/);
   })
 
   it('rejects recursive localhost browsing, empty comics, script injection and dummy pictures', async () => {
     expect(() => validateComicHtml(html.replace('Una aventura', 'http://127.0.0.1:3080/'))).toThrow(/navegación/)
     expect(() => validateComicHtml(html.replace('</body>', '<iframe src="http://localhost:3080/"></iframe></body>'))).toThrow(/navegación/)
     expect(() => validateComicHtml(html.replace('</body>', '<script>alert(1)</script></body>'))).toThrow(/navegación/)
-    expect(() => validateComicHtml(html.replace('data:image/png;base64,' + art, 'imagen-pendiente.png'))).toThrow(/ilustración/)
-    expect(() => validateComicHtml(html.replace('data:image/png;base64,' + art, 'data:image/png;base64,iVBORw0KGgo='))).toThrow(/ilustración/)
+    expect(() => validateComicHtml(html.replaceAll('data:image/png;base64,' + art, 'imagen-pendiente.png'))).toThrow(/ilustración|cubierta|portada/)
+    expect(() => validateComicHtml(html.replaceAll('data:image/png;base64,' + art, 'data:image/png;base64,iVBORw0KGgo='))).toThrow(/ilustración|cubierta|portada/)
     const tool = createPhoenixComicTool()
     await expect(tool.execute({ title: 'Sin cómic', html: '<h1>Ya está publicado</h1>' }, execContext())).rejects.toThrow(/HTML/)
     await expect(tool.execute({ title: 'Ambiguo', html, file_path: 'otro.html' }, execContext())).rejects.toThrow(/uno solamente/)
@@ -83,7 +88,7 @@ describe('Phoenix Comic Studio: actual in-chat publication', () => {
       writeFileSync(htmlPath, html)
       const receipt = {
         schemaVersion: 1, seriesId: 'guardianes', issueId: 'numero-uno',
-        formats: ['html'], draft: false, structurallyValid: true,
+        formats: ['html'], draft: false, structurallyValid: true, editorialComplete: true,
         sha256: { html: createHash('sha256').update(html).digest('hex') },
       }
       writeFileSync(receiptPath, JSON.stringify(receipt))
@@ -91,7 +96,7 @@ describe('Phoenix Comic Studio: actual in-chat publication', () => {
       const published = await createPhoenixComicTool().execute({
         title: 'Guardianes #1', series_id: 'guardianes', issue_id: 'numero-uno',
       }, execContext()) as { pages: number; panels: number }
-      expect(published).toMatchObject({ pages: 1, panels: 1 })
+      expect(published).toMatchObject({ pages: 3, panels: 1 })
       writeFileSync(htmlPath, html + 'alterado')
       expect(() => readComicRelease('guardianes', 'numero-uno')).toThrow(/modificado/)
       writeFileSync(htmlPath, html)
