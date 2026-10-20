@@ -1,0 +1,35 @@
+name: PHOENIX Scene Map Publication
+on:
+  push:
+    branches: [main, stable]
+    paths:
+      - 'packages/hardness/adapters/src/scene-map-tool.ts'
+      - 'packages/hardness/adapters/tests/scene-map-tool.spec.ts'
+      - 'packages/hardness/adapters/src/index.ts'
+      - 'packages/client/ui-conversation/src/client/chat/HardnessArtifactBody.tsx'
+      - '.github/workflows/phoenix-scene-map-publication.yml'
+  pull_request:
+    paths:
+      - 'packages/hardness/adapters/src/scene-map-tool.ts'
+      - 'packages/hardness/adapters/tests/scene-map-tool.spec.ts'
+      - 'packages/hardness/adapters/src/index.ts'
+      - 'packages/client/ui-conversation/src/client/chat/HardnessArtifactBody.tsx'
+      - '.github/workflows/phoenix-scene-map-publication.yml'
+jobs:
+  publication:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Tool emits validated, replayable artifact metadata
+        run: pnpm exec vitest run packages/hardness/adapters/tests/scene-map-tool.spec.ts packages/hardness/adapters/tests/visualize-tool.spec.ts
+      - name: Chat parser mounts real native atlas
+        run: pnpm exec vitest run packages/client/ui-conversation/tests/scene-map.client.spec.tsx
+      - name: Typecheck published backend and frontend
+        run: pnpm run build:lib:host && pnpm run build:lib:client
