@@ -505,6 +505,27 @@ function renderBlock(block: JsonRecord, index: number, expanded: boolean): React
   return <pre className={styles.code} key={index}>{JSON.stringify(block, null, 2)}</pre>
 }
 
+function ComicStudioPreview({ html, title }: { readonly html: string; readonly title: string }) {
+  // Comic Studio's print-sized pages remain immutable; scale only the sandboxed chat view.
+  const documentHtml = useMemo(() => html.replace(/<\/head>/iu,
+    '<style data-phoenix-comic-responsive="true">@media screen{'
+    + 'html,body{background:#181b24!important}.edition{box-sizing:border-box;width:100%;padding:8px;gap:16px}'
+    + '.comic-page{box-sizing:border-box;width:min(100%,1200px);height:auto;aspect-ratio:2/3;'
+    + 'padding:clamp(8px,2.67vw,32px) clamp(8px,2.67vw,32px) clamp(18px,4vw,48px);'
+    + 'gap:clamp(4px,1vw,13px)}.strip{gap:clamp(4px,1vw,13px)}'
+    + '.panel{border-width:clamp(2px,.5vw,6px)}.dialogues{inset:clamp(4px,1vw,13px);'
+    + 'gap:clamp(2px,.6vw,8px)}.bubble{font-size:clamp(8px,1.6vw,19px);'
+    + 'padding:clamp(3px,.7vw,9px) clamp(4px,1vw,14px);border-width:1px}'
+    + '.bubble b{font-size:clamp(7px,1.1vw,13px)}.page-number{font-size:10px}'
+    + '}</style></head>'), [html])
+  return (
+    <section data-phoenix-comic-studio="true" aria-label={'Comic Studio: ' + title}>
+      <p className={styles.note}>Comic Studio · Páginas ilustradas · Vista editorial sin navegador</p>
+      <MiniApp html={documentHtml} title={title} executable={false} minimumHeight={440} />
+    </section>
+  )
+}
+
 function GameIcon({ kind }: { readonly kind: 'add' | 'library' | 'window' }) {
   return (
     <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor"
@@ -720,6 +741,9 @@ function RecordPreview({ record, mime, expanded, title, renderMessageImages }: {
 
 export function HardnessArtifactBody({ mime, data, expanded, title, executable = true, renderMessageImages }: ArtifactBodyProps) {
   if (mime === 'application/vnd.phoenix.game+godot-web') return <GodotWebGamePreview payload={data} title={title} />
+  if (mime === 'application/vnd.phoenix.comic+html') return typeof data === 'string'
+    ? <ComicStudioPreview html={data} title={title} />
+    : <p className={styles.gameError} role="alert">Comic Studio: artefacto inválido.</p>
   if (typeof data === 'string') {
     if (mime === 'application/vnd.phoenix.web-preview+json' || mime === 'application/vnd.hardness.web-preview+json') {
       const url = safeWebPreviewUrl(data)
