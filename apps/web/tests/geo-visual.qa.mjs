@@ -46,7 +46,7 @@ try {
     await page.getByRole('button',{name:'Volver a 2D'}).click()
     if(name==='desktop'){
       await page.getByRole('button',{name:'Seleccionar Centro'}).click()
-      if(!(await page.getByText('Ventas mensuales (RD$): 120.000').isVisible()))throw Error('Lost map selection')
+      if(!(await page.getByText('Ventas mensuales (RD$): ' + (120000).toLocaleString('es-DO')).isVisible()))throw Error('Lost map selection')
       const promise=page.waitForEvent('download',{timeout:15000})
       await page.getByRole('button',{name:'PDF · Informe'}).click()
       const download=await promise

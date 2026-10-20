@@ -47,7 +47,7 @@ describe('Phoenix Geo — calidad de presentación y adaptación',()=>{
    expect(screen.getByRole('button',{name:'Ver todo'})).not.toBeNull()
    expect(screen.getByRole('button',{name:'PDF · Informe'})).not.toBeNull()
    expect(screen.getByRole('button',{name:'Vista 3D'})).not.toBeNull()
-   expect(screen.getByText('65.000')).not.toBeNull()
+   expect(screen.getByText((65000).toLocaleString('es-DO'))).not.toBeNull()
    fireEvent.click(screen.getByRole('button',{name:'Vista 3D'}))
    expect(screen.getByLabelText('Mapa 3D geográfico de geometrías verificadas y extrusión temática')).not.toBeNull()
    expect(screen.getByRole('button',{name:'Volver a 2D'})).not.toBeNull()
@@ -55,7 +55,7 @@ describe('Phoenix Geo — calidad de presentación y adaptación',()=>{
  it('mantiene selección accesible y no pierde la capa al filtrar',()=>{
    render(<GeoMap spec={example()} />)
    fireEvent.click(screen.getByRole('button',{name:'Seleccionar Centro'}))
-   expect(screen.getByText('Ventas (RD$): 120.000')).not.toBeNull()
+   expect(screen.getByText('Ventas (RD$): ' + (120000).toLocaleString('es-DO'))).not.toBeNull()
    fireEvent.click(screen.getByRole('checkbox'))
    expect(screen.getByText('Activa una capa para mostrar sus categorías')).not.toBeNull()
    expect(screen.getByRole('button',{name:'PDF · Informe'}).hasAttribute('disabled')).toBe(true)
