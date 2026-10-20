@@ -6,6 +6,7 @@ import styles from './HardnessArtifactNodeView.module.css'
 import { PhoenixVisualizer, supportsPhoenixVisual } from './PhoenixVisualizer.tsx'
 import { Scene3DView } from './Scene3DView.tsx'
 import { GeoMap, parseGeoMapSpec } from './GeoMap.tsx'
+import { SceneMap, parseSceneMapSpec } from './SceneMap.tsx'
 import { auditGameHtml, readGameManifest } from './game-studio-quality.ts'
 import { hasExternalImageReferences, inlineBundledImages } from './html-preview-assets.ts'
 import {
@@ -723,6 +724,12 @@ function RecordPreview({ record, mime, expanded, title, renderMessageImages }: {
     )
   }
   if (mime === 'application/vnd.phoenix.scene3d+json') return <Scene3DView spec={record} expanded={expanded} />
+  if (mime === 'application/vnd.phoenix.scene-map+json' || record.component === 'scene_map') {
+    const map = parseSceneMapSpec(record)
+    return map === null
+      ? <p className={styles.note} role="alert">El mapa narrativo no se pudo renderizar: datos inválidos.</p>
+      : <SceneMap spec={map} />
+  }
   if (mime === 'application/vnd.phoenix.geo+json' || record.component === 'geo_map') {
     const geo = parseGeoMapSpec(record)
     return geo === null
