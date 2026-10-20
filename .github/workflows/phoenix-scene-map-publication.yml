@@ -7,6 +7,7 @@ on:
       - 'packages/hardness/adapters/tests/scene-map-tool.spec.ts'
       - 'packages/hardness/adapters/src/index.ts'
       - 'packages/client/ui-conversation/src/client/chat/HardnessArtifactBody.tsx'
+      - 'packages/client/ui-conversation/tests/hardness-artifact-renderer.client.spec.tsx'
       - '.github/workflows/phoenix-scene-map-publication.yml'
   pull_request:
     paths:
@@ -14,6 +15,7 @@ on:
       - 'packages/hardness/adapters/tests/scene-map-tool.spec.ts'
       - 'packages/hardness/adapters/src/index.ts'
       - 'packages/client/ui-conversation/src/client/chat/HardnessArtifactBody.tsx'
+      - 'packages/client/ui-conversation/tests/hardness-artifact-renderer.client.spec.tsx'
       - '.github/workflows/phoenix-scene-map-publication.yml'
 jobs:
   publication:
@@ -30,6 +32,6 @@ jobs:
       - name: Tool emits validated, replayable artifact metadata
         run: pnpm exec vitest run packages/hardness/adapters/tests/scene-map-tool.spec.ts packages/hardness/adapters/tests/visualize-tool.spec.ts
       - name: Chat parser mounts real native atlas
-        run: pnpm exec vitest run packages/client/ui-conversation/tests/scene-map.client.spec.tsx
+        run: pnpm exec vitest run packages/client/ui-conversation/tests/scene-map.client.spec.tsx packages/client/ui-conversation/tests/hardness-artifact-renderer.client.spec.tsx
       - name: Typecheck published backend and frontend
         run: pnpm run build:lib:host && pnpm run build:lib:client
