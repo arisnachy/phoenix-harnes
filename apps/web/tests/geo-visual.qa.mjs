@@ -53,7 +53,7 @@ try {
       const filename=output+'/export-check.pdf'
       await download.saveAs(filename)
       const buffer=await readFile(filename)
-      if(!buffer.subarray(0,8).toString().startsWith('%PDF-1.4')||buffer.length<1200)
+      if(!buffer.subarray(0,8).toString().startsWith('%PDF-1.4') || !buffer.toString('latin1').includes('/Count 2') || buffer.length<1600)
         throw Error('PDF export invalid')
       const meta=await stat(filename)
       process.stdout.write('PDF checked: '+meta.size+' bytes\n')
