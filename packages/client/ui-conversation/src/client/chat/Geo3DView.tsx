@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useId, useMemo, useRef, useState } from 'react'
 import type { GeoLayer, GeoFeature } from './GeoMap.tsx'
 import css from './Geo3DView.module.css'
 
@@ -15,6 +15,7 @@ export function Geo3DView({ layers, onSelect }: Props) {
   const [yaw, setYaw] = useState(40)
   const [pitch, setPitch] = useState(52)
   const [scale, setScale] = useState(1)
+  const gradientId = useId().replaceAll(':', '-')
   const drag = useRef<{ x: number; y: number; yaw: number; pitch: number } | null>(null)
   const geometry = useMemo(() => {
     const features = layers.flatMap(layer => layer.features.map(feature => ({ layer, feature })))
@@ -28,7 +29,7 @@ export function Geo3DView({ layers, onSelect }: Props) {
     const maxValue = Math.max(1, ...features.map(x => Math.max(0, x.feature.value ?? 0)))
     return { features, minX, maxX, minY, maxY, normLng, normLat, midLat, maxValue }
   }, [layers])
-  if (geometry === null) return <p>Esta escena aún no tiene coordenadas verificadas.</p>
+  if (geometry === null) return <div className={css.root}><p className={css.empty}>Activa una capa con ubicaciones para visualizarla en 3D.</p></div>
   const angle = yaw * Math.PI / 180, tilt = pitch * Math.PI / 180
   const co = Math.cos(angle), si = Math.sin(angle), ct = Math.cos(tilt), st = Math.sin(tilt)
   const flat = ([lon, lat]: Point): Point => [
@@ -41,7 +42,7 @@ export function Geo3DView({ layers, onSelect }: Props) {
     const xx = x * co - y * si
     const depth = x * si + y * co
     const distance = Math.max(3.3, 5.5 - depth * ct - z * st)
-    const perspective = 235 * scale / distance
+    const perspective = 995 * scale / distance
     return [500 + perspective * xx, 270 + perspective * (depth * st - z * ct)]
   }
   const ground: readonly Point[] = [[geometry.minX,geometry.minY], [geometry.maxX,geometry.minY],
@@ -64,11 +65,11 @@ export function Geo3DView({ layers, onSelect }: Props) {
         }}
         onPointerUp={() => { drag.current = null }}
         onPointerCancel={() => { drag.current = null }}>
-        <defs><linearGradient id="phoenix-geo-3d-floor" x2="0" y2="1">
+        <defs><linearGradient id={gradientId} x2="0" y2="1">
           <stop offset="0" stopColor="#faf8f5"/><stop offset="1" stopColor="#e6e6e2"/>
         </linearGradient></defs>
         <rect width="1000" height="500" fill="#f2f5f5"/>
-        <polygon points={points} fill="url(#phoenix-geo-3d-floor)" stroke="#b9c5c2" strokeWidth="3"/>
+        <polygon points={points} fill={'url(#' + gradientId + ')'} stroke="#b9c5c2" strokeWidth="3"/>
         {[.25,.5,.75].flatMap(q => {
           const y = geometry.minY+(geometry.maxY-geometry.minY)*q
           const x = geometry.minX+(geometry.maxX-geometry.minX)*q
@@ -81,7 +82,16 @@ export function Geo3DView({ layers, onSelect }: Props) {
               stroke="#bdcac7" strokeDasharray="4 6"/>,
           ]
         })}
-        {geometry.features.map(({layer,feature}) => {
+        {geometry.features.slice().sort((a,b) => {
+          const depth = (item: typeof a): number => {
+            const point = item.feature.coordinates[0]
+            if (!point) return 0
+            const xy = flat(point)
+            return xy[0] * si + xy[1] * co
+          }
+          const rank = (kind:string):number => kind==='polygon'?0:kind==='line'?1:2
+          return rank(a.layer.kind)-rank(b.layer.kind) || depth(b)-depth(a)
+        }).map(({layer,feature}) => {
           const first = feature.coordinates[0]
           if (!first) return null
           const value = Math.max(0,feature.value ?? 0)
@@ -91,14 +101,16 @@ export function Geo3DView({ layers, onSelect }: Props) {
           const c=feature.color??'#ce692c'
           const key=layer.id+':'+feature.id
           if (layer.kind === 'polygon') return (
-            <g key={key} className={css.shape} onClick={() => onSelect?.(layer,feature)}>
+            <g key={key} className={css.shape} role="button" tabIndex={0} aria-label={'Seleccionar ' + feature.label}
+              onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onSelect?.(layer,feature) } }}
+              onClick={() => onSelect?.(layer,feature)}>
               {base.map((p,i) => {
                 const next=base[(i+1)%base.length],t=top[i],u=top[(i+1)%top.length]
                 if(!next||!t||!u)return null
                 return <polygon key={i} points={[p,next,u,t].map(pt=>pt.join(',')).join(' ')}
-                  fill={c} opacity=".55" stroke="#ffffff" strokeWidth=".9"/>
+                  fill={c} opacity=".24" stroke="#ffffff" strokeWidth=".9"/>
               })}
-              <polygon points={top.map(p=>p.join(',')).join(' ')} fill={c} opacity=".9" stroke="#fff" strokeWidth="2"/>
+              <polygon points={top.map(p=>p.join(',')).join(' ')} fill={c} opacity=".40" stroke="#fff" strokeWidth="2"/>
               <title>{feature.label}: {feature.value ?? 'sin métrica'}</title>
             </g>
           )
@@ -107,7 +119,9 @@ export function Geo3DView({ layers, onSelect }: Props) {
               stroke={c} strokeWidth="5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
           }
           const lower=render3D(first,0),upper=render3D(first,height)
-          return <g key={key} className={css.shape} onClick={() => onSelect?.(layer,feature)}>
+          return <g key={key} className={css.shape} role="button" tabIndex={0} aria-label={'Seleccionar '+feature.label}
+            onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onSelect?.(layer,feature) } }}
+            onClick={() => onSelect?.(layer,feature)}>
             <line x1={lower[0]} y1={lower[1]} x2={upper[0]} y2={upper[1]} stroke={c} strokeWidth="9" opacity=".75"/>
             <circle cx={upper[0]} cy={upper[1]} r="9" stroke="white" strokeWidth="2" fill={c}/>
             <title>{feature.label}: {feature.value ?? 'sin métrica'}</title>
