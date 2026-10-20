@@ -4,12 +4,15 @@ on:
     branches: [main, stable]
     paths:
       - 'scripts/phoenix-comic-studio*.mjs'
+      - 'scripts/comic-page-layout*.mjs'
       - 'packages/hardness/adapters/src/comic-tool.ts'
+      - 'packages/client/ui-conversation/src/client/chat/HardnessArtifactBody.tsx'
       - 'packages/hardness/adapters/tests/comic-tool.spec.ts'
       - '.github/workflows/comic-studio.yml'
   pull_request:
     paths:
       - 'scripts/phoenix-comic-studio*.mjs'
+      - 'scripts/comic-page-layout*.mjs'
       - '.github/workflows/comic-studio.yml'
 jobs:
   test-comic:
@@ -19,7 +22,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: node --test scripts/phoenix-comic-studio.test.mjs
+      - run: node --test scripts/phoenix-comic-studio.test.mjs scripts/comic-page-layout.test.mjs
       - uses: pnpm/action-setup@v4
         with:
           version: '11.7.0'
