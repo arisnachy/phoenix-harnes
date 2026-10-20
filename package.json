@@ -18,7 +18,8 @@
   ],
   "scripts": {
     "geo": "node scripts/phoenix-geo.mjs",
-    "test:geo": "node --test scripts/phoenix-geo.test.mjs",
+    "geo:operations": "node scripts/phoenix-geo-operations.mjs",
+    "test:geo": "node --test scripts/phoenix-geo*.test.mjs",
     "business": "node scripts/phoenix-business.mjs",
     "test:business": "node --test scripts/phoenix-business.test.mjs scripts/phoenix-book-quality.test.mjs scripts/phoenix-book-continuity.test.mjs scripts/phoenix-business-commerce.test.mjs scripts/phoenix-business-factory.test.mjs scripts/phoenix-business-mission.test.mjs scripts/phoenix-business-shopify.test.mjs && node --experimental-strip-types --test packages/core/tool-business/tests/mission.test.mjs",
     "business:factory": "node scripts/phoenix-business-factory.mjs",
