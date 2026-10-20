@@ -114,7 +114,7 @@ function drawMap(layers:readonly GeoLayer[]):string{
   page+=label('N',area.x+area.w-20,area.y+area.h-24,12,true,'#415862')
   return page
 }
-function firstPage(layers:readonly GeoLayer[],title:string,source:string,metric?:string):string{
+function firstPage(layers:readonly GeoLayer[],title:string):string{
   let p=pageBase('ESTUDIO CARTOGRAFICO',1)
   const titleRows=lines(title,52,2)
   titleRows.forEach((t,i)=>{p+=label(t,52,708-i*23,18,true)})
@@ -219,6 +219,6 @@ function encode(pages:readonly string[]):Uint8Array<ArrayBuffer>{
 }
 export function generateGeoPdf(layers:readonly GeoLayer[],title:string,source:string,metric?:string):Blob{
   if(!layers.some(l=>l.features.length))throw Error('No hay geometrías para exportar')
-  return new Blob([encode([firstPage(layers,title,source,metric),
+  return new Blob([encode([firstPage(layers,title),
     secondPage(layers,title,source,metric)])],{type:'application/pdf'})
 }
