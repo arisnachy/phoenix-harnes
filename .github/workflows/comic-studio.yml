@@ -1,0 +1,20 @@
+name: Comic Studio
+on:
+  push:
+    branches: [main, stable]
+    paths:
+      - 'scripts/phoenix-comic-studio*.mjs'
+      - '.github/workflows/comic-studio.yml'
+  pull_request:
+    paths:
+      - 'scripts/phoenix-comic-studio*.mjs'
+      - '.github/workflows/comic-studio.yml'
+jobs:
+  test-comic:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test scripts/phoenix-comic-studio.test.mjs
