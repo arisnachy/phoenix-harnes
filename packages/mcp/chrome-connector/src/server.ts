@@ -25,6 +25,7 @@ import { formLayoutKey, prepareLearnedFormWorkflow, recallVerifiedFormLayout, sa
 import { chooseYoutubeCaptions, youtubeCaptionUrl, youtubeTranscript, youtubeWatchUrl, type YoutubeCaptionTrack } from './youtube-video.ts'
 import { parseCapturedVideoAudio, transcribeCapturedVideoAudio, videoAudioCaptureExpression } from './video-audio.ts'
 import { inspectVideoMedia } from './video-media.ts'
+import { readInspectPageSources, readPageSources } from './read-only-state.ts'
 
 const DEFAULT_PORTS = [9222, 9223, 9224]
 /** User-temp discovery lets the in-chat view reuse this exact Chromium tab. */
@@ -177,7 +178,11 @@ function browserExecutable(): string {
   )
 }
 
-type Tab = { id: string; title: string; url: string; webSocketDebuggerUrl?: string; type?: string }
+/** One CDP target with metadata used to choose an exact page tab. */
+export type BrowserTab = { id: string; title: string; url: string; webSocketDebuggerUrl?: string; type?: string }
+
+/** Endpoint and page list observed together for one browser operation. */
+export type BrowserTabSnapshot = { endpoint: string; tabs: BrowserTab[] }
 
 /**
  * Resolve a deliberate tab id without silently switching to another page.
@@ -186,7 +191,7 @@ type Tab = { id: string; title: string; url: string; webSocketDebuggerUrl?: stri
  * @param preferredId - Previously selected tab id used only when no explicit id is supplied.
  * @returns The exact explicit tab, the preferred tab, or the first available tab.
  */
-export function chooseTab(available: readonly Tab[], explicitId?: string, preferredId?: string): Tab {
+export function chooseTab(available: readonly BrowserTab[], explicitId?: string, preferredId?: string): BrowserTab {
   if (explicitId !== undefined) {
     const requested = available.find(candidate => candidate.id === explicitId)
     if (!requested) throw new Error(`No existe la pestaña ${explicitId}`)
@@ -332,8 +337,30 @@ async function endpoint(sessionId?: string): Promise<string> {
   )
 }
 
-async function tabs(sessionId?: string): Promise<Tab[]> {
-  return (await json<Tab[]>(`${await endpoint(sessionId)}/json/list`)).filter(tab => tab.type === 'page' || tab.type === undefined)
+/**
+ * Resolve the browser endpoint and list its page targets once for one operation.
+ * The snapshot is intentionally short-lived: a later operation resolves the
+ * endpoint again, so auth, process and selected-session changes are observed.
+ * @param sessionId - Phoenix conversation whose isolated browser should be used.
+ * @param resolveEndpoint - Endpoint resolver, injectable for focused tests.
+ * @param readJson - JSON reader, injectable for focused tests.
+ * @returns The endpoint used and its currently reported page targets.
+ */
+export async function loadTabSnapshot(
+  sessionId?: string,
+  resolveEndpoint: (sessionId?: string) => Promise<string> = endpoint,
+  readJson: <T>(url: string) => Promise<T> = json,
+): Promise<BrowserTabSnapshot> {
+  const base = await resolveEndpoint(sessionId)
+  const available = await readJson<BrowserTab[]>(`${base}/json/list`)
+  return {
+    endpoint: base,
+    tabs: available.filter(tab => tab.type === 'page' || tab.type === undefined),
+  }
+}
+
+async function tabs(sessionId?: string): Promise<BrowserTab[]> {
+  return (await loadTabSnapshot(sessionId)).tabs
 }
 
 /**
@@ -341,13 +368,13 @@ async function tabs(sessionId?: string): Promise<Tab[]> {
  * cards tied to their original pages when later chat turns open new sites.
  * Explicit tabId still navigates the supplied tab for deliberate reuse.
  */
-async function newBrowserTab(url: string, sessionId?: string): Promise<Tab> {
-  const base = await endpoint(sessionId)
+async function newBrowserTab(url: string, sessionId?: string, resolvedEndpoint?: string): Promise<BrowserTab> {
+  const base = resolvedEndpoint ?? await endpoint(sessionId)
   const result = await fetch(base + '/json/new?' + encodeURIComponent(url), {
     method: 'PUT', signal: AbortSignal.timeout(5000),
   })
   if (!result.ok) throw new Error('No se pudo abrir una pestaña Chromium nueva: HTTP ' + String(result.status))
-  const tab = await result.json() as Tab
+  const tab = await result.json() as BrowserTab
   if (!tab.id || !tab.webSocketDebuggerUrl) throw new Error('Chrome no devolvió un identificador válido')
   if (sessionId === undefined) announceSession(base, tab.id)
   else { selectedChatTabs.set(sessionId, tab.id); announceChatTab(sessionId, tab.id) }
@@ -355,8 +382,13 @@ async function newBrowserTab(url: string, sessionId?: string): Promise<Tab> {
 }
 const selectedChatTabs = new Map<string, string>()
 
-async function selectedTab(id?: string, sessionId?: string): Promise<Tab> {
-  const available = await tabs(sessionId)
+async function selectedTab(
+  id?: string,
+  sessionId?: string,
+  snapshot?: BrowserTabSnapshot,
+): Promise<BrowserTab> {
+  const resolved = snapshot ?? await loadTabSnapshot(sessionId)
+  const available = resolved.tabs
   const preferred = sessionId === undefined ? sharedSession()?.selectedTabId
     : selectedChatTabs.get(sessionId) ?? chatBrowserSession(sessionId).selectedTabId
   if (sessionId !== undefined && id === undefined && preferred === undefined && available.length > 1) {
@@ -364,7 +396,7 @@ async function selectedTab(id?: string, sessionId?: string): Promise<Tab> {
   }
   const tab = chooseTab(available, id, preferred)
   if (!tab.webSocketDebuggerUrl) throw new Error('La pestaña no ofrece una conexión CDP')
-  if (sessionId === undefined) announceSession(await endpoint(), tab.id)
+  if (sessionId === undefined) announceSession(resolved.endpoint, tab.id)
   else { selectedChatTabs.set(sessionId, tab.id); announceChatTab(sessionId, tab.id) }
   return tab
 }
@@ -378,11 +410,11 @@ async function selectedTab(id?: string, sessionId?: string): Promise<Tab> {
  * @param sessionId - Owning Phoenix conversation.
  * @returns The Chrome tab on which navigation was initiated.
  */
-async function openConversationPage(url: string, tabId?: string, sessionId?: string): Promise<Tab> {
+async function openConversationPage(url: string, tabId?: string, sessionId?: string): Promise<BrowserTab> {
   if (sessionId === undefined && tabId === undefined) return await newBrowserTab(url)
-  const available = await tabs(sessionId)
-  if (available.length === 0) return await newBrowserTab(url, sessionId)
-  const tab = await selectedTab(tabId, sessionId)
+  const snapshot = await loadTabSnapshot(sessionId)
+  if (snapshot.tabs.length === 0) return await newBrowserTab(url, sessionId, snapshot.endpoint)
+  const tab = await selectedTab(tabId, sessionId, snapshot)
   const navigation = await cdp<{ errorText?: string }>(tab, 'Page.navigate', { url })
   if (navigation.errorText) throw new Error('Chrome rechazó la navegación: ' + navigation.errorText)
   return tab
@@ -390,7 +422,7 @@ async function openConversationPage(url: string, tabId?: string, sessionId?: str
 
 const cdpPool = new CdpConnectionPool()
 
-async function cdp<T = unknown>(tab: Tab, method: string, params: Record<string, unknown> = {}, timeoutMs = 10_000): Promise<T> {
+async function cdp<T = unknown>(tab: BrowserTab, method: string, params: Record<string, unknown> = {}, timeoutMs = 10_000): Promise<T> {
   const debuggerUrl = tab.webSocketDebuggerUrl
   if (!debuggerUrl) throw new Error('La pestaña no ofrece una conexión CDP')
   return await cdpPool.request<T>(debuggerUrl, method, params, timeoutMs)
@@ -409,7 +441,7 @@ export function youtubeSearchUrl(query: string): string {
   return url.toString()
 }
 
-async function evaluate(tab: Tab, expression: string, timeoutMs = 10_000): Promise<unknown> {
+async function evaluate(tab: BrowserTab, expression: string, timeoutMs = 10_000): Promise<unknown> {
   return await cdp(tab, 'Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true }, timeoutMs)
 }
 
@@ -420,7 +452,7 @@ async function evaluate(tab: Tab, expression: string, timeoutMs = 10_000): Promi
  * @param requestedUrl - HTTP(S) URL Kira attempted to open.
  * @returns A bounded receipt with observed URL, page content, and verdict.
  */
-async function verifyBrowserNavigation(tab: Tab, requestedUrl: string): Promise<{
+async function verifyBrowserNavigation(tab: BrowserTab, requestedUrl: string): Promise<{
   verdict: NavigationVerdict
   evidence?: NavigationEvidence
 }> {
@@ -528,7 +560,7 @@ server.registerTool('youtube_search', {
   if (!actionsAllowed()) {
     return { isError: true, content: [{ type: 'text', text: `Navegación no autorizada por la política actual. No se abrió YouTube. Enlace directo para el usuario: ${url}. No repitas ni eludas el permiso; informa este bloqueo una sola vez.` }] }
   }
-  let tab: Tab
+  let tab: BrowserTab
   try {
     tab = await openConversationPage(url, tabId, sessionId)
   } catch (error) {
@@ -571,12 +603,17 @@ server.registerTool('secure_login_status', {
 
 server.registerTool('read_page', {
   description: 'Lee título, URL, texto visible y disponibilidad de accesos cifrados del dominio y módulo relacionado. Si credentialState.relatedSaved=true, NO afirmes que faltan credenciales: abre Acceso seguro para solicitar reutilización; nunca pidas la contraseña en el chat. No accede a cookies ni almacenamiento.',
-  inputSchema: { tabId: z.string().optional(), sessionId: z.string().optional(), maxChars: z.number().int().min(1).max(100000).default(30000) },
+  inputSchema: {
+    tabId: z.string().optional(), sessionId: z.string().optional(),
+    maxChars: z.number().int().min(1).max(100000).default(30000),
+  },
 }, async ({ tabId, maxChars, sessionId }) => {
   const tab = await selectedTab(tabId, sessionId)
-  const value = await evaluate(tab, 'JSON.stringify({title: document.title, url: location.href, text: document.body?.innerText || \'\'})')
+  const { dom: value, vault: credentialState } = await readPageSources(
+    () => evaluate(tab, 'JSON.stringify({title: document.title, url: location.href, text: document.body?.innerText || \'\'})'),
+    () => inspectVaultPresence(tab.url),
+  )
   const page = JSON.parse(String(value)) as { title: string; url: string; text: string }
-  const credentialState = await inspectVaultPresence(tab.url)
   return { content: [{ type: 'text', text: JSON.stringify({ ...page, text: page.text.slice(0, maxChars), credentialState, credentialHint: browserVaultHint(credentialState) }, null, 2) }] }
 })
 
@@ -629,9 +666,11 @@ server.registerTool('inspect_page', {
   inputSchema: { tabId: z.string().optional(), sessionId: z.string().optional() },
 }, async ({ tabId, sessionId }) => {
   const tab = await selectedTab(tabId, sessionId)
-  const observed = await evaluate(tab, browserInteractionExpression({ operation: 'inspect' }))
-  const credentialState = await inspectVaultPresence(tab.url)
-  const layout = await recallVerifiedFormLayout(tab.url).catch(() => undefined)
+  const { dom: observed, vault: credentialState, layout } = await readInspectPageSources(
+    () => evaluate(tab, browserInteractionExpression({ operation: 'inspect' })),
+    () => inspectVaultPresence(tab.url),
+    () => recallVerifiedFormLayout(tab.url).catch(() => undefined),
+  )
   const result = observed as BrowserInteractionResult | undefined
   const frames = Array.isArray(result?.frames) ? result.frames as Array<{ src?: string; accessible?: boolean }> : []
   const crossOriginCount = frames.filter(frame => frame.accessible === false && /^https?:\/\//iu.test(frame.src ?? '')).length
@@ -644,12 +683,19 @@ server.registerTool('inspect_page', {
     : observed
   // Hints do not supply values and cannot stand in for the current DOM.
   if (!layout || !result?.ok || !Array.isArray(result.controls)) return formatBrowserResult(observedWithFrames)
-  const controls = result.controls as Array<{ id?: string; name?: string; visible?: boolean; disabled?: boolean; readonly?: boolean; type?: string }>
+  const controls = result.controls as Array<{
+    id?: string
+    name?: string
+    visible?: boolean
+    disabled?: boolean
+    readonly?: boolean
+    type?: string
+  }>
   const usable = (locator: { selector?: string; name?: string }): boolean => {
     const found = controls.filter(control => control.visible && !control.disabled && !control.readonly
       && control.type !== 'password' && (locator.name !== undefined
-        ? control.name === locator.name
-        : locator.selector?.startsWith('#') && control.id === locator.selector.slice(1)))
+      ? control.name === locator.name
+      : locator.selector?.startsWith('#') && control.id === locator.selector.slice(1)))
     // Class/tag-and-id selectors are suggestions requiring fresh inspection.
     return found.length === 1
   }
@@ -661,7 +707,7 @@ server.registerTool('inspect_page', {
   return formatBrowserResult({
     ...result, ...frameContext, credentialState, ...(suggestions.steps.length || suggestions.verifiedChecks.length
       ? { learnedLayout: suggestions,
-          warning: 'Memoria de localizadores SIN datos: revalida controles, valores y autorización actual. No reutilices envíos.' }
+        warning: 'Memoria de localizadores SIN datos: revalida controles, valores y autorización actual. No reutilices envíos.' }
       : {}),
   })
 })
@@ -784,13 +830,18 @@ server.registerTool('fill_learned_form', {
     next: 'No hay un localizador seguro para todos los campos actuales; vuelve a inspect_page.' })
   const inspect = await evaluate(tab, browserInteractionExpression({ operation: 'inspect' })) as BrowserInteractionResult
   const controls = Array.isArray(inspect?.controls) ? inspect.controls as Array<{
-    id?: string; name?: string; visible?: boolean; disabled?: boolean; readonly?: boolean; type?: string
+    id?: string
+    name?: string
+    visible?: boolean
+    disabled?: boolean
+    readonly?: boolean
+    type?: string
   }> : []
-  const matches = workflow.phases.flat().every(action => {
+  const matches = workflow.phases.flat().every((action) => {
     const match = controls.filter(control => control.visible && !control.disabled && !control.readonly
       && control.type !== 'password' && (action.name !== undefined
-        ? control.name === action.name
-        : action.selector?.startsWith('#') && control.id === action.selector.slice(1)))
+      ? control.name === action.name
+      : action.selector?.startsWith('#') && control.id === action.selector.slice(1)))
     return match.length === 1
   })
   if (!matches) return formatBrowserResult({
@@ -858,7 +909,7 @@ type YoutubeInspectionMetadata = {
 }
 
 /** Inspect the public player's exposed metadata, not cookies or user storage. */
-async function inspectYoutubeMetadata(tab: Tab): Promise<YoutubeInspectionMetadata> {
+async function inspectYoutubeMetadata(tab: BrowserTab): Promise<YoutubeInspectionMetadata> {
   const expression = '(() => { '
     + 'const data = window.ytInitialPlayerResponse || document.querySelector("#movie_player")?.getPlayerResponse?.(); '
     + 'const details = data?.videoDetails; '
@@ -874,7 +925,7 @@ async function inspectYoutubeMetadata(tab: Tab): Promise<YoutubeInspectionMetada
 }
 
 /** Only read public YouTube timed-text from the video tab's own origin. */
-async function youtubeCaptionDocument(tab: Tab, rawUrl: string): Promise<string> {
+async function youtubeCaptionDocument(tab: BrowserTab, rawUrl: string): Promise<string> {
   const address = new URL(youtubeCaptionUrl(rawUrl))
   address.searchParams.set('fmt', 'json3')
   const js = '(async () => { const response = await fetch(' + JSON.stringify(address.href)
@@ -891,7 +942,7 @@ async function youtubeCaptionDocument(tab: Tab, rawUrl: string): Promise<string>
 }
 
 /** Capture true decoded Chromium video frames, never fabricated image assets. */
-async function youtubeSampleFrame(tab: Tab, requestedSeconds: number): Promise<
+async function youtubeSampleFrame(tab: BrowserTab, requestedSeconds: number): Promise<
   { readonly atSeconds: number; readonly jpeg: string } | undefined
 > {
   const expression = '(async () => { const video = document.querySelector("video"); '
@@ -919,7 +970,7 @@ async function youtubeSampleFrame(tab: Tab, requestedSeconds: number): Promise<
  * Transcribe real decoded tab audio locally. Requires permission for playback
  * and an accessible Chrome captureStream audio track. Returns NO audio bytes.
  */
-async function sampleYoutubeSpeech(tab: Tab, startSeconds: number, seconds: number): Promise<{
+async function sampleYoutubeSpeech(tab: BrowserTab, startSeconds: number, seconds: number): Promise<{
   status: 'ok' | 'unavailable'
   reason?: string
   language?: string
@@ -1046,7 +1097,7 @@ server.registerTool('youtube_video_inspect', {
     audioSeconds: z.number().int().min(0).max(9).default(8),
   },
 }, async ({ url, tabId, maxChars, frames, audioSeconds, sessionId }) => {
-  let tab: Tab
+  let tab: BrowserTab
   let expectedVideoUrl: string
   if (url !== undefined) {
     expectedVideoUrl = youtubeWatchUrl(url)

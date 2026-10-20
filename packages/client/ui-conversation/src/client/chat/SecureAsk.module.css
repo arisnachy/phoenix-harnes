@@ -1,4 +1,12 @@
-.root { display: flex; flex-direction: column; gap: 13px; padding: 14px 15px; overflow-y: auto; min-height: 0; font-size: 13px; }
+.root { display: flex; flex-direction: column; margin-top: 10px; overflow: hidden; min-height: 0; border: 1px solid color-mix(in srgb, var(--dsw-specific-phoenix-accent) 30%, var(--dsw-alias-border-l2)); border-radius: 14px; background: var(--dsw-alias-bg-layer-1); box-shadow: 0 8px 24px color-mix(in srgb, var(--dsw-alias-bg-mask-1) 10%, transparent); font-size: 13px; }
+.header { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border-bottom: 1px solid var(--dsw-alias-border-l2); background: color-mix(in srgb, var(--dsw-specific-phoenix-accent) 7%, var(--dsw-alias-bg-layer-1)); }
+.headerCopy { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
+.headerCopy strong { font-size: 13px; }
+.headerCopy span { color: var(--dsw-alias-label-secondary); font-size: 11px; line-height: 1.35; }
+.headerActions { display: inline-flex; align-items: center; gap: 5px; flex: none; }
+.privatePill { border: 1px solid var(--dsw-alias-border-l2); border-radius: 999px; padding: 3px 7px; color: var(--dsw-alias-label-secondary); font-size: 10px; }
+.iconButton { width: 27px; height: 27px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 7px; background: transparent; color: var(--dsw-alias-label-primary); cursor: pointer; font: inherit; line-height: 1; }
+.body { --dsh-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l2); --dsh-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l2); display: flex; flex-direction: column; gap: 10px; padding: 12px; overflow-y: auto; }
 .notice { margin: 0; line-height: 1.55; }
 .origin { padding: 10px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 9px; overflow-wrap: anywhere; background: var(--dsw-alias-bg-layer-1); font-weight: 600; }
 .form { display: flex; flex-direction: column; gap: 13px; }
@@ -10,5 +18,6 @@
 .actions button, .saved button { border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; padding: 8px 10px; background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); cursor: pointer; font: inherit; }
 .actions button:disabled { opacity: .5; cursor: not-allowed; }
 .saved { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.unobserved { display: flex; flex-direction: column; gap: 7px; border: 1px solid color-mix(in srgb, var(--dsw-specific-phoenix-accent) 28%, var(--dsw-alias-border-l2)); border-radius: 9px; padding: 9px 10px; color: var(--dsw-alias-label-secondary); line-height: 1.45; }
 .feedback { margin: 0; font-size: 12px; }
 .foot { color: var(--dsw-alias-label-secondary); font-size: 11px; margin: 0; line-height: 1.5; }

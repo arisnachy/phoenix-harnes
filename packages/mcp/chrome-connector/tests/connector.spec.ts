@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest'
-import { buildDedicatedBrowserArgs, chooseTab, normalizeBrowserKey, youtubeSearchUrl } from '../src/server.ts'
+import { describe, expect, it, vi } from 'vitest'
+import { buildDedicatedBrowserArgs, chooseTab, loadTabSnapshot, normalizeBrowserKey, youtubeSearchUrl } from '../src/server.ts'
 import { fullSiteForEmbeddedPage } from '../src/site-shell.ts'
 
 describe('Chrome/Edge MCP connector entry', () => {
@@ -60,6 +60,17 @@ describe('Chrome/Edge MCP connector entry', () => {
   it('does not fall back to another tab when an explicit id is missing', () => {
     const first = { id: 'first', title: 'First', url: 'https://example.com', webSocketDebuggerUrl: 'ws://127.0.0.1:9222/devtools/page/first' }
     expect(() => chooseTab([first], 'missing')).toThrow('No existe la pestaña missing')
+  })
+
+  it('resolves the endpoint once when loading a tab snapshot', async () => {
+    const tab = { id: 'selected', title: 'Selected', url: 'https://example.com',
+      webSocketDebuggerUrl: 'ws://127.0.0.1:9222/devtools/page/selected', type: 'page' }
+    const resolveEndpoint = vi.fn(async () => 'http://127.0.0.1:9222')
+    const readJson = vi.fn(async () => [tab]) as unknown as <T>(url: string) => Promise<T>
+    const snapshot = await loadTabSnapshot('conversation-1', resolveEndpoint, readJson)
+    expect(resolveEndpoint).toHaveBeenCalledOnce()
+    expect(readJson).toHaveBeenCalledWith('http://127.0.0.1:9222/json/list')
+    expect(snapshot).toEqual({ endpoint: 'http://127.0.0.1:9222', tabs: [tab] })
   })
 })
 

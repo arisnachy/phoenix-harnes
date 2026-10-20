@@ -1,7 +1,7 @@
 /** Human-only secret entry point over the PHOENIX credential provider. */
 
 import type { Context } from '@phoenix-ai/cordis'
-import { registerSecureLogin } from './secure-login.ts'
+import { registerBrowserLoginEvents, registerSecureLogin } from './secure-login.ts'
 import {
   credentialRef,
   isCredentialRefName,
@@ -47,7 +47,7 @@ async function handleLogin(ctx: Context, parsed: RegExpExecArray): Promise<Comma
 
   try {
     if (operation === 'login-set') {
-      return failure('Guarda los accesos web desde Secure Ask, en el panel lateral del chat; nunca escribas contraseñas como mensajes.')
+      return failure('Guarda los accesos web desde la tarjeta Secure Ask debajo del navegador; nunca escribas contraseñas como mensajes.')
     }
 
     if (operation === 'login-delete') {
@@ -57,7 +57,7 @@ async function handleLogin(ctx: Context, parsed: RegExpExecArray): Promise<Comma
       return { kind: 'success', text: `Login for ${origin} removed.` }
     }
 
-    return { kind: 'success', text: 'Los accesos seguros se administran desde Secure Ask, en el lateral del chat.' }
+    return { kind: 'success', text: 'Los accesos seguros se administran desde la tarjeta Secure Ask debajo del navegador.' }
 
   } catch {
     return failure(`Login for ${origin} could not be updated. Check the vault configuration.`)
@@ -66,6 +66,9 @@ async function handleLogin(ctx: Context, parsed: RegExpExecArray): Promise<Comma
 
 /** Register the human-only `/secret` command. */
 export function apply(ctx: Context): void {
+  // The browser consumer uses this host-only event capability even when the
+  // optional loopback UI route is not mounted.
+  registerBrowserLoginEvents(ctx)
   ctx.inject(['webServer'], (web) => {
     web.effect(() => registerSecureLogin(web, ctx.credentials), 'secure user-only website login')
   })

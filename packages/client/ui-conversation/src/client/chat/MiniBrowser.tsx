@@ -136,13 +136,19 @@ async function captureFrame(tabId: string, sessionId: string, signal?: AbortSign
 }
 export type SecureLoginProfile = 'personal' | 'kira'
 export type SecureProfileInfo = {
-  id: SecureLoginProfile; saved: boolean; automatic: boolean
+  id: SecureLoginProfile
+  saved: boolean
+  automatic: boolean
   source: 'dpapi' | 'legacy-vault' | 'none'
 }
 export type SecureStatus = {
-  saved: boolean; automatic: boolean
-  relatedSaved?: boolean; relatedOrigin?: string; relatedProfile?: SecureLoginProfile
-  profile?: SecureLoginProfile; profiles?: SecureProfileInfo[]
+  saved: boolean
+  automatic: boolean
+  relatedSaved?: boolean
+  relatedOrigin?: string
+  relatedProfile?: SecureLoginProfile
+  profile?: SecureLoginProfile
+  profiles?: SecureProfileInfo[]
 }
 export type SecureLoginField = {
   key: string
@@ -153,16 +159,28 @@ export type SecureLoginField = {
   required: boolean
 }
 export type SecureLoginTarget = {
-  origin: string; tabId: string; saved: boolean; automatic: boolean
-  relatedOrigin?: string; relatedProfile?: SecureLoginProfile
-  diagnostic?: string; fields?: SecureLoginField[]
+  origin: string
+  tabId: string
+  saved: boolean
+  automatic: boolean
+  relatedOrigin?: string
+  relatedProfile?: SecureLoginProfile
+  diagnostic?: string
+  fields?: SecureLoginField[]
+  /** True only when Chromium returned the page's actual credential fields. */
+  formObserved?: boolean
   /** True only when a human deliberately opens the secure login controls. */
   explicit?: boolean
-  profile?: SecureLoginProfile; profiles?: SecureProfileInfo[]
+  profile?: SecureLoginProfile
+  profiles?: SecureProfileInfo[]
 }
 type SecureDetection = {
-  required: boolean; formVisible?: boolean; gateVisible?: boolean
-  canOpenInPlace?: boolean; warningVisible?: boolean; fields?: SecureLoginField[]
+  required: boolean
+  formVisible?: boolean
+  gateVisible?: boolean
+  canOpenInPlace?: boolean
+  warningVisible?: boolean
+  fields?: SecureLoginField[]
 }
 type SecureUse = { status: string }
 /** Safe human-facing status: no account names, passwords or vault values. */
@@ -212,7 +230,10 @@ function youtubeId(raw: string | undefined): string | undefined {
   } catch { return undefined }
 }
 /** Human navigation stays in the user-controlled MiniBrowser, never in the model's context. */
-export function MiniBrowser({ sessionId, requested = false, active = true, initialTabId, onActivate, autoScroll = true, onPageChange, onSecureLoginRequest, onSavedAccessNotice }: {
+export function MiniBrowser({
+  sessionId, requested = false, active = true, initialTabId, onActivate, autoScroll = true,
+  onPageChange, onSecureLoginRequest, onSavedAccessNotice,
+}: {
   sessionId: string
   requested?: boolean
   active?: boolean
@@ -273,6 +294,37 @@ export function MiniBrowser({ sessionId, requested = false, active = true, initi
   const savedAccessCallbackRef = useRef(onSavedAccessNotice)
   secureLoginCallbackRef.current = onSecureLoginRequest
   savedAccessCallbackRef.current = onSavedAccessNotice
+
+  /** Open the manual card with the same page detection used by automatic login. */
+  const requestSecureLogin = useCallback(async (origin: string, tabId: string): Promise<void> => {
+    try {
+      const status = await secureApi<SecureStatus>('/status?origin=' + encodeURIComponent(origin))
+      const detection = await secureApi<SecureDetection>('/detect', { origin, tabId }).catch(() => undefined)
+      const fields = detection?.fields?.filter(field => field.label.trim() !== '') ?? []
+      const formObserved = fields.length > 0 && detection?.formVisible !== false
+      const target: SecureLoginTarget = {
+        origin, tabId, saved: status.saved, automatic: status.automatic,
+        formObserved,
+        ...(status.relatedOrigin ? { relatedOrigin: status.relatedOrigin,
+          ...(status.relatedProfile ? { relatedProfile: status.relatedProfile } : {}) } : {}),
+        ...(status.profile ? { profile: status.profile } : {}),
+        ...(status.profiles ? { profiles: status.profiles } : {}),
+        ...(fields.length ? { fields } : {}),
+        ...(!formObserved && !status.saved && !status.relatedSaved ? {
+          diagnostic: detection === undefined
+            ? 'No se pudo observar el formulario de acceso real en esta página.'
+            : detection.required === false
+              ? 'Esta página no solicita un formulario de acceso en este momento.'
+              : 'No se observó un formulario de acceso real. Phoenix no inventará campos ni solicitará credenciales todavía.',
+        } : {}),
+        explicit: true,
+      }
+      secureLoginCallbackRef.current?.(target)
+    } catch {
+      savedAccessCallbackRef.current?.({ origin, phase: 'vault-unavailable' })
+      secureLoginCallbackRef.current?.(null)
+    }
+  }, [])
 
   // Secure Ask is re-checked while a modal appears on the SAME URL.
   // Reactive websites often reveal the password form without navigation:
@@ -351,6 +403,7 @@ export function MiniBrowser({ sessionId, requested = false, active = true, initi
         }
         const request: SecureLoginTarget = {
           origin: siteOrigin, tabId, saved: status.saved, automatic: status.automatic,
+          formObserved: (detection.fields?.length ?? 0) > 0 && detection.formVisible !== false,
           ...(status.relatedOrigin ? { relatedOrigin: status.relatedOrigin,
             ...(status.relatedProfile ? { relatedProfile: status.relatedProfile } : {}) } : {}),
           ...(status.profile ? { profile: status.profile } : {}),
@@ -829,40 +882,27 @@ export function MiniBrowser({ sessionId, requested = false, active = true, initi
             value={address} onChange={(event) => { setAddress(event.currentTarget.value) }} />
           <button type="submit">Ir</button>
           {siteOrigin && snapshot.tabId && onSecureLoginRequest && <button type="button"
-            aria-label="Abrir acceso seguro" title="Acceso seguro de Kira en el panel lateral"
-            onClick={() => {
-              const tabId = snapshot.tabId!
-              void secureApi<SecureStatus>('/status?origin=' + encodeURIComponent(siteOrigin))
-                .then(status => onSecureLoginRequest({
-                  origin: siteOrigin, tabId, saved: status.saved, automatic: status.automatic, explicit: true,
-                  ...(status.relatedOrigin ? { relatedOrigin: status.relatedOrigin,
-            ...(status.relatedProfile ? { relatedProfile: status.relatedProfile } : {}) } : {}),
-                  ...(status.profile ? { profile: status.profile } : {}),
-                  ...(status.profiles ? { profiles: status.profiles } : {}),
-                }))
-                .catch(() => {
-                  onSavedAccessNotice?.({ origin: siteOrigin, phase: 'vault-unavailable' })
-                  onSecureLoginRequest(null)
-                })
-            }}>🔐 Acceso seguro</button>}
+            aria-label="Abrir acceso seguro" title="Acceso seguro de Kira debajo del navegador"
+            onClick={() => { const currentTab = snapshot.tabId; if (currentTab) void requestSecureLogin(siteOrigin, currentTab) }}>
+            🔐 Acceso seguro</button>}
         </form>
         {snapshot.available ? (
           <div className={css.viewport}>
             {!hasPage ? <div className={css.loading} role="status">MiniBrowser de esta conversación iniciado. Todavía no se ha comprobado ninguna página. Kira no debe afirmar que la abrió hasta verificarla.</div> : (
-            videoSurface && videoId ? (
-              <iframe className={css.player}
-                title="Reproductor YouTube"
-                src={'https://www.youtube-nocookie.com/embed/' + videoId + '?autoplay=' + (playingVideo ? '1' : '0') + '&playsinline=1'}
-                allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
-                sandbox="allow-scripts allow-same-origin allow-presentation"
-                allowFullScreen
-                referrerPolicy="strict-origin-when-cross-origin"
-              />
-            ) : frame ? <img ref={focusRef} src={frame} alt={'Página actual: ' + (snapshot.title || snapshot.url || '')}
-              role="button" aria-label="Controlar página con el ratón y el teclado"
-              tabIndex={0} draggable={false} onClick={click} onWheel={wheel} onKeyDown={keyboard}
-              onPaste={(event) => { event.preventDefault(); const value = event.clipboardData.getData('text/plain'); if (value) void run({ type: 'text', text: value.slice(0, 4096) }) }}
-              className={css.screen} /> : <div className={css.loading}>Conectando imagen del navegador…</div>)}
+              videoSurface && videoId ? (
+                <iframe className={css.player}
+                  title="Reproductor YouTube"
+                  src={'https://www.youtube-nocookie.com/embed/' + videoId + '?autoplay=' + (playingVideo ? '1' : '0') + '&playsinline=1'}
+                  allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+                  sandbox="allow-scripts allow-same-origin allow-presentation"
+                  allowFullScreen
+                  referrerPolicy="strict-origin-when-cross-origin"
+                />
+              ) : frame ? <img ref={focusRef} src={frame} alt={'Página actual: ' + (snapshot.title || snapshot.url || '')}
+                role="button" aria-label="Controlar página con el ratón y el teclado"
+                tabIndex={0} draggable={false} onClick={click} onWheel={wheel} onKeyDown={keyboard}
+                onPaste={(event) => { event.preventDefault(); const value = event.clipboardData.getData('text/plain'); if (value) void run({ type: 'text', text: value.slice(0, 4096) }) }}
+                className={css.screen} /> : <div className={css.loading}>Conectando imagen del navegador…</div>)}
           </div>
         ) : (
           <div className={css.empty}>
@@ -899,21 +939,7 @@ export function MiniBrowser({ sessionId, requested = false, active = true, initi
         {mediaCaptureMessage && <p className={css.captureStatus} role="status">{mediaCaptureMessage}</p>}
         {siteOrigin && snapshot.tabId && onSecureLoginRequest && <button type="button"
           className={css.secureShortcut}
-          onClick={() => {
-            const tabId = snapshot.tabId as string
-            void secureApi<SecureStatus>('/status?origin=' + encodeURIComponent(siteOrigin))
-              .then(status => onSecureLoginRequest({
-                origin: siteOrigin, tabId, saved: status.saved, automatic: status.automatic,
-                explicit: true,
-                ...(status.relatedOrigin ? { relatedOrigin: status.relatedOrigin,
-            ...(status.relatedProfile ? { relatedProfile: status.relatedProfile } : {}) } : {}), ...(status.profile ? { profile: status.profile } : {}),
-                ...(status.profiles ? { profiles: status.profiles } : {}),
-              }))
-              .catch(() => {
-                onSavedAccessNotice?.({ origin: siteOrigin, phase: 'vault-unavailable' })
-                onSecureLoginRequest(null)
-              })
-          }}>
+          onClick={() => { void requestSecureLogin(siteOrigin, snapshot.tabId as string) }}>
           🔐 Solicitar acceso seguro
         </button>}
         <form className={css.typeRow} onSubmit={(event) => { event.preventDefault(); if (typed) { void run({ type: 'text', text: typed }); setTyped(''); focusRef.current?.focus() } }}>

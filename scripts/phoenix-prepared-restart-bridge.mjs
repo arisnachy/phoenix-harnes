@@ -170,7 +170,8 @@ function discoverUnsupervisedHostPid() {
     : 'powershell.exe'
   const script = [
     `$cursor = ${String(process.pid)}`,
-    'while ($cursor -gt 0) {',
+    '$seen = [Collections.Generic.HashSet[int]]::new()',
+    'while ($cursor -gt 0 -and $seen.Count -lt 64 -and $seen.Add($cursor)) {',
     '$p = Get-CimInstance Win32_Process -Filter ("ProcessId=" + $cursor) -ErrorAction SilentlyContinue',
     'if ($null -eq $p) { break }',
     '[Console]::Out.WriteLine(([string]$p.ProcessId + "`t" + [string]$p.ParentProcessId + "`t" + [string]$p.CommandLine))',
@@ -183,6 +184,7 @@ function discoverUnsupervisedHostPid() {
     encoding: 'utf8',
     windowsHide: true,
     stdio: ['ignore', 'pipe', 'ignore'],
+    timeout: 15_000,
   })
   if (result.status !== 0 || typeof result.stdout !== 'string') return undefined
 

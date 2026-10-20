@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
 
@@ -745,6 +746,13 @@ internal sealed class PhoenixDesktopWindow : Form
     private async Task<string> FillBrowserFormAsync(BrowserCommand command)
     {
         var core = await RequireBrowserForOriginAsync(command.Origin);
+        var raw = await core.ExecuteScriptAsync(BuildBrowserFillScript(command));
+        return DecodeScriptJson(raw);
+    }
+
+    /// <summary>Build a form update without interpreting markers inside field values.</summary>
+    internal static string BuildBrowserFillScript(BrowserCommand command)
+    {
         var fields = command.Fields ?? throw new InvalidOperationException("Browser form fields are missing.");
         var fieldPayload = fields.Select(field => new
         {
@@ -752,12 +760,13 @@ internal sealed class PhoenixDesktopWindow : Form
             value = field.Value,
             @checked = field.Checked,
         });
-        var script = BrowserFillScript
-            .Replace("__ORIGIN__", JsonSerializer.Serialize(command.Origin), StringComparison.Ordinal)
-            .Replace("__FIELDS__", JsonSerializer.Serialize(fieldPayload), StringComparison.Ordinal)
-            .Replace("__SUBMIT__", command.Submit ? "true" : "false", StringComparison.Ordinal);
-        var raw = await core.ExecuteScriptAsync(script);
-        return DecodeScriptJson(raw);
+        return Regex.Replace(BrowserFillScript, "__(?:ORIGIN|FIELDS|SUBMIT)__", match => match.Value switch
+        {
+            "__ORIGIN__" => JsonSerializer.Serialize(command.Origin),
+            "__FIELDS__" => JsonSerializer.Serialize(fieldPayload),
+            "__SUBMIT__" => command.Submit ? "true" : "false",
+            _ => throw new InvalidOperationException("Unknown browser form marker."),
+        });
     }
 
     private async Task<string> ClickBrowserTextAsync(BrowserCommand command)
@@ -775,14 +784,21 @@ internal sealed class PhoenixDesktopWindow : Form
         var core = await RequireBrowserForOriginAsync(command.Origin);
         if (string.IsNullOrEmpty(command.Account) || string.IsNullOrEmpty(command.Secret))
             throw new InvalidOperationException("Origin-bound login is incomplete.");
-        var script = BrowserLoginScript
-            .Replace("__ORIGIN__", JsonSerializer.Serialize(command.Origin), StringComparison.Ordinal)
-            .Replace("__ACCOUNT__", JsonSerializer.Serialize(command.Account), StringComparison.Ordinal)
-            .Replace("__SECRET__", JsonSerializer.Serialize(command.Secret), StringComparison.Ordinal)
-            .Replace("__SUBMIT__", command.Submit ? "true" : "false", StringComparison.Ordinal);
-        var raw = await core.ExecuteScriptAsync(script);
+        var raw = await core.ExecuteScriptAsync(BuildBrowserLoginScript(command));
         return DecodeScriptJson(raw);
     }
+
+    /// <summary>Substitute trusted JSON literals once so credential text cannot be interpreted as a template marker.</summary>
+    internal static string BuildBrowserLoginScript(BrowserCommand command) => Regex.Replace(
+        BrowserLoginScript, "__(?:ORIGIN|ACCOUNT|SECRET|EXTRAS|SUBMIT)__", match => match.Value switch
+        {
+            "__ORIGIN__" => JsonSerializer.Serialize(command.Origin),
+            "__ACCOUNT__" => JsonSerializer.Serialize(command.Account),
+            "__SECRET__" => JsonSerializer.Serialize(command.Secret),
+            "__EXTRAS__" => JsonSerializer.Serialize(command.Extras ?? new Dictionary<string, string>()),
+            "__SUBMIT__" => command.Submit ? "true" : "false",
+            _ => throw new InvalidOperationException("Unknown browser login marker."),
+        });
 
     private const string BrowserInspectScript = """
         (() => {
@@ -945,6 +961,7 @@ internal sealed class PhoenixDesktopWindow : Form
           if (location.origin !== expected) throw new Error('origin mismatch');
           const account = __ACCOUNT__;
           const secret = __SECRET__;
+          const extras = __EXTRAS__;
           const submit = __SUBMIT__;
           const visible = (el) => {
             const style = getComputedStyle(el);
@@ -960,16 +977,31 @@ internal sealed class PhoenixDesktopWindow : Form
             let score = 0;
             if (ac === 'username') score += 100;
             if (type === 'email') score += 80;
-            if (/user|email|login|account/.test(identity)) score += 50;
+            if (/user|email|login|account|usuario|correo|tel[eé]fono|documento|c[eé]dula/.test(identity)) score += 50;
             if (type === 'text' || type === 'email' || type === 'tel' || !type) score += 10;
             return score;
           };
           const secretFields = inputs.filter((el) => (el.type || '').toLowerCase() === 'password');
-          const accountFields = inputs.filter((el) => scoreAccount(el) >= 0).sort((a, b) => scoreAccount(b) - scoreAccount(a));
-          const accountField = accountFields[0] || null;
+          if (secretFields.length > 1)
+            return JSON.stringify({ origin: location.origin, phase: 'ambiguous-login-form', submitted: false });
           const secretField = secretFields.find((el) => (el.autocomplete || '').toLowerCase() === 'current-password')
             || secretFields[0]
             || null;
+          const form = secretField?.form || null;
+          let loginRoot = form;
+          if (!loginRoot && secretField) {
+            for (let root = secretField.parentElement, depth = 0; root && depth < 8; root = root.parentElement, depth++) {
+              const buttons = Array.from(root.querySelectorAll('button,[role="button"],input[type="submit"]'))
+                .filter(visible).filter(el => !el.disabled && /^(?:ingresar|iniciar sesi[oó]n|acceder|entrar|log ?in|sign ?in)$/i.test((el.innerText || el.textContent || el.value || '').trim()));
+              if (buttons.length === 1 && root.querySelectorAll('input').length >= 2) { loginRoot = root; break; }
+            }
+          }
+          const loginInputs = loginRoot ? inputs.filter(el => loginRoot.contains(el)) : secretField ? [] : inputs;
+          const accountFields = loginInputs.filter((el) => ['text', 'email', 'tel', 'number'].includes(el.type) && scoreAccount(el) >= 0)
+            .sort((a, b) => scoreAccount(b) - scoreAccount(a));
+          if (!secretField && accountFields.length > 1)
+            return JSON.stringify({ origin: location.origin, phase: 'ambiguous-login-form', submitted: false });
+          const accountField = accountFields[0] || null;
           const setValue = (el, value) => {
             const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
             if (descriptor?.set) descriptor.set.call(el, value);
@@ -977,16 +1009,25 @@ internal sealed class PhoenixDesktopWindow : Form
             el.dispatchEvent(new Event('input', { bubbles: true }));
             el.dispatchEvent(new Event('change', { bubbles: true }));
           };
-          if (!accountField && !secretField)
+          if ((!accountField && !secretField) || (secretField && !loginRoot))
             return JSON.stringify({ origin: location.origin, phase: 'fields-not-found', submitted: false });
+
+          const submitForm = form || accountField?.form;
+          if (submitForm && new URL(submitForm.action || location.href, location.href).origin !== expected)
+            return JSON.stringify({ origin: location.origin, phase: 'cross-origin-login-refused', submitted: false });
+          const extraInputs = loginInputs.filter(el => el !== accountField && el !== secretField
+            && ['text', 'email', 'tel', 'number'].includes(el.type) && el.autocomplete !== 'one-time-code');
+          if (extraInputs.length > 4 || extraInputs.some((el, i) => el.required && !extras['extra:' + i]))
+            return JSON.stringify({ origin: location.origin, phase: 'additional-login-field-required', submitted: false });
 
           if (accountField) setValue(accountField, account);
           if (secretField) setValue(secretField, secret);
+          extraInputs.forEach((el, i) => { if (typeof extras['extra:' + i] === 'string') setValue(el, extras['extra:' + i]); });
 
           let submitted = false;
           let phase = secretField ? 'credentials-filled' : 'account-filled';
           if (submit) {
-            const form = secretField?.form || accountField?.form || null;
+            const form = submitForm;
             if (form) {
               const actionOrigin = new URL(form.action || location.href, location.href).origin;
               if (actionOrigin !== expected) throw new Error('cross-origin login submit refused');
@@ -994,6 +1035,11 @@ internal sealed class PhoenixDesktopWindow : Form
               else form.submit();
               submitted = true;
               phase = secretField ? 'credentials-submitted' : 'account-submitted';
+            }
+            else if (loginRoot) {
+              const button = Array.from(loginRoot.querySelectorAll('button,[role="button"],input[type="submit"]'))
+                .filter(visible).find(el => !el.disabled && /^(?:ingresar|iniciar sesi[oó]n|acceder|entrar|log ?in|sign ?in)$/i.test((el.innerText || el.textContent || el.value || '').trim()));
+              if (button) { button.click(); submitted = true; phase = 'credentials-submitted'; }
             }
           }
           return JSON.stringify({ origin: location.origin, phase, submitted });

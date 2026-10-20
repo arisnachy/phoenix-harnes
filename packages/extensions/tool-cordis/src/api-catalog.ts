@@ -3140,6 +3140,22 @@ export const EVENT_API: readonly EventApiEntry[] = [
     parameters: [{ name: 'ref', description: 'the reference whose stored value changed.' }],
   },
   {
+    name: 'credentials/web-login-resolve',
+    mode: 'serial',
+    signature: '\'credentials/web-login-resolve\'(origin: string): Promise<WebLoginResolution | undefined>',
+    summary: 'Resolve an unattended website login only for an origin-bound browser executor.',
+    description: 'Resolve an unattended website login only for an origin-bound browser executor. Denial is authoritative; consumers must not fall back to another identity or store.',
+    parameters: [{ name: 'origin', description: 'Canonical origin whose live browser destination is checked before filling.' }],
+  },
+  {
+    name: 'credentials/web-login-status',
+    mode: 'serial',
+    signature: '\'credentials/web-login-status\'(origin: string): Promise<WebLoginStatus | undefined>',
+    summary: 'Read saved website access without decrypting its values; undefined means no record.',
+    description: 'Read saved website access without decrypting its values; undefined means no record.',
+    parameters: [{ name: 'origin', description: 'Canonical origin to inspect.' }],
+  },
+  {
     name: 'domain/changed',
     mode: 'emit',
     signature: '\'domain/changed\'(change: DomainChanged): void',
@@ -6150,6 +6166,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'WebFetchResultView',
     declaration: 'export interface WebFetchResultView {\n    card: \'web\';\n    kind: \'fetch\';\n    title?: string;\n    url: string;\n    statusCode: number;\n    truncated: boolean;\n}',
+  },
+  {
+    name: 'WebLoginResolution',
+    declaration: 'export type WebLoginResolution = {\n    authorized: false;\n} | {\n    authorized: true;\n    account: string;\n    secret: string;\n    extras?: Record<string, string>;\n};',
+  },
+  {
+    name: 'WebLoginStatus',
+    declaration: 'export interface WebLoginStatus {\n    saved: boolean;\n    automatic: boolean;\n}',
   },
   {
     name: 'WebResultView',

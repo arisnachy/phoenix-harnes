@@ -21,6 +21,8 @@ msedge.exe --remote-debugging-port=9223 --user-data-dir="$env:TEMP\phoenix-edge-
 
 连接器不会读取配置文件、cookies 或密码。必须由用户明确启用 CDP；普通浏览器标签不能被另一个进程自动接管。
 
+每次操作只解析一次要使用的端点和标签页列表，并在下一次操作重新解析，以便观察会话或进程变化。`read_page` 与 `inspect_page` 会并行查询 DOM、Vault 状态以及适用的定位器记忆；这些读取不会复用认证状态，也不会替代导航验证。
+
 ### 表单与 Web 应用（无需 Computer 桌面）
 
 - `inspect_page`：一次检查表单控件、标签、类型、下拉选项以及只读与禁用状态，不公开密码。

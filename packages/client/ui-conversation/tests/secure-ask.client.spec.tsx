@@ -6,6 +6,11 @@ import { SecureAsk } from '../src/client/chat/SecureAsk.tsx'
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 
 describe('Secure Ask human-only browser sidebar', () => {
+  const observedFields = [
+    { key: 'account', role: 'account' as const, label: 'Usuario real', placeholder: 'Usuario real', inputType: 'text' as const, required: true },
+    { key: 'secret', role: 'secret' as const, label: 'Contraseña real', placeholder: 'Contraseña real', inputType: 'password' as const, required: true },
+  ]
+
   it('enables no-repeat login on an existing saved identity without requesting the secret', async () => {
     const calls: Array<{ path: string; data: Record<string, unknown> }> = []
     const onSaved = vi.fn()
@@ -51,11 +56,11 @@ describe('Secure Ask human-only browser sidebar', () => {
     }))
     const onSaved = vi.fn()
     render(<SecureAsk target={{ origin: 'https://example.org', tabId: 'new-tab',
-      saved: false, automatic: false }} onSaved={onSaved} onClose={vi.fn()} />)
-    fireEvent.change(screen.getByPlaceholderText('Escribe o pega tu usuario'), {
+      saved: false, automatic: false, fields: observedFields }} onSaved={onSaved} onClose={vi.fn()} />)
+    fireEvent.change(screen.getByPlaceholderText('Usuario real'), {
       target: { value: 'user' },
     })
-    fireEvent.change(screen.getByPlaceholderText('Escribe o pega la contraseña'), {
+    fireEvent.change(screen.getByPlaceholderText('Contraseña real'), {
       target: { value: 'example-only' },
     })
     fireEvent.click(screen.getByRole('button', { name: 'Guardar y no volver a preguntar' }))
@@ -79,11 +84,11 @@ describe('Secure Ask human-only browser sidebar', () => {
           : { status: 'submitted' }), { status: 200, headers: { 'content-type': 'application/json' } })
     }))
     render(<SecureAsk
-      target={{ origin: 'https://example.org', tabId: 'test-tab', saved: false, automatic: false }}
+      target={{ origin: 'https://example.org', tabId: 'test-tab', saved: false, automatic: false, fields: observedFields }}
       onClose={vi.fn()} onSaved={onSaved} />)
     expect(screen.getByText('🔒 https://example.org')).toBeTruthy()
-    fireEvent.change(screen.getByPlaceholderText('Escribe o pega tu usuario'), { target: { value: 'test-user' } })
-    fireEvent.change(screen.getByPlaceholderText('Escribe o pega la contraseña'), { target: { value: 'test-only-secret' } })
+    fireEvent.change(screen.getByPlaceholderText('Usuario real'), { target: { value: 'test-user' } })
+    fireEvent.change(screen.getByPlaceholderText('Contraseña real'), { target: { value: 'test-only-secret' } })
     fireEvent.click(screen.getByRole('button', { name: 'Guardar y continuar' }))
     await waitFor(() => { expect(onSaved).toHaveBeenCalledTimes(1) }, { timeout: 3_000 })
     expect(calls.map(call => call.path)).toEqual(['/phoenix-secure-login/save', '/phoenix-secure-login/use', '/phoenix-secure-login/detect'])
@@ -95,14 +100,14 @@ describe('Secure Ask human-only browser sidebar', () => {
   })
   it('does not show blank credential inputs when saved credentials already exist', () => {
     render(<SecureAsk target={{ origin: 'https://example.org', tabId: 'known-tab',
-      saved: true, automatic: true }} onSaved={vi.fn()} onClose={vi.fn()} />)
+      saved: true, automatic: true, fields: observedFields }} onSaved={vi.fn()} onClose={vi.fn()} />)
     expect(screen.getByRole('button', { name: 'Usar acceso guardado' })).toBeTruthy()
-    expect(screen.queryByPlaceholderText('Escribe o pega tu usuario')).toBeNull()
-    expect(screen.queryByPlaceholderText('Escribe o pega la contraseña')).toBeNull()
+    expect(screen.queryByPlaceholderText('Usuario real')).toBeNull()
+    expect(screen.queryByPlaceholderText('Contraseña real')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Cambiar o completar credenciales' }))
-    expect(screen.getByPlaceholderText('Escribe o pega tu usuario')).toBeTruthy()
+    expect(screen.getByPlaceholderText('Usuario real')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Ocultar formulario' }))
-    expect(screen.queryByPlaceholderText('Escribe o pega la contraseña')).toBeNull()
+    expect(screen.queryByPlaceholderText('Contraseña real')).toBeNull()
   })
 
   it('adapts protected input labels and additional fields to the real site requirements', async () => {
@@ -185,11 +190,11 @@ describe('Secure Ask human-only browser sidebar', () => {
       saved: true, automatic: true, profile: 'personal', profiles: [
         { id: 'personal', saved: true, automatic: true, source: 'dpapi' },
         { id: 'kira', saved: false, automatic: false, source: 'none' },
-      ] }} onSaved={vi.fn()} onClose={vi.fn()} />)
+      ], fields: observedFields }} onSaved={vi.fn()} onClose={vi.fn()} />)
     fireEvent.click(screen.getByRole('button', { name: 'Cuenta de Kira' }))
-    fireEvent.change(screen.getByPlaceholderText('Escribe o pega tu usuario'),
+    fireEvent.change(screen.getByPlaceholderText('Usuario real'),
       { target: { value: 'kira-service-user' } })
-    fireEvent.change(screen.getByPlaceholderText('Escribe o pega la contraseña'),
+    fireEvent.change(screen.getByPlaceholderText('Contraseña real'),
       { target: { value: 'secret-test-not-to-chat' } })
     fireEvent.click(screen.getByRole('button', { name: 'Guardar y continuar' }))
     await waitFor(() => expect(calls.some(call => call.path.endsWith('/save')
@@ -220,9 +225,9 @@ describe('Secure Ask human-only browser sidebar', () => {
       ] } : { status: 'login-form-not-found' },
     ), { status: 200, headers: { 'content-type': 'application/json' } })))
     render(<SecureAsk target={{ origin: 'https://example.org', tabId: 'tab-2',
-      saved: false, automatic: false }} onClose={vi.fn()} onSaved={vi.fn()} />)
-    fireEvent.change(screen.getByPlaceholderText('Escribe o pega tu usuario'), { target: { value: 'user' } })
-    fireEvent.change(screen.getByPlaceholderText('Escribe o pega la contraseña'), { target: { value: 'do-not-log' } })
+      saved: false, automatic: false, fields: observedFields }} onClose={vi.fn()} onSaved={vi.fn()} />)
+    fireEvent.change(screen.getByPlaceholderText('Usuario real'), { target: { value: 'user' } })
+    fireEvent.change(screen.getByPlaceholderText('Contraseña real'), { target: { value: 'do-not-log' } })
     fireEvent.click(screen.getByRole('button', { name: 'Guardar y continuar' }))
     await waitFor(() => expect(screen.getByText(/Acceso guardado y cifrado/)).toBeTruthy())
     expect(screen.queryByPlaceholderText('Escribe o pega la contraseña')).toBeNull()
@@ -287,5 +292,44 @@ describe('Secure Ask human-only browser sidebar', () => {
     })
     expect(calls.some(x => x.path.endsWith('/save'))).toBe(false)
     await waitFor(() => expect(screen.getByText(/Acceso guardado para este sitio/)).toBeTruthy())
+  })
+
+  it('does not invent credential fields before the browser observes a real login form', () => {
+    render(<SecureAsk target={{ origin: 'https://example.org', tabId: 'unobserved-tab',
+      saved: false, automatic: false }} onClose={vi.fn()} onSaved={vi.fn()} />)
+    expect(screen.queryByPlaceholderText('Escribe o pega tu usuario')).toBeNull()
+    expect(screen.queryByPlaceholderText('Escribe o pega la contraseña')).toBeNull()
+    expect(screen.getByText(/No se observó un formulario de acceso real/)).toBeTruthy()
+  })
+
+  it('renders only observed fields for a sequential login step', () => {
+    render(<SecureAsk target={{ origin: 'https://example.org', tabId: 'account-step',
+      saved: false, automatic: false, fields: [
+        { key: 'account', role: 'account', label: 'Número de afiliado', placeholder: 'Afiliación', inputType: 'text', required: true },
+      ] }} onClose={vi.fn()} onSaved={vi.fn()} />)
+    expect(screen.getByPlaceholderText('Afiliación')).toBeTruthy()
+    expect(screen.queryByPlaceholderText('Escribe o pega la contraseña')).toBeNull()
+    expect(screen.getByText(/Phoenix no inventará campos/)).toBeTruthy()
+  })
+
+  it('keeps entered values available when the vault rejects a save', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('vault unavailable', { status: 503 })))
+    render(<SecureAsk target={{ origin: 'https://example.org', tabId: 'failed-save',
+      saved: false, automatic: false, fields: observedFields }} onClose={vi.fn()} onSaved={vi.fn()} />)
+    fireEvent.change(screen.getByPlaceholderText('Usuario real'), { target: { value: 'retry-user' } })
+    fireEvent.change(screen.getByPlaceholderText('Contraseña real'), { target: { value: 'retry-secret' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar y continuar' }))
+    await waitFor(() => expect(screen.getByText(/No se confirmó el guardado/)).toBeTruthy())
+    expect((screen.getByPlaceholderText('Usuario real') as HTMLInputElement).value).toBe('retry-user')
+    expect((screen.getByPlaceholderText('Contraseña real') as HTMLInputElement).value).toBe('retry-secret')
+  })
+
+  it('keeps the compact card collapsible', () => {
+    render(<SecureAsk target={{ origin: 'https://example.org', tabId: 'observed-tab',
+      saved: false, automatic: false, fields: observedFields }} onClose={vi.fn()} onSaved={vi.fn()} />)
+    expect(screen.getByRole('button', { name: 'Contraer acceso seguro' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Contraer acceso seguro' }))
+    expect(screen.queryByPlaceholderText('Usuario real')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Expandir acceso seguro' })).toBeTruthy()
   })
 })

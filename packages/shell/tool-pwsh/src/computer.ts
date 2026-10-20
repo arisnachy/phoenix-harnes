@@ -148,6 +148,7 @@ interface DesktopBrowserCommand {
   submit?: boolean
   account?: string
   secret?: string
+  extras?: Record<string, string>
 }
 
 /** Whether this action must travel over the native Phoenix Desktop browser channel. */
@@ -456,7 +457,7 @@ async function runLegacyDesktopObservation(
 async function runEmbeddedBrowserAction(
   args: ComputerToolArgs,
   signal?: AbortSignal,
-  login?: { account: string; secret: string },
+  login?: { account: string; secret: string; extras?: Record<string, string> },
 ): Promise<string> {
   const rawDescriptor = await readFile(desktopControlDescriptorPath(), 'utf8')
   const descriptor = parseDesktopBrowserControlDescriptor(rawDescriptor)
@@ -1307,7 +1308,16 @@ export async function runWindowsComputerAction(args: ComputerToolArgs, signal?: 
   return await executeComputerInvocation(invocation, signal)
 }
 
-async function resolveOriginGrant(ctx: Context, origin: string): Promise<boolean> {
+/**
+ * Check the selected website identity before consulting legacy credentials.
+ * @param ctx - Browser executor context.
+ * @param rawOrigin - Site whose unattended browser actions are being authorized.
+ * @returns Whether the human allowed unattended use on this exact origin.
+ */
+export async function computerOriginAuthorized(ctx: Context, rawOrigin: string): Promise<boolean> {
+  const origin = normalizeCredentialOrigin(rawOrigin)
+  const status = await ctx.serial('credentials/web-login-status', origin)
+  if (status !== undefined) return status.saved && status.automatic
   const credentials = ctx.get('credentials')
   if (credentials === undefined) return false
   const grant = await credentials.resolve(originCredentialRef(origin, 'autonomous'))
@@ -1319,11 +1329,11 @@ async function browserActionPreauthorized(ctx: Context, args: ComputerToolArgs):
   if (args.action === 'browser_login'
     || args.action === 'browser_fill_form'
     || args.action === 'browser_click_text') {
-    return await resolveOriginGrant(ctx, requiredCredentialOrigin(args.origin, args.action))
+    return await computerOriginAuthorized(ctx, requiredCredentialOrigin(args.origin, args.action))
   }
   if (args.action === 'browser_open' && args.url !== undefined) {
     try {
-      return await resolveOriginGrant(ctx, normalizeCredentialOrigin(args.url))
+      return await computerOriginAuthorized(ctx, normalizeCredentialOrigin(args.url))
     } catch {
       return false
     }
@@ -1346,6 +1356,27 @@ async function runOriginBoundBrowserLogin(
   }
 
   const origin = requiredCredentialOrigin(args.origin, args.action)
+  return await runEmbeddedBrowserAction(args, signal, await resolveComputerWebLogin(ctx, origin))
+}
+
+/**
+ * Resolve private browser login values from Secure Ask, retaining legacy access only when absent.
+ * Values belong only on the current-user browser pipe and never in model or session output.
+ * @param ctx - Trusted browser executor context.
+ * @param rawOrigin - Exact site origin verified again by the native browser before filling.
+ * @returns Private login values for one authorized browser operation.
+ */
+export async function resolveComputerWebLogin(
+  ctx: Context,
+  rawOrigin: string,
+): Promise<{ account: string; secret: string; extras?: Record<string, string> }> {
+  const origin = normalizeCredentialOrigin(rawOrigin)
+  const selected = await ctx.serial('credentials/web-login-resolve', origin)
+  if (selected !== undefined) {
+    if (!selected.authorized) throw new Error(`Authorize automatic access for ${origin} in Secure Ask first.`)
+    const { account, secret, extras } = selected
+    return { account, secret, ...(extras === undefined ? {} : { extras }) }
+  }
   const credentials = ctx.get('credentials')
   if (credentials === undefined) {
     throw new Error('browser_login requires the Phoenix credential vault')
@@ -1356,12 +1387,12 @@ async function runOriginBoundBrowserLogin(
     credentials.resolve(originCredentialRef(origin, 'autonomous')),
   ])
   if (grant?.value !== '1' || account === undefined || secret === undefined) {
-    throw new Error(`No unattended login is configured for ${origin}; use /secret login-set once.`)
+    throw new Error(`No unattended login is configured for ${origin}; open Secure Ask and authorize automatic access.`)
   }
-  return await runEmbeddedBrowserAction(args, signal, {
+  return {
     account: account.value,
     secret: secret.value,
-  })
+  }
 }
 
 function inputRisk(action: ComputerAction): { risk: 'low' | 'medium' | 'high'; reversible: boolean } {
@@ -1474,12 +1505,12 @@ export function registerComputerTool(ctx: Context): void {
   ctx.systemPrompt.section({
     name: 'tool:computer:embedded-browser',
     order: 106,
-    text: 'On Windows Phoenix Desktop, use computer browser_open/browser_inspect/browser_fill_form/browser_click_text/browser_login for structured work in the embedded WebView2 pane. browser_login resolves an origin-bound vault login internally: never ask the user to paste a stored secret and never place one in text/type arguments. A /secret login-set grant preauthorizes open/login/form/click work only for that exact origin, so recurring authorized tasks can run without repeated workspace-write prompts; other desktop interaction keeps the normal approval policy. browser_inspect is read-only and never returns current field values. If the native Desktop browser broker is absent or stale, do not stop the task: use phoenix_browser/chrome for web work and continue using computer windows/focus/click/type/key/scroll for the real Windows desktop; general desktop control has a fixed PowerShell fallback.',
+    text: 'On Windows Phoenix Desktop, use computer browser_open/browser_inspect/browser_fill_form/browser_click_text/browser_login for structured work in the embedded WebView2 pane. browser_login resolves an origin-bound vault login internally: never ask the user to paste a stored secret and never place one in text/type arguments. Secure Ask automatic-access consent preauthorizes open/login/form/click work only for that exact origin, so recurring authorized tasks can run without repeated workspace-write prompts; other desktop interaction keeps the normal approval policy. browser_inspect is read-only and never returns current field values. If the native Desktop browser broker is absent or stale, do not stop the task: use phoenix_browser/chrome for web work and continue using computer windows/focus/click/type/key/scroll for the real Windows desktop; general desktop control has a fixed PowerShell fallback.',
   })
 
   ctx.tools.register(defineTool({
     name: 'computer',
-    description: 'Control the Windows desktop with window-aware actions. For web work in Phoenix Desktop, prefer browser_inspect/browser_fill_form/browser_click_text/browser_login over coordinate typing when possible. browser_login uses the origin-bound vault internally and never exposes the stored account secret to the model; browser_inspect returns labels/indexes but never current field values. An origin configured with /secret login-set is a one-time grant for unattended open/login/form/click work on that exact origin. The other browser_* actions command Phoenix\'s embedded WebView2 pane directly through the native desktop channel and never intentionally launch the system browser. Then use screenshot/click/type/key/scroll against the Phoenix window for full visual control. Before controlling any other external application, prefer windows -> focus(target) -> screenshot, then act. target may be a visible title/title substring, pid:1234, or hwnd:0x123ABC; when supplied, PHOENIX verifies that target is foreground before injecting input. A minimized target is never clicked from stale coordinates: call focus first, inspect its automatic fresh screenshot, then act. State-changing actions automatically attach a fresh post-action screenshot. Treat that screenshot as the source of truth and verify the visible outcome before the next action; status ok means the OS accepted the tool operation, not that the application-level goal succeeded. read-only is observe-only; workspace-write uses normal approval; danger-full-access is no-prompt desktop authority.',
+    description: 'Control the Windows desktop with window-aware actions. For web work in Phoenix Desktop, prefer browser_inspect/browser_fill_form/browser_click_text/browser_login over coordinate typing when possible. browser_login uses the origin-bound vault internally and never exposes the stored account secret to the model; browser_inspect returns labels/indexes but never current field values. An origin authorized for automatic access in Secure Ask has a one-time grant for unattended open/login/form/click work on that exact origin. The other browser_* actions command Phoenix\'s embedded WebView2 pane directly through the native desktop channel and never intentionally launch the system browser. Then use screenshot/click/type/key/scroll against the Phoenix window for full visual control. Before controlling any other external application, prefer windows -> focus(target) -> screenshot, then act. target may be a visible title/title substring, pid:1234, or hwnd:0x123ABC; when supplied, PHOENIX verifies that target is foreground before injecting input. A minimized target is never clicked from stale coordinates: call focus first, inspect its automatic fresh screenshot, then act. State-changing actions automatically attach a fresh post-action screenshot. Treat that screenshot as the source of truth and verify the visible outcome before the next action; status ok means the OS accepted the tool operation, not that the application-level goal succeeded. read-only is observe-only; workspace-write uses normal approval; danger-full-access is no-prompt desktop authority.',
     parameters: {
       action: {
         type: 'string',

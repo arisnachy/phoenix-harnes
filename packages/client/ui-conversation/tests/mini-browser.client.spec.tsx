@@ -61,7 +61,7 @@ describe('MiniBrowser in Phoenix conversation', () => {
       tabs: [{ id: 'shared-tab', title: 'Acceso', url: 'https://example.org/login' }] }
     let resolveUse: ((value: Response) => void) | undefined
     let used = 0
-    const pending = new Promise<Response>(resolve => { resolveUse = resolve })
+    const pending = new Promise<Response>((resolve) => { resolveUse = resolve })
     vi.stubGlobal('fetch', vi.fn(async (raw: string) => {
       const url = String(raw)
       if (url.startsWith('/phoenix-secure-login/status')) return new Response(
@@ -190,7 +190,11 @@ describe('MiniBrowser in Phoenix conversation', () => {
       if (input.startsWith('/phoenix-secure-login/status')) return new Response(
         JSON.stringify({ saved: false, automatic: false }), { status: 200 })
       if (input.startsWith('/phoenix-secure-login/detect')) return new Response(
-        JSON.stringify({ required: false }), { status: 200 })
+        JSON.stringify({ required: true, formVisible: true, fields: [
+          { key: 'account', role: 'account', label: 'Número de afiliado', placeholder: 'Afiliación', inputType: 'text', required: true },
+          { key: 'secret', role: 'secret', label: 'PIN de acceso', placeholder: 'PIN', inputType: 'password', required: true },
+          { key: 'company', role: 'extra', label: 'Código de empresa', placeholder: 'Empresa', inputType: 'text', required: false },
+        ] }), { status: 200 })
       if (input.startsWith('/phoenix-mini-browser/frame')) return new Response(
         new Uint8Array([255, 216, 255, 217]), { status: 200, headers: { 'content-type': 'image/jpeg' } })
       return new Response(JSON.stringify(onSite), { status: 200,
@@ -203,9 +207,39 @@ describe('MiniBrowser in Phoenix conversation', () => {
     fireEvent.click(button)
     await waitFor(() => {
       expect(request).toHaveBeenCalledWith(expect.objectContaining({
-        origin: 'https://example.org', tabId: 'shared-tab',
+        origin: 'https://example.org', tabId: 'shared-tab', formObserved: true,
+        fields: expect.arrayContaining([
+          expect.objectContaining({ label: 'Número de afiliado', inputType: 'text' }),
+          expect.objectContaining({ label: 'PIN de acceso', inputType: 'password' }),
+          expect.objectContaining({ label: 'Código de empresa', role: 'extra' }),
+        ]),
       }))
     })
+  })
+
+  it('does not offer invented credential fields when manual detection observes no form', async () => {
+    const request = vi.fn()
+    const onSite = { ...state, url: 'https://example.org/home', title: 'Inicio',
+      tabs: [{ id: 'shared-tab', title: 'Inicio', url: 'https://example.org/home' }] }
+    vi.stubGlobal('fetch', vi.fn(async (raw: string) => {
+      const input = String(raw)
+      if (input.startsWith('/phoenix-secure-login/status')) return new Response(
+        JSON.stringify({ saved: false, automatic: false }), { status: 200 })
+      if (input.startsWith('/phoenix-secure-login/detect')) return new Response(
+        JSON.stringify({ required: true, formVisible: false, fields: [] }), { status: 200 })
+      if (input.startsWith('/phoenix-mini-browser/frame')) return new Response(
+        new Uint8Array([255, 216, 255, 217]), { status: 200, headers: { 'content-type': 'image/jpeg' } })
+      return new Response(JSON.stringify(onSite), { status: 200,
+        headers: { 'content-type': 'application/json' } })
+    }))
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn(() => 'blob:secure-unobserved') })
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() })
+    render(<MiniBrowser sessionId="test-chat" requested onSecureLoginRequest={request} />)
+    const button = await screen.findByRole('button', { name: 'Abrir acceso seguro' })
+    fireEvent.click(button)
+    await waitFor(() => expect(request).toHaveBeenCalledWith(expect.objectContaining({
+      origin: 'https://example.org', tabId: 'shared-tab', formObserved: false,
+    })))
   })
   it('cancels the state request when the browser card is deactivated', async () => {
     let stateSignal: AbortSignal | undefined

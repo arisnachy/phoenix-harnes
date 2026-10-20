@@ -35,6 +35,8 @@ Para `https://www.selenium.dev/selenium/web/web-form.html`, un flujo normal es i
 
 El conector no lee archivos del perfil, cookies ni contraseñas. CDP debe ser habilitado explícitamente por el usuario; una pestaña normal no puede ser adoptada mágicamente desde otro proceso.
 
+Cada operación resuelve una vez el endpoint y la lista de pestañas que usará, y vuelve a resolverlos en la siguiente operación para observar cambios de sesión o proceso. `read_page` e `inspect_page` consultan en paralelo el DOM, el estado de Vault y, cuando corresponde, la memoria de localizadores; estas lecturas no reutilizan estado de autenticación ni sustituyen la verificación de navegación.
+
 
 ### Análisis real de videos de YouTube (Kira / Godot)
 

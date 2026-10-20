@@ -58,8 +58,39 @@ export interface GrantRecord {
 /** One durable credential record, tagged by what the seam may do with it. */
 export type CredentialRecord = ApiKeyRecord | GrantRecord
 
+/** Website access metadata for the exact origin and selected human identity. */
+export interface WebLoginStatus {
+  /** Whether the selected identity has a saved login. */
+  saved: boolean
+  /** Whether the human authorized unattended use on this origin. */
+  automatic: boolean
+}
+
+/** Internal browser-only credential resolution; never serialize into model or session output. */
+export type WebLoginResolution = { authorized: false } | {
+  authorized: true
+  account: string
+  secret: string
+  extras?: Record<string, string>
+}
+
 declare module '@phoenix-ai/cordis' {
   interface Events {
+    /**
+     * Read saved website access without decrypting its values; undefined means no record.
+     * @param origin - Canonical origin to inspect.
+     * @returns Selected identity metadata, or undefined when absent.
+     * @mode serial
+     */
+    'credentials/web-login-status'(origin: string): Promise<WebLoginStatus | undefined>
+    /**
+     * Resolve an unattended website login only for an origin-bound browser executor.
+     * Denial is authoritative; consumers must not fall back to another identity or store.
+     * @param origin - Canonical origin whose live browser destination is checked before filling.
+     * @returns Private values when authorized, denial, or undefined when no record exists.
+     * @mode serial
+     */
+    'credentials/web-login-resolve'(origin: string): Promise<WebLoginResolution | undefined>
     /**
      * Committed change to a provider-managed credential source: a `set`, an
      * `unset`, or an external edit observed in storage. Ambient

@@ -334,4 +334,41 @@ Committed change to a provider-managed credential source: a `set`, an `unset`, o
 ```
 
 Source: [`packages/credentials/credentials/src/types.ts`](../../packages/credentials/credentials/src/types.ts)
+
+<a id="credentialsweb-login-resolve--serial"></a>
+
+#### `credentials/web-login-resolve` — serial
+
+Resolve an unattended website login only for an origin-bound browser executor. Denial is authoritative; consumers must not fall back to another identity or store.
+
+```ts cordis-catalog
+/**
+ * Resolve an unattended website login only for an origin-bound browser executor.
+ * Denial is authoritative; consumers must not fall back to another identity or store.
+ * @param origin - Canonical origin whose live browser destination is checked before filling.
+ * @returns Private values when authorized, denial, or undefined when no record exists.
+ * @mode serial
+ */
+'credentials/web-login-resolve'(origin: string): Promise<WebLoginResolution | undefined>
+```
+
+Source: [`packages/credentials/credentials/src/types.ts`](../../packages/credentials/credentials/src/types.ts)
+
+<a id="credentialsweb-login-status--serial"></a>
+
+#### `credentials/web-login-status` — serial
+
+Read saved website access without decrypting its values; undefined means no record.
+
+```ts cordis-catalog
+/**
+ * Read saved website access without decrypting its values; undefined means no record.
+ * @param origin - Canonical origin to inspect.
+ * @returns Selected identity metadata, or undefined when absent.
+ * @mode serial
+ */
+'credentials/web-login-status'(origin: string): Promise<WebLoginStatus | undefined>
+```
+
+Source: [`packages/credentials/credentials/src/types.ts`](../../packages/credentials/credentials/src/types.ts)
 <!-- END GENERATED cordis-surface -->

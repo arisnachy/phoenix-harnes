@@ -1,4 +1,4 @@
-/** Secure Ask is a human-only sidebar form, not ask_user_question or an LLM tool result. */
+/** Human-only credential card below the browser; values never enter ordinary Ask or model output. */
 import { useEffect, useState, type FormEvent } from 'react'
 import { secureApi, type SecureLoginTarget, type SecureStatus, type SecureLoginProfile, type SecureProfileInfo } from './MiniBrowser.tsx'
 import css from './SecureAsk.module.css'
@@ -23,8 +23,12 @@ export function SecureAsk({ target, onClose, onSaved }: {
   const [secret, setSecret] = useState('')
   const [automatic, setAutomatic] = useState(target.automatic)
   const [busy, setBusy] = useState(false)
+  const [collapsed, setCollapsed] = useState(false)
   const [feedback, setFeedback] = useState('')
-  const [editing, setEditing] = useState(!target.saved && !target.relatedOrigin)
+  const fieldsObserved = target.formObserved ?? (target.fields !== undefined && target.fields.length > 0)
+  const fieldsKey = target.fields?.map(field => [field.key, field.role, field.label, field.placeholder,
+    field.inputType, field.required ? 'required' : 'optional'].join(':')).join('|') ?? ''
+  const [editing, setEditing] = useState(!target.saved && !target.relatedOrigin && fieldsObserved)
   const [profile, setProfile] = useState<SecureLoginProfile>(
     !target.saved && target.relatedOrigin ? (target.relatedProfile ?? target.profile ?? 'personal')
       : (target.profile ?? 'personal'))
@@ -42,12 +46,13 @@ export function SecureAsk({ target, onClose, onSaved }: {
       { id: 'kira', saved: false, automatic: false, source: 'none' },
     ])
     setAutomatic(target.automatic)
-    setEditing(!target.saved && !target.relatedOrigin)
+    setEditing(!target.saved && !target.relatedOrigin && (target.formObserved ?? (target.fields?.length ?? 0) > 0))
+    setCollapsed(false)
     setFeedback('')
     setAccount('')
     setSecret('')
     setExtraValues({})
-  }, [target.origin, target.tabId])
+  }, [target.origin, target.tabId, target.formObserved, fieldsKey])
   const selectedProfile = profiles.find(item => item.id === profile)
   const selectedSaved = selectedProfile?.saved ?? false
   const relatedOrigin = !selectedSaved && profile === (target.relatedProfile ?? 'personal')
@@ -58,7 +63,7 @@ export function SecureAsk({ target, onClose, onSaved }: {
     const found = profiles.find(item => item.id === next)
     setProfile(next)
     setAutomatic(found?.automatic ?? false)
-    setEditing(!found?.saved)
+    setEditing(!found?.saved && fieldsObserved)
     setFeedback('')
     setAccount('')
     setSecret('')
@@ -76,6 +81,9 @@ export function SecureAsk({ target, onClose, onSaved }: {
   const accountField = target.fields?.find(field => field.role === 'account')
   const secretField = target.fields?.find(field => field.role === 'secret')
   const extraFields = target.fields?.filter(field => field.role === 'extra') ?? []
+  const completeCredentialForm = accountField !== undefined && secretField !== undefined
+  const canSave = completeCredentialForm && account.trim() !== '' && secret !== ''
+    && !extraFields.some(field => field.required && !extraValues[field.key]?.trim())
   const verifyLogin = async (): Promise<void> => {
     // The site controls the actual session. Do not close Secure Ask just
     // because CDP dispatched a submit click.
@@ -98,6 +106,7 @@ export function SecureAsk({ target, onClose, onSaved }: {
     event?.preventDefault()
     if (busy || !account.trim() || !secret || extraFields.some(field => field.required && !extraValues[field.key]?.trim())) return
     setBusy(true)
+    let saveConfirmed = false
     try {
       const saved = await secureApi<SecureStatus>('/save', {
         origin: target.origin, tabId: target.tabId, account, secret, automatic: remember, profile,
@@ -106,6 +115,7 @@ export function SecureAsk({ target, onClose, onSaved }: {
       if (!saved.saved || (saved.profiles && !saved.profiles.some(item => item.id === profile && item.saved))) {
         throw new Error('La bóveda no confirmó el perfil seleccionado')
       }
+      saveConfirmed = true
       if (saved.profiles) setProfiles(saved.profiles)
       setAutomatic(remember)
       // The host read back the record after writing. A later site-login error
@@ -131,9 +141,13 @@ export function SecureAsk({ target, onClose, onSaved }: {
       setFeedback('No se confirmó el guardado para ' + target.origin + '. ' + detail
         + ' No introduzcas otra vez tu contraseña hasta comprobar el estado del acceso.')
     } finally {
-      setSecret('')
-      setAccount('')
-      setExtraValues({})
+      // Keep human-entered values visible after a failed vault write so the
+      // person can inspect the page and retry without retyping a secret.
+      if (saveConfirmed) {
+        setSecret('')
+        setAccount('')
+        setExtraValues({})
+      }
       setBusy(false)
     }
   }
@@ -214,76 +228,101 @@ export function SecureAsk({ target, onClose, onSaved }: {
     finally { setBusy(false) }
   }
   return (
-    <div className={css.root} data-secure-ask="true" role="region" aria-label="Acceso seguro de Kira">
-      <p className={css.notice}>Kira comprobará primero los accesos existentes. Si necesitas registrar uno nuevo, los datos se envían directamente a la bóveda local, nunca al modelo.</p>
-      <div className={css.origin} title={target.origin}>🔒 {target.origin}</div>
-      <div role="group" aria-label="Seleccionar identidad de acceso" className={css.actions}>
-        <button type="button" disabled={busy} aria-pressed={profile === 'personal'}
-          onClick={() => { void chooseProfile('personal') }}>Cuenta personal</button>
-        <button type="button" disabled={busy} aria-pressed={profile === 'kira'}
-          onClick={() => { void chooseProfile('kira') }}>Cuenta de Kira</button>
-      </div>
-      <p className={css.notice}>{selectedSaved
-        ? 'La identidad seleccionada tiene un acceso cifrado disponible.'
-        : profile === 'kira'
-          ? 'Kira aún no tiene acceso guardado a este sitio. Registrar una cuenta requiere autorización y cumplir las reglas del servicio.'
-          : 'Aún no hay un acceso personal guardado para este sitio.'}</p>
-      {target.diagnostic && <p role="status" className={css.feedback}>{target.diagnostic}</p>}
-      {relatedOrigin && <div className={css.saved} role="status">
-        <span>Ya tienes un acceso cifrado en el módulo relacionado ({relatedOrigin}). Esta página usa otro dominio, por lo que no lo aplicaré automáticamente.</span>
-        <button type="button" disabled={busy} onClick={() => { void adoptRelated() }}>
-          Reutilizar en este sitio
-        </button>
-        <button type="button" disabled={busy} onClick={() => { void adoptRelated(true) }}>
-          Reutilizar y no volver a preguntar en este sitio
-        </button>
-      </div>}
-      {selectedSaved && <div className={css.saved}>
-        <span>Ya existe un acceso guardado para este sitio. No es necesario escribirlo otra vez.</span>
-        <button type="button" disabled={busy} onClick={() => { void useSaved() }}>Usar acceso guardado</button>
-        {!selectedProfile?.automatic && <button type="button" disabled={busy}
-          onClick={() => { void rememberSaved() }}>No volver a preguntar en este sitio</button>}
-        <button type="button" disabled={busy} onClick={() => setEditing(value => !value)}>
-          {editing ? 'Ocultar formulario' : 'Cambiar o completar credenciales'}
-        </button>
-      </div>}
-      {editing && <form onSubmit={event => { void save(event) }} autoComplete="off" className={css.form}>
-        <label>{accountField?.label || 'Usuario o correo electrónico'}
-          <input value={account} disabled={busy} autoComplete="off" spellCheck={false}
-            type={accountField?.inputType === 'email' ? 'email' : accountField?.inputType === 'tel' ? 'tel'
-              : accountField?.inputType === 'number' ? 'text' : 'text'}
-            onChange={event => setAccount(event.currentTarget.value)}
-            placeholder={accountField?.placeholder || 'Escribe o pega tu usuario'} />
-        </label>
-        <label>{secretField?.label || 'Contraseña'}
-          <input type="password" value={secret} disabled={busy} autoComplete="new-password"
-            onChange={event => setSecret(event.currentTarget.value)}
-            placeholder={secretField?.placeholder || 'Escribe o pega la contraseña'} />
-        </label>
-        {extraFields.map(field => <label key={field.key}>{field.label}
-          <input type={field.inputType === 'email' ? 'email' : field.inputType === 'tel' ? 'tel'
-            : field.inputType === 'password' ? 'password' : 'text'}
+    <section className={css.root} data-secure-ask="true" role="region" aria-label="Acceso seguro de Kira">
+      <header className={css.header}>
+        <div className={css.headerCopy}>
+          <strong>Acceso seguro</strong>
+          <span>Solo tú y la bóveda local gestionan estas credenciales.</span>
+        </div>
+        <div className={css.headerActions}>
+          <span className={css.privatePill}>Privado</span>
+          <button type="button" className={css.iconButton} aria-label={collapsed ? 'Expandir acceso seguro' : 'Contraer acceso seguro'}
+            onClick={() => setCollapsed(value => !value)}>{collapsed ? '＋' : '−'}</button>
+          <button type="button" className={css.iconButton} aria-label="Cerrar acceso seguro" onClick={onClose}>×</button>
+        </div>
+      </header>
+      {!collapsed && <div className={css.body}>
+        <p className={css.notice}>
+          Kira comprobará primero los accesos existentes. Si necesitas registrar uno nuevo,
+          los datos se envían directamente a la bóveda local, nunca al modelo.
+        </p>
+        <div className={css.origin} title={target.origin}>🔒 {target.origin}</div>
+        <div role="group" aria-label="Seleccionar identidad de acceso" className={css.actions}>
+          <button type="button" disabled={busy} aria-pressed={profile === 'personal'}
+            onClick={() => { void chooseProfile('personal') }}>Cuenta personal</button>
+          <button type="button" disabled={busy} aria-pressed={profile === 'kira'}
+            onClick={() => { void chooseProfile('kira') }}>Cuenta de Kira</button>
+        </div>
+        <p className={css.notice}>{selectedSaved
+          ? 'La identidad seleccionada tiene un acceso cifrado disponible.'
+          : profile === 'kira'
+            ? 'Kira aún no tiene acceso guardado a este sitio. Registrar una cuenta requiere autorización y cumplir las reglas del servicio.'
+            : 'Aún no hay un acceso personal guardado para este sitio.'}</p>
+        {target.diagnostic && <p role="status" className={css.feedback}>{target.diagnostic}</p>}
+        {relatedOrigin && <div className={css.saved} role="status">
+          <span>
+            Ya tienes un acceso cifrado en el módulo relacionado ({relatedOrigin}).
+            Esta página usa otro dominio, por lo que no lo aplicaré automáticamente.
+          </span>
+          <button type="button" disabled={busy} onClick={() => { void adoptRelated() }}>
+            Reutilizar en este sitio
+          </button>
+          <button type="button" disabled={busy} onClick={() => { void adoptRelated(true) }}>
+            Reutilizar y no volver a preguntar en este sitio
+          </button>
+        </div>}
+        {selectedSaved && <div className={css.saved}>
+          <span>Ya existe un acceso guardado para este sitio. No es necesario escribirlo otra vez.</span>
+          <button type="button" disabled={busy} onClick={() => { void useSaved() }}>Usar acceso guardado</button>
+          {!selectedProfile?.automatic && <button type="button" disabled={busy}
+            onClick={() => { void rememberSaved() }}>No volver a preguntar en este sitio</button>}
+          <button type="button" disabled={busy || !fieldsObserved} onClick={() => setEditing(value => !value)}>
+            {editing ? 'Ocultar formulario' : 'Cambiar o completar credenciales'}
+          </button>
+        </div>}
+        {!selectedSaved && !relatedOrigin && (!fieldsObserved || !completeCredentialForm) && <div className={css.unobserved} role="status">
+          {target.diagnostic ?? 'No se observó un formulario de acceso real. Phoenix no inventará campos ni solicitará credenciales todavía.'}
+        </div>}
+        {editing && fieldsObserved && <form onSubmit={(event) => { void save(event) }} autoComplete="off" className={css.form}>
+          {accountField && <label>{accountField.label}
+            <input value={account} disabled={busy} autoComplete="off" spellCheck={false}
+              type={accountField.inputType === 'email' ? 'email' : accountField.inputType === 'tel' ? 'tel' : 'text'}
+              onChange={event => setAccount(event.currentTarget.value)}
+              placeholder={accountField.placeholder} />
+          </label>}
+          {secretField && <label>{secretField.label}
+            <input type="password" value={secret} disabled={busy} autoComplete="new-password"
+              onChange={event => setSecret(event.currentTarget.value)}
+              placeholder={secretField.placeholder} />
+          </label>}
+          {extraFields.map(field => <label key={field.key}>{field.label}
+            <input type={field.inputType === 'email' ? 'email' : field.inputType === 'tel' ? 'tel'
+              : field.inputType === 'password' ? 'password' : 'text'}
             disabled={busy} required={field.required} value={extraValues[field.key] ?? ''}
             autoComplete="off" spellCheck={false}
             placeholder={field.placeholder || field.label}
-            onChange={event => { const value = event.currentTarget.value; setExtraValues(values => ({ ...values, [field.key]: value })) }} />
-        </label>)}
-        <label className={css.option}><input type="checkbox" checked={automatic} disabled={busy}
-          onChange={event => setAutomatic(event.currentTarget.checked)} />
-          Recordar y permitir inicio automático en futuras visitas</label>
-        <div className={css.actions}>
-          <button type="submit" disabled={busy || !account.trim() || !secret
-            || extraFields.some(field => field.required && !extraValues[field.key]?.trim())}>Guardar y continuar</button>
-          {!automatic && <button type="button" disabled={busy || !account.trim() || !secret
-            || extraFields.some(field => field.required && !extraValues[field.key]?.trim())}
-            onClick={() => { void save(undefined, true) }}>Guardar y no volver a preguntar</button>}
-          <button type="button" disabled={busy} onClick={onClose}>Ahora no</button>
-          {selectedSaved && <button type="button" disabled={busy} onClick={() => { void remove() }}>Eliminar acceso</button>}
-        </div>
-      </form>}
-      {feedback && <p className={css.feedback} role="status">{feedback}</p>}
-      {!editing && <button type="button" disabled={busy} onClick={onClose}>Cerrar acceso seguro</button>}
-      <p className={css.foot}>La contraseña no se incorpora a la conversación ni a sus eventos. Puede requerirse MFA, passkey o CAPTCHA.</p>
-    </div>
+            onChange={(event) => {
+              const value = event.currentTarget.value
+              setExtraValues(values => ({ ...values, [field.key]: value }))
+            }} />
+          </label>)}
+          <label className={css.option}><input type="checkbox" checked={automatic} disabled={busy}
+            onChange={event => setAutomatic(event.currentTarget.checked)} />
+            Recordar y permitir inicio automático en futuras visitas</label>
+          <div className={css.actions}>
+            <button type="submit" disabled={busy || !canSave}>Guardar y continuar</button>
+            {!automatic && <button type="button" disabled={busy || !canSave}
+              onClick={() => { void save(undefined, true) }}>Guardar y no volver a preguntar</button>}
+            <button type="button" disabled={busy} onClick={onClose}>Ahora no</button>
+            {selectedSaved && <button type="button" disabled={busy} onClick={() => { void remove() }}>Eliminar acceso</button>}
+          </div>
+        </form>}
+        {feedback && <p className={css.feedback} role="status">{feedback}</p>}
+        {!editing && <button type="button" disabled={busy} onClick={onClose}>Cerrar acceso seguro</button>}
+        <p className={css.foot}>
+          La contraseña no se incorpora a la conversación ni a sus eventos. Puede requerirse MFA, passkey o CAPTCHA.
+        </p>
+      </div>}
+    </section>
   )
 }

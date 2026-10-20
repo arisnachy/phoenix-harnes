@@ -98,6 +98,11 @@ True(
     failures);
 Equal("https://example.com", fill.Origin, "form origin canonicalized", failures);
 True(fill.Submit, "form submit preserved", failures);
+var markerFillScript = PhoenixDesktopWindow.BuildBrowserFillScript(new BrowserCommand(
+    "phoenix.browser.fill-form", Origin: "https://example.com", Submit: true,
+    Fields: [new BrowserFormValue(0, "__SUBMIT__", null)]));
+True(markerFillScript.Contains("__SUBMIT__", StringComparison.Ordinal),
+    "template markers in a form field remain literal", failures);
 EqualInt(1, fill.Fields?.Count ?? 0, "form field count preserved", failures);
 True(
     BrowserCommand.TryParse(
@@ -116,6 +121,28 @@ True(
     failures);
 Equal("https://example.com", loginCommand.Origin, "login origin canonicalized", failures);
 True(loginCommand.Submit, "login submits by default", failures);
+True(
+    BrowserCommand.TryParse(
+        "{\"type\":\"phoenix.browser.login\",\"origin\":\"https://example.com\",\"account\":\"unit-user\",\"secret\":\"synthetic-login-secret\",\"extras\":{\"extra:0\":\"demo\"}}",
+        out var extraLoginCommand,
+        allowAutomation: true),
+    "runtime pipe admits saved site-specific login fields",
+    failures);
+Equal("demo", extraLoginCommand.Extras?.GetValueOrDefault("extra:0"), "site-specific login field preserved", failures);
+var markerLoginScript = PhoenixDesktopWindow.BuildBrowserLoginScript(new BrowserCommand(
+    "phoenix.browser.login", Origin: "https://example.com", Account: "__SECRET__",
+    Secret: "__EXTRAS____SUBMIT__", Submit: true));
+True(markerLoginScript.Contains("const account = \"__SECRET__\";", StringComparison.Ordinal),
+    "template markers in an account remain literal", failures);
+True(markerLoginScript.Contains("const secret = \"__EXTRAS____SUBMIT__\";", StringComparison.Ordinal),
+    "template markers in a password remain literal", failures);
+False(
+    BrowserCommand.TryParse(
+        "{\"type\":\"phoenix.browser.login\",\"origin\":\"https://example.com\",\"account\":\"unit-user\",\"secret\":\"synthetic-login-secret\",\"extras\":{\"extra:0\":42}}",
+        out _,
+        allowAutomation: true),
+    "runtime pipe rejects invalid extra login field values",
+    failures);
 False(
     BrowserCommand.TryParse(
         "{\"type\":\"phoenix.browser.login\",\"origin\":\"http://example.com\",\"account\":\"unit-user\",\"secret\":\"synthetic-login-secret\"}",

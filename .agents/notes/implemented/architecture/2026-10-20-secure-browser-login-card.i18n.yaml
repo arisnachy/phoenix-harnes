@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-10-20-secure-browser-login-card.md
+2026-10-20-secure-browser-login-card.md: c1c7b060dad51cc278dfd6d402a700bc63df8775
+2026-10-20-secure-browser-login-card.zh.md: e88e7c52a9cf4d33f035976674743fe0b984c0e6

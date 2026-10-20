@@ -522,6 +522,8 @@ export const LINK_MAP: Readonly<Record<string, string>> = {
   AuthorizationStatus: 'credentials.md',
   AuthorizationTelemetry: 'credentials.md',
   CredentialRef: 'credentials.md',
+  WebLoginStatus: 'credentials.md',
+  WebLoginResolution: 'credentials.md',
   CredentialKey: 'credentials.md',
   CredentialInfo: 'credentials.md',
   CredentialRecord: 'credentials.md',

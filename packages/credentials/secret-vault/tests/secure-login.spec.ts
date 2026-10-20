@@ -1,10 +1,25 @@
 import { describe, expect, it } from 'vitest'
+import { JSDOM } from 'jsdom'
 import { loginOrigin, loginDetectionExpression, loginGateExpression, relatedCredentialOrigin, relatedCredentialOrigins, registerSecureLogin, safeSecureLoginFailure } from '../src/secure-login.ts'
 
 describe('origin-scoped secure login', () => {
+  it('describes only the password form even when another email field precedes it', () => {
+    const dom = new JSDOM('<form><label>Newsletter<input type="email"></label></form>'
+      + '<form><label>Player ID<input name="player"></label><label>Site password<input type="password"></label>'
+      + '<label>Tenant<input name="tenant" required></label></form>', {
+      url: 'https://example.org/login', runScripts: 'outside-only',
+    })
+    dom.window.HTMLElement.prototype.getClientRects = () => [{ width: 100, height: 20 }] as never
+    try {
+      const state = dom.window.eval(loginGateExpression()) as { fields: { key: string; label: string }[] }
+      expect(state.fields.map(field => [field.key, field.label])).toEqual([
+        ['account', 'Player ID'], ['secret', 'Site password'], ['extra:0', 'Tenant'],
+      ])
+    } finally { dom.window.close() }
+  })
   it('does not mistake a persistent account menu or a logout control for a login requirement', () => {
     const run = new Function('document', 'location', 'URL', 'return ' + loginGateExpression()) as (
-      doc: unknown, location: unknown, url: typeof URL
+      doc: unknown, location: unknown, url: typeof URL,
     ) => { required: boolean; gateVisible: boolean; authenticated?: boolean }
     const makeElement = (text: string) => ({
       tagName: 'BUTTON', textContent: text, innerText: text,
@@ -170,8 +185,8 @@ describe('origin-scoped secure login', () => {
   it('builds safe site-specific login fields without exposing entered values', () => {
     const evaluator = new Function('document', 'location', 'URL',
       'return ' + loginGateExpression('inspect')) as (d: unknown, l: unknown, u: unknown) => {
-        fields: Array<{ key: string; role: string; label: string; inputType: string }>
-      }
+      fields: Array<{ key: string; role: string; label: string; inputType: string }>
+    }
     const fields = [
       { type: 'tel', name: 'numero', id: '', placeholder: '809 000 0000', required: true,
         readOnly: false, disabled: false, autocomplete: '', getClientRects: () => [1],

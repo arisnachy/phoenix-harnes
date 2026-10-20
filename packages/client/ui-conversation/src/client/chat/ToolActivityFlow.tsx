@@ -644,7 +644,9 @@ function BrowserWorkspace({
     setSavedAccessNotice(previous => previous?.origin === next?.origin && previous?.phase === next?.phase
       ? previous : next)
   }, [])
-  const showSidecar = live || secureRequest !== null || savedAccessNotice !== null
+  // Secure Ask belongs below MiniBrowser. Only real activity or a saved-access
+  // notice should allocate the adjacent transcript pane.
+  const showSidecar = live || savedAccessNotice !== null
   const activityRef = useRef<HTMLDivElement | null>(null)
   const followingRef = useRef(true)
   const [following, setFollowing] = useState(true)
@@ -699,14 +701,19 @@ function BrowserWorkspace({
     <div className={css.browserWorkspace} data-browser-workspace={live ? '' : undefined}
       data-activity-open={showSidecar ? 'true' : undefined} data-chat-flow-kind="browser-workspace">
       <div className={css.browserPane}>
-        <MiniBrowser key={sessionId} sessionId={sessionId} requested active={selected} {...tabId === undefined ? {} : { initialTabId: tabId }}
+        <MiniBrowser key={sessionId} sessionId={sessionId} requested active={selected}
+          {...tabId === undefined ? {} : { initialTabId: tabId }}
           onActivate={onActivate} autoScroll={false} onPageChange={setPage}
           onSecureLoginRequest={handleSecureRequest} onSavedAccessNotice={handleSavedAccessNotice} />
+        {secureRequest !== null && <SecureAsk key={secureRequest.origin + ':' + secureRequest.tabId}
+          target={secureRequest}
+          onClose={dismissSecureRequest}
+          onSaved={dismissSecureRequest} />}
       </div>
-      {showSidecar && <aside className={css.activityPane} aria-label="Actividad y acceso seguro del agente">
+      {showSidecar && <aside className={css.activityPane} aria-label="Actividad del agente">
         <header className={css.activityHeader}>
-          <strong>{secureRequest === null ? 'Actividad del agente' : 'Kira · Secure Ask'}</strong>
-          <span className={css.livePill}><span aria-hidden="true" /> {secureRequest === null ? 'En vivo' : 'Protegido'}</span>
+          <strong>Actividad del agente</strong>
+          <span className={css.livePill}><span aria-hidden="true" /> En vivo</span>
         </header>
         {page !== null && (
           <div className={css.pageInfo}>
@@ -723,15 +730,11 @@ function BrowserWorkspace({
               ? 'Ya existe un acceso cifrado para ' + savedAccessNotice.origin + '. Lo conservaré y, cuando la página lo requiera, podré utilizarlo con la autorización correspondiente.'
               : savedAccessNotice.phase === 'related'
                 ? 'Encontré un acceso cifrado de un módulo relacionado. La página principal utiliza otro dominio. Puedes autorizar su reutilización desde Acceso seguro sin escribir de nuevo la contraseña.'
-              : savedAccessNotice.phase === 'vault-unavailable'
-                ? 'No pude consultar los accesos guardados para ' + savedAccessNotice.origin + '. No te pediré las credenciales otra vez hasta recuperar la bóveda.'
-                : 'Tengo un acceso registrado para ' + savedAccessNotice.origin + ', pero no puedo confirmar el inicio de sesión. Puedes revisar el acceso guardado.'}</span>
+                : savedAccessNotice.phase === 'vault-unavailable'
+                  ? 'No pude consultar los accesos guardados para ' + savedAccessNotice.origin + '. No te pediré las credenciales otra vez hasta recuperar la bóveda.'
+                  : 'Tengo un acceso registrado para ' + savedAccessNotice.origin + ', pero no puedo confirmar el inicio de sesión. Puedes revisar el acceso guardado.'}</span>
         </div>}
-        {secureRequest !== null ? <SecureAsk key={secureRequest.origin + ':' + secureRequest.tabId}
-          target={secureRequest}
-          onClose={dismissSecureRequest}
-          onSaved={dismissSecureRequest}
-        /> : <div ref={activityRef} className={css.activityMessages} aria-live="polite" aria-relevant="additions text">
+        <div ref={activityRef} className={css.activityMessages} aria-live="polite" aria-relevant="additions text">
           {items.map(item => (
             <Fragment key={item.key}>
               {item.kind === 'node'
@@ -755,8 +758,8 @@ function BrowserWorkspace({
             <TurnStatus startTime={turnStatus.startTime} progress={turnStatus.progress}
               expiresAfterMs={turnStatus.expiresAfterMs} t={seatProps.t} />
           )}
-        </div>}
-        {!following && secureRequest === null && <button type="button" className={css.followLatest}
+        </div>
+        {!following && <button type="button" className={css.followLatest}
           onClick={returnToLatest} aria-label="Ir a la última conversación de Kira">
           ↓ Ir a lo más reciente
         </button>}

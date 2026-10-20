@@ -23,6 +23,10 @@ const SHARED_BROWSER = join(tmpdir(), 'phoenix-browser-cdp.json')
 const SCOPED_BROWSER_DIR = join(tmpdir(), 'phoenix-mini-browser-cdp')
 const SCRIPT = [
   '$ErrorActionPreference = "Stop"',
+  // PowerShell 7 does not load ProtectedData's assembly on first use.
+  // Windows PowerShell happened to load it transitively, which masked the
+  // missing dependency until the broker ran under the current host runtime.
+  'Add-Type -AssemblyName System.Security',
   '$payload = [Console]::In.ReadToEnd() | ConvertFrom-Json',
   '$body = [Convert]::FromBase64String($payload.body)',
   '$entropy = [Convert]::FromBase64String($payload.entropy)',
@@ -124,7 +128,7 @@ async function dpapi(mode: 'protect' | 'unprotect', body: string, origin: string
         finish(new Error('Respuesta de la bóveda demasiado grande'))
       }
     })
-    child.on('close', code => {
+    child.on('close', (code) => {
       if (code !== 0 || !result.trim()) finish(new Error('Operación segura rechazada'))
       else finish()
     })
@@ -136,7 +140,7 @@ async function dpapi(mode: 'protect' | 'unprotect', body: string, origin: string
  * This is read only inside the trusted host; values never cross the model wire.
  */
 async function legacyLogin(vault: CredentialProvider | undefined, origin: string):
-  Promise<{ login: LoginContent; automatic: boolean } | undefined> {
+Promise<{ login: LoginContent; automatic: boolean } | undefined> {
   if (!vault) return undefined
   try {
     const [account, secret, permission] = await Promise.all([
@@ -202,7 +206,7 @@ async function setRememberedLogin(origin: string, profile: LoginProfile, automat
     await rename(temporary, path)
   } finally { await rm(temporary, { force: true }).catch(() => {}) }
 }
-async function listProfiles(origin: string, vault?: CredentialProvider): Promise<LoginProfileInfo[]> {
+async function listProfiles(origin: string, vault?: CredentialProvider): Promise<[LoginProfileInfo, LoginProfileInfo]> {
   const [personal, kira] = await Promise.all([load(origin), load(origin, 'kira')])
   const legacy = personal ? undefined : await legacyLogin(vault, origin)
   return [
@@ -216,6 +220,103 @@ async function listProfiles(origin: string, vault?: CredentialProvider): Promise
 async function activeProfile(origin: string, profiles: readonly LoginProfileInfo[]): Promise<LoginProfile> {
   return preferredLoginProfile(profiles, await readPrimary(origin))
 }
+
+/**
+ * Read the selected DPAPI profile for the internal browser-login seam.
+ *
+ * This helper deliberately has no legacy-vault fallback. The caller may use
+ * that fallback only when the DPAPI record is absent; an existing DPAPI record
+ * without automatic consent must remain an authoritative denial.
+ *
+ * @param origin - Exact HTTPS origin whose current browser page is authorized.
+ * @returns The selected profile and encrypted record, or undefined
+ * when no DPAPI record is saved for this origin.
+ */
+async function selectedBrowserLogin(origin: string): Promise<{
+  record: LoginRecord
+  profile: LoginProfile
+} | undefined> {
+  const canonical = loginOrigin(origin)
+  const profiles = await listProfiles(canonical)
+  const selected = await activeProfile(canonical, profiles)
+  const profile = profiles.find(item => item.id === selected)
+  if (!profile?.saved || profile.source !== 'dpapi') return undefined
+  const record = await load(canonical, selected)
+  if (!record) return undefined
+  return { record, profile: selected }
+}
+
+async function decryptBrowserLogin(origin: string, record: LoginRecord, profile: LoginProfile): Promise<LoginContent> {
+  let login: LoginContent
+  try {
+    const decoded: unknown = JSON.parse(Buffer.from(
+      await dpapi('unprotect', record.sealed, origin, profile), 'base64',
+    ).toString('utf8')) as LoginContent
+    if (decoded === null || typeof decoded !== 'object' || Array.isArray(decoded)) {
+      throw new Error('Registro de bóveda inválido')
+    }
+    const candidate = decoded as Record<string, unknown>
+    const rawExtras = candidate.extras
+    if (rawExtras !== undefined && (rawExtras === null || typeof rawExtras !== 'object'
+      || Array.isArray(rawExtras) || Object.keys(rawExtras).length > 4
+      || Object.entries(rawExtras).some(([key, value]) =>
+        !/^extra:[0-3]$/u.test(key) || typeof value !== 'string' || value.length > 4096))) {
+      throw new Error('Registro de bóveda inválido')
+    }
+    login = {
+      origin: candidate.origin as string,
+      account: candidate.account as string,
+      secret: candidate.secret as string,
+      ...(rawExtras === undefined ? {} : { extras: rawExtras as Record<string, string> }),
+    }
+  } catch {
+    throw new Error('Registro de bóveda inválido')
+  }
+  if (login.origin !== origin || typeof login.account !== 'string' || !login.account.trim()
+    || login.account.length > 4096 || typeof login.secret !== 'string' || !login.secret
+    || login.secret.length > 16384) {
+    throw new Error('Registro de bóveda inválido')
+  }
+  return login
+}
+
+function sameLoginExtras(actual: Record<string, string> | undefined,
+  expected: Record<string, string> | undefined): boolean {
+  const left = actual ?? {}
+  const right = expected ?? {}
+  const keys = Object.keys(right)
+  return Object.keys(left).length === keys.length && keys.every(key => left[key] === right[key])
+}
+
+/**
+ * Register the host-only browser-login credential capability.
+ *
+ * Event results stay inside the trusted Cordis process. Consumers must call
+ * the events through `ctx.serial`; the result is never a model argument,
+ * session event, tool result, or UI payload.
+ *
+ * @param ctx - Host composition that owns this vault plugin.
+ */
+export function registerBrowserLoginEvents(ctx: Context): void {
+  ctx.on('credentials/web-login-status', async (origin) => {
+    const saved = await selectedBrowserLogin(origin)
+    if (!saved) return undefined
+    return { saved: true, automatic: saved.record.automatic }
+  })
+  ctx.on('credentials/web-login-resolve', async (origin) => {
+    const saved = await selectedBrowserLogin(origin)
+    if (!saved) return undefined
+    if (!saved.record.automatic) return { authorized: false }
+    const login = await decryptBrowserLogin(loginOrigin(origin), saved.record, saved.profile)
+    return {
+      authorized: true,
+      account: login.account,
+      secret: login.secret,
+      ...(login.extras === undefined ? {} : { extras: login.extras }),
+    }
+  })
+}
+
 function loopbackRequest(req: IncomingMessage): boolean {
   const remote = req.socket.remoteAddress ?? ''
   const host = req.headers.host ?? ''
@@ -254,7 +355,7 @@ async function tabForLogin(tabId: string, origin: string): Promise<BrowserTab> {
   const names = await readdir(SCOPED_BROWSER_DIR).catch(() => [] as string[])
   const descriptors = [SHARED_BROWSER, ...names.filter(name => /^[a-f0-9]{64}\.json$/u.test(name))
     .map(name => join(SCOPED_BROWSER_DIR, name))]
-  const matches = await Promise.all(descriptors.map(async file => {
+  const matches = await Promise.all(descriptors.map(async (file) => {
     try {
       const descriptor = JSON.parse(await readFile(file, 'utf8')) as { endpoint?: string; pid?: number }
       if (!descriptor.endpoint || !Number.isInteger(descriptor.pid) || (descriptor.pid ?? 0) < 1) return undefined
@@ -299,10 +400,12 @@ export function loginDetectionExpression(): string {
       const passwords = fields.filter(e => e.type === 'password');
       if (passwords.length !== 1) return false;
       const pass = passwords[0];
-      const account = fields.find(e => e !== pass
+      const container = pass.form || pass.closest?.('[role="dialog"],[aria-modal="true"]');
+      const accountFields = container ? fields.filter(e => container.contains(e)) : fields;
+      const account = accountFields.find(e => e !== pass
         && (e.autocomplete === 'username' || e.type === 'email'
           || /user|email|login|account/i.test((e.name||'') + ' ' + (e.id||''))))
-        || fields.find(e => e !== pass && ['text','email','tel'].includes(e.type));
+        || accountFields.find(e => e !== pass && ['text','email','tel','number'].includes(e.type));
       return Boolean(account);
     });
   })()`
@@ -379,11 +482,13 @@ export function loginGateExpression(action: 'inspect' | 'open' = 'inspect'): str
       const passwords = fields.filter(el => el.type === 'password');
       if (passwords.length !== 1) return [];
       const pass = passwords[0];
-      const account = fields.find(el => el !== pass && (
+      const container = pass.form || pass.closest?.('[role="dialog"],[aria-modal="true"]');
+      const accountFields = container ? fields.filter(el => container.contains(el)) : fields;
+      const account = accountFields.find(el => el !== pass && (
         el.autocomplete === 'username' || el.type === 'email'
         || /(?:user|email|login|account|usuario|correo|tel[eé]fono|documento|c[eé]dula)/i
           .test((el.name||'') + ' ' + (el.id||''))))
-        || fields.find(el => el !== pass && ['text','email','tel','number'].includes(el.type));
+        || accountFields.find(el => el !== pass && ['text','email','tel','number'].includes(el.type));
       if (!account) return [];
       const hint = (el, role, key) => {
         const labels = [];
@@ -396,7 +501,7 @@ export function loginGateExpression(action: 'inspect' | 'open' = 'inspect'): str
           inputType: ['email','tel','password','number'].includes(el.type) ? el.type : 'text',
           required: Boolean(el.required) };
       };
-      const extra = fields.filter(el => el !== pass && el !== account
+      const extra = accountFields.filter(el => el !== pass && el !== account
         && ['text','email','tel','number'].includes(el.type)
         && el.autocomplete !== 'one-time-code').slice(0, 4);
       return [hint(account,'account','account'), hint(pass,'secret','secret'),
@@ -435,11 +540,14 @@ async function inspectLoginGate(tab: BrowserTab, action: 'inspect' | 'open' = 'i
         params: { expression: loginGateExpression(action), returnByValue: true } }))
       } catch { finish(undefined, new Error('No se pudo consultar el formulario')) }
     })
-    ws.addEventListener('message', event => {
+    ws.addEventListener('message', (event) => {
       try {
         const packet = JSON.parse(String(event.data)) as {
-          id?: number; error?: unknown; result?: {
-            exceptionDetails?: unknown; result?: { value?: LoginGateState }
+          id?: number
+          error?: unknown
+          result?: {
+            exceptionDetails?: unknown
+            result?: { value?: LoginGateState }
           }
         }
         if (packet.id !== 1) return
@@ -484,18 +592,30 @@ async function injectLogin(tab: BrowserTab, login: LoginContent): Promise<string
     + 'const visible=e=>!e.disabled&&!e.readOnly&&e.getClientRects().length>0;'
     + 'const candidates=roots.flatMap(d=>{const fields=[...d.querySelectorAll("input")].filter(visible);'
     + 'const passwords=fields.filter(e=>e.type==="password");if(passwords.length!==1)return [];'
-    + 'const pass=passwords[0];const account=fields.find(e=>e!==pass&&(e.autocomplete==="username"||e.type==="email"'
+    + 'const pass=passwords[0];const container=pass.form||pass.closest?.("[role=dialog],[aria-modal=true]");const accountFields=container?fields.filter(e=>container.contains(e)):fields;const account=accountFields.find(e=>e!==pass&&(e.autocomplete==="username"||e.type==="email"'
     + '||/user|email|login|account|usuario|correo|tel[eé]fono|documento|c[eé]dula/i.test((e.name||"")+" "+(e.id||""))))'
-    + '||fields.find(e=>e!==pass&&["text","email","tel","number"].includes(e.type));'
-    + 'return account?[{pass,account}]:[];});'
+    + '||accountFields.find(e=>e!==pass&&["text","email","tel","number"].includes(e.type));'
+    + 'return account?[{pass,account,form:pass.form||account.form}]:[];});'
     + 'if(candidates.length!==1) return "login-form-not-found";'
-    + 'const {pass,account}=candidates[0];'
+    + 'const {pass,account,form}=candidates[0];'
+    // A modal without a <form> still gets a bounded container. The old code
+    // scanned every visible text input in every same-origin document, so a
+    // search box or a second widget could receive an extra credential.
+    + 'let loginRoot=form;'
+    + 'if(!loginRoot){let root=pass.parentElement;for(let depth=0;depth<8&&root;depth++,root=root.parentElement){'
+    + 'const buttons=[...root.querySelectorAll("button,[role=button],input[type=submit]")]'
+    + '.filter(e=>/^(?:ingresar|iniciar sesi[oó]n|acceder|entrar|log ?in|sign ?in)$/i.test((e.textContent||e.value||"").trim())&&!e.disabled&&e.getClientRects().length>0);'
+    + 'if(root.contains(account)&&buttons.length===1){loginRoot=root;break;}}}'
+    + 'if(!loginRoot)return "login-form-not-found";'
+    + 'if(form){const submit=form.querySelector("button[type=submit],input[type=submit]");'
+    + 'const action=submit?.getAttribute?.("formaction")?submit.formAction:(form.action||location.href);'
+    + 'if(new URL(action,location.href).origin!==expected)return "origin-changed";}'
     + 'const set=(el,v)=>{const win=el.ownerDocument.defaultView||window;'
     + 'const setter=Object.getOwnPropertyDescriptor(win.HTMLInputElement.prototype,"value").set;'
     + 'setter.call(el,v);el.dispatchEvent(new win.Event("input",{bubbles:true}));el.dispatchEvent(new win.Event("change",{bubbles:true}));};'
     + 'set(account,' + JSON.stringify(login.account) + ');'
     + 'set(pass,' + JSON.stringify(login.secret) + ');'
-    + 'const extraInputs=roots.flatMap(d=>[...d.querySelectorAll("input")].filter(visible))'
+    + 'const extraInputs=[...loginRoot.querySelectorAll("input")].filter(visible)'
     + '.filter(el=>el!==account&&el!==pass&&["text","email","tel","number"].includes(el.type)'
     + '&&el.autocomplete!=="one-time-code").slice(0,4);'
     + 'const extras=' + JSON.stringify(login.extras ?? {}) + ';'
@@ -504,16 +624,10 @@ async function injectLogin(tab: BrowserTab, login: LoginContent): Promise<string
     + 'set(extraInputs[i],extras[key]);}'
     + 'await new Promise(resolve=>setTimeout(resolve,80));'
     + 'if(location.origin!==expected) return "origin-changed";'
-    + 'const form=pass.form || account.form;'
     + 'if(form){const button=form.querySelector("button[type=submit],input[type=submit]");'
     + 'if(button)button.click();else form.requestSubmit();}'
-    + 'else {let root=pass;let clicked=false;for(let depth=0;depth<8;depth++){'
-    + 'root=root.parentElement;if(!root)break;'
-    + 'const buttons=[...root.querySelectorAll("button,[role=button],input[type=submit]")]'
-    + '.filter(e=>/^(?:ingresar|iniciar sesi[oó]n|acceder|entrar|log ?in|sign ?in)$/i'
-    + '.test((e.textContent||e.value||"").trim())&&!e.disabled&&e.getClientRects().length>0);'
-    + 'if(buttons.length===1){buttons[0].click();clicked=true;break;}}'
-    + 'if(!clicked)return "login-form-not-found";}'
+    + 'else {[...loginRoot.querySelectorAll("button,[role=button],input[type=submit]")]'
+    + '.find(e=>/^(?:ingresar|iniciar sesi[oó]n|acceder|entrar|log ?in|sign ?in)$/i.test((e.textContent||e.value||"").trim())&&!e.disabled&&e.getClientRects().length>0)?.click();}'
     + 'return "submitted";'
     + '})()'
   return await new Promise<string>((resolve, reject) => {
@@ -535,10 +649,12 @@ async function injectLogin(tab: BrowserTab, login: LoginContent): Promise<string
         params: { expression, returnByValue: true, awaitPromise: true },
       }))
     })
-    ws.addEventListener('message', event => {
+    ws.addEventListener('message', (event) => {
       try {
         const data = JSON.parse(String(event.data)) as {
-          id?: number; error?: unknown; result?: { exceptionDetails?: unknown; result?: { value?: unknown } }
+          id?: number
+          error?: unknown
+          result?: { exceptionDetails?: unknown; result?: { value?: unknown } }
         }
         if (data.id !== 1) return
         if (data.error || data.result?.exceptionDetails) return finish(new Error('El formulario rechazó el inicio de sesión'))
@@ -555,8 +671,9 @@ async function useLogin(origin: string, tabId: string, manual: boolean,
     || (!(saved?.automatic ?? previous?.automatic ?? false) && !manual)) return 'not-authorized'
   const tab = await tabForLogin(tabId, origin)
   const login = saved
-    ? JSON.parse(Buffer.from(await dpapi('unprotect', saved.sealed, origin, profile), 'base64').toString('utf8')) as LoginContent
-    : previous!.login
+    ? await decryptBrowserLogin(origin, saved, profile)
+    : previous?.login
+  if (login === undefined) return 'not-authorized'
   if (login.origin !== origin || !login.account || !login.secret) throw new Error('Registro de bóveda inválido')
   const preparation = await prepareVisibleLogin(tab)
   if (preparation !== undefined) return preparation
@@ -576,7 +693,8 @@ async function useLogin(origin: string, tabId: string, manual: boolean,
 /** Stable human-readable failure codes. Never reflect raw secrets or CDP payloads. */
 export function safeSecureLoginFailure(error: unknown): { code: number; body: { error: string; reason: string } } {
   const message = error instanceof Error ? error.message : ''
-  if (/bóveda|vault|no se pudo leer el acceso cifrado|registro de acceso dañado|operación segura rechazada|powershell|windows|la verificación posterior al guardado/i.test(message)) {
+  if (/bóveda|vault|no se pudo leer el acceso cifrado|registro de acceso dañado/i.test(message)
+    || /operación segura rechazada|powershell|windows|la verificación posterior al guardado/i.test(message)) {
     return { code: 503, body: { reason: 'vault-unavailable',
       error: 'La bóveda no confirmó el cifrado y la recuperación del acceso. El guardado no está verificado; revisa Windows y la identidad activa.' } }
   }
@@ -601,7 +719,7 @@ export function registerSecureLogin(ctx: Context, vault?: CredentialProvider): (
           const origin = loginOrigin(route.searchParams.get('origin') ?? '')
           const profiles = await listProfiles(origin, vault)
           const selected = await activeProfile(origin, profiles)
-          const current = profiles.find(p => p.id === selected)!
+          const current = profiles[selected === 'kira' ? 1 : 0]
           let related: { relatedSaved: true; relatedOrigin: string; relatedProfile: LoginProfile } | undefined
           if (!current.saved) {
             for (const candidate of relatedCredentialOrigins(origin)) {
@@ -634,7 +752,7 @@ export function registerSecureLogin(ctx: Context, vault?: CredentialProvider): (
             throw new Error('Esa identidad no tiene acceso guardado')
           }
           await setPrimary(origin, profile)
-          const current = profiles.find(item => item.id === profile)!
+          const current = profiles[profile === 'kira' ? 1 : 0]
           respond(res, 200, { saved: true, automatic: current.automatic, profile, profiles })
           return
         }
@@ -703,6 +821,13 @@ export function registerSecureLogin(ctx: Context, vault?: CredentialProvider): (
           if (selected !== profile || !persisted?.saved || persisted.automatic !== (payload.automatic === true)) {
             throw new Error('La verificación posterior al guardado no coincidió')
           }
+          const persistedRecord = await load(origin, profile)
+          if (!persistedRecord) throw new Error('La verificación posterior al guardado no coincidió')
+          const persistedLogin = await decryptBrowserLogin(origin, persistedRecord, profile)
+          if (persistedLogin.account !== account || persistedLogin.secret !== secret
+            || !sameLoginExtras(persistedLogin.extras, extras)) {
+            throw new Error('La verificación posterior al guardado no coincidió')
+          }
           respond(res, 200, { saved: true, automatic: persisted.automatic, profile: selected,
             profiles })
           return
@@ -734,8 +859,9 @@ export function registerSecureLogin(ctx: Context, vault?: CredentialProvider): (
           const legacy = profile === 'personal' && !saved ? await legacyLogin(vault, source) : undefined
           if (!saved && !legacy) throw new Error('No existe un acceso guardado en el módulo')
           const data = saved
-            ? JSON.parse(Buffer.from(await dpapi('unprotect', saved.sealed, source, profile), 'base64').toString('utf8')) as LoginContent
-            : legacy!.login
+            ? await decryptBrowserLogin(source, saved, profile)
+            : legacy?.login
+          if (data === undefined) throw new Error('No existe un acceso guardado en el módulo')
           if (data.origin !== source || !data.account || !data.secret) throw new Error('Registro no válido')
           // Automatic login never transfers silently. It is granted only
           // when the person explicitly clicks the separate "never ask" option.
@@ -759,7 +885,7 @@ export function registerSecureLogin(ctx: Context, vault?: CredentialProvider): (
           }
           const profiles = await listProfiles(origin, vault)
           const selected = await activeProfile(origin, profiles)
-          const current = profiles.find(item => item.id === selected)!
+          const current = profiles[selected === 'kira' ? 1 : 0]
           respond(res, 200, { saved: current.saved, automatic: current.automatic,
             profile: selected, profiles })
           return

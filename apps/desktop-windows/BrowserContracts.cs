@@ -112,7 +112,8 @@ public sealed record BrowserCommand(
     string? Secret = null,
     string? Text = null,
     bool Submit = false,
-    IReadOnlyList<BrowserFormValue>? Fields = null)
+    IReadOnlyList<BrowserFormValue>? Fields = null,
+    IReadOnlyDictionary<string, string>? Extras = null)
 {
     private static readonly HashSet<string> PublicTypes = new(StringComparer.Ordinal)
     {
@@ -199,12 +200,28 @@ public sealed record BrowserCommand(
                     || !TryGetString(doc.RootElement, "secret", out var secret)
                     || secret.Length > 16384)
                     return false;
+                Dictionary<string, string>? extras = null;
+                if (doc.RootElement.TryGetProperty("extras", out var extrasNode))
+                {
+                    if (extrasNode.ValueKind != JsonValueKind.Object) return false;
+                    extras = new Dictionary<string, string>(StringComparer.Ordinal);
+                    foreach (var extra in extrasNode.EnumerateObject())
+                    {
+                        if (extras.Count >= 4 || extra.Name.Length != 7
+                            || !extra.Name.StartsWith("extra:", StringComparison.Ordinal)
+                            || extra.Name[6] is < '0' or > '3'
+                            || extra.Value.ValueKind != JsonValueKind.String
+                            || extra.Value.GetString() is not string value || value.Length > 4096
+                            || !extras.TryAdd(extra.Name, value)) return false;
+                    }
+                }
                 command = new BrowserCommand(
                     type,
                     Origin: origin,
                     Account: account,
                     Secret: secret,
-                    Submit: submit);
+                    Submit: submit,
+                    Extras: extras);
                 return true;
             }
 
