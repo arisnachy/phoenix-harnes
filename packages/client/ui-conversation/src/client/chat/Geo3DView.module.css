@@ -14,3 +14,5 @@
 .controls button:focus-visible{outline:3px solid #c8622b;outline-offset:2px}
 @media(max-width:720px){.scene{height:390px}.instruction{left:10px;top:10px;font-size:10px}}
 @media(max-width:420px){.scene{height:345px;min-height:345px}.controls{left:10px;right:10px;bottom:10px;justify-content:end}.controls button{padding:5px 8px}}
+
+.empty{min-height:320px;display:grid;place-items:center;padding:26px;color:#4a5662;font-size:13px;text-align:center}
