@@ -1,5 +1,7 @@
 # Phoenix Design Intelligence — referencia operativa
 
+Español | [中文](phoenix-design-intelligence.zh.md)
+
 ## Alcance
 
 Servicio visual transversal sobre los motores actuales de Phoenix: planea rutas entre Canva MCP y proveedores locales, registra diseños reales, guarda copias exportadas y comprueba integridad. **No incorpora un cliente autónomo de Canva, un publicador de terceros ni un editor visual independiente**. La orquestación de MCP corre mediante herramientas existentes disponibles a Kira, descritas en [la habilidad](../.agents/skills/phoenix-design-intelligence/SKILL.md).
