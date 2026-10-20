@@ -1,8 +1,16 @@
-.root{width:100%;position:relative;background:#edf1f1;overflow:hidden}
-.scene{display:block;width:100%;height:430px;touch-action:none;cursor:grab;user-select:none}
+
+.root{width:100%;min-width:0;position:relative;overflow:hidden;background:#ebf0f2;border-top:1px solid #dfe6e9}
+.scene{display:block;width:100%;height:clamp(320px,44vw,490px);min-height:320px;touch-action:none;cursor:grab;user-select:none}
 .scene:active{cursor:grabbing}
 .shape{cursor:pointer}
-.shape:focus-visible{outline:2px solid #d76b32}
-.instruction{position:absolute;z-index:1;left:15px;top:12px;padding:7px 10px;font-size:11px;background:#fffc;border:1px solid #e1e0dc;border-radius:9px;color:#524c45;pointer-events:none}
-.controls{position:absolute;right:11px;bottom:10px;display:flex;gap:6px}
-.controls button{background:#fffe;border:1px solid #ccc5ba;border-radius:7px;font:inherit;font-size:12px;padding:6px 9px;cursor:pointer}
+.shape:focus-visible{outline:3px solid #d76b32;outline-offset:4px}
+.instruction{position:absolute;z-index:1;left:16px;top:13px;max-width:calc(100% - 32px);
+  padding:9px 12px;font-size:11px;line-height:1.5;background:rgba(255,255,255,.95);
+  border:1px solid #dfe4e6;border-radius:10px;color:#384651;box-shadow:0 5px 18px #2939481d;pointer-events:none}
+.controls{position:absolute;right:13px;bottom:13px;display:flex;flex-wrap:wrap;gap:7px}
+.controls button{background:#fff;border:1px solid #d7e0e3;border-radius:8px;font:inherit;
+  color:#34414b;font-size:11px;font-weight:650;min-height:33px;padding:7px 10px;cursor:pointer}
+.controls button:hover{border-color:#c8622b;background:#fff0e8}
+.controls button:focus-visible{outline:3px solid #c8622b;outline-offset:2px}
+@media(max-width:720px){.scene{height:390px}.instruction{left:10px;top:10px;font-size:10px}}
+@media(max-width:420px){.scene{height:345px;min-height:345px}.controls{left:10px;right:10px;bottom:10px;justify-content:end}.controls button{padding:5px 8px}}
