@@ -6,6 +6,8 @@ whenToUse: El usuario pide monetizar, escribir libros completos, publicar en Ama
 
 # Phoenix Business Engine — protocolo operativo de Kira
 
+**Producción visual universal:** cuando el producto necesite portada, catálogo, publicidad, póster, presentación o identidad, invoca también la habilidad phoenix-design-intelligence. No confundas enlace Canva con archivo exportado ni suplantes el motor editorial/comercial.
+
 ## Detección de intención y orquestación de conectores (Business Mission)
 
 Cuando esté expuesta la herramienta nativa `business_plan_mission`, úsala con la petición comercial exacta. Lee en cada llamada el inventario MCP real desde el host y devuelve rutas candidatas por intención, categoría y canal. No pases ni inventes credenciales. Si no aparece, usa el CLI `pnpm business:mission` como alternativa y declara que la conectividad en vivo está sin comprobar. Un MCP `ready` no garantiza permisos ni publicación; comprueba el esquema, la sesión y las condiciones reales antes de operar. Requiere confirmación para publicar, cobrar, contratar o gastar.
