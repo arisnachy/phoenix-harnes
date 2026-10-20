@@ -8,6 +8,7 @@ import { resolve, join, sep, basename } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { spawnSync } from 'node:child_process'
 import { deflateRawSync } from 'node:zlib'
+import { resolvePageLayout, panelGeometry, hasDynamicPanels, EDITORIAL_CSS } from './comic-page-layout.mjs'
 
 const HOME = resolve(process.env.PHOENIX_COMICS_HOME || join(process.env.DSH_HOME || join(homedir(), '.dsh'), 'comic-studio'))
 const ID = /^[a-z][a-z0-9-]{1,63}$/u
@@ -105,9 +106,27 @@ export async function addLocation(seriesId,spec) {
 }
 export async function addIssue(seriesId,spec) {
   if(!object(spec)) fail('Número inválido.')
-  const issue={id:id(spec.id),number:spec.number,title:shortText(spec.title,'número',160),synopsis:shortText(spec.synopsis,'sinopsis',2000),pages:[]}
+  const issue={id:id(spec.id),number:spec.number,title:shortText(spec.title,'número',160),synopsis:shortText(spec.synopsis,'sinopsis',2000),covers:null,pages:[]}
   if(!Number.isSafeInteger(issue.number)||issue.number<1||issue.number>1000) fail('Número de entrega inválido.')
   return update(seriesId,async p=>{requireNew(p.issues,issue.id);if(p.issues.some(x=>x.number===issue.number))fail('Número editorial duplicado.');p.issues.push(issue);return {issueId:issue.id}})
+}
+export async function setIssueCovers(seriesId,issueId,spec) {
+  if(!object(spec))fail('Portada/contraportada inválida.')
+  const covers={
+    frontAsset:id(spec.frontAsset),
+    backAsset:id(spec.backAsset),
+    tagline:shortText(spec.tagline??'Una aventura por descubrir','lema',170),
+    backBlurb:shortText(spec.backBlurb??'Continúa la aventura en el próximo número.','contraportada',1200),
+    credits:shortText(spec.credits??'Equipo editorial','créditos',350),
+    imprint:shortText(spec.imprint??'Phoenix Comic Studio','sello',120),
+  }
+  return update(seriesId,async p=>{
+    const issue=seek(p.issues,id(issueId))
+    if(issue.covers)fail('La cubierta ya existe; haz una revisión editorial explícita en lugar de sobrescribirla.')
+    if(!p.assets[covers.frontAsset] || !p.assets[covers.backAsset])fail('Primero importa las imágenes reales de portada y contraportada.')
+    issue.covers=covers
+    return {issueId,frontAsset:covers.frontAsset,backAsset:covers.backAsset}
+  })
 }
 export async function importImage(seriesId,assetId,source) {
   id(assetId)
@@ -137,13 +156,15 @@ const parsePanel = panel => {
   const changes=collection(panel.changes??[],20,'cambios').map(c=>{
     if(!object(c))fail('Cambio inválido.');return {subject:id(c.subject),field:id(c.field),before:shortText(c.before,'antes',160),after:shortText(c.after,'después',160),reason:shortText(c.reason,'justificación',500)}
   })
-  return {id:id(panel.id),asset:id(panel.asset),location:id(panel.location),action:shortText(panel.action,'acción',1000),characters:actors,dialogue,changes,visualPrompt:shortText(panel.visualPrompt??panel.action,'dirección de arte',1200)}
+  return {id:id(panel.id),asset:id(panel.asset),location:id(panel.location),action:shortText(panel.action,'acción',1000),characters:actors,dialogue,changes,visualPrompt:shortText(panel.visualPrompt??panel.action,'dirección de arte',1200),sfx:panel.sfx?shortText(panel.sfx,'onomatopeya',40):null}
 }
 export async function addPage(seriesId,issueId,spec){
   if(!object(spec))fail('Página inválida.')
-  const page={number:spec.number,rows:collection(spec.rows,12,'filas'),panels:collection(spec.panels,20,'viñetas').map(parsePanel)}
+  const page={number:spec.number,rows:collection(spec.rows??[],12,'filas'),panels:collection(spec.panels,20,'viñetas').map(parsePanel),layout:spec.layout??{mode:'auto'}}
   if(!Number.isInteger(page.number)||page.number<1||page.number>500)fail('Página inválida.')
-  if(!page.panels.length || !page.rows.length || !page.rows.every(x=>Number.isInteger(x)&&x>=1&&x<=4) || page.rows.reduce((a,b)=>a+b,0)!==page.panels.length)fail('La retícula debe cubrir todas las viñetas.')
+  if(!page.panels.length || (page.rows.length && (!page.rows.every(x=>Number.isInteger(x)&&x>=1&&x<=4) || page.rows.reduce((a,b)=>a+b,0)!==page.panels.length)))fail('Página o retícula inválida.')
+  const layout=resolvePageLayout(page)
+  if(!layout.length)fail('No hay distribución editorial de viñetas.')
   unique(page.panels.map(x=>x.id))
   return update(seriesId,async p=>{
     const issue=seek(p.issues,id(issueId))
@@ -185,7 +206,9 @@ export async function auditSeries(seriesId,{issueId}={}) {
   for(const issue of issues){
     const pages=[...issue.pages].sort((a,b)=>a.number-b.number)
     if(pages.length && pages.some((x,i)=>x.number!==i+1))errors.push({code:'page-gap',issue:issue.id})
-    for(const page of pages)for(const panel of page.panels){
+    for(const page of pages){
+      try{resolvePageLayout(page)}catch(e){errors.push({code:'invalid-layout',issue:issue.id,page:page.number,detail:String(e.message)})}
+      for(const panel of page.panels){
       if(used.has(panel.id))errors.push({code:'duplicate-panel-id',id:panel.id})
       used.add(panel.id)
       if(!assets[panel.asset])errors.push({code:'missing-panel-art',id:panel.id,asset:panel.asset})
@@ -201,7 +224,10 @@ export async function auditSeries(seriesId,{issueId}={}) {
         else states.set(key,ch.after)
       }
       panelCount++
+      }
     }
+    if(!issue.covers)warnings.push({code:'missing-editorial-covers',issue:issue.id})
+    else for(const kind of ['frontAsset','backAsset'])if(!assets[issue.covers[kind]])errors.push({code:'missing-cover-art',issue:issue.id,kind})
   }
   if(issueId&&!issues.some(x=>x.id===issueId))fail('Número desconocido.')
   const target=issueId?issues.find(x=>x.id===issueId):null
@@ -210,26 +236,36 @@ export async function auditSeries(seriesId,{issueId}={}) {
 }
 export async function artBrief(seriesId,issueId){
   const p=await load(id(seriesId)),issue=seek(p.issues,id(issueId))
-  return {seriesId,issueId,style:p.style,worldRules:p.worldRules,characters:p.characters,locations:p.locations,shots:issue.pages.flatMap(page=>page.panels.map(panel=>({page:page.number,panelId:panel.id,assetId:panel.asset,prompt:panel.visualPrompt,location:panel.location,actorReferences:panel.characters.map(a=>{const c=seek(p.characters,a.id);return {...a,identity:c.visualSignature,referenceAssets:c.references}})})))}
+  return {seriesId,issueId,style:p.style,worldRules:p.worldRules,characters:p.characters,locations:p.locations,editorialRequirements:{frontCover:true,backCover:true,irregularPanels:true,letteringSeparate:true},covers:issue.covers,coverBrief:{front:'Arte vertical para portada, sin texto rasterizado; conservar identidades y paleta de la serie',back:'Arte vertical para contraportada, sin texto rasterizado; coherente con la portada'},shots:issue.pages.flatMap(page=>page.panels.map(panel=>({page:page.number,panelId:panel.id,assetId:panel.asset,prompt:panel.visualPrompt,location:panel.location,actorReferences:panel.characters.map(a=>{const c=seek(p.characters,a.id);return {...a,identity:c.visualSignature,referenceAssets:c.references}})})))}
 }
-function renderPanel(panel,assets,locations,cast) {
+function renderPanel(panel,slot,assets,locations,cast,index) {
   const picture=assets[panel.asset]
   const alt=clean(panel.action)
   const img=picture?`<img class="art" alt="${alt}" src="data:${picture.mime};base64,${picture.bytes.toString('base64')}">`:`<div class="missing">Arte pendiente: ${clean(panel.asset)}<small>${alt}</small></div>`
   const words=panel.dialogue.map(d=>`<div class="bubble ${d.type}"><b>${d.speaker==='narrator'?'Narrador':clean(cast.get(d.speaker)||d.speaker)}</b><span>${clean(d.text)}</span></div>`).join('')
-  return `<article class="panel" role="group" aria-label="Viñeta ${clean(panel.id)}">${img}<div class="dialogues">${words}</div><div class="sr-only">${clean(locations.get(panel.location)||panel.location)}: ${alt}</div></article>`
+  const sfx=panel.sfx?`<b class="sfx">${clean(panel.sfx)}</b>`:''
+  return `<article class="panel" data-panel-shape="${slot.shape}" style="${panelGeometry(slot,index)}" role="group" aria-label="Viñeta ${clean(panel.id)}">${img}<div class="dialogues">${words}</div>${sfx}<div class="sr-only">${clean(locations.get(panel.location)||panel.location)}: ${alt}</div></article>`
 }
 function renderPage(page,p,assets){
   const locations=new Map(p.locations.map(x=>[x.id,x.name])),cast=new Map(p.characters.map(x=>[x.id,x.name]))
-  let i=0
-  const rows=page.rows.map(columns=>{
-    const contents=page.panels.slice(i,i+columns);i+=columns
-    return `<div class="strip" style="--cols:${columns}">${contents.map(x=>renderPanel(x,assets,locations,cast)).join('')}</div>`
-  }).join('')
-  return `<section class="comic-page" aria-label="Página ${page.number}">${rows}<div class="page-number">${page.number}</div></section>`
+  const slots=resolvePageLayout(page)
+  const byId=new Map(slots.map((slot,index)=>[slot.id,{slot,index}]))
+  const panels=page.panels.map(panel=>{const item=byId.get(panel.id);return renderPanel(panel,item.slot,assets,locations,cast,item.index)}).join('')
+  return `<section class="comic-page" data-comic-page="${page.number}" aria-label="Página ${page.number}"><div class="panel-stage">${panels}</div><div class="page-number">${page.number}</div></section>`
+}
+function renderCover(side,p,issue,assets){
+  const cover=issue.covers
+  const front=side==='front',asset=cover&&(assets[front?cover.frontAsset:cover.backAsset])
+  const image=asset?`<img alt="Arte de ${front?'portada':'contraportada'}" src="data:${asset.mime};base64,${asset.bytes.toString('base64')}">`:'<div class="missing">Arte de cubierta pendiente</div>'
+  const safeTitle=clean(p.title),safeSubtitle=clean(issue.title)
+  const editorialTop=`<div class="cover-topline"><span>${clean(cover?.imprint??'Phoenix Comic Studio')}</span><span class="issue-badge">${issue.number}</span></div>`
+  const content=front
+    ?`<div>${editorialTop}<h1 class="masthead">${safeTitle}</h1></div><div class="cover-bottom"><div class="cover-tagline">${clean(cover?.tagline??'')}</div><div class="cover-title">${safeSubtitle}</div><div>EDICIÓN ${issue.number} · ${clean(p.style)}</div></div>`
+    :`<div class="back-top"><div class="back-heading">La aventura continúa</div><p class="back-text">${clean(cover?.backBlurb??issue.synopsis)}</p></div><div class="cover-foot"><strong>${safeTitle} — ${safeSubtitle}</strong><div>${clean(cover?.credits??'Equipo editorial')}</div><small>${clean(cover?.imprint??'Phoenix Comic Studio')} · ${clean(p.language)} · Núm. ${issue.number}</small></div>`
+  return `<section class="comic-cover-page ${front?'cover-front':'cover-back'}" data-comic-cover="${side}" aria-label="${front?'Portada':'Contraportada'}">${image}<div class="cover-gradient"></div><div class="cover-meta">${content}</div></section>`
 }
 const CSS=`*{box-sizing:border-box}html,body{margin:0;background:#17202d;color:#12151f;font-family:Arial,Helvetica,sans-serif}.edition{display:flex;align-items:center;flex-direction:column;gap:30px;padding:24px}.comic-page{width:1200px;height:1800px;background:#fff;position:relative;padding:32px 32px 48px;display:flex;flex-direction:column;gap:13px;break-after:page;page-break-after:always;overflow:hidden;box-shadow:0 15px 60px #0005}.strip{display:grid;grid-template-columns:repeat(var(--cols),minmax(0,1fr));gap:13px;flex:1;min-height:0}.panel{position:relative;overflow:hidden;background:#e9e6d9;border:6px solid #151515;min-width:0;min-height:0}.art{width:100%;height:100%;object-fit:cover;display:block}.dialogues{position:absolute;inset:13px;display:flex;flex-direction:column;align-items:flex-start;gap:8px;pointer-events:none}.bubble{max-width:85%;border-radius:18px;background:rgba(255,255,255,.96);padding:9px 14px;border:2px solid #111;box-shadow:2px 2px #111;word-wrap:break-word;font-size:19px;line-height:1.35}.bubble b{display:block;font-size:13px;text-transform:uppercase}.bubble span{display:block}.bubble.thought{border-style:dashed;border-radius:40px}.bubble.caption{background:#ffefb7;border-radius:4px}.missing{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:20px;background:repeating-linear-gradient(45deg,#e2d6be,#e2d6be 20px,#ebdfc9 20px,#ebdfc9 40px);font-size:26px}.missing small{display:block;font-size:18px;margin-top:10px}.page-number{position:absolute;bottom:8px;right:36px;font-size:19px;color:#444}.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}@page{size:12.5in 18.75in;margin:0}@media print{html,body{background:white}.edition{padding:0;display:block}.comic-page{box-shadow:none;margin:0;break-after:page}}`
-const htmlPage = (body,title,screenshot=false) => `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>${clean(title)}</title><meta name="viewport" content="width=device-width,initial-scale=1"><style>${CSS}${screenshot?'@media screen{.edition{padding:0;gap:0}.comic-page{box-shadow:none}}':''}</style></head><body><main class="edition">${body}</main></body></html>`
+const htmlPage = (body,title,screenshot=false) => `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>${clean(title)}</title><meta name="viewport" content="width=device-width,initial-scale=1"><style>${CSS}${EDITORIAL_CSS}${screenshot?'@media screen{.edition{padding:0;gap:0}.comic-page{box-shadow:none}}':''}</style></head><body><main class="edition">${body}</main></body></html>`
 function chromeExecutable(){
   const choices=[process.env.PHOENIX_COMICS_CHROME,process.env.CHROME_PATH,process.platform==='win32'?'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe':'/usr/bin/chromium',process.platform==='win32'?'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe':'/usr/bin/google-chrome'].filter(Boolean)
   for(const bin of choices){const p=spawnSync(bin,['--version'],{encoding:'utf8',timeout:4000,windowsHide:true});if(!p.error&&p.status===0)return bin}
@@ -257,13 +293,16 @@ export async function renderIssue(seriesId,issueId,{formats=['html'],draft=false
   const audit=await auditSeries(id(seriesId),{issueId:id(issueId)})
   if(audit.errors.length&&!draft)fail(`Bloqueo editorial: ${JSON.stringify(audit.errors).slice(0,700)}. Usa --draft solo para previsualizar arte incompleto.`)
   const p=await load(seriesId),issue=seek(p.issues,issueId)
-  if(!issue.pages.length)fail('No hay páginas para exportar.')
+  if(!issue.pages.length)fail('No hay páginas interiores para exportar.')
   if(!Array.isArray(formats)||!formats.length||formats.some(x=>!['html','pdf','cbz'].includes(x)))fail('Formato desconocido.')
+  if(!draft&&!issue.covers)fail('Bloqueo editorial: faltan portada y contraportada. Importa ambos recursos y ejecuta covers SERIE NUMERO cubiertas.json.')
   const assets={};for(const [key,value] of Object.entries(p.assets)){try{assets[key]={...value,bytes:await checkedImage(seriesId,value)}}catch{if(!draft)throw Error(`Activo visual corrupto: ${key}`)}}
   const root=issuePath(seriesId,issueId)
   await mkdir(root,{recursive:true,mode:0o700})
   const title=`${p.title} — ${issue.title}`,pages=[...issue.pages].sort((a,b)=>a.number-b.number)
-  const html=htmlPage(pages.map(page=>renderPage(page,p,assets)).join(''),title)
+  const front=renderCover('front',p,issue,assets),back=renderCover('back',p,issue,assets)
+  const inner=pages.map(page=>renderPage(page,p,assets)),orderedPages=[front,...inner,back]
+  const html=htmlPage(orderedPages.join(''),title)
   const exportPath=join(root,'comic.html');await writeFile(exportPath,html,'utf8')
   const outputs={html:exportPath}
   if(formats.includes('pdf')||formats.includes('cbz')){
@@ -274,20 +313,22 @@ export async function renderIssue(seriesId,issueId,{formats=['html'],draft=false
     }
     if(formats.includes('cbz')){
       const entries=[]
-      for(const page of pages){
-        const id=String(page.number).padStart(4,'0'),source=join(root,`page-${id}.html`),png=join(root,`page-${id}.png`)
-        await writeFile(source,htmlPage(renderPage(page,p,assets),title,true),'utf8')
+      for(let index=0;index<orderedPages.length;index++){
+        const label=String(index).padStart(4,'0'),source=join(root,`page-${label}.html`),png=join(root,`page-${label}.png`)
+        await writeFile(source,htmlPage(orderedPages[index],title,true),'utf8')
         exportWithChrome(bin,source,png,'png')
         const bytes=await readFile(png);if(!bytes.subarray(0,8).equals(Buffer.from('89504e470d0a1a0a','hex')))fail('PNG de página inválido.')
-        entries.push({name:`${id}.png`,content:bytes})
+        entries.push({name:`${label}.png`,content:bytes})
         await rm(source,{force:true})
       }
-      const xml=`<?xml version="1.0" encoding="UTF-8"?><ComicInfo><Title>${clean(issue.title)}</Title><Series>${clean(p.title)}</Series><Number>${issue.number}</Number><PageCount>${pages.length}</PageCount><LanguageISO>${clean(p.language)}</LanguageISO></ComicInfo>`
+      const xml=`<?xml version="1.0" encoding="UTF-8"?><ComicInfo><Title>${clean(issue.title)}</Title><Series>${clean(p.title)}</Series><Number>${issue.number}</Number><PageCount>${orderedPages.length}</PageCount><LanguageISO>${clean(p.language)}</LanguageISO></ComicInfo>`
       entries.push({name:'ComicInfo.xml',content:xml})
       const cbz=join(root,'comic.cbz');await writeFile(cbz,zip(entries));outputs.cbz=cbz
     }
   }
-  const manifest={schemaVersion:1,seriesId,issueId,revision:p.revision,formats:Object.keys(outputs),draft:!!draft,structurallyValid:audit.errors.length===0,humanArtReviewRequired:true,visualConsistencyVerified:false,pages:pages.length,generatedAt:now(),sha256:Object.fromEntries(await Promise.all(Object.entries(outputs).map(async ([kind,file])=>[kind,hash(await readFile(file))])))}
+  const editorialComplete=!draft&&!!issue.covers&&pages.length>0&&!!assets[issue.covers.frontAsset]&&!!assets[issue.covers.backAsset]
+  const manifest={schemaVersion:1,seriesId,issueId,revision:p.revision,formats:Object.keys(outputs),draft:!!draft,structurallyValid:audit.errors.length===0,editorialComplete,frontCover:true,backCover:true,interiorPages:pages.length,pages:orderedPages.length,dynamicPanelPages:pages.filter(hasDynamicPanels).length,
+    humanArtReviewRequired:true,visualConsistencyVerified:false,generatedAt:now(),sha256:Object.fromEntries(await Promise.all(Object.entries(outputs).map(async ([kind,file])=>[kind,hash(await readFile(file))])))}
   await saveAtomic(join(root,'release.json'),manifest)
   return {outputs,manifest,report:audit}
 }
@@ -295,7 +336,7 @@ export async function listSeries(){const path=join(HOME,'series');try{return (aw
 async function cli(argv){
   const [command,seriesId,arg1,arg2,...rest]=argv
   const flags=new Set([arg2,...rest].filter(Boolean))
-  if(command==='help'||!command)return {usage:['init "Título" [serie-id]','list','show SERIE','world SERIE reglas.json','character SERIE personaje.json','location SERIE lugar.json','issue SERIE entrega.json','page SERIE entrega-id pagina.json','asset SERIE id-imagen archivo.png','art-brief SERIE entrega-id','audit SERIE [entrega-id]','render SERIE entrega-id [--pdf] [--cbz] [--draft]']}
+  if(command==='help'||!command)return {usage:['init "Título" [serie-id]','list','show SERIE','world SERIE reglas.json','character SERIE personaje.json','location SERIE lugar.json','issue SERIE entrega.json','covers SERIE entrega-id cubiertas.json','page SERIE entrega-id pagina.json','asset SERIE id-imagen archivo.png','art-brief SERIE entrega-id','audit SERIE [entrega-id]','render SERIE entrega-id [--pdf] [--cbz] [--draft]']}
   if(command==='init')return initSeries(seriesId,{seriesId:arg1})
   if(command==='list')return {series:await listSeries()}
   if(command==='show')return load(id(seriesId))
@@ -303,6 +344,7 @@ async function cli(argv){
   if(command==='character')return addCharacter(seriesId,await loadSpec(arg1))
   if(command==='location')return addLocation(seriesId,await loadSpec(arg1))
   if(command==='issue')return addIssue(seriesId,await loadSpec(arg1))
+  if(command==='covers')return setIssueCovers(seriesId,arg1,await loadSpec(arg2))
   if(command==='page')return addPage(seriesId,arg1,await loadSpec(arg2))
   if(command==='asset')return importImage(seriesId,arg1,arg2)
   if(command==='art-brief')return artBrief(seriesId,arg1)
