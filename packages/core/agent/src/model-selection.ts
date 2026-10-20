@@ -300,7 +300,7 @@ function phoenixAutoUnfinishedAction(text: string): boolean {
 
 /** Kira can request an actual Sol strategy pass when her current approach is unclear. */
 // oxlint-disable-next-line @stylistic/max-len -- Narrow bilingual consultation trigger.
-const AUTO_SOL_REQUEST = /\b(?:necesito|debo|voy\s+a|conviene|quiero)\s+(?:(?:volver\s+a|primero)\s+)?(?:consultar|preguntar|pedir(?:le)?\s+(?:ayuda|una\s+estrategia))\s+(?:(?:a|con)\s+)?sol\b|\b(?:no\s+(?:encuentro|logro|consigo)\s+(?:c[oó]mo|una\s+forma\s+de)|no\s+s[eé]\s+c[oó]mo\s+resolver)\b|\b(?:need\s+to|should|will)\s+(?:consult|ask)\s+sol\b/iu
+const AUTO_SOL_REQUEST = /\b(?:necesito|debo|voy\s+a|conviene|quiero)\s+(?:(?:volver\s+a|primero)\s+)?(?:consultar|preguntar|pedir(?:le)?\s+(?:ayuda|una\s+estrategia))\s+(?:(?:a|con)\s+)?(?:sol|(?:al\s+)?planificador)\b|\b(?:no\s+(?:encuentro|logro|consigo)\s+(?:c[oó]mo|una\s+forma\s+de)|no\s+s[eé]\s+c[oó]mo\s+resolver)\b|\b(?:need\s+to|should|will)\s+(?:consult|ask)\s+sol\b/iu
 
 function kiraNeedsSolStrategy(text: string): boolean {
   return AUTO_SOL_REQUEST.test(text)
