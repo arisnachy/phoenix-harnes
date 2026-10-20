@@ -4,6 +4,8 @@ on:
     branches: [main, stable]
     paths:
       - 'scripts/phoenix-comic-studio*.mjs'
+      - 'packages/hardness/adapters/src/comic-tool.ts'
+      - 'packages/hardness/adapters/tests/comic-tool.spec.ts'
       - '.github/workflows/comic-studio.yml'
   pull_request:
     paths:
@@ -18,3 +20,8 @@ jobs:
         with:
           node-version: '22'
       - run: node --test scripts/phoenix-comic-studio.test.mjs
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '11.7.0'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec vitest run packages/hardness/adapters/tests/comic-tool.spec.ts packages/client/ui-conversation/tests/comic-studio.client.spec.tsx

@@ -53,6 +53,7 @@ import { createHardnessTool } from './hardness-tool.ts'
 import { createPhoenixVisualizerTool } from './visualize-tool.ts'
 import { createPhoenixCanvasTool } from './canvas-tool.ts'
 import { createPhoenixGameTool } from './game-tool.ts'
+import { createPhoenixComicTool } from './comic-tool.ts'
 import { mountGodotWebRoute, type GameWebRouteHost } from './godot-web-bundle.ts'
 import { createPhoenix3DTool } from './scene3d-tool.ts'
 import { createResearchPublishTool } from './research-publish-tool.ts'
@@ -71,7 +72,6 @@ import { createConnectorInstallTool, createXMcpActivateTool } from './connector-
 import type { McpRegistryInstallerService, XMcpHostService } from './connector-install-tool.ts'
 import type { SubagentRuntime } from '@phoenix-ai/dsh-subagent'
 import { installOrdinaryCompletionJudgeBridge } from './ordinary-completion-judge.ts'
-
 export { indexTools } from './tool-adapter.ts'
 export type { ToolAtlasIndexOptions, ToolChangeSource } from './tool-adapter.ts'
 export { indexSkills } from './skill-adapter.ts'
@@ -142,6 +142,7 @@ export { createHardnessTool } from './hardness-tool.ts'
 export { createPhoenixVisualizerTool } from './visualize-tool.ts'
 export { createPhoenixCanvasTool, PHOENIX_CANVAS_MIME } from './canvas-tool.ts'
 export { createPhoenixGameTool, PHOENIX_GAME_MIME } from './game-tool.ts'
+export { createPhoenixComicTool, PHOENIX_COMIC_MIME } from './comic-tool.ts'
 export { createPhoenix3DTool, PHOENIX_SCENE3D_MIME, tropicalVillaScene } from './scene3d-tool.ts'
 export { choosePhoenixDesignMedium, PHOENIX_3D_ROUTING_PROTOCOL } from './scene3d-routing.ts'
 export { createCognitiveWorkflowTool } from './cognitive-workflow-tool.ts'
@@ -179,7 +180,6 @@ export { ROUTINE_PROTOCOL, installRoutineProtocol } from './routine-protocol.ts'
 export { LearnedSkillStore, createLearnedSkillTool } from './learned-skill.ts'
 export type { LearnedSkillInput, LearnedSkillReceipt } from './learned-skill.ts'
 export { installConnectorEventBridge } from './connector-event-bridge.ts'
-
 /** Base-composition consumer that projects existing registries into HARDNESS. */
 export const name = 'hardness-adapters'
 export const inject = ['hardness', 'tools', 'skills', 'agents', 'approval', 'systemPrompt', 'authorization']
@@ -386,6 +386,7 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
       ))
       disposers.push(installCapabilityOperatingProtocol(systemPrompt))
       disposers.push(systemPrompt.section({ name: 'phoenix:3d-intent-router', order: 176, text: PHOENIX_3D_ROUTING_PROTOCOL }))
+      disposers.push(systemPrompt.section({ name: 'phoenix:comic-intent-router', order: 177, text: 'When asked to CREATE, SHOW or CONTINUE a comic, manga, illustrated story or webtoon, deliver an actual illustrated comic in the chat via phoenix_comic. Use real image-generation for panel art; compile the comic with the durable Comic Studio script and publish its verified release by series_id + issue_id. Never open the Phoenix application itself (127.0.0.1:3080 or localhost) inside MiniBrowser for a creative task. Never claim published unless phoenix_comic succeeded and returned an artifactId. If real artwork cannot be produced, describe that exact blocker instead of claiming success. This rule is specific to comics; it does not interfere with other domains.' }))
       disposers.push(installBinanceTradingProtocol(systemPrompt))
     }
     if (modelTools && (authorization !== undefined || mcpConnectors !== undefined)) {
@@ -396,7 +397,7 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
       // Capability projections and the mission/proactivity runtimes are host-owned.
       // Do not repeat them when several sessions mount full presets in one process.
       disposers.push(indexOpenClawExtensions(hardness))
-      disposers.push(indexTools(tools, hardness, { events: ctx, exclude: ['hardness_run', 'hardness_workflow', 'hardness_evolution_status', 'phoenix_visualize', 'phoenix_canvas', 'phoenix_game'] }))
+      disposers.push(indexTools(tools, hardness, { events: ctx, exclude: ['hardness_run', 'hardness_workflow', 'hardness_evolution_status', 'phoenix_visualize', 'phoenix_canvas', 'phoenix_game', 'phoenix_comic'] }))
       disposers.push(await indexSkills(skills, hardness))
     } else if (authorization !== undefined || mcpConnectors !== undefined) {
       // A preset contributes only its scoped connector inventory/discovery
@@ -434,6 +435,7 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
       disposers.push(ctx.tools.register(createPhoenixVisualizerTool()))
       disposers.push(ctx.tools.register(createPhoenixCanvasTool()))
       disposers.push(ctx.tools.register(createPhoenixGameTool()))
+      disposers.push(ctx.tools.register(createPhoenixComicTool()))
       disposers.push(ctx.tools.register(createPhoenix3DTool()))
       disposers.push(ctx.tools.register(createResearchPlanTool()))
       disposers.push(ctx.tools.register(createResearchSourceVerifierTool()))
