@@ -54,7 +54,7 @@ export const AssistantMarkdown = memo(function AssistantMarkdown({
         // transcript order. Incomplete streaming fences remain hidden.
         const segments = splitGenerativeUiText(block.text, { streaming })
         rendered.push(...segments.map((segment, index) => segment.kind === 'ui'
-          ? <GenerativeUi key={`${i}:ui:${index}`} block={segment.block} onAction={onUiAction} conversationId={conversationId} />
+          ? <GenerativeUi key={`${i}:ui:${index}`} block={segment.block} onAction={onUiAction} {...conversationId === undefined ? {} : { conversationId }} />
           : <MarkdownText
               key={`${i}:markdown:${index}`}
               text={segment.text}
