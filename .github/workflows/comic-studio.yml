@@ -24,4 +24,4 @@ jobs:
         with:
           version: '11.7.0'
       - run: pnpm install --frozen-lockfile
-      - run: pnpm exec vitest run packages/hardness/adapters/tests/comic-tool.spec.ts
+      - run: pnpm exec vitest run packages/hardness/adapters/tests/comic-tool.spec.ts packages/client/ui-conversation/tests/comic-studio.client.spec.tsx
