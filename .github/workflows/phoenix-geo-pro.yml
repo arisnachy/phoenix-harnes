@@ -1,0 +1,32 @@
+name: PHOENIX Geo Pro
+on:
+  push:
+    paths:
+      - 'scripts/phoenix-geo*.mjs'
+      - 'scripts/phoenix-geo-postgis.sql'
+      - 'packages/client/ui-conversation/src/client/chat/Geo*.tsx'
+      - '.github/workflows/phoenix-geo-pro.yml'
+  pull_request:
+    paths:
+      - 'scripts/phoenix-geo*.mjs'
+      - 'scripts/phoenix-geo-postgis.sql'
+      - 'packages/client/ui-conversation/src/client/chat/Geo*.tsx'
+      - '.github/workflows/phoenix-geo-pro.yml'
+jobs:
+  geo-functional:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Test geometry, geocoding, routing, PDFs and PostGIS/H3 plans
+        run: node --test scripts/phoenix-geo.test.mjs scripts/phoenix-geo-network.test.mjs scripts/phoenix-geo-pdf.test.mjs scripts/phoenix-geo-db.test.mjs
+      - name: Validate Node module syntax
+        run: |
+          node --check scripts/phoenix-geo.mjs
+          node --check scripts/phoenix-geo-network.mjs
+          node --check scripts/phoenix-geo-db.mjs
+          node --check scripts/phoenix-geo-pdf.mjs
+          node --check scripts/phoenix-geo-operations.mjs
