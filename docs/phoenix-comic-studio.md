@@ -70,3 +70,19 @@ La biblioteca conserva canon de texto, referencias por ID y hashes SHA-256 de im
 ## Publicación directa dentro del chat
 
 Después de generar las ilustraciones auténticas y componer la edición con `render`, Kira llama a `phoenix_comic` usando el ID de serie y entrega. El Host reabre `release.json`, verifica `draft:false`, `structurallyValid:true`, la ruta y el SHA-256 de `comic.html`, comprueba al menos una página con viñetas que contengan datos reales PNG/JPEG/WEBP y emite `application/vnd.phoenix.comic+html`. El cliente lo presenta como HTML estático aislado, con ajuste responsivo; nunca como navegación al propio Phoenix. El recibo confirma publicación del artefacto y estructura de las imágenes, no identidad facial, calidad artística, precisión narrativa o publicación comercial. `file_path` dentro del workspace e `html` inline son alternativas para trabajos no registrados. Una herramienta ausente o una falla de generación debe comunicarse como bloqueo; no se puede declarar un cómic publicado basándose en texto de Kira o en el estado del navegador.
+
+## Portada, contraportada y viñetas libres (estándar obligatorio)
+
+Toda entrega final ahora exige **portada ilustrada, páginas interiores secuenciales y contraportada ilustrada**, en ese orden. Antes de renderizar, importar las imágenes como activos reales con `asset SERIE cover-front portada.png` y `asset SERIE cover-back contraportada.png`, guardar el siguiente JSON en `cubiertas.json` y ejecutar `node scripts/phoenix-comic-studio.mjs covers SERIE NUMERO cubiertas.json`. En modo final, `render` bloquea la ausencia de cualquiera de las cubiertas; solo `--draft` admite imágenes pendientes sin afirmar que el cómic está completo.
+
+```json
+{"frontAsset":"cover-front","backAsset":"cover-back","tagline":"Una grieta en el cielo","backBlurb":"La aventura apenas comienza.","credits":"Equipo editorial","imprint":"Phoenix"}
+```
+
+El motor `scripts/comic-page-layout.mjs` aplica distribuciones cinematográficas no uniformes de forma automática; para dirección artesanal se admite `layout.mode="freeform"` con una coordenada por viñeta (enteros de 0 a 1000) y las siluetas `rectangle`, `slant-left`, `slant-right`, `trapezoid`, `angled-top`, `angled-bottom`, `circle`, `hexagon` y `burst`. Usar `overlay:true` solo en insertos superpuestos intencionados. Las viñetas pueden llevar `sfx` como texto independiente. La composición no reemplaza la generación de dibujos reales, los globos revisados ni la aprobación visual de personajes.
+
+```json
+{"number":1,"panels":[{"id":"p-1","asset":"art-1","location":"tower","action":"Mirada a la grieta"}],"layout":{"mode":"freeform","slots":[{"id":"p-1","x":0,"y":0,"width":1000,"height":1000,"shape":"trapezoid"}]}}
+```
+
+La edición HTML y las exportaciones PDF/CBZ incluyen portada, interiores y contraportada. `release.json` marca `editorialComplete` únicamente si todas están presentes y verificadas; `phoenix_comic` no admite una edición final sin ese recibo y las tres secciones ilustradas. El lector nativo adapta la composición a la anchura del chat sin navegar dentro del propio Phoenix. PDF y CBZ siguen requiriendo Chrome/Chromium real; las pruebas estructurales no certifican semejanza facial, calidad perceptual ni prueba física de impresión.

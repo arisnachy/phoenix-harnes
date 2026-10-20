@@ -71,3 +71,19 @@ node --test scripts/phoenix-comic-studio.test.mjs
 ## 在聊天内直接发布
 
 Kira 生成真正的画稿并用 `render` 排版后，使用系列 ID 和期数 ID 调用 `phoenix_comic`。Host 重新读取 `release.json`，验证 `draft:false`、`structurallyValid:true`、路径及 `comic.html` 的 SHA-256，同时要求至少一页包含真实 PNG/JPEG/WEBP 数据的画格，随后输出 `application/vnd.phoenix.comic+html`。客户端以静态隔离 HTML 呈现响应式页面，不会把 Phoenix 自身作为嵌套网页打开。该回执仅证明制品被接纳以及图片数据结构符合规则，不证明角色长相、艺术质量、故事准确度或商业平台发布。`file_path`（受限于工作区）和内联 `html` 是未登记作品的替代输入。如果没有实际绘图工具或生成失败，Kira 必须明确报告阻碍，不能单凭聊天声明或 MiniBrowser 状态宣布漫画已经发布。
+
+## 专业封面、封底及自由画格（强制标准）
+
+最终成品必须按顺序包含**真正绘制的封面、连续叙事内页和真正绘制的封底**。排版前先通过 `asset SERIE cover-front portada.png` 及 `asset SERIE cover-back contraportada.png` 导入真实图像，把以下 JSON 保存到 `cubiertas.json`，随后运行 `node scripts/phoenix-comic-studio.mjs covers SERIE NUMERO cubiertas.json`。正式 `render` 如果缺少任一封面会失败；只有 `--draft` 可以预览缺失的内容，而且不得宣称漫画已完成。
+
+```json
+{"frontAsset":"cover-front","backAsset":"cover-back","tagline":"Una grieta en el cielo","backBlurb":"La aventura apenas comienza.","credits":"Equipo editorial","imprint":"Phoenix"}
+```
+
+`scripts/comic-page-layout.mjs` 默认生成不规则且非等宽的电影式漫画构图；精确导演模式可以使用 `layout.mode="freeform"`，给每格定义 0–1000 的整数坐标，并选用 `rectangle`、`slant-left`、`slant-right`、`trapezoid`、`angled-top`、`angled-bottom`、`circle`、`hexagon` 或 `burst`。只有有意插入的叠加画格才使用 `overlay:true`。`sfx` 可作为独立的音效文字。版式引擎不能替代真正绘画、对白审校或人物形象复核。
+
+```json
+{"number":1,"panels":[{"id":"p-1","asset":"art-1","location":"tower","action":"Mirada a la grieta"}],"layout":{"mode":"freeform","slots":[{"id":"p-1","x":0,"y":0,"width":1000,"height":1000,"shape":"trapezoid"}]}}
+```
+
+HTML、PDF 和 CBZ 都包含封面、内页与封底。`release.json` 只有在全部内容存在并经过文件验证时才写入 `editorialComplete`；`phoenix_comic` 会拒绝缺少该凭据或三种真实插画页面的正式出版物。原生聊天阅读器按聊天宽度显示页面，不会让 Phoenix 在 MiniBrowser 内打开自己。PDF/CBZ 仍需要可运行的 Chrome/Chromium；结构性测试不会证明角色面貌一致、艺术质量或实体印刷效果。
