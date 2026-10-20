@@ -51,7 +51,8 @@ test('memoria, referencias y render HTML persistentes', async()=>{
 
 test('editorial completo exige ambas cubiertas y no inventa éxito de publicación', async()=>{
   await addIssue('guardianes-orion',{id:'issue-uncovered',number:3,title:'Sin cubierta',synopsis:'Prueba incompleta'})
-  await addPage('guardianes-orion','issue-uncovered',{number:1,panels:[basePanel('1')]})
+  await importImage('guardianes-orion','art-uncovered',img)
+  await addPage('guardianes-orion','issue-uncovered',{number:1,panels:[basePanel('uncovered')]})
   await assert.rejects(renderIssue('guardianes-orion','issue-uncovered'),/portada y contraportada/)
   const draft=await renderIssue('guardianes-orion','issue-uncovered',{draft:true})
   assert.equal(draft.manifest.editorialComplete,false)
