@@ -1,6 +1,6 @@
 # Phoenix Comic Studio — memoria editorial y producción de cómics
 
-Español | [中文](phoenix-comic-studio.zh.md)
+English | [中文](phoenix-comic-studio.zh.md)
 
 Comic Studio añade a Phoenix una habilidad creativa reutilizable; no cambia el arnés universal ni obliga a usar el motor de videojuegos. Conserva la serie, personajes, referencias y línea temporal entre conversaciones, proveedores y reinicios mediante JSON y recursos visuales en `~/.dsh/comic-studio/series/<id>/`. Configurable con `PHOENIX_COMICS_HOME`. Su integración incorpora el motor local invocable por Kira mediante la habilidad `phoenix-comic-studio` y el publicador nativo `phoenix_comic` dentro del chat, sin una pestaña independiente ni MiniBrowser.
 

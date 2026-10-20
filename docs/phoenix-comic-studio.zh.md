@@ -1,6 +1,6 @@
 # Phoenix Comic Studio — 漫画编辑记忆与制作
 
-[Español](phoenix-comic-studio.md) | 中文
+[English](phoenix-comic-studio.md) | 中文
 
 Comic Studio 为 Phoenix 提供可复用的漫画创作能力，而不是改变通用智能体框架或强制采用游戏引擎。它将系列、角色、参考图与故事时间线保存在 `~/.dsh/comic-studio/series/<id>/` 的 JSON 和图像文件中，可跨对话、模型供应商与重启继续使用。根目录可以通过 `PHOENIX_COMICS_HOME` 配置。Kira 可使用 `phoenix-comic-studio` 技能调用本地引擎，再通过原生 `phoenix_comic` 工具直接在聊天中展示作品，无须独立标签页或 MiniBrowser。
 
