@@ -37,7 +37,9 @@ export function validateComicHtml(html: string): { pages: number; panels: number
     const format = img?.[2]?.toLowerCase()
     if (bytes.length < 100 || bytes.toString('base64') !== encoded
       || (format === 'png' && (!bytes.subarray(0, 8).equals(Buffer.from('89504e470d0a1a0a', 'hex'))
-        || bytes.length < 33 || bytes.readUInt32BE(16) < 128 || bytes.readUInt32BE(20) < 128))
+        || bytes.length < 65 || bytes.toString('ascii', 12, 16) !== 'IHDR'
+        || !bytes.includes(Buffer.from('IDAT')) || !bytes.includes(Buffer.from('IEND'))
+        || bytes.readUInt32BE(16) < 128 || bytes.readUInt32BE(20) < 128))
       || (format === 'jpeg' && !(bytes[0] === 0xff && bytes[1] === 0xd8 && bytes.at(-2) === 0xff && bytes.at(-1) === 0xd9))
       || (format === 'webp' && !(bytes.toString('ascii', 0, 4) === 'RIFF' && bytes.toString('ascii', 8, 12) === 'WEBP'))) {
       return reject('Comic Studio: imagen simulada, ilegible o diminuta en viñeta ' + (i + 1))
