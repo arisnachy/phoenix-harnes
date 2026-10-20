@@ -158,16 +158,16 @@ export function createPhoenixDiagramTool(): ToolDefinition {
         executable: false,
       }}),
     },
-    execute(args, exec) {
+    async execute(args, exec) {
       const title = args.title.trim()
       if (title.length === 0 || title.length > 140) invalid('El título requiere de 1 a 140 caracteres.')
       const diagram = admitPhoenixDiagram(args.diagram, title)
       const artifactId = 'phoenix-diagram:' + String(exec.callId)
       if (args.continueAfterDisplay !== true) exec.concludeTurn()
-      return Promise.resolve({
+      return {
         artifactId, title, diagram: diagram as unknown as JsonValue,
         publication: 'artifact_emitted_not_client_render_verified',
-      })
+      }
     },
     presentCall(args) { return {
       card: 'generic', title: 'Diagrama · ' + args.title,
