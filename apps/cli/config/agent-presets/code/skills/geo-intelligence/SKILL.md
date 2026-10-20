@@ -4,7 +4,8 @@ description: >-
   Use whenever the user wants a geographic map, addresses, point locations,
   choropleth or heat layers, neighborhood analysis, real-world routes,
   delivery coverage, GIS, census/statistics by territory, H3/PostGIS, 3D
-  geographic visualization, or a publication-ready cartographic PDF.
+  geographic visualization, fictional interactive worlds/fantasy atlases,
+  or a publication-ready cartographic PDF.
 ---
 
 # Phoenix Geo Intelligence — Universal Mission Engine capability

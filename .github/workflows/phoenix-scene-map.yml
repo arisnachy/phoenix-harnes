@@ -31,4 +31,4 @@ jobs:
       - name: Verify actual chat map rendering and interactive selection
         run: pnpm exec vitest run packages/client/ui-conversation/tests/scene-map.client.spec.tsx packages/client/ui-conversation/tests/geo-map.client.spec.ts
       - name: Compile native client including scene_map
-        run: pnpm exec tsc -b tsconfig.client.json
+        run: pnpm run build:lib:host && pnpm run build:lib:client
