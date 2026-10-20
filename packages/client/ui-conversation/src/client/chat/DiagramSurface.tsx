@@ -83,6 +83,7 @@ export function parseDiagramSpec(value: unknown): DiagramSpec | null {
       || (node.detail !== undefined && !short(node.detail, 650))) return null
     ids.add(node.id)
   }
+  if (p.nodes.filter(node => node.shape !== 'point').length < 2) return null
   if (p.edges !== undefined && (!Array.isArray(p.edges) || p.edges.length > 140)) return null
   if (Array.isArray(p.edges)) {
     for (const edge of p.edges) {
