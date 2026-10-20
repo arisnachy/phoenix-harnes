@@ -15,7 +15,9 @@
 .toolbar button:disabled{opacity:.42;cursor:default}
 .toolbar label{display:flex;align-items:center;gap:5px;border:0}
 .toolbar input{accent-color:var(--scene-accent)}
-.toolbar button:focus-visible,.toolbar input:focus-visible,.placeButton:focus-visible,.ask:focus-visible,.pin:focus-visible{outline:3px solid var(--scene-accent);outline-offset:2px}
+.toolbar button:focus-visible,.toolbar input:focus-visible,.placeButton:focus-visible,.ask:focus-visible{outline:3px solid var(--scene-accent);outline-offset:2px}
+.pin:focus-visible{outline:none}
+.pin:focus-visible > circle:first-of-type{stroke:var(--scene-accent);stroke-width:4px}
 .export{margin-left:auto}
 .layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(210px,240px);min-width:0;align-items:stretch}
 .illustration{min-width:0;aspect-ratio:5/3;max-height:670px;overflow:hidden;background:#cadecf}
@@ -37,6 +39,6 @@
 .ask{margin-top:11px;text-align:left;background:#f4eade;font-size:10px}
 .caption{padding:10px 17px;font-size:11px;line-height:1.55;color:#61706f;background:#fff;margin:0}
 .footer{border-top:1px solid #e4ded2;padding:10px 17px;font-size:10px;color:#757e7d}
-@media(max-width:800px){.layout{grid-template-columns:1fr}.sidebar{max-height:none;border-left:0;border-top:1px solid #e4ded2}.illustration{max-height:none}.map{min-height:300px}.placeList{display:flex;flex-wrap:wrap;overflow:visible}.placeButton{min-height:34px}.description{padding:14px 17px}}
-@media(max-width:440px){.heading{padding:13px;gap:7px}.heading h3{font-size:18px}.badge{font-size:9px;padding:5px 7px}.toolbar{padding:8px}.toolbar label{font-size:10px;padding:5px}.illustration{aspect-ratio:5/4}.map{min-height:260px}.placeList{padding:0 7px 8px}.placeButton{padding:6px;gap:3px;font-size:10px}.description{padding:11px 13px}}
+@media(max-width:800px){.layout{grid-template-columns:1fr}.sidebar{max-height:none;border-left:0;border-top:1px solid #e4ded2}.illustration{max-height:none}.map{min-height:0}.placeList{display:flex;flex-wrap:wrap;overflow:visible}.placeButton{min-height:34px}.description{padding:14px 17px}}
+@media(max-width:440px){.heading{padding:13px;gap:7px}.heading h3{font-size:18px}.badge{font-size:9px;padding:5px 7px}.toolbar{padding:8px}.toolbar label{font-size:10px;padding:5px}.illustration{aspect-ratio:5/3}.map{min-height:0}.placeList{padding:0 7px 8px}.placeButton{padding:6px;gap:3px;font-size:10px}.description{padding:11px 13px}}
 @media(prefers-reduced-motion:reduce){.root *{transition:none!important}}
