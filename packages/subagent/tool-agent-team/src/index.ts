@@ -40,7 +40,12 @@ export interface TeamModelProfile {
   readonly reasoningEffort?: string
 }
 
-/** User-owned Eclipse routing overrides deployment profiles only when explicitly enabled. */
+/** User-owned Eclipse routing overrides deployment profiles only when explicitly enabled.
+ * @param settings - Optional saved Eclipse settings.
+ * @param memberName - Actual named specialist identity.
+ * @param fallback - Deployment-default worker model.
+ * @returns The specialist's explicit route, default worker route, or deployment fallback.
+ */
 export function resolveEclipseTeammateProfile(
   settings: EclipseRoutingSettings | undefined,
   memberName: string,
