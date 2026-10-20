@@ -52,6 +52,7 @@ import { installConnectorEventBridge } from './connector-event-bridge.ts'
 import { createHardnessTool } from './hardness-tool.ts'
 import { createPhoenixVisualizerTool } from './visualize-tool.ts'
 import { createPhoenixSceneMapTool } from './scene-map-tool.ts'
+import { createPhoenixDiagramTool } from './diagram-tool.ts'
 import { createPhoenixCanvasTool } from './canvas-tool.ts'
 import { createPhoenixGameTool } from './game-tool.ts'
 import { createPhoenixComicTool } from './comic-tool.ts'
@@ -142,6 +143,7 @@ export type { HardnessMissionRpcPayload, HardnessMissionRunner, HardnessMissionR
 export { createHardnessTool } from './hardness-tool.ts'
 export { createPhoenixVisualizerTool } from './visualize-tool.ts'
 export { createPhoenixSceneMapTool, PHOENIX_SCENE_MAP_MIME, admitPhoenixSceneMap, demoIslandMap } from './scene-map-tool.ts'
+export { createPhoenixDiagramTool, PHOENIX_DIAGRAM_MIME, admitPhoenixDiagram } from './diagram-tool.ts'
 export { createPhoenixCanvasTool, PHOENIX_CANVAS_MIME } from './canvas-tool.ts'
 export { createPhoenixGameTool, PHOENIX_GAME_MIME } from './game-tool.ts'
 export { createPhoenixComicTool, PHOENIX_COMIC_MIME } from './comic-tool.ts'
@@ -389,6 +391,7 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
       disposers.push(installCapabilityOperatingProtocol(systemPrompt))
       disposers.push(systemPrompt.section({ name: 'phoenix:3d-intent-router', order: 176, text: PHOENIX_3D_ROUTING_PROTOCOL }))
       disposers.push(systemPrompt.section({ name: 'phoenix:map-publication-router', order: 178, text: 'For ALL requests to create or show an imaginary or fictional interactive map, island, fantasy world, game map or Isla Bruma, immediately CALL the phoenix_scene_map tool: demo:true for a requested demonstration, or map:{places:[{id,name,x,y,kind,description}],routes:[]} for custom worlds. This tool publishes a real replayable chat artifact; NEVER merely say you published the map, NEVER open MiniBrowser or an about:blank tab to verify. Tool execution and artifactId prove emission only, not client rendering; do not claim screen verification without it. Geographic WGS84 real-world tasks must use the geo engine, not the fictional scene tool.' }))
+      disposers.push(systemPrompt.section({ name: 'phoenix:diagram-publication-router', order: 179, text: 'When a user asks to CREATE OR SHOW a genogram, family-tree diagram, flowchart, organization chart, mind map, network or other node-connection diagram, immediately CALL phoenix_diagram with title and diagram:{kind,nodes:[{id,label,x,y,shape,detail?}],edges:[{from,to,fromPort?,toPort?,via?}]}. This publishes a replayable native visual in the chat: do not substitute text, localhost MiniBrowser or unrendered JSON. Emitting an artifactId proves publication to the event stream, NOT client screen display. For genograms use square for known male, circle for known female, point for hidden junctions; never invent clinical or family relations. Other domains retain their publishers: geo, scene map, quantitative visualization, 3D, comic, game or image.' }))
       disposers.push(systemPrompt.section({ name: 'phoenix:comic-intent-router', order: 177, text: 'When asked to CREATE, SHOW or CONTINUE a comic, manga, illustrated story or webtoon, deliver an actual illustrated comic in the chat via phoenix_comic. Use real image-generation for panel art; compile the comic with the durable Comic Studio script and publish its verified release by series_id + issue_id. Never open the Phoenix application itself (127.0.0.1:3080 or localhost) inside MiniBrowser for a creative task. Never claim published unless phoenix_comic succeeded and returned an artifactId. If real artwork cannot be produced, describe that exact blocker instead of claiming success. This rule is specific to comics; it does not interfere with other domains.' }))
       disposers.push(installBinanceTradingProtocol(systemPrompt))
     }
@@ -400,7 +403,7 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
       // Capability projections and the mission/proactivity runtimes are host-owned.
       // Do not repeat them when several sessions mount full presets in one process.
       disposers.push(indexOpenClawExtensions(hardness))
-      disposers.push(indexTools(tools, hardness, { events: ctx, exclude: ['hardness_run', 'hardness_workflow', 'hardness_evolution_status', 'phoenix_visualize', 'phoenix_scene_map', 'phoenix_canvas', 'phoenix_game', 'phoenix_comic'] }))
+      disposers.push(indexTools(tools, hardness, { events: ctx, exclude: ['hardness_run', 'hardness_workflow', 'hardness_evolution_status', 'phoenix_visualize', 'phoenix_scene_map', 'phoenix_diagram', 'phoenix_canvas', 'phoenix_game', 'phoenix_comic'] }))
       disposers.push(await indexSkills(skills, hardness))
     } else if (authorization !== undefined || mcpConnectors !== undefined) {
       // A preset contributes only its scoped connector inventory/discovery
@@ -437,6 +440,7 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
       disposers.push(ctx.tools.register(createEvolutionStatusTool()))
       disposers.push(ctx.tools.register(createPhoenixVisualizerTool()))
       disposers.push(ctx.tools.register(createPhoenixSceneMapTool()))
+       disposers.push(ctx.tools.register(createPhoenixDiagramTool()))
       disposers.push(ctx.tools.register(createPhoenixCanvasTool()))
       disposers.push(ctx.tools.register(createPhoenixGameTool()))
       disposers.push(ctx.tools.register(createPhoenixComicTool()))
