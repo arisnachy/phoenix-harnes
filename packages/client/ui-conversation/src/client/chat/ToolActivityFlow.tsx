@@ -629,17 +629,31 @@ function BrowserWorkspace({
 }) {
   const [page, setPage] = useState<{ title: string; url: string } | null>(null)
   const [secureRequest, setSecureRequest] = useState<SecureLoginTarget | null>(null)
+  const secureRequestRef = useRef<SecureLoginTarget | null>(null)
+  const [secureRequestEpoch, setSecureRequestEpoch] = useState(0)
   const [savedAccessNotice, setSavedAccessNotice] = useState<SavedAccessNotice | null>(null)
   const handleSecureRequest = useCallback((request: SecureLoginTarget | null) => {
-    if (request === null) { setSecureRequest(null); return }
+    if (request === null) {
+      const hadRequest = secureRequestRef.current !== null
+      secureRequestRef.current = null
+      if (hadRequest) setSecureRequestEpoch(value => value + 1)
+      setSecureRequest(null)
+      return
+    }
     if (request.explicit) setSecureAskDismissed(sessionId, request.origin, false)
     else if (isSecureAskDismissed(sessionId, request.origin)) return
+    secureRequestRef.current = request
     setSecureRequest(request)
   }, [sessionId])
   const dismissSecureRequest = useCallback(() => {
-    if (secureRequest !== null) setSecureAskDismissed(sessionId, secureRequest.origin, true)
+    const current = secureRequestRef.current
+    if (current !== null) {
+      setSecureAskDismissed(sessionId, current.origin, true)
+      secureRequestRef.current = null
+      setSecureRequestEpoch(value => value + 1)
+    }
     setSecureRequest(null)
-  }, [sessionId, secureRequest])
+  }, [sessionId])
   const handleSavedAccessNotice = useCallback((next: SavedAccessNotice | null) => {
     setSavedAccessNotice(previous => previous?.origin === next?.origin && previous?.phase === next?.phase
       ? previous : next)
@@ -704,7 +718,8 @@ function BrowserWorkspace({
         <MiniBrowser key={sessionId} sessionId={sessionId} requested active={selected}
           {...tabId === undefined ? {} : { initialTabId: tabId }}
           onActivate={onActivate} autoScroll={false} onPageChange={setPage}
-          onSecureLoginRequest={handleSecureRequest} onSavedAccessNotice={handleSavedAccessNotice} />
+          onSecureLoginRequest={handleSecureRequest} onSavedAccessNotice={handleSavedAccessNotice}
+          secureLoginRequestEpoch={secureRequestEpoch} />
         {secureRequest !== null && <SecureAsk key={secureRequest.origin + ':' + secureRequest.tabId}
           target={secureRequest}
           onClose={dismissSecureRequest}

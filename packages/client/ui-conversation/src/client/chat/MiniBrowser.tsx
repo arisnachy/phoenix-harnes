@@ -232,7 +232,7 @@ function youtubeId(raw: string | undefined): string | undefined {
 /** Human navigation stays in the user-controlled MiniBrowser, never in the model's context. */
 export function MiniBrowser({
   sessionId, requested = false, active = true, initialTabId, onActivate, autoScroll = true,
-  onPageChange, onSecureLoginRequest, onSavedAccessNotice,
+  onPageChange, onSecureLoginRequest, onSavedAccessNotice, secureLoginRequestEpoch = 0,
 }: {
   sessionId: string
   requested?: boolean
@@ -244,6 +244,8 @@ export function MiniBrowser({
   onPageChange?: (page: { title: string; url: string } | null) => void
   onSecureLoginRequest?: (request: SecureLoginTarget | null) => void
   onSavedAccessNotice?: (notice: SavedAccessNotice | null) => void
+  /** Parent generation; changing it invalidates an in-flight manual request. */
+  secureLoginRequestEpoch?: number
 }) {
   const [snapshot, setSnapshot] = useState<Snapshot>(BLANK)
   const [enabled, setEnabled] = useState(false)
@@ -292,14 +294,33 @@ export function MiniBrowser({
   // marked as attempted, and the saved password appears to be ignored.
   const secureLoginCallbackRef = useRef(onSecureLoginRequest)
   const savedAccessCallbackRef = useRef(onSavedAccessNotice)
+  const secureLoginRequestEpochRef = useRef(secureLoginRequestEpoch)
+  const secureLoginRequestIdRef = useRef(0)
+  const secureLoginPageRef = useRef({ origin: siteOrigin, tabId: snapshot.tabId, url: snapshot.url, active, dismissed })
   secureLoginCallbackRef.current = onSecureLoginRequest
   savedAccessCallbackRef.current = onSavedAccessNotice
+  secureLoginRequestEpochRef.current = secureLoginRequestEpoch
+  secureLoginPageRef.current = { origin: siteOrigin, tabId: snapshot.tabId, url: snapshot.url, active, dismissed }
 
   /** Open the manual card with the same page detection used by automatic login. */
   const requestSecureLogin = useCallback(async (origin: string, tabId: string): Promise<void> => {
+    const page = secureLoginPageRef.current
+    const requestId = ++secureLoginRequestIdRef.current
+    const requestEpoch = secureLoginRequestEpochRef.current
+    const isCurrent = (): boolean => {
+      const currentPage = secureLoginPageRef.current
+      return mounted.current && secureLoginRequestEpochRef.current === requestEpoch
+        && secureLoginRequestIdRef.current === requestId
+        && page.active && !page.dismissed
+        && currentPage.active && !currentPage.dismissed
+        && currentPage.origin === origin && currentPage.tabId === tabId && currentPage.url === page.url
+    }
+    if (!isCurrent()) return
     try {
       const status = await secureApi<SecureStatus>('/status?origin=' + encodeURIComponent(origin))
+      if (!isCurrent()) return
       const detection = await secureApi<SecureDetection>('/detect', { origin, tabId }).catch(() => undefined)
+      if (!isCurrent()) return
       const fields = detection?.fields?.filter(field => field.label.trim() !== '') ?? []
       const formObserved = fields.length > 0 && detection?.formVisible !== false
       const target: SecureLoginTarget = {
@@ -319,8 +340,10 @@ export function MiniBrowser({
         } : {}),
         explicit: true,
       }
+      if (!isCurrent()) return
       secureLoginCallbackRef.current?.(target)
     } catch {
+      if (!isCurrent()) return
       savedAccessCallbackRef.current?.({ origin, phase: 'vault-unavailable' })
       secureLoginCallbackRef.current?.(null)
     }

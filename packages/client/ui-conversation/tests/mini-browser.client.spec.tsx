@@ -886,6 +886,95 @@ describe('MiniBrowser in Phoenix conversation', () => {
     })))
   })
 
+  it('ignores a manual Secure Ask response after its parent invalidates the request', async () => {
+    const request = vi.fn()
+    const onSite = { ...state, url: 'https://example.org/login', title: 'Acceso',
+      tabs: [{ id: 'shared-tab', title: 'Acceso', url: 'https://example.org/login' }] }
+    let detectCalls = 0
+    let resolveManualDetect: ((value: Response) => void) | undefined
+    const manualDetect = new Promise<Response>((resolve) => { resolveManualDetect = resolve })
+    vi.stubGlobal('fetch', vi.fn(async (raw: string) => {
+      const url = String(raw)
+      if (url.startsWith('/phoenix-secure-login/status')) return new Response(
+        JSON.stringify({ saved: false, automatic: false }), { status: 200 })
+      if (url.startsWith('/phoenix-secure-login/detect')) {
+        detectCalls += 1
+        if (detectCalls === 1) return new Response(JSON.stringify({
+          required: true, formVisible: true,
+          fields: [{ key: 'account', role: 'account', label: 'Usuario', placeholder: 'Usuario', inputType: 'text', required: true }],
+        }), { status: 200 })
+        return manualDetect
+      }
+      if (url.startsWith('/phoenix-mini-browser/frame')) return new Response(
+        new Uint8Array([255, 216, 255, 217]), { status: 200,
+          headers: { 'content-type': 'image/jpeg' } })
+      return new Response(JSON.stringify(onSite), { status: 200,
+        headers: { 'content-type': 'application/json' } })
+    }))
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn(() => 'blob:manual-cancelled') })
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() })
+    const view = render(<MiniBrowser sessionId="manual-cancelled" requested
+      secureLoginRequestEpoch={0} onSecureLoginRequest={request} />)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Abrir acceso seguro' })).toBeTruthy())
+    fireEvent.click(screen.getByRole('button', { name: 'Abrir acceso seguro' }))
+    await waitFor(() => expect(detectCalls).toBe(2))
+    view.rerender(<MiniBrowser sessionId="manual-cancelled" requested
+      secureLoginRequestEpoch={1} onSecureLoginRequest={request} />)
+    await act(async () => {
+      resolveManualDetect?.(new Response(JSON.stringify({
+        required: true, formVisible: true,
+        fields: [{ key: 'account', role: 'account', label: 'Usuario', placeholder: 'Usuario', inputType: 'text', required: true }],
+      }), { status: 200 }))
+      await manualDetect
+    })
+    expect(request).not.toHaveBeenCalledWith(expect.objectContaining({ explicit: true }))
+  })
+
+  it('only honors the latest manual Secure Ask request for the current page', async () => {
+    const request = vi.fn()
+    const onSite = { ...state, url: 'https://example.org/login', title: 'Acceso',
+      tabs: [{ id: 'shared-tab', title: 'Acceso', url: 'https://example.org/login' }] }
+    let detectCalls = 0
+    let resolveFirst: ((value: Response) => void) | undefined
+    let resolveSecond: ((value: Response) => void) | undefined
+    const firstManual = new Promise<Response>((resolve) => { resolveFirst = resolve })
+    const secondManual = new Promise<Response>((resolve) => { resolveSecond = resolve })
+    const fields = [{ key: 'account', role: 'account', label: 'Usuario', placeholder: 'Usuario', inputType: 'text', required: true }]
+    vi.stubGlobal('fetch', vi.fn(async (raw: string) => {
+      const url = String(raw)
+      if (url.startsWith('/phoenix-secure-login/status')) return new Response(
+        JSON.stringify({ saved: false, automatic: false }), { status: 200 })
+      if (url.startsWith('/phoenix-secure-login/detect')) {
+        detectCalls += 1
+        if (detectCalls === 1) return new Response(JSON.stringify({ required: true, formVisible: true, fields }), { status: 200 })
+        return detectCalls === 2 ? firstManual : secondManual
+      }
+      if (url.startsWith('/phoenix-mini-browser/frame')) return new Response(
+        new Uint8Array([255, 216, 255, 217]), { status: 200,
+          headers: { 'content-type': 'image/jpeg' } })
+      return new Response(JSON.stringify(onSite), { status: 200,
+        headers: { 'content-type': 'application/json' } })
+    }))
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn(() => 'blob:manual-latest') })
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() })
+    render(<MiniBrowser sessionId="manual-latest" requested onSecureLoginRequest={request} />)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Abrir acceso seguro' })).toBeTruthy())
+    fireEvent.click(screen.getByRole('button', { name: 'Abrir acceso seguro' }))
+    await waitFor(() => expect(detectCalls).toBe(2))
+    fireEvent.click(screen.getByRole('button', { name: 'Abrir acceso seguro' }))
+    await waitFor(() => expect(detectCalls).toBe(3))
+    await act(async () => {
+      resolveFirst?.(new Response(JSON.stringify({ required: true, formVisible: true, fields }), { status: 200 }))
+      await firstManual
+    })
+    expect(request).not.toHaveBeenCalledWith(expect.objectContaining({ explicit: true }))
+    await act(async () => {
+      resolveSecond?.(new Response(JSON.stringify({ required: true, formVisible: true, fields }), { status: 200 }))
+      await secondManual
+    })
+    await waitFor(() => expect(request).toHaveBeenCalledWith(expect.objectContaining({ explicit: true })))
+  })
+
 
   it('does not ask for new credentials when Vault is temporarily unreachable', async () => {
     const request = vi.fn(), notice = vi.fn()
