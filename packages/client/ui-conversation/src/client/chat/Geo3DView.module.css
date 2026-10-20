@@ -1,0 +1,8 @@
+.root{width:100%;position:relative;background:#edf1f1;overflow:hidden}
+.scene{display:block;width:100%;height:430px;touch-action:none;cursor:grab;user-select:none}
+.scene:active{cursor:grabbing}
+.shape{cursor:pointer}
+.shape:focus-visible{outline:2px solid #d76b32}
+.instruction{position:absolute;z-index:1;left:15px;top:12px;padding:7px 10px;font-size:11px;background:#fffc;border:1px solid #e1e0dc;border-radius:9px;color:#524c45;pointer-events:none}
+.controls{position:absolute;right:11px;bottom:10px;display:flex;gap:6px}
+.controls button{background:#fffe;border:1px solid #ccc5ba;border-radius:7px;font:inherit;font-size:12px;padding:6px 9px;cursor:pointer}

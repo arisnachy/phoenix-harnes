@@ -8,6 +8,7 @@ import { readFile, writeFile } from 'node:fs/promises'
 import { resolve, extname } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { createHash } from 'node:crypto'
+import { renderGeoPDF } from './phoenix-geo-pdf.mjs'
 
 const MAX_FEATURES = 3000
 const MAX_POINTS = 400
@@ -201,7 +202,8 @@ async function main(){
   const result=compileGeoJson(input,opts)
   await writeFile(resolve(opts.output),JSON.stringify(result.spec,null,2)+'\n','utf8')
   if(opts.report)await writeFile(resolve(opts.report),reportMarkdown(result),'utf8')
-  process.stdout.write(JSON.stringify({output:opts.output,report:opts.report??null,statistics:result.statistics})+'\n')
+  if(opts.pdf)await writeFile(resolve(opts.pdf),renderGeoPDF(result))
+  process.stdout.write(JSON.stringify({output:opts.output,report:opts.report??null,pdf:opts.pdf??null,statistics:result.statistics})+'\n')
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href)
   main().catch(error=>{process.stderr.write('PHOENIX GEO: '+String(error?.message??error)+'\n');process.exitCode=1})
