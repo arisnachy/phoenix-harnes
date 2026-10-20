@@ -6,7 +6,7 @@
 
 import { Context, Service } from '@phoenix-ai/cordis'
 import z from '@phoenix-ai/schemastery'
-import type { ModelSelection } from '@phoenix-ai/dsh-agent'
+import type { ModelSelection, EclipseRoutingSettings } from '@phoenix-ai/dsh-agent'
 import { ReasoningEffortId } from '@phoenix-ai/dsh-llm'
 import { installSettingsSection, settingsNamespace } from '@phoenix-ai/dsh-settings'
 
@@ -28,13 +28,29 @@ export interface AgentDefaultModelSettings {
   model: string
   /** Adapter-owned reasoning effort, or provider/default behavior when absent. */
   reasoningEffort?: string
+  /** Eclipse orchestration preferences, never interpreted as a model id. */
+  eclipse?: EclipseRoutingSettings
 }
+
+const eclipseRouteSchema = z.object({
+  provider: z.string().required(),
+  model: z.string().required(),
+  reasoningEffort: z.string(),
+})
 
 /** Schema of the default Agent model settings section. */
 export const AGENT_DEFAULT_MODEL_SETTINGS_SCHEMA: z<AgentDefaultModelSettings> = z.object({
   provider: z.string().required(),
   model: z.string().required(),
   reasoningEffort: z.string(),
+  eclipse: z.object({
+    mode: z.union(['automatic', 'hybrid', 'manual']).default('automatic'),
+    planner: eclipseRouteSchema,
+    coordinator: eclipseRouteSchema,
+    subagent: eclipseRouteSchema,
+    specialists: z.dict(eclipseRouteSchema),
+    maxTeammates: z.number().step(1).min(0).max(3),
+  }),
 })
 
 /** Composition entry for the default model selection. */
@@ -95,11 +111,18 @@ export class AgentDefaultModelConfig extends Service {
    * @param next - resolved selection accepted by an entry point.
    * @returns fulfillment after the optional settings write settles.
    */
+  /** Resolve Eclipse settings live so a saved change affects the next model request. */
+  currentEclipseProfile(): EclipseRoutingSettings | undefined {
+    const saved = this.source().eclipse
+    return saved === undefined ? undefined : structuredClone(saved)
+  }
+
   async saveSelection(next: ModelSelection): Promise<void> {
     await this.ctx.get('settings')?.replace(AGENT_DEFAULT_MODEL_SETTINGS_NAMESPACE, {
       provider: next.provider,
       model: next.model,
       ...next.reasoningEffort === undefined ? {} : { reasoningEffort: String(next.reasoningEffort) },
+      ...this.source().eclipse === undefined ? {} : { eclipse: this.source().eclipse },
     })
   }
 }
