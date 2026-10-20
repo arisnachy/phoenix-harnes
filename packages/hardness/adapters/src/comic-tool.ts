@@ -30,7 +30,7 @@ export function validateComicHtml(html: string): { pages: number; panels: number
   for (const side of ['front', 'back']) {
     const mark = new RegExp('<section\\b[^>]*data-comic-cover="' + side + '"[^>]*>([\\s\\S]*?)<\\/section>', 'iu')
     const cover = mark.exec(html)
-    if (!cover || !/<img\\b[^>]*\\bsrc\\s*=\\s*(["'])data:image\\/(png|jpeg|webp);base64,[A-Za-z0-9+/]{100,}={0,2}\\1/iu.test(cover[1]!)) {
+    if (!cover || !/<img\b[^>]*\bsrc\s*=\s*(["'])data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]{100,}={0,2}\1/iu.test(cover[1]!)) {
       return reject('Comic Studio: faltan imágenes reales de portada y contraportada; no se permite publicar una edición incompleta.')
     }
   }
