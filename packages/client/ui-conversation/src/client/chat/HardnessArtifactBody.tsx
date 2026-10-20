@@ -7,6 +7,7 @@ import { PhoenixVisualizer, supportsPhoenixVisual } from './PhoenixVisualizer.ts
 import { Scene3DView } from './Scene3DView.tsx'
 import { GeoMap, parseGeoMapSpec } from './GeoMap.tsx'
 import { SceneMap, parseSceneMapSpec } from './SceneMap.tsx'
+import { DiagramSurface, parseDiagramSpec } from './DiagramSurface.tsx'
 import { auditGameHtml, readGameManifest } from './game-studio-quality.ts'
 import { hasExternalImageReferences, inlineBundledImages } from './html-preview-assets.ts'
 import {
@@ -729,6 +730,12 @@ function RecordPreview({ record, mime, expanded, title, renderMessageImages }: {
     return map === null
       ? <p className={styles.note} role="alert">El mapa narrativo no se pudo renderizar: datos inválidos.</p>
       : <SceneMap spec={map} />
+  }
+  if (mime === 'application/vnd.phoenix.diagram+json' || record.component === 'diagram') {
+    const diagram = parseDiagramSpec(record)
+    return diagram === null
+      ? <p className={styles.note} role="alert">El diagrama no se pudo mostrar: estructura inválida.</p>
+      : <DiagramSurface spec={diagram} />
   }
   if (mime === 'application/vnd.phoenix.geo+json' || record.component === 'geo_map') {
     const geo = parseGeoMapSpec(record)
