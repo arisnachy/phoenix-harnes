@@ -43,6 +43,20 @@ try {
     await page.getByRole('button',{name:'Vista 3D'}).click()
     await page.locator('[data-phoenix-geo-3d="true"]').waitFor()
     await page.waitForTimeout(220) // stable CSS transition for deterministic screenshot and contrast
+    const contrast=await page.getByRole('button',{name:'Volver a 2D'}).evaluate(el=>{
+      const style=getComputedStyle(el)
+      const components = (value) => (value.match(/[0-9.]+/g)??[]).slice(0,3).map(Number)
+      const luminance=(value) => {
+        const channels=components(value).map(v=>{
+          const n=v/255
+          return n<=.04045?n/12.92:((n+.055)/1.055)**2.4
+        })
+        return .2126*channels[0]+.7152*channels[1]+.0722*channels[2]
+      }
+      const bg=luminance(style.backgroundColor),fg=luminance(style.color)
+      return (Math.max(bg,fg)+.05)/(Math.min(bg,fg)+.05)
+    })
+    if(contrast<4.5)throw Error(name+' active 3D button lacks WCAG AA text contrast: '+contrast.toFixed(2))
     await page.screenshot({path:output+'/'+name+'-3d.png',fullPage:true})
     await page.getByRole('button',{name:'Volver a 2D'}).click()
     if(name==='desktop'){

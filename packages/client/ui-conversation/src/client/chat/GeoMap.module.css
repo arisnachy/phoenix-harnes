@@ -1,6 +1,6 @@
 
 .root {
-  --geo-accent:#cc602b;
+  --geo-accent:#a74c24;
   --geo-accent-soft:#fbede4;
   --geo-ink:var(--dsw-alias-label-primary,#263039);
   --geo-subtle:var(--dsw-alias-label-secondary,#69737c);
@@ -91,7 +91,7 @@
 .footer{display:flex;align-items:start;justify-content:space-between;flex-wrap:wrap;gap:10px;
   padding:11px 20px;border-top:1px solid var(--geo-stroke);color:var(--geo-subtle);font-size:10px}
 .footer span{min-width:0;overflow-wrap:anywhere}
-.root[data-geo-theme="business"]{--geo-accent:#c85a25;--geo-accent-soft:#fff1e7}
+.root[data-geo-theme="business"]{--geo-accent:#a74c24;--geo-accent-soft:#fff1e7}
 .root[data-geo-theme="health"]{--geo-accent:#08795f;--geo-accent-soft:#e7f5f0}
 .root[data-geo-theme="research"]{--geo-accent:#4f61a4;--geo-accent-soft:#ecedfa}
 .root[data-geo-theme="logistics"]{--geo-accent:#1c6b96;--geo-accent-soft:#e8f2f9}
