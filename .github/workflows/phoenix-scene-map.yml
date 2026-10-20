@@ -7,6 +7,10 @@ on:
       - 'packages/client/ui-conversation/src/client/chat/HardnessArtifactBody.tsx'
       - 'packages/client/ui-conversation/tests/scene-map.client.spec.tsx'
       - 'apps/cli/config/agent-presets/code/skills/geo-intelligence/SKILL.md'
+      - 'apps/web/scene-map-qa*'
+      - 'apps/web/tests/scene-map.qa.mjs'
+      - 'apps/web/scene-map-qa*'
+      - 'apps/web/tests/scene-map.qa.mjs'
       - '.github/workflows/phoenix-scene-map.yml'
   push:
     branches: [main]
@@ -32,3 +36,20 @@ jobs:
         run: pnpm exec vitest run packages/client/ui-conversation/tests/scene-map.client.spec.tsx packages/client/ui-conversation/tests/geo-map.client.spec.ts
       - name: Compile native client including scene_map
         run: pnpm run build:lib:host && pnpm run build:lib:client
+
+      - name: Install headless Chromium
+        run: pnpm --dir apps/web exec playwright install --with-deps chromium
+      - name: Compile original native scene map for production preview
+        run: pnpm --dir apps/web exec vite build --config scene-map-qa.config.ts
+      - name: Start isolated production scene-map preview
+        run: |
+          pnpm --dir apps/web exec vite preview --config scene-map-qa.config.ts > /tmp/scene-map.log 2>&1 &
+      - name: Verify actual visible map at four viewport sizes
+        run: node apps/web/tests/scene-map.qa.mjs
+      - name: Store screenshot evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phoenix-scene-map-isla-bruma
+          path: artifacts/scene-map/
+          if-no-files-found: ignore
