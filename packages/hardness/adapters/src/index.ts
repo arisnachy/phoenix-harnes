@@ -72,7 +72,6 @@ import { createConnectorInstallTool, createXMcpActivateTool } from './connector-
 import type { McpRegistryInstallerService, XMcpHostService } from './connector-install-tool.ts'
 import type { SubagentRuntime } from '@phoenix-ai/dsh-subagent'
 import { installOrdinaryCompletionJudgeBridge } from './ordinary-completion-judge.ts'
-
 export { indexTools } from './tool-adapter.ts'
 export type { ToolAtlasIndexOptions, ToolChangeSource } from './tool-adapter.ts'
 export { indexSkills } from './skill-adapter.ts'
@@ -181,7 +180,6 @@ export { ROUTINE_PROTOCOL, installRoutineProtocol } from './routine-protocol.ts'
 export { LearnedSkillStore, createLearnedSkillTool } from './learned-skill.ts'
 export type { LearnedSkillInput, LearnedSkillReceipt } from './learned-skill.ts'
 export { installConnectorEventBridge } from './connector-event-bridge.ts'
-
 /** Base-composition consumer that projects existing registries into HARDNESS. */
 export const name = 'hardness-adapters'
 export const inject = ['hardness', 'tools', 'skills', 'agents', 'approval', 'systemPrompt', 'authorization']
