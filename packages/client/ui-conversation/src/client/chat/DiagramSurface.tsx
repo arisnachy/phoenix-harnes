@@ -53,7 +53,8 @@ const only = (v: Record<string, unknown>, allowed: readonly string[]): boolean =
   Object.keys(v).every(key => allowed.includes(key))
 const short = (v: unknown, max: number): v is string =>
   typeof v === 'string' && v.trim().length > 0 && v.length <= max
-const coord = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 1000
+const within = (value: unknown, min: number, max: number): value is number =>
+  typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max
 
 /**
  * Validate untrusted model-authored diagram JSON before handing it to the React renderer.
@@ -75,7 +76,9 @@ export function parseDiagramSpec(value: unknown): DiagramSpec | null {
   for (const node of p.nodes) {
     if (!isRecord(node) || !only(node, ['id', 'label', 'x', 'y', 'shape', 'detail'])
       || !short(node.id, 80) || ids.has(node.id)
-      || !short(node.label, 100) || !coord(node.x) || !coord(node.y)
+      || !short(node.label, 100)
+      || !within(node.x, node.shape === 'point' ? 0 : 95, node.shape === 'point' ? 1000 : 905)
+      || !within(node.y, node.shape === 'point' ? 0 : 80, node.shape === 'point' ? 620 : 520)
       || (node.shape !== undefined && !shapes.includes(node.shape as DiagramShape))
       || (node.detail !== undefined && !short(node.detail, 650))) return null
     ids.add(node.id)
@@ -92,7 +95,7 @@ export function parseDiagramSpec(value: unknown): DiagramSpec | null {
         || (edge.label !== undefined && !short(edge.label, 120))
         || (edge.via !== undefined && (!Array.isArray(edge.via) || edge.via.length > 12
           || !edge.via.every(point => isRecord(point) && only(point, ['x', 'y'])
-            && coord(point.x) && coord(point.y))))) return null
+            && within(point.x, 0, 1000) && within(point.y, 0, 620))))) return null
     }
   }
   return value as unknown as DiagramSpec
