@@ -393,7 +393,7 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
     case 'ui_canvas': return <GenerativeCanvas spec={block} onAction={onAction} />
     case 'scale_form': return <ScaleForm spec={block} />
     case 'spreadsheet': return <SpreadsheetSurface key={block.props.id} spec={block} />
-    case 'geo_map': return <GeoMap key={(conversationId ?? block.props.conversationId ?? 'ephemeral') + ':' + block.props.id} spec={block} onAction={onAction} {...conversationId === undefined ? {} : { conversationId }} />
+    case 'geo_map': return <GeoMap key={(conversationId ?? block.props.conversationId ?? 'ephemeral') + ':' + block.props.id} spec={block} onAction={onAction} {...(conversationId === undefined ? {} : { conversationId })} />
     case 'status_pill': return <PhoenixStatusPill label={block.props.label} {...block.props.tone === undefined ? {} : { tone: block.props.tone }} />
     case 'agent_line': return <PhoenixAgentLine {...block.props} />
     case 'event_card': {
