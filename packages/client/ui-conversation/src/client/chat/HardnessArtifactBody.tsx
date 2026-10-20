@@ -510,6 +510,9 @@ function ComicStudioPreview({ html, title }: { readonly html: string; readonly t
   const documentHtml = useMemo(() => html.replace(/<\/head>/iu,
     '<style data-phoenix-comic-responsive="true">@media screen{'
     + 'html,body{background:#181b24!important}.edition{box-sizing:border-box;width:100%;padding:8px;gap:16px}'
+    + '.comic-cover-page{width:min(100%,1200px)!important;height:auto!important;aspect-ratio:2/3}'
+    + '.comic-page{padding:0!important;width:min(100%,1200px)!important;height:auto!important;aspect-ratio:2/3}'
+    + '.comic-page .panel-stage{position:absolute;left:2.67%;right:2.67%;top:1.78%;bottom:2.67%;width:auto;height:auto}'
     + '.comic-page{box-sizing:border-box;width:min(100%,1200px);height:auto;aspect-ratio:2/3;'
     + 'padding:clamp(8px,2.67vw,32px) clamp(8px,2.67vw,32px) clamp(18px,4vw,48px);'
     + 'gap:clamp(4px,1vw,13px)}.strip{gap:clamp(4px,1vw,13px)}'
