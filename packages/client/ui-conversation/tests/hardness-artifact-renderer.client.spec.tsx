@@ -33,6 +33,33 @@ function props(data: {
 
 describe('HARDNESS inline artifact renderer', () => {
   afterEach(() => { cleanup() })
+  it('renders a phoenix_scene_map tool artifact as a real clickable atlas in the chat', () => {
+    render(<HardnessArtifactNodeView {...props({
+      artifactId: 'phoenix-scene-map:map-isla-1',
+      mime: 'application/vnd.phoenix.scene-map+json',
+      title: 'Isla Bruma',
+      data: {
+        component: 'scene_map', version: 1,
+        props: {
+          id: 'isla-bruma', title: 'Isla Bruma', theme: 'fantasy',
+          subtitle: 'Mundo narrativo ficticio',
+          places: [
+            { id: 'puerto', name: 'Puerto de la Niebla', x: 24, y: 66, kind: 'port', description: 'Puerto occidental' },
+            { id: 'torre', name: 'Torre del Viento', x: 66, y: 28, kind: 'tower', description: 'Guardianes del viento' },
+          ],
+          routes: [{ from: 'puerto', to: 'torre', label: 'Sendero antiguo' }],
+        },
+      },
+    })} />)
+    expect(document.querySelector('[data-hardness-artifact="phoenix-scene-map:map-isla-1"]')).toBeTruthy()
+    expect(document.querySelector('[data-phoenix-scene-map="isla-bruma"]')).toBeTruthy()
+    expect(screen.getByRole('img', { name: 'Mapa ficticio interactivo Isla Bruma' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Explorar Torre del Viento' }))
+    expect(screen.getByText('Guardianes del viento')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Exportar SVG' })).toBeTruthy()
+    expect(screen.queryByText(/"component"/)).toBeNull()
+  })
+
   it('opens a real large dialog instead of merely changing inline height', () => {
     render(<HardnessArtifactNodeView {...props({
       artifactId: 'table-1',
