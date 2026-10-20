@@ -113,6 +113,13 @@ export const AssistantMarkdown = memo(function AssistantMarkdown({
     && splitGenerativeUiText(block.text, { streaming: false }).some(segment => segment.kind === 'ui'
       && (segment.block.component === 'scene_map' || segment.block.component === 'geo_map')))
   const missingMap = claimsPublishedMap && !containsNativeMap
+  // A tool receipt or prose claim is not proof that a diagram was actually mounted.
+  const claimsPublishedDiagram = !streaming && blocks.some(block => block.kind === 'text'
+    && /(?:publiqu[eé]|publicad[oa]|cre[eé]|gener[eé]|ya est[aá]|qued[oó]).{0,120}(?:genograma|diagrama)|(?:genograma|diagrama).{0,100}(?:publicad[oa]|listo|ya est[aá]|interactiv[oa])/i.test(block.text))
+  const containsNativeDiagram = blocks.some(block => block.kind === 'text'
+    && splitGenerativeUiText(block.text, { streaming: false }).some(segment =>
+      segment.kind === 'ui' && segment.block.component === 'diagram'))
+  const missingDiagram = claimsPublishedDiagram && !containsNativeDiagram
   return (
     <div className={css.root} data-assistant-body="" data-streaming={streaming || undefined}>
       <div className={css.body}>
@@ -125,6 +132,15 @@ export const AssistantMarkdown = memo(function AssistantMarkdown({
             'Kira, genera AHORA el mapa solicitado dentro de este mismo chat con un bloque ```generative-ui que contenga un scene_map versión 1 válido, con lugares y descripciones. No afirmes publicación sin incluir el componente real.',
             'draft',
           )} style={{ display: 'block', marginTop: 8, cursor: 'pointer' }}>Solicitar mapa nativo</button>}
+        </p>}
+        {missingDiagram && <p role="alert" data-phoenix-missing-diagram="" style={{
+          border: '1px solid #e7bb76', borderRadius: 10, background: '#fff7e8',
+          color: '#694319', padding: '11px 13px', fontSize: 12,
+        }}>Este mensaje afirma que creó un diagrama o genograma, pero no incluye una visualización nativa verificable.
+          {onUiAction && <button type="button" onClick={() => onUiAction(
+            'Kira, representa AHORA el genograma o diagrama solicitado directamente en este chat como un bloque \`\`\`generative-ui con component "diagram", version 1 y props {id,title,kind,nodes,edges}. Cada nodo debe incluir id,label,x,y y shape (square,circle,rectangle,diamond,point); las conexiones usan from,to y opcionalmente fromPort,toPort,via. No anuncies una publicación si no incluyes el componente válido.',
+            'draft',
+          )} style={{ display: 'block', marginTop: 8, cursor: 'pointer' }}>Solicitar diagrama visible</button>}
         </p>}
         {interrupted && <span className={css.stopped}>{t('message.stopped')}</span>}
       </div>
