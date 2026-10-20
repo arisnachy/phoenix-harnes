@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { CanvasAction } from './GenerativeCanvas.tsx'
 import css from './GeoMap.module.css'
 import { Geo3DView } from './Geo3DView.tsx'
+import { generateGeoPdf } from './GeoMapPdf.ts'
 
 type Position = readonly [number, number] // [longitude, latitude], GeoJSON order
 type Kind = 'points' | 'line' | 'polygon' | 'heat'
@@ -266,6 +267,15 @@ export function GeoMap({ spec, onAction, conversationId }: { spec: GeoMapSpec; o
           save(fileName(p.title,'csv'), '\uFEFF' + lines.join('\r\n'), 'text/csv;charset=utf-8')
         }}>CSV</button>
         <button type="button" onClick={exportSvg} title="Geometrías vectoriales para informes, sin mapa base">SVG para informe</button>
+        <button type="button" title="Descargar mapa vectorial PDF con fuente y leyenda" onClick={() => {
+          if (active.every(layer => layer.features.length === 0)) return
+          const url = URL.createObjectURL(generateGeoPdf(active,p.title,p.source,p.metric))
+          const anchor = document.createElement('a')
+          anchor.href=url
+          anchor.download=fileName(p.title,'pdf')
+          anchor.click()
+          window.setTimeout(() => URL.revokeObjectURL(url),1000)
+        }}>PDF para informe</button>
         <button type="button" onClick={() => setShow3D(v => !v)} aria-pressed={show3D}>{show3D ? "Mapa 2D" : "Mapa 3D"}</button>
       </div>
       {show3D && <Geo3DView layers={active} onSelect={select} />}
