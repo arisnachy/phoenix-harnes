@@ -71,6 +71,6 @@ describe('native fictional map publication via tool result',()=>{
     const m=demoIslandMap('Isla Bruma')
     expect(m.props.places.every(p=>p.x>=5&&p.x<=95)).toBe(true)
     expect(JSON.stringify(m)).not.toMatch(/https?:\/\/|fetch\(|navigator|geocode|latitud|longitud/i)
-    expect(admitPhoenixSceneMap(m.props,'Isla Bruma')).toEqual(m)
+    expect(admitPhoenixSceneMap({id:m.props.id,theme:m.props.theme,subtitle:m.props.subtitle,description:m.props.description,places:m.props.places,routes:m.props.routes},'Isla Bruma')).toEqual(m)
   })
 })
