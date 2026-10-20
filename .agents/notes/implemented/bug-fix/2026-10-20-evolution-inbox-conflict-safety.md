@@ -2,7 +2,7 @@
 
 Status: implemented
 
-[English](2026-10-20-evolution-inbox-conflict-safety.md) | [中文](2026-10-20-evolution-inbox-conflict-safety.zh.md)
+English | [中文](2026-10-20-evolution-inbox-conflict-safety.zh.md)
 
 ## Problem
 
