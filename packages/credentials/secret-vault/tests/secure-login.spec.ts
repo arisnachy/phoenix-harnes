@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { loginOrigin, loginDetectionExpression, loginGateExpression, relatedCredentialOrigin, registerSecureLogin, safeSecureLoginFailure } from '../src/secure-login.ts'
+import { loginOrigin, loginDetectionExpression, loginGateExpression, relatedCredentialOrigin, relatedCredentialOrigins, registerSecureLogin, safeSecureLoginFailure } from '../src/secure-login.ts'
 
 describe('origin-scoped secure login', () => {
   it('does not mistake a persistent account menu or a logout control for a login requirement', () => {
@@ -44,6 +44,11 @@ describe('origin-scoped secure login', () => {
       .toBe('https://deportes.juancitosport.com.do')
     expect(relatedCredentialOrigin('https://deportes.juancitosport.com.do'))
       .toBe('https://www.juancitosport.com.do')
+    expect(relatedCredentialOrigin('https://juancitosport.com.do'))
+      .toBe('https://www.juancitosport.com.do')
+    expect(relatedCredentialOrigins('https://www.juancitosport.com.do')).toContain('https://juancitosport.com.do')
+    expect(relatedCredentialOrigins('https://deportes.juancitosport.com.do')).toContain('https://juancitosport.com.do')
+    expect(relatedCredentialOrigins('https://juancitosport.com.do.evil.example')).toEqual([])
     expect(relatedCredentialOrigin('https://example.com')).toBeUndefined()
     expect(relatedCredentialOrigin('https://www.juancitosport.com.do.evil.example')).toBeUndefined()
   })
@@ -268,6 +273,34 @@ describe('origin-scoped secure login', () => {
     expect(body).toContain('vault-unavailable')
     expect(body).not.toContain('"saved":false')
     expect(body).not.toContain('offline')
+  })
+
+  it('finds a previously saved apex account while the current tab uses www', async () => {
+    let handler: ((req: unknown, res: unknown) => Promise<void>) | undefined
+    const apex = 'https://juancitosport.com.do'
+    registerSecureLogin({ webServer: { register: (route: { handler: typeof handler }) => {
+      handler = route.handler
+      return () => {}
+    } } } as never, { resolve: async (ref: string) => {
+      const credentials = await import('@phoenix-ai/dsh-credentials')
+      if (ref === credentials.originCredentialRef(apex, 'account')) return { value: 'example-user' }
+      if (ref === credentials.originCredentialRef(apex, 'secret')) return { value: 'HIDDEN_IN_MODEL' }
+      return undefined
+    } } as never)
+    let body = ''
+    let code = 0
+    await handler?.({
+      method: 'GET',
+      url: '/phoenix-secure-login/status?origin=https%3A%2F%2Fwww.juancitosport.com.do',
+      socket: { remoteAddress: '127.0.0.1' },
+      headers: { host: '127.0.0.1:3080', 'x-phoenix-secure-login': '1' },
+    }, { writeHead(status: number) { code = status }, end(value: string) { body = value } })
+    expect(code).toBe(200)
+    expect(JSON.parse(body)).toMatchObject({
+      saved: false, relatedSaved: true, relatedOrigin: apex, relatedProfile: 'personal',
+    })
+    expect(body).not.toContain('example-user')
+    expect(body).not.toContain('HIDDEN_IN_MODEL')
   })
 
   it('rejects non-loopback requests before even accessing the vault', async () => {

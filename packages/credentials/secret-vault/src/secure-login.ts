@@ -46,12 +46,24 @@ export function loginOrigin(raw: string): string {
  * Show only that a related access exists; NEVER share or replay its secret
  * across origins automatically. The user must approve an explicit copy.
  */
+/** Registered related origins are only discovery hints; no implicit cross-site login. */
+export function relatedCredentialOrigins(origin: string): readonly string[] {
+  // This site's apex, www portal and embedded sports module may each host
+  // their own login. An exact allowlist avoids matching lookalike domains.
+  if (origin === 'https://www.juancitosport.com.do') {
+    return ['https://deportes.juancitosport.com.do', 'https://juancitosport.com.do']
+  }
+  if (origin === 'https://deportes.juancitosport.com.do') {
+    return ['https://www.juancitosport.com.do', 'https://juancitosport.com.do']
+  }
+  if (origin === 'https://juancitosport.com.do') {
+    return ['https://www.juancitosport.com.do', 'https://deportes.juancitosport.com.do']
+  }
+  return []
+}
+/** Backward-compatible primary related-site hint; status searches all known origins. */
 export function relatedCredentialOrigin(origin: string): string | undefined {
-  // Explicitly known portal/module pair. Presence may be disclosed in either
-  // direction, but the actual secret NEVER moves without user approval.
-  if (origin === 'https://www.juancitosport.com.do') return 'https://deportes.juancitosport.com.do'
-  if (origin === 'https://deportes.juancitosport.com.do') return 'https://www.juancitosport.com.do'
-  return undefined
+  return relatedCredentialOrigins(origin)[0]
 }
 function filename(origin: string, profile: LoginProfile = 'personal'): string {
   const suffix = profile === 'kira' ? '.kira.dpapi.json' : '.dpapi.json'
@@ -590,14 +602,21 @@ export function registerSecureLogin(ctx: Context, vault?: CredentialProvider): (
           const profiles = await listProfiles(origin, vault)
           const selected = await activeProfile(origin, profiles)
           const current = profiles.find(p => p.id === selected)!
-          const relatedOrigin = !current.saved ? relatedCredentialOrigin(origin) : undefined
-          const relatedProfiles = relatedOrigin ? await listProfiles(relatedOrigin, vault) : []
-          const related = relatedProfiles.some(item => item.saved)
-            ? { relatedOrigin, relatedProfile: preferredLoginProfile(relatedProfiles), relatedSaved: true }
-            : {}
+          let related: { relatedSaved: true; relatedOrigin: string; relatedProfile: LoginProfile } | undefined
+          if (!current.saved) {
+            for (const candidate of relatedCredentialOrigins(origin)) {
+              const profilesAtCandidate = await listProfiles(candidate, vault)
+              if (!profilesAtCandidate.some(item => item.saved)) continue
+              related = {
+                relatedSaved: true, relatedOrigin: candidate,
+                relatedProfile: preferredLoginProfile(profilesAtCandidate),
+              }
+              break
+            }
+          }
           respond(res, 200, {
             saved: current.saved, automatic: current.automatic, source: current.source,
-            profile: selected, profiles, ...related,
+            profile: selected, profiles, ...(related ?? {}),
           })
           return
         }
@@ -703,8 +722,9 @@ export function registerSecureLogin(ctx: Context, vault?: CredentialProvider): (
         if (route.pathname === PREFIX + '/adopt-related') {
           // A human-initiated, specific-site copy: verify the destination tab
           // is genuinely on the intended HTTPS origin before unsealing anything.
-          const source = relatedCredentialOrigin(origin)
-          if (!source || payload.sourceOrigin !== source || payload.consent !== true
+          const source = payload.sourceOrigin
+          if (typeof source !== 'string' || !relatedCredentialOrigins(origin).includes(source)
+            || payload.consent !== true
             || typeof payload.tabId !== 'string' || !/^[A-Za-z0-9_-]{1,200}$/.test(payload.tabId)) {
             throw new Error('Reutilización entre sitios no autorizada')
           }
