@@ -11,7 +11,7 @@ try {
   for (const [name,width,height] of [['desktop',1280,900],['tablet',768,960],['mobile',390,844],['small-mobile',320,700]]) {
     const page=await browser.newPage({viewport:{width,height},deviceScaleFactor:1,acceptDownloads:true})
     const errors=[]
-    page.on('pageerror',error=>errors.push(error.message))
+    page.on('pageerror',error=>errors.push(error.stack??error.message))
     // Deterministic raster fallback: never hammer public OSM tile servers in QA.
     await page.route('https://tile.openstreetmap.org/**',route=>route.fulfill({
       status:200,contentType:'image/svg+xml',

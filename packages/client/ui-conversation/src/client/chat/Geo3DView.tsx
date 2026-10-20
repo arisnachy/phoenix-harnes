@@ -42,7 +42,7 @@ export function Geo3DView({ layers, onSelect }: Props) {
     const xx = x * co - y * si
     const depth = x * si + y * co
     const distance = Math.max(3.3, 5.5 - depth * ct - z * st)
-    const perspective = 235 * scale / distance
+    const perspective = 995 * scale / distance
     return [500 + perspective * xx, 270 + perspective * (depth * st - z * ct)]
   }
   const ground: readonly Point[] = [[geometry.minX,geometry.minY], [geometry.maxX,geometry.minY],

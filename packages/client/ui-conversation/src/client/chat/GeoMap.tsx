@@ -319,7 +319,7 @@ export function GeoMap({ spec, onAction, conversationId }: { spec: GeoMapSpec; o
         onPointerUp={() => { drag.current = null }}
         onPointerCancel={() => { drag.current = null }}>
         <div className={css.mapHud}><span className={css.mapHudDot} />
-          <span className={css.mapHudText}>{p.metric ?? 'Mapa temático'} · {view.zoom.toFixed(0)}×</span></div>
+          <span className={css.mapHudText}>{p.metric ?? 'Mapa temático'} · Nivel {view.zoom.toFixed(0)}</span></div>
         {tiles.map(tile => <img key={tile.key} className={css.tile} src={tile.src} alt="" draggable={false}
           loading="lazy" style={{ left: tile.x, top: tile.y }}
           onError={() => setTileFailures(old => old.includes(tile.key) ? old : [...old, tile.key].slice(-64))} />)}

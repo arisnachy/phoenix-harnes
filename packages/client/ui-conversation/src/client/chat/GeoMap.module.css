@@ -120,3 +120,5 @@
   .attribution{font-size:9px}
 }
 @media(prefers-reduced-motion:reduce){.root button,.marker,.heat{transition:none}}
+
+.modeControls button[aria-pressed="true"],.modeControls button[aria-pressed="true"]:hover{background:var(--geo-accent);border-color:var(--geo-accent);color:#fff}
