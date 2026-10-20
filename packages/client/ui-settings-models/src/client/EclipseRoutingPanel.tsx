@@ -145,7 +145,7 @@ export function EclipseRoutingPanel(props: {
     <p className={css.hint}>{props.t('eclipseDescription')}</p>
     <label className={css.label} htmlFor="eclipse-mode">{props.t('eclipseMode')}</label>
     <select id="eclipse-mode" className={css.input} disabled={!state.writable || working}
-      value={draft.mode ?? 'automatic'} onChange={event => { update({ mode: event.target.value as Profile['mode'] }) }}>
+      value={draft.mode ?? 'automatic'} onChange={event => { update({ mode: event.target.value as NonNullable<Profile['mode']> }) }}>
       <option value="automatic">{props.t('eclipseAutomatic')}</option>
       <option value="hybrid">{props.t('eclipseHybrid')}</option>
       <option value="manual">{props.t('eclipseManual')}</option>
