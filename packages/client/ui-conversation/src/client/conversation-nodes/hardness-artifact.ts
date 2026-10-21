@@ -4,6 +4,7 @@ import type {
 } from '@phoenix-ai/dsh-client-runtime/client'
 import { isAppendSurfaceEvent } from '@phoenix-ai/dsh-client-runtime/client'
 import type { SessionEvent } from '@phoenix-ai/dsh-session/types'
+import type {} from '@phoenix-ai/dsh-tools/types'
 import { chatNode } from './common.ts'
 
 import type { HardnessArtifactValue } from '../artifact.ts'
@@ -54,8 +55,11 @@ function artifactExecutionFrom(event: SessionEvent): ArtifactExecutionData | und
 }
 
 function artifactFrom(match: ConversationMatch): HardnessArtifactChatData | undefined {
-  if (match.event.type !== 'tool/result' || !isAppendSurfaceEvent(match.event)) return undefined
-  const meta = match.event.data.meta
+  const event = match.event
+  if (event.type !== 'tool/code-dispatch'
+    && (event.type !== 'tool/result' || !isAppendSurfaceEvent(event))) return undefined
+  if (event.type === 'tool/code-dispatch' && event.data.isError) return undefined
+  const meta = event.data.meta
   if (!isRecord(meta) || !isRecord(meta.artifact)) return undefined
   const artifact = meta.artifact
   if (typeof artifact.id !== 'string' || artifact.id.trim() === '') return undefined
@@ -68,7 +72,8 @@ function artifactFrom(match: ConversationMatch): HardnessArtifactChatData | unde
       : 'HARDNESS result'
   return {
     artifactId: artifact.id,
-    callId: String(match.event.data.message.source.callId),
+    callId: event.type === 'tool/code-dispatch'
+      ? String(event.data.subCallId) : String(event.data.message.source.callId),
     mime: artifact.mime,
     title,
     data: artifact.data,
@@ -102,12 +107,16 @@ export const hardnessArtifactDefinition: ConversationNodeDefinition<HardnessArti
         role: 'update',
       }
     }
-    if (event.type !== 'tool/result' || !isAppendSurfaceEvent(event)) return null
+    if (event.type !== 'tool/code-dispatch'
+      && (event.type !== 'tool/result' || !isAppendSurfaceEvent(event))) return null
+    if (event.type === 'tool/code-dispatch' && event.data.isError) return null
     const meta = event.data.meta
     if (!isRecord(meta) || !isRecord(meta.artifact)) return null
     const artifactId = meta.artifact.id
     if (typeof artifactId !== 'string' || artifactId.trim() === '') return null
-    return { id: `${String(event.data.message.source.callId)}:${artifactId}`, role: 'start' }
+    const callId = event.type === 'tool/code-dispatch' ? event.data.subCallId
+      : event.data.message.source.callId
+    return { id: `${String(callId)}:${artifactId}`, role: 'start' }
   },
   start: (_context, match) => {
     const artifact = artifactFrom(match)
