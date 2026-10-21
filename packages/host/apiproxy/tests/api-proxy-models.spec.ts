@@ -570,6 +570,38 @@ describe('Web session model selection', () => {
     await ctx.fiber.dispose()
   })
 
+  it('opens a new blank session on the last persisted Web picker model', async () => {
+    const { ctx, sessionId } = await harness()
+    let runtime = { provider: 'deepseek-official', model: 'deepseek-chat' }
+    let last = { provider: 'deepseek-official', model: 'deepseek-chat' }
+    const api = createApiProxy(ctx, {
+      defaultModelSelection: () => runtime,
+      defaultDisplayModelSelection: () => last,
+      saveWebModelSelection: (selected, serving) => {
+        last = { provider: selected.provider, model: selected.model }
+        runtime = { provider: serving.provider, model: serving.model }
+        return Promise.resolve()
+      },
+      cwd: '/tmp',
+    })
+    expectValue(await api.sessions.selectModel(request({
+      sessionId, provider: 'deepseek-official', model: 'deepseek-reasoner',
+    })))
+    // A second blank session inherits the last explicit picker choice,
+    // rather than the initial deployment default (which may be OpenRouter Free).
+    const blank = ctx.sessions.create()
+    const fresh = {
+      id: blank.id, session: blank, ctx,
+      options: { provider: runtime.provider, model: runtime.model },
+      status: 'running', inbox: { nextTurn: [], nextStep: [] },
+    } as unknown as Agent
+    ctx.agents.register(fresh)
+    expect(expectValue(await api.sessions.models(request({ sessionId: blank.id }))).current).toMatchObject({
+      provider: 'deepseek-official', model: 'deepseek-reasoner',
+    })
+    await ctx.fiber.dispose()
+  })
+
   it('reads the Agent default live for a session whose log names no selection', async () => {
     const { ctx, sessionId } = await harness()
     let stored = { provider: 'deepseek-official', model: 'deepseek-chat' }
