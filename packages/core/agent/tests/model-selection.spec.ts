@@ -1629,6 +1629,7 @@ describe('installModelSelection()', () => {
           },
         ],
       },
+      options: {},
     } as unknown as Agent
     ctx.agent = agent
     const signal = new AbortController().signal
