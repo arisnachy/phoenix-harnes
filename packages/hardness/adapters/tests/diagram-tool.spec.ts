@@ -38,13 +38,13 @@ describe('governed universal diagram publication', () => {
     expect(result.diagram.props.nodes).toHaveLength(4)
     expect(result.diagram.props.edges).toHaveLength(3)
     expect(result.publication).toBe('artifact_emitted_not_client_render_verified')
-    expect(end).toHaveBeenCalledOnce()
+    expect(end).not.toHaveBeenCalled()
     expect(tool.output.presentationMeta?.(args, result as never)).toMatchObject({
       artifact: { id: 'phoenix-diagram:family-1', mime: PHOENIX_DIAGRAM_MIME,
         executable: false, data: { component: 'diagram', version: 1 } },
     })
   })
-  it('does not conclude the turn if user explicitly requested further work', async () => {
+  it('preserves a final assistant response and allows expressly requested subsequent work', async () => {
     const tool = createPhoenixDiagramTool()
     const end = vi.fn()
     await tool.execute({ title: 'Secuencia', diagram: family(), continueAfterDisplay: true }, context(end))
