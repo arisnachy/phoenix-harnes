@@ -70,6 +70,35 @@ test('Canva solo maqueta arte existente, sin redefinir paleta, universo o person
   assert.equal(canva.style.rendering,spec.style.rendering)
   await assert.rejects(comicProviderPacket('heroes','one',{slot:'page-2'}),/fuera de la secuencia/)
 })
+test('intentos de Canva con canon ajeno siguen registrados pero no se aceptan como arte aprobado',async()=>{
+  const {recordComicImageAttempt,comicRecoveryStatus,acceptComicImage}=await import('./phoenix-comic-recovery.mjs')
+  const digest=(await readComicCanon('heroes','one')).digest
+  const workspace=join(home,'workspace')
+  await mkdir(workspace,{recursive:true})
+  await writeFile(join(workspace,'panel.png'),bytes)
+  const bad=await recordComicImageAttempt('heroes','one',{attemptId:'canva-bad',slot:'page-1',
+    canonDigest:'f'.repeat(64),provider:'Canva',workspace,
+    response:{file_path:'panel.png',design_id:'DAG123'}})
+  assert.equal(bad.status,'canon-mismatch')
+  const recovered=await comicRecoveryStatus('heroes','one',{workspace})
+  assert.equal(recovered.creativeCanon.locked,true)
+  assert.equal(recovered.mayGenerateFinalArt,true)
+  assert.equal(recovered.pendingReview.includes('page-1'),false)
+  assert.equal(recovered.slots.find(x=>x.slot==='page-1').mismatchedAttempts,1)
+  await assert.rejects(acceptComicImage('heroes','one',{slot:'page-1',filePath:'panel.png',
+    workspace,attemptId:'canva-bad',canonDigest:digest,
+    visualReviewEvidence:'La ilustración fue revisada con el canon aprobado'}),/dirección creativa/)
+  const good=await recordComicImageAttempt('heroes','one',{attemptId:'canva-good',slot:'page-1',
+    canonDigest:digest,provider:'Generador',workspace,response:{file_path:'panel.png'}})
+  assert.equal(good.status,'local-file-found')
+  await assert.rejects(acceptComicImage('heroes','one',{slot:'page-1',filePath:'panel.png',
+    workspace,attemptId:'canva-good'}),/Canon bloqueado/)
+  const accepted=await acceptComicImage('heroes','one',{slot:'page-1',filePath:'panel.png',
+    workspace,attemptId:'canva-good',canonDigest:digest,
+    visualReviewEvidence:'Revisé expresiones, paleta y personajes contra la biblia'})
+  assert.equal(accepted.canonDigest,digest)
+  assert.equal((await comicRecoveryStatus('heroes','one')).needsGeneration.includes('page-1'),false)
+})
 test('cambio de bytes en imagen de referencia invalida el paquete en todas las herramientas',async()=>{
   await writeFile(join(assets,sha+'.png'),Buffer.from('imagen cambiada'))
   await assert.rejects(readComicCanon('heroes','one'),/no coincide/)
