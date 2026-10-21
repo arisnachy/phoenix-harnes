@@ -18,6 +18,12 @@ export interface DownloadsApi {
    * @returns the ZIP attachment response; missing services answer 500 and a
    * missing root session 404 before any byte is produced.
    */
+  /** Download a real file produced by a successful mutation in the named session; untracked paths return 404. */
+  producedFile?(
+    request: { sessionId: SessionId; path: string },
+    signal: AbortSignal,
+  ): Promise<Response>
+
   sessionLog(
     request: { sessionId: SessionId; includeDescendants?: boolean },
     signal: AbortSignal,

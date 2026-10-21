@@ -6,7 +6,7 @@
 import { randomUUID } from 'node:crypto'
 import { mkdir, open as openFile, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { basename, dirname, join, resolve } from 'node:path'
 import { z as zod } from 'zod'
 import type { Context } from '@phoenix-ai/cordis'
 import {
@@ -4337,6 +4337,68 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
     },
 
     downloads: {
+      async producedFile(request, signal) {
+        // Tool locations and successful results, not assistant prose, grant
+        // access to files exported through the browser.
+        try {
+          const source = await historySourceFor(request.sessionId)
+          const session = sourceSession(source)
+          const scope = await presenterScopeFor(request.sessionId, session)
+          const calls = new Map<string, readonly string[]>()
+          let published = false
+          for (const event of session.events) {
+            signal.throwIfAborted()
+            if (event.type === 'tool/call') {
+              const presentation = viewFor(ctx, event, () => undefined, scope)
+              const view = presentation?.for === 'call' ? presentation.view : null
+              const locations = view !== null && view !== undefined
+                && (view.card === 'diff' || (view.card === 'generic' && view.kind === 'edit'))
+                ? view.locations ?? []
+                : []
+              calls.set(String(event.data.callId), locations.map(location => location.path))
+            } else if (event.type === 'tool/result' && isAppendSurfaceEvent(event)) {
+              const [result] = event.data.message.content
+              if (result === undefined || result.isError === true) continue
+              const paths = calls.get(String(event.data.message.source.callId))
+              if (paths?.includes(request.path)) {
+                published = true
+                break
+              }
+            }
+          }
+          if (!published) return new Response('produced file not found', { status: 404 })
+          const physicalPath = resolve(session.header.cwd || defaults.cwd, request.path)
+          const file = await openFile(physicalPath, 'r')
+          try {
+            const info = await file.stat()
+            // Upper bound protects the HTTP transport from unbounded reads.
+            if (!info.isFile() || info.size <= 0 || info.size > 64 * 1024 * 1024) {
+              return new Response('artifact is empty, oversized or not a file', { status: 422 })
+            }
+            const bytes = new Uint8Array(await file.readFile())
+            signal.throwIfAborted()
+            const filename = basename(physicalPath)
+            const safeName = filename.replace(/[^a-zA-Z0-9._-]/gu, '_') || 'phoenix-artifact'
+            return new Response(bytes, {
+              headers: {
+                'content-type': 'application/octet-stream',
+                'content-disposition': `attachment; filename="${safeName}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
+                'cache-control': 'private, no-store',
+                'x-content-type-options': 'nosniff',
+              },
+            })
+          } finally {
+            await file.close()
+          }
+        } catch (error) {
+          if (signal.aborted) return new Response('download cancelled', { status: 499 })
+          if (error instanceof SessionNotFound
+            || (error as NodeJS.ErrnoException).code === 'ENOENT') {
+            return new Response('produced file not found', { status: 404 })
+          }
+          return new Response('artifact download failed', { status: 500 })
+        }
+      },
       async sessionLog(request, signal) {
         // Clean error path first: missing services answer 500 and a missing
         // root artifact 404 before any zip byte is produced. The root content

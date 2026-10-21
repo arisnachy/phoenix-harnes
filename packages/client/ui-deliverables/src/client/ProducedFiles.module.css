@@ -45,6 +45,8 @@
   background: var(--dsw-alias-interactive-bg-hover);
   color: var(--dsw-alias-label-secondary);
   font: inherit;
+  line-height: 22px;
+  text-decoration: none;
   cursor: pointer;
 }
 

@@ -10,6 +10,12 @@ import { z } from 'zod'
 import type { DownloadsApi } from './downloads.ts'
 import { sessionIdSchema } from './sessions.schema.ts'
 
+/** Only a session-scoped, nonempty file location may request a download. */
+export const producedFileQuerySchema = z.object({
+  sessionId: sessionIdSchema,
+  path: z.string().min(1).max(4096),
+}) satisfies z.ZodType<Parameters<NonNullable<DownloadsApi['producedFile']>>[0]>
+
 /**
  * session.export query params → the sessionLog request. `includeDescendants`
  * accepts exactly `true`/`false`/absent; any other value is rejected (400) so

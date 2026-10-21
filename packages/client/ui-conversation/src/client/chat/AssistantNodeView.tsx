@@ -33,8 +33,8 @@ export const AssistantNodeView = memo(function AssistantNodeView({
   const owner = useMemo<TurnTailOwnerProps | undefined>(() => {
     if (turn?.status !== 'closed' || data.finalNode === undefined) return undefined
     if (tail?.closing?.finalNode.seq !== data.finalNode.seq) return undefined
-    return { turn, seq: data.finalNode.seq, openFile }
-  }, [data.finalNode, openFile, tail, turn])
+    return { turn, seq: data.finalNode.seq, openFile, sessionId }
+  }, [data.finalNode, openFile, sessionId, tail, turn])
   // Voice follows the same final assistant output shown in this chat.
   // In-progress conversational tails are not authoritative: an early "sigo
   // en ello" becomes stale when tools finish during the same harness turn.

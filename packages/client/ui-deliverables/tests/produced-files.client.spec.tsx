@@ -293,6 +293,27 @@ describe('ProducedFiles row', () => {
     }
   }
 
+  it('exposes an actual browser download for verified local session outputs', () => {
+    const openFile = vi.fn<(path: string) => void>()
+    const paths = ['reports/informe.pdf']
+    const view = render(
+      <ProducedFiles matched={paths} openFile={openFile} sessionId={'s1' as never}
+        {...capability(true)} t={makeTranslate(en)} />,
+    )
+    const link = view.getByRole('link', { name: 'Download reports/informe.pdf' })
+    expect(link.getAttribute('href')).toBe('/api/artifact.download?sessionId=s1&path=reports%2Finforme.pdf')
+    expect(link.getAttribute('download')).toBe('informe.pdf')
+    expect(openFile).not.toHaveBeenCalled()
+
+    view.rerender(
+      <ProducedFiles matched={paths} openFile={openFile} sessionId={'s1' as never}
+        {...capability(true, false)} t={makeTranslate(en)} />,
+    )
+    const native = view.getByRole('button', { name: 'Open reports/informe.pdf' })
+    fireEvent.click(native)
+    expect(openFile).toHaveBeenCalledWith('reports/informe.pdf')
+  })
+
   it('selects the largest prefix using the exact remainder width', () => {
     expect(fitProducedFiles(230, 8, [70, 60, 60], [55, 55, 55, 55])).toBe(2)
     expect(fitProducedFiles(145, 8, [70, 60, 60], [55, 55, 55, 55])).toBe(1)

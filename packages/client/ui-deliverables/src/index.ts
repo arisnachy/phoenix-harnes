@@ -13,7 +13,8 @@ export const inject = ['systemPrompt']
 
 /** Stable final-response guidance owned by the matching renderer. */
 const FILE_REFERENCE_PROMPT = 'When you successfully create or modify files, mention the primary outputs in your final response. '
-  + 'To make those and any other changed-file references clickable in Web, format them as Markdown inline code using the exact file-tool path, or a basename when unique among the files changed in that turn.'
+  + 'To make those and any other changed-file references clickable in Web, format them as Markdown inline code using the exact file-tool path, or a basename when unique among the files changed in that turn. '
+  + 'Never claim a file is downloadable merely by writing Download or Descargar: only claim delivery after a successful tool-produced file is recorded. On local Web the produced-files row provides the verified browser download; if no file was actually produced, state that clearly and offer to create it.'
 
 /**
  * Register model guidance for the file-reference renderer shipped by this package.
