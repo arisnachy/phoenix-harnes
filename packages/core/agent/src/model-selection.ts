@@ -404,7 +404,415 @@ const AUTO_VISIBLE_PLAN_HANDOFF =
   'natural, concise and useful, not a scripted imitation.'
 
 const FAST_SOCIAL_ATOM = String.raw`(?:hola|hello|hi|hey|buenas|buenos\s+d[ií]as|buenas\s+tardes|buenas\s+noches|qu[eé]\s+tal|c[oó]mo\s+est[aá]s|c[oó]mo\s+te\s+va|c[oó]mo\s+va\s+todo|qu[eé]\s+cuentas|qu[eé]\s+se\s+cuenta|how\s+are\s+you|how(?:'|’)s\s+it\s+going|what(?:'|’)s\s+up|gracias|thanks|thank\s+you)`
-const FAST_SOCIAL_SEQUENCE = new RegExp(`^${FAST_SOCIAL_ATOM}(?:\\s+(?:y\\s+)?${FAST_SOCIAL_ATOM})*$`, 'iu')
+const FAST_SOCIAL_SEQUENCE = new RegExp(`^${FAST_SOCIAL_ATOM}(?:\\s+(?:y\\s+)?${FAST_SOCIAL_ATOM})*/**
+ * Agent-scoped model selection shared by runtime entry points.
+ * @module @phoenix-ai/dsh-agent/model-selection
+ */
+
+import type { Context } from '@phoenix-ai/cordis'
+import type { Agent } from './runtime-types.ts'
+import type { Session } from '@phoenix-ai/dsh-session'
+import { ReasoningEffortId, createUserMessage, type LlmCallConfig } from '@phoenix-ai/dsh-llm'
+
+/** Complete provider, model, and optional reasoning effort selected for one live Agent. */
+export interface ModelSelection {
+  /** Registered provider route. */
+  provider: string
+  /** Provider-owned model id. */
+  model: string
+  /** Adapter-owned reasoning effort, or provider/default behavior when absent. */
+  reasoningEffort?: ReasoningEffortId
+}
+
+/** Model routing preferences belong to Eclipse, not to visible teammate identities. */
+export interface EclipseModelRoute {
+  readonly provider: string
+  readonly model: string
+  readonly reasoningEffort?: string
+}
+
+/** Eclipse settings: Kira independently selects planning, execution and
+ * teammate routes. Strategy review is evidence-driven without a call quota.
+ */
+export interface EclipseRoutingSettings {
+  readonly mode?: 'automatic' | 'hybrid' | 'manual'
+  readonly planner?: EclipseModelRoute
+  readonly coordinator?: EclipseModelRoute
+  readonly subagent?: EclipseModelRoute
+  readonly specialists?: Readonly<Record<string, EclipseModelRoute>>
+  readonly maxTeammates?: number
+  readonly escalationSensitivity?: 'adaptive' | 'quality' | 'economy'
+}
+
+/** Apply a user-selected route at a real dispatch boundary, never to virtual ids.
+ * @param profile - Optional saved routing configuration.
+ * @param role - Independent planning, coordination or teammate responsibility.
+ * @param fallback - Shipped route when the role is not overridden.
+ * @param adaptiveEffort - Effort selected from the current request when a
+ * hybrid/manual route changes only the model and leaves effort unset.
+ * @returns Concrete serving route, with only the selected model's requested effort.
+ */
+export function resolveEclipseRoleRoute(
+  profile: EclipseRoutingSettings | undefined,
+  role: 'planner' | 'coordinator' | 'subagent',
+  fallback: ModelSelection,
+  adaptiveEffort?: string,
+): ModelSelection {
+  if (profile === undefined || profile.mode === undefined || profile.mode === 'automatic') return fallback
+  // Kira's live router selects planner only for strategy steps; execution and
+  // teammate routes never inherit that higher-cost planning selection.
+  const route = profile[role]
+  // Eclipse's catalog and reasoning controls are Codex-only. A stale legacy
+  // profile must not bypass that boundary at the dispatch site.
+  if (route === undefined || route.provider !== 'openai-codex' || route.model === PHOENIX_CODEX_AUTO_MODEL) return fallback
+  return {
+    provider: route.provider,
+    model: route.model,
+    ...route.reasoningEffort === undefined
+      ? adaptiveEffort === undefined ? {} : { reasoningEffort: ReasoningEffortId(adaptiveEffort) }
+      : { reasoningEffort: ReasoningEffortId(route.reasoningEffort) },
+  }
+}
+
+/** Optional host-side settings authority; client selections and secrets never enter prompts. */
+function configuredEclipse(ctx: Context): EclipseRoutingSettings | undefined {
+  const settings = ctx.get('agentDefaultModel') as {
+    currentEclipseProfile?: () => EclipseRoutingSettings | undefined
+  } | undefined
+  return settings?.currentEclipseProfile?.()
+}
+
+/** Durable selector intent, independent of the real model serving a request. */
+export interface ModelSelectionPreference {
+  /** Selected planner/router/provider route. */
+  readonly selection: ModelSelection
+  /** Whether the preference was captured from a default or explicitly chosen. */
+  readonly source: 'explicit' | 'default'
+}
+
+declare module '@phoenix-ai/dsh-session/types' {
+  interface SessionEventMap {
+    /**
+     * Durable model-routing preference, hidden from model history. Required on
+     * read: dropping it would change future provider/model and cost decisions.
+     */
+    'agent/model-selection': ModelSelectionPreference
+  }
+}
+
+/** Read the last durable selector preference without using serving request headers.
+ * @param session - Session owning the authoritative event stream.
+ * @returns Latest preference, or undefined for sessions predating preference capture.
+ */
+export function latestModelSelectionPreference(session: Pick<Session, 'events'>): ModelSelectionPreference | undefined {
+  return session.events.findLast(event => event.type === 'agent/model-selection')?.data
+}
+
+/** Persist a changed selector preference without emitting a model-visible message.
+ * @param session - Session owning the selection.
+ * @param selection - Selected route, independently of the executing model.
+ * @param source - Explicit user choice or a default captured at first dispatch.
+ * @returns Whether a new preference event was appended.
+ */
+export function persistModelSelectionPreference(
+  session: Session,
+  selection: ModelSelection,
+  source: ModelSelectionPreference['source'],
+): boolean {
+  const prior = latestModelSelectionPreference(session)
+  if (prior?.source === source && prior.selection.provider === selection.provider
+    && prior.selection.model === selection.model && prior.selection.reasoningEffort === selection.reasoningEffort) return false
+  session.append('agent/model-selection', {
+    selection: {
+      provider: selection.provider,
+      model: selection.model,
+      ...selection.reasoningEffort === undefined ? {} : { reasoningEffort: selection.reasoningEffort },
+    },
+    source,
+  })
+  return true
+}
+
+/** Mutable model selection plus the value captured for the current step. */
+export interface ModelSelectionRef {
+  /** Model selected for the next step that enters prompt assembly. */
+  current: ModelSelection | undefined
+  /** Selection captured when the current step entered prompt assembly. */
+  assembled: ModelSelection | undefined
+  /** Number of model-facing tools captured with the same prompt assembly. */
+  assembledToolCount?: number
+}
+
+/** Route used after the initial diagnosis/plan step of a turn. */
+export interface ModelSelectionHandoff {
+  /** Last 1-based step that remains on the selected model; execution starts after it. */
+  afterStep: number
+  /** Model and effort used for subsequent execution steps. */
+  selection: ModelSelection
+}
+
+/** Re-resolve the execution handoff from the model currently selected for this step. */
+type ModelSelectionHandoffResolver = (selection: ModelSelection | undefined) => ModelSelectionHandoff | undefined
+
+
+/** Synthetic selector row that enables Phoenix's adaptive GPT-6 Codex router. */
+export const PHOENIX_CODEX_AUTO_MODEL = 'phoenix-auto'
+/** GPT-6.1 planner/rescue route used by Phoenix Auto. */
+export const PHOENIX_CODEX_AUTO_PLANNER_MODEL = 'gpt-6.1-sol'
+/** GPT-6 execution route used by Phoenix Auto. */
+export const PHOENIX_CODEX_AUTO_WORKER_MODEL = 'gpt-6-luna'
+/** Native Codex worker whose permission escalations are reviewed by Codex Auto-review. */
+export const PHOENIX_CODEX_AUTO_REVIEW_TOOL = 'codex_auto_review'
+
+/** Premium Codex tiers that should spend one step planning before Luna executes. */
+const CODEX_PLANNER_MODEL = /^gpt-(\d+(?:\.\d+)?)-(?:sol|astra|terra)(?:$|-)/i
+/** Luna worker ids, grouped by the same GPT generation as their planner. */
+const CODEX_LUNA_MODEL = /^gpt-(\d+(?:\.\d+)?)-luna(?:$|-)/i
+
+/**
+ * Whether the user selected Phoenix's synthetic OpenAI Codex router row.
+ * @param selection - Current selector value, when one exists.
+ * @returns true only for the virtual Phoenix Auto row under OpenAI Codex.
+ */
+export function isPhoenixCodexAutoSelection(selection: ModelSelection | undefined): boolean {
+  return selection?.provider === 'openai-codex' && selection.model === PHOENIX_CODEX_AUTO_MODEL
+}
+
+/**
+ * Phoenix Auto keeps one Kira coordinator identity across planning, execution
+ * and rescue. Explicitly selected other Codex models and other providers stay
+ * on the user's exact model; Team children never reopen a planning phase.
+ * @param selection - the selected provider/model.
+ * @param agent - session owner, when one is available.
+ * @returns whether the Lead uses the Phoenix coordinator route.
+ */
+export function isKiraCodexAutoLead(
+  selection: ModelSelection | undefined,
+  agent: { readonly session: { readonly header?: { readonly agentPreset?: string; readonly origin?: string } } } | undefined,
+): boolean {
+  // Child specialists execute their assigned Luna route; they must never
+  // trigger the Lead-only Sol planning stage even on a replayed auto selector.
+  if (agent?.session?.header?.origin === 'subagent') return false
+  return isPhoenixCodexAutoSelection(selection)
+    || (selection?.provider === 'openai-codex'
+      && selection.model === PHOENIX_CODEX_AUTO_WORKER_MODEL
+      && agent?.session?.header?.agentPreset === 'kira-max')
+}
+
+function codexPlannerGeneration(model: string): string | undefined {
+  return CODEX_PLANNER_MODEL.exec(model)?.[1]
+}
+
+function codexLunaGeneration(model: string): string | undefined {
+  return CODEX_LUNA_MODEL.exec(model)?.[1]
+}
+
+/** Resolve a concrete selection's conversational worker; Phoenix Auto routes before this helper. */
+function lunaWorkerFor(model: string): string | undefined {
+  if (model === PHOENIX_CODEX_AUTO_PLANNER_MODEL) return PHOENIX_CODEX_AUTO_WORKER_MODEL
+  const plannerGeneration = codexPlannerGeneration(model)
+  if (plannerGeneration !== undefined) return `gpt-${plannerGeneration}-luna`
+  return codexLunaGeneration(model) === undefined ? undefined : model
+}
+
+function selectedCandidateId(value: unknown, allowed: ReadonlySet<string>): string | undefined {
+  if (typeof value === 'string') return allowed.has(value) ? value : undefined
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const selected = selectedCandidateId(item, allowed)
+      if (selected !== undefined) return selected
+    }
+    return undefined
+  }
+  if (typeof value !== 'object' || value === null) return undefined
+  const record = value as Record<string, unknown>
+  for (const key of ['choice', 'decision', 'selected', 'selected_model', 'model_id', 'candidate_id', 'model']) {
+    const direct = record[key]
+    if (typeof direct === 'string' && allowed.has(direct)) return direct
+  }
+  // MCP returns REST data under structuredContent. Recurse through likely
+  // decision envelopes, never through probabilities (whose keys are candidates).
+  for (const key of ['structuredContent', 'data', 'result', 'answer', 'answers']) {
+    const nested = record[key]
+    if (nested !== undefined) {
+      const selected = selectedCandidateId(nested, allowed)
+      if (selected !== undefined) return selected
+    }
+  }
+  return undefined
+}
+
+/**
+ * Extract only an explicitly selected available candidate from Jev's typed result.
+ * @param value - Untrusted Jev MCP result envelope.
+ * @param candidates - Exact Phoenix-supplied model ids allowed for this routing decision.
+ * @returns The explicit allowed model id, or undefined when Jev did not make a valid choice.
+ */
+export function jevSelectedModelId(value: unknown, candidates: readonly string[]): string | undefined {
+  return selectedCandidateId(value, new Set(candidates))
+}
+
+/**
+ * Resolve the default quality-preserving execution route for OpenAI Codex orchestrators.
+ * @param selection - Current model selection, when one has been chosen.
+ * @returns execution handoff for OpenAI Codex, or undefined for other providers.
+ */
+export function defaultExecutionHandoff(selection: ModelSelection | undefined): ModelSelectionHandoff | undefined {
+  if (selection?.provider !== 'openai-codex') return undefined
+  return {
+    // The selected Codex route remains the user's coordinator choice. The
+    // handoff only moves execution to the current Luna worker when a caller
+    // still uses the legacy adaptive entry point; it does not spend Max by
+    // default. Exceptional tasks can request Max through Eclipse explicitly.
+    afterStep: 1,
+    selection: {
+      provider: 'openai-codex',
+      model: PHOENIX_CODEX_AUTO_WORKER_MODEL,
+      reasoningEffort: ReasoningEffortId('high'),
+    },
+  }
+}
+
+/** Operational verbs that strongly imply the user expects Phoenix to act on an artifact. */
+// oxlint-disable-next-line @stylistic/max-len -- Keep the deterministic bilingual matcher auditable as one regex literal.
+const TOOL_ACTION = /\b(?:fix(?:es|ed|ing)?|repair(?:s|ed|ing)?|debug(?:s|ged|ging)?|implement(?:s|ed|ing)?|edit(?:s|ed|ing)?|modif(?:y|ies|ied|ying)|update(?:s|d|ing)?|create(?:s|d|ing)?|build(?:s|ing|built)?|run(?:s|ning)?|execute(?:s|d|ing)?|test(?:s|ed|ing)?|inspect(?:s|ed|ing)?|review(?:s|ed|ing)?|audit(?:s|ed|ing)?|refactor(?:s|ed|ing)?|deploy(?:s|ed|ing)?|install(?:s|ed|ing)?|remove(?:s|d|ing)?|delete(?:s|d|ing)?|rename(?:s|d|ing)?|commit(?:s|ted|ting)?|merge(?:s|d|ing)?|revert(?:s|ed|ing)?|resolv(?:e|es|ed|ing)|diagnos(?:e|es|ed|ing)|arregl\p{L}*|repar\p{L}*|corrig\p{L}*|implement\p{L}*|modific\p{L}*|actualiz\p{L}*|crea\p{L}*|ejecut\p{L}*|prueb\p{L}*|revis\p{L}*|audit\p{L}*|refactor\p{L}*|despleg\p{L}*|instal\p{L}*|elimin\p{L}*|renombr\p{L}*|fusion\p{L}*|resuelv\p{L}*|diagnostic\p{L}*)\b/iu
+/** Artifact/code vocabulary used with {@link TOOL_ACTION} to avoid downgrading pure reasoning turns. */
+// oxlint-disable-next-line @stylistic/max-len -- Keep the deterministic bilingual matcher auditable as one regex literal.
+const TOOL_ARTIFACT = /(?:\b(?:file|files|archivo|archivos|code|c[oó]digo|repo|repository|repositorio|branch|rama|commit|test|tests|prueba|pruebas|script|package|build|cli|api|html|css|python|typescript|javascript|github|main|stable|error|exception|traceback|terminal|powershell|shell)\b|\x60\x60\x60|(?:^|[\s\x60'"(])(?:[a-z]:\\|\.{0,2}\/)?[\w@.-]+(?:[\\/][\w@. -]+)*\.(?:ts|tsx|js|mjs|cjs|py|json|ya?ml|toml|md|html?|css|scss|sql|rs|go|java|kt|cs|cpp|c|h)\b)/iu
+
+/**
+ * Detect an explicit operational request whose quality improves after early
+ * real-world/tool evidence. This is deliberately deterministic and narrow:
+ * pure questions keep the user's selected reasoning effort.
+ */
+function isToolAcquisitionRequest(text: string): boolean {
+  return TOOL_ACTION.test(text) && TOOL_ARTIFACT.test(text)
+}
+
+/**
+ * Wider action vocabulary for the synthetic Phoenix Auto route. This remains
+ * deterministic: the router spends no extra model call merely to decide which
+ * GPT-6 tier should handle the next step.
+ */
+// oxlint-disable-next-line @stylistic/max-len -- Keep the deterministic routing vocabulary auditable as one regex literal.
+const AUTO_TASK_ACTION = /\b(?:fix|repair|debug|implement|edit|modify|update|create|build|run|execute|test|inspect|review|audit|refactor|deploy|install|remove|delete|rename|commit|merge|revert|resolve|diagnose|search|research|investigate|browse|compare|fill|submit|schedule|automate|check|verify|confirm|arregl\p{L}*|repar\p{L}*|corrig\p{L}*|implement\p{L}*|modific\p{L}*|actualiz\p{L}*|crea\p{L}*|ejecut\p{L}*|prueb\p{L}*|revis\p{L}*|audit\p{L}*|refactor\p{L}*|despleg\p{L}*|instal\p{L}*|elimin\p{L}*|renombr\p{L}*|fusion\p{L}*|resuelv\p{L}*|diagnostic\p{L}*|busc\p{L}*|investig\p{L}*|compar\p{L}*|llen\p{L}*|envi\p{L}*|program\p{L}*|automatiz\p{L}*|comprob\p{L}*|comprueb\p{L}*|verific\p{L}*|confirm\p{L}*|consult\p{L}*|inspeccion\p{L}*|cheque\p{L}*|averigu\p{L}*)\b/iu
+// oxlint-disable-next-line @stylistic/max-len -- Compact reply-depth vocabulary is easier to audit in one literal.
+const AUTO_DEEP_REPLY = /\b(?:analy[sz]e|analysis|reason|explain\s+in\s+detail|deep|analiz\p{L}*|razon\p{L}*|explic\p{L}*\s+en\s+detalle|profund\p{L}*)\b/iu
+/** High-cost work is opt-in through observable task language, never a model call. */
+// oxlint-disable-next-line @stylistic/max-len -- Keep the deterministic risk vocabulary auditable in one literal.
+const AUTO_EXCEPTIONAL_TASK = /\b(?:exceptional|critical|urgent|emergency|irreversible|security\s+(?:incident|breach)|production\s+outage|incident(?:e)?\s+de\s+seguridad|m[eé]dico|cl[ií]nico|legal|jur[ií]dico|financial|financiero|cr[ií]tico|urgente|emergencia)\b/iu
+/** Multi-step or high-context work merits xhigh while ordinary operations stay high. */
+// oxlint-disable-next-line @stylistic/max-len -- Keep the deterministic complexity vocabulary auditable in one literal.
+const AUTO_COMPLEX_TASK = /\b(?:complex|complicated|multi[-\s]?step|end[-\s]?to[-\s]?end|architecture|architectural|comprehensive|exhaustive|several|multiple|varios|varias|m[uú]ltiples|complej[oa]|arquitectura|integral|exhaustiv[oa]|profund[oa])\b/iu
+
+/**
+ * Choose an effort tier from the already available user request. This keeps
+ * routing deterministic and cheap: no classifier request or hidden model call
+ * is made merely to choose a reasoning budget.
+ * @param text - Direct user request for the current turn.
+ * @returns Low is reserved for non-operational fast paths; operational work
+ * defaults to high, complex work to xhigh and exceptional work to max.
+ */
+export function adaptiveCodexReasoningEffort(text: string): ReasoningEffortId {
+  if (AUTO_EXCEPTIONAL_TASK.test(text)) return ReasoningEffortId('max')
+  if (AUTO_COMPLEX_TASK.test(text) || AUTO_DEEP_REPLY.test(text) || text.length > 480)
+    return ReasoningEffortId('xhigh')
+  return ReasoningEffortId('high')
+}
+
+/** Keep the visible strategy pass cheap; substantive execution gets the adaptive tier. */
+function adaptiveCodexPlanningEffort(text: string): ReasoningEffortId {
+  if (AUTO_EXCEPTIONAL_TASK.test(text)) return ReasoningEffortId('max')
+  if (AUTO_COMPLEX_TASK.test(text) || AUTO_DEEP_REPLY.test(text) || text.length > 480)
+    return ReasoningEffortId('medium')
+  return ReasoningEffortId('low')
+}
+/** A stopped operational reply that still announces the next action rather than performing it. */
+// oxlint-disable-next-line @stylistic/max-len -- Keep the bilingual unfinished-action matcher auditable as one literal.
+const AUTO_UNFINISHED_ACTION = /(?:\b(?:ahora|a\s+continuaci[oó]n|enseguida|para\s+ir\s+m[aá]s\s+r[aá]pido)\b.{0,180}\b(?:voy\s+a|usar[eé]|har[eé]|comprobar[eé]|revisar[eé]|abrir[eé]|ejecutar[eé]|probar[eé]|verificar[eé]|continuar[eé]|seguir[eé])|\bvoy\s+a\s+(?:comprobar|revisar|abrir|ejecutar|probar|verificar|usar|hacer|continuar|seguir|navegar|inspeccionar)|\b(?:i(?:'|’)ll|i\s+will|i(?:'|’)m\s+going\s+to|let\s+me|next\s+i(?:'|’)ll)\s+(?:check|review|open|run|test|verify|use|continue|inspect|try|fix|update|change|browse|navigate))/isu
+/** Short explicit promises are not final answers either. */
+const AUTO_SHORT_PENDING_PROMISE = /\b(?:lo|la)\s+(?:har[eé]|revisar[eé]|probar[eé]|verificar[eé])\s+(?:ahora|enseguida)\b/iu
+/** Bare future-tense commitments (without "voy a") still promise pending action. */
+// oxlint-disable-next-line @stylistic/max-len -- One bounded pattern for outstanding first-person commitments.
+const AUTO_FUTURE_ACTION = /\b(?:comprobar[eé]|verificar[eé]|confirmar[eé]|consultar[eé]|inspeccionar[eé]|revisar[eé]|probar[eé]|buscar[eé]|ejecutar[eé])(?=$|[^\p{L}\p{N}_])/iu
+function phoenixAutoUnfinishedAction(text: string): boolean {
+  return AUTO_UNFINISHED_ACTION.test(text)
+    || AUTO_SHORT_PENDING_PROMISE.test(text)
+    || AUTO_FUTURE_ACTION.test(text)
+}
+
+/** Kira can request a focused strategy pass when her approach is unclear. */
+// oxlint-disable-next-line @stylistic/max-len -- Narrow bilingual consultation trigger.
+const AUTO_SOL_REQUEST = /\b(?:necesito|debo|voy\s+a|conviene|quiero)\s+(?:(?:volver\s+a|primero)\s+)?(?:revisar\s+la\s+estrategia|consultar|preguntar|pedir(?:le)?\s+(?:ayuda|una\s+estrategia))\b|\b(?:no\s+(?:encuentro|logro|consigo)\s+(?:c[oó]mo|una\s+forma\s+de)|no\s+s[eé]\s+c[oó]mo\s+resolver)\b|\b(?:need\s+to|should|will)\s+(?:review\s+the\s+strategy|consult|ask)\b/iu
+
+function kiraNeedsSolStrategy(text: string): boolean {
+  return AUTO_SOL_REQUEST.test(text)
+}
+
+/** Bound generic self-healing prose continuation, not fresh-evidence strategy consultations. */
+// Preserve recovery headroom for real implementation work, while capping tiny
+// conversational demonstrations at two total automatic continuations.
+const AUTO_CONTINUATION_LIMIT = 4
+const BRIEF_TEAM_CONTINUATION_LIMIT = 2
+const AUTO_EXECUTION_CONTINUATION =
+  'Planning or describing the next action is not task completion. ' +
+  'Continue the current user request now with the available tools. ' +
+  'Execute the next concrete action instead of only saying what you will do, ' +
+  'and keep working until the requested task is actually complete or a concrete external blocker requires user action.'
+
+const AUTO_VISIBLE_PLAN_POLICY =
+  'Phoenix Auto is a real two-stage workflow, not hidden role-play. ' +
+  'For an actionable multi-step user request, you are Kira herself, preparing the execution brief in this FIRST step. ' +
+  'Kira is the single Lead identity; her planning model owns this first step and her execution model continues afterward. ' +
+  'Speak as Kira to the user in first person; never address Kira as another person or write "Kira, ...". ' +
+  'Write a SHORT, natural user-visible message beginning exactly with "**Plan:**", followed by 2–4 specific ' +
+  'actions in the user\'s language, the expected deliverable and how it will be verified. ' +
+  'Be proportionate: a tiny team demonstration deserves a tiny plan, not a technical audit. ' +
+  'Show decisions, not private chain-of-thought, model names, ceremonial talk or fabricated completion. ' +
+  'Do not execute tools or assign coworkers in this first planning step; stop after displaying the plan. ' +
+  'On the very next step Kira uses her configured execution coordinator model and executes this plan without asking for routine approval. ' +
+  'If the user only wants a greeting, explanation, answer or standalone preview, respond normally with no planning stage.'
+
+const AUTO_SOL_STRATEGY_POLICY =
+  'You are Kira herself using the configured planning model for one REAL focused strategy pass. ' +
+  'The coordinator is not a separate teammate, speaker or consultant; the Lead identity and ongoing conversation remain Kira. ' +
+  'Speak directly to the user in your own first-person voice. Never address yourself as "Kira, ...", ' +
+  'give instructions to Kira in second person, or narrate what Kira should do as if she were someone else. ' +
+  'Examine the latest evidence and unresolved obstacle, then state one materially different feasible strategy ' +
+  'within the current mission and permissions. Do not delegate, run tools or declare work completed. ' +
+  'Stop after a concise actionable strategy; continue as Kira on her execution coordinator route immediately afterward.'
+
+const AUTO_LUNA_COORDINATION_POLICY =
+  'You are still Kira, coordinating and executing through the configured execution coordinator route. ' +
+  'This is one coordinator role across planning, execution and rescue, not a change of speaker; speak in first person and never address Kira as another person. ' +
+  'If a user-visible **Plan:** was written earlier in THIS turn, ' +
+  'treat that text as the already-approved execution brief; do not rewrite, replan, recite or re-announce it. ' +
+  'Start the first permitted real action promptly, supervise the critical path and choose a genuine teammate ' +
+  'for actionable multi-step missions, delegate at least one real bounded scope with spawn_teammate; otherwise delegate only when materially helpful. Address teammates naturally by name, accept their real evidence, ' +
+  'and speak to the user in concise, warm Spanish when that is their language. ' +
+  'Never simulate coworker messages or claim a tool ran before its real result. ' +
+  'If you genuinely need a new strategy, state "Necesito revisar la estrategia" and end that step: ' +
+  'the router makes a focused planning-model strategy pass whenever new evidence supports it, then returns to execution. ' +
+  'Respect the hard limit of three simultaneous specialists; reuse existing agents and rotate assignments instead of creating more. Report meaningful changes and final verified output; skip filler and repetitive stage narration.'
+
+const AUTO_SOL_RESCUE_HANDOFF =
+  'You are Kira: you just completed your own focused strategy review, not advice from a different teammate. ' +
+  'Resume the SAME unfinished mission in your own first-person voice on the coordinator route; never address Kira as another person. ' +
+  'apply the correction only if it respects the original user request and permissions, ' +
+  'execute the next tool action and stop when verified. Do not reopen completed work.'
+
+const AUTO_VISIBLE_PLAN_HANDOFF =
+  'You are Kira. The visible **Plan:** you authored is your own authoritative execution plan. ' +
+  'Continue the current user request as the SAME Kira on the coordinator route, without addressing yourself as another speaker; execute the next concrete action now, ' +
+  'without re-planning, re-reading the same brief or asking permission for already authorized safe work. ' +
+  'If this is a requested team demonstration, call spawn_teammate once with a small verifiable assignment, ' +
+  'wait for genuine evidence and complete the demonstration. The actual Team conversation must be real, ' +
+  'natural, concise and useful, not a scripted imitation.'
+
+const FAST_SOCIAL_ATOM = String.raw`(?:hola|hello|hi|hey|buenas|buenos\s+d[ií]as|buenas\s+tardes|buenas\s+noches|qu[eé]\s+tal|c[oó]mo\s+est[aá]s|c[oó]mo\s+te\s+va|c[oó]mo\s+va\s+todo|qu[eé]\s+cuentas|qu[eé]\s+se\s+cuenta|how\s+are\s+you|how(?:'|’)s\s+it\s+going|what(?:'|’)s\s+up|gracias|thanks|thank\s+you)`
+, 'iu')
+/** Kira is the default Lead name; a vocative must not turn tool requests into small talk. */
+const FAST_KIRA_VOCATIVE = /^(?:kira|f[eé]nix)\s+|\s+(?:kira|f[eé]nix)$/giu
 const FAST_SOCIAL_OPEN = /^(?:cu[eé]ntame\s+algo(?:\s+bueno)?|dime\s+algo\s+bueno|sorpr[eé]ndeme|tell\s+me\s+something(?:\s+good)?)$/iu
 // oxlint-disable-next-line @stylistic/max-len -- Keep the deterministic bilingual matcher auditable as one regex literal.
 const FAST_CONTEXTUAL_OPEN = /^(?:qu[eé]\s+quieres\s+que\s+hagamos|qu[eé]\s+te\s+gustar[ií]a\s+que\s+hagamos|de\s+qu[eé]\s+hablamos|what\s+do\s+you\s+want\s+to\s+do|what\s+should\s+we\s+talk\s+about)$/iu
@@ -453,7 +861,9 @@ export function isConversationalFastPathText(text: string): boolean {
   // history, tool schemas, and the user's selected reasoning route.
   if (CONTEXTUAL_CONTINUATION.test(candidate)) return false
   const socialCandidate = normalizedFastSocialText(candidate)
+  const addressedGreeting = socialCandidate.replace(FAST_KIRA_VOCATIVE, '').trim()
   if (FAST_SOCIAL_SEQUENCE.test(socialCandidate)
+    || (addressedGreeting !== socialCandidate && FAST_SOCIAL_SEQUENCE.test(addressedGreeting))
     || FAST_SOCIAL_OPEN.test(socialCandidate)
     || FAST_SOCIAL_REPLY.test(candidate)
     || FAST_RUNTIME_META.test(candidate)) return true
@@ -1007,7 +1417,7 @@ function phoenixAutoRoute(
       return {
         provider: 'openai-codex',
         model: PHOENIX_CODEX_AUTO_WORKER_MODEL,
-        reasoningEffort: ReasoningEffortId('low'),
+        reasoningEffort: ReasoningEffortId('max'),
       }
     }
     if (isStandaloneVisualPreviewRequest(directText)) {
@@ -1253,12 +1663,20 @@ export function installModelSelection(
         // The planner serves initial strategy and evidence-based rescues; Kira
         // immediately returns to the independently configured execution model.
         const role = automatic.model === PHOENIX_CODEX_AUTO_PLANNER_MODEL ? 'planner' : 'coordinator'
-        const routed = resolveEclipseRoleRoute(
-          eclipseProfile,
-          role,
-          automatic,
-          eclipseProfile?.mode === 'hybrid' ? automatic.reasoningEffort : undefined,
-        )
+        const conversational = _payload.step === 1
+          && phoenixAutoTeamSignalForTurn(_payload.agent, _payload.turn) === undefined
+          && (isConversationalFastPathText(directText) || isContextualConversationFastPathText(directText))
+        // Intelligent Eclipse chat always enters Luna Max. A hybrid coordinator
+        // override (including legacy Sol) must not hijack a simple greeting.
+        // Manual routing remains authoritative when the user explicitly pins it.
+        const routed = conversational && eclipseProfile?.mode !== 'manual'
+          ? automatic
+          : resolveEclipseRoleRoute(
+            eclipseProfile,
+            role,
+            automatic,
+            eclipseProfile?.mode === 'hybrid' ? automatic.reasoningEffort : undefined,
+          )
         const { reasoningEffort: _inheritedEffort, ...withoutInheritedEffort } = resolved
         return {
           ...withoutInheritedEffort,
