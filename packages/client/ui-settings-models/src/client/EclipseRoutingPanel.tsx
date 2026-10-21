@@ -164,7 +164,7 @@ export function EclipseRoutingPanel(props: {
     setWorking(true)
     setMessage(undefined)
     try {
-      const response = await props.api.settings.mutate({
+      let response = await props.api.settings.mutate({
         ns: dedicatedRegistered ? 'eclipse-routing' : 'agent-default-model',
         // A mixed-version Host may have only the legacy settings section.
         // Use its Eclipse subtree until the current Host restarts; do not
@@ -180,9 +180,22 @@ export function EclipseRoutingPanel(props: {
           : [{ op: 'set' as const, path: ['eclipse'],
             value: reset ? { mode: 'automatic' } : draft }],
       })
+      // A stale settings mirror can advertise the new namespace while an
+      // older Host still handles writes. Recover through the old Eclipse
+      // subtree only for this exact registration mismatch.
+      let usedCompatibility = legacyCompatible
+      if (!response.result.ok && dedicatedRegistered && legacy !== undefined
+        && /settings namespace ["']?eclipse-routing["']? is not registered/i.test(response.result.error.message)) {
+        response = await props.api.settings.mutate({
+          ns: 'agent-default-model',
+          ops: [{ op: 'set', path: ['eclipse'],
+            value: reset ? { mode: 'automatic' } : draft }],
+        })
+        usedCompatibility = true
+      }
       if (!response.result.ok) throw new Error(response.result.error.message)
       await props.controller.load()
-      setMessage(props.t(legacyCompatible ? 'eclipseLegacySaved' : 'eclipseSaved'))
+      setMessage(props.t(usedCompatibility ? 'eclipseLegacySaved' : 'eclipseSaved'))
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error))
     } finally { setWorking(false) }
