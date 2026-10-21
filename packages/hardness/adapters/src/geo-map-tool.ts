@@ -139,6 +139,7 @@ export function createPhoenixGeoMapTool():ToolDefinition {
       continueAfterDisplay:{type:'boolean',description:'Compatibilidad: tras publicar siempre se permite la respuesta final del asistente.'},
     },
     output:{
+      nestedPresentationMeta:true,
       schema:{type:'object',additionalProperties:false,properties:{
         artifactId:{type:'string',required:true},title:{type:'string',required:true},
         map:{type:'json',required:true},publication:{type:'string',required:true},
