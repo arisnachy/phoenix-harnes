@@ -1,12 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# CI needs only bubblewrap's payload, not a system install. Pin the Noble
-# security-update version, resolve it through APT's signed repository metadata,
-# verify the downloaded archive against that metadata, then extract it into the
-# ephemeral runner directory. This survives Ubuntu rotating superseded .deb
-# files out of the pool without weakening integrity checks.
-readonly BUBBLEWRAP_VERSION='0.9.0-1ubuntu0.3'
+# CI needs only bubblewrap's payload, not a system install. Resolve the
+# currently signed Ubuntu APT candidate and verify the downloaded archive
+# against its SHA256 before extracting it into the ephemeral runner directory.
+# Do not pin a superseded security revision that Ubuntu may remove from APT.
 
 : "${RUNNER_TEMP:?prepare-ci-bubblewrap requires RUNNER_TEMP}"
 : "${GITHUB_PATH:?prepare-ci-bubblewrap requires GITHUB_PATH}"
@@ -16,10 +14,15 @@ if [[ "$(uname -s)" != 'Linux' || "$(uname -m)" != 'x86_64' ]]; then
   exit 1
 fi
 
-archive="${RUNNER_TEMP}/bubblewrap_${BUBBLEWRAP_VERSION}_amd64.deb"
 root="${RUNNER_TEMP}/dsh-bubblewrap"
 
 sudo apt-get update -qq
+BUBBLEWRAP_VERSION="$(apt-cache policy bubblewrap | awk '$1 == "Candidate:" { print $2; exit }')"
+if [[ -z "${BUBBLEWRAP_VERSION}" || "${BUBBLEWRAP_VERSION}" == "(none)" ]]; then
+  echo 'no signed APT candidate available for bubblewrap' >&2
+  exit 1
+fi
+archive="${RUNNER_TEMP}/bubblewrap_${BUBBLEWRAP_VERSION}_amd64.deb"
 expected_sha="$(
   apt-cache show "bubblewrap=${BUBBLEWRAP_VERSION}" \
     | awk '$1 == "SHA256:" { sha = $2 } END { if (sha != "") print sha }'
