@@ -136,7 +136,7 @@ export function createPhoenixGeoMapTool():ToolDefinition {
     parameters:{
       title:{type:'string',required:true,description:'Nombre visible del mapa.'},
       map:{type:'object',required:true,additionalProperties:true,description:'Fuente, metadatos y capas geográficas WGS84 verificadas.'},
-      continueAfterDisplay:{type:'boolean',description:'True solo cuando se deba seguir con otros trabajos después de emitir el mapa.'},
+      continueAfterDisplay:{type:'boolean',description:'Compatibilidad: tras publicar siempre se permite la respuesta final del asistente.'},
     },
     output:{
       schema:{type:'object',additionalProperties:false,properties:{
