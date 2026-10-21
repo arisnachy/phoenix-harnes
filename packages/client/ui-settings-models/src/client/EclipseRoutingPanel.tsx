@@ -154,9 +154,15 @@ export function EclipseRoutingPanel(props: {
     try {
       const response = await props.api.settings.mutate({
         ns: 'eclipse-routing',
-        // An explicit automatic value also masks any historical Agent-default
-        // Eclipse preferences after restoring factory settings.
-        ops: [{ op: 'set', path: [], value: reset ? { mode: 'automatic' } : draft }],
+        // An explicit automatic value also masks historical Agent defaults.
+        // Set/unset only fields owned by Eclipse; never change Agent settings.
+        ops: (['mode', 'planner', 'coordinator', 'subagent', 'specialists', 'maxTeammates'] as const)
+          .map(field => {
+            const value = reset ? (field === 'mode' ? 'automatic' : undefined) : draft[field]
+            return value === undefined
+              ? { op: 'unset' as const, path: [field] }
+              : { op: 'set' as const, path: [field], value }
+          }),
       })
       if (!response.result.ok) throw new Error(response.result.error.message)
       await props.controller.load()
