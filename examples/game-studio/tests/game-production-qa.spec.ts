@@ -43,6 +43,15 @@ describe('Phoenix Game Studio production QA planning', () => {
     expect(report.releaseCertified).toBe(false)
     expect(report.phases).toHaveLength(6)
   })
+  it('allows vertical-slice review before completed boss, soundtrack and visual QA', () => {
+    const early = { playtests: evidence.playtests.filter(x => ['boot', 'move', 'combat'].includes(x.id)) }
+    const result = reviewGameProduction(manifest, plan, early)
+    expect(result.missingVerticalSliceProbes).toEqual([])
+    expect(result.missingPlaytests).toContain('boss-patterns')
+    expect(result.phases.find(x => x.id === 'vertical-slice')?.status).toBe('needs-runtime-review')
+    expect(result.phases.find(x => x.id === 'gameplay-qa')?.status).toBe('blocked')
+  })
+
   it('rejects an untested game and unbound presets even when art planning finished', () => {
     const report = reviewGameProduction(manifest, plan)
     expect(report.state).toBe('incomplete')

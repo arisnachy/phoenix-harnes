@@ -40,7 +40,7 @@ export function planGameAssets(manifest, verifiedAssets = { images: [], audio: [
     for (const boss of bosses) {
       add('bosses', boss.id || 'unnamed-boss',
         ['idle', 'anticipation', 'attack', 'recover', 'hurt', 'death',
-          ...Array.isArray(boss.phases) ? boss.phases : []], 'art/motion')
+          ...(Array.isArray(boss.phases) ? boss.phases.map(phase => typeof phase === 'string' ? phase : phase?.id).filter(Boolean) : [])], 'art/motion')
       for (const attack of entries(boss.attacks)) add('boss-attacks',
         (boss.id || 'boss') + '-' + (attack.id || 'unnamed-attack'),
         ['telegraph', 'emission', 'collision', 'recovery', 'impact-sfx'], 'gameplay/audio')
@@ -64,15 +64,25 @@ export function planGameAssets(manifest, verifiedAssets = { images: [], audio: [
         missing.push('implement walkable belt depth, knockback and y-sensitive melee collision')
     }
   }
-  const level = manifest.level && typeof manifest.level === 'object' ? manifest.level : {}
-  const layers = entries(level.layers)
-  for (const layer of layers) add('backgrounds', layer.id || 'unnamed-layer', ['parallax', 'lighting'], 'world-design')
-  if ((isShooter || isBrawler) && layers.length < 3) missing.push('design at least 3 independently illustrated parallax layers')
-  if (isBrawler) {
-    for (const zone of entries(level.zones)) add('zones', zone.id || 'unnamed-zone',
-      ['backdrop', 'foreground-props', 'lighting', 'camera-transition'], 'world-design')
-    if (!Array.isArray(level.zones) || level.zones.length < 2 || !level.belt)
-      missing.push('design two distinct street-stage zones and a walkable depth belt')
+  // Multi-level production uses each level, never silently discards scenes after level one.
+  // Preserve legacy unscoped layer ids for a single-level manifest.
+  const explicitLevels = entries(manifest.levels)
+  const levels = explicitLevels.length ? explicitLevels
+    : [manifest.level && typeof manifest.level === 'object' ? manifest.level : {}]
+  for (const [index, level] of levels.entries()) {
+    const scope = levels.length === 1 ? '' : (level.id || 'level-' + (index + 1)) + '/'
+    const layers = entries(level.layers)
+    for (const layer of layers) add('backgrounds', scope + (layer.id || 'unnamed-layer'),
+      ['parallax', 'lighting'], 'world-design')
+    if ((isShooter || isBrawler) && layers.length < 3) {
+      missing.push((levels.length === 1 ? '' : 'level ' + (level.id || index + 1) + ': ') + 'design at least 3 independently illustrated parallax layers')
+    }
+    if (isBrawler) {
+      for (const zone of entries(level.zones)) add('zones', scope + (zone.id || 'unnamed-zone'),
+        ['backdrop', 'foreground-props', 'lighting', 'camera-transition'], 'world-design')
+      if (!Array.isArray(level.zones) || level.zones.length < 2 || !level.belt)
+        missing.push((levels.length === 1 ? '' : 'level ' + (level.id || index + 1) + ': ') + 'design two distinct street-stage zones and a walkable depth belt')
+    }
   }
   if (isShooter) {
     for (const [family, id, animations] of [
@@ -94,7 +104,7 @@ export function planGameAssets(manifest, verifiedAssets = { images: [], audio: [
   const cues = Array.isArray(manifest.audio?.cues) ? manifest.audio.cues : []
   for (const cue of cues) add('audio', cue, ['trigger', 'mute', 'mix'], 'audio/qa', 'audio-or-WebAudio')
   if (!cues.length) missing.push('design actual sound effects and runtime cue triggers')
-  if (isShooter || isBrawler) add('audio', 'music', ['intro', 'loop', 'pause', 'resume'], 'audio/qa', 'audio-or-WebAudio')
+  if ((isShooter || isBrawler) && !cues.includes('music')) add('audio', 'music', ['intro', 'loop', 'pause', 'resume'], 'audio/qa', 'audio-or-WebAudio')
   if (todo.length === 0) missing.push('define gameplay and scene assets for the requested genre')
   const art = manifest.art && typeof manifest.art === 'object' ? manifest.art : {}
   const readyImages = new Set(verifiedAssets.images || [])

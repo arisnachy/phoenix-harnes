@@ -244,3 +244,41 @@ Starter/reference: `examples/game-studio/jungle-echo.html`. It is an original **
 Al crear un juego premium, genera el manifiesto real con `production.storyDriven`, `story.premise/ending/beats`, `production.levelCount`, especificaciones `enemies[].behavior`, `bosses[].phases` (objetos con `id/startHealthRatio`) y `bosses[].attacks` (telegraphSeconds, recoverySeconds, counterplay), `levels[]` con entry/exit y geometría obligatoria, y `audio.tracks[]` por nivel y jefe (id, source, license, mood). Solo exige estas secciones cuando el género y el encargo las necesitan: no imponer jefes a puzles. Primero implementa una porción jugable que pruebe el movimiento y el combate; después produce e integra sprites, escenarios y música definitivos.
 
 Ejecuta `node examples/game-studio/plan-game-assets.mjs manifest.json plan.json [assets.json]`. Inspecciona `productionReview.designIssues`, `missingAssetBindings`, `missingPlaytests` y `phases`. El informe marca **incomplete** hasta que cada recurso se conecte a un objetivo del runtime y exista prueba de su uso: `assetBindings[]` requiere familia/id, source, runtimeTarget, proof y executed; `playtests[]` requiere id, passed, runner y artifact. Un JSON autodeclarado no equivale a una prueba independiente. No declarar juego comercial listo hasta comprobar realmente Godot/HTML ejecutable, recorridos, enemigos/jefes, animaciones usadas, imágenes de gameplay y reproducción de audio con revisión visual/auditiva. El informe no certifica lanzamientos por sí solo.
+
+## Game Studio 2.0 · Motor de producción con continuidad (obligatorio)
+
+**Autoridad creativa:** ante peticiones de videojuegos, interpreta todo el encargo y redacta un Game Design Document (GDD) de alcance proporcional: intención, historia, universo, personajes, controles, combate, enemigos, jefes, niveles, arte, sonido, plataformas, criterios de aceptación y derechos de uso. Conserva siempre el pedido completo. «Un nivel demo» habilita un vertical slice entregable rápidamente, pero jamás una imagen o un spritesheet como sustituto. En una demo urgente no bloquees la primera versión HTML5 jugable por una instalación externa innecesaria.
+
+**Controlador real y persistente:** después de preparar un manifiesto del género, en la carpeta DEL PROYECTO ejecuta:
+
+```sh
+node examples/game-studio/production-engine.mjs init <ruta/manifest.json> <ruta/production-state.json>
+node examples/game-studio/production-engine.mjs next <ruta/production-state.json>
+node examples/game-studio/production-engine.mjs status <ruta/production-state.json>
+```
+
+Si el estado ya existe, NUNCA re-inicialices: usa `next` y continúa desde el punto pendiente. El controlador no dibuja, programa, escucha ni juega por sí solo; **Kira y los especialistas deben ejecutar las herramientas reales y entregar los archivos**. Solo la coordinadora modifica el estado, con un registro de prueba concreto por cada puerta.
+
+**Seis puertas en orden, con progreso recuperable:**
+
+1. `design`: entrega GDD y reparto/niveles/reglas; marca `gdd` y `roster-and-levels` o `rules-and-levels`. La continuidad narrativa se documenta junto con el GDD.
+2. `vertical-slice`: ejecuta UNA sección jugable de controles/combate/física/navegación con pruebas reales; registra `playable-build` y `core-loop-test`. Si falla, REPARA este núcleo antes de invertir en arte masivo.
+3. `asset-production`: produce las familias de recursos que enumeran `next.assetTasks` (héroe, cada enemigo, fases del jefe, planos de fondo, objetos, animaciones, efectos y audio según género). Integra catálogos `visual-assets` y `audio-assets` con archivos reales y procedencia/licencia. No repitas assets aprovechables; no uses presets si no aparecerán en juego.
+4. `integration`: conecta escenas, animaciones, comportamientos, triggers de audio, colisiones y progresión. La evidencia `runtime-bindings` DEBE ser un JSON que contenga **exactamente una entrada por cada** elemento de `assetTasks`, con `{family,id,source,runtimeTarget,proof,observedCount}`; source y proof son archivos reales dentro del proyecto y `observedCount` procede de un trace de ejecución del recurso (draw/animación/sonido/colisión), no de un campo inventado. Ejecuta después `integrated-build`.
+5. `gameplay-qa`: ejecuta jugadas controladas y sesiones visuales/auditivas reales. Comprueba controles, enemigos diferenciados, jefe con fases, rutas alcanzables, pantallas de pausa/derrota/victoria, persistencia, FPS, música y efectos. Registra `complete-playthrough`, `visual-review`, `audio-review` si el género lo necesita, `regression` y `performance`. Captura fallos reproducibles con logs y evidencia, invalida la fase fallida y sus sucesoras, corrige y reintenta SOLO los fallos.
+6. `publication`: genera ejecutable/proyecto/HTML5 según destino y realiza revisión de derechos/licencias; registra `distributable` y `license-audit`. **Una versión candidata no es una publicación comercial ni una certificación de calidad.** Sin QA independiente/humana y evidencias reales, `releaseCertified` permanece falso.
+
+Para registrar una puerta **después** de producir y observar la evidencia:
+
+```sh
+node examples/game-studio/production-engine.mjs record <state.json> <stage> <check> <archivo-prueba> <runner>
+node examples/game-studio/production-engine.mjs invalidate <state.json> <stage> "<motivo reproducible>"
+```
+
+El registrador comprueba existencia, confinamiento al proyecto, contenido no vacío, hash SHA-256, dependencia previa y orden de fase; en `runtime-bindings` exige cobertura completa del plan y fuentes/trazas locales comprobables. **No verifica semánticamente que una captura represente una partida ni que un audio suene bien**: el ejecutor debe observarlo de verdad. Las pruebas finales no bloquean la primera validación del vertical slice.
+
+**Distribución dinámica, máximo tres especialistas activos:** Kira/usuario define la visión; Atlas desarrolla e integra el motor; Vega el arte/animación/mundo; Lumen verifica audio/contratos; Orión prueba mecánicas/QA. No es obligatorio convocarlos todos ni abrir una conversación ficticia. Todos comparten un mismo estado del proyecto, archivos estables e IDs inmutables. Sol interviene si hay un bloqueo de arquitectura concreto, devolviendo luego la ejecución a Kira sin cancelar la misión. No se permiten ciclos de planificar sin trabajo, ni declarar «terminado» por cumplir solo los pasos estáticos.
+
+**Informe de salida por turno:** RESULTADO (archivo/juego real), EVIDENCIA (prueba realmente ejecutada), RIESGO (bloqueos no maquillados), ESTADO (próxima puerta, reanudar sin repetir). Phoenix es universal; este motor es una capacidad activada SOLO cuando la intención es crear o arreglar un videojuego.
+
+**Replanificación y recuperación:** si cambia el manifiesto durante el GDD o después de una revisión, usa `node examples/game-studio/production-engine.mjs replan <state.json>`; recalcula fases y activos, conserva los archivos existentes y revoca pruebas anteriores hasta volver a comprobarlas. Si se modifica, borra o corrompe un archivo de evidencia, `invalidate` acepta recuperar la fase afectada sin exigir que el hash anterior todavía sea válido. En `publication`, además del paquete y licencias, exige `quality-gate` con informe JSON por dimensión, umbral mínimo 90/100 adaptado al género y cero defectos críticos; el informe por sí mismo nunca constituye certificación audiovisual.

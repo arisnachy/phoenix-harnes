@@ -117,12 +117,18 @@ export function reviewGameProduction(manifest, assetPlan, evidence = {}) {
     : ['boot', 'interaction', 'level-completion', 'visual-review']
   const missingProbes = requiredProbes.filter(id => !probes.some(p => p.id === id && p.passed === true
     && named(p.artifact) && named(p.runner)))
+  // A vertical slice is testable BEFORE final artwork, boss music and full-game QA.
+  const sliceProbes = action ? ['boot', 'move', 'combat'] : ['boot', 'interaction']
+  const missingSliceProbes = sliceProbes.filter(id => !probes.some(p => p.id === id
+    && p.passed === true && named(p.artifact) && named(p.runner)))
+  if (missingSliceProbes.length) add('slice-evidence',
+    'Playable core loop has not been demonstrated: ' + missingSliceProbes.join(', '))
   if (missingProbes.length) add('playtest-evidence', 'Missing independent evidence for: ' + missingProbes.join(', '))
   const groups = [
     { id: 'creative', requires: ['title','genre','story','story-beats','player','controls','enemies','enemy-ai','bosses','boss-phases','boss-attacks','levels','level-count','level-ids','world-layers','level-flow','enemy-placement','boss-placement','jump-reachability'] },
-    { id: 'vertical-slice', requires: ['playtest-evidence'], dependsOn: ['creative'] },
-    { id: 'asset-production', requires: ['asset-integration','duplicate-task'], dependsOn: ['vertical-slice'] },
-    { id: 'soundtrack', requires: ['level-music','boss-music'], dependsOn: ['creative'] },
+    { id: 'vertical-slice', requires: ['slice-evidence'], dependsOn: ['creative'] },
+    { id: 'asset-production', requires: ['duplicate-task'], dependsOn: ['vertical-slice'] },
+    { id: 'soundtrack', requires: ['level-music','boss-music'], dependsOn: ['vertical-slice'] },
     { id: 'integration', requires: ['asset-integration','enemy-ai','boss-attacks'], dependsOn: ['asset-production','soundtrack'] },
     { id: 'gameplay-qa', requires: ['playtest-evidence','jump-reachability'], dependsOn: ['integration'] },
   ]
@@ -137,6 +143,7 @@ export function reviewGameProduction(manifest, assetPlan, evidence = {}) {
     designIssues: errors,
     missingAssetBindings: unbound,
     missingPlaytests: missingProbes,
+    missingVerticalSliceProbes: missingSliceProbes,
     phases,
     note: 'Evidence entries are supplied by the producer; inspect real files, gameplay, visuals and audio independently before release.',
   }

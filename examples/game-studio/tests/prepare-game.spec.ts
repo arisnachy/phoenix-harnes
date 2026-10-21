@@ -25,8 +25,8 @@ describe('Phoenix Game Studio publication handshake', () => {
     const metadata = readGameManifest(shooter)
     const without = shooter.replace(manifestScript, '')
     const prepared = prepareGameHtml(without, metadata)
-    expect(validateGameHtml(prepared)).toMatchObject({ schemaVersion: 1, genre: 'run-and-gun' })
-    expect(readGameManifest(prepared)).toMatchObject({ genre: 'run-and-gun' })
+    expect(validateGameHtml(prepared)).toMatchObject({ schemaVersion: 1, genre: 'original run-and-gun' })
+    expect(readGameManifest(prepared)).toMatchObject({ genre: 'original run-and-gun' })
     expect(prepared).toContain('PhoenixGameKit')
   })
 
