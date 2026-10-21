@@ -315,6 +315,48 @@ describe('installModelSelection()', () => {
     expect(isKiraCodexAutoLead({ provider: 'openai-codex', model: 'gpt-6.1-sol' }, root)).toBe(false)
   })
 
+  it('allows more than two strategy consultations when new failures arrive, without repeating stale ones', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    const events: { type: string; data: unknown }[] = [
+      { type: 'turn/start', data: { turn: 1 } },
+      { type: 'user/message', data: { source: { kind: 'user' },
+        content: [{ type: 'text', text: 'Repara la arquitectura compleja y verifica cada integración.' }] } },
+    ]
+    const agent = { session: { events }, options: {} } as unknown as Agent
+    const selection: ModelSelectionRef = {
+      current: { provider: 'openai-codex', model: PHOENIX_CODEX_AUTO_MODEL }, assembled: undefined,
+    }
+    const dispose = installModelSelection(ctx, selection)
+    const signal = new AbortController().signal
+    const modelAt = async (step: number): Promise<string> => {
+      const result = await agentEvents(ctx, agent).waterfall('agent/request', { turn: 1, step, signal },
+        () => Promise.resolve({ provider: 'seed', model: 'seed' }))
+      return result.model
+    }
+    try {
+      expect(await modelAt(1)).toBe('gpt-6.1-sol')
+      for (let round = 0; round < 4; round += 1) {
+        const step = 3 + round * 2
+        for (let failure = 0; failure < 2; failure += 1) {
+          events.push({ type: 'tool/result', data: {
+            turn: 1, step: step - 1, error: { name: 'ToolError', code: `NEW_${round}` },
+            message: { content: [{ type: 'text', text: `Different blocker ${round}` }] },
+          } })
+        }
+        expect(await modelAt(step)).toBe('gpt-6.1-sol')
+        expect(await modelAt(step + 1)).toBe('gpt-6-luna')
+      }
+      events.push({ type: 'tool/result', data: { turn: 1, step: 11,
+        error: { name: 'ToolError', code: 'NEW_3' },
+        message: { content: [{ type: 'text', text: 'Different blocker 3' }] } } })
+      expect(await modelAt(12)).toBe('gpt-6-luna')
+    } finally {
+      dispose()
+      await ctx.fiber.dispose()
+    }
+  })
+
   it('lets Luna Max consult Sol when stuck, then automatically resumes Luna Max', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
@@ -350,7 +392,7 @@ describe('installModelSelection()', () => {
         { type: 'step/start', data: { turn: 1, step: 2 } })
       const strategyAssembly = await ctx.systemPrompt.assemble()
       const strategyIdentity = strategyAssembly.sections.find(item => item.name === 'phoenix:auto-visible-handoff')?.text
-      expect(strategyIdentity).toContain('You are Kira herself using the coordinator route')
+      expect(strategyIdentity).toContain('You are Kira herself using the configured planning model')
       expect(strategyIdentity).toContain('Speak directly to the user in your own first-person voice')
       expect(strategyIdentity).toContain('Never address yourself as "Kira, ..."')
       expect(strategyIdentity).not.toContain('You are Sol 6.1 consulted by Kira')
@@ -369,7 +411,7 @@ describe('installModelSelection()', () => {
       events.push({ type: 'step/start', data: { turn: 1, step: 3 } })
       const resumedAssembly = await ctx.systemPrompt.assemble()
       expect(resumedAssembly.sections.find(item => item.name === 'phoenix:auto-visible-handoff')?.text)
-        .toContain('still Kira, coordinating and executing through the configured coordinator route')
+        .toContain('still Kira, coordinating and executing through the configured execution coordinator route')
       expect(resumedAssembly.tools.map(tool => tool.name)).toContain('read')
       await expect(agentEvents(ctx, agent).waterfall(
         'agent/request', { turn: 1, step: 4, signal },
