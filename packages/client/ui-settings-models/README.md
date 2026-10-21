@@ -37,7 +37,7 @@ Authorization polling survives panel refreshes and uses the latest completion ca
 
 ## Eclipse routing
 
-Fénix Eclipse exposes two model and reasoning selections: Kira's coordinator and her subagents. Its picker uses the connected Codex account catalog, keeping the newest GPT generation and family revision plus specialized account-visible models. Reasoning options come from each model's advertised capabilities. Saving clears former planner and specialist overrides; planner-only preferences migrate to coordination. Manual mode uses the provider default when effort is unset; hybrid mode adapts unset effort to the task. Rejected writes remain visible without claiming success.
+Fénix Eclipse exposes three separate model and reasoning selections: Kira's planner, her execution coordinator and her subagents. A complex operational request starts on the planner, transfers to execution, and returns for further strategy reviews only on new execution evidence or a distinct Team blocker; there is no per-phase call limit. The `escalationSensitivity` selector offers `adaptive`, `quality` and `economy`; these control escalation thresholds, not a count quota. The editor uses the connected Codex account catalog with provider-reported reasoning levels. Legacy planner-only settings migrate to the old coordinator route, while new writes retain independent seats and clear obsolete per-specialist overrides. Manual mode uses provider defaults when effort is unset; hybrid mode adapts unset efforts. Failed writes are reported and never claimed as saved.
 
 ## Model Experience
 
