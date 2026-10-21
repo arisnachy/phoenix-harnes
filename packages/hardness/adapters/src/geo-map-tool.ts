@@ -153,7 +153,7 @@ export function createPhoenixGeoMapTool():ToolDefinition {
     execute(args,exec){
       const map=admitPhoenixGeoMap(args.map,args.title)
       const artifactId='phoenix-geo-map:'+String(exec.callId)
-      if(args.continueAfterDisplay!==true)exec.concludeTurn()
+      // Continue to the assistant's final response after committing this geographic map artifact.
       return Promise.resolve({artifactId,title:map.props.title,map:map as unknown as JsonValue,
         publication:'artifact_emitted_not_client_render_verified'})
     },
