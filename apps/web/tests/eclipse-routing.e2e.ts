@@ -12,8 +12,10 @@ import { newEnglishPage, REPO_ROOT } from './support.ts'
 
 const OVERLAY = fileURLToPath(new URL('./eclipse-routing.overlay.yml', import.meta.url))
 const MODELS = ['gpt-6.1-sol', 'gpt-6-sol', 'gpt-5.6-sol', 'gpt-6-luna', 'gpt-5.6-luna']
-const profile = { mode: 'manual', coordinator: { provider: 'openai-codex', model: 'gpt-6.1-sol', reasoningEffort: 'medium' },
-  subagent: { provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'xhigh' }, maxTeammates: 2 }
+const profile = { mode: 'manual', planner: { provider: 'openai-codex', model: 'gpt-6.1-sol', reasoningEffort: 'medium' },
+  coordinator: { provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'max' },
+  subagent: { provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'xhigh' },
+  escalationSensitivity: 'adaptive', maxTeammates: 2 }
 
 class SettingsCatalog extends LlmAdapter {
   override listModels(provider: string): Promise<readonly LlmModelInfo[]> {
@@ -28,7 +30,7 @@ class SettingsCatalog extends LlmAdapter {
   override async *stream(): AsyncIterable<StreamChunk> { throw new Error('Settings test must not call a model') }
 }
 
-it('saves exactly two Codex role routes and retains them across browser reload', async () => {
+it('saves three independent Codex roles and unlimited adaptive strategy mode across reload', async () => {
   const scaffold = await launchWebScaffold({ extraOverlayPath: OVERLAY })
   const registration = scaffold.ctx.llm.registerAdapter(['openai-codex'], new SettingsCatalog())
   const browser = await chromium.launch()
@@ -46,17 +48,21 @@ it('saves exactly two Codex role routes and retains them across browser reload',
     await dialog.getByRole('button', { name: 'Fénix Eclipse', exact: true }).click()
     const content = dialog.locator('section[aria-label="Fénix Eclipse · Orchestration"]')
     await expect.poll(() => content.locator('#eclipse-coordinator').isEnabled()).toBe(true)
-    expect(await content.locator('#eclipse-planner').count()).toBe(0)
+    expect(await content.locator('#eclipse-planner').count()).toBe(1)
     expect(await content.locator('#eclipse-specialist').count()).toBe(0)
     expect(await content.locator('#eclipse-coordinator option').allTextContents()).toEqual(['Automatic',
       'gpt-6.1-sol', 'gpt-6-luna'])
     await content.locator('#eclipse-mode').selectOption('manual')
-    await content.locator('#eclipse-coordinator').selectOption(JSON.stringify(['openai-codex', 'gpt-6.1-sol']))
-    expect(await content.locator('#eclipse-effort-coordinator option[value="ultra"]').count()).toBe(1)
-    await content.locator('#eclipse-effort-coordinator').selectOption('medium')
+    await content.locator('#eclipse-planner').selectOption(JSON.stringify(['openai-codex', 'gpt-6.1-sol']))
+    expect(await content.locator('#eclipse-effort-planner option[value="ultra"]').count()).toBe(1)
+    await content.locator('#eclipse-effort-planner').selectOption('medium')
+    await content.locator('#eclipse-coordinator').selectOption(JSON.stringify(['openai-codex', 'gpt-6-luna']))
+    await content.locator('#eclipse-effort-coordinator').selectOption('max')
     await content.locator('#eclipse-subagent').selectOption(JSON.stringify(['openai-codex', 'gpt-6-luna']))
     expect(await content.locator('#eclipse-effort-subagent option[value="ultra"]').count()).toBe(0)
     await content.locator('#eclipse-effort-subagent').selectOption('xhigh')
+    await content.locator('#eclipse-strategy').selectOption('adaptive')
+    expect(await content.getByText('Unlimited per phase.', { exact: false }).count()).toBe(1)
     await content.locator('#eclipse-workers').selectOption('2')
     await content.getByRole('button', { name: 'Save Eclipse', exact: true }).click()
     await content.getByText('Eclipse settings saved.', { exact: true }).waitFor()
@@ -66,14 +72,17 @@ it('saves exactly two Codex role routes and retains them across browser reload',
     expect(persisted).toContain('xhigh')
     const screenshotDir = join(REPO_ROOT, '.artifacts')
     await mkdir(screenshotDir, { recursive: true })
-    await page.screenshot({ path: join(screenshotDir, 'eclipse-two-role-settings.png') })
+    await page.screenshot({ path: join(screenshotDir, 'eclipse-three-role-strategy-settings.png') })
     await compareOrRefreshGolden(join(REPO_ROOT, 'apps/web/tests/snapshots/eclipse-routing/settings.expected.md'),
       await captureStableAria(page, 'section[aria-label="Fénix Eclipse · Orchestration"]', scaffold.workspaceCwd), webSnapshotMode())
     await page.reload({ waitUntil: 'load' })
     await page.getByRole('button', { name: /^Settings/u }).click()
     await dialog.getByRole('button', { name: 'Fénix Eclipse', exact: true }).click()
-    await expect.poll(() => content.locator('#eclipse-coordinator').inputValue()).toBe(JSON.stringify(['openai-codex', 'gpt-6.1-sol']))
-    expect(await content.locator('#eclipse-effort-coordinator').inputValue()).toBe('medium')
+    await expect.poll(() => content.locator('#eclipse-planner').inputValue()).toBe(JSON.stringify(['openai-codex', 'gpt-6.1-sol']))
+    expect(await content.locator('#eclipse-effort-planner').inputValue()).toBe('medium')
+    expect(await content.locator('#eclipse-coordinator').inputValue()).toBe(JSON.stringify(['openai-codex', 'gpt-6-luna']))
+    expect(await content.locator('#eclipse-effort-coordinator').inputValue()).toBe('max')
+    expect(await content.locator('#eclipse-strategy').inputValue()).toBe('adaptive')
     expect(await content.locator('#eclipse-effort-subagent').inputValue()).toBe('xhigh')
     expect(await content.locator('#eclipse-workers').inputValue()).toBe('2')
     expect(tripwire.pageErrors).toEqual([])
