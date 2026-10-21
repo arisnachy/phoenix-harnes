@@ -172,7 +172,12 @@ export async function comicRecoveryStatus(seriesId,issueId,{workspace}={}){
     const attemptsHere=logs.filter(a=>a.slot===slot),latest=attemptsHere.at(-1)
     const local=attemptsHere.filter(a=>!canon.locked||a.canonDigest===canon.digest)
       .flatMap(a=>a.localCandidates??[]).filter(x=>x.verifiedLocalFile)
-    const state=ok?'imported-verified':found?'imported-corrupt':local.length?'generated-needs-review':latest?.status??'missing'
+    const approval=canon.locked?await optional(join(folder(seriesId,issueId),'approvals',slot+'.json')):null
+    const accepted=!canon.locked||(approval?.canonDigest===canon.digest&&target.some(k=>
+      project.assets[k]?.sha256===approval.sha256))
+    const state=ok&&!accepted?'imported-needs-canon-review'
+      :ok?'imported-verified':found?'imported-corrupt':local.length?'generated-needs-review'
+        :latest?.status??'missing'
     items.push({slot,status:state,assetIds:ok?target:[],attemptCount:attemptsHere.length,
       mismatchedAttempts:attemptsHere.filter(a=>canon.locked&&a.canonDigest!==canon.digest).length,
       localCandidates:local.map(x=>({path:x.path,sha256:x.sha256})),providerIds:latest?.providerIds??[],lastError:latest?.error??null})
@@ -189,8 +194,8 @@ export async function comicRecoveryStatus(seriesId,issueId,{workspace}={}){
       genre:canon.locked?canon.contract.style.genre:null,artistDirection:canon.locked?canon.contract.style.rendering:null},
     mayGenerateFinalArt:canon.locked,requiresVisualReview:true,
     verified:items.filter(x=>x.status==='imported-verified').length,
-    pendingReview:items.filter(x=>x.status==='generated-needs-review').map(x=>x.slot),
-    needsGeneration:items.filter(x=>!['imported-verified','generated-needs-review'].includes(x.status)).map(x=>x.slot),
+    pendingReview:items.filter(x=>['generated-needs-review','imported-needs-canon-review'].includes(x.status)).map(x=>x.slot),
+    needsGeneration:items.filter(x=>!['imported-verified','generated-needs-review','imported-needs-canon-review'].includes(x.status)).map(x=>x.slot),
     slots:items,localDiscoveries:discovered,noProviderCallsWereMade:true,
     advice:canon.locked?'Rehidratar canon y comprobar imágenes. Generar solo faltantes con el digest de canon aprobado; Canva es solo maquetación.'
       :'Falta aprobación del canon creativo; primero mostrar referencias y bloquear estilo antes de generar arte final.'}
