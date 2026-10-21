@@ -9,6 +9,8 @@ The plugin config requires `{ provider, model }`. That composition entry is the 
 - `ctx.agentDefaultModel.currentSelection()` returns a detached `{ provider, model, reasoningEffort? }` selection for a newly created Agent.
 - `ctx.agentDefaultModel.saveSelection(selection)` saves the complete user selection. Without a settings provider it is a no-op and the composition entry remains current.
 
+Fénix Eclipse has two configurable routes in the `eclipse-routing` section: `coordinator` for Kira and `subagent` for delegated teammates. New canonical routes must use `openai-codex`; their `reasoningEffort` is an opaque provider value supplied by the live Codex catalog, so the settings layer does not maintain a stale allowlist. Profiles written by the former three-seat editor may retain `planner`; it is read as `coordinator` only when no coordinator route exists and is removed when the editor saves the two-seat form.
+
 The service does not validate catalog membership. A provider route may serve an unadvertised model, and the consumer that actually opens a model request owns availability diagnostics.
 
 ## Model Experience

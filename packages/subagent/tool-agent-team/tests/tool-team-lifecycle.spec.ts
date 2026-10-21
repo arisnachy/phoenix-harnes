@@ -13,8 +13,8 @@ describe('Team tool routing and installation lifecycle', () => {
       defaultModelProfile: 'foreign', modelProfiles: { foreign: { provider: 'mock', model: 'foreign' } },
     })
     ctx.llm.registerAdapter(['openai-codex'], new MockAdapter(['hang'], {
-      efforts: [{ id: ReasoningEffortId('max'), name: 'Max' }],
-      defaultEffort: ReasoningEffortId('max'),
+      efforts: [{ id: ReasoningEffortId('high'), name: 'High' }],
+      defaultEffort: ReasoningEffortId('high'),
     }))
     lead.options.provider = 'openai-codex'
     lead.options.model = 'selected'
@@ -26,16 +26,16 @@ describe('Team tool routing and installation lifecycle', () => {
     const result = await execute(ctx, lead, 'spawn_teammate', { name: 'inherit', description: 'inherit', prompt: 'wait' })
     expect(result.isError).toBe(false)
     const child = await waitRunning(ctx, spawnedChildId(result))
-    expect(child.options).toMatchObject({ provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'max' })
+    expect(child.options).toMatchObject({ provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'high' })
     await execute(ctx, lead, 'interrupt_agent', { target: 'inherit' })
     await waitNoAgent(ctx, child.id)
   })
 
-  it('routes Codex teammates to Luna Max despite a configured foreign worker profile', async () => {
+  it('routes Codex teammates to the adaptive Luna worker despite a configured foreign worker profile', async () => {
     const { ctx, lead } = await setup([], false, { modelProfiles: { bounded: { provider: 'openai-codex', model: 'worker', maxTokens: 512 } } })
     ctx.llm.registerAdapter(['openai-codex'], new MockAdapter(['hang'], {
-      efforts: [{ id: ReasoningEffortId('max'), name: 'Max' }],
-      defaultEffort: ReasoningEffortId('max'),
+      efforts: [{ id: ReasoningEffortId('high'), name: 'High' }],
+      defaultEffort: ReasoningEffortId('high'),
     }))
     lead.options.provider = 'openai-codex'
     lead.options.model = 'planner'
@@ -46,7 +46,7 @@ describe('Team tool routing and installation lifecycle', () => {
     })
     const result = await execute(ctx, lead, 'spawn_teammate', { name: 'bounded', description: 'bounded', prompt: 'wait', model_profile: 'bounded' })
     const child = await waitRunning(ctx, spawnedChildId(result))
-    expect(child.options).toMatchObject({ provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'max' })
+    expect(child.options).toMatchObject({ provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'high' })
     expect(child.options.model).not.toBe('worker')
     await execute(ctx, lead, 'interrupt_agent', { target: 'bounded' })
     await waitNoAgent(ctx, child.id)

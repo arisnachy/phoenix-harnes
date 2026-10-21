@@ -65,6 +65,54 @@ const LOCAL_NS = 'settings.models.local'
 const CONNECTORS_NS = 'settings.connectors'
 export type { ModelsSettingsState, ProviderRow } from './store.ts'
 
+const CODEX_TIER = /^gpt-(\d+(?:\.\d+)?)(?:-([a-z][a-z0-9-]*))?$/iu
+
+/** Keep the newest live numeric GPT model for each Codex tier and every
+ * provider-owned id that does not follow that naming convention.
+ *
+ * The app-server catalog is authoritative. This helper only removes older
+ * numeric siblings already present in that response; it never synthesizes a
+ * model or turns a virtual picker value into an executable route.
+ * @param choices - Choices projected from the connected Codex catalog.
+ * @returns A detached list containing the current tier representatives.
+ */
+export function selectCurrentCodexModels(
+  choices: readonly EclipseCatalogChoice[],
+): EclipseCatalogChoice[] {
+  const numeric = choices.flatMap((choice) => {
+    if (choice.provider !== 'openai-codex' || choice.model === 'phoenix-auto') return []
+    const match = CODEX_TIER.exec(choice.model)
+    const version = match?.[1]
+    if (match === null || version === undefined) return []
+    const [major, minor = '0'] = version.split('.')
+    return [{ choice, score: Number(minor), major: Number(major), tier: (match[2] ?? 'generic').toLowerCase() }]
+  })
+  const highestMajor = numeric.reduce((highest, item) => Math.max(highest, item.major), -1)
+  const latest = new Map<string, { score: number; model: string }>()
+  for (const item of numeric) {
+    if (item.major !== highestMajor) continue
+    const previous = latest.get(item.tier)
+    if (previous === undefined || item.score > previous.score) {
+      latest.set(item.tier, { score: item.score, model: item.choice.model })
+    }
+  }
+  const seen = new Set<string>()
+  return choices.filter((choice) => {
+    if (choice.provider !== 'openai-codex' || choice.model === 'phoenix-auto') return false
+    const match = CODEX_TIER.exec(choice.model)
+    const version = match?.[1]
+    if (match !== null && version !== undefined) {
+      const major = Number(version.split('.')[0])
+      const tier = (match[2] ?? 'generic').toLowerCase()
+      if (major !== highestMajor || latest.get(tier)?.model !== choice.model) return false
+    }
+    const key = `${choice.provider}\u0000${choice.model}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  }).map(choice => ({ ...choice, reasoningEfforts: [...choice.reasoningEfforts] }))
+}
+
 type PluginInventoryRemoteResult<T> =
   | { ok: true; value: T }
   | { ok: false; error: { code: string; message: string } }
@@ -80,16 +128,19 @@ type PluginInventoryMcpRegistryRemote = {
   searchMcpRegistry(request: { query: string; limit?: number }): Promise<PluginInventoryRemoteResult<McpRegistrySearchSnapshot>>
   mcpConnectorHubState(): Promise<PluginInventoryRemoteResult<McpConnectorHubSnapshot>>
   xMcpState(): Promise<PluginInventoryRemoteResult<{
-    clientIdConfigured: boolean; clientSecretConfigured: boolean;
-    api: { configured: boolean; status?: string };
-    phoenixApi: { configured: boolean; status?: string };
-    docs: { configured: boolean; status?: string };
+    clientIdConfigured: boolean
+    clientSecretConfigured: boolean
+    api: { configured: boolean; status?: string }
+    phoenixApi: { configured: boolean; status?: string }
+    docs: { configured: boolean; status?: string }
   }>>
   configureXDeveloperApplication(request: { clientId: string; clientSecret: string }): Promise<PluginInventoryRemoteResult<{
-    saved: true; clientIdConfigured: true; clientSecretConfigured: true
+    saved: true
+    clientIdConfigured: true
+    clientSecretConfigured: true
   }>>
   enableXMcp(request: { identity?: 'user' | 'phoenix'; username?: string }): Promise<PluginInventoryRemoteResult<{
-    api: { status: 'installed' | 'already-installed'; connector: { serverName: string; entryId: string; url: string } };
+    api: { status: 'installed' | 'already-installed'; connector: { serverName: string; entryId: string; url: string } }
     docs: { status: 'installed' | 'already-installed'; connector: { serverName: string; entryId: string; url: string } }
   }>>
   reconnectMcpConnector(request: { serverName: string }): Promise<PluginInventoryRemoteResult<{ accepted: boolean }>>
@@ -323,15 +374,13 @@ export function apply(ctx: ClientContext): void {
       const failure = failures.find(item => item.id === 'openai-codex')
       if (failure !== undefined) throw new Error(failure.message)
     }
-    return [...groups].sort((a, b) =>
-      Number(b.id === 'openai-codex') - Number(a.id === 'openai-codex'))
-      .flatMap(group => group.models.filter(model => model.id !== 'phoenix-auto')
-        .map(model => ({
-          provider: group.id,
-          model: model.id,
-          name: model.name,
-          reasoningEfforts: model.reasoning?.efforts.map(effort => effort.id) ?? [],
-        })))
+    if (codex === undefined) return []
+    return selectCurrentCodexModels(codex.models.map(model => ({
+      provider: 'openai-codex',
+      model: model.id,
+      name: model.name,
+      reasoningEfforts: model.reasoning?.efforts.map(effort => effort.id) ?? [],
+    })))
   }
   const injected = (): ModelsWithLocalSectionInjected => ({
     controller,
@@ -368,7 +417,8 @@ export function apply(ctx: ClientContext): void {
           && stringOrAbsent(job.summary) && stringOrAbsent(job.error))
         || (value.providerIssue !== undefined && (!assistantMailRecord(value.providerIssue)
           || typeof value.providerIssue.status !== 'number'
-          || ![value.providerIssue.code, value.providerIssue.reason, value.providerIssue.permission, value.providerIssue.fix].every(stringOrAbsent)))
+          || ![value.providerIssue.code, value.providerIssue.reason,
+            value.providerIssue.permission, value.providerIssue.fix].every(stringOrAbsent)))
         || (value.startup !== undefined && (!assistantMailRecord(value.startup)
           || typeof value.startup.supported !== 'boolean' || typeof value.startup.enabled !== 'boolean'))) {
         throw new Error('Invalid local mailbox response')

@@ -72,12 +72,14 @@ export function shouldPublishTeammateSpeech(message: string, alreadySpoke: boole
   const needsHelp = /[?]|bloquead[oa]|obst[aá]culo|necesito que|no puedo|error|failed|blocked|need your|approval/iu
   if (needsHelp.test(text)) return true
   const heading = /^(?:@?[\p{L}][\p{L}\p{N}_-]{1,30}[,:]\s*)?(?:ahora |luego |despu[eé]s |next |now )*/iu
+  // oxlint-disable-next-line @stylistic/max-len -- Keep the bilingual promise matcher auditable in one literal.
   const plan = /^(?:voy a|proceder[eé] a|har[eé]|buscar[eé]|comprobar[eé]|verificar[eé]|revisar[eé]|abrir[eé]|i'll|i will|i am going to|i'm going to)\b/iu
   if (plan.test(text.replace(heading, ''))) return false
   if (newReceipt) return true
   // A real peer dependency can change without a non-Team tool receipt.
   // Preserve consequential directed handoffs, never repetitive narration.
   const addressedPeer = /(?:^|\n)\s*@?[\p{L}][\p{L}\p{N}_-]{1,30}[,:]\s+/u
+  // oxlint-disable-next-line @stylistic/max-len -- Keep the bilingual dependency matcher auditable in one literal.
   const dependency = /\b(?:necesit[oa]|necesitas|espera|depende|integra|integrar|pasame|p[aá]same|entrego|comparto|ajusta|ajustar|usa|usar|recibe|recibir|requiere|requiero|handoff|depends|requires|need|share|integrate|adjust|use this)\b/iu
   return addressedPeer.test(text) && dependency.test(text)
 }
@@ -592,7 +594,10 @@ export class TeamChat {
             ? await this.ctx.sessionPersistence.inspect(target) : { meta: child.header, events: child.events }
           const already = messageAccepted(saved.events.slice(saved.meta.seedLength ?? 0), message =>
             message.source.kind === 'user' && textOf(message.content).startsWith(marker))
-          const modelSelection = teamWorkerSelection(lead)
+          // Preserve a live child's route; a cold child restores it from its
+          // persisted continuation state when no override is supplied.
+          const modelSelection = this.ctx.agents.get(target) === undefined
+            ? undefined : teamWorkerSelection(lead, this.ctx.agents.get(target))
           if (!already) await this.ctx.subagents.followup(lead, target, [{ type: 'text', text: `${marker}\nUser priority: answer this person at the next safe boundary; do not interrupt an in-flight action.\nThen continue your existing mission unless the user explicitly changes or cancels it. Use team_chat_answer for a conversational question; operational corrections still require execution evidence.\nUser request: ${JSON.stringify(request.text)}\nReply context:\n${text}` }],
             { source: { kind: 'user' }, delivery: 'next-safe-step', signal: this.signal,
               ...modelSelection === undefined ? {} : { modelSelection } })

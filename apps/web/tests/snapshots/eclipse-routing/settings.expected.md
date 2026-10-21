@@ -1,0 +1,46 @@
+- region "Fénix Eclipse · Orchestration":
+  - heading "Fénix Eclipse · Orchestration" [level=2]
+  - paragraph: Choose the current OpenAI Codex model and reasoning effort for Kira and her subagents. Automatic routing adjusts reasoning to the task.
+  - status: 2 OpenAI Codex models available
+  - button "Refresh models"
+  - text: Routing mode
+  - combobox "Routing mode":
+    - option "Automatic"
+    - option "Hybrid"
+    - option "Manual" [selected]
+  - text: Coordinator model
+  - combobox "Coordinator model":
+    - option "Automatic"
+    - option "gpt-6.1-sol" [selected]
+    - option "gpt-6-luna"
+  - text: Reasoning effort
+  - combobox "Reasoning effort":
+    - option "Provider default"
+    - option "low"
+    - option "medium" [selected]
+    - option "high"
+    - option "xhigh"
+    - option "max"
+    - option "ultra"
+  - text: Subagent model
+  - combobox "Subagent model":
+    - option "Automatic"
+    - option "gpt-6.1-sol"
+    - option "gpt-6-luna" [selected]
+  - text: Reasoning effort
+  - combobox "Reasoning effort":
+    - option "Provider default"
+    - option "low"
+    - option "medium"
+    - option "high"
+    - option "xhigh" [selected]
+    - option "max"
+  - text: Maximum active teammates (0–3)
+  - combobox "Maximum active teammates (0–3)":
+    - option "0"
+    - option "1"
+    - option "2" [selected]
+    - option "3"
+  - status: Eclipse settings saved.
+  - button "Save Eclipse"
+  - button "Restore Eclipse defaults"

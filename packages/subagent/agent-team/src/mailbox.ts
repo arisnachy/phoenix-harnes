@@ -282,7 +282,9 @@ export class TeamMailbox {
           return true
         }
       }
-      const modelSelection = teamWorkerSelection(root)
+      // A live child owns its own configured route. For a cold child omit the
+      // override so continuation can restore that persisted route.
+      const modelSelection = target === undefined ? undefined : teamWorkerSelection(root, target)
       await this.ctx.subagents.followup(root, message.targetId, content, {
         source, signal, ...modelSelection === undefined ? {} : { modelSelection },
       })

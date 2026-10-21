@@ -14,8 +14,8 @@
 .title { margin: 0; font-size: 16px; font-weight: 600; }
 .hint { margin: 0; font-size: 12px; line-height: 1.6; color: var(--dsw-alias-label-secondary); }
 .label { display: block; font-size: 12px; font-weight: 600; }
-.roles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; }
-.role { display: flex; min-width: 0; flex-direction: column; gap: 7px; }
+.roles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.role { display: flex; min-width: 0; flex-direction: column; gap: 7px; padding: 13px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 12px; background: var(--dsw-alias-bg-base); }
 .input { box-sizing: border-box; width: 100%; min-width: 0; padding: 8px 10px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 9px; background: var(--dsw-alias-bg-base); color: var(--dsw-alias-label-primary); }
 .input:disabled { opacity: 0.6; }
 .actions { display: flex; gap: 9px; align-items: center; flex-wrap: wrap; }
@@ -24,3 +24,6 @@
 .actions .primary { background: var(--dsw-alias-interactive-bg-hover-solid); font-weight: 600; }
 .saved { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px; padding: 6px; border-bottom: 1px solid var(--dsw-alias-border-l2); font-size: 12px; }
 .error { color: var(--dsw-alias-state-error-primary); font-size: 12px; }
+@media (max-width: 620px) {
+  .roles { grid-template-columns: 1fr; }
+}

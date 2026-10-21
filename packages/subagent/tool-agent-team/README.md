@@ -21,7 +21,7 @@ Scoped model-facing adapter for [`ctx.agentTeams`](../agent-team/README.md). It 
       judge: { provider: anthropic, model: claude-sonnet-4 }
 ```
 
-`freshProvider` and `forkProvider` select registered continuable-subagent transports. Under OpenAI Codex, `modelProfiles` supplies configured worker routes and `defaultModelProfile` selects the bounded execution route when `spawn_teammate.model_profile` is omitted. Outside OpenAI Codex, every teammate inherits the exact currently selected provider and model even when a profile is requested. Kira retains her selected model for supervision and final verification; a worker's model route does not change its visible name or persona.
+`freshProvider` and `forkProvider` select registered continuable-subagent transports. Under OpenAI Codex, `modelProfiles` supplies configured worker routes and `defaultModelProfile` selects the bounded execution route when `spawn_teammate.model_profile` is omitted. Outside OpenAI Codex, every teammate inherits the exact currently selected provider and model even when a profile is requested. Fénix Eclipse has two model roles: Kira's coordinator route covers planning, execution and rescue, while one configured subagent route covers every child identity. Kira retains her selected route for supervision and final verification; a worker's model route does not change its visible name or persona.
 
 The Team policy calls a JUDGE cognitively independent only when its reported `modelProvider` or `model` differs from the Lead. A fresh child on the same route is operationally independent but remains correlated and must be reported as such.
 
@@ -43,7 +43,7 @@ The plugin listens to Agent publication and installs its registrations through t
 
 #### What the model sees
 
-One stable policy section states the exact Team role/name/id, explicit-delegation requirement, shared-cwd behavior, filesystem stale-version recovery, Bash/formatter/codegen risk, task/write-scope coordination, quiet versus waking delivery, no-retry mailbox rule, and the Lead's duty to wait before answering. The ten Team schemas from `spawn_teammate` through `team_task_update` appear only in Team member scopes.
+A bounded policy defines Kira's coordinator and subagent routes, task-sensitive reasoning, explicit effort precedence, minimal delegation, worker reuse, evidence checks and strategy review. Team tool schemas appear only in a Team member scope.
 
 #### Token effect
 
@@ -72,7 +72,7 @@ The tool policy remains stable; only the delivered reply is appended after the e
 ## Known Limitations and Deferred Work
 
 - **Prompt policy is coordination, not confinement** — it cannot stop Bash or external processes from writing overlapping files.
-- **No autonomous team creation** — ordinary tasks do not trigger delegation unless the user explicitly requests it.
+- **No automatic fan-out** — the coordinator decides whether independent work warrants delegation and keeps the team bounded.
 - **No Web controls** — browser roster, model-profile editing, and task-board presentation are outside this runtime package.
 
 Kira responds to material teammate handoffs by name, evaluates the evidence and states the next decision before stopping or releasing work. The response belongs in the existing turn; finished workers are not awakened merely for acknowledgement.

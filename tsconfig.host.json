@@ -9,6 +9,7 @@
   },
   "include": [
     "apps/web/tests/creative-viewers.e2e.ts",
+    "apps/web/tests/eclipse-routing.e2e.ts",
     "apps/web/tests/connector-oauth.e2e.ts",
     "apps/web/tests/kira-team-chat.e2e.ts",
     "apps/web/tests/phoenix-assistant-email.snapshot.ts",

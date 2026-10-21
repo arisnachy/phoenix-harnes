@@ -21,7 +21,7 @@
       judge: { provider: anthropic, model: claude-sonnet-4 }
 ```
 
-`freshProvider` 与 `forkProvider` 选择已注册的 continuable-subagent transport。在 OpenAI Codex 下，`modelProfiles` 提供配置的 worker 路由；省略 `spawn_teammate.model_profile` 时，`defaultModelProfile` 选择受限的执行路由。在 OpenAI Codex 以外，即使请求 profile，每个 teammate 也继承当前选择的准确 provider 和 model。Kira 保留所选模型用于监督和最终验证；worker 的模型路由不会改变其可见名称或 persona。
+`freshProvider` 与 `forkProvider` 选择已注册的 continuable-subagent transport。在 OpenAI Codex 下，`modelProfiles` 提供配置的 worker 路由；省略 `spawn_teammate.model_profile` 时，`defaultModelProfile` 选择受限的执行路由。在 OpenAI Codex 以外，即使请求 profile，每个 teammate 也继承当前选择的准确 provider 和 model。Fénix Eclipse 只有两个模型角色：Kira 的协调器路由覆盖规划、执行和救援，一个配置的 subagent 路由覆盖所有子 agent 身份。Kira 保留所选路由用于监督和最终验证；worker 的模型路由不会改变其可见名称或 persona。
 
 Team 策略只有在 JUDGE 报告的 `modelProvider` 或 `model` 与 Lead 不同时，才称其具备认知独立性。同一路由上的 fresh child 仅具备运行独立性，仍有相关性，必须明确报告。
 
@@ -43,7 +43,7 @@ Team 策略只有在 JUDGE 报告的 `modelProvider` 或 `model` 与 Lead 不同
 
 #### 模型看到的内容
 
-一段稳定策略会说明确切 Team role／name／id、显式 delegation 要求、共享 cwd 行为、文件 stale-version 恢复、Bash／formatter／codegen 风险、task／write-scope 协调、quiet 与 waking 投递区别、mailbox 不重试规则，以及 Lead 必须在回答前等待。`spawn_teammate` 到 `team_task_update` 的 10 个 Team schema 只出现在 Team member scope。
+一段有界策略定义 Kira 的协调器与子代理路由、按任务调整推理、显式强度优先、最少必要委派、工作者复用、证据检查及策略审查。Team 工具 schema 仅出现在 Team 成员作用域。
 
 #### Token 影响
 
@@ -53,10 +53,24 @@ Team 策略只有在 JUDGE 报告的 `modelProvider` 或 `model` 与 Lead 不同
 
 Team 插件 generation、配置、member role／name 与 schema 不变时，前缀保持稳定。每个成员的身份行不同。工具结果与 peer 消息追加在可复用请求前缀之后。
 
+### 真实定向 Team 对话
+
+#### 模型看到的内容
+
+`team_chat_reply_to_peer` 为真实送达的结果、问题、阻塞或审查记录一条由模型撰写的 Kira 回复。有界且幂等的消息以 Kira 身份显示，并带有收件人姓名及原始消息引用，不增加子代理轮次。虚构、过期及未送达的交接会被拒绝。新工作必须使用 `send_message` 或 `followup_task`；内部报告无需伪造 shell 操作，外部操作声明仍需执行证据。
+
+#### Token 影响
+
+定向回复向 Team 对话追加一条有界消息，不消耗虚假的工具执行轮次，也不重新唤醒子代理。
+
+#### KV Cache 影响
+
+工具策略保持稳定；仅将送达的回复追加到现有对话前缀之后。
+
 ## 已知限制与暂缓事项
 
 - **提示词策略只负责协调，不负责 confinement**：它无法阻止 Bash 或外部进程写入重叠文件。
-- **不会自主创建 Team**：除非用户明确要求 delegation，普通任务不会触发组队。
+- **不会自动扩散组队**：协调器判断独立工作是否值得委派，并保持团队规模有界。
 - **没有 Web 控制功能**：浏览器 roster、model profile 编辑与任务板呈现不属于该 runtime 包。
 
 任务分配明确负责人、交付物、约束与验收证据；简短回复保留结果和阻塞原因，审查后的修改需要重新检查受影响的行为。

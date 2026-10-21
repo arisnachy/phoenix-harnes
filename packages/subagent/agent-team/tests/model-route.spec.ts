@@ -14,12 +14,12 @@ describe('Team lead worker route', () => {
     expect(teamWorkerSelection({ session, options: { provider: 'mock', model: 'mock' } } as Agent)).toEqual({ provider: 'mock', model: 'mock' })
   })
 
-  it('always routes Codex Sol planners and other Codex selections to Luna Max at delivery', () => {
+  it('routes Codex coordinators to the Luna worker without forcing Max', () => {
     const session = Session.create(SessionId('sol-planner'))
     const lead = { session, options: { provider: 'openai-codex', model: 'gpt-6.1-sol',
       reasoningEffort: ReasoningEffortId('low') } } as Agent
     expect(teamWorkerSelection(lead)).toEqual({
-      provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('max'),
+      provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('high'),
     })
     persistModelSelectionPreference(session, {
       provider: 'openai-codex', model: 'gpt-6.1-sol', reasoningEffort: ReasoningEffortId('high'),
@@ -29,7 +29,7 @@ describe('Team lead worker route', () => {
       provider: 'openai-codex', model: 'gpt-6-astra',
     }, 'explicit')
     expect(teamWorkerSelection(lead)).toEqual({
-      provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('max'),
+      provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('high'),
     })
   })
 
@@ -40,5 +40,20 @@ describe('Team lead worker route', () => {
     persistModelSelectionPreference(session, { provider: 'other', model: 'updated' }, 'explicit')
     const restored = Session.fromRestore(session.id, structuredClone(session.events), structuredClone(session.header))
     expect(teamWorkerSelection({ session: restored, options } as Agent)).toEqual({ provider: 'other', model: 'updated' })
+  })
+
+  it('preserves a configured child model and effort during follow-up delivery', () => {
+    const rootSession = Session.create(SessionId('configured-lead'))
+    const childSession = Session.create(SessionId('configured-child'))
+    const root = { session: rootSession, options: { provider: 'openai-codex', model: 'gpt-6.1-sol' } } as Agent
+    const child = { session: childSession, options: {
+      provider: 'openai-codex', model: 'gpt-child-custom', reasoningEffort: ReasoningEffortId('medium'),
+    } } as Agent
+    persistModelSelectionPreference(childSession, {
+      provider: 'openai-codex', model: 'gpt-child-custom', reasoningEffort: ReasoningEffortId('xhigh'),
+    }, 'explicit')
+    expect(teamWorkerSelection(root, child)).toEqual({
+      provider: 'openai-codex', model: 'gpt-child-custom', reasoningEffort: ReasoningEffortId('xhigh'),
+    })
   })
 })

@@ -6,7 +6,7 @@
 
 import { Context, Service } from '@phoenix-ai/cordis'
 import z from '@phoenix-ai/schemastery'
-import type { ModelSelection, EclipseRoutingSettings } from '@phoenix-ai/dsh-agent'
+import type { EclipseModelRoute, EclipseRoutingSettings, ModelSelection } from '@phoenix-ai/dsh-agent'
 import { ReasoningEffortId } from '@phoenix-ai/dsh-llm'
 import { installSettingsSection, settingsNamespace } from '@phoenix-ai/dsh-settings'
 
@@ -53,43 +53,87 @@ export interface AgentDefaultModelSettings {
   lastPickerSelection?: LastPickerSelection
 }
 
-const eclipseRouteSchema = z.object({
+const eclipseRouteSchema: z<EclipseModelRoute> = z.object({
   provider: z.string().required(),
   model: z.string().required(),
-  reasoningEffort: z.string(),
+  reasoningEffort: z.string().required(false),
+})
+const optionalEclipseRouteSchema = eclipseRouteSchema.default(undefined as unknown as EclipseModelRoute)
+
+const OPENAI_CODEX_PROVIDER = 'openai-codex'
+
+/**
+ * Validate the routes written by the two-seat Eclipse editor.
+ *
+ * `planner` remains a read path for settings written by the previous
+ * three-seat editor, but every route that can be consumed must still be
+ * served by the Codex provider. Reasoning efforts remain provider-owned
+ * strings: the connected model catalog supplies the supported values.
+ *
+ * @param profile - Resolved Eclipse settings section.
+ */
+function validateEclipseRoutingSettings(profile: EclipseRoutingSettings): void {
+  const routes: Array<[string, { provider: string } | undefined]> = [
+    ['planner', profile.planner],
+    ['coordinator', profile.coordinator],
+    ['subagent', profile.subagent],
+  ]
+  for (const [role, route] of routes) {
+    if (route !== undefined && route.provider !== OPENAI_CODEX_PROVIDER) {
+      throw new Error(`Eclipse ${role} route must use the ${OPENAI_CODEX_PROVIDER} provider`)
+    }
+  }
+  for (const [name, route] of Object.entries(profile.specialists ?? {})) {
+    if (route.provider !== OPENAI_CODEX_PROVIDER) {
+      throw new Error(`Eclipse specialist ${name} route must use the ${OPENAI_CODEX_PROVIDER} provider`)
+    }
+  }
+}
+
+/**
+ * Add the canonical coordinator route when an old profile only has planner.
+ * The planner field stays in the detached value until the editor explicitly
+ * replaces the section, which lets old documents be read without rewriting
+ * storage during startup.
+ *
+ * @param profile - Stored Eclipse settings.
+ * @returns A detached profile with the canonical coordinator route available.
+ */
+function normalizeEclipseProfile(profile: EclipseRoutingSettings): EclipseRoutingSettings {
+  const detached = structuredClone(profile)
+  return detached.coordinator === undefined && detached.planner !== undefined
+    ? { ...detached, coordinator: detached.planner }
+    : detached
+}
+
+const eclipseRoutingSettingsSchema: z<EclipseRoutingSettings> = z.object({
+  mode: z.union(['automatic', 'hybrid', 'manual']).required(false),
+  planner: optionalEclipseRouteSchema,
+  coordinator: optionalEclipseRouteSchema,
+  subagent: optionalEclipseRouteSchema,
+  specialists: z.dict(eclipseRouteSchema).default(undefined as unknown as Record<string, EclipseModelRoute>),
+  maxTeammates: z.number().step(1).min(0).max(3).required(false),
 })
 
 /** Independent route configuration for the synthetic Fénix Eclipse model. */
-export const ECLIPSE_ROUTING_SETTINGS_SCHEMA: z<EclipseRoutingSettings> = z.object({
-  mode: z.union(['automatic', 'hybrid', 'manual']),
-  planner: eclipseRouteSchema,
-  coordinator: eclipseRouteSchema,
-  subagent: eclipseRouteSchema,
-  specialists: z.dict(eclipseRouteSchema),
-  maxTeammates: z.number().step(1).min(0).max(3),
+export const ECLIPSE_ROUTING_SETTINGS_SCHEMA: z<EclipseRoutingSettings> = eclipseRoutingSettingsSchema
+
+const lastPickerSelectionSchema: z<LastPickerSelection> = z.object({
+  provider: z.string().required(),
+  model: z.string().required(),
+  reasoningEffort: z.string().required(false),
+  runtimeProvider: z.string().required(),
+  runtimeModel: z.string().required(),
+  runtimeReasoningEffort: z.string().required(false),
 })
 
 /** Schema of the default Agent model settings section. */
 export const AGENT_DEFAULT_MODEL_SETTINGS_SCHEMA: z<AgentDefaultModelSettings> = z.object({
   provider: z.string().required(),
   model: z.string().required(),
-  reasoningEffort: z.string(),
-  lastPickerSelection: z.object({
-    provider: z.string().required(),
-    model: z.string().required(),
-    reasoningEffort: z.string(),
-    runtimeProvider: z.string().required(),
-    runtimeModel: z.string().required(),
-    runtimeReasoningEffort: z.string(),
-  }),
-  eclipse: z.object({
-    mode: z.union(['automatic', 'hybrid', 'manual']).default('automatic'),
-    planner: eclipseRouteSchema,
-    coordinator: eclipseRouteSchema,
-    subagent: eclipseRouteSchema,
-    specialists: z.dict(eclipseRouteSchema),
-    maxTeammates: z.number().step(1).min(0).max(3),
-  }),
+  reasoningEffort: z.string().required(false),
+  lastPickerSelection: lastPickerSelectionSchema.default(undefined as unknown as LastPickerSelection),
+  eclipse: eclipseRoutingSettingsSchema.default(undefined as unknown as EclipseRoutingSettings),
 })
 
 /** Composition entry for the default model selection. */
@@ -141,6 +185,7 @@ export class AgentDefaultModelConfig extends Service {
     installSettingsSection(ctx, ECLIPSE_ROUTING_SETTINGS_NAMESPACE, ECLIPSE_ROUTING_SETTINGS_SCHEMA, {}, {
       setSource: (current) => { this.eclipseSource = current },
       onChange: () => {},
+      validate: validateEclipseRoutingSettings,
     })
   }
 
@@ -181,11 +226,11 @@ export class AgentDefaultModelConfig extends Service {
    */
   currentEclipseProfile(): EclipseRoutingSettings | undefined {
     const dedicated = this.eclipseSource()
-    if (Object.keys(dedicated).length !== 0) return structuredClone(dedicated)
+    if (Object.keys(dedicated).length !== 0) return normalizeEclipseProfile(dedicated)
     // Non-destructive compatibility with Eclipse settings saved before this
     // namespace existed. All new writes target eclipse-routing exclusively.
     const legacy = this.source().eclipse
-    return legacy === undefined ? undefined : structuredClone(legacy)
+    return legacy === undefined ? undefined : normalizeEclipseProfile(legacy)
   }
 
   /** Persist the accepted Web picker identity and native execution route atomically.

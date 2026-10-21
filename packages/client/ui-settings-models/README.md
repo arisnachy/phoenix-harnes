@@ -35,6 +35,10 @@ A pi-ai profile's `models` list is edited on the card: one row per model showing
 
 Authorization polling survives panel refreshes and uses the latest completion callback. Provider preparation notices are also displayed in the reserved tab.
 
+## Eclipse routing
+
+Fénix Eclipse exposes two model and reasoning selections: Kira's coordinator and her subagents. Its picker uses the connected Codex account catalog, keeping the newest GPT generation and family revision plus specialized account-visible models. Reasoning options come from each model's advertised capabilities. Saving clears former planner and specialist overrides; planner-only preferences migrate to coordination. Manual mode uses the provider default when effort is unset; hybrid mode adapts unset effort to the task. Rejected writes remain visible without claiming success.
+
 ## Model Experience
 
 None, as the section renders a browser configuration UI; nothing here reaches a model request.

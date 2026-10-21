@@ -94,28 +94,50 @@ describe('AgentDefaultModelConfig', () => {
     const bench = await boot()
     const profile = {
       mode: 'hybrid' as const,
-      planner: { provider: 'openai-codex', model: 'gpt-6.1-sol', reasoningEffort: 'high' },
       coordinator: { provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'max' },
+      subagent: { provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'high' },
     }
     await bench.settingsFiber.ctx.settings.replace(ECLIPSE_ROUTING_SETTINGS_NAMESPACE, profile)
     expect(bench.defaultModel.currentEclipseProfile()).toMatchObject(profile)
     expect(bench.defaultModel.currentSelection().model).toBe('deepseek-v4-flash')
+    expect(bench.settingsFiber.ctx.settings.describe().map(entry => entry.ns)).toEqual([
+      AGENT_DEFAULT_MODEL_SETTINGS_NAMESPACE,
+      ECLIPSE_ROUTING_SETTINGS_NAMESPACE,
+    ])
     await bench.defaultModel.saveSelection({ provider: 'other-provider', model: 'other-model' })
     expect(bench.defaultModel.currentEclipseProfile()).toMatchObject(profile)
+    await bench.ctx.fiber.dispose()
+  })
+
+  it('requires Codex routes for new canonical writes without restricting effort ids', async () => {
+    const bench = await boot()
+    await expect(bench.settingsFiber.ctx.settings.replace(ECLIPSE_ROUTING_SETTINGS_NAMESPACE, {
+      mode: 'manual',
+      coordinator: { provider: 'openrouter', model: 'some-model', reasoningEffort: 'provider-specific' },
+    })).rejects.toThrow(/openai-codex/)
+    await bench.settingsFiber.ctx.settings.replace(ECLIPSE_ROUTING_SETTINGS_NAMESPACE, {
+      mode: 'manual',
+      coordinator: { provider: 'openai-codex', model: 'gpt-current', reasoningEffort: 'provider-specific' },
+    })
+    expect(bench.defaultModel.currentEclipseProfile()).toMatchObject({
+      coordinator: { model: 'gpt-current', reasoningEffort: 'provider-specific' },
+    })
     await bench.ctx.fiber.dispose()
   })
 
   it('reads legacy Eclipse preferences until saved on the dedicated model', async () => {
     const bench = await boot()
     await bench.settingsFiber.ctx.settings.replace(AGENT_DEFAULT_MODEL_SETTINGS_NAMESPACE, {
-      eclipse: { mode: 'manual', planner: { provider: 'openai-codex', model: 'old-sol' } },
+      eclipse: { mode: 'manual', planner: { provider: 'openai-codex', model: 'old-coordinator' } },
     })
-    expect(bench.defaultModel.currentEclipseProfile()?.planner?.model).toBe('old-sol')
+    expect(bench.defaultModel.currentEclipseProfile()?.planner?.model).toBe('old-coordinator')
+    expect(bench.defaultModel.currentEclipseProfile()?.coordinator?.model).toBe('old-coordinator')
     await bench.settingsFiber.ctx.settings.replace(ECLIPSE_ROUTING_SETTINGS_NAMESPACE, {
       mode: 'automatic',
     })
     expect(bench.defaultModel.currentEclipseProfile()?.mode).toBe('automatic')
     expect(bench.defaultModel.currentEclipseProfile()?.planner).toBeUndefined()
+    expect(bench.defaultModel.currentEclipseProfile()?.coordinator).toBeUndefined()
     await bench.ctx.fiber.dispose()
   })
 

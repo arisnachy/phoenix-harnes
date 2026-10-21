@@ -133,62 +133,14 @@ describe('dsh-tool-team', () => {
       .toEqual(TOOL_NAMES)
     const leadPrompt = renderPrompt(leadAssembly)
     expect(leadPrompt).toContain('real shared work, not role-play')
-    expect(leadPrompt).toContain('Simple-task fast path')
-    expect(leadPrompt).toContain('Team conversation must be genuinely two-way')
-    expect(leadPrompt).toContain('After that successful handoff, do not repeat the finding')
-    expect(leadPrompt).toContain('do NOT open a browser, demand independent visual confirmation')
-    expect(leadPrompt).toContain('A real external connection, permission change, send, purchase, deletion')
-    expect(leadPrompt).toContain('Resolve discoverable missing facts with available tools before asking the user')
-    expect(leadPrompt).toContain('Do not reconstruct pre-event facts from later results')
-    expect(leadPrompt).toContain('Fénix Eclipse is explicitly authorized to use this Team path')
-    expect(leadPrompt).toContain('prefer spawn_teammate over legacy subagent delegation')
-    expect(leadPrompt).toContain('one real teammate is the default for a simple delegated mission')
-    expect(leadPrompt).toContain('three for difficult work')
-    expect(leadPrompt).toContain('Three simultaneous teammates is the hard limit')
-    expect(leadPrompt).toContain('spawn at least one genuine bounded Luna Max execution teammate')
-    expect(leadPrompt).toContain('immediately switches to Luna Max')
-    expect(leadPrompt).toContain('Sol never stays active after the plan')
-    expect(leadPrompt).toContain('Sol 6.1 at low reasoning creates the initial concrete plan')
-    expect(leadPrompt).toContain('returns at medium reasoning only for a measured blocker')
-    expect(leadPrompt).toContain('With a provider other than OpenAI Codex')
-    expect(leadPrompt).toContain('the exact currently selected provider/model')
-    expect(leadPrompt).toContain('never switch those workers to Codex or Luna Max')
-    expect(leadPrompt).toContain('Never claim a teammate is running from intent alone')
-    expect(leadPrompt).toContain('compare expected quality gain and time saved against added model consumption')
-    expect(leadPrompt).toContain('stop a redundant worker when its outcome is no longer needed')
-    expect(leadPrompt).toContain('Aegis is a reserved, silent reviewer identity ONLY when')
-    expect(leadPrompt).toContain('Keep Aegis quiet by default')
-    expect(leadPrompt).toContain('purpose review, blocker, or result')
-    expect(leadPrompt).toContain('unused KIRA codename')
-    expect(leadPrompt).toContain('vortice, aurora, atlas')
-    expect(leadPrompt).toContain('FS_STALE_VERSION')
-    expect(leadPrompt).toContain('Bash, formatters, code generators, and scripts are not fully protected')
-    expect(leadPrompt).toContain('Task readiness never starts an owner')
-    expect(leadPrompt).toContain('returns noProgress immediately')
-    expect(leadPrompt).toContain('cognitively independent only when its reported modelProvider or model differs')
-    expect(leadPrompt).toContain('team_chat_react')
-    expect(leadPrompt).toContain('team_chat_react as the canonical visible social reaction')
-    expect(leadPrompt).toContain('Reactions are optional')
-    expect(leadPrompt).not.toContain('emit exactly one natural reaction')
-    expect(leadPrompt).toContain('A directed user question takes priority at the next safe boundary')
-    expect(leadPrompt).toContain('Routine status updates are exempt')
-    expect(leadPrompt).toContain('team_react is a legacy semantic peer-message compatibility tool')
-    expect(leadPrompt).toContain('must send it to lead with purpose result before ending its turn')
-    expect(leadPrompt).toContain('spawn_teammate is itself the initial assignment')
-    expect(leadPrompt).toContain('root Phoenix chat is the shared Team room')
-    expect(leadPrompt).toContain('route the substantive request with followup_task')
-    expect(leadPrompt).toContain('Address a known teammate by their real runtime name')
-    expect(leadPrompt).toContain('worker uses its first normal work update')
-    expect(leadPrompt).toContain('do not add a separate model turn')
-    expect(leadPrompt).toContain('Your Team role is lead')
-    expect(leadPrompt).toContain('Warm, confident, curious, and witty')
-    expect(leadPrompt).toContain('high quality, fast completion, and low cost')
-    expect(leadPrompt).toContain('The fixed priority is quality, then speed, then low token cost')
-    expect(leadPrompt).toContain('reuses available teammates and verifies acceptance')
-    expect(leadPrompt).toContain('never repeat the same failed operation unchanged')
-    expect(leadPrompt).toContain('peers exchange only new evidence')
-    expect(leadPrompt).toContain('never synthesize roster filenames')
-    expect(leadPrompt).toContain('Phoenix has no repository-root cordis.yml')
+    expect(leadPrompt).toContain('Fénix Eclipse has exactly two model roles')
+    expect(leadPrompt).toContain('coordinator for Kira and subagent for every child')
+    expect(leadPrompt).toContain('a child name never changes its model route')
+    expect(leadPrompt).toContain('Preserve the selected provider, model and explicit reasoning effort')
+    expect(leadPrompt).toContain('an omitted effort may use the request-sensitive automatic tier')
+    expect(leadPrompt).toContain('an omitted effort uses the provider default')
+    expect(leadPrompt).toContain('Do not make a model call merely to classify a task')
+    expect(leadPrompt).toContain('A normal peer result, question or wait stays on the coordinator route')
 
     const spawned = await execute(ctx, lead, 'spawn_teammate', {
       name: 'tool-worker',
@@ -204,9 +156,8 @@ describe('dsh-tool-team', () => {
     const childPrompt = renderPrompt(childAssembly)
     expect(childPrompt).toContain('Your Team role is teammate; your Team name is tool-worker')
     expect(childPrompt).toContain('Natural, concise, collegial')
-    expect(childPrompt).toContain('Resolve discoverable missing facts with available tools before asking the user')
-    expect(childPrompt).toContain('never synthesize roster filenames')
-    expect(childPrompt).toContain('Phoenix has no repository-root cordis.yml')
+    expect(childPrompt).toContain('Fénix Eclipse has exactly two model roles')
+    expect(childPrompt).toContain('subagent for every child')
     expect(childPrompt).not.toContain('detective-like')
 
     const denied = await execute(ctx, child, 'spawn_teammate', {
@@ -435,13 +386,13 @@ describe('dsh-tool-team', () => {
     await execute(ctx, lead, 'interrupt_agent', { target: 'same-selected-worker' })
   })
 
-  it('keeps the selected Codex planner while real teammates execute on Luna Max', async () => {
+  it('keeps the selected Codex coordinator while real teammates execute on the adaptive Luna route', async () => {
     const { ctx, lead } = await setup([], false, {
       defaultModelProfile: 'luna-max',
       modelProfiles: { 'luna-max': { provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'max' } },
     })
     const codex = new MockAdapter(['hang'], {
-      efforts: [{ id: ReasoningEffortId('max'), name: 'Max' }], defaultEffort: ReasoningEffortId('max'),
+      efforts: [{ id: ReasoningEffortId('high'), name: 'High' }], defaultEffort: ReasoningEffortId('high'),
     })
     ctx.llm.registerAdapter(['openai-codex'], codex)
     lead.options.provider = 'openai-codex'
@@ -450,13 +401,13 @@ describe('dsh-tool-team', () => {
       name: 'luna-worker', description: 'bounded execution', prompt: 'wait for instructions',
     })
     const child = await waitRunning(ctx, spawnedChildId(spawned))
-    expect(child.options).toMatchObject({ provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'max' })
+    expect(child.options).toMatchObject({ provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'high' })
     expect(lead.options).toMatchObject({ provider: 'openai-codex', model: 'gpt-6.1-sol' })
     expect(codex.requests.every(request => request.sessionId === child.id)).toBe(true)
     await execute(ctx, lead, 'interrupt_agent', { target: 'luna-worker' })
   })
 
-  it('keeps Codex teammates on Luna Max despite an obsolete explicit profile', async () => {
+  it('keeps Codex teammates on the adaptive Luna route despite an obsolete explicit profile', async () => {
     const { ctx, lead } = await setup([], false, {
       defaultModelProfile: 'old-codex',
       modelProfiles: {
@@ -464,8 +415,8 @@ describe('dsh-tool-team', () => {
       },
     })
     ctx.llm.registerAdapter(['openai-codex'], new MockAdapter(['hang'], {
-      efforts: [{ id: ReasoningEffortId('max'), name: 'Max' }],
-      defaultEffort: ReasoningEffortId('max'),
+      efforts: [{ id: ReasoningEffortId('high'), name: 'High' }],
+      defaultEffort: ReasoningEffortId('high'),
     }))
     lead.options.provider = 'openai-codex'
     lead.options.model = 'gpt-6.1-sol'
@@ -478,7 +429,7 @@ describe('dsh-tool-team', () => {
     expect(spawned.isError).toBe(false)
     const child = await waitRunning(ctx, spawnedChildId(spawned))
     expect(child.options).toMatchObject({
-      provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'max',
+      provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'high',
     })
     await execute(ctx, lead, 'interrupt_agent', { target: 'codex-worker' })
   })

@@ -70,7 +70,7 @@ describe('continuation admission from replayed routing evidence', () => {
     'Confirma qué herramientas funcionan en Phoenix',
     'Consulta el estado de las funciones de Kira',
     'Check whether Phoenix Game Studio is available',
-  ])('hands a real Sol plan to Luna Max coordination exactly once: %s', async (request) => {
+  ])('hands a real coordinator plan to the worker route exactly once: %s', async (request) => {
     const r = await router()
     try {
       r.events.push(user(request), answer(1,
@@ -84,7 +84,7 @@ describe('continuation admission from replayed routing evidence', () => {
       await r.stop()
       expect(r.messages).toHaveLength(1)
       expect(JSON.stringify(r.messages[0])).toContain('visible **Plan:**')
-      expect(await r.request(2)).toMatchObject({ model: 'gpt-6-luna', reasoningEffort: 'max' })
+      expect(await r.request(2)).toMatchObject({ model: 'gpt-6-luna', reasoningEffort: 'high' })
 
       r.events.push(
         { type: 'tool/call', data: { step: 2, name: 'read', arguments: '{"path":"status"}' } },
@@ -104,7 +104,7 @@ describe('continuation admission from replayed routing evidence', () => {
       await r.stop()
       expect(r.messages).toHaveLength(1)
       expect(JSON.stringify(r.messages[0])).toContain('Execute the next concrete action')
-      expect(await r.request(2)).toMatchObject({ model: 'gpt-6-luna', reasoningEffort: 'max' })
+      expect(await r.request(2)).toMatchObject({ model: 'gpt-6-luna', reasoningEffort: 'high' })
     } finally { await r.close() }
   })
 
@@ -170,9 +170,9 @@ describe('selected routes and assembly ownership', () => {
     try { r.events.push(user('hola')); expect(await r.request()).toMatchObject({ model: model.startsWith('gpt-5.6') ? 'gpt-5.6-luna' : 'gpt-6-luna', reasoningEffort: 'low' }) } finally { await r.close() }
   })
 
-  it('pins substantive selected GPT-6 Luna to Max and keeps other providers on their conversational selection', async () => {
+  it('preserves an explicit selected GPT-6 Luna effort and keeps other providers exact', async () => {
     const luna = await router('gpt-6-luna')
-    try { luna.events.push(user('Fix router.ts')); expect(await luna.request()).toMatchObject({ model: 'gpt-6-luna', reasoningEffort: 'max' }) } finally { await luna.close() }
+    try { luna.events.push(user('Fix router.ts')); expect(await luna.request()).toMatchObject({ model: 'gpt-6-luna' }) } finally { await luna.close() }
     const other = await router()
     try {
       other.selection.current = { provider: 'other', model: 'custom' }

@@ -15,7 +15,7 @@
 - id: agent-team
   name: '@phoenix-ai/dsh-agent-team'
   config:
-    maxMembers: 8
+    maxMembers: 3
     maxTasks: 256
     maxPendingMessagesPerMember: 64
     maxMessageBytes: 65536
@@ -34,7 +34,7 @@
 
 fresh child 不带 parent 历史 seed。fork child 只捕获一次 Lead 的已完成 turn 前缀，不包含正在执行 delegation 的 turn。继承的 Team 记录带有旧 Root 的 `TeamId`，普通 fork 成为独立运行时 Root 后会忽略这些记录。roster 之外、由 provider 管理的 subagent 不会被误认为嵌套 Team Lead。
 
-roster 同时报告持久 provisioning／failed phase 与实时 `running`／`idle` 状态。active 但不驻留的 teammate 显示为 `inactive`；后续 wakeup 投递会经 continuation owner 冷恢复它。创建请求可携带 provider-neutral `agentOptions`；continuation manager 会校验并持久化该路由，roster 则把 LLM 的 `modelProvider`／`model` 与 subagent transport provider 分开报告。 唤醒邮箱投递和定向用户回复会根据 lead 最新的持久化选择刷新现有队友，缺少该选择时使用其配置路由。Codex 选择使用 Luna 执行交接；其他提供方保留所选提供方和模型。进行中的操作会先完成，然后安全边界上的用户回复使用刷新的路由。
+roster 同时报告持久 provisioning／failed phase 与实时 `running`／`idle` 状态。active 但不驻留的 teammate 显示为 `inactive`；后续唤醒投递通过 continuation owner 冷恢复它。创建请求可携带与提供方无关的 `agentOptions`；continuation manager 校验并持久化路由，roster 将 LLM 的 `modelProvider` 和 `model` 与子代理传输提供方分别报告。唤醒邮箱投递及定向用户回复保留驻留子代理自身的持久选择或创建时路由。冷恢复的子代理使用其持久化选项，不接收负责人的路由。Fénix Eclipse 为 Kira 配置一个协调器路由，并在创建子代理时配置一个子代理路由。正在执行的操作先完成，随后在安全边界投递用户回复。
 
 ## 持久 mailbox
 
@@ -73,6 +73,20 @@ roster 同时报告持久 provisioning／failed phase 与实时 `running`／`idl
 #### KV Cache 影响
 
 Peer 消息追加在 target 可复用历史前缀之后。冷恢复会先复用持久对话，再追加尚未投递的消息。
+
+### 对话式 Team 结果证据
+
+#### 模型看到的内容
+
+直接回答 Kira 的简单对话，即使任务以普通西班牙语要求“prueba de comunicación”及“envía tu respuesta a lead”而未写出工具名，也不是通过工具执行的外部操作。它可以使用 `send_message purpose=result`，无需伪造命令。Gmail、文件系统、PowerShell、浏览器等真实外部效果仍须有匹配的工具回执。普通等待不会触发协调器策略升级。
+
+#### Token 影响
+
+真实消息向接收代理增加一条同伴结果；无需伪造 shell 调用、增加等待轮次或进行不必要的策略升级。
+
+#### KV Cache 影响
+
+结果交接追加到现有对话，不改写系统提示词前缀。
 
 ## 已知限制与暂缓事项
 

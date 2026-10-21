@@ -36,7 +36,7 @@ Every ordinary runtime root is the implicit Lead of a Team whose `TeamId` equals
 
 Fresh children have no parent-history seed. Fork children capture the Lead's completed-turn prefix once; the in-flight delegation turn is excluded. Inherited Team records carry the old root's `TeamId` and are ignored when an ordinary fork becomes an independent runtime root. Provider-owned subagents outside the roster do not become nested Team Leads.
 
-The roster reports durable provisioning/failed phases and live `running`/`idle` status. An active but non-resident teammate is `inactive`; later waking delivery cold-resumes it through the continuation owner. Creation may carry provider-neutral `agentOptions`; the continuation manager validates and persists that route, while the roster reports its LLM `modelProvider` and `model` separately from the subagent transport provider. Waking mailbox deliveries and directed user replies refresh an existing teammate from the lead's latest durable selection, falling back to its configured route. Codex selections use the Luna execution handoff; other providers retain the selected provider and model. An in-flight action finishes before a safe-boundary user reply uses the refreshed route.
+The roster reports durable provisioning/failed phases and live `running`/`idle` status. An active but non-resident teammate is `inactive`; later waking delivery cold-resumes it through the continuation owner. Creation may carry provider-neutral `agentOptions`; the continuation manager validates and persists that route, while the roster reports its LLM `modelProvider` and `model` separately from the subagent transport provider. Waking mailbox deliveries and directed user replies preserve a live child's own durable selection or creation-time route. Cold children resume their persisted options instead of receiving the lead's route. Fénix Eclipse configures one coordinator route for Kira and one subagent route at child creation. An in-flight action finishes before a user reply is delivered at a safe boundary.
 
 ## Durable mailbox
 
@@ -82,7 +82,7 @@ Peer messages append after the target's reusable history prefix. Cold resume reu
 
 #### What the model sees
 
-A simple direct response to Kira, even when its assignment says “prueba de comunicación” and “envía tu respuesta a lead” in ordinary Spanish without the literal tool name, is not a tool-executed external operation. It can use `send_message purpose=result` without running a fake command. External Gmail, filesystem, PowerShell, browser and other effects still require matching genuine tool receipts. Routine waiting does not justify a Sol strategic escalation.
+A simple direct response to Kira, even when its assignment says “prueba de comunicación” and “envía tu respuesta a lead” in ordinary Spanish without the literal tool name, is not a tool-executed external operation. It can use `send_message purpose=result` without running a fake command. External Gmail, filesystem, PowerShell, browser and other effects still require matching genuine tool receipts. Routine waiting does not justify a coordinator strategy escalation.
 
 #### Token effect
 
