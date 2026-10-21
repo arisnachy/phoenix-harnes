@@ -408,6 +408,8 @@ const AUTO_VISIBLE_PLAN_HANDOFF =
 
 const FAST_SOCIAL_ATOM = String.raw`(?:hola|hello|hi|hey|buenas|buenos\s+d[ií]as|buenas\s+tardes|buenas\s+noches|qu[eé]\s+tal|c[oó]mo\s+est[aá]s|c[oó]mo\s+te\s+va|c[oó]mo\s+va\s+todo|qu[eé]\s+cuentas|qu[eé]\s+se\s+cuenta|how\s+are\s+you|how(?:'|’)s\s+it\s+going|what(?:'|’)s\s+up|gracias|thanks|thank\s+you)`
 const FAST_SOCIAL_SEQUENCE = new RegExp(`^${FAST_SOCIAL_ATOM}(?:\\s+(?:y\\s+)?${FAST_SOCIAL_ATOM})*$`, 'iu')
+/** Treat the default Lead's name as a vocative, not substantive task text. */
+const FAST_KIRA_VOCATIVE = /^(?:kira|f[eé]nix)\s+|\s+(?:kira|f[eé]nix)$/giu
 const FAST_SOCIAL_OPEN = /^(?:cu[eé]ntame\s+algo(?:\s+bueno)?|dime\s+algo\s+bueno|sorpr[eé]ndeme|tell\s+me\s+something(?:\s+good)?)$/iu
 // oxlint-disable-next-line @stylistic/max-len -- Keep the deterministic bilingual matcher auditable as one regex literal.
 const FAST_CONTEXTUAL_OPEN = /^(?:qu[eé]\s+quieres\s+que\s+hagamos|qu[eé]\s+te\s+gustar[ií]a\s+que\s+hagamos|de\s+qu[eé]\s+hablamos|what\s+do\s+you\s+want\s+to\s+do|what\s+should\s+we\s+talk\s+about)$/iu
@@ -456,7 +458,9 @@ export function isConversationalFastPathText(text: string): boolean {
   // history, tool schemas, and the user's selected reasoning route.
   if (CONTEXTUAL_CONTINUATION.test(candidate)) return false
   const socialCandidate = normalizedFastSocialText(candidate)
+  const addressedGreeting = socialCandidate.replace(FAST_KIRA_VOCATIVE, '').trim()
   if (FAST_SOCIAL_SEQUENCE.test(socialCandidate)
+    || (addressedGreeting !== socialCandidate && FAST_SOCIAL_SEQUENCE.test(addressedGreeting))
     || FAST_SOCIAL_OPEN.test(socialCandidate)
     || FAST_SOCIAL_REPLY.test(candidate)
     || FAST_RUNTIME_META.test(candidate)) return true
@@ -939,10 +943,11 @@ function phoenixAutoRoute(
       }
     }
     if (isConversationalFastPathText(directText) || isContextualConversationFastPathText(directText)) {
+      // Eclipse's conversational path uses Luna Max directly; no Sol plan.
       return {
         provider: 'openai-codex',
         model: PHOENIX_CODEX_AUTO_WORKER_MODEL,
-        reasoningEffort: ReasoningEffortId('low'),
+        reasoningEffort: ReasoningEffortId('max'),
       }
     }
     if (isStandaloneVisualPreviewRequest(directText)) {
@@ -1189,7 +1194,12 @@ export function installModelSelection(
         // built-in Sol/Luna pair remains only as the automatic fallback when
         // no coordinator override is saved.
         const eclipseProfile = isPhoenixCodexAutoSelection(selected) ? configuredEclipse(agentCtx) : undefined
-        const routed = resolveEclipseRoleRoute(
+        // A simple social turn must not inherit the coordinator's Sol model.
+        // Keep explicit non-Phoenix-Auto selections untouched above.
+        const social = _payload.step === 1
+          && phoenixAutoTeamSignalForTurn(_payload.agent, _payload.turn) === undefined
+          && (isConversationalFastPathText(directText) || isContextualConversationFastPathText(directText))
+        const routed = social ? automatic : resolveEclipseRoleRoute(
           eclipseProfile,
           'coordinator',
           automatic,
