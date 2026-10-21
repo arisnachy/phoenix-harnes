@@ -132,7 +132,7 @@ describe('Eclipse model settings', () => {
       coordinator: { provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'max' },
       subagent: { provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'max' },
     })
-    const mutate = vi.fn(async () => ({ result: { ok: true as const, value: {} as never } }))
+    const mutate = vi.fn(async (_mutation: unknown) => ({ result: { ok: true as const, value: {} as never } }))
     render(<EclipseRoutingPanel controller={controller as never} api={{ settings: { mutate } } as never}
       loadCatalog={async () => catalog} t={t} />)
     expect(await screen.findByLabelText(en.eclipseRole_planner)).toHaveProperty('value',
