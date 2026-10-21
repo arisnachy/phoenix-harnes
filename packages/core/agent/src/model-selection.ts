@@ -863,6 +863,7 @@ interface PhoenixAutoRouterState {
   turn: number
   lastRescueStep: number
   lastRescueEvidenceVersion: number
+  lastRescueEvidenceSignature: string | undefined
   continuationCount: number
   lastContinuationStep: number
   forcePlannerNext: boolean
@@ -874,6 +875,7 @@ function resetPhoenixAutoTurnState(state: PhoenixAutoRouterState, turn: number):
   state.turn = turn
   state.lastRescueStep = 0
   state.lastRescueEvidenceVersion = 0
+  state.lastRescueEvidenceSignature = undefined
   state.continuationCount = 0
   state.lastContinuationStep = 0
   state.forcePlannerNext = false
@@ -889,7 +891,30 @@ function phoenixAutoEvidenceVersion(
   return turnEvents(agent, turn).filter(event => event.type === 'tool/result' || event.type === 'llm/retry').length
 }
 
-/** Unlimited strategic reviews require a new tool result, retry or Team blocker. */
+/** Compare substantive tool outcomes, not volatile call identifiers, before another review. */
+function phoenixAutoEvidenceSignature(
+  agent: { readonly session: { readonly events: readonly PhoenixAutoEvent[] } },
+  turn: number,
+): string | undefined {
+  const latest = turnEvents(agent, turn).findLast(event => event.type === 'tool/result' || event.type === 'llm/retry')
+  if (latest === undefined) return undefined
+  if (latest.type === 'llm/retry') {
+    const data = latest.data as { readonly error?: { readonly code?: string; readonly message?: string } }
+    return `retry:${data.error?.code ?? ''}:${stableFingerprint(data.error?.message ?? '')}`
+  }
+  const result = latest.data as { readonly error?: { readonly code?: string; readonly message?: string }
+    readonly message?: { readonly content?: readonly {
+      readonly text?: string
+      readonly content?: readonly { readonly text?: string }[]
+    }[] } }
+  const text = result.message?.content?.flatMap(block => [
+    block.text ?? '', ...(block.content?.map(child => child.text ?? '') ?? []),
+  ]).filter(Boolean).join(' ') ?? ''
+  return text.length === 0 && result.error === undefined ? undefined
+    : `tool:${result.error?.code ?? ''}:${stableFingerprint(text || result.error?.message || '')}`
+}
+
+/** A strategy review needs new execution evidence or a different Team blocker. */
 function phoenixAutoHasFreshStrategyEvidence(
   agent: { readonly session: { readonly events: readonly PhoenixAutoEvent[] } },
   turn: number,
@@ -897,8 +922,10 @@ function phoenixAutoHasFreshStrategyEvidence(
 ): boolean {
   const signal = phoenixAutoTeamSignalForTurn(agent, turn)
   if (signal?.purpose === 'blocker' && signal.messageId !== state.lastTeamEscalationMessageId) return true
-  return state.lastRescueStep === 0
-    || phoenixAutoEvidenceVersion(agent, turn) > state.lastRescueEvidenceVersion
+  if (state.lastRescueStep === 0) return true
+  if (phoenixAutoEvidenceVersion(agent, turn) <= state.lastRescueEvidenceVersion) return false
+  const signature = phoenixAutoEvidenceSignature(agent, turn)
+  return signature === undefined || signature !== state.lastRescueEvidenceSignature
 }
 
 function recordPhoenixAutoStrategyReview(
@@ -909,8 +936,23 @@ function recordPhoenixAutoStrategyReview(
 ): void {
   state.lastRescueStep = step
   state.lastRescueEvidenceVersion = phoenixAutoEvidenceVersion(agent, turn)
+  state.lastRescueEvidenceSignature = phoenixAutoEvidenceSignature(agent, turn)
   const signal = phoenixAutoTeamSignalForTurn(agent, turn)
   if (signal?.purpose === 'blocker') state.lastTeamEscalationMessageId = signal.messageId
+}
+
+/** Higher quality mode proactively reviews a first complex-task tool failure. */
+function phoenixAutoNeedsStallStrategy(
+  agent: { readonly session: { readonly events: readonly PhoenixAutoEvent[] } },
+  turn: number,
+  directText: string,
+  sensitivity: EclipseRoutingSettings['escalationSensitivity'],
+): boolean {
+  if (sensitivity === 'economy') return false
+  if (isPhoenixCodexAutoStalled(agent, turn)) return true
+  if (sensitivity !== 'quality' || !AUTO_COMPLEX_TASK.test(directText)) return false
+  const latestResult = turnEvents(agent, turn).findLast(event => event.type === 'tool/result')
+  return latestResult !== undefined && failedToolFingerprint(latestResult) !== undefined
 }
 
 function directCodexPlannerRescue(
@@ -1009,8 +1051,7 @@ function phoenixAutoRoute(
     }
   }
 
-  const repeatedStall = isPhoenixCodexAutoStalled(agent, turn)
-  const canRescue = sensitivity !== 'economy' && repeatedStall
+  const canRescue = phoenixAutoNeedsStallStrategy(agent, turn, directText, sensitivity)
     && phoenixAutoHasFreshStrategyEvidence(agent, turn, state)
   if (canRescue) {
     recordPhoenixAutoStrategyReview(agent, turn, step, state)
@@ -1071,6 +1112,7 @@ export function installModelSelection(
     turn: 0,
     lastRescueStep: 0,
     lastRescueEvidenceVersion: 0,
+    lastRescueEvidenceSignature: undefined,
     continuationCount: 0,
     lastContinuationStep: 0,
     forcePlannerNext: false,
@@ -1140,8 +1182,8 @@ export function installModelSelection(
     const needsTeamRescue = teamSignal?.purpose === 'blocker'
       && teamSignal.messageId !== phoenixAutoState.lastTeamEscalationMessageId
     const needsStallRescue = scopedAgent !== undefined && currentTurnNumber !== undefined
-      && isPhoenixCodexAutoStalled(scopedAgent, currentTurnNumber)
-      && configuredEclipse(agentCtx)?.escalationSensitivity !== 'economy'
+      && phoenixAutoNeedsStallStrategy(scopedAgent, currentTurnNumber, currentRequest,
+        configuredEclipse(agentCtx)?.escalationSensitivity)
     const strategyRescueStep = autoStep !== undefined && scopedAgent !== undefined && currentTurnNumber !== undefined
       && phoenixAutoHasFreshStrategyEvidence(scopedAgent, currentTurnNumber, phoenixAutoState)
       && (needsTeamRescue || (autoStep > 1 && (phoenixAutoState.forcePlannerNext || needsStallRescue)))
