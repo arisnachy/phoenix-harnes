@@ -4,6 +4,8 @@
 
 将 PHOENIX 现有 tools 与 skills 的 metadata 投影到 HARDNESS Tool Atlas。
 
+漫画发布器与原生地图发布器一样，在 Code Mode 子调用中保留静态阅读器的制品元数据。因此，持久化的嵌套结果可以在会话重新加载后再次打开漫画查看器；程序返回值无需包含 HTML。
+
 Capability index 不会执行 tools、加载 skill 正文或授予权限；每个源 registry 仍保留其 authority。
 
 适配器将 host 负责的索引与面向模型的工具分开。Host composition 使用 `modelTools: false`，只索引 capability 并安装一次共享的 mission runtime。完整 Agent preset 使用 `modelTools: true`，在自己的 scope 中提供 `hardness_run` 与 `connector_list`，不会重复注册共享的 HARDNESS registry。因此 minimal preset 可以保持有意精简的工具目录。

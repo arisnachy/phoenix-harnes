@@ -116,6 +116,42 @@ async function runCode(
 }
 
 describe('mode-aware wire contribution', () => {
+  it.each(['native', 'code'] as const)('keeps project and publication tools for illustrated deliverables in %s', async (mode) => {
+    const { ctx, systemPrompt } = await setup({ mode })
+    for (const name of ['image_generation', 'read', 'pwsh', 'phoenix_comic', 'phoenix_scene_map', 'phoenix_geo_map']) registerEcho(ctx, name)
+    const { agent } = await mintAgentScope(ctx, 'illustrated-deliverables-' + mode)
+    for (const text of [
+      'Continúa el cómic interrumpido. Recupera el proyecto, conserva las ilustraciones aprobadas y genera únicamente las faltantes. Entrega el PDF y el cómic en el chat.',
+      'Genera un mapa interactivo de la isla con ilustraciones y publícalo en el chat.',
+      'Create a comic with generated images and publish the finished PDF.',
+    ]) {
+      emitAgentEvent(ctx, agent, 'agent/inbox/claimed', {
+        message: createUserMessage({ content: [{ type: 'text', text: 'Generate an image.' }], source: { kind: 'user' } }), turn: 1,
+      })
+      emitAgentEvent(ctx, agent, 'agent/inbox/claimed', {
+        message: createUserMessage({ content: [{ type: 'text', text }], source: { kind: 'user' } }), turn: 1,
+      })
+      const assembled = await systemPrompt.assemble({ scope: agent, agent })
+      const catalog = mode === 'code'
+        ? assembled.sections.find(section => section.name === 'tools:sdk')?.text ?? ''
+        : assembled.tools.map(tool => tool.name).join(' ')
+      for (const name of ['image_generation', 'read', 'pwsh', 'phoenix_comic', 'phoenix_scene_map', 'phoenix_geo_map']) expect(catalog).toContain(name)
+    }
+  })
+
+  it('restores publication tools after a successful native image attempt', async () => {
+    const { ctx, systemPrompt } = await setup({ mode: 'native', runtime: false })
+    registerEcho(ctx, 'image_generation')
+    registerEcho(ctx, 'phoenix_comic')
+    const { agent } = await mintAgentScope(ctx, 'image-success-publish')
+    emitAgentEvent(ctx, agent, 'agent/inbox/claimed', {
+      message: createUserMessage({ content: [{ type: 'text', text: 'Generate an illustration.' }], source: { kind: 'user' } }), turn: 1,
+    })
+    await ctx.tools.execute({ signal: testToolSignal, callId: CallId('successful-image'), name: 'image_generation', arguments: { value: 'art' }, agent })
+    const assembled = await systemPrompt.assemble({ scope: agent, agent })
+    expect(assembled.tools.map(tool => tool.name)).toContain('phoenix_comic')
+  })
+
   it('forces the native image tool ahead of Higgsfield for an explicit image request, then restores the catalog after the attempt', async () => {
     const { ctx, systemPrompt } = await setup({ mode: 'native', runtime: false })
     ctx.tools.register(defineTool({
@@ -939,7 +975,8 @@ describe('the run_code dispatch bridge', () => {
     expect(result.isError).toBe(false)
     expect(result.meta).toBeUndefined()
     const dispatches = events.filter(event => event.type === 'tool/code-dispatch').map(event => event.data as {
-      name: string; meta?: { artifact?: { id: string; mime: string } }
+      name: string
+      meta?: { artifact?: { id: string; mime: string } }
     })
     expect(dispatches).toHaveLength(2)
     expect(dispatches[0]?.meta?.artifact).toMatchObject({

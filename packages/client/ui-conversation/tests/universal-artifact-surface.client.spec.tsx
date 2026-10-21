@@ -8,6 +8,21 @@ import { clampArtifactHeight, normalizeHardnessArtifact } from '../src/client/co
 describe('universal artifact surface', () => {
   afterEach(() => { cleanup() })
 
+  it('opens and closes the comic reader without enabling scripts and offers a download', () => {
+    render(<UniversalArtifactSurface artifact={normalizeHardnessArtifact({
+      id: 'comic-reader', title: 'Edición de prueba', mime: 'application/vnd.phoenix.comic+html',
+      data: '<!doctype html><html><head></head><body><p>Página de prueba</p><input type="checkbox" disabled></body></html>', executable: false,
+    })} onStop={() => {}} />)
+    expect(screen.getByRole('button', { name: 'Download' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Expand' }))
+    const dialog = screen.getByRole('dialog', { name: 'Vista ampliada: Edición de prueba' })
+    expect(dialog.hasAttribute('open')).toBe(true)
+    expect(dialog.querySelector('iframe')?.getAttribute('sandbox')).toBe('allow-same-origin')
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse' }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(screen.getByTitle('Edición de prueba')).toBeTruthy()
+  })
+
   it('normalizes JSON, Python, HTML, and image artifacts into one envelope', () => {
     expect(normalizeHardnessArtifact({ id: 'json', title: 'Data', mime: 'application/json', data: '{"ok":true}' })).toMatchObject({ kind: 'json', executable: false })
     expect(normalizeHardnessArtifact({ id: 'py', title: 'Model', mime: 'text/x-python', data: 'print(1)' })).toMatchObject({ kind: 'code', language: 'python', executable: true })

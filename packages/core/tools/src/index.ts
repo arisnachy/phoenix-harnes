@@ -84,8 +84,8 @@ function isJsonValueShape(value: unknown): value is JsonValue {
 }
 
 /**
- * Match only explicit requests to CREATE an image. Merely discussing, reading,
- * or analyzing an existing image must keep the ordinary tool catalog.
+ * Match standalone image creation. Illustrated projects and interactive maps
+ * need their inspection, composition and publication tools before generation.
  *
  * Normalizing accents once keeps the policy deterministic across Spanish and
  * English without tying it to any model/provider.
@@ -102,7 +102,8 @@ function explicitlyRequestsImageGeneration(message: UserMessage): boolean {
 
   const action = /\b(?:generate|create|make|design|draw|render|visualize|produce|genera(?:r|me)?|crea(?:r|me)?|disena(?:r|me)?|dibuja(?:r|me)?|renderiza(?:r|me)?|visualiza(?:r|me)?|produce|haz(?:me)?)\b/u // oxlint-disable-line @stylistic/max-len -- Keep the bilingual matcher as one regular expression.
   const subject = /\b(?:image|images|photo|photos|picture|pictures|illustration|illustrations|logo|banner|poster|cover|mockup|thumbnail|hero|imagen(?:es)?|foto(?:s)?|fotografia(?:s)?|ilustracion(?:es)?|portada|miniatura|fotorealista|photorealistic)\b/u // oxlint-disable-line @stylistic/max-len -- Keep the bilingual matcher as one regular expression.
-  return action.test(text) && subject.test(text)
+  const project = /\b(?:comic|comics|manga|historieta|webtoon|game|videojuego|juego|map|maps|mapa|mapas|atlas|website|webpage|dashboard|presentation|presentacion|report|informe|pdf|app|aplicacion|diagram|diagrama|genograma)\b/u // oxlint-disable-line @stylistic/max-len -- Keep the bilingual project matcher together.
+  return action.test(text) && subject.test(text) && !project.test(text)
 }
 
 const MCP_FUNCTION_ROOT_FORBIDDEN_KEYS = new Set(['oneOf', 'anyOf', 'allOf', 'enum', 'const', 'not'])
@@ -959,7 +960,7 @@ export class ToolRuntime extends Service {
   /** Definition-owned final content transform snapshotted before policy begins. */
   private contentFinalizers = new WeakMap<ToolRunContext, ToolDefinition['finalizeContent']>()
   /**
-   * Agents whose current claimed prompt explicitly requests image creation.
+   * Agents whose current claimed prompt requests standalone image creation.
    * While armed, the model sees only the first-party image_generation
    * capability (plus run_code when presentation mode requires it). This is an
    * execution-structural preference, not prompt advice, so connector discovery
@@ -1000,16 +1001,14 @@ export class ToolRuntime extends Service {
     // request. The exact same gate therefore covers Native and Code Mode.
     ctx.on('agent/inbox/claimed', ({ agent, message }) => {
       if (explicitlyRequestsImageGeneration(message)) this.nativeImageFirst.add(agent)
+      else if (message.source.kind === 'user') this.nativeImageFirst.delete(agent)
     })
-    // image_generation owns Codex -> local -> free. External image
-    // connectors become visible only if that complete first-party chain fails.
-    // A successful image keeps the gate armed until the turn goes idle, which
-    // prevents a redundant second generator call after success.
-    ctx.on('tools/result', (exec, result) => {
+    // image_generation owns Codex -> local -> free. Once the attempt settles,
+    // restore the tools needed to inspect, integrate and publish its result.
+    ctx.on('tools/result', (exec) => {
       if (
         exec.name === NATIVE_IMAGE_GENERATION_TOOL
         && exec.agent !== undefined
-        && result.isError
       ) {
         this.nativeImageFirst.delete(exec.agent)
       }

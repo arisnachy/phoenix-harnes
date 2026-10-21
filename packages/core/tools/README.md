@@ -6,6 +6,8 @@ Tool registry and execution pipeline. Tool plugins register their schemas and ex
 
 ## Service: `ToolRuntime` (ctx key: `tools`)
 
+Standalone image requests initially expose the native image tool; its settled attempt restores the catalog for integration or fallback. Illustrated projects such as comics, interactive maps, games, reports and applications retain their inspection, composition and publication tools from the first step. A new user instruction replaces the image-only preference within an active turn.
+
 ### Config
 
 ```yaml

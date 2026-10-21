@@ -4,6 +4,8 @@ English | [中文](README.zh.md)
 
 Projects metadata from existing PHOENIX tools and skills into the HARDNESS Tool Atlas.
 
+The comic publisher preserves its static-reader artifact metadata inside Code Mode subcalls, just as the native map publishers do. The durable nested result can therefore reopen the comic viewer after a session reload; the program's return value does not need to contain the HTML.
+
 The capability index does not execute tools, load skill bodies, or grant permissions; each source registry retains authority.
 
 The adapter separates host-owned indexing from model-facing tools. The host composition mounts `modelTools: false` to index capabilities and install the shared mission runtime once. Full agent presets mount `modelTools: true` to expose `hardness_run`, `connector_list`, and durable scheduled-task tools in their own scope without duplicating the shared HARDNESS registry. Minimal presets can therefore keep a deliberately small catalog.

@@ -31,9 +31,14 @@ describe('Phoenix Comic Studio: actual in-chat publication', () => {
   it('registers native model tool and renderer MIME', async () => {
     const tool = createPhoenixComicTool()
     expect(tool.name).toBe('phoenix_comic')
+    expect(tool.output.nestedPresentationMeta).toBe(true)
     expect(tool.description).toContain('NEVER navigate')
     const receipt = await tool.execute({ title: 'Una aventura', html }, execContext()) as {
-      artifactId: string; title: string; pages: number; panels: number; html: string
+      artifactId: string
+      title: string
+      pages: number
+      panels: number
+      html: string
     }
     expect(receipt).toEqual({
       artifactId: 'phoenix-comic:comic-1', title: 'Una aventura', pages: 3, panels: 1, html,
@@ -63,9 +68,9 @@ describe('Phoenix Comic Studio: actual in-chat publication', () => {
     try {
       writeFileSync(join(workspace, 'comic.html'), html)
       writeFileSync(join(outside, 'comic.html'), html)
-      symlinkSync(join(outside, 'comic.html'), join(workspace, 'unsafe.html'))
+      symlinkSync(outside, join(workspace, 'external'), process.platform === 'win32' ? 'junction' : 'dir')
       expect(readWorkspaceComicHtml('comic.html', workspace)).toBe(html)
-      expect(() => readWorkspaceComicHtml('unsafe.html', workspace)).toThrow(/externo/)
+      expect(() => readWorkspaceComicHtml('external/comic.html', workspace)).toThrow(/externo/)
       expect(() => readWorkspaceComicHtml('../outside.html', workspace)).toThrow(/no existe/)
       const tool = createPhoenixComicTool()
       const args = { title: 'Cómic original', file_path: 'comic.html' }

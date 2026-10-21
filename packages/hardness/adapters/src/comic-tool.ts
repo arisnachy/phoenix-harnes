@@ -30,15 +30,15 @@ export function validateComicHtml(html: string): { pages: number; panels: number
   for (const side of ['front', 'back']) {
     const mark = new RegExp('<section\\b[^>]*data-comic-cover="' + side + '"[^>]*>([\\s\\S]*?)<\\/section>', 'iu')
     const cover = mark.exec(html)
-    if (!cover || !/<img\b[^>]*\bsrc\s*=\s*(["'])data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]{100,}={0,2}\1/iu.test(cover[1]!)) {
+    if (!cover?.[1] || !/<img\b[^>]*\bsrc\s*=\s*(["'])data:image\/(png|jpeg|webp);base64,[A-Z0-9+/]{100,}={0,2}\1/iu.test(cover[1])) {
       return reject('Comic Studio: faltan imágenes reales de portada y contraportada; no se permite publicar una edición incompleta.')
     }
   }
   if (pages.length < 1 || pages.length > 100 || panels.length < pages.length || panels.length > 600) {
     return reject('Comic Studio: faltan páginas con viñetas reales.')
   }
-  for (let i = 0; i < panels.length; i++) {
-    const img = /<img\b[^>]*\bsrc\s*=\s*(["'])data:image\/(png|jpeg|webp);base64,([A-Za-z0-9+/]+={0,2})\1[^>]*>/iu.exec(panels[i]![0])
+  for (const [i, panel] of panels.entries()) {
+    const img = /<img\b[^>]*\bsrc\s*=\s*(["'])data:image\/(png|jpeg|webp);base64,([A-Z0-9+/]+={0,2})\1[^>]*>/iu.exec(panel[0])
     const encoded = img?.[3]
     if (!encoded || encoded.length < 100 || encoded.length % 4 !== 0) {
       return reject('Comic Studio: falta ilustración incrustada en viñeta ' + (i + 1))
@@ -135,6 +135,7 @@ export function createPhoenixComicTool(): ToolDefinition {
       html: { type: 'string', description: 'Optional inline illustrated HTML; real embedded raster artwork required.' },
     },
     output: {
+      nestedPresentationMeta: true,
       schema: { type: 'object', additionalProperties: false, properties: {
         artifactId: { type: 'string', required: true },
         title: { type: 'string', required: true },
@@ -162,9 +163,10 @@ export function createPhoenixComicTool(): ToolDefinition {
         return Promise.reject(new ToolArgsError(['Comic Studio: usa series_id + issue_id, file_path o html (uno solamente).']))
       }
       exec.signal.throwIfAborted()
-      const html = fromRelease ? readComicRelease(args.series_id!, args.issue_id!)
-        : fromFile ? readWorkspaceComicHtml(args.file_path!, exec.agent?.session.header.cwd ?? '')
-          : args.html!
+      const html = typeof args.series_id === 'string' && typeof args.issue_id === 'string'
+        ? readComicRelease(args.series_id, args.issue_id)
+        : typeof args.file_path === 'string' ? readWorkspaceComicHtml(args.file_path, exec.agent?.session.header.cwd ?? '')
+          : typeof args.html === 'string' ? args.html : reject('Comic Studio: falta el HTML de la edición.')
       const counts = validateComicHtml(html)
       exec.signal.throwIfAborted()
       return Promise.resolve({ artifactId: 'phoenix-comic:' + String(exec.callId), title, ...counts, html })

@@ -48,8 +48,10 @@ function ActionIcon({ kind }: { readonly kind: 'copy' | 'check' | 'download' | '
  */
 export function UniversalArtifactSurface({ artifact, renderMessageImages, loadImage, onRun, onStop }: UniversalArtifactSurfaceProps) {
   const isHtml = artifact.kind === 'html'
+  const isComic = artifact.mime === 'application/vnd.phoenix.comic+html'
+  const hasViewerControls = !isHtml || isComic
   const isGame = artifact.mime === 'application/vnd.phoenix.game+html'
-  const isFormHtml = isHtml && !isGame && typeof artifact.data === 'string'
+  const isFormHtml = isHtml && !isGame && !isComic && typeof artifact.data === 'string'
     && /<(?:form|input|select|textarea|fieldset)\b/i.test(artifact.data)
   const [expanded, setExpanded] = useState(false)
   const [running, setRunning] = useState(false)
@@ -58,7 +60,7 @@ export function UniversalArtifactSurface({ artifact, renderMessageImages, loadIm
   const controllerRef = useRef<AbortController | undefined>(undefined)
 
   useEffect(() => {
-    if (isHtml) return
+    if (!hasViewerControls) return
     const dialog = dialogRef.current
     if (dialog === null) return
     if (expanded && !dialog.open) {
@@ -68,7 +70,7 @@ export function UniversalArtifactSurface({ artifact, renderMessageImages, loadIm
       if (typeof dialog.close === 'function') dialog.close()
       else dialog.removeAttribute('open')
     }
-  }, [expanded, isHtml])
+  }, [expanded, hasViewerControls])
 
   const execute = (): void => {
     if (onRun === undefined || running) return
@@ -97,11 +99,21 @@ export function UniversalArtifactSurface({ artifact, renderMessageImages, loadIm
     const resolvedUrl = attachment === undefined || loadImage === undefined
       ? undefined : await loadImage(attachment)
     if (attachment !== undefined && resolvedUrl === undefined) return
-    const url = resolvedUrl ?? URL.createObjectURL(new Blob([serialized], { type: artifact.mime }))
+    let downloaded = serialized
+    if (isComic) {
+      // A saved edition must retain the reader's static policy outside its iframe.
+      const document = new DOMParser().parseFromString(serialized, 'text/html')
+      const policy = document.createElement('meta')
+      policy.httpEquiv = 'Content-Security-Policy'
+      policy.content = "default-src 'none'; img-src data: blob:; style-src 'unsafe-inline'; script-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"
+      document.head.prepend(policy)
+      downloaded = '<!doctype html>\n' + document.documentElement.outerHTML
+    }
+    const url = resolvedUrl ?? URL.createObjectURL(new Blob([downloaded], { type: isComic ? 'text/html' : artifact.mime }))
     const anchor = document.createElement('a')
     anchor.href = url
     const basename = artifact.title.replace(/[^a-z0-9._-]+/gi, '-').replace(/^-+|-+$/g, '') || 'phoenix-artifact'
-    anchor.download = artifact.mime === 'application/vnd.phoenix.scene3d+json'
+    anchor.download = isComic ? `${basename}.html` : artifact.mime === 'application/vnd.phoenix.scene3d+json'
       ? `${basename}.scene3d.json` : basename
     anchor.click()
     if (resolvedUrl === undefined) URL.revokeObjectURL(url)
@@ -154,17 +166,17 @@ export function UniversalArtifactSurface({ artifact, renderMessageImages, loadIm
           <strong>{artifact.title}</strong>
           {!isHtml && <span>{artifact.language ?? artifact.kind}</span>}
         </div>
-        {!isHtml && !expanded && actions(false)}
+        {hasViewerControls && !expanded && actions(false)}
       </div>}
       <div className={css.content}>
         {!expanded && content(false)}
       </div>
-      {!isHtml && (
+      {hasViewerControls && (
         <dialog ref={dialogRef} className={css.modal}
           data-phoenix-artifact-expanded="true"
           aria-label={`Vista ampliada: ${artifact.title}`} aria-modal="true"
           onClose={close} onCancel={close}
-          onClick={event => { if (event.target === event.currentTarget) close() }}>
+          onClick={(event) => { if (event.target === event.currentTarget) close() }}>
           {expanded && (
             <>
               <div className={css.modalHeader}>
