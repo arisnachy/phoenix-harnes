@@ -29,7 +29,7 @@ test('edición planificada y recuperación idempotente de seis páginas sin borr
   assert.equal(plan.slots.length,8)
   assert.deepEqual(plan.slots.slice(0,2),['cover-front','page-1'])
   assert.equal((await planComicArt(series,issue,{interiorPages:6})).reused,true)
-  await assert.rejects(planComicArt(series,issue,{interiorPages:4}),/diferente/)
+  await assert.rejects(planComicArt(series,issue,{interiorPages:4}),/distinto/)
 })
 test('la respuesta mal formada se archiva con su SHA y contenido exactos para recuperación',async()=>{
   const result=await recordComicImageAttempt(series,issue,{attemptId:'attempt-a',slot:'page-1',provider:'Canva',response:'{"images":[',workspace})
