@@ -3,6 +3,7 @@ import { ReasoningEffortId } from '@phoenix-ai/dsh-llm'
 import {
   adaptiveCodexReasoningEffort,
   resolveEclipseRoleRoute,
+  resolveEclipseTurnRoute,
   type EclipseRoutingSettings,
 } from '../src/model-selection.ts'
 
@@ -67,6 +68,31 @@ describe('Eclipse role routing', () => {
     expect(resolveEclipseRoleRoute(saved, 'subagent', fallback, 'high')).toEqual({
       provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('max'),
     })
+  })
+
+  it('routes named and contextual conversation to Luna Max even when the coordinator is pinned to Sol', () => {
+    for (const mode of ['automatic', 'hybrid', 'manual'] as const) {
+      const profile: EclipseRoutingSettings = {
+        mode,
+        planner: { provider: 'openai-codex', model: 'gpt-6.1-sol', reasoningEffort: 'medium' },
+        coordinator: { provider: 'openai-codex', model: 'gpt-6.1-sol', reasoningEffort: 'high' },
+      }
+      const worker = { provider: 'openai-codex', model: 'gpt-6-luna',
+        reasoningEffort: ReasoningEffortId('max') }
+      for (const greeting of ['hola kira', '¡Hola, Kira!', 'Kira, hola',
+        '¿cómo estás?', 'qué quieres que hagamos']) {
+        expect(resolveEclipseTurnRoute(profile, worker, greeting, 1, false)).toEqual(worker)
+      }
+      // A genuine Team wakeup or execution step must keep the configured role.
+      if (mode !== 'automatic') {
+        expect(resolveEclipseTurnRoute(profile, worker, 'hola kira', 1, true).model).toBe('gpt-6.1-sol')
+        expect(resolveEclipseTurnRoute(profile, worker, 'hola kira', 2, false).model).toBe('gpt-6.1-sol')
+      }
+      const plan = { provider: 'openai-codex', model: 'gpt-6.1-sol',
+        reasoningEffort: ReasoningEffortId('low') }
+      expect(resolveEclipseTurnRoute(profile, plan, 'Arregla router.ts y ejecuta los tests', 1, false).model)
+        .toBe('gpt-6.1-sol')
+    }
   })
 
   it('selects effort from task evidence without a classifier request', () => {
