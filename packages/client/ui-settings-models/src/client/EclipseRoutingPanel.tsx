@@ -36,10 +36,19 @@ function routeFromKey(key: string): Route | undefined {
     return { provider: value[0], model: value[1] }
   } catch { return undefined }
 }
-function existingProfile(value: unknown): Profile {
-  if (typeof value !== 'object' || value === null) return { ...DEFAULT_PROFILE }
-  const eclipse = (value as { eclipse?: Profile }).eclipse
-  return eclipse === undefined ? { ...DEFAULT_PROFILE } : structuredClone(eclipse)
+/** Use the independent synthetic-model section, with legacy values for migration only.
+ * @param dedicated - Independently persisted Eclipse settings.
+ * @param legacy - Settings from the former Agent default-model namespace.
+ * @returns Profile shown in Settings, preserving any earlier preferences.
+ */
+export function existingProfile(dedicated: unknown, legacy?: unknown): Profile {
+  if (typeof dedicated === 'object' && dedicated !== null && !Array.isArray(dedicated)
+    && Object.keys(dedicated).length > 0) return structuredClone(dedicated as Profile)
+  if (typeof legacy === 'object' && legacy !== null && !Array.isArray(legacy)) {
+    const previous = (legacy as { eclipse?: Profile }).eclipse
+    if (previous !== undefined) return structuredClone(previous)
+  }
+  return { ...DEFAULT_PROFILE }
 }
 
 /** Settings live mirror + real Host session catalog, never hardcoded model names. */
@@ -53,21 +62,37 @@ export function EclipseRoutingPanel(props: {
     listener => props.controller.store.subscribe(listener),
     () => props.controller.store.getSnapshot(),
   )
-  const source = state.namespaces.get('agent-default-model')
-  const [draft, setDraft] = useState<Profile>(() => existingProfile(source?.value))
+  const source = state.namespaces.get('eclipse-routing')
+  const legacy = state.namespaces.get('agent-default-model')
+  const [draft, setDraft] = useState<Profile>(() => existingProfile(source?.value, legacy?.value))
   const [catalog, setCatalog] = useState<readonly EclipseCatalogChoice[]>([])
   const [catalogError, setCatalogError] = useState<string>()
   const [working, setWorking] = useState(false)
   const [message, setMessage] = useState<string>()
   const [specialist, setSpecialist] = useState('')
-  useEffect(() => { setDraft(existingProfile(source?.value)) }, [source?.value])
+  useEffect(() => {
+    if (state.status === 'idle') void props.controller.load()
+  }, [props.controller, state.status])
+  useEffect(() => { setDraft(existingProfile(source?.value, legacy?.value)) },
+    [source?.value, legacy?.value])
+  const [catalogLoading, setCatalogLoading] = useState(true)
+  const refresh = (): void => {
+    setCatalogLoading(true)
+    void props.loadCatalog().then(rows => {
+      setCatalog(rows)
+      setCatalogError(undefined)
+    }, (error: unknown) => {
+      setCatalogError(error instanceof Error ? error.message : String(error))
+    }).finally(() => { setCatalogLoading(false) })
+  }
   useEffect(() => {
     let alive = true
+    setCatalogLoading(true)
     void props.loadCatalog().then(rows => {
       if (alive) { setCatalog(rows); setCatalogError(undefined) }
     }, (error: unknown) => {
       if (alive) setCatalogError(error instanceof Error ? error.message : String(error))
-    })
+    }).finally(() => { if (alive) setCatalogLoading(false) })
     return () => { alive = false }
   }, [props.loadCatalog])
   const update = (patch: Partial<Profile>): void => { setDraft(previous => ({ ...previous, ...patch })); setMessage(undefined) }
@@ -93,7 +118,7 @@ export function EclipseRoutingPanel(props: {
     return <div className={css.role} key={role}>
       <label className={css.label} htmlFor={`eclipse-${role}`}>{props.t(`eclipseRole_${role}` as keyof typeof en)}</label>
       <select id={`eclipse-${role}`} className={css.input} value={selection(route)}
-        disabled={!state.writable || working || models.length === 0}
+        disabled={!state.writable || working || catalogLoading || models.length === 0}
         onChange={event => { pick(role, event.target.value) }}>
         <option value="">{props.t('eclipseAutomatic')}</option>
         {route !== undefined && found === undefined ? <option value={selection(route)}>{route.provider} / {route.model}</option> : null}
@@ -128,9 +153,10 @@ export function EclipseRoutingPanel(props: {
     setMessage(undefined)
     try {
       const response = await props.api.settings.mutate({
-        ns: 'agent-default-model',
-        ops: [reset ? { op: 'unset', path: ['eclipse'] }
-          : { op: 'set', path: ['eclipse'], value: draft }],
+        ns: 'eclipse-routing',
+        // An explicit automatic value also masks any historical Agent-default
+        // Eclipse preferences after restoring factory settings.
+        ops: [{ op: 'set', path: [], value: reset ? { mode: 'automatic' } : draft }],
       })
       if (!response.result.ok) throw new Error(response.result.error.message)
       await props.controller.load()
@@ -143,6 +169,14 @@ export function EclipseRoutingPanel(props: {
   return <section className={css.section} aria-label={props.t('eclipseTitle')}>
     <h2 className={css.title}>{props.t('eclipseTitle')}</h2>
     <p className={css.hint}>{props.t('eclipseDescription')}</p>
+    <div className={css.actions}>
+      <span className={css.hint} role="status">{catalogLoading
+        ? props.t('eclipseCatalogLoading')
+        : props.t('eclipseCatalogCount').replace('{count}', String(models.filter(x => x.provider === 'openai-codex').length))}</span>
+      <button type="button" disabled={catalogLoading} onClick={refresh}>
+        {props.t('eclipseRefresh')}
+      </button>
+    </div>
     <label className={css.label} htmlFor="eclipse-mode">{props.t('eclipseMode')}</label>
     <select id="eclipse-mode" className={css.input} disabled={!state.writable || working}
       value={draft.mode ?? 'automatic'} onChange={event => { update({ mode: event.target.value as NonNullable<Profile['mode']> }) }}>
@@ -181,7 +215,8 @@ export function EclipseRoutingPanel(props: {
       </div>)}
     </div>
     {catalogError !== undefined ? <p role="status" className={css.error}>{catalogError}</p> : null}
-    {models.length === 0 ? <p className={css.hint}>{props.t('eclipseCatalogHint')}</p> : null}
+    {models.length === 0 && !catalogLoading
+      ? <p className={css.hint}>{props.t('eclipseCatalogHint')}</p> : null}
     {!valid && draft.mode !== 'automatic' ? <p className={css.error}>{props.t('eclipseInvalid')}</p> : null}
     {message !== undefined ? <p role="status" className={css.hint}>{message}</p> : null}
     <div className={css.actions}>
