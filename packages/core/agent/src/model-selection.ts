@@ -892,6 +892,34 @@ export function isContextualConversationFastPathText(text: string): boolean {
   return FAST_CONTEXTUAL_OPEN.test(normalizedFastSocialText(candidate))
 }
 
+/** Resolve a concrete Eclipse turn after task classification.
+ * Conversational turns deliberately use Luna Max in every Eclipse mode:
+ * planner/coordinator pins apply to operational tasks, not short greetings.
+ * An explicit provider/model selection outside Phoenix Auto never calls this.
+ * @param profile - User's Eclipse routing preferences.
+ * @param automatic - Task-aware concrete plan or execution route.
+ * @param directText - Current human utterance.
+ * @param step - 1-based step index.
+ * @param hasTeamSignal - Whether a peer question/blocker is admitted in this turn.
+ * @returns The model and reasoning budget for the current serving request.
+ */
+export function resolveEclipseTurnRoute(
+  profile: EclipseRoutingSettings | undefined,
+  automatic: ModelSelection,
+  directText: string,
+  step: number,
+  hasTeamSignal: boolean,
+): ModelSelection {
+  if (step === 1 && !hasTeamSignal && automatic.model === PHOENIX_CODEX_AUTO_WORKER_MODEL
+    && (isConversationalFastPathText(directText) || isContextualConversationFastPathText(directText))) {
+    return { provider: 'openai-codex', model: PHOENIX_CODEX_AUTO_WORKER_MODEL,
+      reasoningEffort: ReasoningEffortId('max') }
+  }
+  const role = automatic.model === PHOENIX_CODEX_AUTO_PLANNER_MODEL ? 'planner' : 'coordinator'
+  return resolveEclipseRoleRoute(profile, role, automatic,
+    profile?.mode === 'hybrid' ? automatic.reasoningEffort : undefined)
+}
+
 function defaultConversationalSelection(selection: ModelSelection | undefined): ModelSelection | undefined {
   if (selection?.provider !== 'openai-codex') return undefined
   return {
@@ -1662,21 +1690,10 @@ export function installModelSelection(
         )
         // The planner serves initial strategy and evidence-based rescues; Kira
         // immediately returns to the independently configured execution model.
-        const role = automatic.model === PHOENIX_CODEX_AUTO_PLANNER_MODEL ? 'planner' : 'coordinator'
-        const conversational = _payload.step === 1
-          && phoenixAutoTeamSignalForTurn(_payload.agent, _payload.turn) === undefined
-          && (isConversationalFastPathText(directText) || isContextualConversationFastPathText(directText))
-        // Intelligent Eclipse chat always enters Luna Max. A hybrid coordinator
-        // override (including legacy Sol) must not hijack a simple greeting.
-        // Manual routing remains authoritative when the user explicitly pins it.
-        const routed = conversational && eclipseProfile?.mode !== 'manual'
-          ? automatic
-          : resolveEclipseRoleRoute(
-            eclipseProfile,
-            role,
-            automatic,
-            eclipseProfile?.mode === 'hybrid' ? automatic.reasoningEffort : undefined,
-          )
+        const routed = resolveEclipseTurnRoute(
+          eclipseProfile, automatic, directText, _payload.step,
+          phoenixAutoTeamSignalForTurn(_payload.agent, _payload.turn) !== undefined,
+        )
         const { reasoningEffort: _inheritedEffort, ...withoutInheritedEffort } = resolved
         return {
           ...withoutInheritedEffort,
