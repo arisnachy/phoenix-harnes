@@ -139,7 +139,7 @@ export function createPhoenixSceneMapTool():ToolDefinition {
       title:{type:'string',required:true,description:'Nombre del mundo/isla en el encabezado del mapa.'},
       demo:{type:'boolean',description:'Para demo explícita y rápida genera cinco lugares ficticios coherentes sin copiar JSON.'},
       map:{type:'object',additionalProperties:true,description:'Contrato narrativo con places:[{id,name,x,y,kind,description}], routes?:[{from,to,label}], coast?:[[x,y]], subtitle?, description?, theme?'},
-      continueAfterDisplay:{type:'boolean',description:'Solo true cuando el usuario pide continuar otro trabajo después de entregar el mapa.'},
+      continueAfterDisplay:{type:'boolean',description:'Deprecated, retained for compatibility. The agent always gets a final-response step.'},
     },
     output:{
       schema:{type:'object',additionalProperties:false,properties:{
@@ -164,7 +164,8 @@ export function createPhoenixSceneMapTool():ToolDefinition {
       if(args.map!==undefined&&args.demo===true)invalid('Indica map original o demo:true, no ambos.')
       const map=args.demo===true?demoIslandMap(title):admitPhoenixSceneMap(args.map,title)
       const artifactId='phoenix-scene-map:'+String(exec.callId)
-      if(args.continueAfterDisplay!==true)exec.concludeTurn()
+      // Let agent-loop receive the tool result and produce a final assistant message.
+      // concludeTurn here terminated a tool-only step with no final response.
       return Promise.resolve({
         artifactId,title,map:map as unknown as JsonValue,
         publication:'artifact_emitted_not_client_render_verified',
