@@ -4,6 +4,7 @@ import type {
 } from '@phoenix-ai/dsh-client-runtime/client'
 import { isAppendSurfaceEvent } from '@phoenix-ai/dsh-client-runtime/client'
 import type { SessionEvent } from '@phoenix-ai/dsh-session/types'
+import type {} from '@phoenix-ai/dsh-tools/types'
 import { chatNode } from './common.ts'
 
 import type { HardnessArtifactValue } from '../artifact.ts'
