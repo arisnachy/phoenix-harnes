@@ -900,6 +900,54 @@ describe('the sub-dispatch scheduler (native concurrency contract)', () => {
 })
 
 describe('the run_code dispatch bridge', () => {
+  it('persists explicitly opted-in nested map artifacts without exposing them to the program', async () => {
+    const { ctx, runtime } = await setup({ mode: 'code' })
+    ctx.tools.register(defineTool({
+      name: 'fiction_map_fixture',
+      description: 'Emit one synthetic map for a transport regression test.',
+      parameters: {},
+      output: {
+        schema: { type: 'string' },
+        nestedPresentationMeta: true,
+        render: (_args, value) => [{ type: 'text', text: value }],
+        presentationMeta: (_args, value) => ({
+          artifact: { id: 'fiction-map-1', mime: 'application/vnd.phoenix.scene-map+json',
+            title: value, executable: false, data: { component: 'scene_map', version: 1, props: { id: 'test' } } },
+        }),
+      },
+      execute: () => Promise.resolve('Isla de prueba'),
+    }))
+    ctx.tools.register(defineTool({
+      name: 'private_fixture',
+      description: 'Tool with a private root-only projection.',
+      parameters: {},
+      output: {
+        schema: { type: 'string' },
+        render: (_args, value) => [{ type: 'text', text: value }],
+        presentationMeta: () => ({ secret: 'must never be forwarded for nested calls' }),
+      },
+      execute: () => Promise.resolve('ordinary'),
+    }))
+    const { agent, events } = fakeAgent()
+    runtime.behavior = async (request) => {
+      const tool = request.bindings[0]!.functions
+      const published = await tool.fiction_map_fixture!({})
+      await tool.private_fixture!({})
+      return { logs: [], value: published }
+    }
+    const result = await runCode(ctx, 'await tools.fiction_map_fixture({})', { agent })
+    expect(result.isError).toBe(false)
+    expect(result.meta).toBeUndefined()
+    const dispatches = events.filter(event => event.type === 'tool/code-dispatch').map(event => event.data as {
+      name: string; meta?: { artifact?: { id: string; mime: string } }
+    })
+    expect(dispatches).toHaveLength(2)
+    expect(dispatches[0]?.meta?.artifact).toMatchObject({
+      id: 'fiction-map-1', mime: 'application/vnd.phoenix.scene-map+json',
+    })
+    expect(dispatches[1]?.meta).toBeUndefined()
+  })
+
   it('bridges tool calls, returns only the curated output, and logs one event per dispatch', async () => {
     const { ctx, runtime } = await setup({ mode: 'code' })
     const calls = registerEcho(ctx)
