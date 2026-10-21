@@ -17,6 +17,37 @@ without asking the user to specify an engine or JSON schema.
 
 ## Conversation contract
 
+## Publicación nativa REAL (requisito para mapas geográficos en el chat)
+
+Cuando se pide crear o mostrar un mapa REAL en la conversación, llama a la
+herramienta `phoenix_geo_map`. No equivale a ejecutar el CLI `geo`,
+rebuscar indefinidamente en un navegador ni describir una futura visualización.
+La herramienta emite el MIME `application/vnd.phoenix.geo+json` que el visor
+`GeoMap` del chat reconoce directamente. Resuelve la intención del usuario,
+obtén las coordenadas WGS84 y fuentes verificadas, y llama a la herramienta
+con `title` y `map`, incluidos `source`, `layers`, `features` y, para
+variables médicas, `metric` (definición, unidad, población). La herramienta
+ajusta el visor a los datos geográficos válidos; el usuario ve zoom, capas,
+selección, leyenda y exportaciones. El ID del artefacto acredita emisión,
+no demuestra captura o interacción visual real.
+
+**Caso de hipertensión RD:** tres bateyes estudiados en Puerto Plata NO
+equivalen a la provincia completa. Una muestra de 379 adultos no permite
+fabricar una tasa ni un ranking por provincias. Los puntos deben representar
+ubicaciones realmente identificadas en la evidencia, no centroides de
+localidades supuestos. Si los bateyes no tienen coordenadas verificables, o
+los valores subnacionales no son comparables, explica que NO se puede
+publicar fielmente el mapa solicitado; ofrece metadatos, tabla o nota
+epidemiológica y solicita una fuente suficiente, sin construir un mapa falso.
+
+- `phoenix_geo_map`: geografía REAL; publica artefacto nativo con contrato.
+- `phoenix_scene_map`: SOLO mundos ficticios; no usarlo para RD real.
+- `generative-ui` con `geo_map`: alternativa válida si se incluye realmente
+  el JSON declarativo completo en el mensaje y el renderer lo acepta.
+- Fallo o ausencia de artefacto: informar la causa. No afirmar «publicado
+  arriba», «funciona» ni «clic comprobado» sin evidencia de pantalla.
+
+
 - Prefer an interactive geo_map block (version 1) **inside the same chat**
   when the goal is exploration or choosing places; preserve surrounding
   human-friendly explanation and allow map selection back into the composer.

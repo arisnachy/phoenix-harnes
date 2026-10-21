@@ -2,7 +2,9 @@
 
 import { describe, expect, it } from 'vitest'
 import { Context } from '@phoenix-ai/cordis'
-import AgentDefaultModelConfig, { AGENT_DEFAULT_MODEL_SETTINGS_NAMESPACE } from '../src/index.ts'
+import AgentDefaultModelConfig, {
+  AGENT_DEFAULT_MODEL_SETTINGS_NAMESPACE, ECLIPSE_ROUTING_SETTINGS_NAMESPACE,
+} from '../src/index.ts'
 import { SettingsProvider } from '@phoenix-ai/dsh-settings'
 import type { SettingsNamespace } from '@phoenix-ai/dsh-settings'
 import { ReasoningEffortId } from '@phoenix-ai/dsh-llm'
@@ -85,6 +87,35 @@ describe('AgentDefaultModelConfig', () => {
     expect(bench.defaultModel.currentSelection()).toEqual({
       provider: 'deepseek-official', model: 'deepseek-v4-flash',
     })
+    await bench.ctx.fiber.dispose()
+  })
+
+  it('stores Eclipse independently of the ordinary default Agent model', async () => {
+    const bench = await boot()
+    const profile = {
+      mode: 'hybrid' as const,
+      planner: { provider: 'openai-codex', model: 'gpt-6.1-sol', reasoningEffort: 'high' },
+      coordinator: { provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'max' },
+    }
+    await bench.settingsFiber.ctx.settings.replace(ECLIPSE_ROUTING_SETTINGS_NAMESPACE, profile)
+    expect(bench.defaultModel.currentEclipseProfile()).toMatchObject(profile)
+    expect(bench.defaultModel.currentSelection().model).toBe('deepseek-v4-flash')
+    await bench.defaultModel.saveSelection({ provider: 'other-provider', model: 'other-model' })
+    expect(bench.defaultModel.currentEclipseProfile()).toMatchObject(profile)
+    await bench.ctx.fiber.dispose()
+  })
+
+  it('reads legacy Eclipse preferences until saved on the dedicated model', async () => {
+    const bench = await boot()
+    await bench.settingsFiber.ctx.settings.replace(AGENT_DEFAULT_MODEL_SETTINGS_NAMESPACE, {
+      eclipse: { mode: 'manual', planner: { provider: 'openai-codex', model: 'old-sol' } },
+    })
+    expect(bench.defaultModel.currentEclipseProfile()?.planner?.model).toBe('old-sol')
+    await bench.settingsFiber.ctx.settings.replace(ECLIPSE_ROUTING_SETTINGS_NAMESPACE, {
+      mode: 'automatic',
+    })
+    expect(bench.defaultModel.currentEclipseProfile()?.mode).toBe('automatic')
+    expect(bench.defaultModel.currentEclipseProfile()?.planner).toBeUndefined()
     await bench.ctx.fiber.dispose()
   })
 

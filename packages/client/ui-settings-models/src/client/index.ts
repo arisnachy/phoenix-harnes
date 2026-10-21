@@ -14,6 +14,8 @@ import type {} from '@phoenix-ai/dsh-api-remotes/client'
 import type { ModelsSectionInjected } from './ModelsSection.tsx'
 import { ModelsWithLocalSection } from './ModelsWithLocalSection.tsx'
 import type { ModelsWithLocalSectionInjected } from './ModelsWithLocalSection.tsx'
+import { EclipseRoutingPanel } from './EclipseRoutingPanel.tsx'
+import type { EclipseCatalogChoice } from './EclipseRoutingPanel.tsx'
 import type {
   PhoenixLocalModelClient,
   PhoenixLocalModelMode,
@@ -309,6 +311,28 @@ export function apply(ctx: ClientContext): void {
   const localModel = localModelClient(ctx)
   const mcpRegistry = mcpRegistryClient(ctx)
   const telegram = telegramBotClient(ctx)
+  const loadEclipseCatalog = async (): Promise<readonly EclipseCatalogChoice[]> => {
+    // Host-wide llm.models queries every registered runtime, including the
+    // connected Codex app-server's live model/reasoning metadata. No session
+    // is required: Settings can render before the first conversation exists.
+    const response = await connection.api.llm.models({})
+    if (!response.result.ok) throw new Error(response.result.error.message)
+    const { groups, failures } = response.result.value
+    const codex = groups.find(group => group.id === 'openai-codex')
+    if (codex === undefined) {
+      const failure = failures.find(item => item.id === 'openai-codex')
+      if (failure !== undefined) throw new Error(failure.message)
+    }
+    return [...groups].sort((a, b) =>
+      Number(b.id === 'openai-codex') - Number(a.id === 'openai-codex'))
+      .flatMap(group => group.models.filter(model => model.id !== 'phoenix-auto')
+        .map(model => ({
+          provider: group.id,
+          model: model.id,
+          name: model.name,
+          reasoningEfforts: model.reasoning?.efforts.map(effort => effort.id) ?? [],
+        })))
+  }
   const injected = (): ModelsWithLocalSectionInjected => ({
     controller,
     hooks: { snapshot: controller.store },
@@ -317,6 +341,12 @@ export function apply(ctx: ClientContext): void {
     t,
     localModel,
     localT,
+  })
+  const eclipseInjected = () => ({
+    controller,
+    api: connection.api,
+    t,
+    loadCatalog: loadEclipseCatalog,
   })
   const assistantMailRecord = (value: unknown): value is Record<string, unknown> =>
     typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -446,6 +476,13 @@ export function apply(ctx: ClientContext): void {
     label: () => t('nav'),
     inject: injected,
   }, ModelsWithLocalSection))
+  ctx.slots.inject('settings.section', () => ctx.slots.register({
+    name: 'settings.section',
+    id: 'eclipse',
+    order: 11,
+    label: () => t('eclipseNav'),
+    inject: eclipseInjected,
+  }, EclipseRoutingPanel))
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section',
     id: 'connectors',

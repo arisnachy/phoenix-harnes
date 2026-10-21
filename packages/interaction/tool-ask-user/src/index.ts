@@ -9,6 +9,7 @@
 import type { Context } from '@phoenix-ai/cordis'
 import { defineTool } from '@phoenix-ai/dsh-tools'
 import '@phoenix-ai/dsh-user-questions'
+import { registerClinicalLongitudinalTool } from './clinical-tools.ts'
 
 export const name = 'tool-ask-user'
 export const inject = ['tools', 'userQuestions']
@@ -17,7 +18,8 @@ const description = 'Ask the user a concise question when you need confirmation,
   + 'Send one or more questions, each with a stable id that will be echoed in the answer. '
   + 'If the user does not answer within one minute, Phoenix applies the safest recommended option; mark that option with recommended=true. '
   + 'An automatic answer is only a decision for this step: it never completes, cancels, or blocks an active mission. '
-  + 'Use it, change strategy when needed, and continue until the requested deliverable is verified.'
+  + 'Use it, change strategy when needed, and continue until the requested deliverable is verified. '
+  + 'For health symptoms, history, medication, consent, finances or other sensitive questions set sensitive=true: expiry then returns no answer, never an inferred fact or consent.'
 
 export function apply(ctx: Context): void {
   ctx.tools.register(defineTool({
@@ -53,6 +55,10 @@ export function apply(ctx: Context): void {
                   },
                 },
               },
+            },
+            sensitive: {
+              type: 'boolean',
+              description: 'Mark sensitive clinical, identity, consent, or other personal questions. On expiration, no option is selected; do not treat an automatic answer as a patient statement.',
             },
             multi_select: {
               type: 'boolean',
@@ -96,6 +102,7 @@ export function apply(ctx: Context): void {
           ...question.header !== undefined ? { header: question.header } : {},
           ...question.options !== undefined ? { options: question.options } : {},
           ...question.multi_select !== undefined ? { multiSelect: question.multi_select } : {},
+          ...question.sensitive !== undefined ? { sensitive: question.sensitive } : {},
         })),
         ...exec.agent !== undefined ? { agent: exec.agent } : {},
         signal: exec.signal,
@@ -110,4 +117,5 @@ export function apply(ctx: Context): void {
       return result.automatic === true ? { ...output, automatic: true } : output
     },
   }))
+  if (process.env.PHOENIX_CLINICAL_VAULT_KEY !== undefined) registerClinicalLongitudinalTool(ctx)
 }

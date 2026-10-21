@@ -113,7 +113,11 @@ export const AssistantMarkdown = memo(function AssistantMarkdown({
     && splitGenerativeUiText(block.text, { streaming: false }).some(segment => segment.kind === 'ui'
       && (segment.block.component === 'scene_map' || segment.block.component === 'geo_map')))
   const missingMap = claimsPublishedMap && !containsNativeMap
-  // A tool receipt or prose claim is not proof that a diagram was actually mounted.
+  const mentionsFiction = blocks.some(block => block.kind === 'text'
+    && /(?:isla bruma|mapa ficticio|mundo imaginario|reino de fantasia|atlas narrativo|escenario ficticio)/i.test(block.text))
+  const recoveryPrompt = mentionsFiction
+    ? 'Kira, entrega realmente el mapa ficticio con la herramienta phoenix_scene_map; verifica el recibo artifactId. Si falla, informa el error, no digas que fue publicado.'
+    : 'Kira, entrega el mapa geográfico solicitado mediante la herramienta phoenix_geo_map, con coordenadas WGS84 y fuente verificadas. No uses scene_map de fantasía para geografía real. Si faltan coordenadas o estadísticas subnacionales comparables, no inventes provincias, rankings, tasas ni lugares: indica el bloqueo. Confirma solo la emisión del artifactId, no una visualización no comprobada.'
   const claimsPublishedDiagram = !streaming && blocks.some(block => block.kind === 'text'
     && /(?:publiqu[eé]|publicad[oa]|cre[eé]|gener[eé]|ya est[aá]|qued[oó]).{0,120}(?:genograma|diagrama)|(?:genograma|diagrama).{0,100}(?:publicad[oa]|listo|ya est[aá]|interactiv[oa])/i.test(block.text))
   const containsNativeDiagram = blocks.some(block => block.kind === 'text'
@@ -127,20 +131,22 @@ export const AssistantMarkdown = memo(function AssistantMarkdown({
         {missingMap && <p role="alert" data-phoenix-missing-map="" style={{
           border: '1px solid #e7bb76', borderRadius: 10, background: '#fff7e8',
           color: '#694319', padding: '11px 13px', fontSize: 12,
-        }}>El texto afirma que se publicó un mapa, pero esta respuesta no contiene un componente cartográfico nativo visible. No se ha comprobado su publicación.
-          {onUiAction && <button type="button" onClick={() => onUiAction(
-            'Kira, genera AHORA el mapa solicitado dentro de este mismo chat con un bloque ```generative-ui que contenga un scene_map versión 1 válido, con lugares y descripciones. No afirmes publicación sin incluir el componente real.',
-            'draft',
-          )} style={{ display: 'block', marginTop: 8, cursor: 'pointer' }}>Solicitar mapa nativo</button>}
+        }}>Este mensaje afirma que publicó un mapa, pero no incluye aquí un mapa nativo válido. Si hay un artefacto cartográfico independiente en el chat, comprueba ese visor; de lo contrario, la entrega no está verificada.
+          {onUiAction && <button type="button" onClick={() => onUiAction(recoveryPrompt, 'draft')}
+            style={{ display: 'block', marginTop: 8, cursor: 'pointer' }}>Solicitar visor {mentionsFiction ? 'narrativo' : 'geográfico'}</button>}
         </p>}
         {missingDiagram && <p role="alert" data-phoenix-missing-diagram="" style={{
           border: '1px solid #e7bb76', borderRadius: 10, background: '#fff7e8',
           color: '#694319', padding: '11px 13px', fontSize: 12,
-        }}>Este mensaje afirma que creó un diagrama o genograma, pero no incluye una visualización nativa verificable.
-          {onUiAction && <button type="button" onClick={() => onUiAction(
-            'Kira, representa AHORA el genograma o diagrama solicitado directamente en este chat como un bloque \`\`\`generative-ui con component "diagram", version 1 y props {id,title,kind,nodes,edges}. Cada nodo debe incluir id,label,x,y y shape (square,circle,rectangle,diamond,point); las conexiones usan from,to y opcionalmente fromPort,toPort,via. No anuncies una publicación si no incluyes el componente válido.',
-            'draft',
-          )} style={{ display: 'block', marginTop: 8, cursor: 'pointer' }}>Solicitar diagrama visible</button>}
+        }}>
+          El mensaje menciona un diagrama publicado pero no contiene una vista nativa del diagrama.
+          Si existe un artefacto independiente en el chat, comprueba ese visor.
+          {onUiAction && <button type="button" onClick={() => {
+            onUiAction(
+              'Kira, publica el genograma o diagrama real en el chat usando la herramienta phoenix_diagram. Entrega el artifactId sin afirmar que el cliente mostró el SVG si no lo comprobaste.',
+              'draft',
+            )
+          }} style={{ display: 'block', marginTop: 8, cursor: 'pointer' }}>Solicitar diagrama visible</button>}
         </p>}
         {interrupted && <span className={css.stopped}>{t('message.stopped')}</span>}
       </div>

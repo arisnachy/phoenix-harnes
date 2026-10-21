@@ -134,12 +134,12 @@ export function demoIslandMap(title:string):PhoenixSceneMap {
 export function createPhoenixSceneMapTool():ToolDefinition {
   return defineTool({
     name:'phoenix_scene_map',
-    description:'MOTOR REAL DE MAPAS FICTICIOS: usar esta herramienta cuando el usuario solicite crear, mostrar, dibujar, publicar o explorar mapas narrativos, islas inventadas, mundos de fantasía, mapas de videojuegos, cuentos, reinos imaginarios o Isla Bruma. LA HERRAMIENTA PUBLICA UN ARTEFACTO NATIVO INTERACTIVO en el chat; no basta responder "hecho", no usar MiniBrowser, localhost ni imágenes estáticas, y no usar geo_map real/OpenStreetMap para ficción. Para una demo inmediata de Isla Bruma usa {"title":"Isla Bruma","demo":true}. Para mapas originales proporciona "map":{"theme":"fantasy"|"treasure"|"atlas","places":[{"id":"puerto","name":"Puerto ...","x":24,"y":66,"kind":"port","description":"..."}],"routes":[{"from":"puerto","to":"bosque"}],"coast":[[18,29],...]}. De 2 a 35 lugares únicos, x/y de 5 a 95, kind city/port/forest/mountain/ruins/castle/tower/temple/cave/village. El mapa admite selección, lista, zoom, reinicio, senderos y descarga SVG; funciona offline. Los resultados registran un artifactId y un contrato de render verificable. Una vez publicada la presentación autocontenida, finaliza el turno; no digas "render comprobado" sin una prueba real del cliente. Para mapas reales y rutas verificadas usar las herramientas geográficas separadas.',
+    description:'MOTOR REAL DE MAPAS FICTICIOS: usar esta herramienta cuando el usuario solicite crear, mostrar, dibujar, publicar o explorar mapas narrativos, islas inventadas, mundos de fantasía, mapas de videojuegos, cuentos, reinos imaginarios o Isla Bruma. LA HERRAMIENTA PUBLICA UN ARTEFACTO NATIVO INTERACTIVO en el chat; no basta responder "hecho", no usar MiniBrowser, localhost ni imágenes estáticas, y no usar geo_map real/OpenStreetMap para ficción. Para una demo inmediata de Isla Bruma usa {"title":"Isla Bruma","demo":true}. Para mapas originales proporciona "map":{"theme":"fantasy"|"treasure"|"atlas","places":[{"id":"puerto","name":"Puerto ...","x":24,"y":66,"kind":"port","description":"..."}],"routes":[{"from":"puerto","to":"bosque"}],"coast":[[18,29],...]}. De 2 a 35 lugares únicos, x/y de 5 a 95, kind city/port/forest/mountain/ruins/castle/tower/temple/cave/village. El mapa admite selección, lista, zoom, reinicio, senderos y descarga SVG; funciona offline. Los resultados registran un artifactId y un contrato de render verificable. Al recibir el resultado de esta herramienta, redacta una respuesta final corta con el identificador real. Nunca cierres el turno antes de esa respuesta; no digas "render comprobado" sin una prueba real del cliente. Para mapas reales y rutas verificadas usar las herramientas geográficas separadas.',
     parameters:{
       title:{type:'string',required:true,description:'Nombre del mundo/isla en el encabezado del mapa.'},
       demo:{type:'boolean',description:'Para demo explícita y rápida genera cinco lugares ficticios coherentes sin copiar JSON.'},
       map:{type:'object',additionalProperties:true,description:'Contrato narrativo con places:[{id,name,x,y,kind,description}], routes?:[{from,to,label}], coast?:[[x,y]], subtitle?, description?, theme?'},
-      continueAfterDisplay:{type:'boolean',description:'Solo true cuando el usuario pide continuar otro trabajo después de entregar el mapa.'},
+      continueAfterDisplay:{type:'boolean',description:'Deprecated, retained for compatibility. The agent always gets a final-response step.'},
     },
     output:{
       schema:{type:'object',additionalProperties:false,properties:{
@@ -164,7 +164,8 @@ export function createPhoenixSceneMapTool():ToolDefinition {
       if(args.map!==undefined&&args.demo===true)invalid('Indica map original o demo:true, no ambos.')
       const map=args.demo===true?demoIslandMap(title):admitPhoenixSceneMap(args.map,title)
       const artifactId='phoenix-scene-map:'+String(exec.callId)
-      if(args.continueAfterDisplay!==true)exec.concludeTurn()
+      // Let agent-loop receive the tool result and produce a final assistant message.
+      // concludeTurn here terminated a tool-only step with no final response.
       return Promise.resolve({
         artifactId,title,map:map as unknown as JsonValue,
         publication:'artifact_emitted_not_client_render_verified',
