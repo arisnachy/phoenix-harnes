@@ -66,7 +66,7 @@ export function inspectComicImageResponse(value) {
         if(URL_KEYS.has(key)&&/^https?:\/\//iu.test(item))urls.add(item)
         if(ID_KEYS.has(key)&&item.trim())ids.push({type:key,value:item.trim()})
       }
-      if(typeof item==='object'||key==='text'||key==='structuredContent'||key==='toolResult')walk(item,depth+1)
+      if(typeof item==='object'||key==='text'||key==='structuredContent'||key==='toolResult'||key==='result'||key==='response')walk(item,depth+1)
     }
   }
   walk(value,0)
