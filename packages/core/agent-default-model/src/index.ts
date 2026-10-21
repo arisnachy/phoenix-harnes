@@ -31,6 +31,12 @@ export interface LastPickerSelection {
   model: string
   /** Selected effort, when managed explicitly by the picker. */
   reasoningEffort?: string
+  /** Provider-native route this picker choice corresponded to. */
+  runtimeProvider: string
+  /** Provider-native model id (never the synthetic Eclipse selector). */
+  runtimeModel: string
+  /** Native reasoning effort, if any. */
+  runtimeReasoningEffort?: string
 }
 
 /** Stored and composed default model selection. */
@@ -72,6 +78,9 @@ export const AGENT_DEFAULT_MODEL_SETTINGS_SCHEMA: z<AgentDefaultModelSettings> =
     provider: z.string().required(),
     model: z.string().required(),
     reasoningEffort: z.string(),
+    runtimeProvider: z.string().required(),
+    runtimeModel: z.string().required(),
+    runtimeReasoningEffort: z.string(),
   }),
   eclipse: z.object({
     mode: z.union(['automatic', 'hybrid', 'manual']).default('automatic'),
@@ -149,6 +158,11 @@ export class AgentDefaultModelConfig extends Service {
   preferredSelection(): ModelSelection {
     const latest = this.source().lastPickerSelection
     if (latest === undefined) return this.currentSelection()
+    const runtime = this.currentSelection()
+    if (latest.runtimeProvider !== runtime.provider || latest.runtimeModel !== runtime.model
+      || (latest.runtimeReasoningEffort ?? '') !== String(runtime.reasoningEffort ?? '')) {
+      return runtime
+    }
     return {
       provider: latest.provider,
       model: latest.model,
@@ -191,6 +205,9 @@ export class AgentDefaultModelConfig extends Service {
         provider: selected.provider,
         model: selected.model,
         ...selected.reasoningEffort === undefined ? {} : { reasoningEffort: String(selected.reasoningEffort) },
+        runtimeProvider: runtime.provider,
+        runtimeModel: runtime.model,
+        ...runtime.reasoningEffort === undefined ? {} : { runtimeReasoningEffort: String(runtime.reasoningEffort) },
       },
       ...current.eclipse === undefined ? {} : { eclipse: current.eclipse },
     })
