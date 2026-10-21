@@ -66,6 +66,8 @@ test('Canva solo maqueta arte existente, sin redefinir paleta, universo o person
   const canva=await comicProviderPacket('heroes','one',{slot:'page-1',provider:'Canva'})
   assert.equal(canva.mode,'layout-only')
   assert.equal(canva.allowRegeneration,false)
+  assert.deepEqual(canva.references.map(r=>r.role),['generated-art'])
+  assert.equal(canva.targetDesignNotes[0].role,'cover-target')
   assert.equal(canva.canonDigest,image.canonDigest)
   assert.equal(canva.style.rendering,spec.style.rendering)
   await assert.rejects(comicProviderPacket('heroes','one',{slot:'page-2'}),/fuera de la secuencia/)
