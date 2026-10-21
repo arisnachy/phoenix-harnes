@@ -136,7 +136,7 @@ export function createPhoenixGeoMapTool():ToolDefinition {
     parameters:{
       title:{type:'string',required:true,description:'Nombre visible del mapa.'},
       map:{type:'object',required:true,additionalProperties:true,description:'Fuente, metadatos y capas geográficas WGS84 verificadas.'},
-      continueAfterDisplay:{type:'boolean',description:'True solo cuando se deba seguir con otros trabajos después de emitir el mapa.'},
+      continueAfterDisplay:{type:'boolean',description:'Compatibilidad: tras publicar siempre se permite la respuesta final del asistente.'},
     },
     output:{
       schema:{type:'object',additionalProperties:false,properties:{
@@ -153,7 +153,7 @@ export function createPhoenixGeoMapTool():ToolDefinition {
     execute(args,exec){
       const map=admitPhoenixGeoMap(args.map,args.title)
       const artifactId='phoenix-geo-map:'+String(exec.callId)
-      if(args.continueAfterDisplay!==true)exec.concludeTurn()
+      // Continue to the assistant's final response after committing this geographic map artifact.
       return Promise.resolve({artifactId,title:map.props.title,map:map as unknown as JsonValue,
         publication:'artifact_emitted_not_client_render_verified'})
     },

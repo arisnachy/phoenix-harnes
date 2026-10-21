@@ -35,7 +35,7 @@ describe('geographic map publication in native chat',()=>{
     expect(result.map.props.center.lng).toBeCloseTo(-70.69)
     expect(result.map.props.layers).toHaveLength(1)
     expect(result.publication).toBe('artifact_emitted_not_client_render_verified')
-    expect(done).toHaveBeenCalledOnce()
+    expect(done).not.toHaveBeenCalled()
     expect(tool.output.presentationMeta?.(args,result as never)).toMatchObject({
       artifact:{id:result.artifactId,mime:PHOENIX_GEO_MAP_MIME,
         executable:false,data:{component:'geo_map',version:1}},
