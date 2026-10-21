@@ -1257,7 +1257,11 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         reasoningEffort: ReasoningEffortId('max'),
       }
     }
-    return { provider: selected.provider, model: selected.model }
+    return {
+      provider: selected.provider,
+      model: selected.model,
+      ...selected.reasoningEffort === undefined ? {} : { reasoningEffort: selected.reasoningEffort },
+    }
   }
   type WebModelSelectionRef = ModelSelectionRef & { current: ModelSelection; accept(next: ModelSelection): Promise<void> }
   const selections = new WeakMap<Agent, WebModelSelectionRef>()
