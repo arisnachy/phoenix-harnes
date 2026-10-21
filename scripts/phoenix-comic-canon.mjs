@@ -173,7 +173,10 @@ export async function comicProviderPacket(seriesId,issueId,{slot,provider='image
   if(provider.toLowerCase()==='canva'){
     if(canon.verifiedReferences.filter(r=>r.role==='generated-art').length===0)fail('Canva necesita arte real aprobado para maquetación; no debe crear el canon.')
     return {...packet,provider:'canva',mode:'layout-only',allowRegeneration:false,
-      instruction:'Arrange existing illustrated assets and separate lettering; do not generate or redesign characters or story.'}
+      references:packet.references.filter(r=>r.role==='generated-art'),
+      targetDesignNotes:packet.references.filter(r=>r.role!=='generated-art')
+        .map(r=>({role:r.role,meaning:r.meaning,assetId:r.assetId})),
+      instruction:'Arrange ONLY references marked generated-art. Target examples describe desired layouts but are not completed pages. Preserve separate lettering, characters, palette and story; no artwork generation.'}
   }
   return {...packet,provider:text(provider,'proveedor',100),mode:'generate-missing-illustration'}
 }
