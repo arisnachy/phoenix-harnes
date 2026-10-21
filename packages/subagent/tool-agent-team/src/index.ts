@@ -3,7 +3,7 @@
 import type { Context } from '@phoenix-ai/cordis'
 import z from '@phoenix-ai/schemastery'
 import {
-  PHOENIX_CODEX_AUTO_WORKER_MODEL, isKiraCodexAutoLead, latestModelSelectionPreference,
+  PHOENIX_CODEX_AUTO_WORKER_MODEL, isPhoenixCodexAutoSelection, latestModelSelectionPreference,
 } from '@phoenix-ai/dsh-agent'
 import type { EclipseRoutingSettings } from '@phoenix-ai/dsh-agent'
 import type { Agent, AgentOptions } from '@phoenix-ai/dsh-agent'
@@ -436,7 +436,8 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
           }
         }
         const preference = latestModelSelectionPreference(agent.session)?.selection
-        const eclipseEnabled = isKiraCodexAutoLead(preference, agent)
+        const eclipseEnabled = agent.session.header?.origin !== 'subagent'
+          && isPhoenixCodexAutoSelection(preference)
         const settingsAuthority = ctx.get('agentDefaultModel') as {
           currentEclipseProfile?: () => EclipseRoutingSettings | undefined
         } | undefined

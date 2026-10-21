@@ -4,6 +4,10 @@ import { WELCOME_NOTICE_COPY } from '../onboarding-copy.ts'
 
 /** English strings (the key-set source of truth for this pair). */
 export const en = {
+  eclipseNav: 'Fénix Eclipse',
+  eclipseCatalogLoading: 'Refreshing live Codex models…',
+  eclipseCatalogCount: '{count} OpenAI Codex models available',
+  eclipseRefresh: 'Refresh models',
   eclipseTitle: "Fénix Eclipse · Orchestration",
   eclipseDescription: "Customize the actual planner, coordinator and teammate model routes. Auto mode preserves the original behavior.",
   eclipseMode: "Routing mode",
@@ -20,7 +24,7 @@ export const en = {
   eclipseSpecialistHint: "Choose a default teammate model first; assign it to a named specialist.",
   eclipseAdd: "Assign",
   eclipseSaved: "Eclipse settings saved.",
-  eclipseCatalogHint: "Open a regular conversation to load the available model catalog.",
+  eclipseCatalogHint: "No live models are listed. Connect OpenAI Codex in Models or check the provider status and retry.",
   eclipseInvalid: "Some selected models or reasoning levels are not in the available catalog.",
   eclipseSave: "Save Eclipse",
   eclipseReset: "Restore Eclipse defaults",
@@ -158,6 +162,10 @@ export type ModelsKey = keyof typeof en
 
 /** Chinese strings (same keys as {@link en}). */
 export const zh: { [Key in keyof typeof en]: string } = {
+  eclipseNav: 'Fénix Eclipse',
+  eclipseCatalogLoading: '正在更新 Codex 实时模型…',
+  eclipseCatalogCount: '可用 OpenAI Codex 模型：{count}',
+  eclipseRefresh: '刷新模型',
   eclipseTitle: "Fénix Eclipse · 编排设置",
   eclipseDescription: "为规划、协调及子代理配置实际调用的模型。自动模式保留原有行为。",
   eclipseMode: "路由模式",
@@ -174,7 +182,7 @@ export const zh: { [Key in keyof typeof en]: string } = {
   eclipseSpecialistHint: "先选择默认子代理模型，然后分配给指定名称。",
   eclipseAdd: "分配",
   eclipseSaved: "Eclipse 设置已保存。",
-  eclipseCatalogHint: "请打开对话以加载可用模型目录。",
+  eclipseCatalogHint: "没有获取到实时模型。请在模型设置中连接 OpenAI Codex 后重试。",
   eclipseInvalid: "某些模型或推理级别不在可用目录中。",
   eclipseSave: "保存 Eclipse",
   eclipseReset: "恢复默认设置",
@@ -311,6 +319,10 @@ export const zh: { [Key in keyof typeof en]: string } = {
  * dedicated translation lands; all primary provider and model flows are native. */
 export const es: { [Key in keyof typeof en]: string } = {
   ...en,
+  eclipseNav: 'Fénix Eclipse',
+  eclipseCatalogLoading: 'Actualizando modelos de OpenAI Codex…',
+  eclipseCatalogCount: '{count} modelos de OpenAI Codex disponibles',
+  eclipseRefresh: 'Actualizar modelos',
   eclipseTitle: "Fénix Eclipse · Orquestación",
   eclipseDescription: "Personaliza los modelos reales de planificación, coordinación y subagentes. El modo automático conserva el comportamiento anterior.",
   eclipseMode: "Modo de enrutamiento",
@@ -327,7 +339,7 @@ export const es: { [Key in keyof typeof en]: string } = {
   eclipseSpecialistHint: "Selecciona el modelo predeterminado y asígnalo a un especialista por su nombre.",
   eclipseAdd: "Asignar",
   eclipseSaved: "Configuración de Eclipse guardada.",
-  eclipseCatalogHint: "Abre una conversación para cargar el catálogo de modelos disponibles.",
+  eclipseCatalogHint: "No hay modelos disponibles. Conecta OpenAI Codex en Modelos o comprueba el proveedor y vuelve a intentar.",
   eclipseInvalid: "Algún modelo o nivel de razonamiento no aparece en el catálogo disponible.",
   eclipseSave: "Guardar Eclipse",
   eclipseReset: "Restaurar Eclipse",

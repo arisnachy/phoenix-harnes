@@ -20,6 +20,9 @@ declare module '@phoenix-ai/cordis' {
 /** Settings namespace carrying the default model selection for future Agents. */
 export const AGENT_DEFAULT_MODEL_SETTINGS_NAMESPACE = settingsNamespace('agent-default-model')
 
+/** Fénix Eclipse owns an independent, model-specific settings namespace. */
+export const ECLIPSE_ROUTING_SETTINGS_NAMESPACE = settingsNamespace('eclipse-routing')
+
 /** Stored and composed default model selection. */
 export interface AgentDefaultModelSettings {
   /** Registered provider route. */
@@ -36,6 +39,16 @@ const eclipseRouteSchema = z.object({
   provider: z.string().required(),
   model: z.string().required(),
   reasoningEffort: z.string(),
+})
+
+/** Independent route configuration for the synthetic Fénix Eclipse model. */
+export const ECLIPSE_ROUTING_SETTINGS_SCHEMA: z<EclipseRoutingSettings> = z.object({
+  mode: z.union(['automatic', 'hybrid', 'manual']),
+  planner: eclipseRouteSchema,
+  coordinator: eclipseRouteSchema,
+  subagent: eclipseRouteSchema,
+  specialists: z.dict(eclipseRouteSchema),
+  maxTeammates: z.number().step(1).min(0).max(3),
 })
 
 /** Schema of the default Agent model settings section. */
@@ -84,6 +97,7 @@ export class AgentDefaultModelConfig extends Service {
   })
 
   private source: () => AgentDefaultModelSettings
+  private eclipseSource: () => EclipseRoutingSettings = () => ({})
 
   constructor(ctx: Context, config: Config) {
     super(ctx, 'agentDefaultModel')
@@ -93,6 +107,13 @@ export class AgentDefaultModelConfig extends Service {
       setSource: (current) => { this.source = current },
       // Every consumer reads through currentSelection(), so no registration-level fact
       // needs rebuilding when the settings document changes.
+      onChange: () => {},
+    })
+    // Eclipse is configured by its own synthetic-model section, not by
+    // the regular Agent default model. Preserve legacy saved values until the
+    // user first saves a dedicated Eclipse preference.
+    installSettingsSection(ctx, ECLIPSE_ROUTING_SETTINGS_NAMESPACE, ECLIPSE_ROUTING_SETTINGS_SCHEMA, {}, {
+      setSource: (current) => { this.eclipseSource = current },
       onChange: () => {},
     })
   }
@@ -115,8 +136,12 @@ export class AgentDefaultModelConfig extends Service {
    * @returns Detached Eclipse settings, or undefined when no user overrides exist.
    */
   currentEclipseProfile(): EclipseRoutingSettings | undefined {
-    const saved = this.source().eclipse
-    return saved === undefined ? undefined : structuredClone(saved)
+    const dedicated = this.eclipseSource()
+    if (Object.keys(dedicated).length !== 0) return structuredClone(dedicated)
+    // Non-destructive compatibility with Eclipse settings saved before this
+    // namespace existed. All new writes target eclipse-routing exclusively.
+    const legacy = this.source().eclipse
+    return legacy === undefined ? undefined : structuredClone(legacy)
   }
 
   /** Persist a new model default without erasing user-owned Eclipse configuration.
