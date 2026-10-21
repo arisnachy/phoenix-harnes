@@ -119,6 +119,38 @@ describe('AgentDefaultModelConfig', () => {
     await bench.ctx.fiber.dispose()
   })
 
+  it('remembers the last real picker choice across service recreation', async () => {
+    const first = await boot()
+    await first.defaultModel.saveWebSelection(
+      { provider: 'openai-codex', model: 'gpt-6.1-sol', reasoningEffort: ReasoningEffortId('high') },
+      { provider: 'openai-codex', model: 'gpt-6.1-sol', reasoningEffort: ReasoningEffortId('high') },
+    )
+    const saved = first.settingsFiber.ctx.settings.describe()
+    expect(first.defaultModel.preferredSelection()).toEqual({
+      provider: 'openai-codex', model: 'gpt-6.1-sol', reasoningEffort: 'high',
+    })
+    expect(first.defaultModel.currentSelection().provider).toBe('openai-codex')
+    expect(saved.some(entry => entry.ns === AGENT_DEFAULT_MODEL_SETTINGS_NAMESPACE)).toBe(true)
+    await first.ctx.fiber.dispose()
+  })
+
+  it('preserves synthetic Fénix Eclipse as the last choice without using it as runtime', async () => {
+    const bench = await boot()
+    await bench.defaultModel.saveWebSelection(
+      { provider: 'openai-codex', model: 'phoenix-auto' },
+      { provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('max') },
+    )
+    expect(bench.defaultModel.preferredSelection()).toEqual({
+      provider: 'openai-codex', model: 'phoenix-auto',
+    })
+    expect(bench.defaultModel.currentSelection()).toEqual({
+      provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'max',
+    })
+    await bench.defaultModel.saveSelection({ provider: 'other', model: 'new' })
+    expect(bench.defaultModel.preferredSelection()).toEqual({ provider: 'other', model: 'new' })
+    await bench.ctx.fiber.dispose()
+  })
+
   it('keeps the composition entry when no settings provider is mounted', async () => {
     const ctx = new Context()
     await ctx.plugin(AgentDefaultModelConfig, { provider: 'p', model: 'm' })
