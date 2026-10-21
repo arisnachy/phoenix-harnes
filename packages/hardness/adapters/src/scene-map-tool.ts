@@ -142,6 +142,7 @@ export function createPhoenixSceneMapTool():ToolDefinition {
       continueAfterDisplay:{type:'boolean',description:'Solo true cuando el usuario pide continuar otro trabajo después de entregar el mapa.'},
     },
     output:{
+      nestedPresentationMeta:true,
       schema:{type:'object',additionalProperties:false,properties:{
         artifactId:{type:'string',required:true},
         title:{type:'string',required:true},
@@ -164,7 +165,7 @@ export function createPhoenixSceneMapTool():ToolDefinition {
       if(args.map!==undefined&&args.demo===true)invalid('Indica map original o demo:true, no ambos.')
       const map=args.demo===true?demoIslandMap(title):admitPhoenixSceneMap(args.map,title)
       const artifactId='phoenix-scene-map:'+String(exec.callId)
-      if(args.continueAfterDisplay!==true)exec.concludeTurn()
+      // Allow the coordinator to send a final response after the durable artifact lands.
       return Promise.resolve({
         artifactId,title,map:map as unknown as JsonValue,
         publication:'artifact_emitted_not_client_render_verified',
