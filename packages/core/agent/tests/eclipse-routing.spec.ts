@@ -51,6 +51,24 @@ describe('Eclipse role routing', () => {
     })
   })
 
+  it('keeps planning with Sol and coordination with Luna independent under unlimited strategy mode', () => {
+    const saved: EclipseRoutingSettings = {
+      mode: 'hybrid',
+      planner: { provider: 'openai-codex', model: 'gpt-6.1-sol', reasoningEffort: 'medium' },
+      coordinator: { provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'max' },
+      subagent: { provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'max' },
+      escalationSensitivity: 'adaptive',
+    }
+    const plan = resolveEclipseRoleRoute(saved, 'planner', fallback, 'low')
+    expect(plan).toEqual({ provider: 'openai-codex', model: 'gpt-6.1-sol', reasoningEffort: ReasoningEffortId('medium') })
+    expect(resolveEclipseRoleRoute(saved, 'coordinator', fallback, 'high')).toEqual({
+      provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('max'),
+    })
+    expect(resolveEclipseRoleRoute(saved, 'subagent', fallback, 'high')).toEqual({
+      provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('max'),
+    })
+  })
+
   it('selects effort from task evidence without a classifier request', () => {
     expect(adaptiveCodexReasoningEffort('Fix the broken navigation button')).toEqual(ReasoningEffortId('high'))
     expect(adaptiveCodexReasoningEffort('Implement a complex multi-step architecture migration')).toEqual(ReasoningEffortId('xhigh'))
