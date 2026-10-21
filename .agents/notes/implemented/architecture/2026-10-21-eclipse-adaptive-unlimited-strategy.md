@@ -16,6 +16,10 @@ The new profile includes a sensitivity marker so older planner-only settings can
 
 Focused checks: UI settings round-trip with three model roles, independent settings schema validation, plan-versus-execution route selection, four distinct successive strategy reviews, unchanged-failure deduplication, and Web accessibility snapshot for the configurator.
 
+## CI runner repair
+
+The Linux CI preflight previously pinned Bubblewrap to an Ubuntu revision no longer present in the signed APT index. CI now selects the current signed APT candidate and independently checks the downloaded package SHA-256 from the same package metadata before extracting or using the sandbox binary. This repairs test infrastructure without removing the sandbox functional probe or weakening archive verification.
+
 ## Limitations
 
 The heuristic sees execution evidence reported in the current session; it does not predict task complexity perfectly or guarantee token savings. Cost/quality comparisons require real provider traces; local tests cannot establish an improvement in production. Provider failures and authorization guards still apply. The generic automatic continuation gate remains bounded independently of strategic reviews.
