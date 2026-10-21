@@ -142,6 +142,7 @@ export function createPhoenixSceneMapTool():ToolDefinition {
       continueAfterDisplay:{type:'boolean',description:'Deprecated, retained for compatibility. The agent always gets a final-response step.'},
     },
     output:{
+      nestedPresentationMeta:true,
       schema:{type:'object',additionalProperties:false,properties:{
         artifactId:{type:'string',required:true},
         title:{type:'string',required:true},
