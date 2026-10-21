@@ -20,6 +20,8 @@ export interface CodeDispatchStartEventData {
 export interface CodeDispatchEventData extends CodeDispatchStartEventData {
   isError: boolean
   content: ContentBlock[]
+  /** Optional trusted, validated presentation metadata for replayable nested artifacts. */
+  meta?: import('@phoenix-ai/dsh-session').JsonValue
 }
 
 declare module '@phoenix-ai/dsh-session/types' {
