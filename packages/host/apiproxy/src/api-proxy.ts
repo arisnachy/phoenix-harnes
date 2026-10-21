@@ -747,6 +747,10 @@ export interface ApiProxyDefaults {
    * and undoing it because storage failed would be the worse outcome.
    */
   saveDefaultModelSelection?: (selection: ModelSelection) => Promise<void>
+  /** Last model explicitly chosen in the Web picker; can be a synthetic model. */
+  defaultDisplayModelSelection?: () => ModelSelection
+  /** Persist the exact picker choice and executable route in one durable transaction. */
+  saveWebModelSelection?: (selected: ModelSelection, runtime: ModelSelection) => Promise<void>
   /** Default project directory for new sessions whose create request carries no cwd. */
   cwd: string
   /** Native open-with-default-application; injectable for carrier tests. */
@@ -1253,7 +1257,11 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         reasoningEffort: ReasoningEffortId('max'),
       }
     }
-    return { provider: selected.provider, model: selected.model }
+    return {
+      provider: selected.provider,
+      model: selected.model,
+      ...selected.reasoningEffort === undefined ? {} : { reasoningEffort: selected.reasoningEffort },
+    }
   }
   type WebModelSelectionRef = ModelSelectionRef & { current: ModelSelection; accept(next: ModelSelection): Promise<void> }
   const selections = new WeakMap<Agent, WebModelSelectionRef>()
@@ -1307,7 +1315,9 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         // Incrementally folded by the session, so a per-step read costs
         // O(new events) rather than a rescan.
         const logged = agent.session.requestHeader()?.config
-        if (logged === undefined) return defaults.defaultModelSelection()
+        if (logged === undefined) {
+          return defaults.defaultDisplayModelSelection?.() ?? defaults.defaultModelSelection()
+        }
         return {
           provider: logged.provider,
           model: logged.model,
@@ -2744,10 +2754,14 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
               // Phoenix Auto is a durable user preference: agentOptions() seeds
               // Agents on Luna Max so the synthetic id is still never sent to OpenAI,
               // while selectionFor() preserves Phoenix Auto for new blank sessions.
-              await defaults.saveDefaultModelSelection?.(selected)
+              if (defaults.saveWebModelSelection !== undefined) {
+                await defaults.saveWebModelSelection(selected, liveRoute)
+              } else {
+                await defaults.saveDefaultModelSelection?.(selected)
+              }
             } catch (error: unknown) {
               ctx.logger.warn(
-                `api-proxy: the model switch applies to this session but was not saved as the default: ${String(error)}`,
+                `api-proxy: the model switch applies to this session but the last-used picker choice was NOT saved: ${String(error)}`,
               )
             }
             return ok(request, { selected: { ...selected } })

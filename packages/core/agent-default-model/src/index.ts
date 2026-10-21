@@ -23,6 +23,22 @@ export const AGENT_DEFAULT_MODEL_SETTINGS_NAMESPACE = settingsNamespace('agent-d
 /** Fénix Eclipse owns an independent, model-specific settings namespace. */
 export const ECLIPSE_ROUTING_SETTINGS_NAMESPACE = settingsNamespace('eclipse-routing')
 
+/** Provider-native runtime selection and exact last picker choice are independent. */
+export interface LastPickerSelection {
+  /** Registered provider (or provider that owns a virtual picker model). */
+  provider: string
+  /** Exact user-facing selected model, including Fénix Eclipse. */
+  model: string
+  /** Selected effort, when managed explicitly by the picker. */
+  reasoningEffort?: string
+  /** Provider-native route this picker choice corresponded to. */
+  runtimeProvider: string
+  /** Provider-native model id (never the synthetic Eclipse selector). */
+  runtimeModel: string
+  /** Native reasoning effort, if any. */
+  runtimeReasoningEffort?: string
+}
+
 /** Stored and composed default model selection. */
 export interface AgentDefaultModelSettings {
   /** Registered provider route. */
@@ -33,6 +49,8 @@ export interface AgentDefaultModelSettings {
   reasoningEffort?: string
   /** Eclipse orchestration preferences, never interpreted as a model id. */
   eclipse?: EclipseRoutingSettings
+  /** Most recently accepted Web picker choice, kept separate from the executable route. */
+  lastPickerSelection?: LastPickerSelection
 }
 
 const eclipseRouteSchema = z.object({
@@ -56,6 +74,14 @@ export const AGENT_DEFAULT_MODEL_SETTINGS_SCHEMA: z<AgentDefaultModelSettings> =
   provider: z.string().required(),
   model: z.string().required(),
   reasoningEffort: z.string(),
+  lastPickerSelection: z.object({
+    provider: z.string().required(),
+    model: z.string().required(),
+    reasoningEffort: z.string(),
+    runtimeProvider: z.string().required(),
+    runtimeModel: z.string().required(),
+    runtimeReasoningEffort: z.string(),
+  }),
   eclipse: z.object({
     mode: z.union(['automatic', 'hybrid', 'manual']).default('automatic'),
     planner: eclipseRouteSchema,
@@ -126,6 +152,24 @@ export class AgentDefaultModelConfig extends Service {
     return selection(this.source())
   }
 
+  /** Recover the last picker model for a new, otherwise blank conversation.
+   * @returns Last saved picker selection, or the provider-native default.
+   */
+  preferredSelection(): ModelSelection {
+    const latest = this.source().lastPickerSelection
+    if (latest === undefined) return this.currentSelection()
+    const runtime = this.currentSelection()
+    if (latest.runtimeProvider !== runtime.provider || latest.runtimeModel !== runtime.model
+      || (latest.runtimeReasoningEffort ?? '') !== String(runtime.reasoningEffort ?? '')) {
+      return runtime
+    }
+    return {
+      provider: latest.provider,
+      model: latest.model,
+      ...latest.reasoningEffort === undefined ? {} : { reasoningEffort: ReasoningEffortId(latest.reasoningEffort) },
+    }
+  }
+
   /**
    * Save the complete default model selection. A deployment without a settings
    * provider keeps its composition entry.
@@ -144,6 +188,31 @@ export class AgentDefaultModelConfig extends Service {
     return legacy === undefined ? undefined : structuredClone(legacy)
   }
 
+  /** Persist the accepted Web picker identity and native execution route atomically.
+   * @param selected - Exact model the user last chose in the picker.
+   * @param runtime - Validated provider-native execution route (never a synthetic model).
+   * @returns Persistence completion; failures must not be described as saved.
+   */
+  async saveWebSelection(selected: ModelSelection, runtime: ModelSelection): Promise<void> {
+    const settings = this.ctx.get('settings')
+    if (settings === undefined) throw new Error('Phoenix settings provider is unavailable; model was not saved')
+    const current = this.source()
+    await settings.replace(AGENT_DEFAULT_MODEL_SETTINGS_NAMESPACE, {
+      provider: runtime.provider,
+      model: runtime.model,
+      ...runtime.reasoningEffort === undefined ? {} : { reasoningEffort: String(runtime.reasoningEffort) },
+      lastPickerSelection: {
+        provider: selected.provider,
+        model: selected.model,
+        ...selected.reasoningEffort === undefined ? {} : { reasoningEffort: String(selected.reasoningEffort) },
+        runtimeProvider: runtime.provider,
+        runtimeModel: runtime.model,
+        ...runtime.reasoningEffort === undefined ? {} : { runtimeReasoningEffort: String(runtime.reasoningEffort) },
+      },
+      ...current.eclipse === undefined ? {} : { eclipse: current.eclipse },
+    })
+  }
+
   /** Persist a new model default without erasing user-owned Eclipse configuration.
    * @param next - Selected default provider, model and optional reasoning.
    * @returns Completion after the settings write.
@@ -154,6 +223,7 @@ export class AgentDefaultModelConfig extends Service {
       model: next.model,
       ...next.reasoningEffort === undefined ? {} : { reasoningEffort: String(next.reasoningEffort) },
       ...this.source().eclipse === undefined ? {} : { eclipse: this.source().eclipse },
+      ...this.source().lastPickerSelection === undefined ? {} : { lastPickerSelection: this.source().lastPickerSelection },
     })
   }
 }

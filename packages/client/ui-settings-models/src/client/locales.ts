@@ -4,6 +4,9 @@ import { WELCOME_NOTICE_COPY } from '../onboarding-copy.ts'
 
 /** English strings (the key-set source of truth for this pair). */
 export const en = {
+  eclipseLegacyHost: 'The Host is running an older Phoenix build. Eclipse will save through the compatibility namespace until the Host is restarted.',
+  eclipseLegacySaved: 'Eclipse was saved through compatibility mode. Update and restart the Phoenix Host.',
+  eclipseHostUnavailable: 'Eclipse settings are unavailable on the running Host. Update Phoenix and restart the Host and browser.',
   eclipseNav: 'Fénix Eclipse',
   eclipseCatalogLoading: 'Refreshing live Codex models…',
   eclipseCatalogCount: '{count} OpenAI Codex models available',
@@ -162,6 +165,9 @@ export type ModelsKey = keyof typeof en
 
 /** Chinese strings (same keys as {@link en}). */
 export const zh: { [Key in keyof typeof en]: string } = {
+  eclipseLegacyHost: '当前 Host 版本较旧；Eclipse 会通过兼容设置保存，直到 Host 完整重启。',
+  eclipseLegacySaved: '已通过兼容模式保存 Eclipse。请更新并重启 Phoenix Host。',
+  eclipseHostUnavailable: '当前 Host 未注册 Eclipse 设置；请更新并完整重启 Phoenix Host 和浏览器。',
   eclipseNav: 'Fénix Eclipse',
   eclipseCatalogLoading: '正在更新 Codex 实时模型…',
   eclipseCatalogCount: '可用 OpenAI Codex 模型：{count}',
@@ -319,6 +325,9 @@ export const zh: { [Key in keyof typeof en]: string } = {
  * dedicated translation lands; all primary provider and model flows are native. */
 export const es: { [Key in keyof typeof en]: string } = {
   ...en,
+  eclipseLegacyHost: 'El servidor Phoenix es anterior a esta interfaz. Eclipse guardará mediante el modo compatible hasta reiniciar el servidor actualizado.',
+  eclipseLegacySaved: 'Preferencias de Eclipse guardadas mediante compatibilidad. Actualiza y reinicia el servidor Phoenix.',
+  eclipseHostUnavailable: 'El servidor Phoenix no tiene registrado Settings de Eclipse. Actualiza y reinicia completamente Phoenix y el navegador.',
   eclipseNav: 'Fénix Eclipse',
   eclipseCatalogLoading: 'Actualizando modelos de OpenAI Codex…',
   eclipseCatalogCount: '{count} modelos de OpenAI Codex disponibles',
