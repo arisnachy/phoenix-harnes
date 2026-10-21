@@ -1,5 +1,7 @@
 import { Context } from '@phoenix-ai/cordis'
+import z from '@phoenix-ai/schemastery'
 import SystemPrompt, { renderPrompt } from '@phoenix-ai/dsh-system-prompt'
+import { SettingsProvider, settingsNamespace, type SettingsNamespace } from '@phoenix-ai/dsh-settings'
 import { createScope, type ScopeKey } from '@phoenix-ai/dsh-scope'
 import { describe, expect, it } from 'vitest'
 import * as Persona from '@phoenix-ai/dsh-persona'
@@ -15,6 +17,14 @@ async function harness(deploymentPersona: string): Promise<Context> {
 async function personaText(ctx: Context, scope?: ScopeKey): Promise<string | undefined> {
   const assembly = await ctx.systemPrompt.assemble(scope === undefined ? {} : { scope })
   return assembly.sections.find(section => section.name === PERSONA_SECTION)?.text
+}
+
+class MemorySettings extends SettingsProvider {
+  readonly writable = true
+  protected load(): Promise<Record<string, unknown>> { return Promise.resolve({}) }
+  protected persist(_ns: SettingsNamespace, _section: Record<string, unknown>): Promise<void> {
+    return Promise.resolve()
+  }
 }
 
 describe('the persona row', () => {
@@ -84,6 +94,35 @@ describe('the persona row', () => {
     expect(await personaText(ctx, key)).toBe('You run on {{model}}.')
     expect(renderPrompt(await ctx.systemPrompt.assemble({ scope: key })))
       .toContain('You run on deepseek-v4-pro.')
+  })
+
+  it('applies the selected Phoenix language inside the actual rendered YAML persona, even when the prompt is complete', async () => {
+    const ctx = await harness('')
+    await ctx.plugin(MemorySettings).await()
+    const key: ScopeKey = { agent: 'localized-agent' }
+    const scope = createScope(ctx, key)
+    await scope.ctx.plugin(Persona, { text: 'Identidad. {{phoenix_locale_instruction}}', complete: true })
+
+    const ns = settingsNamespace('locale')
+    ctx.settings.register(ns, z.object({
+      preference: z.union(['es','en','zh'] as const).required(false),
+    }))
+    await ctx.settings.update(ns, { preference: 'es' })
+    expect(renderPrompt(await ctx.systemPrompt.assemble({ scope: key }))).toContain('IDIOMA ELEGIDO EN PHOENIX: ESPAÑOL')
+    await ctx.settings.update(ns, { preference: 'en' })
+    expect(renderPrompt(await ctx.systemPrompt.assemble({ scope: key }))).toContain('PHOENIX SELECTED LANGUAGE: ENGLISH')
+    await ctx.settings.update(ns, { preference: 'zh' })
+    expect(renderPrompt(await ctx.systemPrompt.assemble({ scope: key }))).toContain('PHOENIX 已选语言：简体中文')
+    await ctx.settings.update(ns, {})
+  })
+
+  it('falls back to the last real user language when no explicit language is configured', async () => {
+    const ctx = await harness('')
+    const key: ScopeKey = { agent: 'unselected' }
+    await createScope(ctx, key).ctx.plugin(Persona, { text: '{{phoenix_locale_instruction}}' })
+    const prompt = renderPrompt(await ctx.systemPrompt.assemble({ scope: key }))
+    expect(prompt).toContain('No explicit language selected in PHOENIX settings')
+    expect(prompt).toContain('user’s latest message')
   })
 
   it('makes a complete persona the exact prompt after every other contribution', async () => {

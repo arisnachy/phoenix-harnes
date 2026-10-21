@@ -10,7 +10,9 @@
 - id: persona
   name: '@phoenix-ai/dsh-persona'
   config:
-    text: You are a helpful software engineer assistant.
+    text: >-
+      Eres una asistente profesional de ingeniería de software de Phoenix.
+      {{phoenix_locale_instruction}}
     complete: true
     includeRuntimeContext: false
 

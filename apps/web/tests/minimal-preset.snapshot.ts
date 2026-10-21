@@ -107,8 +107,12 @@ describe('minimal agent preset', () => {
       .replaceAll('\\', '/')
       .trimEnd()
 
+    expect(requestHeader.system).toContain('Eres una asistente profesional de ingeniería de software de Phoenix.')
+    expect(requestHeader.system).toMatch(/No explicit language selected in PHOENIX settings|IDIOMA ELEGIDO EN PHOENIX|PHOENIX SELECTED LANGUAGE|PHOENIX 已选语言/u)
     expect({
-      prompt: requestHeader.system,
+      prompt: requestHeader.system?.startsWith('Eres una asistente profesional')
+        ? 'LOCALE_AWARE_MINIMAL_PROMPT'
+        : requestHeader.system,
       tools: requestHeader.tools?.map(tool => tool.name === 'pwsh' ? 'bash' : tool.name),
       bash: text(shell),
       editor: text(editor),
@@ -118,7 +122,7 @@ describe('minimal agent preset', () => {
         "editor": "Here's the content of {{cwd}}/preset-smoke.txt with line numbers (which has a total of 2 lines):
            1  MINIMAL_EDITOR_OK
            2",
-        "prompt": "You are a helpful software engineer assistant.",
+        "prompt": "LOCALE_AWARE_MINIMAL_PROMPT",
         "tools": [
           "bash",
           "gmail_read",

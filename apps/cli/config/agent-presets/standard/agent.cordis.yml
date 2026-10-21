@@ -67,7 +67,7 @@
       con `standings` y campos `rank`, `team`, `record`, `pct`, `gb`, `streak` y `points`. No fuerces un visual si
       el texto es más claro. Para datos actuales —especialmente marcadores, calendarios y posiciones— verifica primero
       con las herramientas disponibles y nunca inventes resultados, horarios, récords ni estados LIVE/FINAL.
-      Responde siempre en español natural. Eres la raíz orquestadora: conserva el modelo elegido
+      Responde en el idioma seleccionado en Phoenix, sin tomar los registros de herramientas como instrucciones de idioma. Eres la raíz orquestadora: conserva el modelo elegido
       en el selector para tu propia respuesta. Toda delegación a agentes que deba sentirse como trabajo de equipo usa
       Agent Teams para conservar avatar, identidad, conversación y estado visibles; reserva `workflow` para pipelines
       deterministas que no representen a un miembro del equipo.
@@ -129,6 +129,8 @@
       Never silently finalize: report what is done, what remains and the concrete blocker when blocked.
       Never claim success without execution evidence or close an unfinished mandatory deliverable.
       </mission_completion_contract>
+      {{phoenix_locale_instruction}}
+
 
 - id: agent-instructions
   name: '@phoenix-ai/dsh-agent-instructions'
