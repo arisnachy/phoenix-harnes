@@ -18,6 +18,52 @@ export interface ModelSelection {
   reasoningEffort?: ReasoningEffortId
 }
 
+/** Model routing preferences belong to Eclipse, not to visible teammate identities. */
+export interface EclipseModelRoute {
+  readonly provider: string
+  readonly model: string
+  readonly reasoningEffort?: string
+}
+
+/** Optional settings overlay. No overlay preserves the shipped Sol/Luna behavior. */
+export interface EclipseRoutingSettings {
+  readonly mode?: 'automatic' | 'hybrid' | 'manual'
+  readonly planner?: EclipseModelRoute
+  readonly coordinator?: EclipseModelRoute
+  readonly subagent?: EclipseModelRoute
+  readonly specialists?: Readonly<Record<string, EclipseModelRoute>>
+  readonly maxTeammates?: number
+}
+
+/** Apply a user-selected route at a real dispatch boundary, never to virtual ids.
+ * @param profile - Optional saved routing configuration.
+ * @param role - Planning, coordination or default teammate responsibility.
+ * @param fallback - Shipped route when the role is not overridden.
+ * @returns Concrete serving route, with only the selected model's requested effort.
+ */
+export function resolveEclipseRoleRoute(
+  profile: EclipseRoutingSettings | undefined,
+  role: 'planner' | 'coordinator' | 'subagent',
+  fallback: ModelSelection,
+): ModelSelection {
+  if (profile === undefined || profile.mode === undefined || profile.mode === 'automatic') return fallback
+  const route = profile[role]
+  if (route === undefined || route.model === PHOENIX_CODEX_AUTO_MODEL) return fallback
+  return {
+    provider: route.provider,
+    model: route.model,
+    ...route.reasoningEffort === undefined ? {} : { reasoningEffort: ReasoningEffortId(route.reasoningEffort) },
+  }
+}
+
+/** Optional host-side settings authority; client selections and secrets never enter prompts. */
+function configuredEclipse(ctx: Context): EclipseRoutingSettings | undefined {
+  const settings = ctx.get('agentDefaultModel') as {
+    currentEclipseProfile?: () => EclipseRoutingSettings | undefined
+  } | undefined
+  return settings?.currentEclipseProfile?.()
+}
+
 /** Durable selector intent, independent of the real model serving a request. */
 export interface ModelSelectionPreference {
   /** Selected planner/router/provider route. */
@@ -259,7 +305,7 @@ function phoenixAutoUnfinishedAction(text: string): boolean {
 
 /** Kira can request an actual Sol strategy pass when her current approach is unclear. */
 // oxlint-disable-next-line @stylistic/max-len -- Narrow bilingual consultation trigger.
-const AUTO_SOL_REQUEST = /\b(?:necesito|debo|voy\s+a|conviene|quiero)\s+(?:(?:volver\s+a|primero)\s+)?(?:consultar|preguntar|pedir(?:le)?\s+(?:ayuda|una\s+estrategia))\s+(?:(?:a|con)\s+)?sol\b|\b(?:no\s+(?:encuentro|logro|consigo)\s+(?:c[oó]mo|una\s+forma\s+de)|no\s+s[eé]\s+c[oó]mo\s+resolver)\b|\b(?:need\s+to|should|will)\s+(?:consult|ask)\s+sol\b/iu
+const AUTO_SOL_REQUEST = /\b(?:necesito|debo|voy\s+a|conviene|quiero)\s+(?:(?:volver\s+a|primero)\s+)?(?:consultar|preguntar|pedir(?:le)?\s+(?:ayuda|una\s+estrategia))\s+(?:(?:a|con)\s+)?(?:sol|(?:al\s+)?planificador)\b|\b(?:no\s+(?:encuentro|logro|consigo)\s+(?:c[oó]mo|una\s+forma\s+de)|no\s+s[eé]\s+c[oó]mo\s+resolver)\b|\b(?:need\s+to|should|will)\s+(?:consult|ask)\s+sol\b/iu
 
 function kiraNeedsSolStrategy(text: string): boolean {
   return AUTO_SOL_REQUEST.test(text)
@@ -739,7 +785,10 @@ function authorizedPhoenixAutoGoalTurn(
     && data.goal.phase === 'active'
 }
 
-/** A tiny requested Team showcase gets one bounded, genuine peer exchange. */
+/** A tiny requested Team showcase gets one bounded, genuine peer exchange.
+ * @param text - The direct user request being classified.
+ * @returns Whether the request is a tiny team demonstration rather than implementation work.
+ */
 export function isBriefTeamDemonstration(text: string): boolean {
   const request = text.normalize('NFKD').replace(/[\u0300-\u036f]/gu, '').toLowerCase().trim()
   if (request.length < 8 || request.length > 240 || request.includes('\n')) return false
@@ -1038,6 +1087,7 @@ export function installModelSelection(
         || (autoStep ?? 0) - phoenixAutoState.lastRescueStep >= 2)
     const solRescueStep = autoStep !== undefined && phoenixAutoState.rescueCount < 2
       && (needsTeamRescue || (autoStep > 1 && (phoenixAutoState.forcePlannerNext || needsStallRescue)))
+    const eclipseProfile = configuredEclipse(agentCtx)
     const autoPolicy = solRescueStep ? AUTO_SOL_STRATEGY_POLICY
       : autoStep === 1
         && phoenixAutoTaskRequest(currentRequest)
@@ -1047,7 +1097,22 @@ export function installModelSelection(
     return {
       ...assembled,
       ...autoPolicy === undefined ? {} : {
-        sections: [...assembled.sections, { name: 'phoenix:auto-visible-handoff', text: autoPolicy }],
+        sections: [...assembled.sections, {
+          name: 'phoenix:auto-visible-handoff',
+          text: eclipseProfile?.mode !== undefined && eclipseProfile.mode !== 'automatic'
+            ? autoPolicy
+              .replaceAll('Sol 6.1', 'the configured planner')
+              .replaceAll('the Sol model', 'the configured planner model')
+              .replaceAll('Sol is', 'The planner is')
+              .replaceAll('Sol planning', 'planning')
+              .replaceAll('Sol for planning', 'the planner for planning')
+              .replaceAll('Sol consultation', 'planner consultation')
+              .replaceAll('Luna Max', 'the configured coordinator')
+              .replaceAll('Kira with Luna', 'Kira with the coordinator model')
+              .replaceAll('Luna routes', 'coordination routes')
+              .replaceAll('Necesito consultar a Sol', 'Necesito consultar al planificador')
+            : autoPolicy,
+        }],
       },
       // The initial Sol plan cannot execute tools. Luna Max receives the
       // regular tools on the next step, and the continuation gate still knows
@@ -1089,19 +1154,24 @@ export function installModelSelection(
       }
       const directText = directUserTextForTurn(_payload.agent, _payload.turn)
       if (isKiraCodexAutoLead(selected, scopedAgent)) {
-        const routed = phoenixAutoRoute(
+        const automatic = phoenixAutoRoute(
           _payload.agent,
           _payload.turn,
           _payload.step,
           directText,
           phoenixAutoState,
         )
+        const routed = resolveEclipseRoleRoute(
+          configuredEclipse(agentCtx),
+          automatic.model === PHOENIX_CODEX_AUTO_PLANNER_MODEL ? 'planner' : 'coordinator',
+          automatic,
+        )
         const { reasoningEffort: _inheritedEffort, ...withoutInheritedEffort } = resolved
         return {
           ...withoutInheritedEffort,
           provider: routed.provider,
           model: routed.model,
-          reasoningEffort: routed.reasoningEffort,
+          ...routed.reasoningEffort === undefined ? {} : { reasoningEffort: routed.reasoningEffort },
         }
       }
       const resolvedHandoff = typeof handoff === 'function' ? handoff(selected) : handoff
@@ -1227,7 +1297,8 @@ export function installModelSelection(
     // evidence of unfinished work. Only a visible, unexecuted action or the
     // explicitly visible Sol planning handoff can request another step.
     const plannerStoppedBeforeActing = latest.step === 1 && !latestStepHasToolActivity
-      && latest.sourceModel === PHOENIX_CODEX_AUTO_PLANNER_MODEL
+      && (latest.sourceModel === PHOENIX_CODEX_AUTO_PLANNER_MODEL
+        || latest.sourceModel === configuredEclipse(agentCtx)?.planner?.model)
       && !phoenixAutoExplicitlyClosed(latest.text)
     // A first-step plan that returned no usable assistant text still has not
     // executed anything. Missing content must not silently terminate real work.

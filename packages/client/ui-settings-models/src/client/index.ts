@@ -14,6 +14,7 @@ import type {} from '@phoenix-ai/dsh-api-remotes/client'
 import type { ModelsSectionInjected } from './ModelsSection.tsx'
 import { ModelsWithLocalSection } from './ModelsWithLocalSection.tsx'
 import type { ModelsWithLocalSectionInjected } from './ModelsWithLocalSection.tsx'
+import type { EclipseCatalogChoice } from './EclipseRoutingPanel.tsx'
 import type {
   PhoenixLocalModelClient,
   PhoenixLocalModelMode,
@@ -309,6 +310,22 @@ export function apply(ctx: ClientContext): void {
   const localModel = localModelClient(ctx)
   const mcpRegistry = mcpRegistryClient(ctx)
   const telegram = telegramBotClient(ctx)
+  const loadEclipseCatalog = async (): Promise<readonly EclipseCatalogChoice[]> => {
+    const active = (ctx.get('sessions') as {
+      list?: { getSnapshot: () => { current?: unknown } }
+    } | undefined)?.list?.getSnapshot().current
+    if (active === undefined) return []
+    const response = await connection.api.sessions.models({ sessionId: active as never })
+    if (!response.result.ok) throw new Error(response.result.error.message)
+    return response.result.value.groups.flatMap(group => group.models
+      .filter(model => model.id !== 'phoenix-auto')
+      .map(model => ({
+        provider: group.id,
+        model: model.id,
+        name: model.name,
+        reasoningEfforts: model.reasoning?.efforts.map(effort => effort.id) ?? [],
+      })))
+  }
   const injected = (): ModelsWithLocalSectionInjected => ({
     controller,
     hooks: { snapshot: controller.store },
@@ -317,6 +334,7 @@ export function apply(ctx: ClientContext): void {
     t,
     localModel,
     localT,
+    loadEclipseCatalog,
   })
   const assistantMailRecord = (value: unknown): value is Record<string, unknown> =>
     typeof value === 'object' && value !== null && !Array.isArray(value)
