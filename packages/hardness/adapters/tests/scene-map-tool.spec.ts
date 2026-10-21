@@ -31,7 +31,7 @@ describe('native fictional map publication via tool result',()=>{
     expect(r.map).toMatchObject({component:'scene_map',version:1})
     expect(r.map.props.places).toHaveLength(5)
     expect(r.map.props.routes).toHaveLength(4)
-    expect(conclude).toHaveBeenCalledOnce()
+    expect(conclude).not.toHaveBeenCalled()
     const artifact=tool.output.presentationMeta?.(args,r as never)
     expect(artifact).toMatchObject({artifact:{id:'phoenix-scene-map:map-isla-1',
       mime:PHOENIX_SCENE_MAP_MIME,executable:false,
