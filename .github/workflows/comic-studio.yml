@@ -5,6 +5,7 @@ on:
     paths:
       - 'scripts/phoenix-comic-studio*.mjs'
       - 'scripts/phoenix-comic-recovery*.mjs'
+      - 'scripts/phoenix-comic-canon*.mjs'
       - 'scripts/comic-page-layout*.mjs'
       - 'packages/hardness/adapters/src/comic-tool.ts'
       - 'packages/client/ui-conversation/src/client/chat/HardnessArtifactBody.tsx'
@@ -14,6 +15,7 @@ on:
     paths:
       - 'scripts/phoenix-comic-studio*.mjs'
       - 'scripts/phoenix-comic-recovery*.mjs'
+      - 'scripts/phoenix-comic-canon*.mjs'
       - 'scripts/comic-page-layout*.mjs'
       - '.github/workflows/comic-studio.yml'
 jobs:
@@ -24,7 +26,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: node --test scripts/phoenix-comic-studio.test.mjs scripts/comic-page-layout.test.mjs scripts/phoenix-comic-recovery.test.mjs
+      - run: node --test scripts/phoenix-comic-studio.test.mjs scripts/comic-page-layout.test.mjs scripts/phoenix-comic-recovery.test.mjs scripts/phoenix-comic-canon.test.mjs
       - uses: pnpm/action-setup@v4
         with:
           version: '11.7.0'

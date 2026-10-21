@@ -6,6 +6,7 @@ import { mkdir, readFile, writeFile, rename, rm, realpath, readdir, lstat, stat 
 import { resolve, join, relative, isAbsolute, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { importImage } from './phoenix-comic-studio.mjs'
+import { readComicCanon } from './phoenix-comic-canon.mjs'
 
 const HOME = resolve(process.env.PHOENIX_COMICS_HOME || join(process.env.DSH_HOME || join(homedir(),'.dsh'),'comic-studio'))
 const ID = /^[a-z][a-z0-9-]{1,63}$/u
@@ -83,7 +84,7 @@ async function scopedImage(path,workspace){
   return {path:file,sha256:hash(await readFile(file)),bytes:info.size}
 }
 /** Save provider evidence before changing generation providers. Invalid JSON remains an explicit failure. */
-export async function recordComicImageAttempt(seriesId,issueId,{attemptId,slot,provider,response,workspace,error}={}){
+export async function recordComicImageAttempt(seriesId,issueId,{attemptId,slot,provider,response,workspace,error,canonDigest}={}){
   await edition(seriesId,issueId);valid(attemptId);slotId(slot)
   if(typeof provider!=='string'||!provider.trim()||provider.length>100)fail('Proveedor inválido.')
   const raw=typeof response==='string'?response:JSON.stringify(response??null)
@@ -91,6 +92,9 @@ export async function recordComicImageAttempt(seriesId,issueId,{attemptId,slot,p
   const path=join(folder(seriesId,issueId),'attempts',valid(attemptId)+'.json')
   const old=await optional(path),responseHash=hash(raw)
   if(old){if(old.responseHash!==responseHash||old.slot!==slot||old.provider!==provider)fail('No se sobrescriben intentos con identificadores o respuestas diferentes.');return {...old,reused:true}}
+  const canon=await readComicCanon(seriesId,issueId)
+  const expectedCanonDigest=canon.locked?canon.digest:null
+  const canonMismatch=Boolean(expectedCanonDigest&&canonDigest!==expectedCanonDigest)
   const scan=inspectComicImageResponse(response),localCandidates=[]
   for(const candidate of scan.localCandidates){
     const file=await scopedImage(candidate,workspace)
@@ -98,7 +102,8 @@ export async function recordComicImageAttempt(seriesId,issueId,{attemptId,slot,p
   }
   const receipt={schemaVersion:1,seriesId,issueId,attemptId,slot,provider:provider.trim(),
     responseHash,rawResult:raw,error:error?String(error).slice(0,2000):null,
-    status:error?'provider-error':scan.malformedJson?'malformed-json'
+    canonDigest:canonDigest??null,expectedCanonDigest,canonMismatch,
+    status:canonMismatch?'canon-mismatch':error?'provider-error':scan.malformedJson?'malformed-json'
       :localCandidates.some(x=>x.verifiedLocalFile)?'local-file-found'
       :scan.providerIds.length?'provider-id-only'
       :scan.remoteCandidates.length?'remote-link-only':'unresolved',
@@ -113,15 +118,20 @@ async function attempts(s,i){
   return rows.sort((a,b)=>a.createdAt.localeCompare(b.createdAt))
 }
 /** Approve only a user/workflow-reviewed, byte-verified local image, never an inferred remote ID. */
-export async function acceptComicImage(seriesId,issueId,{slot,filePath,workspace,attemptId}={}){
+export async function acceptComicImage(seriesId,issueId,{slot,filePath,workspace,attemptId,canonDigest,visualReviewEvidence}={}){
   await edition(seriesId,issueId);slotId(slot)
   const plan=await optional(join(folder(seriesId,issueId),'plan.json'))
   if(plan&&!plan.slots.includes(slot))fail('Imagen fuera del plan editorial.')
+  const canon=await readComicCanon(seriesId,issueId)
+  if(canon.locked&&(canonDigest!==canon.digest||typeof visualReviewEvidence!=='string'||visualReviewEvidence.trim().length<12)){
+    fail('Canon bloqueado: necesita digest actual y evidencia de revisión visual antes de aceptar ilustraciones.')
+  }
   const file=await scopedImage(filePath,workspace)
   if(!file)fail('La imagen local no está disponible dentro del workspace autorizado.')
   if(attemptId){
     const old=await optional(join(folder(seriesId,issueId),'attempts',valid(attemptId)+'.json'))
     if(!old||old.slot!==slot)fail('El intento guardado no corresponde a esta ilustración.')
+    if(canon.locked&&old.canonDigest!==canon.digest)fail('Imagen de intento sin la dirección creativa aprobada; no se importa como arte final.')
   }
   const project=(await edition(seriesId,issueId)).project,existing=project.assets[slot]
   if(existing&&existing.sha256!==file.sha256)fail('Una imagen aprobada no se reemplaza silenciosamente.')
@@ -129,13 +139,15 @@ export async function acceptComicImage(seriesId,issueId,{slot,filePath,workspace
   const approval=await optional(approvalPath)
   if(approval&&approval.sha256!==file.sha256)fail('Aprobación ya registrada con otra imagen.')
   const imported=await importImage(seriesId,slot,file.path)
-  const value={seriesId,issueId,slot,assetId:slot,sha256:file.sha256,sourceAttempt:attemptId??null,at:new Date().toISOString()}
+  const value={seriesId,issueId,slot,assetId:slot,sha256:file.sha256,sourceAttempt:attemptId??null,
+    canonDigest:canon.locked?canon.digest:null,visualReviewEvidence:canon.locked?visualReviewEvidence.trim():null,at:new Date().toISOString()}
   if(!approval)await store(approvalPath,value)
   return {...value,reused:Boolean(existing||approval||imported.reused)}
 }
 /** Return actionable missing, unreviewed and preserved imagery without any provider call. */
 export async function comicRecoveryStatus(seriesId,issueId,{workspace}={}){
   const {project,issue}=await edition(seriesId,issueId)
+  const canon=await readComicCanon(seriesId,issueId)
   const plan=await optional(join(folder(seriesId,issueId),'plan.json'))
   const slots=plan?.slots??['cover-front',...(issue.pages??[]).flatMap(p=>p.panels.map((_,i)=>'page-'+p.number+'-panel-'+(i+1))),'cover-back']
   const logs=await attempts(seriesId,issueId),items=[]
@@ -158,9 +170,16 @@ export async function comicRecoveryStatus(seriesId,issueId,{workspace}={}){
     const found=target.some(key=>Boolean(project.assets[key]))
     const ok=target.length>0&&(await Promise.all(target.map(verified))).every(Boolean)
     const attemptsHere=logs.filter(a=>a.slot===slot),latest=attemptsHere.at(-1)
-    const local=attemptsHere.flatMap(a=>a.localCandidates??[]).filter(x=>x.verifiedLocalFile)
-    const state=ok?'imported-verified':found?'imported-corrupt':local.length?'generated-needs-review':latest?.status??'missing'
+    const local=attemptsHere.filter(a=>!canon.locked||a.canonDigest===canon.digest)
+      .flatMap(a=>a.localCandidates??[]).filter(x=>x.verifiedLocalFile)
+    const approval=canon.locked?await optional(join(folder(seriesId,issueId),'approvals',slot+'.json')):null
+    const accepted=!canon.locked||(approval?.canonDigest===canon.digest&&target.some(k=>
+      project.assets[k]?.sha256===approval.sha256))
+    const state=ok&&!accepted?'imported-needs-canon-review'
+      :ok?'imported-verified':found?'imported-corrupt':local.length?'generated-needs-review'
+        :latest?.status??'missing'
     items.push({slot,status:state,assetIds:ok?target:[],attemptCount:attemptsHere.length,
+      mismatchedAttempts:attemptsHere.filter(a=>canon.locked&&a.canonDigest!==canon.digest).length,
       localCandidates:local.map(x=>({path:x.path,sha256:x.sha256})),providerIds:latest?.providerIds??[],lastError:latest?.error??null})
   }
   const discovered=[]
@@ -171,11 +190,15 @@ export async function comicRecoveryStatus(seriesId,issueId,{workspace}={}){
     }
   }
   return {seriesId,issueId,planned:!!plan,totalSlots:slots.length,
+    creativeCanon:{status:canon.status,locked:canon.locked,sha256:canon.digest??null,
+      genre:canon.locked?canon.contract.style.genre:null,artistDirection:canon.locked?canon.contract.style.rendering:null},
+    mayGenerateFinalArt:canon.locked,requiresVisualReview:true,
     verified:items.filter(x=>x.status==='imported-verified').length,
-    pendingReview:items.filter(x=>x.status==='generated-needs-review').map(x=>x.slot),
-    needsGeneration:items.filter(x=>!['imported-verified','generated-needs-review'].includes(x.status)).map(x=>x.slot),
+    pendingReview:items.filter(x=>['generated-needs-review','imported-needs-canon-review'].includes(x.status)).map(x=>x.slot),
+    needsGeneration:items.filter(x=>!['imported-verified','generated-needs-review','imported-needs-canon-review'].includes(x.status)).map(x=>x.slot),
     slots:items,localDiscoveries:discovered,noProviderCallsWereMade:true,
-    advice:'Genera solamente imágenes realmente faltantes. No conviertas design_id en asset_id. No repitas identificadores rechazados.'}
+    advice:canon.locked?'Rehidratar canon y comprobar imágenes. Generar solo faltantes con el digest de canon aprobado; Canva es solo maquetación.'
+      :'Falta aprobación del canon creativo; primero mostrar referencias y bloquear estilo antes de generar arte final.'}
 }
 async function cli(argv){
   const [cmd,seriesId,issueId,arg]=argv
