@@ -42,7 +42,8 @@ jobs:
 
   node-24-coverage:
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    # Bubblewrap sandbox preflight is verified against Ubuntu 24.04 APT metadata.
+    runs-on: ubuntu-24.04
     name: node 24 / coverage
     env:
       DSH_COVERAGE_MAX_WORKERS: '2'
@@ -77,7 +78,8 @@ jobs:
 
   node-24-consumers:
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    # Keep the authenticated Bubblewrap package + Playwright stack on Noble.
+    runs-on: ubuntu-24.04
     name: node 24 / snapshots and artifacts
     env:
       DSH_GATE_CONCURRENCY: '1'
