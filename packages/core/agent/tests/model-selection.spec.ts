@@ -1617,15 +1617,15 @@ describe('installModelSelection()', () => {
     }
     const dispose = installModelSelection(ctx, selection, defaultExecutionHandoff)
     const events: { type: string; data: unknown }[] = [
-          { type: 'turn/start', data: { turn: 1 } },
-          {
-            type: 'user/message',
-            data: {
-              source: { kind: 'user' },
-              content: [{ type: 'text', text: 'hola kira' }],
-            },
-          },
-        ]
+      { type: 'turn/start', data: { turn: 1 } },
+      {
+        type: 'user/message',
+        data: {
+          source: { kind: 'user' },
+          content: [{ type: 'text', text: 'hola kira' }],
+        },
+      },
+    ]
     const agent = {
       session: { events, append: (type: string, data: unknown) => { events.push({ type, data }) } },
       options: {},
