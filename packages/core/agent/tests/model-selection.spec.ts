@@ -560,6 +560,12 @@ describe('installModelSelection()', () => {
 
   it('classifies narrow social, runtime-meta, and casual-reaction turns for the low-latency path', () => {
     expect(isConversationalFastPathText('hola')).toBe(true)
+    expect(isConversationalFastPathText('hola kira')).toBe(true)
+    expect(isConversationalFastPathText('¡Hola, Kira!')).toBe(true)
+    expect(isConversationalFastPathText('Kira, hola')).toBe(true)
+    expect(isConversationalFastPathText('buenas tardes Fénix')).toBe(true)
+    expect(isConversationalFastPathText('hola Kira, revisa el repo')).toBe(false)
+    expect(isConversationalFastPathText('hola Kira, ¿qué tiempo hace hoy?')).toBe(false)
     expect(isConversationalFastPathText('como te va que se cuenta')).toBe(true)
     expect(isConversationalFastPathText('¿cómo te va, qué se cuenta?')).toBe(true)
     expect(isConversationalFastPathText('hola, cómo te va, qué se cuenta')).toBe(true)
@@ -1560,7 +1566,7 @@ describe('installModelSelection()', () => {
     await ctx.fiber.dispose()
   })
 
-  it('uses Luna low for answer-only Phoenix Auto turns', async () => {
+  it('routes a named Kira greeting directly to Luna Max without planning', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
     const selection: ModelSelectionRef = {
@@ -1576,7 +1582,7 @@ describe('installModelSelection()', () => {
             type: 'user/message',
             data: {
               source: { kind: 'user' },
-              content: [{ type: 'text', text: 'hola' }],
+              content: [{ type: 'text', text: 'hola kira' }],
             },
           },
         ],
@@ -1593,7 +1599,7 @@ describe('installModelSelection()', () => {
     )).resolves.toEqual({
       provider: 'openai-codex',
       model: 'gpt-6-luna',
-      reasoningEffort: ReasoningEffortId('low'),
+      reasoningEffort: ReasoningEffortId('max'),
     })
 
     dispose()
