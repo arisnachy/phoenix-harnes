@@ -1087,7 +1087,7 @@ export function installModelSelection(
         || (autoStep ?? 0) - phoenixAutoState.lastRescueStep >= 2)
     const solRescueStep = autoStep !== undefined && phoenixAutoState.rescueCount < 2
       && (needsTeamRescue || (autoStep > 1 && (phoenixAutoState.forcePlannerNext || needsStallRescue)))
-    const eclipseProfile = configuredEclipse(agentCtx)
+    const eclipseProfile = isPhoenixCodexAutoSelection(selected) ? configuredEclipse(agentCtx) : undefined
     const autoPolicy = solRescueStep ? AUTO_SOL_STRATEGY_POLICY
       : autoStep === 1
         && phoenixAutoTaskRequest(currentRequest)
@@ -1162,7 +1162,7 @@ export function installModelSelection(
           phoenixAutoState,
         )
         const routed = resolveEclipseRoleRoute(
-          configuredEclipse(agentCtx),
+          isPhoenixCodexAutoSelection(selected) ? configuredEclipse(agentCtx) : undefined,
           automatic.model === PHOENIX_CODEX_AUTO_PLANNER_MODEL ? 'planner' : 'coordinator',
           automatic,
         )
@@ -1298,7 +1298,8 @@ export function installModelSelection(
     // explicitly visible Sol planning handoff can request another step.
     const plannerStoppedBeforeActing = latest.step === 1 && !latestStepHasToolActivity
       && (latest.sourceModel === PHOENIX_CODEX_AUTO_PLANNER_MODEL
-        || latest.sourceModel === configuredEclipse(agentCtx)?.planner?.model)
+        || (isPhoenixCodexAutoSelection(effectiveSelection(agentCtx.agent))
+          && latest.sourceModel === configuredEclipse(agentCtx)?.planner?.model))
       && !phoenixAutoExplicitlyClosed(latest.text)
     // A first-step plan that returned no usable assistant text still has not
     // executed anything. Missing content must not silently terminate real work.
