@@ -178,7 +178,7 @@ export function DiagramSurface({ spec, onAction }: {
               {edge.label && <title>{edge.label}</title>}
             </g>
           })}
-          {p.nodes.map(node => {
+          {p.nodes.map((node) => {
             if (node.shape === 'point') return null
             const shape = node.shape ?? 'rectangle'
             const focused = selected === node.id
@@ -194,9 +194,7 @@ export function DiagramSurface({ spec, onAction }: {
                 fill="#e1efff" stroke="#4479b2" strokeWidth="3.5"/>}
               {shape === 'rectangle' && <rect x={node.x - 80} y={node.y - 36} width="160" height="72" rx="15"
                 fill="#e7f1ee" stroke="#56857b" strokeWidth="3"/>}
-              {shape === 'diamond' && <path d={'M ' + node.x + ' ' + (node.y - 58)
-                + ' L ' + (node.x + 58) + ' ' + node.y + ' L ' + node.x + ' ' + (node.y + 58)
-                + ' L ' + (node.x - 58) + ' ' + node.y + ' Z'}
+              {shape === 'diamond' && <path d={`M ${node.x} ${node.y - 58} L ${node.x + 58} ${node.y} L ${node.x} ${node.y + 58} L ${node.x - 58} ${node.y} Z`}
                 fill="#fff0d7" stroke="#ca9842" strokeWidth="3"/>}
               {shape === 'rectangle' || shape === 'diamond'
                 ? <text x={node.x} y={node.y + 5} textAnchor="middle" fontSize="18" fontWeight="600"
@@ -218,8 +216,9 @@ export function DiagramSurface({ spec, onAction }: {
           <strong>{active.label}</strong>
           <p>{active.detail ?? 'Elemento del diagrama'}</p>
         </div>
-        {onAction && <button className={css.ask} type="button" onClick={() =>
-          { onAction(`En el diagrama "${p.title}" he seleccionado "${active.label}". ${active.detail ?? ''} Continúa a partir de este elemento.`, 'draft') }}>
+        {onAction && <button className={css.ask} type="button" onClick={() => {
+          onAction(`En el diagrama "${p.title}" he seleccionado "${active.label}". ${active.detail ?? ''} Continúa a partir de este elemento.`, 'draft')
+        }}>
           Preguntar a Kira sobre este elemento
         </button>}
       </aside>
