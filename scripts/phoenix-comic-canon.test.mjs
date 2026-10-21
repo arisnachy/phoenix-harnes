@@ -71,7 +71,8 @@ test('Canva solo maqueta arte existente, sin redefinir paleta, universo o person
   await assert.rejects(comicProviderPacket('heroes','one',{slot:'page-2'}),/fuera de la secuencia/)
 })
 test('intentos de Canva con canon ajeno siguen registrados pero no se aceptan como arte aprobado',async()=>{
-  const {recordComicImageAttempt,comicRecoveryStatus,acceptComicImage}=await import('./phoenix-comic-recovery.mjs')
+  const {planComicArt,recordComicImageAttempt,comicRecoveryStatus,acceptComicImage}=await import('./phoenix-comic-recovery.mjs')
+  await planComicArt('heroes','one',{interiorPages:1})
   const digest=(await readComicCanon('heroes','one')).digest
   const workspace=join(home,'workspace')
   await mkdir(workspace,{recursive:true})
