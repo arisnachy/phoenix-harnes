@@ -29,6 +29,7 @@ function artifactKind(mime: string, data: HardnessArtifactValue): ArtifactKind {
     || mime === 'application/vnd.phoenix.web-preview+json'
     || mime === 'application/vnd.hardness.web-preview+json') return 'html'
   if (mime.startsWith('image/')) return 'image'
+  if (mime === 'application/vnd.phoenix.diagram+json') return 'visual'
   if (mime === 'application/vnd.phoenix.scene3d+json') return 'visual'
   if (mime === 'application/vnd.phoenix.visual+json'
     || mime === 'application/vnd.hardness.visual+json'
