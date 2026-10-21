@@ -64,6 +64,9 @@ export function EclipseRoutingPanel(props: {
   )
   const source = state.namespaces.get('eclipse-routing')
   const legacy = state.namespaces.get('agent-default-model')
+  const dedicatedRegistered = source !== undefined
+  const legacyCompatible = !dedicatedRegistered && legacy !== undefined
+  const canPersist = dedicatedRegistered || legacyCompatible
   const [draft, setDraft] = useState<Profile>(() => existingProfile(source?.value, legacy?.value))
   const [catalog, setCatalog] = useState<readonly EclipseCatalogChoice[]>([])
   const [catalogError, setCatalogError] = useState<string>()
@@ -101,13 +104,18 @@ export function EclipseRoutingPanel(props: {
   const selection = (route: Route | undefined): string => route === undefined ? '' : encoded(route)
   const pick = (role: Role, key: string): void => {
     const next = routeFromKey(key)
-    update({ [role]: next } as Partial<Profile>)
+    update({ [role]: next, ...next !== undefined && (draft.mode ?? 'automatic') === 'automatic'
+      ? { mode: 'hybrid' as const } : {} } as Partial<Profile>)
   }
   const updateEffort = (role: Role, effort: string): void => {
     const route = draft[role]
     if (route === undefined) return
     const { reasoningEffort: _removed, ...bare } = route
-    update({ [role]: effort === '' ? bare : { ...bare, reasoningEffort: effort } } as Partial<Profile>)
+    update({
+      [role]: effort === '' ? bare : { ...bare, reasoningEffort: effort },
+      ...effort !== '' && (draft.mode ?? 'automatic') === 'automatic'
+        ? { mode: 'hybrid' as const } : {},
+    } as Partial<Profile>)
   }
   const selectedModel = (route: Route | undefined): EclipseCatalogChoice | undefined =>
     route === undefined ? undefined : models.find(choice => choice.provider === route.provider && choice.model === route.model)
@@ -149,24 +157,32 @@ export function EclipseRoutingPanel(props: {
   })
   const save = async (reset = false): Promise<void> => {
     if (!state.writable || working) return
+    if (!canPersist) {
+      setMessage(props.t('eclipseHostUnavailable'))
+      return
+    }
     setWorking(true)
     setMessage(undefined)
     try {
       const response = await props.api.settings.mutate({
-        ns: 'eclipse-routing',
-        // An explicit automatic value also masks historical Agent defaults.
-        // Set/unset only fields owned by Eclipse; never change Agent settings.
-        ops: (['mode', 'planner', 'coordinator', 'subagent', 'specialists', 'maxTeammates'] as const)
-          .map(field => {
-            const value = reset ? (field === 'mode' ? 'automatic' : undefined) : draft[field]
-            return value === undefined
-              ? { op: 'unset' as const, path: [field] }
-              : { op: 'set' as const, path: [field], value }
-          }),
+        ns: dedicatedRegistered ? 'eclipse-routing' : 'agent-default-model',
+        // A mixed-version Host may have only the legacy settings section.
+        // Use its Eclipse subtree until the current Host restarts; do not
+        // silently claim that the new dedicated namespace was written.
+        ops: dedicatedRegistered
+          ? (['mode', 'planner', 'coordinator', 'subagent', 'specialists', 'maxTeammates'] as const)
+            .map(field => {
+              const value = reset ? (field === 'mode' ? 'automatic' : undefined) : draft[field]
+              return value === undefined
+                ? { op: 'unset' as const, path: [field] }
+                : { op: 'set' as const, path: [field], value }
+            })
+          : [{ op: 'set' as const, path: ['eclipse'],
+            value: reset ? { mode: 'automatic' } : draft }],
       })
       if (!response.result.ok) throw new Error(response.result.error.message)
       await props.controller.load()
-      setMessage(props.t('eclipseSaved'))
+      setMessage(props.t(legacyCompatible ? 'eclipseLegacySaved' : 'eclipseSaved'))
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error))
     } finally { setWorking(false) }
@@ -220,15 +236,18 @@ export function EclipseRoutingPanel(props: {
         }}>{props.t('remove')}</button>
       </div>)}
     </div>
+    {legacyCompatible ? <p role="status" className={css.hint}>{props.t('eclipseLegacyHost')}</p> : null}
+    {!canPersist && state.status === 'ready'
+      ? <p role="alert" className={css.error}>{props.t('eclipseHostUnavailable')}</p> : null}
     {catalogError !== undefined ? <p role="status" className={css.error}>{catalogError}</p> : null}
     {models.length === 0 && !catalogLoading
       ? <p className={css.hint}>{props.t('eclipseCatalogHint')}</p> : null}
     {!valid && draft.mode !== 'automatic' ? <p className={css.error}>{props.t('eclipseInvalid')}</p> : null}
     {message !== undefined ? <p role="status" className={css.hint}>{message}</p> : null}
     <div className={css.actions}>
-      <button type="button" className={css.primary} disabled={!state.writable || working || (!valid && draft.mode !== 'automatic')}
+      <button type="button" className={css.primary} disabled={!state.writable || working || !canPersist || (!valid && draft.mode !== 'automatic')}
         onClick={() => { void save() }}>{props.t('eclipseSave')}</button>
-      <button type="button" disabled={!state.writable || working}
+      <button type="button" disabled={!state.writable || working || !canPersist}
         onClick={() => { void save(true) }}>{props.t('eclipseReset')}</button>
     </div>
   </section>
