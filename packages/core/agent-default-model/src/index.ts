@@ -113,7 +113,7 @@ export class AgentDefaultModelConfig extends Service {
     // the regular Agent default model. Preserve legacy saved values until the
     // user first saves a dedicated Eclipse preference.
     installSettingsSection(ctx, ECLIPSE_ROUTING_SETTINGS_NAMESPACE, ECLIPSE_ROUTING_SETTINGS_SCHEMA, {}, {
-      setSource: (current) => { this.eclipseSource = () => current },
+      setSource: (current) => { this.eclipseSource = current },
       onChange: () => {},
     })
   }
