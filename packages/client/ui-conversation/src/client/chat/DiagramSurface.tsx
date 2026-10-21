@@ -83,7 +83,7 @@ export function parseDiagramSpec(value: unknown): DiagramSpec | null {
       || (node.detail !== undefined && !short(node.detail, 650))) return null
     ids.add(node.id)
   }
-  if (p.nodes.filter(node => node.shape !== 'point').length < 2) return null
+  if (p.nodes.filter((node: unknown) => isRecord(node) && node.shape !== 'point').length < 2) return null
   if (p.edges !== undefined && (!Array.isArray(p.edges) || p.edges.length > 140)) return null
   if (Array.isArray(p.edges)) {
     for (const edge of p.edges) {
@@ -129,7 +129,7 @@ function downloadSvg(svg: SVGSVGElement | null, title: string): void {
   link.download = (title.normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-z0-9]+/gi, '-').slice(0, 70) || 'diagrama') + '.svg'
   link.click()
-  window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+  window.setTimeout(() => { URL.revokeObjectURL(url) }, 1000)
 }
 
 /**
@@ -143,18 +143,19 @@ export function DiagramSurface({ spec, onAction }: {
   readonly onAction?: CanvasAction | undefined
 }) {
   const p = spec.props
-  const [selected, setSelected] = useState(p.nodes.find(n => n.shape !== 'point')?.id ?? p.nodes[0]!.id)
+  const [selected, setSelected] = useState(p.nodes.find(n => n.shape !== 'point')?.id ?? p.nodes[0]?.id ?? '')
   const svgRef = useRef<SVGSVGElement>(null)
   const arrowId = useId().replaceAll(':', '-') + '-arrow'
   const byId = new Map(p.nodes.map(node => [node.id, node]))
-  const active = byId.get(selected) ?? p.nodes[0]!
-  const choose = (id: string): void => setSelected(id)
+  const active = byId.get(selected) ?? p.nodes[0]
+  const choose = (id: string): void => { setSelected(id) }
+  if (active === undefined) return <p role="alert">El diagrama no contiene elementos visibles.</p>
 
   return <section className={css.root} data-phoenix-diagram={p.id} data-diagram-kind={p.kind ?? 'other'}>
     <header className={css.header}>
       <div><span className={css.eyebrow}>DIAGRAMA INTERACTIVO</span>
         <h3>{p.title}</h3>{p.subtitle && <p>{p.subtitle}</p>}</div>
-      <button type="button" className={css.export} onClick={() => downloadSvg(svgRef.current, p.title)}>Exportar SVG</button>
+      <button type="button" className={css.export} onClick={() => { downloadSvg(svgRef.current, p.title) }}>Exportar SVG</button>
     </header>
     <div className={css.layout}>
       <div className={css.canvas}>
@@ -164,15 +165,16 @@ export function DiagramSurface({ spec, onAction }: {
             orient="auto" markerUnits="strokeWidth"><path d="M0 0 L8 3 L0 6" fill="none" stroke="#64748b" strokeWidth="1.6"/></marker></defs>
           <rect x="0" y="0" width="1000" height="620" rx="22" fill="#fffdfa"/>
           {(p.edges ?? []).map((edge, index) => {
-            const from = byId.get(edge.from)!
-            const to = byId.get(edge.to)!
+            const from = byId.get(edge.from)
+            const to = byId.get(edge.to)
+            if (from === undefined || to === undefined) return null
             const positions = [anchor(from, edge.fromPort ?? 'center'), ...(edge.via ?? []), anchor(to, edge.toPort ?? 'center')]
-            const points = positions.map(point => point.x + ',' + point.y).join(' ')
-            return <g key={edge.from + ':' + edge.to + ':' + index}>
+            const points = positions.map(point => `${point.x},${point.y}`).join(' ')
+            return <g key={`${edge.from}:${edge.to}:${index}`}>
               <polyline points={points} fill="none" stroke="#64748b" strokeWidth="3.2"
                 strokeLinecap="round" strokeLinejoin="round"
                 strokeDasharray={edge.kind === 'dashed' ? '8 7' : undefined}
-                markerEnd={edge.kind === 'arrow' ? 'url(#' + arrowId + ')' : undefined}/>
+                markerEnd={edge.kind === 'arrow' ? `url(#${arrowId})` : undefined}/>
               {edge.label && <title>{edge.label}</title>}
             </g>
           })}
@@ -182,7 +184,7 @@ export function DiagramSurface({ spec, onAction }: {
             const focused = selected === node.id
             return <g key={node.id} className={css.node} role="button" tabIndex={0}
               aria-label={'Ver ' + node.label} aria-pressed={focused}
-              onClick={() => choose(node.id)}
+              onClick={() => { choose(node.id) }}
               onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); choose(node.id) } }}>
               <title>{node.label + (node.detail ? ': ' + node.detail : '')}</title>
               {focused && <circle cx={node.x} cy={node.y} r={shape === 'rectangle' ? 96 : 64}
@@ -210,15 +212,14 @@ export function DiagramSurface({ spec, onAction }: {
         <div className={css.list}>
           {p.nodes.filter(node => node.shape !== 'point').map(node =>
             <button type="button" key={node.id} aria-pressed={node.id === selected}
-              onClick={() => choose(node.id)}>{node.label}</button>)}
+              onClick={() => { choose(node.id) }}>{node.label}</button>)}
         </div>
         <div aria-live="polite" className={css.selected}>
           <strong>{active.label}</strong>
           <p>{active.detail ?? 'Elemento del diagrama'}</p>
         </div>
         {onAction && <button className={css.ask} type="button" onClick={() =>
-          onAction('En el diagrama "' + p.title + '" he seleccionado "' + active.label + '". ' +
-            (active.detail ?? '') + ' Continúa a partir de este elemento.', 'draft')}>
+          { onAction(`En el diagrama "${p.title}" he seleccionado "${active.label}". ${active.detail ?? ''} Continúa a partir de este elemento.`, 'draft') }}>
           Preguntar a Kira sobre este elemento
         </button>}
       </aside>
