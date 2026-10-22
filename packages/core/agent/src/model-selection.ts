@@ -272,7 +272,7 @@ export function defaultExecutionHandoff(selection: ModelSelection | undefined): 
 
 /** Operational verbs that strongly imply the user expects Phoenix to act on an artifact. */
 // oxlint-disable-next-line @stylistic/max-len -- Keep the deterministic bilingual matcher auditable as one regex literal.
-const TOOL_ACTION = /\b(?:fix(?:es|ed|ing)?|repair(?:s|ed|ing)?|debug(?:s|ged|ging)?|implement(?:s|ed|ing)?|edit(?:s|ed|ing)?|modif(?:y|ies|ied|ying)|update(?:s|d|ing)?|create(?:s|d|ing)?|build(?:s|ing|built)?|run(?:s|ning)?|execute(?:s|d|ing)?|test(?:s|ed|ing)?|inspect(?:s|ed|ing)?|review(?:s|ed|ing)?|audit(?:s|ed|ing)?|refactor(?:s|ed|ing)?|deploy(?:s|ed|ing)?|install(?:s|ed|ing)?|remove(?:s|d|ing)?|delete(?:s|d|ing)?|rename(?:s|d|ing)?|commit(?:s|ted|ting)?|merge(?:s|d|ing)?|revert(?:s|ed|ing)?|resolv(?:e|es|ed|ing)|diagnos(?:e|es|ed|ing)|arregl\p{L}*|repar\p{L}*|corrig\p{L}*|implement\p{L}*|modific\p{L}*|actualiz\p{L}*|crea\p{L}*|ejecut\p{L}*|prueb\p{L}*|revis\p{L}*|audit\p{L}*|refactor\p{L}*|despleg\p{L}*|instal\p{L}*|elimin\p{L}*|renombr\p{L}*|fusion\p{L}*|resuelv\p{L}*|diagnostic\p{L}*)\b/iu
+const TOOL_ACTION = /\b(?:fix(?:es|ed|ing)?|repair(?:s|ed|ing)?|debug(?:s|ged|ging)?|implement(?:s|ed|ing)?|edit(?:s|ed|ing)?|modif(?:y|ies|ied|ying)|update(?:s|d|ing)?|create(?:s|d|ing)?|build(?:s|ing|built)?|run(?:s|ning)?|execute(?:s|d|ing)?|test(?:s|ed|ing)?|inspect(?:s|ed|ing)?|review(?:s|ed|ing)?|audit(?:s|ed|ing)?|refactor(?:s|ed|ing)?|deploy(?:s|ed|ing)?|install(?:s|ed|ing)?|remove(?:s|d|ing)?|delete(?:s|d|ing)?|rename(?:s|d|ing)?|commit(?:s|ted|ting)?|merge(?:s|d|ing)?|revert(?:s|ed|ing)?|resolv(?:e|es|ed|ing)|diagnos(?:e|es|ed|ing)|arregl\p{L}*|repar\p{L}*|corrig\p{L}*|implement\p{L}*|modific\p{L}*|actualiz\p{L}*|crea\p{L}*|ejecut\p{L}*|prueb\p{L}*|revis\p{L}*|audit\p{L}*|refactor\p{L}*|despleg\p{L}*|desplieg\p{L}*|instal\p{L}*|elimin\p{L}*|renombr\p{L}*|fusion\p{L}*|resuelv\p{L}*|diagnostic\p{L}*)\b/iu
 /** Artifact/code vocabulary used with {@link TOOL_ACTION} to avoid downgrading pure reasoning turns. */
 // oxlint-disable-next-line @stylistic/max-len -- Keep the deterministic bilingual matcher auditable as one regex literal.
 const TOOL_ARTIFACT = /(?:\b(?:file|files|archivo|archivos|code|c[oó]digo|repo|repository|repositorio|branch|rama|commit|test|tests|prueba|pruebas|script|package|build|cli|api|html|css|python|typescript|javascript|github|main|stable|error|exception|traceback|terminal|powershell|shell)\b|\x60\x60\x60|(?:^|[\s\x60'"(])(?:[a-z]:\\|\.{0,2}\/)?[\w@.-]+(?:[\\/][\w@. -]+)*\.(?:ts|tsx|js|mjs|cjs|py|json|ya?ml|toml|md|html?|css|scss|sql|rs|go|java|kt|cs|cpp|c|h)\b)/iu
@@ -867,9 +867,12 @@ export function isPhoenixAutoQuickTurn(text: string): boolean {
   // the mere mention of "architecture" does not make them implementation jobs.
   if (AUTO_EXCEPTIONAL_TASK.test(candidate) || AUTO_DEEP_REPLY.test(candidate)) return false
   if (AUTO_LARGE_INTENT.test(candidate)) return false
+  // A neutral question about a risky concept is chat; a command to alter it
+  // must never use the shortcut, even if its verb is absent from the action list.
+  const informationalQuestion = /^[¿?\s]*(?:qu[eé]|c[oó]mo|cu[aá]l|por\s+qu[eé]|what|how|why)\b/iu.test(candidate)
+  if (AUTO_SIMPLE_EXCLUSION.test(candidate) && !informationalQuestion) return false
   if (!phoenixAutoTaskRequest(candidate)) return true
-  if (AUTO_LARGE_CREATION.test(candidate) || AUTO_COMPLEX_TASK.test(candidate)
-    || AUTO_SIMPLE_EXCLUSION.test(candidate)) return false
+  if (AUTO_LARGE_CREATION.test(candidate) || AUTO_COMPLEX_TASK.test(candidate)) return false
   if (!AUTO_SIMPLE_ACTION.test(candidate)) return false
   const verbs = candidate.match(new RegExp(AUTO_TASK_ACTION.source, 'giu')) ?? []
   return verbs.length <= 1
