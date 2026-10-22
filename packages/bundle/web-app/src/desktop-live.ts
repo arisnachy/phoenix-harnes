@@ -50,7 +50,10 @@ function descriptorPath(): string | null {
   return appData ? join(appData, 'Phoenix', 'desktop-control.json') : null
 }
 
-/** Parse only the known user-owned pipe descriptor, not caller-supplied names. */
+/** Parse only the known user-owned pipe descriptor, not caller-supplied names.
+ * @param raw - Raw descriptor JSON from the current-user installation.
+ * @returns The validated local pipe name.
+ */
 export function desktopLivePipeName(raw: string): string {
   const parsed: unknown = JSON.parse(raw)
   if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
@@ -130,7 +133,10 @@ async function recentObservation(sessionId: string): Promise<Buffer | undefined>
   }
 }
 
-/** A dead host is not a live application; never synthesize a success state. */
+/** A dead host is not a live application; never synthesize a success state.
+ * @param sessionId - Exact owning Phoenix conversation identifier.
+ * @returns The live native or verified recent observation status.
+ */
 export async function readDesktopLiveState(sessionId: string): Promise<NativeState> {
   try {
     const raw = await requestNative(sessionId, 'phoenix.desktop.live-state')
@@ -152,6 +158,10 @@ export async function readDesktopLiveState(sessionId: string): Promise<NativeSta
   }
 }
 
+/** Retrieve an existing, session-owned PNG, never a fabricated application frame.
+ * @param sessionId - Exact owning conversation identifier.
+ * @returns Verified native or recently observed PNG bytes.
+ */
 export async function readDesktopLiveFrame(sessionId: string): Promise<Buffer> {
   let base64: string
   try {
@@ -170,7 +180,9 @@ export async function readDesktopLiveFrame(sessionId: string): Promise<Buffer> {
   return png
 }
 
-/** Attach the visible native app to the conversation without another browser. */
+/** Attach the visible native app to the conversation without another browser.
+ * @param ctx - Web host with a server route registry.
+ */
 export function registerDesktopLiveRoutes(ctx: Context): void {
   const guard = (req: IncomingMessage, res: ServerResponse): boolean => {
     if (!authorized(req)) { sendJson(res, 403, { error: 'Origen no autorizado.' }); return false }

@@ -2,7 +2,7 @@
 
 Status: implemented
 
-English | [中文](2026-10-22-desktop-live-visible-native-applications.zh.md)
+[English](2026-10-22-desktop-live-visible-native-applications.md) | 中文
 
 ## Problem
 

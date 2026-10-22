@@ -1518,6 +1518,9 @@ function delay(ms: number, signal?: AbortSignal): Promise<void> {
  * when Phoenix is launched through pnpm without Phoenix.exe. A snapshot is
  * created only AFTER the computer tool has passed its normal permissions.
  */
+/** @param sessionId - Owning conversation id.
+ * @returns Path scoped by a SHA-256 digest rather than a raw user input.
+ */
 export function desktopObservationPath(sessionId: string): string {
   const file = createHash('sha256').update(sessionId).digest('hex') + '.png'
   return join(tmpdir(), 'phoenix-desktop-observations', file)

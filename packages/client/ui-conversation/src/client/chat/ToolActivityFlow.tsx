@@ -373,7 +373,10 @@ export function addBrowserCards(
   return result
 }
 
-/** Explicit user requests for a real Windows application, not web browsing. */
+/** Explicit user requests for a real Windows application, not web browsing.
+ * @param text - Latest user prompt text.
+ * @returns Whether the user intends a native application viewer.
+ */
 export function isDesktopPrompt(text: string): boolean {
   const normalized = text.normalize('NFD').replace(/[\u0300-\u036f]/gu, '').toLowerCase()
   if (/\bdesktop[\s-]*live\b/u.test(normalized)) return true
@@ -391,9 +394,11 @@ function isDesktopRequest(node: OrderedChatNode): boolean {
       && typeof block.text === 'string' ? block.text : '').join(' '))
 }
 
-/**
- * Put a real native Desktop Live status/viewport where users requested it.
+/** Put a real native Desktop Live status/viewport where users requested it.
  * A disconnected viewer is explicitly unavailable, never a made-up screenshot.
+ * @param flow - Ordered chat items.
+ * @param nodes - Durable chat messages.
+ * @returns Flow with viewer cards beside relevant user prompts.
  */
 export function addDesktopCards(flow: FlowItem[], nodes: readonly OrderedChatNode[]): FlowItem[] {
   const requests = new Set(nodes.filter(isDesktopRequest).map(node => node.key))
