@@ -20,5 +20,7 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
+      - name: Verify PowerShell stdin driver transport
+        run: node scripts/desktop-powershell-stdin-smoke.mjs
       - name: Compile and run real desktop command contracts
         run: dotnet run --project apps/desktop-windows/Phoenix.Desktop.Tests/Phoenix.Desktop.Tests.csproj -c Release

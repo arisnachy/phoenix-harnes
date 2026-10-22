@@ -112,8 +112,9 @@ describe('Computer Use argument contract', () => {
     const invocation = windowsComputerInvocation({ action: 'windows' })
     expect(invocation.argv).toContain('-STA')
     expect(invocation.argv).toContain('-Command')
-    expect(invocation.argv.at(-1)).toBe('-')
+    expect(invocation.argv.at(-1)).toContain('[scriptblock]::Create([Console]::In.ReadToEnd())')
     expect(invocation.argv.join(' ').length).toBeLessThan(256)
+    expect(invocation.argv.join(' ')).not.toContain('Invoke-Expression')
     const driver = (invocation as unknown as { stdin?: string }).stdin
     expect(driver).toBeDefined()
     expect(driver).toContain('[FieldOffset(0)] public MOUSEINPUT mi;')
