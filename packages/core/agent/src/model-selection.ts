@@ -272,7 +272,7 @@ export function defaultExecutionHandoff(selection: ModelSelection | undefined): 
 
 /** Operational verbs that strongly imply the user expects Phoenix to act on an artifact. */
 // oxlint-disable-next-line @stylistic/max-len -- Keep the deterministic bilingual matcher auditable as one regex literal.
-const TOOL_ACTION = /\b(?:fix(?:es|ed|ing)?|repair(?:s|ed|ing)?|debug(?:s|ged|ging)?|implement(?:s|ed|ing)?|edit(?:s|ed|ing)?|modif(?:y|ies|ied|ying)|update(?:s|d|ing)?|create(?:s|d|ing)?|build(?:s|ing|built)?|run(?:s|ning)?|execute(?:s|d|ing)?|test(?:s|ed|ing)?|inspect(?:s|ed|ing)?|review(?:s|ed|ing)?|audit(?:s|ed|ing)?|refactor(?:s|ed|ing)?|deploy(?:s|ed|ing)?|install(?:s|ed|ing)?|remove(?:s|d|ing)?|delete(?:s|d|ing)?|rename(?:s|d|ing)?|commit(?:s|ted|ting)?|merge(?:s|d|ing)?|revert(?:s|ed|ing)?|resolv(?:e|es|ed|ing)|diagnos(?:e|es|ed|ing)|arregl\p{L}*|repar\p{L}*|corrig\p{L}*|implement\p{L}*|modific\p{L}*|actualiz\p{L}*|crea\p{L}*|ejecut\p{L}*|prueb\p{L}*|revis\p{L}*|audit\p{L}*|refactor\p{L}*|despleg\p{L}*|instal\p{L}*|elimin\p{L}*|renombr\p{L}*|fusion\p{L}*|resuelv\p{L}*|diagnostic\p{L}*)\b/iu
+const TOOL_ACTION = /\b(?:fix(?:es|ed|ing)?|repair(?:s|ed|ing)?|debug(?:s|ged|ging)?|implement(?:s|ed|ing)?|edit(?:s|ed|ing)?|modif(?:y|ies|ied|ying)|update(?:s|d|ing)?|create(?:s|d|ing)?|build(?:s|ing|built)?|run(?:s|ning)?|execute(?:s|d|ing)?|test(?:s|ed|ing)?|inspect(?:s|ed|ing)?|review(?:s|ed|ing)?|audit(?:s|ed|ing)?|refactor(?:s|ed|ing)?|deploy(?:s|ed|ing)?|install(?:s|ed|ing)?|remove(?:s|d|ing)?|delete(?:s|d|ing)?|rename(?:s|d|ing)?|commit(?:s|ted|ting)?|merge(?:s|d|ing)?|revert(?:s|ed|ing)?|resolv(?:e|es|ed|ing)|diagnos(?:e|es|ed|ing)|arregl\p{L}*|repar\p{L}*|corrig\p{L}*|implement\p{L}*|modific\p{L}*|actualiz\p{L}*|crea\p{L}*|ejecut\p{L}*|prueb\p{L}*|revis\p{L}*|audit\p{L}*|refactor\p{L}*|despleg\p{L}*|desplieg\p{L}*|instal\p{L}*|elimin\p{L}*|renombr\p{L}*|fusion\p{L}*|resuelv\p{L}*|diagnostic\p{L}*)\b/iu
 /** Artifact/code vocabulary used with {@link TOOL_ACTION} to avoid downgrading pure reasoning turns. */
 // oxlint-disable-next-line @stylistic/max-len -- Keep the deterministic bilingual matcher auditable as one regex literal.
 const TOOL_ARTIFACT = /(?:\b(?:file|files|archivo|archivos|code|c[oó]digo|repo|repository|repositorio|branch|rama|commit|test|tests|prueba|pruebas|script|package|build|cli|api|html|css|python|typescript|javascript|github|main|stable|error|exception|traceback|terminal|powershell|shell)\b|\x60\x60\x60|(?:^|[\s\x60'"(])(?:[a-z]:\\|\.{0,2}\/)?[\w@.-]+(?:[\\/][\w@. -]+)*\.(?:ts|tsx|js|mjs|cjs|py|json|ya?ml|toml|md|html?|css|scss|sql|rs|go|java|kt|cs|cpp|c|h)\b)/iu
@@ -838,11 +838,53 @@ export function isBriefTeamDemonstration(text: string): boolean {
   return !/(?:https?:\/\/|[a-z]:\\|\b(?:github|repo|codigo|script|archivo\w*|implementa|despliega|production|produccion|email|correo|compra|borra|elimina|contrato|paciente|sql|api|web|sitio|site|investigacion|research)\b)/u.test(request)
 }
 
+/**
+ * Cheap, conservative fast lane for Kira's ordinary conversation and one-shot
+ * low-risk tool work. A positive match skips Sol's visible strategy pass without
+ * hiding the tools; multi-step and consequential workflows stay on the planner.
+ * Ambiguous cases deliberately fall back to the ordinary planning route.
+ * @param text - The current human request, not model-generated continuation.
+ * @returns Whether Luna Max can directly serve the first operational step.
+ */
+// oxlint-disable-next-line @stylistic/max-len -- Auditable bilingual one-action vocabulary.
+const AUTO_SIMPLE_ACTION = /^(?:(?:kira|f[eé]nix)[,\s]+)?(?:abre|abrir|open|muestra|mu[eé]strame|show|lee|leer|read|lista|listar|list|busca|buscar|search|consulta|consultar|check|verifica|verificar|revisa|revisar|resume|resumir|res[uú]meme|summari[sz]e|corrige|corregir|correct|cambia|cambiar|change|renombra|renombrar|rename|actualiza|actualizar|update|crea|crear|create)\b/iu
+// oxlint-disable-next-line @stylistic/max-len -- Consequential changes and multi-stage operations require Sol.
+const AUTO_SIMPLE_EXCLUSION = /(?:\b(?:main|stable|branch|rama|commit|merge|fusionar|push|pull|despliega|deploy|producci[oó]n|production|servidor|database|base\s+de\s+datos|sql|migraci[oó]n|pagos?|payments?|compras?|contrato|contract|paciente|historia\s+cl[ií]nica|credenciales?|contrase[nñ]as?|secretos?|security|seguridad|permiso|permissions?|borra|elimina|delete|remove|y\s+(?:despu[eé]s|luego|tambi[eé]n|abre|busca|verifica|revisa|corrige|cambia|crea|ejecuta|actualiza|publica|agrega|a[nñ]ade|guarda|env[ií]a|renombra|ejecuta|instala)|luego|despu[eé]s|then|and\s+(?:then|also|open|fix|update|run|deploy))\b)/iu
+
+// oxlint-disable-next-line @stylistic/max-len -- Explicit creations cannot be mistaken for general chat merely because the verb was previously unknown.
+const AUTO_LARGE_CREATION = /^(?:(?:kira|f[eé]nix)[,\s]+)?(?:haz|hacer|dise[nñ]a|desarrolla|construye|elabora|prepara|genera|generar|crea|crear|redacta|escribe|produce|make|design|develop|write|create|generate)\b.{0,150}\b(?:juego|videojuego|sistema|aplicaci[oó]n|app|plataforma|sitio|web|motor|m[oó]dulo|informe|investigaci[oó]n|libro|c[oó]mic|novela|curso|software|base\s+de\s+datos|hospital|saas)\b/iu
+
+/** Requests phrased as "quiero que me construyas un sistema" are still projects. */
+// oxlint-disable-next-line @stylistic/max-len -- Bound natural-language construction intent, avoiding a second classification model call.
+const AUTO_LARGE_INTENT = /^[¡!¿?\s]*(?:(?:kira|f[eé]nix)[,\s]+)?(?:quiero|necesito|puedes|podr[ií]as|can\s+you|i\s+(?:want|need))\b.{0,80}\b(?:hacer|hagas|crear|crees|construir|construyas|desarrollar|desarrolles|dise[nñ]ar|dise[nñ]es|implementar|implementes|build|create|develop|design|make)\b.{0,100}\b(?:juego|videojuego|sistema|aplicaci[oó]n|app|plataforma|sitio|web|motor|m[oó]dulo|informe|investigaci[oó]n|libro|c[oó]mic|novela|curso|software|hospital|saas)\b/iu
+
+export function isPhoenixAutoQuickTurn(text: string): boolean {
+  const candidate = text.trim()
+  if (candidate.length === 0 || candidate.length > 180 || candidate.includes('\n')) return false
+  if (CONTEXTUAL_CONTINUATION.test(candidate)) return false
+  if (isConversationalFastPathText(candidate) || isContextualConversationFastPathText(candidate)) return true
+  // Ordinary questions about complicated subjects are still conversation;
+  // the mere mention of "architecture" does not make them implementation jobs.
+  if (AUTO_EXCEPTIONAL_TASK.test(candidate) || AUTO_DEEP_REPLY.test(candidate)) return false
+  if (AUTO_LARGE_INTENT.test(candidate)) return false
+  // A neutral question about a risky concept is chat; a command to alter it
+  // must never use the shortcut, even if its verb is absent from the action list.
+  const informationalQuestion = /^[¿?\s]*(?:qu[eé]|c[oó]mo|cu[aá]l|por\s+qu[eé]|what|how|why)\b/iu.test(candidate)
+  if (AUTO_SIMPLE_EXCLUSION.test(candidate) && !informationalQuestion) return false
+  if (!phoenixAutoTaskRequest(candidate)) return true
+  if (AUTO_LARGE_CREATION.test(candidate) || AUTO_COMPLEX_TASK.test(candidate)) return false
+  if (!AUTO_SIMPLE_ACTION.test(candidate)) return false
+  const verbs = candidate.match(new RegExp(AUTO_TASK_ACTION.source, 'giu')) ?? []
+  return verbs.length <= 1
+}
+
 function phoenixAutoTaskRequest(text: string): boolean {
   const candidate = text.trim()
   return CONTEXTUAL_CONTINUATION.test(candidate)
     || isToolAcquisitionRequest(candidate)
     || AUTO_TASK_ACTION.test(candidate)
+    || AUTO_LARGE_CREATION.test(candidate)
+    || AUTO_LARGE_INTENT.test(candidate)
 }
 
 /** Look at the live turn boundary: assembly happens before step/start is logged. */
@@ -965,6 +1007,13 @@ function phoenixAutoRoute(
         provider: 'openai-codex',
         model: PHOENIX_CODEX_AUTO_WORKER_MODEL,
         reasoningEffort: ReasoningEffortId('low'),
+      }
+    }
+    if (isPhoenixAutoQuickTurn(directText)) {
+      return {
+        provider: 'openai-codex',
+        model: PHOENIX_CODEX_AUTO_WORKER_MODEL,
+        reasoningEffort: ReasoningEffortId('max'),
       }
     }
     if (phoenixAutoTaskRequest(directText)) {
@@ -1132,6 +1181,7 @@ export function installModelSelection(
     const autoPolicy = strategyRescueStep ? AUTO_SOL_STRATEGY_POLICY
       : autoStep === 1
         && phoenixAutoTaskRequest(currentRequest)
+        && !isPhoenixAutoQuickTurn(currentRequest)
         && !isStandaloneVisualPreviewRequest(currentRequest)
         && !isBriefTeamDemonstration(currentRequest) ? AUTO_VISIBLE_PLAN_POLICY
         : autoStep !== undefined && autoStep > 1 ? AUTO_LUNA_COORDINATION_POLICY : undefined
@@ -1194,17 +1244,20 @@ export function installModelSelection(
         // built-in Sol/Luna pair remains only as the automatic fallback when
         // no coordinator override is saved.
         const eclipseProfile = isPhoenixCodexAutoSelection(selected) ? configuredEclipse(agentCtx) : undefined
-        // A simple social turn must not inherit the coordinator's Sol model.
-        // Keep explicit non-Phoenix-Auto selections untouched above.
-        const social = _payload.step === 1
-          && phoenixAutoTeamSignalForTurn(_payload.agent, _payload.turn) === undefined
-          && (isConversationalFastPathText(directText) || isContextualConversationFastPathText(directText))
-        const routed = social ? automatic : resolveEclipseRoleRoute(
-          eclipseProfile,
-          'coordinator',
-          automatic,
-          eclipseProfile?.mode === 'hybrid' ? automatic.reasoningEffort : undefined,
-        )
+        // Kira handles conversation and small one-shot tasks directly on Luna
+        // Max, even when Eclipse's coordinator role points to Sol. A real Team
+        // signal or strategy rescue still follows the operational route.
+        const quick = phoenixAutoTeamSignalForTurn(_payload.agent, _payload.turn) === undefined
+          && automatic.model === PHOENIX_CODEX_AUTO_WORKER_MODEL
+          && isPhoenixAutoQuickTurn(directText)
+        const routed = quick
+          ? { ...automatic, reasoningEffort: ReasoningEffortId('max') }
+          : resolveEclipseRoleRoute(
+            eclipseProfile,
+            'coordinator',
+            automatic,
+            eclipseProfile?.mode === 'hybrid' ? automatic.reasoningEffort : undefined,
+          )
         const { reasoningEffort: _inheritedEffort, ...withoutInheritedEffort } = resolved
         return {
           ...withoutInheritedEffort,

@@ -65,11 +65,11 @@ describe('continuation admission from replayed routing evidence', () => {
   })
 
   it.each([
-    'comprobar la disponibilidad de Phoenix Game Studio',
-    'Verifica si está disponible Phoenix Game Studio',
-    'Confirma qué herramientas funcionan en Phoenix',
-    'Consulta el estado de las funciones de Kira',
-    'Check whether Phoenix Game Studio is available',
+    'Audita la disponibilidad de Phoenix Game Studio y revisa todas las integraciones',
+    'Verifica si está disponible Phoenix Game Studio y diagnostica los fallos de los módulos',
+    'Confirma qué herramientas funcionan en Phoenix para una migración completa',
+    'Consulta el estado de las funciones de Kira y despliega una actualización',
+    'Check whether Phoenix Game Studio is available and diagnose the integration',
   ])('hands a real coordinator plan to the worker route exactly once: %s', async (request) => {
     const r = await router()
     try {
@@ -96,6 +96,20 @@ describe('continuation admission from replayed routing evidence', () => {
     } finally { await r.close() }
   })
 
+  it.each([
+    'Verifica si está disponible Phoenix Game Studio',
+    'Consulta el estado de las funciones de Kira',
+    'Check whether Phoenix Game Studio is available',
+  ])('uses Luna Max directly for one simple availability check: %s', async (request) => {
+    const r = await router()
+    try {
+      r.events.push(user(request))
+      expect(await r.request()).toMatchObject({
+        model: 'gpt-6-luna', reasoningEffort: 'max',
+      })
+    } finally { await r.close() }
+  })
+
   it('rescues an unexecuted bare future-tense verification promise without a Plan heading', async () => {
     const r = await router()
     try {
@@ -115,7 +129,7 @@ describe('continuation admission from replayed routing evidence', () => {
 
   it.each(['Explain in detail the design', 'What is JSON?'])('routes answer-only text without task acquisition: %s', async (text) => {
     const r = await router()
-    try { r.events.push(user(text)); expect(await r.request()).toMatchObject({ model: 'gpt-6-luna', reasoningEffort: text.includes('detail') ? 'medium' : 'low' }) } finally { await r.close() }
+    try { r.events.push(user(text)); expect(await r.request()).toMatchObject({ model: 'gpt-6-luna', reasoningEffort: text.includes('detail') ? 'medium' : 'max' }) } finally { await r.close() }
   })
 
   it('ignores malformed or missing stopping evidence and never extends answer-only or tool-free turns', async () => {
