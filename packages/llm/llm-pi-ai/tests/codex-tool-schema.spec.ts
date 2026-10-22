@@ -4,6 +4,7 @@ import {
   applyMondayCodexMembrane,
   normalizeCodexToolParameters,
   normalizeCodexToolSchemas,
+  scopeCodexToolsForPaint,
   normalizeOpenAiFunctionToolPayload,
   requiresMondayCodexMembrane,
   requiresObjectRootFunctionSchemas,
@@ -123,6 +124,30 @@ describe('Codex tool-schema compatibility', () => {
     }
 
     expect(normalizeCodexToolParameters(schema)).toBe(schema)
+  })
+
+  it('keeps an unrelated Social Engine function out of a simple Paint Codex request', () => {
+    const message = (text: string) => ({
+      role: 'user' as const, id: 'test-user' as never,
+      source: { kind: 'user' as const },
+      content: [{ type: 'text' as const, text }],
+    })
+    const tools = [
+      { name: 'computer', description: 'Windows desktop', parameters: { type: 'object' } },
+      { name: 'mcp__social-engine__social_campaign_create', description: 'Create campaign',
+        parameters: { oneOf: [{ type: 'object', properties: { brand: { type: 'string' } } }] } },
+      { name: 'mcp__windows-desktop__inspect', description: 'Windows tool', parameters: { type: 'object' } },
+      { name: 'image_generation', description: 'Create image', parameters: { type: 'object' } },
+    ]
+    const request: GenerateOptions = {
+      provider: 'openai-codex', model: 'gpt-6-sol', messages: [message('entra en Paint y crea una carita')], tools,
+    }
+    const scoped = scopeCodexToolsForPaint(request)
+    expect(scoped.tools?.map(tool => tool.name)).toEqual(['computer', 'mcp__windows-desktop__inspect'])
+    expect(request.tools?.length).toBe(4)
+    expect(scopeCodexToolsForPaint({ ...request,
+      messages: [message('abre Paint y publica un anuncio en redes sociales')], }).tools).toEqual(tools)
+    expect(scopeCodexToolsForPaint({ ...request, messages: [message('abre Instagram')], }).tools).toEqual(tools)
   })
 
   it('normalizes the exact social campaign tool across direct, Codex and tool-search projections', () => {
