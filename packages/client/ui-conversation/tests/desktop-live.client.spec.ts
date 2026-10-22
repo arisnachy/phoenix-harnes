@@ -5,6 +5,9 @@ describe('Desktop Live transcript visibility', () => {
   it('detects Paint and explicit Desktop Live without treating browser tasks as desktop', () => {
     expect(isDesktopPrompt('Abre Microsoft Paint, dibuja una casa y muéstrame Desktop Live')).toBe(true)
     expect(isDesktopPrompt('Abre el Bloc de notas y escribe hola')).toBe(true)
+    expect(isDesktopPrompt('entra a paint y haz un trazo')).toBe(true)
+    expect(isDesktopPrompt('entra en paint y crea una carita')).toBe(true)
+    expect(isDesktopPrompt('Abre la calculadora de Windows')).toBe(true)
     expect(isDesktopPrompt('Abre una página en Chrome')).toBe(false)
     expect(isDesktopPrompt('Genera un informe científico con gráficos')).toBe(false)
   })

@@ -14,6 +14,8 @@ import {
   systemBrowserOpenInvocation,
   validateComputerArgs,
   windowsComputerInvocation,
+  nativeDesktopTurnActive,
+  normalizedDesktopTarget,
 } from '../src/computer.ts'
 
 describe('Computer Use permissions', () => {
@@ -125,6 +127,8 @@ describe('Computer Use argument contract', () => {
     expect(driver).toContain('SetForegroundWindow')
     expect(driver).toContain('GetForegroundWindow')
     expect(driver).toContain('AttachThreadInput')
+    expect(driver).toContain('[DllImport("kernel32.dll", ExactSpelling = true)]')
+    expect(driver).not.toMatch(/\[DllImport\("user32\.dll"\)\]\s*private static extern uint GetCurrentThreadId/u)
   })
 
   it('forces a fresh observation after state-changing desktop actions', () => {
@@ -256,5 +260,33 @@ describe('Desktop Live side-pane preflight', () => {
     })
     expect(desktopPreviewCommandForAction({ action: 'screenshot' }, 'session-4').observe).toBe(true)
     expect(() => desktopPreviewCommandForAction({ action: 'click', x: 4, y: 8 }, '../../unsafe')).toThrow(/session id/i)
+  })
+})
+
+describe('native Windows Paint task ownership', () => {
+  const human = (text: string) => ({
+    type: 'user/message', data: { source: { kind: 'user' }, content: [{ type: 'text', text }] },
+  })
+  it('restricts browser actions for a Paint prompt, not across the whole conversation', () => {
+    expect(nativeDesktopTurnActive([human('entra en paint y crea una carita')])).toBe(true)
+    expect(nativeDesktopTurnActive([human('abre Paint y haz un trazo')])).toBe(true)
+    expect(nativeDesktopTurnActive([human('abre Paint'), {
+      type: 'user/message', data: { source: { kind: 'plugin' }, content: [{ type: 'text', text: 'browser inspect' }] },
+    }])).toBe(true)
+    expect(nativeDesktopTurnActive([human('abre Paint'), human('ahora abre YouTube en Chrome')])).toBe(false)
+    expect(nativeDesktopTurnActive([human('busca un tutorial de Paint en Chrome')])).toBe(false)
+  })
+  it('uses verified window handles instead of title guessing', () => {
+    expect(normalizedDesktopTarget('hwnd=0x420024 title=Sin título - Paint')).toBe('hwnd:0x420024')
+    expect(normalizedDesktopTarget('hwnd:0x420024')).toBe('hwnd:0x420024')
+    expect(normalizedDesktopTarget('pid=1234 title=Paint')).toBe('pid:1234')
+    expect(normalizedDesktopTarget('Sin título - Paint')).toBe('Sin título - Paint')
+    expect(windowsComputerInvocation({ action: 'focus', target: 'hwnd=0x420024' }).env.PHX_TARGET).toBe('hwnd:0x420024')
+  })
+  it('separates deliberate bounded focus retry from guarded clicks', () => {
+    const driver = windowsComputerInvocation({ action: 'focus', target: 'Paint' }).stdin
+    expect(driver).toContain('for (int attempt = 0; attempt < 3')
+    expect(driver).toContain('target lost foreground')
+    expect(driver).not.toContain('if (!String.IsNullOrWhiteSpace(selector)) FocusWindow(selector, false)')
   })
 })

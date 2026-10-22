@@ -781,7 +781,9 @@ public static class PhoenixDesktop {
   [DllImport("user32.dll")]
   private static extern bool ShowWindowAsync(IntPtr hWnd, int command);
 
-  [DllImport("user32.dll")]
+  // Current-thread IDs belong to kernel32, not user32.
+  // Wrong DLL causes EntryPointNotFoundException as soon as focus is attempted.
+  [DllImport("kernel32.dll", ExactSpelling = true)]
   private static extern uint GetCurrentThreadId();
 
   [DllImport("user32.dll")]
@@ -957,36 +959,45 @@ public static class PhoenixDesktop {
       Thread.Sleep(120);
     }
 
-    IntPtr foreground = GetForegroundWindow();
-    uint ignored;
-    uint targetThread = GetWindowThreadProcessId(hWnd, out ignored);
-    uint currentThread = GetCurrentThreadId();
-    uint foregroundThread = foreground == IntPtr.Zero ? 0 : GetWindowThreadProcessId(foreground, out ignored);
-    bool attachedTarget = false;
-    bool attachedForeground = false;
-    try {
-      if (targetThread != 0 && targetThread != currentThread) {
-        attachedTarget = AttachThreadInput(currentThread, targetThread, true);
+    // Windows foreground policy can reject transient focus requests.
+    // Retry only the same already-validated HWND; never pick another window.
+    for (int attempt = 0; attempt < 3 && GetForegroundWindow() != hWnd; attempt++) {
+      IntPtr foreground = GetForegroundWindow();
+      uint ignored;
+      uint targetThread = GetWindowThreadProcessId(hWnd, out ignored);
+      uint currentThread = GetCurrentThreadId();
+      uint foregroundThread = foreground == IntPtr.Zero ? 0 : GetWindowThreadProcessId(foreground, out ignored);
+      bool attachedTarget = false;
+      bool attachedForeground = false;
+      try {
+        if (targetThread != 0 && targetThread != currentThread)
+          attachedTarget = AttachThreadInput(currentThread, targetThread, true);
+        if (foregroundThread != 0 && foregroundThread != currentThread && foregroundThread != targetThread)
+          attachedForeground = AttachThreadInput(currentThread, foregroundThread, true);
+        BringWindowToTop(hWnd);
+        SetForegroundWindow(hWnd);
+      } finally {
+        if (attachedForeground) AttachThreadInput(currentThread, foregroundThread, false);
+        if (attachedTarget) AttachThreadInput(currentThread, targetThread, false);
       }
-      if (foregroundThread != 0 && foregroundThread != currentThread && foregroundThread != targetThread) {
-        attachedForeground = AttachThreadInput(currentThread, foregroundThread, true);
-      }
-      BringWindowToTop(hWnd);
-      SetForegroundWindow(hWnd);
-    } finally {
-      if (attachedForeground) AttachThreadInput(currentThread, foregroundThread, false);
-      if (attachedTarget) AttachThreadInput(currentThread, targetThread, false);
+      Thread.Sleep(140);
     }
-
-    Thread.Sleep(100);
     if (GetForegroundWindow() != hWnd) {
-      throw new InvalidOperationException("failed to focus target window; foreground is " + DescribeWindow(GetForegroundWindow()));
+      throw new InvalidOperationException("Windows refused focus for " + DescribeWindow(hWnd)
+        + "; foreground is " + DescribeWindow(GetForegroundWindow())
+        + ". Do not click or type into another window.");
     }
     return DescribeWindow(hWnd) + " restored=" + restored.ToString().ToLowerInvariant();
   }
 
   private static void GuardTarget(string selector) {
-    if (!String.IsNullOrWhiteSpace(selector)) FocusWindow(selector, false);
+    if (String.IsNullOrWhiteSpace(selector)) return;
+    // Guarded input never changes window focus: geometry must be fresh.
+    IntPtr expected = ResolveWindow(selector);
+    if (IsIconic(expected)) throw new InvalidOperationException("target window minimized; focus and recapture first");
+    if (GetForegroundWindow() != expected)
+      throw new InvalidOperationException("target lost foreground; focus and recapture before input. expected="
+        + DescribeWindow(expected) + " actual=" + DescribeWindow(GetForegroundWindow()));
   }
 
   public static void Move(int x, int y) {
@@ -1177,6 +1188,43 @@ switch ($action) {
 // The script source is trusted; model parameters remain environment variables.
 const stdinScriptCommand = '& ([scriptblock]::Create([Console]::In.ReadToEnd()))'
 
+
+/**
+ * Detect only the last genuine user prompt, ignoring plugin context messages.
+ * @param events - Immutable conversation events.
+ * @returns True while the user requests a native Windows app.
+ */
+export function nativeDesktopTurnActive(events: readonly { readonly type: string; readonly data: unknown }[]): boolean {
+  for (let index = events.length - 1; index >= 0; index--) {
+    const event = events[index]
+    if (event?.type !== 'user/message') continue
+    const msg = event.data as { source?: { kind?: string }; content?: Array<{ type?: string; text?: string }> }
+    if (msg.source?.kind !== 'user') continue
+    const text = (msg.content ?? []).map(block => block.type === 'text' ? block.text ?? '' : '').join(' ')
+      .normalize('NFD').replace(/[\u0300-\u036f]/gu, '').toLowerCase()
+    const native = /\b(?:paint|mspaint|bloc de notas|notepad|calculadora|calculator|explorador de windows|file explorer|desktop live)\b/u.test(text)
+    const action = /\b(?:abre|abrir|entra|entrar|ingresa|inicia|ejecuta|dibuja|dibujo|trazo|traza|crea|crear|haz|hace|controla|muestra|usa|open|draw|use|launch)\b/u.test(text)
+    const web = /\b(?:pagina web|navegador|chrome|youtube|sitio web|tutorial web)\b/u.test(text)
+    return native && action && !web
+  }
+  return false
+}
+
+/**
+ * Normalize literal window identifiers copied from enumeration output.
+ * @param value - Window title, PID or HWND selector.
+ * @returns Canonical guarded selector.
+ */
+export function normalizedDesktopTarget(value: string | undefined): string | undefined {
+  if (value === undefined) return undefined
+  const trimmed = value.trim()
+  const handle = /^hwnd\s*[=:]\s*(0x[0-9a-f]+)\b/iu.exec(trimmed)
+  if (handle !== null) return 'hwnd:' + handle[1]
+  const pid = /^pid\s*[=:]\s*(\d+)\b/iu.exec(trimmed)
+  if (pid !== null) return 'pid:' + pid[1]
+  return trimmed
+}
+
 function putNumber(env: Record<string, string>, key: string, value: number | undefined): void {
   if (value !== undefined) env[key] = String(value)
 }
@@ -1198,7 +1246,7 @@ export function windowsComputerInvocation(args: ComputerToolArgs): ComputerInvoc
   putNumber(env, 'PHX_X2', args.x2)
   putNumber(env, 'PHX_Y2', args.y2)
   putNumber(env, 'PHX_DELTA', args.delta)
-  if (args.target !== undefined) env.PHX_TARGET = args.target
+  if (args.target !== undefined) env.PHX_TARGET = normalizedDesktopTarget(args.target)!
   if (args.button !== undefined) env.PHX_BUTTON = args.button
   if (args.text !== undefined) env.PHX_TEXT = args.text
   if (args.keys !== undefined) env.PHX_KEYS = args.keys
@@ -1665,6 +1713,10 @@ export function registerComputerTool(ctx: Context): void {
     async execute(args: ComputerToolArgs, exec) {
       validateComputerArgs(args)
       const session = exec.agent?.session
+      if (session !== undefined && isEmbeddedBrowserAction(args.action)
+        && nativeDesktopTurnActive(session.events)) {
+        throw new Error('Native Windows task: do not open MiniBrowser or inspect a web page; use computer windows/focus/screenshot.')
+      }
       const policy = sandboxPolicy?.resolve(session === undefined ? {} : { session })
       const sandboxMode = policy?.mode ?? deploymentDefault
       await authorizeComputerAction(ctx, exec, args, sandboxMode)
