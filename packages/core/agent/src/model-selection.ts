@@ -859,10 +859,12 @@ export function isPhoenixAutoQuickTurn(text: string): boolean {
   if (candidate.length === 0 || candidate.length > 180 || candidate.includes('\n')) return false
   if (CONTEXTUAL_CONTINUATION.test(candidate)) return false
   if (isConversationalFastPathText(candidate) || isContextualConversationFastPathText(candidate)) return true
-  if (AUTO_LARGE_CREATION.test(candidate) || AUTO_EXCEPTIONAL_TASK.test(candidate)
-    || AUTO_COMPLEX_TASK.test(candidate) || AUTO_DEEP_REPLY.test(candidate)
-    || AUTO_SIMPLE_EXCLUSION.test(candidate)) return false
+  // Ordinary questions about complicated subjects are still conversation;
+  // the mere mention of "architecture" does not make them implementation jobs.
+  if (AUTO_EXCEPTIONAL_TASK.test(candidate) || AUTO_DEEP_REPLY.test(candidate)) return false
   if (!phoenixAutoTaskRequest(candidate)) return true
+  if (AUTO_LARGE_CREATION.test(candidate) || AUTO_COMPLEX_TASK.test(candidate)
+    || AUTO_SIMPLE_EXCLUSION.test(candidate)) return false
   if (!AUTO_SIMPLE_ACTION.test(candidate)) return false
   const verbs = candidate.match(new RegExp(AUTO_TASK_ACTION.source, 'giu')) ?? []
   return verbs.length <= 1
