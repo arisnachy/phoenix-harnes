@@ -621,6 +621,26 @@ describe('toPiContext', () => {
   })
 })
 
+describe('OpenRouter length classification', () => {
+  it('preserves OpenRouter length as an output-token finish below the advertised catalog cap', async () => {
+    const result = assistant({
+      provider: 'openrouter',
+      model: 'qwen/qwen3',
+      stopReason: 'length',
+      usage: usage(20, 15),
+      content: [{ type: 'text', text: 'partial' }],
+    })
+    expect(mapStopReason(result, 8192, 100)).toMatchObject({
+      kind: 'error', failure: { code: CONTEXT_WINDOW_EXCEEDED_CODE },
+    })
+    expect(mapStopReason(result, 8192, 100, true)).toEqual({ kind: 'max-tokens' })
+    const chunks = await collect(toStreamChunks(feed({ type: 'done', reason: 'length', message: result }), 8192, 100, true))
+    expect(chunks.findLast(chunk => chunk.type === 'finish')).toMatchObject({
+      type: 'finish', reason: { kind: 'max-tokens' },
+    })
+  })
+})
+
 describe('toStreamChunks', () => {
   const partialWithToolCall = assistant({
     content: [{ type: 'toolCall', id: 'call-1', name: 'f', arguments: {} }],

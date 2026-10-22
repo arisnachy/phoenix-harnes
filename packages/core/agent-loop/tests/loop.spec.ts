@@ -1116,7 +1116,7 @@ describe('agent loop', () => {
       [{ type: 'text', text: 'first half' }],
       [{ type: 'text', text: 'second half' }],
     ])
-    expect(agent.session.events.findLast(e => e.type === 'turn/end')?.data.reason).toEqual({ kind: 'completed' })
+    expect((() => { const ending = agent.session.events.findLast(e => e.type === 'turn/end'); return ending?.type === 'turn/end' ? ending.data.reason : undefined })()).toEqual({ kind: 'completed' })
   })
 
   it('never auto-continues Codex even behind OpenRouter', async () => {
@@ -1129,7 +1129,7 @@ describe('agent loop', () => {
     send(agent, 'write a long answer')
     await waitForIdle(ctx, agent)
     expect(adapter.requests).toHaveLength(1)
-    expect(agent.session.events.findLast(e => e.type === 'turn/end')?.data.reason).toEqual({ kind: 'max-tokens' })
+    expect((() => { const ending = agent.session.events.findLast(e => e.type === 'turn/end'); return ending?.type === 'turn/end' ? ending.data.reason : undefined })()).toEqual({ kind: 'max-tokens' })
   })
 
   it('bounds output-limit continuations and refuses identical consecutive segments', async () => {
@@ -1145,7 +1145,7 @@ describe('agent loop', () => {
     send(agent, 'write an answer')
     await waitForIdle(ctx, agent)
     expect(adapter.requests).toHaveLength(2)
-    expect(agent.session.events.findLast(e => e.type === 'turn/end')?.data.reason).toEqual({ kind: 'max-tokens' })
+    expect((() => { const ending = agent.session.events.findLast(e => e.type === 'turn/end'); return ending?.type === 'turn/end' ? ending.data.reason : undefined })()).toEqual({ kind: 'max-tokens' })
   })
 
   it('never exceeds three output-limit continuations for one human request', async () => {
@@ -1164,7 +1164,7 @@ describe('agent loop', () => {
     expect(agent.session.events.filter(event => event.type === 'user/message'
       && event.data.source.kind === 'plugin'
       && event.data.source.plugin === 'agent-loop-auto-continue')).toHaveLength(3)
-    expect(agent.session.events.findLast(e => e.type === 'turn/end')?.data.reason).toEqual({ kind: 'max-tokens' })
+    expect((() => { const ending = agent.session.events.findLast(e => e.type === 'turn/end'); return ending?.type === 'turn/end' ? ending.data.reason : undefined })()).toEqual({ kind: 'max-tokens' })
   })
 
   it('surfaces max-tokens as the turn-end reason when the last step is cut off', async () => {
