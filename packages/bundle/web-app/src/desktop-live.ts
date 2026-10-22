@@ -12,7 +12,7 @@ import { validBrowserScopeId } from './mini-browser-scopes.ts'
 
 interface NativeState { available: boolean; paused: boolean; title: string; reason: string; source?: 'native' | 'observation' }
 const DISCONNECTED: NativeState = {
-  available: false, paused: false, title: '', reason: 'Desktop Live sin conexión con Phoenix.exe y esta conversación.',
+  available: false, paused: false, title: '', reason: 'Aún no hay una captura verificada de esta conversación. En Phoenix web, computer debe capturar Paint primero; para vídeo continuo se requiere Phoenix.exe.',
 }
 const TIMEOUT_MS = 3_000
 const MAX_REPLY_BYTES = 24 * 1024 * 1024

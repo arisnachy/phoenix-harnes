@@ -146,6 +146,9 @@ export function isBrowserPrompt(text: string): boolean {
   // "puedes entras a la pagina..." must open the same in-chat browser
   // that Kira controls, rather than silently omitting its card.
   const normalized = text.normalize('NFD').replace(/[\u0300-\u036f]/gu, '').toLowerCase()
+  // Native Windows requests are never automatic web-navigation intents even
+  // when they say "entra", "abre" or mention the Desktop Live viewer.
+  if (isDesktopPrompt(text)) return false
   const verb = /\b(?:abre|abres|abrir|abreme|abrirme|navega|navegas|navegar|entra|entras|entrar|ingresa|ingresas|ingresar)\b/u
   const verb2 = /\b(?:visita|visitas|visitar|accede|accedes|acceder)\b/u
   const englishVerb = /\b(?:open|browse|visit)\b/u
@@ -343,7 +346,8 @@ export function addBrowserCards(
   flow: FlowItem[],
   nodes: readonly OrderedChatNode[],
 ): FlowItem[] {
-  const requests = new Set(nodes.filter(isBrowserRequest).map(node => node.key))
+  const desktopRequests = new Set(nodes.filter(isDesktopRequest).map(node => node.key))
+  const requests = new Set(nodes.filter(node => !desktopRequests.has(node.key) && isBrowserRequest(node)).map(node => node.key))
   const browserTabIds = new Map<string, string>()
   let currentUserKey: string | undefined
   for (const node of nodes) {
@@ -351,7 +355,7 @@ export function addBrowserCards(
     if (node.kind === 'tool-call' && currentUserKey !== undefined) {
       const root = (node.data as ToolChatData).root
       const browserUse = embeddedBrowserUse(root)
-      if (browserUse.found) {
+      if (browserUse.found && !desktopRequests.has(currentUserKey)) {
         requests.add(currentUserKey)
         if (browserUse.tabId !== undefined) browserTabIds.set(currentUserKey, browserUse.tabId)
       }
@@ -380,8 +384,8 @@ export function addBrowserCards(
 export function isDesktopPrompt(text: string): boolean {
   const normalized = text.normalize('NFD').replace(/[\u0300-\u036f]/gu, '').toLowerCase()
   if (/\bdesktop[\s-]*live\b/u.test(normalized)) return true
-  const application = /\b(?:paint|mspaint|bloc de notas|notepad|explorador de windows)\b/u
-  const action = /\b(?:abre|abrir|inicia|ejecuta|dibuja|trabaja|controla|muestra|open|draw|launch)\b/u
+  const application = /\b(?:microsoft paint|paint|mspaint|bloc de notas|notepad|explorador de windows|calculadora|calculator|explorador de archivos|file explorer)\b/u
+  const action = /\b(?:abre|abres|abrir|entra|entrar|ingresa|ingresar|inicia|ejecuta|dibuja|dibujo|trazo|traza|trabaja|controla|muestra|open|draw|launch|use|usa)\b/u
   return application.test(normalized) && action.test(normalized)
 }
 

@@ -62,13 +62,13 @@ describe('MiniBrowser chronological conversation cards', () => {
     expect(optimistic.map(item => item.key)).toEqual(['optimistic-paint'])
   })
 
-  it('does not open MiniBrowser even after a mistaken page inspection during a native Paint turn', () => {
+  it('refuses MiniBrowser for Paint even after an incidental Chrome inspection', () => {
     const nodes = [
       user('paint', 'entra en paint y crea una carita'),
-      { key: 'inspection', kind: 'tool-call', data: { root: { call: { name: 'mcp__chrome__inspect_page' } } } },
+      { key: 'inspect', kind: 'tool-call', data: { root: { call: { name: 'mcp__chrome__inspect_page' } } } },
     ]
-    expect(addBrowserCards(flowNodes('paint', 'inspection'), nodes).map(item => item.key))
-      .toEqual(['paint', 'inspection'])
+    expect(addBrowserCards(flowNodes('paint', 'inspect'), nodes).map(item => item.key))
+      .toEqual(['paint', 'inspect'])
   })
 
   it('opens the browser for nested Chrome calls emitted by a Code parent', () => {

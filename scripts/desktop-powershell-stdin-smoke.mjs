@@ -50,6 +50,28 @@ const actualOutput = await new Promise((resolve, reject) => {
   child.stdin.end(actualDriver, 'utf8')
 })
 assert.ok(String(actualOutput).length > 0, 'real driver must not return empty output')
+// FocusWindow triggers this Win32 import. Check the actual private import
+// dynamically without relying on an interactive GUI in the CI runner.
+const testImport = actualDriver + '\n' + [
+  '$method = [PhoenixDesktop].GetMethod("GetCurrentThreadId", [System.Reflection.BindingFlags]::NonPublic -bor [System.Reflection.BindingFlags]::Static)',
+  'if ($null -eq $method) { throw "missing GetCurrentThreadId import" }',
+  '$threadId = [uint32]$method.Invoke($null, @())',
+  'if ($threadId -eq 0) { throw "GetCurrentThreadId returned zero" }',
+  'Write-Output ("thread-import-ok:" + $threadId)',
+].join('\n')
+const validatedImport = await new Promise((resolve, reject) => {
+  const child = execFile('powershell.exe', args, {
+    encoding: 'utf8', windowsHide: true, timeout: 30_000,
+    env: { ...process.env, PHX_ACTION: 'windows' },
+  }, (error, stdout, stderr) => {
+    if (error) reject(new Error(stderr.trim() || error.message))
+    else resolve(stdout.trim())
+  })
+  if (!child.stdin) return reject(new Error('P/Invoke smoke stdin unavailable'))
+  child.stdin.end(testImport, 'utf8')
+})
+assert.match(String(validatedImport), /thread-import-ok:[1-9][0-9]*/u)
+console.log('Actual Phoenix GetCurrentThreadId import succeeded')
 console.log('Real Phoenix Windows driver enumeration smoke passed')
 
 console.log('PowerShell complete-driver stdin smoke passed')
