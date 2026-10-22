@@ -781,7 +781,9 @@ public static class PhoenixDesktop {
   [DllImport("user32.dll")]
   private static extern bool ShowWindowAsync(IntPtr hWnd, int command);
 
-  [DllImport("user32.dll")]
+  // Current-thread IDs belong to kernel32, not user32.
+  // Wrong DLL causes EntryPointNotFoundException as soon as focus is attempted.
+  [DllImport("kernel32.dll", ExactSpelling = true)]
   private static extern uint GetCurrentThreadId();
 
   [DllImport("user32.dll")]

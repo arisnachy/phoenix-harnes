@@ -125,6 +125,8 @@ describe('Computer Use argument contract', () => {
     expect(driver).toContain('SetForegroundWindow')
     expect(driver).toContain('GetForegroundWindow')
     expect(driver).toContain('AttachThreadInput')
+    expect(driver).toContain('[DllImport("kernel32.dll", ExactSpelling = true)]')
+    expect(driver).not.toMatch(/\[DllImport\("user32\.dll"\)\]\s*private static extern uint GetCurrentThreadId/u)
   })
 
   it('forces a fresh observation after state-changing desktop actions', () => {
