@@ -18,6 +18,8 @@ Windows 默认注册 Computer Use；设置 `PHOENIX_DESKTOP_COMPUTER=0` 可以�
 
 此前 Desktop Live 只存在于 Windows 原生侧边栏，因此用户通过网页聊天时看不到正在操作的程序。现在 Web 应用经由已有 Windows 本地命名管道，提供有限的只读 `/phoenix-desktop-live/state` 和 `/phoenix-desktop-live/frame` 路由。只有当确切会话 ID 拥有可见原生预览时，代理才会返回真实帧。用户要求 Paint 或 Desktop Live 时，聊天内出现对应的 React 视图，轮询实际状态和验证过的 PNG；未连接时明确报告，而不伪造画面。原有 MiniBrowser 和按会话隔离的 CDP 操作不变。
 
+对于只运行 `pnpm phoenix` 而没有 Phoenix.exe 的情况，已有权限的 `computer` 工具会把经过验证的操作后截图写入当前用户可访问、按会话 ID 哈希命名且会过期的临时文件。聊天视图可显示这些真实的近期截图，并明确标注**这是近期截图，而非实时视频**。这不是额外的桌面控制或截图授权，最长读取有效期为 90 秒。
+
 ## Alternatives considered
 
 **用通用网页视图取代 MiniBrowser。** 不采用：WebView2 无法嵌入任意原生程序窗口，也无法替代其可访问性接口，还会破坏现有网页会话。

@@ -1,5 +1,7 @@
 /** Session-scoped native application frames, surfaced in the Phoenix Web chat. */
-import { readFile } from 'node:fs/promises'
+import { readFile, stat } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
+import { tmpdir } from 'node:os'
 import { createConnection } from 'node:net'
 import { join } from 'node:path'
 import type { IncomingMessage, ServerResponse } from 'node:http'
@@ -8,7 +10,7 @@ import type {} from '@phoenix-ai/dsh-host-webserver'
 import { miniBrowserRequestAllowed, miniBrowserSingleHeader } from './mini-browser.ts'
 import { validBrowserScopeId } from './mini-browser-scopes.ts'
 
-interface NativeState { available: boolean; paused: boolean; title: string; reason: string }
+interface NativeState { available: boolean; paused: boolean; title: string; reason: string; source?: 'native' | 'observation' }
 const DISCONNECTED: NativeState = {
   available: false, paused: false, title: '', reason: 'Desktop Live sin conexión con Phoenix.exe y esta conversación.',
 }
@@ -107,6 +109,27 @@ async function requestNative(sessionId: string, type: string): Promise<string> {
   return reply.details
 }
 
+const OBSERVATION_MAX_AGE_MS = 90_000
+
+function observationFile(sessionId: string): string {
+  return join(tmpdir(), 'phoenix-desktop-observations',
+    createHash('sha256').update(sessionId).digest('hex') + '.png')
+}
+
+async function recentObservation(sessionId: string): Promise<Buffer | undefined> {
+  const path = observationFile(sessionId)
+  try {
+    const file = await stat(path)
+    if (Date.now() - file.mtimeMs > OBSERVATION_MAX_AGE_MS
+      || file.size < 24 || file.size > 16 * 1024 * 1024) return undefined
+    const png = await readFile(path)
+    return png.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
+      ? png : undefined
+  } catch {
+    return undefined
+  }
+}
+
 /** A dead host is not a live application; never synthesize a success state. */
 export async function readDesktopLiveState(sessionId: string): Promise<NativeState> {
   try {
@@ -118,14 +141,26 @@ export async function readDesktopLiveState(sessionId: string): Promise<NativeSta
       || typeof state.title !== 'string' || typeof state.reason !== 'string') {
       throw new Error('Estado Desktop Live incompleto.')
     }
-    return { available: state.available, paused: state.paused, title: state.title, reason: state.reason }
+    if (state.available) return { available: true, paused: state.paused, title: state.title, reason: state.reason, source: 'native' }
   } catch {
-    return DISCONNECTED
+    // A missing native shell may still have real screenshots from the model tool.
+  }
+  const observation = await recentObservation(sessionId)
+  return observation === undefined ? DISCONNECTED : {
+    available: true, paused: false, title: 'Última captura verificada del escritorio',
+    reason: 'Captura posterior a una acción de Computer Use; no es vídeo en directo.', source: 'observation',
   }
 }
 
 export async function readDesktopLiveFrame(sessionId: string): Promise<Buffer> {
-  const base64 = await requestNative(sessionId, 'phoenix.desktop.live-frame')
+  let base64: string
+  try {
+    base64 = await requestNative(sessionId, 'phoenix.desktop.live-frame')
+  } catch {
+    const observed = await recentObservation(sessionId)
+    if (observed === undefined) throw new Error('No existe una captura Desktop Live verificable para esta conversación.')
+    return observed
+  }
   if (!/^[A-Za-z0-9+/]+={0,2}$/u.test(base64)) throw new Error('Imagen Desktop Live inválida.')
   const png = Buffer.from(base64, 'base64')
   if (png.byteLength < 24 || png.byteLength > 16 * 1024 * 1024

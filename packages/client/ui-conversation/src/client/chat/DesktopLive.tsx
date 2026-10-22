@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react'
 import css from './DesktopLive.module.css'
 
-interface DesktopState { available: boolean; paused: boolean; title: string; reason: string }
+interface DesktopState { available: boolean; paused: boolean; title: string; reason: string; source?: 'native' | 'observation' }
 const HEADERS = { 'x-phoenix-mini-browser': '1' }
 const EMPTY: DesktopState = { available: false, paused: false, title: '', reason: 'Conectando con Desktop Live…' }
 
@@ -70,7 +70,7 @@ export function DesktopLive({ sessionId, active }: { sessionId: string; active: 
       <header className={css.header}>
         <strong>▣ Desktop Live</strong>
         <span className={css.status}>{status.available
-          ? status.paused ? 'Pausado' : 'Ventana real'
+          ? status.paused ? 'Pausado' : status.source === 'observation' ? 'Captura reciente' : 'Ventana real'
           : 'Sin conexión'}</span>
         <button type="button" aria-label={collapsed ? 'Mostrar Desktop Live' : 'Contraer Desktop Live'}
           onClick={() => setCollapsed(value => !value)}>{collapsed ? 'Mostrar' : 'Contraer'}</button>
@@ -78,7 +78,7 @@ export function DesktopLive({ sessionId, active }: { sessionId: string; active: 
       {!collapsed && (status.available && image
         ? <div className={css.viewport}>
           <img className={css.frame} src={image} alt={'Captura real de ' + (status.title || 'la aplicación Windows')} />
-          <div className={css.caption}>{status.title || 'Aplicación Windows'} · Captura de la sesión actual</div>
+          <div className={css.caption}>{status.title || 'Aplicación Windows'} · {status.source === 'observation' ? 'Imagen real del último paso, no vídeo' : 'Visor de la sesión actual'}</div>
         </div>
         : <div className={css.empty}>
           <strong>No hay una aplicación verificada en Desktop Live.</strong>

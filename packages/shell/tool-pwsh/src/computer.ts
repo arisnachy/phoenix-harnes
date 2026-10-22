@@ -13,8 +13,9 @@
  */
 
 import { execFile } from 'node:child_process'
-import { randomUUID } from 'node:crypto'
-import { readFile, unlink } from 'node:fs/promises'
+import { createHash, randomUUID } from 'node:crypto'
+import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import { createConnection } from 'node:net'
 import { join } from 'node:path'
 import type { Context } from '@phoenix-ai/cordis'
@@ -1511,6 +1512,29 @@ function delay(ms: number, signal?: AbortSignal): Promise<void> {
   })
 }
 
+/**
+ * Publish a bounded actual Computer screenshot to the local chat viewer.
+ * This supplements (never replaces) the authenticated desktop host pipe
+ * when Phoenix is launched through pnpm without Phoenix.exe. A snapshot is
+ * created only AFTER the computer tool has passed its normal permissions.
+ */
+export function desktopObservationPath(sessionId: string): string {
+  const file = createHash('sha256').update(sessionId).digest('hex') + '.png'
+  return join(tmpdir(), 'phoenix-desktop-observations', file)
+}
+
+async function publishDesktopObservation(sessionId: string, png: Buffer): Promise<void> {
+  const path = desktopObservationPath(sessionId)
+  await mkdir(join(tmpdir(), 'phoenix-desktop-observations'), { recursive: true, mode: 0o700 })
+  const temporary = path + '.' + randomUUID() + '.tmp'
+  try {
+    await writeFile(temporary, png, { flag: 'wx', mode: 0o600 })
+    await rename(temporary, path)
+  } finally {
+    try { await unlink(temporary) } catch { /* Atomic temp can already have been renamed. */ }
+  }
+}
+
 async function attachDesktopScreenshot(
   ctx: Context,
   exec: ToolRunContext,
@@ -1532,6 +1556,11 @@ async function attachDesktopScreenshot(
     mediaType: 'image/png',
     name: 'phoenix-desktop.png',
   })
+  try {
+    await publishDesktopObservation(String(exec.agent.session.header.id), bytes)
+  } catch {
+    // Web viewer is optional; never invalidate a verified model screenshot.
+  }
   const imageBlock = { type: 'image', attachment } as unknown as ContentBlock
   exec.deferContext(createUserMessage({
     content: [

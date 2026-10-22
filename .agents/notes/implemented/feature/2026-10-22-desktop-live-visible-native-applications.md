@@ -18,6 +18,8 @@ The user can hide the viewer without having it automatically reappear, then reop
 
 The previous native-only side pane did not appear when Phoenix was used through its ordinary web conversation, so users could see tools spin without seeing an application. The web app now serves bounded, read-only `/phoenix-desktop-live/state` and `/phoenix-desktop-live/frame` routes over the same local Windows pipe. The broker refuses frames unless the exact conversation id owns an active, visible native viewer. A conversation-level React card appears for explicit Desktop Live/Paint requests, polls real state and verified PNG captures, and shows an unambiguous disconnected diagnosis rather than a fake picture. The MiniBrowser and its own session-scoped CDP controls are unchanged.
 
+For the CLI-only `pnpm phoenix` route, the already-authorized `computer` tool also publishes its verified post-action screenshots into owner-only, expiring temporary files keyed by a hash of the session id. The chat viewer can display those real recent images even without Phoenix.exe; it labels them **recent captures, not live video**. This is a visual fallback, not independent desktop control or additional screenshot authority. The 90-second age limit prevents indefinite retention.
+
 ## Alternatives considered
 
 **Replace MiniBrowser with a universal embedded web view.** Rejected: WebView2 cannot embed arbitrary native app windows or run their accessibility trees, and this would regress browser sessions.
