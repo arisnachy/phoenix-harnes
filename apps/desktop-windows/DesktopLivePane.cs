@@ -50,6 +50,30 @@ internal sealed class DesktopLivePane : UserControl
     internal bool IsDismissed { get; private set; }
     internal event EventHandler? CloseRequested;
 
+    internal string StateForSession(string? sessionId)
+    {
+        var owned = !string.IsNullOrWhiteSpace(sessionId)
+            && string.Equals(sessionId, ownerSession, StringComparison.Ordinal);
+        var ready = owned && Visible && !IsDismissed;
+        return System.Text.Json.JsonSerializer.Serialize(new
+        {
+            available = ready,
+            paused = ready && IsPaused,
+            title = ready ? status.Text.Replace("Desktop Live · ", "", StringComparison.Ordinal) : string.Empty,
+            reason = ready ? string.Empty : "No hay una sesión Desktop Live visible y vinculada a esta conversación."
+        });
+    }
+
+    internal string FrameForSession(string? sessionId)
+    {
+        if (string.IsNullOrWhiteSpace(sessionId)
+            || !string.Equals(sessionId, ownerSession, StringComparison.Ordinal)
+            || !Visible || IsDismissed)
+            throw new InvalidOperationException("Desktop Live no está disponible para esta conversación.");
+        return CaptureTargetAsBase64()
+            ?? throw new InvalidOperationException("La aplicación no devolvió una captura verificable.");
+    }
+
     internal DesktopLivePane()
     {
         var bar = new ToolStrip { Dock = DockStyle.Top, GripStyle = ToolStripGripStyle.Hidden };

@@ -11,6 +11,7 @@ import { PendingSteeringBubble } from './MessageItem.tsx'
 import { formatRunDuration } from './message-chrome.ts'
 import { ReasoningRow } from './ReasoningRow.tsx'
 import { MiniBrowser, type SavedAccessNotice, type SecureLoginTarget } from './MiniBrowser.tsx'
+import { DesktopLive } from './DesktopLive.tsx'
 import { SecureAsk } from './SecureAsk.tsx'
 import type { TurnProgress } from './turn-progress.ts'
 import chatCss from './ChatView.module.css'
@@ -55,6 +56,7 @@ type ActivityItem =
   }
 
 type FlowItem =
+  | { readonly kind: 'desktop'; readonly key: string; readonly userKey: string }
   | { readonly kind: 'browser'; readonly key: string; readonly userKey: string; readonly tabId?: string }
   | { readonly kind: 'browser-workspace'; readonly key: string; readonly userKey: string; readonly tabId?: string; readonly live: boolean; readonly items: readonly FlowItem[] }
   | { readonly kind: 'node'; readonly key: string }
@@ -369,6 +371,46 @@ export function addBrowserCards(
     }
   }
   return result
+}
+
+/** Explicit user requests for a real Windows application, not web browsing.
+ * @param text - Latest user prompt text.
+ * @returns Whether the user intends a native application viewer.
+ */
+export function isDesktopPrompt(text: string): boolean {
+  const normalized = text.normalize('NFD').replace(/[\u0300-\u036f]/gu, '').toLowerCase()
+  if (/\bdesktop[\s-]*live\b/u.test(normalized)) return true
+  const application = /\b(?:paint|mspaint|bloc de notas|notepad|explorador de windows)\b/u
+  const action = /\b(?:abre|abrir|inicia|ejecuta|dibuja|trabaja|controla|muestra|open|draw|launch)\b/u
+  return application.test(normalized) && action.test(normalized)
+}
+
+function isDesktopRequest(node: OrderedChatNode): boolean {
+  if (node.kind !== 'user' && node.kind !== 'steering') return false
+  const content = (node.data as { content?: unknown }).content
+  if (!Array.isArray(content)) return false
+  return isDesktopPrompt(content.map((block: unknown) =>
+    block !== null && typeof block === 'object' && 'text' in block
+      && typeof block.text === 'string' ? block.text : '').join(' '))
+}
+
+/** Put a real native Desktop Live status/viewport where users requested it.
+ * A disconnected viewer is explicitly unavailable, never a made-up screenshot.
+ * @param flow - Ordered chat items.
+ * @param nodes - Durable chat messages.
+ * @returns Flow with viewer cards beside relevant user prompts.
+ */
+export function addDesktopCards(flow: FlowItem[], nodes: readonly OrderedChatNode[]): FlowItem[] {
+  const requests = new Set(nodes.filter(isDesktopRequest).map(node => node.key))
+  const output: FlowItem[] = []
+  for (const item of flow) {
+    output.push(item)
+    if (item.kind === 'node' && requests.has(item.key)
+      || item.kind === 'optimistic' && isDesktopPrompt(item.text)) {
+      output.push({ kind: 'desktop', key: 'desktop:' + item.key, userKey: item.key })
+    }
+  }
+  return output
 }
 
 /**
@@ -792,7 +834,7 @@ function BrowserWorkspace({
  * @returns The grouped transcript flow.
  */
 export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, browserTurnOpen, sessionId, ...seatProps }: ToolActivityFlowProps) {
-  const ordinaryFlow = useMemo(() => addBrowserCards(buildAnchoredFlow(nodes, optimisticSubmit), nodes), [nodes, optimisticSubmit])
+  const ordinaryFlow = useMemo(() => addDesktopCards(addBrowserCards(buildAnchoredFlow(nodes, optimisticSubmit), nodes), nodes), [nodes, optimisticSubmit])
   const browserKeys = ordinaryFlow.filter(item => item.kind === 'browser').map(item => item.userKey)
   const [selectedBrowserKey, setSelectedBrowserKey] = useState<string | undefined>()
   const newestBrowserKey = browserKeys.at(-1)
@@ -804,6 +846,7 @@ export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, browserT
     }
   }, [newestBrowserKey, lastBrowserKey])
   const activeBrowserKey = selectedBrowserKey ?? newestBrowserKey
+  const latestDesktopKey = ordinaryFlow.filter(item => item.kind === 'desktop').at(-1)?.key
   const browserTurnRunning = browserTurnOpen ?? (turnStatus?.progress != null)
   const flow = useMemo(() => {
     const grouped = browserTurnRunning && newestBrowserKey !== undefined
@@ -844,7 +887,9 @@ export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, browserT
               t={seatProps.t}
             />
           )}
-          {item.kind === 'browser-workspace'
+          {item.kind === 'desktop'
+            ? <DesktopLive sessionId={sessionId} active={item.key === latestDesktopKey} />
+            : item.kind === 'browser-workspace'
             ? <BrowserWorkspace
               sessionId={sessionId}
               live={item.live}

@@ -138,6 +138,8 @@ public sealed record BrowserCommand(
         "phoenix.desktop.windows",
         "phoenix.desktop.screenshot",
         "phoenix.desktop.preview",
+        "phoenix.desktop.live-state",
+        "phoenix.desktop.live-frame",
     };
 
     public static bool TryParse(string json, out BrowserCommand command, bool allowAutomation = false)
@@ -173,6 +175,16 @@ public sealed record BrowserCommand(
             if (type is "phoenix.browser.inspect" or "phoenix.desktop.windows" or "phoenix.desktop.screenshot")
             {
                 command = new BrowserCommand(type);
+                return true;
+            }
+
+            if (type is "phoenix.desktop.live-state" or "phoenix.desktop.live-frame")
+            {
+                if (!TryGetString(doc.RootElement, "sessionId", out var requestedSession)
+                    || requestedSession.Length > 128
+                    || requestedSession.Any(ch => !(char.IsAsciiLetterOrDigit(ch) || ch is '-' or '_' or ':')))
+                    return false;
+                command = new BrowserCommand(type, SessionId: requestedSession, Observe: true);
                 return true;
             }
 
