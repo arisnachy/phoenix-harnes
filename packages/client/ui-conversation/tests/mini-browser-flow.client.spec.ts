@@ -30,6 +30,7 @@ describe('MiniBrowser chronological conversation cards', () => {
     expect(isBrowserPrompt('No abras el navegador')).toBe(false)
     expect(isBrowserPrompt('Hola, ¿cómo va todo?')).toBe(false)
     expect(isBrowserPrompt('entra a paint y haz un trazo')).toBe(false)
+    expect(isBrowserPrompt('entra en paint y crea una carita')).toBe(false)
     expect(isBrowserPrompt('Abre Microsoft Paint, dibuja una casa y muéstrame Desktop Live')).toBe(false)
     expect(isBrowserPrompt('Abre el Bloc de notas')).toBe(false)
     expect(isBrowserPrompt('Abre la calculadora de Windows')).toBe(false)
@@ -59,6 +60,15 @@ describe('MiniBrowser chronological conversation cards', () => {
     expect(cards.map(item => item.key)).toEqual(['user-paint', 'tool-1'])
     const optimistic = addBrowserCards([{ kind: 'optimistic', key: 'optimistic-paint', text: 'abre Paint' }], [])
     expect(optimistic.map(item => item.key)).toEqual(['optimistic-paint'])
+  })
+
+  it('refuses MiniBrowser for Paint even after an incidental Chrome inspection', () => {
+    const nodes = [
+      user('paint', 'entra en paint y crea una carita'),
+      { key: 'inspect', kind: 'tool-call', data: { root: { call: { name: 'mcp__chrome__inspect_page' } } } },
+    ]
+    expect(addBrowserCards(flowNodes('paint', 'inspect'), nodes).map(item => item.key))
+      .toEqual(['paint', 'inspect'])
   })
 
   it('opens the browser for nested Chrome calls emitted by a Code parent', () => {

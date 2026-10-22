@@ -14,6 +14,9 @@ import {
   systemBrowserOpenInvocation,
   validateComputerArgs,
   windowsComputerInvocation,
+  nativeDesktopTurnActive,
+  nativeDesktopFallbackDenied,
+  normalizedDesktopTarget,
 } from '../src/computer.ts'
 
 describe('Computer Use permissions', () => {
@@ -258,5 +261,54 @@ describe('Desktop Live side-pane preflight', () => {
     })
     expect(desktopPreviewCommandForAction({ action: 'screenshot' }, 'session-4').observe).toBe(true)
     expect(() => desktopPreviewCommandForAction({ action: 'click', x: 4, y: 8 }, '../../unsafe')).toThrow(/session id/i)
+  })
+})
+
+describe('native Windows Paint task ownership', () => {
+  const human = (text: string) => ({
+    type: 'user/message', data: { source: { kind: 'user' }, content: [{ type: 'text', text }] },
+  })
+  it('restricts browser actions for a Paint prompt, not across the whole conversation', () => {
+    expect(nativeDesktopTurnActive([human('entra en paint y crea una carita')])).toBe(true)
+    expect(nativeDesktopTurnActive([human('abre Paint y haz un trazo')])).toBe(true)
+    expect(nativeDesktopTurnActive([human('abre Paint'), {
+      type: 'user/message', data: { source: { kind: 'plugin' }, content: [{ type: 'text', text: 'browser inspect' }] },
+    }])).toBe(true)
+    expect(nativeDesktopTurnActive([human('abre Paint'), human('ahora abre YouTube en Chrome')])).toBe(false)
+    expect(nativeDesktopTurnActive([human('busca un tutorial de Paint en Chrome')])).toBe(false)
+  })
+  it('uses verified window handles instead of title guessing', () => {
+    expect(normalizedDesktopTarget('hwnd=0x420024 title=Sin título - Paint')).toBe('hwnd:0x420024')
+    expect(normalizedDesktopTarget('hwnd:0x420024')).toBe('hwnd:0x420024')
+    expect(normalizedDesktopTarget('pid=1234 title=Paint')).toBe('pid:1234')
+    expect(normalizedDesktopTarget('Sin título - Paint')).toBe('Sin título - Paint')
+    expect(windowsComputerInvocation({ action: 'focus', target: 'hwnd=0x420024' }).env.PHX_TARGET).toBe('hwnd:0x420024')
+  })
+  it('separates deliberate bounded focus retry from guarded clicks', () => {
+    const driver = windowsComputerInvocation({ action: 'focus', target: 'Paint' }).stdin
+    expect(driver).toContain('for (int attempt = 0; attempt < 3')
+    expect(driver).toContain('target lost foreground')
+    expect(driver).not.toContain('if (!String.IsNullOrWhiteSpace(selector)) FocusWindow(selector, false)')
+  })
+})
+
+describe('monotonic native Windows turn browser/image fallback guard', () => {
+  const user = (text: string) => [{
+    type: 'user/message', data: { source: { kind: 'user' }, content: [{ type: 'text', text }] },
+  }]
+  const paint = user('entra en Paint y crea una carita')
+  it('rejects Chrome, browser, and generated images for native Paint requests', () => {
+    expect(nativeDesktopFallbackDenied('mcp__chrome__inspect_page', {}, paint)).toMatch(/native Windows/u)
+    expect(nativeDesktopFallbackDenied('mcp__browser__navigate', {}, paint)).toMatch(/native Windows/u)
+    expect(nativeDesktopFallbackDenied('computer', { action: 'browser_inspect' }, paint)).toMatch(/native Windows/u)
+    expect(nativeDesktopFallbackDenied('image_generation', {}, paint)).toMatch(/native Windows/u)
+    expect(nativeDesktopFallbackDenied('phoenix_3d', {}, paint)).toMatch(/native Windows/u)
+  })
+  it('permits native Computer and shell, and does not leak the lock across turns', () => {
+    expect(nativeDesktopFallbackDenied('computer', { action: 'focus', target: 'hwnd:0x420024' }, paint)).toBeUndefined()
+    expect(nativeDesktopFallbackDenied('computer', { action: 'screenshot' }, paint)).toBeUndefined()
+    expect(nativeDesktopFallbackDenied('pwsh', { script: 'mspaint' }, paint)).toBeUndefined()
+    expect(nativeDesktopFallbackDenied('mcp__chrome__inspect_page', {}, user('abre Chrome'))).toBeUndefined()
+    expect(nativeDesktopFallbackDenied('image_generation', {}, user('genera una carita'))).toBeUndefined()
   })
 })
