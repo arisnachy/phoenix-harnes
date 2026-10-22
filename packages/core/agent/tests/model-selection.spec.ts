@@ -631,6 +631,8 @@ describe('installModelSelection()', () => {
       'explica en detalle cómo diseñar una arquitectura hospitalaria',
       'haz un sistema hospitalario con varios módulos',
       'crea una app de facturación',
+      'quiero que me crees una aplicación para una clínica',
+      '¿puedes diseñar una plataforma hospitalaria?',
       'corrige el problema de seguridad en producción',
       'despliega el proyecto a producción',
       'actualiza la base de datos y después reinicia el servidor',
