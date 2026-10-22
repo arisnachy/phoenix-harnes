@@ -110,9 +110,14 @@ interface AttachmentWriter {
   saveImage(input: { data: Buffer; mediaType: 'image/png'; name: string }): Promise<DesktopImageAttachment>
 }
 
-/** Resolve the optional attachment capability without adding a hard package edge. */
-function attachmentWriter(ctx: Context): AttachmentWriter | undefined {
-  return (ctx as unknown as { attachments?: AttachmentWriter }).attachments
+/** Resolve the optional attachment capability without adding a hard package edge.
+ * @param ctx - Cordis context with optional late-bound attachment service.
+ * @returns The image persistence interface, or undefined when not installed.
+ */
+export function attachmentWriter(ctx: Context): AttachmentWriter | undefined {
+  // Cordis service getters require injection. get() is the supported late-bound
+  // optional dependency lookup, and returns undefined when not mounted.
+  return ctx.get('attachments') as AttachmentWriter | undefined
 }
 
 
@@ -340,7 +345,7 @@ export function residentComputerRequestForAction(args: ComputerToolArgs, request
     schema: RESIDENT_DESKTOP_CONTROL_SCHEMA,
     requestId,
     type: args.action,
-    ...(args.target === undefined ? {} : { target: args.target }),
+    ...(args.target === undefined ? {} : { target: normalizedDesktopTarget(args.target) }),
     ...(args.url === undefined ? {} : { url: args.url }),
     ...(args.origin === undefined ? {} : { origin: normalizeCredentialOrigin(args.origin) }),
     ...(args.fields === undefined ? {} : { fields: args.fields }),
@@ -472,7 +477,7 @@ export function desktopPreviewCommandForAction(
   }
   return {
     type: 'phoenix.desktop.preview',
-    ...(args.target === undefined ? {} : { target: args.target }),
+    ...(args.target === undefined ? {} : { target: normalizedDesktopTarget(args.target) }),
     sessionId,
     observe: args.action === 'screenshot' || args.action === 'windows',
   }
@@ -1626,7 +1631,7 @@ async function attachDesktopScreenshot(
   exec: ToolRunContext,
   base64Png: string,
   label: string,
-): Promise<void> {
+): Promise<boolean> {
   if (exec.agent === undefined) throw new Error('Computer screenshot requires an owning agent session')
   if (base64Png.length === 0) throw new Error('Computer screenshot driver returned no image bytes')
   const bytes = Buffer.from(base64Png, 'base64')
@@ -1635,18 +1640,27 @@ async function attachDesktopScreenshot(
   if (bytes.length < pngSignature.length || !bytes.subarray(0, pngSignature.length).equals(pngSignature)) {
     throw new Error('Computer screenshot driver returned invalid PNG bytes')
   }
+  // Keep the genuine Desktop Live frame observable in the conversation even
+  // when no durable model-image store has been mounted yet.
+  try {
+    await publishDesktopObservation(String(exec.agent.session.header.id), bytes)
+  } catch {
+    // User-facing preview is best-effort, not proof the desktop capture failed.
+  }
   const attachments = attachmentWriter(ctx)
-  if (attachments === undefined) throw new Error('Computer screenshot requires the attachment service')
+  if (attachments === undefined) {
+    exec.deferContext(createUserMessage({
+      content: [{ type: 'text', text:
+        `${label} captured for Desktop Live, but the model image attachment backend is unavailable. Do not claim to have visually verified the result.` }],
+      source: { kind: 'plugin', plugin: 'computer-use' },
+    }))
+    return false
+  }
   const attachment = await attachments.saveImage({
     data: bytes,
     mediaType: 'image/png',
     name: 'phoenix-desktop.png',
   })
-  try {
-    await publishDesktopObservation(String(exec.agent.session.header.id), bytes)
-  } catch {
-    // Web viewer is optional; never invalidate a verified model screenshot.
-  }
   const imageBlock = { type: 'image', attachment } as unknown as ContentBlock
   exec.deferContext(createUserMessage({
     content: [
@@ -1658,6 +1672,7 @@ async function attachDesktopScreenshot(
     ],
     source: { kind: 'plugin', plugin: 'computer-use' },
   }))
+  return true
 }
 
 /**
@@ -1732,7 +1747,7 @@ export function registerComputerTool(ctx: Context): void {
         text: value.action === 'windows'
           ? `Visible top-level windows:\n${value.details ?? '<none>'}`
           : value.action === 'screenshot'
-            ? 'Desktop screenshot captured and attached for the next model step.'
+            ? (value.postScreenshot ? 'Desktop screenshot captured and attached for the next model step.' : 'Desktop screenshot captured for Desktop Live, but not attached to the model.')
             : value.action === 'browser_inspect'
               ? `Phoenix embedded browser inspection:\n${value.details ?? '{}'}`
               : value.action.startsWith('browser_')
@@ -1763,13 +1778,11 @@ export function registerComputerTool(ctx: Context): void {
       let postScreenshot = false
 
       if (args.action === 'screenshot') {
-        await attachDesktopScreenshot(ctx, exec, output, 'PHOENIX desktop screenshot')
-        postScreenshot = true
+        postScreenshot = await attachDesktopScreenshot(ctx, exec, output, 'PHOENIX desktop screenshot')
       } else if (shouldCaptureAfterAction(args.action)) {
         await delay(POST_ACTION_SETTLE_MS, exec.signal)
         const fresh = await runWindowsComputerAction({ action: 'screenshot' }, exec.signal)
-        await attachDesktopScreenshot(ctx, exec, fresh, `PHOENIX post-${args.action} desktop screenshot`)
-        postScreenshot = true
+        postScreenshot = await attachDesktopScreenshot(ctx, exec, fresh, `PHOENIX post-${args.action} desktop screenshot`)
       }
 
       return {
