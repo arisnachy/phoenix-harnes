@@ -1,3 +1,6 @@
+import { describe, expect, it } from 'vitest'
+import { eclipseTeamPlanSummary, resolveEclipseTeammateProfile } from '../src/index.ts'
+
 describe('Kira plan handoff to Luna Max specialists', () => {
   it('passes only the visible plan from the current turn, not old missions or full chat', () => {
     const events = [
@@ -20,9 +23,6 @@ describe('Kira plan handoff to Luna Max specialists', () => {
     ])?.length).toBeLessThanOrEqual(1800)
   })
 })
-
-import { describe, expect, it } from 'vitest'
-import { eclipseTeamPlanSummary, resolveEclipseTeammateProfile } from '../src/index.ts'
 
 describe('Eclipse teammate overrides', () => {
   const fallback = { provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'max' }
