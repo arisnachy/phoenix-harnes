@@ -1225,6 +1225,33 @@ export function normalizedDesktopTarget(value: string | undefined): string | und
   return trimmed
 }
 
+
+/**
+ * Block unrelated browser and image-generation fallbacks only for a real user
+ * request to control a native Windows application. The restriction is scoped
+ * to the latest genuine user prompt and automatically ends on the next prompt.
+ * @param toolName - Registered tool being dispatched (including nested Code calls).
+ * @param args - Parsed tool arguments.
+ * @param events - Current conversation events.
+ * @returns An explanatory denial or undefined when allowed.
+ */
+export function nativeDesktopFallbackDenied(
+  toolName: string,
+  args: unknown,
+  events: readonly { readonly type: string; readonly data: unknown }[],
+): string | undefined {
+  if (!nativeDesktopTurnActive(events)) return undefined
+  const name = toolName.toLowerCase()
+  const isWeb = /(?:^|[_:./-])(?:browser|chrome)(?:[_:./-]|$)/u.test(name)
+  const isSyntheticImage = /(?:^|[_:./-])(?:image_generation|image-generation|phoenix_3d|phoenix-3d)(?:[_:./-]|$)/u.test(name)
+  const isComputerBrowser = name === 'computer' && args !== null
+    && typeof args === 'object' && 'action' in args
+    && typeof args.action === 'string' && args.action.startsWith('browser_')
+  return isWeb || isSyntheticImage || isComputerBrowser
+    ? 'Paint is a native Windows desktop task. Browser inspection and image-generation fallbacks are not authorized by this turn. Continue with computer windows/focus/screenshot and report a real blocker if needed.'
+    : undefined
+}
+
 function putNumber(env: Record<string, string>, key: string, value: number | undefined): void {
   if (value !== undefined) env[key] = String(value)
 }
@@ -1641,6 +1668,11 @@ export function registerComputerTool(ctx: Context): void {
   if (process.platform !== 'win32') return
   const sandboxPolicy: SandboxPolicyService | undefined = ctx.get('sandboxPolicy')
   const deploymentDefault = ctx.shell.sandboxMode
+
+  // Monotonic registry guard covers direct tool calls AND nested run_code
+  // sub-dispatches, including external Chrome/Browser MCPs. No prompt-only lock.
+  ctx.tools.guard(exec => exec.agent === undefined ? undefined
+    : nativeDesktopFallbackDenied(exec.name, exec.arguments, exec.agent.session.events))
 
   ctx.systemPrompt.section({
     name: 'tool:computer:embedded-browser',

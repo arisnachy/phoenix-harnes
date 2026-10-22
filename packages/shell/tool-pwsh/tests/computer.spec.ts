@@ -15,6 +15,7 @@ import {
   validateComputerArgs,
   windowsComputerInvocation,
   nativeDesktopTurnActive,
+  nativeDesktopFallbackDenied,
   normalizedDesktopTarget,
 } from '../src/computer.ts'
 
@@ -288,5 +289,26 @@ describe('native Windows Paint task ownership', () => {
     expect(driver).toContain('for (int attempt = 0; attempt < 3')
     expect(driver).toContain('target lost foreground')
     expect(driver).not.toContain('if (!String.IsNullOrWhiteSpace(selector)) FocusWindow(selector, false)')
+  })
+})
+
+describe('monotonic native Windows turn browser/image fallback guard', () => {
+  const user = (text: string) => [{
+    type: 'user/message', data: { source: { kind: 'user' }, content: [{ type: 'text', text }] },
+  }]
+  const paint = user('entra en Paint y crea una carita')
+  it('rejects Chrome, browser, and generated images for native Paint requests', () => {
+    expect(nativeDesktopFallbackDenied('mcp__chrome__inspect_page', {}, paint)).toMatch(/native Windows/u)
+    expect(nativeDesktopFallbackDenied('mcp__browser__navigate', {}, paint)).toMatch(/native Windows/u)
+    expect(nativeDesktopFallbackDenied('computer', { action: 'browser_inspect' }, paint)).toMatch(/native Windows/u)
+    expect(nativeDesktopFallbackDenied('image_generation', {}, paint)).toMatch(/native Windows/u)
+    expect(nativeDesktopFallbackDenied('phoenix_3d', {}, paint)).toMatch(/native Windows/u)
+  })
+  it('permits native Computer and shell, and does not leak the lock across turns', () => {
+    expect(nativeDesktopFallbackDenied('computer', { action: 'focus', target: 'hwnd:0x420024' }, paint)).toBeUndefined()
+    expect(nativeDesktopFallbackDenied('computer', { action: 'screenshot' }, paint)).toBeUndefined()
+    expect(nativeDesktopFallbackDenied('pwsh', { script: 'mspaint' }, paint)).toBeUndefined()
+    expect(nativeDesktopFallbackDenied('mcp__chrome__inspect_page', {}, user('abre Chrome'))).toBeUndefined()
+    expect(nativeDesktopFallbackDenied('image_generation', {}, user('genera una carita'))).toBeUndefined()
   })
 })
