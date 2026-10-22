@@ -345,7 +345,7 @@ export function residentComputerRequestForAction(args: ComputerToolArgs, request
     schema: RESIDENT_DESKTOP_CONTROL_SCHEMA,
     requestId,
     type: args.action,
-    ...(args.target === undefined ? {} : { target: normalizedDesktopTarget(args.target) }),
+    ...(args.target === undefined ? {} : { target: normalizedDesktopTarget(args.target)! }),
     ...(args.url === undefined ? {} : { url: args.url }),
     ...(args.origin === undefined ? {} : { origin: normalizeCredentialOrigin(args.origin) }),
     ...(args.fields === undefined ? {} : { fields: args.fields }),
@@ -477,7 +477,7 @@ export function desktopPreviewCommandForAction(
   }
   return {
     type: 'phoenix.desktop.preview',
-    ...(args.target === undefined ? {} : { target: normalizedDesktopTarget(args.target) }),
+    ...(args.target === undefined ? {} : { target: normalizedDesktopTarget(args.target)! }),
     sessionId,
     observe: args.action === 'screenshot' || args.action === 'windows',
   }
