@@ -27,7 +27,7 @@ import type {} from '@phoenix-ai/dsh-system-prompt'
 import type {} from '@phoenix-ai/dsh-tools'
 import type { SessionPersistence } from '@phoenix-ai/dsh-session-persistence'
 import { ReactLoopAgent } from './agent.ts'
-import { DEFAULT_MAX_PARALLEL_TOOL_CALLS, DEFAULT_MAX_STEPS_PER_TURN } from './constants.ts'
+import { DEFAULT_AUTO_CONTINUE_MAX_SEGMENTS, DEFAULT_AUTO_CONTINUE_PROVIDERS, DEFAULT_MAX_PARALLEL_TOOL_CALLS, DEFAULT_MAX_STEPS_PER_TURN } from './constants.ts'
 
 /** Fiber states that cannot own or serve a new lifecycle. */
 const INACTIVE_STATES: ReadonlySet<FiberState> = new Set([
@@ -146,6 +146,15 @@ function resolveMaxStepsPerTurn(value: number | undefined): number {
   return maxStepsPerTurn
 }
 
+/** Validate the finite auto-continuation budget before a settings write commits. */
+function resolveAutoContinueMaxSegments(value: number | undefined): number {
+  const count = value ?? DEFAULT_AUTO_CONTINUE_MAX_SEGMENTS
+  if (!Number.isSafeInteger(count) || count < 0 || count > 8) {
+    throw new Error('autoContinueMaxSegments must be an integer from 0 to 8')
+  }
+  return count
+}
+
 /** Reject an output-token cap that cannot be represented exactly on the request wire. */
 function assertAgentOptions(options: AgentOptions): void {
   if (options.maxTokens !== undefined
@@ -254,12 +263,18 @@ export interface AgentLoopSettings {
   maxParallelToolCalls: number
   /** Maximum model/tool iterations before the user must continue in a new turn. */
   maxStepsPerTurn: number
+  /** Number of automatic output-limit continuations per human request; zero disables them. */
+  autoContinueMaxSegments: number
+  /** Exact provider route IDs eligible for output-limit continuation. */
+  autoContinueProviders: string[]
 }
 
 /** Schema of the agent-loop settings section. */
 export const AGENT_LOOP_SETTINGS_SCHEMA: z<AgentLoopSettings> = z.object({
   maxParallelToolCalls: z.number().step(1).min(1).default(DEFAULT_MAX_PARALLEL_TOOL_CALLS),
   maxStepsPerTurn: z.number().step(1).min(1).default(DEFAULT_MAX_STEPS_PER_TURN),
+  autoContinueMaxSegments: z.number().step(1).min(0).max(8).default(DEFAULT_AUTO_CONTINUE_MAX_SEGMENTS),
+  autoContinueProviders: z.array(z.string().min(1)).default([...DEFAULT_AUTO_CONTINUE_PROVIDERS]),
 })
 
 /** Agent-loop plugin configuration. */
@@ -271,6 +286,10 @@ export interface Config {
   maxParallelToolCalls?: number
   /** Maximum model/tool iterations in one turn; omission defaults to 64. */
   maxStepsPerTurn?: number
+  /** Output-limit continuations per human request (0 disables); default 3. */
+  autoContinueMaxSegments?: number
+  /** Provider route IDs eligible for automatic output-limit continuation. */
+  autoContinueProviders?: string[]
   /** Agents created or resumed at plugin startup. */
   agents: (AgentOptions & {
     /** Stable config label used in logs and as the fresh combined-id prefix. */
@@ -285,7 +304,7 @@ export interface Config {
 }
 
 /** Agent-loop configuration after defaults and load-time validation. */
-type ResolvedConfig = Config & { maxParallelToolCalls: number; maxStepsPerTurn: number }
+type ResolvedConfig = Config & AgentLoopSettings
 
 /** Reject self-contained identity conflicts before any configured agent starts. */
 function validateConfiguredAgents(agents: Config['agents']): void {
@@ -313,6 +332,8 @@ export class AgentLoop extends Service implements AgentFactory {
   static Config = z.object({
     maxParallelToolCalls: z.number().step(1).min(1).default(DEFAULT_MAX_PARALLEL_TOOL_CALLS),
     maxStepsPerTurn: z.number().step(1).min(1).default(DEFAULT_MAX_STEPS_PER_TURN),
+    autoContinueMaxSegments: z.number().step(1).min(0).max(8).default(DEFAULT_AUTO_CONTINUE_MAX_SEGMENTS),
+    autoContinueProviders: z.array(z.string().min(1)).default([...DEFAULT_AUTO_CONTINUE_PROVIDERS]),
     agents: z.array(z.object({
       id: z.string().required(),
       sessionId: z.string().min(1),
@@ -336,6 +357,8 @@ export class AgentLoop extends Service implements AgentFactory {
     const entry: AgentLoopSettings = {
       maxParallelToolCalls: resolveMaxParallelToolCalls(config.maxParallelToolCalls),
       maxStepsPerTurn: resolveMaxStepsPerTurn(config.maxStepsPerTurn),
+      autoContinueMaxSegments: resolveAutoContinueMaxSegments(config.autoContinueMaxSegments),
+      autoContinueProviders: config.autoContinueProviders ?? [...DEFAULT_AUTO_CONTINUE_PROVIDERS],
     }
     let source: () => AgentLoopSettings = () => entry
     this.config = {
@@ -350,6 +373,12 @@ export class AgentLoop extends Service implements AgentFactory {
       get maxStepsPerTurn() {
         return source().maxStepsPerTurn
       },
+      get autoContinueMaxSegments() {
+        return source().autoContinueMaxSegments
+      },
+      get autoContinueProviders() {
+        return source().autoContinueProviders
+      },
     }
     installSettingsSection(ctx, AGENT_LOOP_SETTINGS_NAMESPACE, AGENT_LOOP_SETTINGS_SCHEMA, entry, {
       // The schema admits any integer above zero; `resolveMaxParallelToolCalls`
@@ -358,6 +387,7 @@ export class AgentLoop extends Service implements AgentFactory {
       validate: (value) => {
         resolveMaxParallelToolCalls(value.maxParallelToolCalls)
         resolveMaxStepsPerTurn(value.maxStepsPerTurn)
+        resolveAutoContinueMaxSegments(value.autoContinueMaxSegments)
       },
       setSource: (current) => {
         source = current
@@ -574,6 +604,7 @@ export class AgentLoop extends Service implements AgentFactory {
         options,
         session,
         () => this.config.maxStepsPerTurn,
+        () => ({ maxSegments: this.config.autoContinueMaxSegments, providers: this.config.autoContinueProviders }),
       )
       machineReady.resolve()
       assertLive()

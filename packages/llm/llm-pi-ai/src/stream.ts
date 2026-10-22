@@ -110,12 +110,13 @@ export function mapStopReason(
   message: AssistantMessage,
   contextWindow?: number,
   desiredMaxOutput?: number,
+  lengthIsOutputLimit = false,
 ): FinishReason {
   const piAiOverflow = isContextOverflow(message, contextWindow)
   const harnessOverflow = message.stopReason === 'error'
     && message.errorMessage !== undefined
     && isContextWindowExceededError(message.errorMessage)
-  const recoverableLength = isRecoverableLength(message, desiredMaxOutput)
+  const recoverableLength = !lengthIsOutputLimit && isRecoverableLength(message, desiredMaxOutput)
   if (piAiOverflow || harnessOverflow || recoverableLength) {
     return {
       kind: 'error',
@@ -179,6 +180,7 @@ export async function* toStreamChunks(
   events: AsyncIterable<AssistantMessageEvent>,
   contextWindow?: number,
   desiredMaxOutput?: number,
+  lengthIsOutputLimit = false,
 ): AsyncGenerator<StreamChunk> {
   // pi-ai contentIndex ↔ our block index map 1:1 (both count blocks from 0
   // in stream order), but we track ids per index for tool calls.
@@ -244,7 +246,7 @@ export async function* toStreamChunks(
         yield { type: 'usage', usage: mapUsage(event.message.usage) }
         yield {
           type: 'finish',
-          reason: mapStopReason(event.message, contextWindow, desiredMaxOutput),
+          reason: mapStopReason(event.message, contextWindow, desiredMaxOutput, lengthIsOutputLimit),
           replayState: toPiReplayState(event.message),
         }
         return
@@ -252,7 +254,7 @@ export async function* toStreamChunks(
         // In-stream error delivery (pi-ai's style) → error finish chunk
         // (the harness's other sanctioned error path besides throwing).
         yield { type: 'usage', usage: mapUsage(event.error.usage) }
-        yield { type: 'finish', reason: mapStopReason(event.error, contextWindow, desiredMaxOutput) }
+        yield { type: 'finish', reason: mapStopReason(event.error, contextWindow, desiredMaxOutput, lengthIsOutputLimit) }
         return
       // no default: AssistantMessageEvent is pi-ai's closed union; a new
       // event type should fail compilation here via tsc's exhaustiveness

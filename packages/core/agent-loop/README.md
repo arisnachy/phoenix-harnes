@@ -54,6 +54,28 @@ interface Config {
 
 Configured agents start automatically. A model call requires both `provider` and `model`; `agent/request` may supply a missing pair before dispatch. An optional positive `maxTokens` seeds each conversation request's output cap and is logged in its request header. `maxParallelToolCalls` bounds every agent's rolling pool for parallel-safe calls and defaults to `10`. `maxStepsPerTurn` defaults to `64` and stops a runaway model/tool loop before step 65; the user can explicitly continue in a new turn. Both controls are hot-reloadable through the `agent-loop` Settings section, and non-positive integers are refused at the write. `agents` is deliberately absent from that section — it is consumed once when the service starts, so a stored change could only look like it had an effect. `cwd` applies only to fresh sessions, while `resumeSessionId` retains persisted metadata. Configured agents use the deployment persona, and programmatic setup can shadow it per agent. This plugin supplies the per-agent `provider`, `model`, and `cwd` prompt variables; harness identity and deployment persona belong to `dsh-system-prompt`.
 
+### Phoenix Auto-Continue (short-output providers)
+
+A genuine `max-tokens` finish on a selected model route causes Phoenix to
+preserve the truncated assistant segment and inject an identified, logged
+continuation at the next step. The follow-up reuses prior context and verified
+tool results; discarded partial tool calls are never assumed executed.
+`openrouter`, `deepseek`, and `qwen` routes are enabled by default, covering
+DeepSeek and Qwen models served through OpenRouter. OpenAI Codex routes and model
+IDs are explicitly excluded, even if accessed through OpenRouter. Other large
+or non-truncated responses are unaffected.
+
+`agent-loop` settings expose `autoContinueProviders` (exact route IDs) and
+`autoContinueMaxSegments` (0–8, default 3). A zero budget disables the
+feature. The number of logged continuations since the latest human message
+enforces the cap across internal turn checkpoints and restarts; identical
+successive text segments stop early. An interrupted user steer or explicit
+cancel retains the usual inbox/abort semantics. A successful automatic
+continuation closes with `completed`, while an unrecovered truncation retains
+`max-tokens`. This behavior lives at the agent step boundary because it must
+observe the durable finish event and enqueue the next step before the turn
+closes.
+
 ### Internal concrete driver
 
 The concrete `ReactLoopAgent`, its inbox, and run controls are package-internal. The package root exports only the plugin/service/config contract, and the package exports map exposes no `./src/*` escape hatch; lifecycle owners create agents through `ctx.agents` rather than naming, constructing, or starting driver internals. One prepared session can be claimed by only one concrete driver, and everything observable happens through session events and the `agent/*` event taxonomy.

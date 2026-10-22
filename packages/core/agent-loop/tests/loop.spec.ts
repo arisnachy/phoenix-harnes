@@ -1096,6 +1096,77 @@ describe('agent loop', () => {
     expect(reasons).toEqual([{ kind: 'aborted', reason: { kind: 'user' } }])
   })
 
+  it('automatically continues OpenRouter max-token output and closes completed', async () => {
+    const adapter = new MockAdapter([
+      maxTokensResponse('first half'),
+      textResponse('second half'),
+    ])
+    const ctx = await harness(adapter)
+    ctx.llm.registerAdapter(['openrouter'], adapter)
+    const agent = ctx.agentLoop.create(SessionId('openrouter-output-limit'), {
+      provider: 'openrouter', model: 'qwen/qwen3',
+    })
+    send(agent, 'write a long answer')
+    await waitForIdle(ctx, agent)
+    expect(adapter.requests).toHaveLength(2)
+    expect(adapter.requests[1]?.messages.some(message =>
+      message.source.kind === 'plugin' && message.source.plugin === 'agent-loop-auto-continue')).toBe(true)
+    expect(agent.session.events.filter(e => e.type === 'assistant/message').map(e =>
+      e.type === 'assistant/message' ? e.data.message.content : [])).toEqual([
+      [{ type: 'text', text: 'first half' }],
+      [{ type: 'text', text: 'second half' }],
+    ])
+    expect(agent.session.events.findLast(e => e.type === 'turn/end')?.data.reason).toEqual({ kind: 'completed' })
+  })
+
+  it('never auto-continues Codex even behind OpenRouter', async () => {
+    const adapter = new MockAdapter([maxTokensResponse('truncated')])
+    const ctx = await harness(adapter)
+    ctx.llm.registerAdapter(['openrouter'], adapter)
+    const agent = ctx.agentLoop.create(SessionId('openrouter-codex-no-continue'), {
+      provider: 'openrouter', model: 'openai/gpt-5.5-codex',
+    })
+    send(agent, 'write a long answer')
+    await waitForIdle(ctx, agent)
+    expect(adapter.requests).toHaveLength(1)
+    expect(agent.session.events.findLast(e => e.type === 'turn/end')?.data.reason).toEqual({ kind: 'max-tokens' })
+  })
+
+  it('bounds output-limit continuations and refuses identical consecutive segments', async () => {
+    const adapter = new MockAdapter([
+      maxTokensResponse('unchanged'),
+      maxTokensResponse('unchanged'),
+    ])
+    const ctx = await harness(adapter)
+    ctx.llm.registerAdapter(['deepseek'], adapter)
+    const agent = ctx.agentLoop.create(SessionId('deepseek-output-loop-guard'), {
+      provider: 'deepseek', model: 'deepseek-v4',
+    })
+    send(agent, 'write an answer')
+    await waitForIdle(ctx, agent)
+    expect(adapter.requests).toHaveLength(2)
+    expect(agent.session.events.findLast(e => e.type === 'turn/end')?.data.reason).toEqual({ kind: 'max-tokens' })
+  })
+
+  it('never exceeds three output-limit continuations for one human request', async () => {
+    const adapter = new MockAdapter([
+      maxTokensResponse('one'),
+      maxTokensResponse('two'),
+      maxTokensResponse('three'),
+      maxTokensResponse('four'),
+    ])
+    const ctx = await harness(adapter)
+    ctx.llm.registerAdapter(['qwen'], adapter)
+    const agent = ctx.agentLoop.create(SessionId('qwen-output-budget'), { provider: 'qwen', model: 'qwen3' })
+    send(agent, 'write')
+    await waitForIdle(ctx, agent)
+    expect(adapter.requests).toHaveLength(4)
+    expect(agent.session.events.filter(event => event.type === 'user/message'
+      && event.data.source.kind === 'plugin'
+      && event.data.source.plugin === 'agent-loop-auto-continue')).toHaveLength(3)
+    expect(agent.session.events.findLast(e => e.type === 'turn/end')?.data.reason).toEqual({ kind: 'max-tokens' })
+  })
+
   it('surfaces max-tokens as the turn-end reason when the last step is cut off', async () => {
     // A single step that ends with a max-tokens finish (no tool calls): the
     // turn stops by default and ends max-tokens, not completed.

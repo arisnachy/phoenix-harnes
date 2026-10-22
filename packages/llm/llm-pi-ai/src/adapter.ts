@@ -563,6 +563,7 @@ export class PiAiAdapter extends LlmAdapter {
         events,
         model.contextWindow,
         desiredMaxOutput,
+        options.provider === 'openrouter',
       )[Symbol.asyncIterator]()
       let exhausted = false
       try {

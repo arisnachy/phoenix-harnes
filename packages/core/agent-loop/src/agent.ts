@@ -42,7 +42,7 @@ import type { Context } from '@phoenix-ai/cordis'
 import { projectRequestHistory } from './request-history.ts'
 import { RuntimeContextProjection } from './runtime-context.ts'
 import { executeToolCalls } from './tool-calls.ts'
-import { DEFAULT_MAX_STEPS_PER_TURN } from './constants.ts'
+import { DEFAULT_AUTO_CONTINUE_MAX_SEGMENTS, DEFAULT_AUTO_CONTINUE_PROVIDERS, DEFAULT_MAX_STEPS_PER_TURN } from './constants.ts'
 import { isExplicitUserStop } from './user-stop.ts'
 
 type Phase =
@@ -65,6 +65,22 @@ type StepEndReason = Extract<TurnEndReason, { kind: 'completed' | 'max-tokens' }
 
 const SILENT_TOOL_PROGRESS_REMINDER = 'If substantial work remains, report only a concrete finding, blocker or real milestone in the user\'s language. Do not restate plans or tool steps; continue via the shortest executable path. Do not reveal hidden reasoning.'
 const AUTOMATIC_CONTINUATION_PROMPT = 'Continue the current task from the latest verified tool result. Reuse fresh evidence, skip repetitive planning and narration, and finish when the outcome is verified or genuinely blocked. Do not begin work without an outstanding requirement.'
+const OUTPUT_LIMIT_CONTINUATION_SOURCE = 'agent-loop-auto-continue'
+const OUTPUT_LIMIT_CONTINUATION_PROMPT = 'The previous model output was cut off by the output-token limit. Continue the unfinished answer or task without repeating previously visible text, planning, or completed actions. Previously truncated tool calls were NOT executed; emit a complete tool call if still required. Verify the final result before claiming completion.'
+
+/**
+ * Only configured short-output provider routes continue; Codex models stay
+ * under their native long-output behavior even behind an OpenRouter route.
+ * @param provider - Actual provider route of the truncated message.
+ * @param model - Actual model that generated the truncated message.
+ * @param providers - Current allowed provider route names.
+ * @returns Whether a genuine max-token stop may be resumed.
+ */
+export function shouldAutoContinueOutputLimit(provider: string, model: string, providers: readonly string[]): boolean {
+  const route = provider.trim().toLowerCase()
+  if (route.includes('codex') || /(?:^|[\\/_-])codex(?:$|[\\/_-])/i.test(model)) return false
+  return providers.some(candidate => candidate.trim().toLowerCase() === route)
+}
 /**
  * Decide when an ongoing silent tool chain needs one user-facing update.
  * @param lastUpdateAt - Time of the most recent visible progress or reminder.
@@ -142,6 +158,10 @@ export class ReactLoopAgent implements Agent {
     public readonly options: AgentOptions,
     public readonly session: Session,
     private readonly maxStepsPerTurn: () => number = () => DEFAULT_MAX_STEPS_PER_TURN,
+    private readonly autoContinuePolicy: () => { maxSegments: number; providers: readonly string[] } = () => ({
+      maxSegments: DEFAULT_AUTO_CONTINUE_MAX_SEGMENTS,
+      providers: DEFAULT_AUTO_CONTINUE_PROVIDERS,
+    }),
   ) {
     this.dispatch = agentEvents(loopCtx, this)
     this.inbox = new Inbox(session, {
@@ -435,12 +455,48 @@ export class ReactLoopAgent implements Agent {
           for (const message of decision.messages) {
             this.session.append('user/message', message, this.runtimeContext.surfaceIntent(message))
           }
-          // max-tokens is sticky: once any step hits the ceiling, later steps
-          // that complete normally must not downgrade the turn outcome.
+          const outputLimitContinuation = decision.messages.some(message =>
+            message.source.kind === 'plugin' && message.source.plugin === OUTPUT_LIMIT_CONTINUATION_SOURCE)
           const stepEnd = await this.step(decision.assembly)
-          // max-tokens stays sticky: a later completed step must not
-          // downgrade the turn outcome.
-          if (turnEnds === null || turnEnds.kind !== 'max-tokens') turnEnds = stepEnd
+          if (stepEnd?.kind === 'max-tokens') {
+            const { maxSegments, providers } = this.autoContinuePolicy()
+            const events = this.session.events
+            const latest = events.findLast(event =>
+              event.type === 'assistant/message' && event.data.turn === turn && event.data.step === step)
+            if (latest?.type === 'assistant/message'
+              && shouldAutoContinueOutputLimit(latest.data.message.source.provider, latest.data.message.source.model, providers)) {
+              // Read the durable history instead of process-local counters: the
+              // cap survives internal turn checkpoints and resumed sessions.
+              let previousContinuations = 0
+              for (let i = events.length - 1; i >= 0; i--) {
+                const event = events[i]
+                if (event?.type !== 'user/message') continue
+                if (event.data.source.kind === 'user') break
+                if (event.data.source.kind === 'plugin'
+                  && event.data.source.plugin === OUTPUT_LIMIT_CONTINUATION_SOURCE) previousContinuations++
+              }
+              const visible = latest.data.message.content
+                .filter(block => block.type === 'text')
+                .map(block => block.text).join('')
+              const previous = events.findLast(event =>
+                event.type === 'assistant/message' && event.data.turn === turn && event.data.step < step)
+              const previousVisible = previous?.type === 'assistant/message'
+                ? previous.data.message.content.filter(block => block.type === 'text').map(block => block.text).join('')
+                : undefined
+              // A repeated full segment indicates no progress; never pay for
+              // further copies of the same output.
+              if (previousContinuations < maxSegments && (visible === '' || visible !== previousVisible)) {
+                this.inbox.splice('next-step', this.inbox.nextStep.length, 0, [createUserMessage({
+                  content: [{ type: 'text', text: OUTPUT_LIMIT_CONTINUATION_PROMPT }],
+                  source: { kind: 'plugin', plugin: OUTPUT_LIMIT_CONTINUATION_SOURCE },
+                })])
+              }
+            }
+          }
+          // Unrelated steering retains sticky max-tokens semantics. Only a
+          // successful output-limit continuation clears the former truncation.
+          if (turnEnds === null || turnEnds.kind !== 'max-tokens'
+            || (outputLimitContinuation && stepEnd?.kind === 'completed')) turnEnds = stepEnd
         } finally {
           this.session.append('step/end', { turn, step })
         }
