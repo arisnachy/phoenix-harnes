@@ -41,7 +41,7 @@ describe('Eclipse model settings', () => {
       planner: { provider: 'openai-codex', model: 'gpt-6.1-sol', reasoningEffort: 'medium' },
     }
     expect(existingProfile(eclipse, agentDefault)).toEqual({
-      mode: 'hybrid', coordinator: eclipse.planner, maxTeammates: 3,
+      mode: 'hybrid', coordinator: eclipse.planner, escalationSensitivity: 'adaptive', maxTeammates: 3,
     })
     expect(existingProfile(eclipse, agentDefault)).not.toHaveProperty('planner')
   })
@@ -49,10 +49,10 @@ describe('Eclipse model settings', () => {
   it('migrates legacy Eclipse settings into the two canonical seats', () => {
     const old = { eclipse: { mode: 'manual', coordinator: { provider: 'mock', model: 'lead' } } }
     expect(existingProfile({}, old)).toEqual({
-      mode: 'manual', coordinator: old.eclipse.coordinator, maxTeammates: 3,
+      mode: 'manual', coordinator: old.eclipse.coordinator, escalationSensitivity: 'adaptive', maxTeammates: 3,
     })
-    expect(existingProfile({ mode: 'automatic' }, old)).toEqual({ mode: 'automatic', maxTeammates: 3 })
-    expect(existingProfile(undefined, {})).toEqual({ mode: 'automatic', maxTeammates: 3 })
+    expect(existingProfile({ mode: 'automatic' }, old)).toEqual({ mode: 'automatic', escalationSensitivity: 'adaptive', maxTeammates: 3 })
+    expect(existingProfile(undefined, {})).toEqual({ mode: 'automatic', escalationSensitivity: 'adaptive', maxTeammates: 3 })
   })
 
   it('keeps only the newest numeric Codex tier and unknown live Codex ids', () => {
@@ -87,7 +87,7 @@ describe('Eclipse model settings', () => {
     ])
   })
 
-  it('renders exactly two seats, keeps authoritative effort ids, and saves canonical fields', async () => {
+  it('renders three independent seats with unlimited strategy calls and saves canonical fields', async () => {
     const controller = controllerWith({
       mode: 'manual', planner: { provider: 'openai-codex', model: 'gpt-6.1-sol' },
       specialists: { orion: { provider: 'openai-codex', model: 'gpt-6-luna' } },
@@ -99,15 +99,18 @@ describe('Eclipse model settings', () => {
     render(<EclipseRoutingPanel controller={controller as never} api={{ settings: { mutate } } as never}
       loadCatalog={loadCatalog} t={t} />)
 
-    expect(await screen.findByLabelText(en.eclipseRole_coordinator)).toBeTruthy()
+    expect(await screen.findByLabelText(en.eclipseRole_planner)).toBeTruthy()
+    expect(screen.getByText(en.eclipseStrategyUnlimited)).toBeTruthy()
+    expect(screen.getByLabelText(en.eclipseStrategy)).toBeTruthy()
+    expect(screen.getByLabelText(en.eclipseStrategy).querySelectorAll('option')).toHaveLength(3)
+    expect(screen.getByLabelText(en.eclipseRole_coordinator)).toBeTruthy()
     expect(screen.getByLabelText(en.eclipseRole_subagent)).toBeTruthy()
-    expect(screen.queryByText('Planner model')).toBeNull()
     expect(screen.queryByLabelText(/specialist/i)).toBeNull()
-    expect(screen.getAllByRole('option', { name: en.eclipseDefaultEffort })).toHaveLength(2)
+    expect(screen.getAllByRole('option', { name: en.eclipseDefaultEffort })).toHaveLength(3)
     fireEvent.change(screen.getByLabelText(en.eclipseMode), { target: { value: 'hybrid' } })
-    expect(screen.getAllByRole('option', { name: en.eclipseAdaptiveEffort })).toHaveLength(2)
+    expect(screen.getAllByRole('option', { name: en.eclipseAdaptiveEffort })).toHaveLength(3)
     expect(screen.getByRole('option', { name: 'ultra' })).toBeTruthy()
-    expect(screen.getAllByRole('combobox')).toHaveLength(6)
+    expect(screen.getAllByRole('combobox')).toHaveLength(9)
 
     fireEvent.click(screen.getByRole('button', { name: en.eclipseSave }))
     await waitFor(() => expect(mutate).toHaveBeenCalledTimes(1))
@@ -116,8 +119,37 @@ describe('Eclipse model settings', () => {
       ops: expect.arrayContaining([
         { op: 'set', path: ['coordinator'], value: { provider: 'openai-codex', model: 'gpt-6.1-sol' } },
         { op: 'unset', path: ['planner'] }, { op: 'unset', path: ['specialists'] },
+        { op: 'set', path: ['escalationSensitivity'], value: 'adaptive' },
       ]),
     })
+  })
+
+
+  it('persists distinct Sol planning and Luna execution routes without a numeric consultation cap', async () => {
+    const controller = controllerWith({
+      mode: 'hybrid', escalationSensitivity: 'adaptive',
+      planner: { provider: 'openai-codex', model: 'gpt-6.1-sol', reasoningEffort: 'medium' },
+      coordinator: { provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'max' },
+      subagent: { provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'max' },
+    })
+    const mutate = vi.fn(async (_mutation: unknown) => ({ result: { ok: true as const, value: {} as never } }))
+    render(<EclipseRoutingPanel controller={controller as never} api={{ settings: { mutate } } as never}
+      loadCatalog={async () => catalog} t={t} />)
+    expect(await screen.findByLabelText(en.eclipseRole_planner)).toHaveProperty('value',
+      JSON.stringify(['openai-codex', 'gpt-6.1-sol']))
+    expect(screen.getByLabelText(en.eclipseRole_coordinator)).toHaveProperty('value',
+      JSON.stringify(['openai-codex', 'gpt-6-luna']))
+    fireEvent.change(screen.getByLabelText(en.eclipseStrategy), { target: { value: 'quality' } })
+    fireEvent.click(screen.getByRole('button', { name: en.eclipseSave }))
+    await waitFor(() => expect(mutate).toHaveBeenCalledOnce())
+    expect(mutate.mock.calls[0]?.[0]).toMatchObject({
+      ops: expect.arrayContaining([
+        { op: 'set', path: ['planner'], value: { provider: 'openai-codex', model: 'gpt-6.1-sol', reasoningEffort: 'medium' } },
+        { op: 'set', path: ['coordinator'], value: { provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'max' } },
+        { op: 'set', path: ['escalationSensitivity'], value: 'quality' },
+      ]),
+    })
+    expect(JSON.stringify(mutate.mock.calls[0]?.[0])).not.toContain('maxPlannerCalls')
   })
 
   it('surfaces a failed save instead of claiming the settings were stored', async () => {

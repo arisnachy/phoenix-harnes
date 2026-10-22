@@ -16,7 +16,10 @@ describe('Eclipse role routing', () => {
   }
   it('preserves shipped routes in automatic mode or without settings', () => {
     expect(resolveEclipseRoleRoute(undefined, 'coordinator', fallback)).toEqual(fallback)
-    expect(resolveEclipseRoleRoute({ ...profile, mode: 'automatic' }, 'planner', fallback)).toEqual(fallback)
+    expect(resolveEclipseRoleRoute({ ...profile, mode: 'automatic' }, 'planner', fallback)).toMatchObject({
+      provider: 'openai-codex', model: 'gpt-6.1-sol', reasoningEffort: ReasoningEffortId('medium'),
+    })
+    expect(resolveEclipseRoleRoute({ ...profile, mode: 'automatic' }, 'coordinator', fallback)).toEqual(fallback)
   })
   it('dispatches a different model and effort for each configured role', () => {
     expect(resolveEclipseRoleRoute(profile, 'planner', fallback)).toEqual({
@@ -49,6 +52,24 @@ describe('Eclipse role routing', () => {
       'coordinator', fallback, 'xhigh')).toEqual({
       provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('xhigh'),
     })
+  })
+
+  it('keeps user-selected planning independent of automatic Luna Max execution', () => {
+    const profile: EclipseRoutingSettings = {
+      mode: 'automatic',
+      planner: { provider: 'openai-codex', model: 'gpt-6.1-sol', reasoningEffort: 'medium' },
+      coordinator: { provider: 'openai-codex', model: 'gpt-6.1-sol', reasoningEffort: 'high' },
+      subagent: { provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'max' },
+      escalationSensitivity: 'adaptive',
+    }
+    const sol = resolveEclipseRoleRoute(profile, 'planner', fallback)
+    expect(sol.model).toBe('gpt-6.1-sol')
+    expect(sol.reasoningEffort).toBe(ReasoningEffortId('medium'))
+    const luna = resolveEclipseRoleRoute(profile, 'coordinator', {
+      provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('max'),
+    })
+    expect(luna.model).toBe('gpt-6-luna')
+    expect(luna.reasoningEffort).toBe(ReasoningEffortId('max'))
   })
 
   it('selects effort from task evidence without a classifier request', () => {

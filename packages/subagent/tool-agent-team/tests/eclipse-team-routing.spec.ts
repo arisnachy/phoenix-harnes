@@ -1,5 +1,28 @@
 import { describe, expect, it } from 'vitest'
-import { resolveEclipseTeammateProfile } from '../src/index.ts'
+import { eclipseTeamPlanSummary, resolveEclipseTeammateProfile } from '../src/index.ts'
+
+describe('Kira plan handoff to Luna Max specialists', () => {
+  it('passes only the visible plan from the current turn, not old missions or full chat', () => {
+    const events = [
+      { type: 'turn/start', data: { turn: 1 } },
+      { type: 'assistant/message', data: { message: { content: [{ text: '**Plan:** Viejo plan' }] } } },
+      { type: 'turn/start', data: { turn: 2 } },
+      { type: 'user/message', data: { content: [{ text: 'secreto que no pertenece al plan' }] } },
+      { type: 'assistant/message', data: { message: { content: [{ text: '**Plan:** Paso A; Paso B; verificar evidencia' }] } } },
+      { type: 'assistant/message', data: { message: { content: [{ text: 'Ejecución comenzada' }] } } },
+    ]
+    const brief = eclipseTeamPlanSummary(events)
+    expect(brief).toBe('**Plan:** Paso A; Paso B; verificar evidencia')
+    expect(brief).not.toContain('Viejo plan')
+    expect(brief).not.toContain('secreto')
+  })
+  it('never invents a plan or transfers a large conversation to the specialist', () => {
+    expect(eclipseTeamPlanSummary([{ type: 'user/message', data: { text: 'hazlo' } }])).toBeUndefined()
+    expect(eclipseTeamPlanSummary([{ type: 'turn/start', data: { turn: 1 } },
+      { type: 'assistant/message', data: { message: { content: [{ text: '**Plan:** ' + 'x'.repeat(4000) }] } } },
+    ])?.length).toBeLessThanOrEqual(1800)
+  })
+})
 
 describe('Eclipse teammate overrides', () => {
   const fallback = { provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'max' }

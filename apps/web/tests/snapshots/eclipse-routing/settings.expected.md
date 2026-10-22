@@ -1,6 +1,6 @@
 - region "Fénix Eclipse · Orchestration":
   - heading "Fénix Eclipse · Orchestration" [level=2]
-  - paragraph: Choose the current OpenAI Codex model and reasoning effort for Kira and her subagents. Automatic routing adjusts reasoning to the task.
+  - paragraph: Choose independent planning, coordination and teammate models. Kira consults her planner as often as fresh task evidence requires.
   - status: 2 OpenAI Codex models available
   - button "Refresh models"
   - text: Routing mode
@@ -8,8 +8,8 @@
     - option "Automatic"
     - option "Hybrid"
     - option "Manual" [selected]
-  - text: Coordinator model
-  - combobox "Coordinator model":
+  - text: Planning / strategy model
+  - combobox "Planning / strategy model":
     - option "Automatic"
     - option "gpt-6.1-sol" [selected]
     - option "gpt-6-luna"
@@ -22,6 +22,19 @@
     - option "xhigh"
     - option "max"
     - option "ultra"
+  - text: Execution / coordinator model
+  - combobox "Execution / coordinator model":
+    - option "Automatic"
+    - option "gpt-6.1-sol"
+    - option "gpt-6-luna" [selected]
+  - text: Reasoning effort
+  - combobox "Reasoning effort":
+    - option "Provider default"
+    - option "low"
+    - option "medium"
+    - option "high"
+    - option "xhigh"
+    - option "max" [selected]
   - text: Subagent model
   - combobox "Subagent model":
     - option "Automatic"
@@ -35,6 +48,12 @@
     - option "high"
     - option "xhigh" [selected]
     - option "max"
+  - text: Strategic planner consultations
+  - combobox "Strategic planner consultations":
+    - option "Adaptive · consult on new blockers and complexity" [selected]
+    - option "Quality · prioritize strategic review"
+    - option "Efficient · consult when essential"
+  - paragraph: Unlimited per phase. Kira consults the planner whenever fresh evidence warrants it, without repeating an unchanged blocker.
   - text: Maximum active teammates (0–3)
   - combobox "Maximum active teammates (0–3)":
     - option "0"

@@ -94,11 +94,14 @@ describe('AgentDefaultModelConfig', () => {
     const bench = await boot()
     const profile = {
       mode: 'hybrid' as const,
+      planner: { provider: 'openai-codex', model: 'gpt-6.1-sol', reasoningEffort: 'medium' },
       coordinator: { provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'max' },
+      escalationSensitivity: 'adaptive' as const,
       subagent: { provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'high' },
     }
     await bench.settingsFiber.ctx.settings.replace(ECLIPSE_ROUTING_SETTINGS_NAMESPACE, profile)
     expect(bench.defaultModel.currentEclipseProfile()).toMatchObject(profile)
+    expect(bench.defaultModel.currentEclipseProfile()?.planner?.model).toBe('gpt-6.1-sol')
     expect(bench.defaultModel.currentSelection().model).toBe('deepseek-v4-flash')
     expect(bench.settingsFiber.ctx.settings.describe().map(entry => entry.ns)).toEqual([
       AGENT_DEFAULT_MODEL_SETTINGS_NAMESPACE,
@@ -122,6 +125,21 @@ describe('AgentDefaultModelConfig', () => {
     expect(bench.defaultModel.currentEclipseProfile()).toMatchObject({
       coordinator: { model: 'gpt-current', reasoningEffort: 'provider-specific' },
     })
+    await bench.ctx.fiber.dispose()
+  })
+
+
+  it('supports unlimited evidence-driven strategy mode without merging planner into execution', async () => {
+    const bench = await boot()
+    await bench.settingsFiber.ctx.settings.replace(ECLIPSE_ROUTING_SETTINGS_NAMESPACE, {
+      mode: 'hybrid',
+      planner: { provider: 'openai-codex', model: 'gpt-6.1-sol' },
+      escalationSensitivity: 'quality',
+    })
+    const persisted = bench.defaultModel.currentEclipseProfile()
+    expect(persisted?.planner?.model).toBe('gpt-6.1-sol')
+    expect(persisted?.coordinator).toBeUndefined()
+    expect(persisted?.escalationSensitivity).toBe('quality')
     await bench.ctx.fiber.dispose()
   })
 

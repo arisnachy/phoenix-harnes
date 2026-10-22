@@ -14,24 +14,25 @@ export interface EclipseCatalogChoice {
 
 interface Route { provider: string; model: string; reasoningEffort?: string }
 
-/** The two user-configurable Eclipse seats. */
+/** Kira's planning and execution seats plus her delegated teammates. */
 export interface EclipseProfile {
   mode?: 'automatic' | 'hybrid' | 'manual'
+  planner?: Route
   coordinator?: Route
   subagent?: Route
+  escalationSensitivity?: 'adaptive' | 'quality' | 'economy'
   maxTeammates?: number
 }
 
-/** Legacy fields are read only to migrate the former three-seat editor. */
+/** Former per-specialist overrides are read for cleanup only. */
 interface LegacyProfile extends EclipseProfile {
-  planner?: Route
   specialists?: Record<string, Route>
 }
 
-type Role = 'coordinator' | 'subagent'
+type Role = 'planner' | 'coordinator' | 'subagent'
 type Translator = (key: keyof typeof en) => string
-const ROLES: readonly Role[] = ['coordinator', 'subagent']
-const DEFAULT_PROFILE: EclipseProfile = { mode: 'automatic', maxTeammates: 3 }
+const ROLES: readonly Role[] = ['planner', 'coordinator', 'subagent']
+const DEFAULT_PROFILE: EclipseProfile = { mode: 'automatic', maxTeammates: 3, escalationSensitivity: 'adaptive' }
 
 function encoded(route: Route): string { return JSON.stringify([route.provider, route.model]) }
 
@@ -62,16 +63,24 @@ function profileFromValue(value: unknown): EclipseProfile {
   const candidate = value as LegacyProfile
   const mode: NonNullable<EclipseProfile['mode']> = candidate.mode === 'automatic'
     || candidate.mode === 'hybrid' || candidate.mode === 'manual' ? candidate.mode : 'automatic'
-  // The old planner seat was the same Lead responsibility as the coordinator.
-  const coordinator = routeFromValue(candidate.coordinator) ?? routeFromValue(candidate.planner)
+  // Older two-seat documents reused planner as coordinator. New three-seat
+  // documents persist escalationSensitivity to distinguish independent seats.
+  const sensitivity = candidate.escalationSensitivity === 'quality' || candidate.escalationSensitivity === 'economy'
+    ? candidate.escalationSensitivity : 'adaptive'
+  const legacyPlanner = candidate.escalationSensitivity === undefined && candidate.coordinator === undefined
+  const coordinator = routeFromValue(candidate.coordinator)
+    ?? (legacyPlanner ? routeFromValue(candidate.planner) : undefined)
+  const planner = legacyPlanner ? undefined : routeFromValue(candidate.planner)
   const subagent = routeFromValue(candidate.subagent)
   const maxTeammates = typeof candidate.maxTeammates === 'number'
     && Number.isInteger(candidate.maxTeammates) && candidate.maxTeammates >= 0 && candidate.maxTeammates <= 3
     ? candidate.maxTeammates : 3
   return {
     mode,
+    ...(planner === undefined ? {} : { planner }),
     ...(coordinator === undefined ? {} : { coordinator }),
     ...(subagent === undefined ? {} : { subagent }),
+    escalationSensitivity: sensitivity,
     maxTeammates,
   }
 }
@@ -79,7 +88,7 @@ function profileFromValue(value: unknown): EclipseProfile {
 /** Use the independent Eclipse section, with legacy values for migration only.
  * @param dedicated - Independently persisted Eclipse settings.
  * @param legacy - Settings from the former Agent default-model namespace.
- * @returns The canonical two-seat profile shown in Settings.
+ * @returns The independent planning, execution and teammate routes shown in Settings.
  */
 export function existingProfile(dedicated: unknown, legacy?: unknown): EclipseProfile {
   if (typeof dedicated === 'object' && dedicated !== null && !Array.isArray(dedicated)
@@ -213,14 +222,15 @@ export function EclipseRoutingPanel(props: {
       let response = await props.api.settings.mutate({
         ns: dedicatedRegistered ? 'eclipse-routing' : 'agent-default-model',
         expectedRevision: namespace.revision,
-        // Clear the removed planner/specialist fields whenever the two-seat
-        // editor saves, so old routing cannot silently override the new roles.
+        // Keep the plan and execution routes independent while cleaning up
+        // obsolete per-specialist overrides.
         ops: dedicatedRegistered
-          ? (['mode', 'coordinator', 'subagent', 'planner', 'specialists', 'maxTeammates'] as const)
+          ? (['mode', 'planner', 'coordinator', 'subagent', 'specialists', 'maxTeammates', 'escalationSensitivity'] as const)
             .map((field) => {
               const value = reset
                 ? field === 'mode' ? 'automatic' : undefined
-                : field === 'mode' || field === 'coordinator' || field === 'subagent' || field === 'maxTeammates'
+                : field === 'mode' || field === 'planner' || field === 'coordinator' || field === 'subagent'
+                  || field === 'maxTeammates' || field === 'escalationSensitivity'
                   ? draft[field] : undefined
               return value === undefined
                 ? { op: 'unset' as const, path: [field] }
@@ -268,6 +278,15 @@ export function EclipseRoutingPanel(props: {
       <option value="manual">{props.t('eclipseManual')}</option>
     </select>
     <div className={css.roles}>{ROLES.map(field)}</div>
+    <label className={css.label} htmlFor="eclipse-strategy">{props.t('eclipseStrategy')}</label>
+    <select id="eclipse-strategy" className={css.input} value={draft.escalationSensitivity ?? 'adaptive'}
+      disabled={!state.writable || working}
+      onChange={(event) => { update({ escalationSensitivity: event.target.value as NonNullable<EclipseProfile['escalationSensitivity']> }) }}>
+      <option value="adaptive">{props.t('eclipseStrategyAdaptive')}</option>
+      <option value="quality">{props.t('eclipseStrategyQuality')}</option>
+      <option value="economy">{props.t('eclipseStrategyEconomy')}</option>
+    </select>
+    <p className={css.hint}>{props.t('eclipseStrategyUnlimited')}</p>
     <label className={css.label} htmlFor="eclipse-workers">{props.t('eclipseWorkers')}</label>
     <select id="eclipse-workers" className={css.input} value={draft.maxTeammates ?? 3}
       disabled={!state.writable || working} onChange={(event) => { update({ maxTeammates: Number(event.target.value) }) }}>
