@@ -995,10 +995,14 @@ function phoenixAutoNeedsStallStrategy(
   sensitivity: EclipseRoutingSettings['escalationSensitivity'],
 ): boolean {
   if (sensitivity === 'economy') return false
+  // A fresh successful result is progress: never pay for a Sol review of an
+  // older failure that the executor may already have recovered from.
+  const latest = turnEvents(agent, turn).findLast(event =>
+    event.type === 'tool/result' || event.type === 'llm/retry')
+  if (latest?.type === 'tool/result' && failedToolFingerprint(latest) === undefined) return false
   if (isPhoenixCodexAutoStalled(agent, turn)) return true
-  if (sensitivity !== 'quality' || !AUTO_COMPLEX_TASK.test(directText)) return false
-  const latest = turnEvents(agent, turn).findLast(event => event.type === 'tool/result')
-  return latest !== undefined && failedToolFingerprint(latest) !== undefined
+  return sensitivity === 'quality' && AUTO_COMPLEX_TASK.test(directText)
+    && latest?.type === 'tool/result' && failedToolFingerprint(latest) !== undefined
 }
 
 function directCodexPlannerRescue(
