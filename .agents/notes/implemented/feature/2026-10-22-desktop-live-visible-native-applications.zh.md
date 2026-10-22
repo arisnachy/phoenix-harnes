@@ -20,6 +20,8 @@ Windows 默认注册 Computer Use；设置 `PHOENIX_DESKTOP_COMPUTER=0` 可以�
 
 对于只运行 `pnpm phoenix` 而没有 Phoenix.exe 的情况，已有权限的 `computer` 工具会把经过验证的操作后截图写入当前用户可访问、按会话 ID 哈希命名且会过期的临时文件。聊天视图可显示这些真实的近期截图，并明确标注**这是近期截图，而非实时视频**。这不是额外的桌面控制或截图授权，最长读取有效期为 90 秒。
 
+Kira Max 以前强制只使用 Code Mode；当某模型直接调用有效的 `fs_status` 时会收到 UNKNOWN_TOOL 错误。现在使用已有的 `both` 模式：`run_code` 仍可批量操作，同时已注册的原生工具可直接在相同权限与审批流程下执行。这可能增加工具 Schema 的 token 消耗，但避免弱模型反复因 Code Mode 格式失败而中断；用户选定的模型不被暗中更改。
+
 ## Alternatives considered
 
 **用通用网页视图取代 MiniBrowser。** 不采用：WebView2 无法嵌入任意原生程序窗口，也无法替代其可访问性接口，还会破坏现有网页会话。

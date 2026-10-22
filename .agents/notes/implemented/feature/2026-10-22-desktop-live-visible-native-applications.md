@@ -20,6 +20,8 @@ The previous native-only side pane did not appear when Phoenix was used through 
 
 For the CLI-only `pnpm phoenix` route, the already-authorized `computer` tool also publishes its verified post-action screenshots into owner-only, expiring temporary files keyed by a hash of the session id. The chat viewer can display those real recent images even without Phoenix.exe; it labels them **recent captures, not live video**. This is a visual fallback, not independent desktop control or additional screenshot authority. The 90-second age limit prevents indefinite retention.
 
+Kira Max previously mandated code-only presentation even when a provider incorrectly called `fs_status` directly. Its scoped tool presentation now uses the supported `both` mode: `run_code` remains available for batched work, while directly named registered tools can execute under the exact same permission policy. This spends more tool-schema tokens to avoid a repeated UNKNOWN_TOOL/no-output failure for models unable to compose a valid code program. The selected provider/model stays under the user's control.
+
 ## Alternatives considered
 
 **Replace MiniBrowser with a universal embedded web view.** Rejected: WebView2 cannot embed arbitrary native app windows or run their accessibility trees, and this would regress browser sessions.
