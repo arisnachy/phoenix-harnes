@@ -84,7 +84,7 @@ internal sealed class DesktopLivePane : UserControl
         if (!observe && IsPaused)
             throw new InvalidOperationException("Desktop Live paused by user; resume from the native toolbar.");
         if (sessionId is null) return; // Direct human Ctrl+F10 reopen, never a model call.
-        if (!observe && ownerSession is not null
+        if (ownerSession is not null
             && !string.Equals(ownerSession, sessionId, StringComparison.Ordinal)
             && DateTimeOffset.UtcNow - ownerLastAction < TimeSpan.FromSeconds(30))
             throw new InvalidOperationException("Desktop Live occupied by another session; retry after its lease expires.");

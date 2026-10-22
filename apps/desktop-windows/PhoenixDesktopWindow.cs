@@ -1131,7 +1131,7 @@ internal sealed class PhoenixDesktopWindow : Form
         return "Desktop Live visible; la captura se actualiza mientras Kira trabaja.";
     }
 
-    private void ReopenDesktopLive()
+    internal void ReopenDesktopLive()
     {
         desktopLive.ResetDismissal();
         _ = ShowDesktopLive(new BrowserCommand("phoenix.desktop.preview", Observe: true));
