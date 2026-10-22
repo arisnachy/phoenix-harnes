@@ -68,6 +68,21 @@ export function resolveEclipseTeammateProfile(
     : route
 }
 
+/** Compact latest visible Kira plan for one specialist; never send the full chat history.
+ * @param events - Durable session events in their original order.
+ * @returns The current turn's confirmed plan, or undefined when there is none.
+ */
+export function eclipseTeamPlanSummary(events: readonly { readonly type: string; readonly data: unknown }[]): string | undefined {
+  const start = events.findLastIndex(event => event.type === 'turn/start')
+  const messages = events.slice(start + 1).filter(event => event.type === 'assistant/message')
+  const texts = messages.map(event => {
+    const data = event.data as { readonly message?: { readonly content?: readonly { readonly text?: string }[] } }
+    return data.message?.content?.map(part => part.text ?? '').filter(Boolean).join(' ') ?? ''
+  })
+  const plan = texts.findLast(text => /^(?:#{1,3}\s*)?(?:\*\*)?plan(?:\s+de\s+trabajo)?\s*:/iu.test(text.trim()))
+  return plan === undefined ? undefined : plan.slice(0, 1800)
+}
+
 /** Tool routing configuration. */
 export interface Config {
   /** Continuable-subagent provider used for fresh teammates. */
@@ -491,10 +506,16 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
               ...activeMaxTokens === undefined ? {} : { maxTokens: activeMaxTokens },
               ...activeReasoningEffort === undefined ? {} : { reasoningEffort: activeReasoningEffort },
             }
+        // Give Luna Max specialists Kira's actual published plan plus only
+        // their bounded assignment. Fresh children cannot infer the plan from
+        // the Lead's private history; a compact excerpt avoids token waste.
+        const planBrief = eclipseEnabled ? eclipseTeamPlanSummary(agent.session.events) : undefined
+        const delegatedPrompt = planBrief === undefined ? args.prompt
+          : `Plan de ejecución acordado por Kira:\n${planBrief}\n\nResponsabilidad delegada:\n${args.prompt}`
         return await ctx.agentTeams.spawnTeammate(agent, {
           name: memberName,
           description: args.description,
-          prompt: [{ type: 'text', text: args.prompt }],
+          prompt: [{ type: 'text', text: delegatedPrompt }],
           context,
           provider: context === 'fork' ? config.forkProvider : config.freshProvider,
           ...args.mission_complexity === undefined ? {} : { missionComplexity: args.mission_complexity },
