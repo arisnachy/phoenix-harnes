@@ -156,48 +156,85 @@ internal sealed class DesktopLivePane : UserControl
         return foregroundPid == Environment.ProcessId ? IntPtr.Zero : foreground;
     }
 
-    private void CaptureSelectedWindow()
+    internal string? CaptureTargetAsBase64()
     {
-        if (IsDisposed || !Visible) return;
+        if (!Visible) return null;
+        using var frame = CaptureNativeWindow(out _);
+        if (frame is null) return null;
+        using var stream = new MemoryStream();
+        frame.Save(stream, System.Drawing.Imaging.ImageFormat.Png);
+        return Convert.ToBase64String(stream.ToArray());
+    }
+
+    private Bitmap? CaptureNativeWindow(out string explanation)
+    {
         var hwnd = ResolveTargetWindow();
         if (hwnd == IntPtr.Zero)
         {
-            status.Text = "Desktop Live · selecciona una ventana con computer focus";
-            return;
+            explanation = "Selecciona una ventana con computer focus";
+            return null;
         }
         if (IsIconic(hwnd))
         {
-            status.Text = "Desktop Live · ventana minimizada; activa la aplicación";
-            return;
+            explanation = "Ventana minimizada: activa la aplicación";
+            return null;
         }
         if (!GetWindowRect(hwnd, out var bounds))
         {
-            status.Text = "Desktop Live · no se pudo localizar la ventana";
-            return;
+            explanation = "No se pudo localizar la ventana";
+            return null;
         }
         var width = bounds.Right - bounds.Left;
         var height = bounds.Bottom - bounds.Top;
         if (width <= 0 || height <= 0 || (long)width * height > 16_000_000)
         {
-            status.Text = "Desktop Live · dimensiones de ventana no compatibles";
-            return;
+            explanation = "Dimensiones de ventana no compatibles";
+            return null;
         }
-        using var frame = new Bitmap(width, height);
-        using (var graphics = Graphics.FromImage(frame))
+        var frame = new Bitmap(width, height);
+        try
         {
+            using var graphics = Graphics.FromImage(frame);
             var hdc = graphics.GetHdc();
             bool captured;
             try { captured = PrintWindow(hwnd, hdc, 2); }
             finally { graphics.ReleaseHdc(hdc); }
             if (!captured)
             {
-                status.Text = "Desktop Live · la aplicación no permite captura nativa";
+                explanation = "Esta aplicación no permite captura nativa";
+                frame.Dispose();
+                return null;
+            }
+            explanation = WindowTitle(hwnd);
+            return frame;
+        }
+        catch
+        {
+            frame.Dispose();
+            throw;
+        }
+    }
+
+    private void CaptureSelectedWindow()
+    {
+        if (IsDisposed || !Visible) return;
+        try
+        {
+            using var frame = CaptureNativeWindow(out var explanation);
+            if (frame is null)
+            {
+                status.Text = $"Desktop Live · {explanation}";
                 return;
             }
+            var previous = image.Image;
+            image.Image = (Bitmap)frame.Clone();
+            previous?.Dispose();
+            status.Text = $"Desktop Live · {explanation}";
         }
-        var previous = image.Image;
-        image.Image = (Bitmap)frame.Clone();
-        previous?.Dispose();
-        status.Text = $"Desktop Live · {WindowTitle(hwnd)}";
+        catch (Exception ex)
+        {
+            // A protected or GPU-accelerated window is not a successful capture.
+            status.Text = $"Desktop Live · captura no disponible ({ex.GetType().Name})";
+        }
     }
 }

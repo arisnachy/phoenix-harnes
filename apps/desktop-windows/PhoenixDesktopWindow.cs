@@ -624,7 +624,7 @@ internal sealed class PhoenixDesktopWindow : Form
             case "phoenix.desktop.windows":
                 return ListNativeDesktopWindows();
             case "phoenix.desktop.screenshot":
-                return CaptureNativeDesktopScreenshot();
+                return desktopLive.CaptureTargetAsBase64() ?? CaptureNativeDesktopScreenshot();
             case "phoenix.desktop.preview":
                 return ShowDesktopLive(command);
             case "phoenix.browser.inspect":
@@ -1120,7 +1120,7 @@ internal sealed class PhoenixDesktopWindow : Form
         desktopLive.AssertSessionAccess(command.SessionId, command.Observe);
         if (desktopLive.IsDismissed)
             return "Desktop Live oculto por el usuario. Ctrl+F10 para volver a abrir el visor.";
-        ShowAndActivate();
+        // Never steal foreground focus from the target before guarded input.
         var opening = split.Panel2Collapsed;
         split.Panel2Collapsed = false;
         if (opening) browserWidthOverride = null;
