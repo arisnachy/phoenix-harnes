@@ -398,7 +398,7 @@ const AUTO_SOL_RESCUE_HANDOFF =
 
 const AUTO_VISIBLE_PLAN_HANDOFF =
   'You are Kira. The visible **Plan:** you authored is your own authoritative execution plan. ' +
-  'Continue the current user request as the SAME Kira on Luna Max's execution coordinator route, without addressing yourself as another speaker; execute the next concrete action now, ' +
+  'Continue the current user request as the SAME Kira on the Luna Max execution coordinator route, without addressing yourself as another speaker; execute the next concrete action now, ' +
   'without re-planning, re-reading the same brief or asking permission for already authorized safe work. ' +
   'If this is a requested team demonstration, call spawn_teammate once with a small verifiable assignment, ' +
   'wait for genuine evidence and complete the demonstration. The actual Team conversation must be real, ' +
