@@ -125,6 +125,44 @@ describe('Codex tool-schema compatibility', () => {
     expect(normalizeCodexToolParameters(schema)).toBe(schema)
   })
 
+  it('normalizes the exact social campaign tool across direct, Codex and tool-search projections', () => {
+    const union = {
+      oneOf: [
+        { type: 'object', properties: { brand: { type: 'string' }, title: { type: 'string' } }, required: ['brand'] },
+        { type: 'object', properties: { brand: { type: 'string' }, destination: { type: 'string' } }, required: ['brand'] },
+      ],
+    }
+    const tool = { name: 'mcp__social-engine__social_campaign_create', description: 'Create campaign', parameters: union }
+    const options: GenerateOptions = {
+      provider: 'openai-codex', model: 'gpt-6-sol', messages: [], tools: [tool],
+    }
+    const projected = normalizeCodexToolSchemas(options)
+    expect(projected.tools?.[0]?.parameters.type).toBe('object')
+    expect(projected.tools?.[0]?.parameters).not.toHaveProperty('oneOf')
+    const payload = {
+      model: 'gpt-6-sol',
+      tools: [{ type: 'function', name: tool.name, parameters: union }],
+      input: [{ type: 'tool_search_output', tools: [
+        { type: 'function', name: tool.name, input_schema: union },
+        { name: tool.name, inputSchema: union },
+        { function: { name: tool.name, parameters: union } },
+      ] }],
+    }
+    const fixed = normalizeOpenAiFunctionToolPayload(payload) as Record<string, unknown>
+    const wire = (fixed.tools as Array<{ parameters: Record<string, unknown> }>)[0]
+    expect(wire?.parameters.type).toBe('object')
+    expect(wire?.parameters).not.toHaveProperty('oneOf')
+    const tools = ((fixed.input as Array<{ tools: unknown[] }>)[0]?.tools ?? []) as Array<Record<string, unknown>>
+    for (const candidate of tools.slice(0, 2)) {
+      expect((candidate.parameters as Record<string, unknown>).type).toBe('object')
+      expect(candidate).not.toHaveProperty('input_schema')
+      expect(candidate).not.toHaveProperty('inputSchema')
+    }
+    const nested = tools[2]?.function as { parameters: Record<string, unknown> }
+    expect(nested.parameters.type).toBe('object')
+    expect(nested.parameters).not.toHaveProperty('oneOf')
+  })
+
   it('repairs Responses-style function tools at the final provider payload seam', () => {
     const payload = {
       model: 'gpt-5.6-sol',

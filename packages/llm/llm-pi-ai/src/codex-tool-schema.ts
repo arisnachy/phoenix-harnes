@@ -240,6 +240,16 @@ function normalizePayloadToolEntry(value: unknown, mondayMembrane: boolean): unk
   // after provider encoding.
   const isWireFunction = value.type === 'function'
   const isMcpContextTool = typeof value.name === 'string' && value.name.startsWith('mcp__')
+  // Some MCP/tool-search projections expose inputSchema or input_schema
+  // instead of the provider wire's parameters field. Never forward that
+  // root union unchanged into an OpenAI/Codex function definition.
+  const alternateSchema = isObject(value.inputSchema) ? value.inputSchema
+    : isObject(value.input_schema) ? value.input_schema : undefined
+  if ((isWireFunction || isMcpContextTool)
+    && !isObject(value.parameters) && alternateSchema !== undefined) {
+    const { inputSchema: _inputSchema, input_schema: _input_schema, ...rest } = value
+    return { ...rest, parameters: normalizeCodexToolParameters(alternateSchema) }
+  }
   if ((isWireFunction || isMcpContextTool) && isObject(value.parameters)) {
     if (mondayMembrane && isMondayToolName(value.name)) {
       if (isMondayEnvelopeParameters(value.parameters)) return value
@@ -253,7 +263,10 @@ function normalizePayloadToolEntry(value: unknown, mondayMembrane: boolean): unk
     return parameters === value.parameters ? value : { ...value, parameters }
   }
 
-  if (isWireFunction && isObject(value.function) && isObject(value.function.parameters)) {
+  if (isObject(value.function)
+    && typeof value.function.name === 'string'
+    && (isWireFunction || value.function.name.startsWith('mcp__'))
+    && isObject(value.function.parameters)) {
     if (mondayMembrane && isMondayToolName(value.function.name)) {
       if (isMondayEnvelopeParameters(value.function.parameters)) return value
       return {
