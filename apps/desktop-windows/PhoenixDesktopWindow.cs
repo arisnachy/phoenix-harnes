@@ -36,6 +36,8 @@ internal sealed class PhoenixDesktopWindow : Form
     private readonly SplitContainer split = new();
     private readonly WebView2 phoenixView = new();
     private readonly WebView2 browserView = new();
+    private readonly DesktopLivePane desktopLive = new();
+    private ToolStrip? browserToolbar;
     private readonly ToolStripTextBox address = new();
     private readonly ToolStripButton backButton = new("←");
     private readonly ToolStripButton forwardButton = new("→");
@@ -88,9 +90,13 @@ internal sealed class PhoenixDesktopWindow : Form
         split.Panel1.Controls.Add(startupOverlay);
         startupOverlay.BringToFront();
 
-        var browserToolbar = BuildBrowserToolbar();
+        browserToolbar = BuildBrowserToolbar();
         split.Panel2.Controls.Add(browserView);
         split.Panel2.Controls.Add(browserToolbar);
+        split.Panel2.Controls.Add(desktopLive);
+        desktopLive.Dock = DockStyle.Fill;
+        desktopLive.Visible = false;
+        desktopLive.CloseRequested += (_, _) => SetBrowserVisible(false);
         Controls.Add(split);
 
         // SplitContainer validates min sizes against its current Width. During construction the
@@ -618,7 +624,9 @@ internal sealed class PhoenixDesktopWindow : Form
             case "phoenix.desktop.windows":
                 return ListNativeDesktopWindows();
             case "phoenix.desktop.screenshot":
-                return CaptureNativeDesktopScreenshot();
+                return desktopLive.CaptureTargetAsBase64() ?? CaptureNativeDesktopScreenshot();
+            case "phoenix.desktop.preview":
+                return ShowDesktopLive(command);
             case "phoenix.browser.inspect":
                 return await InspectBrowserAsync();
             case "phoenix.browser.fill-form":
@@ -1105,8 +1113,35 @@ internal sealed class PhoenixDesktopWindow : Form
         PublishBrowserState();
     }
 
+    private string ShowDesktopLive(BrowserCommand command)
+    {
+        // This command is accepted only from the current-user named pipe, never from WebView JS.
+        // Lock each burst of desktop actions to its initiating Phoenix conversation.
+        desktopLive.AssertSessionAccess(command.SessionId, command.Observe);
+        if (desktopLive.IsDismissed)
+            return "Desktop Live oculto por el usuario. Ctrl+F10 para volver a abrir el visor.";
+        // Never steal foreground focus from the target before guarded input.
+        var opening = split.Panel2Collapsed;
+        split.Panel2Collapsed = false;
+        if (opening) browserWidthOverride = null;
+        ApplyBrowserSplitLayout();
+        browserView.Visible = false;
+        if (browserToolbar is not null) browserToolbar.Visible = false;
+        desktopLive.Open(command.Text, command.SessionId);
+        return "Desktop Live visible; la captura se actualiza mientras Kira trabaja.";
+    }
+
+    internal void ReopenDesktopLive()
+    {
+        desktopLive.ResetDismissal();
+        _ = ShowDesktopLive(new BrowserCommand("phoenix.desktop.preview", Observe: true));
+    }
+
     private void SetBrowserVisible(bool visible)
     {
+        desktopLive.HideForBrowser();
+        browserView.Visible = true;
+        if (browserToolbar is not null) browserToolbar.Visible = true;
         var opening = visible && split.Panel2Collapsed;
         split.Panel2Collapsed = !visible;
         if (visible)
@@ -1137,7 +1172,7 @@ internal sealed class PhoenixDesktopWindow : Form
         var payload = JsonSerializer.Serialize(new
         {
             type = "phoenix.browser.state",
-            open = !split.Panel2Collapsed,
+            open = !split.Panel2Collapsed && !desktopLive.Visible,
             url = current,
             title = browserView.CoreWebView2.DocumentTitle ?? string.Empty,
             canGoBack = browserView.CanGoBack,
@@ -1148,6 +1183,12 @@ internal sealed class PhoenixDesktopWindow : Form
 
     private void OnWindowKeyDown(object? sender, KeyEventArgs e)
     {
+        if (e.Control && e.KeyCode == Keys.F10)
+        {
+            ReopenDesktopLive();
+            e.Handled = true;
+            return;
+        }
         if (e.KeyCode == Keys.F9)
         {
             SetBrowserVisible(split.Panel2Collapsed);

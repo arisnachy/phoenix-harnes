@@ -113,7 +113,9 @@ public sealed record BrowserCommand(
     string? Text = null,
     bool Submit = false,
     IReadOnlyList<BrowserFormValue>? Fields = null,
-    IReadOnlyDictionary<string, string>? Extras = null)
+    IReadOnlyDictionary<string, string>? Extras = null,
+    string? SessionId = null,
+    bool Observe = false)
 {
     private static readonly HashSet<string> PublicTypes = new(StringComparer.Ordinal)
     {
@@ -135,6 +137,7 @@ public sealed record BrowserCommand(
         "phoenix.browser.login",
         "phoenix.desktop.windows",
         "phoenix.desktop.screenshot",
+        "phoenix.desktop.preview",
     };
 
     public static bool TryParse(string json, out BrowserCommand command, bool allowAutomation = false)
@@ -170,6 +173,29 @@ public sealed record BrowserCommand(
             if (type is "phoenix.browser.inspect" or "phoenix.desktop.windows" or "phoenix.desktop.screenshot")
             {
                 command = new BrowserCommand(type);
+                return true;
+            }
+
+            if (type == "phoenix.desktop.preview")
+            {
+                string? target = null;
+                if (doc.RootElement.TryGetProperty("target", out var targetNode))
+                {
+                    if (targetNode.ValueKind != JsonValueKind.String) return false;
+                    target = targetNode.GetString();
+                    if (target is null || target.Length > 512 || target.Contains('\0')) return false;
+                }
+                if (!TryGetString(doc.RootElement, "sessionId", out var sessionId)
+                    || sessionId.Length > 128
+                    || sessionId.Any(ch => !(char.IsAsciiLetterOrDigit(ch) || ch is '-' or '_' or ':')))
+                    return false;
+                var observe = false;
+                if (doc.RootElement.TryGetProperty("observe", out var observeNode))
+                {
+                    if (observeNode.ValueKind is not JsonValueKind.True and not JsonValueKind.False) return false;
+                    observe = observeNode.GetBoolean();
+                }
+                command = new BrowserCommand(type, Text: target, SessionId: sessionId, Observe: observe);
                 return true;
             }
 

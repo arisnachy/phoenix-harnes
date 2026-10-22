@@ -454,6 +454,58 @@ async function runLegacyDesktopObservation(
   return typeof response.details === 'string' ? response.details : ''
 }
 
+/**
+ * Show the real Windows application in Phoenix Desktop's side pane before any
+ * state-changing PowerShell input. The native toolbar may pause desktop mutations,
+ * and an active lease prevents a second conversation taking over the first.
+ * Native preview failure does not disable the existing Computer Use fallback when
+ * no desktop shell is running; a user pause or occupied lease always fails closed.
+ */
+export function desktopPreviewCommandForAction(
+  args: ComputerToolArgs,
+  sessionId: string,
+): { type: 'phoenix.desktop.preview'; target?: string; sessionId: string; observe: boolean } {
+  validateComputerArgs(args)
+  if (!/^[A-Za-z0-9_:-]{1,128}$/u.test(sessionId)) {
+    throw new TypeError('Desktop Live requires a valid conversation session id')
+  }
+  return {
+    type: 'phoenix.desktop.preview',
+    ...(args.target === undefined ? {} : { target: args.target }),
+    sessionId,
+    observe: args.action === 'screenshot' || args.action === 'windows',
+  }
+}
+
+async function prepareDesktopLivePreview(
+  args: ComputerToolArgs,
+  sessionId: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  if (isEmbeddedBrowserAction(args.action) || args.action === 'windows') return
+  const descriptor = await readDesktopControlDescriptorIfAvailable()
+  if (descriptor?.schema !== LEGACY_DESKTOP_CONTROL_SCHEMA) return
+  const request = desktopPreviewCommandForAction(args, sessionId)
+  try {
+    const response = await requestNamedPipeLine(
+      `\\\\.\\pipe\\${descriptor.pipeName}`,
+      JSON.stringify(request),
+      signal,
+    )
+    parseDesktopControlReply(response, 'Phoenix Desktop Live')
+  } catch (error) {
+    // Permission/pause failures are authoritative. Do not bypass the user's
+    // explicit native pause or an ongoing desktop session by using PowerShell.
+    if (error instanceof Error && /paused by user|occupied by another session/iu.test(error.message)) {
+      throw error
+    }
+    if (desktopControlConnectionWasNeverEstablished(error)) {
+      await clearStaleDesktopControlDescriptor(descriptor)
+    }
+    // An unavailable view is not evidence the PowerShell driver is unavailable.
+  }
+}
+
 async function runEmbeddedBrowserAction(
   args: ComputerToolArgs,
   signal?: AbortSignal,
@@ -1576,6 +1628,10 @@ export function registerComputerTool(ctx: Context): void {
       const policy = sandboxPolicy?.resolve(session === undefined ? {} : { session })
       const sandboxMode = policy?.mode ?? deploymentDefault
       await authorizeComputerAction(ctx, exec, args, sandboxMode)
+      if (!isEmbeddedBrowserAction(args.action) && args.action !== 'windows') {
+        const owner = String(exec.agent?.session.header.id ?? '')
+        if (owner.length > 0) await prepareDesktopLivePreview(args, owner, exec.signal)
+      }
 
       const output = args.action === 'browser_login'
         ? await runOriginBoundBrowserLogin(ctx, args, exec.signal)

@@ -89,6 +89,27 @@ True(
     "runtime pipe admits native desktop screenshots",
     failures);
 Equal("phoenix.desktop.screenshot", desktopScreenshot.Type, "desktop screenshot command type", failures);
+False(
+    BrowserCommand.TryParse("{\"type\":\"phoenix.desktop.preview\",\"sessionId\":\"turn-1\"}", out _),
+    "web bridge cannot open Desktop Live",
+    failures);
+True(
+    BrowserCommand.TryParse(
+        "{\"type\":\"phoenix.desktop.preview\",\"target\":\"Paint\",\"sessionId\":\"turn-1\",\"observe\":false}",
+        out var desktopPreview,
+        allowAutomation: true),
+    "native pipe accepts session-scoped Desktop Live preview",
+    failures);
+Equal("Paint", desktopPreview.Text, "Desktop Live preserves target", failures);
+Equal("turn-1", desktopPreview.SessionId, "Desktop Live preserves conversation owner", failures);
+False(desktopPreview.Observe, "Desktop Live marks interactive preflight", failures);
+False(
+    BrowserCommand.TryParse(
+        "{\"type\":\"phoenix.desktop.preview\",\"sessionId\":\"../../bad\"}",
+        out _,
+        allowAutomation: true),
+    "desktop session ids reject path characters",
+    failures);
 True(
     BrowserCommand.TryParse(
         "{\"type\":\"phoenix.browser.fill-form\",\"origin\":\"https://example.com/form\",\"fields\":[{\"field\":0,\"value\":\"synthetic-value\"}],\"submit\":true}",

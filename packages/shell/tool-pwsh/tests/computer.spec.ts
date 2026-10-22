@@ -5,6 +5,7 @@ import {
   computerActionNeedsApproval,
   computerModeForSandbox,
   desktopControlConnectionWasNeverEstablished,
+  desktopPreviewCommandForAction,
   legacyDesktopObservationCommandForAction,
   parseDesktopBrowserControlDescriptor,
   residentComputerRequestForAction,
@@ -245,4 +246,14 @@ describe('Computer Use native Windows driver', () => {
     const output = await runWindowsComputerAction({ action: 'windows' })
     expect(typeof output).toBe('string')
   }, 60_000)
+})
+
+describe('Desktop Live side-pane preflight', () => {
+  it('carries the conversation owner and target without shell text', () => {
+    expect(desktopPreviewCommandForAction({ action: 'focus', target: 'Paint' }, 'session-4')).toEqual({
+      type: 'phoenix.desktop.preview', target: 'Paint', sessionId: 'session-4', observe: false,
+    })
+    expect(desktopPreviewCommandForAction({ action: 'screenshot' }, 'session-4').observe).toBe(true)
+    expect(() => desktopPreviewCommandForAction({ action: 'click', x: 4, y: 8 }, '../../unsafe')).toThrow(/session id/i)
+  })
 })

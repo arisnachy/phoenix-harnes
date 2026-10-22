@@ -1,0 +1,24 @@
+name: Phoenix Desktop Live native contract
+
+on:
+  pull_request:
+    paths:
+      - 'apps/desktop-windows/**'
+      - 'packages/shell/tool-pwsh/**'
+      - '.github/workflows/desktop-live-native.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-native-contract:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Compile and run real desktop command contracts
+        run: dotnet run --project apps/desktop-windows/Phoenix.Desktop.Tests/Phoenix.Desktop.Tests.csproj -c Release
