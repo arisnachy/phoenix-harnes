@@ -838,7 +838,7 @@ export function isBriefTeamDemonstration(text: string): boolean {
   return !/(?:https?:\/\/|[a-z]:\\|\b(?:github|repo|codigo|script|archivo\w*|implementa|despliega|production|produccion|email|correo|compra|borra|elimina|contrato|paciente|sql|api|web|sitio|site|investigacion|research)\b)/u.test(request)
 }
 
-/** 
+/**
  * Cheap, conservative fast lane for Kira's ordinary conversation and one-shot
  * low-risk tool work. A positive match skips Sol's visible strategy pass without
  * hiding the tools; multi-step and consequential workflows stay on the planner.
@@ -849,15 +849,19 @@ export function isBriefTeamDemonstration(text: string): boolean {
 // oxlint-disable-next-line @stylistic/max-len -- Auditable bilingual one-action vocabulary.
 const AUTO_SIMPLE_ACTION = /^(?:(?:kira|f[eé]nix)[,\s]+)?(?:abre|abrir|open|muestra|mu[eé]strame|show|lee|leer|read|lista|listar|list|busca|buscar|search|consulta|consultar|check|verifica|verificar|revisa|revisar|resume|resumir|res[uú]meme|summari[sz]e|corrige|corregir|correct|cambia|cambiar|change|renombra|renombrar|rename)\b/iu
 // oxlint-disable-next-line @stylistic/max-len -- Consequential changes and multi-stage operations require Sol.
-const AUTO_SIMPLE_EXCLUSION = /(?:https?:\/\/\S+\/\S+|\b(?:main|stable|branch|rama|commit|merge|fusionar|push|pull|despliega|deploy|producci[oó]n|production|servidor|database|base\s+de\s+datos|sql|migraci[oó]n|pagos?|payments?|compras?|contrato|contract|paciente|historia\s+cl[ií]nica|credenciales?|contrase[nñ]as?|secretos?|security|seguridad|permiso|permissions?|borra|elimina|delete|remove|y\s+(?:despu[eé]s|luego|tambi[eé]n|abre|busca|verifica|revisa|corrige|cambia|crea|ejecuta|actualiza|publica)|luego|despu[eé]s|then|and\s+(?:then|also|open|fix|update|run|deploy))\b)/iu
+const AUTO_SIMPLE_EXCLUSION = /(?:\b(?:main|stable|branch|rama|commit|merge|fusionar|push|pull|despliega|deploy|producci[oó]n|production|servidor|database|base\s+de\s+datos|sql|migraci[oó]n|pagos?|payments?|compras?|contrato|contract|paciente|historia\s+cl[ií]nica|credenciales?|contrase[nñ]as?|secretos?|security|seguridad|permiso|permissions?|borra|elimina|delete|remove|y\s+(?:despu[eé]s|luego|tambi[eé]n|abre|busca|verifica|revisa|corrige|cambia|crea|ejecuta|actualiza|publica|agrega|a[nñ]ade|guarda|env[ií]a|renombra|ejecuta|instala)|luego|despu[eé]s|then|and\s+(?:then|also|open|fix|update|run|deploy))\b)/iu
+
+// oxlint-disable-next-line @stylistic/max-len -- Explicit creations cannot be mistaken for general chat merely because the verb was previously unknown.
+const AUTO_LARGE_CREATION = /^(?:(?:kira|f[eé]nix)[,\s]+)?(?:haz|hacer|dise[nñ]a|desarrolla|construye|elabora|prepara|genera|redacta|escribe|produce|make|design|develop|write)\b.{0,150}\b(?:juego|videojuego|sistema|aplicaci[oó]n|app|plataforma|sitio|web|motor|m[oó]dulo|informe|investigaci[oó]n|libro|c[oó]mic|novela|curso|software|base\s+de\s+datos|hospital|saas)\b/iu
 
 export function isPhoenixAutoQuickTurn(text: string): boolean {
   const candidate = text.trim()
   if (candidate.length === 0 || candidate.length > 180 || candidate.includes('\n')) return false
   if (CONTEXTUAL_CONTINUATION.test(candidate)) return false
-  if (AUTO_EXCEPTIONAL_TASK.test(candidate) || AUTO_COMPLEX_TASK.test(candidate)
-    || AUTO_DEEP_REPLY.test(candidate) || AUTO_SIMPLE_EXCLUSION.test(candidate)) return false
   if (isConversationalFastPathText(candidate) || isContextualConversationFastPathText(candidate)) return true
+  if (AUTO_LARGE_CREATION.test(candidate) || AUTO_EXCEPTIONAL_TASK.test(candidate)
+    || AUTO_COMPLEX_TASK.test(candidate) || AUTO_DEEP_REPLY.test(candidate)
+    || AUTO_SIMPLE_EXCLUSION.test(candidate)) return false
   if (!phoenixAutoTaskRequest(candidate)) return true
   if (!AUTO_SIMPLE_ACTION.test(candidate)) return false
   const verbs = candidate.match(new RegExp(AUTO_TASK_ACTION.source, 'giu')) ?? []
@@ -869,6 +873,7 @@ function phoenixAutoTaskRequest(text: string): boolean {
   return CONTEXTUAL_CONTINUATION.test(candidate)
     || isToolAcquisitionRequest(candidate)
     || AUTO_TASK_ACTION.test(candidate)
+    || AUTO_LARGE_CREATION.test(candidate)
 }
 
 /** Look at the live turn boundary: assembly happens before step/start is logged. */
@@ -1237,11 +1242,11 @@ export function installModelSelection(
         const routed = quick
           ? { ...automatic, reasoningEffort: ReasoningEffortId('max') }
           : resolveEclipseRoleRoute(
-          eclipseProfile,
-          'coordinator',
-          automatic,
-          eclipseProfile?.mode === 'hybrid' ? automatic.reasoningEffort : undefined,
-        )
+            eclipseProfile,
+            'coordinator',
+            automatic,
+            eclipseProfile?.mode === 'hybrid' ? automatic.reasoningEffort : undefined,
+          )
         const { reasoningEffort: _inheritedEffort, ...withoutInheritedEffort } = resolved
         return {
           ...withoutInheritedEffort,
