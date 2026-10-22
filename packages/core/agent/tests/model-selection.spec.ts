@@ -1275,7 +1275,7 @@ describe('installModelSelection()', () => {
     await ctx.fiber.dispose()
   })
 
-  it('routes simple fictional visual requests directly to Luna low, retaining Sol for actual multi-step work', async () => {
+  it('routes simple fictional visual requests directly to Luna Max, retaining Sol for actual multi-step work', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
     ctx.systemPrompt.tools(() => ({ schemas: [
@@ -1297,7 +1297,7 @@ describe('installModelSelection()', () => {
       } })
       await expect(agentEvents(ctx, agent).waterfall('agent/request',
         { turn: 1, step: 1, signal }, () => Promise.resolve(seed))).resolves.toMatchObject({
-        model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('low'),
+        model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('max'),
       })
       events.pop()
     }
