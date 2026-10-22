@@ -17,9 +17,25 @@ import {
   nativeDesktopTurnActive,
   nativeDesktopFallbackDenied,
   normalizedDesktopTarget,
+  attachmentWriter,
 } from '../src/computer.ts'
 
 describe('Computer Use permissions', () => {
+  it('reads optional attachments via ctx.get rather than un-injected context getters', () => {
+    const store = { saveImage: async () => ({ width: 4, height: 4 }) }
+    const ctx = {
+      get(name: string) { expect(name).toBe('attachments'); return store },
+      get attachments() { throw new Error('cannot get property "attachments" without inject') },
+    }
+    expect(attachmentWriter(ctx as never)).toBe(store)
+    expect(attachmentWriter({ get: () => undefined } as never)).toBeUndefined()
+  })
+
+  it('uses a normalized HWND for both resident control and Desktop Live preview', () => {
+    expect(residentComputerRequestForAction({ action: 'focus', target: 'hwnd=0x420024 title=Paint' }).target).toBe('hwnd:0x420024')
+    expect(desktopPreviewCommandForAction({ action: 'focus', target: 'hwnd=0x420024 title=Paint' }, 'session-1').target).toBe('hwnd:0x420024')
+  })
+
   it('derives desktop authority from the existing sandbox permission', () => {
     expect(computerModeForSandbox(undefined)).toBe('off')
     expect(computerModeForSandbox('read-only')).toBe('observe')
