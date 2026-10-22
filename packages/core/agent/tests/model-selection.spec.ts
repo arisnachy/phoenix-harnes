@@ -495,7 +495,7 @@ describe('installModelSelection()', () => {
       const operational = await ctx.systemPrompt.assemble()
       expect(operational.tools.map(tool => tool.name)).toContain('spawn_teammate')
       const operationalIdentity = operational.sections.find(item => item.name === 'phoenix:auto-visible-handoff')?.text
-      expect(operationalIdentity).toContain('execution coordinator route')
+      expect(operationalIdentity).toContain('configured execution route')
       expect(operationalIdentity).toContain('still Kira')
       await expect(agentEvents(ctx, agent).waterfall(
         'agent/request', { turn: 1, step: 2, signal },
