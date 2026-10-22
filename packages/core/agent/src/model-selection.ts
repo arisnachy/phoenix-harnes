@@ -1235,11 +1235,13 @@ export function installModelSelection(
       ? phoenixAutoTeamSignalForTurn(scopedAgent, currentTurnNumber) : undefined
     const needsTeamRescue = teamSignal?.purpose === 'blocker'
       && teamSignal.messageId !== phoenixAutoState.lastTeamEscalationMessageId
+    const strategyProfile = configuredEclipse(agentCtx)
     const needsStallRescue = scopedAgent !== undefined && currentTurnNumber !== undefined
-      && isPhoenixCodexAutoStalled(scopedAgent, currentTurnNumber)
-      && (phoenixAutoState.lastRescueStep === 0
-        || (autoStep ?? 0) - phoenixAutoState.lastRescueStep >= 2)
-    const strategyRescueStep = autoStep !== undefined && phoenixAutoState.rescueCount < 2
+      && phoenixAutoNeedsStallStrategy(scopedAgent, currentTurnNumber, currentRequest,
+        strategyProfile?.escalationSensitivity)
+    const strategyRescueStep = autoStep !== undefined && scopedAgent !== undefined
+      && currentTurnNumber !== undefined
+      && phoenixAutoHasFreshStrategyEvidence(scopedAgent, currentTurnNumber, phoenixAutoState)
       && (needsTeamRescue || (autoStep > 1 && (phoenixAutoState.forcePlannerNext || needsStallRescue)))
     const autoPolicy = strategyRescueStep ? AUTO_SOL_STRATEGY_POLICY
       : autoStep === 1
@@ -1296,28 +1298,27 @@ export function installModelSelection(
       }
       const directText = directUserTextForTurn(_payload.agent, _payload.turn)
       if (isKiraCodexAutoLead(selected, scopedAgent)) {
+        const eclipseProfile = isPhoenixCodexAutoSelection(selected) ? configuredEclipse(agentCtx) : undefined
         const automatic = phoenixAutoRoute(
           _payload.agent,
           _payload.turn,
           _payload.step,
           directText,
           phoenixAutoState,
+          eclipseProfile?.escalationSensitivity,
         )
-        // Eclipse exposes one coordinator route for every Kira phase. The
-        // built-in Sol/Luna pair remains only as the automatic fallback when
-        // no coordinator override is saved.
-        const eclipseProfile = isPhoenixCodexAutoSelection(selected) ? configuredEclipse(agentCtx) : undefined
         // Kira handles conversation and small one-shot tasks directly on Luna
         // Max, even when Eclipse's coordinator role points to Sol. A real Team
         // signal or strategy rescue still follows the operational route.
         const quick = phoenixAutoTeamSignalForTurn(_payload.agent, _payload.turn) === undefined
           && automatic.model === PHOENIX_CODEX_AUTO_WORKER_MODEL
           && isPhoenixAutoQuickTurn(directText)
+        const role = automatic.model === PHOENIX_CODEX_AUTO_PLANNER_MODEL ? 'planner' : 'coordinator'
         const routed = quick
           ? { ...automatic, reasoningEffort: ReasoningEffortId('max') }
           : resolveEclipseRoleRoute(
             eclipseProfile,
-            'coordinator',
+            role,
             automatic,
             eclipseProfile?.mode === 'hybrid' ? automatic.reasoningEffort : undefined,
           )
@@ -1421,11 +1422,10 @@ export function installModelSelection(
     const actualStrategyRescue = !latestStepHasToolActivity
       && (authorizedGoal || latest.step === phoenixAutoState.lastRescueStep)
       && (latest.sourceModel === PHOENIX_CODEX_AUTO_PLANNER_MODEL
-        || latest.sourceModel === configuredEclipse(agentCtx)?.coordinator?.model
+        || latest.sourceModel === configuredEclipse(agentCtx)?.planner?.model
         || (latest.sourceModel === undefined && latest.step === phoenixAutoState.lastRescueStep))
     if (actualStrategyRescue && !phoenixAutoExplicitlyClosed(latest.text)) {
       phoenixAutoState.lastRescueStep = latest.step
-      phoenixAutoState.rescueCount = Math.min(2, Math.max(1, phoenixAutoState.rescueCount))
       phoenixAutoState.lastContinuationStep = latest.step
       phoenixAutoState.continuationCount += 1
       agent.steer(createUserMessage({
@@ -1438,8 +1438,7 @@ export function installModelSelection(
     // The coordinator can ask for a strategy when stuck without repeating a doomed tool.
     if (latest.step > 1
       && !phoenixAutoExplicitlyClosed(latest.text) && kiraNeedsSolStrategy(latest.text)
-      && phoenixAutoState.rescueCount < 2
-      && phoenixAutoState.continuationCount < continuationLimit) {
+      && phoenixAutoHasFreshStrategyEvidence(agent, turn, phoenixAutoState)) {
       phoenixAutoState.lastContinuationStep = latest.step
       phoenixAutoState.continuationCount += 1
       phoenixAutoState.forcePlannerNext = true
@@ -1458,7 +1457,7 @@ export function installModelSelection(
     const plannerStoppedBeforeActing = latest.step === 1 && !latestStepHasToolActivity
       && (latest.sourceModel === PHOENIX_CODEX_AUTO_PLANNER_MODEL
         || (isPhoenixCodexAutoSelection(effectiveSelection(agentCtx.agent))
-          && latest.sourceModel === configuredEclipse(agentCtx)?.coordinator?.model))
+          && latest.sourceModel === configuredEclipse(agentCtx)?.planner?.model))
       && !phoenixAutoExplicitlyClosed(latest.text)
     // A first-step plan that returned no usable assistant text still has not
     // executed anything. Missing content must not silently terminate real work.
