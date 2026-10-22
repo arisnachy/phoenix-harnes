@@ -627,6 +627,10 @@ internal sealed class PhoenixDesktopWindow : Form
                 return desktopLive.CaptureTargetAsBase64() ?? CaptureNativeDesktopScreenshot();
             case "phoenix.desktop.preview":
                 return ShowDesktopLive(command);
+            case "phoenix.desktop.live-state":
+                return desktopLive.StateForSession(command.SessionId);
+            case "phoenix.desktop.live-frame":
+                return desktopLive.FrameForSession(command.SessionId);
             case "phoenix.browser.inspect":
                 return await InspectBrowserAsync();
             case "phoenix.browser.fill-form":

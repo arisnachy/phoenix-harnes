@@ -89,6 +89,16 @@ True(
     "runtime pipe admits native desktop screenshots",
     failures);
 Equal("phoenix.desktop.screenshot", desktopScreenshot.Type, "desktop screenshot command type", failures);
+False(BrowserCommand.TryParse("{\"type\":\"phoenix.desktop.live-frame\",\"sessionId\":\"turn-1\"}", out _),
+    "web bridge may not request native Desktop Live frames", failures);
+True(BrowserCommand.TryParse("{\"type\":\"phoenix.desktop.live-state\",\"sessionId\":\"turn-1\"}",
+    out var liveStatus, allowAutomation: true), "runtime accepts session-scoped native state", failures);
+Equal("turn-1", liveStatus.SessionId, "native desktop state carries conversation owner", failures);
+True(BrowserCommand.TryParse("{\"type\":\"phoenix.desktop.live-frame\",\"sessionId\":\"turn-1\"}",
+    out var liveFrame, allowAutomation: true), "runtime accepts session-scoped native frame", failures);
+Equal("turn-1", liveFrame.SessionId, "native desktop frame carries conversation owner", failures);
+False(BrowserCommand.TryParse("{\"type\":\"phoenix.desktop.live-frame\",\"sessionId\":\"../other\"}",
+    out _, allowAutomation: true), "native desktop frame rejects invalid conversation id", failures);
 False(
     BrowserCommand.TryParse("{\"type\":\"phoenix.desktop.preview\",\"sessionId\":\"turn-1\"}", out _),
     "web bridge cannot open Desktop Live",
