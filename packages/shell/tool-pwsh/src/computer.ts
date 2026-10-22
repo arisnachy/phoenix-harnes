@@ -110,7 +110,10 @@ interface AttachmentWriter {
   saveImage(input: { data: Buffer; mediaType: 'image/png'; name: string }): Promise<DesktopImageAttachment>
 }
 
-/** Resolve the optional attachment capability without adding a hard package edge. */
+/** Resolve the optional attachment capability without adding a hard package edge.
+ * @param ctx - Cordis context with optional late-bound attachment service.
+ * @returns The image persistence interface, or undefined when not installed.
+ */
 export function attachmentWriter(ctx: Context): AttachmentWriter | undefined {
   // Cordis service getters require injection. get() is the supported late-bound
   // optional dependency lookup, and returns undefined when not mounted.
