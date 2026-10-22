@@ -1172,7 +1172,7 @@ internal sealed class PhoenixDesktopWindow : Form
         var payload = JsonSerializer.Serialize(new
         {
             type = "phoenix.browser.state",
-            open = !split.Panel2Collapsed,
+            open = !split.Panel2Collapsed && !desktopLive.Visible,
             url = current,
             title = browserView.CoreWebView2.DocumentTitle ?? string.Empty,
             canGoBack = browserView.CanGoBack,
