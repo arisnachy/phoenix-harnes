@@ -94,7 +94,7 @@ export const Config: z<Config> = z.object({
 })
 
 /** Model-facing collaboration guidance shared by Lead and teammates. */
-const POLICY = 'Agent Teams is real shared work, not role-play. Kira is the single coordinator identity: she plans, supervises, executes and verifies the user\'s mission through the configured coordinator route. Fénix Eclipse has exactly two model roles: coordinator for Kira and subagent for every child; a child name never changes its model route. Delegate only when independent work materially improves quality or latency, choose the smallest sufficient team, reuse workers, and keep three simultaneous specialists as the hard limit. Routine low-risk requests stay with Kira and do not create artificial teams. Kira owns acceptance and verifies real evidence; never fabricate tools, peer dialogue, completion or model independence. Preserve the selected provider, model and explicit reasoning effort in hybrid/manual mode. In hybrid mode an omitted effort may use the request-sensitive automatic tier; in manual mode an omitted effort uses the provider default. Automatic effort is cheap for ordinary strategy and increases only when task evidence warrants it. Do not make a model call merely to classify a task. A normal peer result, question or wait stays on the coordinator route; a bounded strategy review is allowed only for a substantive blocker or explicit corrective request. Use concise Spanish when the user does. Keep collaboration sparse, evidence-based and truthful.'
+const POLICY = 'Agent Teams is real shared work. Kira is the single visible coordinator identity. For complex work the selected Sol/planner model creates a concise plan, then Kira runs it on Luna Max and delegates bounded specialist scopes using Luna Max. Kira owns verification and communication. Specialists do not switch to Sol when Kira requests strategic help. Prefer one specialist, add more only for independent parallel work, and cap live teammates at three. Never fabricate tools, peer dialogue, completion, or separate personas for planning and execution. Save and reuse the current plan and compact relevant evidence rather than duplicating whole histories. A new strategic blocker, design conflict or explicit corrective request can trigger another focused planner review, without a numerical consultation quota; never repeat the same unsuccessful consultation without new evidence. Simple tasks remain with Kira on Luna Max, without unnecessary planning or delegation.'
 
 const ACTIVE_WAIT_STATUSES: ReadonlySet<TeamMemberView['status']> = new Set(['running', 'provisioning'])
 type WaitBudget = { teamSeq: number; expired: number }
@@ -455,14 +455,14 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
         const codexDefault: TeamModelProfile | undefined = activeProvider === 'openai-codex'
           ? {
             provider: 'openai-codex', model: PHOENIX_CODEX_AUTO_WORKER_MODEL,
-            reasoningEffort: adaptiveEffort ?? 'high',
+            reasoningEffort: 'max',
           }
           : undefined
         const namedProfile = args.model_profile === undefined
           ? undefined : config.modelProfiles[args.model_profile]
-        // An Eclipse automatic/hybrid child uses the adaptive Codex default;
-        // do not let a legacy deployment preset silently force Max. An
-        // explicitly named profile remains an explicit caller choice.
+        // Every ordinary Eclipse specialist defaults to Luna Max, even when
+        // Kira temporarily uses Sol for an initial plan or focused review.
+        // A consciously named provider profile remains an explicit override.
         const fallbackProfile = namedProfile
           ?? (eclipseEnabled && activeProvider === 'openai-codex'
             ? codexDefault : config.modelProfiles[config.defaultModelProfile] ?? codexDefault)
