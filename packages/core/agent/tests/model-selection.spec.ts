@@ -11,6 +11,7 @@ import {
   persistModelSelectionPreference,
   isContextualConversationFastPathText,
   isConversationalFastPathText,
+  isPhoenixAutoQuickTurn,
   isBriefTeamDemonstration,
   jevSelectedModelId,
   PHOENIX_CODEX_AUTO_MODEL,
@@ -604,6 +605,81 @@ describe('installModelSelection()', () => {
     expect(isConversationalFastPathText('¿esto parece un error de memoria?')).toBe(false)
     expect(isConversationalFastPathText('qué tiempo hace hoy')).toBe(false)
     expect(isConversationalFastPathText('https://example.com')).toBe(false)
+  })
+
+  it('classifies ordinary conversation and bounded one-step tool requests for Luna Max', () => {
+    for (const quick of [
+      'hola kira',
+      '¿cómo estás?',
+      '¿qué es un algoritmo?',
+      'explícame qué significa caché',
+      'abre YouTube',
+      'Kira, busca el enlace oficial',
+      'corrige una palabra de este texto',
+      'cambia el color del botón',
+      'actualiza el archivo README.md',
+      'crea una carpeta temporal',
+    ]) expect(isPhoenixAutoQuickTurn(quick), quick).toBe(true)
+
+    for (const planned of [
+      'dale',
+      'revisa main y stable',
+      'revisa el repositorio y arregla todos los errores',
+      'crea un videojuego completo con tres niveles',
+      'haz un sistema hospitalario con varios módulos',
+      'crea una app de facturación',
+      'corrige el problema de seguridad en producción',
+      'despliega el proyecto a producción',
+      'actualiza la base de datos y después reinicia el servidor',
+      'consulta el historial de un paciente',
+    ]) expect(isPhoenixAutoQuickTurn(planned), planned).toBe(false)
+  })
+
+  it('executes simple actions on Luna Max with tools available and plans complex actions with Sol', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    ctx.systemPrompt.tools(() => ({
+      schemas: [{ name: 'read', description: 'read a file', parameters: { type: 'object' } }],
+    }))
+    const selection: ModelSelectionRef = {
+      current: { provider: 'openai-codex', model: PHOENIX_CODEX_AUTO_MODEL }, assembled: undefined,
+    }
+    const dispose = installModelSelection(ctx, selection)
+    const events: { type: string; data: unknown }[] = [
+      { type: 'turn/start', data: { turn: 1 } },
+      { type: 'user/message', data: { source: { kind: 'user' },
+        content: [{ type: 'text', text: 'revisa el archivo README.md' }] } },
+    ]
+    const agent = {
+      session: { events, append: (type: string, data: unknown) => { events.push({ type, data }) } },
+      options: {},
+    } as unknown as Agent
+    ctx.agent = agent
+    const signal = new AbortController().signal
+    try {
+      const simple = await ctx.systemPrompt.assemble()
+      expect(simple.tools.some(tool => tool.name === 'read')).toBe(true)
+      expect(simple.sections.some(section => section.name === 'phoenix:auto-visible-handoff')).toBe(false)
+      await expect(agentEvents(ctx, agent).waterfall('agent/request', { turn: 1, step: 1, signal },
+        () => Promise.resolve({ provider: 'seed', model: 'seed' }))).resolves.toMatchObject({
+        provider: 'openai-codex', model: 'gpt-6-luna',
+        reasoningEffort: ReasoningEffortId('max'),
+      })
+
+      events.push({ type: 'turn/start', data: { turn: 2 } },
+        { type: 'user/message', data: { source: { kind: 'user' },
+          content: [{ type: 'text', text: 'crea un sistema hospitalario con varios módulos' }] } })
+      const complex = await ctx.systemPrompt.assemble()
+      expect(complex.sections.some(section => section.name === 'phoenix:auto-visible-handoff')).toBe(true)
+      expect(complex.tools).toEqual([])
+      await expect(agentEvents(ctx, agent).waterfall('agent/request', { turn: 2, step: 1, signal },
+        () => Promise.resolve({ provider: 'seed', model: 'seed' }))).resolves.toMatchObject({
+        provider: 'openai-codex', model: 'gpt-6.1-sol',
+      })
+    } finally {
+      dispose()
+      await ctx.fiber.dispose()
+    }
   })
 
   it('keeps every provider specialist delegation inside the real Kira Team path', async () => {
