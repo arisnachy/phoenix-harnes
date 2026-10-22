@@ -16,6 +16,8 @@ Before desktop mutations, the model tool requests a Desktop Live native-side pre
 
 The user can hide the viewer without having it automatically reappear, then reopen it with Ctrl+F10. No new unrestricted keyboard/mouse backend is introduced. Without a desktop host, Computer Use retains its existing PowerShell actuator and permission policy.
 
+The previous native-only side pane did not appear when Phoenix was used through its ordinary web conversation, so users could see tools spin without seeing an application. The web app now serves bounded, read-only `/phoenix-desktop-live/state` and `/phoenix-desktop-live/frame` routes over the same local Windows pipe. The broker refuses frames unless the exact conversation id owns an active, visible native viewer. A conversation-level React card appears for explicit Desktop Live/Paint requests, polls real state and verified PNG captures, and shows an unambiguous disconnected diagnosis rather than a fake picture. The MiniBrowser and its own session-scoped CDP controls are unchanged.
+
 ## Alternatives considered
 
 **Replace MiniBrowser with a universal embedded web view.** Rejected: WebView2 cannot embed arbitrary native app windows or run their accessibility trees, and this would regress browser sessions.

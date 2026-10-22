@@ -16,6 +16,8 @@ Windows 默认注册 Computer Use；设置 `PHOENIX_DESKTOP_COMPUTER=0` 可以�
 
 用户可手动隐藏预览，之后不会自动重新打开；按 Ctrl+F10 可恢复。没有新增不受限制的键鼠执行器。没有原生桌面外壳时，仍使用原 PowerShell 执行器及既有权限策略。
 
+此前 Desktop Live 只存在于 Windows 原生侧边栏，因此用户通过网页聊天时看不到正在操作的程序。现在 Web 应用经由已有 Windows 本地命名管道，提供有限的只读 `/phoenix-desktop-live/state` 和 `/phoenix-desktop-live/frame` 路由。只有当确切会话 ID 拥有可见原生预览时，代理才会返回真实帧。用户要求 Paint 或 Desktop Live 时，聊天内出现对应的 React 视图，轮询实际状态和验证过的 PNG；未连接时明确报告，而不伪造画面。原有 MiniBrowser 和按会话隔离的 CDP 操作不变。
+
 ## Alternatives considered
 
 **用通用网页视图取代 MiniBrowser。** 不采用：WebView2 无法嵌入任意原生程序窗口，也无法替代其可访问性接口，还会破坏现有网页会话。

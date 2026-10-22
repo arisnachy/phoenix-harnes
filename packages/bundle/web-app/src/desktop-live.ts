@@ -36,7 +36,7 @@ function sendJson(res: ServerResponse, status: number, object: unknown): void {
 
 function requestedSession(req: IncomingMessage): string {
   const id = new URL(req.url ?? '/', 'http://127.0.0.1').searchParams.get('sessionId')
-  if (!validBrowserScopeId(id)) throw new Error('Identificador de conversación inválido.')
+  if (!validBrowserScopeId(id) || id.length > 128 || id.includes('.')) throw new Error('Identificador de conversación inválido.')
   return id
 }
 
