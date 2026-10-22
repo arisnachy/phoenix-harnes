@@ -1172,6 +1172,11 @@ switch ($action) {
 }
 `
 
+// Read the complete fixed driver before evaluating: PowerShell -Command - may
+// parse multi-line here-strings interactively and exit 0 with empty stdout.
+// The script source is trusted; model parameters remain environment variables.
+const stdinScriptCommand = '& ([scriptblock]::Create([Console]::In.ReadToEnd()))'
+
 function putNumber(env: Record<string, string>, key: string, value: number | undefined): void {
   if (value !== undefined) env[key] = String(value)
 }
@@ -1199,7 +1204,7 @@ export function windowsComputerInvocation(args: ComputerToolArgs): ComputerInvoc
   if (args.keys !== undefined) env.PHX_KEYS = args.keys
   return {
     file: 'powershell.exe',
-    argv: ['-NoLogo', '-NoProfile', '-NonInteractive', '-STA', '-Command', '-'],
+    argv: ['-NoLogo', '-NoProfile', '-NonInteractive', '-STA', '-Command', stdinScriptCommand],
     env,
     stdin: WINDOWS_DRIVER,
   }
@@ -1227,7 +1232,7 @@ export function systemBrowserOpenInvocation(url: string): ComputerInvocation {
   }
   return {
     file: 'powershell.exe',
-    argv: ['-NoLogo', '-NoProfile', '-NonInteractive', '-STA', '-Command', '-'],
+    argv: ['-NoLogo', '-NoProfile', '-NonInteractive', '-STA', '-Command', stdinScriptCommand],
     env: { PHX_URL: parsed.toString() },
     stdin: SYSTEM_BROWSER_OPEN_DRIVER,
   }
@@ -1252,8 +1257,11 @@ function executeComputerInvocation(invocation: ComputerInvocation, signal?: Abor
         return
       }
       const output = stdout.trim()
-      if (output.length === 0 && detail.length > 0) {
-        reject(new Error(`Computer Use PowerShell driver reported: ${detail}`))
+      if (output.length === 0) {
+        // Silent zero-exit drivers are not a successful desktop operation.
+        reject(new Error(detail.length > 0
+          ? `Computer Use PowerShell driver reported: ${detail}`
+          : 'Computer Use PowerShell driver produced no output: check the interactive Windows desktop and PowerShell execution.'))
         return
       }
       resolve(output)
