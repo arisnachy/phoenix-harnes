@@ -154,7 +154,12 @@ if (-not (Test-Path -LiteralPath $commandProcessor -PathType Leaf)) {
   throw "Windows command processor is missing: $commandProcessor"
 }
 $targetPath = $commandProcessor
-$arguments = "/k `"cd /d `"`"$rootPath`"`" && pnpm phoenix`""
+# The OneDrive checkout without spaces uses the exact requested CMD command.
+$arguments = '/k "cd /d ' + $rootPath + ' && pnpm phoenix"'
+# For other checkout paths, quote any spaces or command metacharacters.
+if ($rootPath -match '[\s&|<>^()]') {
+  $arguments = '/k "cd /d ""' + $rootPath + '"" && pnpm phoenix"'
+}
 $windowStyle = 1
 $powerShellExe = Join-Path $PSHOME 'powershell.exe'
 $workingDirectory = $rootPath
