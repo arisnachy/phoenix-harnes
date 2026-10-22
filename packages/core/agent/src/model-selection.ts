@@ -854,6 +854,10 @@ const AUTO_SIMPLE_EXCLUSION = /(?:\b(?:main|stable|branch|rama|commit|merge|fusi
 // oxlint-disable-next-line @stylistic/max-len -- Explicit creations cannot be mistaken for general chat merely because the verb was previously unknown.
 const AUTO_LARGE_CREATION = /^(?:(?:kira|f[eé]nix)[,\s]+)?(?:haz|hacer|dise[nñ]a|desarrolla|construye|elabora|prepara|genera|generar|crea|crear|redacta|escribe|produce|make|design|develop|write|create|generate)\b.{0,150}\b(?:juego|videojuego|sistema|aplicaci[oó]n|app|plataforma|sitio|web|motor|m[oó]dulo|informe|investigaci[oó]n|libro|c[oó]mic|novela|curso|software|base\s+de\s+datos|hospital|saas)\b/iu
 
+/** Requests phrased as "quiero que me construyas un sistema" are still projects. */
+// oxlint-disable-next-line @stylistic/max-len -- Bound natural-language construction intent, avoiding a second classification model call.
+const AUTO_LARGE_INTENT = /^(?:(?:kira|f[eé]nix)[,\s]+)?(?:quiero|necesito|puedes|podr[ií]as|can\s+you|i\s+(?:want|need))\b.{0,80}\b(?:hacer|hagas|crear|crees|construir|construyas|desarrollar|desarrolles|dise[nñ]ar|dise[nñ]es|implementar|implementes|build|create|develop|design|make)\b.{0,100}\b(?:juego|videojuego|sistema|aplicaci[oó]n|app|plataforma|sitio|web|motor|m[oó]dulo|informe|investigaci[oó]n|libro|c[oó]mic|novela|curso|software|hospital|saas)\b/iu
+
 export function isPhoenixAutoQuickTurn(text: string): boolean {
   const candidate = text.trim()
   if (candidate.length === 0 || candidate.length > 180 || candidate.includes('\n')) return false
@@ -862,6 +866,7 @@ export function isPhoenixAutoQuickTurn(text: string): boolean {
   // Ordinary questions about complicated subjects are still conversation;
   // the mere mention of "architecture" does not make them implementation jobs.
   if (AUTO_EXCEPTIONAL_TASK.test(candidate) || AUTO_DEEP_REPLY.test(candidate)) return false
+  if (AUTO_LARGE_INTENT.test(candidate)) return false
   if (!phoenixAutoTaskRequest(candidate)) return true
   if (AUTO_LARGE_CREATION.test(candidate) || AUTO_COMPLEX_TASK.test(candidate)
     || AUTO_SIMPLE_EXCLUSION.test(candidate)) return false
@@ -876,6 +881,7 @@ function phoenixAutoTaskRequest(text: string): boolean {
     || isToolAcquisitionRequest(candidate)
     || AUTO_TASK_ACTION.test(candidate)
     || AUTO_LARGE_CREATION.test(candidate)
+    || AUTO_LARGE_INTENT.test(candidate)
 }
 
 /** Look at the live turn boundary: assembly happens before step/start is logged. */
