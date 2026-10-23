@@ -15,6 +15,7 @@ import {
   validateComputerArgs,
   windowsComputerInvocation,
   computerVerificationTarget,
+  computerActionWithPinnedTarget,
   nativeDesktopTurnActive,
   nativeDesktopFallbackDenied,
   normalizedDesktopTarget,
@@ -30,6 +31,20 @@ describe('Computer Use permissions', () => {
     }
     expect(attachmentWriter(ctx as never)).toBe(store)
     expect(attachmentWriter({ get: () => undefined } as never)).toBeUndefined()
+  })
+
+  it('preserves the selected application across observations within one session', () => {
+    expect(computerActionWithPinnedTarget({ action: 'screenshot' }, 'hwnd:0x420024')).toEqual({
+      action: 'screenshot', target: 'hwnd:0x420024',
+    })
+    expect(computerActionWithPinnedTarget({ action: 'click', x: 10, y: 15 }, 'hwnd:0x420024')).toEqual({
+      action: 'click', x: 10, y: 15, target: 'hwnd:0x420024',
+    })
+    expect(computerActionWithPinnedTarget({ action: 'screenshot', target: 'Notepad' }, 'hwnd:0x420024').target)
+      .toBe('Notepad')
+    expect(computerActionWithPinnedTarget({ action: 'windows' }, 'hwnd:0x420024')).toEqual({ action: 'windows' })
+    expect(computerActionWithPinnedTarget({ action: 'focus', target: 'Notepad' }, 'hwnd:0x420024'))
+      .toEqual({ action: 'focus', target: 'Notepad' })
   })
 
   it('pins screenshot verification to the acted-on HWND instead of whichever window gets focus later', () => {
