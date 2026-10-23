@@ -56,6 +56,26 @@ function installBrowserMock(current: typeof state = state) {
 }
 
 describe('MiniBrowser in Phoenix conversation', () => {
+  it('opens a real public research source after Chrome is available, once per URL', async () => {
+    const blank = { ...state, url: 'about:blank', title: '',
+      tabs: [{ id: 'shared-tab', title: '', url: 'about:blank' }] }
+    const calls = installBrowserMock(blank)
+    const view = render(<MiniBrowser sessionId="research-fetch-1" requested
+      sourceUrl="https://hai.stanford.edu/ai-index" />)
+    await waitFor(() => expect(calls.filter(call => call.type === 'open'))
+      .toEqual([{ type: 'open', url: 'https://hai.stanford.edu/ai-index' }]))
+    view.rerender(<MiniBrowser sessionId="research-fetch-1" requested
+      sourceUrl="https://hai.stanford.edu/ai-index" />)
+    await act(async () => { await Promise.resolve() })
+    expect(calls.filter(call => call.type === 'open')).toHaveLength(1)
+    view.rerender(<MiniBrowser sessionId="research-fetch-1" requested
+      sourceUrl="https://pubmed.ncbi.nlm.nih.gov/" />)
+    await waitFor(() => expect(calls.filter(call => call.type === 'open'))
+      .toHaveLength(2))
+    expect(calls.filter(call => call.type === 'open')[1]?.url)
+      .toBe('https://pubmed.ncbi.nlm.nih.gov/')
+  })
+
   it('keeps the saved-credential login attempt alive when its parent callback changes', async () => {
     const site = { ...state, url: 'https://example.org/login',
       tabs: [{ id: 'shared-tab', title: 'Acceso', url: 'https://example.org/login' }] }
