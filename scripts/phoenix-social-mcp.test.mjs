@@ -31,6 +31,13 @@ test('Kira can prepare Phoenix own social identities without falsely claiming ex
   assert.equal(initial.result.serverInfo.name, 'phoenix-social-engine')
   const listed = await request('tools/list')
   assert.ok(listed.result.tools.some(x => x.name === 'social_phoenix_onboarding'))
+  for (const listedTool of listed.result.tools) {
+    const schema = listedTool.inputSchema
+    assert.equal(schema.type, 'object', listedTool.name)
+    for (const keyword of ['oneOf', 'anyOf', 'allOf', 'enum', 'const', 'not']) {
+      assert.equal(Object.hasOwn(schema, keyword), false, listedTool.name + ': ' + keyword)
+    }
+  }
   const start = await request('tools/call', { name: 'social_phoenix_onboarding', arguments: {} })
   assert.equal(start.result.isError, undefined)
   const body = JSON.parse(start.result.content[0].text)
@@ -41,4 +48,13 @@ test('Kira can prepare Phoenix own social identities without falsely claiming ex
   assert.ok(body.profiles.every(p => p.officialSignup.startsWith('https://')))
   const accounts = await request('tools/call', { name: 'social_accounts', arguments: {} })
   assert.deepEqual(JSON.parse(accounts.result.content[0].text), [])
+  const campaign = await request('tools/call', {
+    name: 'social_campaign_create',
+    arguments: { brand: 'phoenix', title: 'Prueba MCP', destination: 'https://example.com/campaign' },
+  })
+  assert.equal(campaign.result.isError, undefined)
+  const created = JSON.parse(campaign.result.content[0].text)
+  assert.equal(created.title, 'Prueba MCP')
+  assert.equal(created.brandId, 'phoenix')
+  assert.equal(created.destination, 'https://example.com/campaign')
 })

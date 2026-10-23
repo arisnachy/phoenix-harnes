@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest'
+import type { AssistantMessageEvent } from '@earendil-works/pi-ai'
 import type { GenerateOptions } from '@phoenix-ai/dsh-llm'
 import {
   applyMondayCodexMembrane,
   normalizeCodexToolParameters,
   normalizeCodexToolSchemas,
+  recoverRejectedCodexFunctionSchema,
+  surfaceRejectedCodexSchemaEvent,
   scopeCodexToolsForPaint,
   normalizeOpenAiFunctionToolPayload,
   requiresMondayCodexMembrane,
@@ -148,6 +151,62 @@ describe('Codex tool-schema compatibility', () => {
     expect(scopeCodexToolsForPaint({ ...request,
       messages: [message('abre Paint y publica un anuncio en redes sociales')], }).tools).toEqual(tools)
     expect(scopeCodexToolsForPaint({ ...request, messages: [message('abre Instagram')], }).tools).toEqual(tools)
+  })
+
+  it('recovers an invalid social campaign schema without removing other functions', () => {
+    const broken = {
+      name: 'mcp__social-engine__social_campaign_create',
+      description: 'Create campaign',
+      parameters: { oneOf: [{ type: 'object', properties: { brand: { type: 'string' } } }] },
+    }
+    const valid = { name: 'computer', description: 'Use desktop', parameters: { type: 'object' } }
+    const options: GenerateOptions = {
+      provider: 'openai-codex', model: 'gpt-6-sol', messages: [], tools: [valid, broken],
+    }
+    const diagnostic = "Codex error: Invalid schema for function 'mcp__social-engine__social_campaign_create': schema must have type 'object' and not have 'oneOf'/'anyOf'/'allOf'/'enum'/'const'/'not' at the top level."
+    const recovered = recoverRejectedCodexFunctionSchema(options, diagnostic)
+    expect(recovered?.tools).toEqual([valid])
+    expect(options.tools).toEqual([valid, broken])
+  })
+
+  it('surfaces Codex schema error events before the adapter emits a terminal finish', async () => {
+    const diagnostic = "Codex error: Invalid schema for function 'mcp__social-engine__social_campaign_create': schema must have type 'object' and not have 'oneOf'/'anyOf'/'allOf'/'enum'/'const'/'not' at the top level."
+    const start = { type: 'start' } as unknown as AssistantMessageEvent
+    const error = { type: 'error', error: { errorMessage: diagnostic } } as unknown as AssistantMessageEvent
+    const seen: AssistantMessageEvent[] = []
+    await expect(async () => {
+      for await (const event of surfaceRejectedCodexSchemaEvent((async function* () {
+        yield start
+        yield error
+      })())) seen.push(event)
+    }).rejects.toThrow("Invalid schema for function 'mcp__social-engine__social_campaign_create'")
+    expect(seen).toEqual([start])
+  })
+
+  it('keeps ordinary provider errors as error events for standard retry classification', async () => {
+    const ordinary = { type: 'error', error: { errorMessage: 'HTTP 429 rate limit' } } as unknown as AssistantMessageEvent
+    const result: AssistantMessageEvent[] = []
+    for await (const event of surfaceRejectedCodexSchemaEvent((async function* () {
+      yield ordinary
+    })())) result.push(event)
+    expect(result).toEqual([ordinary])
+  })
+
+  it('never masks unrelated provider failures or retries a function absent from the request', () => {
+    const original: GenerateOptions = {
+      provider: 'openai-codex', model: 'gpt-6-sol', messages: [], tools: [{
+        name: 'mcp__social-engine__social_campaign_create',
+        description: 'Create campaign',
+        parameters: { type: 'object', properties: {} },
+      }],
+    }
+    for (const diagnostic of [
+      'Codex error: connection lost',
+      "Invalid schema for function 'mcp__social-engine__social_campaign_create': missing required field",
+      "Invalid schema for function 'another_tool': schema must have type 'object'",
+    ]) {
+      expect(recoverRejectedCodexFunctionSchema(original, diagnostic)).toBeUndefined()
+    }
   })
 
   it('normalizes the exact social campaign tool across direct, Codex and tool-search projections', () => {
