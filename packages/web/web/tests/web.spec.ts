@@ -122,6 +122,39 @@ describe('WebRuntime execution resolution', () => {
     await expect(web.search({ query: 'q' })).resolves.toMatchObject({ content: 'browser' })
   })
 
+  it('falls back to keyless search when OpenRouter credentials are missing', async () => {
+    const { web } = await mountWeb({ searchProvider: 'openrouter', searchFallbackProviders: ['free-html'] })
+    web.registerSearchProvider(makeSearchProvider('openrouter', available, async () => {
+      throw new WebError('OpenRouter search has no API key', 'WEB_PROVIDER_CREDENTIAL_MISSING')
+    }))
+    let freeCalls = 0
+    web.registerSearchProvider(makeSearchProvider('free-html', available, () => {
+      freeCalls++
+      return Promise.resolve(searchResult('free-html', { sources: [{ url: 'https://example.com/free' }] }))
+    }))
+    await expect(web.search({ query: 'recent book sales' })).resolves.toMatchObject({
+      content: 'free-html',
+      sources: [{ url: 'https://example.com/free' }],
+    })
+    expect(freeCalls).toBe(1)
+  })
+
+  it('does not hide nonrecoverable provider misconfiguration behind a free fallback', async () => {
+    const { web } = await mountWeb({ searchProvider: 'openrouter', searchFallbackProviders: ['free-html'] })
+    web.registerSearchProvider(makeSearchProvider('openrouter', available, async () => {
+      throw new WebError('invalid provider configuration', 'WEB_PROVIDER_CONFIGURED_MISSING')
+    }))
+    let freeCalls = 0
+    web.registerSearchProvider(makeSearchProvider('free-html', available, () => {
+      freeCalls++
+      return Promise.resolve(searchResult('free-html'))
+    }))
+    await expect(web.search({ query: 'q' })).rejects.toThrow(
+      expect.objectContaining({ code: 'WEB_PROVIDER_CONFIGURED_MISSING' }),
+    )
+    expect(freeCalls).toBe(0)
+  })
+
   it('ignores unusable providers when auto-selecting', async () => {
     const { web } = await mountWeb()
     web.registerSearchProvider(makeSearchProvider('exa', available, () => Promise.resolve(searchResult('exa'))))
