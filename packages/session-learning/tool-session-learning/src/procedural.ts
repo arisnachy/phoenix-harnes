@@ -518,7 +518,11 @@ export class ProceduralExperienceTrace {
     return steps
   }
 
-  /** Inspect partial operational steps without falsely certifying task success. */
+  /**
+   * Inspect partial operational steps without falsely certifying task success.
+   * @param sessionId - Session whose partial operational steps are read.
+   * @returns Ordered, bounded recorded steps without clearing the trace.
+   */
   snapshot(sessionId: string): string[] {
     return [...(this.traces.get(sessionId) ?? [])]
   }
