@@ -16,6 +16,14 @@
 
 `dispose()`（资源释放）具有幂等性：如果当前的两个标识符均已知，它会尽力请求 `turn/interrupt`，关闭 JSON-RPC 通信链路，结束标准输入，调用共享的进程树逐级终止机制，等待整棵进程树退出，并移除 stderr observer。独立清理拒绝使用固定的 `teardown` 阶段与可用进程结果。当启动与回滚同时失败时，顶层聚合消息会保留两条安全阶段说明，而原始失败仍只在内部可见。
 
+## 持久化 app-server 传输
+
+`CodexAppServerWire` 还提供明确的持久化传输操作，但不公开通用 RPC：`startDurableThread(cwd, signal)` 创建 `{ ephemeral: false }`，`resumeThread(threadId, signal)` 重新连接已确认的原生线程，`readThread(threadId, signal)` 返回有界的轮次状态元数据，`reconcileThread(threadId, signal)` 为恢复流程执行同一份权威读取。`startDurableTurn(texts, signal)` 返回已确认的原生轮次 id 与完成 promise；其 `completed`、`interrupted` 或 `failed` 状态只来自 `turn/completed`，不会把 assistant 叙述当作成功。`steerTurn(turnId, texts, signal)` 会在配置的 checkpoint callback 完成后发送官方 `turn/steer` 操作。
+
+持久化 callback 只接收有界且不含秘密的 `CodexWireEvent` 元数据，以及精确的原生线程／轮次 id。可选的审批 callback 会接收有界的命令或 workspace 路径，其中凭证特征值已经 redacted，并接收其 abort signal；缺少具体作用域的请求会拒绝，且绝不会增加权限授予。线程或轮次确认后，以及下一次原生副作用发送前，都会等待 checkpoint callback，使 Phoenix 所有者能够在 dispatch 前保存绑定。现有的 `startThread()` 与单次 `runTurn()` 行为保持不变。
+
+当存在 `dsh-agent-team` 时，默认的 `codex` provider 会把 `CodexExecutionAdapter` 注册为可选执行引擎。它通过 Team runtime 持久化 prepared、dispatching 与 running checkpoint，将已保存的模型和 reasoning effort 传给原生 Codex，以不可信的参考文本传入召回记忆，并且只恢复已保存的准确原生轮次。缺少轮次或轮次被中断时会明确保持 uncertain，绝不会重新提交；命令与文件审批使用可选的 `dsh-user-approval` broker，否则默认拒绝。
+
 ## 能力与上下文
 
 本提供方不声明任何可选的启动时能力，并报告 `inheritsParentContext: false`。Codex 会接收独立文本任务和父会话 cwd，但不会接收父会话的对话、角色设定、工具筛选器、深度策略或结构化输出约定。临时 Codex 线程 ID 与轮次 ID 仅在此次运行内部可见，绝不会持久化到父会话。
@@ -28,6 +36,7 @@
 | `env` | `{}` | 显式指定的子进程环境，叠加在由子进程 seam 清除凭证后的父环境之上。 |
 | `permissionMode` | `never` | 为该提供方实例的每个线程固定原生非交互审批与沙箱模式。 |
 | `disposeGraceMs` | `3000` | 共享进程树责任方各终止层级之间的宽限期，单位为毫秒且须为正有限值，并不得大于仓库共享的 [`MAX_TIMER_DELAY_MS`](../../util/timeout/README.zh.md)；随后资源释放会等待整棵进程树退出。 |
+| `probeTtlMs` | `30000` | readiness 缓存的正有限生命周期，单位为毫秒且不得大于 [`MAX_TIMER_DELAY_MS`](../../util/timeout/README.zh.md)；并发 probe 会 single-flight，账户变化可以使缓存失效。 |
 
 | `permissionMode` 值 | `thread/start` 字段 | 原生行为 |
 |---|---|---|
@@ -134,12 +143,14 @@ Codex 子级会在一个全新的临时线程中，以单个轮次接收这些�
 
 ## 已知限制与后续工作
 
-- **每次运行均新建一个进程、一个线程和一个轮次**：不支持续接、恢复、池化、进度流或产品会话持久化。
+- **Profile provider 仍是单次运行**：`start()` 保持原有临时线程约定，而可选的 Team 注册通过 `CodexExecutionAdapter` 负责持久化执行。
+- **持久化恢复需要执行记录所有者**：调用方必须保存原生线程 id、已确认的轮次 id 与 checkpoint 元数据；wire 不会创建第二个会话或记忆数据库。
+- **每个 wire 只有一个 app-server 连接**：恢复会启动新连接并续接已保存的原生线程；传输层不会池化进程，也不会重试结果不确定的轮次提交。
 - **静态选择实例**：Profile 配置项固定提供方名称与工具绑定；调用无法动态选择提供方，而且每个公开工具都需要唯一的 `toolName`。
 - **身份验证与账户状态仍由原生机制管理**：Bundle 会提供 CLI，但不会创建账户、登录、信任项目或改写 Codex 设置；配置与身份验证失败会公开其生命周期阶段与安全的 `unknown` 回退，而不会增加单独的公开分类体系。
 - **委派时必须存在原生平台载荷**：省略 optional dependencies 的安装、不受支持的平台以及缺失或损坏的载荷都会在第一次运行时失败；不会回退到宿主 CLI。
 - **兼容性由开发证据锁定**：若要从已验证的 0.147.0 协议基线升级，必须重新生成上游 schema 证据，并重新运行握手、答案选择、审批、取消、无密钥真实产品以及带密钥的 DeepSeek 随机数测试。
-- **没有人工审批路径**：已知的无人值守审批请求会被拒绝，未知服务器请求会以默认拒绝方式使运行失败；三种 Profile 模式都不会创建 PHOENIX 交互通道或逐次调用 allow 策略。
+- **审批必须显式提供**：持久化执行适配器只有在挂载 `dsh-user-approval` broker 时才使用它；没有 broker 时命令与文件请求会 fail closed。单次 Profile 路径仍然无人值守，任何模式都不会创建隐式 allow 策略。
 - **assistant 载荷仅包含最终文本**：失败运行可以额外公开独立的安全诊断；推理、过程说明、中间消息、工具通信、用量信息、原始 stderr 和工作区差异不会进入父会话，通用 Job id、通知与状态来自共享作业运行时。
 - **没有可选的共享能力**：对于本提供方，共享服务会拒绝输出 schema、子任务角色设定、工具筛选和 harness 深度强制约束。
 - **没有按实际经过时间触发的超时或副作用回滚**：长时间运行的工作由调用方取消，且取消前已更改的文件或外部系统不会恢复原状。

@@ -129,7 +129,7 @@ Source: [`packages/core/agent/src/types.ts:19`](../packages/core/agent/src/types
 'agent/model-selection': ModelSelectionPreference
 ```
 
-Source: [`packages/core/agent/src/model-selection.ts:35`](../packages/core/agent/src/model-selection.ts)
+Source: [`packages/core/agent/src/model-selection.ts:98`](../packages/core/agent/src/model-selection.ts)
 
 ### `agent-preset/*`
 
@@ -895,6 +895,50 @@ Source: [`packages/subagent/agent-team/src/chat-types.ts:72`](../packages/subage
 
 Source: [`packages/subagent/agent-team/src/chat-types.ts:79`](../packages/subagent/agent-team/src/chat-types.ts)
 
+<a id="teamexecution--log-only"></a>
+
+#### `team/execution` — log-only
+
+```ts persistence-catalog
+/** Versioned whole execution value committed before native dispatch. */
+'team/execution': { readonly version: 1; readonly snapshot: ExecutionSnapshot }
+```
+
+Source: [`packages/subagent/agent-team/src/execution-types.ts:95`](../packages/subagent/agent-team/src/execution-types.ts)
+
+<a id="teamexecution-context--log-only"></a>
+
+#### `team/execution-context` — log-only
+
+```ts persistence-catalog
+/** Selective memory supplied to an external execution; never re-indexed as a new memory. */
+'team/execution-context': { readonly version: 1; readonly executionId: ExecutionId; readonly content: string; readonly memoryIds: readonly string[] }
+```
+
+Source: [`packages/subagent/agent-team/src/execution-types.ts:99`](../packages/subagent/agent-team/src/execution-types.ts)
+
+<a id="teamexecution-input--log-only"></a>
+
+#### `team/execution-input` — log-only
+
+```ts persistence-catalog
+/** Persisted before native steering; transport uncertainty prevents blind retries. */
+'team/execution-input': { readonly version: 1 } & ExecutionInputReceipt
+```
+
+Source: [`packages/subagent/agent-team/src/execution-types.ts:93`](../packages/subagent/agent-team/src/execution-types.ts)
+
+<a id="teamexecution-progress--log-only"></a>
+
+#### `team/execution-progress` — log-only
+
+```ts persistence-catalog
+/** Metadata from one native event, deduplicated within the execution. */
+'team/execution-progress': { readonly version: 1; readonly executionId: ExecutionId; readonly event: ExecutionProgress }
+```
+
+Source: [`packages/subagent/agent-team/src/execution-types.ts:97`](../packages/subagent/agent-team/src/execution-types.ts)
+
 <a id="teammember--log-only"></a>
 
 #### `team/member` — log-only
@@ -906,7 +950,7 @@ Source: [`packages/subagent/agent-team/src/chat-types.ts:79`](../packages/subage
 
 Types: [TeamId](subsystems/agent-team.md) · [TeamMemberSnapshot](subsystems/agent-team.md)
 
-Source: [`packages/subagent/agent-team/src/types.ts:260`](../packages/subagent/agent-team/src/types.ts)
+Source: [`packages/subagent/agent-team/src/types.ts:264`](../packages/subagent/agent-team/src/types.ts)
 
 <a id="teammessagedelivered--log-only"></a>
 
@@ -924,7 +968,7 @@ Source: [`packages/subagent/agent-team/src/types.ts:260`](../packages/subagent/a
 
 Types: [TeamId](subsystems/agent-team.md) · [TeamMessageId](subsystems/agent-team.md)
 
-Source: [`packages/subagent/agent-team/src/types.ts:266`](../packages/subagent/agent-team/src/types.ts)
+Source: [`packages/subagent/agent-team/src/types.ts:270`](../packages/subagent/agent-team/src/types.ts)
 
 <a id="teammessagequeued--log-only"></a>
 
@@ -937,7 +981,7 @@ Source: [`packages/subagent/agent-team/src/types.ts:266`](../packages/subagent/a
 
 Types: [TeamId](subsystems/agent-team.md) · [TeamMessageSnapshot](subsystems/agent-team.md)
 
-Source: [`packages/subagent/agent-team/src/types.ts:264`](../packages/subagent/agent-team/src/types.ts)
+Source: [`packages/subagent/agent-team/src/types.ts:268`](../packages/subagent/agent-team/src/types.ts)
 
 <a id="teammission--log-only"></a>
 
@@ -965,7 +1009,7 @@ Source: [`packages/subagent/agent-team/src/universal-mission.ts:42`](../packages
 
 Types: [TeamId](subsystems/agent-team.md)
 
-Source: [`packages/subagent/agent-team/src/types.ts:273`](../packages/subagent/agent-team/src/types.ts)
+Source: [`packages/subagent/agent-team/src/types.ts:277`](../packages/subagent/agent-team/src/types.ts)
 
 <a id="teamtask--log-only"></a>
 
@@ -978,7 +1022,7 @@ Source: [`packages/subagent/agent-team/src/types.ts:273`](../packages/subagent/a
 
 Types: [TeamId](subsystems/agent-team.md) · [TeamTaskSnapshot](subsystems/agent-team.md)
 
-Source: [`packages/subagent/agent-team/src/types.ts:262`](../packages/subagent/agent-team/src/types.ts)
+Source: [`packages/subagent/agent-team/src/types.ts:266`](../packages/subagent/agent-team/src/types.ts)
 
 ### `todo/*`
 
@@ -1037,7 +1081,7 @@ Source: [`packages/core/session/src/types.ts:288`](../packages/core/session/src/
 'tool/code-dispatch': CodeDispatchEventData
 ```
 
-Source: [`packages/core/tools/src/types.ts:56`](../packages/core/tools/src/types.ts)
+Source: [`packages/core/tools/src/types.ts:58`](../packages/core/tools/src/types.ts)
 
 <a id="toolcode-dispatch-start--log-only"></a>
 
@@ -1060,7 +1104,7 @@ Source: [`packages/core/tools/src/types.ts:56`](../packages/core/tools/src/types
 'tool/code-dispatch-start': CodeDispatchStartEventData
 ```
 
-Source: [`packages/core/tools/src/types.ts:40`](../packages/core/tools/src/types.ts)
+Source: [`packages/core/tools/src/types.ts:42`](../packages/core/tools/src/types.ts)
 
 <a id="toolresult--surface"></a>
 

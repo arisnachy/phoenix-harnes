@@ -7,11 +7,12 @@ import { foldTeam } from './fold.ts'
 import type { TeamFoldState } from './fold.ts'
 
 type AppendTeamEvent = <T extends MutableTeamEventType>(type: T, data: SessionEventMap[T]) => void
-type MutableTeamEventType = 'team/member' | 'team/task' | 'team/message/queued' | 'team/message/delivered' | 'team/reaction' | 'team/chat-message' | 'team/mission'
+type MutableTeamEventType = 'team/member' | 'team/task' | 'team/message/queued' | 'team/message/delivered' | 'team/reaction' | 'team/chat-message' | 'team/mission' | 'team/execution' | 'team/execution-progress' | 'team/execution-context' | 'team/execution-input'
 
 /** Owns per-Lead transaction order and committed Team event publication. */
 export class TeamJournal {
   private readonly tails = new Map<SessionId, Promise<void>>()
+  private readonly pendingExecutionFlush = new Map<SessionId, Agent>()
 
   /**
    * @param ctx - Team service context with the injected Session service.
@@ -39,7 +40,16 @@ export class TeamJournal {
    */
   async transact<T>(rootId: SessionId, operation: () => Promise<T>): Promise<T> {
     const prior = this.tails.get(rootId) ?? Promise.resolve()
-    const run = prior.then(operation, operation)
+    const guarded = async (): Promise<T> => {
+      const pending = this.pendingExecutionFlush.get(rootId)
+      if (pending !== undefined) {
+        if (!await this.ctx.sessions.flush(pending.session)) throw new Error('Execution persistence remains unavailable')
+        this.pendingExecutionFlush.delete(rootId)
+        this.onCommit(pending)
+      }
+      return await operation()
+    }
+    const run = prior.then(guarded, guarded)
     const tail = run.then(() => undefined, () => undefined)
     this.tails.set(rootId, tail)
     try {
@@ -47,6 +57,18 @@ export class TeamJournal {
     } finally {
       if (this.tails.get(rootId) === tail) this.tails.delete(rootId)
     }
+  }
+
+  /** Unflushed execution mutations cannot be presented as committed receipts.
+   * @param root - Owning Lead whose latest execution receipts must be durable.
+   */
+  assertDurable(root: Agent): void {
+    if (this.pendingExecutionFlush.has(root.id)) throw new Error('Execution receipt has not been durably persisted')
+  }
+
+  /** Teardown cannot certify success while an execution barrier remains failed. */
+  assertAllExecutionsDurable(): void {
+    if (this.pendingExecutionFlush.size > 0) throw new Error('Execution teardown has uncommitted receipts')
   }
 
   /**
@@ -67,7 +89,12 @@ export class TeamJournal {
     // preserving the event-key/payload correlation.
     const append = root.session.append.bind(root.session) as unknown as AppendTeamEvent
     append(type, data)
-    await this.ctx.sessions.flush(root.session)
+    if (type.startsWith('team/execution')) this.pendingExecutionFlush.set(root.id, root)
+    const persisted = await this.ctx.sessions.flush(root.session)
+    if (!persisted && type.startsWith('team/execution')) {
+      throw new Error('execution dispatch requires a durable Session flush listener')
+    }
+    if (persisted) this.pendingExecutionFlush.delete(root.id)
     this.onCommit(root)
   }
 }

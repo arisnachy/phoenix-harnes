@@ -16,12 +16,14 @@ concurrency:
 
 env:
   INBOX_BRANCH: phoenix/evolution-inbox
+  DEEPSEEK_UPSTREAM_REPOSITORY: ${{ vars.DEEPSEEK_UPSTREAM_REPOSITORY }}
 
 jobs:
   observe-contracts:
     runs-on: ubuntu-latest
     outputs:
       refresh_ready: ${{ steps.refresh.outputs.ready }}
+      deepseek_configured: ${{ steps.observe.outputs.deepseek_configured }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -62,19 +64,55 @@ jobs:
           fi
           echo "ready=true" >> "$GITHUB_OUTPUT"
       - name: Observe official upstream heads
+        id: observe
         if: steps.refresh.outputs.ready == 'true'
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p .phoenix/evolution
-          deepseek=$(git ls-remote https://github.com/arisnachy/phoenix-harnes.git refs/heads/main | cut -f1)
+          source="${DEEPSEEK_UPSTREAM_REPOSITORY:-}"
+          if [[ -z "$source" ]]; then
+            echo '::notice::DeepSeek observation skipped: repository variable DEEPSEEK_UPSTREAM_REPOSITORY is not configured.'
+            echo 'deepseek_configured=false' >> "$GITHUB_OUTPUT"
+            deepseek_record='"status": "skipped", "reason": "DEEPSEEK_UPSTREAM_REPOSITORY is not configured", "intake": "manual-only"'
+          else
+            if [[ ! "$source" =~ ^(https://|ssh://|git@)[^[:space:]]+$ ]]; then
+              echo '::error::DeepSeek observation refused: DEEPSEEK_UPSTREAM_REPOSITORY must be an explicitly configured Git URL.' >&2
+              exit 1
+            fi
+            normalize_remote() {
+              local value="$1"
+              value="${value#https://}"
+              value="${value#http://}"
+              value="${value#ssh://}"
+              if [[ "$value" == git@* ]]; then
+                value="${value#git@}"
+                value="${value/:/\/}"
+              fi
+              value="${value#github.com:}"
+              value="${value#github.com/}"
+              value="${value%.git}"
+              value="${value%/}"
+              printf '%s' "$value" | tr '[:upper:]' '[:lower:]'
+            }
+            configured_identity="$(normalize_remote "$source")"
+            phoenix_identity="$(normalize_remote "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git")"
+            if [[ "$configured_identity" == "$phoenix_identity" ]]; then
+              echo '::error::DeepSeek observation refused: configured upstream resolves to the PHOENIX repository.' >&2
+              exit 1
+            fi
+            deepseek=$(git ls-remote "$source" refs/heads/main | cut -f1)
+            [[ "$deepseek" =~ ^[0-9a-f]{40}$ ]] || { echo '::error::DeepSeek observation returned an invalid main SHA.' >&2; exit 1; }
+            echo 'deepseek_configured=true' >> "$GITHUB_OUTPUT"
+            deepseek_record='"ref": "main", "sha": "'"$deepseek"'", "intake": "merge-candidate"'
+          fi
           codex=$(git ls-remote https://github.com/openai/codex.git refs/heads/main | cut -f1)
           claude=$(git ls-remote https://github.com/anthropics/claude-code.git refs/heads/main | cut -f1)
-          [[ -n "$deepseek" && -n "$codex" && -n "$claude" ]] || { echo "Upstream observation incomplete; fail closed."; exit 1; }
+          [[ "$codex" =~ ^[0-9a-f]{40}$ && "$claude" =~ ^[0-9a-f]{40}$ ]] || { echo "Upstream observation incomplete; fail closed."; exit 1; }
           cat > .phoenix/evolution/observed-sources.json <<EOF
           {
             "schemaVersion": 1,
-            "deepseekHarness": { "ref": "main", "sha": "$deepseek", "intake": "merge-candidate" },
+            "deepseekHarness": { $deepseek_record },
             "openaiCodex": { "ref": "main", "sha": "$codex", "intake": "observe-and-adapt" },
             "anthropicClaudeCode": { "ref": "main", "sha": "$claude", "intake": "observe-and-adapt" }
           }
@@ -91,7 +129,7 @@ jobs:
 
   deepseek-source-candidate:
     needs: observe-contracts
-    if: needs.observe-contracts.outputs.refresh_ready == 'true'
+    if: needs.observe-contracts.outputs.refresh_ready == 'true' && needs.observe-contracts.outputs.deepseek_configured == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -104,9 +142,39 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          source="${DEEPSEEK_UPSTREAM_REPOSITORY:-}"
+          if [[ -z "$source" ]]; then
+            echo '::notice::DeepSeek source candidate skipped: repository variable DEEPSEEK_UPSTREAM_REPOSITORY is not configured.'
+            exit 0
+          fi
+          if [[ ! "$source" =~ ^(https://|ssh://|git@)[^[:space:]]+$ ]]; then
+            echo '::error::DeepSeek source candidate refused: DEEPSEEK_UPSTREAM_REPOSITORY must be an explicitly configured Git URL.' >&2
+            exit 1
+          fi
+          normalize_remote() {
+            local value="$1"
+            value="${value#https://}"
+            value="${value#http://}"
+            value="${value#ssh://}"
+            if [[ "$value" == git@* ]]; then
+              value="${value#git@}"
+              value="${value/:/\/}"
+            fi
+            value="${value#github.com:}"
+            value="${value#github.com/}"
+            value="${value%.git}"
+            value="${value%/}"
+            printf '%s' "$value" | tr '[:upper:]' '[:lower:]'
+          }
+          configured_identity="$(normalize_remote "$source")"
+          phoenix_identity="$(normalize_remote "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git")"
+          if [[ "$configured_identity" == "$phoenix_identity" ]]; then
+            echo '::error::DeepSeek source candidate refused: configured upstream resolves to the PHOENIX repository.' >&2
+            exit 1
+          fi
           git config user.name "phoenix-evolution-bot"
           git config user.email "phoenix-evolution-bot@users.noreply.github.com"
-          git remote add deepseek https://github.com/arisnachy/phoenix-harnes.git
+          git remote add deepseek "$source"
           git fetch deepseek main
           sha=$(git rev-parse deepseek/main); short=${sha:0:12}; branch="phoenix/evolution-deepseek-${short}"
           if git merge-base --is-ancestor deepseek/main HEAD; then exit 0; fi

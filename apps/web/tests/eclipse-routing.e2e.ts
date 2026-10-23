@@ -12,7 +12,7 @@ import { newEnglishPage, REPO_ROOT } from './support.ts'
 
 const OVERLAY = fileURLToPath(new URL('./eclipse-routing.overlay.yml', import.meta.url))
 const MODELS = ['gpt-6.1-sol', 'gpt-6-sol', 'gpt-5.6-sol', 'gpt-6-luna', 'gpt-5.6-luna']
-const profile = { mode: 'manual', coordinator: { provider: 'openai-codex', model: 'gpt-6.1-sol', reasoningEffort: 'medium' },
+const profile = { mode: 'manual', executionEngine: 'internal', coordinator: { provider: 'openai-codex', model: 'gpt-6.1-sol', reasoningEffort: 'medium' },
   subagent: { provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'xhigh' }, maxTeammates: 2 }
 
 class SettingsCatalog extends LlmAdapter {
@@ -28,11 +28,12 @@ class SettingsCatalog extends LlmAdapter {
   override async *stream(): AsyncIterable<StreamChunk> { throw new Error('Settings test must not call a model') }
 }
 
-it('saves exactly two Codex role routes and retains them across browser reload', async () => {
+it('saves two Codex role routes and an independent engine preference across browser reload', async () => {
   const scaffold = await launchWebScaffold({ extraOverlayPath: OVERLAY })
   const registration = scaffold.ctx.llm.registerAdapter(['openai-codex'], new SettingsCatalog())
   const browser = await chromium.launch()
   try {
+    const ordinaryModelBefore = JSON.stringify(scaffold.ctx.settings.get(settingsNamespace('agent-default-model')))
     // Real settings authority must advertise Eclipse before the browser starts.
     const described = await scaffold.ctx.apiProxy.settings.describe({ rpcId: 'eclipse-describe' as never, payload: {} })
     expect(described.result.ok).toBe(true)
@@ -58,17 +59,28 @@ it('saves exactly two Codex role routes and retains them across browser reload',
     expect(await content.locator('#eclipse-effort-subagent option[value="ultra"]').count()).toBe(0)
     await content.locator('#eclipse-effort-subagent').selectOption('xhigh')
     await content.locator('#eclipse-workers').selectOption('2')
+    await content.locator('#eclipse-engine').selectOption('internal')
+    await content.getByRole('button', { name: 'Check engine status', exact: true }).click()
+    await content.getByText('Phoenix internal engine · Connected · phoenix', { exact: true }).waitFor()
     await content.getByRole('button', { name: 'Save Eclipse', exact: true }).click()
     await content.getByText('Eclipse settings saved.', { exact: true }).waitFor()
     expect(scaffold.ctx.settings.get(settingsNamespace('eclipse-routing'))).toMatchObject(profile)
     const persisted = await readFile(join(scaffold.harnessHome, 'settings.yaml'), 'utf8')
     expect(persisted).toContain('gpt-6.1-sol')
     expect(persisted).toContain('xhigh')
-    const screenshotDir = join(REPO_ROOT, '.artifacts')
+    expect(JSON.stringify(scaffold.ctx.settings.get(settingsNamespace('agent-default-model')))).toBe(ordinaryModelBefore)
+    await content.getByText(/^PHOENIX · current · [a-f0-9]{8}$/u).waitFor()
+    expect(await content.getByRole('button', { name: 'Prepare OpenClaw', exact: true }).count()).toBe(1)
+    expect(await content.locator('#eclipse-openclaw-version').getAttribute('placeholder')).toBe('2026.10.6')
+    const screenshotDir = join(REPO_ROOT, '.artifacts', 'dual-core')
     await mkdir(screenshotDir, { recursive: true })
-    await page.screenshot({ path: join(screenshotDir, 'eclipse-two-role-settings.png') })
+    await content.locator('#eclipse-mode').scrollIntoViewIfNeeded()
+    await page.screenshot({ path: join(screenshotDir, 'eclipse-model-roles.png') })
+    await content.getByRole('button', { name: 'Save Eclipse', exact: true }).scrollIntoViewIfNeeded()
+    await page.screenshot({ path: join(screenshotDir, 'eclipse-execution-settings.png') })
     await compareOrRefreshGolden(join(REPO_ROOT, 'apps/web/tests/snapshots/eclipse-routing/settings.expected.md'),
-      await captureStableAria(page, 'section[aria-label="Fénix Eclipse · Orchestration"]', scaffold.workspaceCwd), webSnapshotMode())
+      (await captureStableAria(page, 'section[aria-label="Fénix Eclipse · Orchestration"]', scaffold.workspaceCwd))
+        .replace(/(listitem: PHOENIX · current · )[a-f0-9]{8}/gu, '$1<COMMIT>'), webSnapshotMode())
     await page.reload({ waitUntil: 'load' })
     await page.getByRole('button', { name: /^Settings/u }).click()
     await dialog.getByRole('button', { name: 'Fénix Eclipse', exact: true }).click()
@@ -76,6 +88,8 @@ it('saves exactly two Codex role routes and retains them across browser reload',
     expect(await content.locator('#eclipse-effort-coordinator').inputValue()).toBe('medium')
     expect(await content.locator('#eclipse-effort-subagent').inputValue()).toBe('xhigh')
     expect(await content.locator('#eclipse-workers').inputValue()).toBe('2')
+    expect(await content.locator('#eclipse-engine').inputValue()).toBe('internal')
+    expect(JSON.stringify(scaffold.ctx.settings.get(settingsNamespace('agent-default-model')))).toBe(ordinaryModelBefore)
     expect(tripwire.pageErrors).toEqual([])
   } finally {
     await browser.close()

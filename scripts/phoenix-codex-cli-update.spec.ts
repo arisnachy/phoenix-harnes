@@ -118,18 +118,47 @@ describe('PHOENIX managed Codex CLI updater', () => {
     expect(script).toContain("status: options.repair === true ? 'waiting-upstream' : 'current'")
   })
 
+  it('preserves one explicit previous version for rollback', () => {
+    const home = mkdtempSync(join(tmpdir(), 'phoenix-codex-retain-'))
+    temporaryPaths.push(home)
+    const versions = join(home, 'codex-cli', 'versions')
+    for (const name of ['0.158.0', '0.159.0', '0.160.0']) mkdirSync(join(versions, name), { recursive: true })
+    expect(pruneManagedCodexVersions(home, '0.160.0', '0.159.0')).toEqual({ removed: 1 })
+    expect(existsSync(join(versions, '0.159.0'))).toBe(true)
+    expect(existsSync(join(versions, '0.158.0'))).toBe(false)
+  })
+
+  it('preserves staging owned by a live installer', () => {
+    const home = mkdtempSync(join(tmpdir(), 'phoenix-codex-live-install-'))
+    temporaryPaths.push(home)
+    const staging = join(home, 'codex-cli', 'versions', `.staging-0.161.0-${process.pid}-abc123`)
+    mkdirSync(staging, { recursive: true })
+    expect(pruneManagedCodexVersions(home, '0.160.0')).toEqual({ removed: 0 })
+    expect(existsSync(staging)).toBe(true)
+  })
+
+  it('preserves all versions when the active marker is unreadable', () => {
+    const home = mkdtempSync(join(tmpdir(), 'phoenix-codex-unknown-owner-'))
+    temporaryPaths.push(home)
+    const versions = join(home, 'codex-cli', 'versions')
+    mkdirSync(join(versions, '0.159.0'), { recursive: true })
+    writeFileSync(join(home, 'codex-cli', 'active.json'), '{broken')
+    expect(pruneManagedCodexVersions(home, '0.160.0')).toEqual({ removed: 0 })
+    expect(existsSync(join(versions, '0.159.0'))).toBe(true)
+  })
+
   it('prunes obsolete managed versions and incomplete staging directories', () => {
     const home = mkdtempSync(join(tmpdir(), 'phoenix-codex-prune-'))
     temporaryPaths.push(home)
     const versions = join(home, 'codex-cli', 'versions')
-    for (const name of ['0.159.2', '0.160.0', '.staging-0.161.0-1-deadbeef', 'user-folder']) {
+    for (const name of ['0.159.2', '0.160.0', '.staging-0.161.0-99999999-deadbeef', 'user-folder']) {
       mkdirSync(join(versions, name), { recursive: true })
     }
 
     expect(pruneManagedCodexVersions(home, '0.160.0')).toEqual({ removed: 2 })
     expect(existsSync(join(versions, '0.160.0'))).toBe(true)
     expect(existsSync(join(versions, '0.159.2'))).toBe(false)
-    expect(existsSync(join(versions, '.staging-0.161.0-1-deadbeef'))).toBe(false)
+    expect(existsSync(join(versions, '.staging-0.161.0-99999999-deadbeef'))).toBe(false)
     expect(existsSync(join(versions, 'user-folder'))).toBe(true)
   })
 })

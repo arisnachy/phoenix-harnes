@@ -41,6 +41,28 @@
     - option "1"
     - option "2" [selected]
     - option "3"
+  - heading "Execution engines" [level=3]
+  - paragraph: Automatic routing selects one compatible engine for each task. Model preferences remain independent.
+  - text: Preferred execution engine
+  - combobox "Preferred execution engine":
+    - option "Automatic"
+    - option "Codex"
+    - option "OpenClaw"
+    - option "Phoenix internal engine" [selected]
+  - list:
+    - listitem: Codex · Unavailable or not configured
+    - listitem: OpenClaw · Unavailable or not configured · unknown · OPENCLAW_EXECUTION_POLICY_UNVERIFIED
+    - listitem: Phoenix internal engine · Connected · phoenix
+  - button "Check engine status"
+  - heading "Installed runtime updates" [level=4]
+  - paragraph: Inspect the official Codex/OpenClaw and Phoenix versions without exposing host paths or credentials.
+  - list:
+    - listitem: Codex · unavailable · ENGINE_UNAVAILABLE
+    - listitem: OpenClaw · unavailable · ENGINE_UNAVAILABLE
+    - listitem: PHOENIX · current · <COMMIT>
+  - button "Refresh runtime status"
+  - status: OpenClaw preparation is unavailable until installer shutdown and package verification pass.
+  - status: Activation and rollback are not available yet. Phoenix must first verify that no current or saved tasks are still running.
   - status: Eclipse settings saved.
   - button "Save Eclipse"
   - button "Restore Eclipse defaults"

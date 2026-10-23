@@ -341,11 +341,26 @@ Owns the default model selection independently of any Host or transport. The com
  */
 currentSelection(): ModelSelection
 
-/**
- * Save the complete default model selection. A deployment without a settings
- * provider keeps its composition entry.
- * @param next - resolved selection accepted by an entry point.
- * @returns fulfillment after the optional settings write settles.
+/** Recover the last picker model for a new, otherwise blank conversation.
+ * @returns Last saved picker selection, or the provider-native default.
+ */
+preferredSelection(): ModelSelection
+
+/** Resolve Eclipse settings live so a saved change affects the next model request.
+ * @returns Detached Eclipse settings, or undefined when no user overrides exist.
+ */
+currentEclipseProfile(): EclipseRoutingSettings | undefined
+
+/** Persist the accepted Web picker identity and native execution route atomically.
+ * @param selected - Exact model the user last chose in the picker.
+ * @param runtime - Validated provider-native execution route (never a synthetic model).
+ * @returns Persistence completion; failures must not be described as saved.
+ */
+async saveWebSelection(selected: ModelSelection, runtime: ModelSelection): Promise<void>
+
+/** Persist a new model default without erasing user-owned Eclipse configuration.
+ * @param next - Selected default provider, model and optional reasoning.
+ * @returns Completion after the settings write.
  */
 async saveSelection(next: ModelSelection): Promise<void>
 ```
@@ -1082,3 +1097,7 @@ One session committed a different agent preset to its durable log. Consumers inv
 
 Source: [`packages/preset/agent-presets/src/types.ts`](../../packages/preset/agent-presets/src/types.ts)
 <!-- END GENERATED cordis-surface -->
+
+## Eclipse 路由设置
+
+`EclipseRoutingSettings` 存储编排路由模式、模型路由和推理偏好、团队成员上限，以及可选的独立执行引擎偏好。引擎选择不会改写当前对话的提供商或模型。[默认模型包](../../packages/core/agent-default-model/README.zh.md) 负责设置校验与迁移。

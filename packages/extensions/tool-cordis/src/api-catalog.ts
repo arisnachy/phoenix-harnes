@@ -93,10 +93,28 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'a detached provider, model, and optional reasoning selection.',
       },
       {
+        signature: 'preferredSelection(): ModelSelection',
+        description: 'Recover the last picker model for a new, otherwise blank conversation.',
+        parameters: [],
+        returns: 'Last saved picker selection, or the provider-native default.',
+      },
+      {
+        signature: 'currentEclipseProfile(): EclipseRoutingSettings | undefined',
+        description: 'Resolve Eclipse settings live so a saved change affects the next model request.',
+        parameters: [],
+        returns: 'Detached Eclipse settings, or undefined when no user overrides exist.',
+      },
+      {
+        signature: 'async saveWebSelection(selected: ModelSelection, runtime: ModelSelection): Promise<void>',
+        description: 'Persist the accepted Web picker identity and native execution route atomically.',
+        parameters: [{ name: 'selected', description: 'Exact model the user last chose in the picker.' }, { name: 'runtime', description: 'Validated provider-native execution route (never a synthetic model).' }],
+        returns: 'Persistence completion; failures must not be described as saved.',
+      },
+      {
         signature: 'async saveSelection(next: ModelSelection): Promise<void>',
-        description: 'Save the complete default model selection. A deployment without a settings provider keeps its composition entry.',
-        parameters: [{ name: 'next', description: 'resolved selection accepted by an entry point.' }],
-        returns: 'fulfillment after the optional settings write settles.',
+        description: 'Persist a new model default without erasing user-owned Eclipse configuration.',
+        parameters: [{ name: 'next', description: 'Selected default provider, model and optional reasoning.' }],
+        returns: 'Completion after the settings write.',
       },
     ],
   },
@@ -310,10 +328,21 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     description: 'Agent Teams service backed by the exact live Lead Session log.',
     methods: [
       {
+        signature: 'readonly executions: TeamExecutionRuntime',
+        description: 'Engine registry and durable operations subordinate to the Lead mission.',
+        parameters: [],
+      },
+      {
         signature: '@Remote(\'chatMessages\') async chatMessages(request: TeamChatReadRequest): Promise<TeamChatReadResult>',
         description: 'Read actual team outputs without starting agents.',
         parameters: [{ name: 'request', description: 'root identity.' }],
         returns: 'durable transcript.',
+      },
+      {
+        signature: '@Remote(\'executionEngines\') async executionEngines(): Promise<ExecutionEngineStatus[]>',
+        description: 'Inspect connected execution engines without starting a task or changing models.',
+        parameters: [],
+        returns: 'Native readiness and supported capabilities without credentials.',
       },
       {
         signature: 'async readChatFor(actor: Agent, limit: number): Promise<TeamChatReadResult>',
@@ -1218,6 +1247,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         parameters: [{ name: 'sessionId', description: 'Branded session identity to read.' }, { name: 'limit', description: 'Maximum number of records to return, from 1 through 128.' }],
         returns: 'Active records in chronological order.',
         throws: ['{TypeError} When limit is outside the supported range.'],
+      },
+      {
+        signature: 'recallForExecution(session: Session, query: string, maxBytes: number): ExecutionMemoryContext',
+        description: 'Read relevant procedural memory for an exact, registered execution session. CWD and agent preset matching are taken from the live session registry; the mutable current-project cursor is intentionally not consulted.',
+        parameters: [{ name: 'session', description: 'Registered session requesting execution context.' }, { name: 'query', description: 'Non-empty lexical query for relevant procedural memory.' }, { name: 'maxBytes', description: 'Maximum UTF-8 bytes including provenance wrappers.' }],
+        returns: 'Sanitized bounded context and the included canonical memory IDs.',
       },
       {
         signature: 'workingMemory(limit: number = 20): CognitiveMemoryRecord[]',
@@ -3545,7 +3580,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'AskUserQuestionItem',
-    declaration: 'export interface AskUserQuestionItem {\n    id: string;\n    question: string;\n    detail?: string;\n    header?: string;\n    options?: AskUserQuestionOption[];\n    multiSelect?: boolean;\n    intent?: AskUserQuestionIntent;\n}',
+    declaration: 'export interface AskUserQuestionItem {\n    id: string;\n    question: string;\n    detail?: string;\n    header?: string;\n    options?: AskUserQuestionOption[];\n    multiSelect?: boolean;\n    sensitive?: boolean;\n    intent?: AskUserQuestionIntent;\n}',
   },
   {
     name: 'AskUserQuestionOption',
@@ -3757,7 +3792,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'CognitiveMemoryQuery',
-    declaration: 'export interface CognitiveMemoryQuery {\n    readonly query?: string;\n    readonly layers?: readonly CognitiveMemoryLayer[];\n    readonly projectId?: string;\n    readonly sessionId?: string;\n    readonly entity?: string;\n    readonly from?: number;\n    readonly to?: number;\n    readonly includeHistory?: boolean;\n    readonly limit?: number;\n}',
+    declaration: 'export interface CognitiveMemoryQuery {\n    readonly query?: string;\n    readonly layers?: readonly CognitiveMemoryLayer[];\n    readonly projectId?: string;\n    readonly sessionId?: string;\n    readonly sessionIds?: readonly string[];\n    readonly entity?: string;\n    readonly from?: number;\n    readonly to?: number;\n    readonly includeHistory?: boolean;\n    readonly limit?: number;\n}',
   },
   {
     name: 'CognitiveMemoryRecord',
@@ -4048,6 +4083,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface DynamicCordisRunRequest {\n    requestId: ApprovalRequestId;\n    agentId: SessionId;\n    pluginId: CordisDynamicPluginId;\n    packageId: CordisDynamicPackageId;\n    mode: CordisDynamicRunMode;\n    name: string;\n    purpose: string;\n    requiresApproval: boolean;\n}',
   },
   {
+    name: 'EclipseModelRoute',
+    declaration: 'export interface EclipseModelRoute {\n    readonly provider: string;\n    readonly model: string;\n    readonly reasoningEffort?: string;\n}',
+  },
+  {
+    name: 'EclipseRoutingSettings',
+    declaration: 'export interface EclipseRoutingSettings {\n    readonly mode?: \'automatic\' | \'hybrid\' | \'manual\';\n    readonly executionEngine?: \'automatic\' | \'internal\' | \'codex\' | \'openclaw\';\n    readonly planner?: EclipseModelRoute;\n    readonly coordinator?: EclipseModelRoute;\n    readonly subagent?: EclipseModelRoute;\n    readonly specialists?: Readonly<Record<string, EclipseModelRoute>>;\n    readonly maxTeammates?: number;\n}',
+  },
+  {
     name: 'EditGoalRequest',
     declaration: 'export interface EditGoalRequest {\n    readonly objective?: string;\n    readonly maxGoalRounds?: number;\n}',
   },
@@ -4062,6 +4105,66 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'EvaluateSpecialistRequest',
     declaration: 'export interface EvaluateSpecialistRequest {\n    readonly score: number;\n    readonly passed: boolean;\n    readonly blocked?: boolean;\n    readonly summary: string;\n    readonly requiredChanges?: readonly string[];\n}',
+  },
+  {
+    name: 'ExecutionAdapter',
+    declaration: 'export interface ExecutionAdapter {\n    readonly engine: ExecutionEngine;\n    probe(): Promise<ExecutionEngineStatus>;\n    run(context: ExecutionContext): Promise<ExecutionOutcome>;\n    recover(context: ExecutionContext): Promise<ExecutionOutcome>;\n    steer?(context: Pick<ExecutionContext, \'root\' | \'snapshot\' | \'signal\'>, text: string): Promise<void>;\n}',
+  },
+  {
+    name: 'ExecutionBinding',
+    declaration: 'export interface ExecutionBinding {\n    readonly sessionId: string;\n    readonly turnId?: string;\n    readonly cursor?: string;\n}',
+  },
+  {
+    name: 'ExecutionCapability',
+    declaration: 'export type ExecutionCapability = \'conversation\' | \'code\' | \'artifact\' | \'browser\' | \'connector\' | \'automation\';',
+  },
+  {
+    name: 'ExecutionContext',
+    declaration: 'export interface ExecutionContext {\n    readonly root: Agent;\n    readonly snapshot: ExecutionSnapshot;\n    readonly signal: AbortSignal;\n    readonly sharedMemory: string;\n    checkpoint(phase: \'prepared\' | \'dispatching\' | \'running\', binding?: ExecutionBinding): Promise<void>;\n    progress(event: ExecutionProgress): Promise<void>;\n}',
+  },
+  {
+    name: 'ExecutionEngine',
+    declaration: 'export type ExecutionEngine = \'internal\' | \'codex\' | \'openclaw\';',
+  },
+  {
+    name: 'ExecutionEngineStatus',
+    declaration: 'export interface ExecutionEngineStatus {\n    readonly engine: ExecutionEngine;\n    readonly connected: boolean;\n    readonly version: string;\n    readonly capabilities: readonly ExecutionCapability[];\n    readonly providers: readonly string[];\n    readonly diagnostic?: string;\n}',
+  },
+  {
+    name: 'ExecutionId',
+    declaration: 'export type ExecutionId = Branded<\'ExecutionId\'>;',
+  },
+  {
+    name: 'ExecutionInputReceipt',
+    declaration: 'export interface ExecutionInputReceipt {\n    readonly executionId: ExecutionId;\n    readonly idempotencyKey: string;\n    readonly text: string;\n    readonly phase: \'reserved\' | \'submitted\' | \'uncertain\';\n}',
+  },
+  {
+    name: 'ExecutionLimits',
+    declaration: 'export interface ExecutionLimits {\n    readonly maxOperations: number;\n    readonly maxTaskBytes: number;\n    readonly maxOutputBytes: number;\n    readonly maxProgressEvents?: number;\n    readonly disposalTimeoutMs?: number;\n}',
+  },
+  {
+    name: 'ExecutionNativePolicy',
+    declaration: 'export interface ExecutionNativePolicy {\n    readonly provider: string;\n    readonly model: string;\n    readonly agentRuntime: string;\n    readonly sandbox: string;\n    readonly approval: string;\n    readonly cwd: string;\n}',
+  },
+  {
+    name: 'ExecutionOutcome',
+    declaration: 'export interface ExecutionOutcome {\n    readonly status: \'completed\' | \'failed\' | \'cancelled\' | \'uncertain\';\n    readonly output?: string;\n    readonly errorCode?: string;\n}',
+  },
+  {
+    name: 'ExecutionPhase',
+    declaration: 'export type ExecutionPhase = \'reserved\' | \'prepared\' | \'dispatching\' | \'running\' | \'completed\' | \'failed\' | \'cancelled\' | \'uncertain\';',
+  },
+  {
+    name: 'ExecutionProgress',
+    declaration: 'export interface ExecutionProgress {\n    readonly kind: \'tool-started\' | \'tool-completed\' | \'reasoning\' | \'output\' | \'waiting-approval\';\n    readonly nativeEventId: string;\n    readonly toolName?: string;\n}',
+  },
+  {
+    name: 'ExecutionRequest',
+    declaration: 'export interface ExecutionRequest {\n    readonly idempotencyKey: string;\n    readonly task: string;\n    readonly capabilities: readonly ExecutionCapability[];\n    readonly engine?: ExecutionEngine;\n    readonly selection?: {\n        readonly provider: string;\n        readonly model: string;\n        readonly reasoningEffort?: string;\n    };\n    readonly nativePolicy?: ExecutionNativePolicy;\n}',
+  },
+  {
+    name: 'ExecutionSnapshot',
+    declaration: 'export interface ExecutionSnapshot {\n    readonly id: ExecutionId;\n    readonly teamId: TeamId;\n    readonly missionId: string;\n    readonly cancellationEpoch: number;\n    readonly idempotencyKey: string;\n    readonly engine: ExecutionEngine;\n    readonly provider: string;\n    readonly model: string;\n    readonly reasoningEffort?: string;\n    readonly task: string;\n    readonly capabilities: readonly ExecutionCapability[];\n    readonly nativePolicy?: ExecutionNativePolicy;\n    readonly phase: ExecutionPhase;\n    readonly revision: number;\n    readonly createdAt: number;\n    readonly updatedAt: number;\n    readonly binding?: ExecutionBinding;\n    readonly output?: string;\n    readonly errorCode?: string;\n}',
   },
   {
     name: 'FileAttachmentLimits',
@@ -5680,12 +5783,32 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface TeamChatReplyRequest extends TeamChatReadRequest {\n    readonly requestId: string;\n    readonly targetId: string;\n    readonly targetIds?: readonly string[];\n    readonly text: string;\n    readonly replyTo?: string | undefined;\n}',
   },
   {
+    name: 'TeamExecutionRuntime',
+    declaration: 'export class TeamExecutionRuntime {\n    async withMaintenance<T>(assertIdle: () => Promise<void>, operation: () => Promise<T>): Promise<T>;\n    constructor(private readonly journal: TeamJournal, private readonly missions: UniversalMissionLedger, private readonly assertLead: (root: Agent) => void, private readonly limits: ExecutionLimits, private readonly recall?: (root: Agent, task: string) => ExecutionMemoryContext);\n    register(adapter: ExecutionAdapter): () => void;\n    async status(): Promise<ExecutionEngineStatus[]>;\n    list(root: Agent): ExecutionSnapshot[];\n    async execute(root: Agent, request: ExecutionRequest, signal?: AbortSignal): Promise<ExecutionSnapshot>;\n    async recover(root: Agent, id: ExecutionId): Promise<ExecutionSnapshot>;\n    async steer(root: Agent, id: ExecutionId, idempotencyKey: string, text: string): Promise<ExecutionInputReceipt>;\n    async cancel(root: Agent, id: ExecutionId): Promise<ExecutionSnapshot>;\n    async cancelMission(root: Agent, missionId: string): Promise<void>;\n    async dispose(): Promise<void>;\n}',
+  },
+  {
+    name: 'TeamFoldState',
+    declaration: 'export interface TeamFoldState {\n    readonly id: TeamId;\n    readonly members: Map<SessionId, TeamMemberSnapshot>;\n    readonly memberIdsByName: Map<string, SessionId>;\n    readonly tasks: Map<TeamTaskId, TeamTaskSnapshot>;\n    readonly messages: Map<TeamMessageId, TeamMessageSnapshot>;\n    readonly delivered: Set<TeamMessageId>;\n    readonly reactions: Map<TeamMessageId, TeamReactionSnapshot[]>;\n    nextTaskNumber: number;\n}',
+  },
+  {
     name: 'TeamId',
     declaration: 'export type TeamId = Branded<\'TeamId\'>;',
   },
   {
+    name: 'TeamJournal',
+    declaration: 'export class TeamJournal {\n    constructor(private readonly ctx: Context, private readonly onCommit: (root: Agent) => void);\n    state(root: Agent): TeamFoldState;\n    async transact<T>(rootId: SessionId, operation: () => Promise<T>): Promise<T>;\n    assertDurable(root: Agent): void;\n    assertAllExecutionsDurable(): void;\n    async appendAndFlush<T extends MutableTeamEventType>(root: Agent, type: T, data: SessionEventMap[T]): Promise<void>;\n}',
+  },
+  {
+    name: 'TeamMemberPhase',
+    declaration: 'export type TeamMemberPhase = \'provisioning\' | \'active\' | \'failed\';',
+  },
+  {
     name: 'TeamMembership',
     declaration: 'export interface TeamMembership {\n    readonly root: Agent;\n    readonly id: TeamId;\n    readonly role: \'lead\' | \'teammate\';\n    readonly name: string;\n}',
+  },
+  {
+    name: 'TeamMemberSnapshot',
+    declaration: 'export interface TeamMemberSnapshot {\n    readonly id: SessionId;\n    readonly name: string;\n    readonly description: string;\n    readonly provider: string;\n    readonly context: \'fresh\' | \'fork\';\n    readonly phase: TeamMemberPhase;\n    readonly error?: string;\n}',
   },
   {
     name: 'TeamMemberUsage',
@@ -5704,8 +5827,16 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type TeamMessagePurpose = \'assignment\' | \'question\' | \'blocker\' | \'result\' | \'review\' | \'decision\' | \'update\';',
   },
   {
+    name: 'TeamMessageSnapshot',
+    declaration: 'export interface TeamMessageSnapshot {\n    readonly id: TeamMessageId;\n    readonly senderId: SessionId;\n    readonly senderName: string;\n    readonly targetId: SessionId;\n    readonly targetName?: string;\n    readonly purpose?: TeamMessagePurpose;\n    readonly delivery: \'quiet\' | \'wakeup\';\n    readonly content: ContentBlock[];\n}',
+  },
+  {
     name: 'TeamReactionKind',
     declaration: 'export type TeamReactionKind = \'ack\' | \'agree\' | \'insight\' | \'blocked\' | \'done\';',
+  },
+  {
+    name: 'TeamReactionSnapshot',
+    declaration: 'export interface TeamReactionSnapshot {\n    readonly messageId: TeamMessageId;\n    readonly reactorId: SessionId;\n    readonly reactorName: string;\n    readonly reaction: TeamReactionKind;\n}',
   },
   {
     name: 'TeamTaskAction',
@@ -5714,6 +5845,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'TeamTaskId',
     declaration: 'export type TeamTaskId = Branded<\'TeamTaskId\'>;',
+  },
+  {
+    name: 'TeamTaskSnapshot',
+    declaration: 'export interface TeamTaskSnapshot {\n    readonly id: TeamTaskId;\n    readonly revision: number;\n    readonly subject: string;\n    readonly description: string;\n    readonly status: TeamTaskStatus;\n    readonly ownerId?: SessionId;\n    readonly blockedBy: TeamTaskId[];\n    readonly writeScopes: string[];\n}',
   },
   {
     name: 'TeamTaskStatus',
@@ -5889,7 +6024,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'ToolOutputDefinition',
-    declaration: 'export interface ToolOutputDefinition {\n    readonly schema: JsonSchemaNode;\n    render(args: unknown, value: JsonValue): ContentBlock[];\n    presentationMeta?(args: unknown, value: JsonValue): JsonValue;\n}',
+    declaration: 'export interface ToolOutputDefinition {\n    readonly schema: JsonSchemaNode;\n    render(args: unknown, value: JsonValue): ContentBlock[];\n    presentationMeta?(args: unknown, value: JsonValue): JsonValue;\n    nestedPresentationMeta?: boolean;\n}',
   },
   {
     name: 'ToolPresentationMode',
@@ -6006,6 +6141,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'TypertTypeModel',
     declaration: 'export interface TypertTypeModel {\n    readonly name: string;\n    readonly declaration: string;\n}',
+  },
+  {
+    name: 'UniversalMissionLedger',
+    declaration: 'export class UniversalMissionLedger {\n    constructor(private readonly journal: TeamJournal);\n    read(root: Agent): UniversalMissionSnapshot | undefined;\n    async ensure(root: Agent, objective: string, maxTeammates: number): Promise<UniversalMissionSnapshot>;\n    async close(root: Agent, cancelled: boolean, completion: {\n        readonly verified: boolean;\n        readonly evidenceIds: readonly string[];\n    } = {\n        verified: false, evidenceIds: [],\n    }, expectedMissionId?: string): Promise<UniversalMissionSnapshot | undefined>;\n}',
   },
   {
     name: 'UniversalMissionPhase',

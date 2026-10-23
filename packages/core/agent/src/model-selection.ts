@@ -31,6 +31,8 @@ export interface EclipseModelRoute {
  */
 export interface EclipseRoutingSettings {
   readonly mode?: 'automatic' | 'hybrid' | 'manual'
+  /** Execution transport preference, independent from the two model routes. */
+  readonly executionEngine?: 'automatic' | 'internal' | 'codex' | 'openclaw'
   /** @deprecated Use coordinator; retained so old settings can be read safely. */
   readonly planner?: EclipseModelRoute
   readonly coordinator?: EclipseModelRoute

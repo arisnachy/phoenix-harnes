@@ -2,6 +2,12 @@
 
 English | [中文](README.zh.md)
 
+## Native execution receipts
+
+`execution_steer` sends one bounded instruction to the same live Codex turn. Persist the input key before dispatch and retain it on retries: a reserved or uncertain input receipt is not resent automatically. A different instruction requires a different key. Other engines fail explicitly until their adapters support directing an active operation.
+
+Lead-only `execution_run` selects one compatible engine using the saved Eclipse preference and the concrete resolved worker model. `execution_list` returns up to 32 recent receipt identities and states without starting work. `execution_recover` reconciles that same native operation after interruption; `execution_cancel` persists cancellation before interrupting it. Reuse the same idempotency key for the same task, and inspect uncertain receipts instead of submitting replacement work. These receipts establish execution state; artifact verification still determines whether the mission succeeded.
+
 Scoped model-facing adapter for [`ctx.agentTeams`](../agent-team/README.md). It installs the Agent Teams policy and collaboration tools in each implicit Lead and durable teammate scope. Scoped Team definitions shadow same-named legacy global continuable-subagent controls, so a composition that mounts both must disable the legacy definitions.
 
 ## Main conversation tools

@@ -465,6 +465,11 @@
     - id: subagent-codex
       name: '@phoenix-ai/dsh-subagent-codex'
 
+    # Public Gateway adapter stays disconnected until an explicit native route
+    # and host-owned credential reference are configured.
+    - id: subagent-openclaw
+      name: '@phoenix-ai/dsh-subagent-openclaw'
+
     # Execution-only Codex sibling. Its app-server thread uses the official
     # on-request + auto_review permission lane and is runtime-gated to an
     # active OpenAI Codex parent; the default provider above remains the sole

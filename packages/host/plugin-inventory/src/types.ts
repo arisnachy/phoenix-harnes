@@ -266,6 +266,39 @@ export interface PhoenixUpdateRefreshReceipt {
   readonly accepted: boolean
 }
 
+/** Safe lifecycle state for a Phoenix-managed execution runtime. */
+export type EngineRuntimeStatus = 'active' | 'prepared' | 'stopped' | 'unavailable'
+
+/** Secret-free status for one Codex or OpenClaw runtime. */
+export interface EngineRuntimeEntry {
+  readonly status: EngineRuntimeStatus
+  readonly version?: string
+  readonly diagnostic?: string
+}
+
+/** Phoenix update state included in the unified execution-runtime view. */
+export interface EngineRuntimePhoenixState {
+  readonly status: string
+  readonly current?: string
+  readonly target?: string
+  readonly diagnostic?: string
+}
+
+/** Unified read-only runtime projection used by Eclipse Settings. */
+export interface EngineRuntimeSnapshot {
+  readonly checkedAt: string
+  readonly codex: EngineRuntimeEntry
+  readonly openclaw: EngineRuntimeEntry
+  readonly phoenix: EngineRuntimePhoenixState
+}
+
+/** Result of preparing an official OpenClaw candidate. */
+export interface EngineRuntimePrepareReceipt {
+  readonly status: 'prepared' | 'already-active' | 'blocked' | 'unavailable' | 'error'
+  readonly version?: string
+  readonly diagnostic?: string
+}
+
 /** User-selectable Phoenix Local runtime policy. */
 export type PhoenixLocalModelMode = 'off' | 'on-demand' | 'always-on'
 

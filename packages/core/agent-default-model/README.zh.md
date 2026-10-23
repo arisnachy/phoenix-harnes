@@ -1,5 +1,7 @@
 # @phoenix-ai/dsh-agent-default-model
 
+Eclipse 路由配置可选地保存 `executionEngine`（`automatic`、`internal`、`codex`、`openclaw`），该字段独立于协调者和子代理的模型角色，也独立于当前对话模型。清除引擎偏好会恢复按能力路由，不会重置提供商和模型选择。
+
 [English](README.md) | 中文
 
 该部署默认值供入口在创建尚无会话级模型选择的 Agent 时使用。`AgentDefaultModelConfig` 提供 `ctx.agentDefaultModel`；`dsh --profile headless` 这类直接入口与 ApiProxy 这类由 Host 支撑的入口读取同一服务，而不是分别持有平行的提供方／模型默认值。

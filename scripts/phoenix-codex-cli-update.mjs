@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 /**
  * Keep PHOENIX on the latest stable official Codex CLI without mutating the
  * source checkout. A versioned npm runtime is staged under DSH_HOME, smoke
@@ -9,6 +8,8 @@ import { spawnSync } from 'node:child_process'
 import {
   existsSync,
   mkdirSync,
+  lstatSync,
+  realpathSync,
   readFileSync,
   readdirSync,
   renameSync,
@@ -128,7 +129,8 @@ export function readActiveCodexRuntime(home) {
     const boundary = root.endsWith(sep) ? root : `${root}${sep}`
     if (bin !== root && !bin.startsWith(boundary)) return undefined
     if (!existsSync(bin)) return undefined
-    return { version, bin }
+    const previousVersion = typeof value.previousVersion === 'string' && /^\d+\.\d+\.\d+$/u.test(value.previousVersion) ? value.previousVersion : undefined
+    return { version, bin, ...(previousVersion === undefined ? {} : { previousVersion }) }
   } catch {
     return undefined
   }
@@ -239,28 +241,46 @@ function installVersion(home, version) {
 }
 
 function activateVersion(home, version, bin) {
+  const previous = readActiveCodexRuntime(home)
   const root = runtimeRoot(home)
   const relativeBin = relative(root, bin).replace(/\\/gu, '/')
   if (relativeBin.startsWith('../') || relativeBin === '..') throw new Error('managed Codex binary escaped runtime root')
   writeJsonAtomic(markerPath(home), {
     schema: 1,
     version,
+    ...(previous === undefined || previous.version === version ? {} : { previousVersion: previous.version }),
     bin: relativeBin,
     activatedAt: new Date().toISOString(),
   })
 }
 
 /** Remove inactive managed Codex versions and abandoned staging directories. */
-export function pruneManagedCodexVersions(home, activeVersion) {
+export function pruneManagedCodexVersions(home, activeVersion, previousVersion = readActiveCodexRuntime(home)?.previousVersion) {
   const versions = versionsRoot(home)
   if (!existsSync(versions)) return { removed: 0 }
+  const actualActive = readActiveCodexRuntime(home)
+  if (existsSync(markerPath(home)) && actualActive === undefined) return { removed: 0 }
+  const retained = new Set([activeVersion, previousVersion, actualActive?.version, actualActive?.previousVersion])
+  const homeReal = realpathSync(resolve(home))
+  const ownedRoot = resolve(home, 'codex-cli')
+  if (lstatSync(ownedRoot).isSymbolicLink() || lstatSync(versions).isSymbolicLink()) throw new Error('Codex cleanup refuses linked runtime roots')
+  const versionsReal = realpathSync(versions)
+  if (!versionsReal.startsWith(`${homeReal}${sep}`)) throw new Error('Codex cleanup escaped DSH_HOME')
   let removed = 0
   for (const entry of readdirSync(versions, { withFileTypes: true })) {
     if (!entry.isDirectory()) continue
-    if (entry.name === activeVersion) continue
-    if (!/^\d+\.\d+\.\d+$/u.test(entry.name) && !entry.name.startsWith('.staging-')) continue
+    if (retained.has(entry.name)) continue
+    if (!/^\d+\.\d+\.\d+$/u.test(entry.name)) {
+      const staging = /^\.staging-\d+\.\d+\.\d+-(\d+)-[a-z0-9]+$/u.exec(entry.name)
+      if (staging === null) continue
+      try { process.kill(Number(staging[1]), 0); continue } catch (error) {
+        if (error?.code !== 'ESRCH') continue
+      }
+    }
+    const target = resolve(versions, entry.name)
+    if (dirname(target) !== resolve(versions) || lstatSync(target).isSymbolicLink() || !realpathSync(target).startsWith(`${versionsReal}${sep}`)) throw new Error('Codex cleanup target escaped managed versions')
     try {
-      rmSync(join(versions, entry.name), { recursive: true, force: true, maxRetries: 3, retryDelay: 250 })
+      rmSync(target, { recursive: true, force: true, maxRetries: 3, retryDelay: 250 })
       removed += 1
     } catch (error) {
       if (!['EPERM', 'EACCES', 'EBUSY'].includes(error?.code)) throw error

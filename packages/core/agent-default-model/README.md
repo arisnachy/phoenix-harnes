@@ -1,5 +1,7 @@
 # @phoenix-ai/dsh-agent-default-model
 
+The Eclipse routing profile optionally persists `executionEngine` (`automatic`, `internal`, `codex`, `openclaw`) independently of its coordinator/subagent model seats and the selected conversation model. Clearing engine preference restores capability-based routing; it does not reset provider/model selection.
+
 English | [中文](README.zh.md)
 
 The deployment default used when an entry point creates an Agent that has no session-local model selection. `AgentDefaultModelConfig` provides `ctx.agentDefaultModel`; direct entry points such as `dsh --profile headless` and Host-backed entry points such as ApiProxy read the same service instead of owning parallel provider/model defaults.

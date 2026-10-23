@@ -16,6 +16,14 @@ Local cancellation wins the result race and maps to `aborted`. For failed turns,
 
 `dispose()` is idempotent: it requests a best-effort `turn/interrupt` with both current ids when they are known, closes the JSON-RPC wire, ends stdin, invokes the shared process-tree termination escalation, waits for whole-tree exit, and detaches the stderr observer. Independent cleanup rejection uses the fixed `teardown` stage and any available process outcome. When startup and rollback both fail, the top-level aggregate message preserves both safe stage lines while the raw failures remain internal.
 
+## Durable app-server transport
+
+`CodexAppServerWire` also exposes an explicit durable transport surface without exposing generic RPC: `startDurableThread(cwd, signal)` creates `{ ephemeral: false }`, `resumeThread(threadId, signal)` reattaches an acknowledged native thread, `readThread(threadId, signal)` returns bounded turn status metadata, and `reconcileThread(threadId, signal)` performs the same authoritative read for recovery. `startDurableTurn(texts, signal)` returns the acknowledged native turn id and a completion promise whose `completed`, `interrupted`, or `failed` status comes only from `turn/completed`; it never treats assistant narration as success. `steerTurn(turnId, texts, signal)` sends the official `turn/steer` operation after the configured checkpoint callback completes.
+
+Durable callbacks receive only bounded, secret-free `CodexWireEvent` metadata and exact native thread/turn ids. An optional approval callback receives a bounded command or workspace path with credential-like values redacted plus its abort signal; requests without concrete scope decline, and no permission grant is ever added. The checkpoint callback is awaited after an acknowledged thread or turn and before the next native side effect, so the owning Phoenix execution can persist its binding before dispatch. The existing `startThread()` and one-shot `runTurn()` behavior remains unchanged.
+
+When `dsh-agent-team` is present, the default `codex` provider registers `CodexExecutionAdapter` as an optional execution engine. It persists prepared, dispatching, and running checkpoints through the Team runtime, passes the saved model and reasoning effort to native Codex, supplies recalled memory as untrusted reference text, and recovers only the exact saved native turn. A missing or interrupted turn remains explicitly uncertain and is never resubmitted; command and file approval uses the optional `dsh-user-approval` broker and otherwise declines by default.
+
 ## Capabilities and context
 
 The provider advertises no optional start-time capabilities and reports `inheritsParentContext: false`. Codex receives the standalone text task and the parent Session cwd, but not the parent conversation, persona, tool filter, depth policy, or structured-output contract. The ephemeral Codex thread id and turn id stay private to this run and are never persisted in the parent Session.
@@ -28,6 +36,7 @@ The provider advertises no optional start-time capabilities and reports `inherit
 | `env` | `{}` | Explicit child environment layered over the subprocess seam's credential-scrubbed parent environment. |
 | `permissionMode` | `never` | Native non-interactive approval and sandbox mode fixed for every thread from this Provider instance. |
 | `disposeGraceMs` | `3000` | Positive finite grace in milliseconds, no greater than [`MAX_TIMER_DELAY_MS`](../../util/timeout/README.md), between the shared process-tree owner's termination tiers; disposal then waits for whole-tree exit. |
+| `probeTtlMs` | `30000` | Positive finite readiness-cache lifetime in milliseconds, no greater than [`MAX_TIMER_DELAY_MS`](../../util/timeout/README.md); concurrent probes single-flight and account changes can invalidate the cache. |
 
 | `permissionMode` value | `thread/start` fields | Native behavior |
 |---|---|---|
@@ -134,12 +143,14 @@ Append-only: foreground adds one result after the reusable parent prefix, while 
 
 ## Known Limitations and Deferred Work
 
-- **One fresh process, thread, and turn per run** — there is no continuation, resume, pooling, progress stream, or product-session persistence.
+- **The Profile provider remains one-shot** — `start()` keeps its existing ephemeral contract, while the optional Team registration owns durable execution through `CodexExecutionAdapter`.
+- **Durable recovery needs an owning execution record** — callers must persist the native thread id, acknowledged turn id, and checkpoint metadata; the wire does not create a second session or memory store.
+- **One app-server connection per wire** — recovery starts a new connection and resumes the persisted native thread; the transport does not pool processes or retry an uncertain turn submission.
 - **Static instance selection** — Profile rows fix provider names and tool bindings; calls cannot choose a provider dynamically, and every exposed tool needs a unique `toolName`.
 - **Authentication and account state remain native** — the Bundle supplies the CLI but does not create an account, log in, trust a project, or rewrite Codex settings; configuration and authentication failures surface with their lifecycle stage and the safe `unknown` fallback rather than a separate public taxonomy.
 - **The native platform payload is required at delegation time** — installs that omit optional dependencies, unsupported platforms, and missing or damaged payloads fail at the first run; there is no host-CLI fallback.
 - **Compatibility is pinned by development evidence** — upgrading from the verified 0.147.0 protocol baseline requires regenerating upstream schema evidence and rerunning handshake, answer-selection, approval, cancellation, keyless real-product, and credentialed DeepSeek nonce tests.
-- **No human approval path** — known unattended approval requests are denied and unknown server requests fail closed; the three Profile modes never create a PHOENIX interaction channel or per-call allow policy.
+- **Approval remains explicit** — the durable execution adapter uses `dsh-user-approval` only when that broker is mounted; without it, command and file requests fail closed. The one-shot Profile path remains unattended, and no mode creates an implicit allow policy.
 - **Assistant payload is final text only** — a failed run may additionally expose the separate safe diagnostic; reasoning, commentary, intermediate messages, tool traffic, usage, raw stderr, and workspace diffs remain outside the parent Session, while generic Job ids, notices, and status come from the shared job runtime.
 - **No optional shared capabilities** — output schemas, child personas, tool filtering, and harness depth enforcement are rejected by the shared service for this provider.
 - **No wall-clock timeout or side-effect rollback** — the caller cancels long work, and files or external systems changed before cancellation are not restored.

@@ -94,6 +94,7 @@ describe('AgentDefaultModelConfig', () => {
     const bench = await boot()
     const profile = {
       mode: 'hybrid' as const,
+      executionEngine: 'codex' as const,
       coordinator: { provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'max' },
       subagent: { provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'high' },
     }

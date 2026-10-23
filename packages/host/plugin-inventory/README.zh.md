@@ -4,6 +4,8 @@
 
 用于当前 Cordis Loader 树与 PHOENIX stable 更新生命周期的 Host 诊断服务。`PluginInventoryGateway` 注册 `pluginInventory` Remote 命名空间。`pluginInventory/list` 仍是对非 group Loader 条目的只读即时投影；`pluginInventory/updateState` 暴露经过清理的仓库本地更新器状态；`pluginInventory/restartForUpdate` 只有在受信任状态恰好为 `ready` 且带有有效的已准备 target 时才接受重启请求。
 
+`pluginInventory/engineRuntimeState` 提供不含秘密的 Codex/OpenClaw runtime 与 Phoenix 更新状态检查。`pluginInventory/prepareEngineRuntime` 拒绝无效版本，并在加载 manager 或安装包之前以 `OPENCLAW_INSTALLER_UNVERIFIED` 阻止有效版本。安装进程树退出、完整包校验、经过认证的进程归属和持久生命周期恢复尚未验证。全局 idle 证明和共享 admission fence 完成之前不提供激活或回滚。浏览器响应不包含路径、进程号、命令或凭据。
+
 ChatGPT Web 生命周期也由 Host 持有。`pluginInventory/chatGptWebState`、`pluginInventory/enableChatGptWeb` 与 `pluginInventory/disableChatGptWeb` 为本地回环浏览器桥接器提供经过清理的 ON/OFF 控制。enabled 偏好与进程所有权分开持久化：只有用户明确留下的 ON 会在 Host 启动后恢复；Settings 只有在 `/v1/models` 返回可用健康结果后才会暴露 provider 路由；浏览器凭据绝不会跨越这条 Remote 边界。
 
 Host 还负责那些无法安全使用通用 registry 安装器的固定厂商 MCP 组合。官方 X 组合会安装无需凭据的 `https://docs.x.com/mcp`，以及 X 官方 `@xdevplatform/xurl` stdio 桥接器以连接 `https://api.x.com/mcp`。桥接器配置只保存 `X_CLIENT_ID` 与 `X_CLIENT_SECRET` 的凭据引用；实际值留在 Phoenix 凭据提供方中，并且只在启动对应 xurl 世代时注入子进程。模型只能通过需要用户批准的连接器工具激活该组合，激活动作本身不会执行任何 X 账户操作。

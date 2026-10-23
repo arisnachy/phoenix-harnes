@@ -1,11 +1,12 @@
-import { readFileSync } from 'node:fs'
-import { dirname, resolve } from 'node:path'
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { dirname, join, resolve } from 'node:path'
 import { PassThrough } from 'node:stream'
 import { fileURLToPath } from 'node:url'
 import { Context } from '@phoenix-ai/cordis'
 import Loader from '@phoenix-ai/cordis-plugin-loader'
 import * as yaml from 'js-yaml'
-import { describe, expect, it, vi } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { Agent } from '@phoenix-ai/dsh-agent'
 import type { InvariantInstaller } from '@phoenix-ai/dsh-invariants'
 import type { ContentBlock } from '@phoenix-ai/dsh-llm'
@@ -76,6 +77,35 @@ const CODEX_PLATFORM_PACKAGES = [
   '@openai/codex-win32-arm64',
   '@openai/codex-win32-x64',
 ] as const
+
+// Unit fixtures must never select a user-managed CLI marker or write into the
+// user's Codex account/SQLite state. The production resolver still prefers the
+// managed marker when the real environment is used.
+const isolatedDshHome = mkdtempSync(join(tmpdir(), 'phoenix-subagent-codex-dsh-'))
+const isolatedCodexHome = mkdtempSync(join(tmpdir(), 'phoenix-subagent-codex-home-'))
+const isolatedCodexSqliteHome = resolve(isolatedCodexHome, 'sqlite')
+const originalTestEnvironment = {
+  DSH_HOME: process.env.DSH_HOME,
+  CODEX_HOME: process.env.CODEX_HOME,
+  CODEX_SQLITE_HOME: process.env.CODEX_SQLITE_HOME,
+  PHOENIX_CODEX_SQLITE_HOME: process.env.PHOENIX_CODEX_SQLITE_HOME,
+}
+
+beforeAll(() => {
+  process.env.DSH_HOME = isolatedDshHome
+  process.env.CODEX_HOME = isolatedCodexHome
+  process.env.CODEX_SQLITE_HOME = isolatedCodexSqliteHome
+  delete process.env.PHOENIX_CODEX_SQLITE_HOME
+})
+
+afterAll(() => {
+  for (const [name, value] of Object.entries(originalTestEnvironment)) {
+    if (value === undefined) Reflect.deleteProperty(process.env, name)
+    else process.env[name] = value
+  }
+  rmSync(isolatedDshHome, { recursive: true, force: true })
+  rmSync(isolatedCodexHome, { recursive: true, force: true })
+})
 
 const fakeParent = {
   id: 'parent',
@@ -249,13 +279,18 @@ function runSpec(
   child: FakeChild,
   overrides: Partial<CodexRunSpec> = {},
 ): CodexRunSpec {
+  const env = {
+    CODEX_HOME: isolatedCodexHome,
+    CODEX_SQLITE_HOME: isolatedCodexSqliteHome,
+    ...overrides.env,
+  }
   return {
     cwd: process.cwd(),
     permissionMode: DEFAULT_CODEX_PERMISSION_MODE,
-    env: {},
     disposeGraceMs: DEFAULT_DISPOSE_GRACE_MS,
     spawn: () => child.handle,
     ...overrides,
+    env,
   }
 }
 
@@ -432,7 +467,11 @@ describe('task admission and package contracts', () => {
 
     const parsed = yaml.load(readFileSync(resolve(root, manifest.dsh!.bundle!.patch!), 'utf8'))
     const rows = Array.isArray(parsed)
-      ? (parsed as Array<{ insert?: Array<{ id?: string; name?: string; config?: Record<string, string> }> }>).flatMap(entry => entry.insert ?? [])
+      ? (parsed as Array<{ insert?: Array<{
+        id?: string
+        name?: string
+        config?: Record<string, string>
+      }> }>).flatMap(entry => entry.insert ?? [])
       : []
     expect(rows).toEqual([
       {
@@ -1634,7 +1673,11 @@ describe('run lifecycle and quiescence', () => {
       cwd: process.cwd(),
       stdio: { stdin: 'pipe', stdout: 'pipe', stderr: 'pipe' },
       graceMs: DEFAULT_DISPOSE_GRACE_MS,
-      env: { OPENAI_API_KEY: 'fake' },
+      env: {
+        OPENAI_API_KEY: 'fake',
+        CODEX_HOME: isolatedCodexHome,
+        CODEX_SQLITE_HOME: isolatedCodexSqliteHome,
+      },
     })
     expect(run.localAgent).toBeUndefined()
 
@@ -1765,7 +1808,10 @@ describe('run lifecycle and quiescence', () => {
     child.settle({ exitCode: 17, signal: null })
     await expect(run.result).resolves.toEqual({
       output: [{ type: 'text', text: 'partial answer' }],
-      diagnostic: `${expectedFailureDiagnostic('turn', 'contextWindowExceeded', { outcome: { exitCode: 17, signal: null } })}\nCodex unattended decision (mode: never; request: command execution; decision: denied): Codex rejected an escalation because the selected policy never asks for approval`,
+      diagnostic: `${expectedFailureDiagnostic('turn',
+        'contextWindowExceeded',
+        { outcome: { exitCode: 17,
+          signal: null } })}\nCodex unattended decision (mode: never; request: command execution; decision: denied): Codex rejected an escalation because the selected policy never asks for approval`,
       stopReason: 'max-tokens',
     })
     await run.dispose()
@@ -1906,7 +1952,8 @@ describe('run lifecycle and quiescence', () => {
     }))
     await expect(run.result).resolves.toEqual({
       output: [],
-      diagnostic: `${expectedFailureDiagnostic('turn', 'other')}\nCodex unattended decision (mode: never; request: command approval; decision: cancelled): the provider does not grant interactive approval`,
+      diagnostic: `${expectedFailureDiagnostic('turn',
+        'other')}\nCodex unattended decision (mode: never; request: command approval; decision: cancelled): the provider does not grant interactive approval`,
       stopReason: 'error',
     })
     await run.dispose()
@@ -1926,7 +1973,8 @@ describe('run lifecycle and quiescence', () => {
     })
     await expect(run.result).resolves.toEqual({
       output: [],
-      diagnostic: `${expectedFailureDiagnostic('turn', 'badRequest')}\nCodex unattended decision (mode: never; request: command execution; decision: denied): Codex rejected an escalation because the selected policy never asks for approval`,
+      diagnostic: `${expectedFailureDiagnostic('turn',
+        'badRequest')}\nCodex unattended decision (mode: never; request: command execution; decision: denied): Codex rejected an escalation because the selected policy never asks for approval`,
       stopReason: 'error',
     })
     await run.dispose()
@@ -1948,7 +1996,8 @@ describe('run lifecycle and quiescence', () => {
     }))
     await expect(run.result).resolves.toEqual({
       output: [],
-      diagnostic: `${expectedFailureDiagnostic('turn', 'badRequest')}\nCodex unattended decision (mode: never; request: command execution; decision: denied): Codex rejected an escalation because the selected policy never asks for approval`,
+      diagnostic: `${expectedFailureDiagnostic('turn',
+        'badRequest')}\nCodex unattended decision (mode: never; request: command execution; decision: denied): Codex rejected an escalation because the selected policy never asks for approval`,
       stopReason: 'error',
     })
     expect(Buffer.concat(hostStderrWrite.chunks).toString()).toContain('SECRET_TOKEN')
@@ -1971,7 +2020,8 @@ describe('run lifecycle and quiescence', () => {
     }))
     await expect(run.result).resolves.toEqual({
       output: [],
-      diagnostic: `${expectedFailureDiagnostic('turn', 'badRequest')}\nCodex unattended decision (mode: never; request: command execution; decision: denied): Codex rejected an escalation because the selected policy never asks for approval`,
+      diagnostic: `${expectedFailureDiagnostic('turn',
+        'badRequest')}\nCodex unattended decision (mode: never; request: command execution; decision: denied): Codex rejected an escalation because the selected policy never asks for approval`,
       stopReason: 'error',
     })
     await run.dispose()
@@ -2233,12 +2283,14 @@ describe('run lifecycle and quiescence', () => {
     }))
     await expect(first.run.result).resolves.toEqual({
       output: [],
-      diagnostic: `${expectedFailureDiagnostic('turn', 'other')}\nCodex unattended decision (mode: never; request: command approval; decision: cancelled): the provider does not grant interactive approval`,
+      diagnostic: `${expectedFailureDiagnostic('turn',
+        'other')}\nCodex unattended decision (mode: never; request: command approval; decision: cancelled): the provider does not grant interactive approval`,
       stopReason: 'error',
     })
     await expect(second.run.result).resolves.toEqual({
       output: [],
-      diagnostic: `${expectedFailureDiagnostic('turn', 'other')}\nCodex unattended decision (mode: dangerously-bypass-approvals-and-sandbox; request: MCP elicitation; decision: declined): the provider does not collect interactive MCP input`,
+      diagnostic: `${expectedFailureDiagnostic('turn',
+        'other')}\nCodex unattended decision (mode: dangerously-bypass-approvals-and-sandbox; request: MCP elicitation; decision: declined): the provider does not collect interactive MCP input`,
       stopReason: 'error',
     })
     await Promise.all([first.run.dispose(), second.run.dispose()])
@@ -2256,7 +2308,11 @@ describe('run lifecycle and quiescence', () => {
     }) as typeof ctx.logger.warn
     await ctx.plugin(codex, {
       providerName: 'codex-diagnostic',
-      env: { OPENAI_API_KEY: 'fake' },
+      env: {
+        OPENAI_API_KEY: 'fake',
+        CODEX_HOME: isolatedCodexHome,
+        CODEX_SQLITE_HOME: isolatedCodexSqliteHome,
+      },
       permissionMode: 'approve-for-me',
       disposeGraceMs: 25,
     })
@@ -2333,11 +2389,16 @@ describe('run lifecycle and quiescence', () => {
     }))
     await expect(run.result).resolves.toEqual({
       output: [],
-      diagnostic: `${expectedFailureDiagnostic('turn', 'other')}\nCodex unattended decision (mode: approve-for-me; request: command approval; decision: cancelled): the provider does not grant interactive approval`,
+      diagnostic: `${expectedFailureDiagnostic('turn',
+        'other')}\nCodex unattended decision (mode: approve-for-me; request: command approval; decision: cancelled): the provider does not grant interactive approval`,
       stopReason: 'error',
     })
     expect(spawn).toHaveBeenCalledWith(expect.objectContaining({
-      env: { OPENAI_API_KEY: 'fake' },
+      env: expect.objectContaining({
+        OPENAI_API_KEY: 'fake',
+        CODEX_HOME: isolatedCodexHome,
+        CODEX_SQLITE_HOME: isolatedCodexSqliteHome,
+      }),
       graceMs: 25,
       cwd: process.cwd(),
     }))

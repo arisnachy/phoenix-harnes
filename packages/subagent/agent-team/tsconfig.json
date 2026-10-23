@@ -36,6 +36,9 @@
       "path": "../../session/session-persistence"
     },
     {
+      "path": "../../session/session-learning"
+    },
+    {
       "path": "../../runtime-diagnostics/invariants"
     },
     {

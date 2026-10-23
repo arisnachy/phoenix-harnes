@@ -25,7 +25,7 @@ PHOENIX 的持久化认知记忆会观察每个持久会话事件。原始会话
 
 #### 模型看到的内容
 
-认知服务提供 `searchCognitive()`、`timeline()`、`cognitiveForSession()` 和 `workingMemory()` 查询。`cognitiveForSession()` 是只读的会话范围投影，只读取指定的 `SessionId`，最多返回 128 条最新活动记录，同时保持持久化发生顺序；它不会修改规范会话日志或认知日志。学习工具在自动上下文中调用项目范围的 `recallCognitive()`，并返回层、实体、关系、来源 URI、时间和置信度。
+认知服务提供 `searchCognitive()`、`timeline()`、`cognitiveForSession()` 和 `workingMemory()` 查询。`cognitiveForSession()` 是只读的会话范围投影，只读取指定的 `SessionId`，最多返回 128 条最新活动记录，同时保持持久化发生顺序；它不会修改规范会话日志或认知日志。学习工具在自动上下文中调用项目范围的 `recallCognitive()`，并返回层、实体、关系、来源 URI、时间和置信度。 `recallForExecution(session, query, maxBytes)` 是执行上下文使用的独立有界投影。它要求传入会话注册表中的同一个 `Session` 对象，只搜索活动的高置信度程序记忆，并要求来源会话与请求会话具有相同的规范化绝对 CWD 和配置的 agent preset；每条结果都会带有记忆 ID 和来源 URI，再按 UTF-8 字节上限组合。匹配 preset 会保守地阻止跨 preset 召回，但 `agentPreset` 描述的是角色组合，不是用户身份。整个本地 DSH_HOME 才是用户隔离范围；本服务不宣称多用户租户隔离。它不会回退到可变的当前项目，也不会读取完整会话历史。
 
 #### Token 影响
 

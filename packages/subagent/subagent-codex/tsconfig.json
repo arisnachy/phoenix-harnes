@@ -8,6 +8,7 @@
     "src"
   ],
   "references": [
+    { "path": "../../sandbox/sandbox-policy" },
     {
       "path": "../../../vendor/cosmokit"
     },
@@ -19,6 +20,9 @@
     },
     {
       "path": "../../core/agent"
+    },
+    {
+      "path": "../agent-team"
     },
     {
       "path": "../../credentials/authorization"
@@ -46,6 +50,9 @@
     },
     {
       "path": "../../runtime-diagnostics/invariants"
+    },
+    {
+      "path": "../../interaction/user-approval"
     }
   ]
 }

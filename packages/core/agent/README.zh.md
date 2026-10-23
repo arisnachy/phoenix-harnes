@@ -1,5 +1,7 @@
 # dsh-agent
 
+`EclipseRoutingSettings.executionEngine` 是可选的引擎偏好，独立于协调者及子代理模型和对话选择。其值为 `automatic`、`internal`、`codex` 和 `openclaw`；实际派发仍会检查提供商及能力兼容性。
+
 [English](README.md) | 中文
 
 Agent 接口、注册表、进程本地发起方作用域，以及 `agent/*` 事件词汇。每个插件（UI、钩子、编排器）都面向此处定义的 `Agent` handle 编程；它不依赖循环，因此循环可以替换。

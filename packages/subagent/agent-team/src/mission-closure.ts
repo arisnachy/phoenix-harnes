@@ -85,6 +85,29 @@ export function unfinishedMissionTeamTasks(events: readonly SessionEvent[]): boo
  */
 export function unfinishedMissionWork(events: readonly SessionEvent[]): boolean {
   return unfinishedMissionGoal(events) || unfinishedMissionTodos(events) || unfinishedMissionTeamTasks(events)
+    || unfinishedMissionExecutions(events)
+}
+
+/**
+ * Keep a mission open while a native operation is active or its outcome is unknown.
+ * @param events - Lead session events, including persisted engine checkpoints.
+ * @returns Whether the exact current mission has unreconciled execution work.
+ */
+export function unfinishedMissionExecutions(events: readonly SessionEvent[]): boolean {
+  const mission = events.findLast(event => event.type === 'team/mission')
+  if (mission?.type !== 'team/mission') return false
+  const executions = new Map<string, string>()
+  for (const event of events) {
+    if (event.type !== 'team/execution' || event.data.snapshot.missionId !== mission.data.snapshot.id) continue
+    executions.set(event.data.snapshot.id, event.data.snapshot.phase)
+  }
+  const inputs = new Map<string, string>()
+  for (const event of events) {
+    if (event.type !== 'team/execution-input' || !executions.has(event.data.executionId)) continue
+    inputs.set(JSON.stringify([event.data.executionId, event.data.idempotencyKey]), event.data.phase)
+  }
+  return [...executions.values()].some(phase => !['completed', 'failed', 'cancelled'].includes(phase))
+    || [...inputs.values()].some(phase => phase !== 'submitted')
 }
 
 /**

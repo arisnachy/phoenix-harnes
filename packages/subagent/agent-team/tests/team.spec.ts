@@ -741,6 +741,17 @@ describe('Team identity and provisioning', () => {
     await orphanRoot.dispose()
   })
 
+  it('does not grant a provider child Lead membership before its descriptor is appended', async () => {
+    const { ctx, lead } = await setup([])
+    const child = await ctx.agents.create({
+      sessionId: SessionId('published-provider-child'),
+      meta: { parentSession: lead.id, origin: 'subagent' },
+      agentOptions: { provider: 'mock', model: 'mock' },
+    })
+    expect(ctx.agentTeams.tryMembership(child.agent)).toBeUndefined()
+    await child.dispose()
+  })
+
   it('does not reinterpret an orphaned provider child or malformed parent stream as a Team root', async () => {
     const first = await setup([textResponse('ordinary child done')])
     const parent = await first.ctx.agents.create({
