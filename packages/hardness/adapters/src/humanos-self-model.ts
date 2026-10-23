@@ -3,7 +3,7 @@ import type { ProactivityEngine } from './proactivity-engine.ts'
 
 /** Provider-neutral observations already held in HARDNESS and the durable task engine. */
 export interface HumanOSObservationSources {
-  readonly hardness: Pick<HardnessService, 'list'>
+  readonly hardness: Pick<HardnessService, 'list' | 'evidenceFor'>
   readonly tasks: Pick<ProactivityEngine, 'peek'>
 }
 
@@ -28,6 +28,17 @@ export interface HumanOSSelfModel {
     readonly brokenOrQuarantined: number
     readonly deprecated: number
   }
+  readonly verification: {
+    /** This is audit evidence for descriptor versions, not proof of runtime availability. */
+    readonly examinedCapabilities: number
+    readonly unexaminedCapabilities: number
+    readonly currentPasses: number
+    readonly currentFailures: number
+    readonly currentDenials: number
+    readonly outdatedVersionRecords: number
+    readonly capabilitiesWithoutCurrentEvidence: number
+    readonly capabilitiesWithConflictingEvidence: number
+  }
   readonly tasks: {
     readonly scheduled: number
     readonly running: number
@@ -37,6 +48,10 @@ export interface HumanOSSelfModel {
   }
   readonly attention: 'inspect-failure' | 'verify-before-use' | 'check-due-work' | 'no-alert'
 }
+
+/** Limit registry observation cost even when providers publish very large catalogs. */
+const MAX_VERIFICATION_CAPABILITIES = 64
+const MAX_EVIDENCE_PER_CAPABILITY = 12
 
 function selected(value: string | undefined): boolean {
   return typeof value === 'string' && value.trim().length > 0
@@ -65,7 +80,42 @@ export function inspectHumanOSSelfModel(
     quarantined: 0,
     deprecated: 0,
   }
-  for (const descriptor of sources.hardness.list()) status[descriptor.status] += 1
+  const descriptors = sources.hardness.list()
+  const verification = {
+    examinedCapabilities: 0,
+    unexaminedCapabilities: Math.max(0, descriptors.length - MAX_VERIFICATION_CAPABILITIES),
+    currentPasses: 0,
+    currentFailures: 0,
+    currentDenials: 0,
+    outdatedVersionRecords: 0,
+    capabilitiesWithoutCurrentEvidence: 0,
+    capabilitiesWithConflictingEvidence: 0,
+  }
+  for (const [index, descriptor] of descriptors.entries()) {
+    if (Object.hasOwn(status, descriptor.status)) status[descriptor.status] += 1
+    if (index >= MAX_VERIFICATION_CAPABILITIES) continue
+    verification.examinedCapabilities += 1
+    // Versions and outcomes come from the authoritative registry, never model claims.
+    const records = sources.hardness.evidenceFor(descriptor.id).slice(-MAX_EVIDENCE_PER_CAPABILITY)
+    let passes = 0
+    let failures = 0
+    for (const evidence of records) {
+      if (evidence.descriptorVersion !== descriptor.version) {
+        verification.outdatedVersionRecords += 1
+        continue
+      }
+      switch (evidence.outcome) {
+        case 'passed': verification.currentPasses += 1; passes += 1; break
+        case 'failed': verification.currentFailures += 1; failures += 1; break
+        case 'denied': verification.currentDenials += 1; break
+      }
+    }
+    const current = passes + failures + records.filter(
+      evidence => evidence.descriptorVersion === descriptor.version && evidence.outcome === 'denied',
+    ).length
+    if (current === 0) verification.capabilitiesWithoutCurrentEvidence += 1
+    if (passes > 0 && failures > 0) verification.capabilitiesWithConflictingEvidence += 1
+  }
   const tasks = { scheduled: 0, running: 0, failed: 0, paused: 0, due: 0 }
   for (const task of sources.tasks.peek({ now })) {
     if (task.targetAgentId !== undefined && task.targetAgentId !== id) continue
@@ -90,12 +140,13 @@ export function inspectHumanOSSelfModel(
       modelSpecified: selected(assembly.agent?.options?.model),
     },
     atlas: {
-      registered: Object.values(status).reduce((sum, count) => sum + count, 0),
+      registered: descriptors.length,
       declaredVerified: status.verified,
       experimentalOrTesting: status.experimental + status.testing,
       brokenOrQuarantined: degraded,
       deprecated: status.deprecated,
     },
+    verification,
     tasks,
     attention: tasks.failed > 0
       ? 'inspect-failure'
@@ -124,7 +175,8 @@ export function renderHumanOSSelfModel(
   return [
     '<phoenix_humanos_self_model>',
     'Read-only operational self-observation. This is a registry snapshot, not subjective consciousness, live tool availability, proof of success, permission, or a reason to start work.',
-    'The HARDNESS capability counts describe global metadata, not capabilities granted to the active agent. Resolve and verify the exact tool for the actual task.',
+    'HARDNESS descriptor counts are global metadata, not current-agent access. Verification outcome counts describe a bounded sample of existing recorded cases and exact descriptor versions, not live ability, statistical probabilities or model confidence.',
+    'A failed, denied, missing, stale or contradictory verification case calls for task-specific rechecking, not an automatic tool retry or permission escalation. Resolve the exact capability with the existing permission gates.',
     'Task counts include only currently visible global and current-agent tasks. Other agents and unrevealed surprises are excluded. Do not infer task titles or details from counts.',
     JSON.stringify(view),
     'Silently use this only when relevant. Check actual evidence before claiming ability or completion. If a failed task matters to the present objective, diagnose and recover through the existing governed mission runtime; otherwise do not interrupt the user.',
