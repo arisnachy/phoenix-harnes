@@ -258,10 +258,14 @@ describe('OpenClaw Agent Teams adapter', () => {
 
   it('fails closed when host-owned policy attestation disagrees with effective restrictions', async () => {
     const gateway = await gatewayFor()
-    const policyAttester: OpenClawPolicyAttester = async request => ({
-      ...await attest(request),
-      toolPolicy: { ...request.expected.toolPolicy, profileHash: 'sha256:wrong' },
-    })
+    const policyAttester: OpenClawPolicyAttester = async request => {
+      const original = await attest(request)
+      if (original === undefined) throw new Error('Fixture native policy attestation is missing')
+      return {
+        ...original,
+        toolPolicy: { ...request.expected.toolPolicy, profileHash: 'sha256:wrong' },
+      }
+    }
     const adapter = new OpenClawExecutionAdapter(adapterConfig(gateway.url, { policyAttester }))
     const fixture = executionContext()
     await expect(adapter.probe()).resolves.toMatchObject({ connected: false, diagnostic: 'OPENCLAW_EXECUTION_POLICY_UNVERIFIED' })
