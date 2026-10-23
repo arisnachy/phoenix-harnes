@@ -1800,6 +1800,42 @@ export async function rollbackOpenClawCandidate({ home, execution, phoenixExecut
 }
 
 /**
+ * Attest a Gateway still owned by this Host's launcher manager.
+ * A persisted PID or a TCP listener alone is never proof of ownership.
+ * @param {object} options
+ * @param {string} options.home - The user-owned runtime home.
+ * @returns {Promise<object | undefined>} Credential-free authority receipt.
+ */
+export async function attestManagedOpenClawGateway({ home } = {}) {
+  try {
+    const resolvedHome = requireHome(home)
+    const paths = pathsFor(resolvedHome)
+    const active = readJson(paths.active)
+    const owned = liveOwnedGateway(paths)
+    if (active?.schema !== SCHEMA || active.status !== 'active' || !owned?.child
+      || !Number.isInteger(active.pid) || active.pid !== owned.child.pid
+      || !Number.isInteger(active.port) || active.port !== owned.port
+      || childExited(owned.child)) return undefined
+    const spec = launchSpec(resolvedHome, active)
+    if (!(await verifyWindowsGatewayOwnership(owned.child, owned.port, 5_000))) return undefined
+    const configPath = join(paths.root, 'openclaw.json')
+    const info = lstatSync(configPath)
+    if (!info.isFile() || info.isSymbolicLink() || info.size < 1 || info.size > MAX_METADATA_BYTES) return undefined
+    if (!(await authenticatedGatewayHealth({ env: { OPENCLAW_CONFIG_PATH: configPath } }, owned.port, 5_000))) return undefined
+    // Bind subsequent Host policy reads to the exact bytes authenticated here.
+    const bytes = readFileSync(configPath)
+    return {
+      status: 'verified',
+      version: spec.version,
+      port: owned.port,
+      configDigest: 'sha256:' + createHash('sha256').update(bytes).digest('hex'),
+    }
+  } catch {
+    return undefined
+  }
+}
+
+/**
  * Start the active isolated OpenClaw gateway with fixed loopback arguments.
  * @param {object} options
  * @param {string} options.home - DSH_HOME containing isolated OpenClaw state.
