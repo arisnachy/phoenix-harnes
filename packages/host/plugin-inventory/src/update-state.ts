@@ -293,9 +293,9 @@ export function readPhoenixUpdateSnapshot(root: string = runtimeRoot()): Phoenix
       && snapshot.target !== undefined
       && queuedRestartTarget(controlDir) === snapshot.target
     ) {
-      return { ...snapshot, status: 'restarting', phase: 'restart', events }
+      return { ...snapshot, status: 'restarting', phase: 'restart', ...(events.length > 0 ? { events } : {}) }
     }
-    return { ...snapshot, events }
+    return events.length > 0 ? { ...snapshot, events } : snapshot
   } catch {
     return { status: 'error', detail: 'PHOENIX update state could not be read.' }
   }
