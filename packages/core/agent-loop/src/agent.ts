@@ -76,7 +76,7 @@ const OUTPUT_LIMIT_CONTINUATION_PROMPT = 'The previous model output was cut off 
  * @param providers - Current allowed provider route names.
  * @returns Whether a genuine max-token stop may be resumed.
  */
-export function shouldAutoContinueOutputLimit(provider: string, model: string, providers: readonly string[]): boolean {
+function shouldAutoContinueOutputLimit(provider: string, model: string, providers: readonly string[]): boolean {
   const route = provider.trim().toLowerCase()
   if (route.includes('codex') || /(?:^|[\\/_-])codex(?:$|[\\/_-])/i.test(model)) return false
   return providers.some(candidate => candidate.trim().toLowerCase() === route)
