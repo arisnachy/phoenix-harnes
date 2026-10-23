@@ -6,7 +6,8 @@ import { WebSocketServer } from 'ws'
 import { Context } from '@phoenix-ai/cordis'
 import { afterEach, expect, it } from 'vitest'
 import OpenClawManagedHostAuthority from '../src/host-authority.ts'
-import { managedOpenClawConfigPath } from '../src/managed-runtime.ts'
+import { createManagedOpenClawConfig, managedOpenClawConfigPath } from '../src/managed-runtime.ts'
+import { OpenClawExecutionAdapter } from '../src/execution-adapter.ts'
 
 const DENY = ['browser', 'cron', 'gateway', 'nodes', 'group:fs', 'group:runtime', 'group:web']
 const roots: string[] = []
@@ -131,6 +132,16 @@ it('binds the Host-authorized model and sandbox to an authenticated native route
     agentId: 'phoenix', model: 'gpt-5', toolPolicy: { profileHash: policy.toolPolicy.profileHash },
   })
   expect(JSON.stringify(policy)).not.toContain('private-fixture-token')
+  // Drive the actual managed composition and Gateway adapter rather than only
+  // inspecting the Host policy service in isolation.
+  const managed = await createManagedOpenClawConfig(f.host)
+  if (managed === undefined) throw new Error('verified Host did not compose the native adapter')
+  const adapter = new OpenClawExecutionAdapter(managed)
+  await expect(adapter.probe()).resolves.toMatchObject({
+    engine: 'openclaw', connected: true, providers: ['openai-codex'],
+  })
+  expect(f.gateway.requests).toContain('agents.list')
+  expect(f.gateway.requests).not.toContain('agent')
 })
 
 it('rejects a weakened sandbox or changed credential-bearing config after the proof', async () => {
