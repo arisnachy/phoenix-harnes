@@ -51,14 +51,18 @@ export const Config: z<Config> = z.object({
 })
 
 export const name = 'subagent-openclaw'
-export const inject = ['agentTeams', 'openclawManagedRuntime']
+export const inject = ['agentTeams']
 /** Optional host service key used for production managed-runtime composition. */
 export const managedRuntimeService = 'openclawManagedRuntime'
 
 /** Register one adapter per Cordis fiber; disposal unregisters that exact instance. */
 export async function apply(ctx: Context, config: Config = {}): Promise<void> {
-  const service = ctx.get(managedRuntimeService)
-  const host = service instanceof OpenClawManagedHostAuthority ? service : undefined
+  const service: unknown = ctx.get(managedRuntimeService)
+  // The adapter's own trusted Host fiber provides this native authority. A
+  // foreign plugin cannot mint permission by occupying the same service key.
+  const host = service === undefined
+    ? new OpenClawManagedHostAuthority(ctx)
+    : service instanceof OpenClawManagedHostAuthority ? service : undefined
   // Plugin YAML (including a pasted function or policy attestation) is never
   // execution authority. Only a live trusted Host can create the native route.
   // A missing Host fails closed even when a configured endpoint is reachable.

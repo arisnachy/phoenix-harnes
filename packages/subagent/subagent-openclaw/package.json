@@ -23,15 +23,10 @@
       "default": "./lib/invariant.js"
     },
     "./src/*": "./src/*",
-    "./package.json": "./package.json",
-    "./host-authority": {
-      "types": "./lib/types/host-authority.d.ts",
-      "default": "./lib/host-authority.js"
-    }
+    "./package.json": "./package.json"
   },
   "files": [
     "lib/index.js",
-    "lib/host-authority.js",
     "lib/invariant.js",
     "lib/types/**/*.d.ts"
   ],
