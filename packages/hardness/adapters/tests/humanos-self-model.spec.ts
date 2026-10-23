@@ -74,6 +74,24 @@ describe('Phoenix HumanOS grounded self-model', () => {
     expect(rendered).not.toContain('v1')
   })
 
+  it('uses only the most recent bounded evidence for each descriptor', () => {
+    const input = sources(['verified'], [], {
+      'cap-0': [
+        { descriptorVersion: 'v1', outcome: 'failed' },
+        ...Array.from({ length: 12 }, () => ({
+          descriptorVersion: 'v1', outcome: 'passed' as const,
+        })),
+      ],
+    })
+    const result = inspectHumanOSSelfModel(input, scoped, time)
+    expect(result?.verification).toMatchObject({
+      examinedCapabilities: 1,
+      currentPasses: 12,
+      currentFailures: 0,
+      capabilitiesWithConflictingEvidence: 0,
+    })
+  })
+
   it('bounds verification work and explicitly discloses unexamined capabilities', () => {
     const input = sources(Array.from({ length: 70 }, () => 'verified'))
     const snapshot = vi.fn(() => input.hardness.snapshot())
