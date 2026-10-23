@@ -1,9 +1,10 @@
 /** Cordis plugin composition for the public OpenClaw execution adapter. */
 
 import type { Context } from '@phoenix-ai/cordis'
+import type { ExecutionAdapter } from '@phoenix-ai/dsh-agent-team'
 import z from '@phoenix-ai/schemastery'
 import {
-  registerOpenClawExecutionAdapter,
+  OpenClawExecutionAdapter,
 } from './execution-adapter.ts'
 import { createManagedOpenClawConfig } from './managed-runtime.ts'
 import OpenClawManagedHostAuthority from './host-authority.ts'
@@ -63,14 +64,28 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
   const host = service === undefined
     ? new OpenClawManagedHostAuthority(ctx)
     : service instanceof OpenClawManagedHostAuthority ? service : undefined
-  // Plugin YAML (including a pasted function or policy attestation) is never
-  // execution authority. Only a live trusted Host can create the native route.
-  // A missing Host fails closed even when a configured endpoint is reachable.
-  const managed = host === undefined ? undefined : await createManagedOpenClawConfig(host)
-  registerOpenClawExecutionAdapter(ctx, managed === undefined ? {} : {
-    ...managed,
-    // These bounded transport preferences do not change route or permissions.
-    ...(config.timeoutMs === undefined ? {} : { timeoutMs: config.timeoutMs }),
-    ...(config.maxFrameBytes === undefined ? {} : { maxFrameBytes: config.maxFrameBytes }),
+  // Re-resolve Host authority on every probe and operation. Freezing one
+  // unconfigured adapter at boot would leave a Gateway started later
+  // permanently disconnected, and would also retain stale permissions.
+  const adapterNow = async (): Promise<OpenClawExecutionAdapter> => {
+    const managed = host === undefined ? undefined : await createManagedOpenClawConfig(host)
+    return new OpenClawExecutionAdapter(managed === undefined ? {} : {
+      ...managed,
+      ...(config.timeoutMs === undefined ? {} : { timeoutMs: config.timeoutMs }),
+      ...(config.maxFrameBytes === undefined ? {} : { maxFrameBytes: config.maxFrameBytes }),
+    })
+  }
+  ctx.inject(['agentTeams'], (teamContext) => {
+    const adapter: ExecutionAdapter = {
+      engine: 'openclaw',
+      probe: async () => (await adapterNow()).probe(),
+      resolveNativePolicy: async (request) => (await adapterNow()).resolveNativePolicy(request),
+      run: async (request) => (await adapterNow()).run(request),
+      recover: async (request) => (await adapterNow()).recover(request),
+    }
+    teamContext.effect(
+      () => teamContext.agentTeams.executions.register(adapter),
+      'subagent-openclaw.execution-adapter',
+    )
   })
 }
