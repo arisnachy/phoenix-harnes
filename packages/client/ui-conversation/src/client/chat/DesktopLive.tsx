@@ -16,8 +16,10 @@ export function DesktopLive({ sessionId, active }: { sessionId: string; active: 
   const [image, setImage] = useState<string>()
   const [collapsed, setCollapsed] = useState(false)
   const [live, setLive] = useState<MediaStream | null>(null)
+  const [liveOwner, setLiveOwner] = useState<string | null>(null)
   const [captureError, setCaptureError] = useState('')
   const imageRef = useRef<string>()
+  const imageOwnerRef = useRef(sessionId)
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const owningSessionRef = useRef(sessionId)
@@ -27,6 +29,7 @@ export function DesktopLive({ sessionId, active }: { sessionId: string; active: 
     streamRef.current = null
     stream?.getTracks().forEach(track => track.stop())
     setLive(null)
+    setLiveOwner(null)
   }, [])
 
   useEffect(() => {
@@ -81,6 +84,7 @@ export function DesktopLive({ sessionId, active }: { sessionId: string; active: 
         if (streamRef.current === stream) stopSharing()
       }, { once: true })
       streamRef.current = stream
+      setLiveOwner(owner)
       setLive(stream)
     } catch (error) {
       setCaptureError(error instanceof Error && error.name === 'NotAllowedError'
@@ -123,6 +127,7 @@ export function DesktopLive({ sessionId, active }: { sessionId: string; active: 
         const next = URL.createObjectURL(blob)
         const previous = imageRef.current
         imageRef.current = next
+        imageOwnerRef.current = sessionId
         setImage(next)
         if (previous) URL.revokeObjectURL(previous)
       } catch (error) {
@@ -144,7 +149,8 @@ export function DesktopLive({ sessionId, active }: { sessionId: string; active: 
     if (imageRef.current) URL.revokeObjectURL(imageRef.current)
   }, [])
 
-  const liveWindow = live !== null
+  const liveWindow = live !== null && liveOwner === sessionId
+  const ownedImage = imageOwnerRef.current === sessionId ? image : undefined
   return (
     <section className={css.root} data-chat-flow-kind="desktop-live" aria-label="Phoenix Desktop Live">
       <header className={css.header}>
@@ -165,9 +171,9 @@ export function DesktopLive({ sessionId, active }: { sessionId: string; active: 
           <video ref={videoRef} className={css.frame} autoPlay muted playsInline aria-label="Ventana Windows compartida en tiempo real" />
           <div className={css.caption}>Vídeo de la ventana que seleccionaste · Cambiar de pestaña no cambia la ventana compartida. La captura no controla la aplicación.</div>
         </div>
-        : status.available && image
+        : status.available && ownedImage
           ? <div className={css.viewport}>
-            <img className={css.frame} src={image} alt={'Captura real de ' + (status.title || 'la aplicación Windows')} />
+            <img className={css.frame} src={ownedImage} alt={'Captura real de ' + (status.title || 'la aplicación Windows')} />
             <div className={css.caption}>{status.title || 'Aplicación Windows'} · {status.source === 'observation'
               ? 'Último paso verificado (no vídeo). Usa «Compartir ventana en directo» para verla sin depender del foco.'
               : 'Capturas periódicas de la ventana seleccionada'}</div>
