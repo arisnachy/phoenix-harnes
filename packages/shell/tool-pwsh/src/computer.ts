@@ -699,6 +699,18 @@ export function validateComputerArgs(args: ComputerToolArgs): void {
 }
 
 /**
+ * Select the exact app that accepted an action before capturing verification evidence.
+ * @param args - Explicitly selected Computer window, if any.
+ * @param details - Driver's observed HWND recorded immediately after the operation.
+ * @returns A pinned HWND or the user-provided selector; undefined for legacy whole-screen capture.
+ */
+export function computerVerificationTarget(args: Pick<ComputerToolArgs, 'target'>, details: string): string | undefined {
+  if (args.target !== undefined) return normalizedDesktopTarget(args.target)
+  const match = /\bhwnd=(0x[0-9a-f]+)\b/iu.exec(details)
+  return match === null ? undefined : 'hwnd:' + match[1]
+}
+
+/**
  * Determine whether an action must be followed by a fresh visual observation.
  * @param action - Closed-set Computer Use action.
  * @returns True when the action can change desktop/application state in a way the model must re-observe.
@@ -1413,7 +1425,7 @@ export async function runWindowsComputerAction(args: ComputerToolArgs, signal?: 
 
   const descriptor = await readDesktopControlDescriptorIfAvailable()
   if (descriptor?.schema === LEGACY_DESKTOP_CONTROL_SCHEMA
-    && (args.action === 'windows' || args.action === 'screenshot')) {
+    && (args.action === 'windows' || (args.action === 'screenshot' && args.target === undefined))) {
     try {
       const nativeObservation = await runLegacyDesktopObservation(args, descriptor, signal)
       if (nativeObservation.length > 0) return nativeObservation
@@ -1817,8 +1829,7 @@ export function registerComputerTool(ctx: Context): void {
         await delay(POST_ACTION_SETTLE_MS, exec.signal)
         // Bind the verification image to the window that accepted the action,
         // not whatever application the user foregrounds while we capture it.
-        const observedHandle = /\bhwnd=(0x[0-9a-f]+)\b/iu.exec(output)?.[1]
-        const screenshotTarget = args.target ?? (observedHandle === undefined ? undefined : 'hwnd:' + observedHandle)
+        const screenshotTarget = computerVerificationTarget(args, output)
         const fresh = await runWindowsComputerAction({
           action: 'screenshot', ...(screenshotTarget === undefined ? {} : { target: screenshotTarget }),
         }, exec.signal)
