@@ -13,7 +13,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import clsx from 'clsx'
 import {
   Button, IconCloseFill14, IconPersonalizationOutline16,
-  IconProjectAddOutline16, IconSearchOutline16, Menu, Modal, Tooltip,
+  IconProjectAddOutline16, IconSearchOutline16, IconTrashOutline16, Menu, Modal, Tooltip,
 } from '@phoenix-ai/dsh-client-ui-primitives'
 import type {
   SessionId, SessionListState, SessionSearchResultItem, WorkspaceId, WorkspaceView,
@@ -23,6 +23,7 @@ import type { SessionNode, SessionOrderBy } from './tree.ts'
 import { deriveFlat, deriveGroups, deriveSearchResults, UNGROUPED_KEY } from './tree.ts'
 import { ProjectRowItem, SearchResultItem, SessionNodeItem } from './Rows.tsx'
 import { FLAT_SESSION_ORDER_KEY } from './stores.ts'
+import { cleanupCandidateIds, type SessionCleanupMode } from './cleanup.ts'
 import { WorkspacePickFlow } from './WorkspacePicker.tsx'
 import css from './WorkspaceBrowser.module.css'
 
@@ -868,6 +869,7 @@ export function WorkspaceBrowser({
   const workspaces = useWorkspaces(state => state.items)
   const workspacePhase = useWorkspaces(state => state.phase)
   const archivedSessionIds = useWorkspaces(state => state.archivedSessionIds)
+  const cleanupSessions = useSessions(state => state)
   // Live occupancy of this surface's directory-flow hole (the same source the
   // flow reads): a composition without a picking affordance can add nothing.
   const directoryFlowAvailable = useDirectoryFlow(occupied => occupied)
@@ -1093,6 +1095,64 @@ export function WorkspaceBrowser({
     })
   }
 
+  // Explicit, user-scoped mass deletion. The preview is computed from the
+  // current Host-visible roster; each id uses the same safe physical-delete RPC
+  // as one conversation, so partial failures remain observable.
+  const [cleanupOpen, setCleanupOpen] = useState(false)
+  const [cleanupMode, setCleanupMode] = useState<SessionCleanupMode>('selected')
+  const [cleanupBefore, setCleanupBefore] = useState('')
+  const [cleanupAfter, setCleanupAfter] = useState('')
+  const [cleanupSelected, setCleanupSelected] = useState<string[]>([])
+  const [cleanupConfirm, setCleanupConfirm] = useState('')
+  const [cleanupRunning, setCleanupRunning] = useState(false)
+  const [cleanupProgress, setCleanupProgress] = useState<{ done: number; total: number } | null>(null)
+  const [cleanupErrors, setCleanupErrors] = useState<string[]>([])
+  const [cleanupFinished, setCleanupFinished] = useState(false)
+  const cleanupCandidates = useMemo(() => cleanupCandidateIds(
+    cleanupSessions, cleanupMode, cleanupSelected, cleanupBefore, cleanupAfter,
+  ), [cleanupSessions, cleanupMode, cleanupSelected, cleanupBefore, cleanupAfter])
+  const cleanupNeedsToken = cleanupMode === 'all'
+  const cleanupCanSubmit = !cleanupRunning && !cleanupFinished && deleteSession !== undefined
+    && cleanupCandidates.length > 0
+    && (!cleanupNeedsToken || cleanupConfirm === t('cleanup.confirmToken'))
+  const resetCleanupResult = () => {
+    setCleanupProgress(null)
+    setCleanupErrors([])
+    setCleanupFinished(false)
+    setCleanupConfirm('')
+  }
+  const closeCleanup = () => {
+    if (cleanupRunning) return
+    setCleanupOpen(false)
+    resetCleanupResult()
+  }
+  const confirmCleanup = () => {
+    if (!cleanupCanSubmit || deleteSession === undefined) return
+    const ids = [...cleanupCandidates]
+    setCleanupRunning(true)
+    setCleanupErrors([])
+    setCleanupProgress({ done: 0, total: ids.length })
+    void (async () => {
+      const failures: string[] = []
+      let done = 0
+      // Serial deletion: the same per-session lifecycle and workspace
+      // persistence indexes serve each operation; avoid a destructive flood.
+      for (const id of ids) {
+        try {
+          await deleteSession(id)
+        } catch (error: unknown) {
+          failures.push(id + ': ' + (error instanceof Error ? error.message : String(error)))
+        }
+        done++
+        setCleanupProgress({ done, total: ids.length })
+      }
+      setCleanupErrors(failures)
+      setCleanupFinished(true)
+      setCleanupRunning(false)
+      if (failures.length === 0) setCleanupSelected([])
+    })()
+  }
+
   const [sessionDeleteTarget, setSessionDeleteTarget] = useState<{ sessionId: SessionNode['id']; title: string } | null>(null)
   const [sessionDeleting, setSessionDeleting] = useState(false)
   const [sessionDeleteError, setSessionDeleteError] = useState<string | null>(null)
@@ -1224,6 +1284,17 @@ export function WorkspaceBrowser({
           </div>
         )}
         <div className={clsx(css.headerActions, wide && searchExpanded && css.headerActionsHidden)}>
+          {wide && deleteSession !== undefined && (
+            <Tooltip label={t('cleanup.title')} side="bottom" delayMs={500}>
+              <button
+                type="button" className={css.iconButton}
+                aria-label={t('cleanup.title')}
+                onClick={() => { resetCleanupResult(); setCleanupOpen(true) }}
+              >
+                <IconTrashOutline16 />
+              </button>
+            </Tooltip>
+          )}
           {wide && (
             <ViewOptionsMenu
               groupBy={groupBy}
@@ -1438,6 +1509,119 @@ export function WorkspaceBrowser({
         {sessionRenameError !== null && <div className={css.renameError} role="alert">{sessionRenameError}</div>}
       </Modal>
       <Modal
+        open={cleanupOpen}
+        onClose={closeCleanup}
+        closeLabel={t('close')}
+        title={t('cleanup.title')}
+        description={t('cleanup.description')}
+        footer={(
+          <>
+            <Button variant="outline" disabled={cleanupRunning} onClick={closeCleanup}>
+              {cleanupFinished ? t('close') : t('cancel')}
+            </Button>
+            {!cleanupFinished && (
+              <Button
+                variant="outline"
+                className={css.deleteAction}
+                disabled={!cleanupCanSubmit}
+                onClick={confirmCleanup}
+              >
+                {t('cleanup.deleteCount', { n: cleanupCandidates.length })}
+              </Button>
+            )}
+          </>
+        )}
+      >
+        <div className={css.cleanupForm}>
+          <label htmlFor="phoenix-cleanup-mode">{t('cleanup.mode')}</label>
+          <select
+            id="phoenix-cleanup-mode" disabled={cleanupRunning}
+            value={cleanupMode}
+            onChange={e => {
+              setCleanupMode(e.target.value as SessionCleanupMode)
+              resetCleanupResult()
+            }}
+          >
+            <option value="selected">{t('cleanup.selected')}</option>
+            <option value="before">{t('cleanup.before')}</option>
+            <option value="between">{t('cleanup.between')}</option>
+            <option value="all">{t('cleanup.all')}</option>
+          </select>
+          {(cleanupMode === 'before' || cleanupMode === 'between') && (
+            <label>
+              {t('cleanup.dateBefore')}
+              <input
+                type="date" disabled={cleanupRunning}
+                value={cleanupBefore}
+                onChange={e => { setCleanupBefore(e.target.value); resetCleanupResult() }}
+              />
+            </label>
+          )}
+          {cleanupMode === 'between' && (
+            <label>
+              {t('cleanup.dateAfter')}
+              <input
+                type="date" disabled={cleanupRunning}
+                value={cleanupAfter}
+                onChange={e => { setCleanupAfter(e.target.value); resetCleanupResult() }}
+              />
+            </label>
+          )}
+          {cleanupMode === 'selected' && (
+            <div className={css.cleanupChoices} role="group" aria-label={t('cleanup.selected')}>
+              {cleanupSessions.ids.map(id => {
+                const item = cleanupSessions.byId[id]
+                if (item === undefined) return null
+                return (
+                  <label key={id} className={css.cleanupChoice}>
+                    <input
+                      type="checkbox" disabled={cleanupRunning}
+                      checked={cleanupSelected.includes(id)}
+                      onChange={e => {
+                        setCleanupSelected(previous => e.target.checked
+                          ? [...previous, id] : previous.filter(value => value !== id))
+                        resetCleanupResult()
+                      }}
+                    />
+                    <span>{item.displayTitle}</span>
+                    {item.running && <small>{t('status.running')}</small>}
+                  </label>
+                )
+              })}
+            </div>
+          )}
+          <p role="status">{t('cleanup.previewCount', { n: cleanupCandidates.length })}</p>
+          <p>{t('cleanup.warning')}</p>
+          {cleanupNeedsToken && !cleanupFinished && (
+            <label>
+              {t('cleanup.typeConfirm', { token: t('cleanup.confirmToken') })}
+              <input
+                type="text" disabled={cleanupRunning}
+                value={cleanupConfirm} autoComplete="off"
+                onChange={e => { setCleanupConfirm(e.target.value) }}
+              />
+            </label>
+          )}
+          {cleanupProgress !== null && (
+            <p role="status">{t('cleanup.progress', cleanupProgress)}</p>
+          )}
+          {cleanupFinished && (
+            <p role="status">
+              {t('cleanup.completed', {
+                n: (cleanupProgress?.total ?? 0) - cleanupErrors.length,
+                failed: cleanupErrors.length,
+              })}
+            </p>
+          )}
+          {cleanupErrors.length > 0 && (
+            <div className={css.cleanupErrors} role="alert">
+              {cleanupErrors.slice(0, 10).map(message => <p key={message}>{message}</p>)}
+              {cleanupErrors.length > 10 && <p>{t('cleanup.moreErrors', { n: cleanupErrors.length - 10 })}</p>}
+            </div>
+          )}
+        </div>
+      </Modal>
+      <Modal
         open={sessionDeleteTarget !== null}
         onClose={closeSessionDelete}
         closeLabel={t('close')}
@@ -1459,6 +1643,7 @@ export function WorkspaceBrowser({
           </>
         )}
       >
+        {sessionDeleteTarget !== null && <p>{t('delete.session.activeNotice')}</p>}
         {sessionDeleteError !== null && <div className={css.renameError} role="alert">{sessionDeleteError}</div>}
       </Modal>
       <Modal

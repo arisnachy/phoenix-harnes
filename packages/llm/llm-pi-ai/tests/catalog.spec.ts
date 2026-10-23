@@ -13,7 +13,8 @@ import { getBuiltinModels } from '@earendil-works/pi-ai/providers/all'
 import { createModels, getSupportedThinkingLevels } from '@earendil-works/pi-ai'
 import type { Api, Model, OpenAICompletionsCompat, Provider } from '@earendil-works/pi-ai'
 import { resolveProfiles } from '../src/config.ts'
-import { catalogModels } from '../src/catalog.ts'
+import { catalogModels, documentedOpenRouterContextWindow } from '../src/catalog.ts'
+import { fitGenerateOptionsToContext } from '../src/context.ts'
 import { buildProvider, supportedProtocols } from '../src/provider.ts'
 import { assemble } from './assemble.ts'
 import { memoryAuth } from './auth-double.ts'
@@ -75,6 +76,50 @@ async function harness(config: LlmPiAi.Config): Promise<Context> {
   await ctx.plugin(LlmPiAi, config)
   return ctx
 }
+
+describe('OpenRouter Nemotron context capacity', () => {
+  const model = 'nvidia/nemotron-3-nano-30b-a3b'
+
+  it('corrects only the inherited stale 128K capacity, preserving user overrides and other routes', () => {
+    expect(documentedOpenRouterContextWindow('openrouter', 'https://openrouter.ai/api/v1', model, 131_072))
+      .toBe(262_144)
+    expect(documentedOpenRouterContextWindow('openrouter', 'https://openrouter.ai/api/v1', model, 262_144))
+      .toBe(262_144)
+    expect(documentedOpenRouterContextWindow('openrouter', 'https://openrouter.ai/api/v1', model, 131_072, 98_304))
+      .toBe(98_304)
+    expect(documentedOpenRouterContextWindow('openrouter', 'https://gateway.example/v1', model, 131_072))
+      .toBe(131_072)
+    expect(documentedOpenRouterContextWindow('deepseek', 'https://openrouter.ai/api/v1', model, 131_072))
+      .toBe(131_072)
+  })
+
+  it('admits the actual 187,208 input-token request on the corrected model route', () => {
+    const profile = resolveProfiles({ openrouter: {} }).get('openrouter')
+    const catalogModel = profile?.piProvider.getModels().find(value => value.id === model)
+    expect(catalogModel?.contextWindow).toBe(262_144)
+    const input = 'a'.repeat(187_208 * 4)
+    const request = {
+      provider: 'openrouter', model,
+      system: 'important instruction', messages: [createUserMessage({
+        content: [{ type: 'text' as const, text: input }],
+        source: { kind: 'user' as const },
+      })],
+    }
+    const fitted = fitGenerateOptionsToContext(request, catalogModel!.contextWindow, 4096)
+    expect(fitted.estimatedTokens).toBeLessThanOrEqual(fitted.inputBudgetTokens)
+    expect(fitted.inputBudgetTokens).toBe(253_952)
+    const previouslyConstrained = fitGenerateOptionsToContext(request, 131_072, 4096)
+    expect(previouslyConstrained.estimatedTokens).toBeGreaterThan(previouslyConstrained.inputBudgetTokens)
+  })
+
+  it('does not increase a user-configured Nemotron context limit', () => {
+    const profile = resolveProfiles({ openrouter: { models: [{
+      id: model,
+      contextWindow: 131_072,
+    }] } }).get('openrouter')
+    expect(profile?.piProvider.getModels().find(value => value.id === model)?.contextWindow).toBe(131_072)
+  })
+})
 
 describe('hand-declared providers', () => {
   it('serves a route pi-ai has never heard of from its own declaration', async () => {

@@ -64,6 +64,8 @@ async function harness(
   extras: {
     openPath?: (path: string, signal: AbortSignal) => Promise<void>
     canOpenPath?: () => boolean
+    persistence?: unknown
+    detachableSessionFactory?: boolean
   } = {},
 ) {
   const ctx = new Context()
@@ -75,21 +77,23 @@ async function harness(
   const storageDomain = new DomainFacility(ctx, { backend: 'memory', routes: {} })
   ctx.storage.mount('domain', storageDomain)
   ctx.provide('storageDomain', storageDomain)
-  ctx.provide('sessionPersistence', { list: () => Promise.resolve([]) } as never)
+  ctx.provide('sessionPersistence', (extras.persistence ?? { list: () => Promise.resolve([]) }) as never)
   await ctx.plugin(WorkspaceRegistry)
 
   const factory: AgentFactory = {
     async createAgent(_ownerCtx, options) {
-      const session = ctx.sessions.create(
-        options.sessionId,
-        options.meta === undefined ? {} : { meta: options.meta },
-      )
+      const session = extras.detachableSessionFactory
+        ? ctx.sessions.prepare(options.sessionId, options.meta === undefined ? {} : { meta: options.meta })
+        : ctx.sessions.create(options.sessionId, options.meta === undefined ? {} : { meta: options.meta })
+      const detach = extras.detachableSessionFactory ? ctx.sessions.enter(session) : undefined
+      if (detach !== undefined) ctx.sessions.announce(session)
       const agent = stubAgent(session)
       const unregister = ctx.agents.register(agent)
       return {
         agent,
         dispose: () => {
           unregister()
+          detach?.()
           return Promise.resolve()
         },
       }
@@ -567,5 +571,33 @@ describe('Host Workspace increments', () => {
       error: { code: 'session-not-found', details: { sessionId: 'session-ghost' } },
     })
     abort.abort()
+  })
+})
+
+describe('user-requested permanent deletion of active hosted conversations', () => {
+  it('disposes the live owner and drains its session before removing the durable record', async () => {
+    const removed: string[] = []
+    const { api, ctx, root } = await harness(undefined, undefined, {
+      detachableSessionFactory: true,
+      persistence: {
+        list: () => Promise.resolve([]),
+        remove: async (id: SessionId) => {
+          expect(ctx.sessions.get(id)).toBeUndefined()
+          expect(ctx.agents.get(id)).toBeUndefined()
+          removed.push(id)
+          return true
+        },
+      },
+    })
+    const created = expectOk(await api.sessions.create(request({ cwd: root })))
+    expect(ctx.agents.get(created.sessionId)).toBeDefined()
+    expect(ctx.sessions.get(created.sessionId)).toBeDefined()
+
+    expect(await api.sessions.delete(request({ sessionId: created.sessionId })))
+      .toMatchObject({ result: { ok: true, value: { deleted: true } } })
+    expect(removed).toEqual([created.sessionId])
+    expect(ctx.agents.get(created.sessionId)).toBeUndefined()
+    expect(ctx.sessions.get(created.sessionId)).toBeUndefined()
+    await ctx.fiber.dispose()
   })
 })

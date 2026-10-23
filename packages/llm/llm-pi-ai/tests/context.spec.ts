@@ -175,6 +175,17 @@ describe('pi-ai request context conversion', () => {
     expect(fitted.options.messages).toEqual([userMessage])
   })
 
+  it('preserves the exact user content and refuses oversized requests rather than silently truncating', () => {
+    const message = user([{ type: 'text', text: 'd'.repeat(800_000) }])
+    const source = request([message])
+    const narrow = fitGenerateOptionsToContext(source, 131_072, 4096)
+    expect(narrow.estimatedTokens).toBeGreaterThan(narrow.inputBudgetTokens)
+    expect(narrow.options.messages.at(-1)).toEqual(message)
+    const expanded = fitGenerateOptionsToContext(source, 262_144, 4096)
+    expect(expanded.estimatedTokens).toBeLessThan(expanded.inputBudgetTokens)
+    expect(expanded.options.messages.at(-1)).toEqual(message)
+  })
+
   it('leaves requests untouched when they already preserve reply room', () => {
     const options = request([user([{ type: 'text', text: 'small request' }])])
     const fitted = fitGenerateOptionsToContext(options, 200_000, 4096)

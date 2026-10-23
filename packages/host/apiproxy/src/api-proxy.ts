@@ -19,7 +19,7 @@ import {
   PHOENIX_CODEX_AUTO_PLANNER_MODEL,
   PHOENIX_CODEX_AUTO_WORKER_MODEL,
 } from '@phoenix-ai/dsh-agent'
-import type { Agent, ModelSelection, ModelSelectionRef, AgentOptions, AgentStatus } from '@phoenix-ai/dsh-agent'
+import type { Agent, AgentHandle, ModelSelection, ModelSelectionRef, AgentOptions, AgentStatus } from '@phoenix-ai/dsh-agent'
 import type {} from '@phoenix-ai/dsh-agent-presets/types'
 import { AttachmentError, admitEncodedFiles, admitEncodedImages } from '@phoenix-ai/dsh-attachment'
 import type { FileAttachmentRef, ImageAttachmentRef } from '@phoenix-ai/dsh-attachment'
@@ -1275,6 +1275,13 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
   const presetSwitches = new Map<SessionId, Promise<unknown>>()
   /** Client-chosen identity creation/resume, deduplicated across concurrent retries. */
   const sessionCreations = new Map<SessionId, Promise<Agent>>()
+  /** Retain owned disposal handles: looking up an Agent is not authority to tear it down. */
+  const sessionOwners = new Map<SessionId, AgentHandle>()
+  /** Fence all admission paths while the owner drains a user-requested deletion. */
+  const deletingSessions = new Set<SessionId>()
+  const rememberSessionOwner = (handle: AgentHandle): void => {
+    sessionOwners.set(handle.agent.id, handle)
+  }
   /** Serializes path ownership and explicit title checks with Workspace mutations. */
   let workspaceCreationChain = Promise.resolve()
   const pendingQuestions = new Map<RpcId, PendingQuestion>()
@@ -1446,6 +1453,8 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
     agentOptions,
     setup: async ({ meta, events }) =>
       (await composeAgent(resolveSessionPreset({ header: meta, events }))).setup,
+    onOwnedHandle: rememberSessionOwner,
+    isDeletingSession: id => deletingSessions.has(id),
   })
 
   /** Send one transient frame to every connected mux consumer. */
@@ -1822,6 +1831,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
     checkPersistedIdentity: boolean,
     presetId?: string,
   ): Promise<Agent> {
+    if (deletingSessions.has(sessionId)) throw new Error(`session "${sessionId}" is being deleted`)
     let creation = sessionCreations.get(sessionId)
     if (creation === undefined) {
       creation = (async () => {
@@ -1855,11 +1865,14 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           // session's history was produced under that composition, and
           // rebuilding it differently would replay tool calls the model can no
           // longer make.
-          return (await ctx.agents.resume({
+          if (deletingSessions.has(sessionId)) throw new Error(`session "${sessionId}" is being deleted`)
+          const handle = await ctx.agents.resume({
             resumeSessionId: sessionId,
             agentOptions: agentOptions(),
             setup: (await composeAgent(storedPreset)).setup,
-          })).agent
+          })
+          rememberSessionOwner(handle)
+          return handle.agent
         }
 
         try {
@@ -1868,7 +1881,8 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           throw new Error(`failed to ensure project directory "${cwd}": ${String(error)}`, { cause: error })
         }
         const composition = await composeAgent(presetId)
-        return (await ctx.agents.create({
+        if (deletingSessions.has(sessionId)) throw new Error(`session "${sessionId}" is being deleted`)
+        const handle = await ctx.agents.create({
           sessionId,
           agentOptions: agentOptions(),
           meta: {
@@ -1876,7 +1890,9 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             ...composition.agentPreset === undefined ? {} : { agentPreset: composition.agentPreset },
           },
           setup: composition.setup,
-        })).agent
+        })
+        rememberSessionOwner(handle)
+        return handle.agent
       })().catch((error: unknown) => {
         // Another Host entry path may have published the same identity while
         // this operation crossed an asynchronous persistence/filesystem step.
@@ -2807,13 +2823,6 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
 
       async delete(request) {
         const { sessionId } = request.payload
-        if (ctx.agents.get(sessionId) !== undefined || ctx.sessions.get(sessionId) !== undefined) {
-          return err(request, {
-            code: 'agent-busy',
-            message: `session "${sessionId}" is active and cannot be deleted`,
-            details: { reason: 'stop the active session before deleting its durable log' },
-          })
-        }
         const persistence = ctx.get('sessionPersistence')
         if (persistence === undefined) {
           return err(request, {
@@ -2822,7 +2831,47 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             details: {},
           })
         }
+        if (deletingSessions.has(sessionId)) {
+          return err(request, {
+            code: 'agent-busy', message: 'This conversation is already being deleted.', details: { reason: 'deletion already in progress' },
+          })
+        }
+        deletingSessions.add(sessionId)
         try {
+          // Drain creation and implicit cold resume already admitted before the
+          // deletion fence. No other entry path can resume this id until done.
+          await sessionCreations.get(sessionId)?.then(() => undefined, () => undefined)
+          await agentFor.waitForPending(sessionId)
+          const live = ctx.agents.get(sessionId)
+          if (live !== undefined && hasSubagentOwner(live.session, live)) {
+            return err(request, {
+              code: 'agent-busy',
+              message: 'This session is owned by an active subagent and must first be stopped by its parent.',
+              details: { reason: 'subagent is owned by its parent lifecycle' },
+            })
+          }
+          const owner = sessionOwners.get(sessionId)
+          if (live !== undefined && (owner === undefined || owner.agent !== live)) {
+            return err(request, {
+              code: 'agent-busy',
+              message: 'The session is owned by a different lifecycle and cannot be removed without its disposal authority.',
+              details: { reason: 'the session is not owned by this web host' },
+            })
+          }
+          if (owner !== undefined) {
+            // Owner disposal cancels/drains the running loop and removes the
+            // attached Session. Persistence retirement then finishes its final
+            // writes before remove() physically deletes the durable record.
+            await owner.dispose()
+            if (sessionOwners.get(sessionId) === owner) sessionOwners.delete(sessionId)
+          }
+          if (ctx.sessions.get(sessionId) !== undefined) {
+            return err(request, {
+              code: 'agent-busy',
+              message: 'Session is still attached to a live owner; its stored data was not deleted.',
+              details: { reason: 'session is still attached' },
+            })
+          }
           if (!await persistence.remove(sessionId)) {
             return err(request, {
               code: 'session-not-found',
@@ -2838,6 +2887,8 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             message: `failed to delete session "${sessionId}": ${String(error)}`,
             details: {},
           })
+        } finally {
+          deletingSessions.delete(sessionId)
         }
       },
 
@@ -2901,7 +2952,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         // plane, composing nothing would leave the child with no tools at all.
         const forkComposition = await composeAgent(resolveSessionPreset(source))
         try {
-          await ctx.agents.create({
+          const forkHandle = await ctx.agents.create({
             sessionId: childId,
             seed: events.slice(0, cut),
             meta: {
@@ -2915,6 +2966,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             agentOptions: agentOptions(),
             setup: forkComposition.setup,
           })
+          rememberSessionOwner(forkHandle)
         } catch (error: unknown) {
           return err(request, {
             code: 'internal',

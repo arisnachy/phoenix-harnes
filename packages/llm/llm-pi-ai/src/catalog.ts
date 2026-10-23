@@ -859,6 +859,37 @@ function normalizeOfficialOpenAiContextWindow(
     || !OPENAI_GPT56_MODEL_IDS.has(modelId)) return contextWindow
   return OPENAI_GPT56_CONTEXT_WINDOW
 }
+const OPENROUTER_NEMOTRON3_NANO_ID = 'nvidia/nemotron-3-nano-30b-a3b'
+const OPENROUTER_NEMOTRON3_NANO_CONTEXT_WINDOW = 262_144
+
+/**
+ * The OpenRouter model directory publishes 262,144 input-context tokens for
+ * Nemotron 3 Nano. Older pi-ai catalog snapshots advertise a smaller window,
+ * causing Phoenix to reject otherwise valid long requests before any network
+ * I/O. This corrects only the inherited catalog capacity on OpenRouter's
+ * official API, never a user's explicit model override or a private gateway.
+ *
+ * Source: https://openrouter.ai/nvidia/nemotron-3-nano-30b-a3b
+ * @param provider - requested route.
+ * @param baseUrl - effective API origin.
+ * @param modelId - exact catalog model.
+ * @param inherited - unconfigured capacity from catalog or route fallback.
+ * @param explicit - optional user-selected context capacity.
+ */
+export function documentedOpenRouterContextWindow(
+  provider: string,
+  baseUrl: string,
+  modelId: string,
+  inherited: number,
+  explicit?: number,
+): number {
+  if (explicit !== undefined) return explicit
+  if (provider !== 'openrouter'
+    || !/^https:\/\/openrouter\.ai\/api\/v1\/?$/u.test(baseUrl)
+    || modelId !== OPENROUTER_NEMOTRON3_NANO_ID) return inherited
+  return Math.max(inherited, OPENROUTER_NEMOTRON3_NANO_CONTEXT_WINDOW)
+}
+
 /** One route's materialized catalog, plus the request caps its profile chose. */
 export interface RouteCatalog {
   /** The materialized models in configuration order. */
@@ -953,7 +984,13 @@ export function resolveRouteModels(request: RouteCatalogRequest): RouteCatalog {
     // discloses nothing but ids still yields a serviceable route. The fallback
     // is a guess by construction, which is why it is a configurable route field
     // rather than a constant buried here.
-    const configuredContextWindow = entry.contextWindow ?? base?.contextWindow ?? request.defaultContextWindow
+    const configuredContextWindow = documentedOpenRouterContextWindow(
+      provider,
+      baseUrl,
+      entry.id,
+      base?.contextWindow ?? request.defaultContextWindow,
+      entry.contextWindow,
+    )
     const contextWindow = normalizeOfficialOpenAiContextWindow(
       provider,
       baseUrl,
