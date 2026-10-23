@@ -74,6 +74,22 @@
   word-break: break-word;
 }
 
+.evidenceList {
+  margin: 0;
+  padding-left: 18px;
+  list-style: disc;
+}
+
+.evidenceList li {
+  overflow-wrap: anywhere;
+}
+
+.evidenceNotice {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 18px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .root[data-state='running'] .row::after {
     animation: none;
