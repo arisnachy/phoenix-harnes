@@ -60,9 +60,11 @@ function routeFromConfig(data: Json, digest: string): ExecutionNativePolicy | un
     || sandbox !== 'read-only' || approval !== 'never' || tools?.profile !== 'minimal') return undefined
   // The runtime is kept read-only until a separate native approval implementation is audited.
   // These exact tool restrictions must be configured; a reported tools.effective preview is not proof.
-  if (!Array.isArray(tools.allow) || tools.allow.length !== ALLOWED_TOOLS.length
-    || !ALLOWED_TOOLS.every(t => tools.allow?.includes(t))
-    || !Array.isArray(tools.deny) || !DENIED_TOOLS.every(t => tools.deny?.includes(t))) return undefined
+  const allow = Array.isArray(tools?.allow) ? tools.allow as string[] : undefined
+  const deny = Array.isArray(tools?.deny) ? tools.deny as string[] : undefined
+  if (allow === undefined || allow.length !== ALLOWED_TOOLS.length
+    || !ALLOWED_TOOLS.every(t => allow.includes(t))
+    || deny === undefined || !DENIED_TOOLS.every(t => deny.includes(t))) return undefined
   return {
     provider: 'openai', model: resolvedModel.slice('openai/'.length), agentRuntime: 'codex',
     sandbox, approval, cwd: workspace,
@@ -81,9 +83,9 @@ export default class OpenClawManagedHostAuthority extends Service implements Man
   private proof: RuntimeReceipt | undefined
   private readonly grants = new Map<string, { policy: ExecutionNativePolicy; root: ExecutionNativePolicyRequest['root'] }>()
   private live = true
-  constructor(private readonly owner: Context) {
-    super(owner, 'openclawManagedRuntime')
-    owner.effect(() => () => { this.live = false; this.proof = undefined; this.grants.clear() }, 'openclawManagedRuntime.dispose')
+  constructor(ctx: Context) {
+    super(ctx, 'openclawManagedRuntime')
+    ctx.effect(() => () => { this.live = false; this.proof = undefined; this.grants.clear() }, 'openclawManagedRuntime.dispose')
   }
 
   private async verified(): Promise<VerifiedConfig | undefined> {
