@@ -184,7 +184,8 @@ describe('OpenClaw Agent Teams adapter', () => {
     const fiber = await ctx.plugin({ name: 'subagent-openclaw', inject: ['agentTeams'], apply }, {
       url: gateway.url, agentId: 'phoenix', provider: 'openai', model: 'gpt-5',
       agentRuntime: 'codex', sandbox: 'workspace-write', approval: 'never',
-      cwd: 'C:/phoenix-workspace', toolPolicy: nativePolicy.toolPolicy,
+      cwd: 'C:/phoenix-workspace', toolPolicy: { ...nativePolicy.toolPolicy,
+        allow: [...nativePolicy.toolPolicy.allow], deny: [...nativePolicy.toolPolicy.deny] },
       policyAttester: attest,
     })
     expect(register).toHaveBeenCalledOnce()
