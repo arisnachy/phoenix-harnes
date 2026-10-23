@@ -161,7 +161,7 @@ export function inspectHumanOSSelfModel(
     tasks,
     attention: tasks.failed > 0
       ? 'inspect-failure'
-      : degraded > 0
+      : degraded > 0 || verification.currentFailures > 0 || verification.capabilitiesWithConflictingEvidence > 0
         ? 'verify-before-use'
         : tasks.due > 0
           ? 'check-due-work'
