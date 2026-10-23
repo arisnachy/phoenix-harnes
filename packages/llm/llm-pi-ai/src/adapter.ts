@@ -73,6 +73,7 @@ import { codexPlatformFallbackModel, isChatGptAccessJwt, isChatGptAccountJwt } f
 import { applyMondayCodexMembrane, normalizeCodexToolSchemas, scopeCodexToolsForPaint, normalizeOpenAiFunctionToolPayload, requiresMondayCodexMembrane, requiresObjectRootFunctionSchemas } from './codex-tool-schema.ts'
 import { fitGenerateOptionsToContext, toPiContext } from './context.ts'
 import { toStreamChunks } from './stream.ts'
+import { isNonCodexRecoveryModel } from './provider-recovery.ts'
 
 /** One resolution's frozen view: the profiles and the collection built from them. */
 interface PiAiSnapshot {
@@ -564,6 +565,7 @@ export class PiAiAdapter extends LlmAdapter {
         model.contextWindow,
         desiredMaxOutput,
         options.provider === 'openrouter',
+        isNonCodexRecoveryModel(options.provider, options.model),
       )[Symbol.asyncIterator]()
       let exhausted = false
       try {

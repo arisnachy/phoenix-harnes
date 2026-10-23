@@ -13,6 +13,7 @@ import type { FinishReason, StreamChunk, TokenUsage } from '@phoenix-ai/dsh-llm'
 import { isContextOverflow } from '@earendil-works/pi-ai'
 import type { AssistantMessage, AssistantMessageEvent, Usage as PiUsage } from '@earendil-works/pi-ai'
 import { toPiReplayState } from './replay.ts'
+import { RECOVERABLE_PI_AI_ERROR_CODE } from './provider-recovery.ts'
 
 /**
  * Map pi-ai usage (reasoning folded into output by pi-ai).
@@ -59,7 +60,7 @@ function classifyPiAiError(message: string): string {
   // A rejected request body (gateway or provider size cap): resending the
   // same request cannot succeed, so it is invalid, not transient.
   if (/\b413\b|failed to buffer the request body:\s*length limit exceeded|payload too large|request body too large/i.test(message)) return 'INVALID_REQUEST'
-  if (/\b400\b|invalid.?request/i.test(message)) return 'INVALID_REQUEST'
+  if (/\b400\b|invalid.?request|invalid arguments|invalid tool (?:call|arguments)|malformed (?:json|tool|arguments)|schema validation failed/i.test(message)) return 'INVALID_REQUEST'
   if (/\b5\d\d\b/.test(message)) return 'SERVER'
   if (/\btime(?:d)?\s*out\b|timeout/i.test(message)) return 'TIMEOUT'
   // A stream truncated before the provider's terminal event: each pi-ai provider
@@ -102,6 +103,7 @@ function isRecoverableLength(message: AssistantMessage, desiredMaxOutput?: numbe
  * @param contextWindow - resolved catalog capacity for usage-based overflow detection.
  * @param desiredMaxOutput - original intended output budget before provider/context clamping.
  * @param lengthIsOutputLimit - OpenRouter length is output truncation, not speculative context overflow.
+ * @param recoverUnknownProviderError - Whether this exact route and model supports bounded generic recovery.
  * @returns the mapped harness reason. Recognized error text, `stop` usage above
  *   `contextWindow`, and zero-output `length` usage that fills the window map
  *   to `CONTEXT_WINDOW_EXCEEDED`; a `stop` with no content blocks maps to an
@@ -112,6 +114,7 @@ export function mapStopReason(
   contextWindow?: number,
   desiredMaxOutput?: number,
   lengthIsOutputLimit = false,
+  recoverUnknownProviderError = false,
 ): FinishReason {
   const piAiOverflow = isContextOverflow(message, contextWindow)
   const harnessOverflow = message.stopReason === 'error'
@@ -153,7 +156,10 @@ export function mapStopReason(
     }
     case 'error': {
       const text = message.errorMessage ?? 'pi-ai stream error'
-      const code = classifyPiAiError(text)
+      const classified = classifyPiAiError(text)
+      const code = classified === 'PI_AI_ERROR' && recoverUnknownProviderError
+        ? RECOVERABLE_PI_AI_ERROR_CODE
+        : classified
       const providerRetryAfterMs = code === 'RATE_LIMIT' ? retryAfterMsFromMessage(text) : undefined
       return {
         kind: 'error',
@@ -175,6 +181,7 @@ export function mapStopReason(
  * @param contextWindow - resolved catalog capacity for usage-based overflow detection.
  * @param desiredMaxOutput - original intended output budget used to classify early length stops.
  * @param lengthIsOutputLimit - true for OpenRouter's provider-side output cap.
+ * @param recoverUnknownProviderError - true only for eligible non-Codex routes/models.
  * @returns the harness chunks, ending with `usage` then `finish`; throws
  *   `LlmError` (`STREAM_CLOSED`) if the source ends without a terminal event.
  */
@@ -183,6 +190,7 @@ export async function* toStreamChunks(
   contextWindow?: number,
   desiredMaxOutput?: number,
   lengthIsOutputLimit = false,
+  recoverUnknownProviderError = false,
 ): AsyncGenerator<StreamChunk> {
   // pi-ai contentIndex ↔ our block index map 1:1 (both count blocks from 0
   // in stream order), but we track ids per index for tool calls.
@@ -248,7 +256,7 @@ export async function* toStreamChunks(
         yield { type: 'usage', usage: mapUsage(event.message.usage) }
         yield {
           type: 'finish',
-          reason: mapStopReason(event.message, contextWindow, desiredMaxOutput, lengthIsOutputLimit),
+          reason: mapStopReason(event.message, contextWindow, desiredMaxOutput, lengthIsOutputLimit, recoverUnknownProviderError),
           replayState: toPiReplayState(event.message),
         }
         return
@@ -256,7 +264,7 @@ export async function* toStreamChunks(
         // In-stream error delivery (pi-ai's style) → error finish chunk
         // (the harness's other sanctioned error path besides throwing).
         yield { type: 'usage', usage: mapUsage(event.error.usage) }
-        yield { type: 'finish', reason: mapStopReason(event.error, contextWindow, desiredMaxOutput, lengthIsOutputLimit) }
+        yield { type: 'finish', reason: mapStopReason(event.error, contextWindow, desiredMaxOutput, lengthIsOutputLimit, recoverUnknownProviderError) }
         return
       // no default: AssistantMessageEvent is pi-ai's closed union; a new
       // event type should fail compilation here via tsc's exhaustiveness
