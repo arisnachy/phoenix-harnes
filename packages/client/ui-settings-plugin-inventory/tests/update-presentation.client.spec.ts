@@ -10,7 +10,7 @@ describe('updater presentation policy', () => {
     const events = [{ step: 'updated', result: 'ok', at: new Date(now - 1000).toISOString() }]
     expect(recentlyUpdated(events, now)).toBe(true)
     expect(recentlyUpdated(events, now + 11 * 60_000)).toBe(false)
-    expect(recentlyUpdated([{ ...events[0], result: 'failed' }], now)).toBe(false)
+    expect(recentlyUpdated([{ step: 'updated', result: 'failed', at: events[0]!.at }], now)).toBe(false)
   })
 
   it('hides pauses caused by protected checkout policy', () => {
