@@ -100,9 +100,10 @@ Genuine messages add one peer result to the receiving agent; no fabricated shell
 
 Result handoffs append to the existing conversation rather than rewriting system-prompt prefixes.
 
+## Known Limitations and Deferred Work
+
 A stop request after external dispatch persists `uncertain` with `EXECUTION_CANCELLATION_UNCONFIRMED`; a local abort signal cannot certify native termination. The native binding remains durable and mission closure stays blocked until recovery establishes a terminal outcome. Before dispatch, cancellation can close the reservation without native task effects.
 
-## Known Limitations and Deferred Work
 
 - **One process and one shared checkout** — members share cwd and observe edits immediately; this package provides no worktree, remote member, merge, or filesystem lock.
 - **Advisory write scopes** — Bash, formatters, code generators, and direct external writers can bypass filesystem version checks; Leads must coordinate ownership and review the final diff.
