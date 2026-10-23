@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { spawnSync } from 'node:child_process'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { writePhoenixUpdateState } from './phoenix-update-state.mjs'
+import { recordPhoenixUpdateStep, writePhoenixUpdateState } from './phoenix-update-state.mjs'
 
 const roots: string[] = []
 const originalSupervised = process.env.PHOENIX_UPDATE_SUPERVISED
@@ -21,6 +21,25 @@ afterEach(() => {
 })
 
 describe('PHOENIX updater state persistence', () => {
+  it('records only fixed step codes and actual outcomes, never raw command output', () => {
+    const root = mkdtempSync(join(tmpdir(), 'phoenix-update-journal-'))
+    roots.push(root)
+    const path = join(root, 'phoenix-update-state.json')
+    const target = 'd'.repeat(40)
+    writePhoenixUpdateState(path, { schema: 1, status: 'preparing', phase: 'dependencies', target })
+    recordPhoenixUpdateStep(path, 'dependencies', 'started', target)
+    recordPhoenixUpdateStep(path, 'dependencies', 'failed', target, 9)
+    recordPhoenixUpdateStep(path, 'rm -rf password=supersecret', 'failed', target, 1)
+    const entries = readFileSync(join(root, 'phoenix-update-events.jsonl'), 'utf8')
+      .trim().split('\n').map(line => JSON.parse(line) as Record<string, unknown>)
+    expect(entries).toEqual([
+      expect.objectContaining({ step: 'preparing', result: 'info', target }),
+      expect.objectContaining({ step: 'dependencies', result: 'started', target }),
+      expect.objectContaining({ step: 'dependencies', result: 'failed', exitCode: 9, target }),
+    ])
+    expect(JSON.stringify(entries)).not.toContain('supersecret')
+  })
+
   it('replaces the state document atomically and leaves no temporary file', () => {
     process.env.PHOENIX_UPDATE_SUPERVISED = '0'
     const root = mkdtempSync(join(tmpdir(), 'phoenix-update-state-write-'))
