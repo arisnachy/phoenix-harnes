@@ -480,6 +480,126 @@ def format_text(value, refs, style, order):
         raise ValueError("Unresolved manuscript citations cannot enter PDF/Word/HTML")
     return result
 
+# Inline Markdown belongs to the manuscript, not to any output backend.
+# All three document formats share one safe parsing path.
+def inline_markdown_runs(value):
+    pieces = []
+
+    def push(text, bold, italic, code=False):
+        if not text:
+            return
+        if pieces and pieces[-1][1:] == (bold, italic, code):
+            previous = pieces[-1]
+            pieces[-1] = (previous[0] + text, bold, italic, code)
+        else:
+            pieces.append((text, bold, italic, code))
+
+    def parse(source, bold=False, italic=False):
+        plain = []
+        pos = 0
+
+        def flush():
+            if plain:
+                push("".join(plain), bold, italic)
+                plain.clear()
+
+        while pos < len(source):
+            char = source[pos]
+            if char == "\\" and pos + 1 < len(source) and source[pos + 1] in ("\\", "*", "_", chr(96)):
+                plain.append(source[pos + 1])
+                pos += 2
+                continue
+
+            marker = None
+            if char == chr(96):
+                marker = char
+            elif source.startswith("**", pos) or source.startswith("__", pos):
+                marker = source[pos:pos + 2]
+            elif char in "*_":
+                marker = char
+
+            if marker and marker.startswith("_") and pos > 0 and source[pos - 1].isalnum():
+                marker = None
+            if marker and source[pos + len(marker):pos + len(marker) + 1].isspace():
+                marker = None
+
+            close = -1
+            if marker:
+                seek = pos + len(marker)
+                while True:
+                    seek = source.find(marker, seek)
+                    if seek < 0:
+                        break
+                    backslashes = 0
+                    before = seek - 1
+                    while before >= 0 and source[before] == "\\":
+                        backslashes += 1
+                        before -= 1
+                    if backslashes % 2 == 0 and seek > pos + len(marker) and not source[seek - 1].isspace():
+                        if not (marker.startswith("_") and seek + len(marker) < len(source)
+                                and source[seek + len(marker)].isalnum()):
+                            close = seek
+                            break
+                    seek += len(marker)
+
+            if close < 0:
+                plain.append(char)
+                pos += 1
+                continue
+
+            flush()
+            inner = source[pos + len(marker):close]
+            if marker == chr(96):
+                push(inner, bold, italic, True)
+            else:
+                parse(inner, bold or len(marker) == 2,
+                      italic or len(marker) == 1)
+            pos = close + len(marker)
+        flush()
+
+    parse(str(value))
+    return pieces
+
+
+def inline_markdown_html(value):
+    fragments = []
+    for text, bold, italic, code in inline_markdown_runs(value):
+        escaped = html.escape(text)
+        if code:
+            escaped = "<code>" + escaped + "</code>"
+        if italic:
+            escaped = "<em>" + escaped + "</em>"
+        if bold:
+            escaped = "<strong>" + escaped + "</strong>"
+        fragments.append(escaped)
+    return "".join(fragments)
+
+
+def inline_markdown_pdf(value):
+    fragments = []
+    for text, bold, italic, code in inline_markdown_runs(value):
+        escaped = html.escape(text)
+        if code:
+            escaped = '<font name="Courier">' + escaped + "</font>"
+        if italic:
+            escaped = "<i>" + escaped + "</i>"
+        if bold:
+            escaped = "<b>" + escaped + "</b>"
+        fragments.append(escaped)
+    return "".join(fragments)
+
+
+def add_word_inline(paragraph, value):
+    for text, bold, italic, code in inline_markdown_runs(value):
+        run = paragraph.add_run(text)
+        if bold:
+            run.bold = True
+        if italic:
+            run.italic = True
+        if code:
+            run.font.name = "Consolas"
+
+
 def bibliography(ref, style, number):
     authors = ref["authors"].strip()
     year = ref["year"]
@@ -773,7 +893,8 @@ def main():
         text = format_text(section["text"], refs, style, numbers)
         for paragraph in text.split("\n"):
             if paragraph.strip():
-                entry = doc.add_paragraph(paragraph.strip())
+                entry = doc.add_paragraph()
+                add_word_inline(entry, paragraph.strip())
                 if style == "apa" and not editorial and section_kind(section) != "abstract":
                     entry.paragraph_format.first_line_indent = Cm(1.27)
     if report.get("tables"):
@@ -831,16 +952,37 @@ def main():
         for ix, item in enumerate(report["appendices"], 1):
             doc.add_heading("Anexo " + str(ix) + ". " + item["title"], level=2)
             for line in format_text(item["text"], refs, style, numbers).split("\n"):
-                if line.strip(): doc.add_paragraph(line)
+                if line.strip():
+                    add_word_inline(doc.add_paragraph(), line)
     docx_file = output_root / "informe.docx"
     doc.save(docx_file)
 
     font = "Helvetica"
+    font_source = None
     for p in ["/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "C:/Windows/Fonts/arial.ttf", "C:/Windows/Fonts/Arial.ttf"]:
         if Path(p).is_file():
             pdfmetrics.registerFont(TTFont("ResearchUnicode", p))
             font = "ResearchUnicode"
+            font_source = p
             break
+    if font_source:
+        # ReportLab's inline bold/italic markup needs a mapped Unicode TTF family.
+        dejavu = "DejaVuSans.ttf" in font_source
+        folder = Path(font_source).parent
+        variants = (
+            ("ResearchUnicodeBold", "DejaVuSans-Bold.ttf" if dejavu else "arialbd.ttf"),
+            ("ResearchUnicodeItalic", "DejaVuSans-Oblique.ttf" if dejavu else "ariali.ttf"),
+            ("ResearchUnicodeBoldItalic", "DejaVuSans-BoldOblique.ttf" if dejavu else "arialbi.ttf"),
+        )
+        registered = {}
+        for name, filename in variants:
+            if (folder / filename).is_file():
+                pdfmetrics.registerFont(TTFont(name, str(folder / filename)))
+                registered[name] = name
+        pdfmetrics.registerFontFamily(
+            font, normal=font, bold=registered.get("ResearchUnicodeBold", font),
+            italic=registered.get("ResearchUnicodeItalic", font),
+            boldItalic=registered.get("ResearchUnicodeBoldItalic", font))
     # Prefer modern local typefaces. Offline and Windows-safe fallback is essential.
     heading_font = font
     if editorial:
@@ -881,8 +1023,9 @@ def main():
     cover_meta = ParagraphStyle("RCoverMeta", parent=small,
                                 fontSize=10, leading=15.5, textColor=ink, spaceAfter=6)
     story = []
-    def para(value, st=body):
-        story.append(Paragraph(html.escape(str(value)).replace("\n", "<br/>"), st))
+    def para(value, st=body, markdown=False):
+        rendered = inline_markdown_pdf(value) if markdown else html.escape(str(value))
+        story.append(Paragraph(rendered.replace("\n", "<br/>"), st))
     if editorial:
         # Cover content starts beneath the vector masthead, with semantic hierarchy.
         story.append(Spacer(1, 112))
@@ -947,7 +1090,7 @@ def main():
             story.append(HRFlowable(width="100%", thickness=0.7, color=colors.HexColor("#dce6e6"), spaceAfter=9))
         value = format_text(section["text"], refs, style, numbers)
         for piece in value.split("\n"):
-            if piece.strip(): para(piece)
+            if piece.strip(): para(piece, markdown=True)
     if report.get("tables"):
         para("Tablas", h1)
         for ix, item in enumerate(report["tables"], 1):
@@ -1163,7 +1306,7 @@ def main():
     chunks.append("<nav>"+ " · ".join("<a href='#sec-"+str(i)+"'>"+html.escape(v["heading"])+"</a>" for i,v in enumerate(report["sections"]))+"</nav>")
     for i,section in enumerate(report["sections"]):
         rendered=format_text(section["text"],refs,style,numbers)
-        chunks.append("<section id='sec-"+str(i)+"'><h2>"+html.escape(section["heading"])+"</h2><p>"+html.escape(rendered).replace("\n","</p><p>")+"</p></section>")
+        chunks.append("<section id='sec-"+str(i)+"'><h2>"+html.escape(section["heading"])+"</h2><p>"+inline_markdown_html(rendered).replace("\n","</p><p>")+"</p></section>")
     for ix,item in enumerate(report.get("tables", []), 1):
         chunks.append("<figure><figcaption>Tabla "+str(ix)+". "+html.escape(str(item.get("title","Resultados")))+"</figcaption><table><thead><tr>")
         chunks.extend("<th scope='col'>"+html.escape(str(c))+"</th>" for c in item["columns"])
@@ -1196,7 +1339,7 @@ def main():
         chunks.append("<section><h2>Anexos y apéndices</h2>")
         for ix, item in enumerate(report["appendices"], 1):
             chunks.append("<h3>Anexo "+str(ix)+". "+html.escape(item["title"])+"</h3><p>"+
-                          html.escape(format_text(item["text"],refs,style,numbers)).replace("\n","</p><p>")+"</p>")
+                          inline_markdown_html(format_text(item["text"],refs,style,numbers)).replace("\n","</p><p>")+"</p>")
         chunks.append("</section>")
     chunks.append("</html>")
     html_file=output_root/"informe.html"
