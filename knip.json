@@ -15,6 +15,7 @@
     "sandbox-exec",
     "tar",
     "taskkill",
+    "vite",
     "where.exe"
   ],
   "ignoreWorkspaces": [
