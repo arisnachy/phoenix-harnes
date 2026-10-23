@@ -50,7 +50,7 @@ export const Config: z<Config> = z.object({
 })
 
 export const name = 'subagent-openclaw'
-export const inject = ['agentTeams']
+export const inject = ['agentTeams', 'openclawManagedRuntime']
 /** Optional host service key used for production managed-runtime composition. */
 export const managedRuntimeService = 'openclawManagedRuntime'
 

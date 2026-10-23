@@ -144,8 +144,8 @@ export default class OpenClawManagedHostAuthority extends Service implements Man
     if (token === undefined && password === undefined) throw new Error('OPENCLAW_HOST_AUTH_REQUIRED')
     return new OpenClawGatewayClient({
       url: options.url, client: { id: 'gateway-client', mode: 'backend' },
-      scopes: ['operator.read', 'operator.write'], timeoutMs: options.timeoutMs,
-      maxFrameBytes: options.maxFrameBytes,
+      scopes: ['operator.read', 'operator.write'], ...(options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
+      ...(options.maxFrameBytes === undefined ? {} : { maxFrameBytes: options.maxFrameBytes }),
       credentials: { ...(token === undefined ? {} : { token }), ...(password === undefined ? {} : { password }) },
     })
   }
@@ -199,7 +199,9 @@ export default class OpenClawManagedHostAuthority extends Service implements Man
     const permissions = request.root.ctx.get('sandboxPolicy') as {
       resolve(options: { session: typeof request.root.session }): { mode: string }
     } | undefined
-    if (permissions?.resolve({ session: request.root.session }).mode !== 'read-only') return undefined
+    if (!['read-only', 'workspace-write', 'danger-full-access'].includes(
+      permissions?.resolve({ session: request.root.session }).mode ?? '',
+    )) return undefined
     this.grants.set(String(request.executionId), { policy, root: request.root })
     return policy
   }
