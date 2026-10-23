@@ -33,7 +33,7 @@ it('handles a timed out challenge while the WebSocket upgrade is still pending',
   } finally {
     await client.dispose()
     for (const socket of sockets) socket.destroy()
-    await new Promise<void>(resolve => server.close(() => resolve()))
+    await new Promise<void>(resolve => { server.close(() => { resolve() }) })
   }
 })
 
@@ -104,7 +104,7 @@ afterEach(async () => {
 
 describe('OpenClaw public Gateway client', () => {
   it('rejects remote plaintext URLs before opening a socket', () => {
-    expect(() => new OpenClawGatewayClient({ url: 'ws://gateway.example.test' })).toThrowError(OpenClawGatewayError)
+    expect(() => new OpenClawGatewayClient({ url: 'ws://gateway.example.test' })).toThrow(OpenClawGatewayError)
     expect(() => new OpenClawGatewayClient({ url: 'ws://gateway.example.test' })).toThrow(/loopback/i)
   })
 

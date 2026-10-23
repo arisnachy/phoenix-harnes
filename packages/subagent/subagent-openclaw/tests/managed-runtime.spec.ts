@@ -37,7 +37,7 @@ beforeEach(() => {
       approvalPolicy: 'never' } } } } } }
   save()
 })
-afterEach(() => rmSync(location.home, { recursive: true, force: true }))
+afterEach(() => { rmSync(location.home, { recursive: true, force: true }) })
 
 it('uses exact managed route and host factories without copying credentials', async () => {
   const authority = host()
