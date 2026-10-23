@@ -1,11 +1,20 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# CI needs only bubblewrap's payload, not a system install. Resolve the
-# currently available candidate (or an explicitly requested CI version) from
-# signed APT metadata. Verify its package SHA256 against that same metadata
-# before extracting into the ephemeral runner directory. Do not rely on a
-# superseded .deb that Ubuntu may have already removed.
+# CI needs only bubblewrap's payload, not a system install. Pin each
+# supported Ubuntu release to its security-update version, resolve through
+# signed APT metadata, verify the archive SHA256, then extract into the runner.
+# Fail closed for unrecognized images instead of selecting an unreviewed package.
+if [[ ! -r /etc/os-release ]]; then
+  echo 'cannot identify Ubuntu runner release for pinned bubblewrap' >&2
+  exit 1
+fi
+. /etc/os-release
+case "${ID:-}:${VERSION_ID:-}" in
+  ubuntu:24.04) readonly BUBBLEWRAP_VERSION='0.9.0-1ubuntu0.3' ;;
+  ubuntu:26.04) readonly BUBBLEWRAP_VERSION='0.11.1-1ubuntu0.3' ;;
+  *) echo "unsupported runner release for pinned bubblewrap: ${ID:-unknown} ${VERSION_ID:-unknown}" >&2; exit 1 ;;
+esac
 
 : "${RUNNER_TEMP:?prepare-ci-bubblewrap requires RUNNER_TEMP}"
 : "${GITHUB_PATH:?prepare-ci-bubblewrap requires GITHUB_PATH}"
@@ -17,16 +26,7 @@ fi
 
 root="${RUNNER_TEMP}/dsh-bubblewrap"
 
-if ! sudo apt-get -o Acquire::Retries=3 update; then
-  echo 'Signed APT index refresh failed; cannot verify bubblewrap package' >&2
-  exit 1
-fi
-BUBBLEWRAP_VERSION="${DSH_CI_BUBBLEWRAP_VERSION:-$(apt-cache policy bubblewrap | awk '$1 == "Candidate:" { print $2; exit }')}"
-if [[ ! "$BUBBLEWRAP_VERSION" =~ ^[0-9A-Za-z.+:~_-]+$ || "$BUBBLEWRAP_VERSION" == "(none)" ]]; then
-  echo "No valid bubblewrap candidate is available in signed APT metadata" >&2
-  exit 1
-fi
-archive="${RUNNER_TEMP}/bubblewrap_${BUBBLEWRAP_VERSION}_amd64.deb"
+sudo apt-get update -qq
 expected_sha="$(
   apt-cache show "bubblewrap=${BUBBLEWRAP_VERSION}" \
     | awk '$1 == "SHA256:" { sha = $2 } END { if (sha != "") print sha }'
@@ -36,15 +36,22 @@ if [[ ! "${expected_sha}" =~ ^[0-9a-f]{64}$ ]]; then
   exit 1
 fi
 
-rm -f "$archive"
+# APT may choose a filename differing from the package-version spelling.
+# Admit exactly one new archive, and authenticate it by the signed APT digest.
+rm -f "${RUNNER_TEMP}"/bubblewrap_*.deb
 (
   cd "$RUNNER_TEMP"
-  apt-get -o Acquire::Retries=3 download "bubblewrap=${BUBBLEWRAP_VERSION}"
+  apt-get download "bubblewrap=${BUBBLEWRAP_VERSION}"
 )
-if [[ ! -f "$archive" ]]; then
-  echo "APT did not produce expected bubblewrap archive: $archive" >&2
+shopt -s nullglob
+archives=("${RUNNER_TEMP}"/bubblewrap_*.deb)
+shopt -u nullglob
+if (( ${#archives[@]} != 1 )); then
+  echo "APT produced ${#archives[@]} candidate bubblewrap archives; expected exactly one" >&2
+  ls -la "${RUNNER_TEMP}"/bubblewrap* >&2 || true
   exit 1
 fi
+archive="${archives[0]}"
 printf '%s  %s\n' "$expected_sha" "$archive" | sha256sum --check --status
 
 rm -rf "$root"

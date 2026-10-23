@@ -10,6 +10,12 @@ The capability index does not execute tools, load skill bodies, or grant permiss
 
 The adapter separates host-owned indexing from model-facing tools. The host composition mounts `modelTools: false` to index capabilities and install the shared mission runtime once. Full agent presets mount `modelTools: true` to expose `hardness_run`, `connector_list`, and durable scheduled-task tools in their own scope without duplicating the shared HARDNESS registry. Minimal presets can therefore keep a deliberately small catalog.
 
+## HumanOS grounded self-model
+
+Full agent presets add a read-only `hardness:humanos-self-model` runtime context beside the existing Kira presence and initiative context. It observes the registered HARDNESS capability statuses and visible current-agent/global durable task counts without I/O, provider calls, new memory stores or permission changes. The projection separates declared verified capability metadata from live tool availability, excludes other agents' tasks and unrevealed surprises, and never exposes task text, identities, model names or credentials. Kira uses the observation only when relevant, then resolves and verifies actual capabilities before making claims. This is operational self-knowledge, not sentience, autonomous self-modification or permission to execute.
+
+HumanOS also performs bounded metacognitive calibration against the existing HARDNESS case ledger: at most 64 capability descriptors and the latest 12 evidence rows per descriptor. It counts same-version passes, failures, denials, obsolete-version evidence and conflicting observations without injecting names or payloads. This evidence is historical and never proves current availability or authorization; remaining descriptors are explicitly counted as unexamined.
+
 ## Local assistant mailbox
 
 Mailbox management returns JSON values: unavailable draft and attachment metadata is omitted, and provider labels are normalized to strings.
