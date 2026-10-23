@@ -33,7 +33,7 @@ try {
 
 包还导出 `subagent-openclaw` Cordis 插件和 `OpenClawExecutionAdapter`。配置明确的 `url`、`agentId`、`provider` 与 `model`（可选的主机凭据引用 `tokenRef` 和 `sessionKey`）后，才会向 Agent Teams 注册 `openclaw` 引擎。没有完整配置或尚未验证 Gateway 路由时，引擎仍会注册但报告未连接。派发前会把 Phoenix 快照与 `agents.list` 报告的精确模型及匹配的 `sessions.list` 行进行比较；不会向 `agent` 发送未在公开协议中声明的模型覆盖字段。只有 `agent.wait` 和会话记录确认完成，恢复也只等待持久化的原生绑定。
 
-受管运行时识别模型级 `agents.defaults.models[modelRef].agentRuntime.id` 和提供商级 `models.providers.openai.agentRuntime.id`；明确的模型覆盖优先。配置 `plugins.allow` 时必须包含 `codex`。配置内的 attestation 或 Gateway 连接均不能代替 Host 策略证明。在可信 Host authority 提供受管路由、私有客户端工厂和当前会话策略证据之前，内置插件保持不可用。预留、派发和恢复前会根据所属 Phoenix 工作区与 sandbox 检查策略，缺省权限为只读。工具策略变化或原生会话无法验证时阻止执行。生产 Host authority 与真实模型 Gateway 验收仍待完成。传输认证不等于任务授权；未关联到 run 的会话历史不会作为结果返回。
+受管运行时识别模型级 `agents.defaults.models[modelRef].agentRuntime.id` 和提供商级 `models.providers.openai.agentRuntime.id`；明确的模型覆盖优先。配置 `plugins.allow` 时必须包含 `codex`。配置内的 attestation 或 Gateway 连接均不能代替 Host 策略证明。在可信 Host authority 提供受管路由、私有客户端工厂和当前会话策略证据之前，内置插件保持不可用。预留、派发和恢复前会根据所属 Phoenix 工作区与 sandbox 检查策略，缺省权限为只读。工具策略变化或原生会话无法验证时阻止执行。基础组合已挂载启动器所有的 `openclawManagedRuntime` Host 服务。只有仍由当前 Host 持有、通过认证健康检查、运行标记和配置摘要相符的 Gateway，且其 Codex 代理路由精确匹配并采用 `read-only`/`never`/`minimal` 限制时才被接纳。原生工具允许列表必须仅包含 `session_status`，并明确禁止 `browser`、`cron`、`gateway`、`nodes`、`group:fs`、`group:runtime` 和 `group:web`。Host 在每次原生操作前重新检查会话身份、路由与策略；未知或失去所有权的 Gateway 保持断开状态。Windows 上针对官方安装 OpenClaw Gateway 的端到端验收仍待完成。传输认证不等于任务授权；未关联到 run 的会话历史不会作为结果返回。
 
 ## Model Experience
 
