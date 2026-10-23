@@ -234,7 +234,7 @@ export function visibleResearchSourceUrl(raw: string): string | undefined {
     if (url.protocol !== 'https:' || url.username || url.password) return undefined
     // Exclude IP literals, local hostnames and private/internal endpoints. A
     // publicly named site may still fail to load, which Chromium will report.
-    if (!/^(?:[a-z0-9-]+\\.)+[a-z][a-z0-9-]{1,}$/iu.test(url.hostname)) return undefined
+    if (!/^(?:[a-z0-9-]+\.)+[a-z][a-z0-9-]{1,}$/iu.test(url.hostname)) return undefined
     if (url.hostname.endsWith('.local') || url.hostname.endsWith('.internal')) return undefined
     if ([...url.searchParams.keys()].some(key =>
       /(?:token|api[_-]?key|password|secret|credential|signature|session|authorization)/iu.test(key))) return undefined
