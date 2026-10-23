@@ -113,11 +113,12 @@ export default class OpenClawManagedHostAuthority extends Service implements Man
       const digest = 'sha256:' + createHash('sha256').update(raw).digest('hex')
       if (receipt.configDigest !== digest) return undefined
       const data = record(JSON.parse(raw.toString('utf8')) as unknown)
-      const gateway = record(data?.gateway)
+      if (data === undefined) return undefined
+      const gateway = record(data.gateway)
       if (gateway?.port !== receipt.port || !['loopback', 'localhost', '127.0.0.1'].includes(string(gateway.bind) ?? 'loopback')) return undefined
       const auth = record(gateway.auth)
       if (string(auth?.token) === undefined && string(auth?.password) === undefined) return undefined
-      const policy = data === undefined ? undefined : routeFromConfig(data, digest)
+      const policy = routeFromConfig(data, digest)
       if (policy === undefined) return undefined
       const result: RuntimeReceipt = { status: 'verified', port: receipt.port, configDigest: digest }
       this.proof = { ...result, provedAt: Date.now() }
