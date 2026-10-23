@@ -179,7 +179,14 @@ describe('OpenClaw Agent Teams adapter', () => {
     const register = vi.fn<(adapter: OpenClawExecutionAdapter) => () => void>(() => vi.fn())
     const ctx = new Context()
     ctx.provide('agentTeams', { executions: { register } } as never)
-    const fiber = await ctx.plugin({ name: 'subagent-openclaw', inject: ['agentTeams'], apply }, { url: gateway.url, agentId: 'phoenix', provider: 'openai', model: 'gpt-5' })
+    // A configuration-supplied policy and attester must never stand in for
+    // the missing trusted Host authority, even if the Gateway is reachable.
+    const fiber = await ctx.plugin({ name: 'subagent-openclaw', inject: ['agentTeams'], apply }, {
+      url: gateway.url, agentId: 'phoenix', provider: 'openai', model: 'gpt-5',
+      agentRuntime: 'codex', sandbox: 'workspace-write', approval: 'never',
+      cwd: 'C:/phoenix-workspace', toolPolicy: nativePolicy.toolPolicy,
+      policyAttester: attest,
+    })
     expect(register).toHaveBeenCalledOnce()
     const adapter = register.mock.calls[0]?.[0] as OpenClawExecutionAdapter
     await expect(adapter.probe()).resolves.toMatchObject({ engine: 'openclaw', connected: false, diagnostic: 'OPENCLAW_NOT_CONFIGURED' })
