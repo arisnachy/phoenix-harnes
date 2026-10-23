@@ -28,6 +28,7 @@ import { installHardnessProtocol, type HardnessPromptRegistrar } from './protoco
 import { installProactivityProtocol } from './proactivity-protocol.ts'
 import { installWakeProtocol } from './wake-protocol.ts'
 import { installHumanPresenceProtocol } from './presence-protocol.ts'
+import { installHumanOSSelfModel } from './humanos-self-model.ts'
 import { installInitiativeContextProjection, type InitiativePromptRegistrar } from './initiative-context.ts'
 import { installConnectorProtocol } from './connector-protocol.ts'
 import { BinancePaperBroker } from './binance-paper.ts'
@@ -170,6 +171,8 @@ export { installHardnessProtocol } from './protocol.ts'
 export type { HardnessPromptRegistrar } from './protocol.ts'
 export { CONNECTOR_OPERATING_PROTOCOL, installConnectorProtocol } from './connector-protocol.ts'
 export { HUMAN_PRESENCE_PROTOCOL, installHumanPresenceProtocol } from './presence-protocol.ts'
+export { inspectHumanOSSelfModel, renderHumanOSSelfModel, installHumanOSSelfModel } from './humanos-self-model.ts'
+export type { HumanOSAssemblyContext, HumanOSObservationSources, HumanOSPromptRegistrar, HumanOSSelfModel } from './humanos-self-model.ts'
 export { WAKE_PROTOCOL, installWakeProtocol } from './wake-protocol.ts'
 export { renderInitiativeContext, installInitiativeContextProjection } from './initiative-context.ts'
 export { CAPABILITY_OPERATING_PROTOCOL, installCapabilityOperatingProtocol } from './capability-protocol.ts'
@@ -385,6 +388,10 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
       disposers.push(installRoutineProtocol(systemPrompt))
       disposers.push(installWakeProtocol(systemPrompt))
       disposers.push(installHumanPresenceProtocol(systemPrompt))
+      disposers.push(installHumanOSSelfModel(
+        systemPrompt,
+        { hardness, tasks: proactivity.engine },
+      ))
       disposers.push(installInitiativeContextProjection(
         systemPrompt as HardnessPromptRegistrar & InitiativePromptRegistrar,
         proactivity.engine,
