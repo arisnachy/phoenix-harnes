@@ -72,7 +72,10 @@ describe('official Blender Lab MCP overlay', () => {
     const reconnect = config.reconnect as Record<string, unknown>
 
     expect((config.command as { __jsExpr?: string }).__jsExpr).toContain("'uvx'")
-    expect(config.args).toEqual(['--from', officialSource, 'blender-mcp'])
+    const argv = Array.isArray(config.args)
+      ? config.args as string[]
+      : Object.values(config.args as Record<string, string[]>).flat()
+    expect(argv).toEqual(['--from', officialSource, 'blender-mcp'])
     expect(env.BLENDER_MCP_HOST?.__jsExpr).toContain("'localhost'")
     expect(env.BLENDER_MCP_PORT?.__jsExpr).toContain("'9876'")
     expect(config.toolCallTimeoutMs).toBe(120_000)
