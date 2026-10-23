@@ -37,15 +37,17 @@ function routeFromConfig(data: Json, digest: string): ExecutionNativePolicy | un
   const agents = record(data.agents)
   const entries = record(agents?.entries)
   const agent = record(entries?.phoenix)
-  const modelRef = string(record(agent?.model)?.primary)
+  const modelRef = string(record(agent?.model)?.primary) ?? string(agent?.model)
   const defaults = record(agents?.defaults)
-  const resolvedModel = modelRef ?? string(record(defaults?.model)?.primary)
+  const resolvedModel = modelRef ?? string(record(defaults?.model)?.primary) ?? string(defaults?.model)
   const workspace = string(agent?.workspace) ?? string(defaults?.workspace)
   const policies = record(defaults?.models)
   const agentPolicies = record(agent?.models)
-  const selectedModelPolicy = record(agentPolicies?.[resolvedModel ?? '']) ?? record(policies?.[resolvedModel ?? ''])
+  const agentModelPolicy = record(agentPolicies?.[resolvedModel ?? ''])
+  const defaultModelPolicy = record(policies?.[resolvedModel ?? ''])
   const providerPolicy = record(record(record(data.models)?.providers)?.openai)
-  const nativeRuntime = string(record(selectedModelPolicy?.agentRuntime)?.id)
+  const nativeRuntime = string(record(agentModelPolicy?.agentRuntime)?.id)
+    ?? string(record(defaultModelPolicy?.agentRuntime)?.id)
     ?? string(record(providerPolicy?.agentRuntime)?.id)
   const plugins = record(data.plugins)
   const plugin = record(record(plugins?.entries)?.codex)
@@ -80,7 +82,7 @@ function routeFromConfig(data: Json, digest: string): ExecutionNativePolicy | un
  * An unowned/stale Gateway remains disconnected rather than being silently promoted.
  */
 export default class OpenClawManagedHostAuthority extends Service implements ManagedOpenClawRuntimeHost {
-  private proof: RuntimeReceipt | undefined
+  private proof: (RuntimeReceipt & { readonly provedAt: number }) | undefined
   private readonly grants = new Map<string, { policy: ExecutionNativePolicy; root: ExecutionNativePolicyRequest['root'] }>()
   private live = true
   constructor(ctx: Context) {
@@ -118,7 +120,7 @@ export default class OpenClawManagedHostAuthority extends Service implements Man
       const policy = data === undefined ? undefined : routeFromConfig(data, digest)
       if (policy === undefined) return undefined
       const result: RuntimeReceipt = { status: 'verified', port: receipt.port, configDigest: digest }
-      this.proof = result
+      this.proof = { ...result, provedAt: Date.now() }
       return { receipt: result, data, policy }
     } catch {
       return undefined
@@ -127,7 +129,8 @@ export default class OpenClawManagedHostAuthority extends Service implements Man
 
   readonly clientFactory = (options: OpenClawGatewayClientOptions): OpenClawGatewayClient => {
     const proof = this.proof
-    if (!this.live || proof === undefined || options.url !== `ws://127.0.0.1:${proof.port}`) {
+    if (!this.live || proof === undefined || Date.now() - proof.provedAt > 15_000
+      || options.url !== `ws://127.0.0.1:${proof.port}`) {
       throw new Error('OPENCLAW_HOST_AUTHORITY_UNAVAILABLE')
     }
     const path = managedOpenClawConfigPath()

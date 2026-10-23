@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { once } from 'node:events'
 import { tmpdir } from 'node:os'
