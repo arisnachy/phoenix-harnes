@@ -17,7 +17,10 @@ fi
 
 root="${RUNNER_TEMP}/dsh-bubblewrap"
 
-sudo apt-get update -qq
+if ! sudo apt-get -o Acquire::Retries=3 update; then
+  echo 'Signed APT index refresh failed; cannot verify bubblewrap package' >&2
+  exit 1
+fi
 BUBBLEWRAP_VERSION="${DSH_CI_BUBBLEWRAP_VERSION:-$(apt-cache policy bubblewrap | awk '$1 == "Candidate:" { print $2; exit }')}"
 if [[ ! "$BUBBLEWRAP_VERSION" =~ ^[0-9A-Za-z.+:~_-]+$ || "$BUBBLEWRAP_VERSION" == "(none)" ]]; then
   echo "No valid bubblewrap candidate is available in signed APT metadata" >&2
@@ -36,7 +39,7 @@ fi
 rm -f "$archive"
 (
   cd "$RUNNER_TEMP"
-  apt-get download "bubblewrap=${BUBBLEWRAP_VERSION}" >/dev/null
+  apt-get -o Acquire::Retries=3 download "bubblewrap=${BUBBLEWRAP_VERSION}"
 )
 if [[ ! -f "$archive" ]]; then
   echo "APT did not produce expected bubblewrap archive: $archive" >&2
