@@ -172,6 +172,31 @@ export function scopeCodexToolsForPaint(options: GenerateOptions): GenerateOptio
   return tools.length === options.tools.length ? options : { ...options, tools }
 }
 
+/**
+ * Contain a provider-rejected function schema without abandoning the whole
+ * conversation. A 400 naming one invalid function is a pre-generation
+ * rejection, never a completed tool action; the caller may retry once without
+ * only that rejected tool. No unrelated tools or durable registry entries
+ * are removed.
+ *
+ * @param options - Original, unmodified model request.
+ * @param detail - Provider diagnostic including the exact rejected tool name.
+ * @returns A request with only the offending function quarantined, or undefined
+ * when the error is not the exact invalid-object-root failure.
+ */
+export function recoverRejectedCodexFunctionSchema(
+  options: GenerateOptions,
+  detail: string,
+): GenerateOptions | undefined {
+  if (!/invalid schema for function/iu.test(detail)
+    || !/schema must have type ['"]?object['"]?/iu.test(detail)) return undefined
+  const name = /invalid schema for function ['"]([^'"]+)['"]/iu.exec(detail)?.[1]
+  if (name === undefined || options.tools === undefined) return undefined
+  const remaining = options.tools.filter(tool => tool.name !== name)
+  if (remaining.length === options.tools.length) return undefined
+  return { ...options, tools: remaining }
+}
+
 function normalizeTool(tool: ToolSchema): ToolSchema {
   const parameters = normalizeCodexToolParameters(tool.parameters)
   return parameters === tool.parameters ? tool : { ...tool, parameters }
