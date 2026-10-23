@@ -828,7 +828,7 @@ function BrowserWorkspace({
       data-activity-open={showSidecar ? 'true' : undefined} data-chat-flow-kind="browser-workspace">
       <div className={css.browserPane}>
         <MiniBrowser key={sessionId} sessionId={sessionId} requested active={selected}
-          {...live && sourceUrl !== undefined ? { sourceUrl } : {}}
+          {...sourceUrl === undefined ? {} : { sourceUrl }}
           {...tabId === undefined ? {} : { initialTabId: tabId }}
           onActivate={onActivate} autoScroll={false} onPageChange={setPage}
           onSecureLoginRequest={handleSecureRequest} onSavedAccessNotice={handleSavedAccessNotice}
@@ -843,7 +843,7 @@ function BrowserWorkspace({
           <strong>Actividad del agente</strong>
           <span className={css.livePill}><span aria-hidden="true" /> En vivo</span>
         </header>
-        {sourceUrl !== undefined && live && (
+        {sourceUrl !== undefined && (
           <div className={css.pageInfo} role="status">
             <span className={css.pageCaption}>Fuente de investigación</span>
             <span>La fuente consultada por fetch se abre por separado en Chromium. La vista no sustituye ni confirma el resultado de fetch.</span>
