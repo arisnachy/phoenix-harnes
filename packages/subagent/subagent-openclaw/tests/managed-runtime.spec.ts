@@ -48,6 +48,35 @@ it('uses exact managed route and host factories without copying credentials', as
     clientFactory: authority.clientFactory })
   expect(JSON.stringify(result)).not.toContain('private-fixture')
 })
+it('accepts a provider-scoped native Codex route with verified Host policy', async () => {
+  const agents = config.agents as { defaults: Record<string, unknown> }
+  agents.defaults = { models: {} }
+  config.models = { providers: { openai: { agentRuntime: { id: 'codex' } } } }
+  save()
+  const authority = host()
+  await expect(createManagedOpenClawConfig(authority)).resolves.toMatchObject({
+    provider: 'openai', model: 'gpt-6-luna', agentRuntime: 'codex',
+  })
+  expect(authority.resolvePolicy).toHaveBeenCalledOnce()
+})
+it('does not override an explicit model-level non-Codex runtime', async () => {
+  config.models = { providers: { openai: { agentRuntime: { id: 'codex' } } } }
+  const agents = config.agents as { defaults: Record<string, unknown> }
+  agents.defaults = { models: { 'openai/gpt-6-luna': { agentRuntime: { id: 'openclaw' } } } }
+  save()
+  const authority = host()
+  await expect(createManagedOpenClawConfig(authority)).resolves.toBeUndefined()
+  expect(authority.resolvePolicy).not.toHaveBeenCalled()
+})
+it('rejects a Codex plugin excluded by the native allowlist', async () => {
+  const plugins = config.plugins as Record<string, unknown>
+  plugins.allow = ['another-plugin']
+  save()
+  const authority = host()
+  await expect(createManagedOpenClawConfig(authority)).resolves.toBeUndefined()
+  expect(authority.resolvePolicy).not.toHaveBeenCalled()
+})
+
 it('fails closed when the trusted policy resolver is unavailable', async () => {
   await expect(createManagedOpenClawConfig({ ...host(),
     resolvePolicy: async () => { throw new Error('private failure') } })).resolves.toBeUndefined()
