@@ -59,6 +59,15 @@ it('accepts a provider-scoped native Codex route with verified Host policy', asy
   })
   expect(authority.resolvePolicy).toHaveBeenCalledOnce()
 })
+it('rejects an explicit agent-model runtime that overrides a Codex provider', async () => {
+  config.models = { providers: { openai: { agentRuntime: { id: 'codex' } } } }
+  const agents = config.agents as { entries: { phoenix: Record<string, unknown> } }
+  agents.entries.phoenix.models = { 'openai/gpt-6-luna': { agentRuntime: { id: 'openclaw' } } }
+  save()
+  const authority = host()
+  await expect(createManagedOpenClawConfig(authority)).resolves.toBeUndefined()
+  expect(authority.resolvePolicy).not.toHaveBeenCalled()
+})
 it('does not override an explicit model-level non-Codex runtime', async () => {
   config.models = { providers: { openai: { agentRuntime: { id: 'codex' } } } }
   const agents = config.agents as { defaults: Record<string, unknown> }
