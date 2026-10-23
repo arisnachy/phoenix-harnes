@@ -15,6 +15,7 @@ const { WebSocketServer } = require('ws')
 
 import {
   activateOpenClawCandidate,
+  attestManagedOpenClawGateway,
   ENGINE_RUNTIME_SAFETY_VERSION,
   inspectExecutionEngines,
   killWindowsProcessTreeForDiagnostics,
@@ -32,6 +33,19 @@ const OFFICIAL_VERSION = '2026.10.5'
 const NODE_VERSION = '24.22.1'
 const TARGET = 'a'.repeat(40)
 const NEXT_TARGET = 'b'.repeat(40)
+
+test('does not attest forged or orphaned Gateway ownership from a marker alone', async () => {
+  const f = fixture()
+  try {
+    writeFileSync(join(f.runtime, 'active.json'), JSON.stringify({
+      schema: 1, status: 'active', pid: process.pid, port: 18789, version: VERSION,
+    }))
+    writeFileSync(join(f.runtime, 'openclaw.json'), JSON.stringify({
+      gateway: { port: 18789, bind: 'loopback', auth: { token: 'fixture-private' } },
+    }))
+    assert.equal(await attestManagedOpenClawGateway({ home: f.home }), undefined)
+  } finally { dispose(f) }
+})
 
 test('exports the hardened engine runtime safety contract version', () => {
   assert.equal(ENGINE_RUNTIME_SAFETY_VERSION, 2)
