@@ -68,7 +68,7 @@ describe('MiniBrowser chronological conversation cards', () => {
 
   it('follows nested fetch calls but gives genuine Chrome activity priority', () => {
     const source = 'https://pubmed.ncbi.nlm.nih.gov/123456/'
-    const nodes = [
+    const nodes: BrowserFlowNode[] = [
       user('research', 'Investiga estudios recientes'),
       { key: 'code', kind: 'tool-call', data: { root: {
         call: { name: 'Code', argsRaw: '{}' },
@@ -80,7 +80,8 @@ describe('MiniBrowser chronological conversation cards', () => {
       call: { name: 'mcp__browser__navigate', argsRaw: JSON.stringify({ url: 'https://example.org' }) },
     } } })
     const active = addBrowserCards(flowNodes('research', 'code', 'chrome'), nodes)
-    expect(active[1]).toMatchObject({ kind: 'browser', sourceUrl: undefined })
+    expect(active[1]?.kind).toBe('browser')
+    expect('sourceUrl' in (active[1] ?? {})).toBe(false)
   })
 
   it('never mirrors private endpoints, untrusted schemes or credentials', () => {
