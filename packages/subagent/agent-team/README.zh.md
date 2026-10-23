@@ -98,6 +98,8 @@ Peer 消息追加在 target 可复用历史前缀之后。冷恢复会先复用�
 
 ## 已知限制与暂缓事项
 
+外部派发后的停止请求持久化为 `uncertain`，诊断为 `EXECUTION_CANCELLATION_UNCONFIRMED`；本地 abort 信号不能证明原生任务已经终止。保留原生绑定，直到恢复确认终态之前阻止使命关闭。派发之前可以取消尚未产生原生任务效果的预留。
+
 - **单进程、共享 checkout**：所有成员共享 cwd，修改立即可见；本包不提供 worktree、远端成员、自动 merge 或文件锁。
 - **write scope 仅作提示**：Bash、formatter、codegen 和直接外部写入可以绕过文件版本检查；Lead 必须协调 owner 并检查最终 diff。
 - **扁平且不可变的 roster**：只有 Lead 可以创建直接 teammate；不支持嵌套 Team、重命名、删除或名字复用。
@@ -110,4 +112,3 @@ Peer 消息追加在 target 可复用历史前缀之后。冷恢复会先复用�
 
 普通成员在首次更新后继续执行，并向负责人交接证据或阻塞。重要交接的指引要求 Kira 在同一轮次执行下一步，或通过 followup_task 恢复必要的成员工作。交流风格保持自然简洁；讽刺针对情境，而非用户或同事。
 
-外部派发后的停止请求持久化为 `uncertain`，诊断为 `EXECUTION_CANCELLATION_UNCONFIRMED`；本地 abort 信号不能证明原生任务已经终止。保留原生绑定，直到恢复确认终态之前阻止使命关闭。派发之前可以取消尚未产生原生任务效果的预留。
