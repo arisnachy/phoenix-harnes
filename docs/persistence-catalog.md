@@ -129,7 +129,7 @@ Source: [`packages/core/agent/src/types.ts:19`](../packages/core/agent/src/types
 'agent/model-selection': ModelSelectionPreference
 ```
 
-Source: [`packages/core/agent/src/model-selection.ts:94`](../packages/core/agent/src/model-selection.ts)
+Source: [`packages/core/agent/src/model-selection.ts:35`](../packages/core/agent/src/model-selection.ts)
 
 ### `agent-preset/*`
 
@@ -1037,7 +1037,7 @@ Source: [`packages/core/session/src/types.ts:288`](../packages/core/session/src/
 'tool/code-dispatch': CodeDispatchEventData
 ```
 
-Source: [`packages/core/tools/src/types.ts:58`](../packages/core/tools/src/types.ts)
+Source: [`packages/core/tools/src/types.ts:56`](../packages/core/tools/src/types.ts)
 
 <a id="toolcode-dispatch-start--log-only"></a>
 
@@ -1060,7 +1060,7 @@ Source: [`packages/core/tools/src/types.ts:58`](../packages/core/tools/src/types
 'tool/code-dispatch-start': CodeDispatchStartEventData
 ```
 
-Source: [`packages/core/tools/src/types.ts:42`](../packages/core/tools/src/types.ts)
+Source: [`packages/core/tools/src/types.ts:40`](../packages/core/tools/src/types.ts)
 
 <a id="toolresult--surface"></a>
 

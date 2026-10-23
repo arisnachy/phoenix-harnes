@@ -3,8 +3,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { resolveLanTrust } from '../src/index.ts'
 
-vi.mock('node:os', async (importOriginal) => ({
-  ...await importOriginal<typeof import('node:os')>(),
+vi.mock('node:os', () => ({
   networkInterfaces: () => ({
     lo0: [
       { family: 'IPv4', internal: true, address: '127.0.0.1' },

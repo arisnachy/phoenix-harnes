@@ -1673,7 +1673,6 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
       'client-ui-agent-preset AgentPresetSection id \'agent-presets\'',
       'client-ui-settings-general GeneralSection id \'general\'',
       'client-ui-settings-models ModelsWithLocalSection id \'models\'',
-      'client-ui-settings-models EclipseRoutingPanel id \'eclipse\'',
       'client-ui-settings-models ConnectorsSettingsSection id \'connectors\'',
       'client-ui-settings-plugins PluginsSettingsSection id \'plugins\'',
       'client-ui-settings-profile UserProfileRow id \'profile\'',

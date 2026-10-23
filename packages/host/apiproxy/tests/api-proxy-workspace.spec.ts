@@ -593,7 +593,9 @@ describe('user-requested permanent deletion of active hosted conversations', () 
     expect(ctx.agents.get(created.sessionId)).toBeDefined()
     expect(ctx.sessions.get(created.sessionId)).toBeDefined()
 
-    expect(await api.sessions.delete(request({ sessionId: created.sessionId })))
+    const deleteSession = api.sessions.delete
+    if (deleteSession === undefined) throw new Error('session.delete must be installed')
+    expect(await deleteSession(request({ sessionId: created.sessionId })))
       .toMatchObject({ result: { ok: true, value: { deleted: true } } })
     expect(removed).toEqual([created.sessionId])
     expect(ctx.agents.get(created.sessionId)).toBeUndefined()

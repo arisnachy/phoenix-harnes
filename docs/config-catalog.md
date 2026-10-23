@@ -100,7 +100,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/core/agent-default-model/src/index.ts:137`](../packages/core/agent-default-model/src/index.ts)
+Source: [`packages/core/agent-default-model/src/index.ts:41`](../packages/core/agent-default-model/src/index.ts)
 
 <a id="phoenix-aidsh-agent-instructions"></a>
 
@@ -148,10 +148,6 @@ export interface Config {
   maxParallelToolCalls?: number
   /** Maximum model/tool iterations in one turn; omission defaults to 64. */
   maxStepsPerTurn?: number
-  /** Output-limit continuations per human request (0 disables); default 3. */
-  autoContinueMaxSegments?: number
-  /** Provider route IDs eligible for automatic output-limit continuation. */
-  autoContinueProviders?: string[]
   /** Agents created or resumed at plugin startup. */
   agents: (AgentOptions & {
     /** Stable config label used in logs and as the fresh combined-id prefix. */
@@ -168,7 +164,7 @@ export interface Config {
 
 Depends on: [`AgentOptions`](subsystems/core.md) · [`SessionId`](subsystems/core.md)
 
-Source: [`packages/core/agent-loop/src/index.ts:281`](../packages/core/agent-loop/src/index.ts)
+Source: [`packages/core/agent-loop/src/index.ts:266`](../packages/core/agent-loop/src/index.ts)
 
 <a id="phoenix-aidsh-agent-presets"></a>
 
@@ -243,10 +239,6 @@ export interface Config {
   maxParallelToolCalls?: AgentLoopConfig['maxParallelToolCalls']
   /** Maximum model/tool steps in one turn before explicit continuation is required. */
   maxStepsPerTurn?: AgentLoopConfig['maxStepsPerTurn']
-  /** Number of automatic output-limit continuations in one request. */
-  autoContinueMaxSegments?: AgentLoopConfig['autoContinueMaxSegments']
-  /** Exact provider routes allowed for automatic output-limit continuation. */
-  autoContinueProviders?: AgentLoopConfig['autoContinueProviders']
   /** Whether the system prompt includes the fixed Harness identity (default true). */
   includeHarnessIdentity?: SystemPromptConfig['includeHarnessIdentity']
   /** Whether model history includes dynamic runtime-context snapshots (default true). */
@@ -797,7 +789,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/hardness/adapters/src/index.ts:197`](../packages/hardness/adapters/src/index.ts)
+Source: [`packages/hardness/adapters/src/index.ts:188`](../packages/hardness/adapters/src/index.ts)
 
 <a id="phoenix-aidsh-headless"></a>
 
@@ -1400,7 +1392,7 @@ export type PiAiThinkingFormat = NonNullable<OpenAICompletionsCompat['thinkingFo
 
 Depends on: `Api` (`@earendil-works/pi-ai`) · `CacheRetention` (`@earendil-works/pi-ai`) · `Model` (`@earendil-works/pi-ai`) · `ModelThinkingLevel` (`@earendil-works/pi-ai`) · `OpenAICompletionsCompat` (`@earendil-works/pi-ai`) · [`RetryPolicyConfig`](../packages/llm/llm/src/index.ts) · `ThinkingBudgets` (`@earendil-works/pi-ai`) · `Transport` (`@earendil-works/pi-ai`)
 
-Source: [`packages/llm/llm-pi-ai/src/config.ts:283`](../packages/llm/llm-pi-ai/src/config.ts)
+Source: [`packages/llm/llm-pi-ai/src/config.ts:263`](../packages/llm/llm-pi-ai/src/config.ts)
 
 <a id="phoenix-aidsh-llm-replay"></a>
 
@@ -2769,7 +2761,7 @@ export interface TeamModelProfile {
 }
 ```
 
-Source: [`packages/subagent/tool-agent-team/src/index.ts:87`](../packages/subagent/tool-agent-team/src/index.ts)
+Source: [`packages/subagent/tool-agent-team/src/index.ts:41`](../packages/subagent/tool-agent-team/src/index.ts)
 
 <a id="phoenix-aidsh-tool-bash"></a>
 
@@ -3104,7 +3096,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/skill/tool-skill/src/index.ts:68`](../packages/skill/tool-skill/src/index.ts)
+Source: [`packages/skill/tool-skill/src/index.ts:67`](../packages/skill/tool-skill/src/index.ts)
 
 <a id="phoenix-aidsh-tool-str-replace-editor"></a>
 
@@ -3357,7 +3349,7 @@ export interface Config {
 export type ToolPresentationMode = 'native' | 'code' | 'both'
 ```
 
-Source: [`packages/core/tools/src/index.ts:797`](../packages/core/tools/src/index.ts)
+Source: [`packages/core/tools/src/index.ts:794`](../packages/core/tools/src/index.ts)
 
 <a id="phoenix-aidsh-typert-loader"></a>
 
@@ -3536,7 +3528,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/bundle/web-app/src/index.ts:44`](../packages/bundle/web-app/src/index.ts)
+Source: [`packages/bundle/web-app/src/index.ts:43`](../packages/bundle/web-app/src/index.ts)
 
 <a id="phoenix-aidsh-web-fetch-http"></a>
 

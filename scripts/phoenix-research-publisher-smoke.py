@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 from zipfile import ZipFile
 from PIL import Image
+from docx import Document
 import fitz
 
 script = Path(__file__).with_name("phoenix-research-publisher.py")
@@ -24,7 +25,7 @@ try:
                   "logo_path": str(logo)},
         "sections": [
             {"heading": "Resumen", "text": "Dos fuentes de prueba [@source1; @source2] sin marcadores literales."},
-            {"heading": "Metodología", "text": "El gráfico contiene datos de prueba [@source1]."},
+            {"heading": "Metodología", "text": "**Implicaciones para investigación.** Hay *cursivas* y `código` sin etiquetas crudas, con citas [@source1]."},
             {"heading": "Limitaciones", "text": "Esta prueba no valida la evidencia externa [@source1]."},
         ],
         "references": [
@@ -70,6 +71,8 @@ try:
             assert "[@" not in report_text
             assert "[1,2]" in report_text if style == "vancouver" else "[@" not in report_text
             assert "Tabla 1" in report_text and "Figura 2" in report_text
+            assert "Implicaciones para investigación." in report_text
+            assert "**" not in report_text and "*cursivas*" not in report_text
             for page in pdf:
                 assert page.rect.width >= 500 and page.rect.height >= 700
                 for block in page.get_text("blocks"):
@@ -82,6 +85,9 @@ try:
         assert "Referencias" in html_contents
         assert "[@" not in html_contents
         assert "<table>" in html_contents and "Comparación de prueba" in html_contents
+        assert "<strong>Implicaciones para investigación.</strong>" in html_contents
+        assert "<em>cursivas</em>" in html_contents and "<code>código</code>" in html_contents
+        assert "**" not in html_contents
         assert "Figura 2" in html_contents and "Forest plot sintético" in html_contents and "alt=" in html_contents
         assert receipt["presentation"] == presentation
         assert receipt["quality"]["submission_certified"] is False
@@ -93,7 +99,12 @@ try:
             assert "Referencias" in xml and "Metodología" in xml
             assert "[@" not in xml
             assert "Comparación de prueba" in xml
+            assert "**" not in xml
             assert ("(Apellido, 2026)" in xml) if style in ("apa", "apa7") else ("[1]" in xml)
+        assert any(run.bold and "Implicaciones para investigación." in run.text
+                   for paragraph in Document(paths["docx"]).paragraphs for run in paragraph.runs)
+        assert any(run.italic and "cursivas" in run.text
+                   for paragraph in Document(paths["docx"]).paragraphs for run in paragraph.runs)
         print("OK", style, paths["pdf"], paths["docx"], paths["html"])
     report["document_type"] = "thesis"
     incomplete = subprocess.run([sys.executable, str(script)], input=json.dumps(report).encode("utf-8"),
