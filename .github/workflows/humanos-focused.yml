@@ -4,6 +4,10 @@ on:
   pull_request:
     paths:
       - 'packages/hardness/adapters/**'
+      - 'apps/cli/tests/blender-mcp-config.spec.ts'
+      - 'packages/bundle/web-app/tests/trusted-hosts.spec.ts'
+      - 'packages/examples/agent-spine-demo/src/index.ts'
+      - 'scripts/gen-cordis-catalog.ts'
       - '.github/workflows/humanos-focused.yml'
 
 permissions:
@@ -27,4 +31,4 @@ jobs:
       - name: Install immutable workspace
         run: pnpm install --frozen-lockfile
       - name: Verify HumanOS model and registration
-        run: pnpm exec vitest run packages/hardness/adapters/tests/humanos-self-model.spec.ts packages/hardness/adapters/tests/adapters.spec.ts packages/hardness/adapters/tests/research-publish.spec.ts packages/client/ui-workspace/tests/cleanup.client.spec.ts
+        run: pnpm exec vitest run packages/hardness/adapters/tests/humanos-self-model.spec.ts packages/hardness/adapters/tests/adapters.spec.ts packages/hardness/adapters/tests/research-publish.spec.ts packages/client/ui-workspace/tests/cleanup.client.spec.ts apps/cli/tests/blender-mcp-config.spec.ts packages/bundle/web-app/tests/trusted-hosts.spec.ts
