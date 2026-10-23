@@ -14,6 +14,8 @@ Full agent presets install one read-only `hardness:humanos-self-model` context o
 
 The generated prompt explicitly distinguishes verified **metadata** from actual tool reachability and instructs the active model to resolve/verify the exact capability through existing permission and mission systems. The existing Kira persona, Eclipse router and providers stay in charge of model choice. HumanOS does not suggest machine sentience, subjective emotions or unrestricted action authority.
 
+A second bounded read of the already-resident HARDNESS case registry compares each checked descriptor's current version with its most recent evidence, counting passed/failed/denied and conflicting or stale proof. The projection checks no more than 64 descriptors and 12 rows for each; it reports the unexamined count and never claims this historical sample is fresh runtime availability. This adds no stored state, provider invocation, or automatic recovery authority.
+
 ## Alternatives considered
 
 **Write a parallel HumanOS memory store.** Rejected: session learning, cognitive runtime and proactivity already own those facts; duplicated stores invite divergence and privacy leaks.
