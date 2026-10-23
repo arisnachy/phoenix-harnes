@@ -1792,6 +1792,14 @@ async function waitForHostEvent(host, hostExitPromise, lastObservedFingerprint) 
         return { kind: 'safe-update-handoff', target: updateTarget, lastObservedFingerprint }
       } catch (error) {
         reportSupervisorStep('runtime-activation', 'failed', 1)
+        const stateFile = updateStatePath()
+        if (stateFile !== undefined) {
+          writePhoenixUpdateState(stateFile, {
+            schema: 1, status: 'error', phase: 'runtime-activation',
+            target: updateTarget, at: new Date().toISOString(),
+            detail: 'Verified isolated runtime failed activation. The existing Host remains available; retry preparation.',
+          })
+        }
         clearRestartRequest()
         clearPreparedRecord()
         clearHostRestartRequest()
