@@ -17,6 +17,6 @@ export function isNonCodexRecoveryModel(provider: string, model: string): boolea
   const route = provider.trim().toLowerCase()
   const selected = model.trim().toLowerCase()
   if (!route || /^(?:openai|openai-codex|chatgpt-web)$/.test(route) || route.includes('codex')) return false
-  if (selected.startsWith('openai/') || /(?:^|[\\/_-])codex(?:$|[\\/_-])/.test(selected)) return false
+  if (selected.startsWith('openai/') || selected.includes('codex')) return false
   return true
 }
