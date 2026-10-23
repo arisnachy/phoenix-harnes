@@ -28,7 +28,9 @@ async function mockGateway(): Promise<{ port: number; requests: string[] }> {
   server.on('connection', (socket) => {
     socket.send(JSON.stringify({ type: 'event', event: 'connect.challenge', payload: { nonce: 'fixture-1', ts: 1 } }))
     socket.on('message', (raw) => {
-      const bytes = Array.isArray(raw) ? Buffer.concat(raw) : Buffer.from(raw)
+      const chunks: Uint8Array[] = Array.isArray(raw)
+        ? raw : [raw instanceof ArrayBuffer ? new Uint8Array(raw) : raw]
+      const bytes = Buffer.concat(chunks)
       const request = JSON.parse(bytes.toString('utf8')) as { type: string; id: string; method: string; params?: Record<string, unknown> }
       requests.push(request.method)
       if (request.method === 'connect') {
