@@ -24,7 +24,6 @@ if [[ "$(uname -s)" != 'Linux' || "$(uname -m)" != 'x86_64' ]]; then
   exit 1
 fi
 
-archive="${RUNNER_TEMP}/bubblewrap_${BUBBLEWRAP_VERSION}_amd64.deb"
 root="${RUNNER_TEMP}/dsh-bubblewrap"
 
 sudo apt-get update -qq
@@ -37,15 +36,22 @@ if [[ ! "${expected_sha}" =~ ^[0-9a-f]{64}$ ]]; then
   exit 1
 fi
 
-rm -f "$archive"
+# APT may choose a filename differing from the package-version spelling.
+# Admit exactly one new archive, and authenticate it by the signed APT digest.
+rm -f "${RUNNER_TEMP}"/bubblewrap_*.deb
 (
   cd "$RUNNER_TEMP"
-  apt-get download "bubblewrap=${BUBBLEWRAP_VERSION}" >/dev/null
+  apt-get download "bubblewrap=${BUBBLEWRAP_VERSION}"
 )
-if [[ ! -f "$archive" ]]; then
-  echo "APT did not produce expected bubblewrap archive: $archive" >&2
+shopt -s nullglob
+archives=("${RUNNER_TEMP}"/bubblewrap_*.deb)
+shopt -u nullglob
+if (( ${#archives[@]} != 1 )); then
+  echo "APT produced ${#archives[@]} candidate bubblewrap archives; expected exactly one" >&2
+  ls -la "${RUNNER_TEMP}"/bubblewrap* >&2 || true
   exit 1
 fi
+archive="${archives[0]}"
 printf '%s  %s\n' "$expected_sha" "$archive" | sha256sum --check --status
 
 rm -rf "$root"
