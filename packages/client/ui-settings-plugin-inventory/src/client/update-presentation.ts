@@ -56,7 +56,12 @@ export function updateStepLabelKey(step: string): typeof UPDATE_STEP_LABEL_KEYS[
     : undefined
 }
 
-/** Whether a finished update still deserves a visible success confirmation. */
+/**
+ * Check whether a verified successful activation is recent enough to display.
+ * @param events - validated updater events scoped to one release.
+ * @param now - current timestamp in milliseconds.
+ * @returns whether an update passed within the last ten minutes.
+ */
 export function recentlyUpdated(events: readonly { readonly step: string; readonly result: string; readonly at: string }[] | undefined, now = Date.now()): boolean {
   return events?.some(event => event.step === 'updated' && event.result === 'ok'
     && Number.isFinite(Date.parse(event.at))
