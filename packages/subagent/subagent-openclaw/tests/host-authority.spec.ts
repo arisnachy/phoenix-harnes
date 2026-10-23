@@ -4,10 +4,12 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { WebSocketServer } from 'ws'
 import { Context } from '@phoenix-ai/cordis'
-import { afterEach, expect, it } from 'vitest'
+import { afterEach, expect, it, vi } from 'vitest'
 import OpenClawManagedHostAuthority from '../src/host-authority.ts'
 import { createManagedOpenClawConfig, managedOpenClawConfigPath } from '../src/managed-runtime.ts'
 import { OpenClawExecutionAdapter } from '../src/execution-adapter.ts'
+import type { ExecutionAdapter } from '@phoenix-ai/dsh-agent-team'
+import { apply } from '../src/plugin.ts'
 
 const DENY = ['browser', 'cron', 'gateway', 'nodes', 'group:fs', 'group:runtime', 'group:web']
 const roots: string[] = []
@@ -23,10 +25,11 @@ async function mockGateway(): Promise<{ port: number; requests: string[] }> {
   const address = server.address()
   if (address === null || typeof address === 'string') throw new Error('test Gateway port unavailable')
   const requests: string[] = []
-  server.on('connection', socket => {
+  server.on('connection', (socket) => {
     socket.send(JSON.stringify({ type: 'event', event: 'connect.challenge', payload: { nonce: 'fixture-1', ts: 1 } }))
-    socket.on('message', raw => {
-      const request = JSON.parse(raw.toString()) as { type: string; id: string; method: string; params?: Record<string, unknown> }
+    socket.on('message', (raw) => {
+      const bytes = Array.isArray(raw) ? Buffer.concat(raw) : Buffer.from(raw)
+      const request = JSON.parse(bytes.toString('utf8')) as { type: string; id: string; method: string; params?: Record<string, unknown> }
       requests.push(request.method)
       if (request.method === 'connect') {
         const auth = request.params?.auth as { token?: string } | undefined
@@ -103,7 +106,7 @@ async function fixture(activateManager: boolean) {
   return { root, home, workspace, gateway, config, ctx, host, selected }
 }
 afterEach(async () => {
-  await Promise.all(contexts.splice(0).map(async ctx => ctx.fiber.dispose()))
+  await Promise.all(contexts.splice(0).map(async (ctx) => ctx.fiber.dispose()))
   for (const server of servers.splice(0)) {
     for (const socket of server.clients) socket.terminate()
     await new Promise<void>(resolve => { server.close(() => { resolve() }) })
@@ -165,4 +168,19 @@ it('rejects forged task identity even with a valid static Host route', async () 
   expect(await f.host.attestPolicy({ agentId: 'phoenix', expected: policy,
     sessionKey: 'agent:phoenix:phoenix:execution-1', taskIdempotencyKey: 'unbound-task',
   })).toBeUndefined()
+})
+
+it('reconnects after Gateway configuration appears without restarting the Host plugin', async () => {
+  const f = await fixture(true)
+  const register = vi.fn((_adapter: ExecutionAdapter) => vi.fn())
+  f.ctx.provide('agentTeams', { executions: { register } } as never)
+  rmSync(managedOpenClawConfigPath())
+  const fiber = await f.ctx.plugin({ name: 'subagent-openclaw', inject: ['agentTeams'], apply }, {})
+  expect(register).toHaveBeenCalledOnce()
+  const adapter = register.mock.calls[0]?.[0]
+  if (adapter === undefined) throw new Error('missing native execution adapter')
+  await expect(adapter.probe()).resolves.toMatchObject({ connected: false })
+  writeFileSync(managedOpenClawConfigPath(), JSON.stringify(f.config))
+  await expect(adapter.probe()).resolves.toMatchObject({ connected: true })
+  await fiber.dispose()
 })

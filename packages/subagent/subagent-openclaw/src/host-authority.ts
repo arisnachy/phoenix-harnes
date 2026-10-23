@@ -62,8 +62,8 @@ function routeFromConfig(data: Json, digest: string): ExecutionNativePolicy | un
     || sandbox !== 'read-only' || approval !== 'never' || tools?.profile !== 'minimal') return undefined
   // The runtime is kept read-only until a separate native approval implementation is audited.
   // These exact tool restrictions must be configured; a reported tools.effective preview is not proof.
-  const allow = Array.isArray(tools?.allow) ? tools.allow as string[] : undefined
-  const deny = Array.isArray(tools?.deny) ? tools.deny as string[] : undefined
+  const allow = Array.isArray(tools.allow) ? tools.allow as string[] : undefined
+  const deny = Array.isArray(tools.deny) ? tools.deny as string[] : undefined
   if (allow === undefined || allow.length !== ALLOWED_TOOLS.length
     || !ALLOWED_TOOLS.every(t => allow.includes(t))
     || deny === undefined || !DENIED_TOOLS.every(t => deny.includes(t))) return undefined
@@ -199,7 +199,7 @@ export default class OpenClawManagedHostAuthority extends Service implements Man
   ): Promise<ExecutionNativePolicy | undefined> => {
     if (request.engine !== 'openclaw' || request.selection.provider !== 'openai-codex'
       || request.selection.model !== request.model || request.idempotencyKey.length === 0
-      || request.root.session?.header.cwd === undefined
+      || request.root.session.header.cwd === undefined
       || resolve(request.root.session.header.cwd) !== resolve(request.cwd)
       || request.root.ctx.get('agents')?.get(request.root.id) !== request.root) return undefined
     const policy = await this.resolvePolicy(request)
