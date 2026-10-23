@@ -57,8 +57,8 @@ type ActivityItem =
 
 type FlowItem =
   | { readonly kind: 'desktop'; readonly key: string; readonly userKey: string }
-  | { readonly kind: 'browser'; readonly key: string; readonly userKey: string; readonly tabId?: string }
-  | { readonly kind: 'browser-workspace'; readonly key: string; readonly userKey: string; readonly tabId?: string; readonly live: boolean; readonly items: readonly FlowItem[] }
+  | { readonly kind: 'browser'; readonly key: string; readonly userKey: string; readonly tabId?: string; readonly sourceUrl?: string }
+  | { readonly kind: 'browser-workspace'; readonly key: string; readonly userKey: string; readonly tabId?: string; readonly sourceUrl?: string; readonly live: boolean; readonly items: readonly FlowItem[] }
   | { readonly kind: 'node'; readonly key: string }
   | { readonly kind: 'optimistic'; readonly key: string; readonly text: string }
   | {
@@ -222,6 +222,59 @@ function toolCallTabId(block: ToolCallBlock): string | undefined {
 
 const MAX_EMBEDDED_BROWSER_DEPTH = 256
 
+/**
+ * Only public, credential-free HTTPS sources may be mirrored into Chromium.
+ * This does not turn an HTTP fetch into a Chrome tool call: the viewport makes
+ * a separate real navigation and will show its own loading/error state.
+ */
+export function visibleResearchSourceUrl(raw: string): string | undefined {
+  if (raw.length === 0 || raw.length > 2048) return undefined
+  try {
+    const url = new URL(raw)
+    if (url.protocol !== 'https:' || url.username || url.password) return undefined
+    // Exclude IP literals, local hostnames and private/internal endpoints. A
+    // publicly named site may still fail to load, which Chromium will report.
+    if (!/^(?:[a-z0-9-]+\.)+[a-z][a-z0-9-]{1,}$/iu.test(url.hostname)) return undefined
+    if (url.hostname.endsWith('.local') || url.hostname.endsWith('.internal')) return undefined
+    if ([...url.searchParams.keys()].some(key =>
+      /(?:token|api[_-]?key|password|secret|credential|signature|session|authorization)/iu.test(key))) return undefined
+    url.hash = ''
+    return url.href
+  } catch { return undefined }
+}
+
+function fetchSourceUrl(block: ToolCallBlock): string | undefined {
+  const name = toolCallName(block)?.toLowerCase()
+  if (name === undefined || !/^(?:web_fetch|mcp__fetch__fetch|mcp__web__fetch|mcp__web_fetch__fetch)$/u.test(name)) return undefined
+  const raw = toolCallArguments(block)
+  if (raw === undefined) return undefined
+  try {
+    const args: unknown = JSON.parse(raw)
+    if (args === null || typeof args !== 'object' || Array.isArray(args)) return undefined
+    const url = (args as { url?: unknown }).url
+    return typeof url === 'string' ? visibleResearchSourceUrl(url) : undefined
+  } catch { return undefined }
+}
+
+/** Last public source actually requested by an HTTP fetch, including nested Code calls. */
+function researchSourceUse(block: ToolCallBlock): string | undefined {
+  const visited = new Set<ToolCallBlock>()
+  const pending: Array<{ block: ToolCallBlock; depth: number }> = [{ block, depth: 0 }]
+  let latest: string | undefined
+  while (pending.length > 0) {
+    const current = pending.pop()
+    if (current === undefined || visited.has(current.block)) continue
+    visited.add(current.block)
+    latest = fetchSourceUrl(current.block) ?? latest
+    if (current.depth >= MAX_EMBEDDED_BROWSER_DEPTH) continue
+    for (let i = (current.block.subCalls ?? []).length - 1; i >= 0; i--) {
+      const child = current.block.subCalls?.[i]
+      if (child !== undefined) pending.push({ block: child, depth: current.depth + 1 })
+    }
+  }
+  return latest
+}
+
 function embeddedBrowserUse(block: ToolCallBlock): EmbeddedBrowserUse {
   const visited = new Set<ToolCallBlock>()
   const pending: Array<{ readonly block: ToolCallBlock; readonly depth: number }> = [{ block, depth: 0 }]
@@ -349,15 +402,23 @@ export function addBrowserCards(
   const desktopRequests = new Set(nodes.filter(isDesktopRequest).map(node => node.key))
   const requests = new Set(nodes.filter(node => !desktopRequests.has(node.key) && isBrowserRequest(node)).map(node => node.key))
   const browserTabIds = new Map<string, string>()
+  const researchUrls = new Map<string, string>()
+  const directChromeTurns = new Set<string>()
   let currentUserKey: string | undefined
   for (const node of nodes) {
     if (node.kind === 'user' || node.kind === 'steering') currentUserKey = node.key
-    if (node.kind === 'tool-call' && currentUserKey !== undefined) {
+    if (node.kind === 'tool-call' && currentUserKey !== undefined && !desktopRequests.has(currentUserKey)) {
       const root = (node.data as ToolChatData).root
       const browserUse = embeddedBrowserUse(root)
-      if (browserUse.found && !desktopRequests.has(currentUserKey)) {
+      if (browserUse.found) {
         requests.add(currentUserKey)
+        directChromeTurns.add(currentUserKey)
         if (browserUse.tabId !== undefined) browserTabIds.set(currentUserKey, browserUse.tabId)
+      }
+      const sourceUrl = researchSourceUse(root)
+      if (sourceUrl !== undefined) {
+        requests.add(currentUserKey)
+        researchUrls.set(currentUserKey, sourceUrl)
       }
     }
   }
@@ -370,8 +431,10 @@ export function addBrowserCards(
     if (item.kind === 'node' && requests.has(item.key)
       || item.kind === 'optimistic' && isBrowserPrompt(item.text)) {
       const tabId = browserTabIds.get(item.key)
+      const sourceUrl = directChromeTurns.has(item.key) ? undefined : researchUrls.get(item.key)
       result.push({ kind: 'browser', key: 'browser:' + item.key, userKey: item.key,
-        ...(tabId === undefined ? {} : { tabId }) })
+        ...(tabId === undefined ? {} : { tabId }),
+        ...(sourceUrl === undefined ? {} : { sourceUrl }) })
     }
   }
   return result
@@ -440,10 +503,12 @@ export function groupActiveBrowserFlow(
   if (nextTurn) return flow
   const browser = flow[index]
   const tabId = browser?.kind === 'browser' ? browser.tabId : undefined
+  const sourceUrl = browser?.kind === 'browser' ? browser.sourceUrl : undefined
   return [
     ...flow.slice(0, index),
     { kind: 'browser-workspace', key: 'browser-workspace:' + userKey, userKey,
       ...(tabId === undefined ? {} : { tabId }),
+      ...(sourceUrl === undefined ? {} : { sourceUrl }),
       live: true, items: flow.slice(index + 1) },
   ]
 }
@@ -664,13 +729,14 @@ export function setSecureAskDismissed(sessionId: string, origin: string, dismiss
 
 /** Same real transcript seats as the ordinary chat, inside the temporary sidecar. */
 function BrowserWorkspace({
-  items, live, selected, onActivate, seatProps, turnStatus, tabId, sessionId,
+  items, live, selected, onActivate, seatProps, turnStatus, tabId, sourceUrl, sessionId,
 }: {
   readonly items: readonly FlowItem[]
   readonly sessionId: string
   readonly live: boolean
   readonly selected: boolean
   readonly tabId?: string
+  readonly sourceUrl?: string
   readonly onActivate: () => void
   readonly seatProps: SeatProps
   readonly turnStatus: ToolActivityFlowProps['turnStatus']
@@ -764,6 +830,7 @@ function BrowserWorkspace({
       data-activity-open={showSidecar ? 'true' : undefined} data-chat-flow-kind="browser-workspace">
       <div className={css.browserPane}>
         <MiniBrowser key={sessionId} sessionId={sessionId} requested active={selected}
+          {...sourceUrl === undefined ? {} : { sourceUrl }}
           {...tabId === undefined ? {} : { initialTabId: tabId }}
           onActivate={onActivate} autoScroll={false} onPageChange={setPage}
           onSecureLoginRequest={handleSecureRequest} onSavedAccessNotice={handleSavedAccessNotice}
@@ -778,6 +845,12 @@ function BrowserWorkspace({
           <strong>Actividad del agente</strong>
           <span className={css.livePill}><span aria-hidden="true" /> En vivo</span>
         </header>
+        {sourceUrl !== undefined && (
+          <div className={css.pageInfo} role="status">
+            <span className={css.pageCaption}>Fuente de investigación</span>
+            <span>La fuente consultada por fetch se abre por separado en Chromium. La vista no sustituye ni confirma el resultado de fetch.</span>
+          </div>
+        )}
         {page !== null && (
           <div className={css.pageInfo}>
             <span className={css.pageCaption}>Pestaña en uso</span>
@@ -840,10 +913,7 @@ function BrowserWorkspace({
  * @returns The grouped transcript flow.
  */
 export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, browserTurnOpen, sessionId, ...seatProps }: ToolActivityFlowProps) {
-  const ordinaryFlow = useMemo(
-    () => addDesktopCards(addBrowserCards(buildAnchoredFlow(nodes, optimisticSubmit), nodes), nodes),
-    [nodes, optimisticSubmit],
-  )
+  const ordinaryFlow = useMemo(() => addDesktopCards(addBrowserCards(buildAnchoredFlow(nodes, optimisticSubmit), nodes), nodes), [nodes, optimisticSubmit])
   const browserKeys = ordinaryFlow.filter(item => item.kind === 'browser').map(item => item.userKey)
   const [selectedBrowserKey, setSelectedBrowserKey] = useState<string | undefined>()
   const newestBrowserKey = browserKeys.at(-1)
@@ -865,7 +935,8 @@ export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, browserT
     // and closes. Changing layouts must never recreate the CDP tab/session.
     return grouped.map(item => item.kind === 'browser'
       ? { kind: 'browser-workspace' as const, key: 'browser-workspace:' + item.userKey,
-        userKey: item.userKey, ...(item.tabId === undefined ? {} : { tabId: item.tabId }), live: false, items: [] }
+        userKey: item.userKey, ...(item.tabId === undefined ? {} : { tabId: item.tabId }),
+        ...(item.sourceUrl === undefined ? {} : { sourceUrl: item.sourceUrl }), live: false, items: [] }
       : item)
   }, [ordinaryFlow, newestBrowserKey, nodes, browserTurnRunning])
   const hasBrowserWorkspace = flow.some(item => item.kind === 'browser-workspace' && item.live)
@@ -899,39 +970,40 @@ export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, browserT
           {item.kind === 'desktop'
             ? <DesktopLive sessionId={sessionId} active={item.key === latestDesktopKey} />
             : item.kind === 'browser-workspace'
-              ? <BrowserWorkspace
-                sessionId={sessionId}
-                live={item.live}
-                items={item.items}
-                {...item.tabId === undefined ? {} : { tabId: item.tabId }}
-                selected={item.userKey === activeBrowserKey}
-                onActivate={() => { setSelectedBrowserKey(item.userKey) }}
-                seatProps={seatProps}
-                turnStatus={turnStatus}
-              />
-              : item.kind === 'node'
-                ? <ChatNodeSeat nodeKey={item.key} {...seatProps} />
-                : item.kind === 'optimistic'
+            ? <BrowserWorkspace
+              sessionId={sessionId}
+              live={item.live}
+              items={item.items}
+              {...item.tabId === undefined ? {} : { tabId: item.tabId }}
+              {...item.sourceUrl === undefined ? {} : { sourceUrl: item.sourceUrl }}
+              selected={item.userKey === activeBrowserKey}
+              onActivate={() => { setSelectedBrowserKey(item.userKey) }}
+              seatProps={seatProps}
+              turnStatus={turnStatus}
+            />
+            : item.kind === 'node'
+              ? <ChatNodeSeat nodeKey={item.key} {...seatProps} />
+              : item.kind === 'optimistic'
+                ? (
+                  <PendingSteeringBubble
+                    content={[{ type: 'text', text: item.text }]}
+                    renderMessageImages={seatProps.renderMessageImages}
+                    t={seatProps.t}
+                  />
+                )
+                : item.kind === 'images'
                   ? (
-                    <PendingSteeringBubble
-                      content={[{ type: 'text', text: item.text }]}
-                      renderMessageImages={seatProps.renderMessageImages}
-                      t={seatProps.t}
-                    />
+                    <div data-chat-flow-kind="generated-image">
+                      {seatProps.renderMessageImages({ images: item.images, align: 'start' })}
+                    </div>
                   )
-                  : item.kind === 'images'
-                    ? (
-                      <div data-chat-flow-kind="generated-image">
-                        {seatProps.renderMessageImages({ images: item.images, align: 'start' })}
-                      </div>
-                    )
-                    : (
-                      <ToolActivityGroup
-                        items={item.items}
-                        anchorKey={item.anchorKey}
-                        {...seatProps}
-                      />
-                    )}
+                  : (
+                    <ToolActivityGroup
+                      items={item.items}
+                      anchorKey={item.anchorKey}
+                      {...seatProps}
+                    />
+                  )}
         </Fragment>
       ))}
       {!hasBrowserWorkspace && turnStatus !== undefined && turnStatus.progress !== null && statusBeforeIndex === -1 && (
