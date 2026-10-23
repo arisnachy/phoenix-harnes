@@ -182,7 +182,7 @@ export async function prepareEngineRuntime(requestedVersion: string): Promise<En
       const allowed = new Set(['ACTIVE_RUNTIME_CONFLICT',
         'OPENCLAW_RUNTIME_BUSY',
         'OPENCLAW_LIFECYCLE_BUSY',
-        'OPENCLAW_INSTALLER_TREE_UNCERTAIN'])
+        'OPENCLAW_INSTALLER_TREE_UNCERTAIN', 'OPENCLAW_PROCESS_TREE_UNCERTAIN'])
       return { status: 'blocked',
         diagnostic: typeof receipt.code === 'string'
         && allowed.has(receipt.code) ? receipt.code : 'OPENCLAW_PREPARATION_BLOCKED' }

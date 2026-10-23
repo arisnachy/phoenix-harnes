@@ -354,10 +354,10 @@
       name: '@phoenix-ai/dsh-tool-pwsh'
       disabled: !!js process.platform !== 'win32'
       config:
-        # Phoenix Desktop Computer is still experimental. Keep the stable
-        # browser route primary and expose native desktop control only when
-        # explicitly opted in for testing.
-        enableComputerUse: !!js "['1', 'true', 'on'].includes((process.env.PHOENIX_DESKTOP_COMPUTER ?? '').trim().toLowerCase())"
+        # Windows desktop control is available by default, using the existing
+        # session permission/approval policy. Disable explicitly with
+        # PHOENIX_DESKTOP_COMPUTER=0; Chrome remains the primary web route.
+        enableComputerUse: !!js "process.platform === 'win32' && process.env.PHOENIX_DESKTOP_COMPUTER !== '0'"
 
     - id: tool-jobs
       name: '@phoenix-ai/dsh-tool-jobs'

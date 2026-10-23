@@ -38,6 +38,30 @@ function stubAgent(ctx: Context, session: Session): Agent {
   return { id: session.id, session, status: 'idle', ctx } as Agent
 }
 
+describe('API Remote Agent resolver lifecycle deletion barrier', () => {
+  it('exposes ownership of cold resumed agents and refuses new admissions under deletion', async () => {
+    const ctx = await createContext()
+    const id = sid('delete-cold-resume')
+    const meta = header(id)
+    provideSession(ctx, meta, () => Promise.resolve({ meta, events: [] }))
+    let deleting = false
+    const handle = { agent: stubAgent(ctx, { id, header: meta } as Session), dispose: vi.fn(() => Promise.resolve()) }
+    vi.spyOn(ctx.agents, 'resume').mockResolvedValue(handle)
+    const owned: typeof handle[] = []
+    const resolver = createApiRemoteAgentResolver(ctx, {
+      onOwnedHandle: (owner) => { owned.push(owner as typeof handle) },
+      isDeletingSession: candidate => deleting && candidate === id,
+    })
+    expect(await resolver(id)).toMatchObject({ agent: { id } })
+    expect(owned).toEqual([handle])
+    await resolver.waitForPending(id)
+    deleting = true
+    expect(await resolver(id)).toMatchObject({ error: { code: 'agent-busy' } })
+    expect(ctx.agents.resume).toHaveBeenCalledTimes(1)
+    await ctx.fiber.dispose()
+  })
+})
+
 describe('API Remote Agent resolver races', () => {
   it('maps an inspected session without a cwd to session-not-found', async () => {
     const ctx = await createContext()

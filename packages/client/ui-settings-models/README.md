@@ -41,7 +41,7 @@ Authorization polling survives panel refreshes and uses the latest completion ca
 
 Fénix Eclipse exposes two model and reasoning selections: Kira's coordinator and her subagents. Its picker uses the connected Codex account catalog, keeping the newest GPT generation and family revision plus specialized account-visible models. Reasoning options come from each model's advertised capabilities. Saving clears former planner and specialist overrides; planner-only preferences migrate to coordination. Manual mode uses the provider default when effort is unset; hybrid mode adapts unset effort to the task. Rejected writes remain visible without claiming success.
 
-The same panel inspects Host-owned Codex, OpenClaw, and Phoenix runtime versions without exposing paths, process ids, or credentials. OpenClaw preparation is unavailable until installer shutdown and complete package integrity are verified. Activation and rollback remain unavailable until Team proves global idleness across legacy and persisted execution roots under a shared admission fence. Failed inspection stays visibly unavailable.
+The same panel inspects Host-owned Codex, OpenClaw, and Phoenix runtime versions without exposing paths, process ids, or credentials. Official OpenClaw preparation is offered through the verified launcher manager, with bounded cleanup that preserves active, previous and candidate runtimes. Uncertain installer shutdown blocks safely. Activation and rollback remain unavailable until Team proves global idleness across legacy and persisted execution roots under a shared admission fence. Failed inspection stays visibly unavailable.
 
 ## Model Experience
 

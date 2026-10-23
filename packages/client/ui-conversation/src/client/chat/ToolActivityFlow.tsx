@@ -11,6 +11,7 @@ import { PendingSteeringBubble } from './MessageItem.tsx'
 import { formatRunDuration } from './message-chrome.ts'
 import { ReasoningRow } from './ReasoningRow.tsx'
 import { MiniBrowser, type SavedAccessNotice, type SecureLoginTarget } from './MiniBrowser.tsx'
+import { DesktopLive } from './DesktopLive.tsx'
 import { SecureAsk } from './SecureAsk.tsx'
 import type { TurnProgress } from './turn-progress.ts'
 import chatCss from './ChatView.module.css'
@@ -55,6 +56,7 @@ type ActivityItem =
   }
 
 type FlowItem =
+  | { readonly kind: 'desktop'; readonly key: string; readonly userKey: string }
   | { readonly kind: 'browser'; readonly key: string; readonly userKey: string; readonly tabId?: string }
   | { readonly kind: 'browser-workspace'; readonly key: string; readonly userKey: string; readonly tabId?: string; readonly live: boolean; readonly items: readonly FlowItem[] }
   | { readonly kind: 'node'; readonly key: string }
@@ -144,6 +146,9 @@ export function isBrowserPrompt(text: string): boolean {
   // "puedes entras a la pagina..." must open the same in-chat browser
   // that Kira controls, rather than silently omitting its card.
   const normalized = text.normalize('NFD').replace(/[\u0300-\u036f]/gu, '').toLowerCase()
+  // Native Windows requests are never automatic web-navigation intents even
+  // when they say "entra", "abre" or mention the Desktop Live viewer.
+  if (isDesktopPrompt(text)) return false
   const verb = /\b(?:abre|abres|abrir|abreme|abrirme|navega|navegas|navegar|entra|entras|entrar|ingresa|ingresas|ingresar)\b/u
   const verb2 = /\b(?:visita|visitas|visitar|accede|accedes|acceder)\b/u
   const englishVerb = /\b(?:open|browse|visit)\b/u
@@ -341,7 +346,8 @@ export function addBrowserCards(
   flow: FlowItem[],
   nodes: readonly OrderedChatNode[],
 ): FlowItem[] {
-  const requests = new Set(nodes.filter(isBrowserRequest).map(node => node.key))
+  const desktopRequests = new Set(nodes.filter(isDesktopRequest).map(node => node.key))
+  const requests = new Set(nodes.filter(node => !desktopRequests.has(node.key) && isBrowserRequest(node)).map(node => node.key))
   const browserTabIds = new Map<string, string>()
   let currentUserKey: string | undefined
   for (const node of nodes) {
@@ -349,7 +355,7 @@ export function addBrowserCards(
     if (node.kind === 'tool-call' && currentUserKey !== undefined) {
       const root = (node.data as ToolChatData).root
       const browserUse = embeddedBrowserUse(root)
-      if (browserUse.found) {
+      if (browserUse.found && !desktopRequests.has(currentUserKey)) {
         requests.add(currentUserKey)
         if (browserUse.tabId !== undefined) browserTabIds.set(currentUserKey, browserUse.tabId)
       }
@@ -369,6 +375,48 @@ export function addBrowserCards(
     }
   }
   return result
+}
+
+/** Explicit user requests for a real Windows application, not web browsing.
+ * @param text - Latest user prompt text.
+ * @returns Whether the user intends a native application viewer.
+ */
+export function isDesktopPrompt(text: string): boolean {
+  const normalized = text.normalize('NFD').replace(/[\u0300-\u036f]/gu, '').toLowerCase()
+  if (/\bdesktop[\s-]*live\b/u.test(normalized)) return true
+  // oxlint-disable-next-line @stylistic/max-len -- Keep the complete desktop intent pattern readable.
+  const application = /\b(?:microsoft paint|paint|mspaint|bloc de notas|notepad|explorador de windows|calculadora|calculator|explorador de archivos|file explorer)\b/u
+  // oxlint-disable-next-line @stylistic/max-len -- Keep the complete desktop intent pattern readable.
+  const action = /\b(?:abre|abres|abrir|entra|entrar|ingresa|ingresar|inicia|ejecuta|dibuja|dibujo|trazo|traza|trabaja|controla|muestra|open|draw|launch|use|usa)\b/u
+  return application.test(normalized) && action.test(normalized)
+}
+
+function isDesktopRequest(node: OrderedChatNode): boolean {
+  if (node.kind !== 'user' && node.kind !== 'steering') return false
+  const content = (node.data as { content?: unknown }).content
+  if (!Array.isArray(content)) return false
+  return isDesktopPrompt(content.map((block: unknown) =>
+    block !== null && typeof block === 'object' && 'text' in block
+      && typeof block.text === 'string' ? block.text : '').join(' '))
+}
+
+/** Put a real native Desktop Live status/viewport where users requested it.
+ * A disconnected viewer is explicitly unavailable, never a made-up screenshot.
+ * @param flow - Ordered chat items.
+ * @param nodes - Durable chat messages.
+ * @returns Flow with viewer cards beside relevant user prompts.
+ */
+export function addDesktopCards(flow: FlowItem[], nodes: readonly OrderedChatNode[]): FlowItem[] {
+  const requests = new Set(nodes.filter(isDesktopRequest).map(node => node.key))
+  const output: FlowItem[] = []
+  for (const item of flow) {
+    output.push(item)
+    if (item.kind === 'node' && requests.has(item.key)
+      || item.kind === 'optimistic' && isDesktopPrompt(item.text)) {
+      output.push({ kind: 'desktop', key: 'desktop:' + item.key, userKey: item.key })
+    }
+  }
+  return output
 }
 
 /**
@@ -792,7 +840,10 @@ function BrowserWorkspace({
  * @returns The grouped transcript flow.
  */
 export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, browserTurnOpen, sessionId, ...seatProps }: ToolActivityFlowProps) {
-  const ordinaryFlow = useMemo(() => addBrowserCards(buildAnchoredFlow(nodes, optimisticSubmit), nodes), [nodes, optimisticSubmit])
+  const ordinaryFlow = useMemo(
+    () => addDesktopCards(addBrowserCards(buildAnchoredFlow(nodes, optimisticSubmit), nodes), nodes),
+    [nodes, optimisticSubmit],
+  )
   const browserKeys = ordinaryFlow.filter(item => item.kind === 'browser').map(item => item.userKey)
   const [selectedBrowserKey, setSelectedBrowserKey] = useState<string | undefined>()
   const newestBrowserKey = browserKeys.at(-1)
@@ -804,6 +855,7 @@ export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, browserT
     }
   }, [newestBrowserKey, lastBrowserKey])
   const activeBrowserKey = selectedBrowserKey ?? newestBrowserKey
+  const latestDesktopKey = ordinaryFlow.filter(item => item.kind === 'desktop').at(-1)?.key
   const browserTurnRunning = browserTurnOpen ?? (turnStatus?.progress != null)
   const flow = useMemo(() => {
     const grouped = browserTurnRunning && newestBrowserKey !== undefined
@@ -844,40 +896,42 @@ export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, browserT
               t={seatProps.t}
             />
           )}
-          {item.kind === 'browser-workspace'
-            ? <BrowserWorkspace
-              sessionId={sessionId}
-              live={item.live}
-              items={item.items}
-              {...item.tabId === undefined ? {} : { tabId: item.tabId }}
-              selected={item.userKey === activeBrowserKey}
-              onActivate={() => { setSelectedBrowserKey(item.userKey) }}
-              seatProps={seatProps}
-              turnStatus={turnStatus}
-            />
-            : item.kind === 'node'
-              ? <ChatNodeSeat nodeKey={item.key} {...seatProps} />
-              : item.kind === 'optimistic'
-                ? (
-                  <PendingSteeringBubble
-                    content={[{ type: 'text', text: item.text }]}
-                    renderMessageImages={seatProps.renderMessageImages}
-                    t={seatProps.t}
-                  />
-                )
-                : item.kind === 'images'
+          {item.kind === 'desktop'
+            ? <DesktopLive sessionId={sessionId} active={item.key === latestDesktopKey} />
+            : item.kind === 'browser-workspace'
+              ? <BrowserWorkspace
+                sessionId={sessionId}
+                live={item.live}
+                items={item.items}
+                {...item.tabId === undefined ? {} : { tabId: item.tabId }}
+                selected={item.userKey === activeBrowserKey}
+                onActivate={() => { setSelectedBrowserKey(item.userKey) }}
+                seatProps={seatProps}
+                turnStatus={turnStatus}
+              />
+              : item.kind === 'node'
+                ? <ChatNodeSeat nodeKey={item.key} {...seatProps} />
+                : item.kind === 'optimistic'
                   ? (
-                    <div data-chat-flow-kind="generated-image">
-                      {seatProps.renderMessageImages({ images: item.images, align: 'start' })}
-                    </div>
-                  )
-                  : (
-                    <ToolActivityGroup
-                      items={item.items}
-                      anchorKey={item.anchorKey}
-                      {...seatProps}
+                    <PendingSteeringBubble
+                      content={[{ type: 'text', text: item.text }]}
+                      renderMessageImages={seatProps.renderMessageImages}
+                      t={seatProps.t}
                     />
-                  )}
+                  )
+                  : item.kind === 'images'
+                    ? (
+                      <div data-chat-flow-kind="generated-image">
+                        {seatProps.renderMessageImages({ images: item.images, align: 'start' })}
+                      </div>
+                    )
+                    : (
+                      <ToolActivityGroup
+                        items={item.items}
+                        anchorKey={item.anchorKey}
+                        {...seatProps}
+                      />
+                    )}
         </Fragment>
       ))}
       {!hasBrowserWorkspace && turnStatus !== undefined && turnStatus.progress !== null && statusBeforeIndex === -1 && (

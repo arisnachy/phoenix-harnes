@@ -23,6 +23,16 @@ describe('Phoenix research report publisher', () => {
     expect(() => validateResearchPublication({ ...report, references: [{ ...report.references[0], url: 'http://localhost/secret' }] })).toThrow()
     expect(() => validateResearchPublication({ ...report, style: 'inventado' })).toThrow()
   })
+  it('explains how to recover when a model calls publish without research sources', () => {
+    const incomplete = { title: 'El futuro de la IA', sections: [
+      { heading: 'Introducción', text: 'La IA transformará la sociedad en la próxima década.' },
+    ] }
+    expect(() => validateResearchPublication(incomplete)).toThrow(/report\.references.*investiga fuentes reales/u)
+    const tool = createResearchPublishTool()
+    expect(tool.description).toMatch(/NO llames esta herramienta sin report\.references/u)
+    expect(tool.parameters).toMatchObject({ properties: { report: { description: expect.stringContaining('report.references') } } })
+  })
+
   it('admits named modern design presets but protects strict academic styling', () => {
     const options = ['editorial_navy', 'clinical_teal', 'executive_amber',
       'minimal_graphite', 'creative_coral', 'journal_ink', 'research_violet', 'biotech_green',

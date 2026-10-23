@@ -29,6 +29,11 @@ describe('MiniBrowser chronological conversation cards', () => {
     expect(isBrowserPrompt('Abre la carpeta del proyecto')).toBe(false)
     expect(isBrowserPrompt('No abras el navegador')).toBe(false)
     expect(isBrowserPrompt('Hola, ¿cómo va todo?')).toBe(false)
+    expect(isBrowserPrompt('entra a paint y haz un trazo')).toBe(false)
+    expect(isBrowserPrompt('entra en paint y crea una carita')).toBe(false)
+    expect(isBrowserPrompt('Abre Microsoft Paint, dibuja una casa y muéstrame Desktop Live')).toBe(false)
+    expect(isBrowserPrompt('Abre el Bloc de notas')).toBe(false)
+    expect(isBrowserPrompt('Abre la calculadora de Windows')).toBe(false)
     expect(isBrowserPrompt('Analiza este tutorial de Godot en YouTube')).toBe(true)
   })
 
@@ -44,6 +49,26 @@ describe('MiniBrowser chronological conversation cards', () => {
     ]
     const output = addBrowserCards(flowNodes('user-1', 'tool-1'), nodes)
     expect(output.map(item => item.key)).toEqual(['user-1', 'browser:user-1', 'tool-1'])
+  })
+
+  it('does not launch a MiniBrowser for a native Paint request, even when a browser tool was called', () => {
+    const nodes = [
+      user('user-paint', 'entra a paint y haz un trazo'),
+      { key: 'tool-1', kind: 'tool-call', data: { root: { call: { name: 'mcp__browser__navigate' } } } },
+    ]
+    const cards = addBrowserCards(flowNodes('user-paint', 'tool-1'), nodes)
+    expect(cards.map(item => item.key)).toEqual(['user-paint', 'tool-1'])
+    const optimistic = addBrowserCards([{ kind: 'optimistic', key: 'optimistic-paint', text: 'abre Paint' }], [])
+    expect(optimistic.map(item => item.key)).toEqual(['optimistic-paint'])
+  })
+
+  it('refuses MiniBrowser for Paint even after an incidental Chrome inspection', () => {
+    const nodes = [
+      user('paint', 'entra en paint y crea una carita'),
+      { key: 'inspect', kind: 'tool-call', data: { root: { call: { name: 'mcp__chrome__inspect_page' } } } },
+    ]
+    expect(addBrowserCards(flowNodes('paint', 'inspect'), nodes).map(item => item.key))
+      .toEqual(['paint', 'inspect'])
   })
 
   it('opens the browser for nested Chrome calls emitted by a Code parent', () => {

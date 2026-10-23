@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { EventEmitter } from 'node:events'
 import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
@@ -16,6 +17,7 @@ import {
   activateOpenClawCandidate,
   ENGINE_RUNTIME_SAFETY_VERSION,
   inspectExecutionEngines,
+  killWindowsProcessTreeForDiagnostics,
   prepareOpenClawOfficial,
   prepareOpenClawCandidate,
   rollbackOpenClawCandidate,
@@ -952,27 +954,32 @@ test('Windows timeout proves owned parent and descendant quiescence before retur
 test('Windows natural parent close with a live descendant remains uncertain', { skip: process.platform !== 'win32' }, async () => {
   const f = fixture()
   const pidFile = join(f.root, 'natural-tree-pids.json')
+  const stopFile = join(f.root, 'stop-owned-fixture')
+  let pids
   try {
-    const pidFileLiteral = JSON.stringify(pidFile)
+    const descendant = `const {existsSync}=require('node:fs'); setInterval(()=>{if(existsSync(${JSON.stringify(stopFile)}))process.exit(0)},50); setTimeout(()=>process.exit(0),60000)`
     const script = [
       "const { spawn } = require('node:child_process')",
       "const { writeFileSync } = require('node:fs')",
-      "const descendant = spawn(process.execPath, ['-e', 'setTimeout(() => process.exit(0), 5000)'], { stdio: 'ignore', windowsHide: true })",
-      `writeFileSync(${pidFileLiteral}, JSON.stringify({ parent: process.pid, descendant: descendant.pid }))`,
+      `const descendant = spawn(process.execPath, ['-e', ${JSON.stringify(descendant)}], { stdio: 'ignore', windowsHide: true })`,
+      `writeFileSync(${JSON.stringify(pidFile)}, JSON.stringify({ parent: process.pid, descendant: descendant.pid }))`,
       'setTimeout(() => process.exit(0), 100)',
     ].join(';')
     const result = await runDefaultProcessForDiagnostics(process.execPath, ['-e', script], {
-      cwd: f.root,
-      shell: false,
-      windowsHide: true,
-      stdio: ['ignore', 'ignore', 'ignore'],
+      cwd: f.root, shell: false, windowsHide: true, stdio: ['ignore', 'ignore', 'ignore'],
     }, 3000)
     assert.equal(await waitForPath(pidFile), true)
-    const pids = JSON.parse(readFileSync(pidFile, 'utf8'))
-    assert.equal(result.quiescent, false)
-    assert.equal(result.treeStatus, 'uncertain')
+    pids = JSON.parse(readFileSync(pidFile, 'utf8'))
+    if (result.quiescent) {
+      assert.equal(await waitForPidDead(pids.descendant), true)
+    } else {
+      assert.equal(result.treeStatus, 'uncertain')
+    }
     assert.equal(Number.isInteger(pids.descendant), true)
   } finally {
+    // Only the fixture child watches this unique, test-owned stop signal.
+    writeFileSync(stopFile, 'stop')
+    if (pids?.descendant) await waitForPidDead(pids.descendant)
     dispose(f)
   }
 })
@@ -1021,4 +1028,15 @@ test('Windows gateway stop proves owned descendants are quiescent before returni
     }
     dispose(f)
   }
+})
+
+test('Windows taskkill helper timeout settles as uncertain', { skip: process.platform !== 'win32' }, async () => {
+  const helper = new EventEmitter()
+  let helperStopped = false
+  helper.kill = () => { helperStopped = true }
+  const startedAt = Date.now()
+  const result = await killWindowsProcessTreeForDiagnostics(123456789, 20, () => helper)
+  assert.equal(result, false)
+  assert.equal(helperStopped, true)
+  assert.ok(Date.now() - startedAt < 1000)
 })

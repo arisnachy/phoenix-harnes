@@ -25,26 +25,23 @@ export interface EclipseModelRoute {
   readonly reasoningEffort?: string
 }
 
-/** Optional settings overlay. The user-facing router has two roles: Kira's
- * coordinator and the models used by her subagents. The legacy planner field
- * remains readable for one migration window, but new dispatch never uses it.
- */
+/** Kira uses separate Codex routes for strategy, execution and specialists. */
 export interface EclipseRoutingSettings {
   readonly mode?: 'automatic' | 'hybrid' | 'manual'
   /** Execution transport preference, independent from the two model routes. */
   readonly executionEngine?: 'automatic' | 'internal' | 'codex' | 'openclaw'
-  /** @deprecated Use coordinator; retained so old settings can be read safely. */
   readonly planner?: EclipseModelRoute
   readonly coordinator?: EclipseModelRoute
   readonly subagent?: EclipseModelRoute
   readonly specialists?: Readonly<Record<string, EclipseModelRoute>>
   readonly maxTeammates?: number
+  /** Escalation threshold, not a per-phase quota. */
+  readonly escalationSensitivity?: 'adaptive' | 'quality' | 'economy'
 }
 
 /** Apply a user-selected route at a real dispatch boundary, never to virtual ids.
  * @param profile - Optional saved routing configuration.
- * @param role - Coordinator or default teammate responsibility. `planner` is
- * a legacy read path and is never selected by the automatic router.
+ * @param role - Independent planner, coordinator or teammate model.
  * @param fallback - Shipped route when the role is not overridden.
  * @param adaptiveEffort - Effort selected from the current request when a
  * hybrid/manual route changes only the model and leaves effort unset.
@@ -56,10 +53,11 @@ export function resolveEclipseRoleRoute(
   fallback: ModelSelection,
   adaptiveEffort?: string,
 ): ModelSelection {
-  if (profile === undefined || profile.mode === undefined || profile.mode === 'automatic') return fallback
-  // A legacy planner override is still honored when called directly so an
-  // older persisted profile does not silently lose a user choice. Phoenix's
-  // own adaptive path calls this helper only with `coordinator`.
+  // An explicitly selected planner must be honored even in automatic mode.
+  // Execution follows Luna Max unless the user selected a coordinator in
+  // hybrid/manual mode. This prevents a legacy Sol coordinator taking over.
+  if (profile === undefined) return fallback
+  if (role !== 'planner' && (profile.mode === undefined || profile.mode === 'automatic')) return fallback
   const route = profile[role]
   // Eclipse's catalog and reasoning controls are Codex-only. A stale legacy
   // profile must not bypass that boundary at the dispatch site.
@@ -274,7 +272,7 @@ export function defaultExecutionHandoff(selection: ModelSelection | undefined): 
 
 /** Operational verbs that strongly imply the user expects Phoenix to act on an artifact. */
 // oxlint-disable-next-line @stylistic/max-len -- Keep the deterministic bilingual matcher auditable as one regex literal.
-const TOOL_ACTION = /\b(?:fix(?:es|ed|ing)?|repair(?:s|ed|ing)?|debug(?:s|ged|ging)?|implement(?:s|ed|ing)?|edit(?:s|ed|ing)?|modif(?:y|ies|ied|ying)|update(?:s|d|ing)?|create(?:s|d|ing)?|build(?:s|ing|built)?|run(?:s|ning)?|execute(?:s|d|ing)?|test(?:s|ed|ing)?|inspect(?:s|ed|ing)?|review(?:s|ed|ing)?|audit(?:s|ed|ing)?|refactor(?:s|ed|ing)?|deploy(?:s|ed|ing)?|install(?:s|ed|ing)?|remove(?:s|d|ing)?|delete(?:s|d|ing)?|rename(?:s|d|ing)?|commit(?:s|ted|ting)?|merge(?:s|d|ing)?|revert(?:s|ed|ing)?|resolv(?:e|es|ed|ing)|diagnos(?:e|es|ed|ing)|arregl\p{L}*|repar\p{L}*|corrig\p{L}*|implement\p{L}*|modific\p{L}*|actualiz\p{L}*|crea\p{L}*|ejecut\p{L}*|prueb\p{L}*|revis\p{L}*|audit\p{L}*|refactor\p{L}*|despleg\p{L}*|instal\p{L}*|elimin\p{L}*|renombr\p{L}*|fusion\p{L}*|resuelv\p{L}*|diagnostic\p{L}*)\b/iu
+const TOOL_ACTION = /\b(?:fix(?:es|ed|ing)?|repair(?:s|ed|ing)?|debug(?:s|ged|ging)?|implement(?:s|ed|ing)?|edit(?:s|ed|ing)?|modif(?:y|ies|ied|ying)|update(?:s|d|ing)?|create(?:s|d|ing)?|build(?:s|ing|built)?|run(?:s|ning)?|execute(?:s|d|ing)?|test(?:s|ed|ing)?|inspect(?:s|ed|ing)?|review(?:s|ed|ing)?|audit(?:s|ed|ing)?|refactor(?:s|ed|ing)?|deploy(?:s|ed|ing)?|install(?:s|ed|ing)?|remove(?:s|d|ing)?|delete(?:s|d|ing)?|rename(?:s|d|ing)?|commit(?:s|ted|ting)?|merge(?:s|d|ing)?|revert(?:s|ed|ing)?|resolv(?:e|es|ed|ing)|diagnos(?:e|es|ed|ing)|arregl\p{L}*|repar\p{L}*|corrig\p{L}*|implement\p{L}*|modific\p{L}*|actualiz\p{L}*|crea\p{L}*|ejecut\p{L}*|prueb\p{L}*|revis\p{L}*|audit\p{L}*|refactor\p{L}*|despleg\p{L}*|desplieg\p{L}*|instal\p{L}*|elimin\p{L}*|renombr\p{L}*|fusion\p{L}*|resuelv\p{L}*|diagnostic\p{L}*)\b/iu
 /** Artifact/code vocabulary used with {@link TOOL_ACTION} to avoid downgrading pure reasoning turns. */
 // oxlint-disable-next-line @stylistic/max-len -- Keep the deterministic bilingual matcher auditable as one regex literal.
 const TOOL_ARTIFACT = /(?:\b(?:file|files|archivo|archivos|code|c[oó]digo|repo|repository|repositorio|branch|rama|commit|test|tests|prueba|pruebas|script|package|build|cli|api|html|css|python|typescript|javascript|github|main|stable|error|exception|traceback|terminal|powershell|shell)\b|\x60\x60\x60|(?:^|[\s\x60'"(])(?:[a-z]:\\|\.{0,2}\/)?[\w@.-]+(?:[\\/][\w@. -]+)*\.(?:ts|tsx|js|mjs|cjs|py|json|ya?ml|toml|md|html?|css|scss|sql|rs|go|java|kt|cs|cpp|c|h)\b)/iu
@@ -362,28 +360,28 @@ const AUTO_EXECUTION_CONTINUATION =
 const AUTO_VISIBLE_PLAN_POLICY =
   'Phoenix Auto is a real two-stage workflow, not hidden role-play. ' +
   'For an actionable multi-step user request, you are Kira herself, preparing the execution brief in this FIRST step. ' +
-  'Kira is the single Lead identity and the configured coordinator model remains responsible for planning, execution and rescue. ' +
+  'Kira is the single Lead identity. The Eclipse planning seat prepares the plan, then the Luna Max coordination seat directs execution and teammates. ' +
   'Speak as Kira to the user in first person; never address Kira as another person or write "Kira, ...". ' +
   'Write a SHORT, natural user-visible message beginning exactly with "**Plan:**", followed by 2–4 specific ' +
   'actions in the user\'s language, the expected deliverable and how it will be verified. ' +
   'Be proportionate: a tiny team demonstration deserves a tiny plan, not a technical audit. ' +
   'Show decisions, not private chain-of-thought, model names, ceremonial talk or fabricated completion. ' +
   'Do not execute tools or assign coworkers in this first planning step; stop after displaying the plan. ' +
-  'On the very next step you continue as Kira with the same coordinator route and execute this exact plan without asking for routine approval. ' +
+  'On the next step Kira switches to the execution coordinator on Luna Max, uses this exact plan and coordinates the real specialists without asking for routine approval. ' +
   'If the user only wants a greeting, explanation, answer or standalone preview, respond normally with no planning stage.'
 
 const AUTO_SOL_STRATEGY_POLICY =
-  'You are Kira herself using the coordinator route for one REAL focused strategy pass. ' +
+  'You are Kira herself using the selected strategy/planner model for one focused review of execution evidence. ' +
   'The coordinator is not a separate teammate, speaker or consultant; the Lead identity and ongoing conversation remain Kira. ' +
   'Speak directly to the user in your own first-person voice. Never address yourself as "Kira, ...", ' +
   'give instructions to Kira in second person, or narrate what Kira should do as if she were someone else. ' +
   'Examine the latest evidence and unresolved obstacle, then state one materially different feasible strategy ' +
   'within the current mission and permissions. Do not delegate, run tools or declare work completed. ' +
-  'Stop after a concise actionable strategy; continue as Kira on the same coordinator route immediately afterward.'
+  'Stop after one concise, actionable strategy adjustment; then Kira returns to Luna Max execution. Do not rewrite the entire plan.'
 
 const AUTO_LUNA_COORDINATION_POLICY =
-  'You are still Kira, coordinating and executing through the configured coordinator route. ' +
-  'This is one coordinator role across planning, execution and rescue, not a change of speaker; speak in first person and never address Kira as another person. ' +
+  'You are still Kira, coordinating and executing on Luna Max through the configured execution route. ' +
+  'The single Kira identity owns the plan across model switches; never address Kira as another speaker. ' +
   'If a user-visible **Plan:** was written earlier in THIS turn, ' +
   'treat that text as the already-approved execution brief; do not rewrite, replan, recite or re-announce it. ' +
   'Start the first permitted real action promptly, supervise the critical path and choose a genuine teammate ' +
@@ -391,18 +389,18 @@ const AUTO_LUNA_COORDINATION_POLICY =
   'and speak to the user in concise, warm Spanish when that is their language. ' +
   'Never simulate coworker messages or claim a tool ran before its real result. ' +
   'If you genuinely need a new strategy, state "Necesito revisar la estrategia" and end that step: ' +
-  'the router makes one REAL bounded coordinator strategy pass and returns to execution. ' +
+  'the router asks the selected planning model for a focused review only when new evidence warrants it, then returns immediately to Luna Max execution. ' +
   'Respect the hard limit of three simultaneous specialists; reuse existing agents and rotate assignments instead of creating more. Report meaningful changes and final verified output; skip filler and repetitive stage narration.'
 
 const AUTO_SOL_RESCUE_HANDOFF =
-  'You are Kira: you just completed your own focused strategy review, not advice from a different teammate. ' +
-  'Resume the SAME unfinished mission in your own first-person voice on the coordinator route; never address Kira as another person. ' +
+  'You are Kira: you just completed a focused review on the planning model; specialists did not switch models. ' +
+  'Resume the SAME unfinished mission on Luna Max in your own first-person voice; never address Kira as another person. ' +
   'apply the correction only if it respects the original user request and permissions, ' +
   'execute the next tool action and stop when verified. Do not reopen completed work.'
 
 const AUTO_VISIBLE_PLAN_HANDOFF =
   'You are Kira. The visible **Plan:** you authored is your own authoritative execution plan. ' +
-  'Continue the current user request as the SAME Kira on the coordinator route, without addressing yourself as another speaker; execute the next concrete action now, ' +
+  'Continue the current user request as the SAME Kira on the Luna Max execution coordinator route, without addressing yourself as another speaker; execute the next concrete action now, ' +
   'without re-planning, re-reading the same brief or asking permission for already authorized safe work. ' +
   'If this is a requested team demonstration, call spawn_teammate once with a small verifiable assignment, ' +
   'wait for genuine evidence and complete the demonstration. The actual Team conversation must be real, ' +
@@ -410,6 +408,8 @@ const AUTO_VISIBLE_PLAN_HANDOFF =
 
 const FAST_SOCIAL_ATOM = String.raw`(?:hola|hello|hi|hey|buenas|buenos\s+d[ií]as|buenas\s+tardes|buenas\s+noches|qu[eé]\s+tal|c[oó]mo\s+est[aá]s|c[oó]mo\s+te\s+va|c[oó]mo\s+va\s+todo|qu[eé]\s+cuentas|qu[eé]\s+se\s+cuenta|how\s+are\s+you|how(?:'|’)s\s+it\s+going|what(?:'|’)s\s+up|gracias|thanks|thank\s+you)`
 const FAST_SOCIAL_SEQUENCE = new RegExp(`^${FAST_SOCIAL_ATOM}(?:\\s+(?:y\\s+)?${FAST_SOCIAL_ATOM})*$`, 'iu')
+/** Treat the default Lead's name as a vocative, not substantive task text. */
+const FAST_KIRA_VOCATIVE = /^(?:kira|f[eé]nix)\s+|\s+(?:kira|f[eé]nix)$/giu
 const FAST_SOCIAL_OPEN = /^(?:cu[eé]ntame\s+algo(?:\s+bueno)?|dime\s+algo\s+bueno|sorpr[eé]ndeme|tell\s+me\s+something(?:\s+good)?)$/iu
 // oxlint-disable-next-line @stylistic/max-len -- Keep the deterministic bilingual matcher auditable as one regex literal.
 const FAST_CONTEXTUAL_OPEN = /^(?:qu[eé]\s+quieres\s+que\s+hagamos|qu[eé]\s+te\s+gustar[ií]a\s+que\s+hagamos|de\s+qu[eé]\s+hablamos|what\s+do\s+you\s+want\s+to\s+do|what\s+should\s+we\s+talk\s+about)$/iu
@@ -458,7 +458,9 @@ export function isConversationalFastPathText(text: string): boolean {
   // history, tool schemas, and the user's selected reasoning route.
   if (CONTEXTUAL_CONTINUATION.test(candidate)) return false
   const socialCandidate = normalizedFastSocialText(candidate)
+  const addressedGreeting = socialCandidate.replace(FAST_KIRA_VOCATIVE, '').trim()
   if (FAST_SOCIAL_SEQUENCE.test(socialCandidate)
+    || (addressedGreeting !== socialCandidate && FAST_SOCIAL_SEQUENCE.test(addressedGreeting))
     || FAST_SOCIAL_OPEN.test(socialCandidate)
     || FAST_SOCIAL_REPLY.test(candidate)
     || FAST_RUNTIME_META.test(candidate)) return true
@@ -836,11 +838,53 @@ export function isBriefTeamDemonstration(text: string): boolean {
   return !/(?:https?:\/\/|[a-z]:\\|\b(?:github|repo|codigo|script|archivo\w*|implementa|despliega|production|produccion|email|correo|compra|borra|elimina|contrato|paciente|sql|api|web|sitio|site|investigacion|research)\b)/u.test(request)
 }
 
+/**
+ * Cheap, conservative fast lane for Kira's ordinary conversation and one-shot
+ * low-risk tool work. A positive match skips Sol's visible strategy pass without
+ * hiding the tools; multi-step and consequential workflows stay on the planner.
+ * Ambiguous cases deliberately fall back to the ordinary planning route.
+ * @param text - The current human request, not model-generated continuation.
+ * @returns Whether Luna Max can directly serve the first operational step.
+ */
+// oxlint-disable-next-line @stylistic/max-len -- Auditable bilingual one-action vocabulary.
+const AUTO_SIMPLE_ACTION = /^(?:(?:kira|f[eé]nix)[,\s]+)?(?:abre|abrir|open|muestra|mu[eé]strame|show|lee|leer|read|lista|listar|list|busca|buscar|search|consulta|consultar|check|verifica|verificar|revisa|revisar|resume|resumir|res[uú]meme|summari[sz]e|corrige|corregir|correct|cambia|cambiar|change|renombra|renombrar|rename|actualiza|actualizar|update|crea|crear|create)\b/iu
+// oxlint-disable-next-line @stylistic/max-len -- Consequential changes and multi-stage operations require Sol.
+const AUTO_SIMPLE_EXCLUSION = /(?:\b(?:main|stable|branch|rama|commit|merge|fusionar|push|pull|despliega|deploy|producci[oó]n|production|servidor|database|base\s+de\s+datos|sql|migraci[oó]n|pagos?|payments?|compras?|contrato|contract|paciente|historia\s+cl[ií]nica|credenciales?|contrase[nñ]as?|secretos?|security|seguridad|permiso|permissions?|borra|elimina|delete|remove|y\s+(?:despu[eé]s|luego|tambi[eé]n|abre|busca|verifica|revisa|corrige|cambia|crea|ejecuta|actualiza|publica|agrega|a[nñ]ade|guarda|env[ií]a|renombra|ejecuta|instala)|luego|despu[eé]s|then|and\s+(?:then|also|open|fix|update|run|deploy))\b)/iu
+
+// oxlint-disable-next-line @stylistic/max-len -- Explicit creation verbs identify projects.
+const AUTO_LARGE_CREATION = /^(?:(?:kira|f[eé]nix)[,\s]+)?(?:haz|hacer|dise[nñ]a|desarrolla|construye|elabora|prepara|genera|generar|crea|crear|redacta|escribe|produce|make|design|develop|write|create|generate)\b.{0,150}\b(?:juego|videojuego|sistema|aplicaci[oó]n|app|plataforma|sitio|web|motor|m[oó]dulo|informe|investigaci[oó]n|libro|c[oó]mic|novela|curso|software|base\s+de\s+datos|hospital|saas)\b/iu
+
+/** Requests phrased as "quiero que me construyas un sistema" are still projects. */
+// oxlint-disable-next-line @stylistic/max-len -- Bound natural-language construction intent, avoiding a second classification model call.
+const AUTO_LARGE_INTENT = /^[¡!¿?\s]*(?:(?:kira|f[eé]nix)[,\s]+)?(?:quiero|necesito|puedes|podr[ií]as|can\s+you|i\s+(?:want|need))\b.{0,80}\b(?:hacer|hagas|crear|crees|construir|construyas|desarrollar|desarrolles|dise[nñ]ar|dise[nñ]es|implementar|implementes|build|create|develop|design|make)\b.{0,100}\b(?:juego|videojuego|sistema|aplicaci[oó]n|app|plataforma|sitio|web|motor|m[oó]dulo|informe|investigaci[oó]n|libro|c[oó]mic|novela|curso|software|hospital|saas)\b/iu
+
+export function isPhoenixAutoQuickTurn(text: string): boolean {
+  const candidate = text.trim()
+  if (candidate.length === 0 || candidate.length > 180 || candidate.includes('\n')) return false
+  if (CONTEXTUAL_CONTINUATION.test(candidate)) return false
+  if (isConversationalFastPathText(candidate) || isContextualConversationFastPathText(candidate)) return true
+  // Ordinary questions about complicated subjects are still conversation;
+  // the mere mention of "architecture" does not make them implementation jobs.
+  if (AUTO_EXCEPTIONAL_TASK.test(candidate) || AUTO_DEEP_REPLY.test(candidate)) return false
+  if (AUTO_LARGE_INTENT.test(candidate)) return false
+  // A neutral question about a risky concept is chat; a command to alter it
+  // must never use the shortcut, even if its verb is absent from the action list.
+  const informationalQuestion = /^[¿?\s]*(?:qu[eé]|c[oó]mo|cu[aá]l|por\s+qu[eé]|what|how|why)\b/iu.test(candidate)
+  if (AUTO_SIMPLE_EXCLUSION.test(candidate) && !informationalQuestion) return false
+  if (!phoenixAutoTaskRequest(candidate)) return true
+  if (AUTO_LARGE_CREATION.test(candidate) || AUTO_COMPLEX_TASK.test(candidate)) return false
+  if (!AUTO_SIMPLE_ACTION.test(candidate)) return false
+  const verbs = candidate.match(new RegExp(AUTO_TASK_ACTION.source, 'giu')) ?? []
+  return verbs.length <= 1
+}
+
 function phoenixAutoTaskRequest(text: string): boolean {
   const candidate = text.trim()
   return CONTEXTUAL_CONTINUATION.test(candidate)
     || isToolAcquisitionRequest(candidate)
     || AUTO_TASK_ACTION.test(candidate)
+    || AUTO_LARGE_CREATION.test(candidate)
+    || AUTO_LARGE_INTENT.test(candidate)
 }
 
 /** Look at the live turn boundary: assembly happens before step/start is logged. */
@@ -867,7 +911,8 @@ function hasVisibleSolPlan(text: string): boolean {
 interface PhoenixAutoRouterState {
   turn: number
   lastRescueStep: number
-  rescueCount: number
+  lastRescueEvidenceVersion: number
+  lastRescueEvidenceSignature: string | undefined
   continuationCount: number
   lastContinuationStep: number
   forcePlannerNext: boolean
@@ -878,11 +923,89 @@ function resetPhoenixAutoTurnState(state: PhoenixAutoRouterState, turn: number):
   if (state.turn === turn) return
   state.turn = turn
   state.lastRescueStep = 0
-  state.rescueCount = 0
+  state.lastRescueEvidenceVersion = 0
+  state.lastRescueEvidenceSignature = undefined
   state.continuationCount = 0
   state.lastContinuationStep = 0
   state.forcePlannerNext = false
   state.lastTeamEscalationMessageId = undefined
+}
+
+/** Each new tool receipt or provider retry can add evidence to the current phase. */
+function phoenixAutoEvidenceVersion(
+  agent: { readonly session: { readonly events: readonly PhoenixAutoEvent[] } },
+  turn: number,
+): number {
+  return turnEvents(agent, turn).filter(event => event.type === 'tool/result' || event.type === 'llm/retry').length
+}
+
+/** Use substantive outcomes, not changing tool-call IDs, to suppress duplicate rescues. */
+function phoenixAutoEvidenceSignature(
+  agent: { readonly session: { readonly events: readonly PhoenixAutoEvent[] } },
+  turn: number,
+): string | undefined {
+  const latest = turnEvents(agent, turn).findLast(event =>
+    event.type === 'tool/result' || event.type === 'llm/retry')
+  if (latest === undefined) return undefined
+  if (latest.type === 'llm/retry') {
+    const data = latest.data as { readonly error?: { readonly code?: string; readonly message?: string } }
+    return `retry:${data.error?.code ?? ''}:${stableFingerprint(data.error?.message ?? '')}`
+  }
+  const result = latest.data as { readonly error?: { readonly code?: string; readonly message?: string }
+    readonly message?: { readonly content?: readonly {
+      readonly text?: string
+      readonly content?: readonly { readonly text?: string }[]
+    }[] } }
+  const outcome = result.message?.content?.flatMap(part => [
+    part.text ?? '', ...(part.content?.map(child => child.text ?? '') ?? []),
+  ]).filter(Boolean).join(' ') ?? ''
+  return outcome.length === 0 && result.error === undefined
+    ? undefined : `tool:${result.error?.code ?? ''}:${stableFingerprint(outcome || result.error?.message || '')}`
+}
+
+/** No numeric limit: a strategy rescue requires genuinely fresh evidence. */
+function phoenixAutoHasFreshStrategyEvidence(
+  agent: { readonly session: { readonly events: readonly PhoenixAutoEvent[] } },
+  turn: number,
+  state: PhoenixAutoRouterState,
+): boolean {
+  const signal = phoenixAutoTeamSignalForTurn(agent, turn)
+  if (signal?.purpose === 'blocker' && signal.messageId !== state.lastTeamEscalationMessageId) return true
+  if (state.lastRescueStep === 0) return true
+  if (phoenixAutoEvidenceVersion(agent, turn) <= state.lastRescueEvidenceVersion) return false
+  const signature = phoenixAutoEvidenceSignature(agent, turn)
+  return signature === undefined || signature !== state.lastRescueEvidenceSignature
+}
+
+function recordPhoenixAutoStrategyReview(
+  agent: { readonly session: { readonly events: readonly PhoenixAutoEvent[] } },
+  turn: number,
+  step: number,
+  state: PhoenixAutoRouterState,
+): void {
+  state.lastRescueStep = step
+  state.lastRescueEvidenceVersion = phoenixAutoEvidenceVersion(agent, turn)
+  state.lastRescueEvidenceSignature = phoenixAutoEvidenceSignature(agent, turn)
+  const signal = phoenixAutoTeamSignalForTurn(agent, turn)
+  if (signal?.purpose === 'blocker') state.lastTeamEscalationMessageId = signal.messageId
+}
+
+/** Quality favors early diagnosis; economy skips stalled-tool rescue, but never Team blockers. */
+function phoenixAutoNeedsStallStrategy(
+  agent: { readonly session: { readonly events: readonly PhoenixAutoEvent[] } },
+  turn: number,
+  directText: string,
+  sensitivity: EclipseRoutingSettings['escalationSensitivity'],
+): boolean {
+  if (sensitivity === 'economy') return false
+  // A fresh successful result is progress: never pay for a Sol review of an
+  // older failure that the executor may already have recovered from.
+  const latest = turnEvents(agent, turn).findLast(event =>
+    event.type === 'tool/result' || event.type === 'llm/retry')
+  if (latest?.type === 'tool/result' && failedToolFingerprint(latest) === undefined) return false
+  if (isPhoenixCodexAutoStalled(agent, turn)) return true
+  return sensitivity === 'quality' && AUTO_COMPLEX_TASK.test(directText)
+    && latest?.type === 'tool/result' && failedToolFingerprint(latest) !== undefined
 }
 
 function directCodexPlannerRescue(
@@ -895,15 +1018,10 @@ function directCodexPlannerRescue(
   if (selection.provider !== 'openai-codex' || step <= 1) return undefined
   resetPhoenixAutoTurnState(state, turn)
   const teamSignal = phoenixAutoTeamSignalForTurn(agent, turn)
-  if (teamSignal?.purpose === 'blocker' && teamSignal.messageId !== state.lastTeamEscalationMessageId
-    && state.rescueCount < 2) {
-    state.lastTeamEscalationMessageId = teamSignal.messageId
-    state.lastRescueStep = step
-    return selection
-  }
-  if (isPhoenixCodexAutoStalled(agent, turn)
-    && (state.lastRescueStep === 0 || step - state.lastRescueStep >= 2)) {
-    state.lastRescueStep = step
+  if (!phoenixAutoHasFreshStrategyEvidence(agent, turn, state)) return undefined
+  if ((teamSignal?.purpose === 'blocker' && teamSignal.messageId !== state.lastTeamEscalationMessageId)
+    || isPhoenixCodexAutoStalled(agent, turn)) {
+    recordPhoenixAutoStrategyReview(agent, turn, step, state)
     return selection
   }
   return undefined
@@ -915,14 +1033,12 @@ function phoenixAutoRoute(
   step: number,
   directText: string,
   state: PhoenixAutoRouterState,
+  sensitivity: EclipseRoutingSettings['escalationSensitivity'] = 'adaptive',
 ): ModelSelection & { reasoningEffort: ReasoningEffortId } {
   resetPhoenixAutoTurnState(state, turn)
   const teamSignal = phoenixAutoTeamSignalForTurn(agent, turn)
-  if (teamSignal?.purpose === 'blocker' && teamSignal.messageId !== state.lastTeamEscalationMessageId
-    && state.rescueCount < 2) {
-    state.lastTeamEscalationMessageId = teamSignal.messageId
-    state.lastRescueStep = step
-    state.rescueCount += 1
+  if (teamSignal?.purpose === 'blocker' && teamSignal.messageId !== state.lastTeamEscalationMessageId) {
+    recordPhoenixAutoStrategyReview(agent, turn, step, state)
     return {
       provider: 'openai-codex',
       model: PHOENIX_CODEX_AUTO_PLANNER_MODEL,
@@ -941,10 +1057,11 @@ function phoenixAutoRoute(
       }
     }
     if (isConversationalFastPathText(directText) || isContextualConversationFastPathText(directText)) {
+      // Eclipse's conversational path uses Luna Max directly; no Sol plan.
       return {
         provider: 'openai-codex',
         model: PHOENIX_CODEX_AUTO_WORKER_MODEL,
-        reasoningEffort: ReasoningEffortId('low'),
+        reasoningEffort: ReasoningEffortId('max'),
       }
     }
     if (isStandaloneVisualPreviewRequest(directText)) {
@@ -964,6 +1081,13 @@ function phoenixAutoRoute(
         reasoningEffort: ReasoningEffortId('low'),
       }
     }
+    if (isPhoenixAutoQuickTurn(directText)) {
+      return {
+        provider: 'openai-codex',
+        model: PHOENIX_CODEX_AUTO_WORKER_MODEL,
+        reasoningEffort: ReasoningEffortId('max'),
+      }
+    }
     if (phoenixAutoTaskRequest(directText)) {
       return {
         provider: 'openai-codex',
@@ -978,10 +1102,9 @@ function phoenixAutoRoute(
     }
   }
 
-  if (state.forcePlannerNext && state.rescueCount < 2) {
+  if (state.forcePlannerNext && phoenixAutoHasFreshStrategyEvidence(agent, turn, state)) {
     state.forcePlannerNext = false
-    state.lastRescueStep = step
-    state.rescueCount += 1
+    recordPhoenixAutoStrategyReview(agent, turn, step, state)
     return {
       provider: 'openai-codex',
       model: PHOENIX_CODEX_AUTO_PLANNER_MODEL,
@@ -989,12 +1112,10 @@ function phoenixAutoRoute(
     }
   }
 
-  const repeatedStall = isPhoenixCodexAutoStalled(agent, turn)
-  const canRescue = repeatedStall && state.rescueCount < 2
-    && (state.lastRescueStep === 0 || step - state.lastRescueStep >= 2)
+  const canRescue = phoenixAutoNeedsStallStrategy(agent, turn, directText, sensitivity)
+    && phoenixAutoHasFreshStrategyEvidence(agent, turn, state)
   if (canRescue) {
-    state.lastRescueStep = step
-    state.rescueCount += 1
+    recordPhoenixAutoStrategyReview(agent, turn, step, state)
     return {
       provider: 'openai-codex',
       model: PHOENIX_CODEX_AUTO_PLANNER_MODEL,
@@ -1051,7 +1172,8 @@ export function installModelSelection(
   const phoenixAutoState: PhoenixAutoRouterState = {
     turn: 0,
     lastRescueStep: 0,
-    rescueCount: 0,
+    lastRescueEvidenceVersion: 0,
+    lastRescueEvidenceSignature: undefined,
     continuationCount: 0,
     lastContinuationStep: 0,
     forcePlannerNext: false,
@@ -1120,15 +1242,18 @@ export function installModelSelection(
       ? phoenixAutoTeamSignalForTurn(scopedAgent, currentTurnNumber) : undefined
     const needsTeamRescue = teamSignal?.purpose === 'blocker'
       && teamSignal.messageId !== phoenixAutoState.lastTeamEscalationMessageId
+    const strategyProfile = configuredEclipse(agentCtx)
     const needsStallRescue = scopedAgent !== undefined && currentTurnNumber !== undefined
-      && isPhoenixCodexAutoStalled(scopedAgent, currentTurnNumber)
-      && (phoenixAutoState.lastRescueStep === 0
-        || (autoStep ?? 0) - phoenixAutoState.lastRescueStep >= 2)
-    const strategyRescueStep = autoStep !== undefined && phoenixAutoState.rescueCount < 2
+      && phoenixAutoNeedsStallStrategy(scopedAgent, currentTurnNumber, currentRequest,
+        strategyProfile?.escalationSensitivity)
+    const strategyRescueStep = autoStep !== undefined && scopedAgent !== undefined
+      && currentTurnNumber !== undefined
+      && phoenixAutoHasFreshStrategyEvidence(scopedAgent, currentTurnNumber, phoenixAutoState)
       && (needsTeamRescue || (autoStep > 1 && (phoenixAutoState.forcePlannerNext || needsStallRescue)))
     const autoPolicy = strategyRescueStep ? AUTO_SOL_STRATEGY_POLICY
       : autoStep === 1
         && phoenixAutoTaskRequest(currentRequest)
+        && !isPhoenixAutoQuickTurn(currentRequest)
         && !isStandaloneVisualPreviewRequest(currentRequest)
         && !isBriefTeamDemonstration(currentRequest) ? AUTO_VISIBLE_PLAN_POLICY
         : autoStep !== undefined && autoStep > 1 ? AUTO_LUNA_COORDINATION_POLICY : undefined
@@ -1180,23 +1305,30 @@ export function installModelSelection(
       }
       const directText = directUserTextForTurn(_payload.agent, _payload.turn)
       if (isKiraCodexAutoLead(selected, scopedAgent)) {
+        const eclipseProfile = isPhoenixCodexAutoSelection(selected) ? configuredEclipse(agentCtx) : undefined
         const automatic = phoenixAutoRoute(
           _payload.agent,
           _payload.turn,
           _payload.step,
           directText,
           phoenixAutoState,
+          eclipseProfile?.escalationSensitivity,
         )
-        // Eclipse exposes one coordinator route for every Kira phase. The
-        // built-in Sol/Luna pair remains only as the automatic fallback when
-        // no coordinator override is saved.
-        const eclipseProfile = isPhoenixCodexAutoSelection(selected) ? configuredEclipse(agentCtx) : undefined
-        const routed = resolveEclipseRoleRoute(
-          eclipseProfile,
-          'coordinator',
-          automatic,
-          eclipseProfile?.mode === 'hybrid' ? automatic.reasoningEffort : undefined,
-        )
+        // Kira handles conversation and small one-shot tasks directly on Luna
+        // Max, even when Eclipse's coordinator role points to Sol. A real Team
+        // signal or strategy rescue still follows the operational route.
+        const quick = phoenixAutoTeamSignalForTurn(_payload.agent, _payload.turn) === undefined
+          && automatic.model === PHOENIX_CODEX_AUTO_WORKER_MODEL
+          && isPhoenixAutoQuickTurn(directText)
+        const role = automatic.model === PHOENIX_CODEX_AUTO_PLANNER_MODEL ? 'planner' : 'coordinator'
+        const routed = quick
+          ? { ...automatic, reasoningEffort: ReasoningEffortId('max') }
+          : resolveEclipseRoleRoute(
+            eclipseProfile,
+            role,
+            automatic,
+            eclipseProfile?.mode === 'hybrid' ? automatic.reasoningEffort : undefined,
+          )
         const { reasoningEffort: _inheritedEffort, ...withoutInheritedEffort } = resolved
         return {
           ...withoutInheritedEffort,
@@ -1297,11 +1429,10 @@ export function installModelSelection(
     const actualStrategyRescue = !latestStepHasToolActivity
       && (authorizedGoal || latest.step === phoenixAutoState.lastRescueStep)
       && (latest.sourceModel === PHOENIX_CODEX_AUTO_PLANNER_MODEL
-        || latest.sourceModel === configuredEclipse(agentCtx)?.coordinator?.model
+        || latest.sourceModel === configuredEclipse(agentCtx)?.planner?.model
         || (latest.sourceModel === undefined && latest.step === phoenixAutoState.lastRescueStep))
     if (actualStrategyRescue && !phoenixAutoExplicitlyClosed(latest.text)) {
       phoenixAutoState.lastRescueStep = latest.step
-      phoenixAutoState.rescueCount = Math.min(2, Math.max(1, phoenixAutoState.rescueCount))
       phoenixAutoState.lastContinuationStep = latest.step
       phoenixAutoState.continuationCount += 1
       agent.steer(createUserMessage({
@@ -1314,8 +1445,7 @@ export function installModelSelection(
     // The coordinator can ask for a strategy when stuck without repeating a doomed tool.
     if (latest.step > 1
       && !phoenixAutoExplicitlyClosed(latest.text) && kiraNeedsSolStrategy(latest.text)
-      && phoenixAutoState.rescueCount < 2
-      && phoenixAutoState.continuationCount < continuationLimit) {
+      && phoenixAutoHasFreshStrategyEvidence(agent, turn, phoenixAutoState)) {
       phoenixAutoState.lastContinuationStep = latest.step
       phoenixAutoState.continuationCount += 1
       phoenixAutoState.forcePlannerNext = true
@@ -1334,7 +1464,7 @@ export function installModelSelection(
     const plannerStoppedBeforeActing = latest.step === 1 && !latestStepHasToolActivity
       && (latest.sourceModel === PHOENIX_CODEX_AUTO_PLANNER_MODEL
         || (isPhoenixCodexAutoSelection(effectiveSelection(agentCtx.agent))
-          && latest.sourceModel === configuredEclipse(agentCtx)?.coordinator?.model))
+          && latest.sourceModel === configuredEclipse(agentCtx)?.planner?.model))
       && !phoenixAutoExplicitlyClosed(latest.text)
     // A first-step plan that returned no usable assistant text still has not
     // executed anything. Missing content must not silently terminate real work.

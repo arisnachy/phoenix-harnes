@@ -70,9 +70,10 @@ import {
 import type { ResolvedPiAiProviderProfile } from './config.ts'
 import { CODEX_PROVIDER } from './codex-live-catalog.ts'
 import { codexPlatformFallbackModel, isChatGptAccessJwt, isChatGptAccountJwt } from './codex-platform.ts'
-import { applyMondayCodexMembrane, normalizeCodexToolSchemas, normalizeOpenAiFunctionToolPayload, requiresMondayCodexMembrane, requiresObjectRootFunctionSchemas } from './codex-tool-schema.ts'
+import { applyMondayCodexMembrane, normalizeCodexToolSchemas, scopeCodexToolsForPaint, normalizeOpenAiFunctionToolPayload, requiresMondayCodexMembrane, requiresObjectRootFunctionSchemas } from './codex-tool-schema.ts'
 import { fitGenerateOptionsToContext, toPiContext } from './context.ts'
 import { toStreamChunks } from './stream.ts'
+import { isNonCodexRecoveryModel } from './provider-recovery.ts'
 
 /** One resolution's frozen view: the profiles and the collection built from them. */
 interface PiAiSnapshot {
@@ -502,7 +503,7 @@ export class PiAiAdapter extends LlmAdapter {
       const requiresFunctionSchemaProjection = requiresObjectRootFunctionSchemas(options.provider, model.api)
       const requiresMondayMembrane = requiresMondayCodexMembrane(options.provider, model.api)
       const projectedOptions = requiresFunctionSchemaProjection
-        ? normalizeCodexToolSchemas(fitted.options)
+        ? normalizeCodexToolSchemas(scopeCodexToolsForPaint(fitted.options))
         : fitted.options
       const requestOptions = requiresMondayMembrane
         ? applyMondayCodexMembrane(projectedOptions)
@@ -563,6 +564,8 @@ export class PiAiAdapter extends LlmAdapter {
         events,
         model.contextWindow,
         desiredMaxOutput,
+        options.provider === 'openrouter',
+        isNonCodexRecoveryModel(options.provider, options.model),
       )[Symbol.asyncIterator]()
       let exhausted = false
       try {

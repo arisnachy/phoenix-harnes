@@ -11,6 +11,7 @@ import {
   persistModelSelectionPreference,
   isContextualConversationFastPathText,
   isConversationalFastPathText,
+  isPhoenixAutoQuickTurn,
   isBriefTeamDemonstration,
   jevSelectedModelId,
   PHOENIX_CODEX_AUTO_MODEL,
@@ -315,6 +316,48 @@ describe('installModelSelection()', () => {
     expect(isKiraCodexAutoLead({ provider: 'openai-codex', model: 'gpt-6.1-sol' }, root)).toBe(false)
   })
 
+  it('permits four strategy rescues on distinct fresh execution failures and rejects stale retries', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    const events: { type: string; data: unknown }[] = [
+      { type: 'turn/start', data: { turn: 1 } },
+      { type: 'user/message', data: { source: { kind: 'user' },
+        content: [{ type: 'text', text: 'Repara la arquitectura compleja e integra el servicio.' }] } },
+    ]
+    const agent = { session: { events }, options: {} } as unknown as Agent
+    const selection: ModelSelectionRef = {
+      current: { provider: 'openai-codex', model: PHOENIX_CODEX_AUTO_MODEL }, assembled: undefined,
+    }
+    const dispose = installModelSelection(ctx, selection)
+    const signal = new AbortController().signal
+    const modelAt = async (step: number): Promise<string> => {
+      const result = await agentEvents(ctx, agent).waterfall('agent/request', { turn: 1, step, signal },
+        () => Promise.resolve({ provider: 'seed', model: 'seed' }))
+      return result.model
+    }
+    try {
+      expect(await modelAt(1)).toBe('gpt-6.1-sol')
+      for (let index = 0; index < 4; index += 1) {
+        const step = 3 + index * 2
+        for (let repeat = 0; repeat < 2; repeat += 1) {
+          events.push({ type: 'tool/result', data: { turn: 1, step: step - 1,
+            error: { code: `DIFFERENT_BLOCKER_${index}` },
+            message: { content: [{ type: 'text', text: `Distinct blocker ${index}` }] },
+          } })
+        }
+        expect(await modelAt(step)).toBe('gpt-6.1-sol')
+        expect(await modelAt(step + 1)).toBe('gpt-6-luna')
+      }
+      events.push({ type: 'tool/result', data: { turn: 1, step: 11,
+        error: { code: 'DIFFERENT_BLOCKER_3' },
+        message: { content: [{ type: 'text', text: 'Distinct blocker 3' }] } } })
+      expect(await modelAt(12)).toBe('gpt-6-luna')
+    } finally {
+      dispose()
+      await ctx.fiber.dispose()
+    }
+  })
+
   it('lets Luna Max consult Sol when stuck, then automatically resumes Luna Max', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
@@ -350,7 +393,7 @@ describe('installModelSelection()', () => {
         { type: 'step/start', data: { turn: 1, step: 2 } })
       const strategyAssembly = await ctx.systemPrompt.assemble()
       const strategyIdentity = strategyAssembly.sections.find(item => item.name === 'phoenix:auto-visible-handoff')?.text
-      expect(strategyIdentity).toContain('You are Kira herself using the coordinator route')
+      expect(strategyIdentity).toContain('You are Kira herself using the selected strategy/planner model')
       expect(strategyIdentity).toContain('Speak directly to the user in your own first-person voice')
       expect(strategyIdentity).toContain('Never address yourself as "Kira, ..."')
       expect(strategyIdentity).not.toContain('You are Sol 6.1 consulted by Kira')
@@ -365,11 +408,11 @@ describe('installModelSelection()', () => {
       await agentEvents(ctx, agent).serial('agent/turn-stopping', { turn: 1, signal })
       expect(steered).toHaveLength(2)
       expect(JSON.stringify(steered[1])).toContain('Resume the SAME unfinished mission')
-      expect(JSON.stringify(steered[1])).toContain('You are Kira: you just completed your own focused strategy review')
+      expect(JSON.stringify(steered[1])).toContain('You are Kira: you just completed a focused review on the planning model')
       events.push({ type: 'step/start', data: { turn: 1, step: 3 } })
       const resumedAssembly = await ctx.systemPrompt.assemble()
       expect(resumedAssembly.sections.find(item => item.name === 'phoenix:auto-visible-handoff')?.text)
-        .toContain('still Kira, coordinating and executing through the configured coordinator route')
+        .toContain('still Kira, coordinating and executing on Luna Max through the configured execution route')
       expect(resumedAssembly.tools.map(tool => tool.name)).toContain('read')
       await expect(agentEvents(ctx, agent).waterfall(
         'agent/request', { turn: 1, step: 4, signal },
@@ -452,7 +495,7 @@ describe('installModelSelection()', () => {
       const operational = await ctx.systemPrompt.assemble()
       expect(operational.tools.map(tool => tool.name)).toContain('spawn_teammate')
       const operationalIdentity = operational.sections.find(item => item.name === 'phoenix:auto-visible-handoff')?.text
-      expect(operationalIdentity).toContain('configured coordinator route')
+      expect(operationalIdentity).toContain('configured execution route')
       expect(operationalIdentity).toContain('still Kira')
       await expect(agentEvents(ctx, agent).waterfall(
         'agent/request', { turn: 1, step: 2, signal },
@@ -560,6 +603,12 @@ describe('installModelSelection()', () => {
 
   it('classifies narrow social, runtime-meta, and casual-reaction turns for the low-latency path', () => {
     expect(isConversationalFastPathText('hola')).toBe(true)
+    expect(isConversationalFastPathText('hola kira')).toBe(true)
+    expect(isConversationalFastPathText('¡Hola, Kira!')).toBe(true)
+    expect(isConversationalFastPathText('Kira, hola')).toBe(true)
+    expect(isConversationalFastPathText('buenas tardes Fénix')).toBe(true)
+    expect(isConversationalFastPathText('hola Kira, revisa el repo')).toBe(false)
+    expect(isConversationalFastPathText('hola Kira, ¿qué tiempo hace hoy?')).toBe(false)
     expect(isConversationalFastPathText('como te va que se cuenta')).toBe(true)
     expect(isConversationalFastPathText('¿cómo te va, qué se cuenta?')).toBe(true)
     expect(isConversationalFastPathText('hola, cómo te va, qué se cuenta')).toBe(true)
@@ -598,6 +647,86 @@ describe('installModelSelection()', () => {
     expect(isConversationalFastPathText('¿esto parece un error de memoria?')).toBe(false)
     expect(isConversationalFastPathText('qué tiempo hace hoy')).toBe(false)
     expect(isConversationalFastPathText('https://example.com')).toBe(false)
+  })
+
+  it('classifies ordinary conversation and bounded one-step tool requests for Luna Max', () => {
+    for (const quick of [
+      'hola kira',
+      '¿cómo estás?',
+      '¿qué es un algoritmo?',
+      '¿qué es arquitectura de software?',
+      '¿qué significa un sistema complejo?',
+      'explícame qué significa caché',
+      'abre YouTube',
+      'Kira, busca el enlace oficial',
+      'corrige una palabra de este texto',
+      'cambia el color del botón',
+      'actualiza el archivo README.md',
+      'crea una carpeta temporal',
+    ]) expect(isPhoenixAutoQuickTurn(quick), quick).toBe(true)
+
+    for (const planned of [
+      'dale',
+      'revisa main y stable',
+      'revisa el repositorio y arregla todos los errores',
+      'crea un videojuego completo con tres niveles',
+      'explica en detalle cómo diseñar una arquitectura hospitalaria',
+      'haz un sistema hospitalario con varios módulos',
+      'crea una app de facturación',
+      'quiero que me crees una aplicación para una clínica',
+      '¿puedes diseñar una plataforma hospitalaria?',
+      'corrige el problema de seguridad en producción',
+      'despliega el proyecto a producción',
+      'actualiza la base de datos y después reinicia el servidor',
+      'consulta el historial de un paciente',
+    ]) expect(isPhoenixAutoQuickTurn(planned), planned).toBe(false)
+  })
+
+  it('executes simple actions on Luna Max with tools available and plans complex actions with Sol', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    ctx.systemPrompt.tools(() => ({
+      schemas: [{ name: 'read', description: 'read a file', parameters: { type: 'object' } }],
+    }))
+    const selection: ModelSelectionRef = {
+      current: { provider: 'openai-codex', model: PHOENIX_CODEX_AUTO_MODEL }, assembled: undefined,
+    }
+    const dispose = installModelSelection(ctx, selection)
+    const events: { type: string; data: unknown }[] = [
+      { type: 'turn/start', data: { turn: 1 } },
+      { type: 'user/message', data: { source: { kind: 'user' },
+        content: [{ type: 'text', text: 'revisa el archivo README.md' }] } },
+    ]
+    const agent = {
+      session: { events, append: (type: string, data: unknown) => { events.push({ type, data }) } },
+      options: {},
+    } as unknown as Agent
+    ctx.agent = agent
+    const signal = new AbortController().signal
+    try {
+      const simple = await ctx.systemPrompt.assemble()
+      expect(simple.tools.some(tool => tool.name === 'read')).toBe(true)
+      expect(simple.sections.some(section => section.name === 'phoenix:auto-visible-handoff')).toBe(false)
+      await expect(agentEvents(ctx, agent).waterfall('agent/request', { turn: 1, step: 1, signal },
+        () => Promise.resolve({ provider: 'seed', model: 'seed' }))).resolves.toMatchObject({
+        provider: 'openai-codex', model: 'gpt-6-luna',
+        reasoningEffort: ReasoningEffortId('max'),
+      })
+
+      events.push({ type: 'turn/start', data: { turn: 2 } },
+        { type: 'user/message', data: { source: { kind: 'user' },
+          content: [{ type: 'text', text: 'crea un sistema hospitalario con varios módulos' }] } })
+      const complex = await ctx.systemPrompt.assemble()
+      expect(complex.sections.some(section => section.name === 'phoenix:auto-visible-handoff')).toBe(true)
+      expect(complex.tools).toEqual([])
+      await expect(agentEvents(ctx, agent).waterfall('agent/request', { turn: 2, step: 1, signal },
+        () => Promise.resolve({ provider: 'seed', model: 'seed' }))).resolves.toMatchObject({
+        provider: 'openai-codex', model: 'gpt-6.1-sol',
+      })
+    } finally {
+      dispose()
+      await ctx.fiber.dispose()
+    }
   })
 
   it('keeps every provider specialist delegation inside the real Kira Team path', async () => {
@@ -1193,7 +1322,7 @@ describe('installModelSelection()', () => {
     await ctx.fiber.dispose()
   })
 
-  it('routes simple fictional visual requests directly to Luna low, retaining Sol for actual multi-step work', async () => {
+  it('routes simple fictional visual requests directly to Luna Max, retaining Sol for actual multi-step work', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
     ctx.systemPrompt.tools(() => ({ schemas: [
@@ -1215,7 +1344,7 @@ describe('installModelSelection()', () => {
       } })
       await expect(agentEvents(ctx, agent).waterfall('agent/request',
         { turn: 1, step: 1, signal }, () => Promise.resolve(seed))).resolves.toMatchObject({
-        model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('low'),
+        model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('max'),
       })
       events.pop()
     }
@@ -1560,7 +1689,7 @@ describe('installModelSelection()', () => {
     await ctx.fiber.dispose()
   })
 
-  it('uses Luna low for answer-only Phoenix Auto turns', async () => {
+  it('routes a named Kira greeting directly to Luna Max without planning', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
     const selection: ModelSelectionRef = {
@@ -1576,7 +1705,7 @@ describe('installModelSelection()', () => {
             type: 'user/message',
             data: {
               source: { kind: 'user' },
-              content: [{ type: 'text', text: 'hola' }],
+              content: [{ type: 'text', text: 'hola kira' }],
             },
           },
         ],
@@ -1593,7 +1722,7 @@ describe('installModelSelection()', () => {
     )).resolves.toEqual({
       provider: 'openai-codex',
       model: 'gpt-6-luna',
-      reasoningEffort: ReasoningEffortId('low'),
+      reasoningEffort: ReasoningEffortId('max'),
     })
 
     dispose()

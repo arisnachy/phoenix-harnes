@@ -20,6 +20,7 @@ import { credentialRef } from '@phoenix-ai/dsh-credentials'
 import type { CredentialRef } from '@phoenix-ai/dsh-credentials'
 import { MAX_TIMER_DELAY_MS } from '@phoenix-ai/dsh-timeout'
 import { resolveRetryPolicy, RetryPolicySchema } from '@phoenix-ai/dsh-llm'
+import { isNonCodexRecoveryModel, RECOVERABLE_PI_AI_ERROR_CODE } from './provider-recovery.ts'
 import type { ResolvedRetryPolicy, RetryPolicyConfig } from '@phoenix-ai/dsh-llm'
 import {
   CACHE_CONTROL_FORMATS,
@@ -217,10 +218,29 @@ export interface PiAiProviderProfile {
   requestImagePixelBudget?: number
   /** Raw encoded-byte cap for each deterministic inline request version. */
   requestImageMaxBytes?: number
-  /** Optional provider-route cap for one text attachment projected into a pi-ai request; default delegates to the selected model context. */
+  /** Optional text attachment cap; omission delegates to the selected model context. */
   maxInlineFileBytes?: number
   /** Provider-owned model-request retry policy; omission uses normal mode with two retries. */
   retryPolicy?: RetryPolicyConfig
+}
+
+/**
+ * When no route policy was specified, only non-Codex routes gain bounded
+ * recovery for otherwise unclassified pi-ai provider errors. Explicit
+ * policies retain their exact code lists, including opt-outs.
+ * @param provider - The route key to resolve.
+ * @param configured - The optional deployment-owned policy.
+ * @returns A resolved, detached retry policy for this route.
+ */
+export function resolvePiAiRetryPolicy(provider: string, configured?: RetryPolicyConfig): ResolvedRetryPolicy {
+  const resolved = resolveRetryPolicy(configured, `llm-pi-ai: provider "${provider}" retryPolicy`)
+  if (configured !== undefined || !isNonCodexRecoveryModel(provider, '') || resolved.mode !== 'normal') {
+    return resolved
+  }
+  return Object.freeze({
+    ...resolved,
+    retryableCodes: Object.freeze([...resolved.retryableCodes, RECOVERABLE_PI_AI_ERROR_CODE]),
+  })
 }
 
 /** Validated profile with its route stamped and every adapter-owned default resolved. */
@@ -528,7 +548,7 @@ export function resolveProfiles(
       requestImagePixelBudget,
       requestImageMaxBytes,
       maxInlineFileBytes,
-      retryPolicy: resolveRetryPolicy(retryPolicy, `llm-pi-ai: provider "${provider}" retryPolicy`),
+      retryPolicy: resolvePiAiRetryPolicy(provider, retryPolicy),
       ...rest.headers === undefined ? {} : { headers: { ...rest.headers } },
       ...rest.thinkingBudgets === undefined ? {} : { thinkingBudgets: { ...rest.thinkingBudgets } },
       configuredMaxTokens: catalog.configuredMaxTokens,

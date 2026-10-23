@@ -141,6 +141,37 @@ export function normalizeCodexToolParameters(parameters: JsonObject): JsonObject
   return normalized
 }
 
+
+/**
+ * Limit a narrowly requested Paint turn to its relevant tool family. An
+ * unrelated social MCP with an invalid deferred schema must not poison
+ * Codex's *entire* function catalog before Computer Use even starts.
+ * This is a request-only view: the registry and subsequent turns are intact.
+ *
+ * @param options - Model request with identified human messages and tool list.
+ * @returns Same request, or a scoped shallow copy for native Paint work.
+ */
+export function scopeCodexToolsForPaint(options: GenerateOptions): GenerateOptions {
+  if (options.tools === undefined) return options
+  const human = [...options.messages].reverse().find(message =>
+    message.role === 'user' && message.source.kind === 'user')
+  if (human === undefined) return options
+  const text = human.content.map(block =>
+    block.type === 'text' ? block.text : '').join(' ')
+    .normalize('NFD').replace(/[\u0300-\u036f]/gu, '').toLowerCase()
+  const paint = /\b(?:paint|mspaint)\b/u.test(text)
+    && /\b(?:abre|abrir|entra|entrar|crea|crear|dibuja|dibujo|trazo|carita|usa|open|draw)\b/u.test(text)
+    && !/\b(?:publica|publicar|campana|campaign|redes sociales|social media|youtube|instagram|facebook|chrome|navegador)\b/u.test(text)
+  if (!paint) return options
+  const tools = options.tools.filter((tool) => {
+    const name = tool.name.toLowerCase()
+    if (/^(?:image_generation|phoenix_3d)$/u.test(name)) return false
+    if (!name.startsWith('mcp__')) return true
+    return /(?:desktop|windows|filesystem|file-system|powershell|pwsh|shell|computer)/u.test(name)
+  })
+  return tools.length === options.tools.length ? options : { ...options, tools }
+}
+
 function normalizeTool(tool: ToolSchema): ToolSchema {
   const parameters = normalizeCodexToolParameters(tool.parameters)
   return parameters === tool.parameters ? tool : { ...tool, parameters }
@@ -240,6 +271,16 @@ function normalizePayloadToolEntry(value: unknown, mondayMembrane: boolean): unk
   // after provider encoding.
   const isWireFunction = value.type === 'function'
   const isMcpContextTool = typeof value.name === 'string' && value.name.startsWith('mcp__')
+  // Some MCP/tool-search projections expose inputSchema or input_schema
+  // instead of the provider wire's parameters field. Never forward that
+  // root union unchanged into an OpenAI/Codex function definition.
+  const alternateSchema = isObject(value.inputSchema) ? value.inputSchema
+    : isObject(value.input_schema) ? value.input_schema : undefined
+  if ((isWireFunction || isMcpContextTool)
+    && !isObject(value.parameters) && alternateSchema !== undefined) {
+    const { inputSchema: _inputSchema, input_schema: _input_schema, ...rest } = value
+    return { ...rest, parameters: normalizeCodexToolParameters(alternateSchema) }
+  }
   if ((isWireFunction || isMcpContextTool) && isObject(value.parameters)) {
     if (mondayMembrane && isMondayToolName(value.name)) {
       if (isMondayEnvelopeParameters(value.parameters)) return value
@@ -253,7 +294,10 @@ function normalizePayloadToolEntry(value: unknown, mondayMembrane: boolean): unk
     return parameters === value.parameters ? value : { ...value, parameters }
   }
 
-  if (isWireFunction && isObject(value.function) && isObject(value.function.parameters)) {
+  if (isObject(value.function)
+    && typeof value.function.name === 'string'
+    && (isWireFunction || value.function.name.startsWith('mcp__'))
+    && isObject(value.function.parameters)) {
     if (mondayMembrane && isMondayToolName(value.function.name)) {
       if (isMondayEnvelopeParameters(value.function.parameters)) return value
       return {

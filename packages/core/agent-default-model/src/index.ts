@@ -63,11 +63,8 @@ const optionalEclipseRouteSchema = eclipseRouteSchema.default(undefined as unkno
 const OPENAI_CODEX_PROVIDER = 'openai-codex'
 
 /**
- * Validate the routes written by the two-seat Eclipse editor.
- *
- * `planner` remains a read path for settings written by the previous
- * three-seat editor, but every route that can be consumed must still be
- * served by the Codex provider. Reasoning efforts remain provider-owned
+ * Validate independently configurable planner, execution and teammate routes.
+ * Each serving route must use OpenAI Codex. Reasoning efforts remain provider-owned
  * strings: the connected model catalog supplies the supported values.
  *
  * @param profile - Resolved Eclipse settings section.
@@ -91,19 +88,18 @@ function validateEclipseRoutingSettings(profile: EclipseRoutingSettings): void {
 }
 
 /**
- * Add the canonical coordinator route when an old profile only has planner.
- * The planner field stays in the detached value until the editor explicitly
- * replaces the section, which lets old documents be read without rewriting
- * storage during startup.
+ * Migrate old planner-only profiles without overwriting independently
+ * configured strategy routes saved by the new editor. The sensitivity field
+ * identifies the new profile format.
  *
  * @param profile - Stored Eclipse settings.
  * @returns A detached profile with the canonical coordinator route available.
  */
 function normalizeEclipseProfile(profile: EclipseRoutingSettings): EclipseRoutingSettings {
   const detached = structuredClone(profile)
-  return detached.coordinator === undefined && detached.planner !== undefined
-    ? { ...detached, coordinator: detached.planner }
-    : detached
+  return detached.escalationSensitivity === undefined
+    && detached.coordinator === undefined && detached.planner !== undefined
+    ? { ...detached, coordinator: detached.planner } : detached
 }
 
 const eclipseRoutingSettingsSchema: z<EclipseRoutingSettings> = z.object({
@@ -113,6 +109,7 @@ const eclipseRoutingSettingsSchema: z<EclipseRoutingSettings> = z.object({
   coordinator: optionalEclipseRouteSchema,
   subagent: optionalEclipseRouteSchema,
   specialists: z.dict(eclipseRouteSchema).default(undefined as unknown as Record<string, EclipseModelRoute>),
+  escalationSensitivity: z.union(['adaptive', 'quality', 'economy']).required(false),
   maxTeammates: z.number().step(1).min(0).max(3).required(false),
 })
 

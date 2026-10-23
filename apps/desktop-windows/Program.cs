@@ -340,6 +340,7 @@ internal sealed class PhoenixApplicationContext : ApplicationContext
 
         var menu = new ContextMenuStrip();
         menu.Items.Add("Abrir Phoenix", null, (_, _) => ShowWindow(userEntry: true));
+        menu.Items.Add("Reabrir Desktop Live", null, (_, _) => window.ReopenDesktopLive());
         restartItem = new ToolStripMenuItem("Reiniciar runtime administrado", null, async (_, _) => await RestartOwnedRuntimeAsync());
         menu.Items.Add(restartItem);
 

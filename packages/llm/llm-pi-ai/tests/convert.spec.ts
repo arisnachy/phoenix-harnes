@@ -7,6 +7,7 @@ import type { AssistantMessage, AssistantMessageEvent, Usage } from '@earendil-w
 import { toPiContext } from '../src/context.ts'
 import { toPiReplayState } from '../src/replay.ts'
 import { mapStopReason, mapUsage, toStreamChunks } from '../src/stream.ts'
+import { RECOVERABLE_PI_AI_ERROR_CODE } from '../src/provider-recovery.ts'
 
 function usage(input = 0, output = 0, cacheRead = 0, cacheWrite = 0): Usage {
   return {
@@ -621,6 +622,26 @@ describe('toPiContext', () => {
   })
 })
 
+describe('OpenRouter length classification', () => {
+  it('preserves OpenRouter length as an output-token finish below the advertised catalog cap', async () => {
+    const result = assistant({
+      provider: 'openrouter',
+      model: 'qwen/qwen3',
+      stopReason: 'length',
+      usage: usage(20, 15),
+      content: [{ type: 'text', text: 'partial' }],
+    })
+    expect(mapStopReason(result, 8192, 100)).toMatchObject({
+      kind: 'error', failure: { code: CONTEXT_WINDOW_EXCEEDED_CODE },
+    })
+    expect(mapStopReason(result, 8192, 100, true)).toEqual({ kind: 'max-tokens' })
+    const chunks = await collect(toStreamChunks(feed({ type: 'done', reason: 'length', message: result }), 8192, 100, true))
+    expect(chunks.findLast(chunk => chunk.type === 'finish')).toMatchObject({
+      type: 'finish', reason: { kind: 'max-tokens' },
+    })
+  })
+})
+
 describe('toStreamChunks', () => {
   const partialWithToolCall = assistant({
     content: [{ type: 'toolCall', id: 'call-1', name: 'f', arguments: {} }],
@@ -776,6 +797,30 @@ describe('mapStopReason / mapUsage', () => {
   it('keeps a thinking-only stop successful (any block counts as content)', () => {
     expect(mapStopReason(assistant({ stopReason: 'stop', content: [{ type: 'thinking', thinking: 'mull' }] })))
       .toEqual({ kind: 'stop' })
+  })
+
+  it('classifies ambiguous non-Codex provider errors as bounded-retry candidates only when explicitly eligible', async () => {
+    const generic = assistant({ stopReason: 'error', provider: 'openrouter', model: 'qwen/qwen3' })
+    expect(mapStopReason(generic, undefined, undefined, false, true)).toEqual({
+      kind: 'error', failure: { message: 'pi-ai stream error', code: RECOVERABLE_PI_AI_ERROR_CODE },
+    })
+    expect(mapStopReason(generic)).toMatchObject({ failure: { code: 'PI_AI_ERROR' } })
+    expect(mapStopReason(assistant({
+      stopReason: 'error', provider: 'openrouter', model: 'qwen/qwen3',
+      errorMessage: 'invalid arguments: a real source is required',
+    }), undefined, undefined, false, true)).toMatchObject({
+      kind: 'error', failure: { code: 'INVALID_REQUEST' },
+    })
+    expect(mapStopReason(assistant({
+      stopReason: 'error', provider: 'openrouter', model: 'qwen/qwen3',
+      errorMessage: 'HTTP 401: bad credentials',
+    }), undefined, undefined, false, true)).toMatchObject({
+      kind: 'error', failure: { code: 'AUTH' },
+    })
+    const chunks = await collect(toStreamChunks(feed({ type: 'error', reason: 'error', error: generic }), undefined, undefined, false, true))
+    expect(chunks.findLast(chunk => chunk.type === 'finish')).toMatchObject({
+      reason: { kind: 'error', failure: { code: RECOVERABLE_PI_AI_ERROR_CODE } },
+    })
   })
 
   it('defaults the error message when pi-ai omits it', () => {

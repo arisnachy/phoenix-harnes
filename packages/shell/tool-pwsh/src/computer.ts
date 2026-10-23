@@ -13,8 +13,9 @@
  */
 
 import { execFile } from 'node:child_process'
-import { randomUUID } from 'node:crypto'
-import { readFile, unlink } from 'node:fs/promises'
+import { createHash, randomUUID } from 'node:crypto'
+import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import { createConnection } from 'node:net'
 import { join } from 'node:path'
 import type { Context } from '@phoenix-ai/cordis'
@@ -109,9 +110,14 @@ interface AttachmentWriter {
   saveImage(input: { data: Buffer; mediaType: 'image/png'; name: string }): Promise<DesktopImageAttachment>
 }
 
-/** Resolve the optional attachment capability without adding a hard package edge. */
-function attachmentWriter(ctx: Context): AttachmentWriter | undefined {
-  return (ctx as unknown as { attachments?: AttachmentWriter }).attachments
+/** Resolve the optional attachment capability without adding a hard package edge.
+ * @param ctx - Cordis context with optional late-bound attachment service.
+ * @returns The image persistence interface, or undefined when not installed.
+ */
+export function attachmentWriter(ctx: Context): AttachmentWriter | undefined {
+  // Cordis service getters require injection. get() is the supported late-bound
+  // optional dependency lookup, and returns undefined when not mounted.
+  return ctx.get('attachments') as AttachmentWriter | undefined
 }
 
 
@@ -339,7 +345,7 @@ export function residentComputerRequestForAction(args: ComputerToolArgs, request
     schema: RESIDENT_DESKTOP_CONTROL_SCHEMA,
     requestId,
     type: args.action,
-    ...(args.target === undefined ? {} : { target: args.target }),
+    ...(args.target === undefined ? {} : { target: normalizedDesktopTarget(args.target) }),
     ...(args.url === undefined ? {} : { url: args.url }),
     ...(args.origin === undefined ? {} : { origin: normalizeCredentialOrigin(args.origin) }),
     ...(args.fields === undefined ? {} : { fields: args.fields }),
@@ -452,6 +458,58 @@ async function runLegacyDesktopObservation(
   const rawReply = await requestNamedPipeLine(pipePath, JSON.stringify(command), signal)
   const response = parseDesktopControlReply(rawReply, 'Phoenix Desktop native observation')
   return typeof response.details === 'string' ? response.details : ''
+}
+
+/**
+ * Show the real Windows application in Phoenix Desktop's side pane before any
+ * state-changing PowerShell input. The native toolbar may pause desktop mutations,
+ * and an active lease prevents a second conversation taking over the first.
+ * Native preview failure does not disable the existing Computer Use fallback when
+ * no desktop shell is running; a user pause or occupied lease always fails closed.
+ */
+export function desktopPreviewCommandForAction(
+  args: ComputerToolArgs,
+  sessionId: string,
+): { type: 'phoenix.desktop.preview'; target?: string; sessionId: string; observe: boolean } {
+  validateComputerArgs(args)
+  if (!/^[A-Za-z0-9_:-]{1,128}$/u.test(sessionId)) {
+    throw new TypeError('Desktop Live requires a valid conversation session id')
+  }
+  return {
+    type: 'phoenix.desktop.preview',
+    ...(args.target === undefined ? {} : { target: normalizedDesktopTarget(args.target) }),
+    sessionId,
+    observe: args.action === 'screenshot' || args.action === 'windows',
+  }
+}
+
+async function prepareDesktopLivePreview(
+  args: ComputerToolArgs,
+  sessionId: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  if (isEmbeddedBrowserAction(args.action) || args.action === 'windows') return
+  const descriptor = await readDesktopControlDescriptorIfAvailable()
+  if (descriptor?.schema !== LEGACY_DESKTOP_CONTROL_SCHEMA) return
+  const request = desktopPreviewCommandForAction(args, sessionId)
+  try {
+    const response = await requestNamedPipeLine(
+      `\\\\.\\pipe\\${descriptor.pipeName}`,
+      JSON.stringify(request),
+      signal,
+    )
+    parseDesktopControlReply(response, 'Phoenix Desktop Live')
+  } catch (error) {
+    // Permission/pause failures are authoritative. Do not bypass the user's
+    // explicit native pause or an ongoing desktop session by using PowerShell.
+    if (error instanceof Error && /paused by user|occupied by another session/iu.test(error.message)) {
+      throw error
+    }
+    if (desktopControlConnectionWasNeverEstablished(error)) {
+      await clearStaleDesktopControlDescriptor(descriptor)
+    }
+    // An unavailable view is not evidence the PowerShell driver is unavailable.
+  }
 }
 
 async function runEmbeddedBrowserAction(
@@ -728,7 +786,9 @@ public static class PhoenixDesktop {
   [DllImport("user32.dll")]
   private static extern bool ShowWindowAsync(IntPtr hWnd, int command);
 
-  [DllImport("user32.dll")]
+  // Current-thread IDs belong to kernel32, not user32.
+  // Wrong DLL causes EntryPointNotFoundException as soon as focus is attempted.
+  [DllImport("kernel32.dll", ExactSpelling = true)]
   private static extern uint GetCurrentThreadId();
 
   [DllImport("user32.dll")]
@@ -904,36 +964,45 @@ public static class PhoenixDesktop {
       Thread.Sleep(120);
     }
 
-    IntPtr foreground = GetForegroundWindow();
-    uint ignored;
-    uint targetThread = GetWindowThreadProcessId(hWnd, out ignored);
-    uint currentThread = GetCurrentThreadId();
-    uint foregroundThread = foreground == IntPtr.Zero ? 0 : GetWindowThreadProcessId(foreground, out ignored);
-    bool attachedTarget = false;
-    bool attachedForeground = false;
-    try {
-      if (targetThread != 0 && targetThread != currentThread) {
-        attachedTarget = AttachThreadInput(currentThread, targetThread, true);
+    // Windows foreground policy can reject transient focus requests.
+    // Retry only the same already-validated HWND; never pick another window.
+    for (int attempt = 0; attempt < 3 && GetForegroundWindow() != hWnd; attempt++) {
+      IntPtr foreground = GetForegroundWindow();
+      uint ignored;
+      uint targetThread = GetWindowThreadProcessId(hWnd, out ignored);
+      uint currentThread = GetCurrentThreadId();
+      uint foregroundThread = foreground == IntPtr.Zero ? 0 : GetWindowThreadProcessId(foreground, out ignored);
+      bool attachedTarget = false;
+      bool attachedForeground = false;
+      try {
+        if (targetThread != 0 && targetThread != currentThread)
+          attachedTarget = AttachThreadInput(currentThread, targetThread, true);
+        if (foregroundThread != 0 && foregroundThread != currentThread && foregroundThread != targetThread)
+          attachedForeground = AttachThreadInput(currentThread, foregroundThread, true);
+        BringWindowToTop(hWnd);
+        SetForegroundWindow(hWnd);
+      } finally {
+        if (attachedForeground) AttachThreadInput(currentThread, foregroundThread, false);
+        if (attachedTarget) AttachThreadInput(currentThread, targetThread, false);
       }
-      if (foregroundThread != 0 && foregroundThread != currentThread && foregroundThread != targetThread) {
-        attachedForeground = AttachThreadInput(currentThread, foregroundThread, true);
-      }
-      BringWindowToTop(hWnd);
-      SetForegroundWindow(hWnd);
-    } finally {
-      if (attachedForeground) AttachThreadInput(currentThread, foregroundThread, false);
-      if (attachedTarget) AttachThreadInput(currentThread, targetThread, false);
+      Thread.Sleep(140);
     }
-
-    Thread.Sleep(100);
     if (GetForegroundWindow() != hWnd) {
-      throw new InvalidOperationException("failed to focus target window; foreground is " + DescribeWindow(GetForegroundWindow()));
+      throw new InvalidOperationException("Windows refused focus for " + DescribeWindow(hWnd)
+        + "; foreground is " + DescribeWindow(GetForegroundWindow())
+        + ". Do not click or type into another window.");
     }
     return DescribeWindow(hWnd) + " restored=" + restored.ToString().ToLowerInvariant();
   }
 
   private static void GuardTarget(string selector) {
-    if (!String.IsNullOrWhiteSpace(selector)) FocusWindow(selector, false);
+    if (String.IsNullOrWhiteSpace(selector)) return;
+    // Guarded input never changes window focus: geometry must be fresh.
+    IntPtr expected = ResolveWindow(selector);
+    if (IsIconic(expected)) throw new InvalidOperationException("target window minimized; focus and recapture first");
+    if (GetForegroundWindow() != expected)
+      throw new InvalidOperationException("target lost foreground; focus and recapture before input. expected="
+        + DescribeWindow(expected) + " actual=" + DescribeWindow(GetForegroundWindow()));
   }
 
   public static void Move(int x, int y) {
@@ -1119,6 +1188,79 @@ switch ($action) {
 }
 `
 
+// Read the complete fixed driver before evaluating: PowerShell -Command - may
+// parse multi-line here-strings interactively and exit 0 with empty stdout.
+// The script source is trusted; model parameters remain environment variables.
+const stdinScriptCommand = '& ([scriptblock]::Create([Console]::In.ReadToEnd()))'
+
+
+/**
+ * Detect only the last genuine user prompt, ignoring plugin context messages.
+ * @param events - Immutable conversation events.
+ * @returns True while the user requests a native Windows app.
+ */
+export function nativeDesktopTurnActive(events: readonly { readonly type: string; readonly data: unknown }[]): boolean {
+  for (let index = events.length - 1; index >= 0; index--) {
+    const event = events[index]
+    if (event?.type !== 'user/message') continue
+    const msg = event.data as { source?: { kind?: string }; content?: Array<{ type?: string; text?: string }> }
+    if (msg.source?.kind !== 'user') continue
+    const text = (msg.content ?? []).map(block => block.type === 'text' ? block.text ?? '' : '').join(' ')
+      .normalize('NFD').replace(/[\u0300-\u036f]/gu, '').toLowerCase()
+    // oxlint-disable-next-line @stylistic/max-len -- Keep the complete desktop intent pattern readable.
+    const native = /\b(?:paint|mspaint|bloc de notas|notepad|calculadora|calculator|explorador de windows|file explorer|desktop live)\b/u.test(text)
+    // oxlint-disable-next-line @stylistic/max-len -- Keep the complete desktop intent pattern readable.
+    const action = /\b(?:abre|abrir|entra|entrar|ingresa|inicia|ejecuta|dibuja|dibujo|trazo|traza|crea|crear|haz|hace|controla|muestra|usa|open|draw|use|launch)\b/u.test(text)
+    const web = /\b(?:pagina web|navegador|chrome|youtube|sitio web|tutorial web)\b/u.test(text)
+    return native && action && !web
+  }
+  return false
+}
+
+/**
+ * Normalize literal window identifiers copied from enumeration output.
+ * @param value - Window title, PID or HWND selector.
+ * @returns Canonical guarded selector.
+ */
+export function normalizedDesktopTarget(value: string): string
+export function normalizedDesktopTarget(value: string | undefined): string | undefined
+export function normalizedDesktopTarget(value: string | undefined): string | undefined {
+  if (value === undefined) return undefined
+  const trimmed = value.trim()
+  const handle = /^hwnd\s*[=:]\s*(0x[0-9a-f]+)\b/iu.exec(trimmed)
+  if (handle !== null) return 'hwnd:' + handle[1]
+  const pid = /^pid\s*[=:]\s*(\d+)\b/iu.exec(trimmed)
+  if (pid !== null) return 'pid:' + pid[1]
+  return trimmed
+}
+
+
+/**
+ * Block unrelated browser and image-generation fallbacks only for a real user
+ * request to control a native Windows application. The restriction is scoped
+ * to the latest genuine user prompt and automatically ends on the next prompt.
+ * @param toolName - Registered tool being dispatched (including nested Code calls).
+ * @param args - Parsed tool arguments.
+ * @param events - Current conversation events.
+ * @returns An explanatory denial or undefined when allowed.
+ */
+export function nativeDesktopFallbackDenied(
+  toolName: string,
+  args: unknown,
+  events: readonly { readonly type: string; readonly data: unknown }[],
+): string | undefined {
+  if (!nativeDesktopTurnActive(events)) return undefined
+  const name = toolName.toLowerCase()
+  const isWeb = /(?:^|[_:./-])(?:browser|chrome)(?:[_:./-]|$)/u.test(name)
+  const isSyntheticImage = /(?:^|[_:./-])(?:image_generation|image-generation|phoenix_3d|phoenix-3d)(?:[_:./-]|$)/u.test(name)
+  const isComputerBrowser = name === 'computer' && args !== null
+    && typeof args === 'object' && 'action' in args
+    && typeof args.action === 'string' && args.action.startsWith('browser_')
+  return isWeb || isSyntheticImage || isComputerBrowser
+    ? 'Paint is a native Windows desktop task. Browser inspection and image-generation fallbacks are not authorized by this turn. Continue with computer windows/focus/screenshot and report a real blocker if needed.'
+    : undefined
+}
+
 function putNumber(env: Record<string, string>, key: string, value: number | undefined): void {
   if (value !== undefined) env[key] = String(value)
 }
@@ -1140,13 +1282,13 @@ export function windowsComputerInvocation(args: ComputerToolArgs): ComputerInvoc
   putNumber(env, 'PHX_X2', args.x2)
   putNumber(env, 'PHX_Y2', args.y2)
   putNumber(env, 'PHX_DELTA', args.delta)
-  if (args.target !== undefined) env.PHX_TARGET = args.target
+  if (args.target !== undefined) env.PHX_TARGET = normalizedDesktopTarget(args.target)
   if (args.button !== undefined) env.PHX_BUTTON = args.button
   if (args.text !== undefined) env.PHX_TEXT = args.text
   if (args.keys !== undefined) env.PHX_KEYS = args.keys
   return {
     file: 'powershell.exe',
-    argv: ['-NoLogo', '-NoProfile', '-NonInteractive', '-STA', '-Command', '-'],
+    argv: ['-NoLogo', '-NoProfile', '-NonInteractive', '-STA', '-Command', stdinScriptCommand],
     env,
     stdin: WINDOWS_DRIVER,
   }
@@ -1174,7 +1316,7 @@ export function systemBrowserOpenInvocation(url: string): ComputerInvocation {
   }
   return {
     file: 'powershell.exe',
-    argv: ['-NoLogo', '-NoProfile', '-NonInteractive', '-STA', '-Command', '-'],
+    argv: ['-NoLogo', '-NoProfile', '-NonInteractive', '-STA', '-Command', stdinScriptCommand],
     env: { PHX_URL: parsed.toString() },
     stdin: SYSTEM_BROWSER_OPEN_DRIVER,
   }
@@ -1199,8 +1341,11 @@ function executeComputerInvocation(invocation: ComputerInvocation, signal?: Abor
         return
       }
       const output = stdout.trim()
-      if (output.length === 0 && detail.length > 0) {
-        reject(new Error(`Computer Use PowerShell driver reported: ${detail}`))
+      if (output.length === 0) {
+        // Silent zero-exit drivers are not a successful desktop operation.
+        reject(new Error(detail.length > 0
+          ? `Computer Use PowerShell driver reported: ${detail}`
+          : 'Computer Use PowerShell driver produced no output: check the interactive Windows desktop and PowerShell execution.'))
         return
       }
       resolve(output)
@@ -1459,12 +1604,38 @@ function delay(ms: number, signal?: AbortSignal): Promise<void> {
   })
 }
 
+/**
+ * Publish a bounded actual Computer screenshot to the local chat viewer.
+ * This supplements (never replaces) the authenticated desktop host pipe
+ * when Phoenix is launched through pnpm without Phoenix.exe. A snapshot is
+ * created only AFTER the computer tool has passed its normal permissions.
+ */
+/** @param sessionId - Owning conversation id.
+ * @returns Path scoped by a SHA-256 digest rather than a raw user input.
+ */
+export function desktopObservationPath(sessionId: string): string {
+  const file = createHash('sha256').update(sessionId).digest('hex') + '.png'
+  return join(tmpdir(), 'phoenix-desktop-observations', file)
+}
+
+async function publishDesktopObservation(sessionId: string, png: Buffer): Promise<void> {
+  const path = desktopObservationPath(sessionId)
+  await mkdir(join(tmpdir(), 'phoenix-desktop-observations'), { recursive: true, mode: 0o700 })
+  const temporary = path + '.' + randomUUID() + '.tmp'
+  try {
+    await writeFile(temporary, png, { flag: 'wx', mode: 0o600 })
+    await rename(temporary, path)
+  } finally {
+    try { await unlink(temporary) } catch { /* Atomic temp can already have been renamed. */ }
+  }
+}
+
 async function attachDesktopScreenshot(
   ctx: Context,
   exec: ToolRunContext,
   base64Png: string,
   label: string,
-): Promise<void> {
+): Promise<boolean> {
   if (exec.agent === undefined) throw new Error('Computer screenshot requires an owning agent session')
   if (base64Png.length === 0) throw new Error('Computer screenshot driver returned no image bytes')
   const bytes = Buffer.from(base64Png, 'base64')
@@ -1473,8 +1644,22 @@ async function attachDesktopScreenshot(
   if (bytes.length < pngSignature.length || !bytes.subarray(0, pngSignature.length).equals(pngSignature)) {
     throw new Error('Computer screenshot driver returned invalid PNG bytes')
   }
+  // Keep the genuine Desktop Live frame observable in the conversation even
+  // when no durable model-image store has been mounted yet.
+  try {
+    await publishDesktopObservation(String(exec.agent.session.header.id), bytes)
+  } catch {
+    // User-facing preview is best-effort, not proof the desktop capture failed.
+  }
   const attachments = attachmentWriter(ctx)
-  if (attachments === undefined) throw new Error('Computer screenshot requires the attachment service')
+  if (attachments === undefined) {
+    exec.deferContext(createUserMessage({
+      content: [{ type: 'text', text:
+        `${label} captured for Desktop Live, but the model image attachment backend is unavailable. Do not claim to have visually verified the result.` }],
+      source: { kind: 'plugin', plugin: 'computer-use' },
+    }))
+    return false
+  }
   const attachment = await attachments.saveImage({
     data: bytes,
     mediaType: 'image/png',
@@ -1491,6 +1676,7 @@ async function attachDesktopScreenshot(
     ],
     source: { kind: 'plugin', plugin: 'computer-use' },
   }))
+  return true
 }
 
 /**
@@ -1501,6 +1687,11 @@ export function registerComputerTool(ctx: Context): void {
   if (process.platform !== 'win32') return
   const sandboxPolicy: SandboxPolicyService | undefined = ctx.get('sandboxPolicy')
   const deploymentDefault = ctx.shell.sandboxMode
+
+  // Monotonic registry guard covers direct tool calls AND nested run_code
+  // sub-dispatches, including external Chrome/Browser MCPs. No prompt-only lock.
+  ctx.tools.guard(exec => exec.agent === undefined ? undefined
+    : nativeDesktopFallbackDenied(exec.name, exec.arguments, exec.agent.session.events))
 
   ctx.systemPrompt.section({
     name: 'tool:computer:embedded-browser',
@@ -1560,7 +1751,7 @@ export function registerComputerTool(ctx: Context): void {
         text: value.action === 'windows'
           ? `Visible top-level windows:\n${value.details ?? '<none>'}`
           : value.action === 'screenshot'
-            ? 'Desktop screenshot captured and attached for the next model step.'
+            ? (value.postScreenshot ? 'Desktop screenshot captured and attached for the next model step.' : 'Desktop screenshot captured for Desktop Live, but not attached to the model.')
             : value.action === 'browser_inspect'
               ? `Phoenix embedded browser inspection:\n${value.details ?? '{}'}`
               : value.action.startsWith('browser_')
@@ -1573,9 +1764,17 @@ export function registerComputerTool(ctx: Context): void {
     async execute(args: ComputerToolArgs, exec) {
       validateComputerArgs(args)
       const session = exec.agent?.session
+      if (session !== undefined && isEmbeddedBrowserAction(args.action)
+        && nativeDesktopTurnActive(session.events)) {
+        throw new Error('Native Windows task: do not open MiniBrowser or inspect a web page; use computer windows/focus/screenshot.')
+      }
       const policy = sandboxPolicy?.resolve(session === undefined ? {} : { session })
       const sandboxMode = policy?.mode ?? deploymentDefault
       await authorizeComputerAction(ctx, exec, args, sandboxMode)
+      if (!isEmbeddedBrowserAction(args.action) && args.action !== 'windows') {
+        const owner = String(exec.agent?.session.header.id ?? '')
+        if (owner.length > 0) await prepareDesktopLivePreview(args, owner, exec.signal)
+      }
 
       const output = args.action === 'browser_login'
         ? await runOriginBoundBrowserLogin(ctx, args, exec.signal)
@@ -1583,13 +1782,11 @@ export function registerComputerTool(ctx: Context): void {
       let postScreenshot = false
 
       if (args.action === 'screenshot') {
-        await attachDesktopScreenshot(ctx, exec, output, 'PHOENIX desktop screenshot')
-        postScreenshot = true
+        postScreenshot = await attachDesktopScreenshot(ctx, exec, output, 'PHOENIX desktop screenshot')
       } else if (shouldCaptureAfterAction(args.action)) {
         await delay(POST_ACTION_SETTLE_MS, exec.signal)
         const fresh = await runWindowsComputerAction({ action: 'screenshot' }, exec.signal)
-        await attachDesktopScreenshot(ctx, exec, fresh, `PHOENIX post-${args.action} desktop screenshot`)
-        postScreenshot = true
+        postScreenshot = await attachDesktopScreenshot(ctx, exec, fresh, `PHOENIX post-${args.action} desktop screenshot`)
       }
 
       return {

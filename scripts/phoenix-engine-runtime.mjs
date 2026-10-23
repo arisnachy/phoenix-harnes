@@ -719,18 +719,20 @@ async function defaultHealth(_command, _args, options, timeoutMs) {
   return { exitCode: 0, stdout: Buffer.concat(chunks).toString('utf8'), stderr: '' }
 }
 
-async function killWindowsProcessTree(pid) {
+async function killWindowsProcessTree(pid, timeoutMs = 5000, spawnImpl = spawn) {
   if (process.platform !== 'win32' || !Number.isInteger(pid) || pid <= 0) return true
   return new Promise(resolveKill => {
     let settled = false
+    let timer
     const finish = value => {
       if (settled) return
       settled = true
+      clearTimeout(timer)
       resolveKill(value)
     }
     let killer
     try {
-      killer = spawn('taskkill.exe', ['/PID', String(pid), '/T', '/F'], {
+      killer = spawnImpl('taskkill.exe', ['/PID', String(pid), '/T', '/F'], {
         shell: false,
         windowsHide: true,
         stdio: ['ignore', 'ignore', 'ignore'],
@@ -743,13 +745,28 @@ async function killWindowsProcessTree(pid) {
     // spawn error so it cannot become an uncaught EventEmitter exception.
     killer.once('error', () => { finish(false) })
     killer.once('close', code => { finish(code === 0) })
+    timer = setTimeout(() => {
+      finish(false)
+      try { killer.kill() } catch { /* Only this manager-owned helper is terminated. */ }
+    }, Math.max(1, Math.min(timeoutMs, 5000)))
   })
 }
 
-async function terminateChildTree(child) {
+/**
+ * Exercise the bounded Windows termination helper without launching native processes.
+ * @param {number} pid - Owned process id used in the helper arguments.
+ * @param {number} timeoutMs - Maximum helper wait.
+ * @param {Function} spawnImpl - Test-owned subprocess factory.
+ * @returns {Promise<boolean>} False on timeout or uncertain termination.
+ */
+export function killWindowsProcessTreeForDiagnostics(pid, timeoutMs, spawnImpl) {
+  return killWindowsProcessTree(pid, timeoutMs, spawnImpl)
+}
+
+async function terminateChildTree(child, timeoutMs) {
   if (!child) return false
   if (process.platform === 'win32' && Number.isInteger(child.pid) && child.pid > 0) {
-    const treeKilled = await killWindowsProcessTree(child.pid)
+    const treeKilled = await killWindowsProcessTree(child.pid, timeoutMs)
     if (!treeKilled) {
       // Keep the child handle owned by this manager, but do not claim the
       // descendants are gone when taskkill could not run.
@@ -776,7 +793,7 @@ function defaultRun(command, args, options, timeoutMs = DEFAULT_PROCESS_TIMEOUT_
     let settled = false
     let quiescing = false
     let timer
-    const treeBudget = Math.max(1, Math.min(Number.isFinite(timeoutMs) ? timeoutMs : DEFAULT_PROCESS_TIMEOUT_MS, 15000))
+    const treeBudget = 15000
     const initialTreeSnapshot = process.platform === 'win32'
       ? captureWindowsDescendantPids(child?.pid, treeBudget)
       : Promise.resolve([])
@@ -791,7 +808,7 @@ function defaultRun(command, args, options, timeoutMs = DEFAULT_PROCESS_TIMEOUT_
     const settleAfterTreeExit = async (result, error) => {
       if (settled || quiescing) return
       quiescing = true
-      const treeKilled = await terminateChildTree(child)
+      const treeKilled = await terminateChildTree(child, treeBudget)
       // Do not release the preparation/lifecycle lock while the owned child
       // is still alive. On Windows taskkill /T /F is followed by the child
       // handle's close event, which is the manager's quiescence proof. The
@@ -799,7 +816,11 @@ function defaultRun(command, args, options, timeoutMs = DEFAULT_PROCESS_TIMEOUT_
       // durable lock can remain held instead of hanging this process forever.
       const waitBudget = Math.max(1, Number.isFinite(timeoutMs) ? timeoutMs : DEFAULT_PROCESS_TIMEOUT_MS)
       const exited = await waitForChildExit(child, waitBudget)
-      const quiescent = treeKilled && exited
+      const initial = await initialTreeSnapshot
+      const after = process.platform === 'win32' ? await captureWindowsDescendantPids(child?.pid, treeBudget) : []
+      const observedDead = Array.isArray(initial) && Array.isArray(after)
+        && [...new Set([...initial, ...after])].every(pid => ownerProcessState(pid) === 'dead')
+      const quiescent = treeKilled && exited && observedDead
       const status = { ...result, quiescent, ownedPid: child?.pid, treeStatus: quiescent ? 'quiescent' : 'uncertain' }
       if (error && !quiescent) Object.assign(error, { code: 'OPENCLAW_PROCESS_TREE_UNCERTAIN', ownedPid: child?.pid, treeStatus: 'uncertain' })
       finish(status, error)
@@ -1007,7 +1028,7 @@ async function defaultStopChild(child, timeoutMs = DEFAULT_HEALTH_TIMEOUT_MS) {
   const initialTree = process.platform === 'win32'
     ? await captureWindowsDescendantPids(child.pid, treeBudget)
     : []
-  const treeKilled = await terminateChildTree(child)
+  const treeKilled = await terminateChildTree(child, treeBudget)
   const exited = await waitForChildExit(child, boundedTimeout)
   if (!treeKilled || !exited) return false
   if (process.platform !== 'win32') return true
@@ -1015,7 +1036,8 @@ async function defaultStopChild(child, timeoutMs = DEFAULT_HEALTH_TIMEOUT_MS) {
   // belonged to the owned tree. A second bounded snapshot must be available
   // and empty before the lifecycle marker may be released.
   const afterTree = await captureWindowsDescendantPids(child.pid, treeBudget)
-  return Array.isArray(initialTree) && Array.isArray(afterTree) && afterTree.length === 0
+  return Array.isArray(initialTree) && Array.isArray(afterTree)
+    && [...new Set([...initialTree, ...afterTree])].every(pid => ownerProcessState(pid) === 'dead')
 }
 
 function activeMarker(spec, launch, status = 'active') {

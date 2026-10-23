@@ -1,6 +1,6 @@
 - region "Fénix Eclipse · Orchestration":
   - heading "Fénix Eclipse · Orchestration" [level=2]
-  - paragraph: Choose the current OpenAI Codex model and reasoning effort for Kira and her subagents. Automatic routing adjusts reasoning to the task.
+  - paragraph: Choose the model and reasoning effort for Kira coordination and for subagents. Strategic consultations adapt to the task.
   - status: 2 OpenAI Codex models available
   - button "Refresh models"
   - text: Routing mode
@@ -8,8 +8,8 @@
     - option "Automatic"
     - option "Hybrid"
     - option "Manual" [selected]
-  - text: Coordinator model
-  - combobox "Coordinator model":
+  - text: Execution / coordinator model
+  - combobox "Execution / coordinator model":
     - option "Automatic"
     - option "gpt-6.1-sol" [selected]
     - option "gpt-6-luna"
@@ -35,6 +35,12 @@
     - option "high"
     - option "xhigh" [selected]
     - option "max"
+  - text: Strategic planner consultations
+  - combobox "Strategic planner consultations":
+    - option "Adaptive · consult on new blockers and complexity" [selected]
+    - option "Quality · prioritize strategic review"
+    - option "Efficient · consult when essential"
+  - paragraph: Unlimited per phase. Kira consults the planner whenever fresh evidence warrants it, without repeating an unchanged blocker.
   - text: Maximum active teammates (0–3)
   - combobox "Maximum active teammates (0–3)":
     - option "0"
@@ -51,7 +57,7 @@
     - option "Phoenix internal engine" [selected]
   - list:
     - listitem: Codex · Unavailable or not configured
-    - listitem: OpenClaw · Unavailable or not configured · unknown · OPENCLAW_EXECUTION_POLICY_UNVERIFIED
+    - listitem: OpenClaw · Unavailable or not configured · unknown · OPENCLAW_NOT_CONFIGURED
     - listitem: Phoenix internal engine · Connected · phoenix
   - button "Check engine status"
   - heading "Installed runtime updates" [level=4]
@@ -61,7 +67,10 @@
     - listitem: OpenClaw · unavailable · ENGINE_UNAVAILABLE
     - listitem: PHOENIX · current · <COMMIT>
   - button "Refresh runtime status"
-  - status: OpenClaw preparation is unavailable until installer shutdown and package verification pass.
+  - text: OpenClaw version to prepare
+  - textbox "OpenClaw version to prepare":
+    - /placeholder: 2026.10.6
+  - button "Prepare official OpenClaw" [disabled]
   - status: Activation and rollback are not available yet. Phoenix must first verify that no current or saved tasks are still running.
   - status: Eclipse settings saved.
   - button "Save Eclipse"

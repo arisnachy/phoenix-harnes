@@ -37,7 +37,7 @@ pi-ai profile 的 `models` 列表就在卡片上编辑：一行一个模型，�
 
 Fénix Eclipse 提供两个模型及推理选项：Kira 协调器与子代理。选择器使用已连接 Codex 账号的目录，保留最新 GPT 代际及系列修订版本，以及账号可见的专用模型。推理选项来自各模型声明的能力。保存会清除旧规划器和专家覆盖；仅有规划器的偏好迁移为协调器。手动模式下未设置推理强度时使用提供方默认值；混合模式则根据任务调整未设置的推理强度。写入被拒绝时显示错误，不报告成功。
 
-同一面板读取 Host 拥有的 Codex、OpenClaw 与 Phoenix runtime 版本，不显示路径、进程号或凭据。在安装进程退出和完整包校验得到验证之前，OpenClaw 准备功能不可用。在 Team 持有共享 admission fence 并证明 legacy 与持久化 execution root 全局 idle 之前，激活和回滚保持不可用。检查失败时明确显示 unavailable。
+同一面板读取 Host 拥有的 Codex、OpenClaw 与 Phoenix runtime 版本，不显示路径、进程号或凭据。官方 OpenClaw 准备通过已验证的 launcher manager 提供，并使用有界清理保留 active、previous 与 candidate runtime。安装进程退出不确定时安全阻止。在 Team 持有共享 admission fence 并证明 legacy 与持久化 execution root 全局 idle 之前，激活和回滚保持不可用。检查失败时明确显示 unavailable。
 
 ## 模型体验
 

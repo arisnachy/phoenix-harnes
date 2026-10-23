@@ -143,11 +143,16 @@ jobs:
 
           $shortcut = $shell.CreateShortcut($shortcutPath)
           if ([string]::IsNullOrWhiteSpace($shortcut.TargetPath)) { throw 'Phoenix shortcut target is empty' }
-          if ([IO.Path]::GetFileName($shortcut.TargetPath) -ne 'powershell.exe') {
-            throw "Phoenix shortcut still targets the wrong launcher: $($shortcut.TargetPath)"
+          $expectedCmd = Join-Path $env:SystemRoot 'System32\cmd.exe'
+          if ($shortcut.TargetPath -ine $expectedCmd) {
+            throw "Phoenix shortcut must use visible cmd.exe: $($shortcut.TargetPath)"
           }
-          if (-not $shortcut.Arguments.Contains('phoenix-desktop-launch.ps1')) {
-            throw "Phoenix shortcut does not call the normal browser launch script: $($shortcut.Arguments)"
+          $expectedArgs = '/k "cd /d ' + (Resolve-Path .).Path + ' && pnpm phoenix"'
+          if ($shortcut.Arguments -ne $expectedArgs) {
+            throw "Phoenix shortcut is not running pnpm from the checkout: $($shortcut.Arguments)"
+          }
+          if ($shortcut.WindowStyle -ne 1) {
+            throw "Phoenix shortcut must show the CMD window: $($shortcut.WindowStyle)"
           }
           if ($shortcut.Arguments.Contains('Phoenix.exe') -or $shortcut.TargetPath.Contains('Phoenix.exe')) {
             throw 'Phoenix shortcut still references legacy Phoenix.exe'
@@ -175,7 +180,7 @@ jobs:
           if (-not (Test-Path $taskbarPath)) { throw 'Phoenix taskbar shortcut was not prepared' }
           $taskbar = $shell.CreateShortcut($taskbarPath)
           if ($taskbar.TargetPath -ne $shortcut.TargetPath -or $taskbar.Arguments -ne $shortcut.Arguments) {
-            throw 'Taskbar shortcut does not match canonical Phoenix browser launcher'
+            throw 'Taskbar shortcut does not match the visible Phoenix CMD launcher'
           }
 
           $mdProgId = (Get-Item 'HKCU:\Software\Classes\.md').GetValue('')
