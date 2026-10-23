@@ -242,6 +242,14 @@ export type PhoenixUpdateStatus =
   | 'rollback-failed'
   | 'off'
 
+/** Whitelisted durable progress event, without raw terminal output or secrets. */
+export interface PhoenixUpdateEvent {
+  readonly at: string
+  readonly step: string
+  readonly result: 'started' | 'ok' | 'failed' | 'info'
+  readonly exitCode?: number
+}
+
 /** Sanitized updater state read from the repository-owned Git directory. */
 export interface PhoenixUpdateSnapshot {
   readonly status: PhoenixUpdateStatus
@@ -253,6 +261,7 @@ export interface PhoenixUpdateSnapshot {
   readonly channelPublishedAt?: string
   readonly detail?: string
   readonly at?: string
+  readonly events?: readonly PhoenixUpdateEvent[]
 }
 
 /** Result of asking the live Host to restart into a prepared update. */

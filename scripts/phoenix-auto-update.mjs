@@ -27,7 +27,7 @@ import { isAbsolute, join, relative, resolve } from 'node:path'
 import process from 'node:process'
 import { gitSafeDirectoryEnvironment } from './phoenix-git-safe-directory.mjs'
 import { classifyStableUpdate } from './phoenix-update-policy.mjs'
-import { writePhoenixUpdateState } from './phoenix-update-state.mjs'
+import { recordPhoenixUpdateStep, writePhoenixUpdateState } from './phoenix-update-state.mjs'
 
 const EXPECTED_REPOSITORY = process.env.PHOENIX_UPDATE_REPOSITORY ?? 'arisnachy/phoenix-harnes'
 const REMOTE = process.env.PHOENIX_UPDATE_REMOTE ?? 'origin'
@@ -105,7 +105,9 @@ function command(bin, args, options = {}) {
   const stdout = typeof result.stdout === 'string' ? result.stdout.trim() : ''
   const stderr = typeof result.stderr === 'string' ? result.stderr.trim() : ''
   if (status !== 0 && !options.allowFailure) {
-    throw new Error(`${bin} ${args.join(' ')} failed (${status})${stderr.length > 0 ? `: ${stderr}` : ''}`)
+    const error = new Error(`${bin} ${args.join(' ')} failed (${status})${stderr.length > 0 ? `: ${stderr}` : ''}`)
+    error.exitCode = status
+    throw error
   }
   return { ok: status === 0, stdout, stderr, status }
 }
@@ -352,6 +354,24 @@ function writeState(root, state) {
     })
   } catch (error) {
     console.error(`[PHOENIX UPDATE] warning: could not persist update state: ${error instanceof Error ? error.message : String(error)}`)
+  }
+}
+
+function updateCommandStep(root, step, commandFn) {
+  let target
+  try {
+    const current = JSON.parse(readFileSync(statePath(root), 'utf8'))
+    if (typeof current?.target === 'string') target = current.target
+  } catch { /* legacy state without a target */ }
+  const path = statePath(root)
+  recordPhoenixUpdateStep(path, step, 'started', target)
+  try {
+    const result = commandFn()
+    recordPhoenixUpdateStep(path, step, 'ok', target, 0)
+    return result
+  } catch (error) {
+    recordPhoenixUpdateStep(path, step, 'failed', target, Number.isInteger(error?.exitCode) ? error.exitCode : 1)
+    throw error
   }
 }
 
@@ -805,7 +825,8 @@ function ensureDependencies(root, label, plan, onPhase) {
   }
   onPhase('dependencies')
   console.error(`[PHOENIX UPDATE] ${label}: refreshing locked dependencies...`)
-  corepack(root, ['pnpm', 'install', '--frozen-lockfile'], { inherit: true })
+  updateCommandStep(root, 'dependencies', () =>
+    corepack(root, ['pnpm', 'install', '--frozen-lockfile'], { inherit: true }))
 }
 
 function buildAndSmoke(root, label, plan, onPhase = () => {}) {
@@ -814,27 +835,31 @@ function buildAndSmoke(root, label, plan, onPhase = () => {}) {
   if (plan.mode === 'full') {
     onPhase('build')
     console.error(`[PHOENIX UPDATE] ${label}: full build (${String(plan.files.length)} changed file(s))...`)
-    corepack(root, ['pnpm', 'run', 'build'], { inherit: true })
+    updateCommandStep(root, 'build', () =>
+      corepack(root, ['pnpm', 'run', 'build'], { inherit: true }))
 
     const builtBin = join(root, 'apps', 'cli', 'lib', 'bin.js')
     if (!existsSync(builtBin)) throw new Error(`${label}: full build did not produce apps/cli/lib/bin.js`)
     onPhase('smoke')
     console.error(`[PHOENIX UPDATE] ${label}: smoke-testing built launcher...`)
-    node(root, [builtBin, '--version'], { inherit: true })
+    updateCommandStep(root, 'smoke', () =>
+      node(root, [builtBin, '--version'], { inherit: true }))
     return
   }
 
   if (plan.mode === 'client') {
     onPhase('build')
     console.error(`[PHOENIX UPDATE] ${label}: incremental client build (${String(plan.files.length)} changed file(s))...`)
-    corepack(root, ['pnpm', 'exec', 'tsx', 'scripts/build.ts', '--scope', 'client'], { inherit: true })
+    updateCommandStep(root, 'build', () =>
+      corepack(root, ['pnpm', 'exec', 'tsx', 'scripts/build.ts', '--scope', 'client'], { inherit: true }))
   } else {
     console.error(`[PHOENIX UPDATE] ${label}: documentation-only update; build skipped.`)
   }
 
   onPhase('smoke')
   console.error(`[PHOENIX UPDATE] ${label}: smoke-testing source launcher...`)
-  node(root, ['--import', 'tsx/esm', 'apps/cli/src/bin.ts', '--version'], { inherit: true })
+  updateCommandStep(root, 'smoke', () =>
+    node(root, ['--import', 'tsx/esm', 'apps/cli/src/bin.ts', '--version'], { inherit: true }))
 }
 
 function promotedTargetStillCurrent(root, target) {

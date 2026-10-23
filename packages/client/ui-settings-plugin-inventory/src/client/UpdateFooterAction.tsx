@@ -7,7 +7,7 @@ import { Tooltip } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { SidebarFooterActionOwnerProps } from '@phoenix-ai/dsh-client-ui-sidebar/client'
 import type { InjectFace, PropsLocale } from '@phoenix-ai/dsh-client-ui-slots'
 import type { PluginInventoryLocaleKey } from './locales.ts'
-import { isHiddenUpdaterPause } from './update-presentation.ts'
+import { isHiddenUpdaterPause, recentlyUpdated, updateStepLabelKey } from './update-presentation.ts'
 import css from './UpdateFooterAction.module.css'
 
 /** Poll cadence for the repository-local updater state while Web is open. */
@@ -72,10 +72,14 @@ export function updateLabelKey(snapshot: PhoenixUpdateSnapshot): PluginInventory
     || snapshot.detail?.startsWith('Automatic updates are disabled on branch ') === true
   switch (snapshot.status) {
     case 'idle':
-    case 'current':
-    case 'updated':
     case 'off':
       return undefined
+    case 'current': return recentlyUpdated(snapshot.events) ? 'updateUpdated' : undefined
+    case 'updated':
+      return recentlyUpdated(snapshot.events)
+        || (snapshot.at !== undefined && Date.now() - Date.parse(snapshot.at) >= 0
+          && Date.now() - Date.parse(snapshot.at) < 10 * 60_000)
+        ? 'updateUpdated' : undefined
     case 'paused': return protectedPause ? undefined : 'updatePaused'
     case 'checking': return undefined
     case 'available': return 'updateAvailable'
@@ -115,16 +119,16 @@ function updateProgress(snapshot: PhoenixUpdateSnapshot): number {
         case 'smoke': return 86
         default: return 42
       }
-    case 'ready': return 100
-    case 'restarting': return 100
-    case 'applying': return 92
+    case 'ready': return 88
+    case 'restarting': return 92
+    case 'applying': return 96
+    case 'updated': return 100
+    case 'current': return recentlyUpdated(snapshot.events) ? 100 : 0
     case 'rolling-back': return 60
     case 'rolled-back': return 100
     case 'error':
     case 'rollback-failed': return 0
     case 'idle':
-    case 'current':
-    case 'updated':
     case 'paused':
     case 'off': return 0
     /* v8 ignore next 2 -- compile-time exhaustiveness guard for future statuses. */
@@ -169,18 +173,21 @@ export function UpdateFooterAction({
   const [snapshot, setSnapshot] = useState<PhoenixUpdateSnapshot>({ status: 'idle' })
   const [requesting, setRequesting] = useState(false)
   const [detailsOpen, setDetailsOpen] = useState(false)
+  const [connectionLost, setConnectionLost] = useState(false)
   const requestInFlight = useRef(false)
 
   const acceptDurableSnapshot = useCallback((next: PhoenixUpdateSnapshot) => {
     // A successful RPC proves the Host is reachable again. From this point the
     // durable updater state, including a real error, is authoritative.
     clearRestartReconnectGrace()
+    setConnectionLost(false)
     setSnapshot(next)
   }, [])
 
   const reportReadFailure = useCallback((_error: unknown) => {
-    // The Host intentionally disappears during an accepted restart. Treat that
-    // transport gap as part of the restart instead of inventing an updater error.
+    // The Host intentionally disappears during an accepted restart. Do not
+    // replace its durable state with a fabricated success or failure.
+    setConnectionLost(true)
     if (restartReconnectGraceActive()) return
     // A transient RPC/network failure is not evidence that an update failed.
     // Keep the last durable snapshot rendered until a later poll can replace
@@ -310,6 +317,7 @@ export function UpdateFooterAction({
   }
 
   const progress = updateProgress(snapshot)
+  const events = snapshot.events?.slice(-20).reverse() ?? []
   const target = snapshot.target?.slice(0, 12)
   const retryable = errorState || snapshot.status === 'paused'
   const detail = retryable
@@ -346,16 +354,39 @@ export function UpdateFooterAction({
           {detailsOpen ? '⌃' : '⌄'}
         </button>
       )}
-      {wide && !ready && detailsOpen && (
-        <span className={css.expandedDetails}>
-          {target === undefined ? null : <code>{target}</code>}
-          {detail ?? label}
+      {wide && detailsOpen && !ready && (
+        <div className={css.expandedDetails}>
+          <div className={css.phaseInfo}>
+            {target === undefined ? null : <code>{target}</code>}
+            <span>{detail ?? label}</span>
+          </div>
           {busy && progress > 0 ? (
-            <span className={css.progressTrack} aria-hidden="true">
-              <span className={css.progressValue} style={{ width: `${String(progress)}%` }} />
-            </span>
+            <div className={css.progressTrack} aria-label={label}>
+              <div className={css.progressValue} style={{ width: `${String(progress)}%` }} />
+            </div>
           ) : null}
-        </span>
+          {connectionLost && <p className={css.reconnecting}>{t('updateReconnect')}</p>}
+          <div className={css.journalHeader}>{t('updateJournalTitle')}</div>
+          {events.length === 0
+            ? <p className={css.journalEmpty}>{t('updateJournalEmpty')}</p>
+            : <ol className={css.journal} aria-label={t('updateJournalTitle')} data-testid="phoenix-update-journal">
+              {events.map((event, index) => {
+                const stepLabel = updateStepLabelKey(event.step)
+                const stateLabel = event.result === 'started' ? t('updateEventStarted')
+                  : event.result === 'ok' ? t('updateEventOk')
+                    : event.result === 'failed' ? t('updateEventFailed') : t('updateEventInfo')
+                return (
+                  <li key={event.at + event.step + String(index)} data-result={event.result}>
+                    <time dateTime={event.at}>{new Date(event.at).toLocaleTimeString()}</time>
+                    <span className={css.eventStep}>{stepLabel === undefined ? event.step : t(stepLabel)}</span>
+                    <span className={css.eventOutcome}>{stateLabel}{event.exitCode === undefined ? ''
+                      : ` · ${t('updateExitCode')}: ${String(event.exitCode)}`}</span>
+                  </li>
+                )
+              })}
+            </ol>}
+          <p className={css.journalPrivacy}>{t('updateJournalPrivacy')}</p>
+        </div>
       )}
     </>
   )

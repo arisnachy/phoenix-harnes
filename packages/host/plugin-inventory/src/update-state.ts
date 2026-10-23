@@ -2,16 +2,20 @@
 
 import { spawnSync } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
-import { existsSync, lstatSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
+import { closeSync, existsSync, fstatSync, lstatSync, openSync, readFileSync, readSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
 import { isAbsolute, join, resolve } from 'node:path'
 import type {
   PhoenixUpdateRestartReceipt,
   PhoenixUpdateRefreshReceipt,
   PhoenixUpdateSnapshot,
   PhoenixUpdateStatus,
+  PhoenixUpdateEvent,
 } from './types.ts'
 
 const STATE_FILE = 'phoenix-update-state.json'
+const PROGRESS_JOURNAL_FILE = 'phoenix-update-events.jsonl'
+const MAX_EVENT_READ_BYTES = 64 * 1024
+const MAX_DISPLAY_EVENTS = 24
 const RESTART_REQUEST_FILE = 'phoenix-update-restart-request.json'
 const REFRESH_REQUEST_FILE = 'phoenix-update-refresh-request.json'
 const SHA_PATTERN = /^[0-9a-f]{40}$/i
@@ -20,6 +24,14 @@ const STATE_READ_RETRY_MS = 12
 const STATE_WRITE_ATTEMPTS = 4
 const STATE_WRITE_RETRY_MS = 20
 const GIT_FILE_MARKER_MAX_BYTES = 4096
+const EVENT_STEPS = new Set([
+  'git-worktree', 'git-reset', 'git-clean', 'dependencies', 'build',
+  'smoke', 'boot-preflight', 'handoff', 'host-restart', 'health-check',
+  'runtime-activation', 'rollback', 'checking', 'available', 'preparing',
+  'ready', 'restarting', 'applying', 'updated', 'current', 'rolling-back',
+  'rolled-back', 'error', 'rollback-failed', 'paused',
+])
+
 const STATUSES: ReadonlySet<PhoenixUpdateStatus> = new Set([
   'idle', 'checking', 'current', 'available', 'preparing', 'ready', 'restarting',
   'applying', 'rolling-back', 'updated', 'rolled-back', 'paused', 'error',
@@ -205,6 +217,61 @@ export function parsePhoenixUpdateSnapshot(value: unknown): PhoenixUpdateSnapsho
 }
 
 /**
+ * Parse only known, secret-free fields from a durable journal tail.
+ * Unknown codes, raw output, and entries from another release target are dropped.
+ * @param content - last bytes of the newline-delimited journal.
+ * @param target - exact release commit currently being displayed.
+ * @returns bounded and validated stage events for the current release.
+ */
+export function parsePhoenixUpdateEvents(content: string, target?: string): readonly PhoenixUpdateEvent[] {
+  const events: PhoenixUpdateEvent[] = []
+  for (const line of content.split(/\r?\n/u)) {
+    if (!line.startsWith('{"schema":1,')) continue
+    try {
+      const value = JSON.parse(line) as Record<string, unknown>
+      if (value.schema !== 1
+        || typeof value.step !== 'string' || !EVENT_STEPS.has(value.step)
+        || !['started', 'ok', 'failed', 'info'].includes(String(value.result))
+        || typeof value.at !== 'string' || !Number.isFinite(Date.parse(value.at))
+        || (target !== undefined && value.target !== target)) continue
+      const exitCode = value.exitCode
+      events.push({
+        step: value.step,
+        result: value.result as PhoenixUpdateEvent['result'],
+        at: value.at,
+        ...(typeof exitCode === 'number' && Number.isSafeInteger(exitCode)
+          && exitCode >= 0 && exitCode <= 255 ? { exitCode } : {}),
+      })
+    } catch {
+      // Torn/legacy lines are never surfaced to the browser.
+    }
+  }
+  return events.slice(-MAX_DISPLAY_EVENTS)
+}
+
+/** Read the last bounded portion of the journal, without loading long build logs. */
+function readPhoenixUpdateEvents(controlDir: string, target?: string): readonly PhoenixUpdateEvent[] {
+  const path = join(controlDir, PROGRESS_JOURNAL_FILE)
+  let fd: number | undefined
+  try {
+    fd = openSync(path, 'r')
+    const size = fstatSync(fd).size
+    const count = Math.min(size, MAX_EVENT_READ_BYTES)
+    if (count <= 0) return []
+    const buffer = Buffer.allocUnsafe(count)
+    const bytes = readSync(fd, buffer, 0, count, size - count)
+    const raw = buffer.subarray(0, bytes).toString('utf8')
+    // When reading the tail, discard the partial first JSON line.
+    const boundary = size > count ? raw.indexOf('\n') : -1
+    return parsePhoenixUpdateEvents(boundary < 0 ? raw : raw.slice(boundary + 1), target)
+  } catch {
+    return []
+  } finally {
+    if (fd !== undefined) closeSync(fd)
+  }
+}
+
+/**
  * Read the current updater state without making updater availability a Host boot dependency.
  * @param root - PHOENIX checkout root; defaults to the launcher-protected runtime root.
  * @returns sanitized durable updater state, or `idle` when no updater state exists.
@@ -220,14 +287,15 @@ export function readPhoenixUpdateSnapshot(root: string = runtimeRoot()): Phoenix
     // activation/restart immediately. There is a short window where STATE_FILE
     // still says ready while RESTART_REQUEST_FILE already proves activation is
     // in flight. Never expose an actionable Ready button during that window.
+    const events = readPhoenixUpdateEvents(controlDir, snapshot.target)
     if (
       snapshot.status === 'ready'
       && snapshot.target !== undefined
       && queuedRestartTarget(controlDir) === snapshot.target
     ) {
-      return { ...snapshot, status: 'restarting', phase: 'restart' }
+      return { ...snapshot, status: 'restarting', phase: 'restart', ...(events.length > 0 ? { events } : {}) }
     }
-    return snapshot
+    return events.length > 0 ? { ...snapshot, events } : snapshot
   } catch {
     return { status: 'error', detail: 'PHOENIX update state could not be read.' }
   }
