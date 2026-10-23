@@ -321,6 +321,58 @@ describe('Phoenix reality context', () => {
     })
   })
 
+  it('separates the raw over-window estimate from bounded display occupancy', async () => {
+    const engine = new RealityContextEngine({ refreshMs: 30_000 })
+    const ctx = {
+      get(name: string) {
+        if (name === 'llm') return {
+          listProviders: () => [],
+          listConfigurableProviders: () => [],
+          resolveModelInfo: async () => ({
+            provider: 'openai', id: 'model-a', context: { contextWindow: 100 },
+          }),
+        }
+        if (name === 'agentDefaultModel') return {
+          currentSelection: () => ({ provider: 'openai', model: 'model-a' }),
+        }
+        if (name === 'tokenMeter') return {
+          measure: () => ({
+            logRevision: 3, baseline: { kind: 'estimate', tokens: 180 },
+            surfaceTokens: 70, totalTokens: 250,
+          }),
+        }
+        return undefined
+      },
+    } as never
+    await engine.refreshRuntimeServices(ctx)
+    const snapshot = engine.snapshot(ctx, new Date('2026-10-23T20:00:00.000Z'), {
+      agent: { options: { provider: 'openai', model: 'model-a', maxTokens: 20 }, session: { id: 'a' } },
+    })
+    expect(snapshot.ai).toMatchObject({
+      contextWindowTokens: 100,
+      currentContextTokens: 100,
+      remainingContextTokens: 0,
+      inputHeadroomAfterOutputReserveTokens: 0,
+      tokenMeasurement: {
+        rawEstimatedTotalTokens: 250,
+        overWindowEstimateTokens: 150,
+        occupancyKind: 'bounded-display-raw-estimate-over-window',
+      },
+    })
+    const differentModel = engine.snapshot(ctx, new Date('2026-10-23T20:00:00.000Z'), {
+      agent: { options: { provider: 'openai', model: 'model-b' }, session: { id: 'b' } },
+    })
+    expect(differentModel.ai).toMatchObject({
+      contextWindowTokens: null,
+      remainingContextTokens: null,
+      tokenMeasurement: {
+        rawEstimatedTotalTokens: 250,
+        overWindowEstimateTokens: null,
+        occupancyKind: 'raw-estimate-window-unknown',
+      },
+    })
+  })
+
   it('probes fresh runtime services immediately and reuses telemetry until the TTL expires', async () => {
     const clock = vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-10-01T15:00:00.000Z'))
     const list = vi.fn(() => [])
