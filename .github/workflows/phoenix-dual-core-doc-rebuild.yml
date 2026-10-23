@@ -4,7 +4,7 @@ on:
     branches:
       - fix/phoenix-dual-core-integration-20261023
 permissions:
-  contents: read
+  contents: write
 jobs:
   generate:
     runs-on: ubuntu-24.04
@@ -12,7 +12,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          persist-credentials: false
+          persist-credentials: true
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v6
         with:
@@ -36,6 +36,7 @@ jobs:
           done
           git status --short
           echo "Generator failures: $failed" >> "$GITHUB_STEP_SUMMARY"
+          if (( failed != 0 )); then exit 1; fi
       - name: Export generated content for reviewed GitHub commit
         uses: actions/upload-artifact@v4
         with:
@@ -48,3 +49,17 @@ jobs:
             docs/persistence-catalog.md
             docs/tool-catalog.md
             docs/module-graph.md
+            packages/core/session/src/known-event-types.ts
+      - name: Commit deterministic generated files only to the review branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = 'refs/heads/fix/phoenix-dual-core-integration-20261023'
+          git add -- docs/event-producer-consumer.md packages/extensions/tool-cordis/src/api-catalog.ts \
+            docs/config-catalog.md docs/persistence-catalog.md docs/tool-catalog.md docs/module-graph.md \
+            packages/core/session/src/known-event-types.ts
+          if git diff --cached --quiet; then echo 'Generated files are current'; exit 0; fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'docs(dual-core): regenerate verified catalogs and module graphs'
+          git push origin HEAD:refs/heads/fix/phoenix-dual-core-integration-20261023
