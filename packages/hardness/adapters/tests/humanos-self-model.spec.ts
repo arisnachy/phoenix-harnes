@@ -169,6 +169,20 @@ describe('Phoenix HumanOS grounded self-model', () => {
     expect(renderHumanOSSelfModel(current, { agent: { id: '   ' } }, time)).toBe('')
   })
 
+  it('reflects restored atlas state on the next context assembly without retaining a private ledger', () => {
+    let active = sources(['testing'])
+    const observed: HumanOSObservationSources = {
+      hardness: { snapshot: () => active.hardness.snapshot() },
+      tasks: { peek: () => active.tasks.peek() },
+    }
+    expect(inspectHumanOSSelfModel(observed, scoped, time)?.atlas.experimentalOrTesting).toBe(1)
+    active = sources(['verified', 'verified', 'broken'])
+    expect(inspectHumanOSSelfModel(observed, scoped, time)?.atlas).toMatchObject({
+      registered: 3, declaredVerified: 2, brokenOrQuarantined: 1,
+    })
+    expect(inspectHumanOSSelfModel(observed, scoped, time)?.attention).toBe('verify-before-use')
+  })
+
   it('uses the model-visible context registry without installing a new store or tool', () => {
     const dispose = vi.fn()
     const context = vi.fn((_section: {
