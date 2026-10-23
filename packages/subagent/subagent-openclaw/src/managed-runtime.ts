@@ -86,13 +86,22 @@ function projection(raw: unknown): ManagedConfigProjection | undefined {
   const provider = modelRef.slice(0, slash)
   const model = modelRef.slice(slash + 1)
   if (provider !== 'openai') return undefined
+  // Effective runtime may be selected at model, or at provider policy level.
+  // A model override always wins: never fall back to Codex after an explicit
+  // "openclaw" model selection.
   const modelPolicies = object(defaults?.models)
   const modelPolicy = object(modelPolicies?.[modelRef])
+  const providerPolicies = object(object(root?.models)?.providers)
+  const providerPolicy = object(providerPolicies?.[provider])
   const runtime = text(object(modelPolicy?.agentRuntime)?.id)
+    ?? text(object(providerPolicy?.agentRuntime)?.id)
   const tools = object(agent.tools) ?? object(defaults?.tools)
   const toolsProfile = text(tools?.profile)
   const pluginEntries = object(object(root?.plugins)?.entries)
   const codex = object(pluginEntries?.codex)
+  const allowedPlugins = object(root?.plugins)?.allow
+  // An explicit allowlist that omits Codex cannot load the native harness.
+  if (Array.isArray(allowedPlugins) && !allowedPlugins.includes('codex')) return undefined
   const codexConfig = object(codex?.config)
   const appServer = object(codexConfig?.appServer)
   const sandbox = text(appServer?.sandbox)
