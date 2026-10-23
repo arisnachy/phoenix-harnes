@@ -32,47 +32,12 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Verify HumanOS model and registration
         run: pnpm exec vitest run packages/hardness/adapters/tests/humanos-self-model.spec.ts packages/hardness/adapters/tests/adapters.spec.ts packages/hardness/adapters/tests/research-publish.spec.ts packages/client/ui-workspace/tests/cleanup.client.spec.ts apps/cli/tests/blender-mcp-config.spec.ts packages/bundle/web-app/tests/trusted-hosts.spec.ts
-
-      - name: Produce canonical catalog outputs for CI repair
-        if: always()
+      - name: Verify regenerated catalogs and documentation
         run: |
-          pnpm run gen-client-catalog
-          pnpm run gen-persistence-catalog
-          node --input-type=module - <<'JS'
-          import fs from 'node:fs'
-          const paths = [
-            'packages/extensions/cordis-client-runner/src/client/slot-catalog.ts',
-            'docs/persistence-catalog.md',
-          ]
-          for (const [index, path] of paths.entries()) {
-            const encoded = fs.readFileSync(path).toString('base64')
-            console.log('GENFILE ' + index + ' ' + path + ' ' + encoded.length)
-            for (let offset = 0; offset < encoded.length; offset += 3000) {
-              console.log('GENCHUNK ' + index + ' ' + (offset / 3000) + ' ' + encoded.slice(offset, offset + 3000))
-            }
-          }
-          JS
-
-      - name: Produce remaining generated documentation for review
-        if: always()
-        run: |
-          pnpm run gen-cordis-catalog
-          pnpm run gen-config-catalog
-          pnpm run gen-doc-graphs
-          node --input-type=module - <<'JS'
-          import fs from 'node:fs'
-          import { execFileSync } from 'node:child_process'
-          const paths = execFileSync('git', ['diff', '--name-only'], { encoding: 'utf8' })
-            .trim().split('\n').filter(Boolean)
-          for (const [index, path] of paths.entries()) {
-            if (!path.startsWith('docs/') && !path.startsWith('packages/')) {
-              console.log('GEN2SKIP ' + path)
-              continue
-            }
-            const encoded = fs.readFileSync(path).toString('base64')
-            console.log('GEN2FILE ' + index + ' ' + path + ' ' + encoded.length)
-            for (let offset = 0; offset < encoded.length; offset += 3000) {
-              console.log('GEN2CHUNK ' + index + ' ' + (offset / 3000) + ' ' + encoded.slice(offset, offset + 3000))
-            }
-          }
-          JS
+          pnpm run verify-client-catalog
+          pnpm run verify-persistence-catalog
+          pnpm run verify-cordis-catalog
+          pnpm run verify-config-catalog
+          pnpm run verify-doc-graphs
+          pnpm run verify-md-wrap
+          pnpm run knip
