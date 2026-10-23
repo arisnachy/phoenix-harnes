@@ -801,7 +801,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/hardness/adapters/src/index.ts:194`](../packages/hardness/adapters/src/index.ts)
+Source: [`packages/hardness/adapters/src/index.ts:197`](../packages/hardness/adapters/src/index.ts)
 
 <a id="phoenix-aidsh-headless"></a>
 
