@@ -33,9 +33,9 @@ export function ReasoningRow({ text, running, t }: { text: string; running: bool
   const [expanded, setExpanded] = useState(false)
   const locale = t('reasoning.localeCode')
   const safeToDisplay = reasoningMatchesLocale(text, locale)
-  const visibleText = safeToDisplay ? text.trim() : ''
+  const visibleText = safeToDisplay ? text : ''
   const status = !safeToDisplay ? t('reasoning.unavailableLanguage')
-    : visibleText === '' ? t('reasoning.pending')
+    : visibleText.trim() === '' ? t('reasoning.pending')
       : running ? t('reasoning.running') : t('reasoning.available')
 
   return (
@@ -60,7 +60,7 @@ export function ReasoningRow({ text, running, t }: { text: string; running: bool
         )}
       >
         <div className={css.thinkBody} data-reasoning-source="provider">
-          {safeToDisplay ? (visibleText || t('reasoning.pending')) : t('reasoning.unavailableLanguage')}
+          {safeToDisplay ? (visibleText.trim() === '' ? t('reasoning.pending') : visibleText) : t('reasoning.unavailableLanguage')}
         </div>
       </DisclosureRow>
     </div>
