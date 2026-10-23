@@ -1805,9 +1805,11 @@ export async function rollbackOpenClawCandidate({ home, execution, phoenixExecut
  * @param {string} options.home - DSH_HOME containing isolated OpenClaw state.
  * @returns {Promise<object>} Ready or fail-closed status.
  */
-export async function startOpenClawGateway({ home, runner, port, env, healthTimeoutMs, healthIntervalMs, stopTimeoutMs, applyRetention = false, retentionConfirm = false } = {}) {
+export async function startOpenClawGateway({ home, execution, phoenixExecution, runner, port, env, healthTimeoutMs, healthIntervalMs, stopTimeoutMs, applyRetention = false, retentionConfirm = false } = {}) {
   const resolvedHome = requireHome(home)
   return withLifecycleLock(pathsFor(resolvedHome).root, async () => {
+    // Restarting an unhealthy owned gateway can terminate a native task.
+    if (executionIsBusy(execution ?? phoenixExecution)) return busyResult()
     const paths = pathsFor(resolvedHome)
     const active = readJson(paths.active)
     if (!active || active.status === 'none') return { status: 'blocked', code: 'ACTIVE_MISSING' }
@@ -1839,9 +1841,11 @@ export async function startOpenClawGateway({ home, runner, port, env, healthTime
  * @param {string} options.home - DSH_HOME containing isolated OpenClaw state.
  * @returns {Promise<object>} Stopped or missing status.
  */
-export async function stopOpenClawGateway({ home, runner, stopTimeoutMs, applyRetention = false, retentionConfirm = false } = {}) {
+export async function stopOpenClawGateway({ home, execution, phoenixExecution, runner, stopTimeoutMs, applyRetention = false, retentionConfirm = false } = {}) {
   const resolvedHome = requireHome(home)
   return withLifecycleLock(pathsFor(resolvedHome).root, async () => {
+    // An explicit busy execution must never be interrupted by maintenance.
+    if (executionIsBusy(execution ?? phoenixExecution)) return busyResult()
     const paths = pathsFor(resolvedHome)
     const active = readJson(paths.active)
     if (!active || active.status === 'none') return { status: 'stopped', code: 'ACTIVE_MISSING' }
