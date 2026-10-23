@@ -140,6 +140,25 @@ describe('Phoenix intelligent UI canvas', () => {
     expect(splitGenerativeUiText(json, { streaming: true }).map(item => item.kind)).toEqual(['ui'])
   })
 
+  it('distinguishes incomplete JSON from rejected UI schema without leaking payloads', () => {
+    const malformed = 'Introducción\\n' + '```generative-ui\\n{"component":"ui_canvas","version":1,"props":{broken}}\\n```'
+    const invalid = splitGenerativeUiText(malformed)
+    expect(invalid).toEqual([
+      { kind: 'markdown', text: 'Introducción\\n' },
+      { kind: 'notice', text: expect.stringContaining('UI_JSON_INVALID') },
+    ])
+    const rejected = splitGenerativeUiText(JSON.stringify({
+      component: 'ui_canvas', version: 1, props: {
+        title: 'Secreto', children: [{ type: 'text', text: 'private', onClick: 'alert(1)' }],
+      },
+    }))
+    expect(rejected).toMatchObject([{ kind: 'notice', text: expect.stringContaining('UI_SCHEMA_REJECTED') }])
+    expect(JSON.stringify(rejected)).not.toContain('private')
+    expect(JSON.stringify(rejected)).not.toContain('alert(1)')
+    const incomplete = splitGenerativeUiText('{"component":"ui_canvas","version":1,"props":')
+    expect(incomplete).toMatchObject([{ kind: 'notice', text: expect.stringContaining('UI_INCOMPLETE') }])
+  })
+
   it('shows a clean notice instead of exposing malformed canvas JSON', () => {
     const malformed = JSON.stringify({ component: 'ui_canvas', version: 1, props: {
       title: 'Unsafe', children: [{ type: 'button', label: 'Run', prompt: 'x', onclick: 'evil' }],
