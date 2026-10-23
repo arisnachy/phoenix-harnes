@@ -95,10 +95,13 @@ function projection(raw: unknown): ManagedConfigProjection | undefined {
   // A model override always wins: never fall back to Codex after an explicit
   // "openclaw" model selection.
   const modelPolicies = object(defaults?.models)
+  const agentModelPolicies = object(agent.models)
   const modelPolicy = object(modelPolicies?.[modelRef])
+  const agentModelPolicy = object(agentModelPolicies?.[modelRef])
   const providerPolicies = object(object(root?.models)?.providers)
   const providerPolicy = object(providerPolicies?.[provider])
-  const runtime = text(object(modelPolicy?.agentRuntime)?.id)
+  const runtime = text(object(agentModelPolicy?.agentRuntime)?.id)
+    ?? text(object(modelPolicy?.agentRuntime)?.id)
     ?? text(object(providerPolicy?.agentRuntime)?.id)
   const tools = object(agent.tools) ?? object(defaults?.tools)
   const toolsProfile = text(tools?.profile)
