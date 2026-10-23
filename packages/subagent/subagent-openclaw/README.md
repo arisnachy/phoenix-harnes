@@ -40,7 +40,7 @@ The bundled plugin remains unavailable until a trusted Host authority supplies t
 
 #### What the model sees
 
-The transport adds no tool schema or system instruction. The owning Team execution consumer supplies the authorized task, frozen route and bounded recalled reference context. It receives a structured completion, failure or uncertainty result tied to the saved native binding; raw Gateway history and credentials are excluded.
+The transport adds no tool schema or system instruction. The owning Team execution consumer supplies the authorized task, frozen route and bounded recalled reference context. It receives a structured `team/execution` completion, failure or uncertainty result tied to the saved native binding; raw Gateway history and credentials are excluded.
 
 #### Token effect
 
