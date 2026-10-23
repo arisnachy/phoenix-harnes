@@ -2833,7 +2833,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         }
         if (deletingSessions.has(sessionId)) {
           return err(request, {
-            code: 'agent-busy', message: 'This conversation is already being deleted.', details: {},
+            code: 'agent-busy', message: 'This conversation is already being deleted.', details: { reason: 'deletion already in progress' },
           })
         }
         deletingSessions.add(sessionId)
@@ -2847,7 +2847,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             return err(request, {
               code: 'agent-busy',
               message: 'This session is owned by an active subagent and must first be stopped by its parent.',
-              details: { sessionId },
+              details: { reason: 'subagent is owned by its parent lifecycle' },
             })
           }
           const owner = sessionOwners.get(sessionId)
@@ -2855,7 +2855,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             return err(request, {
               code: 'agent-busy',
               message: 'The session is owned by a different lifecycle and cannot be removed without its disposal authority.',
-              details: { sessionId },
+              details: { reason: 'the session is not owned by this web host' },
             })
           }
           if (owner !== undefined) {
@@ -2869,7 +2869,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             return err(request, {
               code: 'agent-busy',
               message: 'Session is still attached to a live owner; its stored data was not deleted.',
-              details: { sessionId },
+              details: { reason: 'session is still attached' },
             })
           }
           if (!await persistence.remove(sessionId)) {
@@ -2952,7 +2952,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         // plane, composing nothing would leave the child with no tools at all.
         const forkComposition = await composeAgent(resolveSessionPreset(source))
         try {
-          await ctx.agents.create({
+          const forkHandle = await ctx.agents.create({
             sessionId: childId,
             seed: events.slice(0, cut),
             meta: {
@@ -2966,6 +2966,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             agentOptions: agentOptions(),
             setup: forkComposition.setup,
           })
+          rememberSessionOwner(forkHandle)
         } catch (error: unknown) {
           return err(request, {
             code: 'internal',
