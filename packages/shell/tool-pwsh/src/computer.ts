@@ -723,6 +723,18 @@ export function computerVerificationTarget(args: Pick<ComputerToolArgs, 'target'
 }
 
 /**
+ * Explain coordinate mapping for a cropped, window-specific desktop screenshot.
+ * @param label - Existing human-readable screenshot label.
+ * @param target - Selected target when the screenshot is not a full virtual desktop.
+ * @returns Label warning the model to translate local image positions into screen coordinates.
+ */
+export function desktopScreenshotLabel(label: string, target: string | undefined): string {
+  return target === undefined ? label
+    : label + ' (window-only capture: image pixel 0,0 is the top-left of ' + target
+      + '; mouse actions require absolute screen coordinates. Query computer windows for current bounds before clicking.)'
+}
+
+/**
  * Determine whether an action must be followed by a fresh visual observation.
  * @param action - Closed-set Computer Use action.
  * @returns True when the action can change desktop/application state in a way the model must re-observe.
@@ -1847,7 +1859,8 @@ export function registerComputerTool(ctx: Context): void {
       let postScreenshot = false
 
       if (args.action === 'screenshot') {
-        postScreenshot = await attachDesktopScreenshot(ctx, exec, output, 'PHOENIX desktop screenshot')
+        postScreenshot = await attachDesktopScreenshot(ctx, exec, output,
+          desktopScreenshotLabel('PHOENIX desktop screenshot', effectiveArgs.target))
       } else if (shouldCaptureAfterAction(args.action)) {
         await delay(POST_ACTION_SETTLE_MS, exec.signal)
         // Bind the verification image to the window that accepted the action,
@@ -1856,7 +1869,8 @@ export function registerComputerTool(ctx: Context): void {
         const fresh = await runWindowsComputerAction({
           action: 'screenshot', ...(screenshotTarget === undefined ? {} : { target: screenshotTarget }),
         }, exec.signal)
-        postScreenshot = await attachDesktopScreenshot(ctx, exec, fresh, `PHOENIX post-${args.action} desktop screenshot`)
+        postScreenshot = await attachDesktopScreenshot(ctx, exec, fresh,
+          desktopScreenshotLabel(`PHOENIX post-${args.action} desktop screenshot`, screenshotTarget))
       }
 
       return {
