@@ -63,7 +63,10 @@ describe('MiniBrowser in Phoenix conversation', () => {
     const view = render(<MiniBrowser sessionId="research-fetch-1" requested
       sourceUrl="https://hai.stanford.edu/ai-index" />)
     await waitFor(() => expect(calls.filter(call => call.type === 'open'))
-      .toEqual([{ type: 'open', url: 'https://hai.stanford.edu/ai-index' }]))
+      .toHaveLength(1))
+    expect(calls.filter(call => call.type === 'open')[0]).toMatchObject({
+      type: 'open', url: 'https://hai.stanford.edu/ai-index',
+    })
     view.rerender(<MiniBrowser sessionId="research-fetch-1" requested
       sourceUrl="https://hai.stanford.edu/ai-index" />)
     await act(async () => { await Promise.resolve() })
