@@ -536,6 +536,18 @@ async function runEmbeddedBrowserAction(
 }
 
 /**
+ * Preserve the latest selected application for an agent's next desktop action.
+ * @param args - Requested action with any explicitly selected window.
+ * @param pinnedTarget - Verified HWND remembered in this conversation.
+ * @returns The action with the same target until the model selects a different window.
+ */
+export function computerActionWithPinnedTarget(args: ComputerToolArgs, pinnedTarget: string | undefined): ComputerToolArgs {
+  if (pinnedTarget === undefined || args.target !== undefined || args.action === 'focus'
+    || args.action === 'windows' || isEmbeddedBrowserAction(args.action)) return args
+  return { ...args, target: pinnedTarget }
+}
+
+/**
  * Map the existing sandbox authority onto desktop authority.
  * @param mode - Effective sandbox mode for the current session/deployment.
  * @returns Desktop authority that is never wider than the sandbox authority.
@@ -1729,6 +1741,8 @@ export function registerComputerTool(ctx: Context): void {
   if (process.platform !== 'win32') return
   const sandboxPolicy: SandboxPolicyService | undefined = ctx.get('sandboxPolicy')
   const deploymentDefault = ctx.shell.sandboxMode
+  // Weak keys keep window selectors session-owned without a global desktop lease leak.
+  const selectedDesktopTargets = new WeakMap<object, string>()
 
   // Monotonic registry guard covers direct tool calls AND nested run_code
   // sub-dispatches, including external Chrome/Browser MCPs. No prompt-only lock.
@@ -1810,17 +1824,25 @@ export function registerComputerTool(ctx: Context): void {
         && nativeDesktopTurnActive(session.events)) {
         throw new Error('Native Windows task: do not open MiniBrowser or inspect a web page; use computer windows/focus/screenshot.')
       }
+      const effectiveArgs = computerActionWithPinnedTarget(
+        args, session === undefined ? undefined : selectedDesktopTargets.get(session),
+      )
       const policy = sandboxPolicy?.resolve(session === undefined ? {} : { session })
       const sandboxMode = policy?.mode ?? deploymentDefault
-      await authorizeComputerAction(ctx, exec, args, sandboxMode)
+      await authorizeComputerAction(ctx, exec, effectiveArgs, sandboxMode)
       if (!isEmbeddedBrowserAction(args.action) && args.action !== 'windows') {
         const owner = String(exec.agent?.session.header.id ?? '')
-        if (owner.length > 0) await prepareDesktopLivePreview(args, owner, exec.signal)
+        if (owner.length > 0) await prepareDesktopLivePreview(effectiveArgs, owner, exec.signal)
       }
 
       const output = args.action === 'browser_login'
-        ? await runOriginBoundBrowserLogin(ctx, args, exec.signal)
-        : await runWindowsComputerAction(args, exec.signal)
+        ? await runOriginBoundBrowserLogin(ctx, effectiveArgs, exec.signal)
+        : await runWindowsComputerAction(effectiveArgs, exec.signal)
+      if (session !== undefined && !isEmbeddedBrowserAction(args.action)
+        && args.action !== 'windows' && args.action !== 'screenshot') {
+        const selected = computerVerificationTarget(effectiveArgs, output)
+        if (selected !== undefined) selectedDesktopTargets.set(session, selected)
+      }
       let postScreenshot = false
 
       if (args.action === 'screenshot') {
@@ -1829,7 +1851,7 @@ export function registerComputerTool(ctx: Context): void {
         await delay(POST_ACTION_SETTLE_MS, exec.signal)
         // Bind the verification image to the window that accepted the action,
         // not whatever application the user foregrounds while we capture it.
-        const screenshotTarget = computerVerificationTarget(args, output)
+        const screenshotTarget = computerVerificationTarget(effectiveArgs, output)
         const fresh = await runWindowsComputerAction({
           action: 'screenshot', ...(screenshotTarget === undefined ? {} : { target: screenshotTarget }),
         }, exec.signal)
