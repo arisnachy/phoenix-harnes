@@ -10,7 +10,7 @@ The OpenClaw plugin expected `openclawManagedRuntime` but no shipped Host regist
 
 ## Decision
 
-The base composition loads a Host-only Cordis service before its OpenClaw execution adapter. The launcher manager attests an in-process owned child, matching active PID/port, verified runtime candidate, Windows TCP listener ownership, authenticated Gateway health, and the exact configuration digest. The service confines the active route to authenticated loopback OpenClaw with an exact Codex agent, restrictive read-only sandbox and tool allowlist, and live Agent Teams session ownership. It repeats Host checks before reservations, native execution and recovery, and does not adopt orphaned processes.
+The base composition mounts the published OpenClaw plugin, which registers the Host-owned Cordis service within its own fiber. Its adapter refreshes the effective route before each probe, reservation, execution and recovery, including when the Gateway becomes ready after Phoenix boot. The launcher manager attests an in-process owned child, matching active PID/port, verified runtime candidate, Windows TCP listener ownership, authenticated Gateway health, and the exact configuration digest. The service confines the active route to authenticated loopback OpenClaw with an exact Codex agent, restrictive read-only sandbox and tool allowlist, and live Agent Teams session ownership. It repeats Host checks before reservations, native execution and recovery, and does not adopt orphaned processes.
 
 ## Consequences
 
