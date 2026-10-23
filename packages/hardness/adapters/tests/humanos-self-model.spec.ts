@@ -68,7 +68,12 @@ describe('Phoenix HumanOS grounded self-model', () => {
 
   it('uses the model-visible context registry without installing a new store or tool', () => {
     const dispose = vi.fn()
-    const context = vi.fn((_section: { readonly name: string; readonly order: number; readonly text: string | ((assembly: HumanOSAssemblyContext) => string); readonly interpolateVariables?: boolean }) => dispose)
+    const context = vi.fn((_section: {
+      readonly name: string
+      readonly order: number
+      readonly text: string | ((assembly: HumanOSAssemblyContext) => string)
+      readonly interpolateVariables?: boolean
+    }) => dispose)
     const installer = installHumanOSSelfModel({ context }, sources(['verified']))
     expect(context).toHaveBeenCalledOnce()
     const section = context.mock.calls[0]?.[0]
