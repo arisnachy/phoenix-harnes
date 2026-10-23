@@ -166,7 +166,11 @@ export async function readDesktopLiveFrame(sessionId: string): Promise<Buffer> {
   let base64: string
   try {
     base64 = await requestNative(sessionId, 'phoenix.desktop.live-frame')
-  } catch {
+  } catch (error) {
+    // A native owner is never disguised as a fresh frame from the last tool action.
+    // The screenshot fallback is valid only if the native viewer is unavailable.
+    const state = await readDesktopLiveState(sessionId)
+    if (state.source === 'native') throw error
     const observed = await recentObservation(sessionId)
     if (observed === undefined) throw new Error('No existe una captura Desktop Live verificable para esta conversación.')
     return observed
