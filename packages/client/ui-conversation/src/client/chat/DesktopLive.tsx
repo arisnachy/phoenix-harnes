@@ -6,7 +6,10 @@ interface DesktopState { available: boolean; paused: boolean; title: string; rea
 const HEADERS = { 'x-phoenix-mini-browser': '1' }
 const EMPTY: DesktopState = { available: false, paused: false, title: '', reason: 'Conectando con Desktop Live…' }
 
-/** Whether a browser capture is pinned to one app, rather than recording all windows or Phoenix chat. */
+/** Whether a browser capture is pinned to one app rather than recording the desktop or chat.
+ * @param track - User-authorized media capture track.
+ * @returns True only for a browser-reported single application window.
+ */
 export function isWindowCapture(track: MediaStreamTrack): boolean {
   return track.getSettings().displaySurface === 'window'
 }
