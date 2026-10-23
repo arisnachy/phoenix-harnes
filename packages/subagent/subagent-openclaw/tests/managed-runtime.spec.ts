@@ -77,6 +77,21 @@ it('rejects a Codex plugin excluded by the native allowlist', async () => {
   expect(authority.resolvePolicy).not.toHaveBeenCalled()
 })
 
+it('loads the same isolated descriptor as the launcher when DSH_HOME is customized', async () => {
+  const custom = join(location.home, 'isolated-home')
+  mkdirSync(join(custom, 'openclaw-runtime'), { recursive: true })
+  writeFileSync(join(custom, 'openclaw-runtime', 'openclaw.json'), JSON.stringify(config))
+  const previous = process.env.DSH_HOME
+  try {
+    process.env.DSH_HOME = custom
+    await expect(createManagedOpenClawConfig(host())).resolves.toMatchObject({
+      agentId: 'phoenix', url: 'ws://127.0.0.1:18879',
+    })
+  } finally {
+    if (previous === undefined) delete process.env.DSH_HOME
+    else process.env.DSH_HOME = previous
+  }
+})
 it('fails closed when the trusted policy resolver is unavailable', async () => {
   await expect(createManagedOpenClawConfig({ ...host(),
     resolvePolicy: async () => { throw new Error('private failure') } })).resolves.toBeUndefined()
