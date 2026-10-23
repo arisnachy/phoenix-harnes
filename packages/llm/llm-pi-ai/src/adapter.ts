@@ -70,7 +70,7 @@ import {
 import type { ResolvedPiAiProviderProfile } from './config.ts'
 import { CODEX_PROVIDER } from './codex-live-catalog.ts'
 import { codexPlatformFallbackModel, isChatGptAccessJwt, isChatGptAccountJwt } from './codex-platform.ts'
-import { applyMondayCodexMembrane, normalizeCodexToolSchemas, recoverRejectedCodexFunctionSchema, scopeCodexToolsForPaint, normalizeOpenAiFunctionToolPayload, requiresMondayCodexMembrane, requiresObjectRootFunctionSchemas } from './codex-tool-schema.ts'
+import { applyMondayCodexMembrane, normalizeCodexToolSchemas, recoverRejectedCodexFunctionSchema, scopeCodexToolsForPaint, normalizeOpenAiFunctionToolPayload, surfaceRejectedCodexSchemaEvent, requiresMondayCodexMembrane, requiresObjectRootFunctionSchemas } from './codex-tool-schema.ts'
 import { fitGenerateOptionsToContext, toPiContext } from './context.ts'
 import { toStreamChunks } from './stream.ts'
 import { isNonCodexRecoveryModel } from './provider-recovery.ts'
@@ -563,7 +563,7 @@ export class PiAiAdapter extends LlmAdapter {
         ? openAIResponsesApi().streamSimple(wireModel, providerContext, streamOptions)
         : snapshot.models.streamSimple(wireModel, providerContext, streamOptions)
       const iterator = toStreamChunks(
-        events,
+        requiresFunctionSchemaProjection ? surfaceRejectedCodexSchemaEvent(events) : events,
         model.contextWindow,
         desiredMaxOutput,
         options.provider === 'openrouter',
