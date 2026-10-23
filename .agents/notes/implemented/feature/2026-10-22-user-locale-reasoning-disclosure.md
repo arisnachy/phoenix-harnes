@@ -1,25 +1,31 @@
-# Agent Note: Opt-in model reasoning disclosure and persistent output language
+# Agent Note: Verified reasoning activity with the user's output language
 
-Status: implemented in proposed branch (pending CI and live-provider verification)
+Status: implemented
+
+English | [中文](2026-10-22-user-locale-reasoning-disclosure.zh.md)
 
 ## Problem
 
-The conversation's reasoning rows received provider-emitted text but discarded it, rendering one static privacy sentence for every streaming and completed block. The model-facing identity prompt preferred the latest message language and did not give precedence to the Host's persisted user language. Some providers emitted Chinese-script reasoning despite a Spanish UI, and the old interface presented no way to distinguish unavailable content from a live explanation.
+The reasoning disclosure displayed the same static notice on every step and did not distinguish current execution evidence from the provider's potentially private thinking text. The existing prompt selected the language of the latest user message even when a different language was explicitly saved in PHOENIX settings. Users may therefore see mismatched language output after switching models.
 
 ## Decision
 
-The existing Tools activity group keeps reasoning scoped to the actual assistant-step blocks. The inner Reasoning row remains collapsed until the user explicitly expands it. While expanded it renders the exact text supplied by the provider, reusing the existing streaming projection without timers or fabricated explanations. If the stream includes Chinese, Japanese, Korean, Cyrillic, or Arabic script while the selected locale is English or Spanish, the entire block is replaced with a localized unavailable message even during partial updates. The script gate is deliberately not called a translator or a full language classifier: Latin-script output in the wrong language still needs a future provider-facing normalization service.
+The conversation's existing Tools group owns one collapsed Reasoning row for each reasoning step. The row opens only on explicit user input and shows an ordered view of genuine tool-call names and runtime state already present in that flow group. Running, failed and completed labels use the client locale dictionary. Neither raw provider reasoning nor tool arguments and outputs reach this disclosure. If no tool evidence is present, the view explicitly says so instead of inventing a plan, decision or summary. Technical tool names containing non-Latin scripts are masked in English and Spanish interfaces, without transforming the underlying event.
 
-The Host locale plugin contributes a dynamic system-prompt section only when the user has explicitly stored a preference. This section asks the active model to produce all user-facing output and visible explanations in that language, independent of the language of the latest user message. A missing preference preserves the preexisting request-language behavior. Locale persistence and UI dictionary selection remain owned by the locale plugin. Technical paths, commands, citations, and identifiers are not translated. Models without a permitted public explanation must not invent one.
+The Host locale plugin contributes a conditional prompt section from the persisted language preference when both settings and systemPrompt are available. The section requests responses and any public model-generated decision summaries in the selected language; absent an explicit preference, existing language selection remains unchanged. The text does not claim to translate output from an uncooperative provider. Filesystem paths, commands, citations and identifiers are never rewritten by this preference.
 
 ## Alternatives considered
 
-A static activity script was rejected because it misleadingly suggests verified live reasoning. Blind client-side translation was rejected because no translation provider is owned by the render component and a late translation would flash unwanted source-language chunks. Changing durable session events was rejected because the existing ordered assistant reasoning blocks already carry streaming and replay data.
+**Reveal arbitrary provider reasoning text.** Rejected: many adapters expose private chain-of-thought without a public-summary provenance marker; revealing it would misclassify internal deliberation and may expose sensitive material.
 
-## Consequences and boundaries
+**Generate a canned sequence of reasoning messages.** Rejected: fabricated stages cannot be independently verified and create misleading progress.
 
-The source of visible content is the provider's already-returned reasoning block, not a statement about unrestricted access to a model's private internal trace. PHOENIX must not claim that a provider emits public reasoning when it does not. The script gate prevents common non-Latin language leaks but cannot promise perfect recognition of wrong-language Latin text or sanitize arbitrary sensitive content embedded by a provider. Credentials and private internal deliberations require stricter upstream policy and redaction before any public summary channel is introduced.
+**Translate streaming raw reasoning in the browser.** Rejected: the renderer has no authorized translation pipeline, and asynchronous translation could expose intermediate content in the wrong language.
+
+## Consequences
+
+Users can inspect verifiable activity rather than repeatedly reading a fixed privacy notice. For models that do not emit a public reasoning summary, the disclosure identifies the actual tool evidence and does not pretend to show internal thoughts. A later provider-specific, explicitly public summary channel can enrich this view without changing the private-reasoning rule. The language preference remains best-effort for model prose; it does not guarantee translation of third-party tool output or detect all Latin-script language mismatches.
 
 ## Verification
 
-Unit regressions exercise manual disclosure, live updates, completion without remounting, absent content, Chinese-to-Spanish blocking and Chinese locale allowance. Host regressions cover stored Spanish, English, Chinese, absent settings, and plugin disposal. Keyless assembled UI snapshots and live-provider validation for OpenRouter/DeepSeek remain required prior to release.
+Focused tests exercise opt-in disclosure, updates to actual tool status, absent evidence, language switching, foreign-script masking, exclusion of private text and the Host language instruction's persistence. Assembled Web and multi-provider smoke tests are required before release.
