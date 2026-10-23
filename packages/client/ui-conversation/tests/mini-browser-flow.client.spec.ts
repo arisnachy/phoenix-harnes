@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addBrowserCards, groupActiveBrowserFlow, isAtActivityTail, isBrowserPrompt, isEmbeddedNavigationTool, isSecureAskDismissed, setSecureAskDismissed } from '../src/client/chat/ToolActivityFlow.tsx'
+import { addBrowserCards, groupActiveBrowserFlow, isAtActivityTail, isBrowserPrompt, isEmbeddedNavigationTool, visibleResearchSourceUrl, isSecureAskDismissed, setSecureAskDismissed } from '../src/client/chat/ToolActivityFlow.tsx'
 
 type BrowserFlowNode = { key: string; kind: string; data: unknown }
 const user = (key: string, text: string): BrowserFlowNode => ({
@@ -49,6 +49,58 @@ describe('MiniBrowser chronological conversation cards', () => {
     ]
     const output = addBrowserCards(flowNodes('user-1', 'tool-1'), nodes)
     expect(output.map(item => item.key)).toEqual(['user-1', 'browser:user-1', 'tool-1'])
+  })
+
+  it('mirrors a public research fetch as a distinct real Chromium navigation', () => {
+    const source = 'https://hai.stanford.edu/ai-index/2025-ai-index-report'
+    const nodes = [
+      user('research', 'Investiga el estado de la inteligencia artificial'),
+      { key: 'fetch', kind: 'tool-call', data: { root: {
+        call: { name: 'mcp__fetch__fetch', argsRaw: JSON.stringify({ url: source }) },
+      } } },
+    ]
+    const cards = addBrowserCards(flowNodes('research', 'fetch'), nodes)
+    expect(cards.map(item => item.key)).toEqual(['research', 'browser:research', 'fetch'])
+    expect(cards[1]).toMatchObject({ sourceUrl: source })
+    const live = groupActiveBrowserFlow(cards, 'research', nodes)
+    expect(live[1]).toMatchObject({ kind: 'browser-workspace', sourceUrl: source })
+  })
+
+  it('follows nested fetch calls but gives genuine Chrome activity priority', () => {
+    const source = 'https://pubmed.ncbi.nlm.nih.gov/123456/'
+    const nodes = [
+      user('research', 'Investiga estudios recientes'),
+      { key: 'code', kind: 'tool-call', data: { root: {
+        call: { name: 'Code', argsRaw: '{}' },
+        subCalls: [{ call: { name: 'web_fetch', argsRaw: JSON.stringify({ url: source }) }, subCalls: [] }],
+      } } },
+    ]
+    expect(addBrowserCards(flowNodes('research', 'code'), nodes)[1]).toMatchObject({ sourceUrl: source })
+    nodes.push({ key: 'chrome', kind: 'tool-call', data: { root: {
+      call: { name: 'mcp__browser__navigate', argsRaw: JSON.stringify({ url: 'https://example.org' }) },
+    } } })
+    const active = addBrowserCards(flowNodes('research', 'code', 'chrome'), nodes)
+    expect(active[1]).toMatchObject({ kind: 'browser', sourceUrl: undefined })
+  })
+
+  it('never mirrors private endpoints, untrusted schemes or credentials', () => {
+    expect(visibleResearchSourceUrl('https://hai.stanford.edu/page#section')).toBe('https://hai.stanford.edu/page')
+    for (const value of [
+      'http://example.org/', 'https://127.0.0.1:3000/', 'https://localhost/',
+      'https://192.168.1.1/', 'https://intranet.local/', 'https://service.internal/',
+      'https://user:pass@example.org/', 'javascript:alert(1)',
+      'https://example.org/?token=private',
+    ]) {
+      expect(visibleResearchSourceUrl(value)).toBeUndefined()
+    }
+    const nodes = [
+      user('research', 'Explica este documento'),
+      { key: 'fetch', kind: 'tool-call', data: { root: {
+        call: { name: 'mcp__fetch__fetch', argsRaw: '{"url":"http://localhost:3000/"}' },
+      } } },
+    ]
+    expect(addBrowserCards(flowNodes('research', 'fetch'), nodes).map(item => item.key))
+      .toEqual(['research', 'fetch'])
   })
 
   it('does not launch a MiniBrowser for a native Paint request, even when a browser tool was called', () => {
