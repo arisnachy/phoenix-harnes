@@ -174,10 +174,14 @@ export function inspectHumanOSSelfModel(
     unclassified: 0,
     sampleLimit: MAX_SESSION_TOOL_RESULTS as 128,
   }
-  const entries = assembly.agent?.session?.events
-    ?.filter(event => event.type === 'tool/result')
-    .slice(-MAX_SESSION_TOOL_RESULTS) ?? []
-  for (const event of entries) {
+  const entries = assembly.agent?.session?.events ?? []
+  // Traverse newest-first with fixed output and allocation bounds. Do not
+  // materialize all tool messages in a potentially long persisted session.
+  let sampled = 0
+  for (let index = entries.length - 1; index >= 0 && sampled < MAX_SESSION_TOOL_RESULTS; index--) {
+    const event = entries[index]
+    if (event?.type !== 'tool/result') continue
+    sampled += 1
     const envelope = event.data
     const data = typeof envelope === 'object' && envelope !== null
       ? envelope as Record<string, unknown> : undefined
