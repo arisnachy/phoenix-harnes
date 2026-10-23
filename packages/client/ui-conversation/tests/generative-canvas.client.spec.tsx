@@ -141,10 +141,10 @@ describe('Phoenix intelligent UI canvas', () => {
   })
 
   it('distinguishes incomplete JSON from rejected UI schema without leaking payloads', () => {
-    const malformed = 'Introducción\\n' + '```generative-ui\\n{"component":"ui_canvas","version":1,"props":{broken}}\\n```'
+    const malformed = 'Introducción\n' + '```generative-ui\n{"component":"ui_canvas","version":1,"props":{broken}}\n```'
     const invalid = splitGenerativeUiText(malformed)
     expect(invalid).toEqual([
-      { kind: 'markdown', text: 'Introducción\\n' },
+      { kind: 'markdown', text: 'Introducción\n' },
       { kind: 'notice', text: expect.stringContaining('UI_JSON_INVALID') },
     ])
     const rejected = splitGenerativeUiText(JSON.stringify({
