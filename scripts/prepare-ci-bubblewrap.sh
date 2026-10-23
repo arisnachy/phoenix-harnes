@@ -1,12 +1,20 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# CI needs only bubblewrap's payload, not a system install. Pin the Noble
-# security-update version, resolve it through APT's signed repository metadata,
-# verify the downloaded archive against that metadata, then extract it into the
-# ephemeral runner directory. This survives Ubuntu rotating superseded .deb
-# files out of the pool without weakening integrity checks.
-readonly BUBBLEWRAP_VERSION='0.9.0-1ubuntu0.3'
+# CI needs only bubblewrap's payload, not a system install. Pin each
+# supported Ubuntu release to its security-update version, resolve through
+# signed APT metadata, verify the archive SHA256, then extract into the runner.
+# Fail closed for unrecognized images instead of selecting an unreviewed package.
+if [[ ! -r /etc/os-release ]]; then
+  echo 'cannot identify Ubuntu runner release for pinned bubblewrap' >&2
+  exit 1
+fi
+. /etc/os-release
+case "${ID:-}:${VERSION_ID:-}" in
+  ubuntu:24.04) readonly BUBBLEWRAP_VERSION='0.9.0-1ubuntu0.3' ;;
+  ubuntu:26.04) readonly BUBBLEWRAP_VERSION='0.11.1-1ubuntu0.3' ;;
+  *) echo "unsupported runner release for pinned bubblewrap: ${ID:-unknown} ${VERSION_ID:-unknown}" >&2; exit 1 ;;
+esac
 
 : "${RUNNER_TEMP:?prepare-ci-bubblewrap requires RUNNER_TEMP}"
 : "${GITHUB_PATH:?prepare-ci-bubblewrap requires GITHUB_PATH}"
