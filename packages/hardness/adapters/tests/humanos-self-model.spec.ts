@@ -65,7 +65,9 @@ describe('Phoenix HumanOS grounded self-model', () => {
     const result = inspectHumanOSSelfModel(input, scoped, time)
     expect(result?.attention).toBe('verify-before-use')
     expect(result?.verification).toEqual({
-      examinedCapabilities: 4, unexaminedCapabilities: 0, currentPasses: 1, currentFailures: 1,
+      examinedCapabilities: 4, unexaminedCapabilities: 0,
+      samplePage: 0, totalPages: 1, sampleStrategy: 'current-evidence-first',
+      currentPasses: 1, currentFailures: 1,
       currentDenials: 1, outdatedVersionRecords: 2, capabilitiesWithoutCurrentEvidence: 2,
       capabilitiesWithConflictingEvidence: 1,
     })
@@ -111,6 +113,27 @@ describe('Phoenix HumanOS grounded self-model', () => {
     expect(model?.verification.unexaminedCapabilities).toBe(6)
     expect(model?.verification.capabilitiesWithoutCurrentEvidence).toBe(64)
     expect(snapshot).toHaveBeenCalledOnce()
+  })
+
+  it('discovers current-version evidence outside the first 64 registrations and pages without duplicates', () => {
+    const many = sources(Array.from({ length: 70 }, () => 'testing'), [], {
+      'cap-69': [{ descriptorVersion: 'v1', outcome: 'passed' }],
+      'cap-68': [{ descriptorVersion: 'v0', outcome: 'failed' }],
+    })
+    const first = inspectHumanOSSelfModel(many, scoped, time)
+    const second = inspectHumanOSSelfModel(many, scoped, time, 1)
+    expect(first?.verification).toMatchObject({
+      samplePage: 0, totalPages: 2, sampleStrategy: 'current-evidence-first',
+      examinedCapabilities: 64, unexaminedCapabilities: 6,
+      currentPasses: 1, currentFailures: 0,
+    })
+    expect(second?.verification).toMatchObject({
+      samplePage: 1, totalPages: 2,
+      examinedCapabilities: 6, unexaminedCapabilities: 64,
+      currentPasses: 0, currentFailures: 0, outdatedVersionRecords: 1,
+    })
+    expect(inspectHumanOSSelfModel(many, scoped, time, 100)?.verification.samplePage).toBe(1)
+    expect(inspectHumanOSSelfModel(many, scoped, time, -1)?.verification.samplePage).toBe(0)
   })
 
   it('filters other-agent tasks and counts only visible agent/global tasks', () => {
