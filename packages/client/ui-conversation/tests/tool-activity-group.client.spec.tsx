@@ -246,6 +246,17 @@ describe('chat tool activity grouping', () => {
     expect(screen.getByText('reasoning.title')).toBeTruthy()
   })
 
+  it('projects observed completed tool calls into the reasoning disclosure without private text', () => {
+    renderChat([user(1, 'Prueba el sistema'), settledTool('search-1'), assistantWithReasoning(3, false)])
+    fireEvent.click(screen.getByRole('button', { name: 'Tools' }))
+    const reasoning = screen.getByRole('button', { name: /reasoning.title/ })
+    fireEvent.click(reasoning)
+    const evidence = document.querySelector('[data-reasoning-source="tool-events"]')
+    expect(evidence?.textContent).toContain('web_search')
+    expect(evidence?.textContent).not.toContain('inspect the runtime first')
+    expect(evidence?.textContent).not.toContain('cognitiveRuntime')
+  })
+
   it('starts a new Tools disclosure after an ordinary user message', () => {
     renderChat([context(1, 'before'), user(2, 'hello'), context(3, 'after')])
 
