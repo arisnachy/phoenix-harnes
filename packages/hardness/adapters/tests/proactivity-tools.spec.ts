@@ -2,6 +2,28 @@ import { describe, expect, it } from 'vitest'
 import { MemoryProactivityStore, ProactivityEngine } from '../src/proactivity-engine.ts'
 import { createProactivityCreateTool } from '../src/proactivity-tools.ts'
 
+describe('proactivity human read-only guard', () => {
+  it('blocks scheduled task creation without persisting state after an explicit no-write instruction', async () => {
+    const engine = new ProactivityEngine(
+      new MemoryProactivityStore(),
+      { execute: async () => ({}) },
+      { id: () => 'should-not-exist' },
+    )
+    const tool = createProactivityCreateTool(engine)
+    const exec = { agent: { id: 'agent-a', session: { events: [{
+      type: 'user/message',
+      data: { source: { kind: 'user' }, content: [{ type: 'text', text: 'Solo lectura: no crees tareas ni modifiques nada.' }] },
+    }] } } } as never
+    await expect(tool.execute({
+      title: 'Unauthorized task',
+      instruction: 'Send a message',
+      runAt: '2026-10-23T22:00:00.000Z',
+      requestedByUser: true,
+    }, exec)).rejects.toThrow(/Read-only user instruction/)
+    expect(await engine.list()).toHaveLength(0)
+  })
+})
+
 describe('phoenix_task_create email delivery', () => {
   it('resolves and persists the connected account email before accepting the task', async () => {
     const engine = new ProactivityEngine(
