@@ -4,7 +4,7 @@ import type { Agent } from '@phoenix-ai/dsh-agent'
 import type { TeamJournal } from '../src/journal.ts'
 import { UniversalMissionLedger } from '../src/universal-mission.ts'
 import { TeamExecutionRuntime, routeExecution } from '../src/execution-runtime.ts'
-import type { ExecutionAdapter, ExecutionContext, ExecutionEngineStatus } from '../src/execution-types.ts'
+import type { ExecutionAdapter, ExecutionContext, ExecutionEngineStatus, ExecutionNativePolicyRequest } from '../src/execution-types.ts'
 import { unfinishedMissionWork } from '../src/mission-closure.ts'
 
 const status = (engine: ExecutionEngineStatus['engine']): ExecutionEngineStatus => ({
@@ -14,7 +14,7 @@ const status = (engine: ExecutionEngineStatus['engine']): ExecutionEngineStatus 
 function fixture(maxProgressEvents = 1024) {
   const session = Session.create(SessionId('execution-lead'))
   const root = { id: session.id, session, options: { provider: 'openai-codex', model: 'gpt-6-luna' } } as Agent
-  let tail = Promise.resolve(undefined)
+  let tail: Promise<void> = Promise.resolve()
   const flush = vi.fn(async () => {})
   const journal = {
     assertDurable() {},
@@ -70,7 +70,7 @@ describe('execution capability routing', () => {
 describe('durable execution admission and recovery', () => {
   it('resolves native policy from the trusted adapter before reservation flush', async () => {
     const f = fixture()
-    const resolveNativePolicy = vi.fn(async () => nativePolicy)
+    const resolveNativePolicy = vi.fn(async (_request: ExecutionNativePolicyRequest) => nativePolicy)
     f.runtime.register({ ...adapter(async () => ({ status: 'completed' as const })), resolveNativePolicy })
     const result = await f.runtime.execute(f.root, request)
     expect(result.nativePolicy).toEqual(nativePolicy)
