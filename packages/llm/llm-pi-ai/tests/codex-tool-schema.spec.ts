@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
+import type { AssistantMessageEvent } from '@earendil-works/pi-ai'
 import type { GenerateOptions } from '@phoenix-ai/dsh-llm'
 import {
   applyMondayCodexMembrane,
   normalizeCodexToolParameters,
   normalizeCodexToolSchemas,
   recoverRejectedCodexFunctionSchema,
+  surfaceRejectedCodexSchemaEvent,
   scopeCodexToolsForPaint,
   normalizeOpenAiFunctionToolPayload,
   requiresMondayCodexMembrane,
@@ -165,6 +167,29 @@ describe('Codex tool-schema compatibility', () => {
     const recovered = recoverRejectedCodexFunctionSchema(options, diagnostic)
     expect(recovered?.tools).toEqual([valid])
     expect(options.tools).toEqual([valid, broken])
+  })
+
+  it('surfaces Codex schema error events before the adapter emits a terminal finish', async () => {
+    const diagnostic = "Codex error: Invalid schema for function 'mcp__social-engine__social_campaign_create': schema must have type 'object' and not have 'oneOf'/'anyOf'/'allOf'/'enum'/'const'/'not' at the top level."
+    const start = { type: 'start' } as unknown as AssistantMessageEvent
+    const error = { type: 'error', error: { errorMessage: diagnostic } } as unknown as AssistantMessageEvent
+    const seen: AssistantMessageEvent[] = []
+    await expect(async () => {
+      for await (const event of surfaceRejectedCodexSchemaEvent((async function* () {
+        yield start
+        yield error
+      })())) seen.push(event)
+    }).rejects.toThrow("Invalid schema for function 'mcp__social-engine__social_campaign_create'")
+    expect(seen).toEqual([start])
+  })
+
+  it('keeps ordinary provider errors as error events for standard retry classification', async () => {
+    const ordinary = { type: 'error', error: { errorMessage: 'HTTP 429 rate limit' } } as unknown as AssistantMessageEvent
+    const result: AssistantMessageEvent[] = []
+    for await (const event of surfaceRejectedCodexSchemaEvent((async function* () {
+      yield ordinary
+    })())) result.push(event)
+    expect(result).toEqual([ordinary])
   })
 
   it('never masks unrelated provider failures or retries a function absent from the request', () => {
