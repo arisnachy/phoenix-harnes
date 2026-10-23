@@ -30,7 +30,11 @@ describe('Phoenix research report publisher', () => {
     expect(() => validateResearchPublication(incomplete)).toThrow(/report\.references.*investiga fuentes reales/u)
     const tool = createResearchPublishTool()
     expect(tool.description).toMatch(/NO llames esta herramienta sin report\.references/u)
-    expect(tool.parameters).toMatchObject({ report: { description: expect.stringContaining('report.references') } })
+    expect(tool.parameters).toMatchObject({
+      type: 'object',
+      properties: { report: { description: expect.stringContaining('report.references') } },
+      required: ['report'],
+    })
   })
 
   it('admits named modern design presets but protects strict academic styling', () => {
