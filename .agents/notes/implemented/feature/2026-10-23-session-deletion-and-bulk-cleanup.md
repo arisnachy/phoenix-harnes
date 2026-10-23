@@ -20,3 +20,11 @@ not shared project files or globally referenced attachment blobs. Never
 claim space recovered without filesystem measurement. A future storage
 inspector/garbage collector may show measured bytes by category and
 safely clean only zero-reference blobs.
+
+## Acceptance checks added
+
+Unit coverage for deletion admission and retained Host ownership on
+cold resume, and for all/date/selection preview semantics with invalid
+date fail-closed. Both were enrolled in the main Windows gate.
+A live filesystem smoke on Windows and shared-attachment reference-count
+inspection remain outstanding.
