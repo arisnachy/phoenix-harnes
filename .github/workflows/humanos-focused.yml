@@ -27,4 +27,4 @@ jobs:
       - name: Install immutable workspace
         run: pnpm install --frozen-lockfile
       - name: Verify HumanOS model and registration
-        run: pnpm exec vitest run packages/hardness/adapters/tests/humanos-self-model.spec.ts packages/hardness/adapters/tests/adapters.spec.ts
+        run: pnpm exec vitest run packages/hardness/adapters/tests/humanos-self-model.spec.ts packages/hardness/adapters/tests/adapters.spec.ts packages/hardness/adapters/tests/research-publish.spec.ts
