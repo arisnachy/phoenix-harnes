@@ -57,12 +57,13 @@ internal sealed class DesktopLivePane : UserControl
     {
         var owned = !string.IsNullOrWhiteSpace(sessionId)
             && string.Equals(sessionId, ownerSession, StringComparison.Ordinal);
-        var ready = owned && Visible && !IsDismissed && ResolveTargetWindow() != IntPtr.Zero;
+        var selectedWindow = owned && Visible && !IsDismissed ? ResolveTargetWindow() : IntPtr.Zero;
+        var ready = selectedWindow != IntPtr.Zero && !IsIconic(selectedWindow);
         return System.Text.Json.JsonSerializer.Serialize(new
         {
             available = ready,
             paused = ready && IsPaused,
-            title = ready ? WindowTitle(ResolveTargetWindow()) : string.Empty,
+            title = ready ? WindowTitle(selectedWindow) : string.Empty,
             reason = ready ? string.Empty : owned && Visible
                 ? "La ventana vinculada a Desktop Live ya no está disponible; usa computer focus para seleccionar otra."
                 : "No hay una sesión Desktop Live visible y vinculada a esta conversación."
