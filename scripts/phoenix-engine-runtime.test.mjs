@@ -783,6 +783,23 @@ test('replacement blocks a persisted PID with no owned live process', async () =
   } finally { dispose(f) }
 })
 
+test('gateway restart and shutdown defer without side effects for live or uncertain Phoenix work', async () => {
+  const f = fixture()
+  try {
+    const marker = { schema: 1, status: 'active', version: '2026.10.6', port: 18789, pid: 4512 }
+    writeFileSync(join(f.runtime, 'active.json'), JSON.stringify(marker))
+    const runner = nativeRunner()
+    for (const operation of [startOpenClawGateway, stopOpenClawGateway]) {
+      for (const execution of [{ live: true }, { uncertain: true }, { phase: 'running' }]) {
+        const result = await operation({ home: f.home, runner, execution })
+        assert.deepEqual(result, { status: 'deferred', code: 'PHOENIX_EXECUTIONS_BUSY' })
+        assert.deepEqual(JSON.parse(readFileSync(join(f.runtime, 'active.json'), 'utf8')), marker)
+      }
+    }
+    assert.equal(runner.calls.length, 0)
+  } finally { dispose(f) }
+})
+
 test('stop reports bounded quiescence timeout and retains the active marker', async () => {
   const f = fixture()
   try {
