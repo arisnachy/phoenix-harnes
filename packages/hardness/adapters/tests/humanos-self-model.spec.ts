@@ -11,12 +11,15 @@ function sources(
 ): HumanOSObservationSources {
   return {
     hardness: {
-      list: () => statuses.map((status, index) => ({
-        status, id: `cap-${index}`, version: 'v1', name: `never disclose secret-${index}`,
-      })),
-      evidenceFor: (id: string) => (evidence[id] ?? []).map((item, index) => ({
-        ...item, id: `${id}-proof-${index}`, capabilityId: id, inputSummary: 'secret fixture',
-      })),
+      snapshot: () => ({
+        formatVersion: 1,
+        capabilities: statuses.map((status, index) => ({
+          status, id: `cap-${index}`, version: 'v1', name: `never disclose secret-${index}`,
+        })),
+        evidence: Object.entries(evidence).flatMap(([id, rows]) => rows.map((item, index) => ({
+          ...item, id: `${id}-proof-${index}`, capabilityId: id, inputSummary: 'secret fixture',
+        }))),
+      }),
     },
     tasks: { peek: () => tasks },
   } as unknown as HumanOSObservationSources
@@ -72,24 +75,14 @@ describe('Phoenix HumanOS grounded self-model', () => {
   })
 
   it('bounds verification work and explicitly discloses unexamined capabilities', () => {
-    const consulted: string[] = []
     const input = sources(Array.from({ length: 70 }, () => 'verified'))
-    const instrumented: HumanOSObservationSources = {
-      ...input,
-      hardness: {
-        list: input.hardness.list,
-        evidenceFor: (id) => {
-          consulted.push(id)
-          return input.hardness.evidenceFor(id)
-        },
-      },
-    }
-    const model = inspectHumanOSSelfModel(instrumented, scoped, time)
+    const snapshot = vi.fn(() => input.hardness.snapshot())
+    const model = inspectHumanOSSelfModel({ ...input, hardness: { snapshot } }, scoped, time)
     expect(model?.atlas.registered).toBe(70)
     expect(model?.verification.examinedCapabilities).toBe(64)
     expect(model?.verification.unexaminedCapabilities).toBe(6)
     expect(model?.verification.capabilitiesWithoutCurrentEvidence).toBe(64)
-    expect(consulted).toHaveLength(64)
+    expect(snapshot).toHaveBeenCalledOnce()
   })
 
   it('filters other-agent tasks and counts only visible agent/global tasks', () => {
