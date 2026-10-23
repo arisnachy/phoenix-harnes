@@ -1,42 +1,41 @@
-/** Provider-emitted reasoning disclosure, independent of tool-call presentation. */
+/** Verified execution evidence disclosure, kept separate from private model reasoning. */
 import { useState } from 'react'
 import { DisclosureRow, IconThinkOutline14 } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { ChatViewSlotProps } from '../contract/slots.ts'
 import a11yCss from './accessibility.module.css'
 import css from './ReasoningRow.module.css'
 
-// Do not leak an unexpected writing system through a streaming partial: wait
-// for the provider to produce a localized explanation instead of pretending to
-// translate a private chain of thought. Code/identifiers remain unmodified.
-const FOREIGN_SCRIPT = /[\u3400-\u9fff\uf900-\ufaff\u3040-\u30ff\uac00-\ud7af\u0400-\u052f\u0600-\u06ff]/u
-
-/**
- * A model's emitted explanation is displayable only in a supported script.
- * This is a presentation guard, not translation or a language classifier.
- * @param text - Model-emitted content, never a canned explanation.
- * @param locale - Active user-selected locale.
- * @returns Whether the client can display this content without foreign scripts.
- */
-export function reasoningMatchesLocale(text: string, locale: string): boolean {
-  return locale === 'zh' || !FOREIGN_SCRIPT.test(text)
+/** User-displayable metadata from a tool call; never contains arguments or results. */
+export interface ReasoningEvidence {
+  readonly name: string
+  readonly state: 'running' | 'success' | 'error'
 }
 
+/** Exclude unexpected scripts from technical names in Latin-language interfaces. */
+const NON_LATIN_SCRIPT = /[\u3400-\u9fff\uf900-\ufaff\u3040-\u30ff\uac00-\ud7af\u0400-\u052f\u0600-\u06ff]/u
+
 /**
- * Render one provider-emitted reasoning block behind an explicit user toggle.
- * The text is rendered verbatim, never invented or paraphrased by this view.
- * @param props.text - Complete or streaming provider-emitted reasoning content.
- * @param props.running - Whether the block is still streaming.
- * @param props.t - User-selected conversation language.
- * @returns An opt-in reasoning disclosure.
+ * Render only observed tool execution metadata and localized status messages.
+ * Provider reasoning blocks are not necessarily public summaries, so their raw
+ * text must never be passed through to the user-facing DOM.
+ * @param props - Logged evidence, running state and locale-resolved labels.
+ * @returns A manual, opt-in execution-evidence disclosure.
  */
-export function ReasoningRow({ text, running, t }: { text: string; running: boolean; t: ChatViewSlotProps['t'] }) {
+export function ReasoningRow({ running, t, evidence }: {
+  running: boolean
+  t: ChatViewSlotProps['t']
+  evidence: readonly ReasoningEvidence[]
+}) {
   const [expanded, setExpanded] = useState(false)
   const locale = t('reasoning.localeCode')
-  const safeToDisplay = reasoningMatchesLocale(text, locale)
-  const visibleText = safeToDisplay ? text : ''
-  const status = !safeToDisplay ? t('reasoning.unavailableLanguage')
-    : visibleText.trim() === '' ? t('reasoning.pending')
-      : running ? t('reasoning.running') : t('reasoning.available')
+  const visible = evidence.map(item => ({
+    ...item,
+    name: locale !== 'zh' && NON_LATIN_SCRIPT.test(item.name)
+      ? t('reasoning.toolUnnamed') : item.name,
+  }))
+  const summary = evidence.length > 0
+    ? t('reasoning.toolCount', { count: evidence.length })
+    : running ? t('reasoning.running') : t('reasoning.noEvents')
 
   return (
     <div className={css.root} data-variant="think" data-state={running ? 'running' : 'ok'}>
@@ -52,15 +51,21 @@ export function ReasoningRow({ text, running, t }: { text: string; running: bool
         expandable
         expandOnRowClick
         onToggle={() => { setExpanded(value => !value) }}
-        collapsedContent={(
-          <>
-            <span className={css.separator} aria-hidden />
-            <span className={css.summary}>{status}</span>
-          </>
-        )}
+        collapsedContent={<><span className={css.separator} aria-hidden /><span className={css.summary}>{summary}</span></>}
       >
-        <div className={css.thinkBody} data-reasoning-source="provider">
-          {safeToDisplay ? (visibleText.trim() === '' ? t('reasoning.pending') : visibleText) : t('reasoning.unavailableLanguage')}
+        <div className={css.thinkBody} data-reasoning-source="tool-events">
+          {visible.length === 0
+            ? t('reasoning.noEvents')
+            : <ul className={css.evidenceList}>
+                {visible.map((item, index) => (
+                  <li key={index}>
+                    {item.name} · {t(item.state === 'running'
+                      ? 'reasoning.toolRunning'
+                      : item.state === 'error' ? 'reasoning.toolFailed' : 'reasoning.toolDone')}
+                  </li>
+                ))}
+              </ul>}
+          <p className={css.evidenceNotice}>{t('reasoning.evidenceNotice')}</p>
         </div>
       </DisclosureRow>
     </div>
