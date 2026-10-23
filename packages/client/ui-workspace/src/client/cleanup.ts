@@ -8,7 +8,7 @@ export type SessionCleanupMode = 'selected' | 'before' | 'between' | 'all'
 
 /** Local end-of-day boundary for a date input; invalid/empty dates select nothing. */
 function dayLimit(value: string, endOfDay: boolean): number | undefined {
-  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(value)) return undefined
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return undefined
   const parsed = new Date(value + (endOfDay ? 'T23:59:59.999' : 'T00:00:00'))
   if (!Number.isFinite(parsed.getTime())) return undefined
   if (parsed.getFullYear() !== Number(value.slice(0, 4))
