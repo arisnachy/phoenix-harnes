@@ -16,6 +16,7 @@ import {
   windowsComputerInvocation,
   computerVerificationTarget,
   computerActionWithPinnedTarget,
+  desktopScreenshotLabel,
   nativeDesktopTurnActive,
   nativeDesktopFallbackDenied,
   normalizedDesktopTarget,
@@ -51,6 +52,8 @@ describe('Computer Use permissions', () => {
     expect(computerVerificationTarget({ target: 'Paint' }, 'hwnd=0x123 active=true title=Paint')).toBe('Paint')
     expect(computerVerificationTarget({}, 'hwnd=0x420024 pid=9 active=true title=Paint')).toBe('hwnd:0x420024')
     expect(computerVerificationTarget({}, 'no real target')).toBeUndefined()
+    expect(desktopScreenshotLabel('Desktop', undefined)).toBe('Desktop')
+    expect(desktopScreenshotLabel('Desktop', 'hwnd:0x420024')).toContain('absolute screen coordinates')
     const selected = windowsComputerInvocation({ action: 'screenshot', target: 'hwnd:0x420024' })
     expect(selected.env.PHX_TARGET).toBe('hwnd:0x420024')
     expect(selected.stdin).toContain('[PhoenixDesktop]::SnapshotWindow($hwnd, $hdc)')
