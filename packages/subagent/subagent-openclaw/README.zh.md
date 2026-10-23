@@ -9,9 +9,10 @@
 ```ts
 import { OpenClawGatewayClient } from '@phoenix-ai/dsh-subagent-openclaw'
 
+const token = process.env.OPENCLAW_GATEWAY_TOKEN
 const gateway = new OpenClawGatewayClient({
   url: 'ws://127.0.0.1:18789',
-  credentials: { token: process.env.OPENCLAW_GATEWAY_TOKEN },
+  credentials: token === undefined ? {} : { token },
 })
 
 try {
