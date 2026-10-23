@@ -52,3 +52,27 @@ jobs:
             }
           }
           JS
+
+      - name: Produce remaining generated documentation for review
+        if: always()
+        run: |
+          pnpm run gen-cordis-catalog
+          pnpm run gen-config-catalog
+          pnpm run gen-doc-graphs
+          node --input-type=module - <<'JS'
+          import fs from 'node:fs'
+          import { execFileSync } from 'node:child_process'
+          const paths = execFileSync('git', ['diff', '--name-only'], { encoding: 'utf8' })
+            .trim().split('\n').filter(Boolean)
+          for (const [index, path] of paths.entries()) {
+            if (!path.startsWith('docs/') && !path.startsWith('packages/')) {
+              console.log('GEN2SKIP ' + path)
+              continue
+            }
+            const encoded = fs.readFileSync(path).toString('base64')
+            console.log('GEN2FILE ' + index + ' ' + path + ' ' + encoded.length)
+            for (let offset = 0; offset < encoded.length; offset += 3000) {
+              console.log('GEN2CHUNK ' + index + ' ' + (offset / 3000) + ' ' + encoded.slice(offset, offset + 3000))
+            }
+          }
+          JS
