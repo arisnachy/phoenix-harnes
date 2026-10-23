@@ -13,6 +13,7 @@ vi.mock('node:child_process', async (importOriginal) => {
 })
 import {
   parsePhoenixUpdateSnapshot,
+  parsePhoenixUpdateEvents,
   readPhoenixUpdateSnapshot,
   requestPhoenixUpdateRefresh,
   requestPhoenixUpdateRestart,
@@ -54,6 +55,39 @@ afterEach(() => {
 })
 
 describe('PHOENIX updater state bridge', () => {
+  it('validates journal outcome, exact SHA, step allowlist and hides raw metadata', () => {
+    const target = 'e'.repeat(40)
+    const at = new Date().toISOString()
+    const entries = [
+      { schema: 1, at, step: 'build', result: 'started', target },
+      { schema: 1, at, step: 'build', result: 'failed', target, exitCode: 7, password: 'secret', command: 'curl private.example' },
+      { schema: 1, at, step: 'build', result: 'ok', target: 'f'.repeat(40) },
+      { schema: 1, at, step: 'powershell -enc secret', result: 'failed', target },
+    ].map(row => JSON.stringify(row)).join('\n')
+    expect(parsePhoenixUpdateEvents(entries, target)).toEqual([
+      { at, step: 'build', result: 'started' },
+      { at, step: 'build', result: 'failed', exitCode: 7 },
+    ])
+    expect(parsePhoenixUpdateEvents(entries, 'f'.repeat(40))).toEqual([
+      { at, step: 'build', result: 'ok' },
+    ])
+  })
+
+  it('reads journal events only for the current stable target', () => {
+    const repo = repository()
+    const target = git(repo, 'rev-parse', 'HEAD')
+    const at = new Date().toISOString()
+    writeFileSync(statePath(repo), JSON.stringify({ status: 'restarting', target }))
+    writeFileSync(join(repo, '.git', 'phoenix-update-events.jsonl'),
+      [
+        { schema: 1, at, step: 'build', result: 'ok', target },
+        { schema: 1, at, step: 'build', result: 'failed', target: 'f'.repeat(40) },
+      ].map(row => JSON.stringify(row)).join('\n') + '\n')
+    expect(readPhoenixUpdateSnapshot(repo)).toMatchObject({
+      status: 'restarting', target, events: [{ at, step: 'build', result: 'ok' }],
+    })
+  })
+
   it('rejects non-object and unknown-state documents', () => {
     expect(parsePhoenixUpdateSnapshot(null).status).toBe('error')
     expect(parsePhoenixUpdateSnapshot('bad').status).toBe('error')
