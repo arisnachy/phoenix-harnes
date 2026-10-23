@@ -185,6 +185,27 @@ describe('Phoenix HumanOS grounded self-model', () => {
       .toEqual({ providerSpecified: false, modelSpecified: false })
   })
 
+  it('reports bounded own-session tool outcomes without equating them to verification', () => {
+    const secret = 'private-file-path-do-not-show'
+    const results = Array.from({ length: 135 }, (_, index) => ({
+      type: 'tool/result',
+      data: { message: { content: [{ type: 'tool-result', isError: index === 134, content: [{ type: 'text', text: secret }] }] } },
+    }))
+    const view = inspectHumanOSSelfModel(sources(['testing']), {
+      agent: { id: 'session-a', session: { events: results } },
+    }, time)
+    expect(view?.toolActivity).toEqual({
+      inspectedResults: 128, succeeded: 127, failed: 1, unclassified: 0, sampleLimit: 128,
+    })
+    expect(view?.verification.currentPasses).toBe(0)
+    expect(view?.atlas.declaredVerified).toBe(0)
+    const rendered = renderHumanOSSelfModel(sources(['testing']), {
+      agent: { id: 'session-a', session: { events: results } },
+    }, time)
+    expect(rendered).not.toContain(secret)
+    expect(rendered).toContain('successful tool calls do not count as formal HARDNESS verification')
+  })
+
   it('does not project operational state outside an agent scope', () => {
     const current = sources(['verified'])
     expect(inspectHumanOSSelfModel(current, {}, time)).toBeUndefined()
