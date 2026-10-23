@@ -81,7 +81,7 @@ function targetAgent(exec: ToolRunContext): string | undefined {
  * evidence; the other established permission gates remain authoritative.
  */
 function assertHumanTurnAllowsMutation(exec: ToolRunContext): void {
-  const events = exec.agent?.session.events
+  const events = exec.agent?.session?.events
   if (events === undefined) return
   for (let index = events.length - 1; index >= 0; index--) {
     const event = events[index]
