@@ -1,122 +1,67 @@
 // @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { makeTranslate } from '@phoenix-ai/dsh-client-test-runtime'
+import { en as commonEn } from '@phoenix-ai/dsh-client-locale/src/locales/en.ts'
+import { es as commonEs } from '@phoenix-ai/dsh-client-locale/src/locales/es.ts'
 import { zh as commonZh } from '@phoenix-ai/dsh-client-locale/src/locales/zh.ts'
-import { AssistantMarkdown, type AssistantMarkdownProps } from '../src/client/chat/AssistantMarkdown.tsx'
-import { zh } from '../src/client/locales.ts'
+import { en, es, zh } from '../src/client/locales.ts'
+import { ReasoningRow, reasoningMatchesLocale } from '../src/client/chat/ReasoningRow.tsx'
 
-let nextAnimationFrameId = 1
-let animationFrames = new Map<number, FrameRequestCallback>()
+afterEach(cleanup)
 
-function flushAnimationFrames(count: number): void {
-  for (let index = 0; index < count; index += 1) {
-    const callbacks = [...animationFrames.values()]
-    animationFrames.clear()
-    for (const callback of callbacks) callback(index)
-  }
-}
+const spanish = makeTranslate(es, commonEs)
+const english = makeTranslate(en, commonEn)
+const chinese = makeTranslate(zh, commonZh)
 
-beforeEach(() => {
-  nextAnimationFrameId = 1
-  animationFrames = new Map()
-  vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
-    const id = nextAnimationFrameId
-    nextAnimationFrameId += 1
-    animationFrames.set(id, callback)
-    return id
-  })
-  vi.stubGlobal('cancelAnimationFrame', (id: number) => {
-    animationFrames.delete(id)
-  })
-})
-
-afterEach(() => {
-  cleanup()
-  vi.unstubAllGlobals()
-})
-
-const t = makeTranslate(zh, commonZh)
-const renderMessageImages: AssistantMarkdownProps['renderMessageImages'] = () => null
-
-describe('ReasoningRow', () => {
-  it('auto-opens while streaming, keeps a manual collapse, and auto-collapses on settle', () => {
-    const view = render(
-      <AssistantMarkdown
-        t={t}
-        blocks={[{ kind: 'reasoning', text: 'Inspect the session\nNewest reasoning tokens' }]}
-        streaming
-        renderMessageImages={renderMessageImages}
-      />,
-    )
-    const row = view.getByRole('button')
-    // Streaming phase starts expanded but exposes only a localized status.
-    expect(row.getAttribute('aria-expanded')).toBe('true')
-    expect(view.container.querySelector('[class*="thinkBody"]')?.textContent).toContain(zh['reasoning.body'])
-    expect(view.container.textContent).not.toContain('Newest reasoning tokens')
-
-    // A manual collapse wins for the rest of the phase.
-    fireEvent.click(view.getByText(zh['reasoning.title']))
-    expect(row.getAttribute('aria-expanded')).toBe('false')
-    expect(view.getByText(zh['reasoning.running'])).toBeTruthy()
-
-    view.rerender(
-      <AssistantMarkdown
-        t={t}
-        blocks={[{ kind: 'reasoning', text: 'Inspect the session\nNewest reasoning tokens keep arriving' }]}
-        streaming
-        renderMessageImages={renderMessageImages}
-      />,
-    )
-
-    // Settling auto-collapses and keeps the localized status.
-    view.rerender(
-      <AssistantMarkdown
-        t={t}
-        blocks={[{ kind: 'reasoning', text: 'Inspect the session\nNewest reasoning tokens keep arriving\n' }]}
-        streaming={false}
-        renderMessageImages={renderMessageImages}
-      />,
-    )
-    flushAnimationFrames(3)
-    expect(row.getAttribute('aria-expanded')).toBe('false')
-    expect(view.getByText(zh['reasoning.hidden'])).toBeTruthy()
-    expect(view.container.textContent).not.toContain('Newest reasoning tokens keep arriving')
-    expect(view.queryByText('运行中')).toBeNull()
+describe('ReasoningRow: user-controlled provider text', () => {
+  it('never shows model-emitted text until the user expands the row', () => {
+    const view = render(<ReasoningRow t={spanish} text="He comprobado el registro actual." running />)
+    const trigger = view.getByRole('button', { name: /Razonamiento/ })
+    expect(trigger.getAttribute('aria-expanded')).toBe('false')
+    expect(view.container.textContent).not.toContain('He comprobado el registro actual.')
+    fireEvent.click(trigger)
+    expect(trigger.getAttribute('aria-expanded')).toBe('true')
+    expect(view.container.textContent).toContain('He comprobado el registro actual.')
+    expect(view.container.querySelector('[data-reasoning-source="provider"]')).not.toBeNull()
   })
 
-  it('expands from either Think or the reasoning summary', () => {
-    const view = render(
-      <AssistantMarkdown
-        t={t}
-        blocks={[{ kind: 'reasoning', text: 'Inspect the session\nCheck persistence' }]}
-        streaming={false}
-        renderMessageImages={renderMessageImages}
-      />,
-    )
-    const row = view.getByRole('button')
-
-    fireEvent.click(view.getByText(zh['reasoning.hidden']))
-    expect(row.getAttribute('aria-expanded')).toBe('true')
-    expect(view.getByText(zh['reasoning.body'])).toBeTruthy()
-
-    fireEvent.click(view.getByText(zh['reasoning.title']))
-    expect(row.getAttribute('aria-expanded')).toBe('false')
+  it('updates genuine provider text without resetting a manual disclosure', () => {
+    const view = render(<ReasoningRow t={spanish} text="Primera observación." running />)
+    const trigger = view.getByRole('button', { name: /Razonamiento/ })
+    fireEvent.click(trigger)
+    view.rerender(<ReasoningRow t={spanish} text="Primera observación.\nSegunda observación." running />)
+    expect(trigger.getAttribute('aria-expanded')).toBe('true')
+    expect(view.container.textContent).toContain('Segunda observación.')
+    view.rerender(<ReasoningRow t={spanish} text="Primera observación.\nSegunda observación." running={false} />)
+    expect(trigger.getAttribute('aria-expanded')).toBe('true')
+    expect(view.container.textContent).toContain('Segunda observación.')
   })
 
-  it('expanded Razonamiento drops the inline summary and renders localized status, no IN card', () => {
-    const view = render(
-      <AssistantMarkdown
-        t={t}
-        blocks={[{ kind: 'reasoning', text: 'Inspect the session\nCheck persistence' }]}
-        streaming={false}
-        renderMessageImages={renderMessageImages}
-      />,
-    )
-    fireEvent.click(view.getByText(zh['reasoning.title']))
-    expect(view.getAllByText(zh['reasoning.body'])).toHaveLength(1)
-    expect(view.queryByText('IN')).toBeNull()
-    expect(view.container.querySelector('[class*="ioCard"]')).toBeNull()
-    expect(view.container.querySelector('[class*="thinkBody"]')).not.toBeNull()
+  it('blocks Chinese content when the configured language is Spanish or English', () => {
+    const content = '正在分析错误原因'
+    expect(reasoningMatchesLocale(content, 'es')).toBe(false)
+    expect(reasoningMatchesLocale(content, 'en')).toBe(false)
+    const view = render(<ReasoningRow t={spanish} text={content} running={false} />)
+    fireEvent.click(view.getByRole('button', { name: /Razonamiento/ }))
+    expect(view.container.textContent).not.toContain(content)
+    expect(view.container.textContent).toContain(es['reasoning.unavailableLanguage'])
+    view.rerender(<ReasoningRow t={english} text={content} running={false} />)
+    expect(view.container.textContent).toContain(en['reasoning.unavailableLanguage'])
+    expect(view.container.textContent).not.toContain(content)
+  })
+
+  it('shows native-script content only when that locale is selected', () => {
+    const content = '正在分析错误原因'
+    expect(reasoningMatchesLocale(content, 'zh')).toBe(true)
+    const view = render(<ReasoningRow t={chinese} text={content} running={false} />)
+    fireEvent.click(view.getByRole('button', { name: zh['reasoning.title'] }))
+    expect(view.container.textContent).toContain(content)
+  })
+
+  it('does not invent a summary when a provider sends no text', () => {
+    const view = render(<ReasoningRow t={spanish} text=" " running={false} />)
+    fireEvent.click(view.getByRole('button', { name: /Razonamiento/ }))
+    expect(view.container.textContent).toContain(es['reasoning.pending'])
   })
 })
