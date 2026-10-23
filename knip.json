@@ -8,6 +8,8 @@
     "codex",
     "icacls",
     "musl-gcc",
+    "playwright",
+    "psql",
     "powershell.exe",
     "python3",
     "sandbox-exec",
