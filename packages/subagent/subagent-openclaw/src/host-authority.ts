@@ -71,7 +71,7 @@ function routeFromConfig(data: Json, digest: string): ExecutionNativePolicy | un
     provider: 'openai', model: resolvedModel.slice('openai/'.length), agentRuntime: 'codex',
     sandbox, approval, cwd: workspace,
     toolPolicy: {
-      profile: 'minimal', allow: [...ALLOWED_TOOLS], deny: [...DENIED_TOOLS],
+      profile: 'minimal', allow: [...allow], deny: [...deny],
       profileHash: digest,
     },
   }
@@ -91,6 +91,8 @@ export default class OpenClawManagedHostAuthority extends Service implements Man
   }
 
   private async verified(): Promise<VerifiedConfig | undefined> {
+    // A failed revalidation immediately revokes the previous credential lease.
+    this.proof = undefined
     if (!this.live) return undefined
     const home = resolve(process.env.DSH_HOME?.trim() || join(homedir(), '.dsh'))
     const root = resolve(process.env.PHOENIX_RUNTIME_ROOT?.trim() || process.cwd())
