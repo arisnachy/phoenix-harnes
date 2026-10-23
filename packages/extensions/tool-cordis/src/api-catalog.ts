@@ -4088,7 +4088,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'EclipseRoutingSettings',
-    declaration: 'export interface EclipseRoutingSettings {\n    readonly mode?: \'automatic\' | \'hybrid\' | \'manual\';\n    readonly executionEngine?: \'automatic\' | \'internal\' | \'codex\' | \'openclaw\';\n    readonly planner?: EclipseModelRoute;\n    readonly coordinator?: EclipseModelRoute;\n    readonly subagent?: EclipseModelRoute;\n    readonly specialists?: Readonly<Record<string, EclipseModelRoute>>;\n    readonly maxTeammates?: number;\n}',
+    declaration: 'export interface EclipseRoutingSettings {\n    readonly mode?: \'automatic\' | \'hybrid\' | \'manual\';\n    readonly executionEngine?: \'automatic\' | \'internal\' | \'codex\' | \'openclaw\';\n    readonly planner?: EclipseModelRoute;\n    readonly coordinator?: EclipseModelRoute;\n    readonly subagent?: EclipseModelRoute;\n    readonly specialists?: Readonly<Record<string, EclipseModelRoute>>;\n    readonly maxTeammates?: number;\n    readonly escalationSensitivity?: \'adaptive\' | \'quality\' | \'economy\';\n}',
   },
   {
     name: 'EditGoalRequest',
@@ -4108,7 +4108,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'ExecutionAdapter',
-    declaration: 'export interface ExecutionAdapter {\n    readonly engine: ExecutionEngine;\n    probe(): Promise<ExecutionEngineStatus>;\n    run(context: ExecutionContext): Promise<ExecutionOutcome>;\n    recover(context: ExecutionContext): Promise<ExecutionOutcome>;\n    steer?(context: Pick<ExecutionContext, \'root\' | \'snapshot\' | \'signal\'>, text: string): Promise<void>;\n}',
+    declaration: 'export interface ExecutionAdapter {\n    readonly engine: ExecutionEngine;\n    probe(): Promise<ExecutionEngineStatus>;\n    resolveNativePolicy?(request: ExecutionNativePolicyRequest): Promise<ExecutionNativePolicy | undefined>;\n    run(context: ExecutionContext): Promise<ExecutionOutcome>;\n    recover(context: ExecutionContext): Promise<ExecutionOutcome>;\n    steer?(context: Pick<ExecutionContext, \'root\' | \'snapshot\' | \'signal\'>, text: string): Promise<void>;\n}',
   },
   {
     name: 'ExecutionBinding',
@@ -4144,7 +4144,11 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'ExecutionNativePolicy',
-    declaration: 'export interface ExecutionNativePolicy {\n    readonly provider: string;\n    readonly model: string;\n    readonly agentRuntime: string;\n    readonly sandbox: string;\n    readonly approval: string;\n    readonly cwd: string;\n}',
+    declaration: 'export interface ExecutionNativePolicy {\n    readonly provider: string;\n    readonly model: string;\n    readonly agentRuntime: string;\n    readonly sandbox: string;\n    readonly approval: string;\n    readonly cwd: string;\n    readonly toolPolicy: ExecutionToolPolicy;\n}',
+  },
+  {
+    name: 'ExecutionNativePolicyRequest',
+    declaration: 'export interface ExecutionNativePolicyRequest {\n    readonly executionId: ExecutionId;\n    readonly root: Agent;\n    readonly engine: ExecutionEngine;\n    readonly idempotencyKey: string;\n    readonly selection: {\n        readonly provider: string;\n        readonly model: string;\n        readonly reasoningEffort?: string;\n    };\n    readonly capabilities: readonly ExecutionCapability[];\n}',
   },
   {
     name: 'ExecutionOutcome',
@@ -4165,6 +4169,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'ExecutionSnapshot',
     declaration: 'export interface ExecutionSnapshot {\n    readonly id: ExecutionId;\n    readonly teamId: TeamId;\n    readonly missionId: string;\n    readonly cancellationEpoch: number;\n    readonly idempotencyKey: string;\n    readonly engine: ExecutionEngine;\n    readonly provider: string;\n    readonly model: string;\n    readonly reasoningEffort?: string;\n    readonly task: string;\n    readonly capabilities: readonly ExecutionCapability[];\n    readonly nativePolicy?: ExecutionNativePolicy;\n    readonly phase: ExecutionPhase;\n    readonly revision: number;\n    readonly createdAt: number;\n    readonly updatedAt: number;\n    readonly binding?: ExecutionBinding;\n    readonly output?: string;\n    readonly errorCode?: string;\n}',
+  },
+  {
+    name: 'ExecutionToolPolicy',
+    declaration: 'export interface ExecutionToolPolicy {\n    readonly profile: string;\n    readonly allow: readonly string[];\n    readonly deny: readonly string[];\n    readonly profileHash: string;\n}',
   },
   {
     name: 'FileAttachmentLimits',

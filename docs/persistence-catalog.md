@@ -129,7 +129,7 @@ Source: [`packages/core/agent/src/types.ts:19`](../packages/core/agent/src/types
 'agent/model-selection': ModelSelectionPreference
 ```
 
-Source: [`packages/core/agent/src/model-selection.ts:98`](../packages/core/agent/src/model-selection.ts)
+Source: [`packages/core/agent/src/model-selection.ts:96`](../packages/core/agent/src/model-selection.ts)
 
 ### `agent-preset/*`
 
@@ -904,7 +904,7 @@ Source: [`packages/subagent/agent-team/src/chat-types.ts:79`](../packages/subage
 'team/execution': { readonly version: 1; readonly snapshot: ExecutionSnapshot }
 ```
 
-Source: [`packages/subagent/agent-team/src/execution-types.ts:95`](../packages/subagent/agent-team/src/execution-types.ts)
+Source: [`packages/subagent/agent-team/src/execution-types.ts:130`](../packages/subagent/agent-team/src/execution-types.ts)
 
 <a id="teamexecution-context--log-only"></a>
 
@@ -915,7 +915,7 @@ Source: [`packages/subagent/agent-team/src/execution-types.ts:95`](../packages/s
 'team/execution-context': { readonly version: 1; readonly executionId: ExecutionId; readonly content: string; readonly memoryIds: readonly string[] }
 ```
 
-Source: [`packages/subagent/agent-team/src/execution-types.ts:99`](../packages/subagent/agent-team/src/execution-types.ts)
+Source: [`packages/subagent/agent-team/src/execution-types.ts:134`](../packages/subagent/agent-team/src/execution-types.ts)
 
 <a id="teamexecution-input--log-only"></a>
 
@@ -926,7 +926,7 @@ Source: [`packages/subagent/agent-team/src/execution-types.ts:99`](../packages/s
 'team/execution-input': { readonly version: 1 } & ExecutionInputReceipt
 ```
 
-Source: [`packages/subagent/agent-team/src/execution-types.ts:93`](../packages/subagent/agent-team/src/execution-types.ts)
+Source: [`packages/subagent/agent-team/src/execution-types.ts:128`](../packages/subagent/agent-team/src/execution-types.ts)
 
 <a id="teamexecution-progress--log-only"></a>
 
@@ -937,7 +937,7 @@ Source: [`packages/subagent/agent-team/src/execution-types.ts:93`](../packages/s
 'team/execution-progress': { readonly version: 1; readonly executionId: ExecutionId; readonly event: ExecutionProgress }
 ```
 
-Source: [`packages/subagent/agent-team/src/execution-types.ts:97`](../packages/subagent/agent-team/src/execution-types.ts)
+Source: [`packages/subagent/agent-team/src/execution-types.ts:132`](../packages/subagent/agent-team/src/execution-types.ts)
 
 <a id="teammember--log-only"></a>
 
