@@ -34,7 +34,9 @@ export function ReasoningRow({ text, running, t }: { text: string; running: bool
   const locale = t('reasoning.localeCode')
   const safeToDisplay = reasoningMatchesLocale(text, locale)
   const visibleText = safeToDisplay ? text.trim() : ''
-  const status = running ? t('reasoning.running') : t('reasoning.available')
+  const status = !safeToDisplay ? t('reasoning.unavailableLanguage')
+    : visibleText === '' ? t('reasoning.pending')
+      : running ? t('reasoning.running') : t('reasoning.available')
 
   return (
     <div className={css.root} data-variant="think" data-state={running ? 'running' : 'ok'}>
