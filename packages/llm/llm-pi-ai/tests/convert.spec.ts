@@ -799,7 +799,7 @@ describe('mapStopReason / mapUsage', () => {
       .toEqual({ kind: 'stop' })
   })
 
-  it('classifies ambiguous non-Codex provider errors as bounded-retry candidates only when explicitly eligible', () => {
+  it('classifies ambiguous non-Codex provider errors as bounded-retry candidates only when explicitly eligible', async () => {
     const generic = assistant({ stopReason: 'error', provider: 'openrouter', model: 'qwen/qwen3' })
     expect(mapStopReason(generic, undefined, undefined, false, true)).toEqual({
       kind: 'error', failure: { message: 'pi-ai stream error', code: RECOVERABLE_PI_AI_ERROR_CODE },
