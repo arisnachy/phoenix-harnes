@@ -16,7 +16,12 @@ import type { OpenClawPolicyAttester } from './types.ts'
  * @returns The fixed user-owned managed runtime configuration path.
  */
 export function managedOpenClawConfigPath(): string {
-  return resolve(homedir(), '.dsh', 'openclaw-runtime', 'openclaw.json')
+  // The launcher and installer use DSH_HOME when the user overrides it.
+  // Reading a different homedir() descriptor leaves a working Gateway
+  // permanently "not configured" in those installations.
+  const configured = process.env.DSH_HOME?.trim()
+  const home = configured === undefined || configured.length === 0 ? resolve(homedir(), '.dsh') : resolve(configured)
+  return resolve(home, 'openclaw-runtime', 'openclaw.json')
 }
 
 /** Host-owned client and policy authority; credentials never enter this package's config. */
