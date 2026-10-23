@@ -23,6 +23,9 @@ export function DesktopLive({ sessionId, active }: { sessionId: string; active: 
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const owningSessionRef = useRef(sessionId)
+  const activeRef = useRef(active)
+  const mountedRef = useRef(false)
+  activeRef.current = active
 
   const stopSharing = useCallback(() => {
     const stream = streamRef.current
@@ -31,6 +34,11 @@ export function DesktopLive({ sessionId, active }: { sessionId: string; active: 
     setLive(null)
     setLiveOwner(null)
   }, [])
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => { mountedRef.current = false; stopSharing() }
+  }, [stopSharing])
 
   useEffect(() => {
     owningSessionRef.current = sessionId
@@ -75,7 +83,7 @@ export function DesktopLive({ sessionId, active }: { sessionId: string; active: 
         setCaptureError('Selecciona una ventana de aplicación (no pantalla completa ni pestaña).')
         return
       }
-      if (owner !== owningSessionRef.current || !active) {
+      if (owner !== owningSessionRef.current || !activeRef.current || !mountedRef.current) {
         stream.getTracks().forEach(item => item.stop())
         return
       }
