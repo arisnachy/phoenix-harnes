@@ -96,6 +96,10 @@ export interface Config {
   maxParallelToolCalls?: AgentLoopConfig['maxParallelToolCalls']
   /** Maximum model/tool steps in one turn before explicit continuation is required. */
   maxStepsPerTurn?: AgentLoopConfig['maxStepsPerTurn']
+  /** Maximum bounded continuation segments after model output reaches a limit. */
+  autoContinueMaxSegments?: AgentLoopConfig['autoContinueMaxSegments']
+  /** Provider IDs allowed to continue bounded, output-limited turns. */
+  autoContinueProviders?: AgentLoopConfig['autoContinueProviders']
   /** Whether the system prompt includes the fixed Harness identity (default true). */
   includeHarnessIdentity?: SystemPromptConfig['includeHarnessIdentity']
   /** Whether model history includes dynamic runtime-context snapshots (default true). */
