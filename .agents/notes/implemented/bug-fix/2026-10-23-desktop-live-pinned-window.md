@@ -2,26 +2,32 @@
 
 Status: implemented
 
+English | [中文](2026-10-23-desktop-live-pinned-window.zh.md)
+
 ## Problem
 
-In a browser-only `pnpm phoenix` session, Desktop Live displayed one PNG saved after the most recent Computer action, not a live window feed. The chat displayed that image for up to 90 seconds and the UI stopped polling altogether while the document was hidden. Native Windows captures followed the foreground application when no window selector had been supplied, so switching to Chrome/Phoenix could replace Paint with a recursive view of the chat. Post-action screenshots were also recorded from the whole screen even when the driver knew which HWND had accepted the action.
+In a browser-only `pnpm phoenix` session, Desktop Live displayed one PNG saved after the most recent Computer action, not a live window feed. The chat displayed that image for up to 90 seconds and the UI stopped polling while the document was hidden. Native Windows captures followed the foreground application when no window selector had been supplied, so switching to Chrome or Phoenix could replace Paint with a recursive view of the chat. Post-action screenshots could also capture the entire screen after the driver had identified the target HWND.
 
 ## Decision
 
-**Phoenix Web** offers an explicit `Compartir ventana en directo` action using the browser's native `getDisplayMedia` picker. It accepts only `displaySurface === 'window'`; whole-screen and browser-tab sources are stopped immediately, not labeled as application video. Only the current user gesture authorizes capture. The stream stops on navigation to a different conversation, deactivation, browser-native track termination or explicit user Stop. The video is local to the currently rendered chat, is never uploaded through Desktop Live routes and does not provide model input authority. Existing session-owned verified Computer screenshots remain available without a new grant and are still labeled `captura reciente` instead of video. Desktop status polling no longer depends on the foreground browser tab.
+**Phoenix Web** offers an explicit `Compartir ventana en directo` action using the browser's native `getDisplayMedia` picker. It accepts only `displaySurface === 'window'`; whole-screen and browser-tab sources are stopped immediately, not labeled as application video. Only a deliberate user gesture authorizes capture. The stream stops when the user changes conversation, deactivates the view, ends browser sharing, or chooses Stop. The video stays inside the current chat and is never uploaded through Desktop Live routes or supplied to the model as input. Existing owner-scoped verified Computer screenshots remain available without a new grant and are labeled `captura reciente`, not video. Desktop status polling no longer depends on the browser tab being in the foreground.
 
-**Phoenix.exe** pins `PrintWindow` snapshots to the selected top-level HWND plus PID rather than dynamically resolving the active application. New session owners clear the prior window selector; a closed or replaced HWND is not silently replaced with whichever application happens to have focus. The native viewer refreshes at 500 ms (a sequence of verified screenshots, not an encoded video feed). Explicit `computer focus(target)` supplies the HWND/title selector. No new injection API or cross-session capture route was added.
+**Phoenix.exe** pins `PrintWindow` snapshots to the selected top-level HWND plus PID rather than dynamically resolving the active application. New session owners clear the previous selector; a closed, minimized, or replaced HWND is not silently replaced with whichever application has focus. The native viewer refreshes every 500 ms using successive screenshots, not an encoded video feed. Explicit `computer focus(target)` supplies the application selector. No new injection API or cross-session capture route is introduced.
 
-**Computer verification** keeps the latest resolved HWND in a WeakMap keyed by the in-memory agent session. Subsequent screenshot and input actions with no new selector reuse that application; `windows` remains global and a new explicit `focus` changes the target. It chooses the explicit target or the HWND returned by the completed action, capturing that application using `PrintWindow` rather than a screenshot of whichever window the user brought to the foreground. Cropped screenshots explicitly warn that their pixel coordinates are window-relative, while Computer mouse input still expects absolute screen coordinates obtained from the `computer windows` bounds. Windows' safe foreground guard still blocks sending keystrokes or clicks into the wrong window. The legacy Desktop.exe screenshot fallback remains available for untargeted observations only.
+**Computer verification** keeps the latest resolved HWND in a WeakMap keyed by the in-memory agent session. Subsequent screenshot and input actions without a new selector reuse that application; `windows` remains global and an explicit `focus` changes the target. It uses `PrintWindow` to capture the selected application instead of whatever the user foregrounds after an action. Cropped screenshot descriptions warn that image pixel coordinates are window-relative, while Computer mouse input still expects absolute screen coordinates from `computer windows`. Windows' foreground input guard still blocks keystrokes or clicks into the wrong window. The legacy Desktop.exe screenshot fallback remains available only for untargeted observations.
 
-## Scope and limitations
+## Alternatives considered
 
-Browser window capture is user-authorized by design and requires the user to choose a single app in Chrome's selector. PrintWindow may fail for minimized, DRM-protected, privileged or some GPU-backed windows. Browser track behavior when a selected window is minimized is OS-dependent. Both viewers are observers; continuous input to a background Windows application requires a separate, safely isolated input actuator and is not claimed here. Do not bypass the active-window input guard to make tests green.
+**Continuously capture the full desktop.** Rejected because it could expose unrelated windows and recursively display Phoenix chat when the user switches focus.
 
-## Acceptance
+**Force focus back to the selected window for every viewer frame or input.** Rejected because it steals user focus and creates the risk of misdirected keyboard and mouse actions.
 
-- Sharing a real application window produces continuous browser video independent of chat-tab focus. Monitor and tab captures are rejected.
-- Ending sharing or changing conversations stops the track; the recent-screenshot fallback is not mislabeled as video.
-- Native preview stays on the selected HWND and PID as the operator brings Phoenix to the foreground; when the target closes, the viewer reports that it is unavailable instead of showing another window.
-- Post-action `computer` observations use the acted-on HWND when available; attempting a targeted capture that fails does not leak a fallback capture of another app.
-- Keyless client and Computer helper tests cover the capture-source guard and target-selection contract; Windows CI and a real Paint session are still needed to validate the full native pipeline.
+**Automatically grant browser screen sharing to every agent.** Rejected because browser capture requires deliberate user approval and must never silently bypass browser privacy controls.
+
+## Consequences
+
+Users can see continuously updated video of a deliberately shared application window in Phoenix Web, while the native viewer observes the same identified HWND even when chat becomes foreground. Closing or minimizing an application reports unavailability rather than pretending a previously stored image is live. Window capture is user-authorized and is not independent computer-control authority. Some minimized, DRM-protected, privileged, or GPU-backed windows cannot be captured with `PrintWindow`. Background Windows input remains subject to the existing safe foreground guard; this change does not introduce a background keyboard-and-mouse actuator.
+
+## Testing
+
+Unit tests cover refusal of whole-screen and tab sources, session-pinned targets, and window-relative coordinate guidance. Desktop Live native Windows contracts and chat UI tests exercise the changed surfaces. A real Paint session on Windows remains necessary to verify the complete interactive workflow end to end.
