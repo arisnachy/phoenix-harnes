@@ -28,7 +28,7 @@ import { installHardnessProtocol, type HardnessPromptRegistrar } from './protoco
 import { installProactivityProtocol } from './proactivity-protocol.ts'
 import { installWakeProtocol } from './wake-protocol.ts'
 import { installHumanPresenceProtocol } from './presence-protocol.ts'
-import { installHumanOSSelfModel } from './humanos-self-model.ts'
+import { installHumanOSSelfModel, type HumanOSPromptRegistrar } from './humanos-self-model.ts'
 import { installInitiativeContextProjection, type InitiativePromptRegistrar } from './initiative-context.ts'
 import { installConnectorProtocol } from './connector-protocol.ts'
 import { BinancePaperBroker } from './binance-paper.ts'
@@ -389,7 +389,7 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
       disposers.push(installWakeProtocol(systemPrompt))
       disposers.push(installHumanPresenceProtocol(systemPrompt))
       disposers.push(installHumanOSSelfModel(
-        systemPrompt,
+        systemPrompt as HardnessPromptRegistrar & HumanOSPromptRegistrar,
         { hardness, tasks: proactivity.engine },
       ))
       disposers.push(installInitiativeContextProjection(
