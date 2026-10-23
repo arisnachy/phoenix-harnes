@@ -60,8 +60,22 @@ describe('HARDNESS source adapters', () => {
     expect(context.tools.get('hardness_run')).toBeDefined()
     expect(handle).not.toHaveBeenCalled()
 
+    const observed = await context.systemPrompt.assemble({
+      agent: { id: 'kira-session', options: { provider: 'test', model: 'model-a' } },
+    } as never)
+    const humanos = observed.contexts.find(item => item.name === 'hardness:humanos-self-model')?.text
+    expect(humanos).toContain('<phoenix_humanos_self_model>')
+    expect(humanos).toContain('"identity":"kira"')
+    expect(humanos).toContain('"scope":"current-agent-and-global-registry"')
+    expect(humanos).not.toContain('model-a')
+    expect(humanos).not.toContain('kira-session')
+
     dispose()
     expect(context.tools.get('hardness_workflow')).toBeUndefined()
+    const afterDispose = await context.systemPrompt.assemble({
+      agent: { id: 'kira-session', options: { provider: 'test', model: 'model-b' } },
+    } as never)
+    expect(afterDispose.contexts.some(item => item.name === 'hardness:humanos-self-model')).toBe(false)
     await context.fiber.dispose()
   })
 

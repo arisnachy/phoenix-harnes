@@ -70,7 +70,7 @@ import {
 import type { ResolvedPiAiProviderProfile } from './config.ts'
 import { CODEX_PROVIDER } from './codex-live-catalog.ts'
 import { codexPlatformFallbackModel, isChatGptAccessJwt, isChatGptAccountJwt } from './codex-platform.ts'
-import { applyMondayCodexMembrane, normalizeCodexToolSchemas, scopeCodexToolsForPaint, normalizeOpenAiFunctionToolPayload, requiresMondayCodexMembrane, requiresObjectRootFunctionSchemas } from './codex-tool-schema.ts'
+import { applyMondayCodexMembrane, normalizeCodexToolSchemas, recoverRejectedCodexFunctionSchema, scopeCodexToolsForPaint, normalizeOpenAiFunctionToolPayload, surfaceRejectedCodexSchemaEvent, requiresMondayCodexMembrane, requiresObjectRootFunctionSchemas } from './codex-tool-schema.ts'
 import { fitGenerateOptionsToContext, toPiContext } from './context.ts'
 import { toStreamChunks } from './stream.ts'
 import { isNonCodexRecoveryModel } from './provider-recovery.ts'
@@ -411,6 +411,7 @@ export class PiAiAdapter extends LlmAdapter {
     options: GenerateOptions,
     snapshot: PiAiSnapshot,
     liveReasoning: LlmModelReasoningInfo | undefined,
+    recoveredSchema = false,
   ): AsyncIterable<StreamChunk> {
     if (options.stop !== undefined) {
       throw new LlmError('llm-pi-ai does not support GenerateOptions.stop', 'UNSUPPORTED_OPTION')
@@ -489,6 +490,7 @@ export class PiAiAdapter extends LlmAdapter {
       : AbortSignal.any([options.signal, consumer.signal])
     const streamIdleTimeoutMs = profile.streamIdleTimeoutMs
     using watchdog = idleWatchdog(upstream, streamIdleTimeoutMs, 'LLM_STREAM_IDLE_TIMEOUT')
+    let emittedChunk = false
 
     try {
       const desiredMaxOutput = options.maxTokens ?? model.maxTokens
@@ -561,7 +563,7 @@ export class PiAiAdapter extends LlmAdapter {
         ? openAIResponsesApi().streamSimple(wireModel, providerContext, streamOptions)
         : snapshot.models.streamSimple(wireModel, providerContext, streamOptions)
       const iterator = toStreamChunks(
-        events,
+        requiresFunctionSchemaProjection ? surfaceRejectedCodexSchemaEvent(events) : events,
         model.contextWindow,
         desiredMaxOutput,
         options.provider === 'openrouter',
@@ -577,6 +579,7 @@ export class PiAiAdapter extends LlmAdapter {
             exhausted = true
             return
           }
+          emittedChunk = true
           yield result.value
         }
       } finally {
@@ -597,6 +600,19 @@ export class PiAiAdapter extends LlmAdapter {
         throw new LlmError('pi-ai request aborted by caller', 'ABORTED', { cause: error })
       }
       const detail = errorChain(error)
+      // Codex can reject one broken *tool definition* before generating any
+      // response, even after normalization (e.g. a deferred MCP catalog). That
+      // is not a failed social campaign action. Quarantine only its exact
+      // function name and make at most one fresh model attempt. Once streaming
+      // has begun, never silently replay a potentially side-effecting turn.
+      if (!emittedChunk && !recoveredSchema
+        && requiresObjectRootFunctionSchemas(options.provider, model.api)) {
+        const recovered = recoverRejectedCodexFunctionSchema(options, detail)
+        if (recovered !== undefined) {
+          yield* this.streamWithSnapshot(recovered, snapshot, liveReasoning, true)
+          return
+        }
+      }
       // pi-ai transports several OpenAI-compatible providers (including the
       // Phoenix Local loopback). Normalize their provider-specific context
       // overflow wording so compaction-basic can repair the durable surface

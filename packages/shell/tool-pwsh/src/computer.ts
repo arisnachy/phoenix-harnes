@@ -536,6 +536,18 @@ async function runEmbeddedBrowserAction(
 }
 
 /**
+ * Preserve the latest selected application for an agent's next desktop action.
+ * @param args - Requested action with any explicitly selected window.
+ * @param pinnedTarget - Verified HWND remembered in this conversation.
+ * @returns The action with the same target until the model selects a different window.
+ */
+export function computerActionWithPinnedTarget(args: ComputerToolArgs, pinnedTarget: string | undefined): ComputerToolArgs {
+  if (pinnedTarget === undefined || args.target !== undefined || args.action === 'focus'
+    || args.action === 'windows' || isEmbeddedBrowserAction(args.action)) return args
+  return { ...args, target: pinnedTarget }
+}
+
+/**
  * Map the existing sandbox authority onto desktop authority.
  * @param mode - Effective sandbox mode for the current session/deployment.
  * @returns Desktop authority that is never wider than the sandbox authority.
@@ -699,6 +711,30 @@ export function validateComputerArgs(args: ComputerToolArgs): void {
 }
 
 /**
+ * Select the exact app that accepted an action before capturing verification evidence.
+ * @param args - Explicitly selected Computer window, if any.
+ * @param details - Driver's observed HWND recorded immediately after the operation.
+ * @returns A pinned HWND or the user-provided selector; undefined for legacy whole-screen capture.
+ */
+export function computerVerificationTarget(args: Pick<ComputerToolArgs, 'target'>, details: string): string | undefined {
+  if (args.target !== undefined) return normalizedDesktopTarget(args.target)
+  const match = /\bhwnd=(0x[0-9a-f]+)\b/iu.exec(details)
+  return match === null ? undefined : 'hwnd:' + match[1]
+}
+
+/**
+ * Explain coordinate mapping for a cropped, window-specific desktop screenshot.
+ * @param label - Existing human-readable screenshot label.
+ * @param target - Selected target when the screenshot is not a full virtual desktop.
+ * @returns Label warning the model to translate local image positions into screen coordinates.
+ */
+export function desktopScreenshotLabel(label: string, target: string | undefined): string {
+  return target === undefined ? label
+    : label + ' (window-only capture: image pixel 0,0 is the top-left of ' + target
+      + '; mouse actions require absolute screen coordinates. Query computer windows for current bounds before clicking.)'
+}
+
+/**
  * Determine whether an action must be followed by a fresh visual observation.
  * @param action - Closed-set Computer Use action.
  * @returns True when the action can change desktop/application state in a way the model must re-observe.
@@ -796,6 +832,25 @@ public static class PhoenixDesktop {
 
   [DllImport("user32.dll")]
   private static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
+
+  [DllImport("user32.dll")]
+  private static extern bool PrintWindow(IntPtr hWnd, IntPtr hdc, uint flags);
+
+  public static int[] CaptureBounds(IntPtr hWnd) {
+    if (hWnd == IntPtr.Zero || !IsWindow(hWnd) || IsIconic(hWnd))
+      throw new InvalidOperationException("selected screenshot window is unavailable or minimized");
+    RECT rect;
+    if (!GetWindowRect(hWnd, out rect)) throw new InvalidOperationException("selected window has no bounds");
+    int width = rect.Right - rect.Left;
+    int height = rect.Bottom - rect.Top;
+    if (width <= 0 || height <= 0 || (long)width * height > 16000000L)
+      throw new InvalidOperationException("selected window dimensions are not capturable");
+    return new int[] { width, height };
+  }
+
+  public static bool SnapshotWindow(IntPtr hWnd, IntPtr hdc) {
+    return IsWindow(hWnd) && !IsIconic(hWnd) && PrintWindow(hWnd, hdc, 2);
+  }
 
   [StructLayout(LayoutKind.Sequential)]
   private struct RECT {
@@ -1128,12 +1183,27 @@ switch ($action) {
   'screenshot' {
     Add-Type -AssemblyName System.Windows.Forms
     Add-Type -AssemblyName System.Drawing
-    $bounds = [System.Windows.Forms.SystemInformation]::VirtualScreen
-    if ($bounds.Width -le 0 -or $bounds.Height -le 0) { throw 'desktop has no capturable virtual screen' }
-    $bitmap = New-Object System.Drawing.Bitmap -ArgumentList $bounds.Width, $bounds.Height
+    if ($target) {
+      # PrintWindow observes the exact selected HWND even when Phoenix chat has focus.
+      # Fail closed rather than returning the foreground/another conversation.
+      $hwnd = [PhoenixDesktop]::ResolveWindow($target)
+      $size = [PhoenixDesktop]::CaptureBounds($hwnd)
+      $bitmap = New-Object System.Drawing.Bitmap -ArgumentList $size[0], $size[1]
+    } else {
+      $bounds = [System.Windows.Forms.SystemInformation]::VirtualScreen
+      if ($bounds.Width -le 0 -or $bounds.Height -le 0) { throw 'desktop has no capturable virtual screen' }
+      $bitmap = New-Object System.Drawing.Bitmap -ArgumentList $bounds.Width, $bounds.Height
+    }
     $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
     try {
-      $graphics.CopyFromScreen($bounds.Left, $bounds.Top, 0, 0, $bitmap.Size, [System.Drawing.CopyPixelOperation]::SourceCopy)
+      if ($target) {
+        $hdc = $graphics.GetHdc()
+        try {
+          if (-not [PhoenixDesktop]::SnapshotWindow($hwnd, $hdc)) { throw 'selected window refused PrintWindow capture' }
+        } finally { $graphics.ReleaseHdc($hdc) }
+      } else {
+        $graphics.CopyFromScreen($bounds.Left, $bounds.Top, 0, 0, $bitmap.Size, [System.Drawing.CopyPixelOperation]::SourceCopy)
+      }
       $stream = New-Object System.IO.MemoryStream
       try {
         $bitmap.Save($stream, [System.Drawing.Imaging.ImageFormat]::Png)
@@ -1379,7 +1449,7 @@ export async function runWindowsComputerAction(args: ComputerToolArgs, signal?: 
 
   const descriptor = await readDesktopControlDescriptorIfAvailable()
   if (descriptor?.schema === LEGACY_DESKTOP_CONTROL_SCHEMA
-    && (args.action === 'windows' || args.action === 'screenshot')) {
+    && (args.action === 'windows' || (args.action === 'screenshot' && args.target === undefined))) {
     try {
       const nativeObservation = await runLegacyDesktopObservation(args, descriptor, signal)
       if (nativeObservation.length > 0) return nativeObservation
@@ -1683,6 +1753,8 @@ export function registerComputerTool(ctx: Context): void {
   if (process.platform !== 'win32') return
   const sandboxPolicy: SandboxPolicyService | undefined = ctx.get('sandboxPolicy')
   const deploymentDefault = ctx.shell.sandboxMode
+  // Weak keys keep window selectors session-owned without a global desktop lease leak.
+  const selectedDesktopTargets = new WeakMap<object, string>()
 
   // Monotonic registry guard covers direct tool calls AND nested run_code
   // sub-dispatches, including external Chrome/Browser MCPs. No prompt-only lock.
@@ -1764,25 +1836,41 @@ export function registerComputerTool(ctx: Context): void {
         && nativeDesktopTurnActive(session.events)) {
         throw new Error('Native Windows task: do not open MiniBrowser or inspect a web page; use computer windows/focus/screenshot.')
       }
+      const effectiveArgs = computerActionWithPinnedTarget(
+        args, session === undefined ? undefined : selectedDesktopTargets.get(session),
+      )
       const policy = sandboxPolicy?.resolve(session === undefined ? {} : { session })
       const sandboxMode = policy?.mode ?? deploymentDefault
-      await authorizeComputerAction(ctx, exec, args, sandboxMode)
+      await authorizeComputerAction(ctx, exec, effectiveArgs, sandboxMode)
       if (!isEmbeddedBrowserAction(args.action) && args.action !== 'windows') {
         const owner = String(exec.agent?.session.header.id ?? '')
-        if (owner.length > 0) await prepareDesktopLivePreview(args, owner, exec.signal)
+        if (owner.length > 0) await prepareDesktopLivePreview(effectiveArgs, owner, exec.signal)
       }
 
       const output = args.action === 'browser_login'
-        ? await runOriginBoundBrowserLogin(ctx, args, exec.signal)
-        : await runWindowsComputerAction(args, exec.signal)
+        ? await runOriginBoundBrowserLogin(ctx, effectiveArgs, exec.signal)
+        : await runWindowsComputerAction(effectiveArgs, exec.signal)
+      if (session !== undefined && !isEmbeddedBrowserAction(args.action)
+        && args.action !== 'windows' && args.action !== 'screenshot') {
+        const observed = computerVerificationTarget({}, output)
+        const selected = observed ?? normalizedDesktopTarget(effectiveArgs.target)
+        if (selected !== undefined) selectedDesktopTargets.set(session, selected)
+      }
       let postScreenshot = false
 
       if (args.action === 'screenshot') {
-        postScreenshot = await attachDesktopScreenshot(ctx, exec, output, 'PHOENIX desktop screenshot')
+        postScreenshot = await attachDesktopScreenshot(ctx, exec, output,
+          desktopScreenshotLabel('PHOENIX desktop screenshot', effectiveArgs.target))
       } else if (shouldCaptureAfterAction(args.action)) {
         await delay(POST_ACTION_SETTLE_MS, exec.signal)
-        const fresh = await runWindowsComputerAction({ action: 'screenshot' }, exec.signal)
-        postScreenshot = await attachDesktopScreenshot(ctx, exec, fresh, `PHOENIX post-${args.action} desktop screenshot`)
+        // Bind the verification image to the window that accepted the action,
+        // not whatever application the user foregrounds while we capture it.
+        const screenshotTarget = computerVerificationTarget(effectiveArgs, output)
+        const fresh = await runWindowsComputerAction({
+          action: 'screenshot', ...(screenshotTarget === undefined ? {} : { target: screenshotTarget }),
+        }, exec.signal)
+        postScreenshot = await attachDesktopScreenshot(ctx, exec, fresh,
+          desktopScreenshotLabel(`PHOENIX post-${args.action} desktop screenshot`, screenshotTarget))
       }
 
       return {

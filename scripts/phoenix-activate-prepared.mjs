@@ -272,8 +272,15 @@ function activate() {
     smoke(root, prepared.mode)
     clearFile(preparedPath)
     clearFile(requestPath)
-    writeState(root, { status: 'updated', phase: replacing ? 'realigned' : 'complete', previous: current, current: target, target })
-    console.error(`[PHOENIX UPDATE] activation complete at ${target.slice(0, 12)}.`)
+    // Compiling and smoke-testing are not proof that the replacement Host
+    // actually booted. The external supervisor owns the healthy checkpoint.
+    const awaitingHost = process.env.PHOENIX_UPDATE_SUPERVISED === '1'
+    writeState(root, {
+      status: awaitingHost ? 'restarting' : 'updated',
+      phase: awaitingHost ? 'host-health' : replacing ? 'realigned' : 'complete',
+      previous: current, current: target, target,
+    })
+    console.error(`[PHOENIX UPDATE] activation prepared at ${target.slice(0, 12)}; ${awaitingHost ? 'awaiting verified Host health.' : 'unsupervised activation complete.'}`)
     return 0
   } catch (error) {
     clearFile(requestPath)

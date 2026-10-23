@@ -88,4 +88,15 @@ describe('prepared client self-update contract', () => {
     expect(supervisor).toContain('restoreActiveRuntime()')
     expect(supervisor).toContain('cwd: root,')
   })
+  it('reports activation only after the new supervised Host health checkpoint', () => {
+    const activator = source('scripts/phoenix-activate-prepared.mjs')
+    const supervisor = source('scripts/phoenix-windows-supervisor.mjs')
+    expect(activator).toContain("const awaitingHost = process.env.PHOENIX_UPDATE_SUPERVISED === '1'")
+    expect(activator).toContain("status: awaitingHost ? 'restarting' : 'updated'")
+    expect(supervisor).toContain("gitValue(runtimeRoot, ['rev-parse', 'HEAD']) === target")
+    expect(supervisor).toContain("recordPhoenixUpdateStep(stateFile, 'health-check', 'ok', target, 0)")
+    expect(supervisor).toContain("...updateState, status: 'updated', phase: 'complete'")
+    expect(supervisor).toContain("status: 'error', phase: 'runtime-activation'")
+  })
+
 })
