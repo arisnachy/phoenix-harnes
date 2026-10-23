@@ -32,3 +32,23 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Verify HumanOS model and registration
         run: pnpm exec vitest run packages/hardness/adapters/tests/humanos-self-model.spec.ts packages/hardness/adapters/tests/adapters.spec.ts packages/hardness/adapters/tests/research-publish.spec.ts packages/client/ui-workspace/tests/cleanup.client.spec.ts apps/cli/tests/blender-mcp-config.spec.ts packages/bundle/web-app/tests/trusted-hosts.spec.ts
+
+      - name: Produce canonical catalog outputs for CI repair
+        if: always()
+        run: |
+          pnpm run gen-client-catalog
+          pnpm run gen-persistence-catalog
+          node --input-type=module - <<'JS'
+          import fs from 'node:fs'
+          const paths = [
+            'packages/extensions/cordis-client-runner/src/client/slot-catalog.ts',
+            'docs/persistence-catalog.md',
+          ]
+          for (const [index, path] of paths.entries()) {
+            const encoded = fs.readFileSync(path).toString('base64')
+            console.log('GENFILE ' + index + ' ' + path + ' ' + encoded.length)
+            for (let offset = 0; offset < encoded.length; offset += 3000) {
+              console.log('GENCHUNK ' + index + ' ' + (offset / 3000) + ' ' + encoded.slice(offset, offset + 3000))
+            }
+          }
+          JS
