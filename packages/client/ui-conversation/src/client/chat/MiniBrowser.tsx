@@ -231,7 +231,7 @@ function youtubeId(raw: string | undefined): string | undefined {
 }
 /** Human navigation stays in the user-controlled MiniBrowser, never in the model's context. */
 export function MiniBrowser({
-  sessionId, requested = false, active = true, initialTabId, onActivate, autoScroll = true,
+  sessionId, requested = false, active = true, initialTabId, sourceUrl, onActivate, autoScroll = true,
   onPageChange, onSecureLoginRequest, onSavedAccessNotice, secureLoginRequestEpoch = 0,
 }: {
   sessionId: string
@@ -239,6 +239,8 @@ export function MiniBrowser({
   active?: boolean
   /** Bind this card to a child Chromium call's target when one was recorded. */
   initialTabId?: string
+  /** Public HTTPS source seen in a real fetch call; Chromium visits it independently. */
+  sourceUrl?: string
   onActivate?: () => void
   autoScroll?: boolean
   onPageChange?: (page: { title: string; url: string } | null) => void
@@ -281,6 +283,7 @@ export function MiniBrowser({
   const initialTargetTabId = initialTabId?.trim() === '' ? undefined : initialTabId?.trim()
   const followGlobal = useRef(initialTargetTabId === undefined)
   const appliedInitialTarget = useRef(initialTargetTabId)
+  const mirroredResearchUrl = useRef<string | undefined>(undefined)
   // Each card is bound to the Chromium target it originally displayed.
   // New browser requests never overwrite prior cards with the latest page.
   const cardTabId = useRef<string | undefined>(initialTargetTabId)
@@ -657,6 +660,16 @@ export function MiniBrowser({
       window.clearInterval(timer)
     }
   }, [active, dismissed, initialTargetTabId, requested, sessionId])
+
+  useEffect(() => {
+    if (!active || !requested || !snapshot.available || sourceUrl === undefined) return
+    // The HTTP fetch and Chrome navigation are distinct operations. Follow the
+    // latest public source only once per URL: polling, re-renders, or a failure
+    // must never replay navigation over the reader's subsequent manual actions.
+    if (mirroredResearchUrl.current === sourceUrl) return
+    mirroredResearchUrl.current = sourceUrl
+    if (snapshot.url !== sourceUrl) void run({ type: 'open', url: sourceUrl })
+  }, [active, requested, snapshot.available, snapshot.url, sourceUrl, run])
 
   useEffect(() => {
     if (!active || !show || !hasPage || collapsed || playingVideo) return
