@@ -24,6 +24,31 @@ describe('phoenix_watch_create', () => {
     }, {} as never)).rejects.toThrow(/at least 60/)
   })
 
+  it('denies watch creation on a read-only human turn before persisting anything', async () => {
+    const taskEngine = engine()
+    const tool = createProactivityWatchTool(taskEngine)
+    const args = {
+      title: 'Forbidden watch',
+      condition: 'A status changes',
+      notificationInstruction: 'Notify',
+      runAt: '2026-09-19T12:00:00.000Z',
+      everyMinutes: 60,
+      requestedByUser: true,
+    }
+    const events = [{
+      type: 'user/message',
+      data: { source: { kind: 'user' }, content: [{ type: 'text', text: 'Revisa las tareas. No ejecutes herramientas de creación ni modifiques nada.' }] },
+    }]
+    const exec = { agent: { id: 'agent-1', session: { events } } } as never
+    await expect(tool.execute(args, exec)).rejects.toThrow(/Read-only user instruction/)
+    expect(await taskEngine.list()).toHaveLength(0)
+    events.push({
+      type: 'user/message',
+      data: { source: { kind: 'user' }, content: [{ type: 'text', text: 'Ahora crea una vigilancia para ese estado.' }] },
+    })
+    expect(await tool.execute(args, exec)).toMatchObject({ id: 'watch-1', status: 'scheduled' })
+  })
+
   it('creates a user watch bound to the creating agent', async () => {
     const taskEngine = engine()
     const tool = createProactivityWatchTool(taskEngine)

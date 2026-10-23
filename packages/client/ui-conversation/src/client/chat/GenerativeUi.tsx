@@ -12,6 +12,12 @@ const MAX_UI_BLOCKS = 6
 const MAX_TEXT = 1200
 const MAX_SHORT_TEXT = 180
 
+// Stable, content-free diagnostic codes; never log rejected model payloads.
+type UiDiagnosticCode = 'UI_JSON_INVALID' | 'UI_SCHEMA_REJECTED' | 'UI_LIMIT_EXCEEDED' | 'UI_INCOMPLETE'
+function uiFailure(code: UiDiagnosticCode): GenerativeUiSegment {
+  return { kind: 'notice', text: `Esta interfaz no pudo mostrarse (código ${code}). Pide a Kira que la actualice.` }
+}
+
 type Status = 'positive' | 'neutral' | 'warning' | 'negative' | 'info'
 
 type EventSide = {
@@ -271,16 +277,17 @@ export function splitGenerativeUiText(
     const raw = match[0]
     const body = match[1]
     let parsed: GenerativeUiBlock | null = null
+    let rejected: UiDiagnosticCode = rendered >= MAX_UI_BLOCKS ? 'UI_LIMIT_EXCEEDED' : 'UI_SCHEMA_REJECTED'
     if (rendered < MAX_UI_BLOCKS && body !== undefined) {
       try {
         parsed = parseGenerativeUiBlock(JSON.parse(body))
       } catch {
-        parsed = null
+        rejected = 'UI_JSON_INVALID'
       }
     }
     if (parsed === null) {
       if (/"component"\s*:\s*"(?:ui_canvas|scale_form|spreadsheet|geo_map|scene_map|diagram|status_pill|agent_line)"/.test(body ?? ''))
-        segments.push({ kind: 'notice', text: 'Esta interfaz no pudo mostrarse. Pide a Kira que la actualice.' })
+        segments.push(uiFailure(rejected))
       else appendMarkdown(segments, raw)
     }
     else {
@@ -350,14 +357,15 @@ function expandRawCanvases(segments: GenerativeUiSegment[], streaming: boolean):
         break
       }
       if (end === -1) {
-        result.push({ kind: 'notice', text: 'La interfaz llegó incompleta. Pide a Kira que la actualice.' })
+        result.push(uiFailure('UI_INCOMPLETE'))
         cursor = source.length
         break
       }
       let block: GenerativeUiBlock | null = null
-      try { block = parseGenerativeUiBlock(JSON.parse(source.slice(start, end))) } catch { /* invalid UI */ }
+      let rejected: UiDiagnosticCode = 'UI_SCHEMA_REJECTED'
+      try { block = parseGenerativeUiBlock(JSON.parse(source.slice(start, end))) } catch { rejected = 'UI_JSON_INVALID' }
       if (block === null)
-        result.push({ kind: 'notice', text: 'Esta interfaz no pudo mostrarse. Pide a Kira que la actualice.' })
+        result.push(uiFailure(rejected))
       else {
         result.push({ kind: 'ui', block })
         count += 1

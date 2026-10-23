@@ -784,13 +784,27 @@ function sessionAiSnapshot(
       try {
         const measured = measure(agent.session)
         const total = numericValue(measured.totalTokens)
-        if (total !== null && total >= 0) currentContextTokens = total
+        // The meter estimates an accumulated surface, not the provider's live
+        // input count. Preserve the raw estimate for diagnostics while keeping
+        // the displayed window occupancy bounded to the exact active model.
+        if (total !== null && total >= 0) {
+          currentContextTokens = contextWindowTokens === null ? total : Math.min(total, contextWindowTokens)
+        }
         const baseline = asRecord(measured.baseline)
         tokenMeasurement = {
           source: 'tokenMeter.measure(active-session)',
           logRevision: numericValue(measured.logRevision),
           baselineKind: typeof baseline?.kind === 'string' ? baseline.kind : null,
           surfaceTokens: numericValue(measured.surfaceTokens),
+          rawEstimatedTotalTokens: total,
+          overWindowEstimateTokens: total !== null && contextWindowTokens !== null
+            ? Math.max(0, total - contextWindowTokens)
+            : null,
+          occupancyKind: contextWindowTokens === null
+            ? 'raw-estimate-window-unknown'
+            : total !== null && total > contextWindowTokens
+              ? 'bounded-display-raw-estimate-over-window'
+              : 'bounded-display-estimate',
         }
       } catch {
         tokenMeasurement = {
@@ -827,7 +841,7 @@ function sessionAiSnapshot(
     outputReservationTokens,
     inputHeadroomAfterOutputReserveTokens,
     tokenMeasurement,
-    precision: 'remainingContextTokens = contextWindowTokens - currentContextTokens; inputHeadroomAfterOutputReserveTokens additionally subtracts the agent maxTokens reservation when explicitly configured',
+    precision: 'currentContextTokens is a bounded display estimate, not provider-confirmed live usage. tokenMeasurement.rawEstimatedTotalTokens preserves the unbounded estimate and overWindowEstimateTokens reports its excess only against exact active-model metadata. Remaining/headroom are estimated, not provider guarantees.',
   }
 }
 
