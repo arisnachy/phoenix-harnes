@@ -817,7 +817,7 @@ describe('mapStopReason / mapUsage', () => {
     }), undefined, undefined, false, true)).toMatchObject({
       kind: 'error', failure: { code: 'AUTH' },
     })
-    const chunks = await collect(toStreamChunks(feed({ type: 'error', error: generic }), undefined, undefined, false, true))
+    const chunks = await collect(toStreamChunks(feed({ type: 'error', reason: 'error', error: generic }), undefined, undefined, false, true))
     expect(chunks.findLast(chunk => chunk.type === 'finish')).toMatchObject({
       reason: { kind: 'error', failure: { code: RECOVERABLE_PI_AI_ERROR_CODE } },
     })
