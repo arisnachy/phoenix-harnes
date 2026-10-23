@@ -10,6 +10,10 @@ on:
       - 'scripts/gen-cordis-catalog.ts'
       - '.github/workflows/humanos-focused.yml'
 
+concurrency:
+  group: humanos-focused-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
