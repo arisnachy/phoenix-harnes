@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@phoenix-ai/cordis'
-import SystemPrompt, { renderPrompt } from '@phoenix-ai/dsh-system-prompt'
+import SystemPrompt, { renderContextSnapshot, renderPrompt } from '@phoenix-ai/dsh-system-prompt'
 import ToolRuntimePlugin from '@phoenix-ai/dsh-tools'
 import SkillRegistryPlugin from '@phoenix-ai/dsh-skill'
 import HardnessRegistry from '../../hardness/src/index.ts'
@@ -60,8 +60,22 @@ describe('HARDNESS source adapters', () => {
     expect(context.tools.get('hardness_run')).toBeDefined()
     expect(handle).not.toHaveBeenCalled()
 
+    const observed = await context.systemPrompt.assemble({
+      agent: { id: 'kira-session', options: { provider: 'test', model: 'model-a' } },
+    } as never)
+    const humanos = renderContextSnapshot(observed)
+    expect(humanos).toContain('<phoenix_humanos_self_model>')
+    expect(humanos).toContain('"identity":"kira"')
+    expect(humanos).toContain('"scope":"current-agent-and-global-registry"')
+    expect(humanos).not.toContain('model-a')
+    expect(humanos).not.toContain('kira-session')
+
     dispose()
     expect(context.tools.get('hardness_workflow')).toBeUndefined()
+    const afterDispose = await context.systemPrompt.assemble({
+      agent: { id: 'kira-session', options: { provider: 'test', model: 'model-b' } },
+    } as never)
+    expect(renderContextSnapshot(afterDispose)).not.toContain('<phoenix_humanos_self_model>')
     await context.fiber.dispose()
   })
 
