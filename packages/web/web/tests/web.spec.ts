@@ -122,7 +122,6 @@ describe('WebRuntime execution resolution', () => {
     await expect(web.search({ query: 'q' })).resolves.toMatchObject({ content: 'browser' })
   })
 
-
   it('falls back to keyless search when OpenRouter credentials are missing', async () => {
     const { web } = await mountWeb({ searchProvider: 'openrouter', searchFallbackProviders: ['free-html'] })
     web.registerSearchProvider(makeSearchProvider('openrouter', available, async () => {
