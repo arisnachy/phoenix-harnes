@@ -57,7 +57,14 @@ export const managedRuntimeService = 'openclawManagedRuntime'
 /** Register one adapter per Cordis fiber; disposal unregisters that exact instance. */
 export async function apply(ctx: Context, config: Config = {}): Promise<void> {
   const host = ctx.get(managedRuntimeService) as ManagedOpenClawRuntimeHost | undefined
-  const managed = config.url === undefined && host !== undefined ? await createManagedOpenClawConfig(host) : undefined
-  const overrides = Object.fromEntries(Object.entries(config).filter(([, value]) => value !== undefined)) as Partial<Config>
-  registerOpenClawExecutionAdapter(ctx, managed === undefined ? config : { ...managed, ...overrides })
+  // Plugin YAML (including a pasted function or policy attestation) is never
+  // execution authority. Only a live trusted Host can create the native route.
+  // A missing Host fails closed even when a configured endpoint is reachable.
+  const managed = host === undefined ? undefined : await createManagedOpenClawConfig(host)
+  registerOpenClawExecutionAdapter(ctx, managed === undefined ? {} : {
+    ...managed,
+    // These bounded transport preferences do not change route or permissions.
+    ...(config.timeoutMs === undefined ? {} : { timeoutMs: config.timeoutMs }),
+    ...(config.maxFrameBytes === undefined ? {} : { maxFrameBytes: config.maxFrameBytes }),
+  })
 }
