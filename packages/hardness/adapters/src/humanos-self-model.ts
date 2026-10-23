@@ -12,6 +12,8 @@ export interface HumanOSAssemblyContext {
   readonly agent?: {
     readonly id?: unknown
     readonly options?: { readonly provider?: string; readonly model?: string }
+    /** Existing session log; only own tool-result envelopes are inspected. */
+    readonly session?: { readonly events?: readonly { readonly type: string; readonly data?: unknown }[] }
   }
 }
 
@@ -42,6 +44,14 @@ export interface HumanOSSelfModel {
     readonly capabilitiesWithoutCurrentEvidence: number
     readonly capabilitiesWithConflictingEvidence: number
   }
+  /** Observed session results, NOT formally verified capabilities. */
+  readonly toolActivity: {
+    readonly inspectedResults: number
+    readonly succeeded: number
+    readonly failed: number
+    readonly unclassified: number
+    readonly sampleLimit: 128
+  }
   readonly tasks: {
     readonly scheduled: number
     readonly running: number
@@ -55,6 +65,7 @@ export interface HumanOSSelfModel {
 /** Limit registry observation cost even when providers publish very large catalogs. */
 const MAX_VERIFICATION_CAPABILITIES = 64
 const MAX_EVIDENCE_PER_CAPABILITY = 12
+const MAX_SESSION_TOOL_RESULTS = 128
 
 function selected(value: string | undefined): boolean {
   return typeof value === 'string' && value.trim().length > 0
@@ -153,6 +164,35 @@ export function inspectHumanOSSelfModel(
     if (current === 0) verification.capabilitiesWithoutCurrentEvidence += 1
     if (passes > 0 && failures > 0) verification.capabilitiesWithConflictingEvidence += 1
   }
+  // Read only this agent's durable session events. Tool execution success is
+  // NOT an independently verified HARDNESS capability and must never promote a
+  // descriptor. Ignore nested payloads, input arguments, identities, and text.
+  const toolActivity = {
+    inspectedResults: 0,
+    succeeded: 0,
+    failed: 0,
+    unclassified: 0,
+    sampleLimit: MAX_SESSION_TOOL_RESULTS as 128,
+  }
+  const entries = assembly.agent?.session?.events
+    ?.filter(event => event.type === 'tool/result')
+    .slice(-MAX_SESSION_TOOL_RESULTS) ?? []
+  for (const event of entries) {
+    const envelope = event.data
+    const data = typeof envelope === 'object' && envelope !== null
+      ? envelope as Record<string, unknown> : undefined
+    const message = data?.message
+    const record = typeof message === 'object' && message !== null
+      ? message as Record<string, unknown> : undefined
+    const blocks = record?.content
+    const block = Array.isArray(blocks) ? blocks[0] : undefined
+    if (typeof block !== 'object' || block === null || (block as Record<string, unknown>).type !== 'tool-result') continue
+    toolActivity.inspectedResults += 1
+    const result = block as Record<string, unknown>
+    if (result.isError === true) toolActivity.failed += 1
+    else if (result.isError === false) toolActivity.succeeded += 1
+    else toolActivity.unclassified += 1
+  }
   const tasks = { scheduled: 0, running: 0, failed: 0, paused: 0, due: 0 }
   for (const task of sources.tasks.peek({ now })) {
     if (task.targetAgentId !== undefined && task.targetAgentId !== id) continue
@@ -184,6 +224,7 @@ export function inspectHumanOSSelfModel(
       deprecated: status.deprecated,
     },
     verification,
+    toolActivity,
     tasks,
     attention: tasks.failed > 0
       ? 'inspect-failure'
@@ -214,7 +255,7 @@ export function renderHumanOSSelfModel(
     'Read-only operational self-observation. This is a registry snapshot, not subjective consciousness, live tool availability, proof of success, permission, or a reason to start work.',
     'HARDNESS descriptor counts are global metadata, not current-agent access. The verification sample prioritizes records for current descriptor versions and can be inspected page by page; other pages remain unexamined. Verification outcome counts describe a bounded sample of existing recorded cases and exact descriptor versions, not live ability, statistical probabilities or model confidence.',
     'A failed, denied, missing, stale or contradictory verification case calls for task-specific rechecking, not an automatic tool retry or permission escalation. Resolve the exact capability with the existing permission gates.',
-    'Task counts include only currently visible global and current-agent tasks. Other agents and unrevealed surprises are excluded. Do not infer task titles or details from counts.',
+    'toolActivity reports only bounded current-session tool-result envelopes; successful tool calls do not count as formal HARDNESS verification. Task counts include only currently visible global and current-agent tasks. Other agents and unrevealed surprises are excluded. Do not infer task titles or details from counts.',
     JSON.stringify(view),
     'Silently use this only when relevant. Check actual evidence before claiming ability or completion. If a failed task matters to the present objective, diagnose and recover through the existing governed mission runtime; otherwise do not interrupt the user.',
     '</phoenix_humanos_self_model>',
