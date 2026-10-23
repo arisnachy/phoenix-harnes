@@ -74,6 +74,29 @@ function targetAgent(exec: ToolRunContext): string | undefined {
   return exec.agent?.id
 }
 
+/**
+ * Enforce an explicit read-only instruction from the session's last HUMAN
+ * message at the mutation boundary, independently of model-supplied
+ * requestedByUser flags. A missing human directive is not authorization
+ * evidence; the other established permission gates remain authoritative.
+ */
+function assertHumanTurnAllowsMutation(exec: ToolRunContext): void {
+  const events = exec.agent?.session.events
+  if (events === undefined) return
+  for (let index = events.length - 1; index >= 0; index--) {
+    const event = events[index]
+    if (event?.type !== 'user/message' || event.data.source.kind !== 'user') continue
+    const instruction = event.data.content
+      .filter(block => block.type === 'text')
+      .map(block => block.text)
+      .join(' ')
+    if (/(?:\b(?:solo|sólo|solamente|únicamente)\s+(?:de\s+)?lectura\b|\bno\s+(?:ejecutes?|crees?|programes?|modifiques?|envíes?|escribas?|reactives?|instales?|alteres?)\b|\bsin\s+(?:hacer\s+)?(?:cambios|modificaciones)\b)/iu.test(instruction)) {
+      throw new ToolArgsError(['Read-only user instruction forbids persistent task or watch mutations'])
+    }
+    return
+  }
+}
+
 function normalizedEmail(value: string | undefined): string | undefined {
   if (value === undefined) return undefined
   const trimmed = value.trim()
@@ -180,6 +203,7 @@ export function createProactivityCreateTool(
       }],
     },
     async execute(args, exec) {
+      assertHumanTurnAllowsMutation(exec)
       const schedule = recurrence(args)
       const prepareLeadMs = minutesToMs(args.prepareLeadMinutes, 'prepareLeadMinutes')
       if ((args.preparationInstruction === undefined) !== (prepareLeadMs === undefined)) {
@@ -242,6 +266,7 @@ export function createProactivityWatchTool(engine: ProactivityEngine): ToolDefin
       render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
     },
     async execute(args, exec) {
+      assertHumanTurnAllowsMutation(exec)
       const everyMs = minutesToMs(args.everyMinutes, 'everyMinutes')
       if (everyMs === undefined || everyMs < 60 * 60_000) {
         throw new ToolArgsError(['everyMinutes must be at least 60 for condition watches'])
@@ -309,7 +334,10 @@ function managementTool(
       schema: { type: 'object', additionalProperties: true },
       render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
     },
-    async execute(args) { return taskView(await operation(args.id)) },
+    async execute(args, exec) {
+      assertHumanTurnAllowsMutation(exec)
+      return taskView(await operation(args.id))
+    },
     presentCall(args) { return { card: 'generic', title: `${verb} task`, kind: 'execute', rawInput: args.id } },
   })
 }
