@@ -59,6 +59,37 @@ describe('Phoenix HumanOS grounded self-model', () => {
     expect(text).not.toContain('session-b')
   })
 
+  it('prioritizes due work without treating old completed tasks as obligations', () => {
+    const input = sources(['verified'], [
+      { status: 'completed', targetAgentId: 'session-a' },
+      { status: 'cancelled', targetAgentId: 'session-a' },
+      { status: 'scheduled', targetAgentId: 'session-a', nextRunAt: '2026-10-22T19:00:00.000Z' },
+    ])
+    const model = inspectHumanOSSelfModel(input, scoped, time)
+    expect(model?.tasks).toEqual({ scheduled: 1, running: 0, failed: 0, paused: 0, due: 1 })
+    expect(model?.attention).toBe('check-due-work')
+  })
+
+  it('preserves Kira identity across model switches without exposing model ids', () => {
+    const input = sources(['verified'])
+    const a = renderHumanOSSelfModel(input, {
+      agent: { id: 'session-a', options: { provider: 'vendor-one', model: 'model-one' } },
+    }, time)
+    const b = renderHumanOSSelfModel(input, {
+      agent: { id: 'session-a', options: { provider: 'vendor-two', model: 'model-two' } },
+    }, time)
+    expect(a).toBe(b)
+    expect(a).toContain('"identity":"kira"')
+    expect(a).not.toContain('vendor-one')
+    expect(a).not.toContain('model-one')
+    const unselected = inspectHumanOSSelfModel(input, {
+      agent: { id: 'session-a', options: { provider: ' ', model: '' } },
+    }, time)
+    expect(unselected?.modelSelection).toEqual({ providerSpecified: false, modelSpecified: false })
+    expect(inspectHumanOSSelfModel(input, { agent: { id: 'session-a' } }, time)?.modelSelection)
+      .toEqual({ providerSpecified: false, modelSpecified: false })
+  })
+
   it('does not project operational state outside an agent scope', () => {
     const current = sources(['verified'])
     expect(inspectHumanOSSelfModel(current, {}, time)).toBeUndefined()
