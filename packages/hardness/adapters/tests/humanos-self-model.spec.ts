@@ -2,14 +2,22 @@ import { describe, expect, it, vi } from 'vitest'
 import { inspectHumanOSSelfModel, installHumanOSSelfModel, renderHumanOSSelfModel } from '../src/humanos-self-model.ts'
 import type { HumanOSAssemblyContext, HumanOSObservationSources } from '../src/humanos-self-model.ts'
 
+type TestEvidence = { readonly descriptorVersion: string; readonly outcome: 'passed' | 'failed' | 'denied' }
+
 function sources(
   statuses: readonly string[],
   tasks: readonly Record<string, unknown>[] = [],
+  evidence: Readonly<Record<string, readonly TestEvidence[]>> = {},
 ): HumanOSObservationSources {
   return {
-    hardness: { list: () => statuses.map((status, index) => ({
-      status, id: `cap-${index}`, name: `never disclose secret-${index}`,
-    })) },
+    hardness: {
+      list: () => statuses.map((status, index) => ({
+        status, id: `cap-${index}`, version: 'v1', name: `never disclose secret-${index}`,
+      })),
+      evidenceFor: (id: string) => (evidence[id] ?? []).map((item, index) => ({
+        ...item, id: `${id}-proof-${index}`, capabilityId: id, inputSummary: 'secret fixture',
+      })),
+    },
     tasks: { peek: () => tasks },
   } as unknown as HumanOSObservationSources
 }
@@ -36,9 +44,52 @@ describe('Phoenix HumanOS grounded self-model', () => {
     })
     const text = renderHumanOSSelfModel(sources(['verified']), scoped, time)
     expect(text).toContain('not subjective consciousness, live tool availability')
-    expect(text).toContain('Resolve and verify the exact tool')
+    expect(text).toContain('Resolve the exact capability')
     expect(text).not.toContain('secret-0')
     expect(text).not.toContain('model-name')
+  })
+
+  it('calibrates self-knowledge using versioned success, failure and denial evidence', () => {
+    const input = sources(['verified', 'testing', 'broken', 'verified'], [], {
+      'cap-0': [
+        { descriptorVersion: 'v0', outcome: 'passed' },
+        { descriptorVersion: 'v1', outcome: 'passed' },
+        { descriptorVersion: 'v1', outcome: 'failed' },
+      ],
+      'cap-1': [{ descriptorVersion: 'v1', outcome: 'denied' }],
+      'cap-2': [{ descriptorVersion: 'v0', outcome: 'failed' }],
+    })
+    const result = inspectHumanOSSelfModel(input, scoped, time)
+    expect(result?.verification).toEqual({
+      examinedCapabilities: 4, unexaminedCapabilities: 0, currentPasses: 1, currentFailures: 1,
+      currentDenials: 1, outdatedVersionRecords: 2, capabilitiesWithoutCurrentEvidence: 2,
+      capabilitiesWithConflictingEvidence: 1,
+    })
+    const rendered = renderHumanOSSelfModel(input, scoped, time)
+    expect(rendered).not.toContain('secret fixture')
+    expect(rendered).not.toContain('cap-0')
+    expect(rendered).not.toContain('v1')
+  })
+
+  it('bounds verification work and explicitly discloses unexamined capabilities', () => {
+    const consulted: string[] = []
+    const input = sources(Array.from({ length: 70 }, () => 'verified'))
+    const instrumented: HumanOSObservationSources = {
+      ...input,
+      hardness: {
+        list: input.hardness.list,
+        evidenceFor: (id) => {
+          consulted.push(id)
+          return input.hardness.evidenceFor(id)
+        },
+      },
+    }
+    const model = inspectHumanOSSelfModel(instrumented, scoped, time)
+    expect(model?.atlas.registered).toBe(70)
+    expect(model?.verification.examinedCapabilities).toBe(64)
+    expect(model?.verification.unexaminedCapabilities).toBe(6)
+    expect(model?.verification.capabilitiesWithoutCurrentEvidence).toBe(64)
+    expect(consulted).toHaveLength(64)
   })
 
   it('filters other-agent tasks and counts only visible agent/global tasks', () => {
