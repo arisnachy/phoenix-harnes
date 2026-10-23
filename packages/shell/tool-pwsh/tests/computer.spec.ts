@@ -14,6 +14,9 @@ import {
   systemBrowserOpenInvocation,
   validateComputerArgs,
   windowsComputerInvocation,
+  computerVerificationTarget,
+  computerActionWithPinnedTarget,
+  desktopScreenshotLabel,
   nativeDesktopTurnActive,
   nativeDesktopFallbackDenied,
   normalizedDesktopTarget,
@@ -29,6 +32,32 @@ describe('Computer Use permissions', () => {
     }
     expect(attachmentWriter(ctx as never)).toBe(store)
     expect(attachmentWriter({ get: () => undefined } as never)).toBeUndefined()
+  })
+
+  it('preserves the selected application across observations within one session', () => {
+    expect(computerActionWithPinnedTarget({ action: 'screenshot' }, 'hwnd:0x420024')).toEqual({
+      action: 'screenshot', target: 'hwnd:0x420024',
+    })
+    expect(computerActionWithPinnedTarget({ action: 'click', x: 10, y: 15 }, 'hwnd:0x420024')).toEqual({
+      action: 'click', x: 10, y: 15, target: 'hwnd:0x420024',
+    })
+    expect(computerActionWithPinnedTarget({ action: 'screenshot', target: 'Notepad' }, 'hwnd:0x420024').target)
+      .toBe('Notepad')
+    expect(computerActionWithPinnedTarget({ action: 'windows' }, 'hwnd:0x420024')).toEqual({ action: 'windows' })
+    expect(computerActionWithPinnedTarget({ action: 'focus', target: 'Notepad' }, 'hwnd:0x420024'))
+      .toEqual({ action: 'focus', target: 'Notepad' })
+  })
+
+  it('pins screenshot verification to the acted-on HWND instead of whichever window gets focus later', () => {
+    expect(computerVerificationTarget({ target: 'Paint' }, 'hwnd=0x123 active=true title=Paint')).toBe('Paint')
+    expect(computerVerificationTarget({}, 'hwnd=0x420024 pid=9 active=true title=Paint')).toBe('hwnd:0x420024')
+    expect(computerVerificationTarget({}, 'no real target')).toBeUndefined()
+    expect(desktopScreenshotLabel('Desktop', undefined)).toBe('Desktop')
+    expect(desktopScreenshotLabel('Desktop', 'hwnd:0x420024')).toContain('absolute screen coordinates')
+    const selected = windowsComputerInvocation({ action: 'screenshot', target: 'hwnd:0x420024' })
+    expect(selected.env.PHX_TARGET).toBe('hwnd:0x420024')
+    expect(selected.stdin).toContain('[PhoenixDesktop]::SnapshotWindow($hwnd, $hdc)')
+    expect(selected.stdin).toContain('selected window refused PrintWindow capture')
   })
 
   it('uses a normalized HWND for both resident control and Desktop Live preview', () => {

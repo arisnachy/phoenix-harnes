@@ -41,8 +41,11 @@ internal sealed class DesktopLivePane : UserControl
     private readonly PictureBox image = new() { Dock = DockStyle.Fill, SizeMode = PictureBoxSizeMode.Zoom, BackColor = Color.FromArgb(21, 29, 42) };
     private readonly ToolStripLabel status = new("Desktop Live · sin ventana");
     private readonly ToolStripButton pause = new("Pausar") { ToolTipText = "Impide nuevas acciones del modelo mientras esté pausado" };
-    private readonly System.Windows.Forms.Timer refresh = new() { Interval = 850 };
+    private readonly System.Windows.Forms.Timer refresh = new() { Interval = 500 };
     private string? selectedTarget;
+    // HWND + PID are locked to the conversation's selected window, never to chat focus.
+    private IntPtr pinnedTarget;
+    private uint pinnedProcessId;
     private string? ownerSession;
     private DateTimeOffset ownerLastAction = DateTimeOffset.MinValue;
 
@@ -54,13 +57,16 @@ internal sealed class DesktopLivePane : UserControl
     {
         var owned = !string.IsNullOrWhiteSpace(sessionId)
             && string.Equals(sessionId, ownerSession, StringComparison.Ordinal);
-        var ready = owned && Visible && !IsDismissed;
+        var selectedWindow = owned && Visible && !IsDismissed ? ResolveTargetWindow() : IntPtr.Zero;
+        var ready = selectedWindow != IntPtr.Zero && !IsIconic(selectedWindow);
         return System.Text.Json.JsonSerializer.Serialize(new
         {
             available = ready,
             paused = ready && IsPaused,
-            title = ready ? status.Text.Replace("Desktop Live · ", "", StringComparison.Ordinal) : string.Empty,
-            reason = ready ? string.Empty : "No hay una sesión Desktop Live visible y vinculada a esta conversación."
+            title = ready ? WindowTitle(selectedWindow) : string.Empty,
+            reason = ready ? string.Empty : owned && Visible
+                ? "La ventana vinculada a Desktop Live ya no está disponible; usa computer focus para seleccionar otra."
+                : "No hay una sesión Desktop Live visible y vinculada a esta conversación."
         });
     }
 
@@ -114,6 +120,13 @@ internal sealed class DesktopLivePane : UserControl
             throw new InvalidOperationException("Desktop Live occupied by another session; retry after its lease expires.");
         if (!observe || ownerSession is null)
         {
+            if (!string.Equals(ownerSession, sessionId, StringComparison.Ordinal))
+            {
+                // The former conversation must never leak its HWND into a new lease.
+                selectedTarget = null;
+                pinnedTarget = IntPtr.Zero;
+                pinnedProcessId = 0;
+            }
             ownerSession = sessionId;
             ownerLastAction = DateTimeOffset.UtcNow;
         }
@@ -121,7 +134,13 @@ internal sealed class DesktopLivePane : UserControl
 
     internal void Open(string? target, string? sessionId)
     {
-        if (!string.IsNullOrWhiteSpace(target)) selectedTarget = target.Trim();
+        if (!string.IsNullOrWhiteSpace(target)
+            && !string.Equals(selectedTarget, target.Trim(), StringComparison.OrdinalIgnoreCase))
+        {
+            selectedTarget = target.Trim();
+            pinnedTarget = IntPtr.Zero;
+            pinnedProcessId = 0;
+        }
         Visible = true;
         CaptureSelectedWindow();
         refresh.Start();
@@ -149,35 +168,41 @@ internal sealed class DesktopLivePane : UserControl
 
     private IntPtr ResolveTargetWindow()
     {
-        if (!string.IsNullOrEmpty(selectedTarget))
+        if (pinnedTarget != IntPtr.Zero)
         {
-            IntPtr chosen = IntPtr.Zero;
-            var target = selectedTarget;
-            _ = EnumWindows((window, _) =>
-            {
-                if (!IsWindowVisible(window) || GetWindowThreadProcessId(window, out var pid) == 0)
-                    return true;
-                if (pid == Environment.ProcessId) return true;
-                var match = false;
-                if (target.StartsWith("pid:", StringComparison.OrdinalIgnoreCase))
-                    match = uint.TryParse(target.AsSpan(4), out var requestedPid) && pid == requestedPid;
-                else if (target.StartsWith("hwnd:0x", StringComparison.OrdinalIgnoreCase))
-                    match = long.TryParse(target.AsSpan(7), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var handle)
-                        && window.ToInt64() == handle;
-                else
-                    match = WindowTitle(window).Contains(target, StringComparison.OrdinalIgnoreCase);
-                if (!match) return true;
-                chosen = window;
-                return false;
-            }, IntPtr.Zero);
-            return chosen;
+            // HWNDs can be reused. Require the same PID and a still-visible window.
+            if (!IsWindow(pinnedTarget) || !IsWindowVisible(pinnedTarget)
+                || GetWindowThreadProcessId(pinnedTarget, out var currentPid) == 0
+                || currentPid != pinnedProcessId)
+                return IntPtr.Zero;
+            return pinnedTarget;
         }
 
-        var foreground = GetForegroundWindow();
-        if (foreground == IntPtr.Zero || !IsWindow(foreground)) return IntPtr.Zero;
-        GetWindowThreadProcessId(foreground, out var foregroundPid);
-        // Do not recursively capture the Phoenix chat instead of the requested app.
-        return foregroundPid == Environment.ProcessId ? IntPtr.Zero : foreground;
+        if (string.IsNullOrEmpty(selectedTarget))
+            return IntPtr.Zero; // Never silently follow GetForegroundWindow() or capture Phoenix chat.
+
+        IntPtr chosen = IntPtr.Zero;
+        var target = selectedTarget;
+        _ = EnumWindows((window, _) =>
+        {
+            if (!IsWindowVisible(window) || GetWindowThreadProcessId(window, out var pid) == 0
+                || pid == Environment.ProcessId)
+                return true;
+            var match = false;
+            if (target.StartsWith("pid:", StringComparison.OrdinalIgnoreCase))
+                match = uint.TryParse(target.AsSpan(4), out var requestedPid) && pid == requestedPid;
+            else if (target.StartsWith("hwnd:0x", StringComparison.OrdinalIgnoreCase))
+                match = long.TryParse(target.AsSpan(7), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var handle)
+                    && window.ToInt64() == handle;
+            else
+                match = WindowTitle(window).Contains(target, StringComparison.OrdinalIgnoreCase);
+            if (!match) return true;
+            chosen = window;
+            pinnedProcessId = pid;
+            return false;
+        }, IntPtr.Zero);
+        if (chosen != IntPtr.Zero) pinnedTarget = chosen;
+        return chosen;
     }
 
     internal string? CaptureTargetAsBase64()

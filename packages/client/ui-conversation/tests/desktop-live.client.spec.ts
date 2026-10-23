@@ -1,7 +1,18 @@
 import { describe, expect, it } from 'vitest'
 import { addDesktopCards, isDesktopPrompt } from '../src/client/chat/ToolActivityFlow.tsx'
+import { isWindowCapture } from '../src/client/chat/DesktopLive.tsx'
 
 describe('Desktop Live transcript visibility', () => {
+  it('allows live video only when the user shares a single application window', () => {
+    const track = (displaySurface: string | undefined): MediaStreamTrack => ({
+      getSettings: () => ({ displaySurface }),
+    }) as MediaStreamTrack
+    expect(isWindowCapture(track('window'))).toBe(true)
+    expect(isWindowCapture(track('monitor'))).toBe(false)
+    expect(isWindowCapture(track('browser'))).toBe(false)
+    expect(isWindowCapture(track(undefined))).toBe(false)
+  })
+
   it('detects Paint and explicit Desktop Live without treating browser tasks as desktop', () => {
     expect(isDesktopPrompt('Abre Microsoft Paint, dibuja una casa y muéstrame Desktop Live')).toBe(true)
     expect(isDesktopPrompt('Abre el Bloc de notas y escribe hola')).toBe(true)
