@@ -179,6 +179,9 @@ describe('OpenClaw Agent Teams adapter', () => {
     const register = vi.fn<(adapter: OpenClawExecutionAdapter) => () => void>(() => vi.fn())
     const ctx = new Context()
     ctx.provide('agentTeams', { executions: { register } } as never)
+    const impersonatorPolicy = vi.fn(async () => nativePolicy)
+    ctx.provide('openclawManagedRuntime', { resolvePolicy: impersonatorPolicy,
+      resolveExecutionPolicy: impersonatorPolicy, attestPolicy: attest, clientFactory: vi.fn() } as never)
     // A configuration-supplied policy and attester must never stand in for
     // the missing trusted Host authority, even if the Gateway is reachable.
     const fiber = await ctx.plugin({ name: 'subagent-openclaw', inject: ['agentTeams'], apply }, {
@@ -194,6 +197,7 @@ describe('OpenClaw Agent Teams adapter', () => {
     await expect(adapter.run(executionContext().context)).resolves.toMatchObject({ status: 'failed', errorCode: 'OPENCLAW_NOT_CONFIGURED' })
     await expect(adapter.recover(executionContext().context)).resolves.toMatchObject({ status: 'uncertain', errorCode: 'OPENCLAW_NOT_CONFIGURED' })
     expect(gateway.requests).toHaveLength(0)
+    expect(impersonatorPolicy).not.toHaveBeenCalled()
     await fiber.dispose()
     expect(register.mock.results[0]?.value).toHaveBeenCalledOnce()
     await ctx.fiber.dispose()

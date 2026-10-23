@@ -5,7 +5,8 @@ import z from '@phoenix-ai/schemastery'
 import {
   registerOpenClawExecutionAdapter,
 } from './execution-adapter.ts'
-import { createManagedOpenClawConfig, type ManagedOpenClawRuntimeHost } from './managed-runtime.ts'
+import { createManagedOpenClawConfig } from './managed-runtime.ts'
+import OpenClawManagedHostAuthority from './host-authority.ts'
 import type { OpenClawOperatorScope, OpenClawPolicyAttester } from './types.ts'
 
 type ConfigToolPolicy = { readonly profile: string; readonly allow: string[]; readonly deny: string[]; readonly profileHash: string }
@@ -56,7 +57,8 @@ export const managedRuntimeService = 'openclawManagedRuntime'
 
 /** Register one adapter per Cordis fiber; disposal unregisters that exact instance. */
 export async function apply(ctx: Context, config: Config = {}): Promise<void> {
-  const host = ctx.get(managedRuntimeService) as ManagedOpenClawRuntimeHost | undefined
+  const service = ctx.get(managedRuntimeService)
+  const host = service instanceof OpenClawManagedHostAuthority ? service : undefined
   // Plugin YAML (including a pasted function or policy attestation) is never
   // execution authority. Only a live trusted Host can create the native route.
   // A missing Host fails closed even when a configured endpoint is reachable.
