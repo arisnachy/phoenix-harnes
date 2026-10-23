@@ -1840,7 +1840,8 @@ export function registerComputerTool(ctx: Context): void {
         : await runWindowsComputerAction(effectiveArgs, exec.signal)
       if (session !== undefined && !isEmbeddedBrowserAction(args.action)
         && args.action !== 'windows' && args.action !== 'screenshot') {
-        const selected = computerVerificationTarget(effectiveArgs, output)
+        const observed = computerVerificationTarget({}, output)
+        const selected = observed ?? normalizedDesktopTarget(effectiveArgs.target)
         if (selected !== undefined) selectedDesktopTargets.set(session, selected)
       }
       let postScreenshot = false
