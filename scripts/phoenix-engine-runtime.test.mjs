@@ -11,7 +11,7 @@ import { gzipSync } from 'node:zlib'
 import { createServer } from 'node:http'
 
 const require = createRequire(import.meta.url)
-const { WebSocketServer } = require('../packages/subagent/subagent-openclaw/node_modules/ws')
+const { WebSocketServer } = require('ws')
 
 import {
   activateOpenClawCandidate,
