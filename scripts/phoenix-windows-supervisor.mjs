@@ -23,6 +23,7 @@ import { isManagedReleaseBranch } from './phoenix-update-policy.mjs'
 import { assertPromotedStableTarget } from './phoenix-stable-freshness.mjs'
 import { hydratePhoenixEnvironment } from './phoenix-windows-environment.mjs'
 import { ensurePhoenixDesktopShortcut } from './phoenix-windows-shortcut.mjs'
+import { recordPhoenixUpdateStep, writePhoenixUpdateState } from './phoenix-update-state.mjs'
 
 const root = resolve(process.cwd())
 const supervisorSourceRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -312,6 +313,15 @@ function readUpdateState() {
   } catch {
     return undefined
   }
+}
+
+// Report only fixed lifecycle/command codes; raw PowerShell output remains private.
+function reportSupervisorStep(step, result, exitCode) {
+  const statePath = updateStatePath()
+  if (statePath === undefined) return
+  const target = restartRequestTarget() ?? readUpdateState()?.target
+  if (typeof target !== 'string' || !/^[a-f0-9]{40}$/iu.test(target)) return
+  recordPhoenixUpdateStep(statePath, step, result, target, exitCode)
 }
 
 function clearPreparedRecord() {
@@ -857,14 +867,27 @@ function assertRuntimeStorageCapacity(nextRuntime) {
 }
 
 function runChecked(cwd, bin, args, label) {
+  const step = {
+    'create isolated runtime worktree': 'git-worktree',
+    'reset isolated runtime': 'git-reset',
+    'clean isolated runtime': 'git-clean',
+    'install isolated runtime dependencies': 'dependencies',
+    'build isolated runtime': 'build',
+    'smoke-test isolated runtime': 'smoke',
+  }[label]
+  if (step) reportSupervisorStep(step, 'started')
   const result = spawnSync(bin, args, {
     cwd,
     env: process.env,
     stdio: 'inherit',
     windowsHide: hideRuntimeWindows,
   })
-  if (result.error !== undefined) throw new Error(`${label}: ${result.error.message}`)
-  if ((result.status ?? 1) !== 0) throw new Error(`${label} exited with ${String(result.status ?? 1)}`)
+  if (result.error !== undefined || (result.status ?? 1) !== 0) {
+    if (step) reportSupervisorStep(step, 'failed', result.status ?? 1)
+    if (result.error !== undefined) throw new Error(`${label}: ${result.error.message}`)
+    throw new Error(`${label} exited with ${String(result.status ?? 1)}`)
+  }
+  if (step) reportSupervisorStep(step, 'ok', 0)
 }
 
 function runPnpm(cwd, args, label) {
@@ -1153,12 +1176,15 @@ function activatePreparedRuntime(target) {
   if (!runtimeIsHealthy(runtime, target)) {
     throw new Error(`isolated runtime ${target.slice(0, 12)} failed post-build validation`)
   }
+  reportSupervisorStep('boot-preflight', 'started')
   const bootPreflight = runtimeBootPreflight(runtime)
   if (!bootPreflight.ok) {
+    reportSupervisorStep('boot-preflight', 'failed', 1)
     throw new Error(
       `isolated runtime ${target.slice(0, 12)} failed boot preflight: ${bootPreflight.detail || 'unknown error'}`,
     )
   }
+  reportSupervisorStep('boot-preflight', 'ok', 0)
   writeActiveRuntime(target, runtime)
   return { target, path: runtime }
 }
@@ -1748,7 +1774,9 @@ async function waitForHostEvent(host, hostExitPromise, lastObservedFingerprint) 
         console.error(
           `[PHOENIX UPDATE] prepared ${updateTarget.slice(0, 12)} is ready; warming replacement runtime while current Host remains online...`,
         )
+        reportSupervisorStep('runtime-activation', 'started')
         const runtime = activatePreparedRuntime(updateTarget)
+        reportSupervisorStep('runtime-activation', 'ok', 0)
         runtimeRoot = runtime.path
         repairDesktopShortcut()
         clearPreparedRecord()
@@ -1760,8 +1788,10 @@ async function waitForHostEvent(host, hostExitPromise, lastObservedFingerprint) 
         console.error(
           `[PHOENIX UPDATE] replacement runtime ${runtime.target.slice(0, 12)} passed build, smoke, and boot preflight; switching Hosts now.`,
         )
+        reportSupervisorStep('handoff', 'started')
         return { kind: 'safe-update-handoff', target: updateTarget, lastObservedFingerprint }
       } catch (error) {
+        reportSupervisorStep('runtime-activation', 'failed', 1)
         clearRestartRequest()
         clearPreparedRecord()
         clearHostRestartRequest()
@@ -1987,6 +2017,23 @@ while (true) {
       persistLastKnownGoodConfiguration(launchConfiguration)
       healthyCheckpointWritten = true
       console.error('[PHOENIX RECOVERY] healthy Host checkpoint recorded as last-known-good configuration.')
+      // Only the actual target checkout running beyond the health checkpoint
+      // completes an update. A request marker or successful build alone does not.
+      const updateState = readUpdateState()
+      const target = updateState?.target
+      if ((updateState?.status === 'restarting' || updateState?.status === 'applying')
+        && typeof target === 'string' && /^[a-f0-9]{40}$/iu.test(target)
+        && gitValue(runtimeRoot, ['rev-parse', 'HEAD']) === target) {
+        const stateFile = updateStatePath()
+        if (stateFile !== undefined) {
+          recordPhoenixUpdateStep(stateFile, 'health-check', 'ok', target, 0)
+          writePhoenixUpdateState(stateFile, {
+            ...updateState, status: 'updated', phase: 'complete',
+            current: target, at: new Date().toISOString(),
+            detail: 'Stable runtime activated; the new Host passed its health checkpoint.',
+          })
+        }
+      }
       // These best-effort Windows/PowerShell tasks must never delay the first
       // Host. Keep their diagnostics isolated from the critical launch path.
       repairUserGitSafeDirectory()
@@ -2020,6 +2067,7 @@ while (true) {
     } else {
       console.error('[PHOENIX RECOVERY] configuration preflight passed; restarting under the external supervisor.')
     }
+    if (hostEvent.kind === 'safe-update-handoff') reportSupervisorStep('host-restart', 'started')
     if (host.exitCode === null) host.kill()
     hostExit = await hostExitPromise
   } else {
