@@ -1803,6 +1803,7 @@ export async function rollbackOpenClawCandidate({ home, execution, phoenixExecut
  * Start the active isolated OpenClaw gateway with fixed loopback arguments.
  * @param {object} options
  * @param {string} options.home - DSH_HOME containing isolated OpenClaw state.
+ * @param {object} [options.execution] - Live Phoenix execution; a busy snapshot defers replacement.
  * @returns {Promise<object>} Ready or fail-closed status.
  */
 export async function startOpenClawGateway({ home, execution, phoenixExecution, runner, port, env, healthTimeoutMs, healthIntervalMs, stopTimeoutMs, applyRetention = false, retentionConfirm = false } = {}) {
@@ -1839,6 +1840,7 @@ export async function startOpenClawGateway({ home, execution, phoenixExecution, 
  * Stop the managed OpenClaw gateway and retain its active marker for restart/rollback.
  * @param {object} options
  * @param {string} options.home - DSH_HOME containing isolated OpenClaw state.
+ * @param {object} [options.execution] - Live Phoenix execution; a busy snapshot defers stop.
  * @returns {Promise<object>} Stopped or missing status.
  */
 export async function stopOpenClawGateway({ home, execution, phoenixExecution, runner, stopTimeoutMs, applyRetention = false, retentionConfirm = false } = {}) {
