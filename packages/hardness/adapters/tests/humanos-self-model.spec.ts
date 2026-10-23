@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { inspectHumanOSSelfModel, installHumanOSSelfModel, renderHumanOSSelfModel } from '../src/humanos-self-model.ts'
-import type { HumanOSObservationSources } from '../src/humanos-self-model.ts'
+import type { HumanOSAssemblyContext, HumanOSObservationSources } from '../src/humanos-self-model.ts'
 
 function sources(
   statuses: readonly string[],
@@ -68,7 +68,7 @@ describe('Phoenix HumanOS grounded self-model', () => {
 
   it('uses the model-visible context registry without installing a new store or tool', () => {
     const dispose = vi.fn()
-    const context = vi.fn(() => dispose)
+    const context = vi.fn((_section: { readonly name: string; readonly order: number; readonly text: string | ((assembly: HumanOSAssemblyContext) => string); readonly interpolateVariables?: boolean }) => dispose)
     const installer = installHumanOSSelfModel({ context }, sources(['verified']))
     expect(context).toHaveBeenCalledOnce()
     const section = context.mock.calls[0]?.[0]
@@ -77,7 +77,8 @@ describe('Phoenix HumanOS grounded self-model', () => {
       order: 24,
       interpolateVariables: false,
     })
-    expect(section?.text(scoped)).toContain('<phoenix_humanos_self_model>')
+    if (typeof section?.text !== 'function') throw new Error('expected a dynamic HumanOS context provider')
+    expect(section.text(scoped)).toContain('<phoenix_humanos_self_model>')
     installer()
     expect(dispose).toHaveBeenCalledOnce()
   })
