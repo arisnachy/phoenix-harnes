@@ -3,7 +3,7 @@ import type { ProactivityEngine } from './proactivity-engine.ts'
 
 /** Provider-neutral observations already held in HARDNESS and the durable task engine. */
 export interface HumanOSObservationSources {
-  readonly hardness: Pick<HardnessService, 'list' | 'evidenceFor'>
+  readonly hardness: Pick<HardnessService, 'snapshot'>
   readonly tasks: Pick<ProactivityEngine, 'peek'>
 }
 
@@ -80,7 +80,18 @@ export function inspectHumanOSSelfModel(
     quarantined: 0,
     deprecated: 0,
   }
-  const descriptors = sources.hardness.list()
+  const snapshot = sources.hardness.snapshot()
+  const descriptors = snapshot.capabilities
+  // Index a single atlas snapshot instead of rescanning all history for each descriptor.
+  const examined = new Set(descriptors.slice(0, MAX_VERIFICATION_CAPABILITIES).map(item => item.id))
+  const evidenceById = new Map<string, typeof snapshot.evidence[number][]>()
+  for (const evidence of snapshot.evidence) {
+    if (!examined.has(evidence.capabilityId)) continue
+    const bucket = evidenceById.get(evidence.capabilityId) ?? []
+    if (bucket.length >= MAX_EVIDENCE_PER_CAPABILITY) bucket.shift()
+    bucket.push(evidence)
+    evidenceById.set(evidence.capabilityId, bucket)
+  }
   const verification = {
     examinedCapabilities: 0,
     unexaminedCapabilities: Math.max(0, descriptors.length - MAX_VERIFICATION_CAPABILITIES),
@@ -96,7 +107,7 @@ export function inspectHumanOSSelfModel(
     if (index >= MAX_VERIFICATION_CAPABILITIES) continue
     verification.examinedCapabilities += 1
     // Versions and outcomes come from the authoritative registry, never model claims.
-    const records = sources.hardness.evidenceFor(descriptor.id).slice(-MAX_EVIDENCE_PER_CAPABILITY)
+    const records = evidenceById.get(descriptor.id) ?? []
     let passes = 0
     let failures = 0
     for (const evidence of records) {
