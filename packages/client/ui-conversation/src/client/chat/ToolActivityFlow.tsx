@@ -9,7 +9,7 @@ import type { ChatViewSlotProps } from '../contract/slots.ts'
 import { ChatNodeSeat } from './ChatNodeSeat.tsx'
 import { PendingSteeringBubble } from './MessageItem.tsx'
 import { formatRunDuration } from './message-chrome.ts'
-import { ReasoningRow } from './ReasoningRow.tsx'
+import { ReasoningRow, type ReasoningEvidence } from './ReasoningRow.tsx'
 import { MiniBrowser, type SavedAccessNotice, type SecureLoginTarget } from './MiniBrowser.tsx'
 import { DesktopLive } from './DesktopLive.tsx'
 import { SecureAsk } from './SecureAsk.tsx'
@@ -46,7 +46,7 @@ interface ToolActivityFlowProps extends SeatProps {
 }
 
 type ActivityItem =
-  | { readonly kind: 'node'; readonly key: string; readonly liveTool: boolean }
+  | { readonly kind: 'node'; readonly key: string; readonly liveTool: boolean; readonly evidence?: ReasoningEvidence }
   | {
     readonly kind: 'reasoning'
     readonly key: string
@@ -107,7 +107,16 @@ function isActionableConnectorRecovery(node: OrderedChatNode): boolean {
 function activityNode(node: OrderedChatNode): ActivityItem {
   const liveTool = node.kind === 'tool-call'
     && isRunningTool((node.data as ToolChatData).root)
-  return { kind: 'node', key: node.key, liveTool }
+  if (node.kind !== 'tool-call') return { kind: 'node', key: node.key, liveTool }
+  const root = (node.data as ToolChatData).root
+  const name = toolCallName(root)
+  return { kind: 'node', key: node.key, liveTool,
+    ...(name === undefined ? {} : { evidence: {
+      name,
+      state: isRunningTool(root) ? 'running' as const
+        : isSettledTool(root) && root.isError ? 'error' as const : 'success' as const,
+    } }),
+  }
 }
 
 function assistantData(node: OrderedChatNode): AssistantChatData | null {
@@ -554,6 +563,8 @@ function ToolActivityGroup({
     item.kind === 'node' && item.liveTool)
   const history = items.filter(item => item.kind !== 'node' || !item.liveTool)
   const hasHistory = history.length > 0
+  const evidence = items.flatMap(item => item.kind === 'node' && item.evidence !== undefined
+    ? [item.evidence] : [])
 
   return (
     <div
@@ -596,7 +607,7 @@ function ToolActivityGroup({
             : (
               <ReasoningRow
                 key={item.key}
-                text={item.text}
+                evidence={evidence}
                 running={item.running}
                 t={t}
               />
