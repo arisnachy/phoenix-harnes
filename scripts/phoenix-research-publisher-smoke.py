@@ -100,11 +100,11 @@ try:
             assert "[@" not in xml
             assert "Comparación de prueba" in xml
             assert "**" not in xml
+            assert ("(Apellido, 2026)" in xml) if style in ("apa", "apa7") else ("[1]" in xml)
         assert any(run.bold and "Implicaciones para investigación." in run.text
                    for paragraph in Document(paths["docx"]).paragraphs for run in paragraph.runs)
         assert any(run.italic and "cursivas" in run.text
                    for paragraph in Document(paths["docx"]).paragraphs for run in paragraph.runs)
-            assert ("(Apellido, 2026)" in xml) if style in ("apa", "apa7") else ("[1]" in xml)
         print("OK", style, paths["pdf"], paths["docx"], paths["html"])
     report["document_type"] = "thesis"
     incomplete = subprocess.run([sys.executable, str(script)], input=json.dumps(report).encode("utf-8"),
