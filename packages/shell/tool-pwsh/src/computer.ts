@@ -797,6 +797,25 @@ public static class PhoenixDesktop {
   [DllImport("user32.dll")]
   private static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
 
+  [DllImport("user32.dll")]
+  private static extern bool PrintWindow(IntPtr hWnd, IntPtr hdc, uint flags);
+
+  public static int[] CaptureBounds(IntPtr hWnd) {
+    if (hWnd == IntPtr.Zero || !IsWindow(hWnd) || IsIconic(hWnd))
+      throw new InvalidOperationException("selected screenshot window is unavailable or minimized");
+    RECT rect;
+    if (!GetWindowRect(hWnd, out rect)) throw new InvalidOperationException("selected window has no bounds");
+    int width = rect.Right - rect.Left;
+    int height = rect.Bottom - rect.Top;
+    if (width <= 0 || height <= 0 || (long)width * height > 16000000L)
+      throw new InvalidOperationException("selected window dimensions are not capturable");
+    return new int[] { width, height };
+  }
+
+  public static bool SnapshotWindow(IntPtr hWnd, IntPtr hdc) {
+    return IsWindow(hWnd) && !IsIconic(hWnd) && PrintWindow(hWnd, hdc, 2);
+  }
+
   [StructLayout(LayoutKind.Sequential)]
   private struct RECT {
     public int Left;
@@ -1128,12 +1147,27 @@ switch ($action) {
   'screenshot' {
     Add-Type -AssemblyName System.Windows.Forms
     Add-Type -AssemblyName System.Drawing
-    $bounds = [System.Windows.Forms.SystemInformation]::VirtualScreen
-    if ($bounds.Width -le 0 -or $bounds.Height -le 0) { throw 'desktop has no capturable virtual screen' }
-    $bitmap = New-Object System.Drawing.Bitmap -ArgumentList $bounds.Width, $bounds.Height
+    if ($target) {
+      # PrintWindow observes the exact selected HWND even when Phoenix chat has focus.
+      # Fail closed rather than returning the foreground/another conversation.
+      $hwnd = [PhoenixDesktop]::ResolveWindow($target)
+      $size = [PhoenixDesktop]::CaptureBounds($hwnd)
+      $bitmap = New-Object System.Drawing.Bitmap -ArgumentList $size[0], $size[1]
+    } else {
+      $bounds = [System.Windows.Forms.SystemInformation]::VirtualScreen
+      if ($bounds.Width -le 0 -or $bounds.Height -le 0) { throw 'desktop has no capturable virtual screen' }
+      $bitmap = New-Object System.Drawing.Bitmap -ArgumentList $bounds.Width, $bounds.Height
+    }
     $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
     try {
-      $graphics.CopyFromScreen($bounds.Left, $bounds.Top, 0, 0, $bitmap.Size, [System.Drawing.CopyPixelOperation]::SourceCopy)
+      if ($target) {
+        $hdc = $graphics.GetHdc()
+        try {
+          if (-not [PhoenixDesktop]::SnapshotWindow($hwnd, $hdc)) { throw 'selected window refused PrintWindow capture' }
+        } finally { $graphics.ReleaseHdc($hdc) }
+      } else {
+        $graphics.CopyFromScreen($bounds.Left, $bounds.Top, 0, 0, $bitmap.Size, [System.Drawing.CopyPixelOperation]::SourceCopy)
+      }
       $stream = New-Object System.IO.MemoryStream
       try {
         $bitmap.Save($stream, [System.Drawing.Imaging.ImageFormat]::Png)
@@ -1781,7 +1815,13 @@ export function registerComputerTool(ctx: Context): void {
         postScreenshot = await attachDesktopScreenshot(ctx, exec, output, 'PHOENIX desktop screenshot')
       } else if (shouldCaptureAfterAction(args.action)) {
         await delay(POST_ACTION_SETTLE_MS, exec.signal)
-        const fresh = await runWindowsComputerAction({ action: 'screenshot' }, exec.signal)
+        // Bind the verification image to the window that accepted the action,
+        // not whatever application the user foregrounds while we capture it.
+        const observedHandle = /\bhwnd=(0x[0-9a-f]+)\b/iu.exec(output)?.[1]
+        const screenshotTarget = args.target ?? (observedHandle === undefined ? undefined : 'hwnd:' + observedHandle)
+        const fresh = await runWindowsComputerAction({
+          action: 'screenshot', ...(screenshotTarget === undefined ? {} : { target: screenshotTarget }),
+        }, exec.signal)
         postScreenshot = await attachDesktopScreenshot(ctx, exec, fresh, `PHOENIX post-${args.action} desktop screenshot`)
       }
 
