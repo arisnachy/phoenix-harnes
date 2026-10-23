@@ -63,6 +63,7 @@ describe('Phoenix HumanOS grounded self-model', () => {
       'cap-2': [{ descriptorVersion: 'v0', outcome: 'failed' }],
     })
     const result = inspectHumanOSSelfModel(input, scoped, time)
+    expect(result?.attention).toBe('verify-before-use')
     expect(result?.verification).toEqual({
       examinedCapabilities: 4, unexaminedCapabilities: 0, currentPasses: 1, currentFailures: 1,
       currentDenials: 1, outdatedVersionRecords: 2, capabilitiesWithoutCurrentEvidence: 2,
@@ -72,6 +73,15 @@ describe('Phoenix HumanOS grounded self-model', () => {
     expect(rendered).not.toContain('secret fixture')
     expect(rendered).not.toContain('cap-0')
     expect(rendered).not.toContain('v1')
+  })
+
+  it('requests rechecking when a verified descriptor has failed evidence', () => {
+    const result = inspectHumanOSSelfModel(sources(['verified'], [], {
+      'cap-0': [{ descriptorVersion: 'v1', outcome: 'failed' }],
+    }), scoped, time)
+    expect(result?.atlas.brokenOrQuarantined).toBe(0)
+    expect(result?.verification.currentFailures).toBe(1)
+    expect(result?.attention).toBe('verify-before-use')
   })
 
   it('uses only the most recent bounded evidence for each descriptor', () => {
