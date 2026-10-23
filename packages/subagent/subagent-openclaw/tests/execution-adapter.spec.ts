@@ -25,7 +25,7 @@ interface Gateway {
 const gateways: Gateway[] = []
 
 const nativePolicy = {
-  provider: 'openai', model: 'gpt-5', agentRuntime: 'codex', sandbox: 'workspace', approval: 'never', cwd: 'C:/phoenix-workspace',
+  provider: 'openai', model: 'gpt-5', agentRuntime: 'codex', sandbox: 'workspace-write', approval: 'never', cwd: 'C:/phoenix-workspace',
   toolPolicy: { profile: 'minimal', allow: ['session_status'], deny: ['browser', 'cron', 'gateway', 'group:fs', 'group:runtime', 'group:web', 'nodes'], profileHash: 'sha256:fixture' },
 } as const
 
@@ -134,7 +134,8 @@ function executionContext(overrides: Partial<ExecutionSnapshot> = {}) {
   } as unknown as ExecutionSnapshot
   return {
     context: {
-      root: { ctx: { get: () => undefined }, options: { provider: 'openai-codex', model: 'gpt-5' } },
+      root: { session: { header: { cwd: 'C:/phoenix-workspace' } },
+        ctx: { get: (key: string) => key === 'sandboxPolicy' ? { resolve: () => ({ mode: 'workspace-write' }) } : undefined }, options: { provider: 'openai-codex', model: 'gpt-5' } },
       snapshot, signal: controller.signal, sharedMemory: 'reference only',
       checkpoint: async (phase: string, binding: unknown) => { checkpoints.push({ phase, binding }) },
       progress: async (event: unknown) => { progress.push(event) },
@@ -161,7 +162,7 @@ const attest: OpenClawPolicyAttester = async request => ({
 function adapterConfig(url: string, options: Partial<ConstructorParameters<typeof OpenClawExecutionAdapter>[0]> = {}) {
   return {
     url, agentId: 'worker', provider: 'openai', model: 'gpt-5', agentRuntime: 'codex',
-    sandbox: 'workspace', approval: 'never', cwd: 'C:/phoenix-workspace', toolPolicy: nativePolicy.toolPolicy,
+    sandbox: 'workspace-write', approval: 'never', cwd: 'C:/phoenix-workspace', toolPolicy: nativePolicy.toolPolicy,
     policyAttester: attest, timeoutMs: 5_000, ...options,
   }
 }
@@ -192,7 +193,8 @@ describe('OpenClaw Agent Teams adapter', () => {
 
   it('verifies the native route, checkpoints, uses the snapshot id, and waits for completion', async () => {
     const gateway = await gatewayFor()
-    const adapter = new OpenClawExecutionAdapter(adapterConfig(gateway.url))
+    const policyResolver = vi.fn(async () => nativePolicy)
+    const adapter = new OpenClawExecutionAdapter(adapterConfig(gateway.url, { policyResolver }))
     await expect(adapter.probe()).resolves.toMatchObject({ engine: 'openclaw', connected: true, providers: ['openai-codex'], capabilities: ['conversation'] })
     expect(gateway.requests.find(item => item.method === 'connect')?.params).toMatchObject({ client: { id: 'gateway-client', mode: 'backend' } })
     const fixture = executionContext()
@@ -202,9 +204,48 @@ describe('OpenClaw Agent Teams adapter', () => {
     expect(gateway.requests.some(item => item.method === 'sessions.create')).toBe(true)
     expect(request?.params).toMatchObject({ idempotencyKey: 'execution-1', agentId: 'worker', deliver: false })
     expect(String(request?.params?.sessionKey)).toMatch(/^agent:worker:phoenix:execution-1$/u)
+    expect(policyResolver).toHaveBeenCalledWith(expect.objectContaining({ executionId: request?.params?.idempotencyKey }))
     expect(request?.params).not.toHaveProperty('provider')
     expect(request?.params).not.toHaveProperty('model')
     expect(gateway.requests.some(item => item.method === 'agent.wait')).toBe(true)
+  })
+
+  it('rejects a task from another Phoenix workspace before any native request', async () => {
+    const gateway = await gatewayFor()
+    const adapter = new OpenClawExecutionAdapter(adapterConfig(gateway.url))
+    const fixture = executionContext()
+    const context = { ...fixture.context, root: {
+      ...fixture.context.root,
+      session: { header: { cwd: 'C:/another-project' } },
+    } as ExecutionContext['root'] }
+    await expect(adapter.run(context)).resolves.toMatchObject({ status: 'failed', errorCode: 'OPENCLAW_EXECUTION_POLICY_UNVERIFIED' })
+    expect(gateway.requests).toHaveLength(0)
+  })
+
+  it('rejects native write authority for a read-only Phoenix session', async () => {
+    const gateway = await gatewayFor()
+    const adapter = new OpenClawExecutionAdapter(adapterConfig(gateway.url))
+    const fixture = executionContext()
+    const context = { ...fixture.context, root: {
+      ...fixture.context.root,
+      ctx: { get: () => ({ resolve: () => ({ mode: 'read-only' }) }) },
+    } as unknown as ExecutionContext['root'] }
+    await expect(adapter.run(context)).resolves.toMatchObject({ status: 'failed', errorCode: 'OPENCLAW_EXECUTION_POLICY_UNVERIFIED' })
+    expect(gateway.requests).toHaveLength(0)
+  })
+
+  it('rechecks host policy at dispatch and rejects changed tool authority', async () => {
+    const gateway = await gatewayFor()
+    const policyResolver = vi.fn(async () => ({ ...nativePolicy,
+      toolPolicy: { ...nativePolicy.toolPolicy, profileHash: 'changed-after-reservation' },
+    }))
+    const adapter = new OpenClawExecutionAdapter(adapterConfig(gateway.url, { policyResolver }))
+    const fixture = executionContext()
+    await expect(adapter.run(fixture.context)).resolves.toMatchObject({
+      status: 'failed', errorCode: 'OPENCLAW_EXECUTION_POLICY_UNVERIFIED',
+    })
+    expect(policyResolver).toHaveBeenCalledWith(expect.objectContaining({ root: fixture.context.root }))
+    expect(gateway.requests).toHaveLength(0)
   })
 
   it('fails closed when the native agent route differs from the selected snapshot', async () => {

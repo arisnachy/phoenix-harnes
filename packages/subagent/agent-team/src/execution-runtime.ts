@@ -327,7 +327,8 @@ export class TeamExecutionRuntime {
           const priorAdapter = this.adapters.get(prior.engine)
           if (priorAdapter?.resolveNativePolicy !== undefined) {
             nativePolicy = canonicalNativePolicy(await priorAdapter.resolveNativePolicy({
-              root, engine: prior.engine, idempotencyKey: request.idempotencyKey, selection, capabilities: request.capabilities,
+              root, executionId: prior.id, engine: prior.engine, idempotencyKey: request.idempotencyKey,
+              selection, capabilities: request.capabilities,
             }))
           }
         }
@@ -350,9 +351,10 @@ export class TeamExecutionRuntime {
         .filter(s => s.missionId === mission.id).length >= this.limits.maxOperations) throw new Error('Mission execution limit reached')
       const selectedEngine = routeExecution(request, selection.provider, statuses)
       const adapter = this.adapters.get(selectedEngine)
+      const executionId = randomUUID() as ExecutionId
       if (adapter?.resolveNativePolicy !== undefined) {
         const resolved = canonicalNativePolicy(await adapter.resolveNativePolicy({
-          root, engine: selectedEngine, idempotencyKey: request.idempotencyKey, selection, capabilities: request.capabilities,
+          root, executionId, engine: selectedEngine, idempotencyKey: request.idempotencyKey, selection, capabilities: request.capabilities,
         }))
         if (resolved === undefined) throw new Error('Execution native policy is unavailable')
         if (nativePolicy !== undefined && JSON.stringify(nativePolicy) !== JSON.stringify(resolved)) {
@@ -362,7 +364,7 @@ export class TeamExecutionRuntime {
       }
       const now = Date.now()
       const snapshot: ExecutionSnapshot = {
-        id: randomUUID() as ExecutionId, teamId: TeamId(root.id), missionId: mission.id,
+        id: executionId, teamId: TeamId(root.id), missionId: mission.id,
         cancellationEpoch: mission.cancellationEpoch, idempotencyKey: request.idempotencyKey,
         task: request.task, capabilities: [...request.capabilities],
         engine: selectedEngine,

@@ -1,5 +1,6 @@
 /** Durable Phoenix Agent Teams adapter over the public OpenClaw Gateway RPCs. */
 
+import { resolve } from 'node:path'
 import type { Context } from '@phoenix-ai/cordis'
 import type { CredentialProvider } from '@phoenix-ai/dsh-credentials'
 import { credentialRef } from '@phoenix-ai/dsh-credentials'
@@ -11,6 +12,7 @@ import type {
   ExecutionOutcome,
   ExecutionProgress,
   ExecutionNativePolicy,
+  ExecutionNativePolicyRequest,
   ExecutionToolPolicy,
 } from '@phoenix-ai/dsh-agent-team'
 import {
@@ -67,6 +69,7 @@ export interface OpenClawExecutionAdapterConfig {
   /** Effective host-resolved tool policy, including its profile fingerprint. */
   readonly toolPolicy?: ExecutionToolPolicy
   /** Host-owned effective-policy proof; no model input or credentials are supplied. */
+  readonly policyResolver?: (request: ExecutionNativePolicyRequest) => Promise<ExecutionNativePolicy | undefined>
   readonly policyAttester?: OpenClawPolicyAttester
   /** Requested public operator scopes; admin scopes are rejected. */
   readonly scopes?: readonly OpenClawOperatorScope[]
@@ -85,6 +88,7 @@ interface ResolvedConfig {
   readonly sessionKey?: string
   readonly route?: OpenClawModelRoute
   readonly policy?: ExecutionNativePolicy
+  readonly policyResolver?: (request: ExecutionNativePolicyRequest) => Promise<ExecutionNativePolicy | undefined>
   readonly policyAttester?: OpenClawPolicyAttester
   readonly scopes: readonly OpenClawOperatorScope[]
   readonly timeoutMs: number
@@ -354,6 +358,7 @@ export class OpenClawExecutionAdapter implements ExecutionAdapter {
         && toolPolicy !== undefined
         ? { policy: { provider, model, agentRuntime, sandbox, approval, cwd, toolPolicy } }
         : {}),
+      ...(config.policyResolver === undefined ? {} : { policyResolver: config.policyResolver }),
       ...(config.policyAttester === undefined ? {} : { policyAttester: config.policyAttester }),
       scopes,
       timeoutMs: boundedPositive(config.timeoutMs, DEFAULT_TIMEOUT_MS, MAX_TIMEOUT_MS),
@@ -364,15 +369,28 @@ export class OpenClawExecutionAdapter implements ExecutionAdapter {
   }
 
   /** Resolve the already-attested host policy before Phoenix flushes its reservation. */
-  async resolveNativePolicy(request: { readonly engine: string
-    readonly selection: { readonly provider: string
-      readonly model: string } }): Promise<ExecutionNativePolicy | undefined> {
-    const policy = this.config.policy
+  async resolveNativePolicy(request: ExecutionNativePolicyRequest): Promise<ExecutionNativePolicy | undefined> {
+    const policy = this.config.policyResolver === undefined ? this.config.policy : await this.config.policyResolver(request)
     const route = this.config.route
-    if (policy === undefined || route === undefined || request.engine !== this.engine
+    if (policy === undefined || this.config.policy === undefined || !policyEquals(policy, this.config.policy)
+      || route === undefined || request.engine !== this.engine
       || request.selection.provider !== PHOENIX_CODEX_PROVIDER || request.selection.model !== policy.model
-      || route.provider !== NATIVE_PROVIDER || route.model !== policy.model) return undefined
+      || route.provider !== NATIVE_PROVIDER || route.model !== policy.model
+      || !this.policyAllowedForRoot(policy, request.root)) return undefined
     return policy
+  }
+
+  private policyAllowedForRoot(policy: ExecutionNativePolicy, root: ExecutionContext['root']): boolean {
+    const cwd = root.session?.header.cwd
+    if (cwd === undefined || resolve(cwd) !== resolve(policy.cwd)) return false
+    const sandbox = root.ctx.get('sandboxPolicy') as {
+      resolve(input: { session: typeof root.session }): { mode: string }
+    } | undefined
+    const mode = sandbox?.resolve({ session: root.session }).mode ?? 'read-only'
+    const ranks: Readonly<Record<string, number>> = { 'read-only': 0, 'workspace-write': 1, 'danger-full-access': 2 }
+    const nativeRank = ranks[policy.sandbox]
+    const allowedRank = ranks[mode]
+    return nativeRank !== undefined && allowedRank !== undefined && nativeRank <= allowedRank
   }
 
   /** Probe transport, health, and exact configured agent/session route. */
@@ -406,8 +424,8 @@ export class OpenClawExecutionAdapter implements ExecutionAdapter {
   /** Submit once with Phoenix's idempotency key and wait for canonical completion. */
   async run(context: ExecutionContext): Promise<ExecutionOutcome> {
     if (!this.isConfigured()) return { status: 'failed', errorCode: NOT_CONFIGURED }
-    const policy = this.policyFor(context.snapshot)
-    if (policy === undefined) {
+    const policy = await this.policyForContext(context)
+    if (policy === undefined || !this.policyAllowedForRoot(policy, context.root)) {
       return { status: 'failed', errorCode: POLICY_UNVERIFIED }
     }
     let client: OpenClawGatewayClient | undefined
@@ -470,8 +488,10 @@ export class OpenClawExecutionAdapter implements ExecutionAdapter {
   /** Reconcile the saved native run; never resubmits the task. */
   async recover(context: ExecutionContext): Promise<ExecutionOutcome> {
     if (!this.isConfigured()) return { status: 'uncertain', errorCode: NOT_CONFIGURED }
-    const policy = this.policyFor(context.snapshot)
-    if (policy === undefined) return { status: 'uncertain', errorCode: POLICY_UNVERIFIED }
+    const policy = await this.policyForContext(context)
+    if (policy === undefined || !this.policyAllowedForRoot(policy, context.root)) {
+      return { status: 'uncertain', errorCode: POLICY_UNVERIFIED }
+    }
     const saved = context.snapshot.binding
     if (saved?.sessionId === undefined || saved.turnId === undefined) return { status: 'uncertain', errorCode: MISSING_BINDING }
     let client: OpenClawGatewayClient | undefined
@@ -541,6 +561,17 @@ export class OpenClawExecutionAdapter implements ExecutionAdapter {
     if (requiredMethods.some(method => !capabilities.methods.includes(method))) throw new Error('OPENCLAW_METHOD_UNAVAILABLE')
     await client.health()
     return { serverVersion: capabilities.serverVersion }
+  }
+
+  private async policyForContext(context: ExecutionContext): Promise<ExecutionNativePolicy | undefined> {
+    const saved = this.policyFor(context.snapshot)
+    if (saved === undefined) return undefined
+    const current = await this.resolveNativePolicy({
+      root: context.root, executionId: context.snapshot.id, engine: this.engine, idempotencyKey: context.snapshot.idempotencyKey,
+      selection: { provider: context.snapshot.provider, model: context.snapshot.model },
+      capabilities: context.snapshot.capabilities,
+    })
+    return current !== undefined && policyEquals(current, saved) ? current : undefined
   }
 
   private policyFor(snapshot: ExecutionContext['snapshot']): ExecutionNativePolicy | undefined {

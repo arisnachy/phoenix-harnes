@@ -19,6 +19,7 @@ const policy = { provider: 'openai',
     profileHash: 'verified' } }
 const host = (): ManagedOpenClawRuntimeHost => ({ clientFactory: vi.fn(),
   resolvePolicy: vi.fn(async () => policy),
+  resolveExecutionPolicy: vi.fn(async () => policy),
   attestPolicy: vi.fn(async () => undefined) })
 function save() { writeFileSync(join(location.home, '.dsh/openclaw-runtime/openclaw.json'), JSON.stringify(config)) }
 beforeEach(() => {
@@ -61,4 +62,29 @@ it('rejects an invalid loopback port before querying host authority', async () =
   const authority = host()
   expect(await createManagedOpenClawConfig(authority)).toBeUndefined()
   expect(authority.resolvePolicy).not.toHaveBeenCalled()
+})
+
+it('forwards the owning session and native task identity on each policy resolution', async () => {
+  const authority = host()
+  const result = await createManagedOpenClawConfig(authority)
+  const root = { session: { header: { cwd: 'C:/project' } } } as never
+  const request = {
+    root, executionId: 'native-execution-1' as never, idempotencyKey: 'caller-request-1',
+    engine: 'openclaw' as const, selection: { provider: 'openai-codex', model: 'gpt-6-luna' },
+    capabilities: ['conversation'] as const,
+  }
+  expect(await result?.policyResolver?.(request)).toEqual(policy)
+  expect(authority.resolveExecutionPolicy).toHaveBeenCalledWith(expect.objectContaining({
+    root, executionId: 'native-execution-1', idempotencyKey: 'caller-request-1', agentId: 'phoenix',
+  }))
+  expect(JSON.stringify(vi.mocked(authority.resolveExecutionPolicy).mock.calls)).not.toContain('private-fixture')
+})
+
+it('fails closed when fresh per-session authority cannot be read', async () => {
+  const authority = { ...host(), resolveExecutionPolicy: async () => { throw new Error('private authority failure') } }
+  const result = await createManagedOpenClawConfig(authority)
+  expect(await result?.policyResolver?.({
+    root: {} as never, executionId: 'native-execution-1' as never, idempotencyKey: 'caller-request-1',
+    engine: 'openclaw', selection: { provider: 'openai-codex', model: 'gpt-6-luna' }, capabilities: ['conversation'],
+  })).toBeUndefined()
 })

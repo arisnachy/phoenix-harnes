@@ -2,7 +2,7 @@
 import { readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { resolve } from 'node:path'
-import type { ExecutionNativePolicy } from '@phoenix-ai/dsh-agent-team'
+import type { ExecutionNativePolicy, ExecutionNativePolicyRequest } from '@phoenix-ai/dsh-agent-team'
 import type {
   OpenClawExecutionAdapterConfig,
 } from './execution-adapter.ts'
@@ -12,7 +12,9 @@ import type {
 } from './index.ts'
 import type { OpenClawPolicyAttester } from './types.ts'
 
-/** The only config path this host factory is permitted to inspect. */
+/** The only config path this host factory is permitted to inspect.
+ * @returns The fixed user-owned managed runtime configuration path.
+ */
 export function managedOpenClawConfigPath(): string {
   return resolve(homedir(), '.dsh', 'openclaw-runtime', 'openclaw.json')
 }
@@ -23,6 +25,10 @@ export interface ManagedOpenClawRuntimeHost {
   readonly clientFactory: (options: OpenClawGatewayClientOptions) => OpenClawGatewayClient
   /** Resolve effective restrictions from the managed Gateway and its child runtime. */
   readonly resolvePolicy: (request: ManagedOpenClawPolicyRequest) => Promise<ExecutionNativePolicy | undefined>
+  /** Revalidate effective authority using the owning Phoenix session before every reservation. */
+  readonly resolveExecutionPolicy: (
+    request: ExecutionNativePolicyRequest & ManagedOpenClawPolicyRequest,
+  ) => Promise<ExecutionNativePolicy | undefined>
   /** Return corroborated policy evidence for the exact agent/session/task identity. */
   readonly attestPolicy: OpenClawPolicyAttester
 }
@@ -139,6 +145,10 @@ export async function createManagedOpenClawConfig(host: ManagedOpenClawRuntimeHo
     cwd: selected.cwd,
     toolPolicy: policy.toolPolicy,
     clientFactory: host.clientFactory,
+    policyResolver: async (request) => {
+      try { return await host.resolveExecutionPolicy({ ...request, configPath, ...selected }) }
+      catch { return undefined }
+    },
     policyAttester: host.attestPolicy,
   }
 }

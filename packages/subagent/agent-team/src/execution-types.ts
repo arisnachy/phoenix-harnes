@@ -101,6 +101,8 @@ export interface ExecutionContext {
 }
 /** Trusted host-only input used to resolve native restrictions before reservation flush. */
 export interface ExecutionNativePolicyRequest {
+  /** Globally unique native task identity, shared by reservation and Gateway dispatch. */
+  readonly executionId: ExecutionId
   readonly root: Agent
   readonly engine: ExecutionEngine
   readonly idempotencyKey: string

@@ -1223,7 +1223,15 @@ export function nativeDesktopTurnActive(events: readonly { readonly type: string
  * @returns Canonical guarded selector.
  */
 export function normalizedDesktopTarget(value: string): string
+/** Normalize a supported desktop target identifier.
+ * @param value - Window target, or undefined when no target was selected.
+ * @returns Normalized target, preserving absence.
+ */
 export function normalizedDesktopTarget(value: string | undefined): string | undefined
+/** Normalize a supported desktop target identifier.
+ * @param value - Window target, or undefined when no target was selected.
+ * @returns Normalized target, preserving absence.
+ */
 export function normalizedDesktopTarget(value: string | undefined): string | undefined {
   if (value === undefined) return undefined
   const trimmed = value.trim()
