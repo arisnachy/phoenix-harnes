@@ -142,7 +142,7 @@ export const KiraTeamMessageView = memo(function KiraTeamMessageView({
   const identity = identityFor(data.senderName, data.senderId)
   const avatar = data.senderKind === 'kira' ? 'kira'
     : KIRA_ROSTER.find(persona => persona.kind === data.avatar)?.kind ?? identity.kind
-  const sender = data.senderKind === 'user' ? { name: t?.('chat.user') ?? 'User', role: '', kind: 'aurora' as const } : { ...identity, name: data.senderKind === 'kira' ? 'Kira'
+  const sender = data.senderKind === 'user' ? { name: t?.('chat.user') ?? 'User', role: t?.('chat.userRole') ?? 'Team collaborator', kind: 'aurora' as const } : { ...identity, name: data.senderKind === 'kira' ? 'Kira'
     : participants[data.senderId]?.name ?? (data.missionId === undefined ? identity.name : data.senderName), kind: data.senderKind === 'kira' ? 'kira' : avatar }
   const target = data.targetName === undefined
     ? undefined
