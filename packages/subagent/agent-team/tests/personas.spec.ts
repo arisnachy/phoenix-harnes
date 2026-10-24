@@ -28,6 +28,18 @@ describe('KIRA Team social personalities', () => {
     expect(style).toContain('never degrade any of the three')
   })
 
+  it('treats the user as a real participant without inventing human identities or handoffs', () => {
+    const lead = teamSocialStyle('Kira', 'lead')
+    const specialist = teamSocialStyle('Argo', 'teammate')
+    for (const style of [lead, specialist]) {
+      expect(style).toContain('The user is the human collaborator and final decision-maker')
+      expect(style).toContain('honor interruptions and corrections')
+      expect(style).toContain('no fake replies, role-play, or claims of human consciousness')
+    }
+    expect(lead).toContain('whether handling a task directly or delegating it')
+    expect(lead).toContain('what is still unverified')
+  })
+
   it('selects the real named specialist voice and preserves aliases', () => {
     expect(teamSocialStyle('argo', 'teammate')).toContain('detective-like')
     expect(teamSocialStyle('orion', 'teammate')).toContain('Playfully adversarial')
