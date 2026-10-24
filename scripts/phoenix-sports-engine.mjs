@@ -111,7 +111,9 @@ export async function fetchGames({sport='baseball',league='mlb',date,env=process
   }
   if(!sourceAuthorization('espn',env)) throw new Error('No hay proveedor de resultados habilitado. Confirma licencia/condiciones y configura PHOENIX_SPORTS_ESPN_ALLOWED=1 o PHOENIX_SPORTS_MLB_ALLOWED=1 para MLB.')
   const url='https://site.api.espn.com/apis/site/v2/sports/'+encodeURIComponent(sport)+'/'+encodeURIComponent(league)+'/scoreboard?dates='+compact
-  return {source:'espn',games:normalizeEspn(await getJSON(url,{fetcher}),{sport,league})}
+  const games=normalizeEspn(await getJSON(url,{fetcher}),{sport,league})
+  if(env.PHOENIX_SPORTS_ESPN_IMAGES_ALLOWED!=='1')for(const game of games){game.home.logo=null;game.away.logo=null}
+  return {source:'espn',games}
 }
 export async function discoverLeagues(sport,{env=process.env,fetcher=fetch}={}) {
   if(!Object.hasOwn(SPORTS,sport)) throw new TypeError('Deporte no reconocido')
