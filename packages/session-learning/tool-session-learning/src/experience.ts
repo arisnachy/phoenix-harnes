@@ -158,7 +158,8 @@ export class ExperienceLearningEngine {
    * Count a failed tool result as evidence of execution friction.
    * @param sessionId - sessionId supplied to this public operation.
    * @param failed - failed supplied to this public operation.
-   */
+ * @param toolName - Name of the tool that produced the observation.
+ */
   observeToolResult(sessionId: string, failed: boolean, toolName?: string): void {
     const episode = this.active.get(sessionId)
     if (episode === undefined || !failed) return

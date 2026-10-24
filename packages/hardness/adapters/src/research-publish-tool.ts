@@ -13,7 +13,10 @@ import { defineTool, ToolArgsError, type ToolDefinition } from '@phoenix-ai/dsh-
 
 type Report = Record<string, unknown>
 
-/** Stable report location; identical contents reuse one local output directory. */
+/** Stable report location; identical contents reuse one local output directory.
+ * @param report - Report supplied to this operation.
+ * @returns The result produced by this operation.
+ */
 export function researchOutputPaths(report: Report): { docx: string; pdf: string; html: string } {
   const signature = createHash('sha256').update(JSON.stringify(report)).digest('hex').slice(0, 16)
   const root = join(homedir(), '.dsh', 'research-reports', signature)
@@ -23,6 +26,8 @@ export function researchOutputPaths(report: Report): { docx: string; pdf: string
 /**
  * Fail closed before any Python process or file write. Does not pretend that
  * unverified model-provided references are independently verified.
+ * @param input - Operation inputs validated at the owning boundary.
+ * @returns The result produced by this operation.
  */
 export function validateResearchPublication(input: unknown): Report {
   if (typeof input !== 'object' || input === null || Array.isArray(input)) {
@@ -267,6 +272,9 @@ async function runAttempt(bin: string, args: string[], payload: string, signal: 
  * Generate real DOCX, PDF, and readable HTML using the pinned local Python
  * publisher. Prefer installed Python packages; allow uv dependency bootstrap
  * only when the current environment lacks them.
+ * @param report - Report supplied to this operation.
+ * @param signal - Optional cancellation signal.
+ * @returns The result produced by this operation.
  */
 export async function publishResearchReport(report: Report, signal: AbortSignal): Promise<PublisherOutcome> {
   validateResearchPublication(report)
@@ -299,7 +307,9 @@ export async function publishResearchReport(report: Report, signal: AbortSignal)
   throw new Error('No fue posible publicar el documento. ' + problems.join('; '))
 }
 
-/** Model-facing academic report publication with actual file evidence. */
+/** Model-facing academic report publication with actual file evidence.
+ * @returns The result produced by this operation.
+ */
 export function createResearchPublishTool(): ToolDefinition {
   return defineTool({
     name: 'phoenix_research_publish',

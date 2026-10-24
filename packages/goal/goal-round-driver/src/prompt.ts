@@ -14,6 +14,7 @@ export type GoalRoundFeedback = Pick<GoalJudgeAuditEntry, 'verdict' | 'summary' 
  * @param feedback - latest persisted non-passing judge result, when repair is required.
  * @param strategy - bounded recovery strategy selected for this round.
  * @returns a fresh one-block prompt for `Agent.followup()`.
+ * @param stalledRounds - Stalled rounds supplied to this operation.
  */
 export function renderGoalRoundPrompt(
   goal: GoalView,

@@ -36,6 +36,8 @@ export function unfinishedTodoRecoveryObjective(events: readonly SessionEvent[])
  *
  * A genuine user's most recent turn owns the work; historical tasks from an
  * earlier human turn cannot silently re-arm themselves.
+ * @param events - Events supplied to this operation.
+ * @returns The result produced by this operation.
  */
 export function unfinishedStructuredWorkRecoveryObjective(events: readonly SessionEvent[]): string | undefined {
   const todo = unfinishedTodoRecoveryObjective(events)
@@ -72,6 +74,8 @@ export function unfinishedStructuredWorkRecoveryObjective(events: readonly Sessi
  * This inspects durable tool outcomes, never assistant prose or hard-coded
  * refusal phrases. It does not rerun the failed operation: the Goal driver
  * decides a safe alternative after checking whether effects actually occurred.
+ * @param events - Events supplied to this operation.
+ * @returns The result produced by this operation.
  */
 export function unfinishedToolFailureRecoveryObjective(events: readonly SessionEvent[]): string | undefined {
   const index = events.findLastIndex(event =>
@@ -91,11 +95,11 @@ export function unfinishedToolFailureRecoveryObjective(events: readonly SessionE
     // Accept a structured unverified receipt as unfinished operational work.
     // Inspect nested LLM tool-result blocks rather than assistant phrasing.
     const blocks: unknown = event.data.message.content
-    const pendingDispatch = Array.isArray(blocks) && blocks.some(outer => {
+    const pendingDispatch = Array.isArray(blocks) && blocks.some((outer) => {
       if (!isRecord(outer)) return false
       const inner: unknown = outer.type === 'tool-result' ? outer.content : [outer]
       if (!Array.isArray(inner)) return false
-      return inner.some(part => {
+      return inner.some((part) => {
         if (!isRecord(part) || part.type !== 'text' || typeof part.text !== 'string') return false
         try {
           const row: unknown = JSON.parse(part.text)

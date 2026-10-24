@@ -758,9 +758,13 @@ export function codexImageInvocation(
       'image_generation: unsafe Windows Codex launcher; use codex.exe via CODEX_CLI_PATH',
     )
   }
-  // /s strips the outer quotes and keeps the quoted launcher path intact.
-  const commandLine = '"' + executable + '" ' + argvTail.join(' ')
-  return [process.env.ComSpec?.trim() || 'cmd.exe', '/d', '/s', '/c', '"' + commandLine + '"']
+  // Keep the launcher and its arguments as separate argv entries. Passing a
+  // pre-quoted command line through child_process.spawn lets Node quote the
+  // quotes a second time on Windows, so cmd receives the literal quote and
+  // reports that the spaced path is not an executable. `call` preserves the
+  // batch-file exit status while letting cmd's argv marshalling quote the path
+  // exactly once.
+  return [process.env.ComSpec?.trim() || 'cmd.exe', '/d', '/s', '/c', 'call', executable, ...argvTail]
 }
 /**
  * Prefer the native executable shipped by the official @openai/codex
@@ -778,6 +782,12 @@ export async function resolveNativeCodexImageLauncher(
   architecture: NodeJS.Architecture = process.arch,
 ): Promise<string> {
   if (platform !== 'win32' || !/\.(cmd|bat)$/i.test(shim)) return shim
+  // Only npm/pnpm's conventional Codex wrappers are eligible for native
+  // package replacement. A caller may intentionally pass another command
+  // shim from the same directory; scanning that arbitrary basename would
+  // silently launch a different executable than the one it requested.
+  const shimName = basename(shim).toLowerCase()
+  if (shimName !== 'codex.cmd' && shimName !== 'codex.bat') return shim
   const folder = dirname(shim)
   const packageRoots = [
     join(folder, 'node_modules', '@openai', 'codex'),

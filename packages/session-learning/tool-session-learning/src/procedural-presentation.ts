@@ -23,7 +23,10 @@ export function formatProceduralContext(states: readonly ProceduralLearningState
   ].join('\n').slice(0, MAX_CONTEXT_CHARS)
 }
 
-/** Expose relevant incomplete experience only as a recovery hint, not as success. */
+/** Expose relevant incomplete experience only as a recovery hint, not as success.
+ * @param states - States supplied to this operation.
+ * @returns The result produced by this operation.
+ */
 export function formatRecoveryCandidates(states: readonly ProceduralLearningState[]): string {
   const lines = states.filter(state => state.status === 'candidate').slice(0, 2)
     .map(state => `- [${state.scope}] ${state.title}; attempted steps: ${state.steps.slice(0, 12).join(' → ')}`)

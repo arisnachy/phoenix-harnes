@@ -1266,6 +1266,11 @@ function parseBrowserModifier(value: string): number {
   }
   return bitmask
 }
+/** Normalize a supported browser target identifier.
+ * @param key - Key supplied to this operation.
+ * @param modifiers - Modifiers supplied to this operation.
+ * @returns The result produced by this operation.
+ */
 export function normalizeBrowserKey(key: string, modifiers: number | string | string[] = 0): NormalizedBrowserKey {
   const raw = key.trim()
   if (!raw) {

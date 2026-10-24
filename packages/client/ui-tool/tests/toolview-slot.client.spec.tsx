@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { usePinnedBrowserLanguages } from '@phoenix-ai/dsh-client-test-runtime'
 // The Tool presentation package's acceptance chain on the REAL machinery stack:
 // SlotTestRuntime (cordis Context + SlotRegistry ledger + the ui-renderer
 // renderer) + ui-conversation and ui-tool apply — no outlet twins. Proves the
@@ -10,7 +11,7 @@
 // the declaration then land through slots.inject when the chat entry appears.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup } from '@testing-library/react'
+import { cleanup, fireEvent } from '@testing-library/react'
 import type { ISession, SessionId, ToolResultNode } from '@phoenix-ai/dsh-client-runtime/client'
 import type { PropsRenderSlots } from '@phoenix-ai/dsh-client-ui-slots'
 import { SlotTestRuntime, stubSettingsScope } from '@phoenix-ai/dsh-client-test-runtime'
@@ -19,6 +20,8 @@ import { apply as applyConversation, inject as injectConversation } from '@phoen
 import { apply as applyTool, inject as injectTool } from '@phoenix-ai/dsh-client-ui-tool/client'
 import type { ToolCallViewProps } from '@phoenix-ai/dsh-client-ui-tool/client'
 import { toolChatSnapshot } from './tool-details-render.client.tsx'
+
+usePinnedBrowserLanguages('en-US')
 
 const SID = 's1' as SessionId
 
@@ -72,7 +75,7 @@ async function bench(nodes: ToolResultNode[]) {
   // ui-theme's Appearance row binds a durable scope through these two.
   runtime.provide('remote', { $on: () => () => {} })
   runtime.provide('settingsScope', { bind: () => stubSettingsScope().scope } as never)
-  const layout = { openDetails: vi.fn(), closeDetails: vi.fn() }
+  const layout = { openDetails: vi.fn(), closeDetails: vi.fn(), setSidebarFocus: vi.fn() }
   runtime.provide('layout', layout)
   const locale = new LocaleRuntime(runtime.ctx)
   runtime.provide('locale', locale)
@@ -98,14 +101,14 @@ describe('keyed toolview hole through the real machinery', () => {
       toolResult(3, 'c1', 'bash'),
       toolResult(4, 'c2', 'mystery', '{"n":1}'),
     ])
-    const view = b.runtime.renderRoot()
+    const view = renderExpanded(b.runtime)
     // bash: the sample plugin's keyed registration took the row (root
     // session → global arm, decided inside the component off useSessions).
     expect(view.container.querySelector('[data-sample="bash"]')).not.toBeNull()
-    expect(view.getByText('Bash')).toBeTruthy()
+    expect(view.getByText('Ran')).toBeTruthy()
     expect(view.getByText('Build')).toBeTruthy()
     // mystery: no registration under that key → render-site fallback.
-    expect(view.getByText('Tool call')).toBeTruthy()
+    expect(view.getByText('mystery')).toBeTruthy()
     await b.runtime.dispose()
   })
 
@@ -116,7 +119,7 @@ describe('keyed toolview hole through the real machinery', () => {
       toolResult(5, 'cordis-3', 'cordis_stop', '{"id":"dyn-2"}'),
       toolResult(6, 'cordis-4', 'cordis_undefine', '{"id":"dyn-2"}'),
     ])
-    const view = b.runtime.renderRoot()
+    const view = renderExpanded(b.runtime)
 
     // Every one of these rows is user-visible on each model define/run, so each
     // names its act and carries the package id rather than falling back to the
@@ -134,7 +137,7 @@ describe('keyed toolview hole through the real machinery', () => {
 
   it('file-path clicks travel owner openFile → chat inject → workspaces.openPath', async () => {
     const b = await bench([toolResult(3, 'c1', 'read', '{"path":"src/a.ts"}')])
-    const view = b.runtime.renderRoot()
+    const view = renderExpanded(b.runtime)
     view.getByText('src/a.ts').click()
     expect(b.layout.openDetails).not.toHaveBeenCalled()
     await vi.waitFor(() => {
@@ -145,7 +148,7 @@ describe('keyed toolview hole through the real machinery', () => {
 
   it('bash summary clicks do not open details or host paths', async () => {
     const b = await bench([toolResult(3, 'c1', 'bash')])
-    const view = b.runtime.renderRoot()
+    const view = renderExpanded(b.runtime)
     view.getByText('Build').click()
     expect(b.layout.openDetails).not.toHaveBeenCalled()
     expect(b.runtime.workspaces.calls.some(c => c.method === 'openPath')).toBe(false)
@@ -154,8 +157,8 @@ describe('keyed toolview hole through the real machinery', () => {
 
   it('a live keyed registration takes over its tool row and unload reverts to the fallback', async () => {
     const b = await bench([toolResult(3, 'c2', 'mystery', '{"n":1}')])
-    const view = b.runtime.renderRoot()
-    expect(view.getByText('Tool call')).toBeTruthy()
+    const view = renderExpanded(b.runtime)
+    expect(view.getByText('mystery')).toBeTruthy()
     let dispose = (): void => {}
     dispose = b.slots.register(
       { name: 'tool.call.toolview', key: 'mystery' },
@@ -167,7 +170,7 @@ describe('keyed toolview hole through the real machinery', () => {
     dispose()
     await b.runtime.flush()
     expect(view.queryByTestId('mystery-row')).toBeNull()
-    expect(view.getByText('Tool call')).toBeTruthy()
+    expect(view.getByText('mystery')).toBeTruthy()
     await b.runtime.dispose()
   })
 
@@ -195,7 +198,7 @@ describe('keyed toolview hole through the real machinery', () => {
     }, ({ mark, poke }: ToolCallViewProps & { mark: string; poke: () => void }) => (
       <button data-testid="probe-row" onClick={poke}>{mark}</button>
     ))
-    const view = b.runtime.renderRoot()
+    const view = renderExpanded(b.runtime)
     const row = view.getByTestId('probe-row')
     expect(row.textContent).toBe(`for:${SID}`)
     row.click()
@@ -215,7 +218,7 @@ describe('registrant declaration injection', () => {
     // ui-theme's Appearance row binds a durable scope through these two.
     runtime.provide('remote', { $on: () => () => {} })
     runtime.provide('settingsScope', { bind: () => stubSettingsScope().scope } as never)
-    runtime.provide('layout', { openDetails: vi.fn(), closeDetails: vi.fn() })
+    runtime.provide('layout', { openDetails: vi.fn(), closeDetails: vi.fn(), setSidebarFocus: vi.fn() })
     const locale = new LocaleRuntime(runtime.ctx)
     runtime.provide('locale', locale)
     runtime.slots.installLocale(locale)
@@ -247,3 +250,12 @@ describe('registrant declaration injection', () => {
     await runtime.dispose()
   })
 })
+
+/** Follow the public disclosure before asserting technical tool rows. */
+function renderExpanded(runtime: SlotTestRuntime) {
+  const view = runtime.renderRoot()
+  for (const toggle of view.container.querySelectorAll('[data-chat-flow-kind="tool-activity"] button[aria-expanded="false"]')) {
+    fireEvent.click(toggle)
+  }
+  return view
+}

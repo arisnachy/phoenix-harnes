@@ -20,7 +20,10 @@
 .jump{grid-column:1/-1;width:100%;border:1px solid #d4b48c;border-radius:9px;background:transparent;
  padding:8px;color:inherit;cursor:pointer}.jump:hover{background:rgb(217 172 98 / 12%)}
 .listHead{display:flex;justify-content:space-between;padding:16px 7px 8px;font-size:11px;font-weight:750;opacity:.7}
-.list{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:0 1px 20px}
+.list{
+  --dsh-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l2);
+  --dsh-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l2);
+flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:0 1px 20px}
 .person{display:flex;align-items:center;gap:30px;width:100%;min-height:58px;padding:5px 8px;border:1px solid transparent;
  border-radius:13px;background:transparent;color:inherit;text-align:left;cursor:pointer}
 .person:hover,.person:focus-visible{background:var(--dsw-alias-interactive-bg-hover,#eee7dc)}

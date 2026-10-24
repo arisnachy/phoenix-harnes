@@ -71,7 +71,9 @@ function routeFromConfig(data: Json, digest: string): ExecutionNativePolicy | un
     provider: 'openai', model: resolvedModel.slice('openai/'.length), agentRuntime: 'codex',
     sandbox, approval, cwd: workspace,
     toolPolicy: {
-      profile: 'minimal', allow: [...allow], deny: [...deny],
+      profile: 'minimal',
+      allow: [...new Set(allow)].sort((a, b) => a.localeCompare(b)),
+      deny: [...new Set(deny)].sort((a, b) => a.localeCompare(b)),
       profileHash: digest,
     },
   }

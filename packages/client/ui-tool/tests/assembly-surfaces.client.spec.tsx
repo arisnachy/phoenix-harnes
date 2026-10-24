@@ -76,7 +76,7 @@ async function bench(nodes: ToolResultNode[]) {
   // ui-theme's Appearance row binds a durable scope through these two.
   runtime.provide('remote', { $on: () => () => {} })
   runtime.provide('settingsScope', { bind: () => stubSettingsScope().scope } as never)
-  runtime.provide('layout', { openDetails: vi.fn(), closeDetails: vi.fn() })
+  runtime.provide('layout', { openDetails: vi.fn(), closeDetails: vi.fn(), setSidebarFocus: vi.fn() })
   const locale = new LocaleRuntime(runtime.ctx)
   runtime.provide('locale', locale)
   runtime.slots.installLocale(locale)
@@ -101,6 +101,9 @@ describe('todo_write assembly (product registrations, no outlet twins)', () => {
     // The dock strip reads the host-computed 'todos' projection.
     runtime.sessions.behavior(SID).projections.set('todos', TODOS)
     const view = runtime.renderRoot()
+    for (const toggle of view.container.querySelectorAll('[data-chat-flow-kind="tool-activity"] button[aria-expanded="false"]')) {
+      fireEvent.click(toggle)
+    }
 
     // Keyed toolview registration took the row (summary derived from args).
     const row = view.container.querySelector('[data-tool="todo_write"]')
@@ -136,6 +139,9 @@ describe('terminal card assembly', () => {
       bashResult(4, 'c-fallback', { call: { name: 'fx-bash', argsRaw: '{"command":"ls -la"}' } }),
     ])
     const view = runtime.renderRoot()
+    for (const toggle of view.container.querySelectorAll('[data-chat-flow-kind="tool-activity"] button[aria-expanded="false"]')) {
+      fireEvent.click(toggle)
+    }
 
     // Keyed BashRow: collapsed by default, the whole summary row is the toggle.
     const keyedRow = view.container.querySelector('[data-sample="bash"]')

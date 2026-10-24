@@ -114,6 +114,9 @@ describe('SidebarRoot pointer-revealed scrollbars', () => {
     movePointer(column, 'in')
     expect(quiet()).toBe(false)
     movePointerOverDocument(COLUMN_WIDTH + 400, 300)
+    // The document listener samples geometry on the next animation frame;
+    // flush that frame before advancing the two-second linger window.
+    act(() => { vi.advanceTimersByTime(16) })
     act(() => { vi.advanceTimersByTime(2000) })
     expect(quiet()).toBe(true)
   })

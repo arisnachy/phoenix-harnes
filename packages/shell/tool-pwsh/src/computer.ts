@@ -262,6 +262,8 @@ function desktopControlDescriptorPath(): string {
  * A named-pipe connection failure that proves no native command reached the
  * Desktop broker. Only these pre-connect failures are safe to retry through
  * another actuator; EPIPE/timeouts remain ambiguous and are never replayed.
+ * @param error - Error supplied to this operation.
+ * @returns Whether the requested condition holds.
  */
 export function desktopControlConnectionWasNeverEstablished(error: unknown): boolean {
   const code = (error as NodeJS.ErrnoException | undefined)?.code
@@ -466,6 +468,9 @@ async function runLegacyDesktopObservation(
  * and an active lease prevents a second conversation taking over the first.
  * Native preview failure does not disable the existing Computer Use fallback when
  * no desktop shell is running; a user pause or occupied lease always fails closed.
+ * @param args - Validated arguments for the requested operation.
+ * @param sessionId - Identifier of the owning conversation.
+ * @returns Whether the requested condition holds.
  */
 export function desktopPreviewCommandForAction(
   args: ComputerToolArgs,
@@ -1386,7 +1391,10 @@ Start-Process -FilePath $uri.AbsoluteUri | Out-Null
 Write-Output ('Opened system browser: ' + $uri.AbsoluteUri)
 `
 
-/** Build an injection-safe fallback that opens an HTTP(S) URL in Windows' default browser. */
+/** Build an injection-safe fallback that opens an HTTP(S) URL in Windows' default browser.
+ * @param url - URL whose site or resource identity is inspected.
+ * @returns The result produced by this operation.
+ */
 export function systemBrowserOpenInvocation(url: string): ComputerInvocation {
   const parsed = new URL(url)
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
@@ -1688,7 +1696,8 @@ function delay(ms: number, signal?: AbortSignal): Promise<void> {
  * when Phoenix is launched through pnpm without Phoenix.exe. A snapshot is
  * created only AFTER the computer tool has passed its normal permissions.
  */
-/** @param sessionId - Owning conversation id.
+/** Resolve the persisted desktop observation path.
+ * @param sessionId - Owning conversation id.
  * @returns Path scoped by a SHA-256 digest rather than a raw user input.
  */
 export function desktopObservationPath(sessionId: string): string {

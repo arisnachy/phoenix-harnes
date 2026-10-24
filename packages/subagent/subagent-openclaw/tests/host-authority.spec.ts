@@ -108,10 +108,10 @@ async function fixture(activateManager: boolean) {
   return { root, home, workspace, gateway, config, ctx, host, selected }
 }
 afterEach(async () => {
-  await Promise.all(contexts.splice(0).map(async (ctx) => ctx.fiber.dispose()))
+  await Promise.all(contexts.splice(0).map(async ctx => ctx.fiber.dispose()))
   for (const server of servers.splice(0)) {
     for (const socket of server.clients) socket.terminate()
-    await new Promise<void>(resolve => { server.close(() => { resolve() }) })
+    await new Promise<void>((resolve) => { server.close(() => { resolve() }) })
   }
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true })
   if (oldHome === undefined) delete process.env.DSH_HOME
@@ -142,7 +142,9 @@ it('binds the Host-authorized model and sandbox to an authenticated native route
   const managed = await createManagedOpenClawConfig(f.host)
   if (managed === undefined) throw new Error('verified Host did not compose the native adapter')
   const adapter = new OpenClawExecutionAdapter(managed)
-  await expect(adapter.probe()).resolves.toMatchObject({
+  const probe = await adapter.probe()
+  expect(probe.diagnostic).toBeUndefined()
+  expect(probe).toMatchObject({
     engine: 'openclaw', connected: true, providers: ['openai-codex'],
   })
   expect(f.gateway.requests).toContain('agents.list')

@@ -402,7 +402,7 @@ export class SystemPrompt extends Service {
     if ((config.includeRuntimeContext ?? true)
       && process.platform === 'win32'
       && process.env.PHOENIX_UPDATE_SUPERVISED === '1') {
-      const read = startWindowsCapabilityDiscovery(() => this.ctx.emit('system-prompt/change'))
+      const read = startWindowsCapabilityDiscovery(() => { this.ctx.emit('system-prompt/change') })
       this.context({ name: 'windows:free-capabilities', order: 40, text: read })
     }
   }

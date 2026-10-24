@@ -42,6 +42,7 @@ export interface BusinessLibraryProduct {
   readonly buildStatus: 'not-built' | 'current' | 'stale'
   readonly listingStage: 'not-prepared' | 'assets-missing' | 'review-required' | 'integrity-failed'
 }
+/** Host projection of available business-library artifacts. */
 export interface BusinessLibrarySnapshot {
   readonly totalCount: number
   readonly truncated: boolean

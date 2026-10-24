@@ -23,8 +23,15 @@ function project(value: unknown): BusinessLibraryProduct | undefined {
   if (!id || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(id) || !title || !type || !TYPES.has(type)) return undefined
   const chapters = array(p.chapters), files = array(p.files), listings = array(p.listings)
   const blueprint = record(p.blueprint), build = record(p.build)
-  const ordered = chapters.map(c => {const ch=record(c);return {number:ch?.number,sha256:ch?.sha256,words:ch?.words}}).sort((a,b)=>Number(a.number)-Number(b.number))
-  const fingerprint = sha({ chapters: sha(ordered), blueprint:p.blueprint ?? null })
+  const ordered = chapters.map((value) => {
+    const chapter = record(value)
+    return { number: chapter?.number, sha256: chapter?.sha256, words: chapter?.words }
+  }).sort((a, b) => Number(a.number) - Number(b.number))
+  const covers = files.flatMap((value) => {
+    const file = record(value)
+    return file?.role === 'cover' ? [file.sha256] : []
+  }).sort()
+  const fingerprint = sha({ chapters: sha(ordered), blueprint: p.blueprint ?? null, covers })
   const writtenWords = chapters.reduce<number>((sum, c) => {
     const count = record(c)?.words
     return sum + (typeof count === 'number' && Number.isSafeInteger(count) && count >= 0 ? count : 0)
@@ -50,7 +57,7 @@ export async function readBusinessLibrarySnapshot(root = process.env.PHOENIX_BUS
   const path=join(root,'library.json')
   let file
   try { file=await lstat(path) } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return {totalCount:0,truncated:false,products:[]}
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { totalCount:0,truncated:false,products:[] }
     throw error
   }
   if (!file.isFile() || file.size > MAX_BYTES) throw new Error('Índice comercial inválido o demasiado grande.')
@@ -62,5 +69,5 @@ export async function readBusinessLibrarySnapshot(root = process.env.PHOENIX_BUS
   if (document.products.length > 50000) throw new Error('Demasiados productos en el índice comercial.')
   const products=document.products.map(project).filter((p):p is BusinessLibraryProduct=>p!==undefined)
     .sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt)||a.id.localeCompare(b.id))
-  return {totalCount:products.length,truncated:products.length>LIMIT,products:products.slice(0,LIMIT)}
+  return { totalCount:products.length,truncated:products.length>LIMIT,products:products.slice(0,LIMIT) }
 }
