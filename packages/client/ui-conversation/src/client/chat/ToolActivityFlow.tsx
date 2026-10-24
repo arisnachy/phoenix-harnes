@@ -13,6 +13,8 @@ import { ReasoningRow } from './ReasoningRow.tsx'
 import { MiniBrowser, type SavedAccessNotice, type SecureLoginTarget } from './MiniBrowser.tsx'
 import { DesktopLive } from './DesktopLive.tsx'
 import { SecureAsk } from './SecureAsk.tsx'
+import { GenerativeUi, type GenerativeUiBlock } from './GenerativeUi.tsx'
+import { sportsCardsFromToolResult, unrenderedSportsCards } from './sports-tool-cards.ts'
 import { toolActivity, type TurnActivity, type TurnProgress } from './turn-progress.ts'
 import chatCss from './ChatView.module.css'
 import css from './ToolActivityFlow.module.css'
@@ -72,6 +74,7 @@ type FlowItem =
     readonly key: string
     readonly images: readonly { readonly attachment: ImageAttachmentRef }[]
   }
+  | { readonly kind: 'sports'; readonly key: string; readonly blocks: readonly GenerativeUiBlock[] }
 
 function imageActivity(node: OrderedChatNode): readonly { readonly attachment: ImageAttachmentRef }[] {
   if (node.kind !== 'tool-call') return []
@@ -311,6 +314,7 @@ function buildFlow(nodes: readonly OrderedChatNode[]): FlowItem[] {
   const flow: FlowItem[] = []
   let pending: ActivityItem[] = []
   let pendingAnchorKey: string | undefined
+  let sportsCards: GenerativeUiBlock[] = []
 
   const flush = (avoidAnchorKey?: string): void => {
     const first = pending[0]
@@ -336,6 +340,11 @@ function buildFlow(nodes: readonly OrderedChatNode[]): FlowItem[] {
       continue
     }
     if (isWholeActivity(node.kind)) {
+      if (node.kind === 'tool-call') {
+        const result = (node.data as ToolChatData).root
+        sportsCards.push(...sportsCardsFromToolResult(result))
+        sportsCards = sportsCards.slice(-12)
+      }
       const images = imageActivity(node)
       if (images.length > 0) {
         flush()
@@ -353,6 +362,12 @@ function buildFlow(nodes: readonly OrderedChatNode[]): FlowItem[] {
       if (reasoning.length > 0) pending.push(...reasoning)
       if (hasAssistantSurface(assistant)) {
         flow.push({ kind: 'node', key: node.key })
+        if (assistant.status === 'settled' && sportsCards.length > 0) {
+          const remaining = unrenderedSportsCards(sportsCards,
+            assistant.blocks.filter(b => b.kind === 'text').map(b => b.text))
+          if (remaining.length > 0) flow.push({ kind: 'sports', key: 'sports:' + node.key, blocks: remaining })
+          sportsCards = []
+        }
         flush(node.key)
       } else if (reasoning.length === 0) {
         flush()
@@ -363,6 +378,8 @@ function buildFlow(nodes: readonly OrderedChatNode[]): FlowItem[] {
 
     flush()
     flow.push({ kind: 'node', key: node.key })
+    // Never carry a previous user's sports analysis into another turn.
+    if (node.kind === 'user' || node.kind === 'steering') sportsCards = []
   }
 
   flush()
@@ -547,6 +564,20 @@ function ToolActivityChevron({ open }: { readonly open: boolean }) {
       </svg>
     </span>
   )
+}
+
+/** Tool-backed visual evidence is part of the conversation, never a new menu or a tool disclosure. */
+function SportsEvidenceSurface({ blocks, seatProps }: {
+  readonly blocks: readonly GenerativeUiBlock[]
+  readonly seatProps: SeatProps
+}) {
+  return <section data-chat-flow-kind="sports-evidence" aria-label="Panel deportivo de Kira">
+    {blocks.map((block,index)=><GenerativeUi key={index} block={block}
+      onAction={(prompt,mode)=>{
+        seatProps.inputActions.setDraft(prompt)
+        if(mode==='submit')seatProps.inputActions.submit()
+      }} />)}
+  </section>
 }
 
 function ToolActivityGroup({
