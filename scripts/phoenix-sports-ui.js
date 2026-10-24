@@ -155,7 +155,9 @@ function renderOdds(){
   if(!oddsRows.length){empty(el,'Sin cuotas para este mercado o periodo. Comprueba cobertura y temporada.');return}
   for(const o of oddsRows.slice(0,90)){
     const card=make('article',undefined,'odd')
-    card.append(make('div',o.away+' vs '+o.home,'small'),make('strong',o.selection))
+    card.append(make('div',o.away+' vs '+o.home+' · '+dateTime(o.start),'small'),make('strong',o.selection))
+    const sameMarket=oddsRows.filter(x=>x.eventId===o.eventId&&x.bookmaker===o.bookmaker&&x.market===o.market&&x.point===o.point)
+    if(o.market==='h2h'&&sameMarket.length>=2&&o.decimalOdds===Math.min(...sameMarket.map(x=>x.decimalOdds)))card.append(make('span','Favorito de mercado · cuota implícita '+(100/o.decimalOdds).toFixed(1)+'%','pill'))
     const row=make('div',undefined,'row')
     row.append(make('span',o.market+(o.point!==null?' · '+o.point:'')),make('span',o.decimalOdds.toFixed(2),'price'))
     card.append(row,make('div',o.bookmaker+' · '+dateTime(o.updatedAt),'muted'))
