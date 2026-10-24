@@ -27,7 +27,7 @@ async function loadState(){
 }
 async function saveState(){
   const snapshot=JSON.stringify(state,null,2)+'\n'
-  saveQueue=saveQueue.then(async()=>{
+  saveQueue=saveQueue.catch(()=>{}).then(async()=>{
     await mkdir(HOME,{recursive:true,mode:0o700})
     const temporary=store+'.'+randomUUID()+'.tmp'
     try {await writeFile(temporary,snapshot,{mode:0o600,flag:'wx'});await rename(temporary,store)}
@@ -40,6 +40,7 @@ async function observe(id,ok,completeness){
   await saveState()
 }
 async function measured(id,work){
+  if(!sourceAuthorization(id))throw new Error('Proveedor sin autorización/configuración: '+id)
   const row=state.observations[id]
   if(row?.quarantined)throw new Error('Proveedor '+id+' en cuarentena tras cinco fallos consecutivos; revisar antes de reactivar.')
   try{
@@ -49,7 +50,7 @@ async function measured(id,work){
   }catch(e){await observe(id,false,0);throw e}
 }
 function json(res,status,payload){
-  res.writeHead(status,{'content-type':'application/json; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff','access-control-allow-origin':'null'})
+  res.writeHead(status,{'content-type':'application/json; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff'})
   res.end(JSON.stringify(payload))
 }
 async function bodyJSON(req){
