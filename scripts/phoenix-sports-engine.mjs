@@ -119,7 +119,7 @@ export async function discoverLeagues(sport,{env=process.env,fetcher=fetch}={}) 
   const url='https://sports.core.api.espn.com/v2/sports/'+encodeURIComponent(sport)+'/leagues?limit=500'
   const data=await getJSON(url,{fetcher})
   const items=Array.isArray(data.items)?data.items:[]
-  const slugs=items.map(x=>x.slug||x.abbreviation?.toLowerCase()||x.$ref?.match(/\/leagues\/([^/?#]+)/u)?.[1]).filter(safeSlug)
+  const slugs=items.map(x=>x.slug||x.$ref?.match(/\/leagues\/([^/?#]+)/u)?.[1]||x.abbreviation?.toLowerCase()).filter(safeSlug)
   return [...new Set(slugs)].slice(0,500).map(slug=>({sport,league:slug,source:'espn',state:'candidate',verifiedAt:new Date().toISOString()}))
 }
 export async function discoverOddsSports({env=process.env,fetcher=fetch}={}) {
