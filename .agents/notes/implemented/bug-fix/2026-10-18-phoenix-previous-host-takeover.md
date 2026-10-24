@@ -2,6 +2,8 @@
 
 Status: implemented
 
+English | [中文](2026-10-18-phoenix-previous-host-takeover.zh.md)
+
 ## Problem
 
 Prior startup could not retire an existing Host supervised from a detached `phoenix-runtime-*` directory or from the same official checkout, because the older handoff implementation required a different older official Git checkout.

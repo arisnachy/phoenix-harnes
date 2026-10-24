@@ -2,6 +2,8 @@
 
 Status: implemented
 
+English | [中文](2026-10-22-openrouter-nemotron-context-metadata.zh.md)
+
 ## Problem
 Phoenix rejected a request for `nvidia/nemotron-3-nano-30b-a3b` because the computed safe input budget was 122,880 tokens after reserving 4,096 for safety and 4,096 for output. Therefore the resolved model `contextWindow` was 131,072, while the outgoing input was estimated at 187,208 tokens.
 

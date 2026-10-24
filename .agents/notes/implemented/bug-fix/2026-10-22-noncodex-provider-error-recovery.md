@@ -2,6 +2,8 @@
 
 Status: implemented
 
+English | [中文](2026-10-22-noncodex-provider-error-recovery.zh.md)
+
 ## Problem
 
 A small OpenRouter model called `phoenix_research_publish` with title and sections only. The publication tool correctly refused to create an academic report without real `report.references`. A subsequent pi-ai model stream terminated with generic `PI_AI_ERROR`, which normal provider retry policy did not retry, ending the user turn.

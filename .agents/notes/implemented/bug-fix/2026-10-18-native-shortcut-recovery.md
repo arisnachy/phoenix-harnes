@@ -2,6 +2,8 @@
 
 Status: implemented
 
+English | [中文](2026-10-18-native-shortcut-recovery.zh.md)
+
 ## Problem
 
 The installer contains an interactive Windows native shell with WebView2, a single-instance window signal, and an existing Phoenix backend attach path, but the repository shortcut overwrote its launch target with a permanently visible PowerShell window. Users with a supported native install consequently lost the embedded desktop experience and saw a misleading legacy-EXE rejection message.
