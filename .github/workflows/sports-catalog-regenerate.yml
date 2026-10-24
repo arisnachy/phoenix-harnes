@@ -1,0 +1,38 @@
+name: Sports catalog regeneration (one shot)
+on:
+  push:
+    branches: [feat/kira-sports-source-intelligence-20261024]
+    paths:
+      - .github/workflows/sports-catalog-regenerate.yml
+permissions:
+  contents: write
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/kira-sports-source-intelligence-20261024
+          persist-credentials: true
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.14.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run gen-tool-catalog
+      - run: pnpm run gen-client-catalog
+      - run: pnpm run gen-module-graph
+      - run: pnpm run gen-persistence-catalog
+      - name: Commit generated contract files only to review branch
+        run: |
+          git config user.name "phoenix-sports-ci"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/tool-catalog.md docs/module-graph.md packages/extensions/cordis-client-runner/src/client/slot-catalog.ts docs/persistence-catalog.md
+          if ! git diff --cached --quiet; then
+            git commit -m "docs: regenerate checked sports and platform catalogs"
+            git push origin HEAD:refs/heads/feat/kira-sports-source-intelligence-20261024
+          fi
