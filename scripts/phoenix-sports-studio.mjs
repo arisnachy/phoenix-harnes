@@ -64,7 +64,8 @@ async function bodyJSON(req){
 function sources(){
   return SOURCES.map(d=>{
     const auth=sourceAuthorization(d.id)
-    return {...d,env:undefined,authorized:auth,health:sourceScore(state.observations[d.id]||emptySourceRecord(d.id),auth),observations:state.observations[d.id]||emptySourceRecord(d.id)}
+    const implemented=['espn','mlb','the-odds-api'].includes(d.id)
+    return {...d,env:undefined,authorized:auth&&implemented,configured:auth,implemented,health:implemented?sourceScore(state.observations[d.id]||emptySourceRecord(d.id),auth):{score:0,status:'reference-only'},observations:state.observations[d.id]||emptySourceRecord(d.id)}
   })
 }
 const immutableHeaders={
