@@ -1,5 +1,6 @@
 import {test} from 'node:test'
 import assert from 'node:assert/strict'
+import {readFileSync} from 'node:fs'
 import {sportsCatalog,getFeed,discoverEspnLeagues,chatGames,marketOdds,pricedTicket} from '../src/sports.ts'
 import {getMlbPitcherReport} from '../src/mlb.ts'
 import {normalizeEspnMoneylines} from '../src/espn-odds.ts'
@@ -162,4 +163,11 @@ test('Cricket league references are discovered from the personalized public ESPN
   const leagues=await discoverEspnLeagues('cricket',{},fetcher)
   assert.ok(leagues.includes('123'))
   assert.ok(urls[0].startsWith('https://site.web.api.espn.com/'))
+})
+
+test('sports native tool instructions never tell Kira to print raw JSON or code fences',()=>{
+  const modelFacing=readFileSync(new URL('../src/index.ts',import.meta.url),'utf8')
+  assert.match(modelFacing,/NO copies el JSON/)
+  assert.doesNotMatch(modelFacing,/instruction:'[^']*(?:reproduce los bloques|JSON intacto|en fence|entre fences)/u)
+  assert.match(modelFacing,/Phoenix renderiza uiBlocks automáticamente/)
 })
