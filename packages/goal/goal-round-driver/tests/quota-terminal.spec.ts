@@ -12,11 +12,12 @@ import * as goalDriver from '../src/index.ts'
 
 class QuotaAdapter extends LlmAdapter {
   readonly requests: GenerateOptions[] = []
+  constructor(private readonly quotaMessage = 'The usage limit has been reached') { super() }
 
   override async * stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
     this.requests.push(options)
     if (this.requests.length === 1) {
-      throw new LlmError('The usage limit has been reached', QUOTA_EXCEEDED_CODE)
+      throw new LlmError(this.quotaMessage, QUOTA_EXCEEDED_CODE)
     }
     yield { type: 'block-start', index: 0, blockType: 'text' }
     yield { type: 'block-end', index: 0, block: { type: 'text', text: 'unexpected retry' } }
@@ -30,14 +31,14 @@ afterEach(async () => {
   await Promise.allSettled(contexts.splice(0).map(context => context.fiber.dispose()))
 })
 
-async function harness(): Promise<{ ctx: Context; agent: Agent; adapter: QuotaAdapter }> {
+async function harness(quotaMessage?: string): Promise<{ ctx: Context; agent: Agent; adapter: QuotaAdapter }> {
   const ctx = new Context()
   contexts.push(ctx)
   await mountAgentLoopTestDependencies(ctx)
   await ctx.plugin(GoalService)
   await ctx.plugin(goalDriver)
   await ctx.plugin(AgentLoop, { agents: [] })
-  const adapter = new QuotaAdapter()
+  const adapter = new QuotaAdapter(quotaMessage)
   ctx.llm.registerAdapter(['mock'], adapter)
   const agent = ctx.agentLoop.create(SessionId(`quota-goal-${Math.random()}`), {
     provider: 'mock',
@@ -62,6 +63,20 @@ describe('terminal provider quota handling', () => {
     expect(goalDriver.isTerminalGoalQuota(new LlmError('limit', QUOTA_EXCEEDED_CODE))).toBe(true)
     expect(goalDriver.isTerminalGoalQuota(new LlmError('slow down', 'RATE_LIMIT'))).toBe(false)
     expect(goalDriver.isTerminalGoalQuota(new Error('limit'))).toBe(false)
+  })
+
+  it('preserves a provider-stated 239 minute recovery target without retrying immediately', async () => {
+    const realNow = Date.now()
+    const test = await harness('You have hit your ChatGPT usage limit (plus plan). Try again in ~239 min.')
+    test.ctx.goals.create(test.agent, { objective: 'resume editorial research after quota', maxGoalRounds: 4 })
+    const goal = await waitForGoal(test.ctx, test.agent, current => current?.phase === 'blocked')
+    await test.agent.whenIdle()
+    const expected = new Date(realNow + 239 * 60_000 + 30_000).getTime()
+    const actual = /\\[Phoenix quota resume at ([^\\]]+)\\]/u.exec(goal?.blockedReason?.message ?? '')
+    expect(actual).not.toBeNull()
+    expect(Math.abs(Date.parse(actual![1]!) - expected)).toBeLessThan(15_000)
+    expect(goal?.phase).toBe('blocked')
+    expect(test.adapter.requests).toHaveLength(1)
   })
 
   it('blocks the active goal after one quota failure and never injects another round', async () => {
