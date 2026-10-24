@@ -274,11 +274,29 @@ describe('HARDNESS ProactivityEngine', () => {
     await started
     await expect(engine.resume(created.id)).rejects.toThrow(/cannot resume from running/)
     await expect(engine.pause(created.id)).rejects.toThrow(/cannot pause a running occurrence/)
+    await expect(engine.delete(created.id)).rejects.toThrow(/task .* is executing/)
     expect((await engine.get(created.id))?.status).toBe('running')
     complete()
     await delivery
     expect(execute).toHaveBeenCalledTimes(1)
     expect((await store.load()).tasks[0]?.status).toBe('completed')
+  })
+
+  it('permanently removes a future task before any due work and persists the removal', async () => {
+    const store = new MemoryProactivityStore()
+    const execute = vi.fn(async () => ({ summary: 'should not run' }))
+    const engine = new ProactivityEngine(store, { execute }, { id: fixedIds('to-remove') })
+    const created = await engine.create({
+      title: 'Delete this',
+      instruction: 'No execution should happen.',
+      runAt: '2026-09-13T15:00:00.000Z',
+      createdBy: 'user',
+    })
+    expect(await engine.delete(created.id)).toBe(true)
+    expect(await engine.delete(created.id)).toBe(false)
+    expect((await store.load()).tasks).toEqual([])
+    await engine.runDue(new Date('2026-09-13T16:00:00.000Z'))
+    expect(execute).not.toHaveBeenCalled()
   })
 
   it('records failures and permits an explicit resume to retry the same occurrence', async () => {

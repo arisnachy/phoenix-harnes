@@ -126,6 +126,46 @@ describe('Scheduled tasks global manager', () => {
     await waitFor(() => { expect(call.mock.calls.some((row: unknown[]) => row[1] === 'create')).toBe(true) })
   })
 
+  it('deletes only after explicit confirmation and verifies the Host ledger is empty', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    let exists = true
+    const call = vi.fn().mockImplementation(async (_channel: string, endpoint: string) => {
+      if (endpoint === 'list') return { ok: true, value: exists ? [{
+        id: 'record-1', title: 'Review results', status: 'scheduled',
+        nextRunAt: '2026-12-01T12:00:00.000Z', createdBy: 'user',
+      }] : [] }
+      if (endpoint === 'delete') { exists = false; return { ok: true, value: { id: 'record-1', deleted: true } } }
+      throw new Error('unexpected request')
+    })
+    render(<ScheduledTaskCenter t={t} connection={{ rpc: { call } }} />)
+    fireEvent(window, new Event('phoenix:open-scheduled-tasks'))
+    const label = 'Delete permanently: Review results'
+    await waitFor(() => { expect(screen.getByRole('button', { name: label })).toBeTruthy() })
+    fireEvent.click(screen.getByRole('button', { name: label }))
+    expect(call.mock.calls.every((args: unknown[]) => args[1] !== 'delete')).toBe(true)
+    confirm.mockReturnValue(true)
+    fireEvent.click(screen.getByRole('button', { name: label }))
+    await waitFor(() => { expect(screen.queryByText('Review results')).toBeNull() })
+    expect(call).toHaveBeenCalledWith('/phoenix-tasks', 'delete', { id: 'record-1' })
+    expect(confirm).toHaveBeenCalledWith(expect.stringContaining('Review results'))
+  })
+
+  it('retains the task when the Host refuses deletion', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const call = vi.fn().mockImplementation(async (_channel: string, endpoint: string) =>
+      endpoint === 'list'
+        ? { ok: true, value: [{ id: 'still-here', title: 'Safe record', status: 'paused',
+          nextRunAt: '2026-12-01T12:00:00.000Z', createdBy: 'user' }] }
+        : { ok: false, error: { message: 'task still running' } })
+    render(<ScheduledTaskCenter t={t} connection={{ rpc: { call } }} />)
+    fireEvent(window, new Event('phoenix:open-scheduled-tasks'))
+    const label = 'Delete permanently: Safe record'
+    await waitFor(() => { expect(screen.getByRole('button', { name: label })).toBeTruthy() })
+    fireEvent.click(screen.getByRole('button', { name: label }))
+    await waitFor(() => { expect(screen.getByRole('alert').textContent).toContain('task still running') })
+    expect(screen.getByText('Safe record')).toBeTruthy()
+  })
+
   it('does not send expired schedules to the Host', async () => {
     const call = vi.fn().mockResolvedValue({ ok: true, value: [] })
     render(<ScheduledTaskCenter t={t} connection={{ rpc: { call } }} />)
