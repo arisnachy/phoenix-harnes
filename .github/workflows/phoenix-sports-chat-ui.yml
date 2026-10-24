@@ -13,6 +13,7 @@ on:
       - 'packages/core/tool-sports/src/index.ts'
       - '.github/workflows/phoenix-sports-chat-ui.yml'
       - 'scripts/phoenix-web-freshness*'
+      - 'scripts/phoenix-verify-sports-dist.mjs'
       - 'package.json'
   push:
     branches: [fix/kira-sports-auto-chat-visual-20261024, fix/phoenix-web-stale-ui-sports-20261024]
@@ -40,8 +41,12 @@ jobs:
         run: pnpm exec vitest run packages/client/ui-conversation/tests/sports-tool-visual.client.spec.ts packages/client/ui-conversation/tests/sports-fenced-ui.client.spec.tsx packages/client/ui-conversation/tests/tool-activity-group.client.spec.tsx packages/client/ui-conversation/tests/generative-ui.client.spec.tsx
       - name: Build server contracts and generated client typings
         run: pnpm run build:lib:host
-      - name: Client strict typecheck
-        run: pnpm exec tsc -b tsconfig.client.json
+      - name: Client strict typecheck and library build
+        run: pnpm run build:lib:client
+      - name: Build served Phoenix Vite frontend
+        run: pnpm run build:web
+      - name: Assert live frontend includes native sports renderer
+        run: node scripts/phoenix-verify-sports-dist.mjs
 
   stale-frontend-tests:
     runs-on: ubuntu-latest
