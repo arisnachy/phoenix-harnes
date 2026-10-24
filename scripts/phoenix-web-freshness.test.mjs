@@ -4,7 +4,7 @@ import {mkdtemp,mkdir,writeFile,readFile,rm} from 'node:fs/promises'
 import {mkdirSync,writeFileSync} from 'node:fs'
 import {tmpdir} from 'node:os'
 import {join,dirname} from 'node:path'
-import {checkoutRevision,frontendIsCurrent,verifyFrontend} from './phoenix-web-freshness.mjs'
+import {checkoutRevision,frontendIsCurrent,sportsClientBundleReady,verifyFrontend} from './phoenix-web-freshness.mjs'
 
 const FIRST='a'.repeat(40)
 const SECOND='b'.repeat(40)
@@ -25,12 +25,21 @@ test('rebuilds missing dist, stamps successful revision and skips repeat launch'
   // Build runner is injected so tests cannot execute pnpm or touch production.
   const one=verifyFrontend({root,readRevision,build:args=>{
     commands.push(args.join(' '))
-    if(args[1]==='build:web'){mkdirSync(dirname(index),{recursive:true});writeFileSync(index,'<!doctype html>')}
+    if(args[1]==='build:web'){
+      mkdirSync(dirname(index),{recursive:true});writeFileSync(index,'<!doctype html>')
+      const plugin=join(root,'packages/client/ui-conversation/lib/client.js')
+      mkdirSync(dirname(plugin),{recursive:true})
+      writeFileSync(plugin,'sports_game_card sports_ticket_card sports-evidence')
+    }
     return 0
   }})
   assert.equal(one.status,'rebuilt')
   assert.deepEqual(commands,['run build:lib:host','run build:lib:client','run build:web'])
   assert.equal(frontendIsCurrent(root,FIRST),true)
+  assert.equal(sportsClientBundleReady(root),true)
+  writeFileSync(join(root,'packages/client/ui-conversation/lib/client.js'),'obsolete')
+  assert.equal(frontendIsCurrent(root,FIRST),false)
+  writeFileSync(join(root,'packages/client/ui-conversation/lib/client.js'),'sports_game_card sports_ticket_card sports-evidence')
   assert.equal(verifyFrontend({root,readRevision,build:()=>{throw Error('unexpected rebuild')}}).status,'current')
 })
 test('revision mismatch never serves obsolete frontend and restamps only after build',async t=>{
