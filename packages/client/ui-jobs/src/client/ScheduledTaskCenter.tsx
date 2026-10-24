@@ -18,7 +18,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function parseTasks(value: unknown): ScheduledTask[] {
   if (!Array.isArray(value)) throw new Error('Invalid task list from Host')
-  return value.map(value => {
+  return value.map((value) => {
     if (!isRecord(value) || typeof value.id !== 'string' || typeof value.title !== 'string'
       || typeof value.status !== 'string' || typeof value.nextRunAt !== 'string'
       || typeof value.createdBy !== 'string') throw new Error('Invalid task record from Host')
@@ -108,6 +108,15 @@ export function ScheduledTaskCenter({ connection, t }: ScheduledTaskCenterProps)
     return () => { window.removeEventListener('keydown', key) }
   }, [open])
 
+  /** Re-read authoritative Host state before acknowledging any mutation. */
+  const verifyTask = async (accept: (task: ScheduledTask) => boolean): Promise<void> => {
+    const read = await connection.rpc.call('/phoenix-tasks', 'list', {})
+    if (!read.ok) throw new Error(read.error.message)
+    const verified = parseTasks(read.value)
+    if (!verified.some(accept)) throw new Error(t('task.center.unconfirmed'))
+    setRows(verified)
+  }
+
   const submit = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault()
     if (busy) return
@@ -137,11 +146,7 @@ export function ScheduledTaskCenter({ connection, t }: ScheduledTaskCenterProps)
       if (!isRecord(created) || typeof created.id !== 'string' || created.id.trim() === '') {
         throw new Error(t('task.center.unconfirmed'))
       }
-      const read = await connection.rpc.call('/phoenix-tasks', 'list', {})
-      if (!read.ok) throw new Error(read.error.message)
-      const verified = parseTasks(read.value)
-      if (!verified.some(task => task.id === created.id)) throw new Error(t('task.center.unconfirmed'))
-      setRows(verified)
+      await verifyTask((task) => task.id === created.id)
       setTitle('')
       setPrompt('')
       setWhen('')
@@ -165,13 +170,7 @@ export function ScheduledTaskCenter({ connection, t }: ScheduledTaskCenterProps)
         || updated.status !== (operation === 'pause' ? 'paused' : operation === 'resume' ? 'scheduled' : 'cancelled')) {
         throw new Error(t('task.center.unconfirmed'))
       }
-      const read = await connection.rpc.call('/phoenix-tasks', 'list', {})
-      if (!read.ok) throw new Error(read.error.message)
-      const verified = parseTasks(read.value)
-      if (!verified.some(task => task.id === id && task.status === updated.status)) {
-        throw new Error(t('task.center.unconfirmed'))
-      }
-      setRows(verified)
+      await verifyTask((task) => task.id === id && task.status === updated.status)
     } catch (cause: unknown) {
       setError(cause instanceof Error ? cause.message : String(cause))
     } finally {
@@ -188,12 +187,12 @@ export function ScheduledTaskCenter({ connection, t }: ScheduledTaskCenterProps)
           <button type="button" onClick={close} aria-label={t('task.center.close')}>×</button>
         </header>
         <form className={css.form} onSubmit={(event) => { void submit(event) }}>
-          <label>{t('task.center.name')}<input maxLength={160} required value={title} onChange={event => { setTitle(event.target.value) }} /></label>
-          <label>{t('task.center.prompt')}<textarea maxLength={8000} rows={3} required value={prompt} onChange={event => { setPrompt(event.target.value) }} /></label>
+          <label>{t('task.center.name')}<input maxLength={160} required value={title} onChange={(event) => { setTitle(event.target.value) }} /></label>
+          <label>{t('task.center.prompt')}<textarea maxLength={8000} rows={3} required value={prompt} onChange={(event) => { setPrompt(event.target.value) }} /></label>
           <div className={css.fields}>
-            <label>{t('task.center.when')}<input type="datetime-local" required value={when} onChange={event => { setWhen(event.target.value) }} /></label>
+            <label>{t('task.center.when')}<input type="datetime-local" required value={when} onChange={(event) => { setWhen(event.target.value) }} /></label>
             <label>{t('task.center.frequency')}
-              <select value={recurrence} onChange={event => { setRecurrence(event.target.value as typeof recurrence) }}>
+              <select value={recurrence} onChange={(event) => { setRecurrence(event.target.value as typeof recurrence) }}>
                 <option value="once">{t('task.recurrence.once')}</option>
                 <option value="daily">{t('task.center.daily')}</option>
                 <option value="weekly">{t('task.center.weekly')}</option>
