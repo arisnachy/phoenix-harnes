@@ -74,6 +74,8 @@ function fakeHttpServer(host: '127.0.0.1' | '0.0.0.0' = '127.0.0.1'): { server: 
   const server = {
     host,
     port: 4567,
+    // The real Web server now exposes an explicit route registry for MiniBrowser.
+    register: () => () => {},
     registerFallback: (handler: unknown) => {
       fallback = handler
       return () => { fallback = undefined }

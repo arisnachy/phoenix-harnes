@@ -69,9 +69,18 @@ function fakeAuthorization() {
   return { service, key, wasDisconnected: () => disconnected }
 }
 
+/** Supply the user-question provider expected by the real Host proxy composition. */
+function fakeAuthorizationContext(): Context {
+  const ctx = new Context()
+  ctx.provide('userQuestions', {
+    registerProvider: () => () => {},
+  } as never)
+  return ctx
+}
+
 describe('authorization API domain', () => {
   it('acknowledges the initial RPC before running potentially slow provider startup', async () => {
-    const ctx = new Context()
+    const ctx = fakeAuthorizationContext()
     const { service, key } = fakeAuthorization()
     let started = false
     ctx.provide('authorization', {
@@ -93,7 +102,7 @@ describe('authorization API domain', () => {
   })
 
   it('cancels an attempt before provider startup without leaving the key busy', async () => {
-    const ctx = new Context()
+    const ctx = fakeAuthorizationContext()
     const { service, key } = fakeAuthorization()
     ctx.provide('authorization', service)
     const api = createApiProxy(ctx, DEFAULTS)
@@ -111,7 +120,7 @@ describe('authorization API domain', () => {
     ['MCP_OAUTH_DISCOVERY_TIMEOUT', 'no entregó una URL de autorización'],
     ['MCP_OAUTH_NO_CONSENT_URL', 'sin una URL de autorización'],
   ])('shows a safe actionable MCP OAuth failure for %s', async (code, hint) => {
-    const ctx = new Context()
+    const ctx = fakeAuthorizationContext()
     const { service, key } = fakeAuthorization()
     ctx.provide('authorization', {
       ...service,
@@ -135,7 +144,7 @@ describe('authorization API domain', () => {
 
 
   it('keeps OAuth notices/prompt state in a background attempt and never returns the answer', async () => {
-    const ctx = new Context()
+    const ctx = fakeAuthorizationContext()
     const { service, key } = fakeAuthorization()
     ctx.provide('authorization', service)
     ctx.provide('userQuestions', { registerProvider: () => () => {} } as never)
@@ -163,7 +172,7 @@ describe('authorization API domain', () => {
   })
 
   it('keeps a background OAuth attempt alive after the begin request signal is aborted', async () => {
-    const ctx = new Context()
+    const ctx = fakeAuthorizationContext()
     const { service, key } = fakeAuthorization()
     ctx.provide('authorization', service)
     ctx.provide('userQuestions', { registerProvider: () => () => {} } as never)
@@ -186,7 +195,7 @@ describe('authorization API domain', () => {
   })
 
   it('rejects a second attempt for the same key and keeps the answer method loopback-gated by connection policy', async () => {
-    const ctx = new Context()
+    const ctx = fakeAuthorizationContext()
     const { service, key } = fakeAuthorization()
     ctx.provide('authorization', service)
     ctx.provide('userQuestions', { registerProvider: () => () => {} } as never)
@@ -199,7 +208,7 @@ describe('authorization API domain', () => {
   })
 
   it('reports the stored record behind a flow so cards can show connected state', async () => {
-    const ctx = new Context()
+    const ctx = fakeAuthorizationContext()
     const { service } = fakeAuthorization()
     ctx.provide('authorization', service)
     ctx.provide('userQuestions', { registerProvider: () => () => {} } as never)
@@ -213,7 +222,7 @@ describe('authorization API domain', () => {
   })
 
   it('omits stored state when the seam cannot answer or stores nothing for the key', async () => {
-    const ctx = new Context()
+    const ctx = fakeAuthorizationContext()
     const { service } = fakeAuthorization()
     ctx.provide('authorization', service)
     ctx.provide('userQuestions', { registerProvider: () => () => {} } as never)
@@ -227,7 +236,7 @@ describe('authorization API domain', () => {
   })
 
   it('does not block the authorization catalog behind slow provider telemetry', async () => {
-    const ctx = new Context()
+    const ctx = fakeAuthorizationContext()
     const { service } = fakeAuthorization()
     const slow = service as unknown as {
       inspect: (key: AuthorizationEntry['key'], signal?: AbortSignal) => Promise<undefined>
@@ -251,7 +260,7 @@ describe('authorization API domain', () => {
   }, 3_000)
 
   it('starts OAuth promptly even when every catalog inspection ignores abort', async () => {
-    const ctx = new Context()
+    const ctx = fakeAuthorizationContext()
     const { service, key } = fakeAuthorization()
     const hung = service as unknown as {
       inspect: () => Promise<undefined>
@@ -279,7 +288,7 @@ describe('authorization API domain', () => {
   }, 4_500)
 
   it('projects live connector telemetry and forwards provider-owned disconnect', async () => {
-    const ctx = new Context()
+    const ctx = fakeAuthorizationContext()
     const { service, key, wasDisconnected } = fakeAuthorization()
     ctx.provide('authorization', service)
     ctx.provide('userQuestions', { registerProvider: () => () => {} } as never)
