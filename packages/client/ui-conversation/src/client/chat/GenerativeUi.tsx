@@ -318,7 +318,7 @@ export function splitGenerativeUiText(
   options: SplitGenerativeUiOptions = {},
 ): GenerativeUiSegment[] {
   const segments: GenerativeUiSegment[] = []
-  const fence = /```(?:generative-ui|json)[ \t]*\r?\n([\s\S]*?)```/g
+  const fence = /```[ \t]*(?:generative-ui|json)[ \t]*\r?\n([\s\S]*?)```/gi
   let cursor = 0
   let rendered = 0
 
@@ -336,7 +336,9 @@ export function splitGenerativeUiText(
       }
     }
     if (parsed === null) {
-      if (/"component"\s*:\s*"(?:ui_canvas|scale_form|spreadsheet|geo_map|scene_map|diagram|status_pill|agent_line)"/.test(body ?? ''))
+      if (/"component"\s*:\s*"(?:sports_game_card|sports_ticket_card)"/.test(body ?? ''))
+        segments.push({ kind: 'notice', text: 'La tarjeta deportiva no pudo validarse. Kira debe consultar de nuevo el evento y entregar los datos verificados.' })
+      else if (/"component"\s*:\s*"(?:ui_canvas|scale_form|spreadsheet|geo_map|scene_map|diagram|status_pill|agent_line)"/.test(body ?? ''))
         segments.push({ kind: 'notice', text: 'Esta interfaz no pudo mostrarse. Pide a Kira que la actualice.' })
       else appendMarkdown(segments, raw)
     }
