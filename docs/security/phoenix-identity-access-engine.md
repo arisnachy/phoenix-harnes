@@ -1,5 +1,7 @@
 # Phoenix Identity & Access Engine — V1
 
+English | [中文](phoenix-identity-access-engine.zh.md)
+
 ## Propósito
 
 El broker privado de Phoenix separa la identidad personal del usuario y una identidad de servicio Kira por **origen HTTPS exacto**. Nunca se comparten secretos entre dominios/subdominios. La interfaz protegida del chat es el único destino de credenciales nuevas; los agentes y MCP solo observan resultados sanitizados.
