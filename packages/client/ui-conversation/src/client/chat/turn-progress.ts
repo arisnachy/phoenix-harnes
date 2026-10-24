@@ -44,7 +44,7 @@ const TOOL_ACTIVITY_MATCHERS: readonly (readonly [TurnActivity, RegExp])[] = [
  * @param name - Runtime-reported tool name, never its arguments or result.
  * @returns Safe activity class for the visible progress indicator.
  */
-function toolActivity(name: string): TurnActivity {
+export function toolActivity(name: string): TurnActivity {
   const normalized = name.toLowerCase().replace(/[_.:/-]+/g, ' ').replace(/\s+/g, ' ').trim()
   return TOOL_ACTIVITY_MATCHERS.find(([, pattern]) => pattern.test(normalized))?.[0] ?? 'running-tools'
 }
