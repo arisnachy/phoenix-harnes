@@ -1,5 +1,6 @@
 /** Read-only sports information adapters for Kira's conversation tools. */
 import {fetchPublicEspnOdds} from './espn-odds.ts'
+/** Canonical supported sport identifiers and initial league slugs used for provider discovery. */
 export const sportsCatalog: Readonly<Record<string, readonly string[]>> = {
   soccer: ['eng.1','esp.1','mex.1','usa.1','uefa.champions','fifa.world'],
   basketball: ['nba','wnba','mens-college-basketball'],
