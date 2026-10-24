@@ -596,7 +596,11 @@ export function parseBrowserTaskCreate(input: unknown, now: number): CreateProac
   }
   const row = input as Record<string, unknown>
   const fields = ['title', 'prompt', 'nextRunAt', 'recurrence', 'catchUp', 'delivery', 'createdBy', 'senderIdentity']
-  if (Object.keys(row).length !== fields.length || fields.some(field => !Object.hasOwn(row, field))) {
+  if (fields.some(field => !Object.hasOwn(row, field))
+    || Object.keys(row).some(field => !fields.includes(field) && field !== 'targetAgentId')
+    || (row.targetAgentId !== undefined && (typeof row.targetAgentId !== 'string'
+      || row.targetAgentId.trim() !== row.targetAgentId
+      || row.targetAgentId.length === 0 || row.targetAgentId.length > 256))) {
     throw new Error('scheduled task has missing or unauthorized fields')
   }
   if (row.createdBy !== 'user' || row.senderIdentity !== 'user'
@@ -642,13 +646,14 @@ function installProactivityRpc(connection: HostConnectionHandle,
   engine: ProactivityEngine,
   attention?: AttentionStore,
   extraAttention?: () => Promise<readonly ProactivityAttentionItem[]>,
-  selectedAgent?: () => string | undefined): () => Promise<void> {
-  return connection.rpc.handle('/phoenix-tasks', async (endpoint, input): Promise<RpcResult<ProactivityTaskView | readonly ProactivityTaskView[] | readonly ProactivityAttentionItem[] | null>> => {
+  availableTargets?: () => readonly string[]): () => Promise<void> {
+  return connection.rpc.handle('/phoenix-tasks', async (endpoint, input): Promise<RpcResult<ProactivityTaskView | readonly ProactivityTaskView[] | readonly ProactivityAttentionItem[] | readonly { readonly id: string }[] | null>> => {
     try {
       // `list()` intentionally omits surprises until reveal time. Hidden task
       // content therefore never crosses the browser transport ahead of time.
       const tasks = await engine.list()
       if (endpoint === 'list') return { ok: true, value: tasks.map(taskView) }
+      if (endpoint === 'targets') return { ok: true, value: (availableTargets?.() ?? []).map(id => ({ id })) }
       if (endpoint === 'pause' || endpoint === 'resume' || endpoint === 'cancel') {
         if (typeof input !== 'object' || input === null || Array.isArray(input)
           || Object.keys(input).length !== 1 || !Object.hasOwn(input, 'id')
@@ -663,9 +668,14 @@ function installProactivityRpc(connection: HostConnectionHandle,
       }
       if (endpoint === 'create') {
         const parsed = parseBrowserTaskCreate(input, Date.now())
-        const targetAgentId = selectedAgent?.()
+        const roots = availableTargets?.() ?? []
+        const request = input as Record<string, unknown>
+        const chosen = request['targetAgentId']
+        const targetAgentId = chosen === undefined
+          ? roots.length === 1 ? roots[0] : undefined
+          : typeof chosen === 'string' && roots.includes(chosen) ? chosen : undefined
         if (targetAgentId === undefined) {
-          return rpcFailure('Open a Phoenix conversation before creating a task; no recoverable agent session is available')
+          return rpcFailure('Select an active Phoenix conversation before creating this scheduled task')
         }
         // The engine commits the durable ledger before returning success.
         const created = await engine.create({ ...parsed, targetAgentId })
@@ -727,10 +737,8 @@ export function installProactivityRuntime(ctx: Context,
     activeConnection = connection
     rpcDispose = installProactivityRpc(connection, engine, attention, extraAttention, () => {
       const agents = ctx.get('agents')
-      const roots = agents?.roots() ?? []
-      // Do not guess which conversation owns a new user task. A global
-      // creation without exactly one root must request an explicit selection.
-      return roots.length === 1 ? roots[0]?.id : undefined
+      // Only session ids from active rooted conversations may own browser-created work.
+      return (agents?.roots() ?? []).map(agent => agent.id)
     })
   }
 
