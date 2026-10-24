@@ -107,7 +107,7 @@ export async function fetchPublicEspnOdds(
       const url='https://sports.core.api.espn.com/v2/sports/'+route[0]+'/leagues/'+route[1]+'/events/'+eventId+'/competitions/'+competitionId+'/odds?limit=5'
       try{
         const data=await getJSON<{items?:unknown[]}|EspnOdds[]>(url)
-        odds=Array.isArray(data)?list(data):list(data.items)
+        odds=(Array.isArray(data)?list(data):list(data.items)).filter(x=>x.homeTeamOdds||x.awayTeamOdds)
         if(!odds.length&&isRecord(data)){
           const refs=Array.isArray(data.items)?data.items.filter(isRecord).slice(0,2):[]
           for(const ref of refs){
