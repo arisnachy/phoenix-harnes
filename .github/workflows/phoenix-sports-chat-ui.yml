@@ -1,0 +1,37 @@
+name: Phoenix chat sports visual regression
+on:
+  pull_request:
+    paths:
+      - 'packages/client/ui-conversation/src/client/chat/ToolActivityFlow.tsx'
+      - 'packages/client/ui-conversation/src/client/chat/ChatView.tsx'
+      - 'packages/client/ui-conversation/src/client/chat/sports-tool-cards.ts'
+      - 'packages/client/ui-conversation/tests/sports-tool-visual.client.spec.ts'
+      - 'packages/client/ui-conversation/tests/tool-activity-group.client.spec.tsx'
+      - 'packages/core/tool-sports/src/index.ts'
+      - '.github/workflows/phoenix-sports-chat-ui.yml'
+  push:
+    branches: [fix/kira-sports-auto-chat-visual-20261024]
+    paths:
+      - 'packages/client/ui-conversation/**'
+      - 'packages/core/tool-sports/src/index.ts'
+      - '.github/workflows/phoenix-sports-chat-ui.yml'
+permissions:
+  contents: read
+jobs:
+  visual-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.14.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Render sports cards from durable tool results
+        run: pnpm exec vitest run packages/client/ui-conversation/tests/sports-tool-visual.client.spec.ts packages/client/ui-conversation/tests/tool-activity-group.client.spec.tsx packages/client/ui-conversation/tests/generative-ui.client.spec.tsx
+      - name: Client strict typecheck
+        run: pnpm exec tsc -b tsconfig.client.json
