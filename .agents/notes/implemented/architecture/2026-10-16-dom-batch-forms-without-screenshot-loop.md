@@ -2,6 +2,8 @@
 
 Status: implemented
 
+English | [中文](2026-10-16-dom-batch-forms-without-screenshot-loop.zh.md)
+
 ## Problem
 The embedded MiniBrowser refreshed Chrome JPEG screenshots every 350 ms expanded or 600 ms otherwise. This continuous CDP/video workload competed with Kira form actions even while no visual analysis was required. Kira sometimes chose a visual click→screenshot→text cycle despite `inspect_page` and `fill_form` already supporting up to 30 fields per one CDP call. Internally `browserBatchExpression` rescanned the entire document separately for each field.
 

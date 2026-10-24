@@ -2,6 +2,8 @@
 
 Status: implemented
 
+English | [中文](2026-10-15-unfinished-mission-active-goal-and-team-task-fence.zh.md)
+
 ## Problem
 The Team Lead's `turn/end: completed` is emitted even when Kira provides an interim progress report. The Team runtime previously closed UME on that event, interrupted specialists and published a terminal checkpoint. This disarmed the separate Goal round driver. The first repair checked `todo/write`, but an active Goal or Team task without a checklist still triggered premature shutdown; a later human steering message could also hide an older pending checklist.
 

@@ -2,6 +2,8 @@
 
 Status: implemented
 
+English | [中文](2026-10-15-kira-lead-identity-across-sol-luna.zh.md)
+
 ## Problem
 
 A real Kira ☀ Sol answer began "Kira, la ruta más directa es...", giving instructions to Kira instead of speaking as her. The `AUTO_SOL_STRATEGY_POLICY` explicitly told the same Lead agent "You are Sol 6.1 consulted by Kira" even though the turn belongs to the **Kira** lead session. This caused identity drift during strategic rescue. The initial plan and resume handoffs also described Kira as a distinct actor.
