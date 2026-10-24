@@ -2,6 +2,8 @@
 
 Status: implemented
 
+English | [中文](2026-10-08-phoenix-welcome-reference-fidelity.zh.md)
+
 ## Problem
 
 An earlier quick-action implementation reproduced cards but omitted navigation, the top bar and the content alignment of the approved reference.

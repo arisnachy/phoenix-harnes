@@ -2,6 +2,8 @@
 
 Status: implemented
 
+English | [中文](2026-10-23-session-deletion-and-bulk-cleanup.zh.md)
+
 ## Problem
 
 Active Web sessions were refused deletion solely because an Agent was loaded, preventing user-requested cleanup.
