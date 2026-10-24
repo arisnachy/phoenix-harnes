@@ -112,7 +112,7 @@ export function parseCapturedVideoAudio(value: unknown): CapturedVideoAudio {
  */
 export async function transcribeLocalMediaFile(path: string): Promise<AudioTranscript> {
     const configuredModel=process.env.PHOENIX_VIDEO_WHISPER_MODEL
-    const model=['tiny','base','small'].includes(configuredModel ?? '') ? configuredModel! : 'base'
+    const model=configuredModel !== undefined && ['tiny','base','small'].includes(configuredModel) ? configuredModel : 'base'
     const configuredPython=process.env.PHOENIX_VIDEO_PYTHON?.trim()
     const program=configuredPython || 'uv'
     const args=configuredPython

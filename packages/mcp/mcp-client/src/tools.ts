@@ -200,7 +200,11 @@ function isToolAuthorizationFailure(value: unknown): boolean {
   }
   const message = value instanceof Error ? value.message : String(value)
   const authorizationFailure = new RegExp(
-    String.raw`(?:jwt\s+authentication\s+required|authentication\s+required|authorization\s+required|unauthori[sz]ed|invalid\s+(?:jwt|token)|expired\s+(?:jwt|token)|\b(?:401|403)\b)`,
+    [
+      String.raw`(?:jwt\s+authentication\s+required|authentication\s+required|`,
+      String.raw`authorization\s+required|unauthori[sz]ed|invalid\s+(?:jwt|token)|`,
+      String.raw`expired\s+(?:jwt|token)|\b(?:401|403)\b)`,
+    ].join(''),
     'i',
   )
   return authorizationFailure.test(message)
@@ -496,7 +500,7 @@ function createExecutor(
     // Route every Chrome tool invocation using the REAL agent's conversation
     // identity, never a model-supplied sessionId or the global last Chrome tab.
     // Other MCP integrations are untouched.
-    const chromeScope = scopedChromeTool && exec.agent?.id !== undefined
+    const chromeScope = scopedChromeTool && exec.agent.id !== undefined
     const agent = exec.agent
     // Delegated specialists use the coordinator's parent conversation.
     // A user-created fork (no subagent origin) remains a separate browser.
