@@ -199,7 +199,11 @@ function isToolAuthorizationFailure(value: unknown): boolean {
     if (status === 401 || status === 403 || code === 401 || code === 403) return true
   }
   const message = value instanceof Error ? value.message : String(value)
-  return /(?:jwt\s+authentication\s+required|authentication\s+required|authorization\s+required|unauthori[sz]ed|invalid\s+(?:jwt|token)|expired\s+(?:jwt|token)|\b(?:401|403)\b)/i.test(message)
+  const authorizationFailure = new RegExp(
+    String.raw`(?:jwt\s+authentication\s+required|authentication\s+required|authorization\s+required|unauthori[sz]ed|invalid\s+(?:jwt|token)|expired\s+(?:jwt|token)|\b(?:401|403)\b)`,
+    'i',
+  )
+  return authorizationFailure.test(message)
 }
 
 function reportToolAuthorizationFailure(opts: ToolBridgeOptions, error: unknown): void {
@@ -497,7 +501,7 @@ function createExecutor(
     // Delegated specialists use the coordinator's parent conversation.
     // A user-created fork (no subagent origin) remains a separate browser.
     const ownerId = !scopedChromeTool || agent === undefined ? undefined
-      : agent.session.header?.origin === 'subagent'
+      : agent.session.header.origin === 'subagent'
         ? (agent.session.header.parentSession ?? agent.id)
         : agent.id
     // Fail closed rather than fall back to shared Chromium when the caller

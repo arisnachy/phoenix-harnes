@@ -130,9 +130,9 @@ function parseJson(text: string, label: string): unknown {
 }
 
 function missingExecutable(error: unknown): boolean {
-  const value = error as { code?: unknown; cause?: { code?: unknown } }
-  return value?.code === 'ENOENT'
-    || value?.cause?.code === 'ENOENT'
+  const value = (typeof error === 'object' && error !== null ? error : {}) as { code?: unknown; cause?: { code?: unknown } }
+  return value.code === 'ENOENT'
+    || value.cause?.code === 'ENOENT'
     || String(error).toLowerCase().includes('enoent')
     || String(error).toLowerCase().includes('not recognized as an internal or external command')
 }
@@ -449,7 +449,7 @@ export async function requestGoogleWithOpenClaw(
     const end = record(body?.end)
     if (typeof body?.summary === 'string' && typeof start?.dateTime === 'string' && typeof end?.dateTime === 'string') {
       const attendees = Array.isArray(body.attendees)
-        ? body.attendees.flatMap(candidate => {
+        ? body.attendees.flatMap((candidate) => {
           const item = record(candidate)
           return typeof item?.email === 'string' ? [item.email] : []
         })
