@@ -164,6 +164,7 @@ function renderChat(
   const t = ((key: string, values?: { count?: number; action?: string }) => {
     if (key === 'context.tools') return 'Tools'
     if (key === 'activity.latest') return `${values?.count} operations recorded · latest: ${values?.action}`
+    if (key === 'activity.latestOne') return `1 operation recorded · latest: ${values?.action}`
     if (key === 'activity.searching') return 'search'
     if (key === 'activity.executing') return 'command execution'
     if (key === 'activity.failed') return 'reported an error'
@@ -310,7 +311,7 @@ describe('chat tool activity grouping', () => {
   it('reports a failed observed tool without implying successful task completion', () => {
     renderChat([context(1, 'system'), { ...settledTool(), isError: true }])
     expect(screen.getByTestId('tool-activity-receipt').textContent)
-      .toBe('1 operations recorded · latest: search · reported an error')
+      .toBe('1 operation recorded · latest: search · reported an error')
   })
 
   it('does not manufacture a completed milestone from context or a running tool', () => {
