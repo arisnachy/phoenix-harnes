@@ -240,6 +240,55 @@ describe('Schedule tool protocol', () => {
       .toEqual([expect.objectContaining({ state: 'paused' })])
   })
 
+  it('applies session-owner and durable-read guards to pause and resume', async () => {
+    const test = await harness()
+    await execute(test, 'schedule_create', { prompt: 'guarded', after_seconds: 40 })
+    const other = stubAgent(test.ctx, `other-${Math.random()}`)
+    test.ctx.agents.register(other)
+    for (const name of ['schedule_pause', 'schedule_resume']) {
+      expect(value(await execute(test, name, { id: 'schedule-1' }, other)))
+        .toEqual({ code: 'internal_error', message: 'The schedule operation failed.' })
+    }
+    test.flushes.outcomes.push('reject')
+    expect(value(await execute(test, 'schedule_pause', { id: 'schedule-1' })))
+      .toMatchObject({ code: 'persistence_uncertain', operation: 'pause', id: 'schedule-1' })
+    expect(value(await execute(test, 'schedule_pause', { id: 'schedule-1' })))
+      .toMatchObject({ id: 'schedule-1', state: 'paused' })
+    test.flushes.outcomes.push('reject')
+    expect(value(await execute(test, 'schedule_resume', { id: 'schedule-1' })))
+      .toMatchObject({ code: 'persistence_uncertain', operation: 'resume', id: 'schedule-1' })
+    expect(value(await execute(test, 'schedule_resume', { id: 'schedule-1' })))
+      .toMatchObject({ id: 'schedule-1', state: 'scheduled' })
+  })
+
+  it('fails closed for corrupted pause folds and append rejection', async () => {
+    const corrupt = await harness()
+    Object.defineProperty(corrupt.agent.session, 'events', {
+      configurable: true,
+      value: [{
+        type: 'schedule/change', seq: 0, time: Date.now(),
+        data: { version: 2, operation: 'pause', id: 'schedule-1' },
+      }],
+    })
+    expect(value(await execute(corrupt, 'schedule_pause', { id: 'schedule-1' })))
+      .toMatchObject({ code: 'corrupt_schedule_log' })
+
+    const test = await harness()
+    await execute(test, 'schedule_create', { prompt: 'keep after append error', after_seconds: 40 })
+    const stop = test.ctx.on('internal/dispatch', (_mode, eventName, args) => {
+      if (eventName !== 'session/event') return
+      const event = (args as unknown[])[1] as { type?: string; data?: { operation?: string } } | undefined
+      if (event?.type === 'schedule/change' && event.data?.operation === 'pause') {
+        throw new Error('append denied')
+      }
+    }, { global: true, prepend: true })
+    expect(value(await execute(test, 'schedule_pause', { id: 'schedule-1' })))
+      .toEqual({ code: 'internal_error', message: 'The schedule operation failed.' })
+    stop()
+    expect(value(await execute(test, 'schedule_list', {})))
+      .toEqual([expect.objectContaining({ id: 'schedule-1', state: 'scheduled' })])
+  })
+
   it('rejects an empty or padded delete id before persistence', async () => {
     const test = await harness()
     for (const id of ['', ' schedule-1']) {
