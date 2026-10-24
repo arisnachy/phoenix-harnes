@@ -141,11 +141,11 @@ export function ScheduledTaskCenter({ connection, t }: ScheduledTaskCenterProps)
   }
 
   /** Re-read authoritative Host state before acknowledging any mutation. */
-  const verifyTask = async (accept: (task: ScheduledTask) => boolean): Promise<void> => {
+  const verifyTask = async (accept: (task: ScheduledTask) => boolean, shouldExist = true): Promise<void> => {
     const read = await connection.rpc.call('/phoenix-tasks', 'list', {})
     if (!read.ok) throw new Error(read.error.message)
     const verified = parseTasks(read.value)
-    if (!verified.some(accept)) throw new Error(t('task.center.unconfirmed'))
+    if (verified.some(accept) !== shouldExist) throw new Error(t('task.center.unconfirmed'))
     setRows(verified)
   }
 
@@ -204,6 +204,24 @@ export function ScheduledTaskCenter({ connection, t }: ScheduledTaskCenterProps)
         throw new Error(t('task.center.unconfirmed'))
       }
       await verifyTask(task => task.id === id && task.status === updated.status)
+    } catch (cause: unknown) {
+      setError(cause instanceof Error ? cause.message : String(cause))
+    } finally {
+      setChangingId(undefined)
+    }
+  }
+
+  const deleteTask = async (id: string, taskTitle: string): Promise<void> => {
+    if (changingId !== undefined || !window.confirm(t('task.center.confirmDelete').replace('{title}', taskTitle))) return
+    setChangingId(id)
+    setError(undefined)
+    try {
+      const result = await connection.rpc.call('/phoenix-tasks', 'delete', { id })
+      if (!result.ok) throw new Error(result.error.message)
+      if (!isRecord(result.value) || result.value.id !== id || result.value.deleted !== true) {
+        throw new Error(t('task.center.unconfirmed'))
+      }
+      await verifyTask((task) => task.id === id, false)
     } catch (cause: unknown) {
       setError(cause instanceof Error ? cause.message : String(cause))
     } finally {
@@ -270,6 +288,9 @@ export function ScheduledTaskCenter({ connection, t }: ScheduledTaskCenterProps)
                   disabled={changingId !== undefined}
                   aria-label={`${t('task.center.cancel')}: ${task.title}`}
                   onClick={() => { void changeStatus(task.id, 'cancel') }}>{t('task.center.cancel')}</button>}
+                {task.status !== 'running' && <button type="button" disabled={changingId !== undefined}
+                  aria-label={`${t('task.center.delete')}: ${task.title}`}
+                  onClick={() => { void deleteTask(task.id, task.title) }}>{t('task.center.delete')}</button>}
               </div>
             </article>
           ))}
