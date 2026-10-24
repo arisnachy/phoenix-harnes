@@ -4,7 +4,7 @@
 {"type":"session/title","data":{"title":"Open https://example.org/login","messageSeqs":[1],"source":{"kind":"fallback"}}}
 {"type":"step/start","data":{"turn":1,"step":1}}
 {"type":"assistant/chunk","data":{"turn":1,"step":1,"chunk":{"type":"block-start","index":0,"blockType":"text"}}}
-{"type":"text-chunks","data":{"turn":1,"step":1,"index":0,"dt":[],"texts":["SECURE_LOGIN_ACTIVITY_VISIBLE"]}}
+{"type":"assistant/chunk","data":{"turn":1,"step":1,"chunk":{"type":"text-delta","index":0,"text":"SECURE_LOGIN_ACTIVITY_VISIBLE"}}}
 {"type":"assistant/chunk","data":{"turn":1,"step":1,"chunk":{"type":"block-end","index":0,"block":{"type":"text","text":"SECURE_LOGIN_ACTIVITY_VISIBLE"}}}}
 {"type":"assistant/chunk","data":{"turn":1,"step":1,"chunk":{"type":"finish","reason":{"kind":"stop"}}}}
 {"type":"assistant/message","data":{"turn":1,"step":1,"message":{"id":"secure-login-fixture-assistant","source":{"kind":"model","model":"ui-seed","provider":"fixture"},"role":"assistant","content":[{"type":"text","text":"SECURE_LOGIN_ACTIVITY_VISIBLE"}]}},"sourceEventSeqs":[4,5,6,7],"surfaceOp":"append"}
