@@ -714,8 +714,10 @@ export function installProactivityRuntime(ctx: Context,
     activeConnection = connection
     rpcDispose = installProactivityRpc(connection, engine, attention, extraAttention, () => {
       const agents = ctx.get('agents')
-      const owner = agents?.roots()[0] ?? agents?.list()[0]
-      return owner?.id
+      const roots = agents?.roots() ?? []
+      // Do not guess which conversation owns a new user task. A global
+      // creation without exactly one root must request an explicit selection.
+      return roots.length === 1 ? roots[0]?.id : undefined
     })
   }
 
