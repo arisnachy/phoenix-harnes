@@ -7,7 +7,7 @@ import { en } from '../src/client/locales.ts'
 
 afterEach(() => { cleanup(); vi.restoreAllMocks() })
 
-const t: ScheduledTaskCenterProps['t'] = (key) => en[key] ?? key
+const t: ScheduledTaskCenterProps['t'] = (key) => en[key as keyof typeof en] ?? key
 
 describe('Scheduled tasks global manager', () => {
   it('opens from the sidebar event, lists Host-confirmed records, and closes', async () => {
