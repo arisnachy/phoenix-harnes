@@ -243,8 +243,13 @@ export function apply(ctx: Context): void {
         state.quotaTimer = setTimeout(wake, Math.min(remaining, 2_147_483_647))
         return
       }
-      // A waiting human message has precedence. Recheck when the owner is idle.
-      if (state.agent.status !== 'idle' || state.agent.inbox.hasPending) {
+      // Human work always has priority. Do not spin when the idle inbox
+      // contains an unclaimed human message.
+      if (state.agent.inbox.hasPending) {
+        state.quotaTimer = setTimeout(wake, 60_000)
+        return
+      }
+      if (state.agent.status !== 'idle') {
         void state.agent.whenIdle().then(() => { armQuotaTimer(state) }, () => undefined)
         return
       }
