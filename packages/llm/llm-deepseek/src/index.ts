@@ -181,7 +181,10 @@ const catalogModel: z<DeepSeekCatalogModel> = z.object({
   // Accept an empty legacy array at the schema boundary. Older persisted PHOENIX
   // catalogs used [] for "capability not declared"; resolveModels repairs that
   // sentinel with vendor-aware defaults before the adapter can observe it.
-  inputModalities: z.array(z.union(MODEL_MODALITIES)),
+  // Missing modality metadata defaults to text at the schema boundary. An
+  // explicitly persisted [] remains distinguishable so resolveModels can
+  // repair known legacy ids while rejecting malformed custom entries.
+  inputModalities: z.array(z.union(MODEL_MODALITIES)).default(['text']),
   imagePixelBudget: z.number().step(1).min(1),
   imageMaxBytes: z.number().step(1).min(1),
   imageDetail: z.union(['auto', 'low']),
@@ -249,11 +252,20 @@ function resolveModels(models: readonly DeepSeekCatalogModel[] | undefined): Dee
     // configs persisted both [] and ['text'] while Flash vision support was
     // still hidden, so merely accepting the legacy value would keep the Host
     // rejecting images even after the catalog was fixed.
+    const knownLegacyModel = DEFAULT_MODELS.some(candidate => candidate.id === model.id)
     const inputModalities: ModelModality[] = DEEPSEEK_FLASH_VISION_MODEL_IDS.has(model.id)
       ? ['text', 'image']
-      : declaredInputModalities === undefined || declaredInputModalities.length === 0
+      : declaredInputModalities === undefined
         ? ['text']
-        : declaredInputModalities
+        : declaredInputModalities.length === 0
+          ? knownLegacyModel
+            ? ['text']
+            : (() => {
+              throw new Error(
+                `llm-deepseek: catalog model "${model.id}" inputModalities must not be empty`,
+              )
+            })()
+          : declaredInputModalities
     if (inputModalities.some(modality => !MODEL_MODALITIES.includes(modality))) {
       throw new Error(
         `llm-deepseek: catalog model "${model.id}" inputModalities must contain only "text" and "image"`,

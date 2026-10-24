@@ -42,7 +42,8 @@ jobs:
 
   node-24-coverage:
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    # Bubblewrap is verified against the signed Ubuntu 24.04 package index.
+    runs-on: ubuntu-24.04
     name: node 24 / coverage
     env:
       DSH_COVERAGE_MAX_WORKERS: '2'
@@ -72,12 +73,15 @@ jobs:
           wait "$sandbox_pid" || sandbox_status=$?
           if (( install_status != 0 )); then exit "$install_status"; fi
           exit "$sandbox_status"
+      - name: Install Playwright Chromium for browser coverage tests
+        run: pnpm --filter @phoenix-ai/dsh-web-frontend exec playwright install --with-deps chromium
       - name: Run exhaustive coverage
         run: pnpm run check:ci:coverage
 
   node-24-consumers:
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    # Bubblewrap is verified against the signed Ubuntu 24.04 package index.
+    runs-on: ubuntu-24.04
     name: node 24 / snapshots and artifacts
     env:
       DSH_GATE_CONCURRENCY: '1'

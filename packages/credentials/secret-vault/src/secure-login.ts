@@ -37,7 +37,10 @@ const SCRIPT = [
   '[Console]::Out.Write([Convert]::ToBase64String($result))',
 ].join('\n')
 
-/** Only complete secure web origins are accepted, with loopback HTTP for development. */
+/** Only complete secure web origins are accepted, with loopback HTTP for development.
+ * @param raw - Raw supplied to this operation.
+ * @returns The result produced by this operation.
+ */
 export function loginOrigin(raw: string): string {
   const parsed = new URL(raw)
   if (parsed.username || parsed.password || parsed.origin === 'null') throw new Error('Origen no válido')
@@ -50,7 +53,10 @@ export function loginOrigin(raw: string): string {
  * Show only that a related access exists; NEVER share or replay its secret
  * across origins automatically. The user must approve an explicit copy.
  */
-/** Registered related origins are only discovery hints; no implicit cross-site login. */
+/** Registered related origins are only discovery hints; no implicit cross-site login.
+ * @param origin - Credential or workflow origin to inspect.
+ * @returns The matching projected records.
+ */
 export function relatedCredentialOrigins(origin: string): readonly string[] {
   // This site's apex, www portal and embedded sports module may each host
   // their own login. An exact allowlist avoids matching lookalike domains.
@@ -65,7 +71,10 @@ export function relatedCredentialOrigins(origin: string): readonly string[] {
   }
   return []
 }
-/** Backward-compatible primary related-site hint; status searches all known origins. */
+/** Backward-compatible primary related-site hint; status searches all known origins.
+ * @param origin - Credential or workflow origin to inspect.
+ * @returns The result produced by this operation.
+ */
 export function relatedCredentialOrigin(origin: string): string | undefined {
   return relatedCredentialOrigins(origin)[0]
 }
@@ -384,6 +393,7 @@ async function tabForLogin(tabId: string, origin: string): Promise<BrowserTab> {
 /** Detect a visible login even when a modal appeared without navigation.
  * Includes same-origin iframes; never inspect cross-origin frame secrets.
  * Detection failures are errors, NOT “no login needed”.
+ * @returns The result produced by this operation.
  */
 export function loginDetectionExpression(): string {
   return `(() => {
@@ -411,6 +421,7 @@ export function loginDetectionExpression(): string {
   })()`
 }
 
+/** Observed input metadata used to recognize credential fields. */
 export interface LoginInputHint {
   key: string
   role: 'account' | 'secret' | 'extra'
@@ -419,6 +430,7 @@ export interface LoginInputHint {
   inputType: 'text' | 'email' | 'tel' | 'password' | 'number'
   required: boolean
 }
+/** Observed challenge and form state before submitting credentials. */
 export interface LoginGateState {
   required: boolean
   formVisible: boolean
@@ -430,6 +442,8 @@ export interface LoginGateState {
 }
 /** Inspect a login gate without reading fields, or open exactly one in-page login trigger.
  * Never navigate away, submit an unrelated form, or expose DOM text to the model.
+ * @param action - Action supplied to this operation.
+ * @returns The result produced by this operation.
  */
 export function loginGateExpression(action: 'inspect' | 'open' = 'inspect'): string {
   const expression = `(() => {
@@ -690,7 +704,10 @@ async function useLogin(origin: string, tabId: string, manual: boolean,
   return result
 }
 
-/** Stable human-readable failure codes. Never reflect raw secrets or CDP payloads. */
+/** Stable human-readable failure codes. Never reflect raw secrets or CDP payloads.
+ * @param error - Error supplied to this operation.
+ * @returns The result produced by this operation.
+ */
 export function safeSecureLoginFailure(error: unknown): { code: number; body: { error: string; reason: string } } {
   const message = error instanceof Error ? error.message : ''
   if (/bóveda|vault|no se pudo leer el acceso cifrado|registro de acceso dañado/i.test(message)
@@ -706,7 +723,11 @@ export function safeSecureLoginFailure(error: unknown): { code: number; body: { 
     error: 'No se pudo completar la operación segura. Comprueba los datos y el estado de la bóveda.' } }
 }
 
-/** Route lives on the host, outside every model-facing MCP tool and session log. */
+/** Route lives on the host, outside every model-facing MCP tool and session log.
+ * @param ctx - Cordis context providing the owning services.
+ * @param vault - Vault supplied to this operation.
+ * @returns The result produced by this operation.
+ */
 export function registerSecureLogin(ctx: Context, vault?: CredentialProvider): () => void {
   return ctx.webServer.register({
     kind: 'prefix',

@@ -104,6 +104,7 @@ function normalizeEclipseProfile(profile: EclipseRoutingSettings): EclipseRoutin
 
 const eclipseRoutingSettingsSchema: z<EclipseRoutingSettings> = z.object({
   mode: z.union(['automatic', 'hybrid', 'manual']).required(false),
+  executionEngine: z.union(['automatic', 'internal', 'codex', 'openclaw']).required(false),
   planner: optionalEclipseRouteSchema,
   coordinator: optionalEclipseRouteSchema,
   subagent: optionalEclipseRouteSchema,

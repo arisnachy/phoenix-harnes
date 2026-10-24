@@ -21,3 +21,7 @@ Unit tests cover multiple unconstrained game genres, no tool-name prompts, natur
 ## Consequences
 
 Kira receives the appropriate skill without the user having to dictate implementation steps. Producing, testing and publishing a complete game still depends on actual runtime capabilities; skill activation alone is not proof that the requested game was delivered.
+
+## Alternatives considered
+
+Require the user to name and invoke the Game Studio skill explicitly. Rejected because it exposes internal implementation steps and prevents ordinary natural-language requests from activating an installed, authorized skill.

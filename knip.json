@@ -8,11 +8,14 @@
     "codex",
     "icacls",
     "musl-gcc",
+    "playwright",
     "powershell.exe",
+    "psql",
     "python3",
     "sandbox-exec",
     "tar",
     "taskkill",
+    "vite",
     "where.exe"
   ],
   "ignoreWorkspaces": [

@@ -157,7 +157,10 @@ function validateCollection(
   if (!Array.isArray(collection) || collection.length === 0) issues.push(issue)
 }
 
-/** Resolve both common table encodings without losing object-shaped row cells. */
+/** Resolve both common table encodings without losing object-shaped row cells.
+ * @param spec - Spec supplied to this operation.
+ * @returns The matching projected records.
+ */
 export function projectVisualTable(spec: JsonRecord): {
   readonly columns: readonly string[]
   readonly rows: readonly (readonly unknown[])[]
@@ -184,7 +187,7 @@ export function projectVisualTable(spec: JsonRecord): {
     if (Array.isArray(entry)) return columns.map((_, index) => entry[index])
     if (!isRecord(entry)) return columns.map(() => undefined)
     const keys = Object.keys(entry)
-    return columns.map(column => {
+    return columns.map((column) => {
       if (Object.hasOwn(entry, column)) return entry[column]
       const normalizedColumn = normalize(column)
       const accepted = [normalizedColumn, ...(aliases[normalizedColumn] ?? [])]
@@ -195,7 +198,10 @@ export function projectVisualTable(spec: JsonRecord): {
   return { columns, rows }
 }
 
-/** Only meaningful cells count as actual table data; blank placeholders are not results. */
+/** Only meaningful cells count as actual table data; blank placeholders are not results.
+ * @param spec - Spec supplied to this operation.
+ * @returns The matching projected records.
+ */
 export function populatedVisualTableRows(spec: JsonRecord): readonly (readonly unknown[])[] {
   const table = projectVisualTable(spec)
   return table?.rows.filter(row => row.some(cell =>

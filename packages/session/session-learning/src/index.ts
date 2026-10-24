@@ -8,7 +8,7 @@
  */
 
 import { Context, Service } from '@phoenix-ai/cordis'
-import { basename } from 'node:path'
+import { basename, resolve } from 'node:path'
 import z from '@phoenix-ai/schemastery'
 import type {} from '@phoenix-ai/dsh-agent'
 import { SessionId } from '@phoenix-ai/dsh-session'
@@ -56,7 +56,14 @@ export const Config: z<Config> = z.object({
 
 const DEFAULT_MAX_RECORDS = 10_000
 const MAX_SESSION_COGNITIVE_RECORDS = 128
+const MAX_EXECUTION_COGNITIVE_RECORDS = 128
 const MAX_SUMMARY_CHARS = 4_096
+
+/** Bounded, provenance-carrying memory context for one execution request. */
+export interface ExecutionMemoryContext {
+  readonly content: string
+  readonly memoryIds: readonly string[]
+}
 
 /**
  * Event-backed memory service. Every source event is deduplicated by the
@@ -214,6 +221,60 @@ export class LearningMemoryService extends Service {
     }
     const records = this.cognitive.timeline({ sessionId: String(sessionId), includeHistory: false })
     return records.slice(Math.max(0, records.length - limit))
+  }
+
+  /**
+   * Read relevant procedural memory for an exact, registered execution session.
+   * CWD and agent preset matching are taken from the live session registry; the
+   * mutable current-project cursor is intentionally not consulted.
+   * @param session - Registered session requesting execution context.
+   * @param query - Non-empty lexical query for relevant procedural memory.
+   * @param maxBytes - Maximum UTF-8 bytes including provenance wrappers.
+   * @returns Sanitized bounded context and the included canonical memory IDs.
+   */
+  recallForExecution(session: Session, query: string, maxBytes: number): ExecutionMemoryContext {
+    if (!Number.isSafeInteger(maxBytes) || maxBytes < 0) {
+      throw new TypeError('execution memory maxBytes must be a non-negative safe integer')
+    }
+    const requestedQuery = query.trim()
+    if (requestedQuery === '' || maxBytes === 0) return emptyExecutionMemoryContext()
+
+    const registered = this.ctx.sessions.get(session.id)
+    if (registered !== session) return emptyExecutionMemoryContext()
+    const requestedCwd = normalizedSessionCwd(session)
+    if (requestedCwd === undefined) return emptyExecutionMemoryContext()
+    const requestedProfile = sessionProfile(session)
+    const sourceSessionIds = new Set(this.ctx.sessions.list()
+      .filter(candidate => normalizedSessionCwd(candidate) === requestedCwd)
+      .filter(candidate => sessionProfile(candidate) === requestedProfile)
+      .map(candidate => String(candidate.id)))
+    if (sourceSessionIds.size === 0) return emptyExecutionMemoryContext()
+
+    const hits = this.cognitive.search({
+      query: requestedQuery,
+      sessionIds: [...sourceSessionIds],
+      layers: ['procedural'],
+      limit: MAX_EXECUTION_COGNITIVE_RECORDS,
+    })
+      .filter(hit => hit.record.status === 'active'
+        && hit.record.confidence >= 0.8
+        && hit.record.layers.includes('procedural'))
+      .sort((left, right) => right.score - left.score || right.record.lastObservedAt - left.record.lastObservedAt)
+
+    const unique = new Set<string>()
+    const chunks: string[] = []
+    const memoryIds: string[] = []
+    for (const hit of hits) {
+      const memoryId = String(hit.record.id)
+      if (unique.has(memoryId)) continue
+      const chunk = executionMemoryChunk(hit.record)
+      const candidate = chunks.length === 0 ? chunk : `${chunks.join('\n')}\n${chunk}`
+      if (Buffer.byteLength(candidate, 'utf8') > maxBytes) continue
+      unique.add(memoryId)
+      chunks.push(chunk)
+      memoryIds.push(memoryId)
+    }
+    return { content: chunks.join('\n'), memoryIds }
   }
 
   /**
@@ -379,9 +440,33 @@ export class LearningMemoryService extends Service {
 const RUNTIME_CONTEXT_PLUGIN = '@phoenix-ai/dsh-system-prompt'
 
 function isDerivedRuntimeContextEvent(event: SessionEvent): boolean {
+  if ((event.type as string) === 'team/execution-context') return true
   return event.type === 'user/message'
     && event.data.source.kind === 'plugin'
     && event.data.source.plugin === RUNTIME_CONTEXT_PLUGIN
+}
+
+function emptyExecutionMemoryContext(): ExecutionMemoryContext {
+  return { content: '', memoryIds: [] }
+}
+
+function executionMemoryChunk(record: CognitiveMemoryRecord): string {
+  const memoryId = sanitize(String(record.id))
+  const sourceUri = sanitize(record.provenance.sourceUri)
+  const text = sanitize(record.summary || record.content)
+  return `<memory id="${memoryId}" source="${sourceUri}">\n${text}\n</memory>`
+}
+
+function normalizedSessionCwd(session: Session): string | undefined {
+  const cwd = session.header.cwd?.trim()
+  if (cwd === undefined || cwd === '') return undefined
+  const absolute = resolve(cwd)
+  const normalized = absolute.length > 1 ? absolute.replace(/[\\/]+$/u, '') : absolute
+  return process.platform === 'win32' ? normalized.toLocaleLowerCase() : normalized
+}
+
+function sessionProfile(session: Session): string {
+  return session.header.agentPreset?.trim() ?? ''
 }
 
 interface Observation {

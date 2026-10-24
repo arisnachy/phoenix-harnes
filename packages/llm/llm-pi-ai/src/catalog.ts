@@ -875,6 +875,7 @@ const OPENROUTER_NEMOTRON3_NANO_CONTEXT_WINDOW = 262_144
  * @param modelId - exact catalog model.
  * @param inherited - unconfigured capacity from catalog or route fallback.
  * @param explicit - optional user-selected context capacity.
+ * @returns The result produced by this operation.
  */
 export function documentedOpenRouterContextWindow(
   provider: string,

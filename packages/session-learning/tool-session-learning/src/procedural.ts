@@ -206,7 +206,9 @@ export class ProceduralLearningEngine {
   /**
    * Recover incomplete workflows as diagnostic leads, never as proven recipes.
    * Called only when the current request matches the stored task.
-   */
+ * @param query - Task and scope used to select recovery candidates.
+ * @returns The current result of this operation.
+ */
   recoveryCandidates(query: ProceduralRecommendationQuery): ProceduralLearningState[] {
     if (query.taskContext === undefined || normalizeText(query.taskContext) === '') return []
     const limit = Math.min(2, query.limit ?? 2)
@@ -518,7 +520,11 @@ export class ProceduralExperienceTrace {
     return steps
   }
 
-  /** Inspect partial operational steps without falsely certifying task success. */
+  /**
+   * Inspect partial operational steps without falsely certifying task success.
+   * @param sessionId - Session whose partial operational steps are read.
+   * @returns Ordered, bounded recorded steps without clearing the trace.
+   */
   snapshot(sessionId: string): string[] {
     return [...(this.traces.get(sessionId) ?? [])]
   }
@@ -569,7 +575,7 @@ export function installProceduralLearning(
         let perSession = pendingTools.get(sessionId)
         if (!perSession) { perSession = new Map(); pendingTools.set(sessionId, perSession) }
         perSession.set(data.callId, data.name)
-        if (perSession.size > 128) perSession.delete(perSession.keys().next().value!)
+        if (perSession.size > 128) perSession.delete(requiredValue(perSession.keys().next().value))
         return
       }
       if (eventType === 'tool/result' && isRecord(data)) {
@@ -715,6 +721,8 @@ function cognitiveRow(record: CognitiveMemoryRecord): ProceduralStoredMemory {
 
 /** Only successful observed tool results may teach an active workflow.
  * A bare sent/queued/dispatch receipt lacks evidence of an achieved effect.
+ * @param data - Observed data to inspect.
+ * @returns Whether the requested condition holds.
  */
 export function isLearnableToolResult(data: unknown): boolean {
   if (!isRecord(data) || data.error !== undefined || !isRecord(data.message)
@@ -744,3 +752,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function isCount(value: unknown): value is number { return Number.isSafeInteger(value) && Number(value) >= 0 }
 function isConfidence(value: unknown): value is number { return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1 }
 function isTimestamp(value: unknown): value is number { return typeof value === 'number' && Number.isFinite(value) && value >= 0 }
+
+/** Reject absent entries before reading validated structured data. */
+function requiredValue<T>(value: T | undefined | null): T {
+  if (value === undefined || value === null) throw new Error('Required structured value is missing.')
+  return value
+}

@@ -98,8 +98,8 @@ describe('SidebarRoot.module.css', () => {
     expect(declarations('.newSession:focus-visible')?.get('background')).toBe(
       'var(--dsw-alias-interactive-bg-hover)',
     )
-    expect(declarations('.newSession:focus-visible')?.get('outline')).toBe(
-      '2px solid var(--dsw-alias-state-business-primary)',
+    expect(css).toMatch(
+      /\.newSession:focus-visible\s*\{[^}]*outline:\s*2px solid var\(--dsw-alias-state-business-primary\);/u,
     )
   })
 })

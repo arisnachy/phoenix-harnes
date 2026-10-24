@@ -172,12 +172,28 @@ function lead(messages) {
   return toolChunks([{ name: 'wait_agent', args: { timeout_ms: 10000 } }])
 }
 
+function executionScenario(messages, worker) {
+  const names = calls(messages)
+  if (worker) return names.includes('write') ? textChunks('EXECUTION_FILE_WRITTEN')
+    : toolChunks([{ name: 'write', args: { file_path: 'execution/result.txt', content: 'One durable native execution.' } }])
+  if (names.filter(name => name === 'execution_run').length < 2) return toolChunks([{
+    name: 'execution_run', args: { task: 'EXECUTION_WORKER_MARK: write execution/result.txt once.',
+      idempotency_key: 'assembled-execution-once', capabilities: ['code'], engine: 'internal' },
+  }])
+  if (!names.includes('execution_list')) return toolChunks([{ name: 'execution_list', args: {} }])
+  return textChunks('EXECUTION_WORKFLOW_OK')
+}
+
 class TeamFixtureAdapter extends LlmAdapter {
   async * stream(options) {
     const userText = options.messages.flatMap(message => message.role === 'user'
       ? message.content.filter(block => block.type === 'text').map(block => block.text)
       : []).join('\n')
-    const chunks = userText.includes('RESEARCHER_MARK')
+    const chunks = userText.includes('EXECUTION_WORKER_MARK')
+      ? executionScenario(options.messages, true)
+      : userText.includes('EXECUTION_LEAD_MARK')
+        ? executionScenario(options.messages, false)
+        : userText.includes('RESEARCHER_MARK')
       ? researcher(options.messages)
       : userText.includes('IMPLEMENTER_MARK')
         ? implementer(options.messages)

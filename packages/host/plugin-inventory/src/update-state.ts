@@ -53,21 +53,16 @@ function runtimeRoot(): string {
 
 /** Resolve the repository Git directory without assuming `.git` is a directory. */
 function gitDirectory(root: string): string | undefined {
-  const result = spawnSync('git', ['rev-parse', '--git-dir'], {
-    cwd: root,
-    encoding: 'utf8',
-    windowsHide: true,
-    stdio: ['ignore', 'pipe', 'ignore'],
-  })
-  if (result.status !== 0 || typeof result.stdout !== 'string') return undefined
-  const value = result.stdout.trim()
-  if (value.length === 0) return undefined
-  return isAbsolute(value) ? value : resolve(root, value)
+  return resolveGitDirectory(root, '--git-dir')
 }
 
 /** Resolve the shared Git control directory used across linked PHOENIX worktrees. */
 function gitCommonDirectory(root: string): string | undefined {
-  const result = spawnSync('git', ['rev-parse', '--git-common-dir'], {
+  return resolveGitDirectory(root, '--git-common-dir')
+}
+
+function resolveGitDirectory(root: string, flag: '--git-dir' | '--git-common-dir'): string | undefined {
+  const result = spawnSync('git', ['rev-parse', flag], {
     cwd: root,
     encoding: 'utf8',
     windowsHide: true,

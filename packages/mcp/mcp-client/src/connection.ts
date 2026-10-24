@@ -179,7 +179,6 @@ export function startConnection(
   const label = `mcp-client(${config.serverName})`
   const publishStatus = lifecycle?.setStatus.bind(lifecycle)
   const publishTools = lifecycle?.setTools.bind(lifecycle)
-  let markAuthorizationRequired: (() => void) | undefined
   const opts: ToolBridgeOptions = {
     registrationFailure: 'contain',
     serverName: config.serverName,
@@ -257,7 +256,7 @@ export function startConnection(
     scheduleReconnect()
   }
 
-  markAuthorizationRequired = () => {
+  const markAuthorizationRequired = () => {
     const generation = client
     if (generation === undefined) {
       publishStatus?.('auth-required', 'authorization-required')

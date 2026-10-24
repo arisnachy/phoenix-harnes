@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { Session, SessionId } from '@phoenix-ai/dsh-session'
 import { ReasoningEffortId } from '@phoenix-ai/dsh-llm'
+import { buildVerificationContract } from '../src/verification-contract.ts'
 import { judgeGoalCompletion, recordGoalJudge, resolveGoalJudgeAgentOptions } from '../src/judge.ts'
 
 const parent = {
@@ -28,13 +29,18 @@ const passingGateExecution = {
     artifact_integrity: 'pass',
     clean_room: 'pass',
   },
-  evidence_ledger: [{
-    criterion_id: 'REQ-001',
-    criterion: 'Ship a verified artifact.',
+  evidence_ledger: buildVerificationContract('Finish the feature').criteria.map(item => ({
+    criterion_id: item.id,
+    criterion: item.criterion,
     mandatory: true,
     status: 'verified',
     evidence: ['clean-room verification'],
+  })),
+  builder_test_audit: [{
+    test: 'feature regression suite', expected_source: 'specification', circular: false,
+    evidence: ['expected values traced to the original requirement'],
   }],
+  completion_report: { unverified_items: [], known_limitations: [] },
   artifact_fingerprint: 'sha256:judge-test-artifact',
   clean_room_evidence: 'verified extracted artifact in a clean temporary directory',
   findings: [],
@@ -164,6 +170,7 @@ describe('goal completion judge', () => {
       summary: 'All acceptance evidence is present.',
       findings: [],
       requiredChanges: [],
+      completionReport: { knownLimitations: [], unverifiedItems: [] },
     })
     expect(start).toHaveBeenCalledWith('spawn', expect.objectContaining({
       label: 'goal-completion-judge',

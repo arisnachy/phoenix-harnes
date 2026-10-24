@@ -38,6 +38,8 @@
     }
   },
   "peerDependencies": {
+    "@phoenix-ai/dsh-sandbox-policy": "workspace:^",
+    "@phoenix-ai/dsh-agent-team": "workspace:^",
     "@phoenix-ai/dsh-authorization": "workspace:^",
     "@phoenix-ai/dsh-credentials": "workspace:^",
     "@phoenix-ai/dsh-invariants": "workspace:^",
@@ -46,6 +48,7 @@
     "@phoenix-ai/dsh-subagent": "workspace:^",
     "@phoenix-ai/dsh-subprocess": "workspace:^",
     "@phoenix-ai/dsh-timeout": "workspace:^",
+    "@phoenix-ai/dsh-user-approval": "workspace:^",
     "@phoenix-ai/cordis": "workspace:^"
   },
   "dependencies": {
@@ -54,8 +57,10 @@
     "@openai/codex": "0.147.0"
   },
   "devDependencies": {
+    "@phoenix-ai/dsh-sandbox-policy": "workspace:^",
     "@phoenix-ai/cordis-plugin-loader": "workspace:^",
     "@phoenix-ai/dsh-agent": "workspace:^",
+    "@phoenix-ai/dsh-agent-team": "workspace:^",
     "@phoenix-ai/dsh-authorization": "workspace:^",
     "@phoenix-ai/dsh-credentials": "workspace:^",
     "@phoenix-ai/dsh-invariants": "workspace:^",
@@ -66,6 +71,7 @@
     "@phoenix-ai/dsh-subprocess": "workspace:^",
     "@phoenix-ai/dsh-subprocess-local": "workspace:^",
     "@phoenix-ai/dsh-timeout": "workspace:^",
+    "@phoenix-ai/dsh-user-approval": "workspace:^",
     "@phoenix-ai/cordis": "workspace:^"
   }
 }

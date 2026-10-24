@@ -262,6 +262,8 @@ function desktopControlDescriptorPath(): string {
  * A named-pipe connection failure that proves no native command reached the
  * Desktop broker. Only these pre-connect failures are safe to retry through
  * another actuator; EPIPE/timeouts remain ambiguous and are never replayed.
+ * @param error - Error supplied to this operation.
+ * @returns Whether the requested condition holds.
  */
 export function desktopControlConnectionWasNeverEstablished(error: unknown): boolean {
   const code = (error as NodeJS.ErrnoException | undefined)?.code
@@ -345,7 +347,7 @@ export function residentComputerRequestForAction(args: ComputerToolArgs, request
     schema: RESIDENT_DESKTOP_CONTROL_SCHEMA,
     requestId,
     type: args.action,
-    ...(args.target === undefined ? {} : { target: normalizedDesktopTarget(args.target)! }),
+    ...(args.target === undefined ? {} : { target: normalizedDesktopTarget(args.target) }),
     ...(args.url === undefined ? {} : { url: args.url }),
     ...(args.origin === undefined ? {} : { origin: normalizeCredentialOrigin(args.origin) }),
     ...(args.fields === undefined ? {} : { fields: args.fields }),
@@ -466,6 +468,9 @@ async function runLegacyDesktopObservation(
  * and an active lease prevents a second conversation taking over the first.
  * Native preview failure does not disable the existing Computer Use fallback when
  * no desktop shell is running; a user pause or occupied lease always fails closed.
+ * @param args - Validated arguments for the requested operation.
+ * @param sessionId - Identifier of the owning conversation.
+ * @returns Whether the requested condition holds.
  */
 export function desktopPreviewCommandForAction(
   args: ComputerToolArgs,
@@ -477,7 +482,7 @@ export function desktopPreviewCommandForAction(
   }
   return {
     type: 'phoenix.desktop.preview',
-    ...(args.target === undefined ? {} : { target: normalizedDesktopTarget(args.target)! }),
+    ...(args.target === undefined ? {} : { target: normalizedDesktopTarget(args.target) }),
     sessionId,
     observe: args.action === 'screenshot' || args.action === 'windows',
   }
@@ -1277,7 +1282,9 @@ export function nativeDesktopTurnActive(events: readonly { readonly type: string
     if (msg.source?.kind !== 'user') continue
     const text = (msg.content ?? []).map(block => block.type === 'text' ? block.text ?? '' : '').join(' ')
       .normalize('NFD').replace(/[\u0300-\u036f]/gu, '').toLowerCase()
+    // oxlint-disable-next-line @stylistic/max-len -- Keep the complete desktop intent pattern readable.
     const native = /\b(?:paint|mspaint|bloc de notas|notepad|calculadora|calculator|explorador de windows|file explorer|desktop live)\b/u.test(text)
+    // oxlint-disable-next-line @stylistic/max-len -- Keep the complete desktop intent pattern readable.
     const action = /\b(?:abre|abrir|entra|entrar|ingresa|inicia|ejecuta|dibuja|dibujo|trazo|traza|crea|crear|haz|hace|controla|muestra|usa|open|draw|use|launch)\b/u.test(text)
     const web = /\b(?:pagina web|navegador|chrome|youtube|sitio web|tutorial web)\b/u.test(text)
     return native && action && !web
@@ -1289,6 +1296,16 @@ export function nativeDesktopTurnActive(events: readonly { readonly type: string
  * Normalize literal window identifiers copied from enumeration output.
  * @param value - Window title, PID or HWND selector.
  * @returns Canonical guarded selector.
+ */
+export function normalizedDesktopTarget(value: string): string
+/** Normalize a supported desktop target identifier.
+ * @param value - Window target, or undefined when no target was selected.
+ * @returns Normalized target, preserving absence.
+ */
+export function normalizedDesktopTarget(value: string | undefined): string | undefined
+/** Normalize a supported desktop target identifier.
+ * @param value - Window target, or undefined when no target was selected.
+ * @returns Normalized target, preserving absence.
  */
 export function normalizedDesktopTarget(value: string | undefined): string | undefined {
   if (value === undefined) return undefined
@@ -1348,7 +1365,7 @@ export function windowsComputerInvocation(args: ComputerToolArgs): ComputerInvoc
   putNumber(env, 'PHX_X2', args.x2)
   putNumber(env, 'PHX_Y2', args.y2)
   putNumber(env, 'PHX_DELTA', args.delta)
-  if (args.target !== undefined) env.PHX_TARGET = normalizedDesktopTarget(args.target)!
+  if (args.target !== undefined) env.PHX_TARGET = normalizedDesktopTarget(args.target)
   if (args.button !== undefined) env.PHX_BUTTON = args.button
   if (args.text !== undefined) env.PHX_TEXT = args.text
   if (args.keys !== undefined) env.PHX_KEYS = args.keys
@@ -1374,7 +1391,10 @@ Start-Process -FilePath $uri.AbsoluteUri | Out-Null
 Write-Output ('Opened system browser: ' + $uri.AbsoluteUri)
 `
 
-/** Build an injection-safe fallback that opens an HTTP(S) URL in Windows' default browser. */
+/** Build an injection-safe fallback that opens an HTTP(S) URL in Windows' default browser.
+ * @param url - URL whose site or resource identity is inspected.
+ * @returns The result produced by this operation.
+ */
 export function systemBrowserOpenInvocation(url: string): ComputerInvocation {
   const parsed = new URL(url)
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
@@ -1676,7 +1696,8 @@ function delay(ms: number, signal?: AbortSignal): Promise<void> {
  * when Phoenix is launched through pnpm without Phoenix.exe. A snapshot is
  * created only AFTER the computer tool has passed its normal permissions.
  */
-/** @param sessionId - Owning conversation id.
+/** Resolve the persisted desktop observation path.
+ * @param sessionId - Owning conversation id.
  * @returns Path scoped by a SHA-256 digest rather than a raw user input.
  */
 export function desktopObservationPath(sessionId: string): string {

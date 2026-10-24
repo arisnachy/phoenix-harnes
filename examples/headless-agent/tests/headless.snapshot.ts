@@ -840,6 +840,34 @@ describe('headless stream-json snapshots', () => {
     expect(normalized).toBe(await readFile(streamExpected, 'utf8'))
   }, LOADER_SMOKE_TEST_TIMEOUT_MS)
 
+  it('executes one durable native operation through the assembled Team tools and reuses its receipt', async () => {
+    const result = await runLoaderSmoke({
+      label: 'Durable execution assembled tools', tempDirPrefix: 'headless-execution-',
+      binScript, libBinScript: binScript, configPath: teamConfigPath,
+      binArgs: [teamConfigPath, 'EXECUTION_LEAD_MARK: execute one native file task twice with the same key and inspect its receipt.'],
+      tsconfigPath, processTimeoutMs: 60_000,
+      env: { DSH_SNAPSHOT: 'team', NODE_OPTIONS: '--disable-warning=ExperimentalWarning' },
+      inspect: async (cwd) => {
+        expect(await readFile(join(cwd, 'execution/result.txt'), 'utf8')).toBe('One durable native execution.')
+        const logs = await persistedLogs(cwd)
+        const parent = logs.find(log => typeof log.header.parentSession !== 'string')
+        if (parent === undefined) throw new Error('Execution Lead was not persisted')
+        const rows = parseJsonl(parent.content)
+        const executions = rows.filter(row => row.type === 'team/execution')
+          .map(row => (row.data as JsonObject).snapshot as JsonObject)
+        expect(new Set(executions.map(row => row.id)).size).toBe(1)
+        const termination = logs.flatMap(log => parseJsonl(log.content)).filter(row => row.type === 'turn/end').map(row => row.data)
+        expect(executions.at(-1), JSON.stringify({ executions, termination })).toMatchObject({ engine: 'internal', phase: 'completed', provider: 'deepseek-official' })
+        expect(rows.filter(row => row.type === 'tool/call' && (row.data as JsonObject).name === 'execution_run')).toHaveLength(2)
+        const childCalls = logs.filter(log => typeof log.header.parentSession === 'string')
+          .flatMap(log => parseJsonl(log.content)).filter(row => row.type === 'tool/call' && (row.data as JsonObject).name === 'write')
+        expect(childCalls).toHaveLength(1)
+      },
+    })
+    expect(result.stderr).toBe('')
+    expect(parseJsonl(result.stdout).at(-1)).toMatchObject({ type: 'result', output: 'EXECUTION_WORKFLOW_OK' })
+  }, LOADER_SMOKE_TEST_TIMEOUT_MS)
+
   it('replays two fresh Ralph rounds through the one-shot app', async () => {
     const prompt = await scenarioPrompt(ralphScenarioDir, 'ralph-loop')
     const streamExpected = join(ralphScenarioDir, 'stream-json.expected.jsonl')

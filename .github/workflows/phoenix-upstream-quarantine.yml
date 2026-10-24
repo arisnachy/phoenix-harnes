@@ -16,6 +16,7 @@ concurrency:
 env:
   PRIMARY_NODE_VERSION: '24'
   DSH_TELEMETRY_DISABLED: '1'
+  DEEPSEEK_UPSTREAM_REPOSITORY: ${{ vars.DEEPSEEK_UPSTREAM_REPOSITORY }}
 
 jobs:
   deepseek-candidate:
@@ -25,13 +26,49 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Fetch the public upstream
+      - name: Validate and fetch the configured independent upstream
+        id: source
+        shell: bash
         run: |
-          git remote add deepseek-upstream https://github.com/arisnachy/phoenix-harnes.git
+          set -euo pipefail
+          source="${DEEPSEEK_UPSTREAM_REPOSITORY:-}"
+          if [[ -z "$source" ]]; then
+            echo '::notice::DeepSeek quarantine skipped: repository variable DEEPSEEK_UPSTREAM_REPOSITORY is not configured.'
+            echo 'configured=false' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [[ ! "$source" =~ ^(https://|ssh://|git@)[^[:space:]]+$ ]]; then
+            echo '::error::DeepSeek quarantine refused: DEEPSEEK_UPSTREAM_REPOSITORY must be an explicitly configured Git URL.' >&2
+            exit 1
+          fi
+          normalize_remote() {
+            local value="$1"
+            value="${value#https://}"
+            value="${value#http://}"
+            value="${value#ssh://}"
+            if [[ "$value" == git@* ]]; then
+              value="${value#git@}"
+              value="${value/:/\/}"
+            fi
+            value="${value#github.com:}"
+            value="${value#github.com/}"
+            value="${value%.git}"
+            value="${value%/}"
+            printf '%s' "$value" | tr '[:upper:]' '[:lower:]'
+          }
+          configured_identity="$(normalize_remote "$source")"
+          phoenix_identity="$(normalize_remote "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git")"
+          if [[ "$configured_identity" == "$phoenix_identity" ]]; then
+            echo '::error::DeepSeek quarantine refused: configured upstream resolves to the PHOENIX repository.' >&2
+            exit 1
+          fi
+          git remote add deepseek-upstream "$source"
           git fetch --no-tags deepseek-upstream main
+          echo 'configured=true' >> "$GITHUB_OUTPUT"
 
       - name: Stop when this upstream SHA already has a candidate
         id: candidate
+        if: steps.source.outputs.configured == 'true'
         shell: bash
         run: |
           upstream_sha="$(git rev-parse deepseek-upstream/main)"

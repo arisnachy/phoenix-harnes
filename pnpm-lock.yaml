@@ -123,6 +123,9 @@ importers:
       vitest:
         specifier: ^4.1.8
         version: 4.1.8(@opentelemetry/api@1.9.1)(@types/node@22.20.0)(@vitest/coverage-v8@4.1.8)(jsdom@29.1.1)(vite@8.0.16(@types/node@22.20.0)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.22.4)(yaml@2.9.0))
+      ws:
+        specifier: ^8.21.0
+        version: 8.21.0
 
   apps/cli:
     dependencies:
@@ -1231,6 +1234,9 @@ importers:
       '@phoenix-ai/dsh-subagent-fork-in-process':
         specifier: workspace:^
         version: link:../../subagent/subagent-fork-in-process
+      '@phoenix-ai/dsh-subagent-openclaw':
+        specifier: workspace:^
+        version: link:../../subagent/subagent-openclaw
       '@phoenix-ai/dsh-subagent-spawn-in-process':
         specifier: workspace:^
         version: link:../../subagent/subagent-spawn-in-process
@@ -1249,6 +1255,9 @@ importers:
       '@phoenix-ai/dsh-tool-bash':
         specifier: workspace:^
         version: link:../../shell/tool-bash
+      '@phoenix-ai/dsh-tool-business':
+        specifier: workspace:^
+        version: link:../../core/tool-business
       '@phoenix-ai/dsh-tool-call-timeout-policy':
         specifier: workspace:^
         version: link:../../guard/timeout-policy
@@ -1267,9 +1276,6 @@ importers:
       '@phoenix-ai/dsh-tool-home-gateway':
         specifier: workspace:^
         version: link:../../home/tool-home-gateway
-      '@phoenix-ai/dsh-tool-business':
-        specifier: workspace:^
-        version: link:../../core/tool-business
       '@phoenix-ai/dsh-tool-jobs':
         specifier: workspace:^
         version: link:../../jobs/tool-jobs
@@ -1599,6 +1605,9 @@ importers:
       '@phoenix-ai/dsh-subagent-codex':
         specifier: workspace:^
         version: link:../../subagent/subagent-codex
+      '@phoenix-ai/dsh-subagent-openclaw':
+        specifier: workspace:^
+        version: link:../../subagent/subagent-openclaw
       '@phoenix-ai/dsh-subprocess':
         specifier: workspace:^
         version: link:../../subprocess/subprocess
@@ -5573,21 +5582,21 @@ importers:
       '@phoenix-ai/dsh-agent':
         specifier: workspace:^
         version: link:../../core/agent
+      '@phoenix-ai/dsh-atomic-write':
+        specifier: workspace:^
+        version: link:../../util/atomic-write
       '@phoenix-ai/dsh-credentials':
         specifier: workspace:^
         version: link:../../credentials/credentials
+      '@phoenix-ai/dsh-home-paths':
+        specifier: workspace:^
+        version: link:../../util/home-paths
       '@phoenix-ai/dsh-llm':
         specifier: workspace:^
         version: link:../../llm/llm
       '@phoenix-ai/dsh-session':
         specifier: workspace:^
         version: link:../../core/session
-      '@phoenix-ai/dsh-atomic-write':
-        specifier: workspace:^
-        version: link:../../util/atomic-write
-      '@phoenix-ai/dsh-home-paths':
-        specifier: workspace:^
-        version: link:../../util/home-paths
       zod:
         specifier: ^4.4.3
         version: 4.4.3
@@ -7886,6 +7895,9 @@ importers:
       '@phoenix-ai/dsh-session':
         specifier: workspace:^
         version: link:../../core/session
+      '@phoenix-ai/dsh-session-learning':
+        specifier: workspace:^
+        version: link:../../session/session-learning
       '@phoenix-ai/dsh-session-persistence':
         specifier: workspace:^
         version: link:../../session/session-persistence
@@ -8088,6 +8100,9 @@ importers:
       '@phoenix-ai/dsh-agent':
         specifier: workspace:^
         version: link:../../core/agent
+      '@phoenix-ai/dsh-agent-team':
+        specifier: workspace:^
+        version: link:../agent-team
       '@phoenix-ai/dsh-authorization':
         specifier: workspace:^
         version: link:../../credentials/authorization
@@ -8103,6 +8118,9 @@ importers:
       '@phoenix-ai/dsh-loader-smoke':
         specifier: workspace:^
         version: link:../../test-support/loader-smoke
+      '@phoenix-ai/dsh-sandbox-policy':
+        specifier: workspace:^
+        version: link:../../sandbox/sandbox-policy
       '@phoenix-ai/dsh-session':
         specifier: workspace:^
         version: link:../../core/session
@@ -8118,6 +8136,9 @@ importers:
       '@phoenix-ai/dsh-timeout':
         specifier: workspace:^
         version: link:../../util/timeout
+      '@phoenix-ai/dsh-user-approval':
+        specifier: workspace:^
+        version: link:../../interaction/user-approval
 
   packages/subagent/subagent-dsh-sdk:
     dependencies:
@@ -8252,6 +8273,31 @@ importers:
       '@phoenix-ai/dsh-user-approval':
         specifier: workspace:^
         version: link:../../interaction/user-approval
+
+  packages/subagent/subagent-openclaw:
+    dependencies:
+      '@phoenix-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+      ws:
+        specifier: ^8.21.0
+        version: 8.21.0
+    devDependencies:
+      '@phoenix-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@phoenix-ai/dsh-agent-team':
+        specifier: workspace:^
+        version: link:../agent-team
+      '@phoenix-ai/dsh-credentials':
+        specifier: workspace:^
+        version: link:../../credentials/credentials
+      '@phoenix-ai/dsh-invariants':
+        specifier: workspace:^
+        version: link:../../runtime-diagnostics/invariants
+      '@types/ws':
+        specifier: ^8.18.1
+        version: 8.18.1
 
   packages/subagent/subagent-spawn-in-process:
     dependencies:
@@ -11316,10 +11362,12 @@ packages:
 
   '@modelcontextprotocol/server-everything@2026.7.4':
     resolution: {integrity: sha512-ydMW/M6rk9tK23b+U38trsNLHhd5eF+ntiv2Vr+RPMDhbiKY/IKrZU25ukvSXVPUBvy7TxTPWpeV4KcYcXg72w==}
+    deprecated: 'Date-based versions are no longer published. This package has resumed semantic versioning at 1.0.0: install the latest version.'
     hasBin: true
 
   '@modelcontextprotocol/server-filesystem@2026.7.10':
     resolution: {integrity: sha512-Mmjg4anFBD5OzbPnGJOA0jPPN8645ERhQk38HQLpSenx1ox9bfdPkmAzUnNjeQtqQGFLtKe13J20RtLBmUKMZA==}
+    deprecated: 'Date-based versions are no longer published. This package has resumed semantic versioning at 1.0.0: install the latest version.'
     hasBin: true
 
   '@napi-rs/wasm-runtime@1.1.5':

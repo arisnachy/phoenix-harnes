@@ -13,7 +13,10 @@ import { defineTool, ToolArgsError, type ToolDefinition } from '@phoenix-ai/dsh-
 
 type Report = Record<string, unknown>
 
-/** Stable report location; identical contents reuse one local output directory. */
+/** Stable report location; identical contents reuse one local output directory.
+ * @param report - Report supplied to this operation.
+ * @returns The result produced by this operation.
+ */
 export function researchOutputPaths(report: Report): { docx: string; pdf: string; html: string } {
   const signature = createHash('sha256').update(JSON.stringify(report)).digest('hex').slice(0, 16)
   const root = join(homedir(), '.dsh', 'research-reports', signature)
@@ -23,6 +26,8 @@ export function researchOutputPaths(report: Report): { docx: string; pdf: string
 /**
  * Fail closed before any Python process or file write. Does not pretend that
  * unverified model-provided references are independently verified.
+ * @param input - Operation inputs validated at the owning boundary.
+ * @returns The result produced by this operation.
  */
 export function validateResearchPublication(input: unknown): Report {
   if (typeof input !== 'object' || input === null || Array.isArray(input)) {
@@ -68,7 +73,7 @@ export function validateResearchPublication(input: unknown): Report {
       if (!/^\[@[A-Za-z0-9_-]{1,64}(?:\s*[,;]\s*@?[A-Za-z0-9_-]{1,64})*\]$/u.test(match[0])) {
         throw new ToolArgsError(['Grupo de citas inválido: ' + match[0].slice(0, 120)])
       }
-      tokens.push(...match[1]!.split(/[,;]/u).map(key => key.trim().replace(/^@/u, '')))
+      tokens.push(...(match[1] ?? '').split(/[,;]/u).map(key => key.trim().replace(/^@/u, '')))
     }
     if ((value.match(/\[@/gu) ?? []).length !== (value.match(all) ?? []).length) {
       throw new ToolArgsError(['Existe una cita [@clave] incompleta.'])
@@ -227,8 +232,10 @@ type PublisherOutcome = {
   presentation?: string
   design_preset?: string
   document_type?: string
-  quality?: { required_sections_checked: boolean; submission_certified: boolean;
-    bibliographic_metadata_network_verified: boolean; visual_page_review: string }
+  quality?: { required_sections_checked: boolean
+    submission_certified: boolean
+    bibliographic_metadata_network_verified: boolean
+    visual_page_review: string }
 }
 
 async function runAttempt(bin: string, args: string[], payload: string, signal: AbortSignal): Promise<PublisherOutcome> {
@@ -241,7 +248,7 @@ async function runAttempt(bin: string, args: string[], payload: string, signal: 
     child.stdout.on('data', (chunk: string) => { output = (output + chunk).slice(-16000) })
     child.stderr.on('data', (chunk: string) => { errors = (errors + chunk).slice(-12000) })
     child.on('error', rejectOutcome)
-    child.on('close', code => {
+    child.on('close', (code) => {
       if (code !== 0) {
         rejectOutcome(new Error((errors.trim() || 'RESEARCH_PUBLISH_FAILED') + ' (exit ' + String(code) + ')'))
         return
@@ -265,6 +272,9 @@ async function runAttempt(bin: string, args: string[], payload: string, signal: 
  * Generate real DOCX, PDF, and readable HTML using the pinned local Python
  * publisher. Prefer installed Python packages; allow uv dependency bootstrap
  * only when the current environment lacks them.
+ * @param report - Report supplied to this operation.
+ * @param signal - Optional cancellation signal.
+ * @returns The result produced by this operation.
  */
 export async function publishResearchReport(report: Report, signal: AbortSignal): Promise<PublisherOutcome> {
   validateResearchPublication(report)
@@ -297,7 +307,9 @@ export async function publishResearchReport(report: Report, signal: AbortSignal)
   throw new Error('No fue posible publicar el documento. ' + problems.join('; '))
 }
 
-/** Model-facing academic report publication with actual file evidence. */
+/** Model-facing academic report publication with actual file evidence.
+ * @returns The result produced by this operation.
+ */
 export function createResearchPublishTool(): ToolDefinition {
   return defineTool({
     name: 'phoenix_research_publish',

@@ -135,6 +135,7 @@ export function agentMailIdempotencyKey(value: string): string {
  * @param idempotencyKey Immutable outgoing identity.
  * @param signal Optional owner cancellation, combined with the request deadline.
  * @returns Parsed provider JSON.
+ * @param method - Method supplied to this operation.
  */
 export async function agentMailRequest(path: string,
   key: string | undefined,

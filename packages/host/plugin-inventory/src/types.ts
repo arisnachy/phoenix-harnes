@@ -42,6 +42,7 @@ export interface BusinessLibraryProduct {
   readonly buildStatus: 'not-built' | 'current' | 'stale'
   readonly listingStage: 'not-prepared' | 'assets-missing' | 'review-required' | 'integrity-failed'
 }
+/** Host projection of available business-library artifacts. */
 export interface BusinessLibrarySnapshot {
   readonly totalCount: number
   readonly truncated: boolean
@@ -273,6 +274,39 @@ export interface PhoenixUpdateRestartReceipt {
 /** Result of waking the detached updater for an immediate channel check. */
 export interface PhoenixUpdateRefreshReceipt {
   readonly accepted: boolean
+}
+
+/** Safe lifecycle state for a Phoenix-managed execution runtime. */
+export type EngineRuntimeStatus = 'active' | 'prepared' | 'stopped' | 'unavailable'
+
+/** Secret-free status for one Codex or OpenClaw runtime. */
+export interface EngineRuntimeEntry {
+  readonly status: EngineRuntimeStatus
+  readonly version?: string
+  readonly diagnostic?: string
+}
+
+/** Phoenix update state included in the unified execution-runtime view. */
+export interface EngineRuntimePhoenixState {
+  readonly status: string
+  readonly current?: string
+  readonly target?: string
+  readonly diagnostic?: string
+}
+
+/** Unified read-only runtime projection used by Eclipse Settings. */
+export interface EngineRuntimeSnapshot {
+  readonly checkedAt: string
+  readonly codex: EngineRuntimeEntry
+  readonly openclaw: EngineRuntimeEntry
+  readonly phoenix: EngineRuntimePhoenixState
+}
+
+/** Result of preparing an official OpenClaw candidate. */
+export interface EngineRuntimePrepareReceipt {
+  readonly status: 'prepared' | 'already-active' | 'blocked' | 'unavailable' | 'error'
+  readonly version?: string
+  readonly diagnostic?: string
 }
 
 /** User-selectable Phoenix Local runtime policy. */

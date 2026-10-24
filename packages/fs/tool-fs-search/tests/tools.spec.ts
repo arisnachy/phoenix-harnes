@@ -242,7 +242,7 @@ describe('registration', () => {
     expect(prompt).toContain('Use the glob tool')
     expect(prompt).toContain('Use the grep tool')
     expect(prompt).toContain('sampled across top-level entries')
-    expect(prompt).toContain('Do not use a workspace-wide basename glob')
+    expect(prompt).toContain('never launch a workspace-wide glob')
     expect(prompt).not.toContain('sampled across top-level directories')
     const glob = ctx.tools.schemas().find(schema => schema.name === 'glob')
     expect(glob?.description).toContain('sampled across top-level entries')

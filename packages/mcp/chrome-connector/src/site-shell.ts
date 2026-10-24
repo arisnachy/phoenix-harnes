@@ -1,4 +1,7 @@
-/** Recovery map for publisher-verified embedded web applications. */
+/** Recovery map for publisher-verified embedded web applications.
+ * @param rawUrl - Raw url supplied to this operation.
+ * @returns The result produced by this operation.
+ */
 export function fullSiteForEmbeddedPage(rawUrl: string): string | undefined {
   try {
     const url = new URL(rawUrl)

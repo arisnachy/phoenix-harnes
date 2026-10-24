@@ -331,11 +331,26 @@ Owns the default model selection independently of any Host or transport. The com
  */
 currentSelection(): ModelSelection
 
-/**
- * Save the complete default model selection. A deployment without a settings
- * provider keeps its composition entry.
- * @param next - resolved selection accepted by an entry point.
- * @returns fulfillment after the optional settings write settles.
+/** Recover the last picker model for a new, otherwise blank conversation.
+ * @returns Last saved picker selection, or the provider-native default.
+ */
+preferredSelection(): ModelSelection
+
+/** Resolve Eclipse settings live so a saved change affects the next model request.
+ * @returns Detached Eclipse settings, or undefined when no user overrides exist.
+ */
+currentEclipseProfile(): EclipseRoutingSettings | undefined
+
+/** Persist the accepted Web picker identity and native execution route atomically.
+ * @param selected - Exact model the user last chose in the picker.
+ * @param runtime - Validated provider-native execution route (never a synthetic model).
+ * @returns Persistence completion; failures must not be described as saved.
+ */
+async saveWebSelection(selected: ModelSelection, runtime: ModelSelection): Promise<void>
+
+/** Persist a new model default without erasing user-owned Eclipse configuration.
+ * @param next - Selected default provider, model and optional reasoning.
+ * @returns Completion after the settings write.
  */
 async saveSelection(next: ModelSelection): Promise<void>
 ```
@@ -1072,3 +1087,7 @@ One session committed a different agent preset to its durable log. Consumers inv
 
 Source: [`packages/preset/agent-presets/src/types.ts`](../../packages/preset/agent-presets/src/types.ts)
 <!-- END GENERATED cordis-surface -->
+
+## Eclipse routing settings
+
+`EclipseRoutingSettings` stores the orchestration routing mode, model routes and reasoning preferences, teammate limit, and optional independent execution-engine preference. Engine selection never rewrites the selected conversation provider or model. The [default-model package](../../packages/core/agent-default-model/README.md) owns settings validation and migration.

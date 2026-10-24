@@ -19,7 +19,7 @@ import {
   teamSocialStyle,
   teamLanguageInstruction,
 } from '@phoenix-ai/dsh-agent-team'
-import type { TeamMemberView } from '@phoenix-ai/dsh-agent-team'
+import type { ExecutionId, ExecutionSnapshot, TeamMemberView } from '@phoenix-ai/dsh-agent-team'
 import { foldRequestHeader } from '@phoenix-ai/dsh-session'
 import { defineTool } from '@phoenix-ai/dsh-tools'
 import type { InferValue, ValueSchemaSpec } from '@phoenix-ai/dsh-tools'
@@ -44,7 +44,7 @@ export interface TeamModelProfile {
 /** User-owned Eclipse routing overrides the single deployment subagent profile
  * only when explicitly enabled.
  * @param settings - Optional saved Eclipse settings.
- * @param memberName - Retained for call-site compatibility; specialists do not
+ * @param _memberName - Retained for call-site compatibility; specialists do not
  * receive per-name model overrides.
  * @param fallback - Deployment-default worker model.
  * @param adaptiveEffort - Request-sensitive effort for an omitted hybrid tier.
@@ -75,7 +75,7 @@ export function resolveEclipseTeammateProfile(
 export function eclipseTeamPlanSummary(events: readonly { readonly type: string; readonly data: unknown }[]): string | undefined {
   const start = events.findLastIndex(event => event.type === 'turn/start')
   const messages = events.slice(start + 1).filter(event => event.type === 'assistant/message')
-  const texts = messages.map(event => {
+  const texts = messages.map((event) => {
     const data = event.data as { readonly message?: { readonly content?: readonly { readonly text?: string }[] } }
     return data.message?.content?.map(part => part.text ?? '').filter(Boolean).join(' ') ?? ''
   })
@@ -386,6 +386,86 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
   const disposers: Array<() => unknown> = []
   const register = (disposer: () => unknown): void => { disposers.push(disposer) }
   try {
+    if (ctx.agentTeams.membership(agent).role === 'lead') {
+      const result = (value: ExecutionSnapshot) => ({ executionId: String(value.id), engine: value.engine,
+        status: value.phase, ...value.output === undefined ? {} : { output: value.output },
+        ...value.errorCode === undefined ? {} : { errorCode: value.errorCode } })
+      const output = jsonOutput({ type: 'object', additionalProperties: false, properties: {
+        executionId: { type: 'string', required: true }, engine: { type: 'string', required: true },
+        status: { type: 'string', required: true }, output: { type: 'string' }, errorCode: { type: 'string' },
+      } } as const)
+      register(scoped.tools.register(defineTool({
+        name: 'execution_run',
+        description: 'Execute one concrete task with the compatible Codex, OpenClaw, or native engine. Preserve the same idempotency_key when retrying the same task. Specify only capabilities the task actually requires. The result certifies an execution, not mission completion; verify its artifacts before claiming success. Do not dispatch another engine when a prior outcome is uncertain: use execution_recover.',
+        parameters: {
+          task: { type: 'string', required: true }, idempotency_key: { type: 'string', required: true },
+          capabilities: { type: 'array', items: { type: 'string', enum: ['conversation', 'code', 'artifact', 'browser', 'connector', 'automation'] }, required: true },
+          engine: { type: 'string', enum: ['internal', 'codex', 'openclaw'], description: 'Omit for the saved preference and automatic capability routing.' },
+        }, output,
+        async execute(args, exec) {
+          const caller = callingAgent(exec.agent, 'execution_run')
+          const preference = ctx.get('agentDefaultModel')?.currentEclipseProfile()?.executionEngine
+          const engine = args.engine ?? (preference === 'automatic' ? undefined : preference)
+          const served = foldRequestHeader(caller.session.events)?.config
+          const selected = latestModelSelectionPreference(caller.session)?.selection
+            ?? (caller.options.provider === undefined || caller.options.model === undefined ? undefined
+              : { provider: caller.options.provider, model: caller.options.model })
+          const effort = adaptiveCodexReasoningEffort(args.task)
+          const selection = isPhoenixCodexAutoSelection(selected)
+            ? resolveEclipseTeammateProfile(ctx.get('agentDefaultModel')?.currentEclipseProfile(), 'execution', {
+              provider: 'openai-codex', model: PHOENIX_CODEX_AUTO_WORKER_MODEL, reasoningEffort: effort,
+            }, effort)
+            : { provider: served?.provider ?? caller.options.provider ?? '', model: served?.model ?? caller.options.model ?? '',
+              ...served?.reasoningEffort === undefined && caller.options.reasoningEffort === undefined ? {}
+                : { reasoningEffort: served?.reasoningEffort ?? caller.options.reasoningEffort } }
+          return result(await ctx.agentTeams.executions.execute(caller, {
+            task: args.task, idempotencyKey: args.idempotency_key, capabilities: args.capabilities,
+            ...engine === undefined ? {} : { engine },
+            ...selection === undefined ? {} : { selection },
+          }, exec.signal))
+        },
+      })))
+      register(scoped.tools.register(defineTool({
+        name: 'execution_list',
+        description: 'Read the latest execution receipts in this Team after interruption. Reuse execution_recover for uncertain work; listing never starts native tasks.',
+        parameters: {},
+        output: jsonOutput({ type: 'array', items: { type: 'object', additionalProperties: false, properties: {
+          executionId: { type: 'string', required: true }, engine: { type: 'string', required: true },
+          status: { type: 'string', required: true },
+        } } } as const),
+        async execute(_args, exec) {
+          return ctx.agentTeams.executions.list(callingAgent(exec.agent, 'execution_list')).slice(-32)
+            .map(value => ({ executionId: String(value.id), engine: value.engine, status: value.phase }))
+        },
+      })))
+      register(scoped.tools.register(defineTool({
+        name: 'execution_recover',
+        description: 'Inspect and recover the same native execution after interruption. Never starts a replacement task for an uncertain operation.',
+        parameters: { execution_id: { type: 'string', required: true } }, output,
+        async execute(args, exec) {
+          return result(await ctx.agentTeams.executions.recover(callingAgent(exec.agent, 'execution_recover'), args.execution_id as ExecutionId))
+        },
+      })))
+      register(scoped.tools.register(defineTool({
+        name: 'execution_steer',
+        description: 'Send one instruction to the same live native execution. Retain the same idempotency_key when retrying this instruction. A reserved or uncertain receipt must not be resent under a new key; inspect the native execution first.',
+        parameters: { execution_id: { type: 'string', required: true }, idempotency_key: { type: 'string', required: true }, text: { type: 'string', required: true } },
+        output: jsonOutput({ type: 'object', additionalProperties: false, properties: {
+          executionId: { type: 'string', required: true }, inputKey: { type: 'string', required: true }, status: { type: 'string', required: true },
+        } } as const),
+        async execute(args, exec) {
+          const receipt = await ctx.agentTeams.executions.steer(callingAgent(exec.agent, 'execution_steer'), args.execution_id as ExecutionId, args.idempotency_key, args.text)
+          return { executionId: String(receipt.executionId), inputKey: receipt.idempotencyKey, status: receipt.phase }
+        },
+      })))
+      register(scoped.tools.register(defineTool({
+        name: 'execution_cancel', description: 'Cancel one execution in this mission and interrupt its native work.',
+        parameters: { execution_id: { type: 'string', required: true } }, output,
+        async execute(args, exec) {
+          return result(await ctx.agentTeams.executions.cancel(callingAgent(exec.agent, 'execution_cancel'), args.execution_id as ExecutionId))
+        },
+      })))
+    }
     register(scoped.systemPrompt.section({
       name: 'team:policy',
       order: 60,

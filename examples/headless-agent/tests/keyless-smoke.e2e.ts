@@ -1,8 +1,7 @@
 import { readFile, readdir } from 'node:fs/promises'
-import { zstdDecompress } from 'node:zlib'
-import { promisify } from 'node:util'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { decompressZstdFrame, scanZstdFrames } from '@phoenix-ai/dsh-session-persistence-jsonl/src/zstd.ts'
 import { describe, expect, it } from 'vitest'
 import { LOADER_SMOKE_TEST_TIMEOUT_MS, runLoaderSmoke } from '@phoenix-ai/dsh-loader-smoke'
 import type { SessionEvent } from '@phoenix-ai/dsh-session'
@@ -11,7 +10,14 @@ const binScript = fileURLToPath(new URL('./fixtures/headless-driver.ts', import.
 const configPath = fileURLToPath(new URL('./fixtures/cli.cordis.yml', import.meta.url))
 const connectorInventoryConfigPath = fileURLToPath(new URL('./fixtures/connector-inventory.cordis.yml', import.meta.url))
 const tsconfigPath = fileURLToPath(new URL('../../../tsconfig.json', import.meta.url))
-const decompress = promisify(zstdDecompress)
+
+async function decompressLog(buffer: Buffer): Promise<string> {
+  const { frames, tornStart } = scanZstdFrames(buffer)
+  if (tornStart !== undefined) throw new Error('keyless smoke found a torn Zstandard frame')
+  const decoded: Buffer[] = []
+  for (const frame of frames) decoded.push(await decompressZstdFrame(buffer.subarray(frame.start, frame.end)))
+  return Buffer.concat(decoded).toString('utf8')
+}
 
 describe('headless-agent keyless smoke', () => {
   it('boots the real Loader tree, runs a real bash tool round trip, and persists the turn', async () => {
@@ -30,7 +36,10 @@ describe('headless-agent keyless smoke', () => {
         if (relativePath === undefined) return
         const compressed = await readFile(join(cwd, relativePath))
         expect(compressed.subarray(0, 4).toString('hex')).toBe('28b52ffd')
-        persistedHeader = JSON.parse((await decompress(compressed)).toString()) as Record<string, unknown>
+        const records = (await decompressLog(compressed)).trimEnd().split('\n')
+          .map(line => JSON.parse(line) as Record<string, unknown>)
+        expect(records.length).toBeGreaterThan(1)
+        persistedHeader = records[0]
       },
     })
     const lines = stdout.trimEnd().split('\n').map(line => JSON.parse(line) as Record<string, unknown>)

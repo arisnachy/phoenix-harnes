@@ -15,9 +15,8 @@ import {
   type SessionNotification,
 } from '@agentclientprotocol/sdk'
 import { Readable, Writable } from 'node:stream'
-import { promisify } from 'node:util'
-import { zstdDecompress } from 'node:zlib'
 import { execa } from 'execa'
+import { decompressZstdFrame, scanZstdFrames } from '@phoenix-ai/dsh-session-persistence-jsonl/src/zstd.ts'
 import { afterEach, describe, expect, it } from 'vitest'
 
 /**
@@ -28,7 +27,6 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 const repoRoot = fileURLToPath(new URL('../../../../', import.meta.url))
 const acpBin = join(repoRoot, 'packages/examples/acp-demo/lib/bin.js')
-const decompress = promisify(zstdDecompress)
 
 const dshPackages = [
   'examples/agent-spine-demo', 'core/agent', 'core/session', 'core/system-prompt',
@@ -46,6 +44,14 @@ const vendorPackages = [
 // layout need not hoist them. Symlink those exact paths into the plain-Node consumer.
 const npmDeps = ['@agentclientprotocol/sdk']
 const acpPkgDir = join(repoRoot, 'packages/acp/acp')
+
+async function decompressLog(buffer: Buffer): Promise<string> {
+  const { frames, tornStart } = scanZstdFrames(buffer)
+  if (tornStart !== undefined) throw new Error('ACP built-bin smoke found a torn Zstandard frame')
+  const decoded: Buffer[] = []
+  for (const frame of frames) decoded.push(await decompressZstdFrame(buffer.subarray(frame.start, frame.end)))
+  return Buffer.concat(decoded).toString('utf8')
+}
 
 async function pkgName(absDir: string): Promise<string> {
   const json = JSON.parse(await readFile(join(absDir, 'package.json'), 'utf8')) as { name: string }
@@ -187,7 +193,10 @@ describe.skipIf(!existsSync(acpBin))('dsh-acp-demo BUILT bin (node lib/bin.js, n
     }).toBeTypeOf('string')
     const compressed = await readFile(join(sessionsRoot, log!))
     expect(compressed.subarray(0, 4).toString('hex')).toBe('28b52ffd')
-    expect(JSON.parse((await decompress(compressed)).toString())).toMatchObject({ type: 'session', id: sessionId })
+    const records = (await decompressLog(compressed)).trimEnd().split('\n')
+      .map(line => JSON.parse(line) as Record<string, unknown>)
+    expect(records.length).toBeGreaterThan(1)
+    expect(records[0]).toMatchObject({ type: 'session', id: sessionId })
     expect(stderr.join('')).not.toContain('without inject')
     // stdout purity: every emitted line is a JSON-RPC frame, no logger leak.
     for (const line of rawOut.join('').split('\n').filter(l => l.trim().length > 0)) {

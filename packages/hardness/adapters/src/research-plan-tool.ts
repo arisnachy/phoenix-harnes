@@ -15,8 +15,14 @@ type Intake = {
   title?: string
   target_pages?: number
   page_scope?: 'all' | 'body' | 'unknown'
-  cover?: { institution?: string; author?: string; authors?: Array<{ name?: string; student_id?: string }>;
-    logo_path?: string; advisor?: string; course?: string; institutional_manual_path?: string }
+  cover?: { institution?: string
+    author?: string
+    authors?: Array<{ name?: string
+      student_id?: string }>
+    logo_path?: string
+    advisor?: string
+    course?: string
+    institutional_manual_path?: string }
 }
 const ENTRIES = [
   { id: 'apa7', label: 'Investigación APA 7', default_citation_style: 'apa7' },
@@ -82,17 +88,43 @@ function allocate(input: ReadonlyArray<readonly [string, string, number]>, targe
   const raw = input.map(row => row[2] * target / sum)
   const base = raw.map(Math.floor)
   const remaining = target - base.reduce((a, b) => a + b, 0)
-  const ranking = raw.map((value, index) => ({ index, fraction: value - base[index]! }))
+  const ranking = raw.map((value, index) => ({ index, fraction: value - (base[index] ?? 0) }))
     .sort((a, b) => b.fraction - a.fraction || a.index - b.index)
-  for (const row of ranking.slice(0, remaining)) base[row.index]! += 1
-  return input.map(([kind, label], index) => ({ kind, label, pages: base[index]! }))
+  for (const row of ranking.slice(0, remaining)) base[row.index] = (base[row.index] ?? 0) + 1
+  return input.map(([kind, label], index) => ({ kind, label, pages: base[index] ?? 0 }))
+}
+type AcademicResearchPlan = {
+  state: string
+  entries: Array<{ id: string
+    label: string
+    default_citation_style: string | null }>
+  entry: Entry | null
+  citation_style: string | null
+  document_type: StudyType
+  presentation: string
+  level: Level
+  title: string | null
+  pages: {
+    target: number
+    explicitly_requested: boolean
+    suggested_range: number[]
+    scope: string
+    page_plan: ReturnType<typeof allocate>
+    planned_total: number
+    verification: string
+  }
+  missing_fields: string[]
+  cover_fields: string[]
+  reporting_standard_hint: string
+  evidence_status: string
+  guidance: string
 }
 /**
  * Construct a source-neutral academic intake and bounded page distribution.
  * @param input - user intent and optional research/cover/page constraints.
  * @returns structured intake, chapter plan, missing fields and unverified evidence status.
  */
-export function planAcademicResearch(input: unknown) {
+export function planAcademicResearch(input: unknown): AcademicResearchPlan {
   const args = parse(input)
   const entry = chooseEntry(args)
   const inferredType: StudyType = args.document_type ?? (entry === 'scientific_article'
@@ -160,7 +192,7 @@ export function createResearchPlanTool(): ToolDefinition {
           + '. Extensión estimada, NO páginas escritas: '
           + String((value.pages as Record<string, unknown>).target)
           + '. Campos pendientes: ' + (Array.isArray(value.missing_fields)
-            ? value.missing_fields.map(String).join(', ') : 'ninguno'),
+          ? value.missing_fields.map(String).join(', ') : 'ninguno'),
       }],
     },
     async execute(args) { return planAcademicResearch(args.input) },

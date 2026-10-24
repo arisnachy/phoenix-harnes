@@ -454,7 +454,9 @@ export function addBrowserCards(
 export function isDesktopPrompt(text: string): boolean {
   const normalized = text.normalize('NFD').replace(/[\u0300-\u036f]/gu, '').toLowerCase()
   if (/\bdesktop[\s-]*live\b/u.test(normalized)) return true
+  // oxlint-disable-next-line @stylistic/max-len -- Keep the complete desktop intent pattern readable.
   const application = /\b(?:microsoft paint|paint|mspaint|bloc de notas|notepad|explorador de windows|calculadora|calculator|explorador de archivos|file explorer)\b/u
+  // oxlint-disable-next-line @stylistic/max-len -- Keep the complete desktop intent pattern readable.
   const action = /\b(?:abre|abres|abrir|entra|entrar|ingresa|ingresar|inicia|ejecuta|dibuja|dibujo|trazo|traza|trabaja|controla|muestra|open|draw|launch|use|usa)\b/u
   return application.test(normalized) && action.test(normalized)
 }

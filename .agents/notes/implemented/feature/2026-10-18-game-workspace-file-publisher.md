@@ -21,3 +21,7 @@ Game-tool integration tests cover a workspace-authored file, snapshot immutabili
 ## Consequences
 
 This removes a specific publication bottleneck across all game genres. It does not make games generate themselves or prove visual polish, AI behavior, soundtrack quality or a completed playthrough; real Game Studio authoring and gameplay QA remain necessary.
+
+## Alternatives considered
+
+Keep requiring the complete HTML source as a model tool argument. Rejected because that retransmits an already-authored workspace artifact, expands the prompt payload and fails for larger games.

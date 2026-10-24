@@ -7,8 +7,9 @@ export declare function compareStableVersions(left: string, right: string): -1 |
 export declare function readActiveCodexRuntime(home: string): {
   version: string
   bin: string
+  previousVersion?: string
 } | undefined
-export declare function pruneManagedCodexVersions(home: string, activeVersion: string): { removed: number }
+export declare function pruneManagedCodexVersions(home: string, activeVersion: string, previousVersion?: string): { removed: number }
 export declare function readCodexLiveRepairRequest(home: string): {
   requestedAt: string
   reason: 'quicksilver-v2'

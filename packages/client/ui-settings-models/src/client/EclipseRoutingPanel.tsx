@@ -17,6 +17,7 @@ interface Route { provider: string; model: string; reasoningEffort?: string }
 /** Kira's planning and execution seats plus her delegated teammates. */
 export interface EclipseProfile {
   mode?: 'automatic' | 'hybrid' | 'manual'
+  executionEngine?: 'automatic' | 'internal' | 'codex' | 'openclaw'
   planner?: Route
   coordinator?: Route
   subagent?: Route
@@ -31,7 +32,36 @@ interface LegacyProfile extends EclipseProfile {
 
 type Role = 'planner' | 'coordinator' | 'subagent'
 type Translator = (key: keyof typeof en) => string
-const ROLES: readonly Role[] = ['planner', 'coordinator', 'subagent']
+/** Secret-free status returned by the execution-engine registry. */
+export interface EclipseEngineStatus {
+  engine: 'internal' | 'codex' | 'openclaw'
+  connected: boolean
+  version: string
+  diagnostic?: string
+}
+
+/** Secret-free Host inspection of the installed execution runtimes. */
+export interface EclipseEngineRuntimeEntry {
+  status: 'active' | 'prepared' | 'stopped' | 'unavailable'
+  version?: string
+  diagnostic?: string
+}
+
+/** Unified Phoenix/Codex/OpenClaw update state rendered by Eclipse. */
+export interface EclipseEngineRuntimeSnapshot {
+  checkedAt: string
+  codex: EclipseEngineRuntimeEntry
+  openclaw: EclipseEngineRuntimeEntry
+  phoenix: { status: string; current?: string; target?: string; diagnostic?: string }
+}
+
+/** Safe preparation receipt; activation and rollback are intentionally absent. */
+export interface EclipseEnginePrepareReceipt {
+  status: 'prepared' | 'already-active' | 'blocked' | 'unavailable' | 'error'
+  version?: string
+  diagnostic?: string
+}
+const ROLES: readonly Role[] = ['coordinator', 'subagent']
 const DEFAULT_PROFILE: EclipseProfile = { mode: 'automatic', maxTeammates: 3, escalationSensitivity: 'adaptive' }
 
 function encoded(route: Route): string { return JSON.stringify([route.provider, route.model]) }
@@ -77,6 +107,9 @@ function profileFromValue(value: unknown): EclipseProfile {
     ? candidate.maxTeammates : 3
   return {
     mode,
+    ...candidate.executionEngine === 'automatic' || candidate.executionEngine === 'internal'
+      || candidate.executionEngine === 'codex' || candidate.executionEngine === 'openclaw'
+      ? { executionEngine: candidate.executionEngine } : {},
     ...(planner === undefined ? {} : { planner }),
     ...(coordinator === undefined ? {} : { coordinator }),
     ...(subagent === undefined ? {} : { subagent }),
@@ -105,6 +138,9 @@ export function EclipseRoutingPanel(props: {
   controller: ModelsSettingsStore
   api: Pick<IApiClient, 'settings'>
   loadCatalog: () => Promise<readonly EclipseCatalogChoice[]>
+  loadEngines?: () => Promise<readonly EclipseEngineStatus[]>
+  loadRuntime?: () => Promise<EclipseEngineRuntimeSnapshot>
+  prepareOpenClaw?: (version: string) => Promise<EclipseEnginePrepareReceipt>
   t: Translator
 }) {
   const state = useSyncExternalStore(
@@ -122,6 +158,32 @@ export function EclipseRoutingPanel(props: {
   const [working, setWorking] = useState(false)
   const [message, setMessage] = useState<string>()
   const [catalogLoading, setCatalogLoading] = useState(true)
+  const [engines, setEngines] = useState<readonly EclipseEngineStatus[]>([])
+  const [engineError, setEngineError] = useState(false)
+  const [checkingEngines, setCheckingEngines] = useState(false)
+  const [runtime, setRuntime] = useState<EclipseEngineRuntimeSnapshot>()
+  const [runtimeError, setRuntimeError] = useState(false)
+  const [checkingRuntime, setCheckingRuntime] = useState(false)
+  const [runtimeVersion, setRuntimeVersion] = useState('')
+  const [preparingRuntime, setPreparingRuntime] = useState(false)
+  const [runtimeMessage, setRuntimeMessage] = useState<string>()
+  const checkEngines = async (): Promise<void> => {
+    if (props.loadEngines === undefined) return
+    setCheckingEngines(true)
+    try { setEngines(await props.loadEngines()); setEngineError(false) }
+    catch { setEngineError(true) }
+    finally { setCheckingEngines(false) }
+  }
+  useEffect(() => { void checkEngines() }, [props.loadEngines])
+
+  const checkRuntime = async (): Promise<void> => {
+    if (props.loadRuntime === undefined) return
+    setCheckingRuntime(true)
+    try { setRuntime(await props.loadRuntime()); setRuntimeError(false) }
+    catch { setRuntimeError(true) }
+    finally { setCheckingRuntime(false) }
+  }
+  useEffect(() => { void checkRuntime() }, [props.loadRuntime])
 
   useEffect(() => {
     if (state.status === 'idle') void props.controller.load()
@@ -225,12 +287,12 @@ export function EclipseRoutingPanel(props: {
         // Keep the plan and execution routes independent while cleaning up
         // obsolete per-specialist overrides.
         ops: dedicatedRegistered
-          ? (['mode', 'planner', 'coordinator', 'subagent', 'specialists', 'maxTeammates', 'escalationSensitivity'] as const)
+          ? (['mode', 'planner', 'coordinator', 'subagent', 'specialists', 'maxTeammates', 'escalationSensitivity', 'executionEngine'] as const)
             .map((field) => {
               const value = reset
                 ? field === 'mode' ? 'automatic' : undefined
                 : field === 'mode' || field === 'planner' || field === 'coordinator' || field === 'subagent'
-                  || field === 'maxTeammates' || field === 'escalationSensitivity'
+                  || field === 'maxTeammates' || field === 'escalationSensitivity' || field === 'executionEngine'
                   ? draft[field] : undefined
               return value === undefined
                 ? { op: 'unset' as const, path: [field] }
@@ -292,6 +354,66 @@ export function EclipseRoutingPanel(props: {
       disabled={!state.writable || working} onChange={(event) => { update({ maxTeammates: Number(event.target.value) }) }}>
       {[0, 1, 2, 3].map(n => <option key={n} value={n}>{n}</option>)}
     </select>
+    <h3>{props.t('eclipseEnginesTitle')}</h3>
+    <p className={css.hint}>{props.t('eclipseEnginesDescription')}</p>
+    <label className={css.label} htmlFor="eclipse-engine">{props.t('eclipseEnginePreference')}</label>
+    <select id="eclipse-engine" className={css.input} value={draft.executionEngine ?? 'automatic'}
+      disabled={!state.writable || working} onChange={(event) => { update({ executionEngine: event.target.value as NonNullable<EclipseProfile['executionEngine']> }) }}>
+      <option value="automatic">{props.t('eclipseAutomatic')}</option>
+      <option value="codex">Codex</option><option value="openclaw">OpenClaw</option>
+      <option value="internal">{props.t('eclipseEngineInternal')}</option>
+    </select>
+    <ul>
+      {(['codex', 'openclaw', 'internal'] as const).map((engine) => {
+        const entry = engines.find(item => item.engine === engine)
+        return <li key={engine}>{engine === 'internal' ? props.t('eclipseEngineInternal') : engine === 'codex' ? 'Codex' : 'OpenClaw'}
+          {' · '}{entry?.connected === true ? props.t('eclipseEngineConnected') : props.t('eclipseEngineUnavailable')}
+          {entry === undefined ? '' : ` · ${entry.version}`}
+          {entry?.diagnostic === undefined ? '' : ` · ${entry.diagnostic}`}</li>
+      })}
+    </ul>
+    {engineError ? <p role="status" className={css.hint}>{props.t('eclipseEngineDiagnosticFailed')}</p> : null}
+    <button type="button" disabled={checkingEngines || props.loadEngines === undefined}
+      onClick={() => { void checkEngines() }}>{props.t('eclipseEngineCheck')}</button>
+    {props.loadRuntime !== undefined ? <div className={css.runtime}>
+      <h4>{props.t('eclipseRuntimeTitle')}</h4>
+      <p className={css.hint}>{props.t('eclipseRuntimeDescription')}</p>
+      {runtimeError ? <p role="status" className={css.error}>{props.t('eclipseRuntimeUnavailable')}</p> : null}
+      {runtime !== undefined ? <ul>
+        {(['codex', 'openclaw'] as const).map((engine) => {
+          const entry = runtime[engine]
+          const label = engine === 'codex' ? 'Codex' : 'OpenClaw'
+          return <li key={engine}>{label} · {entry.status}
+            {entry.version === undefined ? '' : ` · ${entry.version}`}
+            {entry.diagnostic === undefined ? '' : ` · ${entry.diagnostic}`}</li>
+        })}
+        <li>PHOENIX · {runtime.phoenix.status}
+          {runtime.phoenix.current === undefined ? '' : ` · ${runtime.phoenix.current.slice(0, 8)}`}</li>
+      </ul> : null}
+      <div className={css.actions}>
+        <button type="button" disabled={checkingRuntime} onClick={() => { void checkRuntime() }}>
+          {props.t('eclipseRuntimeRefresh')}
+        </button>
+      </div>
+      {props.prepareOpenClaw !== undefined ? <>
+        <label className={css.label} htmlFor="eclipse-openclaw-version">{props.t('eclipseRuntimeVersion')}</label>
+        <input id="eclipse-openclaw-version" className={css.input} value={runtimeVersion}
+          placeholder="2026.10.6" disabled={preparingRuntime || checkingRuntime}
+          onChange={(event) => { setRuntimeVersion(event.target.value); setRuntimeMessage(undefined) }} />
+        <button type="button" disabled={preparingRuntime || !/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/u.test(runtimeVersion.trim())}
+          onClick={() => {
+            setPreparingRuntime(true); setRuntimeMessage(undefined)
+            void props.prepareOpenClaw?.(runtimeVersion.trim()).then((result) => {
+              setRuntimeMessage(result.status === 'prepared' || result.status === 'already-active'
+                ? `${props.t('eclipseRuntimePrepared')}${result.version === undefined ? '' : ` · ${result.version}`}`
+                : `${props.t('eclipseRuntimePrepareBlocked')} ${result.diagnostic ?? ''}`.trim())
+            }, () => { setRuntimeMessage(props.t('eclipseRuntimePrepareFailed')) })
+              .finally(() => { setPreparingRuntime(false); void checkRuntime() })
+          }}>{preparingRuntime ? props.t('eclipseRuntimePreparing') : props.t('eclipseRuntimePrepare')}</button>
+        {runtimeMessage !== undefined ? <p role="status" className={css.hint}>{runtimeMessage}</p> : null}
+      </> : <p role="status" className={css.hint}>{props.t('eclipseRuntimePreparationDisabled')}</p>}
+      <p role="status" className={css.hint}>{props.t('eclipseRuntimeActivationDisabled')}</p>
+    </div> : null}
     {legacyCompatible ? <p role="status" className={css.hint}>{props.t('eclipseLegacyHost')}</p> : null}
     {!canPersist && state.status === 'ready'
       ? <p role="alert" className={css.error}>{props.t('eclipseHostUnavailable')}</p> : null}

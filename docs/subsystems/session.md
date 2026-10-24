@@ -715,6 +715,17 @@ timeline(query: Pick<CognitiveMemoryQuery, 'projectId' | 'sessionId' | 'from' | 
 cognitiveForSession(sessionId: SessionId, limit: number = 20): CognitiveMemoryRecord[]
 
 /**
+ * Read relevant procedural memory for an exact, registered execution session.
+ * CWD and agent preset matching are taken from the live session registry; the
+ * mutable current-project cursor is intentionally not consulted.
+ * @param session - Registered session requesting execution context.
+ * @param query - Non-empty lexical query for relevant procedural memory.
+ * @param maxBytes - Maximum UTF-8 bytes including provenance wrappers.
+ * @returns Sanitized bounded context and the included canonical memory IDs.
+ */
+recallForExecution(session: Session, query: string, maxBytes: number): ExecutionMemoryContext
+
+/**
  * Read the latest working-memory records for the current project.
  * @param limit - Maximum number of records.
  * @returns Active working-memory records.
@@ -760,7 +771,7 @@ forget(id: MemoryId): Promise<void>
 forgetCognitive(id: MemoryId): Promise<void>
 ```
 
-Types: [SessionId](core.md)
+Types: [ExecutionMemoryContext](agent-team.md) · [SessionId](core.md)
 
 Source: [`packages/session/session-learning/src/index.ts`](../../packages/session/session-learning/src/index.ts)
 

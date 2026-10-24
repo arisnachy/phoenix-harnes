@@ -812,7 +812,8 @@ export class ManagedMcpController {
    * The exact original is backed up with owner-only permissions before any
    * repair. Only rows accepted by the existing strict parser are restored.
    * The live Loader may need a restart to activate a recovered row.
-   */
+ * @returns The current result of this operation.
+ */
   async recoverInvalidOverlay(): Promise<{ recovered: number; quarantined: number; backupCreated: boolean }> {
     return recoverManagedMcpOverlay(this.path)
   }
@@ -1310,53 +1311,53 @@ export async function recoverManagedMcpOverlay(path: string): Promise<{
   quarantined: number
   backupCreated: boolean
 }> {
-    await mkdir(dirname(path), { recursive: true, mode: 0o700 })
-    return withFileLock(path, async () => {
-      let original: string
-      try {
-        original = await readFile(path, 'utf8')
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-          return { recovered: 0, quarantined: 0, backupCreated: false }
-        }
-        throw error
+  await mkdir(dirname(path), { recursive: true, mode: 0o700 })
+  return withFileLock(path, async () => {
+    let original: string
+    try {
+      original = await readFile(path, 'utf8')
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        return { recovered: 0, quarantined: 0, backupCreated: false }
       }
-      try {
-        const rows = parseManagedRows(original)
-        return { recovered: rows.length, quarantined: 0, backupCreated: false }
-      } catch {
-        // A malformed or manipulated row cannot bypass validConfig validation.
-        let document: unknown
-        try { document = JSON.parse(original) } catch { document = undefined }
-        const values: readonly unknown[] = Array.isArray(document) && document.length === 1
+      throw error
+    }
+    try {
+      const rows = parseManagedRows(original)
+      return { recovered: rows.length, quarantined: 0, backupCreated: false }
+    } catch {
+      // A malformed or manipulated row cannot bypass validConfig validation.
+      let document: unknown
+      try { document = JSON.parse(original) } catch { document = undefined }
+      const values: readonly unknown[] = Array.isArray(document) && document.length === 1
           && isRecord(document[0]) && Array.isArray(document[0].insert)
-          ? document[0].insert
-          : []
-        const recovered: ManagedMcpRow[] = []
-        const usedIds = new Set<string>()
-        const usedNames = new Set<string>()
-        for (const value of values) {
-          try {
-            const row = parseManagedRows(JSON.stringify([{ insert: [value] }]))[0]
-            if (row === undefined || usedIds.has(row.id) || usedNames.has(row.config.serverName)) continue
-            usedIds.add(row.id)
-            usedNames.add(row.config.serverName)
-            recovered.push(row)
-          } catch {
-            // Preserve malformed rows only in the quarantined original.
-          }
-        }
-        const digest = createHash('sha256').update(original).digest('hex').slice(0, 16)
-        const backup = `${path}.quarantined-${digest}.bak`
-        await writeFileAtomic(backup, original, { mode: 0o600, dirMode: 0o700 })
-        await writeManagedRows(path, recovered)
-        return {
-          recovered: recovered.length,
-          quarantined: Math.max(1, values.length - recovered.length),
-          backupCreated: true,
+        ? document[0].insert
+        : []
+      const recovered: ManagedMcpRow[] = []
+      const usedIds = new Set<string>()
+      const usedNames = new Set<string>()
+      for (const value of values) {
+        try {
+          const row = parseManagedRows(JSON.stringify([{ insert: [value] }]))[0]
+          if (row === undefined || usedIds.has(row.id) || usedNames.has(row.config.serverName)) continue
+          usedIds.add(row.id)
+          usedNames.add(row.config.serverName)
+          recovered.push(row)
+        } catch {
+          // Preserve malformed rows only in the quarantined original.
         }
       }
-    }, { waitMs: 30_000 })
+      const digest = createHash('sha256').update(original).digest('hex').slice(0, 16)
+      const backup = `${path}.quarantined-${digest}.bak`
+      await writeFileAtomic(backup, original, { mode: 0o600, dirMode: 0o700 })
+      await writeManagedRows(path, recovered)
+      return {
+        recovered: recovered.length,
+        quarantined: Math.max(1, values.length - recovered.length),
+        backupCreated: true,
+      }
+    }
+  }, { waitMs: 30_000 })
 }
 
 /**

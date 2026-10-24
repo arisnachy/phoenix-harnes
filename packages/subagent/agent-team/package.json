@@ -32,6 +32,10 @@
     "./chat-types": {
       "types": "./lib/types/chat-types.d.ts",
       "default": "./lib/types/chat-types.js"
+    },
+    "./execution-engine-types": {
+      "types": "./lib/types/execution-engine-types.d.ts",
+      "default": "./lib/types/execution-engine-types.js"
     }
   },
   "files": [
@@ -57,6 +61,7 @@
     "@phoenix-ai/dsh-llm": "workspace:^",
     "@phoenix-ai/dsh-session": "workspace:^",
     "@phoenix-ai/dsh-session-persistence": "workspace:^",
+    "@phoenix-ai/dsh-session-learning": "workspace:^",
     "@phoenix-ai/dsh-subagent": "workspace:^",
     "@phoenix-ai/cordis": "workspace:^",
     "@phoenix-ai/dsh-typert-protocol": "workspace:^",
@@ -72,6 +77,7 @@
     "@phoenix-ai/dsh-session": "workspace:^",
     "@phoenix-ai/dsh-session-persistence": "workspace:^",
     "@phoenix-ai/dsh-session-persistence-jsonl": "workspace:^",
+    "@phoenix-ai/dsh-session-learning": "workspace:^",
     "@phoenix-ai/dsh-session-persistence-sqlite": "workspace:^",
     "@phoenix-ai/dsh-subagent": "workspace:^",
     "@phoenix-ai/dsh-subagent-fork-in-process": "workspace:^",

@@ -28,6 +28,8 @@ export interface EclipseModelRoute {
 /** Kira uses separate Codex routes for strategy, execution and specialists. */
 export interface EclipseRoutingSettings {
   readonly mode?: 'automatic' | 'hybrid' | 'manual'
+  /** Execution transport preference, independent from the two model routes. */
+  readonly executionEngine?: 'automatic' | 'internal' | 'codex' | 'openclaw'
   readonly planner?: EclipseModelRoute
   readonly coordinator?: EclipseModelRoute
   readonly subagent?: EclipseModelRoute
@@ -849,13 +851,17 @@ const AUTO_SIMPLE_ACTION = /^(?:(?:kira|f[eé]nix)[,\s]+)?(?:abre|abrir|open|mue
 // oxlint-disable-next-line @stylistic/max-len -- Consequential changes and multi-stage operations require Sol.
 const AUTO_SIMPLE_EXCLUSION = /(?:\b(?:main|stable|branch|rama|commit|merge|fusionar|push|pull|despliega|deploy|producci[oó]n|production|servidor|database|base\s+de\s+datos|sql|migraci[oó]n|pagos?|payments?|compras?|contrato|contract|paciente|historia\s+cl[ií]nica|credenciales?|contrase[nñ]as?|secretos?|security|seguridad|permiso|permissions?|borra|elimina|delete|remove|y\s+(?:despu[eé]s|luego|tambi[eé]n|abre|busca|verifica|revisa|corrige|cambia|crea|ejecuta|actualiza|publica|agrega|a[nñ]ade|guarda|env[ií]a|renombra|ejecuta|instala)|luego|despu[eé]s|then|and\s+(?:then|also|open|fix|update|run|deploy))\b)/iu
 
-// oxlint-disable-next-line @stylistic/max-len -- Explicit creations cannot be mistaken for general chat merely because the verb was previously unknown.
+// oxlint-disable-next-line @stylistic/max-len -- Explicit creation verbs identify projects.
 const AUTO_LARGE_CREATION = /^(?:(?:kira|f[eé]nix)[,\s]+)?(?:haz|hacer|dise[nñ]a|desarrolla|construye|elabora|prepara|genera|generar|crea|crear|redacta|escribe|produce|make|design|develop|write|create|generate)\b.{0,150}\b(?:juego|videojuego|sistema|aplicaci[oó]n|app|plataforma|sitio|web|motor|m[oó]dulo|informe|investigaci[oó]n|libro|c[oó]mic|novela|curso|software|base\s+de\s+datos|hospital|saas)\b/iu
 
 /** Requests phrased as "quiero que me construyas un sistema" are still projects. */
 // oxlint-disable-next-line @stylistic/max-len -- Bound natural-language construction intent, avoiding a second classification model call.
 const AUTO_LARGE_INTENT = /^[¡!¿?\s]*(?:(?:kira|f[eé]nix)[,\s]+)?(?:quiero|necesito|puedes|podr[ií]as|can\s+you|i\s+(?:want|need))\b.{0,80}\b(?:hacer|hagas|crear|crees|construir|construyas|desarrollar|desarrolles|dise[nñ]ar|dise[nñ]es|implementar|implementes|build|create|develop|design|make)\b.{0,100}\b(?:juego|videojuego|sistema|aplicaci[oó]n|app|plataforma|sitio|web|motor|m[oó]dulo|informe|investigaci[oó]n|libro|c[oó]mic|novela|curso|software|hospital|saas)\b/iu
 
+/** Identify a request eligible for the bounded automatic quick route.
+ * @param text - Observed text to classify or present.
+ * @returns Whether the requested condition holds.
+ */
 export function isPhoenixAutoQuickTurn(text: string): boolean {
   const candidate = text.trim()
   if (candidate.length === 0 || candidate.length > 180 || candidate.includes('\n')) return false
@@ -951,7 +957,8 @@ function phoenixAutoEvidenceSignature(
   }
   const result = latest.data as { readonly error?: { readonly code?: string; readonly message?: string }
     readonly message?: { readonly content?: readonly {
-      readonly text?: string; readonly content?: readonly { readonly text?: string }[]
+      readonly text?: string
+      readonly content?: readonly { readonly text?: string }[]
     }[] } }
   const outcome = result.message?.content?.flatMap(part => [
     part.text ?? '', ...(part.content?.map(child => child.text ?? '') ?? []),

@@ -99,18 +99,20 @@ describe('Eclipse model settings', () => {
     render(<EclipseRoutingPanel controller={controller as never} api={{ settings: { mutate } } as never}
       loadCatalog={loadCatalog} t={t} />)
 
-    expect(await screen.findByLabelText(en.eclipseRole_planner)).toBeTruthy()
+    expect(await screen.findByLabelText(en.eclipseRole_coordinator)).toBeTruthy()
+    expect(screen.queryByLabelText(en.eclipseRole_planner)).toBeNull()
     expect(screen.getByText(en.eclipseStrategyUnlimited)).toBeTruthy()
     expect(screen.getByLabelText(en.eclipseStrategy)).toBeTruthy()
     expect(screen.getByLabelText(en.eclipseStrategy).querySelectorAll('option')).toHaveLength(3)
     expect(screen.getByLabelText(en.eclipseRole_coordinator)).toBeTruthy()
     expect(screen.getByLabelText(en.eclipseRole_subagent)).toBeTruthy()
     expect(screen.queryByLabelText(/specialist/i)).toBeNull()
-    expect(screen.getAllByRole('option', { name: en.eclipseDefaultEffort })).toHaveLength(3)
+    expect(screen.getAllByRole('option', { name: en.eclipseDefaultEffort })).toHaveLength(2)
     fireEvent.change(screen.getByLabelText(en.eclipseMode), { target: { value: 'hybrid' } })
-    expect(screen.getAllByRole('option', { name: en.eclipseAdaptiveEffort })).toHaveLength(3)
+    expect(screen.getAllByRole('option', { name: en.eclipseAdaptiveEffort })).toHaveLength(2)
     expect(screen.getByRole('option', { name: 'ultra' })).toBeTruthy()
-    expect(screen.getAllByRole('combobox')).toHaveLength(9)
+    expect(screen.getAllByRole('combobox')).toHaveLength(8)
+    fireEvent.change(screen.getByLabelText(en.eclipseEnginePreference), { target: { value: 'codex' } })
 
     fireEvent.click(screen.getByRole('button', { name: en.eclipseSave }))
     await waitFor(() => expect(mutate).toHaveBeenCalledTimes(1))
@@ -119,6 +121,7 @@ describe('Eclipse model settings', () => {
       ops: expect.arrayContaining([
         { op: 'set', path: ['coordinator'], value: { provider: 'openai-codex', model: 'gpt-6.1-sol' } },
         { op: 'unset', path: ['planner'] }, { op: 'unset', path: ['specialists'] },
+        { op: 'set', path: ['executionEngine'], value: 'codex' },
         { op: 'set', path: ['escalationSensitivity'], value: 'adaptive' },
       ]),
     })
@@ -135,8 +138,8 @@ describe('Eclipse model settings', () => {
     const mutate = vi.fn(async (_mutation: unknown) => ({ result: { ok: true as const, value: {} as never } }))
     render(<EclipseRoutingPanel controller={controller as never} api={{ settings: { mutate } } as never}
       loadCatalog={async () => catalog} t={t} />)
-    expect(await screen.findByLabelText(en.eclipseRole_planner)).toHaveProperty('value',
-      JSON.stringify(['openai-codex', 'gpt-6.1-sol']))
+    await screen.findByLabelText(en.eclipseRole_coordinator)
+    expect(screen.queryByLabelText(en.eclipseRole_planner)).toBeNull()
     expect(screen.getByLabelText(en.eclipseRole_coordinator)).toHaveProperty('value',
       JSON.stringify(['openai-codex', 'gpt-6-luna']))
     fireEvent.change(screen.getByLabelText(en.eclipseStrategy), { target: { value: 'quality' } })
@@ -163,5 +166,44 @@ describe('Eclipse model settings', () => {
     fireEvent.click(screen.getByRole('button', { name: en.eclipseSave }))
     expect(await screen.findByText('settings conflict')).toBeTruthy()
     expect(screen.queryByText(en.eclipseSaved)).toBeNull()
+  })
+
+  it('shows actual engine readiness and retains engine preference independently of model seats', async () => {
+    const controller = controllerWith({ mode: 'manual', executionEngine: 'openclaw', coordinator: {
+      provider: 'openai-codex', model: 'gpt-6.1-sol', reasoningEffort: 'medium',
+    } })
+    const loadEngines = vi.fn(async () => [
+      { engine: 'codex' as const, connected: true, version: '0.163.0' },
+      { engine: 'openclaw' as const, connected: false, version: '2026.5.12', diagnostic: 'GATEWAY_NOT_CONFIGURED' },
+    ])
+    render(<EclipseRoutingPanel controller={controller as never} api={{ settings: { mutate: vi.fn() } } as never}
+      loadCatalog={async () => catalog} loadEngines={loadEngines} t={t} />)
+    expect(await screen.findByText(/Codex · Connected · 0.163.0/)).toBeTruthy()
+    expect(screen.getByText(/GATEWAY_NOT_CONFIGURED/)).toBeTruthy()
+    expect((screen.getByLabelText(en.eclipseEnginePreference) as HTMLSelectElement).value).toBe('openclaw')
+    expect(existingProfile(controller.store.getSnapshot().namespaces.get('eclipse-routing')?.value, {})).toMatchObject({
+      executionEngine: 'openclaw', coordinator: { model: 'gpt-6.1-sol', reasoningEffort: 'medium' },
+    })
+  })
+
+  it('inspects runtimes and prepares OpenClaw without exposing activation controls', async () => {
+    const controller = controllerWith({ mode: 'automatic' })
+    const loadRuntime = vi.fn(async () => ({
+      checkedAt: new Date().toISOString(),
+      codex: { status: 'active' as const, version: '0.163.0' },
+      openclaw: { status: 'prepared' as const, version: '2026.10.5' },
+      phoenix: { status: 'current', current: 'a'.repeat(40) },
+    }))
+    const prepareOpenClaw = vi.fn(async (version: string) => ({ status: 'prepared' as const, version }))
+    render(<EclipseRoutingPanel controller={controller as never} api={{ settings: { mutate: vi.fn() } } as never}
+      loadCatalog={async () => catalog} loadRuntime={loadRuntime} prepareOpenClaw={prepareOpenClaw} t={t} />)
+    expect(await screen.findByText(/OpenClaw · prepared · 2026.10.5/)).toBeTruthy()
+    expect(screen.getByText(/Activation and rollback are not available yet/)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /Activate|Rollback/i })).toBeNull()
+    const input = screen.getByLabelText(en.eclipseRuntimeVersion)
+    fireEvent.change(input, { target: { value: '2026.10.5' } })
+    fireEvent.click(screen.getByRole('button', { name: en.eclipseRuntimePrepare }))
+    await waitFor(() => expect(prepareOpenClaw).toHaveBeenCalledWith('2026.10.5'))
+    expect(await screen.findByText(/OpenClaw candidate prepared/)).toBeTruthy()
   })
 })

@@ -72,20 +72,22 @@ function normalizeScene(raw: unknown, fallbackName: string): Scene {
         throw new ToolArgsError([`Objeto 3D ${index + 1}: parámetros PBR inválidos.`])
       }
       material={
-        ...(typeof value.preset==='string'?{preset:value.preset.slice(0,40)}:{}),
-        ...(typeof value.baseColor==='string'?{baseColor:value.baseColor}:{}),
-        ...(typeof value.emissive==='string'?{emissive:value.emissive}:{}),
+        ...(typeof value.preset==='string'?{ preset:value.preset.slice(0,40) }:{}),
+        ...(typeof value.baseColor==='string'?{ baseColor:value.baseColor }:{}),
+        ...(typeof value.emissive==='string'?{ emissive:value.emissive }:{}),
         ...Object.fromEntries(props.filter(key=>typeof value[key]==='number').map(key=>[key,value[key]])),
       }
     }
     return {
       type: node.type as Primitive,
-      position: [node.position[0]!, node.position[1]!, node.position[2]!],
-      size: [node.size[0]!, node.size[1]!, node.size[2]!],
+      position: [requiredValue(node.position[0]), requiredValue(node.position[1]), requiredValue(node.position[2])],
+      size: [requiredValue(node.size[0]), requiredValue(node.size[1]), requiredValue(node.size[2])],
       color: node.color,
-      ...(material===undefined?{}:{material}),
+      ...(material===undefined?{}:{ material }),
       ...(typeof node.name === 'string' && node.name.length <= 100 ? { name: node.name } : {}),
-      ...(node.rotation === undefined ? {} : { rotation: [node.rotation[0]!, node.rotation[1]!, node.rotation[2]!] }),
+      ...(node.rotation === undefined ? {} : { rotation: [
+        requiredValue(node.rotation[0]), requiredValue(node.rotation[1]), requiredValue(node.rotation[2]),
+      ] }),
     }
   })
   return {
@@ -94,12 +96,14 @@ function normalizeScene(raw: unknown, fallbackName: string): Scene {
     name: typeof data.name === 'string' && data.name.trim() !== '' ? data.name.slice(0, 140) : fallbackName,
     background: typeof data.background === 'string' && hex.test(data.background) ? data.background : '#f7f2eb',
     nodes,
-    ...(data.environment==='studio'||data.environment==='sunset'||data.environment==='daylight'?{environment:data.environment}:{}),
-    ...(data.camera==='perspective'||data.camera==='isometric'||data.camera==='front'||data.camera==='top'?{camera:data.camera}:{}),
+    ...(data.environment==='studio'||data.environment==='sunset'||data.environment==='daylight'?{ environment:data.environment }:{}),
+    ...(data.camera==='perspective'||data.camera==='isometric'||data.camera==='front'||data.camera==='top'?{ camera:data.camera }:{}),
   }
 }
 
-/** An actual 3D *concept model* rather than a 2D image or a claimed CAD reconstruction. */
+/** An actual 3D *concept model* rather than a 2D image or a claimed CAD reconstruction.
+ * @returns The result produced by this operation.
+ */
 export function tropicalVillaScene(): Scene {
   const nodes: SceneNode[] = []
   const box = (name: string, position: [number,number,number], size: [number,number,number], color: string): void => {
@@ -132,7 +136,9 @@ export function tropicalVillaScene(): Scene {
   return { version: 1, units: 'meters', name: 'Villa tropical · modelo 3D conceptual', background:'#f9f3eb', nodes }
 }
 
-/** Model-facing 3D creation; geometry remains portable to other Phoenix applications. */
+/** Model-facing 3D creation; geometry remains portable to other Phoenix applications.
+ * @returns The result produced by this operation.
+ */
 export function createPhoenix3DTool(): ToolDefinition {
   return defineTool({
     name: 'phoenix_3d',
@@ -147,7 +153,7 @@ export function createPhoenix3DTool(): ToolDefinition {
     },
     output: {
       schema: { type:'object', additionalProperties:false, properties: {
-        artifactId:{type:'string',required:true},title:{type:'string',required:true},scene:{type:'json',required:true},
+        artifactId:{ type:'string',required:true },title:{ type:'string',required:true },scene:{ type:'json',required:true },
       } },
       render: (_args, result) => [{ type:'text', text:`Modelo 3D interactivo listo: ${result.title}. Arrastra para girarlo y usa la rueda para acercarlo.` }],
       presentationMeta: (_args, result) => ({ artifact: {
@@ -167,4 +173,10 @@ export function createPhoenix3DTool(): ToolDefinition {
       return { card: 'generic', title: `3D · ${args.title}`, kind:'read', rawInput:'Geometría 3D interactiva en Phoenix' }
     },
   })
+}
+
+/** Reject absent entries before reading validated structured data. */
+function requiredValue<T>(value: T | undefined | null): T {
+  if (value === undefined || value === null) throw new Error('Required structured value is missing.')
+  return value
 }

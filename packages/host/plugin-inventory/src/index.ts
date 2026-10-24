@@ -22,6 +22,7 @@ import {
 import { searchOfficialMcpRegistry } from './mcp-registry.ts'
 import { readBusinessLibrarySnapshot } from './business-library.ts'
 import { OpenClawConnectorBridge } from './openclaw-connectors.ts'
+import { inspectEngineRuntime, prepareEngineRuntime } from './engine-runtime.ts'
 import { readTelegramBotState, saveTelegramBot, removeTelegramBot, TelegramInbox } from './telegram-bot.ts'
 import {
   BINANCE_AGENT_OS_SERVER_NAME,
@@ -59,6 +60,8 @@ import type {
   PhoenixUpdateRestartReceipt,
   PhoenixUpdateRefreshReceipt,
   PhoenixUpdateSnapshot,
+  EngineRuntimePrepareReceipt,
+  EngineRuntimeSnapshot,
   TelegramBotSnapshot,
   PluginEntryId,
   PluginFiberPhase,
@@ -225,12 +228,17 @@ export class PluginInventoryGateway extends TypertRemoteService {
    * Read Phoenix Local state and installable catalog without exposing machine paths.
    * @returns Current sanitized Phoenix Local state and catalog.
    */
-  /** Read local products without exposing contents, orders or filesystem paths. */
+  /** Read local products without exposing contents, orders or filesystem paths.
+ * @returns The current result of this operation.
+ */
   @Remote('businessLibrary')
   async businessLibrary(): Promise<BusinessLibrarySnapshot> {
     return readBusinessLibrarySnapshot()
   }
 
+  /** Read the current local-model runtime state.
+ * @returns The current result of this operation.
+ */
   @Remote('localModelState')
   async localModelState(): Promise<PhoenixLocalModelSnapshot> {
     return publicLocalSnapshot((await this.localModel).snapshot())
@@ -518,7 +526,9 @@ export class PluginInventoryGateway extends TypertRemoteService {
    * Store X Developer App credentials in the Host credential provider, never
    * in an MCP configuration or a chat response. The caller must be a trusted
    * Settings session; the bridge receives values through envCredentialRefs.
-   */
+ * @param request - Validated inputs for this operation.
+ * @returns The current result of this operation.
+ */
   @Remote('configureXDeveloperApplication')
   async configureXDeveloperApplication(request: {
     clientId: string
@@ -716,6 +726,27 @@ export class PluginInventoryGateway extends TypertRemoteService {
   @Remote('refreshForUpdate')
   refreshForUpdate(): PhoenixUpdateRefreshReceipt {
     return requestPhoenixUpdateRefresh()
+  }
+
+  /**
+   * Read Codex, OpenClaw, and Phoenix runtime state from the trusted
+   * launcher-owned manager. Paths, process ids, and credentials stay local.
+   * @returns Secret-free unified runtime state for Eclipse Settings.
+   */
+  @Remote('engineRuntimeState')
+  async engineRuntimeState(): Promise<EngineRuntimeSnapshot> {
+    return inspectEngineRuntime()
+  }
+
+  /**
+   * Prepare one exact official OpenClaw version. Activation and rollback stay
+   * unavailable until Team proves global legacy and persisted execution idle.
+   * @param request - version-only request; candidate paths and metadata are Host-owned.
+   * @returns Sanitized preparation result.
+   */
+  @Remote('prepareEngineRuntime')
+  async prepareEngineRuntime(request: { version: string }): Promise<EngineRuntimePrepareReceipt> {
+    return prepareEngineRuntime(typeof request?.version === 'string' ? request.version : '')
   }
 }
 

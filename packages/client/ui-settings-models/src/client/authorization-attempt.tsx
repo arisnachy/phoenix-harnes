@@ -300,7 +300,22 @@ export function useAuthorizationAttempt(
     else closeReservedPopup()
     // Initial authorization has a dedicated network deadline in ApiClient.
     // User consent stays pending after this initial response.
-    void api.begin({ key, method }).then((response) => {
+    const beginRequest = api.begin({ key, method })
+    // Some optional connector surfaces expose the authorization face before
+    // its begin RPC is mounted. Treat that as a local failure rather than
+    // throwing while dereferencing `.then` and leaving the card spinning.
+    if (beginRequest === undefined) {
+      if (beginSequenceRef.current === beginSequence && pendingBeginTimerRef.current !== undefined) {
+        window.clearTimeout(pendingBeginTimerRef.current)
+        pendingBeginTimerRef.current = undefined
+        setPreparingKey(undefined)
+        const reason = 'El Host de PHOENIX no tiene disponible authorization.begin para este conector.'
+        if (!navigatedRef.current) failReservedPopup(reason)
+        setFailure(reason)
+      }
+      return
+    }
+    void beginRequest.then((response) => {
       if (beginSequenceRef.current !== beginSequence || pendingBeginTimerRef.current === undefined) {
         if (response.result.ok) void api.cancel({ attemptId: response.result.value.attemptId }).catch(() => undefined)
         return

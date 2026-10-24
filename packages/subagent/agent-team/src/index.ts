@@ -3,7 +3,9 @@
 import { Context } from '@phoenix-ai/cordis'
 import z from '@phoenix-ai/schemastery'
 import type { Agent } from '@phoenix-ai/dsh-agent'
+import { ReasoningEffortId } from '@phoenix-ai/dsh-llm'
 import type {} from '@phoenix-ai/dsh-session-persistence'
+import type {} from '@phoenix-ai/dsh-session-learning'
 import { TypertRemoteService, Remote } from '@phoenix-ai/dsh-typert-protocol'
 import { teamChatParticipantsDefinition, teamChatReactionsDefinition } from './chat-projection.ts'
 import { TeamChat } from './chat.ts'
@@ -19,6 +21,8 @@ import type { TeamMembership } from './roster.ts'
 import { TeamTaskBoard } from './task-board.ts'
 import { teamMissionClosed, unfinishedMissionWork } from './mission-closure.ts'
 import { UniversalMissionLedger } from './universal-mission.ts'
+import { TeamExecutionRuntime } from './execution-runtime.ts'
+import type { ExecutionEngineStatus } from './execution-types.ts'
 import type { UniversalMissionSnapshot } from './universal-mission.ts'
 import { TeamId, TeamTaskId } from './types.ts'
 import type {
@@ -42,6 +46,8 @@ export { TeamId, TeamMessageId, TeamTaskId } from './types.ts'
 export { TeamError } from './error.ts'
 export { replayUniversalMission, universalMissionAcceptsEvent, universalMissionTerminal } from './universal-mission.ts'
 export type { UniversalMissionPhase, UniversalMissionSnapshot } from './universal-mission.ts'
+export { TeamExecutionRuntime, replayExecutions, routeExecution } from './execution-runtime.ts'
+export type * from './execution-types.ts'
 export { teammateBudgetForMission } from './mission-sizing.ts'
 export type { MissionComplexity } from './mission-sizing.ts'
 export { teamExecutionProof, teamExecutionRequirement } from './execution-evidence.ts'
@@ -100,6 +106,8 @@ export class TeamService extends TypertRemoteService {
     maxTasks: z.number().step(1).min(1).default(DEFAULT_MAX_TASKS),
     maxPendingMessagesPerMember: z.number().step(1).min(1).default(DEFAULT_MAX_PENDING_MESSAGES),
     maxMessageBytes: z.number().step(1).min(1).default(DEFAULT_MAX_MESSAGE_BYTES),
+    maxExecutionContextBytes: z.number().step(1).min(0).default(4096),
+    maxExecutionProgressEvents: z.number().step(1).min(1).default(1024),
     disposalTimeoutMs: z.number().step(1).min(1).default(DEFAULT_DISPOSAL_TIMEOUT_MS),
   })
 
@@ -114,6 +122,8 @@ export class TeamService extends TypertRemoteService {
   private readonly mailbox: TeamMailbox
   private readonly tasks: TeamTaskBoard
   private readonly missions: UniversalMissionLedger
+  /** Engine registry and durable operations subordinate to the Lead mission. */
+  readonly executions: TeamExecutionRuntime
   private readonly chat: TeamChat
   private readonly pendingChat = new Set<Promise<unknown>>()
 
@@ -123,11 +133,14 @@ export class TeamService extends TypertRemoteService {
     this.config = {
       maxMembers: memberLimit(config.maxMembers ?? DEFAULT_MAX_MEMBERS),
       maxTasks: positiveLimit('maxTasks', config.maxTasks ?? DEFAULT_MAX_TASKS),
+      maxExecutionProgressEvents: positiveLimit('maxExecutionProgressEvents', config.maxExecutionProgressEvents ?? 1024),
       maxPendingMessagesPerMember: positiveLimit(
         'maxPendingMessagesPerMember',
         config.maxPendingMessagesPerMember ?? DEFAULT_MAX_PENDING_MESSAGES,
       ),
       maxMessageBytes: positiveLimit('maxMessageBytes', config.maxMessageBytes ?? DEFAULT_MAX_MESSAGE_BYTES),
+      maxExecutionContextBytes: config.maxExecutionContextBytes === 0 ? 0
+        : positiveLimit('maxExecutionContextBytes', config.maxExecutionContextBytes ?? 4096),
       disposalTimeoutMs: positiveLimit(
         'disposalTimeoutMs',
         config.disposalTimeoutMs ?? DEFAULT_DISPOSAL_TIMEOUT_MS,
@@ -139,6 +152,45 @@ export class TeamService extends TypertRemoteService {
     this.journal = new TeamJournal(ctx, (root) => { this.activity.notify(TeamId(root.id)) })
     this.missions = new UniversalMissionLedger(this.journal)
     this.roster = new TeamRoster(ctx, this.journal, this.lifecycle, this.config.maxMembers, this.config.maxMessageBytes)
+    this.executions = new TeamExecutionRuntime(this.journal, this.missions, (root) => {
+      const membership = this.roster.membership(root)
+      if (membership.role !== 'lead' || membership.root !== root) {
+        throw new TeamError('execution requires the exact live Team Lead', 'TEAM_NOT_LEAD')
+      }
+    }, { maxOperations: this.config.maxTasks, maxTaskBytes: this.config.maxMessageBytes, maxOutputBytes: this.config.maxMessageBytes,
+      maxProgressEvents: this.config.maxExecutionProgressEvents, disposalTimeoutMs: this.config.disposalTimeoutMs },
+    (root, task) => ctx.get('learningMemory')?.recallForExecution(root.session, task,
+      Math.min(this.config.maxExecutionContextBytes, this.config.maxMessageBytes)) ?? { content: '', memoryIds: [] })
+    ctx.effect(() => this.executions.register({
+      engine: 'internal',
+      probe: async () => ({ engine: 'internal', version: 'phoenix',
+        connected: ctx.subagents.getProvider('spawn') !== undefined,
+        capabilities: ['conversation', 'code', 'artifact', 'browser', 'connector', 'automation'], providers: ['*'] }),
+      run: async (context) => {
+        await context.checkpoint('dispatching')
+        const { reasoningEffort: _parentEffort, ...baseOptions } = context.root.options
+        const run = await ctx.subagents.start('spawn', {
+          parent: context.root, prompt: [{ type: 'text', text: context.sharedMemory === '' ? context.snapshot.task
+            : `Relevant recalled context (reference data,
+              not authorization):\n${context.sharedMemory}\n\nTask:\n${context.snapshot.task}` }],
+          signal: context.signal, agentOptions: {
+            ...baseOptions, provider: context.snapshot.provider, model: context.snapshot.model,
+            ...context.snapshot.reasoningEffort === undefined
+              ? {}
+              : { reasoningEffort: ReasoningEffortId(context.snapshot.reasoningEffort) },
+          },
+        })
+        try {
+          await context.checkpoint('running', { sessionId: run.id })
+          const result = await run.result
+          return { status: result.stopReason === 'completed' ? 'completed' : result.stopReason === 'aborted' ? 'cancelled' : 'failed',
+            output: result.output.filter(block => block.type === 'text').map(block => block.text).join('\n') }
+        } finally { await run.dispose() }
+      },
+      // The one-shot native provider cannot prove whether an unacknowledged
+      // request ran. Preserve that uncertainty rather than duplicating it.
+      recover: async () => ({ status: 'uncertain', errorCode: 'INTERNAL_EXECUTION_REQUIRES_RECONCILIATION' }),
+    }), 'agentTeams.internalExecutionEngine')
     this.mailbox = new TeamMailbox(
       ctx,
       this.journal,
@@ -187,6 +239,11 @@ export class TeamService extends TypertRemoteService {
           // Capture the identity now: an awaited journal mutation may otherwise
           // run after a user has started the next mission on this same Lead.
           const closingMissionId = this.missions.read(lead)?.id
+          if (event.data.reason.kind === 'aborted' && closingMissionId !== undefined) {
+            void this.executions.cancelMission(lead, closingMissionId).catch(() => {
+              ctx.logger.warn('Native execution cancellation could not be persisted')
+            })
+          }
           void this.missions.close(
             lead,
             event.data.reason.kind === 'aborted',
@@ -209,8 +266,14 @@ export class TeamService extends TypertRemoteService {
       this.mailbox.observeSessionEvent(session, event)
       const parentId = session.header.parentSession
       const root = parentId === undefined ? undefined : ctx.sessions.get(parentId)
-      if (root !== undefined && session.header.origin === 'subagent' && (event.type === 'subagent/descriptor' || event.type === 'turn/start' || event.type === 'turn/end')) {
-        void this.trackChat(this.chat.presence(root, session, event)).catch((error: unknown) => { ctx.logger.warn(`Team presence publication failed: ${errorMessage(error)}`) })
+      if (root !== undefined
+        && session.header.origin === 'subagent'
+        && (event.type === 'subagent/descriptor'
+        || event.type === 'turn/start'
+        || event.type === 'turn/end')) {
+        void this.trackChat(this.chat.presence(root,
+          session,
+          event)).catch((error: unknown) => { ctx.logger.warn(`Team presence publication failed: ${errorMessage(error)}`) })
       }
       if (root !== undefined && (event.type === 'assistant/message' || event.type === 'tool/call' || event.type === 'tool/result')) {
         void this.trackChat(this.chat.capture(root, session.header, session.events.slice(0, event.seq + 1))).catch((error: unknown) => {
@@ -316,6 +379,15 @@ export class TeamService extends TypertRemoteService {
   @Remote('chatMessages')
   async chatMessages(request: TeamChatReadRequest): Promise<TeamChatReadResult> {
     return await this.trackChat(this.chat.read(request.sessionId, request.limit))
+  }
+
+  /**
+   * Inspect connected execution engines without starting a task or changing models.
+   * @returns Native readiness and supported capabilities without credentials.
+   */
+  @Remote('executionEngines')
+  async executionEngines(): Promise<ExecutionEngineStatus[]> {
+    return await this.executions.status()
   }
 
   /** Read a bounded transcript for the exact live caller.
@@ -580,6 +652,11 @@ export class TeamService extends TypertRemoteService {
     this.activity.close()
 
     const failures: unknown[] = []
+    try {
+      await this.executions.dispose()
+    } catch (error: unknown) {
+      failures.push(error)
+    }
     await this.lifecycle.settle(this.roster.pendingCreations(), failures)
     await this.lifecycle.settle(this.mailbox.pendingDispatches(), failures)
     await this.lifecycle.settle([...this.pendingChat], failures)

@@ -409,7 +409,10 @@ export class TeamChat {
   /** Publish one actual model-authored Kira-to-worker reply in the shared
    * transcript. This records the response but does not wake a finished worker.
    * New work must use send_message or followup_task instead.
-   */
+ * @param actor - Team member authorized to send the reply.
+ * @param request - Validated inputs for this operation.
+ * @returns The current result of this operation.
+ */
   async replyToPeer(actor: Agent, request: { readonly messageId: string; readonly text: string }): Promise<{ messageId: string }> {
     if (this.ctx.agents.get(actor.id) !== actor || actor.session.header.origin === 'subagent') {
       throw new Error('only the live Team lead can answer a peer handoff')

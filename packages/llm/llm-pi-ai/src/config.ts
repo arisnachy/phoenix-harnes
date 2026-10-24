@@ -218,7 +218,7 @@ export interface PiAiProviderProfile {
   requestImagePixelBudget?: number
   /** Raw encoded-byte cap for each deterministic inline request version. */
   requestImageMaxBytes?: number
-  /** Optional provider-route cap for one text attachment projected into a pi-ai request; default delegates to the selected model context. */
+  /** Optional text attachment cap; omission delegates to the selected model context. */
   maxInlineFileBytes?: number
   /** Provider-owned model-request retry policy; omission uses normal mode with two retries. */
   retryPolicy?: RetryPolicyConfig

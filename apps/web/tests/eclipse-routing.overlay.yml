@@ -1,3 +1,7 @@
 # The settings scenario uses a deterministic Codex catalog and never calls a model.
 - id: llm-pi-ai
   disabled: true
+- id: subagent-codex
+  disabled: true
+- id: subagent-codex-auto-review
+  disabled: true

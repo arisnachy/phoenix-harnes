@@ -326,6 +326,8 @@
 }
 
 .mentionMenu {
+  --dsh-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l2);
+  --dsh-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l2);
   display: grid;
   width: min(420px, calc(100% - 12px));
   max-height: 320px;

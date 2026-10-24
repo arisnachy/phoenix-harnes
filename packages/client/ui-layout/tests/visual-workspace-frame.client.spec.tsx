@@ -66,7 +66,7 @@ describe('AppFrame visual workspace', () => {
   it('mounts right Cordis in a structural rail without stealing the left navigation track', () => {
     const { instance, frame } = mountWith('cordis', 'right')
 
-    expect(frame.style.gridTemplateColumns).toBe('280px minmax(0, 1fr) 0px')
+    expect(frame.style.gridTemplateColumns).toBe('320px minmax(0, 1fr) 0px')
     expect(frame.getAttribute('data-cordis-side')).toBe('right')
     const workspace = frame.querySelector('[data-shell-workspace]')
     const cordis = frame.querySelector('[data-cordis-workspace]')
@@ -76,7 +76,7 @@ describe('AppFrame visual workspace', () => {
     expect(frame.querySelector('[data-shell-overlay]')?.contains(cordis)).toBe(false)
 
     act(() => { instance.actions.setWorkspaceOccupant('cordis', false) })
-    expect(frame.style.gridTemplateColumns).toBe('280px minmax(0, 1fr) 0px')
+    expect(frame.style.gridTemplateColumns).toBe('320px minmax(0, 1fr) 0px')
   })
 
   it('gives left Cordis the full physical edge by collapsing the sidebar track to 0px', () => {
@@ -86,7 +86,7 @@ describe('AppFrame visual workspace', () => {
     expect(frame.getAttribute('data-cordis-side')).toBe('left')
 
     act(() => { instance.actions.setWorkspaceOccupant('cordis', false) })
-    expect(frame.style.gridTemplateColumns).toBe('280px minmax(0, 1fr) 0px')
+    expect(frame.style.gridTemplateColumns).toBe('320px minmax(0, 1fr) 0px')
   })
 
   it('mounts expanded KIRA/subagents in the real workspace rail without touching details', () => {
@@ -94,7 +94,7 @@ describe('AppFrame visual workspace', () => {
     const workspace = frame.querySelector('[data-shell-workspace]')
     const overlay = frame.querySelector('[data-shell-overlay]')
     const kira = frame.querySelector('[data-kira-teams]')
-    expect(frame.style.gridTemplateColumns).toBe('280px minmax(0, 1fr) 0px')
+    expect(frame.style.gridTemplateColumns).toBe('320px minmax(0, 1fr) 0px')
     expect(workspace?.contains(kira)).toBe(true)
     expect(overlay?.contains(kira)).toBe(false)
   })

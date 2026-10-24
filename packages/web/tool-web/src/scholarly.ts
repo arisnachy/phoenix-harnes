@@ -21,7 +21,10 @@ export interface ScholarlyRecord {
   isOpenAccess?: boolean
 }
 
-/** Safely project provider metadata to bounded real source citations. */
+/** Safely project provider metadata to bounded real source citations.
+ * @param input - Operation inputs validated at the owning boundary.
+ * @returns The matching projected records.
+ */
 export function projectEuropePmcRecords(input: unknown): ScholarlyRecord[] {
   if (typeof input !== 'object' || input === null) return []
   const root = input as { resultList?: { result?: unknown } }
@@ -42,7 +45,7 @@ export function projectEuropePmcRecords(input: unknown): ScholarlyRecord[] {
     if (seen.has(identity)) continue
     seen.add(identity)
     // Research publisher accepts only citation-safe [@key] identifiers.
-    const key = pmid ? 'pmid' + pmid : pmcid ? pmcid.toLowerCase() : 'doi' + doi!.replace(/[^A-Za-z0-9]/gu, '_').slice(0, 61)
+    const key = pmid ? 'pmid' + pmid : pmcid ? pmcid.toLowerCase() : 'doi' + requiredValue(doi).replace(/[^A-Za-z0-9]/gu, '_').slice(0, 61)
     out.push({
       key,
       title,
@@ -68,6 +71,11 @@ export function projectEuropePmcRecords(input: unknown): ScholarlyRecord[] {
 /**
  * Retrieve official Europe PMC metadata without API keys. This does not imply
  * full text or clinical reliability; article type and study quality are assessed separately.
+ * @param query - Search or selection query.
+ * @param limit - Maximum number of results to return.
+ * @param signal - Optional cancellation signal.
+ * @param request - Request payload or transport used by the operation.
+ * @returns The matching projected records.
  */
 export async function searchEuropePmc(
   query: string, limit = 5, signal?: AbortSignal, request: typeof fetch = fetch,
@@ -100,7 +108,9 @@ export async function searchEuropePmc(
   }
 }
 
-/** Public academic search with provider-authenticated bibliographic metadata. */
+/** Public academic search with provider-authenticated bibliographic metadata.
+ * @returns The result produced by this operation.
+ */
 export function createScholarlySearchTool(): ToolDefinition {
   return defineTool({
     name: 'research_scholar',
@@ -120,4 +130,10 @@ export function createScholarlySearchTool(): ToolDefinition {
       return { card: 'generic', title: 'Literatura científica · ' + String(args.query).slice(0, 80), kind: 'search' }
     },
   })
+}
+
+/** Reject absent entries before reading validated structured data. */
+function requiredValue<T>(value: T | undefined | null): T {
+  if (value === undefined || value === null) throw new Error('Required structured value is missing.')
+  return value
 }

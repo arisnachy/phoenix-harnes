@@ -465,6 +465,11 @@
     - id: subagent-codex
       name: '@phoenix-ai/dsh-subagent-codex'
 
+    # The trusted Host plugin mounts its managed-runtime authority in this
+    # same Cordis fiber; the launcher verifies Gateway process ownership.
+    - id: subagent-openclaw
+      name: '@phoenix-ai/dsh-subagent-openclaw'
+
     # Execution-only Codex sibling. Its app-server thread uses the official
     # on-request + auto_review permission lane and is runtime-gated to an
     # active OpenAI Codex parent; the default provider above remains the sole
