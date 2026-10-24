@@ -60,3 +60,7 @@
 .history ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 8px; }
 .history li { overflow-wrap: anywhere; }
 .history li span { margin-inline-start: 10px; }
+
+.targetPicker { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.targetPicker label { flex: 1; min-width: 170px; }
+.targetPicker select { max-width: 100%; }

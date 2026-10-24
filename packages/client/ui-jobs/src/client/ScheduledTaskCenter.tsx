@@ -66,6 +66,8 @@ export function ScheduledTaskCenter({ connection, t }: ScheduledTaskCenterProps)
   const [prompt, setPrompt] = useState('')
   const [when, setWhen] = useState('')
   const [recurrence, setRecurrence] = useState<'once' | 'daily' | 'weekly'>('once')
+  const [targetId, setTargetId] = useState('')
+  const [targets, setTargets] = useState<readonly string[]>([])
   const origin = useRef<HTMLButtonElement | null>(null)
 
   useEffect(() => {
@@ -122,6 +124,22 @@ export function ScheduledTaskCenter({ connection, t }: ScheduledTaskCenterProps)
     return () => { window.removeEventListener('keydown', key) }
   }, [open])
 
+  /** Fetch only currently selectable root ids; the Host revalidates each choice on create. */
+  const loadTargets = async (): Promise<void> => {
+    try {
+      const response = await connection.rpc.call('/phoenix-tasks', 'targets', {})
+      if (!response.ok) throw new Error(response.error.message)
+      if (!Array.isArray(response.value) || !response.value.every(
+        (item: unknown) => isRecord(item) && typeof item.id === 'string',
+      )) throw new Error(t('task.center.invalidTargets'))
+      const ids = (response.value as { id: string }[]).map(item => item.id)
+      setTargets(ids)
+      setTargetId(current => ids.includes(current) ? current : ids.length === 1 ? ids[0]! : '')
+    } catch (cause: unknown) {
+      setError(cause instanceof Error ? cause.message : String(cause))
+    }
+  }
+
   /** Re-read authoritative Host state before acknowledging any mutation. */
   const verifyTask = async (accept: (task: ScheduledTask) => boolean): Promise<void> => {
     const read = await connection.rpc.call('/phoenix-tasks', 'list', {})
@@ -152,6 +170,7 @@ export function ScheduledTaskCenter({ connection, t }: ScheduledTaskCenterProps)
         delivery: 'chat',
         createdBy: 'user',
         senderIdentity: 'user',
+        ...(targetId === '' ? {} : { targetAgentId: targetId }),
       })
       if (!response.ok) throw new Error(response.error.message)
       // Transport success alone is not a durable task. Require an actual
@@ -212,6 +231,15 @@ export function ScheduledTaskCenter({ connection, t }: ScheduledTaskCenterProps)
                 <option value="weekly">{t('task.center.weekly')}</option>
               </select>
             </label>
+          </div>
+          <div className={css.targetPicker}>
+            <button type="button" onClick={() => { void loadTargets() }}>{t('task.center.chooseConversation')}</button>
+            {targets.length > 0 && <label>{t('task.center.conversation')}
+              <select value={targetId} onChange={(event) => { setTargetId(event.target.value) }}>
+                <option value="">{t('task.center.autoConversation')}</option>
+                {targets.map(id => <option key={id} value={id}>{id}</option>)}
+              </select>
+            </label>}
           </div>
           <button type="submit" disabled={busy}>{busy ? t('task.center.saving') : t('task.center.create')}</button>
         </form>
