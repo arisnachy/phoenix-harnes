@@ -289,6 +289,25 @@ describe('Schedule tool protocol', () => {
       .toEqual([expect.objectContaining({ id: 'schedule-1', state: 'scheduled' })])
   })
 
+  it('does not pause a reminder when the user cancels during the durability preflight', async () => {
+    const test = await harness()
+    await execute(test, 'schedule_create', { prompt: 'keep active', after_seconds: 40 })
+    let release: (() => void) | undefined
+    const deferred = new Promise<'resolve'>(resolve => { release = () => { resolve('resolve') } })
+    test.flushes.outcomes.push(deferred)
+    const controller = new AbortController()
+    const pausing = execute(test, 'schedule_pause', { id: 'schedule-1' }, test.agent, controller.signal)
+    await vi.waitFor(() => { expect(test.flushes.count).toBe(3) })
+    controller.abort()
+    if (release === undefined) throw new Error('pause preflight was not registered')
+    release()
+    await expect(pausing).resolves.toMatchObject({
+      isError: true, error: { info: { name: 'AbortError', code: 'ABORTED' } },
+    })
+    expect(value(await execute(test, 'schedule_list', {})))
+      .toEqual([expect.objectContaining({ id: 'schedule-1', state: 'scheduled' })])
+  })
+
   it('rejects an empty or padded delete id before persistence', async () => {
     const test = await harness()
     for (const id of ['', ' schedule-1']) {
