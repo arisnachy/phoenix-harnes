@@ -78,7 +78,7 @@ describe('KIRA Team chat message', () => {
         avatar: 'atlas', status: 'working', modelProvider: 'openai-codex', model: 'gpt-6-luna' },
     })} />)
     const badge = view.container.querySelector('[data-engine-model="gpt-6-luna"]')
-    expect(badge?.textContent).toBe('☾')
+    expect(badge?.textContent).toContain('☾')
     expect(badge?.getAttribute('data-engine-family')).toBe('luna')
     expect(badge?.textContent).toContain('Luna')
     expect(badge?.closest('[data-avatar]')).toBeNull()
