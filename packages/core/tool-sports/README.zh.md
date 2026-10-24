@@ -14,7 +14,7 @@ ESPN Site/Core 和 MLB Stats 在数据源允许并可用时可不使用商业密
 
 #### 模型看到的内容
 
-模型收到 `sports_chat_catalog`、`sports_chat_discover`、`sports_chat_games`、`sports_chat_mlb_pitchers`、`sports_chat_odds` 和 `sports_chat_ticket` 的结果。比赛数据包含来源、圣多明各当地时间及结构化的 `sports_game_card` 数据。投注单仅为模拟，不执行交易。模型需要在最终聊天回复中准确返回有效的 `generative-ui` 块才能显示卡片。
+模型收到 `sports_chat_catalog`、`sports_chat_discover`、`sports_chat_games`、`sports_chat_mlb_pitchers`、`sports_chat_odds` 和 `sports_chat_ticket` 的结果。比赛数据包含来源、圣多明各当地时间及结构化的 `sports_game_card` 数据。投注单仅为模拟，不执行交易。Phoenix 从经过验证的工具结果直接在对话中渲染体育卡片，模型无需重复 JSON 或生成 `generative-ui` 代码块；模型只需用自然语言解释发现与来源。
 
 #### Token 影响
 
@@ -28,5 +28,5 @@ ESPN Site/Core 和 MLB Stats 在数据源允许并可用时可不使用商业密
 
 - ESPN 公开接口可能变更，公开可访问不代表授予数据或媒体再分发权；运营者必须审查条款。
 - 并非所有联赛或市场都有赛果或可验证的赔率，也未包含经过校准的预测模型。
-- 工具调用本身不会展示卡片：模型必须输出经过验证的聊天内渲染块，客户端仍需端到端测试。
+- 客户端从工具结果提取经过验证的卡片数据；仍需端到端测试验证实际显示，并防止重复渲染。
 - 模拟投注单不会真实下注，模拟前必须重新查询报价。

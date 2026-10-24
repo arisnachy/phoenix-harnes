@@ -14,7 +14,7 @@ ESPN Site/Core and MLB Stats can be queried without a commercial key, subject to
 
 #### What the model sees
 
-The model receives `sports_chat_catalog`, `sports_chat_discover`, `sports_chat_games`, `sports_chat_mlb_pitchers`, `sports_chat_odds` and `sports_chat_ticket` tool results. Game feeds include attribution, Santo Domingo-local game times and structured `sports_game_card` data. Tickets are expressly simulations, not transactions. The model must reproduce valid `generative-ui` blocks in its final chat reply to render the cards.
+The model receives `sports_chat_catalog`, `sports_chat_discover`, `sports_chat_games`, `sports_chat_mlb_pitchers`, `sports_chat_odds` and `sports_chat_ticket` tool results. Game feeds include attribution, Santo Domingo-local game times and structured `sports_game_card` data. Tickets are expressly simulations, not transactions. Phoenix renders validated sports cards directly from tool results in the conversation, without making the model repeat JSON fences. The model explains findings and sources in prose.
 
 #### Token effect
 
@@ -28,5 +28,5 @@ The registered tool definitions and system guidance are stable over the session 
 
 - ESPN public endpoints are not guaranteed stable and do not confer data or media redistribution rights; operators must review their terms.
 - Not every league or market provides results or verified odds, and no calibrated prediction model is included.
-- A tool call does not itself show a card: the assistant must return a validated inline render block; client rendering requires end-to-end tests.
+- The client extracts validated cards from tool results; end-to-end tests still must verify actual display and guard against duplicate rendering.
 - Tickets never place real bets, and their quoted odds must be rechecked before simulation.
