@@ -1,6 +1,6 @@
 import {test} from 'node:test'
 import assert from 'node:assert/strict'
-import {sportsCatalog,getFeed,chatGames,marketOdds,pricedTicket} from '../src/sports.ts'
+import {sportsCatalog,getFeed,discoverEspnLeagues,chatGames,marketOdds,pricedTicket} from '../src/sports.ts'
 import {getMlbPitcherReport} from '../src/mlb.ts'
 import {normalizeEspnMoneylines} from '../src/espn-odds.ts'
 
@@ -134,4 +134,32 @@ test('MLB unavailable falls back to ESPN free scoreboard instead of failing the 
   assert.equal(out.source,'ESPN Site API')
   assert.equal(out.count,0)
   assert.equal(urls.length,2)
+})
+
+test('Kira discovers additional leagues from public ESPN Core, then requests real scoreboard',async()=>{
+  const urls=[]
+  const fetcher=async(url)=>{
+    urls.push(url)
+    if(url.includes('/leagues?limit=500'))return new Response(JSON.stringify({items:[
+      {$ref:'https://sports.core.api.espn.com/v2/sports/soccer/leagues/esp.2'},
+      {slug:'mex.1'},{slug:'invalid/path'}]}),{status:200})
+    return new Response(JSON.stringify({events:[]}),{status:200})
+  }
+  const leagues=await discoverEspnLeagues('soccer',{},fetcher)
+  assert.ok(leagues.includes('esp.2'))
+  assert.equal(leagues.includes('invalid/path'),false)
+  const games=await chatGames('soccer','esp.2','2026-10-24',{},fetcher)
+  assert.equal(games.count,0)
+  assert.equal(games.source,'ESPN Site API')
+  assert.ok(urls.some(x=>x.includes('/soccer/esp.2/scoreboard')))
+})
+test('Cricket league references are discovered from the personalized public ESPN Web API',async()=>{
+  const urls=[]
+  const fetcher=async(url)=>{
+    urls.push(url)
+    return new Response(JSON.stringify({sports:[{leagues:[{id:123},{id:456}]}]}),{status:200})
+  }
+  const leagues=await discoverEspnLeagues('cricket',{},fetcher)
+  assert.ok(leagues.includes('123'))
+  assert.ok(urls[0].startsWith('https://site.web.api.espn.com/'))
 })
