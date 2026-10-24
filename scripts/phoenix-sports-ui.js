@@ -105,6 +105,7 @@ async function bullpen(parent,team){
     box.append(make('h3','Cuerpo de lanzadores · '+team.name))
     for(const p of data.pitchers){
       const line=make('div',p.name+' · '+(p.position||'P'),'source-item')
+      if(p.headshot)line.prepend(avatar(p.name,p.headshot))
       line.append(detailButton('Estadísticas',()=>playerStatistics(box,p.id,p.name)))
       box.append(line)
     }
@@ -122,7 +123,12 @@ function gameCard(g){
   const buttons=make('div',undefined,'details')
   if(g.pitchers?.length){
     card.append(top,teams,venue,make('div','Lanzadores probables: '+g.pitchers.map(p=>p.name).join(' / '),'meta'))
-    for(const p of g.pitchers)if(p.id)buttons.append(detailButton('⚾ '+p.name,()=>playerStatistics(card,p.id,p.name)))
+    for(const p of g.pitchers)if(p.id){
+      const portrait=make('span')
+      if(p.headshot)portrait.append(avatar(p.name,p.headshot))
+      portrait.append(detailButton('⚾ '+p.name,()=>playerStatistics(card,p.id,p.name)))
+      buttons.append(portrait)
+    }
   } else card.append(top,teams,venue)
   if(g.sport==='baseball'&&g.league==='mlb'){
     if(g.home.id)buttons.append(detailButton('Bullpen local',()=>bullpen(card,g.home)))
