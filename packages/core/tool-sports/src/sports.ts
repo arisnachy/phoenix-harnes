@@ -70,6 +70,7 @@ export async function chatGames(sport:string,league:string,requestedDate?:string
   const isMlb=sport==='baseball'&&league==='mlb'&&hasSportsPermission('mlb',env)
   const source=isMlb?'MLB Stats API':'ESPN Site API'
   if(isMlb){
+    try {
     const api=await getFeed<{dates?:Array<{games?:MlbGame[]}>}>('https://statsapi.mlb.com/api/v1/schedule?sportId=1&date='+day+'&hydrate=probablePitcher,venue',fetcher)
     if(!Array.isArray(api.dates))throw Error('MLB devolvió un formato inválido')
     for(const g of api.dates.flatMap(d=>d.games??[]).slice(0,25)){
@@ -88,6 +89,11 @@ export async function chatGames(sport:string,league:string,requestedDate?:string
         highlights,askPrompt:'Kira, amplía la información verificable del partido MLB '+g.gamePk+' incluyendo pitchers probables, rendimiento reciente, bullpen, ausencias y fuente por estadística.',
         note:'Lanzadores probables pueden cambiar; no se confirmó el roster definitivo.',
       }})
+    }
+    } catch (error) {
+      if(!hasSportsPermission('espn',env))throw error
+      // ESPN public scoreboard remains available if the complementary MLB feed fails.
+      return chatGames(sport,league,requestedDate,{...env,PHOENIX_SPORTS_MLB_DISABLED:'1'},fetcher)
     }
   }else{
     if(!hasSportsPermission('espn',env))throw Error('ESPN deshabilitado por configuración PHOENIX_SPORTS_ESPN_DISABLED=1.')
