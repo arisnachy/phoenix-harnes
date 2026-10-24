@@ -130,9 +130,17 @@ export function ScheduledTaskCenter({ connection, t }: ScheduledTaskCenterProps)
         senderIdentity: 'user',
       })
       if (!response.ok) throw new Error(response.error.message)
-      // A successful transport response is not evidence of a durable create:
-      // only the Host's subsequent list is accepted as the displayed result.
-      await refresh()
+      // Transport success alone is not a durable task. Require an actual
+      // Host-issued id, then confirm it appears in the authoritative list.
+      const created = response.value
+      if (!isRecord(created) || typeof created.id !== 'string' || created.id.trim() === '') {
+        throw new Error(t('task.center.unconfirmed'))
+      }
+      const read = await connection.rpc.call('/phoenix-tasks', 'list', {})
+      if (!read.ok) throw new Error(read.error.message)
+      const verified = parseTasks(read.value)
+      if (!verified.some(task => task.id === created.id)) throw new Error(t('task.center.unconfirmed'))
+      setRows(verified)
       setTitle('')
       setPrompt('')
       setWhen('')
