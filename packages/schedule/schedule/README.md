@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-`dsh-schedule` gives future live root Agents three Session-scoped tools for durable reminders. Version 1 accepts positive safe-integer `after_seconds` delays, explicit absolute `at` targets, and fixed-rate `every_seconds` intervals of at least five minutes. The Session event log owns reminder state; timers, tool values, and model follow-ups are disposable projections of that log.
+`dsh-schedule` gives future live root Agents five Session-scoped tools for durable reminders. Version 1 accepts positive safe-integer `after_seconds` delays, explicit absolute `at` targets, and fixed-rate `every_seconds` intervals of at least five minutes. The Session event log owns reminder state; timers, tool values, and model follow-ups are disposable projections of that log.
 
 ## Composition
 
@@ -10,11 +10,11 @@ Load this function plugin after `ctx.sessions`, `ctx.agents`, `ctx.tools`, `ctx.
 
 Time-context is not a Schedule dependency. A composition may mount `@phoenix-ai/dsh-time-context` so the model can interpret natural language in the browser's request-local zone, as the official Schedule Web overlay does. The model must still pass an explicit offset or `time_zone` to `schedule_create`; Schedule never imports or infers from model context.
 
-Every operation that reads or decides from the Schedule fold first awaits `ctx.sessions.flush(session)`. A missing, rejected, or detached persistence path returns `persistence_uncertain`; it never turns an unconfirmed live suffix into a list or not-found answer. A successful create or actual delete also awaits a post-append barrier before confirming the mutation.
+Every operation that reads or decides from the Schedule fold first awaits `ctx.sessions.flush(session)`. A missing, rejected, or detached persistence path returns `persistence_uncertain`; it never turns an unconfirmed live suffix into a list or not-found answer. A successful create, pause, resume, or actual delete also awaits a post-append barrier before confirming the mutation.
 
 ## Durable state
 
-The package owns the strict version-1 `schedule/change` create, delete, and dispatch union. Every create record contains a stable Session-local `ScheduleId`, the trimmed prompt, and a four-digit-year RFC 3339 UTC `scheduledAt`. An `after` record also stores `afterSeconds`; an `at` record stores no copy of its submitted offset, local calendar fields, or interpreting zone; an `every` record stores `everySeconds` and treats `scheduledAt` as the earliest creation-anchor-aligned occurrence not yet dispatched. Delete and one-shot dispatch carry only the id. Every dispatch adds `acceptedAt`, from which replay advances directly to the first anchor-aligned target after that decision time.
+The package owns the strict version-1 `schedule/change` create, pause, resume, delete, and dispatch union. Every create record contains a stable Session-local `ScheduleId`, the trimmed prompt, and a four-digit-year RFC 3339 UTC `scheduledAt`. An `after` record also stores `afterSeconds`; an `at` record stores no copy of its submitted offset, local calendar fields, or interpreting zone; an `every` record stores `everySeconds` and treats `scheduledAt` as the earliest creation-anchor-aligned occurrence not yet dispatched. Pause and resume carry the id and transfer a record between active and paused sets without changing its original target. Delete and one-shot dispatch carry only the id. Every dispatch adds `acceptedAt`, from which replay advances directly to the first anchor-aligned target after that decision time.
 
 Replay rejects unknown versions, extra fields, reused ids, mismatched one-shot or Every dispatch shapes, and delete or dispatch transitions against inactive records. Normal Sessions fold the complete log. A fork folds only `session.events.slice(session.header.seedLength ?? 0)`, so it does not inherit its parent's reminders. The package's `./invariant` companion applies the same policy to existing logs and candidate events.
 
@@ -26,9 +26,9 @@ Schedule owns deterministic calendar normalization. Local times inside a dayligh
 
 ## Management tools
 
-The generated [tool catalog](../../../docs/tool-catalog.md) owns the argument and output schemas for `schedule_create`, `schedule_list`, and `schedule_delete`. Their canonical values use camelCase record fields even though model input uses `after_seconds` and `time_zone`.
+The generated [tool catalog](../../../docs/tool-catalog.md) owns the argument and output schemas for `schedule_create`, `schedule_list`, `schedule_delete`, `schedule_pause`, and `schedule_resume`. Their canonical values use camelCase record fields even though model input uses `after_seconds` and `time_zone`.
 
-One Agent-scoped queue serializes each accepted management transaction and the live owner's due transaction from preflight through any post-append barrier. `schedule_create` requires exactly one of `after_seconds`, `at`, or `every_seconds`, validates shape-only failures before entering the queue, then checkpoints, allocates a never-reused id, appends create, and checkpoints again. `schedule_list` returns active records in creation order with `state: "scheduled" | "overdue"` and `deliveryMode: "session-local"`. `schedule_delete` rejects an empty or whitespace-padded id before the queue and appends only for an active id; an unknown or terminal id returns `{ id, deleted: false, code: "schedule_not_found" }` after preflight.
+One Agent-scoped queue serializes each accepted management transaction and the live owner's due transaction from preflight through any post-append barrier. `schedule_create` requires exactly one of `after_seconds`, `at`, or `every_seconds`, validates shape-only failures before entering the queue, then checkpoints, allocates a never-reused id, appends create, and checkpoints again. `schedule_list` returns active and paused records in original creation order with `state: "scheduled" | "overdue" | "paused"` and `deliveryMode: "session-local"`. `schedule_pause` moves only an active record to paused state; `schedule_resume` returns only a paused record to active scheduling, with an elapsed target becoming overdue. Both changes require a persistence barrier and return `schedule_not_found` if the record is in the wrong state. `schedule_delete` rejects an empty or whitespace-padded id before the queue and appends only for an active or paused id; an unknown or terminal id returns `{ id, deleted: false, code: "schedule_not_found" }` after preflight.
 
 Every successful management preflight also asks the live owner to recompute. This recovers a retained create or delete batch after a previous post-append barrier returned `persistence_uncertain`, without a Schedule-specific persistence-retry timer.
 
@@ -50,7 +50,7 @@ Framing or synchronous follow-up failure writes no dispatch. An append failure f
 
 #### What the model sees
 
-The model sees the three generated tool schemas only in a live root Agent created after this plugin loads. Tool results contain the canonical JSON values described above.
+The model sees the five generated tool schemas only in a live root Agent created after this plugin loads. Tool results contain the canonical JSON values described above.
 
 #### Token effect
 
@@ -58,7 +58,7 @@ The scoped schemas add a fixed request prefix while Schedule is installed. Each 
 
 #### KV Cache effect
 
-The three schemas remain prefix-stable while their definitions and scope stay unchanged. Tool calls and results append to later history and preserve an already reusable prefix.
+The five schemas remain prefix-stable while their definitions and scope stay unchanged. Tool calls and results append to later history and preserve an already reusable prefix.
 
 ### Due reminder follow-up
 
@@ -108,6 +108,7 @@ The batch appends after existing history and preserves its reusable prefix. Its 
 
 ## Known Limitations and Deferred Work
 
+- **Paused targets retain their original time** — resuming an expired one-shot can dispatch as overdue; pausing is not a time-shift or an edit of the rule.
 - **Session-local delivery only** — a reminder runs on time only while its original Session is live; a cold Session receives no external notification and processes an overdue record only after resume.
 - **Activity-driven retry** — a rejected due preflight or contained framing/enqueue failure leaves the record active but starts no private retry timer; later Agent activity or a successful Schedule preflight triggers recomputation.
 - **Explicit local zone** — `at` never imports browser context; callers must translate natural language into either an offset-bearing RFC 3339 string or a local object with `time_zone`.

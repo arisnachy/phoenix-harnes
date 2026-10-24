@@ -47,6 +47,8 @@ describe('Schedule plugin composition', () => {
     expect(ctx.tools.get('schedule_create', root.agent)?.name).toBe('schedule_create')
     expect(ctx.tools.get('schedule_list', root.agent)?.name).toBe('schedule_list')
     expect(ctx.tools.get('schedule_delete', root.agent)?.name).toBe('schedule_delete')
+    expect(ctx.tools.get('schedule_pause', root.agent)?.name).toBe('schedule_pause')
+    expect(ctx.tools.get('schedule_resume', root.agent)?.name).toBe('schedule_resume')
     expect(ctx.tools.get('schedule_create')).toBeUndefined()
 
     const created = await ctx.agents.withInitiator(root.agent, () => ctx.tools.execute({
@@ -75,6 +77,8 @@ describe('Schedule plugin composition', () => {
     expect(ctx.tools.get('schedule_create', root.agent)).toBeUndefined()
     expect(ctx.tools.get('schedule_list', root.agent)).toBeUndefined()
     expect(ctx.tools.get('schedule_delete', root.agent)).toBeUndefined()
+    expect(ctx.tools.get('schedule_pause', root.agent)).toBeUndefined()
+    expect(ctx.tools.get('schedule_resume', root.agent)).toBeUndefined()
 
     await child.dispose()
     await root.dispose()

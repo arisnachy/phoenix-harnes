@@ -75,6 +75,20 @@ export interface ScheduleCreateChange {
   readonly schedule: ScheduleRecord
 }
 
+/** Pauses a live reminder without losing its timing rule. */
+export interface SchedulePauseChange {
+  readonly version: 1
+  readonly operation: 'pause'
+  readonly id: ScheduleId
+}
+
+/** Returns a paused reminder to the live scheduler. */
+export interface ScheduleResumeChange {
+  readonly version: 1
+  readonly operation: 'resume'
+  readonly id: ScheduleId
+}
+
 /** Deletes one currently active reminder. */
 export interface ScheduleDeleteChange {
   readonly version: 1
@@ -102,10 +116,12 @@ export interface EveryScheduleDispatchChange {
 export type ScheduleDispatchChange = OneShotScheduleDispatchChange | EveryScheduleDispatchChange
 
 /** Strict version-1 durable Schedule mutation union. */
-export type ScheduleChange = ScheduleCreateChange | ScheduleDeleteChange | ScheduleDispatchChange
+export type ScheduleChange =
+  | ScheduleCreateChange | SchedulePauseChange | ScheduleResumeChange
+  | ScheduleDeleteChange | ScheduleDispatchChange
 
 /** Current delivery timing derived from the durable record and wall clock. */
-export type ScheduleState = 'scheduled' | 'overdue'
+export type ScheduleState = 'scheduled' | 'overdue' | 'paused'
 
 /** Fixed v1 delivery boundary: the original session must be live. */
 export type ScheduleDeliveryMode = 'session-local'
@@ -119,7 +135,7 @@ export type ScheduleView = ScheduleRecord & {
 }
 
 /** Management operations whose persistence barrier may be uncertain. */
-export type SchedulePersistenceOperation = 'create' | 'list' | 'delete'
+export type SchedulePersistenceOperation = 'create' | 'list' | 'delete' | 'pause' | 'resume'
 
 /** Stable error returned for an empty reminder prompt. */
 export interface InvalidPromptError {
@@ -209,6 +225,11 @@ export type ScheduleDeleteResult =
 
 /** Canonical `schedule_delete` value. */
 export type ScheduleDeleteValue = ScheduleDeleteResult | ScheduleToolError
+
+/** Canonical `schedule_pause` or `schedule_resume` value. */
+export type ScheduleStateChangeValue = ScheduleView
+  | { readonly id: ScheduleId; readonly changed: false; readonly code: 'schedule_not_found' }
+  | ScheduleToolError
 
 declare module '@phoenix-ai/dsh-session/types' {
   interface SessionEventMap {

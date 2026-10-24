@@ -90,6 +90,8 @@ export class ScheduleInputError extends Error {
 export interface FoldedSchedules {
   /** Active records in their original create order. */
   readonly active: readonly ScheduleRecord[]
+  /** Paused records in creation order; never considered by the live scheduler. */
+  readonly paused: readonly ScheduleRecord[]
   /** Every id ever created in this session-local suffix. */
   readonly seenIds: readonly ScheduleIdType[]
 }
@@ -477,6 +479,13 @@ export function decodeScheduleChange(value: unknown): ScheduleChange {
         operation: 'create',
         schedule: decodeScheduleRecord(value['schedule']),
       })
+    case 'pause':
+    case 'resume': {
+      if (!hasExactKeys(value, ['version', 'operation', 'id'])) {
+        throw new ScheduleLogError('schedule pause/resume must contain exactly version, operation, and id')
+      }
+      return Object.freeze({ version: SCHEDULE_CHANGE_VERSION, operation: value['operation'], id: decodeId(value['id']) })
+    }
     case 'delete': {
       if (!hasExactKeys(value, ['version', 'operation', 'id'])) {
         throw new ScheduleLogError('schedule delete must contain exactly version, operation, and id')
@@ -506,7 +515,7 @@ export function decodeScheduleChange(value: unknown): ScheduleChange {
       throw new ScheduleLogError('schedule dispatch must contain id and optional acceptedAt only')
     }
     default:
-      throw new ScheduleLogError('schedule/change operation must be create, delete, or dispatch')
+      throw new ScheduleLogError('schedule/change operation must be create, pause, resume, delete, or dispatch')
   }
 }
 
@@ -580,6 +589,7 @@ export function foldScheduleEvents(
     throw new ScheduleLogError('schedule seedLength must be within the supplied event log')
   }
   const active = new Map<ScheduleIdType, ScheduleRecord>()
+  const paused = new Map<ScheduleIdType, ScheduleRecord>()
   const seen = new Set<ScheduleIdType>()
   for (const event of events.slice(seedLength)) {
     if (event.type !== 'schedule/change') continue
@@ -592,8 +602,22 @@ export function foldScheduleEvents(
         seen.add(change.schedule.id)
         active.set(change.schedule.id, change.schedule)
         break
+      case 'pause': {
+        const record = active.get(change.id)
+        if (record === undefined) throw new ScheduleLogError(`schedule pause targets inactive id ${JSON.stringify(change.id)}`)
+        active.delete(change.id)
+        paused.set(change.id, record)
+        break
+      }
+      case 'resume': {
+        const record = paused.get(change.id)
+        if (record === undefined) throw new ScheduleLogError(`schedule resume targets non-paused id ${JSON.stringify(change.id)}`)
+        paused.delete(change.id)
+        active.set(change.id, record)
+        break
+      }
       case 'delete':
-        if (!active.delete(change.id)) {
+        if (!active.delete(change.id) && !paused.delete(change.id)) {
           throw new ScheduleLogError(`schedule delete targets inactive id ${JSON.stringify(change.id)}`)
         }
         break
@@ -616,6 +640,7 @@ export function foldScheduleEvents(
   }
   return Object.freeze({
     active: Object.freeze([...active.values()]),
+    paused: Object.freeze([...paused.values()]),
     seenIds: Object.freeze([...seen]),
   })
 }
@@ -761,12 +786,13 @@ export function createEveryScheduleRecord(
  * Derive one execution-local management view.
  * @param record - Active durable record.
  * @param now - Wall-clock sample used for its timing state.
+ * @param paused - Whether the caller is projecting a paused durable record.
  * @returns Complete session-local view.
  */
-export function scheduleView(record: ScheduleRecord, now: number): ScheduleView {
+export function scheduleView(record: ScheduleRecord, now: number, paused = false): ScheduleView {
   return Object.freeze({
     ...record,
-    state: now >= Date.parse(record.scheduledAt) ? 'overdue' : 'scheduled',
+    state: paused ? 'paused' : now >= Date.parse(record.scheduledAt) ? 'overdue' : 'scheduled',
     deliveryMode: 'session-local',
   })
 }

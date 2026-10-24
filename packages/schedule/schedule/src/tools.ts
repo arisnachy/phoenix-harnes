@@ -32,6 +32,7 @@ import type {
   ScheduleListValue,
   SchedulePersistenceOperation,
   ScheduleRecord,
+  ScheduleStateChangeValue,
   ScheduleToolError,
 } from './types.ts'
 
@@ -39,7 +40,7 @@ const SHARED_VIEW_PROPERTIES = {
   id: { type: 'string', required: true },
   prompt: { type: 'string', required: true },
   scheduledAt: { type: 'string', required: true },
-  state: { type: 'string', required: true, enum: ['scheduled', 'overdue'] },
+  state: { type: 'string', required: true, enum: ['scheduled', 'overdue', 'paused'] },
   deliveryMode: { type: 'string', required: true, const: 'session-local' },
 } as const
 
@@ -104,7 +105,7 @@ const PERSISTENCE_ERROR_SCHEMA = {
   properties: {
     code: { type: 'string', required: true, const: 'persistence_uncertain' },
     message: { type: 'string', required: true },
-    operation: { type: 'string', required: true, enum: ['create', 'list', 'delete'] },
+    operation: { type: 'string', required: true, enum: ['create', 'list', 'delete', 'pause', 'resume'] },
     id: { type: 'string' },
   },
 } as const
@@ -121,6 +122,22 @@ const LIST_OUTPUT_SCHEMA = {
     ...ERROR_SCHEMAS,
   ],
 } as const
+const STATE_CHANGE_OUTPUT_SCHEMA = {
+  oneOf: [
+    VIEW_SCHEMA,
+    {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        id: { type: 'string', required: true },
+        changed: { type: 'boolean', required: true, const: false },
+        code: { type: 'string', required: true, const: 'schedule_not_found' },
+      },
+    },
+    ...ERROR_SCHEMAS,
+  ],
+} as const
+
 const DELETE_OUTPUT_SCHEMA = {
   oneOf: [
     {
@@ -156,6 +173,9 @@ const CREATE_DESCRIPTION =
 const LIST_DESCRIPTION =
   'List every active reminder in the current session in creation order, including its exact id, '
   + 'UTC target, scheduled or overdue state, and session-local delivery mode.'
+
+const PAUSE_DESCRIPTION = 'Pause one active reminder in the current session. The durable schedule remains listed but cannot dispatch while paused.'
+const RESUME_DESCRIPTION = 'Resume one paused reminder in the current session. An elapsed target becomes overdue and may dispatch after the active turn ends.'
 
 const DELETE_DESCRIPTION =
   'Delete one active reminder in the current session by the exact id returned by schedule_create '
@@ -410,7 +430,12 @@ export function registerScheduleTools(
           const folded = foldForTool(agent)
           if (isToolError(folded)) return folded
           const now = Date.now()
-          return folded.active.map(record => scheduleView(record, now))
+          const pausedIds = new Set(folded.paused.map(record => record.id))
+          const remaining = new Map([...folded.active, ...folded.paused].map(record => [record.id, record]))
+          return folded.seenIds.flatMap((id) => {
+            const record = remaining.get(id)
+            return record === undefined ? [] : [scheduleView(record, now, pausedIds.has(id))]
+          })
         })
       },
       presentCall: () => present('List reminders', 'read'),
@@ -435,7 +460,7 @@ export function registerScheduleTools(
           notifyDurableChange()
           const folded = foldForTool(agent)
           if (isToolError(folded)) return folded
-          if (!folded.active.some(record => record.id === id)) {
+          if (![...folded.active, ...folded.paused].some(record => record.id === id)) {
             return { id, deleted: false, code: 'schedule_not_found' }
           }
           const cancelledBeforeAppend = cancellationPlaceholder(exec.signal)
@@ -453,6 +478,47 @@ export function registerScheduleTools(
       },
       presentCall: args => present('Delete reminder', 'other', args.id),
     })))
+
+    for (const operation of ['pause', 'resume'] as const) {
+      disposers.push(toolCtx.tools.register(defineTool({
+        name: operation === 'pause' ? 'schedule_pause' : 'schedule_resume',
+        description: operation === 'pause' ? PAUSE_DESCRIPTION : RESUME_DESCRIPTION,
+        parameters: {
+          id: { type: 'string', required: true, description: 'Exact session-local schedule id.' },
+        },
+        output: { schema: STATE_CHANGE_OUTPUT_SCHEMA, render: renderValue },
+        async execute(args, exec): Promise<ScheduleStateChangeValue> {
+          if (args.id.length === 0 || args.id.trim() !== args.id) {
+            return { code: 'invalid_rule', message: 'schedule state-change id must be non-empty without surrounding whitespace.' }
+          }
+          const id = ScheduleId(args.id)
+          if (exec.agent !== agent) return internalError()
+          return runCancellableScheduleTransaction(agent, exec.signal, async () => {
+            const uncertain = await preflight(rootCtx, agent, operation, id)
+            if (uncertain !== undefined) return uncertain
+            notifyDurableChange()
+            const folded = foldForTool(agent)
+            if (isToolError(folded)) return folded
+            const record = (operation === 'pause' ? folded.active : folded.paused)
+              .find(candidate => candidate.id === id)
+            if (record === undefined) return { id, changed: false, code: 'schedule_not_found' }
+            const cancelled = cancellationPlaceholder(exec.signal)
+            if (cancelled !== undefined) return cancelled
+            try {
+              agent.session.append('schedule/change', { version: 1, operation, id })
+            } catch {
+              return internalError()
+            }
+            const barrier = await preflight(rootCtx, agent, operation, id)
+            if (barrier !== undefined) return barrier
+            notifyDurableChange()
+            return scheduleView(record, Date.now(), operation === 'pause')
+          })
+        },
+        presentCall: args => present(operation === 'pause' ? 'Pause reminder' : 'Resume reminder', 'other', args.id),
+      })))
+    }
+
   } catch (error) {
     for (const dispose of disposers.reverse()) dispose()
     throw error
