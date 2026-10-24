@@ -95,11 +95,11 @@ export function normalizeEspn(data,{sport,league,source='espn'}={}) {
     return {id:String(e.id),sport,league,date:e.date||null,name:e.name||null,status:e.status?.type?.description||'Sin confirmar',home:competitor(home),away:competitor(away),venue:c.venue?.fullName||e.venue?.fullName||null,city:c.venue?.address?.city||null,broadcasts:(c.broadcasts||[]).flatMap(x=>x.names||[]),source,sourceUrl:null,pitchers:[],players:[],lastVerifiedAt:new Date().toISOString()}
   })
 }
-export function normalizeMlb(data) {
+export function normalizeMlb(data,{imageLicensed=false}={}) {
   if(!Array.isArray(data?.dates)) throw new Error('MLB: formato de calendario no válido')
   return data.dates.flatMap(d=>(d.games||[]).map(g=>{
-    const p=x=>x?.probablePitcher?{id:String(x.probablePitcher.id||''),name:x.probablePitcher.fullName||'Sin confirmar',headshot:null,confirmed:false}:null
-    return {id:String(g.gamePk),sport:'baseball',league:'mlb',date:g.gameDate||null,name:g.teams?.away?.team?.name+' vs '+g.teams?.home?.team?.name,status:g.status?.detailedState||'Sin confirmar',home:{id:String(g.teams?.home?.team?.id||''),name:g.teams?.home?.team?.name||'Sin confirmar',score:g.teams?.home?.score??null,logo:null},away:{id:String(g.teams?.away?.team?.id||''),name:g.teams?.away?.team?.name||'Sin confirmar',score:g.teams?.away?.score??null,logo:null},venue:g.venue?.name||null,city:null,broadcasts:[],source:'mlb',pitchers:[p(g.teams?.away),p(g.teams?.home)].filter(Boolean),players:[],lastVerifiedAt:new Date().toISOString()}
+    const p=x=>x?.probablePitcher?{id:String(x.probablePitcher.id||''),name:x.probablePitcher.fullName||'Sin confirmar',headshot:imageLicensed&&x.probablePitcher.id?'https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_213,q_auto:best/v1/people/'+encodeURIComponent(x.probablePitcher.id)+'/headshot/67/current':null,confirmed:false}:null
+    return {id:String(g.gamePk),sport:'baseball',league:'mlb',date:g.gameDate||null,name:g.teams?.away?.team?.name+' vs '+g.teams?.home?.team?.name,status:g.status?.detailedState||'Sin confirmar',home:{id:String(g.teams?.home?.team?.id||''),name:g.teams?.home?.team?.name||'Sin confirmar',score:g.teams?.home?.score??null,logo:null},away:{id:String(g.teams?.away?.team?.id||''),name:g.teams?.away?.team?.name||'Sin confirmar',score:g.teams?.away?.score??null,logo:null},venue:g.venue?.name||null,city:g.venue?.location?.city||null,broadcasts:[],source:'mlb',pitchers:[p(g.teams?.away),p(g.teams?.home)].filter(Boolean),players:[],lastVerifiedAt:new Date().toISOString()}
   }))
 }
 export async function fetchGames({sport='baseball',league='mlb',date,env=process.env,fetcher=fetch}={}) {
@@ -107,7 +107,7 @@ export async function fetchGames({sport='baseball',league='mlb',date,env=process
   const day=gameDate(date),compact=day.replaceAll('-','')
   if(sport==='baseball'&&league==='mlb'&&sourceAuthorization('mlb',env)){
     const url='https://statsapi.mlb.com/api/v1/schedule?sportId=1&date='+day+'&hydrate=probablePitcher,venue'
-    return {source:'mlb',games:normalizeMlb(await getJSON(url,{fetcher}))}
+    return {source:'mlb',games:normalizeMlb(await getJSON(url,{fetcher}),{imageLicensed:env.PHOENIX_SPORTS_MLB_IMAGES_ALLOWED==='1'})}
   }
   if(!sourceAuthorization('espn',env)) throw new Error('No hay proveedor de resultados habilitado. Confirma licencia/condiciones y configura PHOENIX_SPORTS_ESPN_ALLOWED=1 o PHOENIX_SPORTS_MLB_ALLOWED=1 para MLB.')
   const url='https://site.api.espn.com/apis/site/v2/sports/'+encodeURIComponent(sport)+'/'+encodeURIComponent(league)+'/scoreboard?dates='+compact
