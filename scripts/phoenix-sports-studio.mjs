@@ -148,7 +148,7 @@ export async function handler(req,res){
       const team=Number(u.searchParams.get('team'))
       if(!Number.isSafeInteger(team)||team<1||team>99999)throw new Error('Equipo inválido')
       const data=await measured('mlb',()=>getJSON('https://statsapi.mlb.com/api/v1/teams/'+team+'/roster?rosterType=active'))
-      const pitchers=(data.roster||[]).filter(p=>p.position?.type==='Pitcher'||p.position?.abbreviation==='P').map(p=>({id:p.person.id,name:p.person.fullName,position:p.position?.name,headshot:null}))
+      const pitchers=(data.roster||[]).filter(p=>p.position?.type==='Pitcher'||p.position?.abbreviation==='P').map(p=>({id:p.person.id,name:p.person.fullName,position:p.position?.name,headshot:process.env.PHOENIX_SPORTS_MLB_IMAGES_ALLOWED==='1'?'https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_213,q_auto:best/v1/people/'+encodeURIComponent(p.person.id)+'/headshot/67/current':null}))
       return json(res,200,{ok:true,team,pitchers,source:'mlb'})
     }
     if(path==='/api/mlb/pitcher'&&req.method==='GET'){
