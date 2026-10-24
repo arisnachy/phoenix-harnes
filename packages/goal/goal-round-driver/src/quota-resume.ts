@@ -49,7 +49,8 @@ export function markQuotaResume(message: string, at: string): string {
  */
 export function quotaResumeTarget(message: string): number | undefined {
   const match = /\[Phoenix quota resume at (\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z)\]$/u.exec(message)
-  if (match === null) return undefined
-  const time = Date.parse(match[1]!)
-  return Number.isFinite(time) && new Date(time).toISOString() === match[1] ? time : undefined
+  const captured = match?.[1]
+  if (captured === undefined) return undefined
+  const time = Date.parse(captured)
+  return Number.isFinite(time) && new Date(time).toISOString() === captured ? time : undefined
 }

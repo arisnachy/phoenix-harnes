@@ -293,7 +293,7 @@ describe('Schedule tool protocol', () => {
     const test = await harness()
     await execute(test, 'schedule_create', { prompt: 'keep active', after_seconds: 40 })
     let release: (() => void) | undefined
-    const deferred = new Promise<'resolve'>(resolve => { release = () => { resolve('resolve') } })
+    const deferred = new Promise<'resolve'>((resolve) => { release = () => { resolve('resolve') } })
     test.flushes.outcomes.push(deferred)
     const controller = new AbortController()
     const pausing = execute(test, 'schedule_pause', { id: 'schedule-1' }, test.agent, controller.signal)

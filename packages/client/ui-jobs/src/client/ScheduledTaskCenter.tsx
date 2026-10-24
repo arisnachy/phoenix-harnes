@@ -134,7 +134,7 @@ export function ScheduledTaskCenter({ connection, t }: ScheduledTaskCenterProps)
       )) throw new Error(t('task.center.invalidTargets'))
       const ids = (response.value as { id: string }[]).map(item => item.id)
       setTargets(ids)
-      setTargetId(current => ids.includes(current) ? current : ids.length === 1 ? ids[0]! : '')
+      setTargetId(current => ids.includes(current) ? current : ids.length === 1 ? (ids[0] ?? '') : '')
     } catch (cause: unknown) {
       setError(cause instanceof Error ? cause.message : String(cause))
     }

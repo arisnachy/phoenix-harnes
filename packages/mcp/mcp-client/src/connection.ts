@@ -179,12 +179,11 @@ export function startConnection(
   const label = `mcp-client(${config.serverName})`
   const publishStatus = lifecycle?.setStatus.bind(lifecycle)
   const publishTools = lifecycle?.setTools.bind(lifecycle)
-  let markAuthorizationRequired: (() => void) | undefined
   const opts: ToolBridgeOptions = {
     registrationFailure: 'contain',
     serverName: config.serverName,
     toolCallTimeoutMs: config.toolCallTimeoutMs,
-    onAuthorizationRequired: () => { markAuthorizationRequired?.() },
+    onAuthorizationRequired: () => { markAuthorizationRequired() },
   }
   // Every new connection generation must prove that MCP tools really
   // registered. Containing the registration error made the supervisor announce
@@ -257,7 +256,7 @@ export function startConnection(
     scheduleReconnect()
   }
 
-  markAuthorizationRequired = () => {
+  function markAuthorizationRequired(): void {
     const generation = client
     if (generation === undefined) {
       publishStatus?.('auth-required', 'authorization-required')
