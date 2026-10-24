@@ -37,6 +37,7 @@
 | `@phoenix-ai/dsh-schedule` | `schedule_create`、`schedule_delete`、`schedule_list` | `ctx.tools`、`ctx.sessions`、Session 持久化、未来创建的 live 根 Agent | `tool/call`、`schedule/change create or delete`、`tool/result` | - | 仅在选择启用的 Schedule 插件加载后创建的 live 根 Agent scope 内注册。版本 1 接受 after_seconds、显式绝对 at 和有界固定速率 every_seconds，并披露 session-local 交付；管理读取与变更必须通过共享的 Session 持久化 barrier。 |
 | `@phoenix-ai/dsh-tool-business` | `business_plan_mission` | `ctx.tools`, `ctx.systemPrompt`, `ctx.mcpConnectors (optional at execution)` | `tool/call`, `tool/result` | - | Read-only intent and live MCP capability planning. Tool names and connection status never confer publication rights. |
 | `@phoenix-ai/dsh-tool-living` | `living_act`、`living_forget_creation`、`living_get_connector_kit`、`living_inspect_creation`、`living_list_creations`、`living_read_state`、`living_register_creation`、`living_verify_creation` | `ctx.tools`、`ctx.living`、`ctx.systemPrompt` | `tool/call`、`durable living creation manifest`、`live creation state/actions/events through ctx.living`、`tool/result` | - | 通用、领域无关的控制表面：任意未来创建物类型自行描述状态、动作、事件、资源、参与者及目标集成级别；低于目标级别时验证会拒绝交付。 |
+| `@phoenix-ai/dsh-tool-sports` | `sports_chat_catalog`, `sports_chat_discover`, `sports_chat_games`, `sports_chat_mlb_pitchers`, `sports_chat_odds`, `sports_chat_ticket` | `ctx.tools`、`ctx.systemPrompt` | `tool/call`、`tool/result` | - | 只读体育比赛与赔率上下文通过聊天内卡片呈现；投注单仅模拟收益，不执行交易，也不保证获胜。 |
 | `@phoenix-ai/dsh-tool-lsp` | `lsp` | `ctx.tools`、`ctx.lsp`、`ctx.systemPrompt` | `tool/call`、`tool/result` | - | lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，因此其模型可见 schema 在更换提供方时保持稳定。运行时要求已注册提供方，例如 `@phoenix-ai/dsh-lsp-stdio`；如果没有提供方，查询会返回结构化 `LSP_UNAVAILABLE` 错误，而不会改变 schema。 |
 | `@phoenix-ai/dsh-tool-ralph` | `ralph` | `ctx.tools`、`ctx.workflowEngine`、`ctx.subagents`、`ctx.systemPrompt`、`a calling Agent (exec.agent parents every fresh round)` | `tool/call`、`tool/result`、`workflow and child session events during execution` | - | 固定的前台工作流会在每个 Round 启动一个全新的结构化子级；模型只能选择不可变目标和可选的 Round 上限。 |
 | `@phoenix-ai/dsh-tool-skill` | `skill` | `ctx.tools`、`ctx.agents`、`ctx.skills` | `tool/call`、`tool/result`、`user/message replacement catalogs via agent.inject()` | - | - |
@@ -2208,6 +2209,194 @@ Read-only intent and live MCP capability planning. Tool names and connection sta
 通用、领域无关的控制表面：任意未来创建物类型自行描述状态、动作、事件、资源、参与者及目标集成级别；低于目标级别时验证会拒绝交付。
 
 
+<a id="phoenix-aidsh-tool-sports"></a>
+
+## `@phoenix-ai/dsh-tool-sports`
+
+### `sports_chat_catalog`
+
+列出已记录的体育项目与联赛，不创建菜单或跳转到其他界面。
+
+```json
+{
+  "type": "object",
+  "properties": {}
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_discover`
+
+直接从 ESPN 公开目录发现额外赛事，无须 API 密钥或访问任意网址。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "sport": {
+      "type": "string",
+      "description": "Disciplina ESPN como soccer, baseball, basketball, cricket, golf o hockey."
+    }
+  },
+  "required": [
+    "sport"
+  ]
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_games`
+
+在聊天中提供真实比赛，包括联赛、开赛时间、场馆、队伍及可验证统计信息，返回可渲染卡片。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "sport": {
+      "type": "string",
+      "description": "Deporte: soccer, baseball, basketball, etc."
+    },
+    "league": {
+      "type": "string",
+      "description": "Liga: mlb, nba, mex.1, eng.1, etc."
+    },
+    "date": {
+      "type": "string",
+      "description": "Fecha AAAA-MM-DD, opcional: hoy en Santo Domingo."
+    }
+  },
+  "required": [
+    "sport",
+    "league"
+  ]
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_mlb_pitchers`
+
+按 MLB 球队使用经过验证的赛季数据分析先发轮值、牛棚、ERA、WHIP、投球局数和三振。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "teamId": {
+      "type": "integer",
+      "description": "ID del equipo, extraído de datos reales MLB."
+    },
+    "season": {
+      "type": "integer",
+      "description": "Año de la temporada MLB."
+    }
+  },
+  "required": [
+    "teamId",
+    "season"
+  ]
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_odds`
+
+查询无需密钥的 ESPN 公开赔率，或配置完成时查询 The Odds API；ESPN 未发布价格时可能返回空结果。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "sportKey": {
+      "type": "string",
+      "description": "Clave del proveedor: baseball_mlb, basketball_nba, soccer_epl, etc."
+    },
+    "markets": {
+      "type": "string",
+      "description": "h2h, totals o spreads. Por defecto h2h."
+    }
+  },
+  "required": [
+    "sportKey"
+  ]
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_ticket`
+
+基于重新验证的真实赔率生成模拟投注单卡片，不会执行实际投注。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "sportKey": {
+      "type": "string",
+      "description": "Clave deportiva de The Odds API. Para varios deportes utiliza sportKeys."
+    },
+    "sportKeys": {
+      "type": "array",
+      "description": "Claves para ticket multisport, máximo cuatro.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "markets": {
+      "type": "string",
+      "description": "h2h, totals o spreads, mismo mercado de las selecciones."
+    },
+    "selections": {
+      "type": "array",
+      "description": "Entre una y diez selecciones verificables.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "eventId": {
+            "type": "string"
+          },
+          "bookmaker": {
+            "type": "string"
+          },
+          "market": {
+            "type": "string"
+          },
+          "selection": {
+            "type": "string"
+          },
+          "point": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "eventId",
+          "bookmaker",
+          "market",
+          "selection"
+        ]
+      }
+    },
+    "stake": {
+      "type": "number",
+      "description": "Importe ficticio para simular el retorno; no es una operación financiera."
+    }
+  },
+  "required": [
+    "selections"
+  ]
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+只读比赛和体育赔率信息以聊天内卡片呈现；投注单仅模拟收益，不执行交易，也不保证获胜。
+
 <a id="phoenix-aidsh-tool-lsp"></a>
 
 ## `@phoenix-ai/dsh-tool-lsp`
@@ -3050,7 +3239,7 @@ memory_search and memory_remember expose only bounded, provenance-preserving lea
     },
     "purpose": {
       "type": "string",
-      "description": "Operational purpose. Use blocker only for a real obstacle that needs the Lead to change strategy.",
+      "description": "Operational purpose. A natural conversational answer to Kira may use result without an external tool. Use blocker only for a genuine unresolved task obstacle, never a routine conversation or wait.",
       "enum": [
         "assignment",
         "question",
@@ -3124,7 +3313,7 @@ memory_search and memory_remember expose only bounded, provenance-preserving lea
     },
     "purpose": {
       "type": "string",
-      "description": "Operational purpose. Use blocker only for a real obstacle that needs the Lead to change strategy.",
+      "description": "Operational purpose. A natural conversational answer to Kira may use result without an external tool. Use blocker only for a genuine unresolved task obstacle, never a routine conversation or wait.",
       "enum": [
         "assignment",
         "question",
@@ -3504,7 +3693,7 @@ Source: [`packages/subagent/tool-agent-team/src/index.ts`](../packages/subagent/
   "properties": {
     "timeout_ms": {
       "type": "integer",
-      "description": "Requested wait duration 5000 through 3600000ms, capped internally at 12000ms. Defaults to 5000ms."
+      "description": "Requested wait duration 5000 through 3600000ms, capped internally at 12000ms. Defaults to 12000ms; completes earlier on actual teammate activity."
     }
   }
 }
