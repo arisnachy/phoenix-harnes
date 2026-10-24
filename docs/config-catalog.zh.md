@@ -102,7 +102,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/core/agent-default-model/src/index.ts:41`](../packages/core/agent-default-model/src/index.ts)
+Source: [`packages/core/agent-default-model/src/index.ts:138`](../packages/core/agent-default-model/src/index.ts)
 
 <a id="phoenix-aidsh-agent-instructions"></a>
 
@@ -150,6 +150,10 @@ export interface Config {
   maxParallelToolCalls?: number
   /** Maximum model/tool iterations in one turn; omission defaults to 64. */
   maxStepsPerTurn?: number
+  /** Output-limit continuations per human request (0 disables); default 3. */
+  autoContinueMaxSegments?: number
+  /** Provider route IDs eligible for automatic output-limit continuation. */
+  autoContinueProviders?: string[]
   /** Agents created or resumed at plugin startup. */
   agents: (AgentOptions & {
     /** Stable config label used in logs and as the fresh combined-id prefix. */
@@ -166,7 +170,7 @@ export interface Config {
 
 Depends on: [`AgentOptions`](subsystems/core.zh.md) · [`SessionId`](subsystems/core.zh.md)
 
-Source: [`packages/core/agent-loop/src/index.ts:266`](../packages/core/agent-loop/src/index.ts)
+Source: [`packages/core/agent-loop/src/index.ts:281`](../packages/core/agent-loop/src/index.ts)
 
 <a id="phoenix-aidsh-agent-presets"></a>
 
@@ -241,6 +245,10 @@ export interface Config {
   maxParallelToolCalls?: AgentLoopConfig['maxParallelToolCalls']
   /** Maximum model/tool steps in one turn before explicit continuation is required. */
   maxStepsPerTurn?: AgentLoopConfig['maxStepsPerTurn']
+  /** Maximum bounded continuation segments after model output reaches a limit. */
+  autoContinueMaxSegments?: AgentLoopConfig['autoContinueMaxSegments']
+  /** Provider IDs allowed to continue bounded, output-limited turns. */
+  autoContinueProviders?: AgentLoopConfig['autoContinueProviders']
   /** Whether the system prompt includes the fixed Harness identity (default true). */
   includeHarnessIdentity?: SystemPromptConfig['includeHarnessIdentity']
   /** Whether model history includes dynamic runtime-context snapshots (default true). */
@@ -317,6 +325,10 @@ export interface Config {
   readonly maxPendingMessagesPerMember?: number
   /** Maximum UTF-8 bytes in one complete sender-framed delivery. */
   readonly maxMessageBytes?: number
+  /** Maximum UTF-8 bytes of selective recalled context per execution; zero disables recall. */
+  readonly maxExecutionContextBytes?: number
+  /** Maximum durable progress receipts per execution before interruption. */
+  readonly maxExecutionProgressEvents?: number
   /** Maximum milliseconds allowed for Team-owned runtime disposal. */
   readonly disposalTimeoutMs?: number
 }
@@ -791,7 +803,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/hardness/adapters/src/index.ts:171`](../packages/hardness/adapters/src/index.ts)
+Source: [`packages/hardness/adapters/src/index.ts:197`](../packages/hardness/adapters/src/index.ts)
 
 <a id="phoenix-aidsh-headless"></a>
 
@@ -1244,7 +1256,7 @@ export interface PiAiProviderProfile {
   requestImagePixelBudget?: number
   /** Raw encoded-byte cap for each deterministic inline request version. */
   requestImageMaxBytes?: number
-  /** Optional provider-route cap for one text attachment projected into a pi-ai request; default delegates to the selected model context. */
+  /** Optional text attachment cap; omission delegates to the selected model context. */
   maxInlineFileBytes?: number
   /** Provider-owned model-request retry policy; omission uses normal mode with two retries. */
   retryPolicy?: RetryPolicyConfig
@@ -1394,7 +1406,7 @@ export type PiAiThinkingFormat = NonNullable<OpenAICompletionsCompat['thinkingFo
 
 Depends on: `Api` (`@earendil-works/pi-ai`) · `CacheRetention` (`@earendil-works/pi-ai`) · `Model` (`@earendil-works/pi-ai`) · `ModelThinkingLevel` (`@earendil-works/pi-ai`) · `OpenAICompletionsCompat` (`@earendil-works/pi-ai`) · [`RetryPolicyConfig`](../packages/llm/llm/src/index.ts) · `ThinkingBudgets` (`@earendil-works/pi-ai`) · `Transport` (`@earendil-works/pi-ai`)
 
-Source: [`packages/llm/llm-pi-ai/src/config.ts:260`](../packages/llm/llm-pi-ai/src/config.ts)
+Source: [`packages/llm/llm-pi-ai/src/config.ts:283`](../packages/llm/llm-pi-ai/src/config.ts)
 
 <a id="phoenix-aidsh-llm-replay"></a>
 
@@ -2493,6 +2505,8 @@ export interface Config {
   permissionMode?: CodexPermissionMode
   /** Grace in milliseconds for app-server process-tree termination. */
   disposeGraceMs?: number
+  /** Milliseconds for which a Codex readiness result may be reused. */
+  probeTtlMs?: number
 }
 
 /** Profile-selectable non-interactive Codex permission mode. */
@@ -2502,7 +2516,7 @@ export type CodexPermissionMode =
   | 'dangerously-bypass-approvals-and-sandbox'
 ```
 
-Source: [`packages/subagent/subagent-codex/src/index.ts:40`](../packages/subagent/subagent-codex/src/index.ts)
+Source: [`packages/subagent/subagent-codex/src/index.ts:44`](../packages/subagent/subagent-codex/src/index.ts)
 
 <a id="phoenix-aidsh-subagent-dsh-sdk"></a>
 
@@ -2634,7 +2648,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/core/system-prompt/src/index.ts:190`](../packages/core/system-prompt/src/index.ts)
+Source: [`packages/core/system-prompt/src/index.ts:208`](../packages/core/system-prompt/src/index.ts)
 
 <a id="phoenix-aidsh-terminal-bash"></a>
 
@@ -2763,7 +2777,7 @@ export interface TeamModelProfile {
 }
 ```
 
-Source: [`packages/subagent/tool-agent-team/src/index.ts:41`](../packages/subagent/tool-agent-team/src/index.ts)
+Source: [`packages/subagent/tool-agent-team/src/index.ts:87`](../packages/subagent/tool-agent-team/src/index.ts)
 
 <a id="phoenix-aidsh-tool-bash"></a>
 
@@ -3098,7 +3112,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/skill/tool-skill/src/index.ts:67`](../packages/skill/tool-skill/src/index.ts)
+Source: [`packages/skill/tool-skill/src/index.ts:68`](../packages/skill/tool-skill/src/index.ts)
 
 <a id="phoenix-aidsh-tool-str-replace-editor"></a>
 
@@ -3290,7 +3304,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/web/tool-web/src/index.ts:37`](../packages/web/tool-web/src/index.ts)
+Source: [`packages/web/tool-web/src/index.ts:43`](../packages/web/tool-web/src/index.ts)
 
 <a id="phoenix-aidsh-tool-workflow"></a>
 
@@ -3351,7 +3365,7 @@ export interface Config {
 export type ToolPresentationMode = 'native' | 'code' | 'both'
 ```
 
-Source: [`packages/core/tools/src/index.ts:794`](../packages/core/tools/src/index.ts)
+Source: [`packages/core/tools/src/index.ts:797`](../packages/core/tools/src/index.ts)
 
 <a id="phoenix-aidsh-typert-loader"></a>
 
@@ -3530,7 +3544,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/bundle/web-app/src/index.ts:42`](../packages/bundle/web-app/src/index.ts)
+Source: [`packages/bundle/web-app/src/index.ts:44`](../packages/bundle/web-app/src/index.ts)
 
 <a id="phoenix-aidsh-web-fetch-http"></a>
 
@@ -3794,6 +3808,7 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 - `@phoenix-ai/dsh-subprocess-local` ([`packages/subprocess/subprocess-local/src/index.ts`](../packages/subprocess/subprocess-local/src/index.ts))
 - `@phoenix-ai/dsh-terminal` ([`packages/terminal/terminal/src/index.ts`](../packages/terminal/terminal/src/index.ts))
 - `@phoenix-ai/dsh-tool-ask-user` — requires `tools` · `userQuestions` ([`packages/interaction/tool-ask-user/src/index.ts`](../packages/interaction/tool-ask-user/src/index.ts))
+- `@phoenix-ai/dsh-tool-business` — requires `tools` · `systemPrompt` ([`packages/core/tool-business/src/index.ts`](../packages/core/tool-business/src/index.ts))
 - `@phoenix-ai/dsh-tool-cordis` — requires `tools` · `systemPrompt` · `dynamicCordisRunner` · `cordisInspect` ([`packages/extensions/tool-cordis/src/index.ts`](../packages/extensions/tool-cordis/src/index.ts))
 - `@phoenix-ai/dsh-tool-google-workspace` — 需要 `tools` · `googleApi` ([`packages/credentials/tool-google-workspace/src/index.ts`](../packages/credentials/tool-google-workspace/src/index.ts))
 - `@phoenix-ai/dsh-tool-home-gateway` — requires `tools` · `home` · `systemPrompt` ([`packages/home/tool-home-gateway/src/index.ts`](../packages/home/tool-home-gateway/src/index.ts))
@@ -3858,6 +3873,7 @@ Imported as libraries by other packages; a `cordis.yml` cannot load them.
 - `@phoenix-ai/dsh-session-telemetry` ([`packages/session/session-telemetry/src/index.ts`](../packages/session/session-telemetry/src/index.ts))
 - `@phoenix-ai/dsh-session-title-llm` ([`packages/session/session-title-llm/src/index.ts`](../packages/session/session-title-llm/src/index.ts))
 - `@phoenix-ai/dsh-subagent-in-process-driver` ([`packages/subagent/subagent-in-process-driver/src/index.ts`](../packages/subagent/subagent-in-process-driver/src/index.ts))
+- `@phoenix-ai/dsh-subagent-openclaw` ([`packages/subagent/subagent-openclaw/src/index.ts`](../packages/subagent/subagent-openclaw/src/index.ts))
 - `@phoenix-ai/dsh-timeout` ([`packages/util/timeout/src/index.ts`](../packages/util/timeout/src/index.ts))
 - `@phoenix-ai/dsh-typert-generator` ([`packages/typert/generator/src/index.ts`](../packages/typert/generator/src/index.ts))
 - `@phoenix-ai/dsh-typert-protocol` ([`packages/typert/protocol/src/index.ts`](../packages/typert/protocol/src/index.ts))
