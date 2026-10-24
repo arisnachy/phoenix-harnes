@@ -929,7 +929,9 @@ function BrowserWorkspace({
         <div ref={activityRef} className={css.activityMessages} aria-live="polite" aria-relevant="additions text">
           {items.map(item => (
             <Fragment key={item.key}>
-              {item.kind === 'node'
+              {item.kind === 'sports'
+                ? <SportsEvidenceSurface blocks={item.blocks} inputActions={inputActions} />
+                : item.kind === 'node'
                 ? <ChatNodeSeat nodeKey={item.key} {...seatProps} />
                 : item.kind === 'activity'
                   ? <ToolActivityGroup items={item.items} anchorKey={item.anchorKey} {...seatProps} />
