@@ -103,6 +103,29 @@ describe('Scheduled tasks global manager', () => {
     expect(screen.queryByText('Private source instructions never displayed')).toBeNull()
   })
 
+  it('offers explicit conversation selection when more than one session is active', async () => {
+    const call = vi.fn().mockImplementation(async (_channel: string, endpoint: string, payload: unknown) => {
+      if (endpoint === 'targets') return { ok: true, value: [{ id: 'root-a' }, { id: 'root-b' }] }
+      if (endpoint === 'create') {
+        expect(payload).toMatchObject({ targetAgentId: 'root-b' })
+        return { ok: true, value: { id: 'new-1' } }
+      }
+      return { ok: true, value: [{ id: 'new-1', title: 'Plan',
+        status: 'scheduled', nextRunAt: '2098-10-24T16:00:00.000Z', createdBy: 'user' }] }
+    })
+    render(<ScheduledTaskCenter t={t} connection={{ rpc: { call } }} />)
+    fireEvent(window, new Event('phoenix:open-scheduled-tasks'))
+    await waitFor(() => { expect(screen.getByRole('button', { name: 'Choose conversation' })).toBeTruthy() })
+    fireEvent.click(screen.getByRole('button', { name: 'Choose conversation' }))
+    await waitFor(() => { expect(screen.getByRole('combobox', { name: 'Target conversation' })).toBeTruthy() })
+    fireEvent.change(screen.getByRole('combobox', { name: 'Target conversation' }), { target: { value: 'root-b' } })
+    fireEvent.change(screen.getByLabelText('Task name'), { target: { value: 'Plan' } })
+    fireEvent.change(screen.getByLabelText('What should Phoenix do?'), { target: { value: 'Prepare' } })
+    fireEvent.change(screen.getByLabelText('Start date and time'), { target: { value: '2098-10-24T16:00' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create task' }))
+    await waitFor(() => { expect(call.mock.calls.some((row: unknown[]) => row[1] === 'create')).toBe(true) })
+  })
+
   it('does not send expired schedules to the Host', async () => {
     const call = vi.fn().mockResolvedValue({ ok: true, value: [] })
     render(<ScheduledTaskCenter t={t} connection={{ rpc: { call } }} />)

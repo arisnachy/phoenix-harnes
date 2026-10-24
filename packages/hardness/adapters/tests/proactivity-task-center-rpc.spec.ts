@@ -120,6 +120,29 @@ describe('Host-authorized scheduled task-center creation', () => {
     await ctx.fiber.dispose()
   })
 
+  it('allows a user to select one of multiple active roots without session spoofing', async () => {
+    const ctx = new Context()
+    const store = new MemoryProactivityStore()
+    const engine = new ProactivityEngine(store, { execute: async () => ({}) }, { id: () => 'chosen-task' })
+    let handler: ((endpoint: string, payload: unknown) => Promise<{ ok: boolean; value?: unknown }>) | undefined
+    ctx.provide('connection', { rpc: { handle(_channel: string, callback: typeof handler) {
+      handler = callback
+      return async () => undefined
+    } } } as never)
+    ctx.provide('agents', { roots: () => [{ id: 'session-a' }, { id: 'session-b' }] } as never)
+    const dispose = installProactivityRuntime(ctx, engine, 60_000)
+    expect((await handler!('targets', {})).value).toEqual([{ id: 'session-a' }, { id: 'session-b' }])
+    expect((await handler!('create', { ...input, targetAgentId: 'not-owned' })).ok).toBe(false)
+    expect((await handler!('create', { ...input, targetAgentId: ' session-a ' })).ok).toBe(false)
+    expect(await engine.list()).toEqual([])
+    expect((await handler!('create', { ...input, targetAgentId: 'session-b' })).ok).toBe(true)
+    expect((await store.load()).tasks).toEqual([expect.objectContaining({
+      id: 'chosen-task', targetAgentId: 'session-b',
+    })])
+    dispose()
+    await ctx.fiber.dispose()
+  })
+
   it('refuses global creation without exactly one rooted owner', async () => {
     for (const rootIds of [[], ['one', 'two']]) {
       const ctx = new Context()
