@@ -4,6 +4,7 @@ import {getFeed,hasSportsPermission} from './sports.ts'
 type RosterPlayer={person:{id:number;fullName:string};position?:{type?:string;abbreviation?:string}}
 type PitcherStat={era?:string;whip?:string;inningsPitched?:string;strikeOuts?:number;gamesPlayed?:number;gamesStarted?:number;wins?:number;losses?:number}
 type PitchStatsResponse={stats?:Array<{splits?:Array<{stat?:PitcherStat}>}>}
+/** Attributed pitching roster and its companion inline statistics table. */
 export interface PitcherReport {
   readonly teamId:number
   readonly season:number
@@ -12,6 +13,13 @@ export interface PitcherReport {
   readonly source:string
   readonly uiBlock:{component:'comparison';version:1;props:{title:string;subtitle:string;columns:string[];rows:{label:string;values:string[]}[]}}
 }
+/** Fetch a verified MLB pitching comparison, marking unavailable season stats.
+ * @param teamId - Canonical MLB team identifier.
+ * @param season - Calendar season whose pitching stats are requested.
+ * @param env - Host-side provider and image permission settings.
+ * @param fetcher - Injectable fetch client used in tests.
+ * @returns A bounded pitcher roster with sourced per-season metrics.
+ */
 export async function getMlbPitcherReport(
   teamId:number,season:number,env:NodeJS.ProcessEnv=process.env,fetcher:typeof fetch=fetch,
 ):Promise<PitcherReport>{
