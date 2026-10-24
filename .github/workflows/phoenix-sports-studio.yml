@@ -1,0 +1,34 @@
+name: Phoenix Sports Studio smoke
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/phoenix-sports*'
+      - 'packages/core/tool-sports/**'
+      - 'packages/client/ui-conversation/src/client/chat/GenerativeUi*'
+      - '.github/workflows/phoenix-sports-studio.yml'
+  push:
+    branches:
+      - 'feat/kira-sports-source-intelligence-20261024'
+    paths:
+      - 'scripts/phoenix-sports*'
+      - '.github/workflows/phoenix-sports-studio.yml'
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax and unit tests
+        run: |
+          node --check scripts/phoenix-sports-engine.mjs
+          node --check scripts/phoenix-sports-studio.mjs
+          node --check scripts/phoenix-sports-ui.js
+          node --check scripts/phoenix-sports.test.mjs
+          node --test scripts/phoenix-sports.test.mjs
+          node --experimental-strip-types --test packages/core/tool-sports/tests/chat-sports.test.mjs

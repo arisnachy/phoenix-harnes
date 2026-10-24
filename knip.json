@@ -698,6 +698,15 @@
       "ignoreDependencies": [
         "zod"
       ]
+    },
+    "packages/core/tool-sports": {
+      "entry": [
+        "tests/**/*.test.mjs"
+      ],
+      "project": [
+        "src/**/*.ts",
+        "tests/**/*.mjs"
+      ]
     }
   }
 }

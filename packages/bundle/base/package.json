@@ -115,6 +115,7 @@
     "@phoenix-ai/dsh-tool-goal": "workspace:^",
     "@phoenix-ai/dsh-tool-home-gateway": "workspace:^",
     "@phoenix-ai/dsh-tool-business": "workspace:^",
+    "@phoenix-ai/dsh-tool-sports": "workspace:^",
     "@phoenix-ai/dsh-tool-jobs": "workspace:^",
     "@phoenix-ai/dsh-tool-living": "workspace:^",
     "@phoenix-ai/dsh-tool-pwsh": "workspace:^",

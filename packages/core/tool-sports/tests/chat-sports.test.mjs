@@ -1,0 +1,86 @@
+import {test} from 'node:test'
+import assert from 'node:assert/strict'
+import {sportsCatalog,getFeed,chatGames,marketOdds,pricedTicket} from '../src/sports.ts'
+import {getMlbPitcherReport} from '../src/mlb.ts'
+
+function response(json){
+  return async()=>new Response(JSON.stringify(json),{status:200,headers:{'content-type':'application/json'}})
+}
+test('17 sports are discoverable without enabling a separate menu',()=>{
+  assert.equal(Object.keys(sportsCatalog).length,17)
+  assert.ok(sportsCatalog.baseball.includes('mlb'))
+  assert.ok(sportsCatalog.soccer.includes('mex.1'))
+})
+test('blocks API access when terms/permissions have not been acknowledged',async()=>{
+  await assert.rejects(()=>chatGames('soccer','mex.1','2026-10-24',{}),/autorizado/)
+  await assert.rejects(()=>marketOdds('baseball_mlb','h2h',{}),/THE_ODDS_API_KEY/)
+})
+test('no SSRF or HTTP redirects through sports source tool',async()=>{
+  await assert.rejects(()=>getFeed('http://127.0.0.1:9999/'),/no permitido/)
+  await assert.rejects(()=>getFeed('https://example.com/private'),/no permitido/)
+  const data=await getFeed('https://site.api.espn.com/ok',async(_url,options)=>{
+    assert.equal(options.redirect,'error')
+    return new Response('{"ok":true}',{status:200})
+  })
+  assert.equal(data.ok,true)
+})
+test('ESPN result becomes verified chat card with local hour, venue, no unauthorized logo',async()=>{
+  const mock=await response({events:[{id:'222',name:'Team A vs Team B',date:'2026-10-24T20:00:00Z',status:{type:{description:'Previa'}},competitions:[{venue:{fullName:'Estadio',address:{city:'Santiago'}},competitors:[{homeAway:'home',team:{displayName:'Team B',logo:'https://a.espncdn.com/icon.png'}},{homeAway:'away',team:{displayName:'Team A'}}]}]}]})
+  const out=await chatGames('soccer','mex.1','2026-10-24',{PHOENIX_SPORTS_ESPN_ALLOWED:'1'},mock)
+  assert.equal(out.count,1)
+  assert.equal(out.items[0].component,'sports_game_card')
+  assert.equal(out.items[0].props.venue,'Estadio')
+  assert.equal(out.items[0].props.home.logo,undefined)
+  assert.match(out.items[0].props.when,/4:00|4:00|16:00/u)
+  const withLogo=await chatGames('soccer','mex.1','2026-10-24',{PHOENIX_SPORTS_ESPN_ALLOWED:'1',PHOENIX_SPORTS_ESPN_IMAGES_ALLOWED:'1'},mock)
+  assert.equal(withLogo.items[0].props.home.logo,'https://a.espncdn.com/icon.png')
+})
+test('MLB game cards show pitchers only if provided upstream',async()=>{
+  const mock=await response({dates:[{games:[{gamePk:43,gameDate:'2026-10-24T19:00:00Z',status:{detailedState:'Pre-Game'},venue:{name:'Stadium'},teams:{home:{team:{id:1,name:'Home'},probablePitcher:{id:55,fullName:'Pitcher H'}},away:{team:{id:2,name:'Away'}}}}]}]})
+  const out=await chatGames('baseball','mlb','2026-10-24',{PHOENIX_SPORTS_MLB_ALLOWED:'1'},mock)
+  assert.equal(out.items[0].props.highlights[0].value,'Sin confirmar')
+  assert.equal(out.items[0].props.highlights[1].value,'Pitcher H')
+})
+test('only real bookmaker lines match a ticket; correlation is flagged',()=>{
+  const odds=[{eventId:'evt1',bookmaker:'Book1',market:'h2h',selection:'Home',point:null,price:1.8,home:'Home',away:'Away',time:'today',updatedAt:'now'},
+              {eventId:'evt1',bookmaker:'Book1',market:'totals',selection:'Over',point:7.5,price:2.1,home:'Home',away:'Away',time:'today',updatedAt:'now'}]
+  const selected=odds.map(({eventId,bookmaker,market,selection,point})=>({eventId,bookmaker,market,selection,point}))
+  const result=pricedTicket(selected,odds,100)
+  assert.equal(result.card.component,'sports_ticket_card')
+  assert.equal(result.card.props.combinedOdds,'3.780')
+  assert.equal(result.card.props.grossReturn,'378.00')
+  assert.match(result.warning,/mismo encuentro/)
+  assert.match(result.card.props.note,/SIN APUESTA REAL/)
+  assert.throws(()=>pricedTicket([{...selected[0],selection:'No existe'}],odds),/no verificable/)
+  assert.throws(()=>pricedTicket([selected[0],selected[0]],odds),/duplicada/)
+})
+test('bookmaker quotes include provenance and never permit invalid sport keys',async()=>{
+  const mock=await response([{id:'e',home_team:'Local',away_team:'Visita',commence_time:'2026-10-24T20:00:00Z',
+    bookmakers:[{key:'provider',title:'Casa',markets:[{key:'h2h',last_update:'2026-10-24T18:00:00Z',outcomes:[{name:'Local',price:1.8}]}]}]}])
+  const quotes=await marketOdds('baseball_mlb','h2h',{THE_ODDS_API_KEY:'test-only'},mock)
+  assert.equal(quotes[0].bookmaker,'Casa')
+  assert.equal(quotes[0].updatedAt,'2026-10-24T18:00:00Z')
+  assert.equal(quotes[0].price,1.8)
+  await assert.rejects(()=>marketOdds('../bad','h2h',{THE_ODDS_API_KEY:'test'},mock),/Mercado inválido/)
+})
+
+test('MLB pitcher analysis preserves missing data and compares verified bullpen stats',async()=>{
+  const mock=async(url)=>{
+    if(url.includes('/roster?'))return new Response(JSON.stringify({roster:[
+      {person:{id:22,fullName:'Pitcher One'},position:{type:'Pitcher'}},
+      {person:{id:33,fullName:'Pitcher Two'},position:{type:'Pitcher'}},
+      {person:{id:99,fullName:'Position Player'},position:{type:'Infielder'}},
+    ]}),{status:200})
+    if(url.includes('/people/22/'))return new Response(JSON.stringify({stats:[{splits:[{stat:{era:'2.95',whip:'1.08',inningsPitched:'87.0',strikeOuts:92,gamesStarted:14}}]}]}),{status:200})
+    return new Response(JSON.stringify({stats:[]}),{status:200})
+  }
+  await assert.rejects(()=>getMlbPitcherReport(22,2026,{}),/no autorizada/)
+  const r=await getMlbPitcherReport(99,2026,{PHOENIX_SPORTS_MLB_ALLOWED:'1'},mock)
+  assert.equal(r.pitchers.length,2)
+  assert.equal(r.unavailableStats,1)
+  assert.equal(r.pitchers[0].era,'2.95')
+  assert.equal(r.pitchers[1].era,'—')
+  assert.equal(r.uiBlock.component,'comparison')
+  assert.equal(r.uiBlock.props.rows.length,2)
+  assert.equal(r.pitchers[0].image,undefined)
+})
