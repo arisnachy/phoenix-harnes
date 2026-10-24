@@ -46,6 +46,8 @@ import {
   contentHasImage,
   errorChain,
   isContextWindowExceededError,
+  isQuotaExceededError,
+  QUOTA_EXCEEDED_CODE,
   LlmAdapter,
   LlmError,
   ReasoningEffortId,
@@ -619,6 +621,11 @@ export class PiAiAdapter extends LlmAdapter {
       // and retry instead of exposing a raw HTTP 400 to the user.
       if (isContextWindowExceededError(detail)) {
         throw new LlmError(detail, CONTEXT_WINDOW_EXCEEDED_CODE, { cause: error })
+      }
+      // Subscription usage exhaustion is not a request-rate transient and
+      // must be visible to the durable Goal supervisor as a QUOTA blocker.
+      if (isQuotaExceededError(detail)) {
+        throw new LlmError(detail, QUOTA_EXCEEDED_CODE, { cause: error })
       }
       // Defensive twin of the pre-flight above: a credential that reaches
       // pi-ai's own resolution and still lacks the account claim dies there

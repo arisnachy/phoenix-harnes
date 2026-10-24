@@ -6,6 +6,9 @@ import { createElement } from 'react'
 import type { ClientContext } from '@phoenix-ai/dsh-client-runtime/client'
 import { JobListAction } from './JobListAction.tsx'
 import { TaskListAction, type TaskListActionSlotProps, type TaskRpcConnection } from './TaskListAction.tsx'
+import { ScheduledTaskCenter } from './ScheduledTaskCenter.tsx'
+import type { PropsLocale, PropsRuntime } from '@phoenix-ai/dsh-client-ui-slots'
+import type {} from '@phoenix-ai/dsh-client-ui-sidebar/client'
 import type {} from '@phoenix-ai/dsh-client-locale/client'
 import { en, es, NS, zh, type JobKey } from './locales.ts'
 
@@ -30,6 +33,8 @@ export function apply(ctx: ClientContext): void {
   const connection = ctx.get('connection') as TaskRpcConnection | undefined
   if (connection === undefined) throw new Error('ui-jobs requires the client connection service')
   const TaskAction = (props: TaskListActionSlotProps) => createElement(TaskListAction, { ...props, connection })
+  type TaskCenterSlotProps = PropsRuntime<'sidebar.footer.action'> & PropsLocale<typeof NS>
+  const TaskCenter = ({ t }: TaskCenterSlotProps) => createElement(ScheduledTaskCenter, { connection, t })
 
   ctx.effect(() => ctx.locale.register(NS, { zh, en, es }), 'ui-job: dictionaries')
   ctx.slots.inject(
@@ -50,5 +55,17 @@ export function apply(ctx: ClientContext): void {
       order: 21,
       locale: NS,
     }, TaskAction),
+  )
+  // This globally mounted listener opens the task dashboard from the sidebar
+  // even when the user has no active conversation. No second scheduler runs
+  // in the browser; task creation and reads use the Host authority.
+  ctx.slots.inject(
+    'sidebar.footer.action',
+    () => ctx.slots.register({
+      name: 'sidebar.footer.action',
+      id: 'phoenix-scheduled-task-center',
+      order: 50,
+      locale: NS,
+    }, TaskCenter),
   )
 }
