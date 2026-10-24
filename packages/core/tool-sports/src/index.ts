@@ -9,7 +9,7 @@ export const name = 'tool-sports'
 export const inject = ['tools','systemPrompt']
 const GUIDANCE = [
   'Solo cuando el usuario pida deportes, juegos del día, jugadores, cuotas o tickets, consulta las herramientas sports_chat_catalog, sports_chat_discover, sports_chat_games, sports_chat_mlb_pitchers, sports_chat_odds o sports_chat_ticket.',
-  'NO abras pantallas independientes ni crees entradas de menú. Antes de redactar una cartelera o boleto, llama sports_chat_games y, cuando corresponda, sports_chat_mlb_pitchers / sports_chat_odds / sports_chat_ticket, incluso si investigaste mediante comandos. Phoenix renderiza automáticamente las tarjetas verificadas de esas herramientas junto a tu respuesta. Añade una explicación humana en prosa: no sustituyas los datos estructurados por prosa sola.',
+  'NO abras pantallas independientes ni crees entradas de menú. Antes de redactar una cartelera o boleto, llama sports_chat_games y, cuando corresponda, sports_chat_mlb_pitchers / sports_chat_odds / sports_chat_ticket. Phoenix dibuja de manera nativa las tarjetas verificadas de los resultados. NO copies el JSON de los resultados en la respuesta, NO escribas fences generative-ui ni bloques de código, aunque una herramienta los incluya en sus datos. Explica los hallazgos y las fuentes con un texto humano breve.',
   'Para muchos partidos muestra como máximo seis tarjetas relevantes y ofrece ampliar; nunca inventes eventos, cuotas, lanzadores, lesiones ni resultados ausentes.',
   'Usa ESPN Site/Core como proveedor gratuito para marcadores y, cuando ESPN los publique, moneylines sin claves; usa The Odds API solo como opción ampliada si existe THE_ODDS_API_KEY. Si ESPN no presenta cuotas verificables, devuelve lista vacía y explica cobertura, sin generar precios ficticios; el chat mostrará automáticamente NO BET. Los tickets solo pueden usar precios del proveedor consultados en ese momento. Son simulaciones; no hay garantía de acierto. Identifica correlaciones y ausencia de predicción calibrada.',
   'Los datos deben indicar su fuente, fecha y zona horaria, y adaptar el detalle a cada deporte.',
@@ -53,7 +53,7 @@ export function apply(ctx: Context): void {
       const result=await chatGames(args.sport,args.league,args.date)
       return JSON.stringify({summary:result.summary,date:result.date,source:result.source,count:result.count,
         uiBlocks:result.items.slice(0,6),remaining:Math.max(0,result.items.length-6),
-        instruction:'En tu respuesta del chat reproduce los bloques uiBlocks como JSON exacto en fences generative-ui; no proporciones enlace a un menú.'})
+        instruction:'Phoenix renderiza uiBlocks automáticamente en el chat. No vuelvas a imprimirlos como JSON o código; comenta datos y fuentes en prosa.'})
     },
     presentCall:()=>({card:'generic',title:'Buscar partidos y sus datos',kind:'read' as const}),
   }))
@@ -69,7 +69,7 @@ export function apply(ctx: Context): void {
     async execute(args){
       const report=await getMlbPitcherReport(args.teamId,args.season)
       return JSON.stringify({source:report.source,roster:report.pitchers,missingStats:report.unavailableStats,
-        uiBlock:report.uiBlock,instruction:'Entrega en el chat la tabla UI comparison en fence generative-ui, con datos faltantes visibles.'})
+        uiBlock:report.uiBlock,instruction:'Phoenix muestra uiBlock automáticamente en el chat. No repitas su JSON; explica la comparación y distingue estadísticas ausentes.'})
     },
     presentCall:()=>({card:'generic',title:'Analizar abridores y bullpen MLB',kind:'read' as const}),
   }))
@@ -114,7 +114,7 @@ export function apply(ctx: Context): void {
       const quotes = (await Promise.all(keys.map(key => marketOdds(key,args.markets)))).flat()
       const {card,warning}=pricedTicket(args.selections as MarketSelection[],quotes,args.stake)
       return JSON.stringify({uiBlock:card,warning,simulationOnly:true,placed:false,
-        instruction:'Incluye uiBlock como JSON intacto entre fences generative-ui en tu respuesta. Nunca prometas que ganará.'})
+        instruction:'Phoenix muestra uiBlock automáticamente en el chat. No reproduzcas su JSON ni un bloque de código. Nunca prometas que ganará.'})
     },
     presentCall:()=>({card:'generic',title:'Crear ticket visual de análisis',kind:'read' as const}),
   }))
