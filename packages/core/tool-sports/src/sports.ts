@@ -20,9 +20,20 @@ const date=(v?:string):string => {
   return d
 }
 const leagueValid=(s:string):boolean => /^[a-z0-9][a-z0-9._-]{0,79}$/u.test(s)
+/** Check whether a provider's operator credentials or terms opt-in are available.
+ * @param provider - The supported data source.
+ * @param env - Secret-bearing host environment, never sent to the client.
+ * @returns Whether the provider can be queried.
+ */
 export const hasSportsPermission=(provider:'espn'|'mlb'|'odds',env:NodeJS.ProcessEnv=process.env):boolean =>
   provider==='espn'?env.PHOENIX_SPORTS_ESPN_ALLOWED==='1':
   provider==='mlb'?env.PHOENIX_SPORTS_MLB_ALLOWED==='1':Boolean(env.THE_ODDS_API_KEY)
+/** Fetch a bounded HTTPS JSON response from a trusted sports provider.
+ * @typeParam T - Expected provider shape, verified by each caller.
+ * @param url - Provider URL from the fixed host allowlist.
+ * @param fetcher - Optional transport for tests.
+ * @returns The parsed JSON payload.
+ */
 export async function getFeed<T>(url:string, fetcher:typeof fetch=fetch):Promise<T> {
   const u=new URL(url)
   if(u.protocol!=='https:'||u.username||u.password||!['site.api.espn.com','sports.core.api.espn.com','statsapi.mlb.com','api.the-odds-api.com'].includes(u.hostname))throw Error('Host no permitido')
@@ -44,6 +55,14 @@ function localTime(dateString?:string):string {
   return new Intl.DateTimeFormat('es-DO',{timeZone:'America/Santo_Domingo',dateStyle:'medium',timeStyle:'short'}).format(parsed)
 }
 function logosEnabled(env:NodeJS.ProcessEnv):boolean{return env.PHOENIX_SPORTS_ESPN_IMAGES_ALLOWED==='1'}
+/** Normalize scoreboard results into validated chat renderable cards.
+ * @param sport - Requested discipline.
+ * @param league - Supported league identifier.
+ * @param requestedDate - Optional date in ISO format.
+ * @param env - Provider authorization state.
+ * @param fetcher - Injectable HTTP client for tests.
+ * @returns Attributed game cards, result count and date.
+ */
 export async function chatGames(sport:string,league:string,requestedDate?:string,env:NodeJS.ProcessEnv=process.env,fetcher:typeof fetch=fetch):Promise<{summary:string;items:ChatBlock[];source:string;count:number;date:string}> {
   if(!Object.hasOwn(sportsCatalog,sport)||!leagueValid(league)||!sportsCatalog[sport]?.includes(league))throw Error('Liga desconocida. Consultar el catálogo antes de buscar.')
   const day=date(requestedDate),rows:ChatBlock[]=[]
@@ -93,8 +112,17 @@ export async function chatGames(sport:string,league:string,requestedDate?:string
   }
   return {summary:rows.length?'Eventos con fuente y horario, hora de Santo Domingo.':'No hay encuentros reportados para la fecha seleccionada.',items:rows,count:rows.length,source,date:day}
 }
+/** Unique sportsbook selection identity without an assumed price. */
 export type MarketSelection = {eventId:string;bookmaker:string;market:string;selection:string;point?:number|null}
+/** Time-stamped sportsbook quote tied to a provider event and market. */
 export type MarketOutcome = MarketSelection & {price:number;home:string;away:string;time:string;updatedAt:string}
+/** Read attributed bookmaker quotes, without purchasing or placing any bet.
+ * @param sportKey - Provider sports key.
+ * @param markets - Approved market categories.
+ * @param env - Secret-bearing environment of the host.
+ * @param fetcher - HTTP adapter for isolated tests.
+ * @returns Normalized quotes with bookmaker names and update times.
+ */
 export async function marketOdds(sportKey:string,markets='h2h',env:NodeJS.ProcessEnv=process.env,fetcher:typeof fetch=fetch):Promise<MarketOutcome[]> {
   if(!hasSportsPermission('odds',env))throw Error('Falta THE_ODDS_API_KEY; no se pueden publicar cuotas inventadas.')
   if(!/^[a-z0-9_]{3,80}$/u.test(sportKey)||!/^(h2h|totals|spreads)(,(h2h|totals|spreads))*$/u.test(markets))throw Error('Mercado inválido')
@@ -107,6 +135,12 @@ export async function marketOdds(sportKey:string,markets='h2h',env:NodeJS.Proces
     price:o.price,home:title(event.home_team),away:title(event.away_team),time:localTime(event.commence_time),updatedAt:title(market.last_update??book.last_update),
   }))))).slice(0,500)
 }
+/** Simulate a ticket only when every leg matches a freshly retrieved quote.
+ * @param selections - Requested legs to match exactly.
+ * @param quotes - Current sportsbook quotes from the authorized source.
+ * @param stake - Non-transactional simulated stake.
+ * @returns A rendered ticket and any correlation warnings.
+ */
 export function pricedTicket(selections:MarketSelection[],quotes:MarketOutcome[],stake=0):{card:ChatBlock;warning:string} {
   if(!Array.isArray(selections)||!selections.length||selections.length>10)throw Error('El ticket requiere entre 1 y 10 selecciones')
   if(!Number.isFinite(stake)||stake<0||stake>1e6)throw Error('Importe de simulación inválido')
