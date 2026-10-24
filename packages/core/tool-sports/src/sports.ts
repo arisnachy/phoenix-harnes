@@ -1,4 +1,5 @@
 /** Read-only sports information adapters for Kira's conversation tools. */
+import {fetchPublicEspnOdds} from './espn-odds.ts'
 export const sportsCatalog: Readonly<Record<string, readonly string[]>> = {
   soccer: ['eng.1','esp.1','mex.1','usa.1','uefa.champions','fifa.world'],
   basketball: ['nba','wnba','mens-college-basketball'],
@@ -20,14 +21,14 @@ const date=(v?:string):string => {
   return d
 }
 const leagueValid=(s:string):boolean => /^[a-z0-9][a-z0-9._-]{0,79}$/u.test(s)
-/** Check whether a provider's operator credentials or terms opt-in are available.
+/** Check whether public read-only providers are disabled or a commercial key is available.
  * @param provider - The supported data source.
  * @param env - Secret-bearing host environment, never sent to the client.
  * @returns Whether the provider can be queried.
  */
 export const hasSportsPermission=(provider:'espn'|'mlb'|'odds',env:NodeJS.ProcessEnv=process.env):boolean =>
-  provider==='espn'?env.PHOENIX_SPORTS_ESPN_ALLOWED==='1':
-  provider==='mlb'?env.PHOENIX_SPORTS_MLB_ALLOWED==='1':Boolean(env.THE_ODDS_API_KEY)
+  provider==='espn'?env.PHOENIX_SPORTS_ESPN_DISABLED!=='1':
+  provider==='mlb'?env.PHOENIX_SPORTS_MLB_DISABLED!=='1':Boolean(env.THE_ODDS_API_KEY)
 /** Fetch a bounded HTTPS JSON response from a trusted sports provider.
  * @typeParam T - Expected provider shape, verified by each caller.
  * @param url - Provider URL from the fixed host allowlist.
@@ -89,7 +90,7 @@ export async function chatGames(sport:string,league:string,requestedDate?:string
       }})
     }
   }else{
-    if(!hasSportsPermission('espn',env))throw Error('ESPN no autorizado: revisar términos y configurar PHOENIX_SPORTS_ESPN_ALLOWED=1.')
+    if(!hasSportsPermission('espn',env))throw Error('ESPN deshabilitado por configuración PHOENIX_SPORTS_ESPN_DISABLED=1.')
     const feed=await getFeed<{events?:FeedEvent[]}>('https://site.api.espn.com/apis/site/v2/sports/'+sport+'/'+league+'/scoreboard?dates='+day.replaceAll('-',''),fetcher)
     if(!Array.isArray(feed.events))throw Error('Respuesta ESPN no válida')
     for(const e of feed.events.slice(0,25)){
@@ -115,7 +116,7 @@ export async function chatGames(sport:string,league:string,requestedDate?:string
 /** Unique sportsbook selection identity without an assumed price. */
 export type MarketSelection = {eventId:string;bookmaker:string;market:string;selection:string;point?:number|null}
 /** Time-stamped sportsbook quote tied to a provider event and market. */
-export type MarketOutcome = MarketSelection & {price:number;home:string;away:string;time:string;updatedAt:string}
+export type MarketOutcome = MarketSelection & {price:number;home:string;away:string;time:string;updatedAt:string;source?:string}
 /** Read attributed bookmaker quotes, without purchasing or placing any bet.
  * @param sportKey - Provider sports key.
  * @param markets - Approved market categories.
@@ -124,15 +125,19 @@ export type MarketOutcome = MarketSelection & {price:number;home:string;away:str
  * @returns Normalized quotes with bookmaker names and update times.
  */
 export async function marketOdds(sportKey:string,markets='h2h',env:NodeJS.ProcessEnv=process.env,fetcher:typeof fetch=fetch):Promise<MarketOutcome[]> {
-  if(!hasSportsPermission('odds',env))throw Error('Falta THE_ODDS_API_KEY; no se pueden publicar cuotas inventadas.')
   if(!/^[a-z0-9_]{3,80}$/u.test(sportKey)||!/^(h2h|totals|spreads)(,(h2h|totals|spreads))*$/u.test(markets))throw Error('Mercado inválido')
+  if(!hasSportsPermission('odds',env)){
+    if(!hasSportsPermission('espn',env))throw Error('Sin proveedor de cuotas disponible: ESPN deshabilitado y THE_ODDS_API_KEY ausente.')
+    const fromEspn=await fetchPublicEspnOdds(sportKey,markets,<T>(url:string)=>getFeed<T>(url,fetcher))
+    return fromEspn.map(quote=>({...quote,source:'ESPN Site/Core (sin clave)'}))
+  }
   const u=new URL('https://api.the-odds-api.com/v4/sports/'+sportKey+'/odds')
   for(const [k,v] of Object.entries({apiKey:env.THE_ODDS_API_KEY??'',regions:'us',markets,oddsFormat:'decimal'}))u.searchParams.set(k,v)
   const feed=await getFeed<Array<{id:string;home_team:string;away_team:string;commence_time:string;bookmakers?:Array<{key:string;title:string;last_update?:string;markets?:Array<{key:string;last_update?:string;outcomes?:Array<{name:string;price:number;point?:number}>}>}>}>>(u.toString(),fetcher)
   if(!Array.isArray(feed))throw Error('Respuesta de cuotas inválida')
   return feed.flatMap(event=>(event.bookmakers??[]).flatMap(book=>(book.markets??[]).flatMap(market=>(market.outcomes??[]).filter(o=>o.price>1&&Number.isFinite(o.price)).map(o=>({
     eventId:title(event.id,100),bookmaker:title(book.title||book.key,120),market:title(market.key,60),selection:title(o.name,120),point:o.point??null,
-    price:o.price,home:title(event.home_team),away:title(event.away_team),time:localTime(event.commence_time),updatedAt:title(market.last_update??book.last_update),
+    price:o.price,home:title(event.home_team),away:title(event.away_team),time:localTime(event.commence_time),updatedAt:title(market.last_update??book.last_update),source:'The Odds API',
   }))))).slice(0,500)
 }
 /** Simulate a ticket only when every leg matches a freshly retrieved quote.
@@ -160,7 +165,7 @@ export function pricedTicket(selections:MarketSelection[],quotes:MarketOutcome[]
   return {warning,card:{component:'sports_ticket_card',version:1,props:{
     title:'PHOENIX · Ticket de análisis',subtitle:'Cuotas consultadas en proveedor real · '+new Date().toISOString(),
     legs,combinedOdds:combined.toFixed(3),stake:stake?stake.toFixed(2):undefined,grossReturn:stake?(stake*combined).toFixed(2):undefined,
-    source:'The Odds API · precios de las casas indicadas',note:'SIMULACIÓN, SIN APUESTA REAL. '+warning+' Las cuotas pueden cambiar; no existe garantía de ganar.',
+    source:legs.length&&quotes.some(q=>q.source?.includes('ESPN'))?'ESPN Site/Core (cuotas públicas cuando ESPN las publique)':'The Odds API · precios de las casas indicadas',note:'SIMULACIÓN, SIN APUESTA REAL. '+warning+' Las cuotas pueden cambiar; no existe garantía de ganar.',
     askPrompt:'Kira, revisa este ticket con datos actuales, riesgos, ausencias y correlaciones antes de recomendar nada.',
   }}}
 }
