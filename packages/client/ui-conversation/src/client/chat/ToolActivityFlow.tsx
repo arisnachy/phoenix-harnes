@@ -111,7 +111,7 @@ function activityNode(node: OrderedChatNode): ActivityItem {
   return {
     kind: 'node', key: node.key, liveTool: false,
     ...(isSettledTool(root) ? { receipt: {
-      activity: toolActivity(root.call.name),
+      activity: toolActivity(root.call?.name ?? ''),
       failed: root.isError,
     } } : {}),
   }
