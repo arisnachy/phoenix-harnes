@@ -96,6 +96,10 @@ export interface Config {
   maxParallelToolCalls?: AgentLoopConfig['maxParallelToolCalls']
   /** Maximum model/tool steps in one turn before explicit continuation is required. */
   maxStepsPerTurn?: AgentLoopConfig['maxStepsPerTurn']
+  /** Bounded automatic continuations for providers where they are explicitly supported. */
+  autoContinueMaxSegments?: AgentLoopConfig['autoContinueMaxSegments']
+  /** Explicit list of providers eligible for automatic continuation. */
+  autoContinueProviders?: AgentLoopConfig['autoContinueProviders']
   /** Whether the system prompt includes the fixed Harness identity (default true). */
   includeHarnessIdentity?: SystemPromptConfig['includeHarnessIdentity']
   /** Whether model history includes dynamic runtime-context snapshots (default true). */
@@ -185,6 +189,8 @@ export function pickSpineConfig(config: Omit<Config, 'agents'>): Omit<Config, 'a
   return {
     ...config.maxParallelToolCalls !== undefined ? { maxParallelToolCalls: config.maxParallelToolCalls } : {},
     ...config.maxStepsPerTurn !== undefined ? { maxStepsPerTurn: config.maxStepsPerTurn } : {},
+    ...config.autoContinueMaxSegments !== undefined ? { autoContinueMaxSegments: config.autoContinueMaxSegments } : {},
+    ...config.autoContinueProviders !== undefined ? { autoContinueProviders: config.autoContinueProviders } : {},
     ...config.includeHarnessIdentity !== undefined ? { includeHarnessIdentity: config.includeHarnessIdentity } : {},
     ...config.includeRuntimeContext !== undefined ? { includeRuntimeContext: config.includeRuntimeContext } : {},
     ...config.persona !== undefined ? { persona: config.persona } : {},
