@@ -1,14 +1,14 @@
 # @phoenix-ai/dsh-tool-sports
 
-Native chat-only sports tools for Kira: sports_chat_catalog, sports_chat_games, sports_chat_odds, and sports_chat_ticket. Sports questions use the existing conversation, not a menu. The assistant receives attributed data and declarative sports_game_card or sports_ticket_card blocks to show inside validated generative-ui fences.
+Native chat-only sports tools for Kira: sports_chat_catalog, sports_chat_discover, sports_chat_games, sports_chat_mlb_pitchers, sports_chat_odds, and sports_chat_ticket. Sports questions use the existing conversation, not a menu. The assistant receives attributed data and declarative sports_game_card or sports_ticket_card blocks to show inside validated generative-ui fences.
 
 ## Provider access
 
-PHOENIX_SPORTS_ESPN_ALLOWED=1 and PHOENIX_SPORTS_MLB_ALLOWED=1 require explicit provider terms review. THE_ODDS_API_KEY enables licensed bookmaker quotations. PHOENIX_SPORTS_ESPN_IMAGES_ALLOWED=1 is an additional opt-in after media rights review. Credentials stay in the host environment and never appear in tool output. Only fixed hosts can be queried.
+ESPN Site/Core and MLB Stats are queried as publicly reachable read-only sources without needing an API key or a PHOENIX_SPORTS_ESPN_ALLOWED setting. Operators may opt out using PHOENIX_SPORTS_ESPN_DISABLED=1 or PHOENIX_SPORTS_MLB_DISABLED=1; public access does not grant a license to reuse data. THE_ODDS_API_KEY is optional and enables paid-provider breadth where licensed. If missing, ESPN Core/Site moneyline quotes are read when available, but no absent prices or missing markets are fabricated. PHOENIX_SPORTS_ESPN_IMAGES_ALLOWED=1 is an additional opt-in after media rights review. Credentials stay in the host environment and never appear in tool output. Only fixed hosts can be queried.
 
 ## Model Experience
 
-The tools offer league-specific fixtures with source, Santo Domingo-local times and team data, plus real bookmaker quotes and simulation-only tickets. Tool outputs contain renderable JSON for the assistant to reproduce in the same chat. No wager is placed and there is no guaranteed winner. Missing data, unauthorized providers and unavailable lines are surfaced honestly. Repricing occurs before composing a ticket.
+The tools discover additional league IDs from ESPN Core/Web, then offer league-specific fixtures with source, Santo Domingo-local times and team data, plus real bookmaker quotes and simulation-only tickets. Tool outputs contain renderable JSON for the assistant to reproduce in the same chat. No wager is placed and there is no guaranteed winner. Missing data, operator-disabled providers and unavailable odds are surfaced honestly. Repricing occurs before composing a ticket.
 
 ## Known Limitations and Deferred Work
 
