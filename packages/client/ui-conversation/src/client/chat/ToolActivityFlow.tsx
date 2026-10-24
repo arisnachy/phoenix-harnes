@@ -13,6 +13,8 @@ import { ReasoningRow } from './ReasoningRow.tsx'
 import { MiniBrowser, type SavedAccessNotice, type SecureLoginTarget } from './MiniBrowser.tsx'
 import { DesktopLive } from './DesktopLive.tsx'
 import { SecureAsk } from './SecureAsk.tsx'
+import { GenerativeUi, type GenerativeUiBlock } from './GenerativeUi.tsx'
+import { sportsCardsFromToolResult, unrenderedSportsCards } from './sports-tool-cards.ts'
 import { toolActivity, type TurnActivity, type TurnProgress } from './turn-progress.ts'
 import chatCss from './ChatView.module.css'
 import css from './ToolActivityFlow.module.css'
@@ -27,6 +29,7 @@ interface OrderedChatNode {
 
 interface ToolActivityFlowProps extends SeatProps {
   readonly sessionId: string
+  readonly inputActions: ChatViewSlotProps['inputActions']
   readonly nodes: readonly OrderedChatNode[]
   /** Runtime-open browser turn, even while Kira is streaming visible prose. */
   readonly browserTurnOpen?: boolean
@@ -72,6 +75,7 @@ type FlowItem =
     readonly key: string
     readonly images: readonly { readonly attachment: ImageAttachmentRef }[]
   }
+  | { readonly kind: 'sports'; readonly key: string; readonly blocks: readonly GenerativeUiBlock[] }
 
 function imageActivity(node: OrderedChatNode): readonly { readonly attachment: ImageAttachmentRef }[] {
   if (node.kind !== 'tool-call') return []
@@ -311,6 +315,7 @@ function buildFlow(nodes: readonly OrderedChatNode[]): FlowItem[] {
   const flow: FlowItem[] = []
   let pending: ActivityItem[] = []
   let pendingAnchorKey: string | undefined
+  let sportsCards: GenerativeUiBlock[] = []
 
   const flush = (avoidAnchorKey?: string): void => {
     const first = pending[0]
@@ -336,6 +341,11 @@ function buildFlow(nodes: readonly OrderedChatNode[]): FlowItem[] {
       continue
     }
     if (isWholeActivity(node.kind)) {
+      if (node.kind === 'tool-call') {
+        const result = (node.data as ToolChatData).root
+        sportsCards.push(...sportsCardsFromToolResult(result))
+        sportsCards = sportsCards.slice(-12)
+      }
       const images = imageActivity(node)
       if (images.length > 0) {
         flush()
@@ -353,6 +363,12 @@ function buildFlow(nodes: readonly OrderedChatNode[]): FlowItem[] {
       if (reasoning.length > 0) pending.push(...reasoning)
       if (hasAssistantSurface(assistant)) {
         flow.push({ kind: 'node', key: node.key })
+        if (assistant.status === 'settled' && sportsCards.length > 0) {
+          const remaining = unrenderedSportsCards(sportsCards,
+            assistant.blocks.filter(b => b.kind === 'text').map(b => b.text))
+          if (remaining.length > 0) flow.push({ kind: 'sports', key: 'sports:' + node.key, blocks: remaining })
+          sportsCards = []
+        }
         flush(node.key)
       } else if (reasoning.length === 0) {
         flush()
@@ -363,6 +379,8 @@ function buildFlow(nodes: readonly OrderedChatNode[]): FlowItem[] {
 
     flush()
     flow.push({ kind: 'node', key: node.key })
+    // Never carry a previous user's sports analysis into another turn.
+    if (node.kind === 'user' || node.kind === 'steering') sportsCards = []
   }
 
   flush()
@@ -454,9 +472,7 @@ export function addBrowserCards(
 export function isDesktopPrompt(text: string): boolean {
   const normalized = text.normalize('NFD').replace(/[\u0300-\u036f]/gu, '').toLowerCase()
   if (/\bdesktop[\s-]*live\b/u.test(normalized)) return true
-  // oxlint-disable-next-line @stylistic/max-len -- Keep the complete desktop intent pattern readable.
   const application = /\b(?:microsoft paint|paint|mspaint|bloc de notas|notepad|explorador de windows|calculadora|calculator|explorador de archivos|file explorer)\b/u
-  // oxlint-disable-next-line @stylistic/max-len -- Keep the complete desktop intent pattern readable.
   const action = /\b(?:abre|abres|abrir|entra|entrar|ingresa|ingresar|inicia|ejecuta|dibuja|dibujo|trazo|traza|trabaja|controla|muestra|open|draw|launch|use|usa)\b/u
   return application.test(normalized) && action.test(normalized)
 }
@@ -549,6 +565,20 @@ function ToolActivityChevron({ open }: { readonly open: boolean }) {
       </svg>
     </span>
   )
+}
+
+/** Tool-backed visual evidence is part of the conversation, never a new menu or a tool disclosure. */
+function SportsEvidenceSurface({ blocks, inputActions }: {
+  readonly blocks: readonly GenerativeUiBlock[]
+  readonly inputActions: ChatViewSlotProps['inputActions']
+}) {
+  return <section data-chat-flow-kind="sports-evidence" aria-label="Panel deportivo de Kira">
+    {blocks.map((block,index)=><GenerativeUi key={index} block={block}
+      onAction={(prompt,mode)=>{
+        inputActions.setDraft(prompt)
+        if(mode==='submit')inputActions.submit()
+      }} />)}
+  </section>
 }
 
 function ToolActivityGroup({
@@ -754,10 +784,11 @@ export function setSecureAskDismissed(sessionId: string, origin: string, dismiss
 
 /** Same real transcript seats as the ordinary chat, inside the temporary sidecar. */
 function BrowserWorkspace({
-  items, live, selected, onActivate, seatProps, turnStatus, tabId, sourceUrl, sessionId,
+  items, live, selected, onActivate, seatProps, turnStatus, tabId, sourceUrl, sessionId, inputActions,
 }: {
   readonly items: readonly FlowItem[]
   readonly sessionId: string
+  readonly inputActions: ChatViewSlotProps['inputActions']
   readonly live: boolean
   readonly selected: boolean
   readonly tabId?: string
@@ -898,7 +929,9 @@ function BrowserWorkspace({
         <div ref={activityRef} className={css.activityMessages} aria-live="polite" aria-relevant="additions text">
           {items.map(item => (
             <Fragment key={item.key}>
-              {item.kind === 'node'
+              {item.kind === 'sports'
+                ? <SportsEvidenceSurface blocks={item.blocks} inputActions={inputActions} />
+                : item.kind === 'node'
                 ? <ChatNodeSeat nodeKey={item.key} {...seatProps} />
                 : item.kind === 'activity'
                   ? <ToolActivityGroup items={item.items} anchorKey={item.anchorKey} {...seatProps} />
@@ -937,7 +970,7 @@ function BrowserWorkspace({
  * @param props - Ordered nodes plus the ordinary ChatNodeSeat owner/runtime props.
  * @returns The grouped transcript flow.
  */
-export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, browserTurnOpen, sessionId, ...seatProps }: ToolActivityFlowProps) {
+export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, browserTurnOpen, sessionId, inputActions, ...seatProps }: ToolActivityFlowProps) {
   const ordinaryFlow = useMemo(() => addDesktopCards(addBrowserCards(buildAnchoredFlow(nodes, optimisticSubmit), nodes), nodes), [nodes, optimisticSubmit])
   const browserKeys = ordinaryFlow.filter(item => item.kind === 'browser').map(item => item.userKey)
   const [selectedBrowserKey, setSelectedBrowserKey] = useState<string | undefined>()
@@ -992,43 +1025,46 @@ export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, browserT
               t={seatProps.t}
             />
           )}
-          {item.kind === 'desktop'
+          {item.kind === 'sports'
+            ? <SportsEvidenceSurface blocks={item.blocks} inputActions={inputActions} />
+            : item.kind === 'desktop'
             ? <DesktopLive sessionId={sessionId} active={item.key === latestDesktopKey} />
             : item.kind === 'browser-workspace'
-              ? <BrowserWorkspace
-                sessionId={sessionId}
-                live={item.live}
-                items={item.items}
-                {...item.tabId === undefined ? {} : { tabId: item.tabId }}
-                {...item.sourceUrl === undefined ? {} : { sourceUrl: item.sourceUrl }}
-                selected={item.userKey === activeBrowserKey}
-                onActivate={() => { setSelectedBrowserKey(item.userKey) }}
-                seatProps={seatProps}
-                turnStatus={turnStatus}
-              />
-              : item.kind === 'node'
-                ? <ChatNodeSeat nodeKey={item.key} {...seatProps} />
-                : item.kind === 'optimistic'
+            ? <BrowserWorkspace
+              sessionId={sessionId}
+              inputActions={inputActions}
+              live={item.live}
+              items={item.items}
+              {...item.tabId === undefined ? {} : { tabId: item.tabId }}
+              {...item.sourceUrl === undefined ? {} : { sourceUrl: item.sourceUrl }}
+              selected={item.userKey === activeBrowserKey}
+              onActivate={() => { setSelectedBrowserKey(item.userKey) }}
+              seatProps={seatProps}
+              turnStatus={turnStatus}
+            />
+            : item.kind === 'node'
+              ? <ChatNodeSeat nodeKey={item.key} {...seatProps} />
+              : item.kind === 'optimistic'
+                ? (
+                  <PendingSteeringBubble
+                    content={[{ type: 'text', text: item.text }]}
+                    renderMessageImages={seatProps.renderMessageImages}
+                    t={seatProps.t}
+                  />
+                )
+                : item.kind === 'images'
                   ? (
-                    <PendingSteeringBubble
-                      content={[{ type: 'text', text: item.text }]}
-                      renderMessageImages={seatProps.renderMessageImages}
-                      t={seatProps.t}
-                    />
+                    <div data-chat-flow-kind="generated-image">
+                      {seatProps.renderMessageImages({ images: item.images, align: 'start' })}
+                    </div>
                   )
-                  : item.kind === 'images'
-                    ? (
-                      <div data-chat-flow-kind="generated-image">
-                        {seatProps.renderMessageImages({ images: item.images, align: 'start' })}
-                      </div>
-                    )
-                    : (
-                      <ToolActivityGroup
-                        items={item.items}
-                        anchorKey={item.anchorKey}
-                        {...seatProps}
-                      />
-                    )}
+                  : (
+                    <ToolActivityGroup
+                      items={item.items}
+                      anchorKey={item.anchorKey}
+                      {...seatProps}
+                    />
+                  )}
         </Fragment>
       ))}
       {!hasBrowserWorkspace && turnStatus !== undefined && turnStatus.progress !== null && statusBeforeIndex === -1 && (

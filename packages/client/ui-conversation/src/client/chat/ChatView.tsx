@@ -124,7 +124,7 @@ function userMessageText(node: UserMessageNode): string {
  */
 export function ChatView({
   useSession, useSessions, useInput, useStore, renderSlot, sessionId, openFile, loadOlder, loadImage, inspectCall, chatScroll, forkAt,
-  fileMentions, workspaceFileMentions, openCanvas, runArtifact, t,
+  fileMentions, workspaceFileMentions, openCanvas, runArtifact, inputActions, t,
 }: ChatViewSlotProps) {
   const order = useSession(s => s.chat.order)
   const nodeStore = useSession(s => s.chat.nodes)
@@ -541,6 +541,7 @@ export function ChatView({
           )}
           <ToolActivityFlow
             sessionId={sessionId}
+            inputActions={inputActions}
             nodes={chatNodes}
             optimisticSubmit={optimisticSubmit}
             turnStatus={visibleTurnStatus}
