@@ -99,7 +99,7 @@ Schedule 会拒绝无效偏移量与时区、不带偏移量的字符串、非�
 
 ## 持久变更与回放
 
-版本 1 的 `schedule/change` 会话事件是 Schedule 唯一的持久权威。create 保存完整记录，delete 是终结性且仅含 id 的转换。一次性提醒的 dispatch 同样是终结性且仅含 id。Every dispatch 携带用于选择最新到期触发的墙钟判断时刻，通常推进活动记录而不终结它。dispatch 表示 follow-up 已同步入队，而不表示模型答复成功或用户已读取答复。
+版本 1 的 `schedule/change` 会话事件是 Schedule 唯一的持久权威。create 保存完整记录，pause 和 resume 只记录 id 并保留原始触发时刻，delete 是终结性且仅含 id 的转换。一次性提醒的 dispatch 同样是终结性且仅含 id。Every dispatch 携带用于选择最新到期触发的墙钟判断时刻，通常推进活动记录而不终结它。dispatch 表示 follow-up 已同步入队，而不表示模型答复成功或用户已读取答复。
 
 ```ts type-equiv
 /** Creates one durable reminder record. */
@@ -107,6 +107,24 @@ interface ScheduleCreateChange {
   readonly version: 1
   readonly operation: 'create'
   readonly schedule: ScheduleRecord
+}
+```
+
+```ts type-equiv
+/** Pauses a live reminder without losing its timing rule. */
+interface SchedulePauseChange {
+  readonly version: 1
+  readonly operation: 'pause'
+  readonly id: ScheduleId
+}
+```
+
+```ts type-equiv
+/** Returns a paused reminder to the live scheduler. */
+interface ScheduleResumeChange {
+  readonly version: 1
+  readonly operation: 'resume'
+  readonly id: ScheduleId
 }
 ```
 
@@ -146,7 +164,9 @@ type ScheduleDispatchChange = OneShotScheduleDispatchChange | EveryScheduleDispa
 
 ```ts type-equiv
 /** Strict version-1 durable Schedule mutation union. */
-type ScheduleChange = ScheduleCreateChange | ScheduleDeleteChange | ScheduleDispatchChange
+type ScheduleChange =
+  | ScheduleCreateChange | SchedulePauseChange | ScheduleResumeChange
+  | ScheduleDeleteChange | ScheduleDispatchChange
 ```
 
 严格 decoder 与 fold 会拒绝未知版本、额外字段、复用 id、不匹配的一次性提醒或 Every dispatch 形状，以及针对非活动记录的 delete 或 dispatch 转换。普通 Session 折叠完整事件流。fork 只折叠 `SessionHeader.seedLength` 位置及其后的事件，因此保留历史，但不会接管父 Session 的活动提醒。`schedule/change` 声明和源码位置也编入[持久化目录](../persistence-catalog.zh.md#schedulechange--log-only)。
@@ -157,7 +177,7 @@ type ScheduleChange = ScheduleCreateChange | ScheduleDeleteChange | ScheduleDisp
 
 ```ts type-equiv
 /** Current delivery timing derived from the durable record and wall clock. */
-type ScheduleState = 'scheduled' | 'overdue'
+type ScheduleState = 'scheduled' | 'overdue' | 'paused'
 ```
 
 ```ts type-equiv
@@ -175,7 +195,7 @@ type ScheduleView = ScheduleRecord & {
 }
 ```
 
-生成的[工具目录](../tool-catalog.zh.md#phoenix-aidsh-schedule)负责 `schedule_create`、`schedule_list` 和 `schedule_delete` 的参数与结果 schema。一条 Agent-scoped 队列将管理调用与到期工作串行化。每次读取或判断都会先等待共享的 Session 持久化 barrier；create 与实际执行的 delete 在追加后还会再次等待。barrier 失败会报告 `persistence_uncertain`，而不是猜测 eager write 是否已提交。其他稳定错误代码是 `invalid_prompt`、`invalid_selector`、`invalid_rule`、`invalid_time_zone`、`not_future`、`time_out_of_range`、`frequency_too_high`、`corrupt_schedule_log` 和 `internal_error`。
+生成的[工具目录](../tool-catalog.zh.md#phoenix-aidsh-schedule)负责 `schedule_create`、`schedule_list`、`schedule_delete`、`schedule_pause` 和 `schedule_resume` 的参数与结果 schema。一条 Agent-scoped 队列将管理调用与到期工作串行化。每次读取或判断都会先等待共享的 Session 持久化 barrier；create、pause、resume 与实际执行的 delete 在追加后还会再次等待。barrier 失败会报告 `persistence_uncertain`，而不是猜测 eager write 是否已提交。其他稳定错误代码是 `invalid_prompt`、`invalid_selector`、`invalid_rule`、`invalid_time_zone`、`not_future`、`time_out_of_range`、`frequency_too_high`、`corrupt_schedule_log` 和 `internal_error`。
 
 ## Live 交付
 

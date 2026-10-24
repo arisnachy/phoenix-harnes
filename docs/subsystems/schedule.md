@@ -99,7 +99,7 @@ When multiple distinct Every records are overdue and no one-shot is due, each co
 
 ## Durable changes and replay
 
-The version-1 `schedule/change` Session event is the only durable Schedule authority. Create stores the complete record, and delete is a terminal id-only transition. A one-shot dispatch is also terminal and id-only. An Every dispatch carries the wall-clock decision time used to select its latest due occurrence and normally advances the active record instead of terminating it. Dispatch means the follow-up was synchronously queued, not that a model answer succeeded or the user read it.
+The version-1 `schedule/change` Session event is the only durable Schedule authority. Create stores the complete record, pause and resume preserve its original target through id-only transitions, and delete is terminal. A one-shot dispatch is also terminal and id-only. An Every dispatch carries the wall-clock decision time used to select its latest due occurrence and normally advances the active record instead of terminating it. Dispatch means the follow-up was synchronously queued, not that a model answer succeeded or the user read it.
 
 ```ts type-equiv
 /** Creates one durable reminder record. */
@@ -107,6 +107,24 @@ interface ScheduleCreateChange {
   readonly version: 1
   readonly operation: 'create'
   readonly schedule: ScheduleRecord
+}
+```
+
+```ts type-equiv
+/** Pauses a live reminder without losing its timing rule. */
+interface SchedulePauseChange {
+  readonly version: 1
+  readonly operation: 'pause'
+  readonly id: ScheduleId
+}
+```
+
+```ts type-equiv
+/** Returns a paused reminder to the live scheduler. */
+interface ScheduleResumeChange {
+  readonly version: 1
+  readonly operation: 'resume'
+  readonly id: ScheduleId
 }
 ```
 
@@ -146,7 +164,9 @@ type ScheduleDispatchChange = OneShotScheduleDispatchChange | EveryScheduleDispa
 
 ```ts type-equiv
 /** Strict version-1 durable Schedule mutation union. */
-type ScheduleChange = ScheduleCreateChange | ScheduleDeleteChange | ScheduleDispatchChange
+type ScheduleChange =
+  | ScheduleCreateChange | SchedulePauseChange | ScheduleResumeChange
+  | ScheduleDeleteChange | ScheduleDispatchChange
 ```
 
 The strict decoder and fold reject unknown versions, extra fields, reused ids, mismatched one-shot or Every dispatch shapes, and delete or dispatch transitions against inactive records. A normal Session folds its complete event stream. A fork folds only events at or after `SessionHeader.seedLength`, so it retains history without adopting the parent Session's active reminders. The `schedule/change` declaration and source location are also indexed in the [persistence catalog](../persistence-catalog.md#schedulechange--log-only).
@@ -157,7 +177,7 @@ Tool values combine the durable record with delivery state derived from the curr
 
 ```ts type-equiv
 /** Current delivery timing derived from the durable record and wall clock. */
-type ScheduleState = 'scheduled' | 'overdue'
+type ScheduleState = 'scheduled' | 'overdue' | 'paused'
 ```
 
 ```ts type-equiv
@@ -175,7 +195,7 @@ type ScheduleView = ScheduleRecord & {
 }
 ```
 
-The generated [tool catalog](../tool-catalog.md#phoenix-aidsh-schedule) owns the argument and result schemas for `schedule_create`, `schedule_list`, and `schedule_delete`. Management calls serialize with due work in one Agent-scoped queue. Every read or decision first waits for the shared Session persistence barrier; create and an actual delete wait again after appending. A barrier failure reports `persistence_uncertain` instead of guessing whether an eager write committed. The other stable error codes are `invalid_prompt`, `invalid_selector`, `invalid_rule`, `invalid_time_zone`, `not_future`, `time_out_of_range`, `frequency_too_high`, `corrupt_schedule_log`, and `internal_error`.
+The generated [tool catalog](../tool-catalog.md#phoenix-aidsh-schedule) owns the argument and result schemas for `schedule_create`, `schedule_list`, `schedule_delete`, `schedule_pause`, and `schedule_resume`. Management calls serialize with due work in one Agent-scoped queue. Every read or decision first waits for the shared Session persistence barrier; create, pause, resume, and an actual delete wait again after appending. A barrier failure reports `persistence_uncertain` instead of guessing whether an eager write committed. The other stable error codes are `invalid_prompt`, `invalid_selector`, `invalid_rule`, `invalid_time_zone`, `not_future`, `time_out_of_range`, `frequency_too_high`, `corrupt_schedule_log`, and `internal_error`.
 
 ## Live delivery
 
