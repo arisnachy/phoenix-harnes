@@ -57,7 +57,7 @@ export const inject = ['agentTeams']
 export const managedRuntimeService = 'openclawManagedRuntime'
 
 /** Register one adapter per Cordis fiber; disposal unregisters that exact instance. */
-export async function apply(ctx: Context, config: Config = {}): Promise<void> {
+export function apply(ctx: Context, config: Config = {}): void {
   const service: unknown = ctx.get(managedRuntimeService)
   // The adapter's own trusted Host fiber provides this native authority. A
   // foreign plugin cannot mint permission by occupying the same service key.
@@ -79,9 +79,9 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
     const adapter: ExecutionAdapter = {
       engine: 'openclaw',
       probe: async () => (await adapterNow()).probe(),
-      resolveNativePolicy: async (request) => (await adapterNow()).resolveNativePolicy(request),
-      run: async (request) => (await adapterNow()).run(request),
-      recover: async (request) => (await adapterNow()).recover(request),
+      resolveNativePolicy: async request => (await adapterNow()).resolveNativePolicy(request),
+      run: async request => (await adapterNow()).run(request),
+      recover: async request => (await adapterNow()).recover(request),
     }
     teamContext.effect(
       () => teamContext.agentTeams.executions.register(adapter),
