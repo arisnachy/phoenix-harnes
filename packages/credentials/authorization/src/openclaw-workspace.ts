@@ -68,7 +68,7 @@ function defaultRun(command: string, args: readonly string[], options: CliRunOpt
         env: { ...process.env, ...(options.env ?? {}) },
       })
     } catch (error) {
-      reject(error)
+      reject(error instanceof Error ? error : new Error('OpenClaw process spawn failed', { cause: error }))
       return
     }
 
@@ -76,7 +76,7 @@ function defaultRun(command: string, args: readonly string[], options: CliRunOpt
       if (settled) return
       settled = true
       options.signal?.removeEventListener('abort', onAbort)
-      reject(error)
+      reject(error instanceof Error ? error : new Error('OpenClaw command failed', { cause: error }))
     }
     const onAbort = (): void => {
       child.kill()
@@ -88,12 +88,12 @@ function defaultRun(command: string, args: readonly string[], options: CliRunOpt
     }
     options.signal?.addEventListener('abort', onAbort, { once: true })
 
-    child.stdout?.on('data', (chunk: unknown) => {
+    child.stdout.on('data', (chunk: unknown) => {
       const text = String(chunk)
       stdout = appendBounded(stdout, text)
       options.onOutput?.(text)
     })
-    child.stderr?.on('data', (chunk: unknown) => {
+    child.stderr.on('data', (chunk: unknown) => {
       const text = String(chunk)
       stderr = appendBounded(stderr, text)
       options.onOutput?.(text)

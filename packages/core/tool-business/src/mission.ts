@@ -119,7 +119,8 @@ export function planBusinessMission(
   const blockers: string[] = []
   if (runtime !== undefined && !Array.isArray(runtime)) throw new TypeError('Inventario MCP inválido.')
   if ((runtime?.length ?? 0) > MAX_CONNECTORS) throw new TypeError('Inventario MCP excesivamente grande.')
-  for (const entry of runtime ?? []) {
+  const inventory: readonly RuntimeConnector[] = runtime ?? []
+  for (const entry of inventory) {
     if (!entry || typeof entry.serverName !== 'string' || !SAFE_SERVER.test(entry.serverName) ||
       !['ready','starting','disconnected','failed','auth-required'].includes(entry.status) ||
       !Array.isArray(entry.toolNames) || entry.toolNames.length > 400) continue
