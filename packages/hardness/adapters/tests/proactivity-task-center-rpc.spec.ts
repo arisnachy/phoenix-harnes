@@ -107,6 +107,15 @@ describe('Host-authorized scheduled task-center creation', () => {
     expect((await handler!('list', {})).value).toEqual([
       expect.objectContaining({ id: 'host-task-1' }),
     ])
+    expect((await handler!('pause', { id: 'host-task-1' })).value)
+      .toMatchObject({ status: 'paused' })
+    expect((await handler!('resume', { id: 'host-task-1' })).value)
+      .toMatchObject({ status: 'scheduled' })
+    expect((await handler!('cancel', { id: 'host-task-1' })).value)
+      .toMatchObject({ status: 'cancelled' })
+    expect((await engine.list())[0]).toMatchObject({ id: 'host-task-1', status: 'cancelled' })
+    expect((await handler!('pause', { id: 'missing' })).ok).toBe(false)
+    expect((await handler!('pause', { id: 'host-task-1', extra: true })).ok).toBe(false)
     dispose()
     await ctx.fiber.dispose()
   })

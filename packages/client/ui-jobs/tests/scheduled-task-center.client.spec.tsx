@@ -40,6 +40,45 @@ describe('Scheduled tasks global manager', () => {
     expect(call.mock.calls.filter((args: unknown[]) => args[1] === 'create')).toHaveLength(1)
   })
 
+  it('uses Host-confirmed pause, resume, and cancel rather than optimistic local state', async () => {
+    let status = 'scheduled'
+    const call = vi.fn().mockImplementation(async (_channel: string, endpoint: string) => {
+      if (endpoint === 'list') {
+        return { ok: true, value: [{ id: 'task-1', title: 'Seguimiento semanal', status,
+          nextRunAt: '2026-12-01T12:00:00.000Z', createdBy: 'user' }] }
+      }
+      status = endpoint === 'pause' ? 'paused' : endpoint === 'resume' ? 'scheduled' : 'cancelled'
+      return { ok: true, value: { id: 'task-1', status } }
+    })
+    render(<ScheduledTaskCenter t={t} connection={{ rpc: { call } }} />)
+    fireEvent(window, new Event('phoenix:open-scheduled-tasks'))
+    await waitFor(() => { expect(screen.getByRole('button', { name: 'Pause: Seguimiento semanal' })).toBeTruthy() })
+    fireEvent.click(screen.getByRole('button', { name: 'Pause: Seguimiento semanal' }))
+    await waitFor(() => { expect(screen.getByRole('button', { name: 'Resume: Seguimiento semanal' })).toBeTruthy() })
+    expect(call).toHaveBeenCalledWith('/phoenix-tasks', 'pause', { id: 'task-1' })
+    fireEvent.click(screen.getByRole('button', { name: 'Resume: Seguimiento semanal' }))
+    await waitFor(() => { expect(screen.getByRole('button', { name: 'Pause: Seguimiento semanal' })).toBeTruthy() })
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel task: Seguimiento semanal' }))
+    await waitFor(() => {
+      expect(call).toHaveBeenCalledWith('/phoenix-tasks', 'cancel', { id: 'task-1' })
+      expect(screen.queryByRole('button', { name: 'Pause: Seguimiento semanal' })).toBeNull()
+    })
+  })
+
+  it('retains previous task status when the Host rejects a state change', async () => {
+    const call = vi.fn().mockImplementation(async (_channel: string, endpoint: string) =>
+      endpoint === 'list'
+        ? { ok: true, value: [{ id: 'task-2', title: 'Persistir', status: 'scheduled',
+          nextRunAt: '2026-12-01T12:00:00.000Z', createdBy: 'user' }] }
+        : { ok: false, error: { message: 'Task is locked' } })
+    render(<ScheduledTaskCenter t={t} connection={{ rpc: { call } }} />)
+    fireEvent(window, new Event('phoenix:open-scheduled-tasks'))
+    await waitFor(() => { expect(screen.getByRole('button', { name: 'Pause: Persistir' })).toBeTruthy() })
+    fireEvent.click(screen.getByRole('button', { name: 'Pause: Persistir' }))
+    await waitFor(() => { expect(screen.getByRole('alert').textContent).toContain('Task is locked') })
+    expect(screen.getByRole('button', { name: 'Pause: Persistir' })).toBeTruthy()
+  })
+
   it('does not send expired schedules to the Host', async () => {
     const call = vi.fn().mockResolvedValue({ ok: true, value: [] })
     render(<ScheduledTaskCenter t={t} connection={{ rpc: { call } }} />)
