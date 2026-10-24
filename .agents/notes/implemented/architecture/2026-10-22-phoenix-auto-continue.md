@@ -1,4 +1,6 @@
-# Phoenix Auto-Continue for short-output LLM routes
+# Agent Note: Phoenix Auto-Continue for short-output LLM routes
+
+Status: implemented
 
 ## Problem
 
@@ -12,6 +14,14 @@ Only routes in `autoContinueProviders` are eligible (defaults: `openrouter`, `de
 
 OpenRouter output `length` must not be misclassified as context overflow solely because the gateway's per-model output cap is below the catalog's advertised `maxTokens`. Actual context overflow checks still win.
 
-## Operational evidence required
+## Verification
 
 Focused model-loop tests cover full partial-prefix replay, Codex exclusion, duplicate-suppression, and bounded repeated truncation. Integration on the live Phoenix runtime still requires a provider-keyed OpenRouter response and the deployment's normal typecheck/snapshot gate. No call or tool execution should be claimed successful merely because the model resumed.
+
+## Consequences
+
+Only real output-length finishes for configured non-Codex routes qualify; resumption alone is not completion.
+
+## Alternatives considered
+
+Require the user to type continue after each output-length cutoff. Rejected for eligible routes because the agent can resume within a bounded segment policy.

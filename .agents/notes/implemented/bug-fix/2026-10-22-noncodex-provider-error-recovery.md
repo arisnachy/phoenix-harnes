@@ -1,10 +1,12 @@
-# Recovering generic pi-ai errors without bypassing research validation
+# Agent Note: Recovering generic pi-ai errors without bypassing research validation
 
-## Observed failure
+Status: implemented
+
+## Problem
 
 A small OpenRouter model called `phoenix_research_publish` with title and sections only. The publication tool correctly refused to create an academic report without real `report.references`. A subsequent pi-ai model stream terminated with generic `PI_AI_ERROR`, which normal provider retry policy did not retry, ending the user turn.
 
-## Change
+## Decision
 
 The publication tool now describes its bibliographic precondition in the schema field most models inspect, and the validator returns actionable research and citation-key guidance without inventing any source.
 
@@ -13,3 +15,11 @@ The pi-ai adapter distinguishes an otherwise unclassified generic error on eligi
 ## Verification
 
 Focus policy, streaming, and research publisher tests on: no references; source-linked contract; retry default; explicit opt-out; Code-x exclusion behind gateways; generic missing error; invalid arguments; auth refusal; and terminal event propagation. A real provider-keyed runtime test is still needed to establish the cause of the particular OpenRouter stream failure. Keep research source integrity enforced.
+
+## Consequences
+
+Research publication still requires real sources; nontransient failures remain visible.
+
+## Alternatives considered
+
+Retry all generic or invalid provider errors without classification. Rejected because authorization, quota and malformed requests are not transient.
