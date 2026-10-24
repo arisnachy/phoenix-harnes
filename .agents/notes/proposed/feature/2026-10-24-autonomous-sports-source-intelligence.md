@@ -1,5 +1,7 @@
 # Agent Note: Autonomous sports source discovery and local analytics preview
 
+English | [中文](2026-10-24-autonomous-sports-source-intelligence.zh.md)
+
 Status: proposed
 
 ## Problem
