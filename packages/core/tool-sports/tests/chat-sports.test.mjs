@@ -2,6 +2,7 @@ import {test} from 'node:test'
 import assert from 'node:assert/strict'
 import {sportsCatalog,getFeed,chatGames,marketOdds,pricedTicket} from '../src/sports.ts'
 import {getMlbPitcherReport} from '../src/mlb.ts'
+import {normalizeEspnMoneylines} from '../src/espn-odds.ts'
 
 function response(json){
   return async()=>new Response(JSON.stringify(json),{status:200,headers:{'content-type':'application/json'}})
@@ -11,9 +12,14 @@ test('17 sports are discoverable without enabling a separate menu',()=>{
   assert.ok(sportsCatalog.baseball.includes('mlb'))
   assert.ok(sportsCatalog.soccer.includes('mex.1'))
 })
-test('blocks API access when terms/permissions have not been acknowledged',async()=>{
-  await assert.rejects(()=>chatGames('soccer','mex.1','2026-10-24',{}),/autorizado/)
-  await assert.rejects(()=>marketOdds('baseball_mlb','h2h',{}),/THE_ODDS_API_KEY/)
+test('ESPN works without a key and supports an explicit operator disable switch',async()=>{
+  const mock=await response({events:[]})
+  const out=await chatGames('soccer','mex.1','2026-10-24',{},mock)
+  assert.equal(out.source,'ESPN Site API')
+  assert.equal(out.count,0)
+  await assert.rejects(()=>chatGames('soccer','mex.1','2026-10-24',{PHOENIX_SPORTS_ESPN_DISABLED:'1'},mock),/deshabilitado/)
+  const odds=await marketOdds('baseball_mlb','h2h',{},mock)
+  assert.deepEqual(odds,[])
 })
 test('no SSRF or HTTP redirects through sports source tool',async()=>{
   await assert.rejects(()=>getFeed('http://127.0.0.1:9999/'),/no permitido/)
@@ -74,7 +80,7 @@ test('MLB pitcher analysis preserves missing data and compares verified bullpen 
     if(url.includes('/people/22/'))return new Response(JSON.stringify({stats:[{splits:[{stat:{era:'2.95',whip:'1.08',inningsPitched:'87.0',strikeOuts:92,gamesStarted:14}}]}]}),{status:200})
     return new Response(JSON.stringify({stats:[]}),{status:200})
   }
-  await assert.rejects(()=>getMlbPitcherReport(22,2026,{}),/no autorizada/)
+  await assert.rejects(()=>getMlbPitcherReport(22,2026,{PHOENIX_SPORTS_MLB_DISABLED:'1'}),/deshabilitada/)
   const r=await getMlbPitcherReport(99,2026,{PHOENIX_SPORTS_MLB_ALLOWED:'1'},mock)
   assert.equal(r.pitchers.length,2)
   assert.equal(r.unavailableStats,1)
@@ -83,4 +89,49 @@ test('MLB pitcher analysis preserves missing data and compares verified bullpen 
   assert.equal(r.uiBlock.component,'comparison')
   assert.equal(r.uiBlock.props.rows.length,2)
   assert.equal(r.pitchers[0].image,undefined)
+})
+
+test('ESPN Site odds provide decimal moneyline only from sourced positive and negative prices',async()=>{
+  const future=new Date(Date.now()+86_400_000).toISOString()
+  const event={id:'456',date:future,competitions:[{id:'456',competitors:[
+    {homeAway:'home',team:{displayName:'Local'}},{homeAway:'away',team:{displayName:'Visitante'}},
+  ],odds:[{provider:{name:'ESPN Bet'},homeTeamOdds:{moneyLine:-125},awayTeamOdds:{moneyLine:+105}}]}]}
+  const mock=await response({events:[event]})
+  const quotes=await marketOdds('baseball_mlb','h2h',{},mock)
+  assert.equal(quotes.length,2)
+  assert.equal(quotes[0].price,1.8)
+  assert.equal(quotes[1].price,2.05)
+  assert.equal(quotes[0].source,'ESPN Site/Core (sin clave)')
+  const noKeys=await marketOdds('baseball_mlb','totals',{},mock)
+  assert.deepEqual(noKeys,[])
+  const missing=normalizeEspnMoneylines({...event,competitions:[{...event.competitions[0],odds:[]}]},[])
+  assert.deepEqual(missing,[])
+})
+test('ESPN Core odds references are followed only for trusted https sports.core.api.espn.com',async()=>{
+  const date=new Date(Date.now()+86_400_000).toISOString()
+  const events={events:[{id:'789',date,competitions:[{id:'789',competitors:[
+    {homeAway:'home',team:{name:'Local'}},{homeAway:'away',team:{name:'Visitante'}}]}]}]}
+  const queries=[]
+  const fetcher=async url=>{
+    queries.push(url)
+    const data=url.includes('scoreboard?')?events:
+      url.includes('odds?')?{items:[{$ref:'https://sports.core.api.espn.com/v2/sports/baseball/leagues/mlb/events/789/competitions/789/odds/1'}]}:
+      {provider:{name:'Casa ESPN'},homeTeamOdds:{moneyLine:-110},awayTeamOdds:{moneyLine:+110}}
+    return new Response(JSON.stringify(data),{status:200})
+  }
+  const odds=await marketOdds('baseball_mlb','h2h',{},fetcher)
+  assert.equal(odds.length,2)
+  assert.equal(queries.length,3)
+})
+test('MLB unavailable falls back to ESPN free scoreboard instead of failing the chat',async()=>{
+  const urls=[]
+  const fetcher=async url=>{
+    urls.push(url)
+    if(url.startsWith('https://statsapi.mlb.com/'))return new Response('{}',{status:503})
+    return new Response('{"events":[]}',{status:200})
+  }
+  const out=await chatGames('baseball','mlb','2026-10-24',{},fetcher)
+  assert.equal(out.source,'ESPN Site API')
+  assert.equal(out.count,0)
+  assert.equal(urls.length,2)
 })
