@@ -2,6 +2,8 @@
 
 Status: implemented
 
+English | [中文](2026-10-15-unfinished-team-mission-autocontinue.zh.md)
+
 ## Problem
 A successful *model turn* is not proof that the user's entire mission is complete. The Team session listener closed UME and interrupted children on every Lead `turn/end: completed`, even with outstanding `todo/write` items. Its terminal `team/mission` checkpoint then fenced the Goal round driver, so Phoenix stopped after narration such as "next I will test".
 

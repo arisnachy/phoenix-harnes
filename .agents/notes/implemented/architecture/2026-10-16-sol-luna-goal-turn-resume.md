@@ -2,6 +2,8 @@
 
 Status: implemented
 
+English | [中文](2026-10-16-sol-luna-goal-turn-resume.zh.md)
+
 ## Problem
 The Lead `agent/turn-stopping` gate required an actionable *human message in the current turn*. The Goal supervisor uses `source.kind=goal` for authorized automatic continuation, so Sol strategy turns in later Goal rounds have empty `directUserTextForTurn`. The gate returned before handing Sol to Luna, leaving the mission apparently stopped. An ephemeral `lastRescueStep` check could likewise miss the genuine Sol source after process restoration, and a temporarily blank selector obscured the persisted Auto route.
 
