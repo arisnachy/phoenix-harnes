@@ -67,3 +67,29 @@ export function recentlyUpdated(events: readonly { readonly step: string; readon
     && Number.isFinite(Date.parse(event.at))
     && now - Date.parse(event.at) >= 0 && now - Date.parse(event.at) < 10 * 60_000) ?? false
 }
+
+
+/** Detect a repeat-restart loop or an activation with no verified completion.
+ * This is a warning, not proof that the update failed: a Windows build may
+ * legitimately run for several minutes before a terminal status is recorded.
+ */
+export function activationNeedsVerification(
+  snapshot: {
+    readonly status: string
+    readonly at?: string
+    readonly events?: readonly { readonly step: string; readonly result: string; readonly at: string }[]
+  },
+  now = Date.now(),
+): boolean {
+  if (snapshot.status !== 'restarting' && snapshot.status !== 'applying') return false
+
+  const recentRestarts = snapshot.events?.filter(event => {
+    const at = Date.parse(event.at)
+    return event.step === 'restarting' && event.result === 'started'
+      && Number.isFinite(at) && at <= now && now - at < 15 * 60_000
+  }).length ?? 0
+  if (recentRestarts >= 3) return true
+
+  const since = Date.parse(snapshot.at ?? '')
+  return Number.isFinite(since) && since <= now && now - since >= 10 * 60_000
+}
