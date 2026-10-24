@@ -81,6 +81,10 @@
     - id: tool-business
       name: '@phoenix-ai/dsh-tool-business'
 
+    # Kira's read-only sports research/odds tools; cards render inline in chat.
+    - id: tool-sports
+      name: '@phoenix-ai/dsh-tool-sports'
+
     - id: llm-retry
       name: '@phoenix-ai/dsh-llm-retry'
 
