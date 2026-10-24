@@ -64,7 +64,8 @@ export function apply(ctx: Context): void {
     name:'sports_chat_ticket',
     description:'Genera un ticket visual SIMULADO con selecciones verificadas nuevamente en cuotas reales. No ejecuta apuestas.',
     parameters:{
-      sportKey:{type:'string',required:true,description:'Clave deportiva de The Odds API.'},
+      sportKey:{type:'string',description:'Clave deportiva de The Odds API. Para varios deportes utiliza sportKeys.'},
+      sportKeys:{type:'array',description:'Claves para ticket multisport, máximo cuatro.',items:{type:'string'}},
       markets:{type:'string',description:'h2h, totals o spreads, mismo mercado de las selecciones.'},
       selections:{type:'array',required:true,description:'Entre una y diez selecciones verificables.',
         items:{type:'object',additionalProperties:false,properties:{
@@ -77,7 +78,10 @@ export function apply(ctx: Context): void {
     output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
     isConcurrencySafe:()=>true,
     async execute(args){
-      const quotes=await marketOdds(args.sportKey,args.markets)
+      const requestedKeys = args.sportKeys?.length ? args.sportKeys : args.sportKey ? [args.sportKey] : []
+      const keys = [...new Set(requestedKeys)]
+      if (keys.length < 1 || keys.length > 4) throw new Error('Indica entre 1 y 4 disciplinas para el ticket.')
+      const quotes = (await Promise.all(keys.map(key => marketOdds(key,args.markets)))).flat()
       const {card,warning}=pricedTicket(args.selections as MarketSelection[],quotes,args.stake)
       return JSON.stringify({uiBlock:card,warning,simulationOnly:true,placed:false,
         instruction:'Incluye uiBlock como JSON intacto entre fences generative-ui en tu respuesta. Nunca prometas que ganará.'})
