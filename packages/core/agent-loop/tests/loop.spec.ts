@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@phoenix-ai/cordis'
 import LlmRuntime, { createUserMessage, CallId, LlmError, StreamChunk  } from '@phoenix-ai/dsh-llm'
 import SessionStore, { SessionId, TurnEndReason } from '@phoenix-ai/dsh-session'
