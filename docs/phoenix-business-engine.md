@@ -1,6 +1,6 @@
 # Phoenix Business Engine — núcleo comercial inicial
 
-Español | [中文](phoenix-business-engine.zh.md)
+English | [中文](phoenix-business-engine.zh.md)
 
 **Alcance incorporado:** biblioteca local persistente fuera de entornos temporales; productos genéricos; capítulos estructurados para libros; archivos con SHA-256; precalificación editorial; compilación real de EPUB3 (ZIP, índice, metadatos, XHTML) y manuscrito Markdown; generación de una galería HTML local; preparación de fichas comerciales; clasificación de herramientas MCP candidatas y fallback de navegación; registro de ingresos declarados sin atribuirles validación comercial inexistente. **No** incluye todavía un botón integrado en la barra lateral ni un publicador autónomo para Amazon. No confundir «preparado» con «publicado».
 

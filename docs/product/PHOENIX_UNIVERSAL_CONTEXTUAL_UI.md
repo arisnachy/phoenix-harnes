@@ -1,5 +1,7 @@
 # Phoenix Universal — Superficies por intención, no módulos fijos
 
+English | [中文](PHOENIX_UNIVERSAL_CONTEXTUAL_UI.zh.md)
+
 **Estado:** regla de producto implementada para el inicio neutro. **Alcance:** interfaz global, motor universal de herramientas, Kira y aplicaciones contextuales.
 
 ## Invariante
@@ -11,28 +13,20 @@ La pantalla inicial muestra identidad, saludo, compositor universal, espacio de 
 ## Resolución contextual
 
 1. El usuario plantea cualquier intención en lenguaje natural.
-2. Kira identifica objetivo, contexto y restricciones, consultando el registro
-   de herramientas/ conectores disponibles y permisos reales.
+2. Kira identifica objetivo, contexto y restricciones, consultando el registro de herramientas/ conectores disponibles y permisos reales.
 3. Escoge la capacidad adecuada sin exigir selección previa de un dominio.
-4. Cuando aportan valor, se muestran **durante esa misión** los controles
-   especializados: editor de portada, planificador, visor 3D, formulario, gráfica, navegador, gestión de negocio, etc. Si no son necesarios, no se muestran.
-5. Al terminar/cambiar de misión, las vistas efímeras se cierran. El usuario
-   puede solicitar una vista de forma explícita cuando lo desee.
+4. Cuando aportan valor, se muestran **durante esa misión** los controles especializados: editor de portada, planificador, visor 3D, formulario, gráfica, navegador, gestión de negocio, etc. Si no son necesarios, no se muestran.
+5. Al terminar/cambiar de misión, las vistas efímeras se cierran. El usuario puede solicitar una vista de forma explícita cuando lo desee.
 
 Los controles contextuales deben solicitar los mínimos datos que falten, evitar repeticiones y conservar los aportados previamente. No deben convertirse en un nuevo menú permanente, otra barra fija o un conjunto de botones por integración.
 
 ## Criterios verificables
 
-- El Hero no recibe callbacks específicos como onResearchSelect, onGameSelect
-  ni onBusinessSelect.
-- Las capacidades científicas siguen registradas como herramientas invocables
-  por Kira; eliminarlas del Hero **no** elimina el trabajo del Research Studio.
-- Una integración nueva no modifica el Hero salvo que mejore una función
-  universal (accesibilidad, espacio de trabajo, saludo o compositor).
-- Las interfaces de cada capacidad se pueden probar aisladamente y enlazar
-  únicamente a sesiones relevantes; no se activan por heurísticas de palabras sin contexto o autorización.
-- El estado de herramientas y conectores es real; se diferencia instalado,
-  autorizado, disponible, bloqueado y ejecutado. No se finge autonomía.
+- El Hero no recibe callbacks específicos como onResearchSelect, onGameSelect ni onBusinessSelect.
+- Las capacidades científicas siguen registradas como herramientas invocables por Kira; eliminarlas del Hero **no** elimina el trabajo del Research Studio.
+- Una integración nueva no modifica el Hero salvo que mejore una función universal (accesibilidad, espacio de trabajo, saludo o compositor).
+- Las interfaces de cada capacidad se pueden probar aisladamente y enlazar únicamente a sesiones relevantes; no se activan por heurísticas de palabras sin contexto o autorización.
+- El estado de herramientas y conectores es real; se diferencia instalado, autorizado, disponible, bloqueado y ejecutado. No se finge autonomía.
 - El principio se aplica también a futuros agentes, herramientas y negocios.
 
 ## Próximo punto de extensión

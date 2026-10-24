@@ -1,6 +1,6 @@
 # Phoenix Business Engine — 初始商业引擎
 
-[Español](phoenix-business-engine.md) | 中文
+[English](phoenix-business-engine.md) | 中文
 
 **已实现的范围：** 独立于临时运行目录的持久本地商品库、通用商品、图书章节结构、文件 SHA-256、编辑准备度检查、真正的 EPUB3 编译（ZIP、目录、元数据和 XHTML）、Markdown 手稿、本地 HTML 画廊、商品清单草稿、MCP 候选工具分类及浏览器后备方案，以及**未验证**的申报收入记录。早期版本没有完整侧栏商城或自主 Amazon 发布器。绝不能把“准备好”当作“已发布”。
 
