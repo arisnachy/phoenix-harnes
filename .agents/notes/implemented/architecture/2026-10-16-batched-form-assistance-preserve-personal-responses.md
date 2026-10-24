@@ -2,6 +2,8 @@
 
 Status: implemented
 
+English | [中文](2026-10-16-batched-form-assistance-preserve-personal-responses.zh.md)
+
 ## Problem
 Brandpoll's 20-field "Unaided Associations" survey was loaded in Chrome after the microbrowser recovered, but Kira requested each field's spontaneous personal impression separately. The user answered "nada" for Beond only. Repeated refusal and single-field prompting created an execution loop; general model-visible instructions did not distinguish objective form data from unverifiable subjective attestation.
 

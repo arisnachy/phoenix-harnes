@@ -2,6 +2,8 @@
 
 Status: implemented
 
+English | [中文](2026-10-22-phoenix-auto-continue.zh.md)
+
 ## Problem
 
 A model that finishes with `length` produces a durable assistant prefix, but the agent loop previously ended the turn with `max-tokens`, requiring the person to type “continue” for lengthy code, report, or research generation. The normal max-steps checkpoint is unrelated and does not solve output truncation.

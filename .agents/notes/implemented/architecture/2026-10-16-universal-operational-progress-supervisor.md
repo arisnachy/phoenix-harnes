@@ -2,6 +2,8 @@
 
 Status: implemented
 
+English | [中文](2026-10-16-universal-operational-progress-supervisor.zh.md)
+
 ## Problem
 The Goal driver measured only completion-gate progress, so a long sequence of assistant-only or identical tool attempts showed zero durable change but continued through unlimited execution-window revisions. A new Sol strategy or repeated specialist inspection was treated as forward motion even without new evidence. Large HTML publication exposed the same loop when no direct file-input contract existed.
 

@@ -2,6 +2,8 @@
 
 Status: implemented
 
+English | [中文](2026-10-16-capture-blocked-task-procedures.zh.md)
+
 ## Problem
 
 Phoenix already persisted verified procedures on `goal/change: complete`, but discarded the workflow trace when a goal blocked. For complex browser workflows this lost the only evidence of partial navigation and tool choices, forcing repeated cold starts.
