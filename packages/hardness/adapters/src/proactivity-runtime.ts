@@ -604,7 +604,7 @@ export function parseBrowserTaskCreate(input: unknown, now: number): CreateProac
     || typeof row.prompt !== 'string' || row.prompt.trim().length === 0 || row.prompt.trim().length > 8_000) {
     throw new Error('scheduled task title or instruction is invalid')
   }
-  if (typeof row.nextRunAt !== 'string' || !/^\\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\d\\.\\d{3}Z$/u.test(row.nextRunAt)) {
+  if (typeof row.nextRunAt !== 'string' || !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/u.test(row.nextRunAt)) {
     throw new Error('scheduled task time must be canonical UTC')
   }
   const target = Date.parse(row.nextRunAt)
