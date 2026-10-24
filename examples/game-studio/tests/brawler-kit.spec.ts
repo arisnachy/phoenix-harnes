@@ -25,7 +25,8 @@ const kit = runInNewContext(code + '\nPhoenixBrawlerKit;', {}) as {
   enemyAI: (a: Actor, target: Actor, dt: number, belt: object, w: number, emit?: (e: CombatEvent) => void) => void
   bossAI: (a: Actor, target: Actor, dt: number, belt: object, w: number, emit?: (e: CombatEvent) => void) => void
   cameraX: (target: Actor, camera: number, w: number, world: number, dt: number) => number
-  drawStage: (ctx: object, level: object, imageFor: (id: string, family: string) => unknown, camera: number, w: number, h: number) => boolean
+  drawStage: (ctx: object, level: object, imageFor: (id: string, family: string) => unknown,
+    camera: number, w: number, h: number) => boolean
   drawActorsByDepth: (ctx: object, fighters: Actor[], atlas: (id: string) => unknown, camera: number, clock: number, kit: object) => void
   audioBus: (doc: object) => {
     unlock: () => void

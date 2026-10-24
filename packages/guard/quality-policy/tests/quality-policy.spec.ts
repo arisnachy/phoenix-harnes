@@ -106,7 +106,7 @@ describe('classification', () => {
 
   it('detects premature inability while allowing honest verified completion states', () => {
     expect(isPrematureAuthorizedTaskRefusal(
-      'El ticket no quedó listo y no hay una apuesta confirmada. No puedo armar el cupón en la casa de apuestas, aunque tú hagas el envío final.'
+      'El ticket no quedó listo y no hay una apuesta confirmada. No puedo armar el cupón en la casa de apuestas, aunque tú hagas el envío final.',
     )).toBe(true)
     expect(isPrematureAuthorizedTaskRefusal('No puedo preparar ese formulario. Sigue sin completar.')).toBe(true)
     expect(isPrematureAuthorizedTaskRefusal('No hay apuesta confirmada; el cupón preparado está listo para tu revisión.')).toBe(false)
