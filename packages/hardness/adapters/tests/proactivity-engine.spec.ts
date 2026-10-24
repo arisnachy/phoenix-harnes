@@ -273,6 +273,7 @@ describe('HARDNESS ProactivityEngine', () => {
     const delivery = engine.runDue(new Date('2026-09-13T16:00:00.000Z'))
     await started
     await expect(engine.resume(created.id)).rejects.toThrow(/cannot resume from running/)
+    await expect(engine.pause(created.id)).rejects.toThrow(/cannot pause a running occurrence/)
     expect((await engine.get(created.id))?.status).toBe('running')
     complete()
     await delivery

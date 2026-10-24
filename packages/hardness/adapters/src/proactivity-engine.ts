@@ -722,6 +722,11 @@ export class ProactivityEngine {
       if (status === 'scheduled' && current.status !== 'paused' && current.status !== 'failed') {
         throw new Error(`task ${id} cannot resume from ${current.status}`)
       }
+      // A running occurrence still owns its delivery lease. Pausing then
+      // resuming it before completion could admit the same occurrence twice.
+      if (status === 'paused' && current.status === 'running') {
+        throw new Error(`task ${id} cannot pause a running occurrence`)
+      }
       const next: ProactivityTask = { ...current, status, updatedAt: new Date().toISOString() }
       const tasks = [...snapshot.tasks]
       tasks[index] = next
