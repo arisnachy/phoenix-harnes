@@ -1023,11 +1023,14 @@ export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, browserT
               t={seatProps.t}
             />
           )}
-          {item.kind === 'desktop'
+          {item.kind === 'sports'
+            ? <SportsEvidenceSurface blocks={item.blocks} inputActions={inputActions} />
+            : item.kind === 'desktop'
             ? <DesktopLive sessionId={sessionId} active={item.key === latestDesktopKey} />
             : item.kind === 'browser-workspace'
             ? <BrowserWorkspace
               sessionId={sessionId}
+              inputActions={inputActions}
               live={item.live}
               items={item.items}
               {...item.tabId === undefined ? {} : { tabId: item.tabId }}
