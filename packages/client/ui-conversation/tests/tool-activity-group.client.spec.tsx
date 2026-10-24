@@ -161,7 +161,15 @@ function renderChat(
     draft: '', imageIds: [], draftRev: 0, phase: 'plain', occurrences: [], queue: [],
   })
   const chat = createChatStore().create()
-  const t = ((key: string) => key === 'context.tools' ? 'Tools' : key) as ChatViewSlotProps['t']
+  const t = ((key: string, values?: { count?: number; action?: string }) => {
+    if (key === 'context.tools') return 'Tools'
+    if (key === 'activity.latest') return `${values?.count} operations recorded · latest: ${values?.action}`
+    if (key === 'activity.latestOne') return `1 operation recorded · latest: ${values?.action}`
+    if (key === 'activity.searching') return 'search'
+    if (key === 'activity.executing') return 'command execution'
+    if (key === 'activity.failed') return 'reported an error'
+    return key
+  }) as ChatViewSlotProps['t']
   const renderSlot = ((key: string, owner: object, opts?: { fallback?: React.ReactNode }) => {
     if (key === 'conversation.message.images') return renderMessageImages(owner as never)
     if (key !== 'conversation.chat.node') return opts?.fallback ?? null
@@ -283,6 +291,56 @@ describe('chat tool activity grouping', () => {
     const disclosure = screen.getByRole('button', { name: 'Tools' })
     fireEvent.click(disclosure)
     expect(screen.getByTestId('node-tool-call')).toBeTruthy()
+  })
+
+  it('exposes observed completed-tool milestones without expanding private history', () => {
+    renderChat([context(1, 'system'), settledTool('first-search'), {
+      ...settledTool('then-shell'),
+      seq: 3,
+      time: 3_000,
+      call: { name: 'bash', argsRaw: '{"command":"private"}' },
+    }])
+
+    const receipt = screen.getByTestId('tool-activity-receipt')
+    expect(receipt.textContent).toBe('2 operations recorded · latest: command execution')
+    expect(receipt.textContent).not.toContain('private')
+    expect(screen.queryByTestId('node-tool-call')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Tools' }).getAttribute('aria-expanded')).toBe('false')
+  })
+
+  it.each([
+    ['browser_open', 'activity.browsing'],
+    ['read_file', 'activity.reading'],
+    ['update_file', 'activity.writing'],
+    ['vitest', 'activity.verifying'],
+    ['image_generation', 'activity.other'],
+  ])('classifies a completed %s call from tool identity alone', (name, label) => {
+    renderChat([context(1, 'system'), {
+      ...settledTool(),
+      call: { name, argsRaw: '{"secret":"never display"}' },
+    }])
+
+    const receipt = screen.getByTestId('tool-activity-receipt')
+    expect(receipt.textContent).toContain(label)
+    expect(receipt.textContent).not.toContain('secret')
+  })
+
+  it('keeps a settled tool without call metadata safe and generic', () => {
+    renderChat([context(1, 'system'), { ...settledTool(), call: null }])
+    const receipt = screen.getByTestId('tool-activity-receipt')
+    expect(receipt.textContent).toContain('activity.other')
+    expect(screen.queryByTestId('node-tool-call')).toBeNull()
+  })
+
+  it('reports a failed observed tool without implying successful task completion', () => {
+    renderChat([context(1, 'system'), { ...settledTool(), isError: true }])
+    expect(screen.getByTestId('tool-activity-receipt').textContent)
+      .toBe('1 operation recorded · latest: search · reported an error')
+  })
+
+  it('does not manufacture a completed milestone from context or a running tool', () => {
+    renderChat([context(1, 'system')], [runningTool()])
+    expect(screen.queryByTestId('tool-activity-receipt')).toBeNull()
   })
 
   it('renders a generated image result inline without opening Tools', () => {

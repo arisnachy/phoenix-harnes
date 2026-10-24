@@ -59,6 +59,18 @@ describe('KIRA Team chat message', () => {
     expect(resumed).toEqual(first)
   })
 
+  it('shows the human as a team collaborator without giving them an AI model identity', () => {
+    const view = render(<View node={node({
+      senderId: 'user', senderName: 'User', senderKind: 'user', targetId: 'worker-a',
+      targetName: 'argo', content: [{ type: 'text', text: 'Argo, revisa esa evidencia.' }],
+    })} />)
+    expect(view.getByText('Team collaborator')).toBeTruthy()
+    expect(view.getByText('Argo, revisa esa evidencia.')).toBeTruthy()
+    expect(view.getByText('→ Argo')).toBeTruthy()
+    expect(view.container.querySelector('[data-team-sender-kind="user"]')).toBeTruthy()
+    expect(view.container.querySelector('[data-engine-model]')).toBeNull()
+  })
+
   it('shows the actual teammate Luna badge next to the portrait, not the Lead Sol route', () => {
     const view = render(<View node={node({ senderId: 'worker-a', senderName: 'atlas',
       senderKind: 'agent' })} useProjection={() => ({
@@ -66,7 +78,7 @@ describe('KIRA Team chat message', () => {
         avatar: 'atlas', status: 'working', modelProvider: 'openai-codex', model: 'gpt-6-luna' },
     })} />)
     const badge = view.container.querySelector('[data-engine-model="gpt-6-luna"]')
-    expect(badge?.textContent).toBe('☾')
+    expect(badge?.textContent).toContain('☾')
     expect(badge?.getAttribute('data-engine-family')).toBe('luna')
     expect(badge?.textContent).toContain('Luna')
     expect(badge?.closest('[data-avatar]')).toBeNull()

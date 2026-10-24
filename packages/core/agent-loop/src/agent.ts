@@ -63,7 +63,7 @@ type Phase =
 
 type StepEndReason = Extract<TurnEndReason, { kind: 'completed' | 'max-tokens' }>
 
-const SILENT_TOOL_PROGRESS_REMINDER = 'If substantial work remains, report only a concrete finding, blocker or real milestone in the user\'s language. Do not restate plans or tool steps; continue via the shortest executable path. Do not reveal hidden reasoning.'
+const SILENT_TOOL_PROGRESS_REMINDER = 'Long tool work has left the user without a visible update. If the task is still in progress, write one short user-facing sentence now, in the configured language and your natural voice, about the latest verified finding or the actual work stage and next check. Do not invent progress, expose private reasoning, repeat a generic plan, or report success before verification. Then continue the authorized work in this same turn without waiting for a reply.'
 const AUTOMATIC_CONTINUATION_PROMPT = 'Continue the current task from the latest verified tool result. Reuse fresh evidence, skip repetitive planning and narration, and finish when the outcome is verified or genuinely blocked. Do not begin work without an outstanding requirement.'
 const OUTPUT_LIMIT_CONTINUATION_SOURCE = 'agent-loop-auto-continue'
 const OUTPUT_LIMIT_CONTINUATION_PROMPT = 'The previous model output was cut off by the output-token limit. Continue the unfinished answer or task without repeating previously visible text, planning, or completed actions. Previously truncated tool calls were NOT executed; emit a complete tool call if still required. Verify the final result before claiming completion.'
@@ -626,6 +626,9 @@ export class ReactLoopAgent implements Agent {
       const toolCalls = message.content.filter(block => block.type === 'tool-call')
       if (toolCalls.length === 0) return { kind: 'completed' }
       const hasVisibleProgress = message.content.some(block => block.type === 'text' && block.text.trim().length > 0)
+      // The spoken update happened BEFORE tool execution. A long-running tool
+      // must not be treated as if Kira just spoke when it finally settles.
+      if (hasVisibleProgress) this.lastProgressUpdateAt = Date.now()
       let concluded = false
       this.toolBoundaryActive = true
       try {
@@ -639,8 +642,7 @@ export class ReactLoopAgent implements Agent {
       // Tool-only model steps should not cost another model turn just to narrate
       // the next call. Keep a periodic progress reminder for long silent work.
       const now = Date.now()
-      if (hasVisibleProgress) this.lastProgressUpdateAt = now
-      else if (shouldRequestToolProgress(this.lastProgressUpdateAt, now, !concluded)) {
+      if (shouldRequestToolProgress(this.lastProgressUpdateAt, now, !concluded)) {
         this.lastProgressUpdateAt = now
         this.inbox.splice('next-step', this.inbox.nextStep.length, 0, [createUserMessage({
           content: [{ type: 'text', text: SILENT_TOOL_PROGRESS_REMINDER }],

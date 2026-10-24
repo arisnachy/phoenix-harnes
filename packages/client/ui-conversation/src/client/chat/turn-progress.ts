@@ -40,7 +40,7 @@ const TOOL_ACTIVITY_MATCHERS: readonly (readonly [TurnActivity, RegExp])[] = [
 ]
 
 /** Classify only the tool name; never infer activity from private arguments or output. */
-function toolActivity(name: string): TurnActivity {
+export function toolActivity(name: string): TurnActivity {
   const normalized = name.toLowerCase().replace(/[_.:/-]+/g, ' ').replace(/\s+/g, ' ').trim()
   return TOOL_ACTIVITY_MATCHERS.find(([, pattern]) => pattern.test(normalized))?.[0] ?? 'running-tools'
 }
