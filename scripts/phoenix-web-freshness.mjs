@@ -20,10 +20,17 @@ export function checkoutRevision(root=SOURCE_ROOT,git=execFileSync){
     })).trim().match(/^[a-f0-9]{40}$/u)?.[0]??null
   }catch{return null}
 }
+/** The chat renderer is a separately loaded client plugin, not the Vite shell. */
+export function sportsClientBundleReady(root){
+  try {
+    const client=readFileSync(join(root,'packages','client','ui-conversation','lib','client.js'),'utf8')
+    return ['sports_game_card','sports_ticket_card','sports-evidence'].every(contract=>client.includes(contract))
+  } catch {return false}
+}
 /** A revision stamp is authoritative only when index.html is also present. */
 export function frontendIsCurrent(root,revision){
   const dist=join(root,'apps','web','dist')
-  if(!existsSync(join(dist,'index.html')))return false
+  if(!existsSync(join(dist,'index.html'))||!sportsClientBundleReady(root))return false
   try{
     const marker=JSON.parse(readFileSync(join(dist,STAMP),'utf8'))
     return marker?.revision===revision&&marker?.successful===true
@@ -60,6 +67,7 @@ export function verifyFrontend({
     if(status!==0)throw new Error('Falló '+['pnpm',...args].join(' ')+'. No iniciaré la versión antigua del frontend. Verifica la compilación y las dependencias.')
   }
   if(!existsSync(index))throw new Error('Vite finalizó sin generar apps/web/dist/index.html; no iniciaré una interfaz desactualizada.')
+  if(!sportsClientBundleReady(root))throw new Error('El plugin cliente de conversación no contiene sports_game_card/sports_ticket_card. El build del plugin falló o usó otro paquete; no iniciaré el UI antiguo.')
   if(readRevision(root)!==revision)throw new Error('El checkout cambió durante la compilación. Vuelve a ejecutar pnpm phoenix.')
   const marker=join(dirname(index),STAMP)
   mkdirSync(dirname(marker),{recursive:true})
