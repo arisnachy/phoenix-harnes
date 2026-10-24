@@ -9,6 +9,7 @@ import { LlmAdapter, LlmError, QUOTA_EXCEEDED_CODE } from '@phoenix-ai/dsh-llm'
 import type { GenerateOptions, StreamChunk } from '@phoenix-ai/dsh-llm'
 import { SessionId } from '@phoenix-ai/dsh-session'
 import * as goalDriver from '../src/index.ts'
+import { quotaResumeTarget } from '../src/quota-resume.ts'
 
 class QuotaAdapter extends LlmAdapter {
   readonly requests: GenerateOptions[] = []
@@ -72,9 +73,9 @@ describe('terminal provider quota handling', () => {
     const goal = await waitForGoal(test.ctx, test.agent, current => current?.phase === 'blocked')
     await test.agent.whenIdle()
     const expected = new Date(realNow + 239 * 60_000 + 30_000).getTime()
-    const actual = /\\[Phoenix quota resume at ([^\\]]+)\\]/u.exec(goal?.blockedReason?.message ?? '')
-    expect(actual).not.toBeNull()
-    expect(Math.abs(Date.parse(actual![1]!) - expected)).toBeLessThan(15_000)
+    const actual = quotaResumeTarget(goal?.blockedReason?.message ?? '')
+    expect(actual).toBeDefined()
+    expect(Math.abs(actual! - expected)).toBeLessThan(15_000)
     expect(goal?.phase).toBe('blocked')
     expect(test.adapter.requests).toHaveLength(1)
   })
