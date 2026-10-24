@@ -57,8 +57,8 @@ export async function chatGames(sport:string,league:string,requestedDate?:string
       const side=(p:typeof home)=>({label:title(p?.team?.name),...(p?.score===undefined?{}:{score:String(p.score)})})
       const picture=(p:typeof home)=>env.PHOENIX_SPORTS_MLB_IMAGES_ALLOWED==='1'&&p?.probablePitcher?.id
         ? 'https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_213,q_auto:best/v1/people/'+encodeURIComponent(p.probablePitcher.id)+'/headshot/67/current':undefined
-      const highlights=[{label:'Abridor visitante',value:title(away?.probablePitcher?.fullName,'120'),...(picture(away)?{image:picture(away)}:{})},
-        {label:'Abridor local',value:title(home?.probablePitcher?.fullName,'120'),...(picture(home)?{image:picture(home)}:{})},
+      const highlights=[{label:'Abridor visitante',value:title(away?.probablePitcher?.fullName,120),...(picture(away)?{image:picture(away)}:{})},
+        {label:'Abridor local',value:title(home?.probablePitcher?.fullName,120),...(picture(home)?{image:picture(home)}:{})},
         {label:'Equipo local',value:title(home?.team?.name)+' · ID '+title(home?.team?.id,20)},
         {label:'Equipo visitante',value:title(away?.team?.name)+' · ID '+title(away?.team?.id,20)}]
       rows.push({component:'sports_game_card',version:1,props:{
