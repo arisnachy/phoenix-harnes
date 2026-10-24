@@ -28,6 +28,13 @@ const formatted=fence+'generative-ui\n'+JSON.stringify(screenshotGame)+'\n'+fenc
 const tr=((key:string)=>key) as ChatViewSlotProps['t']
 afterEach(cleanup)
 describe('MLB screenshot regression: card never becomes plaintext code',()=>{
+  it('parses the exact settled card from the live Phoenix tab captured at 18:52',()=>{
+    const captured=JSON.parse("{\"component\":\"sports_game_card\",\"version\":1,\"props\":{\"title\":\"MLB · 849802\",\"subtitle\":\"Partido 2026-10-24\",\"status\":\"Pre-Game\",\"when\":\"24 oct 2026, 8:00 p. m.\",\"venue\":\"American Family Field\",\"home\":{\"label\":\"Milwaukee Brewers\",\"score\":\"0\"},\"away\":{\"label\":\"Tampa Bay Rays\",\"score\":\"0\"},\"source\":\"MLB Stats API · 2026-10-24T22:52:40.016Z\",\"highlights\":[{\"label\":\"Abridor visitante\",\"value\":\"Drew Rasmussen\"},{\"label\":\"Abridor local\",\"value\":\"Logan Henderson\"},{\"label\":\"Equipo local\",\"value\":\"Milwaukee Brewers · ID 158\"},{\"label\":\"Equipo visitante\",\"value\":\"Tampa Bay Rays · ID 139\"}],\"askPrompt\":\"Kira, amplía la información verificable del partido MLB 849802 incluyendo pitchers probables, rendimiento reciente, bullpen, ausencias y fuente por estadística.\",\"note\":\"Lanzadores probables pueden cambiar; no se confirmó el roster definitivo.\"}}")
+    expect(parseGenerativeUiBlock(captured)).toEqual(captured)
+    const result=splitGenerativeUiText(fence+'generative-ui\n'+JSON.stringify(captured)+'\n'+fence)
+    expect(result.length).toBe(1)
+    expect(result[0]?.kind).toBe('ui')
+  })
   it('accepts screenshot-shaped scoreboard including scores and highlights',()=>{
     expect(parseGenerativeUiBlock(screenshotGame)).toEqual(screenshotGame)
     const parsed=splitGenerativeUiText('Hoy hay un partido.\n\n'+formatted)

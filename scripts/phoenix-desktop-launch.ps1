@@ -33,18 +33,54 @@ try {
   $env:PHOENIX_DESKTOP_CONSOLE = '0'
   $env:PHOENIX_SOURCE_ROOT = $rootPath
 
-  # Reopening the source-only desktop shortcut must not start another Host
-  # when Phoenix is already serving its UI on the normal local port.
+  # A previously running Host can serve stale JS if the checkout changed.
+  # Validate/rebuild the frontend BEFORE opening that existing process.
+  # The guard is read-only with respect to Git and refuses a failed build;
+  # only a separately verified Phoenix Host can be retired after a successful build.
+  $frontendWasRebuilt = $false
+  $freshnessScript = Join-Path $rootPath 'scripts\\phoenix-web-freshness.mjs'
+  if (Test-Path -LiteralPath $freshnessScript -PathType Leaf) {
+    $node = Get-Command 'node.exe' -ErrorAction SilentlyContinue
+    if ($null -eq $node) { $node = Get-Command 'node' -ErrorAction SilentlyContinue }
+    if ($null -eq $node) { throw 'No se encontró Node.js para verificar el frontend de Phoenix.' }
+    $freshnessOutput = @(& $node.Source $freshnessScript 2>&1 | Tee-Object -FilePath $logPath -Append)
+    if ($LASTEXITCODE -ne 0) {
+      throw 'La actualización del frontend falló; se impidió abrir la versión anterior de Phoenix. Revisa desktop-launch.log.'
+    }
+    $frontendWasRebuilt = (($freshnessOutput -join "`n") -match '\[PHOENIX\] Interfaz actualizada para ')
+  }
+
+  # Reopen existing Phoenix only if its frontend is current; a rebuilt plugin
+  # must not be served through an old Host process with cached client bundles.
   if (-not $Background) {
+    $phoenixListener = $false
     try {
       $response = Invoke-WebRequest -Uri 'http://127.0.0.1:3080/' -UseBasicParsing -TimeoutSec 2
-      if ($response.StatusCode -eq 200 -and [string]$response.Content -match '(?i:phoenix|dsh)') {
+      $phoenixListener = $response.StatusCode -eq 200 -and [string]$response.Content -match '(?i:phoenix|dsh)'
+    }
+    catch {
+      # No recognizable Phoenix on this port. Normal supervised launch applies.
+    }
+    if ($phoenixListener) {
+      if ($frontendWasRebuilt) {
+        # Only the canonical own-user Phoenix Host may be retired. The
+        # dedicated port repair validates executable, PID, owner and creation
+        # time before stopping; unknown processes are never terminated.
+        $repair = Join-Path $rootPath 'scripts\phoenix-windows-port-repair.ps1'
+        if (-not (Test-Path -LiteralPath $repair -PathType Leaf)) {
+          throw 'Phoenix anterior activo en 3080; falta el reparador verificable del puerto.'
+        }
+        & powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $repair -Port 3080 -Apply 2>&1 |
+          Tee-Object -FilePath $logPath -Append
+        if ($LASTEXITCODE -ne 0) {
+          throw 'No se pudo cerrar el Phoenix anterior con seguridad; no se interrumpió un proceso desconocido.'
+        }
+        # Start the just-compiled Host below.
+      }
+      else {
         Start-Process -FilePath 'http://127.0.0.1:3080/'
         exit 0
       }
-    }
-    catch {
-      # A stopped or unrecognized listener must follow the supervised launch.
     }
   }
 
