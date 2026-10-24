@@ -3,14 +3,15 @@ import assert from 'node:assert/strict'
 import {mkdtemp,rm} from 'node:fs/promises'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
-import {SPORTS,SOURCES,sourceAuthorization,emptySourceRecord,observeSource,sourceScore,gameDate,normalizeEspn,normalizeMlb,normalizeOdds,evaluateSelection,quoteTicket,getJSON,fetchGames,discoverLeagues,discoverOddsSports} from './phoenix-sports-engine.mjs'
-test('17 disciplines and explicit provider opt-in',()=>{
+import {SPORTS,SOURCES,sourceAuthorization,emptySourceRecord,observeSource,sourceScore,gameDate,normalizeEspn,normalizeMlb,normalizeOdds,evaluateSelection,quoteTicket,getJSON,fetchGames,fetchOdds,discoverLeagues,discoverOddsSports} from './phoenix-sports-engine.mjs'
+test('17 disciplines, public ESPN by default and optional paid source',()=>{
   assert.equal(Object.keys(SPORTS).length,17)
   assert.ok(SPORTS.baseball.includes('dominican-winter-league'))
   assert.equal(SOURCES.some(x=>x.id==='the-odds-api'),true)
-  assert.equal(sourceAuthorization('espn',{}),false)
-  assert.equal(sourceAuthorization('espn',{PHOENIX_SPORTS_ESPN_ALLOWED:'1'}),true)
-  assert.equal(sourceAuthorization('espn',{PHOENIX_SPORTS_ESPN_ALLOWED:'yes'}),false)
+  assert.equal(sourceAuthorization('espn',{}),true)
+  assert.equal(sourceAuthorization('mlb',{}),true)
+  assert.equal(sourceAuthorization('espn',{PHOENIX_SPORTS_ESPN_DISABLED:'1'}),false)
+  assert.equal(sourceAuthorization('mlb',{PHOENIX_SPORTS_MLB_DISABLED:'1'}),false)
   assert.equal(sourceAuthorization('the-odds-api',{}),false)
   assert.equal(sourceAuthorization('the-odds-api',{THE_ODDS_API_KEY:'secret'}),true)
 })
@@ -76,17 +77,17 @@ test('network is restricted to known hosts with redirects disabled',async()=>{
   assert.equal(json.valid,true)
   assert.equal(calls[0].opt.redirect,'error')
 })
-test('game query requires authorization and uses the intended provider',async()=>{
-  await assert.rejects(()=>fetchGames({sport:'soccer',league:'eng.1',date:'2026-10-24',env:{}}),/habilitado/)
+test('public ESPN game query uses intended provider and supports operator disable',async()=>{
+  await assert.rejects(()=>fetchGames({sport:'soccer',league:'eng.1',date:'2026-10-24',env:{PHOENIX_SPORTS_ESPN_DISABLED:'1'}}),/deshabilitado/)
   const visits=[]
   const fetcher=async(url)=>{visits.push(url);return {ok:true,headers:{get:()=>null},text:async()=>JSON.stringify({events:[]})}}
-  const data=await fetchGames({sport:'soccer',league:'eng.1',date:'2026-10-24',env:{PHOENIX_SPORTS_ESPN_ALLOWED:'1'},fetcher})
+  const data=await fetchGames({sport:'soccer',league:'eng.1',date:'2026-10-24',env:{},fetcher})
   assert.equal(data.source,'espn')
   assert.match(visits[0],/dates=20261024/u)
 })
 test('league discovery is limited to verified source and safe slugs',async()=>{
   const fetcher=async()=>({ok:true,headers:{get:()=>null},text:async()=>JSON.stringify({items:[{$ref:'https://sports.core.api.espn.com/v2/sports/soccer/leagues/esp.1'},{slug:'mex.1'},{slug:'invalid/path'},{slug:'mex.1'}]})})
-  const rows=await discoverLeagues('soccer',{env:{PHOENIX_SPORTS_ESPN_ALLOWED:'1'},fetcher})
+  const rows=await discoverLeagues('soccer',{env:{},fetcher})
   assert.deepEqual(rows.map(x=>x.league),['esp.1','mex.1'])
   await assert.rejects(()=>discoverOddsSports({env:{}}),/THE_ODDS_API_KEY/)
 })
@@ -112,4 +113,17 @@ test('local studio serves catalog and refuses cross-origin requests',async()=>{
     await new Promise(resolve=>server.close(resolve))
     await rm(home,{recursive:true,force:true})
   }
+})
+
+test('public ESPN odds are readable without The Odds API key when actual prices exist',async()=>{
+  const later=new Date(Date.now()+86400000).toISOString()
+  const fetcher=async()=>new Response(JSON.stringify({events:[{id:'456',date:later,competitions:[{
+    id:'456',competitors:[{homeAway:'home',team:{displayName:'Home'}},{homeAway:'away',team:{displayName:'Away'}}],
+    odds:[{provider:{name:'ESPN provider'},homeTeamOdds:{moneyLine:-110},awayTeamOdds:{moneyLine:+110}}],
+  }]}]}),{status:200})
+  const priced=await fetchOdds('baseball_mlb',{env:{},fetcher})
+  assert.equal(priced.length,2)
+  assert.equal(priced[0].source,'espn')
+  assert.ok(Math.abs(priced[0].decimalOdds-1.90909)<.0001)
+  assert.deepEqual(await fetchOdds('baseball_mlb',{env:{},fetcher,markets:'totals'}),[])
 })
