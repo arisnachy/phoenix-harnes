@@ -586,6 +586,9 @@ function rpcFailure(message: string): RpcResult<never> {
 /** Restrict the loopback task-center write API to explicit human-created chat work.
  * Client claims of system or harness authority are never accepted, even from loopback.
  * Other task kinds and conditional/automated creation use the scoped Host/model tools.
+ * @param input - Untrusted form payload received by the Host loopback RPC.
+ * @param now - Host wall-clock timestamp of the request.
+ * @returns Exactly one validated user-owned task definition.
  */
 export function parseBrowserTaskCreate(input: unknown, now: number): CreateProactivityTaskInput {
   if (typeof input !== 'object' || input === null || Array.isArray(input)) {
@@ -616,24 +619,22 @@ export function parseBrowserTaskCreate(input: unknown, now: number): CreateProac
   if (typeof rule !== 'object' || rule === null || Array.isArray(rule)) {
     throw new Error('invalid scheduled task recurrence')
   }
-  const recurrence = rule as Record<string, unknown>
-  if (recurrence.kind === 'once' && Object.keys(recurrence).length === 1) {
-    return {
-      title: row.title.trim(), instruction: row.prompt.trim(), runAt: row.nextRunAt,
-      createdBy: 'user', senderIdentity: 'user', delivery: 'chat', catchUp: 'latest',
-      recurrence: { kind: 'once' },
-    }
+  const ruleRecord = rule as Record<string, unknown>
+  let recurrence: CreateProactivityTaskInput['recurrence']
+  if (ruleRecord.kind === 'once' && Object.keys(ruleRecord).length === 1) {
+    recurrence = { kind: 'once' }
+  } else if (ruleRecord.kind === 'interval' && Object.keys(ruleRecord).length === 2
+    && Number.isSafeInteger(ruleRecord.everyMs)
+    && (ruleRecord.everyMs as number) >= 300_000) {
+    recurrence = { kind: 'interval', everyMs: ruleRecord.everyMs as number }
+  } else {
+    throw new Error('invalid scheduled task recurrence')
   }
-  if (recurrence.kind === 'interval' && Object.keys(recurrence).length === 2
-    && Number.isSafeInteger(recurrence.everyMs)
-    && (recurrence.everyMs as number) >= 300_000) {
-    return {
-      title: row.title.trim(), instruction: row.prompt.trim(), runAt: row.nextRunAt,
-      createdBy: 'user', senderIdentity: 'user', delivery: 'chat', catchUp: 'latest',
-      recurrence: { kind: 'interval', everyMs: recurrence.everyMs as number },
-    }
+  return {
+    title: row.title.trim(), instruction: row.prompt.trim(), runAt: row.nextRunAt,
+    createdBy: 'user', senderIdentity: 'user', delivery: 'chat', catchUp: 'latest',
+    recurrence,
   }
-  throw new Error('invalid scheduled task recurrence')
 }
 
 /** Mount the loopback endpoints used by the browser task and attention surfaces. */
