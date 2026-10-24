@@ -66,7 +66,7 @@ describe('PHOENIX human presence protocol', () => {
     expect(HUMAN_PRESENCE_PROTOCOL).toContain('single coordinator and conversational point of continuity')
     expect(HUMAN_PRESENCE_PROTOCOL).toContain('never summon a team just to provide human-sounding updates')
     expect(HUMAN_PRESENCE_PROTOCOL).toContain('respond directly to the request')
-    expect(HUMAN_PRESENCE_PROTOCOL).toContain('no theatrical role-playing')
+    expect(HUMAN_PRESENCE_PROTOCOL).toContain('without theatrical role-playing')
   })
 
   it('pins continuity, initiative, natural tone, rigor, low-noise behavior, and user agency', () => {
