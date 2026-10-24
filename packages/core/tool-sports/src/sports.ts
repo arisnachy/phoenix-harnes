@@ -21,6 +21,34 @@ const date=(v?:string):string => {
   return d
 }
 const leagueValid=(s:string):boolean => /^[a-z0-9][a-z0-9._-]{0,79}$/u.test(s)
+
+const knownLeagues=new Map<string,{checkedAt:number;leagues:string[]}>()
+/** Discover league identifiers from ESPN's existing public catalog, without arbitrary-web scanning.
+ * @param sport - One of the 17 recognized sport identifiers.
+ * @param env - Optional operator opt-out.
+ * @param fetcher - Injected HTTP transport for tests.
+ * @returns Safe league identifiers actually listed by ESPN, rather than guessed slugs.
+ */
+export async function discoverEspnLeagues(sport:string,env:NodeJS.ProcessEnv=process.env,fetcher:typeof fetch=fetch):Promise<string[]>{
+  if(!Object.hasOwn(sportsCatalog,sport))throw Error('Disciplina desconocida')
+  if(!hasSportsPermission('espn',env))throw Error('ESPN deshabilitado por configuración del operador')
+  const cached=knownLeagues.get(sport)
+  if(cached&&Date.now()-cached.checkedAt<3_600_000)return cached.leagues
+  let slugs:string[]=[]
+  if(sport==='cricket'){
+    const response=await getFeed<{sports?:Array<{leagues?:Array<{id?:string|number}>}>}>(
+      'https://site.web.api.espn.com/apis/personalized/v2/scoreboard/header?sport=cricket&region=in&tz=Asia%2FCalcutta',fetcher)
+    slugs=(response.sports||[]).flatMap(x=>x.leagues||[]).map(x=>String(x.id||'')).filter(leagueValid)
+  }else{
+    const response=await getFeed<{items?:Array<{slug?:string;$ref?:string;abbreviation?:string}>}>(
+      'https://sports.core.api.espn.com/v2/sports/'+sport+'/leagues?limit=500',fetcher)
+    slugs=(response.items||[]).map(x=>x.slug||x.$ref?.match(/\/leagues\/([^/?#]+)/u)?.[1]||x.abbreviation?.toLowerCase()||'').filter(leagueValid)
+  }
+  const leagues=[...new Set([...(sportsCatalog[sport]||[]),...slugs])].slice(0,500)
+  knownLeagues.set(sport,{checkedAt:Date.now(),leagues})
+  return leagues
+}
+
 /** Check whether public read-only providers are disabled or a commercial key is available.
  * @param provider - The supported data source.
  * @param env - Secret-bearing host environment, never sent to the client.
@@ -37,7 +65,7 @@ export const hasSportsPermission=(provider:'espn'|'mlb'|'odds',env:NodeJS.Proces
  */
 export async function getFeed<T>(url:string, fetcher:typeof fetch=fetch):Promise<T> {
   const u=new URL(url)
-  if(u.protocol!=='https:'||u.username||u.password||!['site.api.espn.com','sports.core.api.espn.com','statsapi.mlb.com','api.the-odds-api.com'].includes(u.hostname))throw Error('Host no permitido')
+  if(u.protocol!=='https:'||u.username||u.password||!['site.api.espn.com','site.web.api.espn.com','sports.core.api.espn.com','statsapi.mlb.com','api.the-odds-api.com'].includes(u.hostname))throw Error('Host no permitido')
   const response=await fetcher(u.toString(),{headers:{accept:'application/json'},redirect:'error',signal:AbortSignal.timeout(9000)})
   if(!response.ok)throw Error('Proveedor HTTP '+response.status)
   if(Number(response.headers.get('content-length')||0)>4_000_000)throw Error('Respuesta supera 4 MB')
@@ -65,7 +93,8 @@ function logosEnabled(env:NodeJS.ProcessEnv):boolean{return env.PHOENIX_SPORTS_E
  * @returns Attributed game cards, result count and date.
  */
 export async function chatGames(sport:string,league:string,requestedDate?:string,env:NodeJS.ProcessEnv=process.env,fetcher:typeof fetch=fetch):Promise<{summary:string;items:ChatBlock[];source:string;count:number;date:string}> {
-  if(!Object.hasOwn(sportsCatalog,sport)||!leagueValid(league)||!sportsCatalog[sport]?.includes(league))throw Error('Liga desconocida. Consultar el catálogo antes de buscar.')
+  if(!Object.hasOwn(sportsCatalog,sport)||!leagueValid(league))throw Error('Disciplina o liga inválida')
+  if(!sportsCatalog[sport]?.includes(league)&&!(await discoverEspnLeagues(sport,env,fetcher)).includes(league))throw Error('Liga no encontrada en el catálogo público de ESPN')
   const day=date(requestedDate),rows:ChatBlock[]=[]
   const isMlb=sport==='baseball'&&league==='mlb'&&hasSportsPermission('mlb',env)
   const source=isMlb?'MLB Stats API':'ESPN Site API'
