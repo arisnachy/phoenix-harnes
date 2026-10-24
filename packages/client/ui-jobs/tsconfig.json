@@ -21,6 +21,9 @@
       "path": "../ui-conversation"
     },
     {
+      "path": "../ui-sidebar"
+    },
+    {
       "path": "../ui-primitives"
     },
     {

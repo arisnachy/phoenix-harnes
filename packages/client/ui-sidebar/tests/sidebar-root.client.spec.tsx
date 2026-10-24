@@ -86,28 +86,33 @@ describe('SidebarRoot shell', () => {
     const b = mountShell()
     const features: Array<{ destination: string; label: string }> = []
     let libraries = 0
+    let openedSchedules = 0
+    const onScheduled = () => { openedSchedules++ }
     const onFeature = (event: Event) => {
       features.push((event as CustomEvent<{ destination: string; label: string }>).detail)
     }
     const onLibrary = () => { libraries++ }
     window.addEventListener('phoenix:open-feature', onFeature)
     window.addEventListener('phoenix:open-workspace-library', onLibrary)
+    window.addEventListener('phoenix:open-scheduled-tasks', onScheduled)
     try {
       fireEvent.click(screen.getByRole('button', { name: 'Home' }))
       expect(b.startSession).toHaveBeenCalledOnce()
-      fireEvent.click(screen.getByRole('button', { name: 'Discover' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Scheduled tasks' }))
       fireEvent.click(screen.getByRole('button', { name: 'Connectors' }))
       fireEvent.click(screen.getByRole('button', { name: 'Team' }))
       fireEvent.click(screen.getByRole('button', { name: 'Library' }))
       expect(features).toEqual([
-        { destination: 'discover', label: 'Discover' },
+        { destination: 'discover', label: 'Scheduled tasks' },
         { destination: 'connectors', label: 'Connectors' },
         { destination: 'team', label: 'Team' },
       ])
       expect(libraries).toBe(1)
+      expect(openedSchedules).toBe(1)
     } finally {
       window.removeEventListener('phoenix:open-feature', onFeature)
       window.removeEventListener('phoenix:open-workspace-library', onLibrary)
+      window.removeEventListener('phoenix:open-scheduled-tasks', onScheduled)
     }
   })
 
@@ -183,22 +188,25 @@ describe('SidebarRoot shell', () => {
     const onFeature = (e: Event) => { received.push((e as CustomEvent<{ destination: string }>).detail.destination) }
     const onLibrary = () => { received.push('library') }
     const onTeam = () => { received.push('team') }
+    const onScheduled = () => { received.push('scheduled') }
     window.addEventListener('phoenix:open-feature', onFeature)
     window.addEventListener('phoenix:open-workspace-library', onLibrary)
     window.addEventListener('phoenix:toggle-team-directory', onTeam)
+    window.addEventListener('phoenix:open-scheduled-tasks', onScheduled)
     try {
       fireEvent.click(screen.getByRole('button', { name: 'Home' }))
-      fireEvent.click(screen.getByRole('button', { name: 'Discover' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Scheduled tasks' }))
       fireEvent.click(screen.getByRole('button', { name: 'Connectors' }))
       fireEvent.click(screen.getByRole('button', { name: 'Team' }))
       fireEvent.click(screen.getByRole('button', { name: 'Library' }))
       expect(b.startSession).toHaveBeenCalledOnce()
-      expect(received).toEqual(['discover', 'connectors', 'team', 'library'])
-      expect(screen.queryByText('Discover')).toBeNull()
+      expect(received).toEqual(['scheduled', 'connectors', 'team', 'library'])
+      expect(screen.queryByText('Scheduled tasks')).toBeNull()
     } finally {
       window.removeEventListener('phoenix:open-feature', onFeature)
       window.removeEventListener('phoenix:open-workspace-library', onLibrary)
       window.removeEventListener('phoenix:toggle-team-directory', onTeam)
+      window.removeEventListener('phoenix:open-scheduled-tasks', onScheduled)
     }
   })
 
