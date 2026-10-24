@@ -7,9 +7,14 @@ import css from './ScheduledTaskCenter.module.css'
 interface ScheduledTask {
   readonly id: string
   readonly title: string
-  readonly status: string
+  readonly status: 'scheduled' | 'running' | 'completed' | 'failed' | 'paused' | 'cancelled'
   readonly nextRunAt: string
   readonly createdBy: string
+  readonly recentHistory: readonly {
+    readonly status: 'completed' | 'failed'
+    readonly finishedAt: string
+    readonly summary?: string
+  }[]
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -20,11 +25,20 @@ function parseTasks(value: unknown): ScheduledTask[] {
   if (!Array.isArray(value)) throw new Error('Invalid task list from Host')
   return value.map((value) => {
     if (!isRecord(value) || typeof value.id !== 'string' || typeof value.title !== 'string'
-      || typeof value.status !== 'string' || typeof value.nextRunAt !== 'string'
+      || !['scheduled', 'running', 'completed', 'failed', 'paused', 'cancelled'].includes(String(value.status))
+      || typeof value.nextRunAt !== 'string'
       || typeof value.createdBy !== 'string') throw new Error('Invalid task record from Host')
+    const history = value.recentHistory
+    if (history !== undefined && (!Array.isArray(history) || !history.every(
+      (entry: unknown) => isRecord(entry)
+        && ['completed', 'failed'].includes(String(entry.status))
+        && typeof entry.finishedAt === 'string'
+        && (entry.summary === undefined || typeof entry.summary === 'string'),
+    ))) throw new Error('Invalid task history from Host')
     return {
       id: value.id, title: value.title, status: value.status,
       nextRunAt: value.nextRunAt, createdBy: value.createdBy,
+      recentHistory: history === undefined ? [] : (history as ScheduledTask['recentHistory']),
     }
   })
 }
@@ -208,8 +222,16 @@ export function ScheduledTaskCenter({ connection, t }: ScheduledTaskCenterProps)
           {!loading && rows.length === 0 && error === undefined && <p>{t('task.empty')}</p>}
           {rows.map(task => (
             <article key={task.id} className={css.item}>
-              <div><strong>{task.title}</strong><small>{task.createdBy === 'user' ? t('task.center.user') : t('task.center.system')} · {task.status}</small></div>
+              <div><strong>{task.title}</strong><small>{task.createdBy === 'user' ? t('task.center.user') : t('task.center.system')} · {t(`task.status.${task.status}` as never)}</small></div>
               <time dateTime={task.nextRunAt}>{new Date(task.nextRunAt).toLocaleString()}</time>
+              {task.recentHistory.length > 0 && <details className={css.history}>
+                <summary>{t('task.center.history')} ({task.recentHistory.length})</summary>
+                <ul>{task.recentHistory.map((entry, index) => <li key={index}>
+                  <time dateTime={entry.finishedAt}>{new Date(entry.finishedAt).toLocaleString()}</time>
+                  <span>{entry.status === 'completed' ? t('task.status.completed') : t('task.status.failed')}</span>
+                  {entry.summary !== undefined && <span>{entry.summary.slice(0, 400)}</span>}
+                </li>)}</ul>
+              </details>}
               <div className={css.itemActions}>
                 {(task.status === 'scheduled' || task.status === 'paused') && <button type="button" disabled={changingId !== undefined}
                   aria-label={`${task.status === 'paused' ? t('task.center.resume') : t('task.center.pause')}: ${task.title}`}
