@@ -21,6 +21,8 @@ export function quotaResumeAt(error: unknown, now: number): string | undefined {
   const match = /\btry again in\s*~?\s*(\d{1,5})\s*(min(?:ute)?s?|h(?:ou)?rs?)\b/iu.exec(error.message)
   if (match === null) return undefined
   const amount = Number(match[1])
+  // The grace period must not turn a zero-minute reset into a retry.
+  if (!Number.isSafeInteger(amount) || amount <= 0) return undefined
   const unit = match[2]?.toLowerCase() ?? ''
   const multiplier = unit.startsWith('h') ? 3_600_000 : 60_000
   const wait = amount * multiplier + GRACE_MS
