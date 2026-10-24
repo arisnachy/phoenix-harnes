@@ -17,6 +17,8 @@ Without authorization or credentials, the studio displays a source-status explan
 ```powershell
 # Set only after confirming applicable ESPN/MLB provider terms and permitted usage.
 $env:PHOENIX_SPORTS_ESPN_ALLOWED = "1"
+# ESPN logos also require confirmation of media rights.
+$env:PHOENIX_SPORTS_ESPN_IMAGES_ALLOWED = "1"
 $env:PHOENIX_SPORTS_MLB_ALLOWED = "1"
 # Optional: portraits require separate confirmation of media rights.
 $env:PHOENIX_SPORTS_MLB_IMAGES_ALLOWED = "1"
