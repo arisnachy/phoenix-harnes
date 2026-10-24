@@ -3,11 +3,12 @@ import type { Context } from '@phoenix-ai/cordis'
 import { defineTool } from '@phoenix-ai/dsh-tools'
 import type {} from '@phoenix-ai/dsh-system-prompt'
 import { sportsCatalog, chatGames, marketOdds, pricedTicket, type MarketSelection } from './sports.ts'
+import {getMlbPitcherReport} from './mlb.ts'
 
 export const name = 'tool-sports'
 export const inject = ['tools','systemPrompt']
 const GUIDANCE = [
-  'Solo cuando el usuario pida deportes, juegos del día, jugadores, cuotas o tickets, consulta las herramientas sports_chat_catalog, sports_chat_games, sports_chat_odds o sports_chat_ticket.',
+  'Solo cuando el usuario pida deportes, juegos del día, jugadores, cuotas o tickets, consulta las herramientas sports_chat_catalog, sports_chat_games, sports_chat_mlb_pitchers, sports_chat_odds o sports_chat_ticket.',
   'NO abras pantallas independientes ni crees entradas de menú. Reproduce en TU RESPUESTA del chat los objetos uiBlocks/uiBlock recibidos como JSON intacto dentro de un bloque de código etiquetado generative-ui. Phoenix los renderiza como tarjetas nativas.',
   'Para muchos partidos muestra como máximo seis tarjetas relevantes y ofrece ampliar; nunca inventes eventos, cuotas, lanzadores, lesiones ni resultados ausentes.',
   'Los tickets solo pueden usar precios del proveedor consultados en ese momento. Son simulaciones; no hay garantía de acierto. Identifica correlaciones y ausencia de predicción calibrada.',
@@ -42,6 +43,22 @@ export function apply(ctx: Context): void {
         instruction:'En tu respuesta del chat reproduce los bloques uiBlocks como JSON exacto en fences generative-ui; no proporciones enlace a un menú.'})
     },
     presentCall:()=>({card:'generic',title:'Buscar partidos y sus datos',kind:'read' as const}),
+  }))
+  ctx.tools.register(defineTool({
+    name:'sports_chat_mlb_pitchers',
+    description:'Analiza rotación y bullpen de MLB por equipo, ERA, WHIP, entradas y ponches con datos de temporada verificados.',
+    parameters:{
+      teamId:{type:'integer',required:true,description:'ID del equipo, extraído de datos reales MLB.'},
+      season:{type:'integer',required:true,description:'Año de la temporada MLB.'},
+    },
+    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    isConcurrencySafe:()=>true,
+    async execute(args){
+      const report=await getMlbPitcherReport(args.teamId,args.season)
+      return JSON.stringify({source:report.source,roster:report.pitchers,missingStats:report.unavailableStats,
+        uiBlock:report.uiBlock,instruction:'Entrega en el chat la tabla UI comparison en fence generative-ui, con datos faltantes visibles.'})
+    },
+    presentCall:()=>({card:'generic',title:'Analizar abridores y bullpen MLB',kind:'read' as const}),
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_odds',
