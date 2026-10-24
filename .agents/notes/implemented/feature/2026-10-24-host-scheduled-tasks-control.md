@@ -24,6 +24,8 @@ Extend the existing loopback RPC endpoint rather than adding a browser scheduler
 
 A user can now create and control persistent scheduled chat work when exactly one root session is active. Existing Host polling and resumable target-session semantics apply. A global creation with zero or multiple roots returns a user-visible error until an explicit session picker exists; cold execution still requires the Host runtime to be launched. Rich conditional tasks and privileged system tasks continue to use existing scoped tools, not this UI.
 
+UI task history is projected from the Host's existing bounded execution receipts, not inferred from prompts. The UI localizes task status, renders result summaries as text, and does not disclose the original private instruction.
+
 ## Testing
 
 Pure input validation and persistent Host RPC write paths, pause/resume/cancel behavior, ownership ambiguities, malformed payload rejection, and frontend confirmed-state actions have focused regression tests. Full static/coverage/Windows suites remain mandatory before promotion.
