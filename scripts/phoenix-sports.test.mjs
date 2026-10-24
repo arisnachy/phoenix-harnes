@@ -64,7 +64,7 @@ test('ticket simulation does not claim a guaranteed winner or invent probabiliti
   assert.ok(quoteTicket([l1,{...l2,eventId:'A'}]).correlationWarning)
   assert.throws(()=>quoteTicket([l1,l1]))
   assert.throws(()=>quoteTicket([l1],{stake:-5}))
-  assert.equal(evaluateSelection({decimalOdds:2,estimatedProbability:.6}).expectedValue,.2)
+  assert.ok(Math.abs(evaluateSelection({decimalOdds:2,estimatedProbability:.6}).expectedValue-.2)<1e-9)
 })
 test('network is restricted to known hosts with redirects disabled',async()=>{
   await assert.rejects(()=>getJSON('http://127.0.0.1/secret'),/no autorizado/)
