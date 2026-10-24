@@ -308,6 +308,23 @@ describe('chat tool activity grouping', () => {
     expect(screen.getByRole('button', { name: 'Tools' }).getAttribute('aria-expanded')).toBe('false')
   })
 
+  it.each([
+    ['browser_open', 'activity.browsing'],
+    ['read_file', 'activity.reading'],
+    ['update_file', 'activity.writing'],
+    ['vitest', 'activity.verifying'],
+    ['image_generation', 'activity.other'],
+  ])('classifies a completed %s call from tool identity alone', (name, label) => {
+    renderChat([context(1, 'system'), {
+      ...settledTool(),
+      call: { name, argsRaw: '{"secret":"never display"}' },
+    }])
+
+    const receipt = screen.getByTestId('tool-activity-receipt')
+    expect(receipt.textContent).toContain(label)
+    expect(receipt.textContent).not.toContain('secret')
+  })
+
   it('reports a failed observed tool without implying successful task completion', () => {
     renderChat([context(1, 'system'), { ...settledTool(), isError: true }])
     expect(screen.getByTestId('tool-activity-receipt').textContent)
