@@ -1,5 +1,7 @@
 # Phoenix Geo Intelligence — contrato de UI integrada (v1)
 
+English | [中文](phoenix-geo-intelligence.zh.md)
+
 **Estado:** base cartográfica nativa UI v1. No implica geocodificación, enrutamiento ni análisis espacial de servidor. Forma parte de Phoenix Universal Mission Engine; no es una aplicación separada.
 
 ## Entrega cartográfica nativa con herramienta real
