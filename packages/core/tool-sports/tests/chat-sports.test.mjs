@@ -1,6 +1,7 @@
 import {test} from 'node:test'
 import assert from 'node:assert/strict'
 import {sportsCatalog,getFeed,chatGames,marketOdds,pricedTicket} from '../src/sports.ts'
+import {getMlbPitcherReport} from '../src/mlb.ts'
 
 function response(json){
   return async()=>new Response(JSON.stringify(json),{status:200,headers:{'content-type':'application/json'}})
@@ -61,4 +62,25 @@ test('bookmaker quotes include provenance and never permit invalid sport keys',a
   assert.equal(quotes[0].updatedAt,'2026-10-24T18:00:00Z')
   assert.equal(quotes[0].price,1.8)
   await assert.rejects(()=>marketOdds('../bad','h2h',{THE_ODDS_API_KEY:'test'},mock),/Mercado inválido/)
+})
+
+test('MLB pitcher analysis preserves missing data and compares verified bullpen stats',async()=>{
+  const mock=async(url)=>{
+    if(url.includes('/roster?'))return new Response(JSON.stringify({roster:[
+      {person:{id:22,fullName:'Pitcher One'},position:{type:'Pitcher'}},
+      {person:{id:33,fullName:'Pitcher Two'},position:{type:'Pitcher'}},
+      {person:{id:99,fullName:'Position Player'},position:{type:'Infielder'}},
+    ]}),{status:200})
+    if(url.includes('/people/22/'))return new Response(JSON.stringify({stats:[{splits:[{stat:{era:'2.95',whip:'1.08',inningsPitched:'87.0',strikeOuts:92,gamesStarted:14}}]}]}),{status:200})
+    return new Response(JSON.stringify({stats:[]}),{status:200})
+  }
+  await assert.rejects(()=>getMlbPitcherReport(22,2026,{}),/no autorizada/)
+  const r=await getMlbPitcherReport(99,2026,{PHOENIX_SPORTS_MLB_ALLOWED:'1'},mock)
+  assert.equal(r.pitchers.length,2)
+  assert.equal(r.unavailableStats,1)
+  assert.equal(r.pitchers[0].era,'2.95')
+  assert.equal(r.pitchers[1].era,'—')
+  assert.equal(r.uiBlock.component,'comparison')
+  assert.equal(r.uiBlock.props.rows.length,2)
+  assert.equal(r.pitchers[0].image,undefined)
 })
