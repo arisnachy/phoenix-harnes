@@ -500,8 +500,8 @@ function createExecutor(
     // Route every Chrome tool invocation using the REAL agent's conversation
     // identity, never a model-supplied sessionId or the global last Chrome tab.
     // Other MCP integrations are untouched.
-    const chromeScope = scopedChromeTool && exec.agent.id !== undefined
     const agent = exec.agent
+    const chromeScope = scopedChromeTool && agent?.id !== undefined
     // Delegated specialists use the coordinator's parent conversation.
     // A user-created fork (no subagent origin) remains a separate browser.
     const ownerId = !scopedChromeTool || agent === undefined ? undefined
