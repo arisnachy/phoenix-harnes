@@ -717,6 +717,11 @@ export class ProactivityEngine {
       if ((current.status === 'completed' || current.status === 'cancelled') && status !== 'cancelled') {
         throw new Error(`task ${id} is terminal: ${current.status}`)
       }
+      // Restarting scheduled/running work can duplicate a live occurrence.
+      // Failed tasks may be retried explicitly; paused work may be resumed.
+      if (status === 'scheduled' && current.status !== 'paused' && current.status !== 'failed') {
+        throw new Error(`task ${id} cannot resume from ${current.status}`)
+      }
       const next: ProactivityTask = { ...current, status, updatedAt: new Date().toISOString() }
       const tasks = [...snapshot.tasks]
       tasks[index] = next
