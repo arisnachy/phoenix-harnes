@@ -647,14 +647,14 @@ function installProactivityRpc(connection: HostConnectionHandle,
   attention?: AttentionStore,
   extraAttention?: () => Promise<readonly ProactivityAttentionItem[]>,
   availableTargets?: () => readonly string[]): () => Promise<void> {
-  return connection.rpc.handle('/phoenix-tasks', async (endpoint, input): Promise<RpcResult<ProactivityTaskView | readonly ProactivityTaskView[] | readonly ProactivityAttentionItem[] | readonly { readonly id: string }[] | null>> => {
+  return connection.rpc.handle('/phoenix-tasks', async (endpoint, input): Promise<RpcResult<ProactivityTaskView | readonly ProactivityTaskView[] | readonly ProactivityAttentionItem[] | readonly { readonly id: string }[] | { readonly id: string; readonly deleted: boolean } | null>> => {
     try {
       // `list()` intentionally omits surprises until reveal time. Hidden task
       // content therefore never crosses the browser transport ahead of time.
       const tasks = await engine.list()
       if (endpoint === 'list') return { ok: true, value: tasks.map(taskView) }
       if (endpoint === 'targets') return { ok: true, value: (availableTargets?.() ?? []).map(id => ({ id })) }
-      if (endpoint === 'pause' || endpoint === 'resume' || endpoint === 'cancel') {
+      if (endpoint === 'pause' || endpoint === 'resume' || endpoint === 'cancel' || endpoint === 'delete') {
         if (typeof input !== 'object' || input === null || Array.isArray(input)
           || Object.keys(input).length !== 1 || !Object.hasOwn(input, 'id')
           || typeof (input as { id?: unknown }).id !== 'string') {
@@ -663,6 +663,10 @@ function installProactivityRpc(connection: HostConnectionHandle,
         const id = (input as { id: string }).id
         // Never disclose or mutate unrevealed surprise tasks via the browser.
         if (!tasks.some(task => task.id === id)) return rpcFailure('task is not visible')
+        if (endpoint === 'delete') {
+          const deleted = await engine.delete(id)
+          return deleted ? { ok: true, value: { id, deleted } } : rpcFailure('task no longer exists')
+        }
         const updated = await engine[endpoint](id)
         return { ok: true, value: taskView(updated) }
       }

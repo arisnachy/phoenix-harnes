@@ -754,6 +754,24 @@ export class ProactivityEngine {
    */
   cancel(id: string): Promise<ProactivityTask> { return this.setStatus(id, 'cancelled') }
 
+  /**
+   * Permanently remove a task and its execution receipts from the durable ledger.
+   * Running tasks must finish (or be cancelled and settled) first so an in-flight
+   * executor never loses its current record mid-delivery.
+   * @param id - Exact durable task identity.
+   * @returns True only after a matching persisted task was removed.
+   */
+  delete(id: string): Promise<boolean> {
+    return this.exclusive(async () => {
+      const snapshot = await this.snapshot()
+      const record = snapshot.tasks.find(task => task.id === id)
+      if (record === undefined) return false
+      if (record.status === 'running') throw new Error(`task ${id} is executing; cancel and wait for settlement before deleting`)
+      await this.commit(snapshot.tasks.filter(task => task.id !== id))
+      return true
+    })
+  }
+
   private dueOccurrences(task: ProactivityTask, nowMs: number): string[] {
     const nextMs = Date.parse(task.nextRunAt)
     if (nowMs < nextMs) return []
