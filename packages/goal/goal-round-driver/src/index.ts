@@ -14,6 +14,7 @@ import type { Session, SessionEvent, TurnEndCancelCause, UserMessage } from '@ph
 import { renderGoalRoundPrompt } from './prompt.ts'
 import { goalBlockedByClosedUniversalMission, unfinishedStructuredWorkRecoveryObjective, unfinishedToolFailureRecoveryObjective } from './mission-fence.ts'
 import { recordGoalSupervisor, replayGoalSupervisor, type GoalSupervisorState } from './supervisor.ts'
+import { markQuotaResume, quotaResumeAt, quotaResumeTarget } from './quota-resume.ts'
 import { measureGoalVerificationProgress, measureGoalWorkProgress, recordGoalStrategy, replayGoalStrategy, selectNextStrategy } from './strategy.ts'
 
 export { renderGoalRoundPrompt } from './prompt.ts'
@@ -54,6 +55,7 @@ interface DriverState {
   run: Promise<void> | undefined
   stopping: boolean
   supervisor: GoalSupervisorState | undefined
+  quotaTimer: ReturnType<typeof setTimeout> | undefined
 }
 
 /** Whether a source identifies an automatic, positive-numbered goal round. */
@@ -126,6 +128,7 @@ export function apply(ctx: Context): void {
       run: undefined,
       stopping: false,
       supervisor: undefined,
+      quotaTimer: undefined,
     }
     states.set(agent, state)
     return state
@@ -210,6 +213,53 @@ export function apply(ctx: Context): void {
     } catch (error: unknown) {
       ctx.logger.warn(`goal-round-driver: could not disarm agent "${state.agent.id}": ${renderThrown(error)}`)
     }
+  }
+
+  /** A blocked quota goal is durable; only the timer is process-local. */
+  function clearQuotaTimer(state: DriverState): void {
+    if (state.quotaTimer !== undefined) clearTimeout(state.quotaTimer)
+    state.quotaTimer = undefined
+  }
+
+  /** Re-arm the exact provider-stated deadline on restart, never before it. */
+  function armQuotaTimer(state: DriverState): void {
+    clearQuotaTimer(state)
+    if (state.stopping || ctx.agents.get(state.agent.id) !== state.agent) return
+    const goal = currentGoal(state)
+    if (goal?.phase !== 'blocked' || goal.blockedReason?.code !== 'provider-quota-exhausted') return
+    const target = quotaResumeTarget(goal.blockedReason.message)
+    if (target === undefined) return
+    const expected = goalRef(goal)
+    const wake = (): void => {
+      state.quotaTimer = undefined
+      if (state.stopping || ctx.agents.get(state.agent.id) !== state.agent) return
+      const current = currentGoal(state)
+      if (current === undefined || current.id !== expected.id || current.revision !== expected.revision
+        || current.phase !== 'blocked' || current.blockedReason?.code !== 'provider-quota-exhausted'
+        || quotaResumeTarget(current.blockedReason.message) !== target
+        || goalBlockedByClosedUniversalMission(state.agent.session)) return
+      const remaining = target - Date.now()
+      if (remaining > 0) {
+        state.quotaTimer = setTimeout(wake, Math.min(remaining, 2_147_483_647))
+        return
+      }
+      // Human work always has priority. Do not spin when the idle inbox
+      // contains an unclaimed human message.
+      if (state.agent.inbox.hasPending) {
+        state.quotaTimer = setTimeout(wake, 60_000)
+        return
+      }
+      if (state.agent.status !== 'idle') {
+        void state.agent.whenIdle().then(() => { armQuotaTimer(state) }, () => undefined)
+        return
+      }
+      try {
+        ctx.goals.resume(state.agent, expected)
+      } catch (error: unknown) {
+        ctx.logger.warn(`goal-round-driver: quota wake could not resume agent "${state.agent.id}": ${renderThrown(error)}`)
+      }
+    }
+    state.quotaTimer = setTimeout(wake, Math.max(0, Math.min(target - Date.now(), 2_147_483_647)))
   }
 
   /** Preserve claimed step context when this driver drops only its own round. */
@@ -461,10 +511,13 @@ export function apply(ctx: Context): void {
         state.attempt = undefined
         state.requested = false
         state.needsCheckpoint = false
+        const message = `Automatic continuation stopped because the model provider quota is exhausted: ${renderThrown(error)}`
+        const resetAt = quotaResumeAt(error, Date.now())
         ctx.goals.block(agent, goalRef(goal), {
           code: 'provider-quota-exhausted',
-          message: `Automatic continuation stopped because the model provider quota is exhausted: ${renderThrown(error)}`,
+          message: resetAt === undefined ? message : markQuotaResume(message, resetAt),
         })
+        armQuotaTimer(state)
         return
       }
       // A failed model turn is a disposable attempt, never a mission result.
@@ -479,7 +532,11 @@ export function apply(ctx: Context): void {
     })
 
     ctx.on('agent/created', ({ agent }) => { stateFor(agent) })
-    ctx.on('agent/disposed', ({ agent }) => { states.delete(agent) })
+    ctx.on('agent/disposed', ({ agent }) => {
+      const state = states.get(agent)
+      if (state !== undefined) clearQuotaTimer(state)
+      states.delete(agent)
+    })
     ctx.on('agent/session-start', ({ agent }) => {
       const state = stateFor(agent)
       state.attempt = undefined
@@ -497,6 +554,7 @@ export function apply(ctx: Context): void {
       } else if (goalBlockedByClosedUniversalMission(agent.session)) {
         disarm(state)
       }
+      armQuotaTimer(state)
     })
     ctx.on('agent/status', ({ agent, status }) => {
       const state = stateFor(agent)
@@ -537,6 +595,7 @@ export function apply(ctx: Context): void {
     })
     ctx.on('goal/changed', ({ agent }) => {
       const state = stateFor(agent)
+      armQuotaTimer(state)
       state.needsCheckpoint = true
       const goal = currentGoal(state)
       if (goal !== undefined) {
@@ -739,6 +798,7 @@ export function apply(ctx: Context): void {
       const waits: Promise<void>[] = []
       for (const state of states.values()) {
         state.stopping = true
+        clearQuotaTimer(state)
         disarm(state)
         const attempt = state.attempt
         if (attempt !== undefined) {
