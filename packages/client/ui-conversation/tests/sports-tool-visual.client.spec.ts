@@ -1,5 +1,6 @@
 import {describe,it,expect} from 'vitest'
 import {sportsCardsFromToolResult,unrenderedSportsCards} from '../src/client/chat/sports-tool-cards.ts'
+import {parseGenerativeUiBlock} from '../src/client/chat/GenerativeUi.tsx'
 
 const sportsGame={
   component:'sports_game_card',version:1,
@@ -52,7 +53,12 @@ describe('native sports chat presentation fallback',()=>{
   it('deduplicates validated assistant-rendered cards and repeated tool results',()=>{
     const fence=String.fromCharCode(96).repeat(3)
     const answer=fence+'generative-ui\n'+JSON.stringify(sportsGame)+'\n'+fence
-    expect(unrenderedSportsCards([sportsGame,sportsGame,mlbComparison],[answer])).toEqual([mlbComparison])
-    expect(unrenderedSportsCards([sportsGame,sportsGame],['Respuesta textual solamente.'])).toEqual([sportsGame])
+    const game=parseGenerativeUiBlock(sportsGame)
+    const table=parseGenerativeUiBlock(mlbComparison)
+    expect(game).not.toBeNull()
+    expect(table).not.toBeNull()
+    if(game===null||table===null)throw Error('Fixture schemas invalid')
+    expect(unrenderedSportsCards([game,game,table],[answer])).toEqual([table])
+    expect(unrenderedSportsCards([game,game],['Respuesta textual solamente.'])).toEqual([game])
   })
 })
