@@ -33,6 +33,21 @@ try {
   $env:PHOENIX_DESKTOP_CONSOLE = '0'
   $env:PHOENIX_SOURCE_ROOT = $rootPath
 
+  # A previously running Host can serve stale JS if the checkout changed.
+  # Validate/rebuild the frontend BEFORE opening that existing process.
+  # The guard is read-only with respect to Git and refuses a failed build;
+  # it never kills an unidentified process on port 3080.
+  $freshnessScript = Join-Path $rootPath 'scripts\\phoenix-web-freshness.mjs'
+  if (Test-Path -LiteralPath $freshnessScript -PathType Leaf) {
+    $node = Get-Command 'node.exe' -ErrorAction SilentlyContinue
+    if ($null -eq $node) { $node = Get-Command 'node' -ErrorAction SilentlyContinue }
+    if ($null -eq $node) { throw 'No se encontró Node.js para verificar el frontend de Phoenix.' }
+    & $node.Source $freshnessScript 2>&1 | Tee-Object -FilePath $logPath -Append
+    if ($LASTEXITCODE -ne 0) {
+      throw 'La actualización del frontend falló; se impidió abrir la versión anterior de Phoenix. Revisa desktop-launch.log.'
+    }
+  }
+
   # Reopening the source-only desktop shortcut must not start another Host
   # when Phoenix is already serving its UI on the normal local port.
   if (-not $Background) {
