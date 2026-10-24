@@ -5,7 +5,10 @@ on:
       - 'packages/client/ui-conversation/src/client/chat/ToolActivityFlow.tsx'
       - 'packages/client/ui-conversation/src/client/chat/ChatView.tsx'
       - 'packages/client/ui-conversation/src/client/chat/sports-tool-cards.ts'
+      - 'packages/client/ui-conversation/src/client/chat/GenerativeUi.tsx'
+      - 'packages/client/ui-conversation/src/client/chat/AssistantMarkdown.tsx'
       - 'packages/client/ui-conversation/tests/sports-tool-visual.client.spec.ts'
+      - 'packages/client/ui-conversation/tests/sports-fenced-ui.client.spec.tsx'
       - 'packages/client/ui-conversation/tests/tool-activity-group.client.spec.tsx'
       - 'packages/core/tool-sports/src/index.ts'
       - '.github/workflows/phoenix-sports-chat-ui.yml'
@@ -30,7 +33,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Render sports cards from durable tool results
-        run: pnpm exec vitest run packages/client/ui-conversation/tests/sports-tool-visual.client.spec.ts packages/client/ui-conversation/tests/tool-activity-group.client.spec.tsx packages/client/ui-conversation/tests/generative-ui.client.spec.tsx
+        run: pnpm exec vitest run packages/client/ui-conversation/tests/sports-tool-visual.client.spec.ts packages/client/ui-conversation/tests/sports-fenced-ui.client.spec.tsx packages/client/ui-conversation/tests/tool-activity-group.client.spec.tsx packages/client/ui-conversation/tests/generative-ui.client.spec.tsx
       - name: Build server contracts and generated client typings
         run: pnpm run build:lib:host
       - name: Client strict typecheck
