@@ -1,5 +1,7 @@
 # Phoenix · Sistema editorial universal para PDFs (v1)
 
+English | [中文](phoenix-editorial-pdf-system.zh.md)
+
 ## Objetivo
 
 Un PDF no está terminado solo porque un motor consiga abrirlo: debe ser legible, fiel a sus fuentes y estar compuesto con intención editorial. Esta habilidad es **un servicio transversal** del arnés universal Phoenix, no un comportamiento exclusivo de investigaciones médicas.
