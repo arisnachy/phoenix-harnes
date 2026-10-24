@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-`dsh-schedule` 为未来创建的 live 根 agent（智能体）提供 3 个会话范围内的工具，用于管理持久提醒。版本 1 接受正的安全整数 `after_seconds` 延时、显式绝对时间 `at` 目标，以及至少 5 分钟的固定速率 `every_seconds` 间隔。会话事件日志拥有提醒状态；timer、工具值和模型 follow-up 都是该日志的可丢弃投影。
+`dsh-schedule` 为未来创建的 live 根 agent（智能体）提供 5 个会话范围内的工具，用于管理持久提醒。版本 1 接受正的安全整数 `after_seconds` 延时、显式绝对时间 `at` 目标，以及至少 5 分钟的固定速率 `every_seconds` 间隔。会话事件日志拥有提醒状态；timer、工具值和模型 follow-up 都是该日志的可丢弃投影。
 
 ## 组合
 
@@ -10,11 +10,11 @@
 
 Time-context 不是 Schedule 的依赖。组合可以挂载 `@phoenix-ai/dsh-time-context`，使模型能够按浏览器的请求本地时区解释自然语言；官方 Schedule Web overlay 正是如此。模型仍必须向 `schedule_create` 传入显式偏移量或 `time_zone`；Schedule 绝不会从模型上下文中导入或推断该值。
 
-每项从 Schedule 折叠结果读取或作出判断的操作，都会先等待 `ctx.sessions.flush(session)`。持久化路径缺失、拒绝或已分离时，操作返回 `persistence_uncertain`；它绝不会把未经确认的 live 后缀当成列表或未找到结果。成功创建或实际删除后，还会等待追加后的持久化 barrier（屏障）再确认变更。
+每项从 Schedule 折叠结果读取或作出判断的操作，都会先等待 `ctx.sessions.flush(session)`。持久化路径缺失、拒绝或已分离时，操作返回 `persistence_uncertain`；它绝不会把未经确认的 live 后缀当成列表或未找到结果。成功创建、暂停、恢复或实际删除后，还会等待追加后的持久化 barrier（屏障）再确认变更。
 
 ## 持久状态
 
-此包拥有严格的版本 1 `schedule/change` create、delete 与 dispatch 联合。每条 create 记录都包含稳定的会话本地 `ScheduleId`、已 trim 的提示词，以及使用四位年份的 RFC 3339 UTC `scheduledAt`。`after` 记录还会存储 `afterSeconds`；`at` 记录不会保留所提交的偏移量、本地日历字段或解释该值时所用的时区；`every` 记录存储 `everySeconds`，并把 `scheduledAt` 视为尚未 dispatch 的最早一个创建锚点对齐发生时点。delete 与一次性 dispatch 只携带 id。Every dispatch 还会添加 `acceptedAt`；回放会据此直接推进到该决策时点之后的第一个锚点对齐目标。
+此包拥有严格的版本 1 `schedule/change` create、pause、resume、delete 与 dispatch 联合。每条 create 记录都包含稳定的会话本地 `ScheduleId`、已 trim 的提示词，以及使用四位年份的 RFC 3339 UTC `scheduledAt`。`after` 记录还会存储 `afterSeconds`；`at` 记录不会保留所提交的偏移量、本地日历字段或解释该值时所用的时区；`every` 记录存储 `everySeconds`，并把 `scheduledAt` 视为尚未 dispatch 的最早一个创建锚点对齐发生时点。pause 和 resume 只携带 id，在 active 和 paused 集合间移动记录而不改变原始目标时间。delete 与一次性 dispatch 只携带 id。Every dispatch 还会添加 `acceptedAt`；回放会据此直接推进到该决策时点之后的第一个锚点对齐目标。
 
 回放会拒绝未知版本、额外字段、重复使用的 id、形状不匹配的一次性或 Every dispatch，以及针对非活动记录的 delete 或 dispatch 转换。普通会话折叠完整日志。fork 只折叠 `session.events.slice(session.header.seedLength ?? 0)`，因此不会继承父会话的提醒。此包的 `./invariant` 配套模块会对现有日志和候选事件应用相同策略。
 
@@ -26,9 +26,9 @@ Schedule 负责确定性的日历规范化。落在夏令时缺口内的本地�
 
 ## 管理工具
 
-生成的[工具目录](../../../docs/tool-catalog.zh.md)负责 `schedule_create`、`schedule_list` 和 `schedule_delete` 的参数与输出 schema。虽然模型输入使用 `after_seconds` 和 `time_zone`，但其规范值中的记录字段使用 camelCase。
+生成的[工具目录](../../../docs/tool-catalog.zh.md)负责 `schedule_create`、`schedule_list`、`schedule_delete`、`schedule_pause` 和 `schedule_resume` 的参数与输出 schema。虽然模型输入使用 `after_seconds` 和 `time_zone`，但其规范值中的记录字段使用 camelCase。
 
-一条 Agent-scoped 队列会将每项已接纳的管理事务与 live owner 的到期事务从 preflight 到任何 post-append barrier 全程串行化。`schedule_create` 要求 `after_seconds`、`at` 与 `every_seconds` 有且只有一项；它会在进入队列前验证只依赖输入形状的失败，随后执行检查点、分配永不复用的 id、追加 create，再次执行检查点。`schedule_list` 按创建顺序返回活动记录，其中包含 `state: "scheduled" | "overdue"` 与 `deliveryMode: "session-local"`。`schedule_delete` 会在进入队列前拒绝空 id 或前后带空白的 id，并只为活动 id 追加事件；未知或已终结的 id 会在 preflight 后返回 `{ id, deleted: false, code: "schedule_not_found" }`。
+一条 Agent-scoped 队列会将每项已接纳的管理事务与 live owner 的到期事务从 preflight 到任何 post-append barrier 全程串行化。`schedule_create` 要求 `after_seconds`、`at` 与 `every_seconds` 有且只有一项；它会在进入队列前验证只依赖输入形状的失败，随后执行检查点、分配永不复用的 id、追加 create，再次执行检查点。`schedule_list` 按原始创建顺序返回活动及暂停记录，其中包含 `state: "scheduled" | "overdue" | "paused"` 与 `deliveryMode: "session-local"`。`schedule_pause` 只暂停活动记录；`schedule_resume` 只恢复暂停记录，原目标时间已过时会变为逾期。两者要求持久化屏障，状态不匹配时返回 `schedule_not_found`。`schedule_delete` 会在进入队列前拒绝空 id 或前后带空白的 id，并只为活动或暂停状态的 id 追加事件；未知或已终结的 id 会在 preflight 后返回 `{ id, deleted: false, code: "schedule_not_found" }`。
 
 每次成功的管理 preflight 还会要求 live owner 重新计算。如果先前的 post-append barrier 返回 `persistence_uncertain`，这会恢复所保留的 create 或 delete batch，而无需 Schedule 专属的持久化重试 timer。
 
@@ -50,7 +50,7 @@ framing 构造或同步 follow-up 失败不会写入 dispatch。追加失败会�
 
 #### 模型看到的内容
 
-只有在此插件加载后创建的 live 根 agent 中，模型才会看到 3 个生成的工具 schema。工具结果包含上文所述的规范 JSON 值。
+只有在此插件加载后创建的 live 根 agent 中，模型才会看到 5 个生成的工具 schema。工具结果包含上文所述的规范 JSON 值。
 
 #### Token 影响
 
@@ -58,7 +58,7 @@ framing 构造或同步 follow-up 失败不会写入 dispatch。追加失败会�
 
 #### KV Cache 影响
 
-3 个 schema 的定义与范围不变时，前缀保持稳定。工具调用和结果会追加到后续历史中，并保留已经可以复用的前缀。
+5 个 schema 的定义与范围不变时，前缀保持稳定。工具调用和结果会追加到后续历史中，并保留已经可以复用的前缀。
 
 ### 到期提醒 follow-up
 
@@ -108,6 +108,7 @@ reminders_json: <JSON.stringify(reminders)>
 
 ## 已知限制与暂缓事项
 
+- **暂停不会改变原目标时间**：恢复已过期的一次性提醒后，仍可按逾期任务派发；暂停不是修改时间规则。
 - **仅限会话本地交付**：提醒只有在原会话 live 时才能准时运行；cold 会话不会收到外部通知，只有恢复后才会处理 overdue 记录。
 - **活动驱动的重试**：到期 preflight 被拒绝或 framing／入队失败被收容后，记录仍保持活动，但不会启动私有重试 timer；后续 Agent 活动或成功的 Schedule preflight 会触发重新计算。
 - **显式本地时区**：`at` 绝不会导入浏览器上下文；调用方必须把自然语言转换为带偏移量的 RFC 3339 字符串，或带 `time_zone` 的本地对象。
