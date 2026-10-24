@@ -437,17 +437,6 @@ const TOOL_PACKAGES: ToolPackage[] = [
       + 'management reads and mutations require the shared Session persistence barrier.',
   },
   {
-    pkg: '@phoenix-ai/dsh-tool-sports',
-    dir: 'tool-sports',
-    source: 'packages/core/tool-sports/src/index.ts',
-    requires: ['ctx.tools', 'ctx.systemPrompt'],
-    writes: ['tool/call', 'tool/result'],
-    async mount(ctx) {
-      await ctx.plugin(ToolSports)
-    },
-    note: 'Read-only sports market and game context with inline chat cards. Tickets simulate returns, never transact or promise wins.',
-  },
-  {
     pkg: '@phoenix-ai/dsh-tool-business',
     dir: 'tool-business',
     source: 'packages/core/tool-business/src/index.ts',
@@ -485,6 +474,17 @@ const TOOL_PACKAGES: ToolPackage[] = [
     },
     note:
       'The lsp tool keeps provider selection and language-server subprocesses behind ctx.lsp, so its model-visible schema stays stable across providers. Requires a registered provider (e.g. `@phoenix-ai/dsh-lsp-stdio`) at runtime; without one, a query returns the structured `LSP_UNAVAILABLE` error rather than changing the schema.',
+  },
+  {
+    pkg: '@phoenix-ai/dsh-tool-sports',
+    dir: 'tool-sports',
+    source: 'packages/core/tool-sports/src/index.ts',
+    requires: ['ctx.tools', 'ctx.systemPrompt'],
+    writes: ['tool/call', 'tool/result'],
+    async mount(ctx) {
+      await ctx.plugin(ToolSports)
+    },
+    note: 'Read-only sports market and game context with inline chat cards. Tickets simulate returns, never transact or promise wins.',
   },
   {
     pkg: '@phoenix-ai/dsh-tool-ralph',
