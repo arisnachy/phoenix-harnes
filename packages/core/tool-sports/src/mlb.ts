@@ -23,7 +23,7 @@ export interface PitcherReport {
 export async function getMlbPitcherReport(
   teamId:number,season:number,env:NodeJS.ProcessEnv=process.env,fetcher:typeof fetch=fetch,
 ):Promise<PitcherReport>{
-  if(!hasSportsPermission('mlb',env))throw Error('MLB Stats API no autorizada')
+  if(!hasSportsPermission('mlb',env))throw Error('MLB Stats API deshabilitada por el operador')
   if(!Number.isSafeInteger(teamId)||teamId<1||teamId>99999)throw Error('ID de equipo inválido')
   if(!Number.isSafeInteger(season)||season<1871||season>2100)throw Error('Temporada inválida')
   const roster=await getFeed<{roster?:RosterPlayer[]}>('https://statsapi.mlb.com/api/v1/teams/'+teamId+'/roster?rosterType=active',fetcher)

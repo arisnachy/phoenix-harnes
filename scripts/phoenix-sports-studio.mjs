@@ -104,8 +104,9 @@ export async function handler(req,res){
       const sportKey=u.searchParams.get('sportKey')||'baseball_mlb'
       const region=u.searchParams.get('region')||'us'
       const markets=u.searchParams.get('markets')||'h2h'
-      const odds=await measured('the-odds-api',()=>fetchOdds(sportKey,{region,markets}))
-      return json(res,200,{ok:true,odds,source:'the-odds-api',observedAt:new Date().toISOString()})
+      const provider=sourceAuthorization('the-odds-api')?'the-odds-api':'espn'
+      const odds=await measured(provider,()=>fetchOdds(sportKey,{region,markets}))
+      return json(res,200,{ok:true,odds,source:provider,observedAt:new Date().toISOString()})
     }
     if(path==='/api/discover'&&req.method==='POST'){
       const body=await bodyJSON(req)

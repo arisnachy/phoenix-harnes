@@ -38,7 +38,7 @@ export function sourceAuthorization(id,env=process.env) {
   const d=SOURCE_DEFS.find(s=>s.id===id)
   if (!d) return false
   if (d.licensed) return typeof env[d.env]==='string' && env[d.env].trim().length>0
-  return env[d.env]==='1'
+  return id==='espn'?env.PHOENIX_SPORTS_ESPN_DISABLED!=='1':id==='mlb'?env.PHOENIX_SPORTS_MLB_DISABLED!=='1':false
 }
 /** Reliability score reflects observed responses, never predicted game accuracy. */
 export function sourceScore(row,authorized=true,now=Date.now()) {
@@ -107,9 +107,10 @@ export async function fetchGames({sport='baseball',league='mlb',date,env=process
   const day=gameDate(date),compact=day.replaceAll('-','')
   if(sport==='baseball'&&league==='mlb'&&sourceAuthorization('mlb',env)){
     const url='https://statsapi.mlb.com/api/v1/schedule?sportId=1&date='+day+'&hydrate=probablePitcher,venue'
-    return {source:'mlb',games:normalizeMlb(await getJSON(url,{fetcher}),{imageLicensed:env.PHOENIX_SPORTS_MLB_IMAGES_ALLOWED==='1'})}
+    try{return {source:'mlb',games:normalizeMlb(await getJSON(url,{fetcher}),{imageLicensed:env.PHOENIX_SPORTS_MLB_IMAGES_ALLOWED==='1'})}}
+    catch(error){if(!sourceAuthorization('espn',env))throw error /* Fall back to ESPN for MLB */}
   }
-  if(!sourceAuthorization('espn',env)) throw new Error('No hay proveedor de resultados habilitado. Confirma licencia/condiciones y configura PHOENIX_SPORTS_ESPN_ALLOWED=1 o PHOENIX_SPORTS_MLB_ALLOWED=1 para MLB.')
+  if(!sourceAuthorization('espn',env)) throw new Error('ESPN y MLB deshabilitados mediante configuración del operador.')
   const url='https://site.api.espn.com/apis/site/v2/sports/'+encodeURIComponent(sport)+'/'+encodeURIComponent(league)+'/scoreboard?dates='+compact
   const games=normalizeEspn(await getJSON(url,{fetcher}),{sport,league})
   if(env.PHOENIX_SPORTS_ESPN_IMAGES_ALLOWED!=='1')for(const game of games){game.home.logo=null;game.away.logo=null}
@@ -117,7 +118,7 @@ export async function fetchGames({sport='baseball',league='mlb',date,env=process
 }
 export async function discoverLeagues(sport,{env=process.env,fetcher=fetch}={}) {
   if(!Object.hasOwn(SPORTS,sport)) throw new TypeError('Deporte no reconocido')
-  if(!sourceAuthorization('espn',env)) throw new Error('ESPN no autorizado para descubrimiento')
+  if(!sourceAuthorization('espn',env)) throw new Error('ESPN deshabilitado para descubrimiento')
   const url='https://sports.core.api.espn.com/v2/sports/'+encodeURIComponent(sport)+'/leagues?limit=500'
   const data=await getJSON(url,{fetcher})
   const items=Array.isArray(data.items)?data.items:[]
@@ -142,8 +143,40 @@ export function normalizeOdds(data,{sportKey}={}) {
   })))).filter(Boolean)
 }
 export async function fetchOdds(sportKey,{env=process.env,fetcher=fetch,region='us',markets='h2h'}={}) {
-  if(!sourceAuthorization('the-odds-api',env)) throw new Error('Cuotas no configuradas (THE_ODDS_API_KEY)')
   if(!safeSlug(sportKey)||!/^[a-z0-9,]{2,20}$/u.test(region)||!/^(h2h|spreads|totals)(,(h2h|spreads|totals))*$/u.test(markets)) throw new TypeError('Filtro de odds inválido')
+  if(!sourceAuthorization('the-odds-api',env)){
+    if(!sourceAuthorization('espn',env))throw new Error('ESPN deshabilitado y falta la clave de The Odds API')
+    const mapping={baseball_mlb:['baseball','mlb'],basketball_nba:['basketball','nba'],americanfootball_nfl:['football','nfl'],icehockey_nhl:['hockey','nhl'],soccer_epl:['soccer','eng.1'],soccer_usa_mls:['soccer','usa.1'],soccer_mexico_ligamx:['soccer','mex.1']}
+    const route=mapping[sportKey]
+    if(!route||!markets.split(',').includes('h2h'))return []
+    const date=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santo_Domingo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()).replaceAll('-','')
+    const board=await getJSON('https://site.api.espn.com/apis/site/v2/sports/'+route[0]+'/'+route[1]+'/scoreboard?dates='+date,{fetcher})
+    if(!Array.isArray(board.events))throw new Error('Formato ESPN inesperado')
+    const result=[]
+    for(const event of board.events.slice(0,8)){
+      const c=event.competitions?.[0], h=c?.competitors?.find(v=>v.homeAway==='home')?.team, a=c?.competitors?.find(v=>v.homeAway==='away')?.team
+      if(!c||!h||!a||!event.id||!Number.isFinite(Date.parse(event.date))||Date.parse(event.date)<=Date.now())continue
+      let items=Array.isArray(c.odds)?c.odds:[]
+      if(!items.length&&/^\d{1,16}$/.test(String(c.id))&&/^\d{1,16}$/.test(String(event.id))){
+        try{
+          const root=await getJSON('https://sports.core.api.espn.com/v2/sports/'+route[0]+'/leagues/'+route[1]+'/events/'+event.id+'/competitions/'+c.id+'/odds?limit=5',{fetcher})
+          items=(root.items||[]).filter(x=>x.homeTeamOdds||x.awayTeamOdds)
+          if(!items.length){for(const ref of (root.items||[]).slice(0,2)){
+            try{const u=new URL(ref.$ref);if(u.hostname==='sports.core.api.espn.com'&&u.protocol==='https:')items.push(await getJSON(u.toString(),{fetcher}))}catch{}
+          }}
+        }catch{}
+      }
+      for(const item of items.slice(0,5)){
+        if(!item.provider?.name)continue
+        for(const [team,american] of [[h,item.homeTeamOdds?.moneyLine],[a,item.awayTeamOdds?.moneyLine]]){
+          const n=Number(american)
+          if(!Number.isInteger(n)||Math.abs(n)<100||Math.abs(n)>100000)continue
+          result.push({eventId:String(event.id),sportKey,start:event.date,home:h.displayName||h.name,away:a.displayName||a.name,bookmaker:item.provider.name,market:'h2h',selection:team.displayName||team.name,point:null,decimalOdds:Number((n>0?1+n/100:1+100/Math.abs(n)).toFixed(5)),updatedAt:item.lastUpdated||null,source:'espn'})
+        }
+      }
+    }
+    return result.slice(0,100)
+  }
   const u=new URL('https://api.the-odds-api.com/v4/sports/'+encodeURIComponent(sportKey)+'/odds/')
   for(const [key,value] of Object.entries({apiKey:env.THE_ODDS_API_KEY,regions:region,markets,oddsFormat:'decimal'}))u.searchParams.set(key,value)
   return normalizeOdds(await getJSON(u.toString(),{fetcher}),{sportKey})

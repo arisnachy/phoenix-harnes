@@ -12,18 +12,19 @@ Open \`http://127.0.0.1:3107\`. Only loopback access is supported, and no bettin
 
 ## Configure providers
 
-Without authorization or credentials, the studio displays a source-status explanation instead of synthetic game data.
+Public ESPN and MLB results require no API key. Advanced commercial odds markets need optional credentials; ESPN moneyline odds are used without a key where ESPN provides real prices. No missing results or odds will be fabricated.
 
 ```powershell
-# Set only after confirming applicable ESPN/MLB provider terms and permitted usage.
-$env:PHOENIX_SPORTS_ESPN_ALLOWED = "1"
+# No keys required for default read-only ESPN/MLB results.
+# Operators can disable a public provider if their policies require it:
+# $env:PHOENIX_SPORTS_ESPN_DISABLED = "1"
+# $env:PHOENIX_SPORTS_MLB_DISABLED = "1"
 # ESPN logos also require confirmation of media rights.
 $env:PHOENIX_SPORTS_ESPN_IMAGES_ALLOWED = "1"
-$env:PHOENIX_SPORTS_MLB_ALLOWED = "1"
 # Optional: portraits require separate confirmation of media rights.
 $env:PHOENIX_SPORTS_MLB_IMAGES_ALLOWED = "1"
-# A valid account and API subscription are necessary for bookmaker odds.
-$env:THE_ODDS_API_KEY = "<your-secret-key>"
+# Optional: expanded bookmaker markets need an account with The Odds API.
+# $env:THE_ODDS_API_KEY = "<your-secret-key>"
 node scripts/phoenix-sports-studio.mjs
 ```
 
@@ -35,7 +36,7 @@ Sports Studio offers 17 disciplines and a starting set of leagues in \`/api/cata
 
 \`GET /api/board?sport=baseball&league=mlb&date=2026-10-24\` gives normalized fixture information. MLB enriches events with stadium and probable pitchers when the upstream response supplies them. \`GET /api/mlb/roster?team=...\` lists active pitchers, and \`GET /api/mlb/pitcher?id=...\` returns season statistics when supplied by MLB. Lack of a value remains explicit and never becomes a fabricated estimate.
 
-\`GET /api/odds?sportKey=baseball_mlb&markets=h2h\` requests bookmaker prices from The Odds API. Quotas, availability, markets and regions depend on the account. \`POST /api/ticket\` simulates decimal returns and marks correlated selections; it never places bets or claims winning picks. Expected value is not calculated unless a separate calibrated probability is provided. No prediction or backtesting model ships with this preview.
+\`GET /api/odds?sportKey=baseball_mlb&markets=h2h\` queries public ESPN Site/Core moneyline prices without a key when offered, or an optional configured The Odds API account. Availability varies by date and sport; unavailable lines remain unavailable. \`POST /api/ticket\` simulates decimal returns and marks correlated selections; it never places bets or claims winning picks. Expected value is not calculated unless a separate calibrated probability is provided. No prediction or backtesting model ships with this preview.
 
 Source intelligence is persisted at \`~/.dsh/sports/intelligence.json\` or \`PHOENIX_SPORTS_HOME\`. The dashboard records success, failure and completeness; five consecutive provider failures trigger quarantine. An operator may restore a source after reviewing it. Scores measure **feed quality**, not a team's probability of winning; the dashboard does not auto-delete sources.
 

@@ -152,7 +152,7 @@ async function loadGames(){
 }
 function renderOdds(){
   const el=$('odds');el.replaceChildren()
-  if(!oddsRows.length){empty(el,'Sin cuotas para este mercado o periodo. Comprueba cobertura y temporada.');return}
+  if(!oddsRows.length){empty(el,'Sin cuotas públicas verificables para este mercado o periodo. Se puede configurar The Odds API para ampliar cobertura.');return}
   for(const o of oddsRows.slice(0,90)){
     const card=make('article',undefined,'odd')
     card.append(make('div',o.away+' vs '+o.home+' · '+dateTime(o.start),'small'),make('strong',o.selection))
@@ -172,7 +172,7 @@ async function loadOdds(){
     const r=await api('/api/odds?'+q)
     oddsRows=r.odds;renderOdds()
     await reload(false)
-  }catch(e){empty($('odds'),'No se pudieron obtener cuotas reales: '+e.message)}
+  }catch(e){empty($('odds'),'No se pudieron consultar cuotas públicas: '+e.message)}
 }
 function addLeg(o){
   if(legs.length>=12)return txt('ticketNote','Máximo 12 selecciones.')
