@@ -1,5 +1,7 @@
 # Meta en Phoenix: DevTools, Facebook, Instagram y WhatsApp Business
 
+English | [中文](meta-mcp.zh.md)
+
 Este documento diferencia las **integraciones oficiales de Meta** y evita confundir una app de desarrollador con una página de Facebook, una cuenta de Instagram o un número de WhatsApp. **Ninguna conexión es gratuita para todo uso ni concede permisos por el mero hecho de instalarla.** Nunca pegues tokens en el chat.
 
 ## 1. Meta Social Technologies / Developer Tools MCP
