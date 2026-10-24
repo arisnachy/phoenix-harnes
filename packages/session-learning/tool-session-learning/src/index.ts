@@ -253,7 +253,7 @@ export function apply(ctx: Context, config: Config): void {
   ctx.systemPrompt.context({
     name: 'context:experiential-learning-memory',
     order: 119,
-    text: assembly => {
+    text: (assembly) => {
       const projectId = ctx.learningMemory.currentProjectId()
       const taskContext = taskForAssembly(assembly)
       const hits = ctx.learningMemory.recallCognitive({
@@ -271,7 +271,7 @@ export function apply(ctx: Context, config: Config): void {
   ctx.systemPrompt.context({
     name: 'context:validated-procedures',
     order: 120,
-    text: assembly => {
+    text: (assembly) => {
       const projectId = ctx.learningMemory.currentProjectId()
       const taskContext = taskForAssembly(assembly)
       return formatProceduralContext(procedural.recommend({
@@ -285,7 +285,7 @@ export function apply(ctx: Context, config: Config): void {
   ctx.systemPrompt.context({
     name: 'context:unverified-recovery-experience',
     order: 120.5,
-    text: assembly => {
+    text: (assembly) => {
       const taskContext = taskForAssembly(assembly)
       if (taskContext === undefined) return ''
       const projectId = ctx.learningMemory.currentProjectId()
@@ -299,7 +299,7 @@ export function apply(ctx: Context, config: Config): void {
   ctx.systemPrompt.context({
     name: 'context:habit-guidance',
     order: 121,
-    text: assembly => {
+    text: (assembly) => {
       const taskContext = taskForAssembly(assembly)
       if (taskContext === undefined) return ''
       const projectId = ctx.learningMemory.currentProjectId()

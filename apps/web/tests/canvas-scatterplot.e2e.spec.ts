@@ -36,12 +36,12 @@ describe('Canvas2D scatterplot live demo', () => {
     page = await browser.newPage({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 })
     page.on('console', (message) => { if (message.type() === 'error') consoleErrors.push(message.text()) })
     page.on('pageerror', (error) => { consoleErrors.push(error.message) })
-    await page.goto(url!, { waitUntil: 'networkidle' })
+    await page.goto(url, { waitUntil: 'networkidle' })
   }, 60_000)
 
   afterAll(async () => {
     await browser?.close()
-    if (server !== undefined) await new Promise<void>((resolve, reject) => server!.close(error => error ? reject(error) : resolve()))
+    if (server !== undefined) await new Promise<void>((resolve, reject) => server!.close((error) =>{  error ? reject(error) : resolve() }))
   }, 60_000)
 
   it('renders the 100,000-point analytical surface and accessible fallback', async () => {

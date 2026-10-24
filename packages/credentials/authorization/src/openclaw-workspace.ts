@@ -449,7 +449,7 @@ export async function requestGoogleWithOpenClaw(
     const end = record(body?.end)
     if (typeof body?.summary === 'string' && typeof start?.dateTime === 'string' && typeof end?.dateTime === 'string') {
       const attendees = Array.isArray(body.attendees)
-        ? body.attendees.flatMap(candidate => {
+        ? body.attendees.flatMap((candidate) => {
           const item = record(candidate)
           return typeof item?.email === 'string' ? [item.email] : []
         })

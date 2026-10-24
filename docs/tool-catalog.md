@@ -33,6 +33,7 @@ This table connects model-visible tool names to the plugin package and service s
 | `@phoenix-ai/dsh-schedule` | `schedule_create`, `schedule_delete`, `schedule_list` | `ctx.tools`, `ctx.sessions`, `Session persistence`, `a future live root Agent` | `tool/call`, `schedule/change create or delete`, `tool/result` | - | Registered only inside live root Agent scopes created after the opt-in Schedule plugin loads. Version 1 accepts after_seconds, explicit absolute at, and bounded fixed-rate every_seconds, and discloses session-local delivery; management reads and mutations require the shared Session persistence barrier. |
 | `@phoenix-ai/dsh-tool-business` | `business_plan_mission` | `ctx.tools`, `ctx.systemPrompt`, `ctx.mcpConnectors (optional at execution)` | `tool/call`, `tool/result` | - | Read-only intent and live MCP capability planning. Tool names and connection status never confer publication rights. |
 | `@phoenix-ai/dsh-tool-living` | `living_act`, `living_forget_creation`, `living_get_connector_kit`, `living_inspect_creation`, `living_list_creations`, `living_read_state`, `living_register_creation`, `living_verify_creation` | `ctx.tools`, `ctx.living`, `ctx.systemPrompt` | `tool/call`, `durable living creation manifest`, `live creation state/actions/events through ctx.living`, `tool/result` | - | Universal domain-neutral control surface: arbitrary future creation kinds describe their own state, actions, events, resources, actors, and target integration level; verification refuses delivery below that target. |
+| `@phoenix-ai/dsh-tool-sports` | `sports_chat_catalog`, `sports_chat_discover`, `sports_chat_games`, `sports_chat_mlb_pitchers`, `sports_chat_odds`, `sports_chat_ticket` | `ctx.tools`, `ctx.systemPrompt` | `tool/call`, `tool/result` | - | Read-only sports market and game context with inline chat cards. Tickets simulate returns, never transact or promise wins. |
 | `@phoenix-ai/dsh-tool-lsp` | `lsp` | `ctx.tools`, `ctx.lsp`, `ctx.systemPrompt` | `tool/call`, `tool/result` | - | The lsp tool keeps provider selection and language-server subprocesses behind ctx.lsp, so its model-visible schema stays stable across providers. Requires a registered provider (e.g. `@phoenix-ai/dsh-lsp-stdio`) at runtime; without one, a query returns the structured `LSP_UNAVAILABLE` error rather than changing the schema. |
 | `@phoenix-ai/dsh-tool-ralph` | `ralph` | `ctx.tools`, `ctx.workflowEngine`, `ctx.subagents`, `ctx.systemPrompt`, `a calling Agent (exec.agent parents every fresh round)` | `tool/call`, `tool/result`, `workflow and child session events during execution` | - | A fixed foreground workflow starts one fresh structured child per round; the model selects only the immutable objective and an optional round cap. |
 | `@phoenix-ai/dsh-tool-skill` | `skill` | `ctx.tools`, `ctx.agents`, `ctx.skills` | `tool/call`, `tool/result`, `user/message replacement catalogs via agent.inject()` | - | - |
@@ -2200,6 +2201,194 @@ Fail unless a creation has reached its declared target integration level. Use on
 Source: [`packages/core/tool-living/src/index.ts`](../packages/core/tool-living/src/index.ts)
 
 Universal domain-neutral control surface: arbitrary future creation kinds describe their own state, actions, events, resources, actors, and target integration level; verification refuses delivery below that target.
+
+<a id="phoenix-aidsh-tool-sports"></a>
+
+## `@phoenix-ai/dsh-tool-sports`
+
+### `sports_chat_catalog`
+
+Lista disciplinas y ligas documentadas. No crea menú ni abre otra pantalla.
+
+```json
+{
+  "type": "object",
+  "properties": {}
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_discover`
+
+Descubre competiciones adicionales directamente en el catálogo público ESPN, sin API key ni acceso a URLs arbitrarias.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "sport": {
+      "type": "string",
+      "description": "Disciplina ESPN como soccer, baseball, basketball, cricket, golf o hockey."
+    }
+  },
+  "required": [
+    "sport"
+  ]
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_games`
+
+Eventos reales en el chat: liga, horario, estadio, equipos y estadísticas verificables. Devuelve tarjetas renderizables.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "sport": {
+      "type": "string",
+      "description": "Deporte: soccer, baseball, basketball, etc."
+    },
+    "league": {
+      "type": "string",
+      "description": "Liga: mlb, nba, mex.1, eng.1, etc."
+    },
+    "date": {
+      "type": "string",
+      "description": "Fecha AAAA-MM-DD, opcional: hoy en Santo Domingo."
+    }
+  },
+  "required": [
+    "sport",
+    "league"
+  ]
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_mlb_pitchers`
+
+Analiza rotación y bullpen de MLB por equipo, ERA, WHIP, entradas y ponches con datos de temporada verificados.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "teamId": {
+      "type": "integer",
+      "description": "ID del equipo, extraído de datos reales MLB."
+    },
+    "season": {
+      "type": "integer",
+      "description": "Año de la temporada MLB."
+    }
+  },
+  "required": [
+    "teamId",
+    "season"
+  ]
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_odds`
+
+Busca cuotas públicas ESPN sin clave o The Odds API si está configurada; puede devolver vacío cuando ESPN no publica precios.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "sportKey": {
+      "type": "string",
+      "description": "Clave del proveedor: baseball_mlb, basketball_nba, soccer_epl, etc."
+    },
+    "markets": {
+      "type": "string",
+      "description": "h2h, totals o spreads. Por defecto h2h."
+    }
+  },
+  "required": [
+    "sportKey"
+  ]
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_ticket`
+
+Genera un ticket visual SIMULADO con selecciones verificadas nuevamente en cuotas reales. No ejecuta apuestas.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "sportKey": {
+      "type": "string",
+      "description": "Clave deportiva de The Odds API. Para varios deportes utiliza sportKeys."
+    },
+    "sportKeys": {
+      "type": "array",
+      "description": "Claves para ticket multisport, máximo cuatro.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "markets": {
+      "type": "string",
+      "description": "h2h, totals o spreads, mismo mercado de las selecciones."
+    },
+    "selections": {
+      "type": "array",
+      "description": "Entre una y diez selecciones verificables.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "eventId": {
+            "type": "string"
+          },
+          "bookmaker": {
+            "type": "string"
+          },
+          "market": {
+            "type": "string"
+          },
+          "selection": {
+            "type": "string"
+          },
+          "point": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "eventId",
+          "bookmaker",
+          "market",
+          "selection"
+        ]
+      }
+    },
+    "stake": {
+      "type": "number",
+      "description": "Importe ficticio para simular el retorno; no es una operación financiera."
+    }
+  },
+  "required": [
+    "selections"
+  ]
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+Read-only sports market and game context with inline chat cards. Tickets simulate returns, never transact or promise wins.
 
 <a id="phoenix-aidsh-tool-lsp"></a>
 

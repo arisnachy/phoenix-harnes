@@ -56,12 +56,12 @@ export const AssistantMarkdown = memo(function AssistantMarkdown({
         rendered.push(...segments.map((segment, index) => segment.kind === 'ui'
           ? <GenerativeUi key={`${i}:ui:${index}`} block={segment.block} onAction={onUiAction} {...(conversationId === undefined ? {} : { conversationId })} />
           : <MarkdownText
-              key={`${i}:markdown:${index}`}
-              text={segment.text}
-              streaming={streaming}
-              codeLabels={codeLabels}
-              fileMentions={mentions}
-            />))
+            key={`${i}:markdown:${index}`}
+            text={segment.text}
+            streaming={streaming}
+            codeLabels={codeLabels}
+            fileMentions={mentions}
+          />))
         break
       }
       // Reasoning is represented once inside the compact Tools disclosure.
@@ -132,7 +132,7 @@ export const AssistantMarkdown = memo(function AssistantMarkdown({
           border: '1px solid #e7bb76', borderRadius: 10, background: '#fff7e8',
           color: '#694319', padding: '11px 13px', fontSize: 12,
         }}>Este mensaje afirma que publicó un mapa, pero no incluye aquí un mapa nativo válido. Si hay un artefacto cartográfico independiente en el chat, comprueba ese visor; de lo contrario, la entrega no está verificada.
-          {onUiAction && <button type="button" onClick={() => onUiAction(recoveryPrompt, 'draft')}
+          {onUiAction && <button type="button" onClick={() =>{  onUiAction(recoveryPrompt, 'draft') }}
             style={{ display: 'block', marginTop: 8, cursor: 'pointer' }}>Solicitar visor {mentionsFiction ? 'narrativo' : 'geográfico'}</button>}
         </p>}
         {missingDiagram && <p role="alert" data-phoenix-missing-diagram="" style={{

@@ -47,7 +47,7 @@ describe('Godot Web project playback host', () => {
     const token = receipt.url.split('/')[3]
     if (!token) throw new Error('Missing scoped token')
     temp.push(join(homedir(), '.dsh', 'game-studio-web', token))
-    const server = createServer((req, res) => serveGodotWebFile(req, res))
+    const server = createServer((req, res) =>{  serveGodotWebFile(req, res) })
     try {
       await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
       const address = server.address()
@@ -70,7 +70,7 @@ describe('Godot Web project playback host', () => {
       const post = await fetch(base + receipt.url, { method: 'POST' })
       expect(post.status).toBe(405)
     } finally {
-      await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()))
+      await new Promise<void>((resolve, reject) => server.close((error) =>{  error ? reject(error) : resolve() }))
     }
   })
   it('rejects symlinks and forged Godot binary files', () => {

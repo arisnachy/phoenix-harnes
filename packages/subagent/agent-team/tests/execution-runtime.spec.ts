@@ -123,7 +123,7 @@ describe('durable execution admission and recovery', () => {
     f.runtime.register(adapter(async (context) => {
       await context.checkpoint('running', { sessionId: 'native', turnId: 'turn' })
       entered.resolve(undefined)
-      await new Promise<void>(resolve => { context.signal.addEventListener('abort', () => { resolve() }, { once: true }) })
+      await new Promise<void>((resolve) => { context.signal.addEventListener('abort', () => { resolve() }, { once: true }) })
       return await finish.promise
     }))
     const running = f.runtime.execute(f.root, request)
@@ -301,7 +301,7 @@ describe('durable execution admission and recovery', () => {
     const entered = Promise.withResolvers<undefined>()
     f.runtime.register(adapter(async (context) => {
       entered.resolve(undefined)
-      await new Promise<void>(resolve => { context.signal.addEventListener('abort', () => { resolve() }, { once: true }) })
+      await new Promise<void>((resolve) => { context.signal.addEventListener('abort', () => { resolve() }, { once: true }) })
       return { status: 'completed' }
     }))
     const running = f.runtime.execute(f.root, request)
@@ -438,7 +438,7 @@ describe('durable execution admission and recovery', () => {
     f.runtime.register(adapter(async (context) => {
       await context.checkpoint('running', { sessionId: 'thread', turnId: 'turn' })
       entered.resolve(undefined)
-      await new Promise<void>(resolve => { context.signal.addEventListener('abort', () => { resolve() }, { once: true }) })
+      await new Promise<void>((resolve) => { context.signal.addEventListener('abort', () => { resolve() }, { once: true }) })
       return { status: 'cancelled' }
     }))
     const run = f.runtime.execute(f.root, request)

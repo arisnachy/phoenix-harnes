@@ -59,7 +59,7 @@ export function startWindowsCapabilityDiscovery(
 
   let snapshot = ''
   const execute: ProbeExecutor = options.execute ?? ((binary, args, execOptions, callback) =>
-    nodeExecFile(binary, args, execOptions, (error, stdout) => callback(error, stdout)))
+    nodeExecFile(binary, args, execOptions, (error, stdout) =>{  callback(error, stdout) }))
   try {
     execute(process.execPath, [path], {
       encoding: 'utf8',

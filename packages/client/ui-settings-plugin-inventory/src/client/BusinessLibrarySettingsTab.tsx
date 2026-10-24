@@ -11,7 +11,7 @@ export interface BusinessLibraryInjected {
 export type BusinessLibrarySettingsTabProps = PropsRuntime<'settings.plugins.tab'>
   & PropsLocale<'settings.pluginInventory'> & InjectFace<BusinessLibraryInjected>
 
-type View = {status:'loading'} | {status:'error'} | {status:'ready';data:BusinessLibrarySnapshot}
+type View = { status:'loading' } | { status:'error' } | { status:'ready';data:BusinessLibrarySnapshot }
 type Product = BusinessLibrarySnapshot['products'][number]
 
 const buildKeys = {
@@ -27,16 +27,16 @@ const listingKeys = {
 } satisfies Record<Product['listingStage'], PluginInventoryLocaleKey>
 
 /** Read-only browser shelf. Never implies a locally prepared listing was published. */
-export function BusinessLibrarySettingsTab({readBusinessLibrary,t}:BusinessLibrarySettingsTabProps):ReactNode {
+export function BusinessLibrarySettingsTab({ readBusinessLibrary,t }:BusinessLibrarySettingsTabProps):ReactNode {
   const [reload,setReload]=useState(0)
-  const [state,setState]=useState<View>({status:'loading'})
+  const [state,setState]=useState<View>({ status:'loading' })
   const [search,setSearch]=useState('')
   const [kind,setKind]=useState('all')
   useEffect(()=>{
     let mounted=true
     void readBusinessLibrary().then(
-      data=>{if(mounted)setState({status:'ready',data})},
-      ()=>{if(mounted)setState({status:'error'})},
+      (data)=>{if(mounted)setState({ status:'ready',data })},
+      ()=>{if(mounted)setState({ status:'error' })},
     )
     return ()=>{mounted=false}
   },[readBusinessLibrary,reload])
@@ -44,7 +44,7 @@ export function BusinessLibrarySettingsTab({readBusinessLibrary,t}:BusinessLibra
     ? state.data.products.filter(product=>(kind==='all'||product.type===kind)
       && (`${product.title} ${product.id}`).toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()))
     : [],[kind,search,state])
-  const refresh=():void=>{setState({status:'loading'});setReload(n=>n+1)}
+  const refresh=():void=>{setState({ status:'loading' });setReload(n=>n+1)}
   return <section className={css.library} aria-busy={state.status==='loading'}>
     <header className={css.header}>
       <div><h3>{t('businessHeading')}</h3><p>{t('businessDescription')}</p></div>
@@ -56,8 +56,8 @@ export function BusinessLibrarySettingsTab({readBusinessLibrary,t}:BusinessLibra
       <p className={css.count}>{state.data.totalCount} {t('businessProducts')}
         {state.data.truncated ? ` · ${t('businessTruncated')}` : ''}</p>
       <div className={css.filters}>
-        <input type="search" value={search} onChange={e=>setSearch(e.target.value)} placeholder={t('businessSearch')} aria-label={t('businessSearch')}/>
-        <select value={kind} onChange={e=>setKind(e.target.value)} aria-label={t('businessFilter')}>
+        <input type="search" value={search} onChange={(e)=>{ setSearch(e.target.value) }} placeholder={t('businessSearch')} aria-label={t('businessSearch')}/>
+        <select value={kind} onChange={(e)=>{ setKind(e.target.value) }} aria-label={t('businessFilter')}>
           <option value="all">{t('businessAll')}</option>
           <option value="book">{t('businessTypeBook')}</option><option value="course">{t('businessTypeCourse')}</option>
           <option value="software">{t('businessTypeSoftware')}</option><option value="game">{t('businessTypeGame')}</option>

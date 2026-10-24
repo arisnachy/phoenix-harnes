@@ -995,40 +995,40 @@ export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, browserT
           {item.kind === 'desktop'
             ? <DesktopLive sessionId={sessionId} active={item.key === latestDesktopKey} />
             : item.kind === 'browser-workspace'
-            ? <BrowserWorkspace
-              sessionId={sessionId}
-              live={item.live}
-              items={item.items}
-              {...item.tabId === undefined ? {} : { tabId: item.tabId }}
-              {...item.sourceUrl === undefined ? {} : { sourceUrl: item.sourceUrl }}
-              selected={item.userKey === activeBrowserKey}
-              onActivate={() => { setSelectedBrowserKey(item.userKey) }}
-              seatProps={seatProps}
-              turnStatus={turnStatus}
-            />
-            : item.kind === 'node'
-              ? <ChatNodeSeat nodeKey={item.key} {...seatProps} />
-              : item.kind === 'optimistic'
-                ? (
-                  <PendingSteeringBubble
-                    content={[{ type: 'text', text: item.text }]}
-                    renderMessageImages={seatProps.renderMessageImages}
-                    t={seatProps.t}
-                  />
-                )
-                : item.kind === 'images'
+              ? <BrowserWorkspace
+                sessionId={sessionId}
+                live={item.live}
+                items={item.items}
+                {...item.tabId === undefined ? {} : { tabId: item.tabId }}
+                {...item.sourceUrl === undefined ? {} : { sourceUrl: item.sourceUrl }}
+                selected={item.userKey === activeBrowserKey}
+                onActivate={() => { setSelectedBrowserKey(item.userKey) }}
+                seatProps={seatProps}
+                turnStatus={turnStatus}
+              />
+              : item.kind === 'node'
+                ? <ChatNodeSeat nodeKey={item.key} {...seatProps} />
+                : item.kind === 'optimistic'
                   ? (
-                    <div data-chat-flow-kind="generated-image">
-                      {seatProps.renderMessageImages({ images: item.images, align: 'start' })}
-                    </div>
-                  )
-                  : (
-                    <ToolActivityGroup
-                      items={item.items}
-                      anchorKey={item.anchorKey}
-                      {...seatProps}
+                    <PendingSteeringBubble
+                      content={[{ type: 'text', text: item.text }]}
+                      renderMessageImages={seatProps.renderMessageImages}
+                      t={seatProps.t}
                     />
-                  )}
+                  )
+                  : item.kind === 'images'
+                    ? (
+                      <div data-chat-flow-kind="generated-image">
+                        {seatProps.renderMessageImages({ images: item.images, align: 'start' })}
+                      </div>
+                    )
+                    : (
+                      <ToolActivityGroup
+                        items={item.items}
+                        anchorKey={item.anchorKey}
+                        {...seatProps}
+                      />
+                    )}
         </Fragment>
       ))}
       {!hasBrowserWorkspace && turnStatus !== undefined && turnStatus.progress !== null && statusBeforeIndex === -1 && (

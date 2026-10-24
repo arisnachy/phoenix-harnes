@@ -320,7 +320,7 @@ export class OpenClawGatewayClient {
       }, timeoutMs)
       const pending: PendingRequest = {
         timer,
-        resolve: value => resolve(value as T),
+        resolve: (value) =>{  resolve(value as T) },
         reject,
         signal: options.signal,
         onAbort: undefined,
@@ -501,7 +501,7 @@ export class OpenClawGatewayClient {
   }
 
   private async openConnection(): Promise<OpenClawHello> {
-    const socket = this.options.socketFactory?.(this.url.toString()) ?? new WebSocket(this.url.toString()) as unknown as OpenClawSocket
+    const socket = this.options.socketFactory?.(this.url.toString()) ?? new WebSocket(this.url.toString())
     this.socket = socket
     try {
       // Attach before waiting for `open`: a Gateway may send its challenge in
@@ -566,7 +566,7 @@ export class OpenClawGatewayClient {
     if (socket.readyState === WebSocket.OPEN) return Promise.resolve(true)
     return new Promise<boolean>((resolve) => {
       let settled = false
-      const timer = setTimeout(() => finish(false), this.timeoutMs)
+      const timer = setTimeout(() =>{  finish(false) }, this.timeoutMs)
       const finish = (opened: boolean): void => {
         if (settled) return
         settled = true
@@ -588,9 +588,9 @@ export class OpenClawGatewayClient {
   private waitForChallenge(socket: OpenClawSocket): Promise<{ readonly nonce: string; readonly ts: number }> {
     return new Promise((resolve, reject) => {
       let settled = false
-      const timer = setTimeout(() => finishReject(new OpenClawGatewayError('OpenClaw Gateway challenge timed out.',
+      const timer = setTimeout(() =>{  finishReject(new OpenClawGatewayError('OpenClaw Gateway challenge timed out.',
         { code: 'CHALLENGE_TIMEOUT',
-          retryable: true })),
+          retryable: true })) },
       this.timeoutMs)
       const finishResolve = (value: { readonly nonce: string; readonly ts: number }): void => {
         if (settled) return
@@ -664,9 +664,9 @@ export class OpenClawGatewayClient {
         clearTimeout(timer)
         this.detach(socket, 'message', onMessage)
         const response = parsed as unknown as ResponseFrame
-        if (response.ok !== true) {
+        if (!response.ok) {
           const error = response.error ?? {}
-          reject(gatewayRpcError(error as unknown as Record<string, unknown>, 'OpenClaw Gateway handshake failed.', this.credentialValues))
+          reject(gatewayRpcError(error, 'OpenClaw Gateway handshake failed.', this.credentialValues))
           return
         }
         if (response.payload === undefined) { reject(new OpenClawGatewayError('OpenClaw Gateway handshake response is empty.',

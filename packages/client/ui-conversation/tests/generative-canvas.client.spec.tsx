@@ -79,7 +79,7 @@ describe('Phoenix intelligent UI canvas', () => {
     const spec = parseCanvasSpec(sample())
     if (spec === null) throw new Error('fixture is invalid')
     render(<GenerativeCanvas spec={spec} />)
-    expect((screen.getByRole('button', { name: 'Enviar a Kira' }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: 'Enviar a Kira' })).disabled).toBe(true)
   })
 
   it('keeps surrounding assistant prose and hides unfinished fences while streaming', () => {
@@ -99,7 +99,7 @@ describe('Phoenix intelligent UI canvas', () => {
       blocks={[{ kind: 'text', text: blockText }]}
       streaming={false}
       renderMessageImages={() => null}
-      t={((key: string) => key) as ChatViewSlotProps['t']}
+      t={((key: string) => key)}
       onUiAction={handle}
     />)
     expect(screen.getByText('He revisado el estado.')).not.toBeNull()

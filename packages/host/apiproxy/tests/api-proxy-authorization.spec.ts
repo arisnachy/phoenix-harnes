@@ -14,7 +14,7 @@ function request<P>(payload: P) {
 }
 
 function hostTick(): Promise<void> {
-  return new Promise(resolve => { setImmediate(resolve) })
+  return new Promise((resolve) => { setImmediate(resolve) })
 }
 
 function ok<T>(response: { result: { ok: boolean; value?: T } }): T {

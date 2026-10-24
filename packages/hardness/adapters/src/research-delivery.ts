@@ -155,7 +155,7 @@ async function sendByTelegram(
     form.append('chat_id', chat.value)
     form.append('caption', 'Phoenix Research Studio · Informe ' + reportId)
     const ownedBytes = Uint8Array.from(file.bytes)
-    form.append('document', new Blob([ownedBytes.buffer as ArrayBuffer], {
+    form.append('document', new Blob([ownedBytes.buffer], {
       type: format === 'pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     }), 'informe.' + format)
     let response: Response
@@ -195,8 +195,8 @@ export function createResearchDeliverTool(deps: ResearchDeliveryDeps): ToolDefin
     async execute(args, exec) {
       const id = args.report_id
       if (!/^[0-9a-f]{16}$/u.test(id)) throw new ToolArgsError(['report_id inválido.'])
-      const channels: Channel[] = args.channel === 'both' ? ['email', 'telegram'] : [args.channel as Channel]
-      const formats: Format[] = args.format === 'both' ? ['pdf', 'docx'] : [args.format as Format]
+      const channels: Channel[] = args.channel === 'both' ? ['email', 'telegram'] : [args.channel]
+      const formats: Format[] = args.format === 'both' ? ['pdf', 'docx'] : [args.format]
       // Verify all files before soliciting an irreversible external action.
       await Promise.all(formats.map(format => verifyPublishedDocument(id, format)))
       if (exec.agent === undefined) throw new Error('La entrega requiere una sesión de agente autenticada.')

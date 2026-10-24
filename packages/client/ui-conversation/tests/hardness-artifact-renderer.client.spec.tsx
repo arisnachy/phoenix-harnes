@@ -431,7 +431,7 @@ describe('HARDNESS inline artifact renderer', () => {
       data: '<img src="https://images.example.test/hero.webp" alt="Hero"><script>document.body.dataset.live="1"</script>',
     })} />)
     const frame = screen.getByTitle('Landing page')
-    expect(frame.getAttribute('srcdoc')).toContain("img-src data: blob:")
+    expect(frame.getAttribute('srcdoc')).toContain('img-src data: blob:')
     expect(frame.getAttribute('srcdoc')).not.toContain('img-src data: blob: https: http:')
     const enable = screen.getByRole('button', { name: 'Cargar imágenes externas' })
     expect(enable.getAttribute('aria-pressed')).toBe('false')

@@ -115,7 +115,7 @@ describe('Eclipse model settings', () => {
     fireEvent.change(screen.getByLabelText(en.eclipseEnginePreference), { target: { value: 'codex' } })
 
     fireEvent.click(screen.getByRole('button', { name: en.eclipseSave }))
-    await waitFor(() => expect(mutate).toHaveBeenCalledTimes(1))
+    await waitFor(() =>{  expect(mutate).toHaveBeenCalledTimes(1) })
     expect(mutate.mock.calls[0]?.[0]).toMatchObject({
       ns: 'eclipse-routing', expectedRevision: 4,
       ops: expect.arrayContaining([
@@ -144,7 +144,7 @@ describe('Eclipse model settings', () => {
       JSON.stringify(['openai-codex', 'gpt-6-luna']))
     fireEvent.change(screen.getByLabelText(en.eclipseStrategy), { target: { value: 'quality' } })
     fireEvent.click(screen.getByRole('button', { name: en.eclipseSave }))
-    await waitFor(() => expect(mutate).toHaveBeenCalledOnce())
+    await waitFor(() =>{  expect(mutate).toHaveBeenCalledOnce() })
     expect(mutate.mock.calls[0]?.[0]).toMatchObject({
       ops: expect.arrayContaining([
         { op: 'set', path: ['planner'], value: { provider: 'openai-codex', model: 'gpt-6.1-sol', reasoningEffort: 'medium' } },
@@ -180,7 +180,7 @@ describe('Eclipse model settings', () => {
       loadCatalog={async () => catalog} loadEngines={loadEngines} t={t} />)
     expect(await screen.findByText(/Codex · Connected · 0.163.0/)).toBeTruthy()
     expect(screen.getByText(/GATEWAY_NOT_CONFIGURED/)).toBeTruthy()
-    expect((screen.getByLabelText(en.eclipseEnginePreference) as HTMLSelectElement).value).toBe('openclaw')
+    expect((screen.getByLabelText(en.eclipseEnginePreference)).value).toBe('openclaw')
     expect(existingProfile(controller.store.getSnapshot().namespaces.get('eclipse-routing')?.value, {})).toMatchObject({
       executionEngine: 'openclaw', coordinator: { model: 'gpt-6.1-sol', reasoningEffort: 'medium' },
     })
@@ -203,7 +203,7 @@ describe('Eclipse model settings', () => {
     const input = screen.getByLabelText(en.eclipseRuntimeVersion)
     fireEvent.change(input, { target: { value: '2026.10.5' } })
     fireEvent.click(screen.getByRole('button', { name: en.eclipseRuntimePrepare }))
-    await waitFor(() => expect(prepareOpenClaw).toHaveBeenCalledWith('2026.10.5'))
+    await waitFor(() =>{  expect(prepareOpenClaw).toHaveBeenCalledWith('2026.10.5') })
     expect(await screen.findByText(/OpenClaw candidate prepared/)).toBeTruthy()
   })
 })

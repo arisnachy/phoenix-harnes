@@ -65,7 +65,7 @@ function fixture() {
   }
   const context = { get: (name: string) => name === 'credentials' ? creds
     : name === 'agents' ? agents : name === 'apiProxy' ? { sessions } : undefined,
-    logger: { warn: vi.fn() } }
+  logger: { warn: vi.fn() } }
   const inbox = new TelegramInbox(context as never)
   const sent = vi.fn(async (_token: string, _chat: number, _text: string) => undefined)
   const typing = vi.fn(async (_token: string, _chat: number, _signal: AbortSignal) => undefined)
@@ -139,14 +139,14 @@ describe('Telegram owner-paired Host inbox', () => {
     const f = fixture()
     f.values.set('PHOENIX_TELEGRAM_OWNER_CHAT_ID', '12345')
     let finish!: () => void
-    const pending = new Promise<void>(resolve => { finish = resolve })
+    const pending = new Promise<void>((resolve) => { finish = resolve })
     f.agent.whenIdle = vi.fn(async () => {
       await pending
       return undefined
     })
     const processing = f.internal.process(makeMessage(12345, 'Kira, revisa las herramientas'), TOKEN, f.creds)
-    await vi.waitFor(() => expect(f.typing).toHaveBeenCalledTimes(1))
-    await vi.waitFor(() => expect(f.sessions.prompt).toHaveBeenCalledTimes(1))
+    await vi.waitFor(() =>{  expect(f.typing).toHaveBeenCalledTimes(1) })
+    await vi.waitFor(() =>{  expect(f.sessions.prompt).toHaveBeenCalledTimes(1) })
     expect(f.sent).not.toHaveBeenCalled()
     const indicatorSignal = f.typing.mock.calls[0]![2]
     expect(indicatorSignal.aborted).toBe(false)

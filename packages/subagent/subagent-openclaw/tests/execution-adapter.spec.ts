@@ -111,7 +111,7 @@ async function gatewayFor(options: {
     requests,
     async close() {
       for (const socket of server.clients) socket.close()
-      await new Promise<void>(resolve => server.close(() => resolve()))
+      await new Promise<void>((resolve) =>{  server.close(() =>{  resolve(); }) })
     },
   }
   gateways.push(gateway)
@@ -270,7 +270,7 @@ describe('OpenClaw Agent Teams adapter', () => {
 
   it('fails closed when host-owned policy attestation disagrees with effective restrictions', async () => {
     const gateway = await gatewayFor()
-    const policyAttester: OpenClawPolicyAttester = async request => {
+    const policyAttester: OpenClawPolicyAttester = async (request) => {
       const original = await attest(request)
       if (original === undefined) throw new Error('Fixture native policy attestation is missing')
       return {

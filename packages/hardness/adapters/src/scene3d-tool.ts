@@ -66,9 +66,9 @@ function normalizeScene(raw: unknown, fallbackName: string): Scene {
       const value=inputMaterial as Record<string,unknown>
       const props=['metallic','roughness','opacity','transmission','clearcoat'] as const
       if (props.some(key=>value[key]!==undefined&&
-        (typeof value[key]!=='number'||!Number.isFinite(value[key])||(value[key] as number)<0||(value[key] as number)>1))
+        (typeof value[key]!=='number'||!Number.isFinite(value[key])||(value[key])<0||(value[key])>1))
         ||['baseColor','emissive'].some(key=>value[key]!==undefined&&
-          (typeof value[key]!=='string'||!hex.test(value[key] as string)))) {
+          (typeof value[key]!=='string'||!hex.test(value[key])))) {
         throw new ToolArgsError([`Objeto 3D ${index + 1}: parámetros PBR inválidos.`])
       }
       material={

@@ -33,7 +33,7 @@ export function DesktopLive({ sessionId, active }: { sessionId: string; active: 
   const stopSharing = useCallback(() => {
     const stream = streamRef.current
     streamRef.current = null
-    stream?.getTracks().forEach(track => track.stop())
+    stream?.getTracks().forEach((track) =>{  track.stop() })
     setLive(null)
     setLiveOwner(null)
   }, [])
@@ -82,12 +82,12 @@ export function DesktopLive({ sessionId, active }: { sessionId: string; active: 
       })
       const track = stream.getVideoTracks()[0]
       if (!track || !isWindowCapture(track)) {
-        stream.getTracks().forEach(item => item.stop())
+        stream.getTracks().forEach((item) =>{  item.stop() })
         setCaptureError('Selecciona una ventana de aplicación (no pantalla completa ni pestaña).')
         return
       }
       if (owner !== owningSessionRef.current || !activeRef.current || !mountedRef.current) {
-        stream.getTracks().forEach(item => item.stop())
+        stream.getTracks().forEach((item) =>{  item.stop() })
         return
       }
       stopSharing()
@@ -173,7 +173,7 @@ export function DesktopLive({ sessionId, active }: { sessionId: string; active: 
           <button type="button" onClick={() => { if (liveWindow) stopSharing(); else void startSharing() }}
             disabled={!active}>{liveWindow ? 'Detener directo' : 'Compartir ventana en directo'}</button>
           <button type="button" aria-label={collapsed ? 'Mostrar Desktop Live' : 'Contraer Desktop Live'}
-            onClick={() => setCollapsed(value => !value)}>{collapsed ? 'Mostrar' : 'Contraer'}</button>
+            onClick={() =>{  setCollapsed(value => !value) }}>{collapsed ? 'Mostrar' : 'Contraer'}</button>
         </div>
       </header>
       {captureError && <p className={css.warning} role="alert">{captureError}</p>}

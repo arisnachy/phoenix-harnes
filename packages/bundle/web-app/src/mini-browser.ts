@@ -545,7 +545,7 @@ async function startScopedChromium(sessionId: string, signal?: AbortSignal): Pro
     const browser: ScopedBrowser = { child, profile }
     scopedBrowsers.set(sessionId, browser)
     let spawnFailure: Error | undefined
-    child.once('error', error => { spawnFailure = error })
+    child.once('error', (error) => { spawnFailure = error })
     try {
       const deadline = Date.now() + START_ACTION_LIMIT_MS
       while (Date.now() < deadline) {

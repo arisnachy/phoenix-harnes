@@ -83,7 +83,7 @@ describe('Phoenix street beat-em-up runtime (no placeholder art)', () => {
     expect(events.some(e => e.type === 'boss-phase')).toBe(true)
     // The VM mutates boss.action during AI, which TypeScript cannot infer after
     // this test explicitly cleared it above. Read the post-call runtime value.
-    const enragedMove = Reflect.get(boss, 'action') as Actor['action']
+    const enragedMove = Reflect.get(boss, 'action')
     expect(['sweep', 'charge']).toContain(enragedMove?.name)
   })
 

@@ -129,10 +129,10 @@ export interface McpRegistryClient {
   state(): Promise<McpConnectorHubSnapshot>
   /** Secret-free X user/Phoenix account and developer credential status. */
   xState?(): Promise<{
-    clientIdConfigured: boolean; clientSecretConfigured: boolean;
-    api: { configured: boolean; status?: string };
-    phoenixApi: { configured: boolean; status?: string };
-    docs: { configured: boolean; status?: string };
+    clientIdConfigured: boolean; clientSecretConfigured: boolean
+    api: { configured: boolean; status?: string }
+    phoenixApi: { configured: boolean; status?: string }
+    docs: { configured: boolean; status?: string }
   }>
   /** Save credentials only through the trusted Host vault; never through a chat/tool response. */
   configureX?(request: { clientId: string; clientSecret: string }): Promise<{
@@ -140,7 +140,7 @@ export interface McpRegistryClient {
   }>
   /** Install one separately authorized X OAuth identity without registry lookup. */
   connectX?(request: { identity?: 'user' | 'phoenix'; username?: string }): Promise<{
-    api: { status: 'installed' | 'already-installed'; connector: { serverName: string; entryId: string; url: string } };
+    api: { status: 'installed' | 'already-installed'; connector: { serverName: string; entryId: string; url: string } }
     docs: { status: 'installed' | 'already-installed'; connector: { serverName: string; entryId: string; url: string } }
   }>
   /** Retry one already-installed live MCP without clearing its stored authorization. */
@@ -777,8 +777,8 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
             <code>npx -y @microsoft/workiq accept-eula</code>. No se aceptará automáticamente.</p>
           <p><a href="https://learn.microsoft.com/en-us/microsoft-365/copilot/extensibility/work-iq/cli"
             target="_blank" rel="noopener noreferrer">Requisitos oficiales</a>
-            {' '}·{' '}<a href="https://github.com/arisnachy/phoenix-harnes/blob/stable/docs/connectors/microsoft-mcp.md"
-              target="_blank" rel="noopener noreferrer">Guía Phoenix</a></p>
+          {' '}·{' '}<a href="https://github.com/arisnachy/phoenix-harnes/blob/stable/docs/connectors/microsoft-mcp.md"
+            target="_blank" rel="noopener noreferrer">Guía Phoenix</a></p>
         </div>
       ) : null}
       {definition.id === 'microsoft-azure' ? (
@@ -789,8 +789,8 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
             El modo consolidado reduce el volumen de herramientas.</p>
           <p><a href="https://learn.microsoft.com/en-us/azure/developer/azure-mcp-server/concepts"
             target="_blank" rel="noopener noreferrer">Documentación oficial</a>
-            {' '}·{' '}<a href="https://github.com/arisnachy/phoenix-harnes/blob/stable/docs/connectors/microsoft-mcp.md"
-              target="_blank" rel="noopener noreferrer">Guía Phoenix</a></p>
+          {' '}·{' '}<a href="https://github.com/arisnachy/phoenix-harnes/blob/stable/docs/connectors/microsoft-mcp.md"
+            target="_blank" rel="noopener noreferrer">Guía Phoenix</a></p>
         </div>
       ) : null}
       {serviceGraph ? (
@@ -798,7 +798,7 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
           <p><strong>OAuth Microsoft independiente:</strong> pulsa Instalar y luego pide a Kira
             «Conecta {definition.name} con Microsoft». Kira debe ejecutar <code>microsoft_status</code>,
             solicitar una sola vez el Application (client) ID público si falta mediante
-            <code>microsoft_setup</code>, iniciar <code>microsoft_login_start</code>, mostrar
+          <code>microsoft_setup</code>, iniciar <code>microsoft_login_start</code>, mostrar
             el código y la URL oficial, completar <code>microsoft_login_complete</code> y
             comprobar <code>microsoft_profile</code>. El dispositivo pide tu consentimiento;
             no se debe pedir contraseña ni mostrar el conector como autenticado por iniciar su MCP.</p>
@@ -1582,9 +1582,9 @@ export function ConnectorsSettingsSection({ api,
     void Promise.race([
       reconnect({ serverName: runtime.serverName }),
       new Promise<never>((_resolve, reject) => {
-        reconnectTimeout = setTimeout(() => reject(new Error(
+        reconnectTimeout = setTimeout(() =>{  reject(new Error(
           'El Host MCP no confirmó la reconexión en 12 segundos. Comprueba la disponibilidad del servicio y vuelve a intentar.',
-        )), 12_000)
+        )) }, 12_000)
       }),
     ]).then(async (result) => {
       if (!result.accepted) {
@@ -2125,19 +2125,19 @@ export function ConnectorsSettingsSection({ api,
             <label className={styles['field']}>
               <span className={styles['fieldLabel']}>X Developer Client ID</span>
               <input className={styles['input']} type="text" autoComplete="off"
-                value={xClientId} onChange={event => { setXClientId(event.target.value) }}
+                value={xClientId} onChange={(event) => { setXClientId(event.target.value) }}
                 placeholder="Dejar vacío si ya está guardado" />
             </label>
             <label className={styles['field']}>
               <span className={styles['fieldLabel']}>X Developer Client Secret</span>
               <input className={styles['input']} type="password" autoComplete="new-password"
-                value={xClientSecret} onChange={event => { setXClientSecret(event.target.value) }}
+                value={xClientSecret} onChange={(event) => { setXClientSecret(event.target.value) }}
                 placeholder="Se almacena solo en el vault del Host" />
             </label>
             <label className={styles['field']}>
               <span className={styles['fieldLabel']}>Usuario X creado para Phoenix (opcional)</span>
               <input className={styles['input']} type="text" autoComplete="off"
-                value={xPhoenixUsername} onChange={event => { setXPhoenixUsername(event.target.value) }}
+                value={xPhoenixUsername} onChange={(event) => { setXPhoenixUsername(event.target.value) }}
                 placeholder="@PhoenixIA" />
             </label>
             {xNotice === undefined ? null : <p role="status" className={styles['advancedHint']}>{xNotice}</p>}

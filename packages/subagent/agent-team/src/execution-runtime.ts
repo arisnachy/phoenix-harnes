@@ -512,7 +512,7 @@ export class TeamExecutionRuntime {
       const outcomes = await Promise.race([
         Promise.allSettled([...active.map(item => item.done), ...this.steering]),
         new Promise<never>((_resolve, reject) => {
-          timer = setTimeout(() => reject(new Error('Native execution teardown timed out; operations remain tracked')),
+          timer = setTimeout(() =>{  reject(new Error('Native execution teardown timed out; operations remain tracked')) },
             this.limits.disposalTimeoutMs ?? 5000)
         }),
       ])

@@ -56,7 +56,7 @@ export function validateResearchPublication(input: unknown): Report {
       throw new ToolArgsError(['Las claves bibliográficas deben ser únicas y válidas.'])
     }
     for (const field of ['authors', 'year', 'title', 'url']) {
-      if (typeof item[field] !== 'string' || (item[field] as string).trim() === '') {
+      if (typeof item[field] !== 'string' || (item[field]).trim() === '') {
         throw new ToolArgsError(['La fuente ' + item.key + ' necesita ' + field + '.'])
       }
     }

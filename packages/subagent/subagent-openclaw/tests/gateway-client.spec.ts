@@ -33,7 +33,7 @@ it('handles a timed out challenge while the WebSocket upgrade is still pending',
   } finally {
     await client.dispose()
     for (const socket of sockets) socket.destroy()
-    await new Promise<void>(resolve => { server.close(() => { resolve() }) })
+    await new Promise<void>((resolve) => { server.close(() => { resolve() }) })
   }
 })
 

@@ -94,7 +94,7 @@ export function createResearchJournalTool(): ToolDefinition {
         text: 'Normas editoriales candidatas: ' + JSON.stringify(value) + '. Verificación editorial pendiente.',
       }] },
     async execute(args) {
-      return journalPublicationProfile(args.journal as JournalName, args.article_type as JournalArticle)
+      return journalPublicationProfile(args.journal, args.article_type)
     },
     presentCall() { return { card: 'generic', title: 'Requisitos de revista científica', kind: 'execute' } },
   })

@@ -92,7 +92,7 @@ describe('durable Codex app-server wire', () => {
     const turn = await turning
     const observed = turn.completion.then(() => 'completed', () => 'closed')
     instance.close()
-    expect(await Promise.race([observed, new Promise(resolve => setTimeout(() => resolve('hung'), 100))])).toBe('closed')
+    expect(await Promise.race([observed, new Promise(resolve => setTimeout(() =>{  resolve('hung') }, 100))])).toBe('closed')
     expect(signal.aborted).toBe(false)
   })
 

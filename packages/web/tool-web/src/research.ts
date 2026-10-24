@@ -294,7 +294,7 @@ export function applyResearchTools(ctx: Context, maxResults: number, timeoutMs: 
       render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
     },
     isConcurrencySafe: () => true,
-    execute: async args => {
+    execute: async (args) => {
       const domain = args.domain?.trim().toLowerCase()
       if (domain !== undefined && domain !== '' && !Object.hasOwn(RESEARCH_SOURCES, domain)) {
         throw new ToolArgsError(['unknown domain; use research_sources without a domain to list domains'])

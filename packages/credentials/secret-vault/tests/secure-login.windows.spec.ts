@@ -46,7 +46,7 @@ async function protectFixture(origin: string, payload: Record<string, unknown>):
       child.kill()
       finish(new Error('test DPAPI helper timeout'))
     }, 12_000)
-    child.on('error', () => finish(new Error('test DPAPI helper unavailable')))
+    child.on('error', () =>{  finish(new Error('test DPAPI helper unavailable')) })
     child.stdout.on('data', (chunk: Buffer) => { output += chunk.toString('utf8') })
     child.on('close', (code) => {
       if (code !== 0 || !output.trim()) finish(new Error('test DPAPI helper rejected fixture'))
@@ -179,9 +179,9 @@ describe.skipIf(!WINDOWS)('Windows DPAPI secure-login integration', () => {
           }
           resolve({
             host: `127.0.0.1:${address.port}`,
-            close: async () => await new Promise<void>((done, reject) => {
-              server?.close(error => error === undefined ? done() : reject(error))
-            }),
+            close: async () =>{  await new Promise<void>((done, reject) => {
+              server?.close(error =>{  error === undefined ? done() : reject(error); })
+            }) },
           })
         })
       })
@@ -388,7 +388,7 @@ describe.skipIf(!WINDOWS)('Windows DPAPI secure-login integration', () => {
     } finally {
       await context?.fiber.dispose()
       if (descriptorPath !== undefined) await rm(descriptorPath, { force: true })
-      if (server?.listening === true) await new Promise<void>(done => server?.close(() => done()))
+      if (server?.listening === true) await new Promise<void>(done => server?.close(() =>{  done() }))
       vi.unstubAllGlobals()
       vi.resetModules()
       if (previousHome === undefined) delete process.env.DSH_HOME

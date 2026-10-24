@@ -41,7 +41,7 @@ export function TelegramConnectorSetup({ client }: { client?: TelegramBotClient 
     if (client === undefined) return
     let cancelled = false
     void client.state().then(
-      next => { if (!cancelled) setSnapshot(next) },
+      (next) => { if (!cancelled) setSnapshot(next) },
       () => { if (!cancelled) setError('No se pudo consultar el estado de Telegram en este Host.') },
     )
     return () => { cancelled = true }
@@ -52,7 +52,7 @@ export function TelegramConnectorSetup({ client }: { client?: TelegramBotClient 
     setBusy(true)
     setError(undefined)
     void client.configure(token).then(
-      next => {
+      (next) => {
         setSnapshot(next)
         setToken('')
         setOpen(false)
@@ -66,23 +66,23 @@ export function TelegramConnectorSetup({ client }: { client?: TelegramBotClient 
     setBusy(true)
     setError(undefined)
     void client.disconnect().then(
-      next => { setSnapshot(next); setToken('') },
+      (next) => { setSnapshot(next); setToken('') },
       () => { setError('No se pudo quitar el token del vault local.') },
     ).finally(() => { setBusy(false) })
   }
 
   const refresh = (): void => {
     if (client === undefined) return
-    void client.state().then(setSnapshot).catch(() => setError('No se pudo actualizar el estado de Telegram.'))
+    void client.state().then(setSnapshot).catch(() =>{  setError('No se pudo actualizar el estado de Telegram.') })
   }
   const pair = (): void => {
     if (client === undefined) return
     setBusy(true)
     setError(undefined)
     void client.pairing().then(
-      response => { setPairCode(response.code) },
+      (response) => { setPairCode(response.code) },
       () => { setError('No se pudo generar el código para vincular tu cuenta.') },
-    ).finally(() => setBusy(false))
+    ).finally(() =>{  setBusy(false) })
   }
   const username = snapshot?.username
   const canOpenBot = username !== undefined && /^[A-Za-z][A-Za-z0-9_]{4,31}$/.test(username)

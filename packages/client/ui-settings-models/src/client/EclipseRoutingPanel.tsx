@@ -243,7 +243,7 @@ export function EclipseRoutingPanel(props: {
     // The app-server's reasoning list is authoritative; do not drop newer ids.
     const supported = found?.reasoningEfforts ?? []
     return <div className={css.role} key={role}>
-      <label className={css.label} htmlFor={`eclipse-${role}`}>{props.t(`eclipseRole_${role}` as keyof typeof en)}</label>
+      <label className={css.label} htmlFor={`eclipse-${role}`}>{props.t(`eclipseRole_${role}`)}</label>
       <select id={`eclipse-${role}`} className={css.input} value={selection(route)}
         disabled={!state.writable || working || catalogLoading || models.length === 0}
         onChange={(event) => { pick(role, event.target.value) }}>

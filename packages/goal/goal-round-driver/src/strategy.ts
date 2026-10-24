@@ -128,7 +128,7 @@ export function measureGoalWorkProgress(
         // Tool protocols can explicitly mark dispatch receipts as unverified.
         // An accepted click/key/submit request is not evidence that its goal
         // was achieved; a subsequent observation must confirm the effect.
-        const unverified = contents.some(block => {
+        const unverified = contents.some((block) => {
           if (block.type !== 'text') return false
           try {
             const parsed: unknown = JSON.parse(block.text)

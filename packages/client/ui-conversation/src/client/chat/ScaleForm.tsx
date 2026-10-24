@@ -101,7 +101,7 @@ export function ScaleForm({ spec }: { readonly spec: ScaleFormSpec }): ReactNode
       item.question + ': ' + (item.options.find(option => option.score === answers[item.id])?.label ?? 'Sin respuesta')),
     'Total: ' + String(scored.total), 'Interpretación: ' + (scored.band?.label ?? 'No definida'),
     'Fuente: ' + (spec.props.source ?? 'No especificada')]
-    void navigator.clipboard.writeText(lines.join('\n')).then(() => setCopied(true)).catch(() => setCopied(false))
+    void navigator.clipboard.writeText(lines.join('\n')).then(() =>{  setCopied(true) }).catch(() =>{  setCopied(false) })
   }
   return <section className={css.surface} data-generative-ui="scale_form">
     <header className={css.heading}><PhoenixUiIcon name="clipboard" />
@@ -112,9 +112,9 @@ export function ScaleForm({ spec }: { readonly spec: ScaleFormSpec }): ReactNode
       {spec.props.items.map((item, index) => <label key={item.id} className={css.question}>
         <span>{index + 1}. {item.question}</span>
         <select value={answers[item.id] === undefined ? '' : String(answers[item.id])}
-          onChange={event => {
+          onChange={(event) => {
             const score = event.currentTarget.value
-            setAnswers(old => {
+            setAnswers((old) => {
               const next = { ...old }
               if (score === '') delete next[item.id]
               else next[item.id] = Number(score)

@@ -547,7 +547,7 @@ export class McpOAuthController {
             AbortSignal.timeout(30_000),
             ...(init?.signal == null ? [] : [init.signal]),
           ]),
-        }).then(response => {
+        }).then((response) => {
           // 4xx from optional well-known documents may be normal SDK fallback.
           // Keep it only for diagnosis if the entire OAuth flow fails.
           if (!response.ok) lastHttpStatus = response.status

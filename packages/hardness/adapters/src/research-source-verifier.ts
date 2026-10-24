@@ -40,8 +40,8 @@ function object(value: unknown): Record<string, unknown> {
 }
 async function queryJson(url: string, fetcher: Fetcher, signal?: AbortSignal): Promise<Record<string, unknown>> {
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), 12000)
-  const cancel = () => controller.abort()
+  const timer = setTimeout(() =>{  controller.abort() }, 12000)
+  const cancel = () =>{  controller.abort() }
   signal?.addEventListener('abort', cancel, { once: true })
   try {
     const response = await fetcher(url, {

@@ -94,13 +94,13 @@ function modelOf(context: ExecutionContext): string {
 }
 
 function sandboxOf(context: ExecutionContext): 'read-only' | 'workspace-write' | 'danger-full-access' {
-  const policy = context.root.ctx.get('sandboxPolicy') as SandboxPolicyService | undefined
+  const policy = context.root.ctx.get('sandboxPolicy')
   return policy?.resolve({ session: context.root.session }).mode ?? 'read-only'
 }
 
 function approvalHandler(context: ExecutionContext): NonNullable<CodexWireOptions['onApproval']> {
   return async (request: CodexApprovalRequest, signal: AbortSignal) => {
-    const approval = context.root.ctx.get('approval') as ApprovalService | undefined
+    const approval = context.root.ctx.get('approval')
     if (approval === undefined) return 'decline'
     const scope = request.kind === 'command' ? request.command : request.path
     if (scope === undefined) return signal.aborted ? 'cancel' : 'decline'

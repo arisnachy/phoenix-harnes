@@ -426,7 +426,7 @@ function expandRawCanvases(segments: GenerativeUiSegment[], streaming: boolean):
   return result
 }
 
-const SportsPortrait = ({ label, logo }: {label: string; logo?: string | undefined}) => (
+const SportsPortrait = ({ label, logo }: { label: string; logo?: string | undefined }) => (
   <span className={css.sportsPortrait}>
     {logo ? <img src={logo} alt={label} loading="lazy" referrerPolicy="no-referrer" /> : label.slice(0,2).toUpperCase()}
   </span>
@@ -483,7 +483,7 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
           <div key={i}>{h.image && <SportsPortrait label={h.value} logo={h.image} />}<dt>{h.label}</dt><dd>{h.value}</dd></div>)}</dl>}
         <footer className={css.sportsFoot}>Fuente: {p.source}
           {p.note && <span>{p.note}</span>}
-          {p.askPrompt && onAction && <button type="button" onClick={() => onAction(p.askPrompt!, 'draft')}>Ampliar análisis</button>}
+          {p.askPrompt && onAction && <button type="button" onClick={() =>{  onAction(p.askPrompt!, 'draft') }}>Ampliar análisis</button>}
         </footer>
       </section>
     }
@@ -500,7 +500,7 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
           {p.stake && <div><small>Importe simulado</small><strong>{p.stake}</strong></div>}
           {p.grossReturn && <div><small>Retorno bruto potencial</small><strong>{p.grossReturn}</strong></div>}</div>
         <footer className={css.sportsFoot}>Fuente: {p.source}<span>{p.note}</span>
-          {p.askPrompt && onAction && <button type="button" onClick={() => onAction(p.askPrompt!, 'draft')}>Revisar selección</button>}
+          {p.askPrompt && onAction && <button type="button" onClick={() =>{  onAction(p.askPrompt!, 'draft') }}>Revisar selección</button>}
         </footer>
       </section>
     }

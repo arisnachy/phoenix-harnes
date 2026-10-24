@@ -362,7 +362,7 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
       if (service && typeof service.register === 'function') removeGodotRoute = mountGodotWebRoute(service)
     }
     attachGodotRoute()
-    disposers.push(ctx.on('internal/service', name => {
+    disposers.push(ctx.on('internal/service', (name) => {
       if (name === 'webServer') attachGodotRoute()
     }))
     disposers.push(() => { removeGodotRoute?.() })
