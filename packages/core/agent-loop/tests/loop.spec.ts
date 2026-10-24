@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@phoenix-ai/cordis'
 import LlmRuntime, { createUserMessage, CallId, LlmError, StreamChunk  } from '@phoenix-ai/dsh-llm'
 import SessionStore, { SessionId, TurnEndReason } from '@phoenix-ai/dsh-session'
@@ -323,6 +323,36 @@ describe('agent loop', () => {
       .flatMap(block => block.type === 'text' ? [block.text] : [])
       .join('\n')
     expect(secondRequestText).not.toContain('If substantial work remains, report only a concrete finding')
+  })
+
+  it('accounts for a long tool after Kira already spoke instead of resetting silence on settlement', async () => {
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(1_000)
+    try {
+      const adapter = new MockAdapter([
+        toolCallResponse('c1', 'echo', { text: 'ping' }, 'Voy a verificar el resultado.'),
+        textResponse('He comprobado el resultado y continúo.'),
+      ])
+      const ctx = await harness(adapter)
+      ctx.tools.register(defineContentToolFixture({
+        name: 'echo',
+        description: 'echo back',
+        parameters: { text: { type: 'string' } },
+        async execute(args) {
+          clock.mockReturnValue(21_500)
+          return [{ type: 'text', text: String(args.text) }]
+        },
+      }))
+      const agent = ctx.agentLoop.create(SessionId('long-spoken-progress'), { provider: 'mock', model: 'mock' })
+      send(agent, 'verify this with the tool')
+      await waitForIdle(ctx, agent)
+      const secondRequestText = adapter.requests[1]!.messages
+        .flatMap(message => message.content)
+        .flatMap(block => block.type === 'text' ? [block.text] : [])
+        .join('\n')
+      expect(secondRequestText).toContain('Long tool work has left the user without a visible update')
+    } finally {
+      clock.mockRestore()
+    }
   })
 
   it('requests progress only after 20 seconds of silent ongoing tool work', () => {
