@@ -50,13 +50,21 @@ export const AssistantMarkdown = memo(function AssistantMarkdown({
     if (block === undefined) continue
     switch (block.kind) {
       case 'text': {
-        // Render declarative UI inline, preserving the surrounding prose and
-        // transcript order. Incomplete streaming fences remain hidden.
-        const segments = splitGenerativeUiText(block.text, { streaming })
+        // Models and streaming transports may split one Markdown fence across
+        // adjacent text blocks. The lexer must see their combined contents,
+        // or a valid sports_game_card is accidentally displayed as raw JSON.
+        const first = i
+        let text = block.text
+        while (i + 1 < blocks.length && blocks[i + 1]?.kind === 'text') {
+          i += 1
+          const next = blocks[i]
+          if (next?.kind === 'text') text += next.text
+        }
+        const segments = splitGenerativeUiText(text, { streaming })
         rendered.push(...segments.map((segment, index) => segment.kind === 'ui'
-          ? <GenerativeUi key={`${i}:ui:${index}`} block={segment.block} onAction={onUiAction} {...(conversationId === undefined ? {} : { conversationId })} />
+          ? <GenerativeUi key={`${first}:ui:${index}`} block={segment.block} onAction={onUiAction} {...(conversationId === undefined ? {} : { conversationId })} />
           : <MarkdownText
-              key={`${i}:markdown:${index}`}
+              key={`${first}:markdown:${index}`}
               text={segment.text}
               streaming={streaming}
               codeLabels={codeLabels}
