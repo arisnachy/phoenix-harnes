@@ -13,7 +13,7 @@ import { ReasoningRow } from './ReasoningRow.tsx'
 import { MiniBrowser, type SavedAccessNotice, type SecureLoginTarget } from './MiniBrowser.tsx'
 import { DesktopLive } from './DesktopLive.tsx'
 import { SecureAsk } from './SecureAsk.tsx'
-import type { TurnProgress } from './turn-progress.ts'
+import { toolActivity, type TurnActivity, type TurnProgress } from './turn-progress.ts'
 import chatCss from './ChatView.module.css'
 import css from './ToolActivityFlow.module.css'
 
@@ -46,7 +46,7 @@ interface ToolActivityFlowProps extends SeatProps {
 }
 
 type ActivityItem =
-  | { readonly kind: 'node'; readonly key: string; readonly liveTool: boolean }
+  | { readonly kind: 'node'; readonly key: string; readonly liveTool: boolean; readonly receipt?: { readonly activity: TurnActivity; readonly failed: boolean } }
   | {
     readonly kind: 'reasoning'
     readonly key: string
@@ -105,9 +105,16 @@ function isActionableConnectorRecovery(node: OrderedChatNode): boolean {
 }
 
 function activityNode(node: OrderedChatNode): ActivityItem {
-  const liveTool = node.kind === 'tool-call'
-    && isRunningTool((node.data as ToolChatData).root)
-  return { kind: 'node', key: node.key, liveTool }
+  if (node.kind !== 'tool-call') return { kind: 'node', key: node.key, liveTool: false }
+  const root = (node.data as ToolChatData).root
+  if (isRunningTool(root)) return { kind: 'node', key: node.key, liveTool: true }
+  return {
+    kind: 'node', key: node.key, liveTool: false,
+    ...(isSettledTool(root) ? { receipt: {
+      activity: toolActivity(root.call.name),
+      failed: root.isError,
+    } } : {}),
+  }
 }
 
 function assistantData(node: OrderedChatNode): AssistantChatData | null {
@@ -554,6 +561,16 @@ function ToolActivityGroup({
     item.kind === 'node' && item.liveTool)
   const history = items.filter(item => item.kind !== 'node' || !item.liveTool)
   const hasHistory = history.length > 0
+  const receipts = history.flatMap(item =>
+    item.kind === 'node' && item.receipt !== undefined ? [item.receipt] : [])
+  const latest = receipts.at(-1)
+  const activityKey = latest?.activity === 'searching' ? 'activity.searching'
+    : latest?.activity === 'browsing' ? 'activity.browsing'
+      : latest?.activity === 'reading' ? 'activity.reading'
+        : latest?.activity === 'writing' ? 'activity.writing'
+          : latest?.activity === 'executing' ? 'activity.executing'
+            : latest?.activity === 'verifying' ? 'activity.verifying'
+              : 'activity.other'
 
   return (
     <div
@@ -581,6 +598,12 @@ function ToolActivityGroup({
           <span>{t('context.tools')}</span>
           <ToolActivityChevron open={open} />
         </button>
+      )}
+      {latest !== undefined && (
+        <div className={css.receipt} role="status" aria-live="polite" data-testid="tool-activity-receipt">
+          {t('activity.latest', { count: receipts.length, action: t(activityKey) })}
+          {latest.failed && <> · {t('activity.failed')}</>}
+        </div>
       )}
       {open && hasHistory && (
         <div className={css.body}>
