@@ -601,7 +601,9 @@ function ToolActivityGroup({
       )}
       {latest !== undefined && (
         <div className={css.receipt} role="status" aria-live="polite" data-testid="tool-activity-receipt">
-          {t('activity.latest', { count: receipts.length, action: t(activityKey) })}
+          {receipts.length === 1
+            ? t('activity.latestOne', { action: t(activityKey) })
+            : t('activity.latest', { count: receipts.length, action: t(activityKey) })}
           {latest.failed && <> · {t('activity.failed')}</>}
         </div>
       )}
