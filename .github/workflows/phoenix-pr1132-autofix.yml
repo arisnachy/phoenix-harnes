@@ -1,0 +1,67 @@
+name: Phoenix PR 1132 scoped autofix
+
+# One-shot trigger: adding this file to the designated PR branch runs the safe generators.
+# Subsequent generated commits do not retrigger the workflow.
+on:
+  push:
+    branches:
+      - fix/phoenix-dual-core-integration-20261023
+    paths:
+      - .github/workflows/phoenix-pr1132-autofix.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: phoenix-pr1132-scoped-autofix
+  cancel-in-progress: false
+
+jobs:
+  scoped-autofix:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout the exact working branch
+        uses: actions/checkout@v6
+        with:
+          ref: fix/phoenix-dual-core-integration-20261023
+          fetch-depth: 0
+          persist-credentials: true
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+      - name: Install immutable workspace
+        run: pnpm install --frozen-lockfile
+      - name: Prepare type-aware lint dependencies
+        run: pnpm run build:lib:host
+      - name: Fix automatically correctable lint issues without adjusting lint baselines
+        shell: bash
+        run: |
+          set +e
+          DSH_OXLINT_THREADS=2 pnpm run lint:fix:contracts-ready
+          lint_status=$?
+          set -e
+          echo "Autofix command status: ${lint_status}; any residual lint errors remain visible to CI."
+      - name: Refresh first-party generated documentation only
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm run gen-doc-graphs
+          pnpm run gen-config-catalog
+          pnpm run gen-tool-catalog
+          pnpm run gen-module-graph
+      - name: Review whitespace and publish only fast-forward to the PR branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add -u
+          git diff --cached --check
+          git diff --cached --stat
+          if git diff --cached --quiet; then
+            echo 'No automatic changes'
+            exit 0
+          fi
+          git -c user.name='Phoenix CI Repair' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'chore(pr1132): apply safe lint autofixes and regenerate catalogs'
+          git push origin HEAD:fix/phoenix-dual-core-integration-20261023
