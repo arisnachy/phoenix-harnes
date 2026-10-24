@@ -36,7 +36,7 @@ function parseTasks(value: unknown): ScheduledTask[] {
         && (entry.summary === undefined || typeof entry.summary === 'string'),
     ))) throw new Error('Invalid task history from Host')
     return {
-      id: value.id, title: value.title, status: value.status,
+      id: value.id, title: value.title, status: value.status as ScheduledTask['status'],
       nextRunAt: value.nextRunAt, createdBy: value.createdBy,
       recentHistory: history === undefined ? [] : (history as ScheduledTask['recentHistory']),
     }
