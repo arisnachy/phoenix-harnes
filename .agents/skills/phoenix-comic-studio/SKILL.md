@@ -6,6 +6,8 @@ whenToUse: El usuario solicita crear un cómic, historieta, novela gráfica, man
 
 # Phoenix Comic Studio — coordinación de Kira
 
+**Integración visual opcional:** usa phoenix-design-intelligence para composición o retoque compatibles con Canva, conservando biblia de personajes, continuidad y viñetas irregulares en Comic Studio. No des por entregado un PDF por haber creado una página de Canva.
+
 **Intención natural.** Ante «crea un cómic de…» o «continúa mi serie», detecta la necesidad y ejecuta el motor sin pedir nombres de scripts, archivos, modelos o parámetros técnicos. Reutiliza las capacidades universales de orquestación, generación de imágenes, almacenamiento, memoria y publicación. No impongas una historia predeterminada. Identifica la serie por su ID existente; no sobrescribas ni reinicies su canon durante una nueva conversación.
 
 **Fuente de verdad:** `node scripts/phoenix-comic-studio.mjs help` y `docs/phoenix-comic-studio.md`. Comienza con `list`, `show` y `audit` para una serie existente. La memoria duradera está bajo `PHOENIX_COMICS_HOME` o `~/.dsh/comic-studio`, no en un chat ni en staging.

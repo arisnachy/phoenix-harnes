@@ -17,6 +17,8 @@
     "website"
   ],
   "scripts": {
+    "design": "node scripts/phoenix-design-intelligence.mjs",
+    "test:design": "node --test scripts/phoenix-design-intelligence.test.mjs",
     "geo": "node scripts/phoenix-geo.mjs",
     "geo:operations": "node scripts/phoenix-geo-operations.mjs",
     "geo:db": "node scripts/phoenix-geo-db.mjs",
