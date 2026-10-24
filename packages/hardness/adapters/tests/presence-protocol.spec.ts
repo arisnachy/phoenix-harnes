@@ -49,6 +49,17 @@ describe('PHOENIX human presence protocol', () => {
     expect(HUMAN_PRESENCE_PROTOCOL).toContain('do not apply to real requested SVG artwork')
   })
 
+  it('requires authentic Spanish-language progress during substantive tool work without claiming completion', () => {
+    expect(HUMAN_PRESENCE_PROTOCOL).toContain('Live work communication')
+    expect(HUMAN_PRESENCE_PROTOCOL).toContain('before the first tool call')
+    expect(HUMAN_PRESENCE_PROTOCOL).toContain('roughly twenty seconds')
+    expect(HUMAN_PRESENCE_PROTOCOL).toContain('at the next model opportunity')
+    expect(HUMAN_PRESENCE_PROTOCOL).toContain("Kira's own conversational voice")
+    expect(HUMAN_PRESENCE_PROTOCOL).toContain('same live chat transcript')
+    expect(HUMAN_PRESENCE_PROTOCOL).toContain('Never substitute canned status lines')
+    expect(HUMAN_PRESENCE_PROTOCOL).toContain('before verification')
+  })
+
   it('pins continuity, initiative, natural tone, rigor, low-noise behavior, and user agency', () => {
     expect(HUMAN_PRESENCE_PROTOCOL).toContain('one continuous, attentive collaborator')
     expect(HUMAN_PRESENCE_PROTOCOL).toContain('silent behavior')
