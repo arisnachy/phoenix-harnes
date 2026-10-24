@@ -10,7 +10,7 @@ The Phoenix global task-center UI could list persistent proactive work, but the 
 
 ## Decision
 
-Extend the existing loopback RPC endpoint rather than adding a browser scheduler or a second task ledger. Only a strict, explicit user-created chat schedule may be submitted: canonical future UTC time, nonempty bounded title and instruction, one-shot or five-minute-plus interval recurrence, `createdBy=user`, `senderIdentity=user`, `catchUp=latest`, and `delivery=chat`. Unknown keys and privileged claims are rejected. The Host targets the only active root conversation; absent or ambiguous ownership fails instead of selecting the wrong workspace. `ProactivityEngine.create` durably saves the record before reporting success. Browser pause/resume/cancel calls only act on currently visible task IDs, are applied in the Host engine, and are confirmed against the authoritative list.
+Extend the existing loopback RPC endpoint rather than adding a browser scheduler or a second task ledger. Only a strict, explicit user-created chat schedule may be submitted: canonical future UTC time, nonempty bounded title and instruction, one-shot or five-minute-plus interval recurrence, `createdBy=user`, `senderIdentity=user`, `catchUp=latest`, and `delivery=chat`. Unknown keys and privileged claims are rejected. The Host can target an explicitly selected active root conversation, or infer ownership only when exactly one root exists; absent, unknown, or ambiguous ownership fails closed. `ProactivityEngine.create` durably saves the record before reporting success. Browser pause/resume/cancel calls only act on currently visible task IDs, are applied in the Host engine, and are confirmed against the authoritative list.
 
 ## Alternatives considered
 

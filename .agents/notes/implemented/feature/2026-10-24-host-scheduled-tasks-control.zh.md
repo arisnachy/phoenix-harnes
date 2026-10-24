@@ -10,7 +10,7 @@ Phoenix 全局任务中心能够列出持久主动任务，但 Host 的 `/phoeni
 
 ## Decision
 
-复用现有的 loopback RPC 和持久化 `ProactivityEngine`，不在浏览器新增调度器。只接受严格验证的用户聊天任务：规范的未来 UTC 时间、非空且有限长度的标题与指令、单次或至少五分钟间隔的重复任务，以及固定的 `createdBy=user`、`senderIdentity=user`、`catchUp=latest`、`delivery=chat`。拒绝额外字段和特权身份。Host 必须恰好有一个活动根会话；没有会话或有多个会话时不能猜测任务所有者。持久化引擎完成保存后才返回成功。暂停、恢复、取消仅针对用户可见任务，并在客户端通过权威列表复核状态。
+复用现有的 loopback RPC 和持久化 `ProactivityEngine`，不在浏览器新增调度器。只接受严格验证的用户聊天任务：规范的未来 UTC 时间、非空且有限长度的标题与指令、单次或至少五分钟间隔的重复任务，以及固定的 `createdBy=user`、`senderIdentity=user`、`catchUp=latest`、`delivery=chat`。拒绝额外字段和特权身份。Host 支持用户明确选择已存在的活动根会话；只有恰好一个根会话时才允许自动选择。没有会话、无效会话或未明确选择多个会话时均拒绝创建。持久化引擎完成保存后才返回成功。暂停、恢复、取消仅针对用户可见任务，并在客户端通过权威列表复核状态。
 
 ## Alternatives considered
 
