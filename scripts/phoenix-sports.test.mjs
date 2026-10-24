@@ -43,6 +43,8 @@ test('MLB probable pitchers, teams and venue come only from supplied feed',()=>{
   assert.equal(x[0].pitchers[0].confirmed,false)
   assert.equal(x[0].venue,'Target Field')
   assert.equal(x[0].home.id,'3')
+  const licensed=normalizeMlb({dates:[{games:[{gamePk:9,teams:{home:{team:{name:'H'},probablePitcher:{id:44,fullName:'P'}},away:{team:{name:'A'}}}}]}]},{imageLicensed:true})
+  assert.match(licensed[0].pitchers[0].headshot,/img.mlbstatic.com/u)
 })
 test('odds markets, source and timestamps remain attributable',()=>{
   const o=normalizeOdds([{id:'evt',sport_key:'baseball_mlb',home_team:'H',away_team:'A',bookmakers:[{key:'book',title:'Sportsbook',markets:[{key:'h2h',last_update:'2026-10-24T12:00:00Z',outcomes:[{name:'H',price:1.8},{name:'A',price:0}]}]}]}])
