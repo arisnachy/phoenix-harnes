@@ -78,6 +78,26 @@ type SmartCard = {
   }
 }
 
+type SportsSide = { label: string; score?: string; logo?: string; meta?: string }
+type SportsGameCard = {
+  component: 'sports_game_card'; version: 1
+  props: {
+    title: string; subtitle?: string; status?: string; when: string; venue?: string
+    home: SportsSide; away: SportsSide; source: string
+    highlights?: Array<{ label: string; value: string; image?: string }>
+    note?: string; askPrompt?: string
+  }
+}
+type SportsTicketCard = {
+  component: 'sports_ticket_card'; version: 1
+  props: {
+    title: string; subtitle?: string; source: string
+    legs: Array<{ event: string; selection: string; price: string; bookmaker: string; when?: string; image?: string }>
+    combinedOdds: string; stake?: string; grossReturn?: string; note: string
+    askPrompt?: string
+  }
+}
+
 type StatusPillBlock = {
   component: 'status_pill'
   version: 1
@@ -95,7 +115,7 @@ const supportedIcons: readonly PhoenixUiIconName[] = [
 ]
 const supportedTones: readonly PhoenixStatusTone[] = ['positive', 'warning', 'negative', 'info', 'neutral']
 
-export type GenerativeUiBlock = EventCard | MetricCard | ComparisonCard | TimelineCard | SmartCard
+export type GenerativeUiBlock = EventCard | MetricCard | ComparisonCard | TimelineCard | SmartCard | SportsGameCard | SportsTicketCard
   | CanvasSpec | ScaleFormSpec | SpreadsheetSpec | GeoMapSpec | SceneMapSpec | DiagramSpec | StatusPillBlock | AgentLineBlock
 
 export type GenerativeUiSegment =
@@ -206,6 +226,41 @@ const validateSmartCard = (value: Record<string, unknown>): value is SmartCard =
     && optionalText(footer, MAX_TEXT)
 }
 
+const trustedPortrait = (value: unknown): value is string | undefined => {
+  if (value === undefined) return true
+  if (typeof value !== 'string' || value.length > 500) return false
+  try { const u = new URL(value); return u.protocol === 'https:' && !u.username && !u.password
+    && ['a.espncdn.com','img.mlbstatic.com'].includes(u.hostname) } catch { return false }
+}
+const sportsSide = (value: unknown): value is SportsSide => isRecord(value)
+  && hasOnlyKeys(value, ['label','score','logo','meta'])
+  && isText(value.label) && optionalText(value.score,32) && optionalText(value.meta)
+  && trustedPortrait(value.logo)
+const sportsGame = (value: Record<string, unknown>): value is SportsGameCard => {
+  if (!isRecord(value.props) || !hasOnlyKeys(value.props,
+    ['title','subtitle','status','when','venue','home','away','source','highlights','note','askPrompt'])) return false
+  const p = value.props
+  return isText(p.title) && optionalText(p.subtitle) && optionalText(p.status,60)
+    && isText(p.when) && optionalText(p.venue) && sportsSide(p.home) && sportsSide(p.away)
+    && isText(p.source,320) && optionalText(p.note,MAX_TEXT) && optionalText(p.askPrompt,400)
+    && (p.highlights === undefined || Array.isArray(p.highlights) && p.highlights.length <= 8
+      && p.highlights.every(x => isRecord(x) && hasOnlyKeys(x,['label','value','image'])
+        && isText(x.label,70) && isText(x.value,180) && trustedPortrait(x.image)))
+}
+const sportsTicket = (value: Record<string, unknown>): value is SportsTicketCard => {
+  if (!isRecord(value.props) || !hasOnlyKeys(value.props,
+    ['title','subtitle','source','legs','combinedOdds','stake','grossReturn','note','askPrompt'])) return false
+  const p = value.props
+  return isText(p.title) && optionalText(p.subtitle) && isText(p.source,320)
+    && isText(p.combinedOdds,40) && optionalText(p.stake,50)
+    && optionalText(p.grossReturn,50) && isText(p.note,MAX_TEXT)
+    && optionalText(p.askPrompt,400) && Array.isArray(p.legs)
+    && p.legs.length >= 1 && p.legs.length <= 12 && p.legs.every(x => isRecord(x)
+      && hasOnlyKeys(x,['event','selection','price','bookmaker','when','image'])
+      && isText(x.event) && isText(x.selection) && isText(x.price,32)
+      && isText(x.bookmaker) && optionalText(x.when) && trustedPortrait(x.image))
+}
+
 export function parseGenerativeUiBlock(value: unknown): GenerativeUiBlock | null {
   if (!isRecord(value)
     || !hasOnlyKeys(value, ['component', 'version', 'props'])
@@ -213,6 +268,8 @@ export function parseGenerativeUiBlock(value: unknown): GenerativeUiBlock | null
     || typeof value.component !== 'string') return null
 
   switch (value.component) {
+    case 'sports_game_card': return sportsGame(value) ? value : null
+    case 'sports_ticket_card': return sportsTicket(value) ? value : null
     case 'event_card': return validateEventCard(value) ? value : null
     case 'metric_card': return validateMetricCard(value) ? value : null
     case 'comparison': return validateComparison(value) ? value : null
@@ -369,6 +426,12 @@ function expandRawCanvases(segments: GenerativeUiSegment[], streaming: boolean):
   return result
 }
 
+const SportsPortrait = ({ label, logo }: {label: string; logo?: string | undefined}) => (
+  <span className={css.sportsPortrait}>
+    {logo ? <img src={logo} alt={label} loading="lazy" referrerPolicy="no-referrer" /> : label.slice(0,2).toUpperCase()}
+  </span>
+)
+
 const Initial = ({ label, symbol }: EventSide) => (
   <span className={css.symbol} aria-hidden="true">{(symbol ?? label.slice(0, 2)).toUpperCase()}</span>
 )
@@ -402,6 +465,45 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
     case 'diagram': return <DiagramSurface key={(conversationId ?? 'ephemeral') + ':' + block.props.id} spec={block} onAction={onAction} />
     case 'status_pill': return <PhoenixStatusPill label={block.props.label} {...block.props.tone === undefined ? {} : { tone: block.props.tone }} />
     case 'agent_line': return <PhoenixAgentLine {...block.props} />
+    case 'sports_game_card': {
+      const p = block.props
+      return <section className={css.sportsCard} data-generative-ui="sports_game_card">
+        <Header title={p.title} subtitle={p.subtitle} badge={p.status} />
+        <div className={css.sportsVenue}>{p.when} · {p.venue ?? 'Sede sin confirmar'}</div>
+        <div className={css.sportsVersus}>
+          <div className={css.sportsTeam}><SportsPortrait label={p.away.label} logo={p.away.logo} />
+            <strong>{p.away.label}</strong>{p.away.score && <b>{p.away.score}</b>}
+            {p.away.meta && <small>{p.away.meta}</small>}</div>
+          <span className={css.sportsVs}>VS</span>
+          <div className={css.sportsTeam}><SportsPortrait label={p.home.label} logo={p.home.logo} />
+            <strong>{p.home.label}</strong>{p.home.score && <b>{p.home.score}</b>}
+            {p.home.meta && <small>{p.home.meta}</small>}</div>
+        </div>
+        {p.highlights && <dl className={css.sportsFacts}>{p.highlights.map((h,i) =>
+          <div key={i}>{h.image && <SportsPortrait label={h.value} logo={h.image} />}<dt>{h.label}</dt><dd>{h.value}</dd></div>)}</dl>}
+        <footer className={css.sportsFoot}>Fuente: {p.source}
+          {p.note && <span>{p.note}</span>}
+          {p.askPrompt && onAction && <button type="button" onClick={() => onAction(p.askPrompt!, 'draft')}>Ampliar análisis</button>}
+        </footer>
+      </section>
+    }
+    case 'sports_ticket_card': {
+      const p = block.props
+      return <section className={css.sportsCard} data-generative-ui="sports_ticket_card">
+        <Header title={p.title} subtitle={p.subtitle} badge="Simulación" />
+        <div className={css.sportsLegs}>{p.legs.map((leg,i) => <div key={i} className={css.sportsLeg}>
+          <span>{leg.image && <SportsPortrait label={leg.selection} logo={leg.image} />}</span>
+          <div><small>{leg.event}{leg.when ? ' · '+leg.when : ''}</small><strong>{leg.selection}</strong>
+            <small>{leg.bookmaker}</small></div><b>{leg.price}</b>
+        </div>)}</div>
+        <div className={css.sportsTicketTotal}><div><small>Cuota total</small><strong>{p.combinedOdds}</strong></div>
+          {p.stake && <div><small>Importe simulado</small><strong>{p.stake}</strong></div>}
+          {p.grossReturn && <div><small>Retorno bruto potencial</small><strong>{p.grossReturn}</strong></div>}</div>
+        <footer className={css.sportsFoot}>Fuente: {p.source}<span>{p.note}</span>
+          {p.askPrompt && onAction && <button type="button" onClick={() => onAction(p.askPrompt!, 'draft')}>Revisar selección</button>}
+        </footer>
+      </section>
+    }
     case 'event_card': {
       const { title, subtitle, badge, left, center, right, footer } = block.props
       return (

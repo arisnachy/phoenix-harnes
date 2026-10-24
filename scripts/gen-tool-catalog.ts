@@ -42,6 +42,7 @@ import LocalJobRegistry from '@phoenix-ai/dsh-jobs-local'
 import LocalLivingRegistry from '@phoenix-ai/dsh-living-local'
 import * as ToolLiving from '@phoenix-ai/dsh-tool-living'
 import * as ToolBusiness from '@phoenix-ai/dsh-tool-business'
+import * as ToolSports from '@phoenix-ai/dsh-tool-sports'
 import * as ToolAskUser from '@phoenix-ai/dsh-tool-ask-user'
 import * as ToolBash from '@phoenix-ai/dsh-tool-bash'
 import * as ToolPwsh from '@phoenix-ai/dsh-tool-pwsh'
@@ -459,6 +460,17 @@ const TOOL_PACKAGES: ToolPackage[] = [
     },
     note:
       'Universal domain-neutral control surface: arbitrary future creation kinds describe their own state, actions, events, resources, actors, and target integration level; verification refuses delivery below that target.',
+  },
+  {
+    pkg: '@phoenix-ai/dsh-tool-sports',
+    dir: 'tool-sports',
+    source: 'packages/core/tool-sports/src/index.ts',
+    requires: ['ctx.tools', 'ctx.systemPrompt'],
+    writes: ['tool/call', 'tool/result'],
+    async mount(ctx) {
+      await ctx.plugin(ToolSports)
+    },
+    note: 'Read-only sports market and game context with inline chat cards. Tickets simulate returns, never transact or promise wins.',
   },
   {
     pkg: '@phoenix-ai/dsh-tool-lsp',

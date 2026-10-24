@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0b1324">
+<title>Phoenix · Sports Intelligence</title>
+<style>
+:root{color-scheme:dark;--bg:#080f1d;--panel:#131e32;--card:#19263b;--muted:#95a7bd;--border:#2b3c52;--accent:#5ce3cc;--gold:#e7be71;--light:#ecf4ff;font-family:Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 15% -10%,#1f465b 0,transparent 32%),var(--bg);color:var(--light);min-height:100vh}
+a{color:var(--accent)}button,input,select{font:inherit}button{cursor:pointer}button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.layout{max-width:1640px;margin:auto;padding:24px;display:grid;grid-template-columns:235px minmax(0,1fr) 320px;gap:20px;align-items:start}
+header{grid-column:1/-1;display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 8px 22px;border-bottom:1px solid var(--border)}
+.logo{font-size:24px;font-weight:850;letter-spacing:.03em}.logo span{color:var(--gold)}.small,.muted{color:var(--muted);font-size:13px}
+.chip{border:1px solid #397365;color:#9af5dd;background:#173a36;border-radius:99px;padding:6px 11px;font-size:12px}
+.panel,.game,.odd,.ticket-item{border:1px solid var(--border);background:linear-gradient(165deg,#17243a,#101c2e);border-radius:17px;box-shadow:0 12px 35px #0002}
+.panel{padding:20px;margin-bottom:18px}.aside{position:sticky;top:20px}.panel h2{font-size:15px;margin:0 0 15px;letter-spacing:.04em}
+nav{display:grid;gap:6px}.sport{width:100%;background:none;color:#d9e7f5;text-align:left;padding:10px 13px;border:1px solid transparent;border-radius:10px}.sport:hover,.sport[aria-current=true]{background:#263b4a;border-color:#37697b;color:white}
+button.primary{background:var(--accent);color:#032523;border:0;border-radius:10px;padding:11px 16px;font-weight:800}button.secondary{background:#233247;border:1px solid var(--border);color:var(--light);border-radius:10px;padding:9px 12px}button:disabled{opacity:.4;cursor:not-allowed}
+.controls{display:flex;flex-wrap:wrap;gap:9px;align-items:end;margin:16px 0 20px}label{display:grid;gap:5px;font-size:12px;color:var(--muted)}select,input{min-width:0;background:#0b1829;border:1px solid #38516a;border-radius:10px;color:var(--light);padding:10px;max-width:100%}
+.lead{display:flex;justify-content:space-between;align-items:center;gap:12px}.lead h1{font-size:clamp(23px,3vw,36px);line-height:1.15;margin:0}.lead p{margin:7px 0 0;color:var(--muted);font-size:14px}
+.grid-games{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px}
+.game{padding:17px}.game-top{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:15px}.game-top span{color:var(--muted);font-size:12px}
+.teams{display:grid;grid-template-columns:minmax(0,1fr) 50px minmax(0,1fr);align-items:center;text-align:center;gap:6px}
+.team{display:grid;justify-items:center;gap:8px;font-weight:750;font-size:14px;min-width:0}.badge-logo{height:55px;width:55px;background:#24374a;border:1px solid #486071;border-radius:50%;display:grid;place-items:center;font-size:15px;color:var(--gold);font-weight:800;overflow:hidden}.badge-logo img{width:100%;height:100%;object-fit:contain}.vs{font-size:13px;color:var(--muted)}
+.score{color:var(--gold);font-size:24px;font-weight:850}.meta{color:var(--muted);font-size:12px;margin-top:15px;line-height:1.6}.details{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}.details button{font-size:12px}
+.section-heading{display:flex;justify-content:space-between;align-items:center;margin:25px 0 12px}.section-heading h2{font-size:19px;margin:0}
+.odds-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px}.odd{padding:14px}.odd .row{display:flex;justify-content:space-between;gap:12px;margin-top:8px}.odd .price{color:var(--gold);font-size:19px;font-weight:800}
+.ticket{position:sticky;top:20px}.ticket-header{background:linear-gradient(110deg,#31485e,#243d43);padding:15px;border-radius:12px;margin:-3px -3px 18px}
+.ticket-item{padding:12px;margin:9px 0;border-radius:11px}.ticket-item button{float:right;background:none;border:0;color:#f8a69c}
+.total{display:flex;justify-content:space-between;margin:10px 0}.total strong{color:var(--gold)}.ticket .primary{width:100%;margin-top:10px}
+.notice{margin:12px 0;font-size:12px;color:#ccdae9;background:#1a2a3c;padding:10px;border-radius:10px;line-height:1.5}.empty{padding:24px;background:#142035;border:1px dashed #38516a;border-radius:12px;color:var(--muted);line-height:1.7}
+.source-item{padding:10px 0;border-bottom:1px solid var(--border);display:flex;gap:7px;justify-content:space-between;font-size:12px}
+pre{overflow:auto;white-space:pre-wrap;word-break:break-word;color:#afcfe9;font-size:12px}
+#status{min-height:22px;font-size:13px;margin-top:8px;color:#a4d4f3}
+.pill{font-size:11px;background:#294859;color:#bcf4ec;border-radius:50px;padding:4px 8px}
+@media(max-width:1130px){.layout{grid-template-columns:190px minmax(0,1fr)}header{grid-column:1/-1}.ticket{position:static;grid-column:2}}
+@media(max-width:700px){.layout{display:block;padding:12px}header{padding:14px 2px}.aside{position:static}.aside nav{display:flex;overflow:auto}.sport{white-space:nowrap;width:auto}.ticket{position:static}.panel{padding:15px}.grid-games{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="layout">
+<header><div><div class="logo"><span>✦</span> PHOENIX <span>SPORTS</span></div><div class="small">Kira · Inteligencia deportiva y fuentes verificadas</div></div><span class="chip">● Modo de análisis · sin apuestas automáticas</span></header>
+<aside class="aside panel"><h2>DISCIPLINAS</h2><nav id="sports"></nav><hr style="border:0;border-top:1px solid var(--border);margin:18px 0"><h2>FUENTES & APRENDIZAJE</h2><div id="sources"></div><p class="small">Kira mide disponibilidad, integridad y actualidad. Las fuentes fallidas se ponen en revisión, no se inventan resultados.</p><button class="secondary" id="discover">Descubrir ligas</button></aside>
+<main>
+<div class="lead"><div><h1>Centro deportivo</h1><p>Partidos del día · sedes · protagonistas · datos con procedencia</p></div><span class="pill" id="count">Sin consultar</span></div>
+<div class="controls"><label>Competición<select id="league"></select></label><label>Fecha<input id="date" type="date"></label><button class="primary" id="refresh">Consultar partidos</button></div>
+<div id="status" role="status" aria-live="polite"></div><div class="grid-games" id="games"><div class="empty">Elige una liga y consulta los partidos. Sin fuentes habilitadas no se mostrarán datos inventados.</div></div>
+<div class="section-heading"><h2>Cuotas verificadas</h2><span class="muted">Proveedor y hora de actualización</span></div>
+<div class="controls"><label>Mercado deportivo<select id="oddsSport"></select></label><label>Mercado<select id="markets"><option value="h2h">Ganador</option><option value="totals">Totales</option><option value="spreads">Hándicap</option></select></label><button class="secondary" id="getOdds">Consultar cuotas</button></div>
+<div id="odds" class="odds-list"><div class="empty">Se consultarán cuotas públicas de ESPN cuando estén disponibles; otras casas requieren credenciales.</div></div>
+<section class="panel" style="margin-top:25px"><h2>Explorador de fuentes</h2><p class="small">El descubrimiento genera candidatos. Las ligas nuevas requieren aprobación y se conservan localmente.</p><div id="candidates"></div></section>
+</main>
+<aside class="panel ticket"><div class="ticket-header"><h2>✦ Ticket de análisis</h2><div class="small">Visualización y cálculo; no se envía a una casa de apuestas</div></div><div id="legs" class="small">Añade selecciones desde las cuotas verificadas.</div><label>Importe de simulación<input id="stake" type="number" min="0" max="1000000" step="1" value="100"></label><div class="total"><span>Cuota conjunta</span><strong id="totalOdds">—</strong></div><div class="total"><span>Retorno bruto potencial</span><strong id="payout">—</strong></div><button class="primary" id="quote">Calcular ticket</button><div class="notice" id="ticketNote">Las cuotas no garantizan resultados. El retorno es una simulación que supone que todas las selecciones son válidas y acertadas.</div><button class="secondary" id="clear">Vaciar ticket</button></aside>
+</div>
+<script src="/app.js" defer></script>
+</body>
+</html>

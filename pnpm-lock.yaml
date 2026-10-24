@@ -1258,6 +1258,9 @@ importers:
       '@phoenix-ai/dsh-tool-business':
         specifier: workspace:^
         version: link:../../core/tool-business
+      '@phoenix-ai/dsh-tool-sports':
+        specifier: workspace:^
+        version: link:../../core/tool-sports
       '@phoenix-ai/dsh-tool-call-timeout-policy':
         specifier: workspace:^
         version: link:../../guard/timeout-policy
@@ -4060,6 +4063,21 @@ importers:
         version: link:../scope
 
   packages/core/tool-business:
+    devDependencies:
+      '@phoenix-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@phoenix-ai/dsh-invariants':
+        specifier: workspace:^
+        version: link:../../runtime-diagnostics/invariants
+      '@phoenix-ai/dsh-system-prompt':
+        specifier: workspace:^
+        version: link:../system-prompt
+      '@phoenix-ai/dsh-tools':
+        specifier: workspace:^
+        version: link:../tools
+
+  packages/core/tool-sports:
     devDependencies:
       '@phoenix-ai/cordis':
         specifier: workspace:^
