@@ -179,7 +179,7 @@ export function ScheduledTaskCenter({ connection, t }: ScheduledTaskCenterProps)
       if (!isRecord(created) || typeof created.id !== 'string' || created.id.trim() === '') {
         throw new Error(t('task.center.unconfirmed'))
       }
-      await verifyTask((task) => task.id === created.id)
+      await verifyTask(task => task.id === created.id)
       setTitle('')
       setPrompt('')
       setWhen('')
@@ -203,7 +203,7 @@ export function ScheduledTaskCenter({ connection, t }: ScheduledTaskCenterProps)
         || updated.status !== (operation === 'pause' ? 'paused' : operation === 'resume' ? 'scheduled' : 'cancelled')) {
         throw new Error(t('task.center.unconfirmed'))
       }
-      await verifyTask((task) => task.id === id && task.status === updated.status)
+      await verifyTask(task => task.id === id && task.status === updated.status)
     } catch (cause: unknown) {
       setError(cause instanceof Error ? cause.message : String(cause))
     } finally {
