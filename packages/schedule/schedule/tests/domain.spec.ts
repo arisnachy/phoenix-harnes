@@ -85,7 +85,7 @@ describe('version-1 Schedule decoding and folding', () => {
   it.each([
     null,
     { version: 2, operation: 'delete', id: 'schedule-1' },
-    { version: 1, operation: 'pause', id: 'schedule-1' },
+    { version: 1, operation: 'pause', id: 'schedule-1', extra: true },
     { version: 1, operation: 'delete', id: 'schedule-1', extra: true },
     { version: 1, operation: 'dispatch', id: '' },
     { version: 1, operation: 'dispatch', id: ' schedule-1' },
@@ -120,6 +120,7 @@ describe('version-1 Schedule decoding and folding', () => {
     const removed = scheduleEvent({ version: 1, operation: 'delete', id: 'first' }, 2)
     expect(foldScheduleEvents([first, second, removed])).toEqual({
       active: [expect.objectContaining({ id: 'second' })],
+      paused: [],
       seenIds: ['first', 'second'],
     })
     expect(() => foldScheduleEvents([
@@ -139,6 +140,7 @@ describe('version-1 Schedule decoding and folding', () => {
     const childCreate = scheduleEvent(createData('child'), 1)
     expect(foldScheduleEvents([parentCreate, childCreate], 1)).toEqual({
       active: [expect.objectContaining({ id: 'child' })],
+      paused: [],
       seenIds: ['child'],
     })
     expect(() => foldScheduleEvents([], -1)).toThrow(/seedLength/)
@@ -146,11 +148,40 @@ describe('version-1 Schedule decoding and folding', () => {
     expect(() => foldScheduleEvents([], 0.5)).toThrow(/seedLength/)
   })
 
+  it('replays pause and resume without delivering paused reminders', () => {
+    const created = scheduleEvent(createData('pause-1'), 0)
+    const pause = scheduleEvent({ version: 1, operation: 'pause', id: 'pause-1' }, 1)
+    const resume = scheduleEvent({ version: 1, operation: 'resume', id: 'pause-1' }, 2)
+    const paused = foldScheduleEvents([created, pause])
+    expect(paused.active).toEqual([])
+    expect(paused.paused).toEqual([expect.objectContaining({ id: 'pause-1' })])
+    expect(scheduleView(paused.paused[0]!, Date.parse('2026-08-06T00:00:00.000Z'), true).state)
+      .toBe('paused')
+    expect(foldScheduleEvents([created, pause, resume])).toEqual({
+      active: [expect.objectContaining({ id: 'pause-1' })],
+      paused: [],
+      seenIds: ['pause-1'],
+    })
+    expect(decodeScheduleChange(pause.data)).toEqual(pause.data)
+    expect(decodeScheduleChange(resume.data)).toEqual(resume.data)
+    expect(() => foldScheduleEvents([created, pause, pause])).toThrow(/pause targets inactive/)
+    expect(() => foldScheduleEvents([created, resume])).toThrow(/resume targets non-paused/)
+    expect(() => foldScheduleEvents([created, pause,
+      scheduleEvent({ version: 1, operation: 'dispatch', id: 'pause-1' }, 3),
+    ])).toThrow(/dispatch targets inactive/)
+    expect(foldScheduleEvents([created, pause,
+      scheduleEvent({ version: 1, operation: 'delete', id: 'pause-1' }, 3),
+    ]).paused).toEqual([])
+    expect(() => foldScheduleEvents([created, pause,
+      scheduleEvent({ version: 1, operation: 'delete', id: 'pause-1' }, 3), resume,
+    ])).toThrow(/resume targets non-paused/)
+  })
+
   it('allocates a readable id without reusing ended or colliding ids', () => {
-    expect(allocateScheduleId({ active: [], seenIds: [] })).toBe('schedule-1')
-    expect(allocateScheduleId({ active: [], seenIds: [ScheduleId('custom'), ScheduleId('schedule-3')] }))
+    expect(allocateScheduleId({ active: [], paused: [], seenIds: [] })).toBe('schedule-1')
+    expect(allocateScheduleId({ active: [], paused: [], seenIds: [ScheduleId('custom'), ScheduleId('schedule-3')] }))
       .toBe('schedule-4')
-    expect(allocateScheduleId({ active: [], seenIds: [ScheduleId('one'), ScheduleId('schedule-2')] }))
+    expect(allocateScheduleId({ active: [], paused: [], seenIds: [ScheduleId('one'), ScheduleId('schedule-2')] }))
       .toBe('schedule-3')
   })
 })
@@ -284,6 +315,7 @@ describe('fixed-rate records and durable progression', () => {
         everySeconds: 300,
         scheduledAt: '2026-08-05T12:20:00.000Z',
       }],
+      paused: [],
       seenIds: ['schedule-every'],
     })
     expect(() => foldScheduleEvents([
@@ -317,7 +349,7 @@ describe('fixed-rate records and durable progression', () => {
         id: final.id,
         acceptedAt: final.scheduledAt,
       }, 1),
-    ])).toEqual({ active: [], seenIds: [final.id] })
+    ])).toEqual({ active: [], paused: [], seenIds: [final.id] })
 
     const first = createEveryScheduleRecord(ScheduleId('schedule-one'), 'line\n"quoted"', 300, start)
     const second = createEveryScheduleRecord(ScheduleId('schedule-two'), 'check metrics', 600, start)
