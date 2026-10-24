@@ -4,7 +4,7 @@ import {
   MemoryProactivityStore,
   ProactivityEngine,
 } from '../src/proactivity-engine.ts'
-import { installProactivityRuntime, parseBrowserTaskCreate } from '../src/proactivity-runtime.ts'
+import { acquireExecutionAgent, installProactivityRuntime, parseBrowserTaskCreate } from '../src/proactivity-runtime.ts'
 
 const future = '2027-05-01T12:00:00.000Z'
 const input = {
@@ -118,6 +118,31 @@ describe('Host-authorized scheduled task-center creation', () => {
     expect((await handler!('pause', { id: 'host-task-1', extra: true })).ok).toBe(false)
     dispose()
     await ctx.fiber.dispose()
+  })
+
+  it('wakes the exact persisted session when the Host owns a cold due task', async () => {
+    const resumed = { whenIdle: vi.fn().mockResolvedValue(undefined) }
+    const dispose = vi.fn().mockResolvedValue(undefined)
+    const resume = vi.fn().mockResolvedValue({ agent: resumed, dispose })
+    const other = { id: 'wrong-session' }
+    const registry = {
+      get: () => undefined,
+      roots: () => [other],
+      list: () => [other],
+      resume,
+    }
+    const config = { pollMs: 60_000, privateWorkProvider: 'test', privateWorkResultChars: 3000 }
+    const lease = await acquireExecutionAgent(registry as never, 'original-session', config)
+    expect(resume).toHaveBeenCalledWith({ resumeSessionId: 'original-session' })
+    expect(lease.agent).toBe(resumed)
+    expect(lease.resumed).toBe(true)
+    await lease.release()
+    await lease.release()
+    expect(resumed.whenIdle).toHaveBeenCalledTimes(1)
+    expect(dispose).toHaveBeenCalledTimes(1)
+    const withoutResume = { get: () => undefined, roots: () => [other], list: () => [other] }
+    await expect(acquireExecutionAgent(withoutResume as never, 'original-session', config))
+      .rejects.toThrow(/cannot resume persisted agents/)
   })
 
   it('allows a user to select one of multiple active roots without session spoofing', async () => {
