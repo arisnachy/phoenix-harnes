@@ -325,6 +325,13 @@ describe('chat tool activity grouping', () => {
     expect(receipt.textContent).not.toContain('secret')
   })
 
+  it('keeps a settled tool without call metadata safe and generic', () => {
+    renderChat([context(1, 'system'), { ...settledTool(), call: null }])
+    const receipt = screen.getByTestId('tool-activity-receipt')
+    expect(receipt.textContent).toContain('activity.other')
+    expect(screen.queryByTestId('node-tool-call')).toBeNull()
+  })
+
   it('reports a failed observed tool without implying successful task completion', () => {
     renderChat([context(1, 'system'), { ...settledTool(), isError: true }])
     expect(screen.getByTestId('tool-activity-receipt').textContent)
