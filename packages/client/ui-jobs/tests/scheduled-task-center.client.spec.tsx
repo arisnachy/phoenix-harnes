@@ -99,7 +99,7 @@ describe('Scheduled tasks global manager', () => {
     await waitFor(() => { expect(screen.getByText('Clinical follow-up')).toBeTruthy() })
     fireEvent.click(screen.getByText(/Results and history/))
     expect(screen.getByText('Validated report delivered')).toBeTruthy()
-    expect(screen.getByText('completed')).toBeTruthy()
+    expect(screen.getAllByText('completed').length).toBeGreaterThan(0)
     expect(screen.queryByText('Private source instructions never displayed')).toBeNull()
   })
 
