@@ -29,6 +29,7 @@ interface OrderedChatNode {
 
 interface ToolActivityFlowProps extends SeatProps {
   readonly sessionId: string
+  readonly inputActions: ChatViewSlotProps['inputActions']
   readonly nodes: readonly OrderedChatNode[]
   /** Runtime-open browser turn, even while Kira is streaming visible prose. */
   readonly browserTurnOpen?: boolean
@@ -567,15 +568,15 @@ function ToolActivityChevron({ open }: { readonly open: boolean }) {
 }
 
 /** Tool-backed visual evidence is part of the conversation, never a new menu or a tool disclosure. */
-function SportsEvidenceSurface({ blocks, seatProps }: {
+function SportsEvidenceSurface({ blocks, inputActions }: {
   readonly blocks: readonly GenerativeUiBlock[]
-  readonly seatProps: SeatProps
+  readonly inputActions: ChatViewSlotProps['inputActions']
 }) {
   return <section data-chat-flow-kind="sports-evidence" aria-label="Panel deportivo de Kira">
     {blocks.map((block,index)=><GenerativeUi key={index} block={block}
       onAction={(prompt,mode)=>{
-        seatProps.inputActions.setDraft(prompt)
-        if(mode==='submit')seatProps.inputActions.submit()
+        inputActions.setDraft(prompt)
+        if(mode==='submit')inputActions.submit()
       }} />)}
   </section>
 }
@@ -783,10 +784,11 @@ export function setSecureAskDismissed(sessionId: string, origin: string, dismiss
 
 /** Same real transcript seats as the ordinary chat, inside the temporary sidecar. */
 function BrowserWorkspace({
-  items, live, selected, onActivate, seatProps, turnStatus, tabId, sourceUrl, sessionId,
+  items, live, selected, onActivate, seatProps, turnStatus, tabId, sourceUrl, sessionId, inputActions,
 }: {
   readonly items: readonly FlowItem[]
   readonly sessionId: string
+  readonly inputActions: ChatViewSlotProps['inputActions']
   readonly live: boolean
   readonly selected: boolean
   readonly tabId?: string
@@ -966,7 +968,7 @@ function BrowserWorkspace({
  * @param props - Ordered nodes plus the ordinary ChatNodeSeat owner/runtime props.
  * @returns The grouped transcript flow.
  */
-export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, browserTurnOpen, sessionId, ...seatProps }: ToolActivityFlowProps) {
+export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, browserTurnOpen, sessionId, inputActions, ...seatProps }: ToolActivityFlowProps) {
   const ordinaryFlow = useMemo(() => addDesktopCards(addBrowserCards(buildAnchoredFlow(nodes, optimisticSubmit), nodes), nodes), [nodes, optimisticSubmit])
   const browserKeys = ordinaryFlow.filter(item => item.kind === 'browser').map(item => item.userKey)
   const [selectedBrowserKey, setSelectedBrowserKey] = useState<string | undefined>()
