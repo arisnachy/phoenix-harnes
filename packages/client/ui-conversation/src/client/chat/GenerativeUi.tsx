@@ -426,7 +426,7 @@ function expandRawCanvases(segments: GenerativeUiSegment[], streaming: boolean):
   return result
 }
 
-const SportsPortrait = ({ label, logo }: {label: string; logo?: string}) => (
+const SportsPortrait = ({ label, logo }: {label: string; logo?: string | undefined}) => (
   <span className={css.sportsPortrait}>
     {logo ? <img src={logo} alt={label} loading="lazy" referrerPolicy="no-referrer" /> : label.slice(0,2).toUpperCase()}
   </span>
