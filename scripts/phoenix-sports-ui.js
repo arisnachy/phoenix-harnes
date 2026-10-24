@@ -36,7 +36,7 @@ function renderSources(){
   for(const s of catalog.sources){
     const row=make('div',undefined,'source-item')
     const name=make('div')
-    name.append(make('strong',s.title),make('div',s.authorized?s.health.status:'Sin acceso configurado','muted'))
+    name.append(make('strong',s.title),make('div',!s.implemented?'Documentación · sin adaptador':s.authorized?s.health.status:'Sin acceso configurado','muted'))
     const right=make('div',s.authorized?s.health.score+'/100':'—')
     row.append(name,right)
     if(s.observations?.quarantined){
