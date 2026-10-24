@@ -2,7 +2,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { AssistantMarkdown } from '../src/client/chat/AssistantMarkdown.tsx'
-import type { ChatViewSlotProps } from '../src/client/contract/slots.ts'
 import { GenerativeCanvas, parseCanvasSpec } from '../src/client/chat/GenerativeCanvas.tsx'
 import { GenerativeUi, parseGenerativeUiBlock, splitGenerativeUiText } from '../src/client/chat/GenerativeUi.tsx'
 
@@ -79,7 +78,7 @@ describe('Phoenix intelligent UI canvas', () => {
     const spec = parseCanvasSpec(sample())
     if (spec === null) throw new Error('fixture is invalid')
     render(<GenerativeCanvas spec={spec} />)
-    expect((screen.getByRole('button', { name: 'Enviar a Kira' })).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: 'Enviar a Kira' }) as HTMLButtonElement).disabled).toBe(true)
   })
 
   it('keeps surrounding assistant prose and hides unfinished fences while streaming', () => {
