@@ -1,5 +1,7 @@
 # GitHub MCP en PHOENIX: crear y configurar un token personal
 
+English | [中文](github-mcp.zh.md)
+
 GitHub MCP permite a Kira consultar repositorios, commits, issues, pull requests, releases y flujos de GitHub Actions desde PHOENIX.
 
 **No es GitHub Copilot.** GitHub Copilot es un proveedor de modelos independiente. El servidor remoto oficial de GitHub MCP está en `https://api.githubcopilot.com/mcp/`, pero ese nombre de dominio no obliga a iniciar sesión en GitHub Copilot.

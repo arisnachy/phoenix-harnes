@@ -1,5 +1,7 @@
 # Telegram — recepción y comunicación de Kira
 
+English | [中文](telegram.zh.md)
+
 ## Configuración
 
 1. En Telegram, crea el bot con [@BotFather](https://t.me/BotFather) usando `/newbot`.
