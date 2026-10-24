@@ -648,6 +648,18 @@ function installProactivityRpc(connection: HostConnectionHandle,
       // content therefore never crosses the browser transport ahead of time.
       const tasks = await engine.list()
       if (endpoint === 'list') return { ok: true, value: tasks.map(taskView) }
+      if (endpoint === 'pause' || endpoint === 'resume' || endpoint === 'cancel') {
+        if (typeof input !== 'object' || input === null || Array.isArray(input)
+          || Object.keys(input).length !== 1 || !Object.hasOwn(input, 'id')
+          || typeof (input as { id?: unknown }).id !== 'string') {
+          return rpcFailure('task action requires an exact id')
+        }
+        const id = (input as { id: string }).id
+        // Never disclose or mutate unrevealed surprise tasks via the browser.
+        if (!tasks.some(task => task.id === id)) return rpcFailure('task is not visible')
+        const updated = await engine[endpoint](id)
+        return { ok: true, value: taskView(updated) }
+      }
       if (endpoint === 'create') {
         const parsed = parseBrowserTaskCreate(input, Date.now())
         const targetAgentId = selectedAgent?.()

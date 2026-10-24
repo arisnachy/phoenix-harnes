@@ -50,3 +50,7 @@
   .fields { grid-template-columns: 1fr; }
   .item { align-items: flex-start; flex-direction: column; }
 }
+
+.itemActions { display: flex; flex-wrap: wrap; gap: 8px; }
+.itemActions button { border: 1px solid var(--dsw-alias-border-subtle, #bbb); border-radius: 10px; padding: 7px 11px; color: inherit; background: transparent; cursor: pointer; }
+.itemActions button:disabled { opacity: .55; cursor: not-allowed; }

@@ -47,6 +47,7 @@ export function ScheduledTaskCenter({ connection, t }: ScheduledTaskCenterProps)
   const [error, setError] = useState<string>()
   const [loading, setLoading] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [changingId, setChangingId] = useState<string>()
   const [title, setTitle] = useState('')
   const [prompt, setPrompt] = useState('')
   const [when, setWhen] = useState('')
@@ -152,6 +153,32 @@ export function ScheduledTaskCenter({ connection, t }: ScheduledTaskCenterProps)
     }
   }
 
+  const changeStatus = async (id: string, operation: 'pause' | 'resume' | 'cancel'): Promise<void> => {
+    if (changingId !== undefined) return
+    setChangingId(id)
+    setError(undefined)
+    try {
+      const response = await connection.rpc.call('/phoenix-tasks', operation, { id })
+      if (!response.ok) throw new Error(response.error.message)
+      const updated = response.value
+      if (!isRecord(updated) || updated.id !== id
+        || updated.status !== (operation === 'pause' ? 'paused' : operation === 'resume' ? 'scheduled' : 'cancelled')) {
+        throw new Error(t('task.center.unconfirmed'))
+      }
+      const read = await connection.rpc.call('/phoenix-tasks', 'list', {})
+      if (!read.ok) throw new Error(read.error.message)
+      const verified = parseTasks(read.value)
+      if (!verified.some(task => task.id === id && task.status === updated.status)) {
+        throw new Error(t('task.center.unconfirmed'))
+      }
+      setRows(verified)
+    } catch (cause: unknown) {
+      setError(cause instanceof Error ? cause.message : String(cause))
+    } finally {
+      setChangingId(undefined)
+    }
+  }
+
   if (!open) return null
   return (
     <div className={css.backdrop} onMouseDown={(event) => { if (event.target === event.currentTarget) close() }}>
@@ -184,6 +211,17 @@ export function ScheduledTaskCenter({ connection, t }: ScheduledTaskCenterProps)
             <article key={task.id} className={css.item}>
               <div><strong>{task.title}</strong><small>{task.createdBy === 'user' ? t('task.center.user') : t('task.center.system')} · {task.status}</small></div>
               <time dateTime={task.nextRunAt}>{new Date(task.nextRunAt).toLocaleString()}</time>
+              <div className={css.itemActions}>
+                {(task.status === 'scheduled' || task.status === 'paused') && <button type="button" disabled={changingId !== undefined}
+                  aria-label={`${task.status === 'paused' ? t('task.center.resume') : t('task.center.pause')}: ${task.title}`}
+                  onClick={() => { void changeStatus(task.id, task.status === 'paused' ? 'resume' : 'pause') }}>
+                  {task.status === 'paused' ? t('task.center.resume') : t('task.center.pause')}
+                </button>}
+                {task.status !== 'cancelled' && task.status !== 'completed' && task.status !== 'running' && <button type="button"
+                  disabled={changingId !== undefined}
+                  aria-label={`${t('task.center.cancel')}: ${task.title}`}
+                  onClick={() => { void changeStatus(task.id, 'cancel') }}>{t('task.center.cancel')}</button>}
+              </div>
             </article>
           ))}
         </div>
