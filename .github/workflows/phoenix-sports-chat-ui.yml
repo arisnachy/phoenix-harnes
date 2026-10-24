@@ -31,5 +31,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Render sports cards from durable tool results
         run: pnpm exec vitest run packages/client/ui-conversation/tests/sports-tool-visual.client.spec.ts packages/client/ui-conversation/tests/tool-activity-group.client.spec.tsx packages/client/ui-conversation/tests/generative-ui.client.spec.tsx
+      - name: Build server contracts and generated client typings
+        run: pnpm run build:lib:host
       - name: Client strict typecheck
         run: pnpm exec tsc -b tsconfig.client.json
