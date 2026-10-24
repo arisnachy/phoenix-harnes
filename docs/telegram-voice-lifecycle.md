@@ -1,5 +1,7 @@
 # Telegram ↔ Phoenix voice lifecycle
 
+English | [中文](telegram-voice-lifecycle.zh.md)
+
 This document defines the transport contract for the future Telegram channel. It does not claim that the Telegram bot or a telephone-call transport exists yet.
 
 - Text commands must enter the ordinary Phoenix Agent inbox. They **must not** toggle the global hands-free flag or start Codex Realtime.
