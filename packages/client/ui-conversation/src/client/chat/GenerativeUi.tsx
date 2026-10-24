@@ -84,7 +84,7 @@ type SportsGameCard = {
   props: {
     title: string; subtitle?: string; status?: string; when: string; venue?: string
     home: SportsSide; away: SportsSide; source: string
-    highlights?: Array<{ label: string; value: string }>
+    highlights?: Array<{ label: string; value: string; image?: string }>
     note?: string; askPrompt?: string
   }
 }
@@ -244,8 +244,8 @@ const sportsGame = (value: Record<string, unknown>): value is SportsGameCard => 
     && isText(p.when) && optionalText(p.venue) && sportsSide(p.home) && sportsSide(p.away)
     && isText(p.source,320) && optionalText(p.note,MAX_TEXT) && optionalText(p.askPrompt,400)
     && (p.highlights === undefined || Array.isArray(p.highlights) && p.highlights.length <= 8
-      && p.highlights.every(x => isRecord(x) && hasOnlyKeys(x,['label','value'])
-        && isText(x.label,70) && isText(x.value,180)))
+      && p.highlights.every(x => isRecord(x) && hasOnlyKeys(x,['label','value','image'])
+        && isText(x.label,70) && isText(x.value,180) && trustedPortrait(x.image)))
 }
 const sportsTicket = (value: Record<string, unknown>): value is SportsTicketCard => {
   if (!isRecord(value.props) || !hasOnlyKeys(value.props,
@@ -480,7 +480,7 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
             {p.home.meta && <small>{p.home.meta}</small>}</div>
         </div>
         {p.highlights && <dl className={css.sportsFacts}>{p.highlights.map((h,i) =>
-          <div key={i}><dt>{h.label}</dt><dd>{h.value}</dd></div>)}</dl>}
+          <div key={i}>{h.image && <SportsPortrait label={h.value} logo={h.image} />}<dt>{h.label}</dt><dd>{h.value}</dd></div>)}</dl>}
         <footer className={css.sportsFoot}>Fuente: {p.source}
           {p.note && <span>{p.note}</span>}
           {p.askPrompt && onAction && <button type="button" onClick={() => onAction(p.askPrompt!, 'draft')}>Ampliar análisis</button>}
