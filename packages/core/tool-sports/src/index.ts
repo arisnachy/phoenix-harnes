@@ -2,13 +2,13 @@
 import type { Context } from '@phoenix-ai/cordis'
 import { defineTool } from '@phoenix-ai/dsh-tools'
 import type {} from '@phoenix-ai/dsh-system-prompt'
-import { sportsCatalog, chatGames, marketOdds, pricedTicket, type MarketSelection } from './sports.ts'
+import { sportsCatalog, discoverEspnLeagues, chatGames, marketOdds, pricedTicket, type MarketSelection } from './sports.ts'
 import {getMlbPitcherReport} from './mlb.ts'
 
 export const name = 'tool-sports'
 export const inject = ['tools','systemPrompt']
 const GUIDANCE = [
-  'Solo cuando el usuario pida deportes, juegos del día, jugadores, cuotas o tickets, consulta las herramientas sports_chat_catalog, sports_chat_games, sports_chat_mlb_pitchers, sports_chat_odds o sports_chat_ticket.',
+  'Solo cuando el usuario pida deportes, juegos del día, jugadores, cuotas o tickets, consulta las herramientas sports_chat_catalog, sports_chat_discover, sports_chat_games, sports_chat_mlb_pitchers, sports_chat_odds o sports_chat_ticket.',
   'NO abras pantallas independientes ni crees entradas de menú. Reproduce en TU RESPUESTA del chat los objetos uiBlocks/uiBlock recibidos como JSON intacto dentro de un bloque de código etiquetado generative-ui. Phoenix los renderiza como tarjetas nativas.',
   'Para muchos partidos muestra como máximo seis tarjetas relevantes y ofrece ampliar; nunca inventes eventos, cuotas, lanzadores, lesiones ni resultados ausentes.',
   'Usa ESPN Site/Core como proveedor gratuito para marcadores y, cuando ESPN los publique, moneylines sin claves; usa The Odds API solo como opción ampliada si existe THE_ODDS_API_KEY. Si ESPN no presenta cuotas verificables, devuelve lista vacía y explica cobertura, sin generar precios ficticios. Los tickets solo pueden usar precios del proveedor consultados en ese momento. Son simulaciones; no hay garantía de acierto. Identifica correlaciones y ausencia de predicción calibrada.',
@@ -25,6 +25,19 @@ export function apply(ctx: Context): void {
     isConcurrencySafe:()=>true,
     execute:()=>Promise.resolve(JSON.stringify({sports:sportsCatalog,notice:'La disponibilidad de ligas y recursos varía por proveedor.'})),
     presentCall:()=>({card:'generic',title:'Consultar deportes',kind:'read' as const}),
+  }))
+  ctx.tools.register(defineTool({
+    name:'sports_chat_discover',
+    description:'Descubre competiciones adicionales directamente en el catálogo público ESPN, sin API key ni acceso a URLs arbitrarias.',
+    parameters:{sport:{type:'string',required:true,description:'Disciplina ESPN como soccer, baseball, basketball, cricket, golf o hockey.'}},
+    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    isConcurrencySafe:()=>true,
+    async execute(args){
+      const leagues=await discoverEspnLeagues(args.sport)
+      return JSON.stringify({sport:args.sport,source:'ESPN Core/Web API (consulta pública)',leagues,
+        note:'Los slugs se obtuvieron del catálogo ESPN; no todas las ligas tienen un scoreboard activo. Solicita deportes individuales con sports_chat_games.'})
+    },
+    presentCall:()=>({card:'generic',title:'Descubrir ligas en ESPN',kind:'read' as const}),
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_games',
