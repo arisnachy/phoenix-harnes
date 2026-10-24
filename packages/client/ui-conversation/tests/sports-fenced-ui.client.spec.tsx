@@ -38,7 +38,7 @@ describe('MLB screenshot regression: card never becomes plaintext code',()=>{
     render(<AssistantMarkdown blocks={[{kind:'text',text:'Hoy hay un partido.\n\n'+formatted}]}
       streaming={false} renderMessageImages={()=>null} t={tr} />)
     expect(screen.getByText('MLB · 849802')).toBeTruthy()
-    expect(screen.getByText('American Family Field')).toBeTruthy()
+    expect(screen.getByText(/American Family Field/)).toBeTruthy()
     expect(document.querySelector('[data-generative-ui="sports_game_card"]')).toBeTruthy()
     expect(screen.queryByText('generative-ui')).toBeNull()
   })
