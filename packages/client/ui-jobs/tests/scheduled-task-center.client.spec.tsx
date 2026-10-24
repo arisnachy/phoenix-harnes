@@ -79,6 +79,30 @@ describe('Scheduled tasks global manager', () => {
     expect(screen.getByRole('button', { name: 'Pause: Persistir' })).toBeTruthy()
   })
 
+  it('renders only Host-confirmed execution receipts in the task history', async () => {
+    const call = vi.fn().mockResolvedValue({ ok: true, value: [{
+      id: 'task-historical',
+      title: 'Clinical follow-up',
+      status: 'completed',
+      nextRunAt: '2026-11-02T12:00:00.000Z',
+      createdBy: 'user',
+      recentHistory: [{
+        phase: 'deliver',
+        status: 'completed',
+        finishedAt: '2026-11-02T12:05:00.000Z',
+        summary: 'Validated report delivered',
+      }],
+      instruction: 'Private source instructions never displayed',
+    }] })
+    render(<ScheduledTaskCenter t={t} connection={{ rpc: { call } }} />)
+    fireEvent(window, new Event('phoenix:open-scheduled-tasks'))
+    await waitFor(() => { expect(screen.getByText('Clinical follow-up')).toBeTruthy() })
+    fireEvent.click(screen.getByText(/Results and history/))
+    expect(screen.getByText('Validated report delivered')).toBeTruthy()
+    expect(screen.getByText('completed')).toBeTruthy()
+    expect(screen.queryByText('Private source instructions never displayed')).toBeNull()
+  })
+
   it('does not send expired schedules to the Host', async () => {
     const call = vi.fn().mockResolvedValue({ ok: true, value: [] })
     render(<ScheduledTaskCenter t={t} connection={{ rpc: { call } }} />)
