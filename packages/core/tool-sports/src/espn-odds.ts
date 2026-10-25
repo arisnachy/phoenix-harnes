@@ -17,13 +17,13 @@ export interface EspnMarketQuote {
 }
 type OddsSide = { moneyLine?: number | string; moneyline?: number | string; spreadOdds?: number|string }
 type EspnOdds = {
-  provider?: { name?: string,displayName?: string,id?: string|number }
+  provider?: { name?: string; displayName?: string; id?: string | number }
   details?: string
-  homeTeamOdds?: OddsSide,awayTeamOdds?: OddsSide
-  overOdds?: number|string,underOdds?: number|string
+  homeTeamOdds?: OddsSide; awayTeamOdds?: OddsSide
+  overOdds?: number|string; underOdds?: number|string
   overUnder?: number|string
   spread?: number|string
-  lastUpdated?: string,lastUpdate?: string,updatedAt?: string
+  lastUpdated?: string; lastUpdate?: string; updatedAt?: string
 }
 type ECompetition={ id?:string|number;competitors?:Array<{ homeAway?:string;team?:{ displayName?:string;name?:string } }>;odds?:EspnOdds[] }
 type EEvent={ id?:string|number;date?:string;competitions?:ECompetition[] }
