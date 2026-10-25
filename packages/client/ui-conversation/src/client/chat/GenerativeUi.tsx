@@ -106,7 +106,7 @@ type SportsTicketCard = {
   props: {
     title: string; subtitle?: string; source: string
     legs: Array<{ event: string; selection: string; price: string; bookmaker: string; when?: string; image?: string;
-      sport?:string;country?:string;league?:string;market?:string;player?:string }>
+      sport?:string;country?:string;league?:string;market?:string;player?:string;rationale?:string }>
     combinedOdds: string; stake?: string; grossReturn?: string; note: string
     askPrompt?: string
   }
@@ -308,11 +308,11 @@ const sportsTicket = (value: Record<string, unknown>): value is SportsTicketCard
     && optionalText(p.grossReturn,50) && isText(p.note,MAX_TEXT)
     && optionalText(p.askPrompt,400) && Array.isArray(p.legs)
     && p.legs.length >= 1 && p.legs.length <= 12 && p.legs.every(x => isRecord(x)
-      && hasOnlyKeys(x,['event','selection','price','bookmaker','when','image','sport','country','league','market','player'])
+      && hasOnlyKeys(x,['event','selection','price','bookmaker','when','image','sport','country','league','market','player','rationale'])
       && isText(x.event) && isText(x.selection) && isText(x.price,32)
       && isText(x.bookmaker) && optionalText(x.when) && trustedPortrait(x.image)
       && optionalText(x.sport,60) && optionalText(x.country,100) && optionalText(x.league,100)
-      && optionalText(x.market,70) && optionalText(x.player,140))
+      && optionalText(x.market,70) && optionalText(x.player,140) && optionalText(x.rationale,240))
 }
 
 export function parseGenerativeUiBlock(value: unknown): GenerativeUiBlock | null {
@@ -653,6 +653,7 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
                 {leg.player&&<small>Jugador · {leg.player}</small>}
                 <strong>{leg.selection}</strong>
                 <small>{[leg.market,leg.bookmaker].filter(Boolean).join(' · ')}</small>
+                {leg.rationale&&<small>Hipótesis de Kira · {leg.rationale}</small>}
               </div><b aria-label={`Cuota ${leg.price}`}>{leg.price}</b>
             </div>)}</div>
           </section>)}</div>
