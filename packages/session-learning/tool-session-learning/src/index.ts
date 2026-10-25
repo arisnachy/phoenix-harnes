@@ -481,7 +481,9 @@ function normalizedMemoryRequest(text: string): string {
 function requestsPriorMemory(text: string): boolean {
   return /\\b(?:recuerd\\p{L}*|record\\p{L}*|memoria|recordatorio|anterior\\p{L}*|previo\\p{L}*|antes|pasado|histor\\p{L}*|habia\\p{L}*|dijiste|dije|elegiste|escogiste|elegimos|guardad\\p{L}*|preferencias?|costumbre\\p{L}*|usual|siempre|repetimos|funciono|funcionaba|remember|recall|memory|before|previous|earlier|last time|used to|usually|history)\\b/iu
     .test(normalizedMemoryRequest(text))
-    || /\\b(?:fue|era|fueron|eran|did (?:we|you))\\b.{0,80}\\b(?:favorit\\p{L}*|pronostic\\p{L}*|prediccion\\p{L}*|pick|seleccion\\p{L}*|eleccion|elegimos|escogimos|chose|picked)\\b/iu
+    || /\b(?:fue|era|fueron|eran|did (?:we|you))\b.{0,100}\b(?:favorit\p{L}*|pronostic\p{L}*|prediccion\p{L}*|pick|seleccion\p{L}*|eleccion|elegimos|escogimos|estrategia|solucion|plan|metodo|chose|picked|strategy|solution)\b/iu
+      .test(normalizedMemoryRequest(text))
+    || /\b(?:retom\p{L}*|continu\p{L}*|sigamos|seguimos|aprendimos|hicimos|usamos|logramos|reutiliz\p{L}*)\b/iu
       .test(normalizedMemoryRequest(text))
 }
 
