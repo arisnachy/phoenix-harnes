@@ -242,6 +242,15 @@ export class LearningMemoryService extends Service {
   }
 
   /**
+   * Resolve the project for the owning session, never another active chat.
+   * @param sessionId - Root human conversation or mission session.
+   * @returns Project scope to use when assembling its model context.
+   */
+  projectIdForSession(sessionId: string): string | undefined {
+    return this.projectForSession(sessionId)
+  }
+
+  /**
    * Store an explicit, bounded lesson supplied by the model or user workflow.
    * @param input - Memory record to persist.
    * @returns The persisted memory record.
@@ -315,8 +324,12 @@ export class LearningMemoryService extends Service {
     if (isDerivedRuntimeContextEvent(event)) return Promise.resolve()
     const observation = observationFor(session, event)
     const cognitiveObservation = cognitiveObservationFor(session, event)
+    // A separate derived row also backfills older model decisions during
+    // canonical session replay without changing the original conversation.
+    const decision = assistantDecisionObservationFor(session, event)
     return Promise.all([
       this.cognitive.remember(cognitiveObservation),
+      ...decision === undefined ? [] : [this.cognitive.remember(decision)],
       ...observation === undefined ? [] : [this.ledger.remember(observation)],
     ]).then(() => undefined).catch((error: unknown) => {
       this.ctx.logger.warn(`learning-memory: ignored event ${event.type} in ${String(session.id)}: ${String(error)}`)
@@ -396,7 +409,10 @@ interface Observation {
 
 function cognitiveObservationFor(session: Session, event: SessionEvent): CognitiveMemoryInput {
   const content = eventText(event)
-  const durable = durableFact(content)
+  // An assistant saying "prefiero" must never become a user preference.
+  const durable = event.type === 'user/message' && event.data.source.kind === 'user'
+    ? durableFact(content)
+    : undefined
   const projectId = projectIdFor(session)
   const entities = entitiesFor(content, projectId, event.type)
   const error = isErrorEvent(event, content)
@@ -433,6 +449,41 @@ function cognitiveObservationFor(session: Session, event: SessionEvent): Cogniti
     confidence: durable === undefined ? error ? 0.9 : 0.7 : 0.95,
     importance: durable === undefined ? prospective || error ? 0.9 : success ? 0.65 : 0.5 : 0.95,
   }
+}
+
+/**
+ * Capture an explicit choice as a durable decision, separate from its raw
+ * assistant message. The decision documents what Kira said, not whether that
+ * forecast was correct. Distinct provenance allows replay to backfill older
+ * conversations and preserves later changed picks as chronological history.
+ */
+function assistantDecisionObservationFor(session: Session, event: SessionEvent): CognitiveMemoryInput | undefined {
+  if (event.type !== 'assistant/message') return undefined
+  const content = eventText(event)
+  if (!isExplicitAssistantDecision(content)) return undefined
+  const projectId = projectIdFor(session)
+  const safeContent = sanitize(content)
+  return {
+    sessionId: String(session.id),
+    eventSeq: event.seq,
+    kind: 'decision',
+    layers: ['autobiographical', 'episodic', 'semantic', 'associative', 'temporal'],
+    content: safeContent,
+    summary: sanitize(`Kira decision: ${safeContent}`),
+    sourceEventType: 'assistant/decision',
+    occurredAt: event.time,
+    ...projectId === undefined ? {} : { projectId },
+    entities: entitiesFor(content, projectId, 'assistant/decision'),
+    confidence: 0.92,
+    importance: 0.94,
+  }
+}
+
+function isExplicitAssistantDecision(text: string): boolean {
+  const normalized = text.normalize('NFKD').replace(/\p{Diacritic}/gu, '').toLocaleLowerCase()
+  if (/\b(?:no tengo (?:un |una )?(?:favorito|pronostico|seleccion)|no puedo elegir|sin (?:favorito|seleccion))\b/u.test(normalized)) return false
+  return /\b(?:mi|nuestro|nuestra|el|la)\s+(?:favorito|pronostico|pick|seleccion|eleccion)\s*(?:es\b|sera\b|para\b|del\b|:)/u.test(normalized)
+    || /\b(?:elijo|elegimos|escogi|escogimos|selecciono|seleccionamos|me inclino por|nos quedamos con|voy con|vamos con)\b/u.test(normalized)
 }
 
 function explicitCognitiveInput(input: MemoryRecordInput, projectId: string | undefined): CognitiveMemoryInput {
