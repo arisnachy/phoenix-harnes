@@ -161,8 +161,8 @@ export async function chatGames(sport:string,league:string,requestedDate?:string
       const periods=awayPeriods.length>0&&awayPeriods.length===homePeriods.length
         ?awayPeriods.slice(0,9).map((v,i)=>({label:String(i+1),
           away:String(v.displayValue??v.value??'—'),home:String(homePeriods[i]?.displayValue??homePeriods[i]?.value??'—')})):[]
-      const sportLabel={soccer:'Fútbol',basketball:'Baloncesto',football:'Fútbol americano',hockey:'Hockey',
-        tennis:'Tenis',mma:'MMA',racing:'Automovilismo',golf:'Golf',baseball:'Béisbol'}[sport]||sport
+      const sportNames:Record<string,string>={soccer:'Fútbol',basketball:'Baloncesto',football:'Fútbol americano',hockey:'Hockey',
+        tennis:'Tenis',mma:'MMA',racing:'Automovilismo',golf:'Golf',baseball:'Béisbol'}; const sportLabel=sportNames[sport]||sport
       rows.push({component:'sports_game_card',version:1,props:{
         title:title(e.name,95),subtitle:title(league,45)+' · '+sportLabel,
         status:title(e.status?.type?.description,55),when:localTime(e.date),
