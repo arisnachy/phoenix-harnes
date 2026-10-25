@@ -2102,7 +2102,12 @@ while (true) {
       // completes an update. A request marker or successful build alone does not.
       const updateState = readUpdateState()
       const target = updateState?.target
-      if ((updateState?.status === 'restarting' || updateState?.status === 'applying')
+      // A watchdog may have reported a stalled request while this supervisor
+      // was busy building the runtime. Verified Host health is stronger evidence
+      // and must resolve that timeout to a real successful installation.
+      const recoverableTimeout = updateState?.status === 'error'
+        && updateState.phase === 'supervisor-timeout'
+      if ((updateState?.status === 'restarting' || updateState?.status === 'applying' || recoverableTimeout)
         && typeof target === 'string' && /^[a-f0-9]{40}$/iu.test(target)
         && gitValue(runtimeRoot, ['rev-parse', 'HEAD']) === target) {
         const stateFile = updateStatePath()
