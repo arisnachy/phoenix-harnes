@@ -166,6 +166,25 @@ describe('Scheduled tasks global manager', () => {
     expect(screen.getByText('Safe record')).toBeTruthy()
   })
 
+  it('keeps a rejected Host action visible after a successful automatic list reload', async () => {
+    const call = vi.fn().mockImplementation(async (_channel: string, endpoint: string) =>
+      endpoint === 'list'
+        ? { ok: true, value: [{ id: 'task-locked', title: 'Locked task', status: 'scheduled',
+          nextRunAt: '2027-05-01T12:00:00.000Z', createdBy: 'user' }] }
+        : { ok: false, error: { message: 'Host denied the update' } })
+    const connection = { rpc: { call } }
+    const view = render(<ScheduledTaskCenter t={t} connection={connection} />)
+    fireEvent(window, new Event('phoenix:open-scheduled-tasks'))
+    await waitFor(() => { expect(screen.getByRole('button', { name: 'Pause: Locked task' })).toBeTruthy() })
+    fireEvent.click(screen.getByRole('button', { name: 'Pause: Locked task' }))
+    await waitFor(() => { expect(screen.getByRole('alert').textContent).toContain('Host denied the update') })
+    // Reconnecting the list client must not erase the last mutation error.
+    view.rerender(<ScheduledTaskCenter t={t} connection={{ rpc: { call } }} />)
+    await waitFor(() => { expect(call.mock.calls.filter((row: unknown[]) => row[1] === 'list').length).toBeGreaterThan(1) })
+    expect(screen.getByRole('alert').textContent).toContain('Host denied the update')
+    expect(screen.getByRole('button', { name: 'Pause: Locked task' })).toBeTruthy()
+  })
+
   it('does not send expired schedules to the Host', async () => {
     const call = vi.fn().mockResolvedValue({ ok: true, value: [] })
     render(<ScheduledTaskCenter t={t} connection={{ rpc: { call } }} />)
