@@ -1,5 +1,6 @@
 /** Read-only sports information adapters for Kira's conversation tools. */
 import {fetchPublicEspnOdds} from './espn-odds.ts'
+import {enrichMlbMatch} from './mlb-matchup.ts'
 export const sportsCatalog: Readonly<Record<string, readonly string[]>> = {
   soccer: ['eng.1','esp.1','mex.1','usa.1','uefa.champions','fifa.world'],
   basketball: ['nba','wnba','mens-college-basketball'],
@@ -73,8 +74,8 @@ export async function getFeed<T>(url:string, fetcher:typeof fetch=fetch):Promise
   if(text.length>4_000_000)throw Error('Respuesta supera 4 MB')
   return JSON.parse(text) as T
 }
-type FeedEvent = {id?:string|number;date?:string;name?:string;status?:{type?:{description?:string}};competitions?:Array<{venue?:{fullName?:string;address?:{city?:string}};competitors?:Array<{id?:string;homeAway?:string;score?:string|number;team?:{displayName?:string;name?:string;id?:string;logo?:string;logos?:Array<{href?:string}>};records?:Array<{summary?:string}>}>}>}
-type MlbGame = {gamePk:number;gameDate?:string;venue?:{name?:string};status?:{detailedState?:string};teams?:Record<'home'|'away',{team?:{id?:number;name?:string};score?:number;probablePitcher?:{id?:number;fullName?:string}}>}
+type FeedEvent = {id?:string|number;date?:string;name?:string;status?:{type?:{description?:string;state?:string}};competitions?:Array<{venue?:{fullName?:string;address?:{city?:string}};competitors?:Array<{id?:string;homeAway?:string;score?:string|number;team?:{displayName?:string;name?:string;id?:string;logo?:string;logos?:Array<{href?:string}>};records?:Array<{summary?:string}>;leaders?:Array<{name?:string;leaders?:Array<{athlete?:{displayName?:string;headshot?:{href?:string}};displayValue?:string}>}>}>;broadcasts?:Array<{names?:string[]}>}>}
+type MlbGame = {gamePk:number;gameDate?:string;venue?:{name?:string};seriesDescription?:string;seriesGameNumber?:number;status?:{detailedState?:string;abstractGameState?:string};teams?:Record<'home'|'away',{team?:{id?:number;name?:string};score?:number;probablePitcher?:{id?:number;fullName?:string}}>}
 /** Safe, minimal sports UI payload; the client validates it before rendering. */
 export type ChatBlock = {component:'sports_game_card'|'sports_ticket_card';version:1;props:Record<string,unknown>}
 function localTime(dateString?:string):string {
@@ -83,7 +84,7 @@ function localTime(dateString?:string):string {
   if(Number.isNaN(parsed.getTime()))return 'Hora no confirmada'
   return new Intl.DateTimeFormat('es-DO',{timeZone:'America/Santo_Domingo',dateStyle:'medium',timeStyle:'short'}).format(parsed)
 }
-function logosEnabled(env:NodeJS.ProcessEnv):boolean{return env.PHOENIX_SPORTS_ESPN_IMAGES_ALLOWED==='1'}
+function logosEnabled(env:NodeJS.ProcessEnv):boolean{return env.PHOENIX_SPORTS_IMAGES_DISABLED!=='1'}
 /** Normalize scoreboard results into validated chat renderable cards.
  * @param sport - Requested discipline.
  * @param league - Supported league identifier.
@@ -102,23 +103,37 @@ export async function chatGames(sport:string,league:string,requestedDate?:string
     try {
     const api=await getFeed<{dates?:Array<{games?:MlbGame[]}>}>('https://statsapi.mlb.com/api/v1/schedule?sportId=1&date='+day+'&hydrate=probablePitcher,venue',fetcher)
     if(!Array.isArray(api.dates))throw Error('MLB devolvió un formato inválido')
-    for(const g of api.dates.flatMap(d=>d.games??[]).slice(0,25)){
+    const games=api.dates.flatMap(d=>d.games??[]).slice(0,25)
+    const cards=await Promise.all(games.map(async(g,index)=>{
       const away=g.teams?.away,home=g.teams?.home
-      const side=(p:typeof home)=>({label:title(p?.team?.name),...(p?.score===undefined?{}:{score:String(p.score)})})
-      const picture=(p:typeof home)=>env.PHOENIX_SPORTS_MLB_IMAGES_ALLOWED==='1'&&p?.probablePitcher?.id
-        ? 'https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_213,q_auto:best/v1/people/'+encodeURIComponent(p.probablePitcher.id)+'/headshot/67/current':undefined
-      const highlights=[{label:'Abridor visitante',value:title(away?.probablePitcher?.fullName,120),...(picture(away)?{image:picture(away)}:{})},
-        {label:'Abridor local',value:title(home?.probablePitcher?.fullName,120),...(picture(home)?{image:picture(home)}:{})},
-        {label:'Equipo local',value:title(home?.team?.name)+' · ID '+title(home?.team?.id,20)},
-        {label:'Equipo visitante',value:title(away?.team?.name)+' · ID '+title(away?.team?.id,20)}]
-      rows.push({component:'sports_game_card',version:1,props:{
-        title:'MLB · '+title(g.gamePk,25),subtitle:'Partido '+day,status:title(g.status?.detailedState,55),
-        when:localTime(g.gameDate),venue:title(g.venue?.name),home:side(home),away:side(away),
-        source:'MLB Stats API · '+new Date().toISOString(),
-        highlights,askPrompt:'Kira, amplía la información verificable del partido MLB '+g.gamePk+' incluyendo pitchers probables, rendimiento reciente, bullpen, ausencias y fuente por estadística.',
-        note:'Lanzadores probables pueden cambiar; no se confirmó el roster definitivo.',
-      }})
-    }
+      const homeName=title(home?.team?.name),awayName=title(away?.team?.name)
+      const showScores=['Live','Final','Completed'].includes(g.status?.abstractGameState??'')
+      const side=(p:typeof home)=>({
+        label:title(p?.team?.name),
+        ...(showScores&&p?.score!==undefined?{score:String(p.score)}:{}),
+        ...(p?.team?.id&&logosEnabled(env)?{logo:'https://www.mlbstatic.com/team-logos/'+p.team.id+'.svg'}:{}),
+      })
+      // Limit deep MLB requests on large game days; the user can drill down any remaining matchup.
+      const details=index<3?await enrichMlbMatch(
+        g.gamePk,home?.team?.id??0,away?.team?.id??0,homeName,awayName,
+        {home:home?.probablePitcher,away:away?.probablePitcher},Number(day.slice(0,4)),env,fetcher,
+      ):null
+      const highlights=details?.pitchers.length
+        ? details.pitchers.map(p=>({label:'Abridor probable · '+p.team,value:p.name,...(p.image?{image:p.image}:{}),...(p.stats?{detail:p.stats}:{})}))
+        : ([['away',away],['home',home]] as const).filter(([,t])=>t?.probablePitcher?.fullName)
+          .map(([side,t])=>({label:'Abridor probable · '+(side==='home'?homeName:awayName),value:title(t?.probablePitcher?.fullName)}))
+      return {component:'sports_game_card' as const,version:1 as const,props:{
+        title:homeName+' vs '+awayName,
+        subtitle:g.seriesDescription?(g.seriesDescription+' · Juego '+(g.seriesGameNumber??'por confirmar')):'MLB · '+day,
+        status:title(g.status?.detailedState,55),when:localTime(g.gameDate),venue:title(g.venue?.name),
+        home:side(home),away:side(away),source:'MLB Stats API · '+new Date().toISOString(),
+        highlights,pitchers:details?.pitchers??[],lineups:details?.lineups??[],
+        bullpen:details?.bullpen??[],sport:'baseball',eventId:String(g.gamePk),
+        note:details?.notes.join(' · ')||'Los abridores y las alineaciones están sujetos a confirmación.',
+        askPrompt:'Kira, investiga el partido MLB '+g.gamePk+' con pitchers probables, bullpen, alineaciones y cuotas verificables. Si hay estimaciones de favoritos, distingue tus cálculos de ESPN.',
+      }}
+    }))
+    rows.push(...cards)
     } catch (error) {
       if(!hasSportsPermission('espn',env))throw error
       // ESPN public scoreboard remains available if the complementary MLB feed fails.
@@ -134,14 +149,15 @@ export async function chatGames(sport:string,league:string,requestedDate?:string
         const name=title(c?.team?.displayName??c?.team?.name)
         const logo=c?.team?.logo??c?.team?.logos?.[0]?.href
         const allowed=!!logo&&/^https:\/\/a\.espncdn\.com\//u.test(logo)&&logosEnabled(env)
-        return {label:name,...(c?.score===undefined?{}:{score:String(c.score)}),...(allowed?{logo}:{})}
+        return {label:name,...(c?.score===undefined||e.status?.type?.state==='pre'?{}:{score:String(c.score)}),...(allowed?{logo}:{logo}) ,...(c?.records?.[0]?.summary?{meta:c.records[0].summary}:{})}
       }
       rows.push({component:'sports_game_card',version:1,props:{
         title:title(league,45)+' · '+title(e.name,95),subtitle:title(sport,45),
         status:title(e.status?.type?.description,55),when:localTime(e.date),
         venue:title(comp?.venue?.fullName),home:side(home),away:side(away),
         source:'ESPN Site API · '+new Date().toISOString(),
-        highlights:[{label:'Ciudad',value:title(comp?.venue?.address?.city)},{label:'Evento',value:title(e.id)}],
+        sport,eventId:String(e.id??''),highlights:(comp?.competitors??[]).flatMap(team=>(team.leaders??[]).slice(0,2).flatMap(group=>(group.leaders??[]).slice(0,1).map(leader=>({label:title(group.name),value:title(leader.athlete?.displayName),...(leader.displayValue?{detail:title(leader.displayValue)}:{})})))),
+        ...(comp?.broadcasts?.length?{broadcast:comp.broadcasts.flatMap(x=>x.names??[]).slice(0,3).join(', ')}:{}),
         askPrompt:'Kira, amplía el análisis verificado del evento '+title(e.id,50)+' de '+league+'. Incluye métricas específicas de '+sport+' con sus fuentes.',
       }})
     }
