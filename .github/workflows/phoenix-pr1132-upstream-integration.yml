@@ -1,4 +1,5 @@
 name: Phoenix PR1132 guarded upstream integration
+# Re-run after deduplicating merged catalog map symbols.
 on:
   push:
     branches:
