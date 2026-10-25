@@ -245,6 +245,7 @@ export function parsePhoenixUpdateEvents(content: string, target?: string): read
           .replace(/\b(?:sk-(?:proj-)?[A-Za-z0-9_-]{12,}|gh[pousr]_[A-Za-z0-9_]{12,}|github_pat_[A-Za-z0-9_]{12,})\b/giu, '[SECRET_REMOVED]')
           .replace(/\bBearer\s+[^\s"']+/giu, 'Bearer [SECRET_REMOVED]')
           .replace(/(\b(?:password|passwd|token|access_token|refresh_token|api[_-]?key|client_secret|authorization|secret|_authToken)\b\s*[:=]\s*)("[^"]*"|'[^']*'|[^\s,;]+)/giu, '$1[SECRET_REMOVED]')
+    .replace(/(\b[A-Za-z0-9_]*(?:TOKEN|API_KEY|PASSWORD|SECRET|AUTH_KEY|PRIVATE_KEY|ACCESS_KEY)\b\s*[:=]\s*)("[^"]*"|'[^']*'|[^\s,;]+)/giu, '$1[SECRET_REMOVED]')
         : undefined
       events.push({
         step: value.step,
