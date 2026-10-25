@@ -14,6 +14,7 @@ import type { ChatNodeOwnerProps, ChatViewSlotProps } from '../contract/slots.ts
 import css from './AssistantMarkdown.module.css'
 import { GenerativeUi, splitGenerativeUiText } from './GenerativeUi.tsx'
 import type { CanvasAction } from './GenerativeCanvas.tsx'
+import { PlainOutputFormatter, splitPlainOutputText } from './PlainOutputFormatter.tsx'
 
 export interface AssistantMarkdownProps {
   blocks: readonly AssistantBlock[]
@@ -69,15 +70,27 @@ export const AssistantMarkdown = memo(function AssistantMarkdown({
           i += 1
         }
         const segments = splitGenerativeUiText(text, { streaming })
-        rendered.push(...segments.map((segment, index) => segment.kind === 'ui'
-          ? <GenerativeUi key={`${first}:ui:${index}`} block={segment.block} onAction={onUiAction} {...(conversationId === undefined ? {} : { conversationId })} />
-          : <MarkdownText
-              key={`${first}:markdown:${index}`}
-              text={segment.text}
-              streaming={streaming}
-              codeLabels={codeLabels}
-              fileMentions={mentions}
-            />))
+        for (let index = 0; index < segments.length; index++) {
+          const segment = segments[index]
+          if (!segment) continue
+          if (segment.kind === 'ui') {
+            rendered.push(<GenerativeUi key={first+':ui:'+index} block={segment.block}
+              onAction={onUiAction} {...(conversationId === undefined ? {} : { conversationId })} />)
+            continue
+          }
+          // Native schema-validated UI takes priority. Only remaining
+          // inert plaintext is reformatted; code and Markdown stay intact.
+          const presentation = segment.kind === 'markdown'
+            ? splitPlainOutputText(segment.text) : [{kind:'markdown' as const,text:segment.text}]
+          for (let j = 0; j < presentation.length; j++) {
+            const part = presentation[j]
+            if (!part) continue
+            rendered.push(part.kind === 'formatted'
+              ? <PlainOutputFormatter key={first+':formatted:'+index+':'+j} card={part.card} />
+              : <MarkdownText key={first+':markdown:'+index+':'+j}
+                  text={part.text} streaming={streaming} codeLabels={codeLabels} fileMentions={mentions} />)
+          }
+        }
         break
       }
       // Reasoning is represented once inside the compact Tools disclosure.
