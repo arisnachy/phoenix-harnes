@@ -59,6 +59,8 @@ export function ScheduledTaskCenter({ connection, t }: ScheduledTaskCenterProps)
   const [open, setOpen] = useState(false)
   const [rows, setRows] = useState<readonly ScheduledTask[]>([])
   const [error, setError] = useState<string>()
+  // Keep mutation failures visible even when a background list refresh succeeds.
+  const [actionError, setActionError] = useState<string>()
   const [loading, setLoading] = useState(false)
   const [busy, setBusy] = useState(false)
   const [changingId, setChangingId] = useState<string>()
@@ -136,7 +138,7 @@ export function ScheduledTaskCenter({ connection, t }: ScheduledTaskCenterProps)
       setTargets(ids)
       setTargetId(current => ids.includes(current) ? current : ids.length === 1 ? (ids[0] ?? '') : '')
     } catch (cause: unknown) {
-      setError(cause instanceof Error ? cause.message : String(cause))
+      setActionError(cause instanceof Error ? cause.message : String(cause))
     }
   }
 
@@ -154,11 +156,11 @@ export function ScheduledTaskCenter({ connection, t }: ScheduledTaskCenterProps)
     if (busy) return
     const moment = new Date(when).getTime()
     if (!Number.isFinite(moment) || moment <= Date.now() || title.trim() === '' || prompt.trim() === '') {
-      setError(t('task.center.invalid'))
+      setActionError(t('task.center.invalid'))
       return
     }
     setBusy(true)
-    setError(undefined)
+    setActionError(undefined)
     try {
       const response = await connection.rpc.call('/phoenix-tasks', 'create', {
         title: title.trim(),
@@ -185,7 +187,7 @@ export function ScheduledTaskCenter({ connection, t }: ScheduledTaskCenterProps)
       setWhen('')
       setRecurrence('once')
     } catch (cause: unknown) {
-      setError(cause instanceof Error ? cause.message : String(cause))
+      setActionError(cause instanceof Error ? cause.message : String(cause))
     } finally {
       setBusy(false)
     }
@@ -194,7 +196,7 @@ export function ScheduledTaskCenter({ connection, t }: ScheduledTaskCenterProps)
   const changeStatus = async (id: string, operation: 'pause' | 'resume' | 'cancel'): Promise<void> => {
     if (changingId !== undefined) return
     setChangingId(id)
-    setError(undefined)
+    setActionError(undefined)
     try {
       const response = await connection.rpc.call('/phoenix-tasks', operation, { id })
       if (!response.ok) throw new Error(response.error.message)
@@ -205,7 +207,7 @@ export function ScheduledTaskCenter({ connection, t }: ScheduledTaskCenterProps)
       }
       await verifyTask(task => task.id === id && task.status === updated.status)
     } catch (cause: unknown) {
-      setError(cause instanceof Error ? cause.message : String(cause))
+      setActionError(cause instanceof Error ? cause.message : String(cause))
     } finally {
       setChangingId(undefined)
     }
@@ -261,11 +263,11 @@ export function ScheduledTaskCenter({ connection, t }: ScheduledTaskCenterProps)
           </div>
           <button type="submit" disabled={busy}>{busy ? t('task.center.saving') : t('task.center.create')}</button>
         </form>
-        {error !== undefined && <p role="alert" className={css.error}>{error}</p>}
+        {(actionError ?? error) !== undefined && <p role="alert" className={css.error}>{actionError ?? error}</p>}
         <div className={css.list}>
           <h3>{t('task.center.list')}</h3>
           {loading && <p>{t('task.center.loading')}</p>}
-          {!loading && rows.length === 0 && error === undefined && <p>{t('task.empty')}</p>}
+          {!loading && rows.length === 0 && error === undefined && actionError === undefined && <p>{t('task.empty')}</p>}
           {rows.map(task => (
             <article key={task.id} className={css.item}>
               <div><strong>{task.title}</strong><small>{task.createdBy === 'user' ? t('task.center.user') : t('task.center.system')} · {t(`task.status.${task.status}` as never)}</small></div>
