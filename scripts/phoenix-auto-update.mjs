@@ -24,6 +24,7 @@ import {
 } from 'node:fs'
 import { homedir } from 'node:os'
 import { isAbsolute, join, relative, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import process from 'node:process'
 import { gitSafeDirectoryEnvironment } from './phoenix-git-safe-directory.mjs'
 import { classifyStableUpdate } from './phoenix-update-policy.mjs'
@@ -80,6 +81,7 @@ function normalizeMode(value) {
   return normalized
 }
 
+let activeLiveUpdateStep
 function command(bin, args, options = {}) {
   const cwd = options.cwd ?? process.cwd()
   const installRoot = process.env.PHOENIX_INSTALL_ROOT?.trim()
@@ -89,10 +91,24 @@ function command(bin, args, options = {}) {
         cwd,
       ])
     : process.env
-  const result = spawnSync(bin, args, {
+  let liveTarget
+  let liveState
+  if (options.inherit && activeLiveUpdateStep !== undefined) {
+    try {
+      liveState = statePath(cwd)
+      const state = JSON.parse(readFileSync(liveState, 'utf8'))
+      if (typeof state?.target === 'string' && /^[a-f0-9]{40}$/iu.test(state.target)) liveTarget = state.target
+    } catch { /* preserve old command path without update state */ }
+  }
+  const streamLive = liveTarget !== undefined && liveState !== undefined
+  const liveArgs = streamLive ? [
+    fileURLToPath(new URL('./phoenix-update-live-command.mjs', import.meta.url)),
+    JSON.stringify({ cwd, bin, args, step: activeLiveUpdateStep, target: liveTarget, statePath: liveState }),
+  ] : args
+  const result = spawnSync(streamLive ? process.execPath : bin, liveArgs, {
     cwd: options.cwd,
     encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'pipe'],
+    stdio: streamLive ? 'inherit' : ['ignore', 'pipe', 'pipe'],
     maxBuffer: 64 * 1024 * 1024,
     windowsHide: true,
     env,
@@ -386,6 +402,8 @@ function updateCommandStep(root, step, commandFn) {
   } catch { /* legacy state without a target */ }
   const path = statePath(root)
   recordPhoenixUpdateStep(path, step, 'started', target)
+  const previousLiveStep = activeLiveUpdateStep
+  activeLiveUpdateStep = step
   try {
     const result = commandFn()
     recordPhoenixUpdateStep(path, step, 'ok', target, 0)
@@ -395,6 +413,8 @@ function updateCommandStep(root, step, commandFn) {
       Number.isInteger(error?.exitCode) ? error.exitCode : 1,
       error?.diagnostic || (error instanceof Error ? error.stack ?? error.message : String(error)))
     throw error
+  } finally {
+    activeLiveUpdateStep = previousLiveStep
   }
 }
 
