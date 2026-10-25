@@ -69,4 +69,11 @@ jobs:
           git add -u
           git diff --cached --check
           git commit -m 'merge(pr1132): preserve main plain output formatting and Phoenix sports UI'
+          # Do not overwrite another worker's commits: recheck the remote and
+          # retry only by rerunning the full workflow on the latest branch.
+          git fetch origin fix/phoenix-dual-core-integration-20261023
+          git merge-base --is-ancestor origin/fix/phoenix-dual-core-integration-20261023 HEAD || {
+            echo 'Branch moved while this workflow ran; refusing stale push' >&2
+            exit 1
+          }
           git push origin HEAD:fix/phoenix-dual-core-integration-20261023
