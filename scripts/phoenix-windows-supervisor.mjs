@@ -24,7 +24,7 @@ import { assertPromotedStableTarget } from './phoenix-stable-freshness.mjs'
 import { hydratePhoenixEnvironment } from './phoenix-windows-environment.mjs'
 import { ensurePhoenixDesktopShortcut } from './phoenix-windows-shortcut.mjs'
 import { recordPhoenixUpdateStep, writePhoenixUpdateState } from './phoenix-update-state.mjs'
-import { pinPhoenixUpdateLiveHelper } from './phoenix-update-live-pin.mjs'
+import { pinPhoenixUpdateLiveHelper, validPinnedPhoenixUpdateLiveHelper } from './phoenix-update-live-pin.mjs'
 
 const root = resolve(process.cwd())
 const supervisorSourceRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -926,7 +926,7 @@ function runChecked(cwd, bin, args, label) {
     : undefined
   if (helperCandidate !== undefined) pinnedLiveHelper = helperCandidate
   const liveHelper = pinnedLiveHelper
-  const live = liveEligible && liveHelper !== undefined && existsSync(liveHelper)
+  const live = liveEligible && validPinnedPhoenixUpdateLiveHelper(liveHelper)
   const directStream = liveEligible && !live
   if (directStream && !missingLiveHelperReported) {
     missingLiveHelperReported = true
