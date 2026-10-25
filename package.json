@@ -161,7 +161,7 @@
     "release:pack": "tsx scripts/release/pack.ts",
     "release:verify-packed-install": "tsx scripts/release/verify-packed-install.ts",
     "release:publish": "tsx scripts/release/publish.ts",
-    "phoenix": "node scripts/phoenix-web-freshness.mjs && node --import tsx/esm apps/cli/src/bin.ts web",
+    "phoenix": "node scripts/phoenix-web-freshness.mjs && node scripts/phoenix-web-entry.mjs",
     "codex:voice:doctor": "node scripts/phoenix-codex-live-doctor.mjs",
     "test:codex:voice:doctor": "node --test scripts/phoenix-codex-live-doctor.node-test.mjs",
     "windows:capabilities": "node scripts/phoenix-windows-free-capabilities.mjs",

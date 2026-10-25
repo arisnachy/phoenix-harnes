@@ -1969,6 +1969,38 @@ function retireVerifiedOlderPhoenixHost(port) {
   return true
 }
 
+/**
+ * pnpm phoenix used to start an unmanaged Node Host directly. An upgraded
+ * supervisor can safely take over its loopback port only when the dedicated
+ * repair tool verifies a same-user legacy PHOENIX process, not another app,
+ * a managed supervisor or an arbitrary TCP listener.
+ */
+function retireVerifiedUnsupervisedPhoenixHost(port) {
+  if (process.platform !== 'win32' || !officialPhoenixRemote()) return false
+  const repair = join(supervisorSourceRoot, 'scripts', 'phoenix-windows-port-repair.ps1')
+  if (!existsSync(repair)) return false
+  const preflight = runtimeBootPreflight(runtimeRoot)
+  if (!preflight.ok) {
+    console.error('[PHOENIX STARTUP] La versión nueva no pasó el preflight; el Host anterior se conserva.')
+    return false
+  }
+  const result = spawnSync('powershell.exe', [
+    '-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+    '-File', repair, '-Port', String(port), '-LegacyOnly', '-Apply',
+  ], {
+    cwd: root, encoding: 'utf8', windowsHide: hideRuntimeWindows,
+    stdio: ['ignore', 'pipe', 'pipe'], timeout: 20_000,
+  })
+  if (result.stdout) process.stdout.write(result.stdout)
+  if (result.error !== undefined || result.status !== 0) {
+    console.error('[PHOENIX STARTUP] No se cerró ningún proceso no verificado: '
+      + (result.stderr?.trim() || result.error?.message || 'no se encontró un Host heredado verificable.'))
+    return false
+  }
+  console.error('[PHOENIX STARTUP] Host antiguo iniciado con pnpm phoenix retirado de forma verificada.')
+  return true
+}
+
 function supervisorPipeName() {
   // A staging checkout and the durable checkout can have different roots but
   // still contend for the same Web Host port. Use the port as the lock identity.
@@ -2067,7 +2099,8 @@ while (true) {
   let lastObservedFingerprint = configurationFingerprint(launchConfiguration)
   const port = defaultPhoenixPort()
   if (port !== undefined && await existingHostOnPort(port)) {
-    const migrated = retireVerifiedOlderPhoenixHost(port)
+    const migrated = (retireVerifiedOlderPhoenixHost(port)
+      || retireVerifiedUnsupervisedPhoenixHost(port))
       && await waitForHostPortRelease(port)
     if (!migrated) {
       console.error(`[PHOENIX] 127.0.0.1:${String(port)} está ocupado; no se cerrará un proceso no verificado.`)
