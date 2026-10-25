@@ -1,0 +1,43 @@
+name: Phoenix Sports rich chat UI
+on:
+  pull_request:
+    paths:
+      - 'packages/core/tool-sports/**'
+      - 'packages/client/ui-conversation/src/client/chat/GenerativeUi*'
+      - 'packages/client/ui-conversation/src/client/chat/sports-tool-cards.ts'
+      - 'packages/client/ui-conversation/tests/sports-rich-ui.client.spec.tsx'
+      - '.github/workflows/phoenix-sports-rich-ui.yml'
+  push:
+    branches: [feat/kira-sports-rich-phoenix-ui-20261024]
+    paths:
+      - 'packages/core/tool-sports/**'
+      - 'packages/client/ui-conversation/**'
+      - '.github/workflows/phoenix-sports-rich-ui.yml'
+permissions:
+  contents: read
+jobs:
+  rich-sports-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Verify MLB enrichment data and safety
+        run: |
+          node --experimental-strip-types --test packages/core/tool-sports/tests/rich-matchup.test.mjs
+          node --experimental-strip-types --test packages/core/tool-sports/tests/chat-sports.test.mjs
+      - name: Verify chat schema, visuals and prior UI compatibility
+        run: pnpm exec vitest run packages/client/ui-conversation/tests/sports-rich-ui.client.spec.tsx packages/client/ui-conversation/tests/generative-ui.client.spec.tsx packages/client/ui-conversation/tests/tool-activity-group.client.spec.tsx
+      - name: Compile shared server contracts
+        run: pnpm run build:lib:host
+      - name: Strict types and Phoenix client build
+        run: pnpm run build:lib:client
+      - name: Build production frontend
+        run: pnpm run build:web
+      - name: Verify production sports UI is bundled
+        run: node scripts/phoenix-verify-sports-dist.mjs
