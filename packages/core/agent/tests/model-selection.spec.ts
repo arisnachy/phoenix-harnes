@@ -1344,7 +1344,7 @@ describe('installModelSelection()', () => {
       } })
       await expect(agentEvents(ctx, agent).waterfall('agent/request',
         { turn: 1, step: 1, signal }, () => Promise.resolve(seed))).resolves.toMatchObject({
-        model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('medium'),
+        model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('low'),
       })
       events.pop()
     }
