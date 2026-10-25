@@ -319,6 +319,15 @@ export function createSpeechOutput(
       }
       clear(false)
       transcript = normalized
+      // An explicit, already-complete Speak request is a single utterance when
+      // short enough. Only growing streams need eager sentence-level chunks.
+      // Splitting short completed answers loses continuity and changes what
+      // the message-level Speak action promises to the user.
+      if (normalized.length <= 180) {
+        queuedThrough = normalized.length
+        enqueue(normalized)
+        return
+      }
       while (true) {
         const planned = nextStreamingSpeechSegment(transcript, queuedThrough, true)
         if (planned === undefined) break
