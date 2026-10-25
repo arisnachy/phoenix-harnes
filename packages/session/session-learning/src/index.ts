@@ -458,7 +458,8 @@ function cognitiveObservationFor(session: Session, event: SessionEvent): Cogniti
  * conversations and preserves later changed picks as chronological history.
  */
 function assistantDecisionObservationFor(session: Session, event: SessionEvent): CognitiveMemoryInput | undefined {
-  if (event.type !== 'assistant/message') return undefined
+  // Subagent deliberation is not a public choice made by Kira.
+  if (event.type !== 'assistant/message' || session.header.origin === 'subagent') return undefined
   const content = eventText(event)
   if (!isExplicitAssistantDecision(content)) return undefined
   const projectId = projectIdFor(session)
