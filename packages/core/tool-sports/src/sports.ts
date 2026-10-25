@@ -2,6 +2,7 @@
 import { fetchPublicEspnOdds } from './espn-odds.ts'
 import { enrichMlbMatch } from './mlb-matchup.ts'
 import { researchMlbTrend } from './mlb-research.ts'
+/** Supported sport-to-league identifiers for read-only source discovery; never live results. */
 export const sportsCatalog: Readonly<Record<string, readonly string[]>> = {
   soccer: ['eng.1','esp.1','mex.1','usa.1','uefa.champions','fifa.world'],
   basketball: ['nba','wnba','mens-college-basketball'],
