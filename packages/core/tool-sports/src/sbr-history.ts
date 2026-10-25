@@ -13,8 +13,10 @@ const files = {
   mlb: 'mlb_archive_10Y.json',
   nhl: 'nhl_archive_10Y.json',
 } as const
+/** Sports supported by the publicly described SBR historical datasets. */
 export type SbrSport = keyof typeof files
 
+/** A historical game and its available archived pricing fields, never a current quote. */
 export type SbrHistoricalGame = {
   season: number
   date: string | null
@@ -28,6 +30,7 @@ export type SbrHistoricalGame = {
   closingTotal: number | null
 }
 
+/** Explicitly labelled archive result that cannot be mistaken for live bookmaker pricing. */
 export type SbrHistoryResult = {
   sport: SbrSport
   season: number
@@ -86,7 +89,15 @@ const normalize = (row: Record<string, unknown>, season: number): SbrHistoricalG
   }
 }
 
-/** Read an operator-supplied dataset without downloading, scraping or exposing local paths. */
+/**
+ * Read an operator-supplied archive without downloading, scraping or exposing local paths.
+ * @param sport - MLB, NBA, NFL or NHL key.
+ * @param season - Historical season, 2007 through 2021.
+ * @param team - Optional case-insensitive team filter.
+ * @param limit - Maximum number of games to return.
+ * @param env - Operator-controlled archive directory (no remote credentials needed).
+ * @returns Source-attributed results explicitly flagged as historical and non-live.
+ */
 export async function querySbrHistoricalOdds(
   sport: string,
   season: number,
