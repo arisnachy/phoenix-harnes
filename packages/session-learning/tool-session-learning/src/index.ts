@@ -473,27 +473,28 @@ export function apply(ctx: Context, config: Config): void {
   }))
 }
 
-/** Read-only recall cues; never classify by an additional model request. */
+/** Decide whether a prior memory is needed without an extra model call. */
 function normalizedMemoryRequest(text: string): string {
-  return text.normalize('NFKD').replace(/\\p{Diacritic}/gu, '').toLocaleLowerCase()
+  return text.normalize('NFKD').replace(/\p{Diacritic}/gu, '').toLocaleLowerCase()
 }
 
 function requestsPriorMemory(text: string): boolean {
-  return /\\b(?:recuerd\\p{L}*|record\\p{L}*|memoria|recordatorio|anterior\\p{L}*|previo\\p{L}*|antes|pasado|histor\\p{L}*|habia\\p{L}*|dijiste|dije|elegiste|escogiste|elegimos|guardad\\p{L}*|preferencias?|costumbre\\p{L}*|usual|siempre|repetimos|funciono|funcionaba|remember|recall|memory|before|previous|earlier|last time|used to|usually|history)\\b/iu
-    .test(normalizedMemoryRequest(text))
+  const normalized = normalizedMemoryRequest(text)
+  return /\b(?:recuerd\p{L}*|record\p{L}*|memoria|recordatorio|anterior\p{L}*|previo\p{L}*|antes|pasado|histor\p{L}*|habia\p{L}*|dijiste|dije|elegiste|escogiste|elegimos|guardad\p{L}*|preferencias?|costumbre\p{L}*|usual|siempre|repetimos|funciono|funcionaba|remember|recall|memory|before|previous|earlier|last time|used to|usually|history)\b/iu
+    .test(normalized)
     || /\b(?:fue|era|fueron|eran|did (?:we|you))\b.{0,100}\b(?:favorit\p{L}*|pronostic\p{L}*|prediccion\p{L}*|pick|seleccion\p{L}*|eleccion|elegimos|escogimos|estrategia|solucion|plan|metodo|chose|picked|strategy|solution)\b/iu
-      .test(normalizedMemoryRequest(text))
+      .test(normalized)
     || /\b(?:retom\p{L}*|continu\p{L}*|sigamos|seguimos|aprendimos|hicimos|usamos|logramos|reutiliz\p{L}*)\b/iu
-      .test(normalizedMemoryRequest(text))
+      .test(normalized)
 }
 
 function requestsPriorDecision(text: string): boolean {
-  return /\\b(?:favorit\\p{L}*|pronostic\\p{L}*|prediccion\\p{L}*|pick|decision\\p{L}*|elegi\\p{L}*|escogi\\p{L}*|chose|picked|predicted)\\b/iu
+  return /\b(?:favorit\p{L}*|pronostic\p{L}*|prediccion\p{L}*|pick|decision\p{L}*|eleg\p{L}*|escog\p{L}*|chose|picked|predicted)\b/iu
     .test(normalizedMemoryRequest(text))
 }
 
 function requestsPriorPreference(text: string): boolean {
-  return /\\b(?:preferen\\p{L}*|prefier\\p{L}*|gustos?|habitos?|costumbre\\p{L}*|preference\\p{L}*|usual)\\b/iu
+  return /\b(?:preferen\p{L}*|prefier\p{L}*|gustos?|habitos?|costumbre\p{L}*|preference\p{L}*|usual)\b/iu
     .test(normalizedMemoryRequest(text))
 }
 
