@@ -305,22 +305,48 @@ describe('UpdateFooterAction', () => {
     expect(refreshForUpdate).toHaveBeenCalledOnce()
   })
 
-  it('keeps active updates to one line and reveals real details only when requested', async () => {
+  it('opens running updates by default, but lets the user collapse the live console', async () => {
     const target = 'c'.repeat(40)
     render(<UpdateFooterAction {...updateProps(async () => ({
       status: 'preparing', phase: 'build', target, detail: 'Building stable runtime',
     }))} />)
     const card = await screen.findByTestId('phoenix-update-card')
-    const expand = screen.getByRole('button', { name: en.updateShowDetails })
-    expect(expand.getAttribute('aria-expanded')).toBe('false')
-    expect(screen.queryByText('cccccccccccc')).toBeNull()
-    fireEvent.click(expand)
+    await screen.findByTestId('phoenix-update-live-console')
     expect(screen.getByText('cccccccccccc')).toBeTruthy()
     expect(screen.getByText(/Building stable runtime/)).toBeTruthy()
     expect(card.querySelector('[class*="expandedDetails"]')).not.toBeNull()
-    expect(screen.getByRole('button', { name: en.updateHideDetails }).getAttribute('aria-expanded')).toBe('true')
-    fireEvent.click(screen.getByRole('button', { name: en.updateHideDetails }))
+    const collapse = screen.getByRole('button', { name: en.updateHideDetails })
+    expect(collapse.getAttribute('aria-expanded')).toBe('true')
+    fireEvent.click(collapse)
     expect(screen.queryByText('cccccccccccc')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: en.updateShowDetails }))
+    expect(screen.getByText('cccccccccccc')).toBeTruthy()
+  })
+
+  it('streams actual command stdout/stderr without an old error and hides it after verified success', async () => {
+    const target = 'd'.repeat(40)
+    const at = new Date().toISOString()
+    const copy = vi.fn(async (_text: string) => {})
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: copy } })
+    let status: PhoenixUpdateSnapshot = {
+      status: 'preparing', phase: 'build', target, at,
+      console: [
+        { at, stream: 'stdout', step: 'build', line: 'Building Phoenix packages 28/40' },
+        { at, stream: 'stderr', step: 'build', line: 'Warning: optional Windows package unavailable' },
+      ],
+      events: [{ at, step: 'host-restart', result: 'failed', diagnostic: 'Old failure from last attempt' }],
+    }
+    const view = render(<UpdateFooterAction {...updateProps(async () => status)} />)
+    const log = await screen.findByTestId('phoenix-update-live-console')
+    expect(log.textContent).toContain('Building Phoenix packages 28/40')
+    expect(log.textContent).toContain('optional Windows package')
+    expect(screen.queryByTestId('phoenix-update-diagnostic')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: en.updateLiveCopy }))
+    expect(copy).toHaveBeenCalledWith(expect.stringContaining('Building Phoenix packages 28/40'))
+
+    status = { status: 'updated', current: target, target }
+    view.rerender(<UpdateFooterAction {...updateProps(async () => status)} />)
+    await waitFor(() => { expect(screen.queryByTestId('phoenix-update-live-console')).toBeNull() })
   })
 
   it('opens the real, copyable PowerShell error automatically after an update failure', async () => {
