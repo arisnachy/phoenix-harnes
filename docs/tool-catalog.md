@@ -2386,6 +2386,63 @@ Genera un ticket visual SIMULADO con selecciones verificadas nuevamente en cuota
 }
 ```
 
+### `sports_chat_ticket_research`
+
+GENERA UN TICKET VISUAL REALMENTE RENDERIZABLE de pronósticos para encuentros futuros verificados en ESPN, incluso SIN cuotas ni API key. Úsalo cuando un usuario pida un ticket y sports_chat_odds venga vacío. No lo confundas con un boleto cotizado.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "date": {
+      "type": "string",
+      "description": "Fecha de los eventos AAAA-MM-DD; por defecto hoy en Santo Domingo."
+    },
+    "legs": {
+      "type": "array",
+      "description": "De 1 a 6 selecciones, con IDs de los partidos obtenidos de sports_chat_games y motivos basados en investigación. No inventar IDs.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "sport": {
+            "type": "string",
+            "description": "Deporte de la cartelera, normalmente soccer."
+          },
+          "league": {
+            "type": "string",
+            "description": "Liga ESPN válida, por ejemplo mex.1 o usa.1."
+          },
+          "eventId": {
+            "type": "string",
+            "description": "ID real de un partido confirmado en sports_chat_games."
+          },
+          "pick": {
+            "type": "string",
+            "description": "home o away; draw solo si es soccer."
+          },
+          "rationale": {
+            "type": "string",
+            "description": "Fundamento breve de la selección; hipótesis de Kira, no una certeza."
+          }
+        },
+        "required": [
+          "sport",
+          "league",
+          "eventId",
+          "pick"
+        ]
+      }
+    }
+  },
+  "required": [
+    "legs"
+  ]
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
 Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
 
 Read-only sports market and game context with inline chat cards. Tickets simulate returns, never transact or promise wins.
