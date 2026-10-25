@@ -60,13 +60,102 @@ describe('failed isolated runtime storage reclamation', () => {
   })
 })
 
+describe('optional live update helper fallback', () => {
+  const start = supervisor.indexOf('function runChecked(cwd, bin, args, label) {')
+  const end = supervisor.indexOf('\nfunction runPnpm(cwd, args, label) {', start)
+  const runner = supervisor.slice(start, end) + '\n({ runChecked })'
+
+  it('prewarms an isolated replacement with the native Git command when the old helper is absent', () => {
+    const spawn = vi.fn(() => ({ status: 0, stdout: null, stderr: null }))
+    const steps = vi.fn()
+    const errors = vi.fn()
+    const { runChecked } = runInNewContext(runner, {
+      restartRequestTarget: () => 'a'.repeat(40),
+      readUpdateState: () => ({ target: 'a'.repeat(40) }),
+      updateStatePath: () => 'state.json',
+      supervisorSourceRoot: 'old-runtime',
+      existsSync: () => false,
+      join,
+      process: { execPath: 'node.exe', env: {} },
+      hideRuntimeWindows: true,
+      missingLiveHelperReported: false,
+      spawnSync: spawn,
+      reportSupervisorStep: steps,
+      console: { error: errors },
+    }) as { runChecked: (cwd: string, bin: string, args: string[], label: string) => void }
+
+    runChecked('checkout', 'git', ['worktree', 'add', '--detach', 'replacement', 'target'],
+      'create isolated runtime worktree')
+    expect(spawn).toHaveBeenCalledWith('git', ['worktree', 'add', '--detach', 'replacement', 'target'],
+      expect.objectContaining({ cwd: 'checkout', stdio: 'inherit' }))
+    expect(steps).toHaveBeenNthCalledWith(1, 'git-worktree', 'started')
+    expect(steps).toHaveBeenNthCalledWith(2, 'git-worktree', 'ok', 0)
+    expect(errors).toHaveBeenCalledWith(expect.stringContaining('optional live output helper missing'))
+    expect(updater).toContain('const directStream = liveEligible && !streamLive')
+    expect(updater).toContain("stdio: streamLive || directStream ? 'inherit'")
+  })
+
+  it('reports a real failing native command rather than a missing Node module error', () => {
+    const spawn = vi.fn(() => ({ status: 31, stdout: null, stderr: null }))
+    const steps = vi.fn()
+    const { runChecked } = runInNewContext(runner, {
+      restartRequestTarget: () => 'b'.repeat(40),
+      readUpdateState: () => undefined,
+      updateStatePath: () => 'state.json',
+      supervisorSourceRoot: 'old-runtime',
+      existsSync: () => false,
+      join,
+      process: { execPath: 'node.exe', env: {} },
+      hideRuntimeWindows: true,
+      missingLiveHelperReported: false,
+      spawnSync: spawn,
+      reportSupervisorStep: steps,
+      console: { error: vi.fn() },
+    }) as { runChecked: (cwd: string, bin: string, args: string[], label: string) => void }
+
+    expect(() => {
+      runChecked('checkout', 'git', ['worktree', 'add'], 'create isolated runtime worktree')
+    }).toThrow('create isolated runtime worktree exited with 31')
+    expect(steps).toHaveBeenCalledWith('git-worktree', 'failed', 31, '')
+    expect(spawn).toHaveBeenCalledWith('git', ['worktree', 'add'],
+      expect.objectContaining({ cwd: 'checkout', stdio: 'inherit' }))
+  })
+
+  it('keeps rich journal streaming when the helper exists', () => {
+    const spawn = vi.fn(() => ({ status: 0, stdout: null, stderr: null }))
+    const { runChecked } = runInNewContext(runner, {
+      restartRequestTarget: () => 'c'.repeat(40),
+      readUpdateState: () => undefined,
+      updateStatePath: () => 'state.json',
+      supervisorSourceRoot: 'runtime',
+      existsSync: () => true,
+      join,
+      process: { execPath: 'node.exe', env: {} },
+      hideRuntimeWindows: true,
+      missingLiveHelperReported: false,
+      spawnSync: spawn,
+      reportSupervisorStep: vi.fn(),
+      console: { error: vi.fn() },
+    }) as { runChecked: (cwd: string, bin: string, args: string[], label: string) => void }
+
+    runChecked('checkout', 'git', ['status'], 'create isolated runtime worktree')
+    expect(spawn).toHaveBeenCalledWith('node.exe', [
+      join('runtime', 'scripts', 'phoenix-update-live-command.mjs'),
+      JSON.stringify({
+        cwd: 'checkout', bin: 'git', args: ['status'], step: 'git-worktree',
+        target: 'c'.repeat(40), statePath: 'state.json',
+      }),
+    ], expect.objectContaining({ cwd: 'checkout', stdio: 'inherit' }))
+  })
+})
+
 describe('PHOENIX supervised updater runtime isolation', () => {
   it('does not launch a duplicate web host into a busy 3080 port or kill the current listener', () => {
     expect(supervisor).toContain("import { createServer } from 'node:net'")
     expect(supervisor).toContain('function existingHostOnPort(port)')
     expect(supervisor).toContain('if (port !== undefined && await existingHostOnPort(port))')
     expect(supervisor).toContain('finalCode = 0')
-    expect(supervisor).not.toContain("taskkill /IM node.exe")
+    expect(supervisor).not.toContain('taskkill /IM node.exe')
   })
 
   it('limits offline watcher fetch latency while preserving manual refresh and live Host', () => {
@@ -130,7 +219,7 @@ describe('PHOENIX supervised updater runtime isolation', () => {
         writeState: (_root: string, state: Record<string, unknown>) => { writes.push(state) },
         console: { error: () => {} },
       },
-    ) as { reconcileAlreadyActiveTarget: (root: string, inspection: {target: string; sourceCurrent: string}) => boolean }
+    ) as { reconcileAlreadyActiveTarget: (root: string, inspection: { target: string; sourceCurrent: string }) => boolean }
     expect(reconcileAlreadyActiveTarget('checkout', { target: 'b'.repeat(40), sourceCurrent: 'c'.repeat(40) })).toBe(false)
     expect(writes).toHaveLength(0)
     expect(reconcileAlreadyActiveTarget('checkout', { target: active.target, sourceCurrent: 'c'.repeat(40) })).toBe(true)
@@ -236,13 +325,13 @@ describe('PHOENIX supervised updater runtime isolation', () => {
   it('offline repair uses the owning checkout identity and never reports a locked 3/3 as success', () => {
     expect(storageRepair).toContain('rev-parse --git-common-dir')
     expect(storageRepair).toContain('[System.Security.Cryptography.SHA256]::Create()')
-    expect(storageRepair).toContain("[regex]::Escape($identity)")
+    expect(storageRepair).toContain('[regex]::Escape($identity)')
     expect(storageRepair).toContain('if ($after.Count -ge $configuredLimit)')
     expect(storageRepair).toContain('cleanup could not free runtime capacity')
-    expect(storageRepair).toContain("Close Phoenix normally before -Apply")
-    expect(storageRepair).toContain("Get-CimInstance Win32_Process")
-    expect(storageRepair).toContain("Select-Object ProcessId, Name")
-    expect(storageRepair).toContain("Associated Handles")
+    expect(storageRepair).toContain('Close Phoenix normally before -Apply')
+    expect(storageRepair).toContain('Get-CimInstance Win32_Process')
+    expect(storageRepair).toContain('Select-Object ProcessId, Name')
+    expect(storageRepair).toContain('Associated Handles')
   })
 
   it('caps runtime copies while keeping age-based staging cleanup', () => {
@@ -261,7 +350,7 @@ describe('PHOENIX supervised updater runtime isolation', () => {
     expect(updater).toContain('function cleanupUpdaterRuntimeStorage(root, { ensureCapacity = false } = {})')
     expect(updater).toContain('updater janitor removed obsolete isolated runtime')
     expect(updater).toContain('function updaterRuntimeStorageHasCapacity(root, target)')
-    expect(updater).toContain("process.env.PHOENIX_RUNTIME_ROOT?.trim()")
+    expect(updater).toContain('process.env.PHOENIX_RUNTIME_ROOT?.trim()')
     expect(updater).toContain("phase: 'storage'")
     expect(supervisor).toContain('function runtimeDirectoriesForCleanup()')
     expect(supervisor).toContain('/^phoenix-runtime-[0-9a-f]{10}-[0-9a-f]{12}$/iu')
@@ -334,14 +423,14 @@ describe('PHOENIX supervised updater runtime isolation', () => {
     expect(updater).toContain('for (const candidate of rollbackCandidates.reverse())')
     expect(updater).toContain('if (updaterRuntimeDirectories(root).length < MAX_RUNTIME_DIRECTORIES) break')
     expect(updater).toContain('cleanupUpdaterRuntimeStorage(root, { ensureCapacity: true })')
-    expect(updater).toContain("if (active?.path !== undefined) keep.add(runtimePathKey(active.path))")
-    expect(updater).toContain("process.env.PHOENIX_RUNTIME_ROOT?.trim()")
+    expect(updater).toContain('if (active?.path !== undefined) keep.add(runtimePathKey(active.path))')
+    expect(updater).toContain('process.env.PHOENIX_RUNTIME_ROOT?.trim()')
     expect(updater).toContain('if (existsSync(targetRuntime)) return true')
     expect(supervisor).toContain('function reclaimInactiveBackupForCapacity(nextRuntime)')
-    expect(supervisor).toContain("!runtimeProtectedByOwningCheckout(path)")
+    expect(supervisor).toContain('!runtimeProtectedByOwningCheckout(path)')
     expect(supervisor).toContain('if (runtimeDirectoriesForCleanup().length < MAX_RUNTIME_DIRECTORIES) break')
     expect(supervisor).toContain('reclaimInactiveBackupForCapacity(nextRuntime)')
-    expect(supervisor).toContain("if (active?.path) keep.add(runtimePathKey(active.path))")
+    expect(supervisor).toContain('if (active?.path) keep.add(runtimePathKey(active.path))')
   })
 
   it('keeps clean release checkouts updatable when Windows locks a stale isolated runtime', () => {
@@ -357,7 +446,7 @@ describe('PHOENIX supervised updater runtime isolation', () => {
     expect(supervisor).toContain("gitSucceeds(root, ['merge-base', '--is-ancestor', current, target])")
     expect(supervisor).toContain('safe-inplace-update-handoff')
     expect(supervisor).toContain("if (hostEvent.kind === 'safe-inplace-update-handoff')")
-    expect(supervisor).toContain("const activationCode = activatePrepared()")
+    expect(supervisor).toContain('const activationCode = activatePrepared()')
   })
 
   it('shows orphaned-runtime EBUSY only when storage capacity is truly blocked', () => {
@@ -407,9 +496,9 @@ describe('PHOENIX supervised updater runtime isolation', () => {
     expect(end).toBeGreaterThan(begin)
     const loop = supervisor.slice(begin, end)
     expect(loop).toContain("readUpdateState()?.status !== 'preparing'")
-    expect(loop).toContain("!watcherSupervisor?.isActive()")
-    expect(supervisor).toContain("isActive() {")
-    expect(supervisor).toContain("!stopping && watcher !== undefined && watcher.exitCode === null")
+    expect(loop).toContain('!watcherSupervisor?.isActive()')
+    expect(supervisor).toContain('isActive() {')
+    expect(supervisor).toContain('!stopping && watcher !== undefined && watcher.exitCode === null')
     expect(loop).toContain('cleanupObsoleteRuntimes()')
     // Capacity checks and explicit offline repairs must still report EBUSY.
     expect(supervisor).toContain('cleanupObsoleteRuntimes([runtimeRoot], { reportBusy: storageAtHardCap })')

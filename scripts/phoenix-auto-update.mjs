@@ -82,6 +82,7 @@ function normalizeMode(value) {
 }
 
 let activeLiveUpdateStep
+let missingLiveHelperReported = false
 function command(bin, args, options = {}) {
   const cwd = options.cwd ?? process.cwd()
   const installRoot = process.env.PHOENIX_INSTALL_ROOT?.trim()
@@ -100,15 +101,26 @@ function command(bin, args, options = {}) {
       if (typeof state?.target === 'string' && /^[a-f0-9]{40}$/iu.test(state.target)) liveTarget = state.target
     } catch { /* preserve old command path without update state */ }
   }
-  const streamLive = liveTarget !== undefined && liveState !== undefined
+  const liveEligible = liveTarget !== undefined && liveState !== undefined
+  const liveHelper = fileURLToPath(new URL('./phoenix-update-live-command.mjs', import.meta.url))
+  // A source checkout updated from an older release may not contain this
+  // optional console journal helper yet. Missing telemetry cannot be allowed
+  // to prevent Git, dependency installation or candidate validation.
+  const streamLive = liveEligible && existsSync(liveHelper)
+  const directStream = liveEligible && !streamLive
+  if (directStream && !missingLiveHelperReported) {
+    missingLiveHelperReported = true
+    console.error('[PHOENIX UPDATE] optional live output helper missing; '
+      + 'running the original updater command with direct console streaming.')
+  }
   const liveArgs = streamLive ? [
-    fileURLToPath(new URL('./phoenix-update-live-command.mjs', import.meta.url)),
+    liveHelper,
     JSON.stringify({ cwd, bin, args, step: activeLiveUpdateStep, target: liveTarget, statePath: liveState }),
   ] : args
   const result = spawnSync(streamLive ? process.execPath : bin, liveArgs, {
     cwd: options.cwd,
     encoding: 'utf8',
-    stdio: streamLive ? 'inherit' : ['ignore', 'pipe', 'pipe'],
+    stdio: streamLive || directStream ? 'inherit' : ['ignore', 'pipe', 'pipe'],
     maxBuffer: 64 * 1024 * 1024,
     windowsHide: true,
     env,
