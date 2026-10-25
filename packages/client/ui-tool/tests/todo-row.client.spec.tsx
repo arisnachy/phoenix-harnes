@@ -74,6 +74,12 @@ function rowProps(block: unknown): TodoRowProps {
   } as unknown as TodoRowProps
 }
 
+function expectRawFallbackSummary(raw: string) {
+  const summary = screen.getByText(raw)
+  expect(summary.closest('[data-tool]')?.getAttribute('data-tool')).toBe('todo_write')
+  expect(screen.getByText('更新任务清单')).toBeTruthy()
+}
+
 describe('TodoRow', () => {
   const ARGS = JSON.stringify({ todos: LIST })
 
@@ -117,12 +123,12 @@ describe('TodoRow', () => {
   it('falls back to the generic summary on malformed args and marks the error state', () => {
     const view = render(<TodoRow {...rowProps(resultNode('not json', { isError: true }))} />)
     expect(view.container.querySelector('[data-state="error"]')).not.toBeNull()
-    expect(screen.getByText('todo_write · not json')).toBeTruthy()
+    expectRawFallbackSummary('not json')
   })
 
   it('falls back when parsed args carry no todos array', () => {
     render(<TodoRow {...rowProps(resultNode('{"other":1}'))} />)
-    expect(screen.getByText('todo_write · {"other":1}')).toBeTruthy()
+    expectRawFallbackSummary('{"other":1}')
   })
 
   it('leading toggle expands the raw args body', () => {
@@ -138,12 +144,12 @@ describe('TodoRow', () => {
     { label: 'null items', argsRaw: '{"todos":[null]}' },
   ])('falls back to the generic summary on valid JSON with an invalid shape ($label)', ({ argsRaw }) => {
     render(<TodoRow {...rowProps(resultNode(argsRaw))} />)
-    expect(screen.getByText(`todo_write · ${argsRaw}`)).toBeTruthy()
+    expectRawFallbackSummary(argsRaw)
   })
 
   it('window-truncated result falls back to the callId summary', () => {
     render(<TodoRow {...rowProps(resultNode('', { call: null }))} />)
-    expect(screen.getByText('todo_write · c1')).toBeTruthy()
+    expectRawFallbackSummary('c1')
   })
 
   it('injects the keyed toolview declaration directly', () => {
