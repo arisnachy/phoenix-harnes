@@ -16,7 +16,7 @@ type ResultBlock = {
   subCalls?: readonly ResultBlock[]
 }
 const ALLOWED_NAMES = new Set([
-  'sports_chat_games','sports_chat_odds','sports_chat_ticket',
+  'sports_chat_games','sports_chat_odds','sports_chat_ticket','sports_chat_ticket_research',
   'sports_chat_mlb_pitchers',
 ])
 const ALLOWED_COMPONENTS = new Set([
@@ -30,26 +30,6 @@ const MAX_NODES = 64
 function verifiedCard(value: unknown): GenerativeUiBlock | null {
   const card=parseGenerativeUiBlock(value)
   return card!==null && ALLOWED_COMPONENTS.has(card.component) ? card : null
-}
-function noOddsCard(reason: 'unavailable'|'failed'): GenerativeUiBlock {
-  const card=verifiedCard({
-    component:'smart_card',version:1,props:{
-      title:'Phoenix · Ticket de análisis',
-      subtitle:'Sin cuotas públicas verificadas',
-      badge:'NO BET',
-      description:reason==='failed'
-        ? 'No se completó la consulta de cuotas. No es posible calcular un boleto con precios vigentes.'
-        : 'El proveedor consultado no entregó precios verificables para la fecha y mercado solicitados.',
-      fields:[
-        { label:'Resultado',value:'Sin apuesta' },
-        { label:'Cuota conjunta',value:'No disponible' },
-        { label:'Retorno potencial',value:'No calculado' },
-      ],
-      footer:'ESPN / proveedor de cuotas · No se inventaron líneas ni probabilidades. Una consulta posterior puede tener cobertura diferente.',
-    },
-  })
-  if(card===null)throw Error('El componente NO BET no cumple el esquema generativo')
-  return card
 }
 /**
  * Read only first-party sports tools, including settled Code Mode nested calls.
@@ -72,11 +52,7 @@ export function sportsCardsFromToolResult(root: unknown): GenerativeUiBlock[] {
       }
     }
     if(tool.kind!=='tool-result'||!ALLOWED_NAMES.has(tool.call?.name??''))continue
-    const isOdds=tool.call?.name==='sports_chat_odds'
-    if(tool.isError){
-      if(isOdds)cards.push(noOddsCard('failed'))
-      continue
-    }
+    if(tool.isError)continue
     const data=Array.isArray(tool.content)?tool.content:[]
     const text=data.filter(b=>b.type==='text'&&typeof b.text==='string').map(b=>b.text).join('')
     if(text.length>MAX_TEXT_BYTES||text.length<2)continue
@@ -91,8 +67,6 @@ export function sportsCardsFromToolResult(root: unknown): GenerativeUiBlock[] {
       const card=verifiedCard(value)
       if(card!==null&&cards.length<MAX_SPORTS_CARDS)cards.push(card)
     }
-    // No price -> a beautiful but truthful "No bet" card, not a fake slip.
-    if(isOdds&&result.total===0&&cards.length<MAX_SPORTS_CARDS)cards.push(noOddsCard('unavailable'))
   }
   return cards
 }

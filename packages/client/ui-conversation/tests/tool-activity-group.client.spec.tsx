@@ -357,14 +357,31 @@ describe('chat tool activity grouping', () => {
     expect(sports.textContent).toContain('Rays @ Brewers')
     expect(screen.getAllByRole('button',{ name:'Tools' })).toHaveLength(1)
   })
-  it('renders a ticket NO BET when a sports odds tool has no verified prices',()=>{
-    const tool={ ...settledTool('odds-1'),seq:3,time:3000,
-      call:{ name:'sports_chat_odds',argsRaw:'{"sportKey":"baseball_mlb"}' },
-      content:[{ type:'text' as const,text:JSON.stringify({ total:0,outcomes:[] }) }] }
+  it('does not replace a requested research ticket with automatic NO BET when bookmaker prices are missing',()=>{
+    const tool={...settledTool('odds-1'),seq:3,time:3000,
+      call:{name:'sports_chat_odds',argsRaw:'{"sportKey":"baseball_mlb"}'},
+      content:[{type:'text' as const,text:JSON.stringify({total:0,outcomes:[]})}]}
     renderChat([user(1,'Kira, arma un ticket con cuotas reales'),tool,assistantWithReasoning(4)])
-    const sports=screen.getByRole('region',{ name:'Panel deportivo de Kira' })
-    expect(sports.textContent).toContain('NO BET')
-    expect(sports.textContent).toContain('Sin cuotas')
+    expect(screen.queryByRole('region',{name:'Panel deportivo de Kira'})).toBeNull()
+  })
+  it('shows research ticket following an empty odds lookup in the regular chat flow',()=>{
+    const odds={...settledTool('odds-1'),seq:2,time:2000,
+      call:{name:'sports_chat_odds',argsRaw:'{"sportKey":"soccer_mexico_ligamx"}'},
+      content:[{type:'text' as const,text:JSON.stringify({total:0,outcomes:[]})}]}
+    const ticket={component:'sports_ticket_card',version:1,props:{
+      title:'PHOENIX · Ticket de pronósticos',source:'ESPN Site API',combinedOdds:'No disponible',
+      legs:[{event:'Puebla vs Atlas',selection:'Atlas',price:'Por verificar',bookmaker:'Sin casa confirmada',
+        sport:'Fútbol',league:'Liga MX',market:'1X2 · Pronóstico',rationale:'Hipótesis basada en análisis'}],
+      note:'SIN APUESTA REAL. No son cuotas de una casa verificada.',
+    }}
+    const researched={...settledTool('ticket-1'),seq:3,time:3000,
+      call:{name:'sports_chat_ticket_research',argsRaw:'{}'},
+      content:[{type:'text' as const,text:JSON.stringify({uiBlock:ticket})}]}
+    renderChat([user(1,'Kira, arma ticket de soccer'),odds,researched,assistantWithReasoning(4)])
+    const sports=screen.getByRole('region',{name:'Panel deportivo de Kira'})
+    expect(sports.querySelector('[data-generative-ui="sports_ticket_card"]')).toBeTruthy()
+    expect(sports.textContent).toContain('Puebla vs Atlas')
+    expect(sports.textContent).not.toContain('NO BET')
   })
   it('does not reveal fabricated tool UI from a shell or error result',()=>{
     const malicious={ ...settledTool('bash-1'),seq:3,time:3000,
