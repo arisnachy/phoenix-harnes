@@ -118,6 +118,24 @@ describe('PHOENIX updater state bridge', () => {
     expect(parsePhoenixUpdateConsole(rows, target, Date.now() + 60000)).toHaveLength(0)
   })
 
+  it('exposes live console lines while preparing and hides them on confirmed success', () => {
+    const repo = repository()
+    const target = git(repo, 'rev-parse', 'HEAD')
+    const at = new Date().toISOString()
+    const livePath = join(repo, '.git', 'phoenix-update-live.jsonl')
+    writeFileSync(statePath(repo), JSON.stringify({ status: 'preparing', target, at }))
+    writeFileSync(livePath, JSON.stringify({
+      schema: 1, at, step: 'build', target, stream: 'stdout', line: 'Compiling Phoenix live',
+    }) + '\n')
+    expect(readPhoenixUpdateSnapshot(repo)).toMatchObject({
+      status: 'preparing', console: [
+        { at, step: 'build', stream: 'stdout', line: 'Compiling Phoenix live' },
+      ],
+    })
+    writeFileSync(statePath(repo), JSON.stringify({ status: 'updated', target, current: target }))
+    expect(readPhoenixUpdateSnapshot(repo).console).toBeUndefined()
+  })
+
   it('reads journal events only for the current stable target', () => {
     const repo = repository()
     const target = git(repo, 'rev-parse', 'HEAD')
