@@ -90,17 +90,21 @@ export function apply(ctx: Context): void {
         if(rows.length<12)rows.push(quote)
         events.set(quote.eventId,rows)
       }
-      const uiBlocks=[...events.entries()].slice(0,5).map(([,rows])=>({
+      const uiBlocks=[...events.entries()].slice(0,5).flatMap(([,rows])=>{
+        const first=rows[0]
+        if(!first)return []
+        return [{
         component:'sports_odds_card',version:1,props:{
-          title:rows[0]!.away+' vs '+rows[0]!.home,
+          title:first.away+' vs '+first.home,
           subtitle:'Mercados reportados por casa; no son probabilidades estimadas',
-          source:rows[0]!.source||'Proveedor consultado',
+          source:first.source||'Proveedor consultado',
           rows:rows.map(q=>({ event:q.away+' vs '+q.home,market:q.market,
             selection:q.selection,bookmaker:q.bookmaker,price:q.price.toFixed(2),
             ...(q.point===null||q.point===undefined?{}:{ point:String(q.point) }) })),
           note:'Cuotas observadas al consultar la herramienta. Pueden cambiar antes de cualquier decisión. No se realizó ninguna apuesta.',
         },
-      }))
+        }]
+      })
       return JSON.stringify({ uiBlocks,source:quotes[0]?.source||'ESPN público (sin cuotas disponibles) / The Odds API opcional',observedAt:new Date().toISOString(),outcomes:quotes.slice(0,120),
         total:quotes.length,remaining:Math.max(0,quotes.length-120),
         note:quotes.length?'Cuotas verificadas, no probabilidades propias. Actualizar antes de componer tickets.':'ESPN no publicó moneylines accesibles para ese día y mercado; no hace falta una clave para ver partidos. Las cuotas faltantes no se inventan.' })
