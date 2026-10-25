@@ -196,7 +196,7 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
 
   it('ignores updater-owned Host restart markers for the already-active verified runtime', () => {
     expect(source).toContain('function readHostRestartRequest()')
-    expect(source).toContain('function activeRuntimeForUpdaterHostRestart(request)')
+    expect(source).toContain('function activeRuntimeForUpdaterHostRestart(request, hostRuntimeRoot)')
     expect(source).toContain("request?.source !== 'updater-ready-state'")
     expect(source).toContain('ignored stale Host restart request')
     expect(source).toContain('if (readPreparedRecord()?.target === alreadyActive.target) clearPreparedRecord()')
@@ -204,6 +204,18 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(source).toContain('clearHostRestartRequest()')
     expect(restartBridgeSource).toContain("join(controlDir, 'phoenix-host-restart-request.json')")
     expect(restartBridgeSource).toContain("value.source === 'updater-ready-state'")
+  })
+
+  it('does not mistake a prewarmed runtime for the running Host and reports a failed health checkpoint', () => {
+    expect(source).toContain('function confirmActiveRuntimeHealth()')
+    expect(source).toContain('confirmActiveRuntimeHealth()')
+    expect(source).toContain('healthyAt: new Date().toISOString()')
+    expect(source).toContain('const hostRuntimeRoot = runtimeRoot')
+    expect(source).toContain('runtimePathKey(alreadyActive.path) === runtimePathKey(hostRuntimeRoot)')
+    expect(source).toContain('runtimePathKey(active.path) !== runtimePathKey(hostRuntimeRoot)')
+    expect(source).toContain("recordPhoenixUpdateStep(stateFile, 'health-check', 'failed'")
+    expect(source).toContain("phase: 'health-check'")
+    expect(source).toContain('The new Host exited before its healthy startup checkpoint')
   })
 
   it('prevents restart loops when a configured Windows port is already occupied', () => {

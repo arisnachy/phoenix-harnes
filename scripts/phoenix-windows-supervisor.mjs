@@ -1120,6 +1120,21 @@ function writeActiveRuntime(target, path) {
   }, undefined, 2) + '\n', 'utf8')
 }
 
+function confirmActiveRuntimeHealth() {
+  const active = readActiveRuntimeRecord()
+  const path = activeRuntimePath()
+  if (active === undefined || path === undefined
+    || runtimePathKey(active.path) !== runtimePathKey(runtimeRoot)
+    || active.target !== gitValue(runtimeRoot, ['rev-parse', 'HEAD'])) return
+
+  // The active-runtime record is written before Host handoff; only the
+  // supervisor's real healthy Host checkpoint may add this attestation.
+  writeFileSync(path, JSON.stringify({
+    ...active,
+    healthyAt: new Date().toISOString(),
+  }, undefined, 2) + '\n', 'utf8')
+}
+
 function clearActiveRuntime() {
   const path = activeRuntimePath()
   if (path === undefined) return
@@ -1296,10 +1311,13 @@ function hostRestartRequested() {
   return readHostRestartRequest() !== undefined
 }
 
-function activeRuntimeForUpdaterHostRestart(request) {
+function activeRuntimeForUpdaterHostRestart(request, hostRuntimeRoot) {
   if (request?.source !== 'updater-ready-state' || typeof request.reason !== 'string') return undefined
   const active = readActiveRuntimeRecord()
-  if (active === undefined || !request.reason.includes(active.target.slice(0, 12))) return undefined
+  if (active === undefined || !request.reason.includes(active.target.slice(0, 12))
+    || runtimePathKey(active.path) !== runtimePathKey(hostRuntimeRoot)) return undefined
+  // The warmed candidate marker alone must not suppress the old Host's
+  // pending restart: only the Host actually running that runtime may do so.
   return healthyRuntimeForTarget(active.target)
 }
 
@@ -1712,7 +1730,7 @@ function activatePrepared() {
   return result.status ?? 1
 }
 
-async function waitForHostEvent(host, hostExitPromise, lastObservedFingerprint) {
+async function waitForHostEvent(host, hostExitPromise, lastObservedFingerprint, hostRuntimeRoot) {
   let nextStorageSweepAt = Date.now() + STORAGE_SWEEP_MS
   while (true) {
     const event = await Promise.race([
@@ -1748,7 +1766,8 @@ async function waitForHostEvent(host, hostExitPromise, lastObservedFingerprint) 
     const updateTarget = restartRequestTarget()
     if (updateTarget !== undefined) {
       const alreadyActive = healthyRuntimeForTarget(updateTarget)
-      if (alreadyActive !== undefined) {
+      if (alreadyActive !== undefined
+        && runtimePathKey(alreadyActive.path) === runtimePathKey(hostRuntimeRoot)) {
         runtimeRoot = alreadyActive.path
         clearPreparedRecord()
         clearRestartRequest()
@@ -1816,7 +1835,7 @@ async function waitForHostEvent(host, hostExitPromise, lastObservedFingerprint) 
 
     const hostRestart = readHostRestartRequest()
     if (hostRestart !== undefined) {
-      const alreadyActive = activeRuntimeForUpdaterHostRestart(hostRestart)
+      const alreadyActive = activeRuntimeForUpdaterHostRestart(hostRestart, hostRuntimeRoot)
       if (alreadyActive !== undefined) {
         runtimeRoot = alreadyActive.path
         if (readPreparedRecord()?.target === alreadyActive.target) clearPreparedRecord()
@@ -2006,6 +2025,7 @@ while (true) {
   }
   if (watcherSupervisor === undefined) watcherSupervisor = superviseWatcher()
   const startedAt = Date.now()
+  const hostRuntimeRoot = runtimeRoot
   const host = startHost()
   startupDuration('first Host process spawned', startupStartedAt)
   activeHost = host
@@ -2023,6 +2043,7 @@ while (true) {
     if (host.exitCode !== null || shutdownRequested || intentionalHandoffRequested) return
     try {
       persistLastKnownGoodConfiguration(launchConfiguration)
+      confirmActiveRuntimeHealth()
       healthyCheckpointWritten = true
       console.error('[PHOENIX RECOVERY] healthy Host checkpoint recorded as last-known-good configuration.')
       // Only the actual target checkout running beyond the health checkpoint
@@ -2057,7 +2078,7 @@ while (true) {
   }, HOST_STABLE_MS)
   stableTimer.unref?.()
 
-  const hostEvent = await waitForHostEvent(host, hostExitPromise, lastObservedFingerprint)
+  const hostEvent = await waitForHostEvent(host, hostExitPromise, lastObservedFingerprint, hostRuntimeRoot)
   lastObservedFingerprint = hostEvent.lastObservedFingerprint
   let plannedHostRestart = false
   let hostExit
@@ -2260,6 +2281,27 @@ while (true) {
       console.error('[PHOENIX RECOVERY] restored last-known-good configuration; relaunching PHOENIX under the same supervisor.')
     } else {
       writeConfigurationRecoveryReport('early-boot-crash-no-last-known-good', `exit=${String(hostExit.code)} signal=${String(hostExit.signal)}`)
+    }
+  }
+
+  // Check the actual Host generation, not the supervisor's selected next
+  // runtime. This also catches an in-place activation on the source checkout.
+  const exitedTarget = gitValue(hostRuntimeRoot, ['rev-parse', 'HEAD'])
+  const failedUpdateState = readUpdateState()
+  if (!healthyCheckpointWritten && exitedTarget !== undefined
+    && failedUpdateState?.target === exitedTarget
+    && (failedUpdateState.status === 'restarting' || failedUpdateState.status === 'applying')) {
+    const stateFile = updateStatePath()
+    if (stateFile !== undefined) {
+      const exitCode = Number.isInteger(hostExit.code) && hostExit.code >= 0 ? hostExit.code : 1
+      recordPhoenixUpdateStep(stateFile, 'health-check', 'failed', exitedTarget, exitCode)
+      writePhoenixUpdateState(stateFile, {
+        ...failedUpdateState,
+        status: 'error',
+        phase: 'health-check',
+        at: new Date().toISOString(),
+        detail: `The new Host exited before its healthy startup checkpoint (exit code ${String(exitCode)}). Activation is not confirmed; the supervisor will recover the Host.`,
+      })
     }
   }
 

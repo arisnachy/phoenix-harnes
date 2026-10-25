@@ -7,6 +7,7 @@ on:
       - 'packages/client/ui-conversation/src/client/chat/**'
       - 'packages/client/ui-conversation/tests/generative-canvas.client.spec.tsx'
       - 'packages/client/ui-conversation/tests/interactive-ui.client.spec.tsx'
+      - 'packages/client/ui-conversation/tests/plain-output-formatter.client.spec.tsx'
       - 'packages/client/ui-conversation/tests/hardness-artifact-renderer.client.spec.tsx'
       - 'packages/client/ui-primitives/src/SmartUi*'
       - 'packages/client/ui-primitives/tests/smart-ui.client.spec.tsx'
@@ -42,3 +43,5 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Intelligent UI regression suite
         run: pnpm exec vitest run packages/client/ui-conversation/tests/generative-canvas.client.spec.tsx packages/client/ui-conversation/tests/interactive-ui.client.spec.tsx packages/client/ui-conversation/tests/hardness-artifact-renderer.client.spec.tsx packages/client/ui-primitives/tests/smart-ui.client.spec.tsx
+      - name: Legacy boxed text and native sports card regression
+        run: pnpm exec vitest run packages/client/ui-conversation/tests/plain-output-formatter.client.spec.tsx packages/client/ui-conversation/tests/sports-fenced-ui.client.spec.tsx

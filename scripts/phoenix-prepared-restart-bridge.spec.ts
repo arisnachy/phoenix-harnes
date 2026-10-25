@@ -64,6 +64,27 @@ describe('prepared update auto-activation bridge', () => {
         target: activeTarget,
         path: runtime,
       }), 'utf8')
+
+      // A prewarmed candidate is not a healthy running Host. The bridge must
+      // preserve activation even if the candidate's Git SHA already matches.
+      const args = [
+        resolve('scripts/phoenix-prepared-restart-bridge.mjs'),
+        '--wait-target', activeTarget,
+        '--common-dir', control,
+        '--timeout-ms', '1000',
+      ]
+      const env = { ...process.env, PHOENIX_UPDATE_SUPERVISED: '1' }
+      const prewarm = spawnSync(process.execPath, args, { encoding: 'utf8', env })
+      expect(prewarm.status, prewarm.stderr).toBe(0)
+      expect(existsSync(join(control, 'phoenix-update-restart-request.json'))).toBe(true)
+
+      // The supervisor attests health only after the replacement Host boots.
+      writeFileSync(join(control, 'phoenix-active-runtime.json'), JSON.stringify({
+        schema: 1,
+        target: activeTarget,
+        path: runtime,
+        healthyAt: new Date().toISOString(),
+      }), 'utf8')
       writeFileSync(join(control, 'phoenix-update-restart-request.json'), JSON.stringify({
         schema: 1,
         target: activeTarget,
