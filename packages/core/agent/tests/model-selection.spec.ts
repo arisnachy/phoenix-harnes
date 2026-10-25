@@ -710,7 +710,7 @@ describe('installModelSelection()', () => {
       await expect(agentEvents(ctx, agent).waterfall('agent/request', { turn: 1, step: 1, signal },
         () => Promise.resolve({ provider: 'seed', model: 'seed' }))).resolves.toMatchObject({
         provider: 'openai-codex', model: 'gpt-6-luna',
-        reasoningEffort: ReasoningEffortId('max'),
+        reasoningEffort: ReasoningEffortId('medium'),
       })
 
       events.push({ type: 'turn/start', data: { turn: 2 } },
@@ -1344,7 +1344,7 @@ describe('installModelSelection()', () => {
       } })
       await expect(agentEvents(ctx, agent).waterfall('agent/request',
         { turn: 1, step: 1, signal }, () => Promise.resolve(seed))).resolves.toMatchObject({
-        model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('max'),
+        model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('medium'),
       })
       events.pop()
     }
@@ -1722,7 +1722,7 @@ describe('installModelSelection()', () => {
     )).resolves.toEqual({
       provider: 'openai-codex',
       model: 'gpt-6-luna',
-      reasoningEffort: ReasoningEffortId('max'),
+      reasoningEffort: ReasoningEffortId('low'),
     })
 
     dispose()
