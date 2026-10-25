@@ -109,9 +109,20 @@ export function conversationalSpeechText(text: string): string {
  * @returns BCP 47 language to pass to the Host or browser TTS engine.
  */
 export function spokenLanguage(text: string, interfaceLanguage?: string): string {
-  const spanish = (text.match(/\b(?:el|la|los|las|que|para|porque|está|estoy|estamos|este|esta|vamos|puedo|puede|tienes|tengo|ahora|listo|lista|terminado|terminada|hola|gracias|hecho|archivo|tarea|problema|correctamente|siguiente|necesito|puedes|revisar|revisando|encontré|realizado|resultado|por|con|del|una|uno)\b/giu) ?? []).length
+  const spanish = (text.match(new RegExp(
+    String.raw`\b(?:el|la|los|las|que|para|porque|está|estoy|estamos|este|esta|vamos|puedo|puede|` +
+    String.raw`tienes|tengo|ahora|listo|lista|terminado|terminada|hola|gracias|hecho|archivo|tarea|` +
+    String.raw`problema|correctamente|siguiente|necesito|puedes|revisar|revisando|encontré|` +
+    String.raw`realizado|resultado|por|con|del|una|uno)\b`,
+    'giu',
+  )) ?? []).length
     + (/[¿¡ñáéíóúü]/iu.test(text) ? 2 : 0)
-  const english = (text.match(/\b(?:the|this|that|and|with|your|you|have|has|was|were|will|would|please|hello|thank|thanks|done|ready|complete|completed|found|file|task|problem|now|next|need|review|working|successfully|already|there|here|because|from|for)\b/giu) ?? []).length
+  const english = (text.match(new RegExp(
+    String.raw`\b(?:the|this|that|and|with|your|you|have|has|was|were|will|would|please|hello|thank|` +
+    String.raw`thanks|done|ready|complete|completed|found|file|task|problem|now|next|need|review|` +
+    String.raw`working|successfully|already|there|here|because|from|for)\b`,
+    'giu',
+  )) ?? []).length
   if (spanish >= 2 && spanish > english) return 'es-DO'
   if (english >= 2 && english > spanish) return 'en-US'
   const preferred = interfaceLanguage?.trim() ?? ''
