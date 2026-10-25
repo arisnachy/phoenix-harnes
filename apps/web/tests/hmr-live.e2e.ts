@@ -144,8 +144,8 @@ it('hot-reloads a real client-plugin source edit without refreshing the page', a
         `clientBundleContainsChange=${String(builtClient?.includes(newText) ?? false)}`,
         `oldHeroVisible=${String(body.includes(oldText))}`,
         `browserErrors=${JSON.stringify(pageErrors)}`,
-        `watcherLogTail=\\n${watcherOutput}`,
-      ].join('\\n'), { cause: error })
+        `watcherLogTail=\n${watcherOutput}`,
+      ].join('\n'), { cause: error })
     }
     expect(await page.evaluate(() => (window as Window & { __dshHmrPageIdentity?: string }).__dshHmrPageIdentity))
       .toBe(pageIdentity)
