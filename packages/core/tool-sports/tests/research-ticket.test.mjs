@@ -55,6 +55,7 @@ test('does not fetch arbitrary hosts or allow invalid markets and dates',async()
   await assert.rejects(()=>researchTicket([{...selected()[0],pick:'spread'}],day,mock(fixture(at),urls)),/evento real/)
   await assert.rejects(()=>researchTicket([{...selected()[0],sport:'baseball',league:'mlb',pick:'draw'}],day,mock(fixture(at),urls)),/evento real/)
   await assert.rejects(()=>researchTicket(selected(),'2026-02-31',mock(fixture(at),urls)),/Fecha/)
+  await assert.rejects(()=>researchTicket(selected(),day,mock(fixture(at),urls),Date.now(),{PHOENIX_SPORTS_ESPN_DISABLED:'1'}),/deshabilitado/)
   assert.deepEqual(urls,[])
 })
 test('reuses one verified scoreboard query for multiple different events',async()=>{
