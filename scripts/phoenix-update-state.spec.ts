@@ -54,7 +54,7 @@ describe('PHOENIX updater state persistence', () => {
       'password=private-pw-123',
       'client_secret: sensitive-secret-xyz',
       'sk-proj-abcdefghijklmnopqrstuvwxyz123456',
-    ].join('\\n')
+    ].join('\n')
     recordPhoenixUpdateStep(path, 'runtime-activation', 'failed', target, 1, trace)
     const journal = readFileSync(join(root, 'phoenix-update-events.jsonl'), 'utf8')
     const event = JSON.parse(journal) as { diagnostic: string; exitCode: number }
