@@ -41,7 +41,16 @@ function validRecord(record: Standing): record is Standing & {
     && record.runsAllowed >= 0
 }
 
-/** Compare published season records without inventing unavailable data. */
+/**
+ * Compare published season records without inventing unavailable data.
+ * @param homeId - Official MLB home team identifier.
+ * @param awayId - Official MLB away team identifier.
+ * @param season - Official MLB season.
+ * @param homeName - Display name for the home team.
+ * @param awayName - Display name for the visiting team.
+ * @param fetcher - Injected HTTP transport for tests.
+ * @returns An attributed trend, or undefined when evidence is insufficient.
+ */
 export async function researchMlbTrend(
   homeId: number,
   awayId: number,

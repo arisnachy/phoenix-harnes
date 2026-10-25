@@ -1,5 +1,7 @@
 # @phoenix-ai/dsh-tool-sports
 
+English | [中文](README.zh.md)
+
 Native chat-only sports tools for Kira: sports_chat_catalog, sports_chat_discover, sports_chat_games, sports_chat_mlb_pitchers, sports_chat_odds, and sports_chat_ticket. Sports questions use the existing conversation, not a menu. The assistant receives attributed data and declarative sports_game_card or sports_ticket_card blocks to show inside validated generative-ui fences.
 
 ## Provider access
