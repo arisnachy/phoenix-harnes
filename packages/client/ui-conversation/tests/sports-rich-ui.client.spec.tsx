@@ -68,3 +68,37 @@ describe('Phoenix Sports rich native cards',()=>{
       bullpen:[{team:'Visita',pitchers:[],note:'Sin datos'}]}})).not.toBeNull()
   })
 })
+
+describe('Phoenix Sports ticket hierarchy and theme compatibility',()=>{
+  const ticket={
+    component:'sports_ticket_card',version:1,props:{
+      title:'PHOENIX · Ticket de análisis',source:'Casas verificadas',combinedOdds:'6.350',
+      note:'SIMULACIÓN, SIN APUESTA REAL. No es una recomendación garantizada.',
+      legs:[
+        {event:'Arsenal vs Chelsea',selection:'Arsenal',price:'1.80',bookmaker:'Casa A',market:'h2h',
+          sport:'Fútbol',country:'Inglaterra',league:'Premier League'},
+        {event:'Liverpool vs Leeds',selection:'Liverpool',price:'1.70',bookmaker:'Casa A',market:'h2h',
+          sport:'Fútbol',country:'Inglaterra',league:'Premier League'},
+        {event:'Brewers vs Rays',selection:'Brewers',price:'2.08',bookmaker:'Casa B',market:'h2h',
+          sport:'Béisbol',league:'MLB'},
+      ],
+    },
+  } as const
+  it('groups by sport / country / league and keeps every original price and bookmaker',()=>{
+    const block=parseGenerativeUiBlock(ticket)
+    expect(block).not.toBeNull()
+    if(!block)throw Error('Ticket fixture rejected')
+    render(<GenerativeUi block={block}/>)
+    expect(screen.getByRole('region',{name:'Fútbol · Inglaterra · Premier League'})).toBeTruthy()
+    expect(screen.getByRole('region',{name:'Béisbol · MLB'})).toBeTruthy()
+    expect(screen.getAllByText(/Casa A/).length).toBe(2)
+    expect(screen.getByText('6.350')).toBeTruthy()
+    expect(screen.getByText('Solo análisis · No se ha realizado ninguna apuesta')).toBeTruthy()
+  })
+  it('rejects arbitrary fields and external images from tickets',()=>{
+    expect(parseGenerativeUiBlock({...ticket,props:{...ticket.props,legs:[
+      {...ticket.props.legs[0],html:'<iframe />'}]}})).toBeNull()
+    expect(parseGenerativeUiBlock({...ticket,props:{...ticket.props,legs:[
+      {...ticket.props.legs[0],image:'https://untrusted.example/bad.png'}]}})).toBeNull()
+  })
+})

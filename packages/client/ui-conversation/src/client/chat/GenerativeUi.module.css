@@ -152,3 +152,26 @@
 .sportsResearch p{font-size:12px;color:var(--dsw-alias-label-secondary,#707880);line-height:1.5;margin:7px 0}
 .sportsResearch ul{list-style:disc;margin:9px 0 11px 19px;padding:0;font-size:12px;line-height:1.7}
 .sportsResearch small{font-size:11px;color:var(--dsw-alias-label-secondary,#777)}
+
+/* Sports tickets reuse the Phoenix surface, label and border tokens in every theme. */
+.sportsCompetition{font-size:12px;font-weight:700;color:var(--dsw-alias-label-secondary,#777);margin-top:5px}
+.sportsTicketCard{padding:0;--sports-ticket-inset:clamp(14px,2.2vw,24px)}
+.sportsTicketHeading{display:grid;gap:9px;padding:var(--sports-ticket-inset);
+  border-bottom:1px dashed var(--dsw-alias-border-subtle,rgba(125,125,125,.3));
+  background:var(--dsw-alias-interactive-bg-hover,rgba(120,120,120,.035))}
+.sportsTicketHeading .sportsHeadline h3{margin-top:1px}
+.sportsTicketCount{font-size:12px;color:var(--dsw-alias-label-secondary,#777);font-weight:650}
+.sportsTicketGroups{display:grid;gap:14px;padding:var(--sports-ticket-inset)}
+.sportsTicketGroup{min-width:0;border:1px solid var(--dsw-alias-border-subtle,rgba(125,125,125,.3));
+  border-radius:14px;overflow:hidden}
+.sportsTicketGroup h4{font-size:12px;margin:0;padding:11px 13px;font-weight:800;overflow-wrap:anywhere;
+  border-bottom:1px solid var(--dsw-alias-border-subtle,rgba(125,125,125,.2));
+  background:var(--dsw-alias-interactive-bg-hover,rgba(120,120,120,.035))}
+.sportsTicketGroup .sportsLegs{margin-top:0;gap:0}
+.sportsTicketGroup .sportsLeg{min-width:0}
+.sportsTicketGroup .sportsLeg:last-child{border-bottom:0}
+.sportsTicketCard .sportsTicketTotal{margin:0;padding:0 var(--sports-ticket-inset) var(--sports-ticket-inset)}
+.sportsTicketCard .sportsFoot{margin:0 var(--sports-ticket-inset);padding-bottom:var(--sports-ticket-inset)}
+.sportsTicketCard .sportsFoot strong{color:var(--dsw-alias-label-primary,inherit);font-size:12px}
+@media(max-width:480px){.sportsTicketCard .sportsTicketTotal{grid-template-columns:1fr 1fr}
+ .sportsTicketGroup .sportsLeg{padding:10px 8px;gap:8px}.sportsTicketGroup .sportsLeg b{font-size:14px}}

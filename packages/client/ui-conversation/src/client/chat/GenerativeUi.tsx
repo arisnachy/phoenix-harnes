@@ -91,7 +91,7 @@ type SportsGameCard = {
     home: SportsSide; away: SportsSide; source: string
     highlights?: Array<{ label: string; value: string; image?: string; detail?: string }>
     pitchers?: SportsPitcher[]; lineups?: SportsLineup[]; bullpen?: SportsBullpen[]
-    sport?: string; eventId?: string; broadcast?: string; research?: SportsResearch
+    sport?: string; league?: string; country?: string; eventId?: string; broadcast?: string; research?: SportsResearch
     periods?: Array<{ label:string;away:string;home:string }>
     note?: string; askPrompt?: string
   }
@@ -105,7 +105,8 @@ type SportsTicketCard = {
   component: 'sports_ticket_card'; version: 1
   props: {
     title: string; subtitle?: string; source: string
-    legs: Array<{ event: string; selection: string; price: string; bookmaker: string; when?: string; image?: string }>
+    legs: Array<{ event: string; selection: string; price: string; bookmaker: string; when?: string; image?: string;
+      sport?:string;country?:string;league?:string;market?:string;player?:string }>
     combinedOdds: string; stake?: string; grossReturn?: string; note: string
     askPrompt?: string
   }
@@ -281,12 +282,13 @@ const sportsOdds = (v:Record<string,unknown>):v is SportsOddsCard => {
 }
 const sportsGame = (value: Record<string, unknown>): value is SportsGameCard => {
   if (!isRecord(value.props) || !hasOnlyKeys(value.props,
-    ['title','subtitle','status','when','venue','home','away','source','highlights','note','askPrompt','pitchers','lineups','bullpen','sport','eventId','broadcast','research','periods'])) return false
+    ['title','subtitle','status','when','venue','home','away','source','highlights','note','askPrompt','pitchers','lineups','bullpen','sport','league','country','eventId','broadcast','research','periods'])) return false
   const p = value.props
   return isText(p.title) && optionalText(p.subtitle) && optionalText(p.status,60)
     && isText(p.when) && optionalText(p.venue) && sportsSide(p.home) && sportsSide(p.away)
     && isText(p.source,320) && optionalText(p.note,MAX_TEXT) && optionalText(p.askPrompt,400)
-    && optionalText(p.sport,60) && optionalText(p.eventId,50) && optionalText(p.broadcast,150)
+    && optionalText(p.sport,60) && optionalText(p.league,100) && optionalText(p.country,100)
+    && optionalText(p.eventId,50) && optionalText(p.broadcast,150)
     && (p.research===undefined || sportsResearch(p.research))
     && (p.periods===undefined || Array.isArray(p.periods) && p.periods.length<=12 && p.periods.every(x=>isRecord(x)
       && hasOnlyKeys(x,['label','away','home']) && isText(x.label,30) && isText(x.away,30) && isText(x.home,30)))
@@ -306,9 +308,11 @@ const sportsTicket = (value: Record<string, unknown>): value is SportsTicketCard
     && optionalText(p.grossReturn,50) && isText(p.note,MAX_TEXT)
     && optionalText(p.askPrompt,400) && Array.isArray(p.legs)
     && p.legs.length >= 1 && p.legs.length <= 12 && p.legs.every(x => isRecord(x)
-      && hasOnlyKeys(x,['event','selection','price','bookmaker','when','image'])
+      && hasOnlyKeys(x,['event','selection','price','bookmaker','when','image','sport','country','league','market','player'])
       && isText(x.event) && isText(x.selection) && isText(x.price,32)
-      && isText(x.bookmaker) && optionalText(x.when) && trustedPortrait(x.image))
+      && isText(x.bookmaker) && optionalText(x.when) && trustedPortrait(x.image)
+      && optionalText(x.sport,60) && optionalText(x.country,100) && optionalText(x.league,100)
+      && optionalText(x.market,70) && optionalText(x.player,140))
 }
 
 export function parseGenerativeUiBlock(value: unknown): GenerativeUiBlock | null {
@@ -559,6 +563,7 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
       return <section className={css.sportsCard} data-generative-ui="sports_game_card">
         <header className={css.sportsHeadline}>
           <div><span className={css.sportsKicker}>PHOENIX / {p.sport?.toUpperCase()??'DEPORTES'}</span>
+            {(p.country||p.league)&&<div className={css.sportsCompetition}>{[p.country,p.league].filter(Boolean).join(' · ')}</div>}
             <h3>{p.title}</h3>{p.subtitle&&<p>{p.subtitle}</p>}</div>
           {p.status&&<span className={css.sportsStatus}>{p.status}</span>}
         </header>
@@ -625,17 +630,37 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
     }
     case 'sports_ticket_card': {
       const p = block.props
-      return <section className={css.sportsCard} data-generative-ui="sports_ticket_card">
-        <Header title={p.title} subtitle={p.subtitle} badge="Simulación" />
-        <div className={css.sportsLegs}>{p.legs.map((leg,i) => <div key={i} className={css.sportsLeg}>
-          <span>{leg.image && <SportsPortrait label={leg.selection} logo={leg.image} />}</span>
-          <div><small>{leg.event}{leg.when ? ' · '+leg.when : ''}</small><strong>{leg.selection}</strong>
-            <small>{leg.bookmaker}</small></div><b>{leg.price}</b>
-        </div>)}</div>
-        <div className={css.sportsTicketTotal}><div><small>Cuota total</small><strong>{p.combinedOdds}</strong></div>
+      // Group only attributed taxonomy from the sportsbook result; unknown leagues stay unlabelled.
+      const groups = new Map<string,typeof p.legs>()
+      for (const leg of p.legs) {
+        const heading=[leg.sport??'Deporte no clasificado',leg.country,leg.league].filter(Boolean).join(' · ')
+        groups.set(heading,[...(groups.get(heading)??[]),leg])
+      }
+      return <section className={`${css.sportsCard} ${css.sportsTicketCard}`} data-generative-ui="sports_ticket_card">
+        <header className={css.sportsTicketHeading}>
+          <span className={css.sportsKicker}>PHOENIX / SPORTS INTELLIGENCE</span>
+          <div className={css.sportsHeadline}><div><h3>{p.title}</h3>
+            {p.subtitle&&<p>{p.subtitle}</p>}</div>
+            <span className={css.sportsStatus}>SIMULACIÓN</span></div>
+          <span className={css.sportsTicketCount}>{p.legs.length} {p.legs.length===1?'selección':'selecciones'} · {groups.size} {groups.size===1?'grupo':'grupos'}</span>
+        </header>
+        <div className={css.sportsTicketGroups}>{[...groups].map(([heading,legs])=>
+          <section key={heading} className={css.sportsTicketGroup} aria-label={heading}>
+            <h4>{heading}</h4>
+            <div className={css.sportsLegs}>{legs.map((leg,i)=><div key={i} className={css.sportsLeg}>
+              {leg.image&&<SportsPortrait label={leg.player??leg.selection} logo={leg.image}/>}
+              <div><small>{leg.event}{leg.when?' · '+leg.when:''}</small>
+                {leg.player&&<small>Jugador · {leg.player}</small>}
+                <strong>{leg.selection}</strong>
+                <small>{[leg.market,leg.bookmaker].filter(Boolean).join(' · ')}</small>
+              </div><b aria-label={`Cuota ${leg.price}`}>{leg.price}</b>
+            </div>)}</div>
+          </section>)}</div>
+        <div className={css.sportsTicketTotal}><div><small>Cuota combinada</small><strong>{p.combinedOdds}</strong></div>
           {p.stake && <div><small>Importe simulado</small><strong>{p.stake}</strong></div>}
           {p.grossReturn && <div><small>Retorno bruto potencial</small><strong>{p.grossReturn}</strong></div>}</div>
-        <footer className={css.sportsFoot}>Fuente: {p.source}<span>{p.note}</span>
+        <footer className={css.sportsFoot}><strong>Solo análisis · No se ha realizado ninguna apuesta</strong>
+          <span>Fuente: {p.source}</span><span>{p.note}</span>
           {p.askPrompt && onAction && <button type="button" onClick={() => { if (p.askPrompt) onAction(p.askPrompt, 'draft') }}>Revisar selección</button>}
         </footer>
       </section>
