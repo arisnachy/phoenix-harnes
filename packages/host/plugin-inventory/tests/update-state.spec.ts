@@ -73,6 +73,26 @@ describe('PHOENIX updater state bridge', () => {
     ])
   })
 
+  it('shows full process errors after redaction and never leaks other releases', () => {
+    const target = 'a'.repeat(40)
+    const at = new Date().toISOString()
+    const entries = [
+      { schema: 1, at, step: 'build', result: 'failed', target, exitCode: 3,
+        diagnostic: 'Error at line 27\\nAuthorization: Bearer hidden-token-123\\npassword=never-expose' },
+      { schema: 1, at, step: 'health-check', result: 'failed', target: 'b'.repeat(40),
+        diagnostic: 'private-other-release' },
+      { schema: 1, at, step: 'build', result: 'ok', target, diagnostic: 'not-a-failure' },
+    ].map(entry => JSON.stringify(entry)).join('\\n')
+    const events = parsePhoenixUpdateEvents(entries, target)
+    expect(events).toHaveLength(2)
+    expect(events[0]).toMatchObject({ exitCode: 3, diagnostic: expect.stringContaining('Error at line 27') })
+    expect(events[0]?.diagnostic).toContain('[SECRET_REMOVED]')
+    expect(JSON.stringify(events)).not.toContain('hidden-token-123')
+    expect(JSON.stringify(events)).not.toContain('never-expose')
+    expect(JSON.stringify(events)).not.toContain('private-other-release')
+    expect(JSON.stringify(events)).not.toContain('not-a-failure')
+  })
+
   it('reads journal events only for the current stable target', () => {
     const repo = repository()
     const target = git(repo, 'rev-parse', 'HEAD')
