@@ -83,6 +83,16 @@
 
 字典形状使重复路由无法表示，发布前的数组形状（每个 profile 携带 `provider` 字段）会加载失败并给出迁移指引。`providers` 也可以为空或整体省略：适配器将以**休眠**姿态挂载——零路由、模型选择器不多一条——一旦 `llm-pi-ai:` settings 分节提供了 profile 就即时注册路由，分节清空时随之撤销。无论是否休眠，插件都会在可配置提供方目录（`ctx.llm.listConfigurableProviders()`，settings 路径 `providers.<provider>`）中声明每个已安装 catalog 提供方，并与当前 profile 声明的每条路由取并集，因此配置界面既能在任何路由存在之前就提供完整 catalog，也能寻址一条手工声明的路由。每个条目都带上 `declared`：pi-ai 在这个键下是否什么都没有。它跟随已安装 catalog 而非设置文档，因为收窄一个内置提供方的模型同样会存下 profile，而那条路由仍然是 pi-ai 认识的——只有适配器分得清两者，所以由目录直接给出答案，而不是留给界面去猜。哪些适配器存在归组合面；哪些提供方在运行可以完全交给用户的设置文档。向 `ctx.llm` 注册具有原子性：如果与另一适配器已拥有的任何提供方路由冲突，插件会加载失败，不注册剩余路由。模型 id 不是生命周期配置；路由未配置的模型会在发起任何提供方请求前以 `LlmError('UNKNOWN_MODEL')` 失败。
 
+## 非 Codex 提供方的通用错误恢复
+
+当 pi-ai 请求返回尚未分类的 `PI_AI_ERROR` 时，非 Codex 路由会给出独立的 `PI_AI_TRANSIENT_ERROR` 重试代码。已安装的 `llm-retry` 插件使用正常且有上限的退避策略进行重试（默认两次），同时保留已验证的会话和工具错误上下文。原生 `openai`、`openai-codex`、`chatgpt-web` 路由，以及经 OpenRouter 使用的 OpenAI/Codex 模型 ID，继续遵循原有错误行为。已知无效请求、认证失败及配额错误绝不会被重新归类为暂时性错误。显式配置的 `retryPolicy` 优先于默认重试代码策略；设置 `maxRetries: 0` 可禁用重试。重试耗尽仍报告真实失败，不能伪装成完成。
+
+研究发布仍要求 `report.references` 包含真实的 HTTPS URL 与引用键。`phoenix_research_publish` 参数无效是工具验证错误，不能绕过发布门槛；模型应先查找真实来源再重试。
+
+## OpenRouter 输出长度上限恢复
+
+OpenRouter 的 `length` 停止原因表示输出长度限制，不应仅因为返回的 token 少于模型标称上限就推断上下文溢出。实际上下文窗口溢出仍属于错误。如果 agent-loop 的 Phoenix Auto-Continue 策略选中该路由，可以保留已有文本并在有限次调用内安全续写。此行为不改变 OpenAI Codex 原生路由。
+
 ## Catalog 解析
 
 profile 的 `models` 列表是*替换*该路由已安装 catalog，而不是扩充它；省略它（或留空）则原样服务该 catalog。每个条目都会从同 `id` 的已安装模型继承自身未设置的字段，因此把 catalog 路由收窄到两个模型、更正某个容量，或加入一个比已安装 catalog 更新的模型，都是一行编辑——但一旦声明了 `models` 列表，该路由要继续服务的每个模型就都必须出现在其中，条目哪怕只写一个 `id` 也足够。可配置的条目字段是 `id`、`name`、`contextWindow`、`maxTokens`、`reasoningEfforts` 与 `compat`。定价与输入模态没有 harness 消费方，因此沿用已安装条目或直接缺席。
