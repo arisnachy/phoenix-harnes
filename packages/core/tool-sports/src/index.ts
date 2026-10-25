@@ -4,6 +4,7 @@ import { defineTool } from '@phoenix-ai/dsh-tools'
 import type {} from '@phoenix-ai/dsh-system-prompt'
 import { sportsCatalog, discoverEspnLeagues, chatGames, marketOdds, pricedTicket, type MarketSelection } from './sports.ts'
 import { getMlbPitcherReport } from './mlb.ts'
+import { querySbrHistoricalOdds } from './sbr-history.ts'
 
 export const name = 'tool-sports'
 export const inject = ['tools','systemPrompt']
@@ -11,6 +12,7 @@ const GUIDANCE = [
   'Solo cuando el usuario pida deportes, juegos del día, jugadores, cuotas o tickets, consulta las herramientas sports_chat_catalog, sports_chat_discover, sports_chat_games, sports_chat_mlb_pitchers, sports_chat_odds o sports_chat_ticket.',
   'NO abras pantallas independientes ni crees entradas de menú. Antes de redactar una cartelera o boleto, llama sports_chat_games y, cuando corresponda, sports_chat_mlb_pitchers / sports_chat_odds / sports_chat_ticket. Phoenix dibuja de manera nativa las tarjetas verificadas de los resultados. NO copies el JSON de los resultados en la respuesta, NO escribas fences generative-ui ni bloques de código, aunque una herramienta los incluya en sus datos. No dibujes tickets con caracteres ASCII, bordes de texto ni bloques de código etiquetados text: para eventos y selecciones reales usa exclusivamente los contratos nativos, conservando la presentación original de Phoenix. Si el usuario quiere solo una demostración, descríbela explícitamente como ficticia y no introduzcas cuotas o equipos inventados como hechos. Explica los hallazgos y las fuentes con un texto humano breve.',
   'Para muchos partidos muestra como máximo seis tarjetas relevantes y ofrece ampliar; nunca inventes eventos, cuotas, lanzadores, lesiones ni resultados ausentes.',
+  'Si piden cuotas históricas MLB, NBA, NFL o NHL, usa sports_chat_odds_history con un archivo local autorizado; nunca confundas datos de SportsbookReview de 2007–2021 con cuotas en vivo, ni los uses para tickets actuales. Si falta el archivo o no se conoce el derecho de distribución, dilo con claridad.',
   'Usa ESPN Site/Core como proveedor gratuito para marcadores y, cuando ESPN los publique, moneylines sin claves; usa The Odds API solo como opción ampliada si existe THE_ODDS_API_KEY. Si ESPN no presenta cuotas verificables, devuelve lista vacía y explica cobertura, sin generar precios ficticios; el chat mostrará automáticamente NO BET. Los tickets solo pueden usar precios del proveedor consultados en ese momento. Son simulaciones; no hay garantía de acierto. Identifica correlaciones y ausencia de predicción calibrada.',
   'Los datos deben indicar su fuente, fecha y zona horaria, y adaptar el detalle a cada deporte. Cuando el usuario pida favoritos, muestra primero los encuentros reales con escudos, horarios, país y liga (si son conocidos), y solo después una tendencia propia sustentada en investigación verificable; una cuota baja no prueba cuál equipo es favorito de tu modelo. En tickets separa visualmente por deporte, país y liga y, si hay un mercado de jugador respaldado por el proveedor, muestra también el jugador; no inventes nombres, mercados ni fotos. Los tickets heredan el tema claro/oscuro de Phoenix. Nunca presentes porcentajes de ESPN como estimaciones propias ni afirmes un porcentaje sin calibración.',
 ].join(' ')
@@ -25,6 +27,24 @@ export function apply(ctx: Context): void {
     isConcurrencySafe:()=>true,
     execute:()=>Promise.resolve(JSON.stringify({ sports:sportsCatalog,notice:'La disponibilidad de ligas y recursos varía por proveedor.' })),
     presentCall:()=>({ card:'generic',title:'Consultar deportes',kind:'read' as const }),
+  }))
+  ctx.tools.register(defineTool({
+    name:'sports_chat_odds_history',
+    description:'Consulta archivos SportsbookReview históricos aportados por el operador, sin API key ni peticiones externas. NUNCA ofrece cuotas vigentes.',
+    parameters:{
+      sport:{ type:'string',required:true,description:'Deporte: nfl, nba, mlb o nhl.' },
+      season:{ type:'integer',required:true,description:'Temporada histórica entre 2007 y 2021 (no hay cuotas actuales).' },
+      team:{ type:'string',description:'Equipo opcional para filtrar partidos del archivo.' },
+      limit:{ type:'integer',description:'Número máximo de encuentros (1–25); 10 predeterminado.' },
+    },
+    output:{ schema:{ type:'string' },render:(_a,v)=>[{ type:'text' as const,text:v }] },
+    isConcurrencySafe:()=>true,
+    async execute(args){
+      const result=await querySbrHistoricalOdds(args.sport,args.season,args.team,args.limit)
+      return JSON.stringify({ ...result,
+        instruction:'Cuotas y líneas históricas exclusivamente; jamás las presentes como mercados en vivo ni las utilices para sports_chat_ticket. No atribuyas una casa no confirmada.' })
+    },
+    presentCall:()=>({ card:'generic',title:'Investigar cuotas históricas',kind:'read' as const }),
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_discover',
