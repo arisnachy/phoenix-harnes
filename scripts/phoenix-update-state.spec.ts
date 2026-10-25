@@ -76,6 +76,37 @@ describe('PHOENIX updater state persistence', () => {
     expect(readFileSync(join(root, 'phoenix-update-events.jsonl'), 'utf8')).not.toContain('should not be shown')
   })
 
+  it('captures real child stdout/stderr and a failing exit code in the live journal', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'phoenix-update-live-'))
+    roots.push(dir)
+    const statePath = join(dir, 'phoenix-update-state.json')
+    const target = 'f'.repeat(40)
+    const code = [
+      "process.stdout.write('Compiling 1/2\\n')",
+      "process.stderr.write('PowerShell: EADDRINUSE\\n')",
+      "process.stderr.write('OPENROUTER_API_KEY=private-value\\n')",
+      'process.exitCode = 7',
+    ].join(';')
+    const command = spawnSync(process.execPath, [
+      join(process.cwd(), 'scripts', 'phoenix-update-live-command.mjs'),
+      JSON.stringify({ statePath, target, step: 'build', cwd: process.cwd(),
+        bin: process.execPath, args: ['-e', code] }),
+    ], { encoding: 'utf8' })
+    expect(command.status, command.stderr).toBe(7)
+    expect(command.stdout).toContain('Compiling 1/2')
+    const records = readFileSync(join(dir, 'phoenix-update-live.jsonl'), 'utf8')
+      .trim().split('\n').map(line => JSON.parse(line))
+    expect(records).toEqual(expect.arrayContaining([
+      expect.objectContaining({ step: 'build', stream: 'stdout',
+        line: expect.stringContaining('Compiling 1/2') }),
+      expect.objectContaining({ step: 'build', stream: 'stderr',
+        line: expect.stringContaining('EADDRINUSE') }),
+    ]))
+    expect(JSON.stringify(records)).not.toContain('private-value')
+    const events = readFileSync(join(dir, 'phoenix-update-events.jsonl'), 'utf8')
+    expect(events).toContain('"exitCode":7')
+  })
+
   it('turns a genuinely stalled restart into an actionable diagnostic without inventing a PowerShell error', () => {
     const root = mkdtempSync(join(tmpdir(), 'phoenix-update-stall-'))
     roots.push(root)
