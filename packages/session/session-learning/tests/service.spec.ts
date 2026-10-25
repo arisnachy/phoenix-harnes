@@ -229,11 +229,11 @@ describe('LearningMemoryService', () => {
       content: [{ type: 'text', text }],
       source: { provider: 'test', model: 'test-model' },
     })
-    sports.append('assistant/message', assistant('Mi favorito para Brewers–Rays es Milwaukee Brewers.'), { surfaceOp: 'append' })
-    sports.append('assistant/message', assistant('No tengo favorito todavía en el otro encuentro.'), { surfaceOp: 'append' })
-    sports.append('assistant/message', assistant('Prefiero respuestas breves.'), { surfaceOp: 'append' })
+    sports.append('assistant/message', { turn: 1, step: 1, message: assistant('Mi favorito para Brewers–Rays es Milwaukee Brewers.') }, { surfaceOp: 'append' })
+    sports.append('assistant/message', { turn: 1, step: 2, message: assistant('No tengo favorito todavía en el otro encuentro.') }, { surfaceOp: 'append' })
+    sports.append('assistant/message', { turn: 1, step: 3, message: assistant('Prefiero respuestas breves.') }, { surfaceOp: 'append' })
     const unrelated = ctx.sessions.create(SessionId('sports-pick-other'), { meta: { cwd: '/workspace/other' } })
-    unrelated.append('assistant/message', assistant('Mi favorito para Dodgers–Mets es Los Angeles Dodgers.'), { surfaceOp: 'append' })
+    unrelated.append('assistant/message', { turn: 1, step: 1, message: assistant('Mi favorito para Dodgers–Mets es Los Angeles Dodgers.') }, { surfaceOp: 'append' })
 
     await ctx.learningMemory.ready()
     expect(ctx.learningMemory.projectIdForSession(String(sports.id))).toBe('sports')
@@ -269,10 +269,10 @@ describe('LearningMemoryService', () => {
       content: [{ type: 'text', text: '¿Quién es tu favorito para Brewers–Rays?' }],
       source: { kind: 'user' },
     }), { surfaceOp: 'append' })
-    session.append('assistant/message', createAssistantMessage({
+    session.append('assistant/message', { turn: 1, step: 1, message: createAssistantMessage({
       content: [{ type: 'text', text: 'Voy con Milwaukee.' }],
       source: { provider: 'test', model: 'test-model' },
-    }), { surfaceOp: 'append' })
+    }) }, { surfaceOp: 'append' })
     await ctx.learningMemory.ready()
     const decision = ctx.learningMemory.searchCognitive('Milwaukee', 10, { kind: 'decision', projectId: 'sports' })
     expect(decision).toHaveLength(1)
