@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { spawnSync } from 'node:child_process'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { recordPhoenixUpdateStep, sanitizePhoenixUpdateDiagnostic, writePhoenixUpdateState } from './phoenix-update-state.mjs'
+import { diagnoseStalledPhoenixActivation, recordPhoenixUpdateStep, sanitizePhoenixUpdateDiagnostic, writePhoenixUpdateState } from './phoenix-update-state.mjs'
 
 const roots: string[] = []
 const originalSupervised = process.env.PHOENIX_UPDATE_SUPERVISED
@@ -74,6 +74,58 @@ describe('PHOENIX updater state persistence', () => {
     expect(sanitizePhoenixUpdateDiagnostic('x'.repeat(110_000))).toContain('[Earlier output truncated')
     recordPhoenixUpdateStep(path, 'build', 'ok', target, 0, 'should not be shown')
     expect(readFileSync(join(root, 'phoenix-update-events.jsonl'), 'utf8')).not.toContain('should not be shown')
+  })
+
+  it('turns a genuinely stalled restart into an actionable diagnostic without inventing a PowerShell error', () => {
+    const root = mkdtempSync(join(tmpdir(), 'phoenix-update-stall-'))
+    roots.push(root)
+    const target = 'a'.repeat(40)
+    const path = join(root, 'phoenix-update-state.json')
+    const now = Date.parse('2026-10-25T16:00:00Z')
+    writeFileSync(path, JSON.stringify({
+      schema: 1, status: 'restarting', phase: 'restart', target,
+      at: new Date(now - 16 * 60_000).toISOString(),
+    }))
+    writeFileSync(join(root, 'phoenix-update-restart-request.json'),
+      JSON.stringify({ schema: 1, target, requestedAt: new Date(now - 16 * 60_000).toISOString() }))
+    expect(diagnoseStalledPhoenixActivation(path, now)).toBe(true)
+    const state = JSON.parse(readFileSync(path, 'utf8'))
+    expect(state).toMatchObject({ status: 'error', phase: 'supervisor-timeout', target })
+    const events = readFileSync(join(root, 'phoenix-update-events.jsonl'), 'utf8')
+      .trim().split('\n').map(line => JSON.parse(line))
+    expect(events).toEqual(expect.arrayContaining([
+      expect.objectContaining({ step: 'host-restart', result: 'failed', target }),
+    ]))
+    const diagnostic = events.find(event => event.step === 'host-restart')?.diagnostic as string
+    expect(diagnostic).toContain('Supervisor observado en los últimos 30 segundos: no')
+    expect(diagnostic).toContain('Solicitud de activación pendiente: sí')
+    expect(diagnostic).toContain('No existe un código de salida')
+    expect(diagnoseStalledPhoenixActivation(path, now + 60_000)).toBe(false)
+    expect(readFileSync(join(root, 'phoenix-update-events.jsonl'), 'utf8')
+      .split('\n').filter(line => line.includes('"step":"host-restart"'))).toHaveLength(1)
+  })
+
+  it('does not flag healthy, recent or completed handoffs as failures', () => {
+    const root = mkdtempSync(join(tmpdir(), 'phoenix-update-stall-safe-'))
+    roots.push(root)
+    const path = join(root, 'phoenix-update-state.json')
+    const now = Date.parse('2026-10-25T16:00:00Z')
+    const target = 'b'.repeat(40)
+    const setStatus = (status: string, ageMinutes: number) =>
+      writeFileSync(path, JSON.stringify({
+        schema: 1, status, phase: 'restart', target,
+        at: new Date(now - ageMinutes * 60_000).toISOString(),
+      }))
+    setStatus('restarting', 2)
+    expect(diagnoseStalledPhoenixActivation(path, now)).toBe(false)
+    setStatus('updated', 55)
+    expect(diagnoseStalledPhoenixActivation(path, now)).toBe(false)
+    setStatus('restarting', 16)
+    writeFileSync(join(root, 'phoenix-update-supervisor-heartbeat.json'),
+      JSON.stringify({ schema: 1, at: new Date(now - 2_000).toISOString(), supervisorPid: 1234 }))
+    expect(diagnoseStalledPhoenixActivation(path, now)).toBe(true)
+    const entries = readFileSync(join(root, 'phoenix-update-events.jsonl'), 'utf8')
+    expect(entries).toContain('Supervisor observado en los últimos 30 segundos: sí')
   })
 
   it('replaces the state document atomically and leaves no temporary file', () => {
