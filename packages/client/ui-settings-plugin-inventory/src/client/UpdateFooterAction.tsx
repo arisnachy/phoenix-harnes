@@ -430,7 +430,8 @@ export function UpdateFooterAction({
             role="progressbar"
             aria-valuemin={0}
             aria-valuemax={100}
-            aria-valuenow={progress}
+            aria-valuenow={unverifiedActivation ? undefined : progress}
+            aria-valuetext={unverifiedActivation ? label : undefined}
             aria-label={label}
           />
           {content}
@@ -455,7 +456,8 @@ export function UpdateFooterAction({
           role="progressbar"
           aria-valuemin={0}
           aria-valuemax={100}
-          aria-valuenow={progress}
+          aria-valuenow={unverifiedActivation ? undefined : progress}
+            aria-valuetext={unverifiedActivation ? label : undefined}
           aria-label={label}
         />
         {content}
