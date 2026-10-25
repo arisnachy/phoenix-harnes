@@ -1,0 +1,100 @@
+name: Phoenix PR1132 guarded upstream integration
+on:
+  push:
+    branches:
+      - fix/phoenix-dual-core-integration-20261023
+    paths:
+      - .github/workflows/phoenix-pr1132-upstream-integration.yml
+permissions:
+  contents: write
+concurrency:
+  group: phoenix-pr1132-guarded-upstream
+  cancel-in-progress: false
+jobs:
+  merge-and-verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: fix/phoenix-dual-core-integration-20261023
+          fetch-depth: 0
+          persist-credentials: true
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+      - name: Install immutable dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Resolve only inspected upstream conflict paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Phoenix PR Integration'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git fetch origin main
+          main_sha=$(git rev-parse origin/main)
+          echo "Integrating main ${main_sha} into $(git rev-parse HEAD)"
+          set +e
+          git merge --no-commit --no-ff origin/main
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ]; then
+            mapfile -t actual < <(git diff --name-only --diff-filter=U | sort)
+            mapfile -t expected < <(printf '%s\n' \
+              docs/persistence-catalog.md \
+              docs/subsystems/core.i18n.yaml \
+              packages/client/ui-conversation/src/client/chat/GenerativeUi.tsx \
+              packages/core/tool-sports/README.i18n.yaml \
+              packages/core/tool-sports/README.md \
+              packages/core/tool-sports/README.zh.md \
+              packages/core/tool-sports/src/espn-odds.ts \
+              packages/core/tool-sports/src/index.ts \
+              packages/core/tool-sports/src/invariant.ts \
+              packages/core/tool-sports/src/mlb.ts \
+              packages/core/tool-sports/src/sports.ts \
+              packages/examples/agent-spine-demo/src/index.ts \
+              packages/extensions/tool-cordis/src/api-catalog.ts | sort)
+            printf 'Unmerged conflict paths:\n%s\n' "${actual[*]}"
+            if [ "${actual[*]}" != "${expected[*]}" ]; then
+              echo 'New/unreviewed merge conflicts: refusing all resolution and push' >&2
+              exit 1
+            fi
+            # Latest main owns refreshed native sports cards and generated catalogs.
+            # PR retains the production Team executions API where its conflict is substantive;
+            # the official generator re-derives the merged catalog below.
+            for path in "${actual[@]}"; do
+              if [ "$path" = packages/extensions/tool-cordis/src/api-catalog.ts ]; then
+                git checkout --ours -- "$path"
+              else
+                git checkout --theirs -- "$path"
+              fi
+              git add -- "$path"
+            done
+          fi
+          git diff --name-only --diff-filter=U | grep -q . && { echo 'Unresolved conflict'; exit 1; } || true
+          echo "Merged main ${main_sha}" >> "$GITHUB_STEP_SUMMARY"
+      - name: Regenerate first-party derived metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm run gen-cordis-catalog
+          pnpm run gen-persistence-catalog
+          pnpm run gen-doc-graphs
+          pnpm run gen-config-catalog
+          pnpm run gen-tool-catalog
+          pnpm run gen-module-graph
+          pnpm run verify-translation-pairing --write docs/subsystems/core.md
+      - name: Verify no TypeScript regression
+        run: pnpm run build:lib
+      - name: Verify strict bilingual documentation
+        run: pnpm run verify-translation-pairing
+      - name: Commit reviewed integration to PR only; never force push
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add -u
+          git diff --cached --check
+          git commit -m 'merge(pr1132): reconcile main sports UI and Dual Core contracts'
+          git push origin HEAD:fix/phoenix-dual-core-integration-20261023
