@@ -11,7 +11,7 @@
 import { createHash } from 'node:crypto'
 import { spawn, spawnSync } from 'node:child_process'
 import {
-  existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, unlinkSync, writeFileSync,
+  existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync,
 } from 'node:fs'
 import { homedir } from 'node:os'
 import { createServer } from 'node:net'
@@ -44,6 +44,8 @@ const PREPARED_FILE = 'phoenix-update-prepared.json'
 const UPDATE_STATE_FILE = 'phoenix-update-state.json'
 const ACTIVE_RUNTIME_FILE = 'phoenix-active-runtime.json'
 const HOST_RESTART_REQUEST_FILE = 'phoenix-host-restart-request.json'
+const SUPERVISOR_HEARTBEAT_FILE = 'phoenix-update-supervisor-heartbeat.json'
+const SUPERVISOR_HEARTBEAT_MS = 5_000
 const WATCHER_RESTART_DELAY_MS = 1000
 const WATCHER_MAX_RESTART_DELAY_MS = 60_000
 const WATCHER_STABLE_MS = 60_000
@@ -323,6 +325,35 @@ function reportSupervisorStep(step, result, exitCode, diagnostic) {
   const target = restartRequestTarget() ?? readUpdateState()?.target
   if (typeof target !== 'string' || !/^[a-f0-9]{40}$/iu.test(target)) return
   recordPhoenixUpdateStep(statePath, step, result, target, exitCode, diagnostic)
+}
+
+/**
+ * This lightweight marker distinguishes a live supervised Host from an update
+ * that no supervisor has consumed. No secrets, command lines or environment
+ * data are persisted. A stale marker is never treated as proof of liveness.
+ */
+let lastSupervisorHeartbeatAt = 0
+function reportSupervisorHeartbeat(host, hostRuntimeRoot) {
+  const now = Date.now()
+  if (now - lastSupervisorHeartbeatAt < SUPERVISOR_HEARTBEAT_MS) return
+  const path = gitControlPath(SUPERVISOR_HEARTBEAT_FILE)
+  if (path === undefined) return
+  const temp = path + '.' + String(process.pid) + '.tmp'
+  // Throttle failed writes too: disk locks should not flood the console.
+  lastSupervisorHeartbeatAt = now
+  try {
+    writeFileSync(temp, JSON.stringify({
+      schema: 1, at: new Date(now).toISOString(),
+      supervisorPid: process.pid,
+      hostPid: host?.pid ?? null,
+      runtimeRoot: hostRuntimeRoot,
+    }) + '\n', { mode: 0o600 })
+    renameSync(temp, path)
+  } catch (error) {
+    try { unlinkSync(temp) } catch { /* best-effort telemetry only */ }
+    console.error('[PHOENIX UPDATE] supervisor heartbeat write failed: '
+      + (error instanceof Error ? error.message : String(error)))
+  }
 }
 
 function clearPreparedRecord() {
@@ -1751,6 +1782,7 @@ async function waitForHostEvent(host, hostExitPromise, lastObservedFingerprint, 
     ])
     if (event.kind === 'exit') return { ...event, lastObservedFingerprint }
     if (shutdownRequested) continue
+    reportSupervisorHeartbeat(host, hostRuntimeRoot)
 
     if (Date.now() >= nextStorageSweepAt) {
       // Full preflights spawn pnpm/tsc/tsdown processes that can hold Windows
@@ -2039,6 +2071,7 @@ while (true) {
   const startedAt = Date.now()
   const hostRuntimeRoot = runtimeRoot
   const host = startHost()
+  reportSupervisorHeartbeat(host, hostRuntimeRoot)
   // Forward the real Host console as usual, but retain a bounded stderr tail
   // so an early crash can display the actual exception/stack in the updater.
   let hostErrorTail = ''
@@ -2070,7 +2103,12 @@ while (true) {
       // completes an update. A request marker or successful build alone does not.
       const updateState = readUpdateState()
       const target = updateState?.target
-      if ((updateState?.status === 'restarting' || updateState?.status === 'applying')
+      // A watchdog may have reported a stalled request while this supervisor
+      // was busy building the runtime. Verified Host health is stronger evidence
+      // and must resolve that timeout to a real successful installation.
+      const recoverableTimeout = updateState?.status === 'error'
+        && updateState.phase === 'supervisor-timeout'
+      if ((updateState?.status === 'restarting' || updateState?.status === 'applying' || recoverableTimeout)
         && typeof target === 'string' && /^[a-f0-9]{40}$/iu.test(target)
         && gitValue(runtimeRoot, ['rev-parse', 'HEAD']) === target) {
         const stateFile = updateStatePath()

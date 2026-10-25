@@ -13,3 +13,6 @@ export declare function recordPhoenixUpdateStep(
 
 /** Redact credentials while retaining bounded full exception details. */
 export declare function sanitizePhoenixUpdateDiagnostic(raw: unknown): string | undefined
+
+/** Record an unconfirmed activation only after a bounded wait for real Host evidence. */
+export declare function diagnoseStalledPhoenixActivation(statePath: string, now?: number): boolean

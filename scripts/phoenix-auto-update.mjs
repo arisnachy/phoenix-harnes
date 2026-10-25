@@ -27,7 +27,7 @@ import { isAbsolute, join, relative, resolve } from 'node:path'
 import process from 'node:process'
 import { gitSafeDirectoryEnvironment } from './phoenix-git-safe-directory.mjs'
 import { classifyStableUpdate } from './phoenix-update-policy.mjs'
-import { recordPhoenixUpdateStep, writePhoenixUpdateState } from './phoenix-update-state.mjs'
+import { diagnoseStalledPhoenixActivation, recordPhoenixUpdateStep, writePhoenixUpdateState } from './phoenix-update-state.mjs'
 
 const EXPECTED_REPOSITORY = process.env.PHOENIX_UPDATE_REPOSITORY ?? 'arisnachy/phoenix-harnes'
 const REMOTE = process.env.PHOENIX_UPDATE_REMOTE ?? 'origin'
@@ -1225,7 +1225,8 @@ async function watch(root, parentPid) {
   // The watcher may restart while the supervisor is relaunching the Host.
   // Never erase its in-flight status or a real failed health checkpoint.
   if (retained?.status !== 'restarting' && retained?.status !== 'applying'
-    && !(retained?.status === 'error' && retained.phase === 'health-check')) {
+    && !(retained?.status === 'error'
+      && (retained.phase === 'health-check' || retained.phase === 'supervisor-timeout'))) {
     writeState(root, {
       status: 'checking',
       phase: 'channel',
@@ -1236,6 +1237,16 @@ async function watch(root, parentPid) {
   while (parentAlive(parentPid)) {
     const manualRefreshRequested = existsSync(refreshRequestPath(root))
     clearRefreshRequest(root)
+    // This check is independent of network availability. If the supervisor
+    // never accepts an activation request, stop an otherwise endless loop and
+    // persist the evidence where the currently running Host can display it.
+    if (process.env.PHOENIX_UPDATE_SUPERVISED === '1'
+      && diagnoseStalledPhoenixActivation(statePath(root))) {
+      pending = undefined
+      preparedTarget = undefined
+      await waitForPollOrParentExit(root, parentPid, pollInterval())
+      continue
+    }
     let inspection
     let repollImmediately = false
     try {
@@ -1263,11 +1274,16 @@ async function watch(root, parentPid) {
         )
         lastNetworkWarningAt = now
       }
-      writeState(root, {
-        status: 'checking',
-        phase: 'retry',
-        detail: `The stable channel is temporarily unavailable. PHOENIX will retry in about ${String(Math.ceil(retryMs / 1000))} seconds.`,
-      })
+      const currentState = durableUpdateState(root)
+      if (currentState?.status !== 'restarting' && currentState?.status !== 'applying'
+        && !(currentState?.status === 'error'
+          && ['health-check', 'supervisor-timeout'].includes(currentState.phase))) {
+        writeState(root, {
+          status: 'checking',
+          phase: 'retry',
+          detail: `The stable channel is temporarily unavailable. PHOENIX will retry in about ${String(Math.ceil(retryMs / 1000))} seconds.`,
+        })
+      }
       await waitForPollOrParentExit(root, parentPid, retryMs)
       continue
     }
@@ -1280,7 +1296,7 @@ async function watch(root, parentPid) {
       if (process.env.PHOENIX_UPDATE_SUPERVISED === '1'
         && !manualRefreshRequested
         && failedActivation?.status === 'error'
-        && failedActivation.phase === 'health-check'
+        && ['health-check', 'supervisor-timeout'].includes(failedActivation.phase)
         && failedActivation.target === inspection.target) {
         pending = undefined
         preparedTarget = undefined

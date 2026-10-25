@@ -246,6 +246,9 @@ export function UpdateFooterAction({
 
   useEffect(() => {
     if (snapshot.status !== 'error' && snapshot.status !== 'rollback-failed') return
+    // A missing/blocked supervisor requires an explicit retry, not a browser
+    // timer that silently creates another restart request every few minutes.
+    if (snapshot.phase === 'supervisor-timeout') return
     let active = true
     let attempt = 0
     let timer: number | undefined
