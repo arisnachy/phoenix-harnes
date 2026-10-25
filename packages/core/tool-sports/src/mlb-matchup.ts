@@ -2,7 +2,12 @@
  * Fixed ESPN/MLB hosts, per-request timeout and bounded enrichment budget are inherited from getFeed.
  */
 import { getFeed } from './sports.ts'
-type P={ person?:{ id?:number;fullName?:string };position?:{ abbreviation?:string;type?:string };battingOrder?:string;seasonStats?:{ batting?:Record<string,number|string> } }
+type P={
+  person?:{ id?:number;fullName?:string },
+  position?:{ abbreviation?:string;type?:string },
+  battingOrder?:string,
+  seasonStats?:{ batting?:Record<string,number|string> },
+}
 type BoxTeam={ battingOrder?:number[];players?:Record<string,P>;bullpen?:number[];team?:{ id?:number;name?:string } }
 type Boxscore={ teams?:{ home?:BoxTeam;away?:BoxTeam } }
 type SeasonStats={ stats?:Array<{ splits?:Array<{ stat?:Record<string,number|string> }> }> }
@@ -43,7 +48,7 @@ async function pitcherSeason(id:number,season:number,fetcher:typeof fetch):Promi
     const stat=data.stats?.[0]?.splits?.[0]?.stat
     if(!stat)return undefined
     const parts=[['ERA',stat.era],['WHIP',stat.whip],['IP',stat.inningsPitched],['K',stat.strikeOuts]]
-    return parts.filter(([,value])=>value!==undefined).map(([key,value])=>key+' '+fmt(value)).join(' · ')||undefined
+    return parts.filter(([,value])=>value!==undefined).map(([key,value])=>String(key)+' '+fmt(value)).join(' · ')||undefined
   }catch{return undefined}
 }
 /**
@@ -88,7 +93,7 @@ export async function enrichMlbMatch(
       const r=await getFeed<Roster>(`https://statsapi.mlb.com/api/v1/teams/${teamId}/roster?rosterType=active`,fetcher)
       const starterId=safeId(starting[side]?.id)
       const available=(r.roster??[]).filter(p=>p.position?.type==='Pitcher'||p.position?.abbreviation==='P')
-        .filter(p=>safeId(p.person?.id)!==null&&!!p.person?.fullName&&p.person?.id!==starterId)
+        .filter(p=>safeId(p.person?.id)!==null&&!!p.person.fullName&&p.person?.id!==starterId)
         .slice(0,4)
       const profiles=await Promise.all(available.map(async (p)=>{
         const id=safeId(p.person?.id)

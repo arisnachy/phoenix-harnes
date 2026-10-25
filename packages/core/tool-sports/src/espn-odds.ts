@@ -17,13 +17,13 @@ export interface EspnMarketQuote {
 }
 type OddsSide = { moneyLine?: number | string; moneyline?: number | string; spreadOdds?: number|string }
 type EspnOdds = {
-  provider?: { name?: string;displayName?: string;id?: string|number }
+  provider?: { name?: string,displayName?: string,id?: string|number }
   details?: string
-  homeTeamOdds?: OddsSide;awayTeamOdds?: OddsSide
-  overOdds?: number|string;underOdds?: number|string
+  homeTeamOdds?: OddsSide,awayTeamOdds?: OddsSide
+  overOdds?: number|string,underOdds?: number|string
   overUnder?: number|string
   spread?: number|string
-  lastUpdated?: string;lastUpdate?: string;updatedAt?: string
+  lastUpdated?: string,lastUpdate?: string,updatedAt?: string
 }
 type ECompetition={ id?:string|number;competitors?:Array<{ homeAway?:string;team?:{ displayName?:string;name?:string } }>;odds?:EspnOdds[] }
 type EEvent={ id?:string|number;date?:string;competitions?:ECompetition[] }
@@ -43,10 +43,15 @@ const americanToDecimal=(value:unknown):number|null=>{
   if(!Number.isFinite(n)||Math.abs(n)<100||Math.abs(n)>100000)return null
   return Number((n>0?1+n/100:1+100/Math.abs(n)).toFixed(5))
 }
-const str=(v:unknown)=>typeof v==='string'?v.slice(0,170):String(v??'').slice(0,170)
+const str=(v:unknown)=>typeof v==='string'?v.slice(0,170)
+  :typeof v==='number'||typeof v==='boolean'?String(v).slice(0,170):''
 const isRecord=(v:unknown):v is Record<string,unknown>=>!!v&&typeof v==='object'&&!Array.isArray(v)
 const list=(v:unknown):EspnOdds[]=>Array.isArray(v)?v.filter(isRecord):isRecord(v)?[v]:[]
-const safeId=(v:unknown)=>/^\d{1,16}$/u.test(String(v??''))?String(v):null
+const safeId=(v:unknown)=>{
+  if(typeof v!=='string'&&typeof v!=='number')return null
+  const id=String(v)
+  return /^\d{1,16}$/u.test(id)?id:null
+}
 const localTime=(value:string):string=>{
   const time=new Date(value)
   return Number.isFinite(time.getTime())?new Intl.DateTimeFormat('es-DO',{ timeZone:'America/Santo_Domingo',dateStyle:'medium',timeStyle:'short' }).format(time):'Hora no confirmada'
@@ -73,7 +78,11 @@ export function normalizeEspnMoneylines(event:EEvent,oddEntries:EspnOdds[]):Espn
     const provider=odd.provider?.name||odd.provider?.displayName
     if(!provider)continue
     const updatedAt=odd.lastUpdated||odd.lastUpdate||odd.updatedAt||'No indicada por ESPN'
-    for(const [selection,value] of [[homeName,odd.homeTeamOdds?.moneyLine??odd.homeTeamOdds?.moneyline],[awayName,odd.awayTeamOdds?.moneyLine??odd.awayTeamOdds?.moneyline]] as const){
+    const quotedSides=[
+      [homeName,odd.homeTeamOdds?.moneyLine??odd.homeTeamOdds?.moneyline],
+      [awayName,odd.awayTeamOdds?.moneyLine??odd.awayTeamOdds?.moneyline],
+    ] as const
+    for(const [selection,value] of quotedSides){
       const price=americanToDecimal(value)
       if(price!==null)result.push({ eventId:id,bookmaker:str(provider),market:'h2h',selection:str(selection),point:null,price,home:str(homeName),away:str(awayName),time:localTime(event.date||''),updatedAt:str(updatedAt) })
     }
