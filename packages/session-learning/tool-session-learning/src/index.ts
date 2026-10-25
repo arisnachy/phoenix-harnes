@@ -163,7 +163,10 @@ export function apply(ctx: Context, config: Config): void {
           pendingToolNames.set(learningOwnerId, names)
         }
         names.set(`${sessionId}:${data.callId}`, data.name)
-        if (names.size > 128) names.delete(names.keys().next().value!)
+        if (names.size > 128) {
+          const oldest = names.keys().next().value
+          if (oldest !== undefined) names.delete(oldest)
+        }
       }
       return
     }
@@ -254,7 +257,7 @@ export function apply(ctx: Context, config: Config): void {
   ctx.systemPrompt.context({
     name: 'context:recent-learning-memory',
     order: 118,
-    text: assembly => {
+    text: (assembly) => {
       const currentMessage = userTextForAssembly(assembly)
       // Memory is a cold, durable index, not a permanent prompt attachment.
       // Only an explicit prior-context cue opens it. Learned procedures have
@@ -296,7 +299,7 @@ export function apply(ctx: Context, config: Config): void {
   ctx.systemPrompt.context({
     name: 'context:validated-procedures',
     order: 120,
-    text: assembly => {
+    text: (assembly) => {
       const currentMessage = userTextForAssembly(assembly)
       if (currentMessage === undefined) return ''
       const projectId = projectForAssembly(assembly)
@@ -312,7 +315,7 @@ export function apply(ctx: Context, config: Config): void {
   ctx.systemPrompt.context({
     name: 'context:unverified-recovery-experience',
     order: 120.5,
-    text: assembly => {
+    text: (assembly) => {
       const currentMessage = userTextForAssembly(assembly)
       if (currentMessage === undefined) return ''
       const projectId = projectForAssembly(assembly)
@@ -327,7 +330,7 @@ export function apply(ctx: Context, config: Config): void {
   ctx.systemPrompt.context({
     name: 'context:habit-guidance',
     order: 121,
-    text: assembly => {
+    text: (assembly) => {
       const currentMessage = userTextForAssembly(assembly)
       if (currentMessage === undefined) return ''
       const projectId = projectForAssembly(assembly)
@@ -480,17 +483,22 @@ function normalizedMemoryRequest(text: string): string {
 
 function requestsPriorMemory(text: string): boolean {
   const normalized = normalizedMemoryRequest(text)
-  return /\b(?:recuerd\p{L}*|record\p{L}*|memoria|recordatorio|anterior\p{L}*|previo\p{L}*|antes|pasado|histor\p{L}*|habia\p{L}*|dijiste|dije|elegiste|escogiste|elegimos|guardad\p{L}*|preferencias?|costumbre\p{L}*|usual|siempre|repetimos|funciono|funcionaba|remember|recall|memory|before|previous|earlier|last time|used to|usually|history)\b/iu
-    .test(normalized)
-    || /\b(?:fue|era|fueron|eran|did (?:we|you))\b.{0,100}\b(?:favorit\p{L}*|pronostic\p{L}*|prediccion\p{L}*|pick|seleccion\p{L}*|eleccion|elegimos|escogimos|estrategia|solucion|plan|metodo|chose|picked|strategy|solution)\b/iu
+  return /\b(?:recuerd\p{L}*|record\p{L}*|memoria|recordatorio|anterior\p{L}*|previo\p{L}*|antes)\b/iu.test(normalized)
+    || /\b(?:pasado|histor\p{L}*|habia|dijiste|dije|elegiste|escogiste|elegimos|guardad\p{L}*)\b/iu.test(normalized)
+    || /\b(?:preferencias?|costumbre\p{L}*|usual|siempre|repetimos|funciono|funcionaba)\b/iu.test(normalized)
+    || /\b(?:remember|recall|memory|before|previous|earlier|last time|used to|usually|history)\b/iu.test(normalized)
+    || /\b(?:fue|era|fueron|eran|did (?:we|you))\b.{0,100}\b(?:favorit\p{L}*|pronostic\p{L}*|prediccion\p{L}*)\b/iu
+      .test(normalized)
+    || /\b(?:fue|era|fueron|eran)\b.{0,100}\b(?:pick|seleccion\p{L}*|eleccion\p{L}*|estrategia|solucion|plan|metodo)\b/iu
       .test(normalized)
     || /\b(?:retom\p{L}*|continu\p{L}*|sigamos|seguimos|aprendimos|hicimos|usamos|logramos|reutiliz\p{L}*)\b/iu
       .test(normalized)
 }
 
 function requestsPriorDecision(text: string): boolean {
-  return /\b(?:favorit\p{L}*|pronostic\p{L}*|prediccion\p{L}*|pick|decision\p{L}*|eleg\p{L}*|escog\p{L}*|chose|picked|predicted)\b/iu
+  return /\b(?:favorit\p{L}*|pronostic\p{L}*|prediccion\p{L}*|pick|decision\p{L}*|eleg\p{L}*|escog\p{L}*)\b/iu
     .test(normalizedMemoryRequest(text))
+    || /\b(?:chose|picked|predicted)\b/iu.test(normalizedMemoryRequest(text))
 }
 
 function requestsPriorPreference(text: string): boolean {
