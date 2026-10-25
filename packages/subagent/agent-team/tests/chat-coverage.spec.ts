@@ -36,6 +36,13 @@ async function fixture(maxBytes = 1024) {
   return { store, ctx, root, child, lead, worker, agents, abort, followup, listChildren, inspect, chat, row }
 }
 
+function appendTeammateSpeech(child: Session, text: string, step: number): void {
+  child.append('assistant/message', {
+    turn: 1, step,
+    message: createAssistantMessage({ source: { provider: 'mock', model: 'mock' }, content: content(text) }),
+  }, { surfaceOp: 'append' })
+}
+
 describe('human teamwork without progress spam', () => {
   it('keeps actions and new evidence but removes duplicate future-tense messages', () => {
     expect(shouldPublishTeammateSpeech('Kira, revisaré la portada.', false, false)).toBe(true)
@@ -54,10 +61,7 @@ describe('human teamwork without progress spam', () => {
   it('keeps real teammate dependency questions visible without manufacturing a tool receipt', async () => {
     const f = await fixture()
     f.child.append('turn/start', { turn: 1 })
-    const speak = (text: string, step: number) => f.child.append('assistant/message', {
-      turn: 1, step,
-      message: createAssistantMessage({ source: { provider: 'mock', model: 'mock' }, content: content(text) }),
-    }, { surfaceOp: 'append' })
+    const speak = appendTeammateSpeech.bind(null, f.child)
     speak('Kira, preparo los sprites según el contrato acordado.', 1)
     await f.chat.capture(f.root, f.child.header, f.child.events)
     speak('Atlas, necesito tu formato de colisiones para entregar el atlas correcto.', 2)
@@ -98,9 +102,7 @@ describe('human teamwork without progress spam', () => {
   it('shares one opening and one tool-backed finding with Kira, not a stream of plans', async () => {
     const f = await fixture()
     f.child.append('turn/start', { turn: 1 })
-    const speak = (text: string, step: number) => f.child.append('assistant/message', {
-      turn: 1, step, message: createAssistantMessage({ source: { provider: 'mock', model: 'mock' }, content: content(text) }),
-    }, { surfaceOp: 'append' })
+    const speak = appendTeammateSpeech.bind(null, f.child)
     speak('Revisaré la portada y comprobaré los enlaces.', 1)
     await f.chat.capture(f.root, f.child.header, f.child.events)
     speak('La tercera nota la tomaré también de la portada.', 2)
