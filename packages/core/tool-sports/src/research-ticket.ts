@@ -10,16 +10,16 @@ export type ResearchTicketLeg = {
   rationale?: string
 }
 
-type EspnTeam = {homeAway?:string;team?:{displayName?:string;name?:string}}
+type EspnTeam = { homeAway?:string;team?:{ displayName?:string;name?:string } }
 type EspnEvent = {
   id?:string|number
   date?:string
-  status?:{type?:{state?:string}}
-  competitions?:Array<{competitors?:EspnTeam[]}>
+  status?:{ type?:{ state?:string } }
+  competitions?:Array<{ competitors?:EspnTeam[] }>
 }
-type EspnBoard = {events?:EspnEvent[]}
+type EspnBoard = { events?:EspnEvent[] }
 const dateInSantoDomingo = ():string =>
-  new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santo_Domingo',year:'numeric',month:'2-digit',day:'2-digit'})
+  new Intl.DateTimeFormat('en-CA',{ timeZone:'America/Santo_Domingo',year:'numeric',month:'2-digit',day:'2-digit' })
     .format(new Date())
 const validDay = (raw:string):boolean => {
   if (!/^\d{4}-\d{2}-\d{2}$/u.test(raw)) return false
@@ -28,24 +28,24 @@ const validDay = (raw:string):boolean => {
 }
 const clean = (value:string,length:number):string =>
   value.replace(/[\u0000-\u001f]/gu,' ').trim().slice(0,length)
-const leagueInfo:Record<string,{sport:string;country?:string;league:string}>={
-  'eng.1':{sport:'Fútbol',country:'Inglaterra',league:'Premier League'},
-  'esp.1':{sport:'Fútbol',country:'España',league:'LaLiga'},
-  'mex.1':{sport:'Fútbol',country:'México',league:'Liga MX'},
-  'usa.1':{sport:'Fútbol',country:'Estados Unidos / Canadá',league:'MLS'},
-  'uefa.champions':{sport:'Fútbol',country:'Europa',league:'Champions League'},
-  'mlb':{sport:'Béisbol',league:'MLB'},
-  'nba':{sport:'Baloncesto',league:'NBA'},
-  'wnba':{sport:'Baloncesto',league:'WNBA'},
-  'nfl':{sport:'Fútbol americano',league:'NFL'},
-  'nhl':{sport:'Hockey',league:'NHL'},
+const leagueInfo:Record<string,{ sport:string;country?:string;league:string }>={
+  'eng.1':{ sport:'Fútbol',country:'Inglaterra',league:'Premier League' },
+  'esp.1':{ sport:'Fútbol',country:'España',league:'LaLiga' },
+  'mex.1':{ sport:'Fútbol',country:'México',league:'Liga MX' },
+  'usa.1':{ sport:'Fútbol',country:'Estados Unidos / Canadá',league:'MLS' },
+  'uefa.champions':{ sport:'Fútbol',country:'Europa',league:'Champions League' },
+  'mlb':{ sport:'Béisbol',league:'MLB' },
+  'nba':{ sport:'Baloncesto',league:'NBA' },
+  'wnba':{ sport:'Baloncesto',league:'WNBA' },
+  'nfl':{ sport:'Fútbol americano',league:'NFL' },
+  'nhl':{ sport:'Hockey',league:'NHL' },
 }
 const sportLabel:Record<string,string>={
   soccer:'Fútbol',baseball:'Béisbol',basketball:'Baloncesto',
   football:'Fútbol americano',hockey:'Hockey',
 }
 const whenLocal = (value:string):string=>
-  new Intl.DateTimeFormat('es-DO',{timeZone:'America/Santo_Domingo',dateStyle:'medium',timeStyle:'short'})
+  new Intl.DateTimeFormat('es-DO',{ timeZone:'America/Santo_Domingo',dateStyle:'medium',timeStyle:'short' })
     .format(new Date(value))
 
 /**
@@ -64,16 +64,18 @@ export async function researchTicket(
   fetcher: typeof fetch = fetch,
   now = Date.now(),
   env: NodeJS.ProcessEnv = process.env,
-):Promise<{card:ChatBlock;verifiedEvents:number;priced:false;placed:false}> {
+):Promise<{ card:ChatBlock;verifiedEvents:number;priced:false;placed:false }> {
   if(!hasSportsPermission('espn',env))throw Error('ESPN deshabilitado por configuración del operador')
   if(!validDay(requestedDate))throw Error('Fecha de ticket inválida (AAAA-MM-DD)')
   if(!Array.isArray(selections)||selections.length<1||selections.length>6)throw Error('El ticket de pronósticos requiere entre 1 y 6 selecciones')
   const cache=new Map<string,EspnBoard>()
   const seen=new Set<string>()
   const legs:Array<Record<string,string>>=[]
-  for(const selection of selections){
-    if(!selection||typeof selection!=='object')throw Error('Selección inválida')
-    const {sport,league,eventId,pick}=selection
+  for(const raw of selections){
+    const candidate: unknown = raw
+    if(candidate===null||typeof candidate!=='object')throw Error('Selección inválida')
+    const selection = candidate as ResearchTicketLeg
+    const { sport,league,eventId,pick }=selection
     if(typeof sport!=='string'||typeof league!=='string'||typeof eventId!=='string'||typeof pick!=='string'
       || !Object.hasOwn(sportsCatalog,sport) || !/^[a-z0-9][a-z0-9._-]{0,79}$/u.test(league)
       || !sportsCatalog[sport]?.includes(league) || !/^\d{1,20}$/u.test(eventId)
@@ -117,20 +119,20 @@ export async function researchTicket(
       when:whenLocal(event.date??''),
       sport:info?.sport??sportLabel[sport]??sport,
       league:info?.league??league,
-      ...(info?.country?{country:info.country}:{}),
+      ...(info?.country?{ country:info.country }:{}),
       market:sport==='soccer'?'1X2 · Pronóstico':'Ganador · Pronóstico',
-      ...(reason?{rationale:reason}:{}),
+      ...(reason?{ rationale:reason }:{}),
     })
   }
   return {
     verifiedEvents:legs.length,priced:false,placed:false,
-    card:{component:'sports_ticket_card',version:1,props:{
+    card:{ component:'sports_ticket_card',version:1,props:{
       title:'PHOENIX · Ticket de pronósticos',
       subtitle:'Selecciones sobre eventos verificados · Previa sin cotización',
       source:'ESPN Site API · cartelera consultada '+new Date(now).toISOString(),
       legs,combinedOdds:'No disponible',
       note:'PRONÓSTICO ORIENTATIVO, SIN APUESTA REAL. Los partidos se confirmaron en ESPN, pero no se verificaron cuotas ni casas. Los argumentos de Kira son hipótesis y deben contrastarse antes de apostar. No se calcula retorno ni probabilidad conjunta.',
       askPrompt:'Kira, busca precios vigentes para estas selecciones con el operador identificado y valida la información antes de generar un ticket cotizado.',
-    }},
+    } },
   }
 }
