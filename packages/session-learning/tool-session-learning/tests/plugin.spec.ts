@@ -6,6 +6,7 @@ import { Context } from '@phoenix-ai/cordis'
 import SessionStore, { SessionId } from '@phoenix-ai/dsh-session'
 import SystemPrompt from '@phoenix-ai/dsh-system-prompt'
 import ToolRegistry from '@phoenix-ai/dsh-tools'
+import { createAssistantMessage, createUserMessage } from '@phoenix-ai/dsh-llm'
 import LearningMemoryService from '@phoenix-ai/dsh-session-learning'
 import { renderContextSnapshot } from '@phoenix-ai/dsh-system-prompt'
 import * as plugin from '../src/index.ts'
@@ -119,4 +120,35 @@ describe('tool-session-learning plugin', () => {
     expect(schema).toBeDefined()
     expect(schema?.description).toMatch(/procedure/i)
   })
+  it('retrieves a prior Brewers–Rays choice in its own conversation without leaking another project', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'phoenix-learning-sports-context-'))
+    roots.push(root)
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    await ctx.plugin(SystemPrompt, { persona: '' })
+    await ctx.plugin(ToolRegistry)
+    await ctx.plugin(LearningMemoryService, { path: join(root, 'memory.jsonl') })
+    await ctx.plugin(plugin, {})
+    const alpha = ctx.sessions.create(SessionId('sports-memory-alpha'), { meta: { cwd: '/workspace/sports' } })
+    const beta = ctx.sessions.create(SessionId('sports-memory-beta'), { meta: { cwd: '/workspace/other' } })
+    const assistant = (text: string) => createAssistantMessage({
+      content: [{ type: 'text', text }],
+      source: { provider: 'test', model: 'test-model' },
+    })
+    alpha.append('assistant/message', { turn: 1, step: 1, message: assistant('Mi favorito para Brewers–Rays es Milwaukee Brewers.') }, { surfaceOp: 'append' })
+    beta.append('assistant/message', { turn: 1, step: 1, message: assistant('Mi favorito para Dodgers–Mets es Los Angeles Dodgers.') }, { surfaceOp: 'append' })
+    alpha.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: '¿Cuál fue tu favorito en Brewers–Rays?' }],
+      source: { kind: 'user' },
+    }), { surfaceOp: 'append' })
+    await ctx.learningMemory.ready()
+
+    const snapshot = renderContextSnapshot(await ctx.systemPrompt.assemble({
+      agent: { id: String(alpha.id), session: alpha },
+    } as never))
+    expect(snapshot).toContain('Milwaukee Brewers')
+    expect(snapshot).not.toContain('Los Angeles Dodgers')
+    expect(snapshot).toContain('Kira decision:')
+  })
+
 })
