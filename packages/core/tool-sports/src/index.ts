@@ -96,15 +96,15 @@ export function apply(ctx: Context): void {
         const first=rows[0]
         if(!first)return []
         return [{
-        component:'sports_odds_card',version:1,props:{
-          title:first.away+' vs '+first.home,
-          subtitle:'Mercados reportados por casa; no son probabilidades estimadas',
-          source:first.source||'Proveedor consultado',
-          rows:rows.map(q=>({ event:q.away+' vs '+q.home,market:q.market,
-            selection:q.selection,bookmaker:q.bookmaker,price:q.price.toFixed(2),
-            ...(q.point===null||q.point===undefined?{}:{ point:String(q.point) }) })),
-          note:'Cuotas observadas al consultar la herramienta. Pueden cambiar antes de cualquier decisión. No se realizó ninguna apuesta.',
-        },
+          component:'sports_odds_card',version:1,props:{
+            title:first.away+' vs '+first.home,
+            subtitle:'Mercados reportados por casa; no son probabilidades estimadas',
+            source:first.source||'Proveedor consultado',
+            rows:rows.map(q=>({ event:q.away+' vs '+q.home,market:q.market,
+              selection:q.selection,bookmaker:q.bookmaker,price:q.price.toFixed(2),
+              ...(q.point===null||q.point===undefined?{}:{ point:String(q.point) }) })),
+            note:'Cuotas observadas al consultar la herramienta. Pueden cambiar antes de cualquier decisión. No se realizó ninguna apuesta.',
+          },
         }]
       })
       return JSON.stringify({ uiBlocks,source:quotes[0]?.source||'ESPN público (sin cuotas disponibles) / The Odds API opcional',observedAt:new Date().toISOString(),outcomes:quotes.slice(0,120),
