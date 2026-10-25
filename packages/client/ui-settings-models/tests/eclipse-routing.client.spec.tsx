@@ -180,7 +180,7 @@ describe('Eclipse model settings', () => {
       loadCatalog={async () => catalog} loadEngines={loadEngines} t={t} />)
     expect(await screen.findByText(/Codex · Connected · 0.163.0/)).toBeTruthy()
     expect(screen.getByText(/GATEWAY_NOT_CONFIGURED/)).toBeTruthy()
-    expect((screen.getByLabelText(en.eclipseEnginePreference) as HTMLSelectElement).value).toBe('openclaw')
+    expect((screen.getByLabelText(en.eclipseEnginePreference)).value).toBe('openclaw')
     expect(existingProfile(controller.store.getSnapshot().namespaces.get('eclipse-routing')?.value, {})).toMatchObject({
       executionEngine: 'openclaw', coordinator: { model: 'gpt-6.1-sol', reasoningEffort: 'medium' },
     })

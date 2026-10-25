@@ -130,7 +130,7 @@ describe('Secure Ask human-only browser sidebar', () => {
       ] }} onSaved={vi.fn()} onClose={vi.fn()} />)
     fireEvent.change(screen.getByPlaceholderText('Afiliación'), { target: { value: 'member-123' } })
     fireEvent.change(screen.getByPlaceholderText('Escribe tu PIN'), { target: { value: 'not-logged-to-chat' } })
-    expect((screen.getByRole('button', { name: 'Guardar y continuar' }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: 'Guardar y continuar' })).disabled).toBe(true)
     fireEvent.change(screen.getByPlaceholderText('Empresa'), { target: { value: 'xyz' } })
     fireEvent.click(screen.getByRole('button', { name: 'Guardar y continuar' }))
     await waitFor(() =>{  expect(calls.some(call => call.account === 'member-123'
@@ -320,8 +320,8 @@ describe('Secure Ask human-only browser sidebar', () => {
     fireEvent.change(screen.getByPlaceholderText('Contraseña real'), { target: { value: 'retry-secret' } })
     fireEvent.click(screen.getByRole('button', { name: 'Guardar y continuar' }))
     await waitFor(() =>{  expect(screen.getByText(/No se confirmó el guardado/)).toBeTruthy() })
-    expect((screen.getByPlaceholderText('Usuario real') as HTMLInputElement).value).toBe('retry-user')
-    expect((screen.getByPlaceholderText('Contraseña real') as HTMLInputElement).value).toBe('retry-secret')
+    expect((screen.getByPlaceholderText('Usuario real')).value).toBe('retry-user')
+    expect((screen.getByPlaceholderText('Contraseña real')).value).toBe('retry-secret')
   })
 
   it('keeps the compact card collapsible', () => {

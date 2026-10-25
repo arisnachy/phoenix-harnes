@@ -105,7 +105,7 @@ type SportsTicketCard = {
   component: 'sports_ticket_card', version: 1
   props: {
     title: string, subtitle?: string, source: string
-    legs: Array<{ event: string, selection: string, price: string, bookmaker: string, when?: string, image?: string,
+    legs: Array<{ event: string, selection: string, price: string, bookmaker: string, when?: string, image?: string
       sport?:string,country?:string,league?:string,market?:string,player?:string }>
     combinedOdds: string, stake?: string, grossReturn?: string, note: string
     askPrompt?: string
@@ -641,7 +641,7 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
           <span className={css.sportsKicker}>PHOENIX / SPORTS INTELLIGENCE</span>
           <div className={css.sportsHeadline}><div><h3>{p.title}</h3>
             {p.subtitle&&<p>{p.subtitle}</p>}</div>
-            <span className={css.sportsStatus}>SIMULACIÓN</span></div>
+          <span className={css.sportsStatus}>SIMULACIÓN</span></div>
           <span className={css.sportsTicketCount}>{p.legs.length} {p.legs.length===1?'selección':'selecciones'} · {groups.size} {groups.size===1?'grupo':'grupos'}</span>
         </header>
         <div className={css.sportsTicketGroups}>{[...groups].map(([heading,legs])=>

@@ -17,7 +17,7 @@ interface GameKit {
     joint: Point, end: Point, reached: boolean
   }
   humanPose: (args?: { walk?: number; running?: boolean; airborne?: boolean; falling?: boolean; aim?: number }) => {
-    legs: Array<{ joint: Point, end: Point }>, arms: Array<{ joint: Point, end: Point }>, hand: Point, muzzle: Point
+    legs: Array<{ joint: Point; end: Point }>, arms: Array<{ joint: Point; end: Point }>, hand: Point, muzzle: Point
   }
   drawHumanoid: (ctx: object, x: number, y: number, opts?: object) => object
   animationFrame: (seconds: number, fps: number, frames: number) => number

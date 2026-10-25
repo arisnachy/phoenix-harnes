@@ -112,19 +112,19 @@ export async function getFeed<T>(url:string, fetcher:typeof fetch=fetch):Promise
   return JSON.parse(text) as T
 }
 type FeedEvent = {
-  id?:string|number;date?:string;name?:string;
-  status?:{ type?:{ description?:string;state?:string } };
+  id?:string|number;date?:string;name?:string
+  status?:{ type?:{ description?:string;state?:string } }
   competitions?:Array<{
-    venue?:{ fullName?:string;address?:{ city?:string } };
+    venue?:{ fullName?:string;address?:{ city?:string } }
     competitors?:Array<{
-      id?:string;homeAway?:string;score?:string|number;
-      team?:{ displayName?:string;name?:string;id?:string;logo?:string;logos?:Array<{ href?:string }> };
-      records?:Array<{ summary?:string }>;
-      linescores?:Array<{ value?:number|string;displayValue?:string }>;
+      id?:string;homeAway?:string;score?:string|number
+      team?:{ displayName?:string;name?:string;id?:string;logo?:string;logos?:Array<{ href?:string }> }
+      records?:Array<{ summary?:string }>
+      linescores?:Array<{ value?:number|string;displayValue?:string }>
       leaders?:Array<{ name?:string;leaders?:Array<{
         athlete?:{ displayName?:string;headshot?:{ href?:string } };displayValue?:string
       }> }>
-    }>;
+    }>
     broadcasts?:Array<{ names?:string[] }>
   }>
 }
@@ -276,19 +276,19 @@ export async function marketOdds(sportKey:string,markets='h2h',env:NodeJS.Proces
   const u=new URL('https://api.the-odds-api.com/v4/sports/'+sportKey+'/odds')
   for(const [k,v] of Object.entries({ apiKey:env.THE_ODDS_API_KEY??'',regions:'us',markets,oddsFormat:'decimal' }))u.searchParams.set(k,v)
   const feed=await getFeed<Array<{
-    id:string;home_team:string;away_team:string;commence_time:string;
-    bookmakers?:Array<{ key:string;title:string;last_update?:string;
-      markets?:Array<{ key:string;last_update?:string;
+    id:string;home_team:string;away_team:string;commence_time:string
+    bookmakers?:Array<{ key:string;title:string;last_update?:string
+      markets?:Array<{ key:string;last_update?:string
         outcomes?:Array<{ name:string;price:number;point?:number }> }> }>
   }>>(u.toString(),fetcher)
   if(!Array.isArray(feed))throw Error('Respuesta de cuotas inválida')
   return feed.flatMap(event=>(event.bookmakers??[]).flatMap(book=>
     (book.markets??[]).flatMap(market=>
       (market.outcomes??[]).filter(o=>o.price>1&&Number.isFinite(o.price)).map(o=>({
-    eventId:title(event.id,100),bookmaker:title(book.title||book.key,120),
-    market:title(market.key,60),selection:title(o.name,120),point:o.point??null,sportKey,
-    price:o.price,home:title(event.home_team),away:title(event.away_team),time:localTime(event.commence_time),updatedAt:title(market.last_update??book.last_update),source:'The Odds API',
-  }))))).slice(0,500)
+        eventId:title(event.id,100),bookmaker:title(book.title||book.key,120),
+        market:title(market.key,60),selection:title(o.name,120),point:o.point??null,sportKey,
+        price:o.price,home:title(event.home_team),away:title(event.away_team),time:localTime(event.commence_time),updatedAt:title(market.last_update??book.last_update),source:'The Odds API',
+      }))))).slice(0,500)
 }
 /** Simulate a ticket only when every leg matches a freshly retrieved quote.
  * @param selections - Requested legs to match exactly.

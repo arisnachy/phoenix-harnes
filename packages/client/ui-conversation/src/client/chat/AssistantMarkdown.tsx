@@ -81,14 +81,14 @@ export const AssistantMarkdown = memo(function AssistantMarkdown({
           // Native schema-validated UI takes priority. Only remaining
           // inert plaintext is reformatted; code and Markdown stay intact.
           const presentation = segment.kind === 'markdown'
-            ? splitPlainOutputText(segment.text) : [{kind:'markdown' as const,text:segment.text}]
+            ? splitPlainOutputText(segment.text) : [{ kind:'markdown' as const,text:segment.text }]
           for (let j = 0; j < presentation.length; j++) {
             const part = presentation[j]
             if (!part) continue
             rendered.push(part.kind === 'formatted'
               ? <PlainOutputFormatter key={first+':formatted:'+index+':'+j} card={part.card} />
               : <MarkdownText key={first+':markdown:'+index+':'+j}
-                  text={part.text} streaming={streaming} codeLabels={codeLabels} fileMentions={mentions} />)
+                text={part.text} streaming={streaming} codeLabels={codeLabels} fileMentions={mentions} />)
           }
         }
         break
