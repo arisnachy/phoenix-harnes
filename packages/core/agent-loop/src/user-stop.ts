@@ -20,12 +20,28 @@ export function isExplicitUserStop(message: UserMessage): boolean {
     .replace(/(?:[,\s]+(?:por favor|please|ya|ahora))+$/u, '')
     .replace(/[,;:\s]+$/u, '').trim()
 
-  const bare = /^(?:det[eé]n(?:te|lo|la|los|las)?|detener(?:te|lo|la|los|las)?|para(?:lo|la|los|las)?|parar(?:lo|la)?|p[aá]rate|cancela(?:r|lo|la|los|las)?|interrumpe|interrumpir|stop(?: it)?|cancel(?: it)?|basta)$/u
+  const bare = new RegExp(
+    String.raw`^(?:det[eé]n(?:te|lo|la|los|las)?|detener(?:te|lo|la|los|las)?|para(?:lo|la|los|las)?|` +
+    String.raw`parar(?:lo|la)?|p[aá]rate|cancela(?:r|lo|la|los|las)?|interrumpe|interrumpir|` +
+    String.raw`stop(?: it)?|cancel(?: it)?|basta)$`,
+    'u',
+  )
   if (bare.test(command)) return true
   const requested = command.match(/^(?:det[eé]n|detener|para|parar|cancela|cancelar|interrumpe|interrumpir|stop|cancel)\s+/u)
   if (requested !== null) {
     const target = command.slice(requested[0].length)
-    return /^(?:(?:la|esta|esa|mi)\s+(?:prueba|tarea|ejecuci[oó]n|revisi[oó]n|automatizaci[oó]n|b[uú]squeda|investigaci[oó]n|actividad|misi[oó]n|sesi[oó]n)|(?:el|este|ese)\s+(?:formulario|proceso|trabajo|harness|agente|equipo|intento)|lo que (?:est[aá]s|estoy)\s+(?:haciendo|ejecutando)|todo|esto|aqu[ií]|everything|(?:the|this|that)\s+(?:test|task|run|process|work|form|execution))$/u.test(target)
+    return new RegExp(
+      String.raw`^(?:(?:la|esta|esa|mi)\s+(?:prueba|tarea|ejecuci[oó]n|revisi[oó]n|automatizaci[oó]n|` +
+      String.raw`b[uú]squeda|investigaci[oó]n|actividad|misi[oó]n|sesi[oó]n)|(?:el|este|` +
+      String.raw`ese)\s+(?:formulario|proceso|trabajo|harness|agente|equipo|intento)|lo que (?:est[aá]s|` +
+      String.raw`estoy)\s+(?:haciendo|ejecutando)|todo|esto|aqu[ií]|everything|(?:the|this|` +
+      String.raw`that)\s+(?:test|task|run|process|work|form|execution))$`,
+      'u',
+    ).test(target)
   }
-  return /^(?:no (?:sigas|contin[uú]es|continues|hagas nada m[aá]s)|deja de (?:trabajar|ejecutar|hacer la prueba|hacer eso)|do not continue|don't continue)$/u.test(command)
+  return new RegExp(
+    String.raw`^(?:no (?:sigas|contin[uú]es|continues|hagas nada m[aá]s)|deja de (?:trabajar|ejecutar|` +
+    String.raw`hacer la prueba|hacer eso)|do not continue|don't continue)$`,
+    'u',
+  ).test(command)
 }

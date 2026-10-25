@@ -20,8 +20,17 @@ export function naturalCreationSkill(input: string): 'game-development' | undefi
   const request = normalized.slice(0, 4000)
 
   // Explicit refusals and meta questions are not instructions to create.
-  if (/^(?:no\s+(?:quiero|necesito|hagas|crees|generes|programes|hace|make|create|build)|sin\s+(?:crear|hacer|generar)|dont\s+(?:make|create|build)|do\s+not\s+(?:make|create|build))\b/u.test(request)) return undefined
-  if (/^(?:como\s+(?:se\s+)?(?:hace|crear?|programar)|how\s+to\s+(?:make|create|build)|que\s+(?:es|significa))\b/u.test(normalized)) return undefined
+  if (new RegExp(
+    String.raw`^(?:no\s+(?:quiero|necesito|hagas|crees|generes|programes|hace|make|create|build)|` +
+    String.raw`sin\s+(?:crear|hacer|generar)|dont\s+(?:make|create|build)|do\s+not\s+(?:make|create|` +
+    String.raw`build))\b`,
+    'u',
+  ).test(request)) return undefined
+  if (new RegExp(
+    String.raw`^(?:como\s+(?:se\s+)?(?:hace|crear?|programar)|how\s+to\s+(?:make|create|build)|` +
+    String.raw`que\s+(?:es|significa))\b`,
+    'u',
+  ).test(normalized)) return undefined
 
   const game = '(?:videojuego|video game|juego|game|juegos|games)'
   const build = '(?:haz(?:me)?|hacer(?:me)?|crea(?:me)?|crear|creame|genera(?:me)?|desarrolla|programa|construye|disena|prepara|arma|make|build|create|generate|develop|code|design)'
