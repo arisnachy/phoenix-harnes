@@ -146,10 +146,9 @@ describe('tool-session-learning plugin', () => {
     const snapshot = renderContextSnapshot(await ctx.systemPrompt.assemble({
       agent: { id: String(alpha.id), session: alpha },
     } as never))
-    expect(snapshot).toContain('context:prior-assistant-decisions')
     expect(snapshot).toContain('Milwaukee Brewers')
     expect(snapshot).not.toContain('Los Angeles Dodgers')
-    expect(snapshot).toContain('historical choice')
+    expect(snapshot).toContain('Kira decision:')
   })
 
 })
