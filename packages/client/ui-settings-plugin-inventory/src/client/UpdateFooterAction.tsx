@@ -404,7 +404,7 @@ export function UpdateFooterAction({
               <pre className={css.diagnosticText} data-testid="phoenix-update-diagnostic">{lastDiagnostic.diagnostic}</pre>
             </section>
           )}
-          {connectionLost && <p className={css.reconnecting}>{t('updateReconnect')}</p>
+          {connectionLost && <p className={css.reconnecting}>{t('updateReconnect')}</p>}
           <div className={css.journalHeader}>{t('updateJournalTitle')}</div>
           {events.length === 0
             ? <p className={css.journalEmpty}>{t('updateJournalEmpty')}</p>
