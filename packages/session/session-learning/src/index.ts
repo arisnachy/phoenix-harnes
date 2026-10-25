@@ -464,13 +464,22 @@ function assistantDecisionObservationFor(session: Session, event: SessionEvent):
   if (!isExplicitAssistantDecision(content)) return undefined
   const projectId = projectIdFor(session)
   const safeContent = sanitize(content)
+  const questionEvent = session.events.findLast(candidate =>
+    candidate.seq < event.seq && candidate.type === 'user/message' && candidate.data.source.kind === 'user')
+  const question = questionEvent === undefined ? undefined : messageText(questionEvent.data)
+  // "Voy con Milwaukee" remains searchable by Brewers–Rays even when the
+  // model's short answer omitted the matchup named in the human question.
+  const referencedQuestion = question === undefined ? '' : sanitize(question).slice(0, 320)
+  const summary = referencedQuestion === ''
+    ? `Kira decision: ${safeContent}`
+    : `Kira decision responding to [${referencedQuestion}]: ${safeContent}`
   return {
     sessionId: String(session.id),
     eventSeq: event.seq,
     kind: 'decision',
     layers: ['autobiographical', 'episodic', 'semantic', 'associative', 'temporal'],
     content: safeContent,
-    summary: sanitize(`Kira decision: ${safeContent}`),
+    summary: sanitize(summary),
     sourceEventType: 'assistant/decision',
     occurredAt: event.time,
     ...projectId === undefined ? {} : { projectId },
