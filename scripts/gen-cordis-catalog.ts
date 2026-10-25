@@ -238,7 +238,6 @@ export const EVENT_WALK_EXEMPTIONS: Record<string, string> = {
  * appear on more than one page.
  */
 export const LINK_MAP: Readonly<Record<string, string>> = {
-  EclipseRoutingSettings: 'core.md',
   ExecutionEngineStatus: 'agent-team.md',
   ExecutionMemoryContext: 'agent-team.md',
   Agent: 'core.md',
@@ -246,6 +245,7 @@ export const LINK_MAP: Readonly<Record<string, string>> = {
   AgentFactory: 'core.md',
   AgentHandle: 'core.md',
   ModelSelection: 'core.md',
+  EclipseRoutingSettings: 'core.md',
   AgentOptions: 'core.md',
   AgentStatus: 'core.md',
   ContentBlock: 'llm-streaming.md',
