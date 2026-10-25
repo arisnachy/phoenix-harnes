@@ -1,4 +1,5 @@
 import {describe,expect,it} from 'vitest'
+import {render,screen,fireEvent} from '@testing-library/react'
 import {parseGenerativeUiBlock,GenerativeUi} from '../src/client/chat/GenerativeUi.tsx'
 const trusted='https://img.mlbstatic.com/mlb-photos/image/upload/v1/people/678021/headshot/67/current'
 const rich={
@@ -30,6 +31,23 @@ describe('Phoenix Sports rich native cards',()=>{
     if(!parsed)throw Error('Rich card rejected')
     const rendered=GenerativeUi({block:parsed}) as {props:Record<string,unknown>}
     expect(rendered.props['data-generative-ui']).toBe('sports_game_card')
+  })
+  it('shows ESPN-style team images, pitcher stats, lineup tabs and bullpen modules inside the Phoenix chat',()=>{
+    const card=parseGenerativeUiBlock(rich)
+    if(!card)throw Error('Fixture rejected')
+    render(<GenerativeUi block={card}/>)
+    expect(screen.getByRole('heading',{name:'Abridores probables'})).toBeTruthy()
+    expect(screen.getByRole('heading',{name:'Alineaciones'})).toBeTruthy()
+    expect(screen.getByRole('heading',{name:'Bullpen y cuerpo de lanzadores'})).toBeTruthy()
+    expect(screen.getByRole('heading',{name:'Investigación Phoenix · Tendencia'})).toBeTruthy()
+    expect(screen.getByAltText('Milwaukee Brewers')).toBeTruthy()
+    expect(screen.getByAltText('Tampa Bay Rays')).toBeTruthy()
+    expect(screen.getByAltText('Starter Away')).toBeTruthy()
+    expect(screen.getByText(/ERA 2.91/)).toBeTruthy()
+    expect(screen.getByText(/Bateador/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button',{name:'Brewers'}))
+    expect(screen.getByText(/todavía no publicó la alineación/)).toBeTruthy()
+    expect(screen.getByText(/Sin datos de bullpen verificables/)).toBeTruthy()
   })
   it('rejects untrusted images, injected markup, overlong rosters and unsupported research',()=>{
     expect(parseGenerativeUiBlock({...rich,props:{...rich.props,home:{label:'Home',logo:'https://evil.example/tracker'}}})).toBeNull()
