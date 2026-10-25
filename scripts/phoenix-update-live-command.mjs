@@ -18,18 +18,17 @@ const SHA = /^[a-f0-9]{40}$/iu
 const STEPS = new Set(['git-worktree', 'git-reset', 'git-clean', 'dependencies', 'build',
   'smoke', 'boot-preflight', 'handoff', 'host-restart', 'health-check', 'runtime-activation', 'rollback'])
 
-function writeLine(config, stream, line) {
-  if (!SHA.test(config.target) || !STEPS.has(config.step)) return
-  const safe = sanitizePhoenixUpdateDiagnostic(line)
-  if (!safe) return
-  const entry = {
-    schema: 1, target: config.target, step: config.step, stream,
-    at: new Date().toISOString(),
-    line: safe.slice(0, MAX_LINE_CHARS) + (safe.length > MAX_LINE_CHARS ? ' [línea recortada]' : ''),
-  }
+// Batch lines to keep OneDrive and Windows antivirus from turning verbose
+// pnpm output into thousands of synchronous disk operations.
+const buffered = []
+let flushTimer
+function flushLines(config) {
+  if (flushTimer !== undefined) clearTimeout(flushTimer)
+  flushTimer = undefined
+  if (buffered.length === 0) return
+  const batch = buffered.splice(0).join('')
   const path = join(dirname(config.statePath), LIVE_FILE)
   try {
-    // Keep the retained tail bounded even through hours of verbose builds.
     if (existsSync(path) && statSync(path).size > MAX_FILE_BYTES) {
       const old = readFileSync(path, 'utf8')
       const suffix = old.slice(-RETAIN_BYTES)
@@ -41,10 +40,24 @@ function writeLine(config, stream, line) {
         renameSync(tmp, path)
       } finally { try { unlinkSync(tmp) } catch { /* best effort */ } }
     }
-    appendFileSync(path, JSON.stringify(entry) + '\n', { encoding: 'utf8', mode: 0o600 })
+    appendFileSync(path, batch, { encoding: 'utf8', mode: 0o600 })
   } catch {
     // Losing presentation telemetry must not fail installation or recovery.
   }
+}
+
+function writeLine(config, stream, line) {
+  if (!SHA.test(config.target) || !STEPS.has(config.step)) return
+  const safe = sanitizePhoenixUpdateDiagnostic(line)
+  if (!safe) return
+  const entry = {
+    schema: 1, target: config.target, step: config.step, stream,
+    at: new Date().toISOString(),
+    line: safe.slice(0, MAX_LINE_CHARS) + (safe.length > MAX_LINE_CHARS ? ' [línea recortada]' : ''),
+  }
+  buffered.push(JSON.stringify(entry) + '\n')
+  if (buffered.length >= 32) flushLines(config)
+  else if (flushTimer === undefined) flushTimer = setTimeout(() => flushLines(config), 160)
 }
 
 function main() {
@@ -103,6 +116,7 @@ function main() {
       recordPhoenixUpdateStep(config.statePath, config.step, 'failed', config.target, exitCode, diagnostic)
       writeLine(config, 'stderr', reason || 'Proceso terminado con código ' + String(exitCode))
     }
+    flushLines(config)
     process.exitCode = exitCode
   }
   child.on('error', error => {
