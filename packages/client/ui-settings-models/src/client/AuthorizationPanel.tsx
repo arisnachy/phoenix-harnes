@@ -129,14 +129,17 @@ export interface McpRegistryClient {
   state(): Promise<McpConnectorHubSnapshot>
   /** Secret-free X user/Phoenix account and developer credential status. */
   xState?(): Promise<{
-    clientIdConfigured: boolean; clientSecretConfigured: boolean
-    api: { configured: boolean; status?: string }
-    phoenixApi: { configured: boolean; status?: string }
-    docs: { configured: boolean; status?: string }
+    clientIdConfigured: boolean
+    clientSecretConfigured: boolean
+    api: { configured: boolean, status?: string }
+    phoenixApi: { configured: boolean, status?: string }
+    docs: { configured: boolean, status?: string }
   }>
   /** Save credentials only through the trusted Host vault; never through a chat/tool response. */
   configureX?(request: { clientId: string; clientSecret: string }): Promise<{
-    saved: true; clientIdConfigured: true; clientSecretConfigured: true
+    saved: true
+    clientIdConfigured: true
+    clientSecretConfigured: true
   }>
   /** Install one separately authorized X OAuth identity without registry lookup. */
   connectX?(request: { identity?: 'user' | 'phoenix'; username?: string }): Promise<{
@@ -1786,25 +1789,26 @@ export function ConnectorsSettingsSection({ api,
   const setupX = (identity: 'user' | 'phoenix'): void => {
     const xConnector = mcpRegistry
     if (xBusy || xConnector?.connectX === undefined) return
+    const { connectX, configureX } = xConnector
     const username = xPhoenixUsername.trim().replace(/^@/u, '')
     if (identity === 'phoenix' && !/^[A-Za-z0-9_]{1,15}$/u.test(username)) {
       setXNotice('Primero crea realmente el perfil de marca en X y escribe su @usuario (máximo 15 caracteres).')
       return
     }
     const hasInput = xClientId.trim().length > 0 || xClientSecret.length > 0
-    if (hasInput && (xClientId.trim().length === 0 || xClientSecret.length === 0 || xConnector.configureX === undefined)) {
+    if (hasInput && (xClientId.trim().length === 0 || xClientSecret.length === 0 || configureX === undefined)) {
       setXNotice('Introduce ambos valores de la aplicación X, o deja ambos vacíos si ya están almacenados.')
       return
     }
     setXBusy(true)
     setXNotice(undefined)
-    const save = hasInput
-      ? xConnector.configureX!({ clientId: xClientId.trim(), clientSecret: xClientSecret })
+    const save = hasInput && configureX !== undefined
+      ? configureX({ clientId: xClientId.trim(), clientSecret: xClientSecret })
       : Promise.resolve(undefined)
     void save.then(() => {
       setXClientId('')
       setXClientSecret('')
-      return xConnector.connectX!({ identity, ...(identity === 'phoenix' ? { username } : {}) })
+      return connectX({ identity, ...(identity === 'phoenix' ? { username } : {}) })
     }).then(async (receipt) => {
       // Reinstalling an already-running xurl bridge does not inject newly saved
       // vault credentials into its existing child. Restart that exact namespace
