@@ -1,5 +1,5 @@
 name: Phoenix PR1132 exact merge conflict probe
-# Confirm translation pairing after final source-preserving markdown corrections.
+# Reconfirm bilingual structure including indented game snippet and corrected URLs.
 on:
   push:
     branches:
