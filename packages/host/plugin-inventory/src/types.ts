@@ -249,6 +249,8 @@ export interface PhoenixUpdateEvent {
   readonly step: string
   readonly result: 'started' | 'ok' | 'failed' | 'info'
   readonly exitCode?: number
+  /** Redacted diagnostic output from the failing process, when available. */
+  readonly diagnostic?: string
 }
 
 /** Sanitized updater state read from the repository-owned Git directory. */

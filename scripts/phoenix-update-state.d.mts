@@ -8,4 +8,8 @@ export declare function recordPhoenixUpdateStep(
   result: 'started' | 'ok' | 'failed' | 'info',
   target?: string,
   exitCode?: number,
+  diagnostic?: string,
 ): void
+
+/** Redact credentials while retaining bounded full exception details. */
+export declare function sanitizePhoenixUpdateDiagnostic(raw: unknown): string | undefined
