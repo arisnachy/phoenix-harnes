@@ -218,16 +218,16 @@ export function ScheduledTaskCenter({ connection, t }: ScheduledTaskCenterProps)
   const deleteTask = async (id: string, taskTitle: string): Promise<void> => {
     if (changingId !== undefined || !window.confirm(t('task.center.confirmDelete').replace('{title}', taskTitle))) return
     setChangingId(id)
-    setError(undefined)
+    setActionError(undefined)
     try {
       const result = await connection.rpc.call('/phoenix-tasks', 'delete', { id })
       if (!result.ok) throw new Error(result.error.message)
       if (!isRecord(result.value) || result.value.id !== id || result.value.deleted !== true) {
         throw new Error(t('task.center.unconfirmed'))
       }
-      await verifyTask((task) => task.id === id, false)
+      await verifyTask(task => task.id === id, false)
     } catch (cause: unknown) {
-      setError(cause instanceof Error ? cause.message : String(cause))
+      setActionError(cause instanceof Error ? cause.message : String(cause))
     } finally {
       setChangingId(undefined)
     }
