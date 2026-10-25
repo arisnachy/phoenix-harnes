@@ -9,9 +9,33 @@
  */
 import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 
 const MODULES = ['phoenix-update-live-command.mjs', 'phoenix-update-state.mjs']
+
+function helperDigest(sources) {
+  const hash = createHash('sha256')
+  for (let i = 0; i < MODULES.length; i += 1) {
+    hash.update(MODULES[i] + '\n' + sources[i].length + '\n' + sources[i])
+  }
+  return hash.digest('hex')
+}
+
+/**
+ * Confirm a cached pinned helper is still the exact content-addressed pair.
+ * @param {string | undefined} helper - previously pinned file.
+ * @returns {boolean} true only for an unmodified complete pair.
+ */
+export function validPinnedPhoenixUpdateLiveHelper(helper) {
+  if (typeof helper !== 'string' || basename(helper) !== MODULES[0]) return false
+  try {
+    const directory = dirname(helper)
+    const sources = MODULES.map(name => readFileSync(join(directory, name), 'utf8'))
+    return helperDigest(sources) === basename(directory)
+  } catch {
+    return false
+  }
+}
 
 /**
  * Copy a matched pair of helper modules to a content-addressed, persistent
@@ -26,11 +50,7 @@ export function pinPhoenixUpdateLiveHelper(sourceRoot, statePath) {
   if (typeof statePath !== 'string' || statePath.length === 0) return undefined
   try {
     const sources = MODULES.map(name => readFileSync(join(sourceRoot, 'scripts', name), 'utf8'))
-    const hash = createHash('sha256')
-    for (let i = 0; i < MODULES.length; i += 1) {
-      hash.update(MODULES[i] + '\n' + sources[i].length + '\n' + sources[i])
-    }
-    const destination = join(dirname(statePath), 'phoenix-live-helpers', hash.digest('hex'))
+    const destination = join(dirname(statePath), 'phoenix-live-helpers', helperDigest(sources))
     mkdirSync(destination, { recursive: true, mode: 0o700 })
     for (let i = 0; i < MODULES.length; i += 1) {
       const pinned = join(destination, MODULES[i])
