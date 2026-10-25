@@ -62,7 +62,8 @@ export function compositionGroups(content: string): Group[] {
     }
     const match = /^\s*- id:\s*([a-z0-9-]+)\s*$/.exec(line)
     if (match === null) continue
-    const id = match[1]!
+    const id = match[1]
+    if (id === undefined) continue
     const indent = line.search(/\S/)
     let plugin = ''
     let disabled = false
@@ -72,7 +73,7 @@ export function compositionGroups(content: string): Group[] {
       if (next.trim() === '' || next.trim().startsWith('#')) continue
       if (next.search(/\S/) <= indent) break
       const name = /^\s*name:\s*['"]?([^'"\r\n]+)['"]?\s*$/.exec(next)
-      if (name !== null && plugin === '') plugin = name[1]!.trim()
+      if (name !== null && plugin === '') plugin = name[1]?.trim() ?? ''
       if (/^\s*disabled:\s*(?:true|!!js\s+)/.test(next)) disabled = true
       if (/^\s*config:\s*/.test(next) || /^\s*group:\s*/.test(next)) break
     }
