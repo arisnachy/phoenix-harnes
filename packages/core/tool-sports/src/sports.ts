@@ -15,7 +15,12 @@ export const sportsCatalog: Readonly<Record<string, readonly string[]>> = {
   'water-polo':['mens-college-water-polo'],'field-hockey':['womens-college-field-hockey'],
   'rugby-league':['3'],'australian-football':['afl'],
 }
-const title=(v:unknown,max=170):string => String(v??'Sin confirmar').replace(/[\u0000-\u001f]/gu,' ').trim().slice(0,max)||'Sin confirmar'
+const title = (v: unknown, max = 170): string => {
+  const safe = typeof v === 'string'
+    ? v
+    : typeof v === 'number' && Number.isFinite(v) ? String(v) : 'Sin confirmar'
+  return safe.replace(/[\u0000-\u001f]/gu, ' ').trim().slice(0, max) || 'Sin confirmar'
+}
 const date=(v?:string):string => {
   const d=v??new Intl.DateTimeFormat('en-CA',{ timeZone:'America/Santo_Domingo',year:'numeric',month:'2-digit',day:'2-digit' }).format(new Date())
   if(!/^\d{4}-\d{2}-\d{2}$/u.test(d)||Number.isNaN(Date.parse(d+'T00:00:00Z'))||new Date(d+'T00:00:00Z').toISOString().slice(0,10)!==d)throw Error('Fecha inválida (AAAA-MM-DD)')
@@ -68,7 +73,7 @@ export async function getFeed<T>(url:string, fetcher:typeof fetch=fetch):Promise
   const u=new URL(url)
   if(u.protocol!=='https:'||u.username||u.password||!['site.api.espn.com','site.web.api.espn.com','sports.core.api.espn.com','statsapi.mlb.com','api.the-odds-api.com'].includes(u.hostname))throw Error('Host no permitido')
   const response=await fetcher(u.toString(),{ headers:{ accept:'application/json' },redirect:'error',signal:AbortSignal.timeout(9000) })
-  if(!response.ok)throw Error('Proveedor HTTP '+response.status)
+  if(!response.ok)throw Error(`Proveedor HTTP ${response.status}`)
   if(Number(response.headers.get('content-length')||0)>4_000_000)throw Error('Respuesta supera 4 MB')
   const text=await response.text()
   if(text.length>4_000_000)throw Error('Respuesta supera 4 MB')
@@ -116,7 +121,7 @@ export async function chatGames(sport:string,league:string,requestedDate?:string
           title:'MLB · '+title(g.gamePk,25),subtitle:'Partido '+day,status:title(g.status?.detailedState,55),
           when:localTime(g.gameDate),venue:title(g.venue?.name),home:side(home),away:side(away),
           source:'MLB Stats API · '+new Date().toISOString(),
-          highlights,askPrompt:'Kira, amplía la información verificable del partido MLB '+g.gamePk+' incluyendo pitchers probables, rendimiento reciente, bullpen, ausencias y fuente por estadística.',
+          highlights,askPrompt:`Kira, amplía la información verificable del partido MLB ${g.gamePk} incluyendo pitchers probables, rendimiento reciente, bullpen, ausencias y fuente por estadística.`,
           note:'Lanzadores probables pueden cambiar; no se confirmó el roster definitivo.',
         } })
       }
@@ -190,11 +195,12 @@ export function pricedTicket(selections:MarketSelection[],quotes:MarketOutcome[]
   const legs=selections.map((sel)=>{
     const matches=quotes.filter(o=>o.eventId===sel.eventId&&o.bookmaker===sel.bookmaker&&o.market===sel.market&&o.selection===sel.selection&&(o.point??null)===(sel.point??null))
     if(matches.length!==1)throw Error('Selección no verificable en cuotas actuales; no se crea ticket ficticio.')
-    const match=matches[0]!
+    const match = matches[0]
+    if (!match) throw Error('Selección no verificable en cuotas actuales')
     const identity=[sel.eventId,sel.market,sel.selection,sel.point??''].join('|')
     if(used.has(identity))throw Error('Selección duplicada')
     used.add(identity);events.add(sel.eventId);combined*=match.price
-    return { event:match.away+' vs '+match.home,selection:match.selection+(match.point==null?'':' '+match.point),bookmaker:match.bookmaker,price:match.price.toFixed(2),when:match.time }
+    return { event:match.away+' vs '+match.home,selection:match.point==null?match.selection:`${match.selection} ${match.point}`,bookmaker:match.bookmaker,price:match.price.toFixed(2),when:match.time }
   })
   const correlated=events.size!==legs.length
   const warning=correlated?'Incluye selecciones del mismo encuentro; no asumas independencia ni que todas pueden combinarse.':'No se ha estimado probabilidad conjunta ni ventaja estadística calibrada.'

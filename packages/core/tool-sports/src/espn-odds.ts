@@ -43,10 +43,16 @@ const americanToDecimal=(value:unknown):number|null=>{
   if(!Number.isFinite(n)||Math.abs(n)<100||Math.abs(n)>100000)return null
   return Number((n>0?1+n/100:1+100/Math.abs(n)).toFixed(5))
 }
-const str=(v:unknown)=>typeof v==='string'?v.slice(0,170):String(v??'').slice(0,170)
+const str = (v: unknown): string => {
+  if (typeof v === 'string') return v.slice(0, 170)
+  return typeof v === 'number' && Number.isFinite(v) ? String(v).slice(0, 170) : ''
+}
 const isRecord=(v:unknown):v is Record<string,unknown>=>!!v&&typeof v==='object'&&!Array.isArray(v)
 const list=(v:unknown):EspnOdds[]=>Array.isArray(v)?v.filter(isRecord):isRecord(v)?[v]:[]
-const safeId=(v:unknown)=>/^\d{1,16}$/u.test(String(v??''))?String(v):null
+const safeId = (v: unknown): string | null => {
+  const value = typeof v === 'string' || typeof v === 'number' ? String(v) : ''
+  return /^\d{1,16}$/u.test(value) ? value : null
+}
 const localTime=(value:string):string=>{
   const time=new Date(value)
   return Number.isFinite(time.getTime())?new Intl.DateTimeFormat('es-DO',{ timeZone:'America/Santo_Domingo',dateStyle:'medium',timeStyle:'short' }).format(time):'Hora no confirmada'
