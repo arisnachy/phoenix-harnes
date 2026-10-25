@@ -190,6 +190,11 @@ function validatedActiveRuntime(root) {
   const value = readActiveRuntime(root)
   if (value === undefined) return undefined
 
+  // The supervisor writes the active-runtime marker during prewarm, while
+  // the OLD Host can still be serving requests. A marker without the
+  // supervisor's post-boot health attestation is a candidate, not "current".
+  if (typeof value.healthyAt !== 'string' || !Number.isFinite(Date.parse(value.healthyAt))) return undefined
+
   const candidate = resolve(value.path)
   if (!existsSync(candidate) || !sameRepositoryWorktree(root, candidate)) return undefined
 
