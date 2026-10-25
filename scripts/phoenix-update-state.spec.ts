@@ -81,6 +81,38 @@ describe('PHOENIX updater state persistence', () => {
     })
   })
 
+  it('keeps one durable activation request while a watcher sees the same ready target repeatedly', () => {
+    const root = mkdtempSync(join(tmpdir(), 'phoenix-update-restart-idempotent-'))
+    roots.push(root)
+    const path = join(root, 'phoenix-update-state.json')
+    const target = 'f'.repeat(40)
+    process.env.PHOENIX_UPDATE_SUPERVISED = '1'
+    process.env.PHOENIX_AUTO_UPDATE = '1'
+    process.env.PHOENIX_UPDATE_MODE = 'auto'
+
+    writePhoenixUpdateState(path, { schema: 1, status: 'ready', target })
+    const firstState = readFileSync(path, 'utf8')
+    const requestPath = join(root, 'phoenix-update-restart-request.json')
+    const firstRequest = readFileSync(requestPath, 'utf8')
+
+    writePhoenixUpdateState(path, { schema: 1, status: 'ready', target })
+    expect(readFileSync(path, 'utf8')).toBe(firstState)
+    expect(readFileSync(requestPath, 'utf8')).toBe(firstRequest)
+    const events = readFileSync(join(root, 'phoenix-update-events.jsonl'), 'utf8')
+      .trim().split('\\n').map(line => JSON.parse(line) as Record<string, unknown>)
+    expect(events.filter(event => event.step === 'restarting' && event.result === 'started')).toHaveLength(1)
+
+    writePhoenixUpdateState(path, { schema: 1, status: 'applying', target })
+    writePhoenixUpdateState(path, { schema: 1, status: 'ready', target })
+    expect(JSON.parse(readFileSync(path, 'utf8'))).toMatchObject({ status: 'applying' })
+
+    writePhoenixUpdateState(path, { schema: 1, status: 'error', target })
+    writePhoenixUpdateState(path, { schema: 1, status: 'ready', target })
+    expect(JSON.parse(readFileSync(path, 'utf8'))).toMatchObject({ status: 'restarting' })
+    expect(readFileSync(join(root, 'phoenix-update-events.jsonl'), 'utf8')
+      .split('\\n').filter(line => line.includes('"step":"restarting"'))).toHaveLength(2)
+  })
+
   it('suppresses and clears duplicate restart requests when the same SHA is already active', () => {
     const root = mkdtempSync(join(tmpdir(), 'phoenix-update-already-active-'))
     roots.push(root)
