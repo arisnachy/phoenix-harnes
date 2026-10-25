@@ -60,6 +60,95 @@ describe('failed isolated runtime storage reclamation', () => {
   })
 })
 
+describe('optional live update helper fallback', () => {
+  const start = supervisor.indexOf('function runChecked(cwd, bin, args, label) {')
+  const end = supervisor.indexOf('\nfunction runPnpm(cwd, args, label) {', start)
+  const runner = supervisor.slice(start, end) + '\n({ runChecked })'
+
+  it('prewarms an isolated replacement with the native Git command when the old helper is absent', () => {
+    const spawn = vi.fn(() => ({ status: 0, stdout: null, stderr: null }))
+    const steps = vi.fn()
+    const errors = vi.fn()
+    const { runChecked } = runInNewContext(runner, {
+      restartRequestTarget: () => 'a'.repeat(40),
+      readUpdateState: () => ({ target: 'a'.repeat(40) }),
+      updateStatePath: () => 'state.json',
+      supervisorSourceRoot: 'old-runtime',
+      existsSync: () => false,
+      join,
+      process: { execPath: 'node.exe', env: {} },
+      hideRuntimeWindows: true,
+      missingLiveHelperReported: false,
+      spawnSync: spawn,
+      reportSupervisorStep: steps,
+      console: { error: errors },
+    }) as { runChecked: (cwd: string, bin: string, args: string[], label: string) => void }
+
+    runChecked('checkout', 'git', ['worktree', 'add', '--detach', 'replacement', 'target'],
+      'create isolated runtime worktree')
+    expect(spawn).toHaveBeenCalledWith('git', ['worktree', 'add', '--detach', 'replacement', 'target'],
+      expect.objectContaining({ cwd: 'checkout', stdio: 'inherit' }))
+    expect(steps.mock.calls.map(call => call.slice(0, 2))).toEqual([
+      ['git-worktree', 'started'],
+      ['git-worktree', 'ok'],
+    ])
+    expect(errors).toHaveBeenCalledWith(expect.stringContaining('optional live output helper missing'))
+    expect(updater).toContain('const directStream = liveEligible && !streamLive')
+    expect(updater).toContain("stdio: streamLive || directStream ? 'inherit'")
+  })
+
+  it('reports a real failing native command rather than a missing Node module error', () => {
+    const spawn = vi.fn(() => ({ status: 31, stdout: null, stderr: null }))
+    const steps = vi.fn()
+    const { runChecked } = runInNewContext(runner, {
+      restartRequestTarget: () => 'b'.repeat(40),
+      readUpdateState: () => undefined,
+      updateStatePath: () => 'state.json',
+      supervisorSourceRoot: 'old-runtime',
+      existsSync: () => false,
+      join,
+      process: { execPath: 'node.exe', env: {} },
+      hideRuntimeWindows: true,
+      missingLiveHelperReported: false,
+      spawnSync: spawn,
+      reportSupervisorStep: steps,
+      console: { error: vi.fn() },
+    }) as { runChecked: (cwd: string, bin: string, args: string[], label: string) => void }
+
+    expect(() => runChecked('checkout', 'git', ['worktree', 'add'], 'create isolated runtime worktree'))
+      .toThrow('create isolated runtime worktree exited with 31')
+    expect(steps).toHaveBeenCalledWith('git-worktree', 'failed', 31, '')
+    expect(spawn.mock.calls[0]?.[0]).toBe('git')
+  })
+
+  it('keeps rich journal streaming when the helper exists', () => {
+    const spawn = vi.fn(() => ({ status: 0, stdout: null, stderr: null }))
+    const { runChecked } = runInNewContext(runner, {
+      restartRequestTarget: () => 'c'.repeat(40),
+      readUpdateState: () => undefined,
+      updateStatePath: () => 'state.json',
+      supervisorSourceRoot: 'runtime',
+      existsSync: () => true,
+      join,
+      process: { execPath: 'node.exe', env: {} },
+      hideRuntimeWindows: true,
+      missingLiveHelperReported: false,
+      spawnSync: spawn,
+      reportSupervisorStep: vi.fn(),
+      console: { error: vi.fn() },
+    }) as { runChecked: (cwd: string, bin: string, args: string[], label: string) => void }
+
+    runChecked('checkout', 'git', ['status'], 'create isolated runtime worktree')
+    expect(spawn).toHaveBeenCalledWith('node.exe', [
+      join('runtime', 'scripts', 'phoenix-update-live-command.mjs'),
+      JSON.stringify({
+        cwd: 'checkout', bin: 'git', args: ['status'], step: 'git-worktree',
+        target: 'c'.repeat(40), statePath: 'state.json',
+      }),
+    ], expect.objectContaining({ cwd: 'checkout', stdio: 'inherit' }))
+  })
+})
+
 describe('PHOENIX supervised updater runtime isolation', () => {
   it('does not launch a duplicate web host into a busy 3080 port or kill the current listener', () => {
     expect(supervisor).toContain("import { createServer } from 'node:net'")
