@@ -60,8 +60,6 @@ export function apply(ctx: Context, config: Config): void {
     return agent === undefined ? undefined
       : agent.session === undefined ? String(agent.id) : learningOwnerSessionId(agent.session)
   }
-  const taskForAssembly = (assembly: unknown): string | undefined =>
-    tasks.currentTask(taskSession(assembly))
   // A memory search must be driven by the owning conversation's most recent
   // HUMAN message, never by a previous task from a different chat or an agent.
   const userTextForAssembly = (assembly: unknown): string | undefined => {
@@ -301,13 +299,15 @@ export function apply(ctx: Context, config: Config): void {
     name: 'context:validated-procedures',
     order: 120,
     text: assembly => {
+      const currentMessage = userTextForAssembly(assembly)
+      if (currentMessage === undefined) return ''
       const projectId = projectForAssembly(assembly)
-      const taskContext = taskForAssembly(assembly)
+      const taskContext = tasks.resolvedReference(taskSession(assembly))?.task.text ?? currentMessage
       return formatProceduralContext(procedural.recommend({
         limit: 4,
         ...projectId === undefined ? {} : { projectId },
-        ...taskContext === undefined ? {} : { taskContext },
-      }))
+        taskContext,
+      }).filter(state => state.projectId === undefined || state.projectId === projectId))
     },
     interpolateVariables: false,
   })
@@ -315,13 +315,14 @@ export function apply(ctx: Context, config: Config): void {
     name: 'context:unverified-recovery-experience',
     order: 120.5,
     text: assembly => {
-      const taskContext = taskForAssembly(assembly)
-      if (taskContext === undefined) return ''
+      const currentMessage = userTextForAssembly(assembly)
+      if (currentMessage === undefined) return ''
       const projectId = projectForAssembly(assembly)
+      const taskContext = tasks.resolvedReference(taskSession(assembly))?.task.text ?? currentMessage
       return formatRecoveryCandidates(procedural.recoveryCandidates({
         taskContext, limit: 2,
         ...projectId === undefined ? {} : { projectId },
-      }))
+      }).filter(state => state.projectId === undefined || state.projectId === projectId))
     },
     interpolateVariables: false,
   })
@@ -329,9 +330,10 @@ export function apply(ctx: Context, config: Config): void {
     name: 'context:habit-guidance',
     order: 121,
     text: assembly => {
-      const taskContext = taskForAssembly(assembly)
-      if (taskContext === undefined) return ''
+      const currentMessage = userTextForAssembly(assembly)
+      if (currentMessage === undefined) return ''
       const projectId = projectForAssembly(assembly)
+      const taskContext = tasks.resolvedReference(taskSession(assembly))?.task.text ?? currentMessage
       const matched = experience.matchTask(taskContext, projectId)
       if (matched === undefined) return ''
       return [formatHabitGuidance(assessHabitExperience(matched)),
@@ -481,6 +483,8 @@ function normalizedMemoryRequest(text: string): string {
 function requestsPriorMemory(text: string): boolean {
   return /\\b(?:recuerd\\p{L}*|record\\p{L}*|memoria|recordatorio|anterior\\p{L}*|previo\\p{L}*|antes|pasado|histor\\p{L}*|habia\\p{L}*|dijiste|dije|elegiste|escogiste|elegimos|guardad\\p{L}*|preferencias?|costumbre\\p{L}*|usual|siempre|repetimos|funciono|funcionaba|remember|recall|memory|before|previous|earlier|last time|used to|usually|history)\\b/iu
     .test(normalizedMemoryRequest(text))
+    || /\\b(?:fue|era|fueron|eran|did (?:we|you))\\b.{0,80}\\b(?:favorit\\p{L}*|pronostic\\p{L}*|prediccion\\p{L}*|pick|seleccion\\p{L}*|eleccion|elegimos|escogimos|chose|picked)\\b/iu
+      .test(normalizedMemoryRequest(text))
 }
 
 function requestsPriorDecision(text: string): boolean {
