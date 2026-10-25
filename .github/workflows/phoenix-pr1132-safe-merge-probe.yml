@@ -1,0 +1,36 @@
+name: PR1132 read-only conflict audit
+on:
+  push:
+    branches:
+      - fix/phoenix-dual-core-integration-20261023
+    paths:
+      - .github/workflows/phoenix-pr1132-safe-merge-probe.yml
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Compare real merge with main without publishing anything
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          echo "BASE_HEAD=$(git rev-parse origin/main)"
+          echo "PR_HEAD=$(git rev-parse HEAD)"
+          git config user.name 'Phoenix Conflict Audit'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          if git merge --no-commit --no-ff origin/main; then
+            echo 'SAFE_MERGE_CLEAN=true'
+          else
+            echo 'SAFE_MERGE_CLEAN=false'
+            echo 'CONFLICT_PATHS_BEGIN'
+            git diff --name-only --diff-filter=U
+            echo 'CONFLICT_PATHS_END'
+            git diff --cc -- packages/core/tool-sports/src/index.ts | head -n 140 || true
+          fi
