@@ -22,7 +22,12 @@ export function phoenixWebLaunch(platform = process.platform, forwarded = []) {
   }
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+const entryPath = fileURLToPath(import.meta.url)
+const invokedPath = process.argv[1] ? resolve(process.argv[1]) : ''
+const isEntry = process.platform === 'win32'
+  ? invokedPath.toLowerCase() === resolve(entryPath).toLowerCase()
+  : invokedPath === entryPath
+if (isEntry) {
   const launch = phoenixWebLaunch(process.platform, process.argv.slice(2))
   const child = spawn(process.execPath, launch.args, {
     cwd: launch.cwd,
