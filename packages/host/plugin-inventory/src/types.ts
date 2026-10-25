@@ -252,6 +252,14 @@ export interface PhoenixUpdateEvent {
   readonly diagnostic?: string
 }
 
+/** One bounded, credential-redacted line emitted by a real updater child process. */
+export interface PhoenixUpdateConsoleLine {
+  readonly at: string
+  readonly step: string
+  readonly stream: 'stdout' | 'stderr'
+  readonly line: string
+}
+
 /** Sanitized updater state read from the repository-owned Git directory. */
 export interface PhoenixUpdateSnapshot {
   readonly status: PhoenixUpdateStatus
@@ -264,6 +272,7 @@ export interface PhoenixUpdateSnapshot {
   readonly detail?: string
   readonly at?: string
   readonly events?: readonly PhoenixUpdateEvent[]
+  readonly console?: readonly PhoenixUpdateConsoleLine[]
 }
 
 /** Result of asking the live Host to restart into a prepared update. */
