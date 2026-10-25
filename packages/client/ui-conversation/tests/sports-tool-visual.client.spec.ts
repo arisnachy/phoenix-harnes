@@ -32,13 +32,20 @@ describe('native sports chat presentation fallback',()=>{
     ]}
     expect(sportsCardsFromToolResult(code).map(x=>x.component)).toEqual(['sports_game_card','comparison'])
   })
-  it('shows an honest NO BET card for missing or failed odds queries',()=>{
+  it('does not generate misleading NO BET cards when no market price is returned',()=>{
     const empty=tool('sports_chat_odds',{total:0,outcomes:[],source:'ESPN'})
-    const card=sportsCardsFromToolResult(empty)[0]
-    expect(card?.component).toBe('smart_card')
-    expect(JSON.stringify(card)).toContain('NO BET')
-    expect(JSON.stringify(card)).toContain('No se inventaron')
-    expect(sportsCardsFromToolResult(tool('sports_chat_odds',{}, {failed:true}))[0]?.component).toBe('smart_card')
+    expect(sportsCardsFromToolResult(empty)).toEqual([])
+    expect(sportsCardsFromToolResult(tool('sports_chat_odds',{}, {failed:true}))).toEqual([])
+  })
+  it('renders an unpriced research ticket without a bookmaker or odds',()=>{
+    const researched={component:'sports_ticket_card',version:1,props:{
+      title:'PHOENIX · Ticket de pronósticos',source:'ESPN Site API',combinedOdds:'No disponible',
+      legs:[{event:'Puebla vs Atlas',selection:'Atlas',price:'Por verificar',bookmaker:'Sin casa confirmada',
+        league:'Liga MX',sport:'Fútbol',rationale:'Hipótesis pendiente de contrastar'}],
+      note:'SIN APUESTA REAL. Pronóstico pendiente de cotización.',
+    }}
+    expect(parseGenerativeUiBlock(researched)).not.toBeNull()
+    expect(sportsCardsFromToolResult(tool('sports_chat_ticket_research',{uiBlock:researched}))).toEqual([researched])
   })
   it('never invents or reconstructs cards from shell tools or arbitrary prose',()=>{
     expect(sportsCardsFromToolResult(tool('bash',{uiBlocks:[sportsGame]}))).toEqual([])
