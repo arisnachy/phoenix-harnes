@@ -181,3 +181,21 @@ test('ESPN missing event IDs do not produce invalid empty-id game cards',async()
   assert.equal(Object.hasOwn(out.items[0].props,'eventId'),false)
   assert.deepEqual(out.items[0].props.highlights,[])
 })
+
+test('sportsbook taxonomy groups sourced sports, countries and leagues without inventing player markets',()=>{
+  const odds=[
+    {eventId:'epl-1',bookmaker:'Casa',market:'h2h',selection:'Arsenal',price:1.8,
+      home:'Arsenal',away:'Chelsea',time:'20:00',updatedAt:'2026-10-24',sportKey:'soccer_epl'},
+    {eventId:'mlb-1',bookmaker:'Casa',market:'h2h',selection:'Milwaukee',price:2.1,
+      home:'Milwaukee',away:'Tampa Bay',time:'21:00',updatedAt:'2026-10-24',sportKey:'baseball_mlb'},
+  ]
+  const selections=odds.map(({eventId,bookmaker,market,selection})=>({eventId,bookmaker,market,selection}))
+  const result=pricedTicket(selections,odds)
+  assert.equal(result.card.props.legs[0].sport,'Fútbol')
+  assert.equal(result.card.props.legs[0].country,'Inglaterra')
+  assert.equal(result.card.props.legs[0].league,'Premier League')
+  assert.equal(result.card.props.legs[1].sport,'Béisbol')
+  assert.equal(result.card.props.legs[1].league,'MLB')
+  assert.equal(result.card.props.legs[0].player,undefined)
+  assert.doesNotMatch(result.warning,/mismo encuentro/)
+})
