@@ -78,14 +78,20 @@ it('hot-reloads a real client-plugin source edit without refreshing the page', a
     .map(path => join(REPO_ROOT, path))
   const originalClientBundles = await Promise.all(clientBundlePaths.map(async path => [path, await readFile(path)] as const))
   const originalSource = await readFile(sourcePath)
-  const oldText = '¿Qué quieres construir hoy en Phoenix?'
-  const sourceNeedle = '<p className={css.subtitle}>¿Qué quieres construir hoy en Phoenix?</p>'
+  // The marketing subtitle is allowed to change independently of HMR.
+  // Exercise a single real JSX text node rather than pinning yesterday's copy.
+  const sourceText = originalSource.toString()
+  const subtitles = [...sourceText.matchAll(/<p className=\{css\.subtitle\}>([^<]+)<\/p>/gu)]
+  if (subtitles.length !== 1 || subtitles[0]?.[1] === undefined) {
+    throw new Error('HMR source must have exactly one static hero subtitle')
+  }
+  const sourceNeedle = subtitles[0][0]
+  const oldText = subtitles[0][1]
   const newText = `HMR UPDATED ${'x'.repeat(80)}`
-  const updatedSource = originalSource.toString().replace(
+  const updatedSource = sourceText.replace(
     sourceNeedle,
     `<p className={css.subtitle}>${newText}</p>`,
   )
-  if (updatedSource === originalSource.toString()) throw new Error(`HMR source lacks ${JSON.stringify(sourceNeedle)}`)
 
   const subprocessCtx = new Context()
   let subprocessFiber: Fiber | undefined
