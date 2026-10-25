@@ -172,3 +172,12 @@ test('sports native tool instructions never tell Kira to print raw JSON or code 
   assert.doesNotMatch(modelFacing,/instruction:'[^']*(?:reproduce los bloques|JSON intacto|en fence|entre fences)/u)
   assert.match(modelFacing,/Phoenix renderiza uiBlocks automáticamente/)
 })
+
+
+test('ESPN missing event IDs do not produce invalid empty-id game cards',async()=>{
+  const mock=await response({events:[{name:'Match without published ID',date:'2026-10-24T20:00:00Z',competitions:[{competitors:[{homeAway:'home',team:{name:'Home'}},{homeAway:'away',team:{name:'Away'}}]}]}]})
+  const out=await chatGames('soccer','mex.1','2026-10-24',{},mock)
+  assert.equal(out.items.length,1)
+  assert.equal(Object.hasOwn(out.items[0].props,'eventId'),false)
+  assert.deepEqual(out.items[0].props.highlights,[])
+})

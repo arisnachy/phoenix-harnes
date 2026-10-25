@@ -163,12 +163,29 @@ export async function chatGames(sport:string,league:string,requestedDate?:string
           away:String(v.displayValue??v.value??'—'),home:String(homePeriods[i]?.displayValue??homePeriods[i]?.value??'—')})):[]
       const sportNames:Record<string,string>={soccer:'Fútbol',basketball:'Baloncesto',football:'Fútbol americano',hockey:'Hockey',
         tennis:'Tenis',mma:'MMA',racing:'Automovilismo',golf:'Golf',baseball:'Béisbol'}; const sportLabel=sportNames[sport]||sport
+      const highlights = (comp?.competitors ?? []).flatMap(team =>
+        (team.leaders ?? []).slice(0, 2).flatMap(group =>
+          (group.leaders ?? []).slice(0, 1).map(leader => {
+            const headshot = leader.athlete?.headshot?.href
+            return {
+              label: title(group.name),
+              value: title(leader.athlete?.displayName),
+              ...(leader.displayValue ? { detail: title(leader.displayValue) } : {}),
+              ...(logosEnabled(env) && headshot && /^https:\/\/a\.espncdn\.com\//u.test(headshot)
+                ? { image: headshot }
+                : {}),
+            }
+          }),
+        ),
+      )
       rows.push({component:'sports_game_card',version:1,props:{
         title:title(e.name,95),subtitle:title(league,45)+' · '+sportLabel,
         status:title(e.status?.type?.description,55),when:localTime(e.date),
         venue:title(comp?.venue?.fullName),home:side(home),away:side(away),
         source:'ESPN Site API · '+new Date().toISOString(),
-        sport,eventId:String(e.id??''),periods,highlights:(comp?.competitors??[]).flatMap(team=>(team.leaders??[]).slice(0,2).flatMap(group=>(group.leaders??[]).slice(0,1).map(leader=>({label:title(group.name),value:title(leader.athlete?.displayName),...(leader.displayValue?{detail:title(leader.displayValue)}:{}),...(logosEnabled(env)&&/^https:\/\/a\.espncdn\.com\//u.test(leader.athlete?.headshot?.href??'')?{image:leader.athlete!.headshot!.href}:{})})))),
+        sport,
+        ...(e.id !== undefined && String(e.id).trim() !== '' ? { eventId: String(e.id) } : {}),
+        periods, highlights,
         ...(comp?.broadcasts?.length?{broadcast:comp.broadcasts.flatMap(x=>x.names??[]).slice(0,3).join(', ')}:{}),
         askPrompt:'Kira, amplía el análisis verificado del evento '+title(e.id,50)+' de '+league+'. Incluye métricas específicas de '+sport+' con sus fuentes.',
       }})
@@ -216,8 +233,8 @@ export function pricedTicket(selections:MarketSelection[],quotes:MarketOutcome[]
   const used=new Set<string>(),events=new Set<string>()
   const legs=selections.map(sel=>{
     const matches=quotes.filter(o=>o.eventId===sel.eventId&&o.bookmaker===sel.bookmaker&&o.market===sel.market&&o.selection===sel.selection&&(o.point??null)===(sel.point??null))
-    if(matches.length!==1)throw Error('Selección no verificable en cuotas actuales; no se crea ticket ficticio.')
-    const match=matches[0]!
+    const match=matches[0]
+    if(matches.length!==1||!match)throw Error('Selección no verificable en cuotas actuales; no se crea ticket ficticio.')
     const identity=[sel.eventId,sel.market,sel.selection,sel.point??''].join('|')
     if(used.has(identity))throw Error('Selección duplicada')
     used.add(identity);events.add(sel.eventId);combined*=match.price
