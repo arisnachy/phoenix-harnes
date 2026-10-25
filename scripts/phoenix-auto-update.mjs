@@ -29,6 +29,7 @@ import process from 'node:process'
 import { gitSafeDirectoryEnvironment } from './phoenix-git-safe-directory.mjs'
 import { classifyStableUpdate } from './phoenix-update-policy.mjs'
 import { diagnoseStalledPhoenixActivation, recordPhoenixUpdateStep, writePhoenixUpdateState } from './phoenix-update-state.mjs'
+import { pinPhoenixUpdateLiveHelper } from './phoenix-update-live-pin.mjs'
 
 const EXPECTED_REPOSITORY = process.env.PHOENIX_UPDATE_REPOSITORY ?? 'arisnachy/phoenix-harnes'
 const REMOTE = process.env.PHOENIX_UPDATE_REMOTE ?? 'origin'
@@ -83,6 +84,7 @@ function normalizeMode(value) {
 
 let activeLiveUpdateStep
 let missingLiveHelperReported = false
+let pinnedLiveHelper
 function command(bin, args, options = {}) {
   const cwd = options.cwd ?? process.cwd()
   const installRoot = process.env.PHOENIX_INSTALL_ROOT?.trim()
@@ -102,11 +104,14 @@ function command(bin, args, options = {}) {
     } catch { /* preserve old command path without update state */ }
   }
   const liveEligible = liveTarget !== undefined && liveState !== undefined
-  const liveHelper = fileURLToPath(new URL('./phoenix-update-live-command.mjs', import.meta.url))
-  // A source checkout updated from an older release may not contain this
-  // optional console journal helper yet. Missing telemetry cannot be allowed
-  // to prevent Git, dependency installation or candidate validation.
-  const streamLive = liveEligible && existsSync(liveHelper)
+  // Pin a matched helper/state-module pair in the owner's stable Git dir.
+  // The source worktree may be replaced while this updater process is alive.
+  const helperCandidate = liveEligible
+    ? pinPhoenixUpdateLiveHelper(fileURLToPath(new URL('..', import.meta.url)), liveState)
+    : undefined
+  if (helperCandidate !== undefined) pinnedLiveHelper = helperCandidate
+  const liveHelper = pinnedLiveHelper
+  const streamLive = liveEligible && liveHelper !== undefined && existsSync(liveHelper)
   const directStream = liveEligible && !streamLive
   if (directStream && !missingLiveHelperReported) {
     missingLiveHelperReported = true
