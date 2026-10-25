@@ -182,6 +182,7 @@ export function UpdateFooterAction({
     clearRestartReconnectGrace()
     setConnectionLost(false)
     setSnapshot(next)
+    if (next.status === 'error' || next.status === 'rollback-failed') setDetailsOpen(true)
   }, [])
 
   const reportReadFailure = useCallback((_error: unknown) => {
@@ -328,6 +329,7 @@ export function UpdateFooterAction({
       : snapshot.detail
   // The supervisor records both the specific failed command and a wrapper
   // activation failure. Prefer the actionable command and its exit code.
+  const lastDiagnostic = events.find(event => event.result === 'failed' && event.diagnostic !== undefined)
   const lastFailedStep = errorState
     ? events.find(event => event.result === 'failed'
       && event.step !== 'runtime-activation' && event.step !== 'error' && event.step !== 'rollback-failed')
@@ -386,7 +388,22 @@ export function UpdateFooterAction({
                 </>}
             </p>
           )}
-          {connectionLost && <p className={css.reconnecting}>{t('updateReconnect')}</p>}
+          {lastDiagnostic?.diagnostic !== undefined && (
+            <section className={css.diagnosticPanel} aria-label={t('updateDiagnosticTitle')}>
+              <div className={css.diagnosticHeader}>
+                <strong>{t('updateDiagnosticTitle')}</strong>
+                <button
+                  type="button"
+                  className={css.diagnosticCopy}
+                  onClick={() => { void navigator.clipboard?.writeText(lastDiagnostic.diagnostic ?? '') }}
+                >
+                  {t('updateDiagnosticCopy')}
+                </button>
+              </div>
+              <pre className={css.diagnosticText} data-testid="phoenix-update-diagnostic">{lastDiagnostic.diagnostic}</pre>
+            </section>
+          )}
+          {connectionLost && <p className={css.reconnecting}>{t('updateReconnect')}</p>
           <div className={css.journalHeader}>{t('updateJournalTitle')}</div>
           {events.length === 0
             ? <p className={css.journalEmpty}>{t('updateJournalEmpty')}</p>
