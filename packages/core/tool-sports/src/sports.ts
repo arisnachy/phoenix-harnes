@@ -153,7 +153,7 @@ export async function chatGames(sport:string,league:string,requestedDate?:string
         const name=title(c?.team?.displayName??c?.team?.name)
         const logo=c?.team?.logo??c?.team?.logos?.[0]?.href
         const allowed=!!logo&&/^https:\/\/a\.espncdn\.com\//u.test(logo)&&logosEnabled(env)
-        return {label:name,...(c?.score===undefined||e.status?.type?.state==='pre'?{}:{score:String(c.score)}),...(allowed?{logo}:{logo}) ,...(c?.records?.[0]?.summary?{meta:c.records[0].summary}:{})}
+        return {label:name,...(c?.score===undefined||e.status?.type?.state==='pre'?{}:{score:String(c.score)}),...(allowed?{logo}:{}) ,...(c?.records?.[0]?.summary?{meta:c.records[0].summary}:{})}
       }
       rows.push({component:'sports_game_card',version:1,props:{
         title:title(league,45)+' · '+title(e.name,95),subtitle:title(sport,45),
