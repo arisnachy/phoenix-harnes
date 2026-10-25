@@ -46,4 +46,8 @@ jobs:
           git diff --cached --stat
           if git diff --cached --quiet; then echo 'No automatic changes'; exit 0; fi
           git -c user.name='Phoenix CI Repair' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'style(pr1132): apply safe lint autofixes'
+          # Rebase the generated fixes onto any concurrent branch updates.
+          # Never force-push or overwrite edits made while lint was running.
+          git fetch origin fix/phoenix-dual-core-integration-20261023
+          git rebase origin/fix/phoenix-dual-core-integration-20261023
           git push origin HEAD:fix/phoenix-dual-core-integration-20261023
