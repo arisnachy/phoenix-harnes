@@ -99,7 +99,7 @@ describe('PHOENIX updater state persistence', () => {
     expect(readFileSync(path, 'utf8')).toBe(firstState)
     expect(readFileSync(requestPath, 'utf8')).toBe(firstRequest)
     const events = readFileSync(join(root, 'phoenix-update-events.jsonl'), 'utf8')
-      .trim().split('\\n').map(line => JSON.parse(line) as Record<string, unknown>)
+      .trim().split('\n').map(line => JSON.parse(line) as Record<string, unknown>)
     expect(events.filter(event => event.step === 'restarting' && event.result === 'started')).toHaveLength(1)
 
     writePhoenixUpdateState(path, { schema: 1, status: 'applying', target })
@@ -110,7 +110,7 @@ describe('PHOENIX updater state persistence', () => {
     writePhoenixUpdateState(path, { schema: 1, status: 'ready', target })
     expect(JSON.parse(readFileSync(path, 'utf8'))).toMatchObject({ status: 'restarting' })
     expect(readFileSync(join(root, 'phoenix-update-events.jsonl'), 'utf8')
-      .split('\\n').filter(line => line.includes('"step":"restarting"'))).toHaveLength(2)
+      .split('\n').filter(line => line.includes('"step":"restarting"'))).toHaveLength(2)
   })
 
   it('suppresses and clears duplicate restart requests when the same SHA is already active', () => {
