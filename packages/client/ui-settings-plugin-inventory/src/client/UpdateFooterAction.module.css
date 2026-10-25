@@ -313,3 +313,13 @@
 @media (prefers-reduced-motion: reduce) {
   .spinner { animation: none; }
 }
+
+.failureNotice {
+  margin: 6px 0;
+  padding: 6px 8px;
+  border-left: 2px solid var(--dsw-alias-state-error-primary);
+  border-radius: 3px;
+  color: var(--dsw-alias-state-error-primary);
+  background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 6%, transparent);
+  font-weight: 580;
+}
