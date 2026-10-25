@@ -74,6 +74,9 @@ describe('optional live update helper fallback', () => {
       readUpdateState: () => ({ target: 'a'.repeat(40) }),
       updateStatePath: () => 'state.json',
       supervisorSourceRoot: 'old-runtime',
+      pinPhoenixUpdateLiveHelper: () => undefined,
+      validPinnedPhoenixUpdateLiveHelper: () => false,
+      pinnedLiveHelper: undefined,
       existsSync: () => false,
       join,
       process: { execPath: 'node.exe', env: {} },
@@ -103,6 +106,9 @@ describe('optional live update helper fallback', () => {
       readUpdateState: () => undefined,
       updateStatePath: () => 'state.json',
       supervisorSourceRoot: 'old-runtime',
+      pinPhoenixUpdateLiveHelper: () => undefined,
+      validPinnedPhoenixUpdateLiveHelper: () => false,
+      pinnedLiveHelper: undefined,
       existsSync: () => false,
       join,
       process: { execPath: 'node.exe', env: {} },
@@ -121,13 +127,16 @@ describe('optional live update helper fallback', () => {
       expect.objectContaining({ cwd: 'checkout', stdio: 'inherit' }))
   })
 
-  it('keeps rich journal streaming when the helper exists', () => {
+  it('streams rich journal output from a pinned helper outside the disposable runtime', () => {
     const spawn = vi.fn(() => ({ status: 0, stdout: null, stderr: null }))
     const { runChecked } = runInNewContext(runner, {
       restartRequestTarget: () => 'c'.repeat(40),
       readUpdateState: () => undefined,
       updateStatePath: () => 'state.json',
       supervisorSourceRoot: 'runtime',
+      pinPhoenixUpdateLiveHelper: () => join('durable-git', 'verified-pair', 'phoenix-update-live-command.mjs'),
+      validPinnedPhoenixUpdateLiveHelper: () => true,
+      pinnedLiveHelper: undefined,
       existsSync: () => true,
       join,
       process: { execPath: 'node.exe', env: {} },
@@ -140,7 +149,7 @@ describe('optional live update helper fallback', () => {
 
     runChecked('checkout', 'git', ['status'], 'create isolated runtime worktree')
     expect(spawn).toHaveBeenCalledWith('node.exe', [
-      join('runtime', 'scripts', 'phoenix-update-live-command.mjs'),
+      join('durable-git', 'verified-pair', 'phoenix-update-live-command.mjs'),
       JSON.stringify({
         cwd: 'checkout', bin: 'git', args: ['status'], step: 'git-worktree',
         target: 'c'.repeat(40), statePath: 'state.json',
