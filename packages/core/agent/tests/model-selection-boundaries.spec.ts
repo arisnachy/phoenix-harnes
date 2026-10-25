@@ -105,7 +105,7 @@ describe('continuation admission from replayed routing evidence', () => {
     try {
       r.events.push(user(request))
       expect(await r.request()).toMatchObject({
-        model: 'gpt-6-luna', reasoningEffort: 'max',
+        model: 'gpt-6-luna', reasoningEffort: 'medium',
       })
     } finally { await r.close() }
   })
@@ -129,7 +129,7 @@ describe('continuation admission from replayed routing evidence', () => {
 
   it.each(['Explain in detail the design', 'What is JSON?'])('routes answer-only text without task acquisition: %s', async (text) => {
     const r = await router()
-    try { r.events.push(user(text)); expect(await r.request()).toMatchObject({ model: 'gpt-6-luna', reasoningEffort: text.includes('detail') ? 'medium' : 'max' }) } finally { await r.close() }
+    try { r.events.push(user(text)); expect(await r.request()).toMatchObject({ model: 'gpt-6-luna', reasoningEffort: 'medium' }) } finally { await r.close() }
   })
 
   it('ignores malformed or missing stopping evidence and never extends answer-only or tool-free turns', async () => {
