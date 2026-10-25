@@ -85,29 +85,29 @@ type SportsLineup = { team:string;confirmed:boolean;players:SportsPlayer[] }
 type SportsBullpen = { team:string;pitchers:SportsPlayer[];note:string }
 type SportsResearch = { favorite:string;method:string;source:string;evidence:string[] }
 type SportsGameCard = {
-  component: 'sports_game_card'; version: 1
+  component: 'sports_game_card', version: 1
   props: {
-    title: string; subtitle?: string; status?: string; when: string; venue?: string
-    home: SportsSide; away: SportsSide; source: string
+    title: string, subtitle?: string, status?: string, when: string, venue?: string
+    home: SportsSide, away: SportsSide, source: string
     highlights?: Array<{ label: string; value: string; image?: string; detail?: string }>
-    pitchers?: SportsPitcher[]; lineups?: SportsLineup[]; bullpen?: SportsBullpen[]
-    sport?: string; league?: string; country?: string; eventId?: string; broadcast?: string; research?: SportsResearch
+    pitchers?: SportsPitcher[], lineups?: SportsLineup[], bullpen?: SportsBullpen[]
+    sport?: string, league?: string, country?: string, eventId?: string, broadcast?: string, research?: SportsResearch
     periods?: Array<{ label:string;away:string;home:string }>
-    note?: string; askPrompt?: string
+    note?: string, askPrompt?: string
   }
 }
 type SportsOddsCard = {
-  component: 'sports_odds_card'; version: 1
-  props: { title:string;source:string;subtitle?:string;note:string
+  component: 'sports_odds_card', version: 1
+  props: { title:string,source:string,subtitle?:string,note:string
     rows:Array<{ event:string;market:string;selection:string;bookmaker:string;price:string;point?:string }> }
 }
 type SportsTicketCard = {
-  component: 'sports_ticket_card'; version: 1
+  component: 'sports_ticket_card', version: 1
   props: {
-    title: string; subtitle?: string; source: string
-    legs: Array<{ event: string; selection: string; price: string; bookmaker: string; when?: string; image?: string;
-      sport?:string;country?:string;league?:string;market?:string;player?:string }>
-    combinedOdds: string; stake?: string; grossReturn?: string; note: string
+    title: string, subtitle?: string, source: string
+    legs: Array<{ event: string, selection: string, price: string, bookmaker: string, when?: string, image?: string,
+      sport?:string,country?:string,league?:string,market?:string,player?:string }>
+    combinedOdds: string, stake?: string, grossReturn?: string, note: string
     askPrompt?: string
   }
 }
