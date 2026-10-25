@@ -110,7 +110,10 @@ describe('MiniBrowser through the real Loader and WebServer composition', () => 
   })
 
   it('serves state and a real frame, rejects an invalid target, and removes routes on dispose', async () => {
-    root = await mkdtemp(join(process.env.TEMP ?? 'C:\\Windows\\Temp', 'phoenix-mini-browser-loader-'))
+    const tempRoot = process.platform === 'win32'
+      ? (process.env.TEMP ?? process.env.TMP ?? 'C:\\Windows\\Temp')
+      : (process.env.TMPDIR ?? '/tmp')
+    root = await mkdtemp(join(tempRoot, 'phoenix-mini-browser-loader-'))
     isolatedTmp.dir = root
 
     let listCalls = 0
