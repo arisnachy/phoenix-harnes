@@ -29,8 +29,8 @@ function candidateExists(candidate: string): boolean {
   }
 }
 
-/** Default health-probe timeout; callers can override it for slower Windows hosts. */
-export const DEFAULT_BASH_HEALTH_CHECK_TIMEOUT_MS = 2_000
+/** Allow a cold native Git Bash process to initialize on slower Windows CI/desktop hosts. */
+export const DEFAULT_BASH_HEALTH_CHECK_TIMEOUT_MS = 8_000
 
 /**
  * Probe a native Bash executable without creating captured child-process pipes.
