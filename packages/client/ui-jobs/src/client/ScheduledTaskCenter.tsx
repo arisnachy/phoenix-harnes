@@ -128,6 +128,7 @@ export function ScheduledTaskCenter({ connection, t }: ScheduledTaskCenterProps)
 
   /** Fetch only currently selectable root ids; the Host revalidates each choice on create. */
   const loadTargets = async (): Promise<void> => {
+    setActionError(undefined)
     try {
       const response = await connection.rpc.call('/phoenix-tasks', 'targets', {})
       if (!response.ok) throw new Error(response.error.message)
@@ -149,6 +150,7 @@ export function ScheduledTaskCenter({ connection, t }: ScheduledTaskCenterProps)
     const verified = parseTasks(read.value)
     if (verified.some(accept) !== shouldExist) throw new Error(t('task.center.unconfirmed'))
     setRows(verified)
+    setError(undefined)
   }
 
   const submit = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
