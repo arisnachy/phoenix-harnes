@@ -36,7 +36,7 @@ export const zh = {
   'task.center.create': '创建任务',
   'task.center.saving': '保存中…',
   'task.center.list': '已保存的任务',
-  'task.center.history': '结果与历史', 
+  'task.center.history': '结果与历史',
   'task.center.user': '用户创建',
   'task.center.system': '系统创建',
   'task.center.loading': '正在读取任务…',
