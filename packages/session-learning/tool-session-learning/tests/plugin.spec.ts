@@ -157,6 +157,16 @@ describe('tool-session-learning plugin', () => {
     expect(ctx.learningMemory.recall(10).some(item => item.summary.includes('production repair'))).toBe(true)
     const found = ctx.learningMemory.searchCognitive('production repair', 5)
     expect(found.some(hit => hit.record.summary.includes('production repair'))).toBe(true)
+
+    // The same session can retrieve the stored lesson when explicitly asked.
+    session.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: '¿Cuál fue la solución anterior del production repair?' }],
+      source: { kind: 'user' },
+    }), { surfaceOp: 'append' })
+    const recalledPrompt = renderContextSnapshot(await ctx.systemPrompt.assemble({
+      agent: { id: String(session.id), session },
+    } as never))
+    expect(recalledPrompt).toContain('The saved production repair')
   })
 
   it('registers guided procedural teaching with a procedure-specific contract', async () => {
