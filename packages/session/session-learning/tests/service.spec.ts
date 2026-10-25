@@ -265,13 +265,19 @@ describe('LearningMemoryService', () => {
     await ctx.plugin(SessionStore)
     await ctx.plugin(LearningMemoryService, { path })
     const session = ctx.sessions.create(SessionId('historic-game'), { meta: { cwd: '/workspace/sports' } })
+    session.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: '¿Quién es tu favorito para Brewers–Rays?' }],
+      source: { kind: 'user' },
+    }), { surfaceOp: 'append' })
     session.append('assistant/message', createAssistantMessage({
-      content: [{ type: 'text', text: 'Mi selección para Brewers–Rays es Milwaukee.' }],
+      content: [{ type: 'text', text: 'Voy con Milwaukee.' }],
       source: { provider: 'test', model: 'test-model' },
     }), { surfaceOp: 'append' })
     await ctx.learningMemory.ready()
     const decision = ctx.learningMemory.searchCognitive('Milwaukee', 10, { kind: 'decision', projectId: 'sports' })
     expect(decision).toHaveLength(1)
+    expect(ctx.learningMemory.searchCognitive('Brewers Rays', 10, { kind: 'decision', projectId: 'sports' }))
+      .toHaveLength(1)
     const recordsBefore = ctx.learningMemory.allCognitiveRecords().length
     // Reload and session-event replay must not duplicate the decision record.
     await ctx.learningMemory.ready()
