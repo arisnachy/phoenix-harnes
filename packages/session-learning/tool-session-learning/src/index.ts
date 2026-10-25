@@ -153,7 +153,10 @@ export function apply(ctx: Context, config: Config): void {
           pendingToolNames.set(learningOwnerId, names)
         }
         names.set(`${sessionId}:${data.callId}`, data.name)
-        if (names.size > 128) names.delete(names.keys().next().value!)
+        if (names.size > 128) {
+          const oldestKey = names.keys().next().value
+          if (oldestKey !== undefined) names.delete(oldestKey)
+        }
       }
       return
     }
