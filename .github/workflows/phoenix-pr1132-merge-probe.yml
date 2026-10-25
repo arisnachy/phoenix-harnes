@@ -29,3 +29,36 @@ jobs:
             exit 1
           }
           echo 'MERGE_CONFLICT_FREE'
+
+  typecheck:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Verify strict source and test TypeScript without weakened rules
+        run: pnpm run build:lib
+  docs-and-lint:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Verify exact bilingual pairing
+        run: pnpm run verify-translation-pairing
+      - name: Verify strict lint
+        run: pnpm run lint:contracts-ready
