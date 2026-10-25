@@ -10,13 +10,13 @@ const makeMessage = (chatId: number, text: string, type = 'private', fromId = ch
 function fixture() {
   const values = new Map<string, string>([[TELEGRAM_BOT_TOKEN_REF, TOKEN]])
   const creds = {
-    describe: async (key: string) => ({ configured: values.has(String(key)) }),
-    resolve: async (key: string) => values.has(String(key)) ? { value: values.get(String(key))! } : undefined,
-    set: async (key: string, value: string) => { values.set(String(key), value) },
-    unset: async (key: string) => { values.delete(String(key)) },
+    describe: async (key: string) => ({ configured: values.has(key) }),
+    resolve: async (key: string) => values.has(key) ? { value: values.get(key)! } : undefined,
+    set: async (key: string, value: string) => { values.set(key, value) },
+    unset: async (key: string) => { values.delete(key) },
   }
   const messages: Array<{ role: string; source: { kind: string }; content: Array<{ type: 'text'; text: string }> }> = []
-  const events: Array<{ type: 'turn/end'; data: { reason:
+  const events: Array<{ type: 'turn/end', data: { reason:
     | { kind: 'completed' }
     | { kind: 'error'; error: { code: string } }
   } }> = []
@@ -37,27 +37,27 @@ function fixture() {
   const registered = new Map<string, typeof agent>()
   const conflicts = new Set<string>()
   const agents = {
-    get: vi.fn((sessionId: string) => registered.get(String(sessionId))),
+    get: vi.fn((sessionId: string) => registered.get(sessionId)),
     create: vi.fn(async (options: { sessionId: string; agentOptions: typeof agent.options }) => {
       agent.id = options.sessionId
       agent.options = options.agentOptions
-      registered.set(String(options.sessionId), agent)
+      registered.set(options.sessionId, agent)
       return { agent, dispose: async () => undefined }
     }),
   }
   const sessions = {
     create: vi.fn(async (request: { payload: { sessionId: string } }) => {
       const sessionId = request.payload.sessionId
-      if (conflicts.has(String(sessionId))) {
+      if (conflicts.has(sessionId)) {
         return { result: { ok: false as const, error: { code: 'session-conflict' } } }
       }
-      if (!registered.has(String(sessionId))) {
+      if (!registered.has(sessionId)) {
         await agents.create({ sessionId, agentOptions: { provider: 'openai-codex', model: 'gpt-6-luna' } })
       }
       return { result: { ok: true as const, value: { sessionId } } }
     }),
     prompt: vi.fn(async (request: { payload: { sessionId: string; content: Array<{ type: 'text'; text: string }> } }) => {
-      const active = registered.get(String(request.payload.sessionId))
+      const active = registered.get(request.payload.sessionId)
       if (active === undefined) return { result: { ok: false as const, error: { code: 'session-not-found' } } }
       active.followup({ role: 'user', source: { kind: 'user' }, content: request.payload.content } as never)
       return { result: { ok: true as const, value: { accepted: true as const } } }
@@ -126,7 +126,7 @@ describe('Telegram owner-paired Host inbox', () => {
     }))
     expect(f.sessions.create).toHaveBeenCalledTimes(1)
     expect(f.sessions.prompt).toHaveBeenCalledWith(expect.objectContaining({
-      payload: expect.objectContaining({ mode: 'queue', content: [{ type: 'text', text: 'Corrige la compilación' }] }),
+      payload: expect.objectContaining({ mode: 'queue', content: [{ type: 'text', text: 'Corrige la compilación' }] }) as unknown,
     }))
     expect(f.values.get('PHOENIX_TELEGRAM_SESSION_ID')).toBeDefined()
     expect(f.typing).toHaveBeenCalledWith(TOKEN, 12345, expect.any(AbortSignal))
