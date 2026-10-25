@@ -20,7 +20,6 @@ const playerImage=(id:number,env:NodeJS.ProcessEnv)=>mediaEnabled(env)
  ? 'https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_213,q_auto:best/v1/people/'+id+'/headshot/67/current'
  : undefined
 const fmt=(v:unknown)=>typeof v==='number'||typeof v==='string'?String(v).slice(0,18):'—'
-const numeric=(v:unknown)=>typeof v==='number'||typeof v==='string'&&v.trim()!==''?Number(v):NaN
 function orderedHitters(team:BoxTeam|undefined,teamName:string,env:NodeJS.ProcessEnv):SportsLineup {
   const order=Array.isArray(team?.battingOrder)?team.battingOrder:[]
   const players=order.slice(0,9).flatMap(id=>{
