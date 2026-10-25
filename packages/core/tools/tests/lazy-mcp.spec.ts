@@ -113,6 +113,49 @@ describe('lazy MCP tool presentation', () => {
     expect(result).toMatchObject({ isError: false, value: 'ran:mcp__server__alpha' })
   })
 
+  it('returns compact discovery metadata without duplicating the complete MCP schema', async () => {
+    const { ctx, agent } = await mount()
+    const definition = tool('mcp__server__detailed', 'Detailed external capability')
+    definition.parameters = {
+      type: 'object',
+      properties: { payload: { type: 'string', description: 'x'.repeat(12_000) } },
+    }
+    ctx.tools.register(definition)
+    ctx.tools.register(tool('mcp__server__other', 'other MCP'))
+
+    const complete = ctx.tools.schemas(agent).find(item => item.name === definition.name)
+    expect(complete).toBeDefined()
+    const discovery = await ctx.tools.execute({
+      signal,
+      callId: CallId('compact-search'),
+      name: 'tool_search',
+      agent,
+      arguments: { names: [definition.name] },
+    })
+    expect(discovery).toMatchObject({
+      isError: false,
+      value: { selected: 1, tools: [{ name: definition.name, schemaDeferred: true }] },
+    })
+    const resultText = JSON.stringify(discovery.value)
+    expect(resultText).not.toContain('x'.repeat(100))
+    expect(resultText.length).toBeLessThan(JSON.stringify(complete).length / 20)
+
+    // The schema is still complete in the immediately following model request
+    // and its tool remains executable. This must not disable MCP functionality.
+    const assembly = await ctx.systemPrompt.assemble({ scope: agent })
+    const active = assembly.tools.find(item => item.name === definition.name)
+    expect((active?.parameters.properties as Record<string, { description?: string }>).payload?.description)
+      .toHaveLength(12_000)
+    const executed = await ctx.tools.execute({
+      signal,
+      callId: CallId('compact-call'),
+      name: definition.name,
+      agent,
+      arguments: { payload: 'test' },
+    })
+    expect(executed).toMatchObject({ isError: false, value: 'ran:mcp__server__detailed' })
+  })
+
   it('keeps the unscoped registry and host execution complete for a large MCP catalog', async () => {
     const { ctx } = await mount()
     ctx.tools.register(tool('mcp__server__alpha', 'alpha MCP'))
