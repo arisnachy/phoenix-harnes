@@ -15,9 +15,9 @@ export interface EspnMarketQuote {
   time: string
   updatedAt: string
 }
-type OddsSide = {moneyLine?: number | string; moneyline?: number | string; spreadOdds?: number|string}
+type OddsSide = { moneyLine?: number | string; moneyline?: number | string; spreadOdds?: number|string }
 type EspnOdds = {
-  provider?: {name?: string;displayName?: string;id?: string|number}
+  provider?: { name?: string;displayName?: string;id?: string|number }
   details?: string
   homeTeamOdds?: OddsSide;awayTeamOdds?: OddsSide
   overOdds?: number|string;underOdds?: number|string
@@ -25,9 +25,9 @@ type EspnOdds = {
   spread?: number|string
   lastUpdated?: string;lastUpdate?: string;updatedAt?: string
 }
-type ECompetition={id?:string|number;competitors?:Array<{homeAway?:string;team?:{displayName?:string;name?:string}}>;odds?:EspnOdds[]}
-type EEvent={id?:string|number;date?:string;competitions?:ECompetition[]}
-type ESPNBoard={events?:EEvent[]}
+type ECompetition={ id?:string|number;competitors?:Array<{ homeAway?:string;team?:{ displayName?:string;name?:string } }>;odds?:EspnOdds[] }
+type EEvent={ id?:string|number;date?:string;competitions?:ECompetition[] }
+type ESPNBoard={ events?:EEvent[] }
 const slugs:Readonly<Record<string,readonly [string,string]>>={
   baseball_mlb:['baseball','mlb'],basketball_nba:['basketball','nba'],
   basketball_wnba:['basketball','wnba'],americanfootball_nfl:['football','nfl'],
@@ -45,11 +45,11 @@ const americanToDecimal=(value:unknown):number|null=>{
 }
 const str=(v:unknown)=>typeof v==='string'?v.slice(0,170):String(v??'').slice(0,170)
 const isRecord=(v:unknown):v is Record<string,unknown>=>!!v&&typeof v==='object'&&!Array.isArray(v)
-const list=(v:unknown):EspnOdds[]=>Array.isArray(v)?v.filter(isRecord) as EspnOdds[]:isRecord(v)?[v as EspnOdds]:[]
+const list=(v:unknown):EspnOdds[]=>Array.isArray(v)?v.filter(isRecord):isRecord(v)?[v]:[]
 const safeId=(v:unknown)=>/^\d{1,16}$/u.test(String(v??''))?String(v):null
 const localTime=(value:string):string=>{
   const time=new Date(value)
-  return Number.isFinite(time.getTime())?new Intl.DateTimeFormat('es-DO',{timeZone:'America/Santo_Domingo',dateStyle:'medium',timeStyle:'short'}).format(time):'Hora no confirmada'
+  return Number.isFinite(time.getTime())?new Intl.DateTimeFormat('es-DO',{ timeZone:'America/Santo_Domingo',dateStyle:'medium',timeStyle:'short' }).format(time):'Hora no confirmada'
 }
 /** Parse quoted American moneylines from an ESPN event without filling in missing markets.
  * @param event - Raw ESPN event with a competition.
@@ -75,7 +75,7 @@ export function normalizeEspnMoneylines(event:EEvent,oddEntries:EspnOdds[]):Espn
     const updatedAt=odd.lastUpdated||odd.lastUpdate||odd.updatedAt||'No indicada por ESPN'
     for(const [selection,value] of [[homeName,odd.homeTeamOdds?.moneyLine??odd.homeTeamOdds?.moneyline],[awayName,odd.awayTeamOdds?.moneyLine??odd.awayTeamOdds?.moneyline]] as const){
       const price=americanToDecimal(value)
-      if(price!==null)result.push({eventId:id,bookmaker:str(provider),market:'h2h',selection:str(selection),point:null,price,home:str(homeName),away:str(awayName),time:localTime(event.date||''),updatedAt:str(updatedAt)})
+      if(price!==null)result.push({ eventId:id,bookmaker:str(provider),market:'h2h',selection:str(selection),point:null,price,home:str(homeName),away:str(awayName),time:localTime(event.date||''),updatedAt:str(updatedAt) })
     }
   }
   return result
@@ -92,7 +92,7 @@ export async function fetchPublicEspnOdds(
   const route=slugs[sportKey]
   if(!route)return []
   if(!requestedMarkets.split(',').includes('h2h'))return []
-  const localDate=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santo_Domingo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()).replaceAll('-','')
+  const localDate=new Intl.DateTimeFormat('en-CA',{ timeZone:'America/Santo_Domingo',year:'numeric',month:'2-digit',day:'2-digit' }).format(new Date()).replaceAll('-','')
   const root='https://site.api.espn.com/apis/site/v2/sports/'+route[0]+'/'+route[1]+'/scoreboard?dates='+localDate
   const board=await getJSON<ESPNBoard>(root)
   if(!Array.isArray(board.events))throw new Error('ESPN devolvió un scoreboard sin eventos válidos')

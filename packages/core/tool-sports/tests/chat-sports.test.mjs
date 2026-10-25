@@ -31,22 +31,23 @@ test('no SSRF or HTTP redirects through sports source tool',async()=>{
   })
   assert.equal(data.ok,true)
 })
-test('ESPN result becomes verified chat card with local hour, venue, no unauthorized logo',async()=>{
+test('ESPN result becomes verified chat card with local hour, venue, trusted logo or explicit opt-out',async()=>{
   const mock=await response({events:[{id:'222',name:'Team A vs Team B',date:'2026-10-24T20:00:00Z',status:{type:{description:'Previa'}},competitions:[{venue:{fullName:'Estadio',address:{city:'Santiago'}},competitors:[{homeAway:'home',team:{displayName:'Team B',logo:'https://a.espncdn.com/icon.png'}},{homeAway:'away',team:{displayName:'Team A'}}]}]}]})
   const out=await chatGames('soccer','mex.1','2026-10-24',{PHOENIX_SPORTS_ESPN_ALLOWED:'1'},mock)
   assert.equal(out.count,1)
   assert.equal(out.items[0].component,'sports_game_card')
   assert.equal(out.items[0].props.venue,'Estadio')
-  assert.equal(out.items[0].props.home.logo,undefined)
+  assert.equal(out.items[0].props.home.logo,'https://a.espncdn.com/icon.png')
   assert.match(out.items[0].props.when,/4:00|4:00|16:00/u)
-  const withLogo=await chatGames('soccer','mex.1','2026-10-24',{PHOENIX_SPORTS_ESPN_ALLOWED:'1',PHOENIX_SPORTS_ESPN_IMAGES_ALLOWED:'1'},mock)
-  assert.equal(withLogo.items[0].props.home.logo,'https://a.espncdn.com/icon.png')
+  const disabled=await chatGames('soccer','mex.1','2026-10-24',{PHOENIX_SPORTS_IMAGES_DISABLED:'1'},mock)
+  assert.equal(disabled.items[0].props.home.logo,undefined)
 })
 test('MLB game cards show pitchers only if provided upstream',async()=>{
   const mock=await response({dates:[{games:[{gamePk:43,gameDate:'2026-10-24T19:00:00Z',status:{detailedState:'Pre-Game'},venue:{name:'Stadium'},teams:{home:{team:{id:1,name:'Home'},probablePitcher:{id:55,fullName:'Pitcher H'}},away:{team:{id:2,name:'Away'}}}}]}]})
   const out=await chatGames('baseball','mlb','2026-10-24',{PHOENIX_SPORTS_MLB_ALLOWED:'1'},mock)
-  assert.equal(out.items[0].props.highlights[0].value,'Sin confirmar')
-  assert.equal(out.items[0].props.highlights[1].value,'Pitcher H')
+  assert.equal(out.items[0].props.highlights[0].value,'Pitcher H')
+  assert.equal(out.items[0].props.highlights.length,1)
+  assert.equal(out.items[0].props.lineups[0].confirmed,false)
 })
 test('only real bookmaker lines match a ticket; correlation is flagged',()=>{
   const odds=[{eventId:'evt1',bookmaker:'Book1',market:'h2h',selection:'Home',point:null,price:1.8,home:'Home',away:'Away',time:'today',updatedAt:'now'},
@@ -170,4 +171,13 @@ test('sports native tool instructions never tell Kira to print raw JSON or code 
   assert.match(modelFacing,/NO copies el JSON/)
   assert.doesNotMatch(modelFacing,/instruction:'[^']*(?:reproduce los bloques|JSON intacto|en fence|entre fences)/u)
   assert.match(modelFacing,/Phoenix renderiza uiBlocks automáticamente/)
+})
+
+
+test('ESPN missing event IDs do not produce invalid empty-id game cards',async()=>{
+  const mock=await response({events:[{name:'Match without published ID',date:'2026-10-24T20:00:00Z',competitions:[{competitors:[{homeAway:'home',team:{name:'Home'}},{homeAway:'away',team:{name:'Away'}}]}]}]})
+  const out=await chatGames('soccer','mex.1','2026-10-24',{},mock)
+  assert.equal(out.items.length,1)
+  assert.equal(Object.hasOwn(out.items[0].props,'eventId'),false)
+  assert.deepEqual(out.items[0].props.highlights,[])
 })

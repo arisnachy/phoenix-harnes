@@ -93,10 +93,28 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'a detached provider, model, and optional reasoning selection.',
       },
       {
+        signature: 'preferredSelection(): ModelSelection',
+        description: 'Recover the last picker model for a new, otherwise blank conversation.',
+        parameters: [],
+        returns: 'Last saved picker selection, or the provider-native default.',
+      },
+      {
+        signature: 'currentEclipseProfile(): EclipseRoutingSettings | undefined',
+        description: 'Resolve Eclipse settings live so a saved change affects the next model request.',
+        parameters: [],
+        returns: 'Detached Eclipse settings, or undefined when no user overrides exist.',
+      },
+      {
+        signature: 'async saveWebSelection(selected: ModelSelection, runtime: ModelSelection): Promise<void>',
+        description: 'Persist the accepted Web picker identity and native execution route atomically.',
+        parameters: [{ name: 'selected', description: 'Exact model the user last chose in the picker.' }, { name: 'runtime', description: 'Validated provider-native execution route (never a synthetic model).' }],
+        returns: 'Persistence completion; failures must not be described as saved.',
+      },
+      {
         signature: 'async saveSelection(next: ModelSelection): Promise<void>',
-        description: 'Save the complete default model selection. A deployment without a settings provider keeps its composition entry.',
-        parameters: [{ name: 'next', description: 'resolved selection accepted by an entry point.' }],
-        returns: 'fulfillment after the optional settings write settles.',
+        description: 'Persist a new model default without erasing user-owned Eclipse configuration.',
+        parameters: [{ name: 'next', description: 'Selected default provider, model and optional reasoning.' }],
+        returns: 'Completion after the settings write.',
       },
     ],
   },
@@ -3545,7 +3563,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'AskUserQuestionItem',
-    declaration: 'export interface AskUserQuestionItem {\n    id: string;\n    question: string;\n    detail?: string;\n    header?: string;\n    options?: AskUserQuestionOption[];\n    multiSelect?: boolean;\n    intent?: AskUserQuestionIntent;\n}',
+    declaration: 'export interface AskUserQuestionItem {\n    id: string;\n    question: string;\n    detail?: string;\n    header?: string;\n    options?: AskUserQuestionOption[];\n    multiSelect?: boolean;\n    sensitive?: boolean;\n    intent?: AskUserQuestionIntent;\n}',
   },
   {
     name: 'AskUserQuestionOption',
@@ -4046,6 +4064,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'DynamicCordisRunRequest',
     declaration: 'export interface DynamicCordisRunRequest {\n    requestId: ApprovalRequestId;\n    agentId: SessionId;\n    pluginId: CordisDynamicPluginId;\n    packageId: CordisDynamicPackageId;\n    mode: CordisDynamicRunMode;\n    name: string;\n    purpose: string;\n    requiresApproval: boolean;\n}',
+  },
+  {
+    name: 'EclipseModelRoute',
+    declaration: 'export interface EclipseModelRoute {\n    readonly provider: string;\n    readonly model: string;\n    readonly reasoningEffort?: string;\n}',
+  },
+  {
+    name: 'EclipseRoutingSettings',
+    declaration: 'export interface EclipseRoutingSettings {\n    readonly mode?: \'automatic\' | \'hybrid\' | \'manual\';\n    readonly planner?: EclipseModelRoute;\n    readonly coordinator?: EclipseModelRoute;\n    readonly subagent?: EclipseModelRoute;\n    readonly specialists?: Readonly<Record<string, EclipseModelRoute>>;\n    readonly maxTeammates?: number;\n    readonly escalationSensitivity?: \'adaptive\' | \'quality\' | \'economy\';\n}',
   },
   {
     name: 'EditGoalRequest',
@@ -5889,7 +5915,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'ToolOutputDefinition',
-    declaration: 'export interface ToolOutputDefinition {\n    readonly schema: JsonSchemaNode;\n    render(args: unknown, value: JsonValue): ContentBlock[];\n    presentationMeta?(args: unknown, value: JsonValue): JsonValue;\n}',
+    declaration: 'export interface ToolOutputDefinition {\n    readonly schema: JsonSchemaNode;\n    render(args: unknown, value: JsonValue): ContentBlock[];\n    presentationMeta?(args: unknown, value: JsonValue): JsonValue;\n    nestedPresentationMeta?: boolean;\n}',
   },
   {
     name: 'ToolPresentationMode',
