@@ -1,0 +1,60 @@
+name: Phoenix PR1149 full quality repair
+on:
+  push:
+    branches: [feat/kira-sports-rich-phoenix-ui-20261024]
+    paths:
+      - .github/workflows/phoenix-pr1149-quality-repair.yml
+permissions:
+  contents: write
+jobs:
+  repair:
+    if: github.repository == 'arisnachy/phoenix-harnes'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build host tooling
+        run: pnpm run build:lib:host
+      - name: Apply repo lint autofixes (without suppressing any lint rule)
+        shell: bash
+        run: |
+          pnpm run lint:fix:contracts-ready || true
+      - name: Rebuild generated catalogs from real source
+        shell: bash
+        run: |
+          set -e
+          pnpm run gen-cordis-catalog
+          pnpm run gen-client-catalog
+          pnpm run gen-tool-catalog
+          pnpm run gen-config-catalog
+          pnpm run gen-persistence-catalog
+          pnpm run gen-module-graph
+          pnpm run gen-doc-graphs
+      - name: Verify baseball data and chat UI tests
+        shell: bash
+        run: |
+          node --experimental-strip-types --test packages/core/tool-sports/tests/chat-sports.test.mjs packages/core/tool-sports/tests/rich-matchup.test.mjs
+          pnpm exec vitest run packages/client/ui-conversation/tests/sports-rich-ui.client.spec.tsx
+          pnpm run build:lib:client
+      - name: Commit safely generated and formatting-only changes
+        shell: bash
+        run: |
+          set -e
+          rm .github/workflows/phoenix-pr1149-quality-repair.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add --all
+          git diff --cached --stat
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "fix(quality): apply contract lint autofixes and regenerate current catalogs"
+          git push origin HEAD:feat/kira-sports-rich-phoenix-ui-20261024
