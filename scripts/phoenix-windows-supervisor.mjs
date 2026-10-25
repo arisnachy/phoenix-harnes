@@ -24,6 +24,7 @@ import { assertPromotedStableTarget } from './phoenix-stable-freshness.mjs'
 import { hydratePhoenixEnvironment } from './phoenix-windows-environment.mjs'
 import { ensurePhoenixDesktopShortcut } from './phoenix-windows-shortcut.mjs'
 import { recordPhoenixUpdateStep, writePhoenixUpdateState } from './phoenix-update-state.mjs'
+import { pinPhoenixUpdateLiveHelper } from './phoenix-update-live-pin.mjs'
 
 const root = resolve(process.cwd())
 const supervisorSourceRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -34,6 +35,7 @@ const desktopConsoleVisible = ['1', 'true', 'yes']
   .includes((process.env.PHOENIX_DESKTOP_CONSOLE ?? '').trim().toLowerCase())
 const hideRuntimeWindows = !desktopConsoleVisible
 let missingLiveHelperReported = false
+let pinnedLiveHelper
 // The supervisor itself may be loaded from a newer isolated runtime while cwd
 // remains the durable checkout. Keep compatibility helpers on the same code
 // generation as the supervisor so a stale source checkout cannot reintroduce
@@ -917,8 +919,14 @@ function runChecked(cwd, bin, args, label) {
   // live-output helper may not exist in that older runtime. Never invoke Node
   // with a missing path: run the ORIGINAL command and stream it directly
   // instead. The same supervisor journals started/failed/ok in both modes.
-  const liveHelper = join(supervisorSourceRoot, 'scripts', 'phoenix-update-live-command.mjs')
-  const live = liveEligible && existsSync(liveHelper)
+  // First pin the matching helper modules outside all disposable worktrees.
+  // A live supervisor can outlast the runtime that originally supplied them.
+  const helperCandidate = liveEligible
+    ? pinPhoenixUpdateLiveHelper(supervisorSourceRoot, journalStatePath)
+    : undefined
+  if (helperCandidate !== undefined) pinnedLiveHelper = helperCandidate
+  const liveHelper = pinnedLiveHelper
+  const live = liveEligible && liveHelper !== undefined && existsSync(liveHelper)
   const directStream = liveEligible && !live
   if (directStream && !missingLiveHelperReported) {
     missingLiveHelperReported = true
