@@ -108,6 +108,16 @@ function recordStateTransition(path, state) {
 }
 
 function readActiveRuntimeTarget(controlDirectory) {
+  // The supervisor writes this runtime marker during prewarm, BEFORE its new
+  // Host has started. Only the supervisor's durable post-health-check status
+  // is proof of successful activation; a built worktree is not.
+  try {
+    const confirmed = JSON.parse(readFileSync(join(controlDirectory, UPDATE_STATE_FILE), 'utf8'))
+    if (confirmed?.status !== 'updated' || !/^[0-9a-f]{40}$/iu.test(confirmed.current)
+      || confirmed.current !== confirmed.target) return undefined
+  } catch {
+    return undefined
+  }
   const path = join(controlDirectory, ACTIVE_RUNTIME_FILE)
   if (!existsSync(path)) return undefined
   try {
