@@ -157,7 +157,7 @@ describe('Phoenix Game Studio publisher', () => {
       const run = (file_path: string): Promise<unknown> =>
         tool.execute({ title: 'Check', file_path }, exec)
       await expect(run(join(outside, 'secret.html'))).rejects.toThrow('dentro del espacio de trabajo')
-      await expect(run('../' + outside.split(/[\\/]/u).at(-1) + '/secret.html')).rejects.toThrow('dentro del espacio de trabajo')
+      await expect(run('../' + (outside.split(/[\\/]/u).at(-1) ?? '') + '/secret.html')).rejects.toThrow('dentro del espacio de trabajo')
       await expect(run('https://example.org/demo.html')).rejects.toThrow('local')
       await expect(run('missing.html')).rejects.toThrow('no existe')
       await expect(run('oversize.html')).rejects.toThrow('16 MiB')
