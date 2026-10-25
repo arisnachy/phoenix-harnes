@@ -182,7 +182,8 @@ export function UpdateFooterAction({
     clearRestartReconnectGrace()
     setConnectionLost(false)
     setSnapshot(next)
-    if (next.status === 'error' || next.status === 'rollback-failed') setDetailsOpen(true)
+    if (next.status === 'error' || next.status === 'rollback-failed'
+      || next.events?.some(event => event.result === 'failed' && event.diagnostic !== undefined)) setDetailsOpen(true)
   }, [])
 
   const reportReadFailure = useCallback((_error: unknown) => {
