@@ -55,10 +55,18 @@ export const AssistantMarkdown = memo(function AssistantMarkdown({
         // or a valid sports_game_card is accidentally displayed as raw JSON.
         const first = i
         let text = block.text
-        while (i + 1 < blocks.length && blocks[i + 1]?.kind === 'text') {
+        // A reasoning or tool-call block is invisible in the assistant
+        // message, but can interrupt the same model-authored UI fence.
+        // Join its surrounding visible text without ever exposing its contents.
+        while (i + 1 < blocks.length) {
+          const next = blocks[i + 1]
+          if (next?.kind === 'reasoning' || next?.kind === 'tool-call') {
+            i += 1
+            continue
+          }
+          if (next?.kind !== 'text') break
+          text += next.text
           i += 1
-          const next = blocks[i]
-          if (next?.kind === 'text') text += next.text
         }
         const segments = splitGenerativeUiText(text, { streaming })
         rendered.push(...segments.map((segment, index) => segment.kind === 'ui'

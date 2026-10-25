@@ -62,8 +62,40 @@ export function updateStepLabelKey(step: string): typeof UPDATE_STEP_LABEL_KEYS[
  * @param now - current timestamp in milliseconds.
  * @returns whether an update passed within the last ten minutes.
  */
-export function recentlyUpdated(events: readonly { readonly step: string; readonly result: string; readonly at: string }[] | undefined, now = Date.now()): boolean {
+export function recentlyUpdated(
+  events: readonly { readonly step: string; readonly result: string; readonly at: string }[] | undefined,
+  now = Date.now(),
+): boolean {
   return events?.some(event => event.step === 'updated' && event.result === 'ok'
     && Number.isFinite(Date.parse(event.at))
     && now - Date.parse(event.at) >= 0 && now - Date.parse(event.at) < 10 * 60_000) ?? false
+}
+
+/**
+ * Detect a repeat-restart loop or an activation with no verified completion.
+ * This is a warning, not proof that the update failed: a Windows build may
+ * legitimately run for several minutes before a terminal status is recorded.
+ * @param snapshot - durable updater phase, timestamp, and bounded execution events.
+ * @param now - time at which the warning is evaluated.
+ * @returns true only when success is still unverified after repeated or long activation.
+ */
+export function activationNeedsVerification(
+  snapshot: {
+    readonly status: string
+    readonly at?: string
+    readonly events?: readonly { readonly step: string; readonly result: string; readonly at: string }[]
+  },
+  now = Date.now(),
+): boolean {
+  if (snapshot.status !== 'restarting' && snapshot.status !== 'applying') return false
+
+  const recentRestarts = snapshot.events?.filter((event) => {
+    const at = Date.parse(event.at)
+    return event.step === 'restarting' && event.result === 'started'
+      && Number.isFinite(at) && at <= now && now - at < 15 * 60_000
+  }).length ?? 0
+  if (recentRestarts >= 3) return true
+
+  const since = Date.parse(snapshot.at ?? '')
+  return Number.isFinite(since) && since <= now && now - since >= 10 * 60_000
 }

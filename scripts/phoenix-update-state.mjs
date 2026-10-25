@@ -210,6 +210,19 @@ export function writePhoenixUpdateState(path, value) {
       return
     }
 
+    // The watcher re-checks the channel every minute. Re-announcing the same
+    // ready SHA while activation is still in progress used to overwrite the
+    // durable status and append endless "restarting / started" events.
+    // Keep the original request and timestamp until the supervisor writes an
+    // actual completion or failure; a failed target may be retried later.
+    try {
+      const existing = JSON.parse(readFileSync(path, 'utf8'))
+      if (existing?.schema === 1 && existing.target === target
+        && (existing.status === 'restarting' || existing.status === 'applying')) return
+    } catch {
+      // No usable prior state: allow the normal atomic transition below.
+    }
+
     const now = new Date().toISOString()
     // Queue activation before publishing the transition. Readers either keep
     // seeing the previous preparing state or see restarting; they never see a

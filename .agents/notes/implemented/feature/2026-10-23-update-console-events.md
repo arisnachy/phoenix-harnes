@@ -14,6 +14,8 @@ The trusted updater writes an append-only, bounded JSON-lines journal in the sha
 
 The existing Host Remote reads only a bounded tail of this journal and validates known step codes, outcomes, timestamps and the exact current target SHA. This extends the existing update snapshot rather than introducing another privileged route. The sidebar renders a localized, chronological execution record with real process outcomes and exit codes; a temporary connection loss is labelled reconnection rather than success or failure. The updater percentage is an approximate phase indicator, not proof of completion. A recent `updated` event stays visible briefly for inspection.
 
+The watcher must not re-publish an already-running activation for the same release on each channel poll. The existing `restarting` or `applying` state and its original activation request remain authoritative until completion or failure. Repeated restart events (three within fifteen minutes), or an activation with no completion for ten minutes, are displayed as **unverified**, not as a proven failure or success. When a failed command is known, the interface highlights its localized step and numeric exit code before the generic runtime-activation wrapper failure.
+
 ## Alternatives considered
 
 **Stream the complete hidden PowerShell output directly to Web.** Rejected because arbitrary command output can contain secrets and local paths; a transport outage during a Host restart would also make a live-only stream lose precisely the interesting handoff events.

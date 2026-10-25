@@ -58,6 +58,17 @@ describe('MLB screenshot regression: card never becomes plaintext code',()=>{
     expect(document.querySelector('[data-generative-ui="sports_game_card"]')).toBeTruthy()
     expect(screen.queryByText('generative-ui')).toBeNull()
   })
+  it('joins sports JSON fences across hidden reasoning blocks without showing private text',()=>{
+    const cut=Math.floor(formatted.length/2)
+    render(<AssistantMarkdown blocks={[
+      {kind:'text',text:'Partido confirmado.\\n\\n'+formatted.slice(0,cut)},
+      {kind:'reasoning',text:'private reasoning must not be displayed'},
+      {kind:'text',text:formatted.slice(cut)},
+    ]} streaming={false} renderMessageImages={()=>null} t={tr} />)
+    expect(document.querySelector('[data-generative-ui="sports_game_card"]')).toBeTruthy()
+    expect(screen.queryByText('generative-ui')).toBeNull()
+    expect(screen.queryByText('private reasoning must not be displayed')).toBeNull()
+  })
   it('renders an explicit notice if a sports contract is unsafe, not a raw JSON slab',()=>{
     const unsafe={...screenshotGame,props:{...screenshotGame.props,home:{label:'Milwaukee Brewers',logo:'https://evil.example/track.gif'}}}
     const parsed=splitGenerativeUiText(fence+'generative-ui\n'+JSON.stringify(unsafe)+'\n'+fence)

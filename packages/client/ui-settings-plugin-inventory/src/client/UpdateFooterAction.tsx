@@ -7,7 +7,7 @@ import { Tooltip } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { SidebarFooterActionOwnerProps } from '@phoenix-ai/dsh-client-ui-sidebar/client'
 import type { InjectFace, PropsLocale } from '@phoenix-ai/dsh-client-ui-slots'
 import type { PluginInventoryLocaleKey } from './locales.ts'
-import { isHiddenUpdaterPause, recentlyUpdated, updateStepLabelKey } from './update-presentation.ts'
+import { activationNeedsVerification, isHiddenUpdaterPause, recentlyUpdated, updateStepLabelKey } from './update-presentation.ts'
 import css from './UpdateFooterAction.module.css'
 
 /** Poll cadence for the repository-local updater state while Web is open. */
@@ -268,13 +268,14 @@ export function UpdateFooterAction({
   if (labelKey === undefined) return null
 
   const ready = snapshot.status === 'ready'
-  const busy = requesting || isBusy(snapshot)
-  const label = t(labelKey)
+  const unverifiedActivation = activationNeedsVerification(snapshot)
+  const busy = requesting || (!unverifiedActivation && isBusy(snapshot))
+  const label = unverifiedActivation ? t('updateRestartUnverified') : t(labelKey)
   const actionLabel = ready ? t('updateRestart') : label
   const errorState = snapshot.status === 'error' || snapshot.status === 'rollback-failed'
   const tone = ready
     ? css.ready
-    : errorState
+    : errorState || unverifiedActivation
       ? css.error
       : busy
         ? css.busy
@@ -320,9 +321,19 @@ export function UpdateFooterAction({
   const events = snapshot.events?.slice(-20).reverse() ?? []
   const target = snapshot.target?.slice(0, 12)
   const retryable = errorState || snapshot.status === 'paused'
-  const detail = retryable
-    ? snapshot.detail ?? t(snapshot.status === 'paused' ? 'updatePausedHint' : 'updateErrorHint')
-    : snapshot.detail
+  const detail = unverifiedActivation
+    ? t('updateRestartUnverifiedHint')
+    : retryable
+      ? snapshot.detail ?? t(snapshot.status === 'paused' ? 'updatePausedHint' : 'updateErrorHint')
+      : snapshot.detail
+  // The supervisor records both the specific failed command and a wrapper
+  // activation failure. Prefer the actionable command and its exit code.
+  const lastFailedStep = errorState
+    ? events.find(event => event.result === 'failed'
+      && event.step !== 'runtime-activation' && event.step !== 'error' && event.step !== 'rollback-failed')
+      ?? events.find(event => event.result === 'failed' && event.step === 'runtime-activation')
+      ?? events.find(event => event.result === 'failed')
+    : undefined
   const content = (
     <>
       <UpdateGlyph spinning={busy} />
@@ -365,6 +376,18 @@ export function UpdateFooterAction({
               <div className={css.progressValue} style={{ width: `${String(progress)}%` }} />
             </div>
           ) : null}
+          {(errorState || unverifiedActivation) && (
+            <p className={css.failureNotice} role="alert">
+              {unverifiedActivation
+                ? t('updateRestartUnverifiedHint')
+                : lastFailedStep === undefined
+                  ? detail ?? t('updateErrorHint')
+                  : <>
+                    {t('updateFailedAt')}: {t(updateStepLabelKey(lastFailedStep.step) ?? 'updateError')}
+                    {lastFailedStep.exitCode === undefined ? null : ` · ${t('updateExitCode')}: ${String(lastFailedStep.exitCode)}`}
+                  </>}
+            </p>
+          )}
           {connectionLost && <p className={css.reconnecting}>{t('updateReconnect')}</p>}
           <div className={css.journalHeader}>{t('updateJournalTitle')}</div>
           {events.length === 0
@@ -409,7 +432,8 @@ export function UpdateFooterAction({
             role="progressbar"
             aria-valuemin={0}
             aria-valuemax={100}
-            aria-valuenow={progress}
+            aria-valuenow={unverifiedActivation ? undefined : progress}
+            aria-valuetext={unverifiedActivation ? label : undefined}
             aria-label={label}
           />
           {content}
@@ -434,7 +458,8 @@ export function UpdateFooterAction({
           role="progressbar"
           aria-valuemin={0}
           aria-valuemax={100}
-          aria-valuenow={progress}
+          aria-valuenow={unverifiedActivation ? undefined : progress}
+          aria-valuetext={unverifiedActivation ? label : undefined}
           aria-label={label}
         />
         {content}
