@@ -244,7 +244,7 @@ export function apply(ctx: Context, config: Config): void {
   ctx.systemPrompt.context({
     name: 'context:recent-learning-memory',
     order: 118,
-    text: assembly => {
+    text: (assembly) => {
       const projectId = projectForAssembly(assembly)
       const durable = ctx.learningMemory.recallCognitive({
         layers: ['semantic'],
@@ -263,7 +263,7 @@ export function apply(ctx: Context, config: Config): void {
   ctx.systemPrompt.context({
     name: 'context:prior-assistant-decisions',
     order: 118.5,
-    text: assembly => {
+    text: (assembly) => {
       const task = taskForAssembly(assembly)
       if (task === undefined) return ''
       const folded = task.normalize('NFKD').replace(/\p{Diacritic}/gu, '').toLocaleLowerCase()
@@ -280,7 +280,7 @@ export function apply(ctx: Context, config: Config): void {
   ctx.systemPrompt.context({
     name: 'context:experiential-learning-memory',
     order: 119,
-    text: assembly => {
+    text: (assembly) => {
       const projectId = projectForAssembly(assembly)
       const taskContext = taskForAssembly(assembly)
       const hits = ctx.learningMemory.recallCognitive({
@@ -298,7 +298,7 @@ export function apply(ctx: Context, config: Config): void {
   ctx.systemPrompt.context({
     name: 'context:validated-procedures',
     order: 120,
-    text: assembly => {
+    text: (assembly) => {
       const projectId = projectForAssembly(assembly)
       const taskContext = taskForAssembly(assembly)
       return formatProceduralContext(procedural.recommend({
@@ -312,7 +312,7 @@ export function apply(ctx: Context, config: Config): void {
   ctx.systemPrompt.context({
     name: 'context:unverified-recovery-experience',
     order: 120.5,
-    text: assembly => {
+    text: (assembly) => {
       const taskContext = taskForAssembly(assembly)
       if (taskContext === undefined) return ''
       const projectId = projectForAssembly(assembly)
@@ -326,7 +326,7 @@ export function apply(ctx: Context, config: Config): void {
   ctx.systemPrompt.context({
     name: 'context:habit-guidance',
     order: 121,
-    text: assembly => {
+    text: (assembly) => {
       const taskContext = taskForAssembly(assembly)
       if (taskContext === undefined) return ''
       const projectId = projectForAssembly(assembly)
