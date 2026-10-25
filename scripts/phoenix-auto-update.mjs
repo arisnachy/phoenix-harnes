@@ -29,7 +29,7 @@ import process from 'node:process'
 import { gitSafeDirectoryEnvironment } from './phoenix-git-safe-directory.mjs'
 import { classifyStableUpdate } from './phoenix-update-policy.mjs'
 import { diagnoseStalledPhoenixActivation, recordPhoenixUpdateStep, writePhoenixUpdateState } from './phoenix-update-state.mjs'
-import { pinPhoenixUpdateLiveHelper } from './phoenix-update-live-pin.mjs'
+import { pinPhoenixUpdateLiveHelper, validPinnedPhoenixUpdateLiveHelper } from './phoenix-update-live-pin.mjs'
 
 const EXPECTED_REPOSITORY = process.env.PHOENIX_UPDATE_REPOSITORY ?? 'arisnachy/phoenix-harnes'
 const REMOTE = process.env.PHOENIX_UPDATE_REMOTE ?? 'origin'
@@ -111,7 +111,7 @@ function command(bin, args, options = {}) {
     : undefined
   if (helperCandidate !== undefined) pinnedLiveHelper = helperCandidate
   const liveHelper = pinnedLiveHelper
-  const streamLive = liveEligible && liveHelper !== undefined && existsSync(liveHelper)
+  const streamLive = liveEligible && validPinnedPhoenixUpdateLiveHelper(liveHelper)
   const directStream = liveEligible && !streamLive
   if (directStream && !missingLiveHelperReported) {
     missingLiveHelperReported = true
