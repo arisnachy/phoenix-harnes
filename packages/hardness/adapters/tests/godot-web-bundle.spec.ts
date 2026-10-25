@@ -70,7 +70,7 @@ describe('Godot Web project playback host', () => {
       const post = await fetch(base + receipt.url, { method: 'POST' })
       expect(post.status).toBe(405)
     } finally {
-      await new Promise<void>((resolve, reject) => server.close((error) =>{  error ? reject(error) : resolve() }))
+      await new Promise<void>((resolve, reject) => server.close((error) => { if (error) reject(error); else resolve() }))
     }
   })
   it('rejects symlinks and forged Godot binary files', () => {
