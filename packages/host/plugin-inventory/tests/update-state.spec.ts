@@ -14,6 +14,7 @@ vi.mock('node:child_process', async (importOriginal) => {
 import {
   parsePhoenixUpdateSnapshot,
   parsePhoenixUpdateEvents,
+  parsePhoenixUpdateConsole,
   readPhoenixUpdateSnapshot,
   requestPhoenixUpdateRefresh,
   requestPhoenixUpdateRestart,
@@ -91,6 +92,48 @@ describe('PHOENIX updater state bridge', () => {
     expect(JSON.stringify(events)).not.toContain('never-expose')
     expect(JSON.stringify(events)).not.toContain('private-other-release')
     expect(JSON.stringify(events)).not.toContain('not-a-failure')
+  })
+
+  it('projects only current-target live output and strips credentials at the RPC boundary', () => {
+    const target = 'a'.repeat(40)
+    const at = new Date().toISOString()
+    const rows = [
+      { schema: 1, at, step: 'build', target, stream: 'stdout',
+        line: 'Compiling Windows desktop app...' },
+      { schema: 1, at, step: 'build', target, stream: 'stderr',
+        line: 'PowerShell: EADDRINUSE; OPENROUTER_API_KEY=do-not-show' },
+      { schema: 1, at, step: 'build', target: 'b'.repeat(40), stream: 'stderr',
+        line: 'different project private output' },
+      { schema: 1, at, step: 'build', target, stream: 'stdin', line: 'invalid channel' },
+      { schema: 1, at, step: 'build', target, stream: 'stdout', line: 'x'.repeat(3000) },
+    ].map(row => JSON.stringify(row)).join('\n')
+    const result = parsePhoenixUpdateConsole(rows, target)
+    expect(result).toHaveLength(2)
+    expect(result[0]).toMatchObject({ step: 'build', stream: 'stdout',
+      line: 'Compiling Windows desktop app...' })
+    expect(result[1]?.line).toContain('EADDRINUSE')
+    expect(result[1]?.line).toContain('[SECRET_REMOVED]')
+    expect(JSON.stringify(result)).not.toContain('do-not-show')
+    expect(JSON.stringify(result)).not.toContain('different project private output')
+    expect(parsePhoenixUpdateConsole(rows, target, Date.now() + 60000)).toHaveLength(0)
+  })
+
+  it('exposes live console lines while preparing and hides them on confirmed success', () => {
+    const repo = repository()
+    const target = git(repo, 'rev-parse', 'HEAD')
+    const at = new Date().toISOString()
+    const livePath = join(repo, '.git', 'phoenix-update-live.jsonl')
+    writeFileSync(statePath(repo), JSON.stringify({ status: 'preparing', target, at }))
+    writeFileSync(livePath, JSON.stringify({
+      schema: 1, at, step: 'build', target, stream: 'stdout', line: 'Compiling Phoenix live',
+    }) + '\n')
+    expect(readPhoenixUpdateSnapshot(repo)).toMatchObject({
+      status: 'preparing', console: [
+        { at, step: 'build', stream: 'stdout', line: 'Compiling Phoenix live' },
+      ],
+    })
+    writeFileSync(statePath(repo), JSON.stringify({ status: 'updated', target, current: target }))
+    expect(readPhoenixUpdateSnapshot(repo).console).toBeUndefined()
   })
 
   it('reads journal events only for the current stable target', () => {

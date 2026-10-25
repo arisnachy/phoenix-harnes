@@ -10,10 +10,14 @@ import type {
   PhoenixUpdateSnapshot,
   PhoenixUpdateStatus,
   PhoenixUpdateEvent,
+  PhoenixUpdateConsoleLine,
 } from './types.ts'
 
 const STATE_FILE = 'phoenix-update-state.json'
 const PROGRESS_JOURNAL_FILE = 'phoenix-update-events.jsonl'
+const LIVE_CONSOLE_FILE = 'phoenix-update-live.jsonl'
+const MAX_CONSOLE_READ_BYTES = 160 * 1024
+const MAX_CONSOLE_LINES = 72
 const MAX_EVENT_READ_BYTES = 256 * 1024
 const MAX_DIAGNOSTIC_CHARS = 96 * 1024
 const MAX_DISPLAY_EVENTS = 24
@@ -280,6 +284,59 @@ function readPhoenixUpdateEvents(controlDir: string, target?: string): readonly 
 }
 
 /**
+ * Validate streamed command output at the Host boundary and redact again.
+ */
+export function parsePhoenixUpdateConsole(
+  content: string, target?: string, since = 0,
+): readonly PhoenixUpdateConsoleLine[] {
+  const rows: PhoenixUpdateConsoleLine[] = []
+  for (const raw of content.split(/\r?\n/u)) {
+    if (!raw.startsWith('{"schema":1,')) continue
+    try {
+      const value = JSON.parse(raw) as Record<string, unknown>
+      if (value.schema !== 1 || value.target !== target
+        || typeof value.step !== 'string' || !EVENT_STEPS.has(value.step)
+        || (value.stream !== 'stdout' && value.stream !== 'stderr')
+        || typeof value.at !== 'string' || !Number.isFinite(Date.parse(value.at))
+        || Date.parse(value.at) < since
+        || typeof value.line !== 'string' || value.line.length > 2700) continue
+      const line = value.line
+        .replace(/\u001b\[[0-9;]*[a-z]/giu, '')
+        .replace(/https?:\/\/[^\s/@]+:[^\s/@]+@/giu, 'https://[CREDENTIALS_REMOVED]@')
+        .replace(/\b(?:sk-(?:proj-)?[A-Za-z0-9_-]{12,}|gh[pousr]_[A-Za-z0-9_]{12,}|github_pat_[A-Za-z0-9_]{12,})\b/giu, '[SECRET_REMOVED]')
+        .replace(/\bBearer\s+[^\s"']+/giu, 'Bearer [SECRET_REMOVED]')
+        .replace(/(\b(?:password|passwd|token|access_token|refresh_token|api[_-]?key|client_secret|authorization|secret|_authToken)\b\s*[:=]\s*)("[^"]*"|'[^']*'|[^\s,;]+)/giu, '$1[SECRET_REMOVED]')
+        .replace(/(\b[A-Za-z0-9_]*(?:TOKEN|API_KEY|PASSWORD|SECRET|AUTH_KEY|PRIVATE_KEY|ACCESS_KEY)\b\s*[:=]\s*)("[^"]*"|'[^']*'|[^\s,;]+)/giu, '$1[SECRET_REMOVED]')
+      rows.push({ at: value.at, step: value.step, stream: value.stream, line })
+    } catch {
+      // Partial JSON line from the detached command.
+    }
+  }
+  return rows.slice(-MAX_CONSOLE_LINES)
+}
+
+function readPhoenixUpdateConsole(controlDir: string, target?: string, since = 0): readonly PhoenixUpdateConsoleLine[] {
+  if (target === undefined) return []
+  const path = join(controlDir, LIVE_CONSOLE_FILE)
+  let fd: number | undefined
+  try {
+    fd = openSync(path, 'r')
+    const size = fstatSync(fd).size
+    const count = Math.min(size, MAX_CONSOLE_READ_BYTES)
+    if (count <= 0) return []
+    const buffer = Buffer.allocUnsafe(count)
+    const bytes = readSync(fd, buffer, 0, count, size - count)
+    const raw = buffer.subarray(0, bytes).toString('utf8')
+    const boundary = size > count ? raw.indexOf('\n') : -1
+    return parsePhoenixUpdateConsole(boundary < 0 ? raw : raw.slice(boundary + 1), target, since)
+  } catch {
+    return []
+  } finally {
+    if (fd !== undefined) closeSync(fd)
+  }
+}
+
+/**
  * Read the current updater state without making updater availability a Host boot dependency.
  * @param root - PHOENIX checkout root; defaults to the launcher-protected runtime root.
  * @returns sanitized durable updater state, or `idle` when no updater state exists.
@@ -296,14 +353,22 @@ export function readPhoenixUpdateSnapshot(root: string = runtimeRoot()): Phoenix
     // still says ready while RESTART_REQUEST_FILE already proves activation is
     // in flight. Never expose an actionable Ready button during that window.
     const events = readPhoenixUpdateEvents(controlDir, snapshot.target)
+    const running = ['preparing', 'restarting', 'applying', 'rolling-back'].includes(snapshot.status)
+    const phaseSince = Date.parse(snapshot.at ?? '')
+    const from = Math.max(Date.now() - 30 * 60_000, Number.isFinite(phaseSince) ? phaseSince - 3000 : 0)
+    const consoleLines = running ? readPhoenixUpdateConsole(controlDir, snapshot.target, from) : []
+    const extra = {
+      ...(events.length > 0 ? { events } : {}),
+      ...(consoleLines.length > 0 ? { console: consoleLines } : {}),
+    }
     if (
       snapshot.status === 'ready'
       && snapshot.target !== undefined
       && queuedRestartTarget(controlDir) === snapshot.target
     ) {
-      return { ...snapshot, status: 'restarting', phase: 'restart', ...(events.length > 0 ? { events } : {}) }
+      return { ...snapshot, status: 'restarting', phase: 'restart', ...extra }
     }
-    return events.length > 0 ? { ...snapshot, events } : snapshot
+    return { ...snapshot, ...extra }
   } catch {
     return { status: 'error', detail: 'PHOENIX update state could not be read.' }
   }
