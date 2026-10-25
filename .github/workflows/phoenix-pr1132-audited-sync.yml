@@ -1,0 +1,72 @@
+name: PR1132 audited main synchronization
+on:
+  push:
+    branches:
+      - fix/phoenix-dual-core-integration-20261023
+    paths:
+      - .github/workflows/phoenix-pr1132-audited-sync.yml
+permissions:
+  contents: write
+concurrency:
+  group: phoenix-pr1132-audited-sync
+  cancel-in-progress: false
+jobs:
+  merge:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: fix/phoenix-dual-core-integration-20261023
+          fetch-depth: 0
+          persist-credentials: true
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Merge inspected main changes into PR branch, never into production
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Phoenix Audited Integration'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git fetch origin main
+          main_head=$(git rev-parse origin/main)
+          echo "main=$main_head"
+          expected_main=c7b294cbf742ede25ec81d06e9034c3568d10838
+          actual_main=$(git rev-parse "origin/main:packages/client/ui-conversation/src/client/chat/AssistantMarkdown.tsx")
+          if [ "$actual_main" != "$expected_main" ]; then
+            echo 'Main changed since the explicit review: abort' >&2
+            exit 1
+          fi
+          if git merge --no-commit --no-ff origin/main; then
+            echo 'No merge conflicts'
+          else
+            mapfile -t conflicts < <(git diff --name-only --diff-filter=U)
+            if [ "${#conflicts[@]}" -ne 1 ] || [ "${conflicts[0]}" != 'packages/client/ui-conversation/src/client/chat/AssistantMarkdown.tsx' ]; then
+              printf 'Unreviewed merge conflicts:\n%s\n' "${conflicts[@]}" >&2
+              exit 1
+            fi
+            # Current main includes prior sports native UI and adds PlainOutputFormatter.
+            git checkout --theirs -- packages/client/ui-conversation/src/client/chat/AssistantMarkdown.tsx
+            git add packages/client/ui-conversation/src/client/chat/AssistantMarkdown.tsx
+          fi
+          test -z "$(git diff --name-only --diff-filter=U)"
+      - name: Check merged application and bilingual docs
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm run build:lib
+          pnpm run verify-translation-pairing
+          pnpm run verify-export-jsdoc
+      - name: Publish audited merge to PR branch only
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --cached --check
+          git add -u
+          git diff --cached --check
+          git commit -m 'merge(pr1132): preserve main plain output formatting and Phoenix sports UI'
+          git push origin HEAD:fix/phoenix-dual-core-integration-20261023
