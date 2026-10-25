@@ -112,17 +112,17 @@ export async function getFeed<T>(url:string, fetcher:typeof fetch=fetch):Promise
   return JSON.parse(text) as T
 }
 type FeedEvent = {
-  id?:string|number,date?:string,name?:string
+  id?:string|number;date?:string;name?:string
   status?:{ type?:{ description?:string;state?:string } }
   competitions?:Array<{
     venue?:{ fullName?:string;address?:{ city?:string } }
     competitors?:Array<{
-      id?:string,homeAway?:string,score?:string|number
+      id?:string;homeAway?:string;score?:string|number
       team?:{ displayName?:string;name?:string;id?:string;logo?:string;logos?:Array<{ href?:string }> }
       records?:Array<{ summary?:string }>
       linescores?:Array<{ value?:number|string;displayValue?:string }>
-      leaders?:Array<{ name?:string,leaders?:Array<{
-        athlete?:{ displayName?:string,headshot?:{ href?:string } },displayValue?:string
+      leaders?:Array<{ name?:string;leaders?:Array<{
+        athlete?:{ displayName?:string;headshot?:{ href?:string } };displayValue?:string
       }> }>
     }>
     broadcasts?:Array<{ names?:string[] }>
@@ -257,7 +257,7 @@ export async function chatGames(
 export type MarketSelection = { eventId:string;bookmaker:string;market:string;selection:string;point?:number|null }
 /** Time-stamped sportsbook quote tied to a provider event and market. */
 export type MarketOutcome = MarketSelection & {
-  price:number,home:string,away:string,time:string,updatedAt:string,source?:string,sportKey?:string
+  price:number;home:string;away:string;time:string;updatedAt:string;source?:string;sportKey?:string
 }
 /** Read attributed bookmaker quotes, without purchasing or placing any bet.
  * @param sportKey - Provider sports key.
@@ -276,9 +276,9 @@ export async function marketOdds(sportKey:string,markets='h2h',env:NodeJS.Proces
   const u=new URL('https://api.the-odds-api.com/v4/sports/'+sportKey+'/odds')
   for(const [k,v] of Object.entries({ apiKey:env.THE_ODDS_API_KEY??'',regions:'us',markets,oddsFormat:'decimal' }))u.searchParams.set(k,v)
   const feed=await getFeed<Array<{
-    id:string,home_team:string,away_team:string,commence_time:string
-    bookmakers?:Array<{ key:string,title:string,last_update?:string
-      markets?:Array<{ key:string,last_update?:string
+    id:string;home_team:string;away_team:string;commence_time:string
+    bookmakers?:Array<{ key:string;title:string;last_update?:string
+      markets?:Array<{ key:string;last_update?:string
         outcomes?:Array<{ name:string;price:number;point?:number }> }> }>
   }>>(u.toString(),fetcher)
   if(!Array.isArray(feed))throw Error('Respuesta de cuotas inválida')
