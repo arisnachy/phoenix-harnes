@@ -329,7 +329,9 @@ export function UpdateFooterAction({
   // The supervisor records both the specific failed command and a wrapper
   // activation failure. Prefer the actionable command and its exit code.
   const lastFailedStep = errorState
-    ? events.find(event => event.result === 'failed' && event.step !== 'runtime-activation')
+    ? events.find(event => event.result === 'failed'
+      && event.step !== 'runtime-activation' && event.step !== 'error' && event.step !== 'rollback-failed')
+      ?? events.find(event => event.result === 'failed' && event.step === 'runtime-activation')
       ?? events.find(event => event.result === 'failed')
     : undefined
   const content = (
