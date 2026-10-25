@@ -6,7 +6,7 @@ import { Context } from '@phoenix-ai/cordis'
 import SessionStore, { SessionId } from '@phoenix-ai/dsh-session'
 import SystemPrompt from '@phoenix-ai/dsh-system-prompt'
 import ToolRegistry from '@phoenix-ai/dsh-tools'
-import { createAssistantMessage, createUserMessage } from '@phoenix-ai/dsh-llm'
+import { CallId, createAssistantMessage, createUserMessage } from '@phoenix-ai/dsh-llm'
 import LearningMemoryService from '@phoenix-ai/dsh-session-learning'
 import { renderContextSnapshot } from '@phoenix-ai/dsh-system-prompt'
 import * as plugin from '../src/index.ts'
@@ -167,6 +167,15 @@ describe('tool-session-learning plugin', () => {
       agent: { id: String(session.id), session },
     } as never))
     expect(recalledPrompt).toContain('The saved production repair')
+    const manual = await ctx.tools.execute({
+      signal: new AbortController().signal,
+      callId: CallId('memory-on-demand'),
+      name: 'memory_search',
+      agent: { id: session.id, session } as never,
+      arguments: { query: 'production repair' },
+    })
+    expect(manual.isError).toBe(false)
+    expect(manual.value).toContain('The saved production repair')
   })
 
   it('registers guided procedural teaching with a procedure-specific contract', async () => {
