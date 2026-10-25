@@ -41,7 +41,7 @@ describe('Canvas2D scatterplot live demo', () => {
 
   afterAll(async () => {
     await browser?.close()
-    if (server !== undefined) await new Promise<void>((resolve, reject) => server!.close((error) =>{  error ? reject(error) : resolve() }))
+    if (server !== undefined) await new Promise<void>((resolve, reject) => server.close((error) => { if (error) reject(error); else resolve() }))
   }, 60_000)
 
   it('renders the 100,000-point analytical surface and accessible fallback', async () => {
