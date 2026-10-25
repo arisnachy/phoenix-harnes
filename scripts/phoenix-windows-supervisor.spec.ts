@@ -184,6 +184,13 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(cliSource).toContain("const supervisor = resolve(supervisorSourceRoot, 'scripts', 'phoenix-windows-supervisor.mjs')")
   })
 
+  it('reports a supervisor heartbeat while the running Host processes update requests', () => {
+    expect(source).toContain('function reportSupervisorHeartbeat(host, hostRuntimeRoot)')
+    expect(source).toContain('phoenix-update-supervisor-heartbeat.json')
+    expect(source).toContain('reportSupervisorHeartbeat(host, hostRuntimeRoot)')
+    expect(source).toContain('SUPERVISOR_HEARTBEAT_MS = 5_000')
+  })
+
   it('consumes duplicate activation requests when the requested SHA is already active', () => {
     expect(source).toContain('function readActiveRuntimeRecord()')
     expect(source).toContain('function healthyRuntimeForTarget(target)')

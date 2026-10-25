@@ -10,6 +10,9 @@ const UPDATE_STATE_FILE = 'phoenix-update-state.json'
 const UPDATE_RESTART_FILE = 'phoenix-update-restart-request.json'
 const HOST_RESTART_FILE = 'phoenix-host-restart-request.json'
 const ACTIVE_RUNTIME_FILE = 'phoenix-active-runtime.json'
+const SUPERVISOR_HEARTBEAT_FILE = 'phoenix-update-supervisor-heartbeat.json'
+const RESTART_STALL_MS = 15 * 60 * 1000
+const FRESH_SUPERVISOR_MS = 30 * 1000
 const PROGRESS_JOURNAL_FILE = 'phoenix-update-events.jsonl'
 const MAX_PROGRESS_JOURNAL_BYTES = 512 * 1024
 const MAX_DIAGNOSTIC_CHARS = 96 * 1024
@@ -272,4 +275,75 @@ export function writePhoenixUpdateState(path, value) {
   }
   writeJsonAtomic(path, value)
   recordStateTransition(path, value)
+}
+
+
+/**
+ * Detect an activation for which no Host confirmed the handoff. This does
+ * not infer that a build failed: the diagnostic explains whether a live
+ * supervisor heartbeat was actually observed. Keep the pending marker for a
+ * recovering supervisor and stop the watcher from rearming the same SHA.
+ *
+ * @param {string} statePath - durable updater state in its Git control dir.
+ * @param {number} now - testable wall-clock timestamp.
+ * @returns {boolean} whether a stuck activation was recorded.
+ */
+export function diagnoseStalledPhoenixActivation(statePath, now = Date.now()) {
+  let state
+  try {
+    state = JSON.parse(readFileSync(statePath, 'utf8'))
+  } catch {
+    return false
+  }
+  if (!state || state.schema !== 1
+    || !['restarting', 'applying'].includes(state.status)
+    || typeof state.target !== 'string' || !/^[a-f0-9]{40}$/iu.test(state.target)) return false
+  const since = Date.parse(state.at ?? '')
+  if (!Number.isFinite(since) || since > now || now - since < RESTART_STALL_MS) return false
+
+  const control = dirname(statePath)
+  let supervisor
+  try {
+    supervisor = JSON.parse(readFileSync(join(control, SUPERVISOR_HEARTBEAT_FILE), 'utf8'))
+  } catch {
+    // An unobserved supervisor is different from proof that it crashed.
+  }
+  let restartRequest
+  try {
+    restartRequest = JSON.parse(readFileSync(join(control, UPDATE_RESTART_FILE), 'utf8'))
+  } catch {
+    // The supervisor may have consumed the request without booting the Host.
+  }
+  const heartbeatTime = Date.parse(supervisor?.at ?? '')
+  const supervisorVisible = supervisor?.schema === 1 && Number.isFinite(heartbeatTime)
+    && heartbeatTime <= now && now - heartbeatTime <= FRESH_SUPERVISOR_MS
+  const requestPending = restartRequest?.schema === 1 && restartRequest.target === state.target
+  const elapsedMinutes = Math.floor((now - since) / 60_000)
+  const detail = supervisorVisible
+    ? 'El supervisor sigue visible, pero el nuevo Host no confirmó el arranque.'
+    : 'No se ha observado actividad reciente del supervisor; no se pudo confirmar que recibiera la orden de reinicio.'
+  const diagnostic = [
+    'PHOENIX UPDATE — REINICIO SIN CONFIRMAR',
+    'Commit: ' + state.target,
+    'Tiempo sin confirmación: ' + String(elapsedMinutes) + ' minutos',
+    'Supervisor observado en los últimos 30 segundos: ' + (supervisorVisible ? 'sí' : 'no'),
+    'PID del supervisor: ' + (supervisorVisible && Number.isSafeInteger(supervisor.supervisorPid)
+      ? String(supervisor.supervisorPid) : 'no verificado'),
+    'PID del Host: ' + (supervisorVisible && Number.isSafeInteger(supervisor.hostPid)
+      ? String(supervisor.hostPid) : 'no verificado'),
+    'Solicitud de activación pendiente: ' + (requestPending ? 'sí' : 'no'),
+    'Estado original: ' + state.status + '; fase: ' + String(state.phase ?? 'desconocida'),
+    detail,
+    'No existe un código de salida del nuevo Host confirmado en esta operación.',
+    'No se inventará un error de PowerShell: para conocer la causa exacta se necesitan sus registros reales.',
+  ].join('\n')
+  recordPhoenixUpdateStep(statePath, 'host-restart', 'failed', state.target, undefined, diagnostic)
+  writePhoenixUpdateState(statePath, {
+    ...state,
+    status: 'error',
+    phase: 'supervisor-timeout',
+    detail,
+    at: new Date(now).toISOString(),
+  })
+  return true
 }
