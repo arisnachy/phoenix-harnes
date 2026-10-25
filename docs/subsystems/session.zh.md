@@ -749,6 +749,13 @@ allCognitiveRecords(): CognitiveMemoryRecord[]
 currentProjectId(): string | undefined
 
 /**
+ * Resolve the project for the owning session, never another active chat.
+ * @param sessionId - Root human conversation or mission session.
+ * @returns Project scope to use when assembling its model context.
+ */
+projectIdForSession(sessionId: string): string | undefined
+
+/**
  * Store an explicit, bounded lesson supplied by the model or user workflow.
  * @param input - Memory record to persist.
  * @returns The persisted memory record.

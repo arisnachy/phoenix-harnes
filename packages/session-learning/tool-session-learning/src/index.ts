@@ -8,7 +8,7 @@ import z from '@phoenix-ai/schemastery'
 import { defineTool } from '@phoenix-ai/dsh-tools'
 import type {} from '@phoenix-ai/dsh-system-prompt'
 import type {} from '@phoenix-ai/dsh-session-learning'
-import type { CognitiveMemoryLayer } from '@phoenix-ai/dsh-session-learning'
+import type { CognitiveMemoryKind, CognitiveMemoryLayer } from '@phoenix-ai/dsh-session-learning'
 import { filterAdaptiveSearchHits, installAdaptiveLearning } from './adaptive.ts'
 import { ExperienceLearningEngine, experienceMemoryInput } from './experience.ts'
 import { LiveEfficiencyMonitor } from './live-efficiency.ts'
@@ -62,6 +62,13 @@ export function apply(ctx: Context, config: Config): void {
   }
   const taskForAssembly = (assembly: unknown): string | undefined =>
     tasks.currentTask(taskSession(assembly))
+  // Do not substitute the newest *other* chat's project for this assembly.
+  const projectForAssembly = (assembly: unknown): string | undefined => {
+    const sessionId = taskSession(assembly)
+    return sessionId === undefined
+      ? ctx.learningMemory.currentProjectId()
+      : ctx.learningMemory.projectIdForSession(sessionId)
+  }
   const curator = new AutonomousMemoryCurator({
     async remember(input) {
       await ctx.learningMemory.rememberCognitive({ ...input })
@@ -97,7 +104,7 @@ export function apply(ctx: Context, config: Config): void {
     const data = event.data as unknown
     const occurredAt = typeof event.time === 'number' ? event.time : Date.now()
     const eventSeq = typeof event.seq === 'number' ? event.seq : 0
-    const projectId = ctx.learningMemory.currentProjectId()
+    const projectId = ctx.learningMemory.projectIdForSession(learningOwnerId)
 
     if (eventType === 'user/message') {
       // Delegated agent prompts are not user instructions or new human tasks.
@@ -225,6 +232,7 @@ export function apply(ctx: Context, config: Config): void {
       + 'When the user explicitly teaches a durable workflow or demonstration, memory_teach remains available for structured authoritative teaching. '
       + 'Use memory_remember for deliberate durable preferences or verified lessons that are not procedures. Never store credentials, private secrets, or unverified guesses. '
       + 'For phrases such as previous, last, anterior, or como antes, use resolved task evidence or memory/history; never infer the referent from repository commit recency, an unrelated module, or tool activity. '
+      + 'When asked what Kira previously picked, predicted, or chose (for example a baseball favorite), search memory_search with kind decision and the known teams or match before claiming the selection is unknown. Treat a stored prediction as a historical choice, never as a verified result or guarantee. '
       + 'If no prior task is supported by sufficient evidence, do not assert a concrete prior problem.',
   })
   ctx.systemPrompt.context({
@@ -236,8 +244,8 @@ export function apply(ctx: Context, config: Config): void {
   ctx.systemPrompt.context({
     name: 'context:recent-learning-memory',
     order: 118,
-    text: () => {
-      const projectId = ctx.learningMemory.currentProjectId()
+    text: assembly => {
+      const projectId = projectForAssembly(assembly)
       const durable = ctx.learningMemory.recallCognitive({
         layers: ['semantic'],
         limit: 4,
@@ -250,11 +258,30 @@ export function apply(ctx: Context, config: Config): void {
     },
     interpolateVariables: false,
   })
+  // Historical choices are model statements, not verified game outcomes.
+  // Only surface a few when the human task refers to a prior prediction.
+  ctx.systemPrompt.context({
+    name: 'context:prior-assistant-decisions',
+    order: 118.5,
+    text: assembly => {
+      const task = taskForAssembly(assembly)
+      if (task === undefined) return ''
+      const folded = task.normalize('NFKD').replace(/\p{Diacritic}/gu, '').toLocaleLowerCase()
+      if (!/\b(?:favorit[oa]s?|prediccion|pronostico|seleccion|eleccion|elegiste|escogiste|escogio|eligio|pick|predijiste|habias elegido)\b/u.test(folded)) return ''
+      const projectId = projectForAssembly(assembly)
+      return formatRecentMemoryContext(ctx.learningMemory.recallCognitive({
+        kind: 'decision',
+        limit: 4,
+        ...projectId === undefined ? {} : { projectId },
+      }))
+    },
+    interpolateVariables: false,
+  })
   ctx.systemPrompt.context({
     name: 'context:experiential-learning-memory',
     order: 119,
-    text: (assembly) => {
-      const projectId = ctx.learningMemory.currentProjectId()
+    text: assembly => {
+      const projectId = projectForAssembly(assembly)
       const taskContext = taskForAssembly(assembly)
       const hits = ctx.learningMemory.recallCognitive({
         query: taskContext ?? '',
@@ -271,8 +298,8 @@ export function apply(ctx: Context, config: Config): void {
   ctx.systemPrompt.context({
     name: 'context:validated-procedures',
     order: 120,
-    text: (assembly) => {
-      const projectId = ctx.learningMemory.currentProjectId()
+    text: assembly => {
+      const projectId = projectForAssembly(assembly)
       const taskContext = taskForAssembly(assembly)
       return formatProceduralContext(procedural.recommend({
         limit: 4,
@@ -285,10 +312,10 @@ export function apply(ctx: Context, config: Config): void {
   ctx.systemPrompt.context({
     name: 'context:unverified-recovery-experience',
     order: 120.5,
-    text: (assembly) => {
+    text: assembly => {
       const taskContext = taskForAssembly(assembly)
       if (taskContext === undefined) return ''
-      const projectId = ctx.learningMemory.currentProjectId()
+      const projectId = projectForAssembly(assembly)
       return formatRecoveryCandidates(procedural.recoveryCandidates({
         taskContext, limit: 2,
         ...projectId === undefined ? {} : { projectId },
@@ -299,10 +326,10 @@ export function apply(ctx: Context, config: Config): void {
   ctx.systemPrompt.context({
     name: 'context:habit-guidance',
     order: 121,
-    text: (assembly) => {
+    text: assembly => {
       const taskContext = taskForAssembly(assembly)
       if (taskContext === undefined) return ''
-      const projectId = ctx.learningMemory.currentProjectId()
+      const projectId = projectForAssembly(assembly)
       const matched = experience.matchTask(taskContext, projectId)
       if (matched === undefined) return ''
       return [formatHabitGuidance(assessHabitExperience(matched)),
@@ -330,24 +357,30 @@ export function apply(ctx: Context, config: Config): void {
       limit: { type: 'integer', description: 'Optional result count, capped by the configured maximum.' },
       project_id: { type: 'string', description: 'Optional project filter. Automatic recall is scoped to the current project.' },
       layer: { type: 'string', enum: ['autobiographical', 'working', 'episodic', 'semantic', 'procedural', 'prospective', 'associative', 'temporal'], description: 'Optional memory-layer filter.' },
+      kind: { type: 'string', enum: ['decision', 'fact', 'preference', 'lesson', 'skill', 'pending', 'mission', 'error', 'success', 'conversation', 'event', 'interaction'], description: 'Exact memory category. Use decision for Kira previous predictions and selections.' },
       from: { type: 'integer', description: 'Optional inclusive Unix-millisecond lower bound.' },
       to: { type: 'integer', description: 'Optional inclusive Unix-millisecond upper bound.' },
       include_history: { type: 'boolean', description: 'Include superseded values while preserving their provenance.' },
     },
     output: MEMORY_OUTPUT,
     isConcurrencySafe: () => true,
-    execute: (args) => {
+    execute: (args, execution) => {
       const requested = args.limit ?? maxResults
       if (!Number.isSafeInteger(requested) || requested < 1) throw new TypeError('limit must be a positive safe integer')
       const filters: {
         projectId?: string
         layers?: readonly CognitiveMemoryLayer[]
+        kind?: CognitiveMemoryKind
         from?: number
         to?: number
         includeHistory?: boolean
       } = {}
+      const sessionId = execution.agent === undefined ? undefined : learningOwnerSessionId(execution.agent.session)
+      const sessionProject = sessionId === undefined ? undefined : ctx.learningMemory.projectIdForSession(sessionId)
       if (args.project_id !== undefined) filters.projectId = args.project_id
+      else if (sessionProject !== undefined) filters.projectId = sessionProject
       if (args.layer !== undefined) filters.layers = [args.layer]
+      if (args.kind !== undefined) filters.kind = args.kind
       if (args.from !== undefined) filters.from = args.from
       if (args.to !== undefined) filters.to = args.to
       if (args.include_history !== undefined) filters.includeHistory = args.include_history
@@ -413,7 +446,7 @@ export function apply(ctx: Context, config: Config): void {
     isConcurrencySafe: () => false,
     async execute(args, execution) {
       if (execution.agent === undefined) throw new TypeError('memory_teach requires an active agent session')
-      const projectId = ctx.learningMemory.currentProjectId()
+      const projectId = ctx.learningMemory.projectIdForSession(String(execution.agent.session.id))
       const learned = await procedural.teach({
         title: args.title,
         scope: args.scope,

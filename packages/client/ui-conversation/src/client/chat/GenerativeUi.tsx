@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { PhoenixStatusPill, PhoenixAgentLine, type PhoenixUiIconName, type PhoenixStatusTone } from '@phoenix-ai/dsh-client-ui-primitives'
 import { ScaleForm, parseScaleForm, type ScaleFormSpec } from './ScaleForm.tsx'
 import { SpreadsheetSurface, parseSpreadsheet, type SpreadsheetSpec } from './SpreadsheetSurface.tsx'
@@ -79,20 +79,34 @@ type SmartCard = {
 }
 
 type SportsSide = { label: string; score?: string; logo?: string; meta?: string }
+type SportsPlayer = { name:string;role?:string;image?:string;stats?:string;id?:number }
+type SportsPitcher = { team:string;name:string;id?:number;image?:string;stats?:string;probable:boolean }
+type SportsLineup = { team:string;confirmed:boolean;players:SportsPlayer[] }
+type SportsBullpen = { team:string;pitchers:SportsPlayer[];note:string }
+type SportsResearch = { favorite:string;method:string;source:string;evidence:string[] }
 type SportsGameCard = {
   component: 'sports_game_card'; version: 1
   props: {
     title: string; subtitle?: string; status?: string; when: string; venue?: string
     home: SportsSide; away: SportsSide; source: string
-    highlights?: Array<{ label: string; value: string; image?: string }>
+    highlights?: Array<{ label: string; value: string; image?: string; detail?: string }>
+    pitchers?: SportsPitcher[]; lineups?: SportsLineup[]; bullpen?: SportsBullpen[]
+    sport?: string; league?: string; country?: string; eventId?: string; broadcast?: string; research?: SportsResearch
+    periods?: Array<{ label:string;away:string;home:string }>
     note?: string; askPrompt?: string
   }
+}
+type SportsOddsCard = {
+  component: 'sports_odds_card'; version: 1
+  props: { title:string;source:string;subtitle?:string;note:string
+    rows:Array<{ event:string;market:string;selection:string;bookmaker:string;price:string;point?:string }> }
 }
 type SportsTicketCard = {
   component: 'sports_ticket_card'; version: 1
   props: {
     title: string; subtitle?: string; source: string
-    legs: Array<{ event: string; selection: string; price: string; bookmaker: string; when?: string; image?: string }>
+    legs: Array<{ event: string; selection: string; price: string; bookmaker: string; when?: string; image?: string;
+      sport?:string;country?:string;league?:string;market?:string;player?:string }>
     combinedOdds: string; stake?: string; grossReturn?: string; note: string
     askPrompt?: string
   }
@@ -115,7 +129,7 @@ const supportedIcons: readonly PhoenixUiIconName[] = [
 ]
 const supportedTones: readonly PhoenixStatusTone[] = ['positive', 'warning', 'negative', 'info', 'neutral']
 
-export type GenerativeUiBlock = EventCard | MetricCard | ComparisonCard | TimelineCard | SmartCard | SportsGameCard | SportsTicketCard
+export type GenerativeUiBlock = EventCard | MetricCard | ComparisonCard | TimelineCard | SmartCard | SportsGameCard | SportsTicketCard | SportsOddsCard
   | CanvasSpec | ScaleFormSpec | SpreadsheetSpec | GeoMapSpec | SceneMapSpec | DiagramSpec | StatusPillBlock | AgentLineBlock
 
 export type GenerativeUiSegment =
@@ -230,22 +244,60 @@ const trustedPortrait = (value: unknown): value is string | undefined => {
   if (value === undefined) return true
   if (typeof value !== 'string' || value.length > 500) return false
   try { const u = new URL(value); return u.protocol === 'https:' && !u.username && !u.password
-    && ['a.espncdn.com','img.mlbstatic.com'].includes(u.hostname) } catch { return false }
+    && ['a.espncdn.com','img.mlbstatic.com','www.mlbstatic.com'].includes(u.hostname) } catch { return false }
 }
 const sportsSide = (value: unknown): value is SportsSide => isRecord(value)
   && hasOnlyKeys(value, ['label','score','logo','meta'])
   && isText(value.label) && optionalText(value.score,32) && optionalText(value.meta)
   && trustedPortrait(value.logo)
+const sportsPlayer = (v:unknown):v is SportsPlayer => isRecord(v)
+  && hasOnlyKeys(v,['name','role','image','stats','id']) && isText(v.name)
+  && optionalText(v.role,60) && optionalText(v.stats,240) && trustedPortrait(v.image)
+  && (v.id===undefined || typeof v.id==='number'&&Number.isSafeInteger(v.id))
+const sportsPitcher = (v:unknown):v is SportsPitcher => isRecord(v)
+  && hasOnlyKeys(v,['team','name','id','image','stats','probable'])
+  && isText(v.team) && isText(v.name) && typeof v.probable==='boolean'
+  && optionalText(v.stats,240) && trustedPortrait(v.image)
+  && (v.id===undefined || typeof v.id==='number'&&Number.isSafeInteger(v.id))
+const sportsLineup = (v:unknown):v is SportsLineup => isRecord(v)
+  && hasOnlyKeys(v,['team','confirmed','players']) && isText(v.team)
+  && typeof v.confirmed==='boolean' && Array.isArray(v.players)
+  && v.players.length<=12 && v.players.every(sportsPlayer)
+const sportsBullpen = (v:unknown):v is SportsBullpen => isRecord(v)
+  && hasOnlyKeys(v,['team','pitchers','note']) && isText(v.team)
+  && isText(v.note,320) && Array.isArray(v.pitchers)
+  && v.pitchers.length<=8 && v.pitchers.every(sportsPlayer)
+const sportsResearch = (v:unknown):v is SportsResearch => isRecord(v)
+  && hasOnlyKeys(v,['favorite','method','source','evidence'])
+  && isText(v.favorite) && isText(v.method,450) && isText(v.source,250)
+  && Array.isArray(v.evidence) && v.evidence.length<=5 && v.evidence.every(x=>isText(x,250))
+const sportsOdds = (v:Record<string,unknown>):v is SportsOddsCard => {
+  if(!isRecord(v.props)||!hasOnlyKeys(v.props,['title','source','subtitle','rows','note']))return false
+  const p=v.props
+  return isText(p.title) && isText(p.source,250) && optionalText(p.subtitle,220)
+    && isText(p.note,1000) && Array.isArray(p.rows) && p.rows.length>=1 && p.rows.length<=12
+    && p.rows.every(x=>isRecord(x)&&hasOnlyKeys(x,['event','market','selection','bookmaker','price','point'])
+      && isText(x.event) && isText(x.market,50) && isText(x.selection)
+      && isText(x.bookmaker) && isText(x.price,35) && optionalText(x.point,35))
+}
 const sportsGame = (value: Record<string, unknown>): value is SportsGameCard => {
   if (!isRecord(value.props) || !hasOnlyKeys(value.props,
-    ['title','subtitle','status','when','venue','home','away','source','highlights','note','askPrompt'])) return false
+    ['title','subtitle','status','when','venue','home','away','source','highlights','note','askPrompt','pitchers','lineups','bullpen','sport','league','country','eventId','broadcast','research','periods'])) return false
   const p = value.props
   return isText(p.title) && optionalText(p.subtitle) && optionalText(p.status,60)
     && isText(p.when) && optionalText(p.venue) && sportsSide(p.home) && sportsSide(p.away)
     && isText(p.source,320) && optionalText(p.note,MAX_TEXT) && optionalText(p.askPrompt,400)
+    && optionalText(p.sport,60) && optionalText(p.league,100) && optionalText(p.country,100)
+    && optionalText(p.eventId,50) && optionalText(p.broadcast,150)
+    && (p.research===undefined || sportsResearch(p.research))
+    && (p.periods===undefined || Array.isArray(p.periods) && p.periods.length<=12 && p.periods.every(x=>isRecord(x)
+      && hasOnlyKeys(x,['label','away','home']) && isText(x.label,30) && isText(x.away,30) && isText(x.home,30)))
+    && (p.pitchers===undefined || Array.isArray(p.pitchers) && p.pitchers.length<=4 && p.pitchers.every(sportsPitcher))
+    && (p.lineups===undefined || Array.isArray(p.lineups) && p.lineups.length<=2 && p.lineups.every(sportsLineup))
+    && (p.bullpen===undefined || Array.isArray(p.bullpen) && p.bullpen.length<=2 && p.bullpen.every(sportsBullpen))
     && (p.highlights === undefined || Array.isArray(p.highlights) && p.highlights.length <= 8
-      && p.highlights.every(x => isRecord(x) && hasOnlyKeys(x,['label','value','image'])
-        && isText(x.label,70) && isText(x.value,180) && trustedPortrait(x.image)))
+      && p.highlights.every(x => isRecord(x) && hasOnlyKeys(x,['label','value','image','detail'])
+        && isText(x.label,70) && isText(x.value,180) && trustedPortrait(x.image) && optionalText(x.detail,240)))
 }
 const sportsTicket = (value: Record<string, unknown>): value is SportsTicketCard => {
   if (!isRecord(value.props) || !hasOnlyKeys(value.props,
@@ -256,9 +308,11 @@ const sportsTicket = (value: Record<string, unknown>): value is SportsTicketCard
     && optionalText(p.grossReturn,50) && isText(p.note,MAX_TEXT)
     && optionalText(p.askPrompt,400) && Array.isArray(p.legs)
     && p.legs.length >= 1 && p.legs.length <= 12 && p.legs.every(x => isRecord(x)
-      && hasOnlyKeys(x,['event','selection','price','bookmaker','when','image'])
+      && hasOnlyKeys(x,['event','selection','price','bookmaker','when','image','sport','country','league','market','player'])
       && isText(x.event) && isText(x.selection) && isText(x.price,32)
-      && isText(x.bookmaker) && optionalText(x.when) && trustedPortrait(x.image))
+      && isText(x.bookmaker) && optionalText(x.when) && trustedPortrait(x.image)
+      && optionalText(x.sport,60) && optionalText(x.country,100) && optionalText(x.league,100)
+      && optionalText(x.market,70) && optionalText(x.player,140))
 }
 
 export function parseGenerativeUiBlock(value: unknown): GenerativeUiBlock | null {
@@ -270,6 +324,7 @@ export function parseGenerativeUiBlock(value: unknown): GenerativeUiBlock | null
   switch (value.component) {
     case 'sports_game_card': return sportsGame(value) ? value : null
     case 'sports_ticket_card': return sportsTicket(value) ? value : null
+    case 'sports_odds_card': return sportsOdds(value) ? value : null
     case 'event_card': return validateEventCard(value) ? value : null
     case 'metric_card': return validateMetricCard(value) ? value : null
     case 'comparison': return validateComparison(value) ? value : null
@@ -428,10 +483,46 @@ function expandRawCanvases(segments: GenerativeUiSegment[], streaming: boolean):
   return result
 }
 
-const SportsPortrait = ({ label, logo }: { label: string; logo?: string | undefined }) => (
+const SportsPortrait = ({ label,logo }:{ label:string;logo?:string|undefined }) => (
   <span className={css.sportsPortrait}>
-    {logo ? <img src={logo} alt={label} loading="lazy" referrerPolicy="no-referrer" /> : label.slice(0,2).toUpperCase()}
+    <span>{label.slice(0,2).toUpperCase()}</span>
+    {logo && <img src={logo} alt={label} loading="lazy" referrerPolicy="no-referrer"
+      onError={(event)=>{event.currentTarget.style.display='none'}}/>}
   </span>
+)
+const SportsLineups = ({ lineups }:{ lineups:SportsLineup[] }) => {
+  const [selected,setSelected]=useState(0)
+  const lineup=lineups[selected]
+  if(!lineup)return null
+  return <section className={css.sportsDetailSection} aria-label="Alineaciones MLB">
+    <h4>Alineaciones</h4>
+    <div className={css.sportsTabs} role="group" aria-label="Seleccionar equipo">
+      {lineups.map((side,i)=><button key={side.team} type="button"
+        aria-pressed={selected===i} onClick={()=>{ setSelected(i) }}>{side.team}</button>)}
+    </div>
+    {!lineup.confirmed&&<p className={css.sportsNote}>Alineación pendiente de confirmación: solo jugadores publicados por MLB.</p>}
+    {lineup.players.length>0?<div className={css.sportsTableScroll}><table className={css.sportsTable}>
+      <thead><tr><th scope="col">Bateador</th><th scope="col">Pos.</th><th scope="col">Temporada</th></tr></thead>
+      <tbody>{lineup.players.map((p,i)=><tr key={p.id??i}>
+        <th scope="row"><span className={css.sportsPlayerName}>
+          {p.image&&<SportsPortrait label={p.name} logo={p.image}/>}
+          {i+1}. {p.name}</span></th><td>{p.role??'—'}</td>
+        <td>{p.stats??'Pendiente'}</td>
+      </tr>)}</tbody></table></div>:<p className={css.sportsNote}>MLB todavía no publicó la alineación oficial.</p>}
+  </section>
+}
+const SportsBullpen = ({ bullpen }:{ bullpen:SportsBullpen[] }) => (
+  <section className={css.sportsDetailSection} aria-label="Bullpen MLB">
+    <h4>Bullpen y cuerpo de lanzadores</h4>
+    <div className={css.sportsBulpenGrid}>{bullpen.map((b,i)=><div key={i} className={css.sportsBullpenTeam}>
+      <strong>{b.team}</strong>{b.pitchers.length?b.pitchers.map((p,j)=>
+        <div className={css.sportsPitcherRow} key={p.id??j}>
+          <SportsPortrait label={p.name} logo={p.image}/>
+          <span><b>{p.name}</b><small>{p.stats??'Estadísticas no disponibles'}</small></span>
+        </div>):<p className={css.sportsNote}>Sin datos de bullpen verificables.</p>}
+      <p className={css.sportsNote}>{b.note}</p>
+    </div>)}</div>
+  </section>
 )
 
 const Initial = ({ label, symbol }: EventSide) => (
@@ -468,41 +559,109 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
     case 'status_pill': return <PhoenixStatusPill label={block.props.label} {...block.props.tone === undefined ? {} : { tone: block.props.tone }} />
     case 'agent_line': return <PhoenixAgentLine {...block.props} />
     case 'sports_game_card': {
-      const p = block.props
+      const p=block.props
       return <section className={css.sportsCard} data-generative-ui="sports_game_card">
-        <Header title={p.title} subtitle={p.subtitle} badge={p.status} />
-        <div className={css.sportsVenue}>{p.when} · {p.venue ?? 'Sede sin confirmar'}</div>
+        <header className={css.sportsHeadline}>
+          <div><span className={css.sportsKicker}>PHOENIX / {p.sport?.toUpperCase()??'DEPORTES'}</span>
+            {(p.country||p.league)&&<div className={css.sportsCompetition}>{[p.country,p.league].filter(Boolean).join(' · ')}</div>}
+            <h3>{p.title}</h3>{p.subtitle&&<p>{p.subtitle}</p>}</div>
+          {p.status&&<span className={css.sportsStatus}>{p.status}</span>}
+        </header>
+        <div className={css.sportsVenue}><span>◷ {p.when}</span>
+          <span>⌖ {p.venue||'Sede sin confirmar'}</span>
+          {p.broadcast&&<span>TV · {p.broadcast}</span>}</div>
         <div className={css.sportsVersus}>
-          <div className={css.sportsTeam}><SportsPortrait label={p.away.label} logo={p.away.logo} />
-            <strong>{p.away.label}</strong>{p.away.score && <b>{p.away.score}</b>}
-            {p.away.meta && <small>{p.away.meta}</small>}</div>
-          <span className={css.sportsVs}>VS</span>
-          <div className={css.sportsTeam}><SportsPortrait label={p.home.label} logo={p.home.logo} />
-            <strong>{p.home.label}</strong>{p.home.score && <b>{p.home.score}</b>}
-            {p.home.meta && <small>{p.home.meta}</small>}</div>
+          <div className={css.sportsTeam}><SportsPortrait label={p.away.label} logo={p.away.logo}/>
+            <strong>{p.away.label}</strong>{p.away.meta&&<small>{p.away.meta}</small>}
+            {p.away.score!==undefined&&<b>{p.away.score}</b>}</div>
+          <span className={css.sportsVs}>{p.away.score!==undefined||p.home.score!==undefined?'—':'VS'}</span>
+          <div className={css.sportsTeam}><SportsPortrait label={p.home.label} logo={p.home.logo}/>
+            <strong>{p.home.label}</strong>{p.home.meta&&<small>{p.home.meta}</small>}
+            {p.home.score!==undefined&&<b>{p.home.score}</b>}</div>
         </div>
-        {p.highlights && <dl className={css.sportsFacts}>{p.highlights.map((h,i) =>
-          <div key={i}>{h.image && <SportsPortrait label={h.value} logo={h.image} />}<dt>{h.label}</dt><dd>{h.value}</dd></div>)}</dl>}
-        <footer className={css.sportsFoot}>Fuente: {p.source}
-          {p.note && <span>{p.note}</span>}
-          {p.askPrompt && onAction && <button type="button" onClick={() =>{  onAction(p.askPrompt!, 'draft') }}>Ampliar análisis</button>}
+        {p.periods?.length?<section className={css.sportsDetailSection} aria-label="Parciales del partido">
+          <h4>Marcador por período</h4><div className={css.sportsTableScroll}><table className={css.sportsTable}>
+            <thead><tr><th>Equipo</th>{p.periods.map((period,i)=><th key={i}>{period.label}</th>)}</tr></thead>
+            <tbody><tr><th>{p.away.label}</th>{p.periods.map((period,i)=><td key={i}>{period.away}</td>)}</tr>
+              <tr><th>{p.home.label}</th>{p.periods.map((period,i)=><td key={i}>{period.home}</td>)}</tr></tbody>
+          </table></div></section>:null}
+        {p.pitchers?.length?<section className={css.sportsDetailSection} aria-label="Lanzadores probables">
+          <h4>Abridores probables</h4>
+          <div className={css.sportsStarters}>{p.pitchers.map((pitcher,i)=>
+            <div key={pitcher.id??i} className={css.sportsStarter}>
+              <SportsPortrait label={pitcher.name} logo={pitcher.image}/>
+              <div><span>{pitcher.team}</span><strong>{pitcher.name}</strong>
+                <small>{pitcher.stats??'Estadísticas de temporada no disponibles'}</small></div>
+            </div>)}</div>
+          <p className={css.sportsNote}>Probables según MLB; sujetos a cambios.</p>
+        </section>:null}
+        {!p.pitchers?.length&&p.highlights?.length?<dl className={css.sportsFacts}>{p.highlights.map((h,i)=>
+          <div key={i}>{h.image&&<SportsPortrait label={h.value} logo={h.image}/>}
+            <dt>{h.label}</dt><dd>{h.value}</dd>{h.detail&&<small>{h.detail}</small>}</div>)}</dl>:null}
+        {p.research&&<section className={css.sportsDetailSection} aria-label="Investigación de Phoenix">
+          <h4>Investigación Phoenix · Tendencia</h4>
+          <div className={css.sportsResearch}><strong>{p.research.favorite}</strong>
+            <p>{p.research.method}</p>
+            <ul>{p.research.evidence.map((line,i)=><li key={i}>{line}</li>)}</ul>
+            <small>Fuente: {p.research.source}</small></div>
+        </section>}
+        {p.lineups?.length?<SportsLineups lineups={p.lineups}/>:null}
+        {p.bullpen?.length?<SportsBullpen bullpen={p.bullpen}/>:null}
+        <footer className={css.sportsSourceBar}>
+          <span>Datos · {p.source}</span>
+          {p.note&&<small>{p.note}</small>}
+          {p.askPrompt&&onAction&&<button type="button" onClick={() => { if (p.askPrompt) onAction(p.askPrompt, 'draft') }}>
+            Investigar análisis y mercados</button>}
         </footer>
+      </section>
+    }
+    case 'sports_odds_card': {
+      const p=block.props
+      return <section className={css.sportsCard} data-generative-ui="sports_odds_card">
+        <header className={css.sportsHeadline}><div><span className={css.sportsKicker}>PHOENIX / CUOTAS VERIFICADAS</span>
+          <h3>{p.title}</h3>{p.subtitle&&<p>{p.subtitle}</p>}</div></header>
+        <div className={css.sportsTableScroll}><table className={css.sportsTable}>
+          <thead><tr><th>Partido</th><th>Mercado</th><th>Selección</th><th>Casa</th><th>Cuota decimal</th></tr></thead>
+          <tbody>{p.rows.map((r,i)=><tr key={i}><th>{r.event}</th><td>{r.market}</td>
+            <td>{r.selection}{r.point?' · '+r.point:''}</td><td>{r.bookmaker}</td><td><strong>{r.price}</strong></td>
+          </tr>)}</tbody></table></div>
+        <footer className={css.sportsSourceBar}><span>Fuente: {p.source}</span><small>{p.note}</small></footer>
       </section>
     }
     case 'sports_ticket_card': {
       const p = block.props
-      return <section className={css.sportsCard} data-generative-ui="sports_ticket_card">
-        <Header title={p.title} subtitle={p.subtitle} badge="Simulación" />
-        <div className={css.sportsLegs}>{p.legs.map((leg,i) => <div key={i} className={css.sportsLeg}>
-          <span>{leg.image && <SportsPortrait label={leg.selection} logo={leg.image} />}</span>
-          <div><small>{leg.event}{leg.when ? ' · '+leg.when : ''}</small><strong>{leg.selection}</strong>
-            <small>{leg.bookmaker}</small></div><b>{leg.price}</b>
-        </div>)}</div>
-        <div className={css.sportsTicketTotal}><div><small>Cuota total</small><strong>{p.combinedOdds}</strong></div>
+      // Group only attributed taxonomy from the sportsbook result; unknown leagues stay unlabelled.
+      const groups = new Map<string,typeof p.legs>()
+      for (const leg of p.legs) {
+        const heading=[leg.sport??'Deporte no clasificado',leg.country,leg.league].filter(Boolean).join(' · ')
+        groups.set(heading,[...(groups.get(heading)??[]),leg])
+      }
+      return <section className={`${css.sportsCard} ${css.sportsTicketCard}`} data-generative-ui="sports_ticket_card">
+        <header className={css.sportsTicketHeading}>
+          <span className={css.sportsKicker}>PHOENIX / SPORTS INTELLIGENCE</span>
+          <div className={css.sportsHeadline}><div><h3>{p.title}</h3>
+            {p.subtitle&&<p>{p.subtitle}</p>}</div>
+            <span className={css.sportsStatus}>SIMULACIÓN</span></div>
+          <span className={css.sportsTicketCount}>{p.legs.length} {p.legs.length===1?'selección':'selecciones'} · {groups.size} {groups.size===1?'grupo':'grupos'}</span>
+        </header>
+        <div className={css.sportsTicketGroups}>{[...groups].map(([heading,legs])=>
+          <section key={heading} className={css.sportsTicketGroup} aria-label={heading}>
+            <h4>{heading}</h4>
+            <div className={css.sportsLegs}>{legs.map((leg,i)=><div key={i} className={css.sportsLeg}>
+              {leg.image&&<SportsPortrait label={leg.player??leg.selection} logo={leg.image}/>}
+              <div><small>{leg.event}{leg.when?' · '+leg.when:''}</small>
+                {leg.player&&<small>Jugador · {leg.player}</small>}
+                <strong>{leg.selection}</strong>
+                <small>{[leg.market,leg.bookmaker].filter(Boolean).join(' · ')}</small>
+              </div><b aria-label={`Cuota ${leg.price}`}>{leg.price}</b>
+            </div>)}</div>
+          </section>)}</div>
+        <div className={css.sportsTicketTotal}><div><small>Cuota combinada</small><strong>{p.combinedOdds}</strong></div>
           {p.stake && <div><small>Importe simulado</small><strong>{p.stake}</strong></div>}
           {p.grossReturn && <div><small>Retorno bruto potencial</small><strong>{p.grossReturn}</strong></div>}</div>
-        <footer className={css.sportsFoot}>Fuente: {p.source}<span>{p.note}</span>
-          {p.askPrompt && onAction && <button type="button" onClick={() =>{  onAction(p.askPrompt!, 'draft') }}>Revisar selección</button>}
+        <footer className={css.sportsFoot}><strong>Solo análisis · No se ha realizado ninguna apuesta</strong>
+          <span>Fuente: {p.source}</span><span>{p.note}</span>
+          {p.askPrompt && onAction && <button type="button" onClick={() => { if (p.askPrompt) onAction(p.askPrompt, 'draft') }}>Revisar selección</button>}
         </footer>
       </section>
     }

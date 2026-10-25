@@ -12,7 +12,7 @@ const GUIDANCE = [
   'NO abras pantallas independientes ni crees entradas de menú. Antes de redactar una cartelera o boleto, llama sports_chat_games y, cuando corresponda, sports_chat_mlb_pitchers / sports_chat_odds / sports_chat_ticket. Phoenix dibuja de manera nativa las tarjetas verificadas de los resultados. NO copies el JSON de los resultados en la respuesta, NO escribas fences generative-ui ni bloques de código, aunque una herramienta los incluya en sus datos. Explica los hallazgos y las fuentes con un texto humano breve.',
   'Para muchos partidos muestra como máximo seis tarjetas relevantes y ofrece ampliar; nunca inventes eventos, cuotas, lanzadores, lesiones ni resultados ausentes.',
   'Usa ESPN Site/Core como proveedor gratuito para marcadores y, cuando ESPN los publique, moneylines sin claves; usa The Odds API solo como opción ampliada si existe THE_ODDS_API_KEY. Si ESPN no presenta cuotas verificables, devuelve lista vacía y explica cobertura, sin generar precios ficticios; el chat mostrará automáticamente NO BET. Los tickets solo pueden usar precios del proveedor consultados en ese momento. Son simulaciones; no hay garantía de acierto. Identifica correlaciones y ausencia de predicción calibrada.',
-  'Los datos deben indicar su fuente, fecha y zona horaria, y adaptar el detalle a cada deporte.',
+  'Los datos deben indicar su fuente, fecha y zona horaria, y adaptar el detalle a cada deporte. Cuando el usuario pida favoritos, muestra primero los encuentros reales con escudos, horarios, país y liga (si son conocidos), y solo después una tendencia propia sustentada en investigación verificable; una cuota baja no prueba cuál equipo es favorito de tu modelo. En tickets separa visualmente por deporte, país y liga y, si hay un mercado de jugador respaldado por el proveedor, muestra también el jugador; no inventes nombres, mercados ni fotos. Los tickets heredan el tema claro/oscuro de Phoenix. Nunca presentes porcentajes de ESPN como estimaciones propias ni afirmes un porcentaje sin calibración.',
 ].join(' ')
 
 export function apply(ctx: Context): void {
@@ -84,7 +84,28 @@ export function apply(ctx: Context): void {
     isConcurrencySafe:()=>true,
     async execute(args){
       const quotes=await marketOdds(args.sportKey,args.markets)
-      return JSON.stringify({ source:quotes[0]?.source||'ESPN público (sin cuotas disponibles) / The Odds API opcional',observedAt:new Date().toISOString(),outcomes:quotes.slice(0,120),
+      const events=new Map<string,typeof quotes>()
+      for(const quote of quotes.slice(0,96)){
+        const rows=events.get(quote.eventId)??[]
+        if(rows.length<12)rows.push(quote)
+        events.set(quote.eventId,rows)
+      }
+      const uiBlocks=[...events.entries()].slice(0,5).flatMap(([,rows])=>{
+        const first=rows[0]
+        if(!first)return []
+        return [{
+        component:'sports_odds_card',version:1,props:{
+          title:first.away+' vs '+first.home,
+          subtitle:'Mercados reportados por casa; no son probabilidades estimadas',
+          source:first.source||'Proveedor consultado',
+          rows:rows.map(q=>({ event:q.away+' vs '+q.home,market:q.market,
+            selection:q.selection,bookmaker:q.bookmaker,price:q.price.toFixed(2),
+            ...(q.point===null||q.point===undefined?{}:{ point:String(q.point) }) })),
+          note:'Cuotas observadas al consultar la herramienta. Pueden cambiar antes de cualquier decisión. No se realizó ninguna apuesta.',
+        },
+        }]
+      })
+      return JSON.stringify({ uiBlocks,source:quotes[0]?.source||'ESPN público (sin cuotas disponibles) / The Odds API opcional',observedAt:new Date().toISOString(),outcomes:quotes.slice(0,120),
         total:quotes.length,remaining:Math.max(0,quotes.length-120),
         note:quotes.length?'Cuotas verificadas, no probabilidades propias. Actualizar antes de componer tickets.':'ESPN no publicó moneylines accesibles para ese día y mercado; no hace falta una clave para ver partidos. Las cuotas faltantes no se inventan.' })
     },

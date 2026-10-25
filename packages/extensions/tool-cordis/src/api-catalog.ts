@@ -1273,6 +1273,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'The current project identifier, when the active session has one.',
       },
       {
+        signature: 'projectIdForSession(sessionId: string): string | undefined',
+        description: 'Resolve the project for the owning session, never another active chat.',
+        parameters: [{ name: 'sessionId', description: 'Root human conversation or mission session.' }],
+        returns: 'Project scope to use when assembling its model context.',
+      },
+      {
         signature: 'remember(input: MemoryRecordInput): Promise<MemoryRecord>',
         description: 'Store an explicit, bounded lesson supplied by the model or user workflow.',
         parameters: [{ name: 'input', description: 'Memory record to persist.' }],
@@ -3792,7 +3798,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'CognitiveMemoryQuery',
-    declaration: 'export interface CognitiveMemoryQuery {\n    readonly query?: string;\n    readonly layers?: readonly CognitiveMemoryLayer[];\n    readonly projectId?: string;\n    readonly sessionId?: string;\n    readonly sessionIds?: readonly string[];\n    readonly entity?: string;\n    readonly from?: number;\n    readonly to?: number;\n    readonly includeHistory?: boolean;\n    readonly limit?: number;\n}',
+    declaration: 'export interface CognitiveMemoryQuery {\n    readonly query?: string;\n    readonly kind?: CognitiveMemoryKind;\n    readonly layers?: readonly CognitiveMemoryLayer[];\n    readonly projectId?: string;\n    readonly sessionId?: string;\n    readonly sessionIds?: readonly string[];\n    readonly entity?: string;\n    readonly from?: number;\n    readonly to?: number;\n    readonly includeHistory?: boolean;\n    readonly limit?: number;\n}',
   },
   {
     name: 'CognitiveMemoryRecord',

@@ -2567,6 +2567,24 @@ Search Phoenix cognitive memory with bounded provenance, layers, project, tempor
         "temporal"
       ]
     },
+    "kind": {
+      "type": "string",
+      "description": "Exact memory category. Use decision for Kira previous predictions and selections.",
+      "enum": [
+        "decision",
+        "fact",
+        "preference",
+        "lesson",
+        "skill",
+        "pending",
+        "mission",
+        "error",
+        "success",
+        "conversation",
+        "event",
+        "interaction"
+      ]
+    },
     "from": {
       "type": "integer",
       "description": "Optional inclusive Unix-millisecond lower bound."

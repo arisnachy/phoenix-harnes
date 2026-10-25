@@ -303,6 +303,15 @@ export class LearningMemoryService extends Service {
   }
 
   /**
+   * Resolve the project for the owning session, never another active chat.
+   * @param sessionId - Root human conversation or mission session.
+   * @returns Project scope to use when assembling its model context.
+   */
+  projectIdForSession(sessionId: string): string | undefined {
+    return this.projectForSession(sessionId)
+  }
+
+  /**
    * Store an explicit, bounded lesson supplied by the model or user workflow.
    * @param input - Memory record to persist.
    * @returns The persisted memory record.
@@ -376,8 +385,12 @@ export class LearningMemoryService extends Service {
     if (isDerivedRuntimeContextEvent(event)) return Promise.resolve()
     const observation = observationFor(session, event)
     const cognitiveObservation = cognitiveObservationFor(session, event)
+    // A separate derived row also backfills older model decisions during
+    // canonical session replay without changing the original conversation.
+    const decision = assistantDecisionObservationFor(session, event)
     return Promise.all([
       this.cognitive.remember(cognitiveObservation),
+      ...decision === undefined ? [] : [this.cognitive.remember(decision)],
       ...observation === undefined ? [] : [this.ledger.remember(observation)],
     ]).then(() => undefined).catch((error: unknown) => {
       this.ctx.logger.warn(`learning-memory: ignored event ${event.type} in ${String(session.id)}: ${String(error)}`)
@@ -481,7 +494,10 @@ interface Observation {
 
 function cognitiveObservationFor(session: Session, event: SessionEvent): CognitiveMemoryInput {
   const content = eventText(event)
-  const durable = durableFact(content)
+  // An assistant saying "prefiero" must never become a user preference.
+  const durable = event.type === 'user/message' && event.data.source.kind === 'user'
+    ? durableFact(content)
+    : undefined
   const projectId = projectIdFor(session)
   const entities = entitiesFor(content, projectId, event.type)
   const error = isErrorEvent(event, content)
@@ -520,6 +536,51 @@ function cognitiveObservationFor(session: Session, event: SessionEvent): Cogniti
   }
 }
 
+/**
+ * Capture an explicit choice as a durable decision, separate from its raw
+ * assistant message. The decision documents what Kira said, not whether that
+ * forecast was correct. Distinct provenance allows replay to backfill older
+ * conversations and preserves later changed picks as chronological history.
+ */
+function assistantDecisionObservationFor(session: Session, event: SessionEvent): CognitiveMemoryInput | undefined {
+  // Subagent deliberation is not a public choice made by Kira.
+  if (event.type !== 'assistant/message' || session.header.origin === 'subagent') return undefined
+  const content = eventText(event)
+  if (!isExplicitAssistantDecision(content)) return undefined
+  const projectId = projectIdFor(session)
+  const safeContent = sanitize(content)
+  const questionEvent = session.events.findLast(candidate =>
+    candidate.seq < event.seq && candidate.type === 'user/message' && candidate.data.source.kind === 'user')
+  const question = questionEvent === undefined ? undefined : messageText(questionEvent.data)
+  // "Voy con Milwaukee" remains searchable by Brewers–Rays even when the
+  // model's short answer omitted the matchup named in the human question.
+  const referencedQuestion = question === undefined ? '' : sanitize(question).slice(0, 320)
+  const summary = referencedQuestion === ''
+    ? `Kira decision: ${safeContent}`
+    : `Kira decision responding to [${referencedQuestion}]: ${safeContent}`
+  return {
+    sessionId: String(session.id),
+    eventSeq: event.seq,
+    kind: 'decision',
+    layers: ['autobiographical', 'episodic', 'semantic', 'associative', 'temporal'],
+    content: safeContent,
+    summary: sanitize(summary),
+    sourceEventType: 'assistant/decision',
+    occurredAt: event.time,
+    ...projectId === undefined ? {} : { projectId },
+    entities: entitiesFor(content, projectId, 'assistant/decision'),
+    confidence: 0.92,
+    importance: 0.94,
+  }
+}
+
+function isExplicitAssistantDecision(text: string): boolean {
+  const normalized = text.normalize('NFKD').replace(/\p{Diacritic}/gu, '').toLocaleLowerCase()
+  if (/\b(?:no tengo (?:un |una )?(?:favorito|pronostico|seleccion)|no puedo elegir|sin (?:favorito|seleccion))\b/u.test(normalized)) return false
+  return /\b(?:mi|nuestro|nuestra|el|la)\s+(?:favorito|pronostico|pick|seleccion|eleccion)\s*(?:es\b|sera\b|para\b|del\b|:)/u.test(normalized)
+    || /\b(?:elijo|elegimos|escogi|escogimos|selecciono|seleccionamos|me inclino por|nos quedamos con|voy con|vamos con)\b/u.test(normalized)
+}
+
 function explicitCognitiveInput(input: MemoryRecordInput, projectId: string | undefined): CognitiveMemoryInput {
   const entities = entitiesFor(input.summary, projectId, input.sourceEventType)
   const layers: CognitiveMemoryLayer[] = ['autobiographical', 'semantic', 'temporal']
@@ -543,8 +604,10 @@ function explicitCognitiveInput(input: MemoryRecordInput, projectId: string | un
 
 function eventText(event: SessionEvent): string {
   switch (event.type) {
-    case 'user/message':
-    case 'assistant/message': return messageText(event.data) ?? event.type
+    case 'user/message': return messageText(event.data) ?? event.type
+    // Assistant events wrap their Message in { turn, step, message }.
+    // Reading the envelope silently reduced every model answer to a label.
+    case 'assistant/message': return messageText(event.data.message) ?? event.type
     case 'tool/result': return toolResultText(event.data.message)
     case 'tool/call': return sanitize(`${event.data.name}: ${event.data.arguments}`)
     case 'turn/end': return event.data.reason.kind === 'error' ? `turn failed: ${errorText(event.data.reason.error)}` : `turn ${event.data.reason.kind}`

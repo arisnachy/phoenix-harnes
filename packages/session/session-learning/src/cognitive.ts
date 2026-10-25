@@ -103,6 +103,8 @@ export interface CognitiveMemoryInput {
 /** Filters used by the deterministic hybrid cognitive search. */
 export interface CognitiveMemoryQuery {
   readonly query?: string
+  /** Optional exact fact class, used to recover prior assistant decisions. */
+  readonly kind?: CognitiveMemoryKind
   readonly layers?: readonly CognitiveMemoryLayer[]
   readonly projectId?: string
   readonly sessionId?: string
@@ -287,6 +289,7 @@ export class CognitiveMemoryLedger {
     const candidates = [...this.records.values()]
       .filter(record => query.includeHistory === true ? record.status !== 'forgotten' : record.status === 'active')
       .filter(record => query.layers === undefined || query.layers.some(layer => record.layers.includes(layer)))
+      .filter(record => query.kind === undefined || record.kind === query.kind)
       .filter(record => query.projectId === undefined || record.projectId === query.projectId)
       .filter(record => query.sessionId === undefined || record.sessionId === query.sessionId)
       .filter(record => sessionIds === undefined || sessionIds.has(record.sessionId))
