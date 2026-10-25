@@ -175,6 +175,8 @@ export function UpdateFooterAction({
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [connectionLost, setConnectionLost] = useState(false)
   const requestInFlight = useRef(false)
+  const autoOpenedTarget = useRef<string | undefined>(undefined)
+  const consoleRef = useRef<HTMLDivElement | null>(null)
 
   const acceptDurableSnapshot = useCallback((next: PhoenixUpdateSnapshot) => {
     // A successful RPC proves the Host is reachable again. From this point the
@@ -182,8 +184,16 @@ export function UpdateFooterAction({
     clearRestartReconnectGrace()
     setConnectionLost(false)
     setSnapshot(next)
-    if (next.status === 'error' || next.status === 'rollback-failed'
-      || next.events?.some(event => event.result === 'failed' && event.diagnostic !== undefined)) setDetailsOpen(true)
+    if (next.status === 'updated' || next.status === 'current' || next.status === 'idle') {
+      setDetailsOpen(false)
+      autoOpenedTarget.current = undefined
+    } else if (next.status === 'error' || next.status === 'rollback-failed') {
+      setDetailsOpen(true)
+    } else if (next.target !== undefined && next.target !== autoOpenedTarget.current
+      && ['preparing', 'restarting', 'applying', 'rolling-back'].includes(next.status)) {
+      autoOpenedTarget.current = next.target
+      setDetailsOpen(true)
+    }
   }, [])
 
   const reportReadFailure = useCallback((_error: unknown) => {
@@ -323,6 +333,9 @@ export function UpdateFooterAction({
   }
 
   const progress = updateProgress(snapshot)
+  const consoleLines = snapshot.console ?? []
+  const liveConsoleText = consoleLines.map(line =>
+    `[${new Date(line.at).toLocaleTimeString()}] [${line.stream}] ${line.line}`).join('\n')
   const events = snapshot.events?.slice(-20).reverse() ?? []
   const target = snapshot.target?.slice(0, 12)
   const retryable = errorState || snapshot.status === 'paused'
@@ -333,7 +346,10 @@ export function UpdateFooterAction({
       : snapshot.detail
   // The supervisor records both the specific failed command and a wrapper
   // activation failure. Prefer the actionable command and its exit code.
-  const lastDiagnostic = events.find(event => event.result === 'failed' && event.diagnostic !== undefined)
+  // Do not display a previous failed attempt while a new build is running.
+  const lastDiagnostic = errorState
+    ? events.find(event => event.result === 'failed' && event.diagnostic !== undefined)
+    : undefined
   const lastFailedStep = errorState
     ? events.find(event => event.result === 'failed'
       && event.step !== 'runtime-activation' && event.step !== 'error' && event.step !== 'rollback-failed')
@@ -391,6 +407,30 @@ export function UpdateFooterAction({
                   {lastFailedStep.exitCode === undefined ? null : ` · ${t('updateExitCode')}: ${String(lastFailedStep.exitCode)}`}
                 </>}
             </p>
+          )}
+          {(['preparing', 'restarting', 'applying', 'rolling-back'].includes(snapshot.status)) && (
+            <section className={css.diagnosticPanel} aria-label={t('updateLiveConsole')}>
+              <div className={css.diagnosticHeader}>
+                <strong>{t('updateLiveConsole')}</strong>
+                {consoleLines.length > 0 && <button
+                  type="button"
+                  className={css.diagnosticCopy}
+                  onClick={() => { void navigator.clipboard?.writeText(liveConsoleText) }}
+                >
+                  {t('updateLiveCopy')}
+                </button>}
+              </div>
+              <div className={css.liveConsole} ref={consoleRef} data-testid="phoenix-update-live-console" role="log" aria-live="off">
+                {consoleLines.length === 0
+                  ? <span className={css.liveWaiting}>{t('updateLiveWaiting')}</span>
+                  : consoleLines.map((line, index) => (
+                    <div key={line.at + line.step + String(index)} className={css.liveLine} data-stream={line.stream}>
+                      <time dateTime={line.at}>{new Date(line.at).toLocaleTimeString()}</time>
+                      <span>{line.line}</span>
+                    </div>
+                  ))}
+              </div>
+            </section>
           )}
           {lastDiagnostic?.diagnostic !== undefined && (
             <section className={css.diagnosticPanel} aria-label={t('updateDiagnosticTitle')}>
