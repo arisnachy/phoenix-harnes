@@ -56,13 +56,16 @@ jobs:
               packages/core/tool-sports/src/mlb.ts \
               packages/core/tool-sports/src/sports.ts \
               packages/examples/agent-spine-demo/src/index.ts \
-              packages/extensions/tool-cordis/src/api-catalog.ts | sort)
+              packages/extensions/tool-cordis/src/api-catalog.ts \
+              packages/session-learning/tool-session-learning/src/index.ts | sort)
             printf 'Unmerged conflict paths:\n%s\n' "${actual[*]}"
             if [ "${actual[*]}" != "${expected[*]}" ]; then
               echo 'New/unreviewed merge conflicts: refusing all resolution and push' >&2
               exit 1
             fi
             # Latest main owns refreshed native sports cards and generated catalogs.
+            # Latest main adds project-scoped memory and historical-decision recall;
+            # preserve those upgrades rather than the branch's superseded currentProjectId lookup.
             # PR retains the production Team executions API where its conflict is substantive;
             # the official generator re-derives the merged catalog below.
             for path in "${actual[@]}"; do
