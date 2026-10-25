@@ -315,13 +315,14 @@ function readUpdateState() {
   }
 }
 
-// Report only fixed lifecycle/command codes; raw PowerShell output remains private.
-function reportSupervisorStep(step, result, exitCode) {
+// Durable event codes are fixed; captured command errors are redacted by the
+// journal writer before the Host reads them.
+function reportSupervisorStep(step, result, exitCode, diagnostic) {
   const statePath = updateStatePath()
   if (statePath === undefined) return
   const target = restartRequestTarget() ?? readUpdateState()?.target
   if (typeof target !== 'string' || !/^[a-f0-9]{40}$/iu.test(target)) return
-  recordPhoenixUpdateStep(statePath, step, result, target, exitCode)
+  recordPhoenixUpdateStep(statePath, step, result, target, exitCode, diagnostic)
 }
 
 function clearPreparedRecord() {
@@ -879,11 +880,22 @@ function runChecked(cwd, bin, args, label) {
   const result = spawnSync(bin, args, {
     cwd,
     env: process.env,
-    stdio: 'inherit',
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+    maxBuffer: 64 * 1024 * 1024,
     windowsHide: hideRuntimeWindows,
   })
+  // Preserve the native console output while retaining the real failure trace
+  // for the browser, rather than showing only "exit code: 1".
+  if (result.stdout) process.stdout.write(result.stdout)
+  if (result.stderr) process.stderr.write(result.stderr)
   if (result.error !== undefined || (result.status ?? 1) !== 0) {
-    if (step) reportSupervisorStep(step, 'failed', result.status ?? 1)
+    const diagnostic = [
+      result.error?.stack ?? result.error?.message,
+      result.stderr && `STDERR:\n${result.stderr}`,
+      result.stdout && `STDOUT:\n${result.stdout}`,
+    ].filter(Boolean).join('\n')
+    if (step) reportSupervisorStep(step, 'failed', result.status ?? 1, diagnostic)
     if (result.error !== undefined) throw new Error(`${label}: ${result.error.message}`)
     throw new Error(`${label} exited with ${String(result.status ?? 1)}`)
   }
@@ -1194,7 +1206,7 @@ function activatePreparedRuntime(target) {
   reportSupervisorStep('boot-preflight', 'started')
   const bootPreflight = runtimeBootPreflight(runtime)
   if (!bootPreflight.ok) {
-    reportSupervisorStep('boot-preflight', 'failed', 1)
+    reportSupervisorStep('boot-preflight', 'failed', 1, bootPreflight.detail)
     throw new Error(
       `isolated runtime ${target.slice(0, 12)} failed boot preflight: ${bootPreflight.detail || 'unknown error'}`,
     )
@@ -1810,7 +1822,7 @@ async function waitForHostEvent(host, hostExitPromise, lastObservedFingerprint, 
         reportSupervisorStep('handoff', 'started')
         return { kind: 'safe-update-handoff', target: updateTarget, lastObservedFingerprint }
       } catch (error) {
-        reportSupervisorStep('runtime-activation', 'failed', 1)
+        reportSupervisorStep('runtime-activation', 'failed', 1, error instanceof Error ? error.stack ?? error.message : String(error))
         const stateFile = updateStatePath()
         if (stateFile !== undefined) {
           writePhoenixUpdateState(stateFile, {
@@ -2294,7 +2306,7 @@ while (true) {
     const stateFile = updateStatePath()
     if (stateFile !== undefined) {
       const exitCode = Number.isInteger(hostExit.code) && hostExit.code >= 0 ? hostExit.code : 1
-      recordPhoenixUpdateStep(stateFile, 'health-check', 'failed', exitedTarget, exitCode)
+      recordPhoenixUpdateStep(stateFile, 'health-check', 'failed', exitedTarget, exitCode, `Host exit ${String(exitCode)} before health checkpoint; runtime ${exitedTarget}`)
       writePhoenixUpdateState(stateFile, {
         ...failedUpdateState,
         status: 'error',
