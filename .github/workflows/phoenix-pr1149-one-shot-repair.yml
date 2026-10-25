@@ -1,0 +1,59 @@
+name: PR1149 one-shot generated contract repair
+on:
+  push:
+    branches:
+      - feat/kira-sports-rich-phoenix-ui-20261024
+    paths:
+      - .github/workflows/phoenix-pr1149-one-shot-repair.yml
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: github.repository == 'arisnachy/phoenix-harnes'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build required host libraries
+        run: pnpm run build:lib:host
+      - name: Auto-fix style only in PR1149 source files
+        shell: bash
+        run: |
+          pnpm exec tsx scripts/run-oxlint.ts packages/core/tool-sports/src packages/client/ui-conversation/src/client/chat/GenerativeUi.tsx --fix || true
+      - name: Regenerate checked-in derived catalogs
+        shell: bash
+        run: |
+          set +e
+          for task in gen-cordis-catalog gen-client-catalog gen-tool-catalog gen-persistence-catalog gen-module-graph gen-doc-graphs; do
+            echo "::group::$task"
+            pnpm run "$task"
+            result=$?
+            echo "$task exit: $result"
+            echo "::endgroup::"
+          done
+          exit 0
+      - name: Remove one-shot workflow and commit generated repairs
+        shell: bash
+        run: |
+          rm -f .github/workflows/phoenix-pr1149-one-shot-repair.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add --all
+          if git diff --cached --quiet; then
+            echo "No generated changes."
+            exit 0
+          fi
+          echo "Files repaired:"
+          git diff --cached --stat
+          git commit -m "chore(sports): regenerate derived catalogs and auto-fix scoped lint"
+          git push origin HEAD:feat/kira-sports-rich-phoenix-ui-20261024
