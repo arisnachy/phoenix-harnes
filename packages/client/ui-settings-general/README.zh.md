@@ -12,6 +12,8 @@
 
 宿主端在用户设置 seam 中注册 `ui-onboarding`。`ui-settings-models` 提供的欢迎步骤通过既有公开 settings 边界读写其中的 `welcomeNoticeVersion`；外壳本身仍不持有产品策略。
 
+现有的唯一 Settings 设置对话框也可以通过应用内侧边栏或欢迎工具栏发送 `phoenix:open-settings-section` 浏览器导航事件打开。事件会选择已经注册的设置分区，不会创建第二份设置存储。
+
 ## 模型体验
 
 无。该插件渲染浏览器设置 UI；这里没有任何内容进入模型请求。

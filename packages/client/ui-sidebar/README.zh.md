@@ -31,3 +31,5 @@ New Session 会启动运行时的页面局部前端 Session Intent。运行时�
 - **Session 状态点渲染由 [ui-workspace](../ui-workspace/README.zh.md) 持有**：没有可用的 done/error 通知数据源。
 - **Workspace 浏览行为由组合持有**：分组、排序、搜索与行状态都属于 [ui-workspace](../ui-workspace/README.zh.md)，不属于此外壳。
 - **「New task completed」未读标记是本地查看状态**：完成时间 > 上次查看时间这一事实永远不会到达宿主。
+
+展开的侧边栏现包含基于已批准简洁助手界面设计的主导航。Inicio 复用新建会话；Descubrir、Conectores 和 Equipo 打开已有的设置分区；Biblioteca 定位到现有的工作区搜索。收起后的轨道和会话浏览器保持不变。
