@@ -108,11 +108,16 @@ export function TelegramConnectorSetup({ client }: { client?: TelegramBotClient 
       {snapshot?.configured && !snapshot.paired ? (
         <div style={{ display: 'grid', gap: 6 }}>
           <button type="button" disabled={busy} onClick={pair}>Generar código de vinculación (15 min)</button>
-          {pairCode ? <p style={{ fontSize: 12, margin: 0 }}>En el chat privado de tu bot, envía <code>/start {pairCode}</code>. Luego pulsa «Actualizar estado».</p> : null}
+          {pairCode ? (
+            <p style={{ fontSize: 12, margin: 0 }}>
+              En el chat privado de tu bot, envía <code>/start {pairCode}</code>. Luego pulsa «Actualizar estado».
+            </p>
+          ) : null}
         </div>
       ) : null}
       <p style={{ margin: 0, fontSize: 11 }}>
-        El bot recibe mensajes solo mientras el Host de Phoenix está en ejecución y tu usuario está vinculado. Las notas de voz y las llamadas de Codex se integrarán aparte; el texto nunca activa el micrófono.
+        El bot recibe mensajes solo mientras el Host de Phoenix está en ejecución y tu usuario está vinculado.
+        Las notas de voz y las llamadas de Codex se integrarán aparte; el texto nunca activa el micrófono.
       </p>
       <details>
         <summary>Instrucciones para configurar Telegram con Kira</summary>
@@ -122,10 +127,16 @@ export function TelegramConnectorSetup({ client }: { client?: TelegramBotClient 
           <li>Elige un usuario terminado en <code>bot</code>, que esté disponible.</li>
           <li>Copia el token entregado por BotFather y pégalo solamente en el campo seguro de Phoenix.</li>
           <li>Pulsa «Guardar y verificar». Si es válido, Phoenix mostrará el usuario real del bot.</li>
-          <li>Pulsa «Generar código de vinculación», abre tu bot y envía <code>/start CODIGO</code> sustituyendo CODIGO por el número mostrado.</li>
+          <li>
+            Pulsa «Generar código de vinculación», abre tu bot y envía <code>/start CODIGO</code>
+            sustituyendo CODIGO por el número mostrado.
+          </li>
           <li>Tras recibir la confirmación de Kira, envía un mensaje de texto. Phoenix lo procesará a través del Agent real.</li>
         </ol>
-        <p style={{ fontSize: 11 }}>No envíes el token por el chat ni lo incluyas en GitHub. El token es distinto de la autenticación de voz Codex.</p>
+        <p style={{ fontSize: 11 }}>
+          No envíes el token por el chat ni lo incluyas en GitHub.
+          El token es distinto de la autenticación de voz Codex.
+        </p>
         <a href={GUIDE} target="_blank" rel="noopener noreferrer">Guía completa de Phoenix</a>
       </details>
       <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
