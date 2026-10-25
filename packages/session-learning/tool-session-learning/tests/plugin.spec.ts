@@ -135,8 +135,8 @@ describe('tool-session-learning plugin', () => {
       content: [{ type: 'text', text }],
       source: { provider: 'test', model: 'test-model' },
     })
-    alpha.append('assistant/message', assistant('Mi favorito para Brewers–Rays es Milwaukee Brewers.'), { surfaceOp: 'append' })
-    beta.append('assistant/message', assistant('Mi favorito para Dodgers–Mets es Los Angeles Dodgers.'), { surfaceOp: 'append' })
+    alpha.append('assistant/message', { turn: 1, step: 1, message: assistant('Mi favorito para Brewers–Rays es Milwaukee Brewers.') }, { surfaceOp: 'append' })
+    beta.append('assistant/message', { turn: 1, step: 1, message: assistant('Mi favorito para Dodgers–Mets es Los Angeles Dodgers.') }, { surfaceOp: 'append' })
     alpha.append('user/message', createUserMessage({
       content: [{ type: 'text', text: '¿Cuál fue tu favorito en Brewers–Rays?' }],
       source: { kind: 'user' },
