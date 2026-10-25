@@ -257,8 +257,9 @@ export function apply(ctx: Context, config: Config): void {
     text: assembly => {
       const currentMessage = userTextForAssembly(assembly)
       // Memory is a cold, durable index, not a permanent prompt attachment.
-      // Plain greetings and unrelated tasks send ZERO memory records.
-      if (currentMessage === undefined) return ''
+      // Only an explicit prior-context cue opens it. Learned procedures have
+      // their own matching gate below and the model can call memory_search.
+      if (currentMessage === undefined || !requestsPriorMemory(currentMessage)) return ''
       const prior = tasks.resolvedReference(taskSession(assembly))
       const query = prior?.task.text ?? currentMessage
       const projectId = projectForAssembly(assembly)
@@ -270,15 +271,12 @@ export function apply(ctx: Context, config: Config): void {
         layers: ['semantic', 'procedural', 'episodic'],
         ...projectId === undefined ? {} : { projectId },
       }).filter(hit => scoped(hit) && hit.reasons.some(reason => reason.startsWith('lexical:')))
-      const explicit = requestsPriorMemory(currentMessage)
-      // Semantic association uses only strong overlaps. Explicit historical
-      // requests can include weaker matches; manual memory_search remains
-      // available to recover any record that was not placed in the prompt.
-      const selected = relevant.filter(hit => explicit || memoryMatchFraction(hit.reasons) >= 0.4)
-        .slice(0, explicit ? 4 : 2)
+      // The user requested prior context; only matched memories enter the
+      // prompt. Full records remain available through memory_search.
+      const selected = relevant.slice(0, 4)
       // Generic requests for prior preferences or choices have no identifying
       // search terms. Offer a small matching class instead of all recent events.
-      if (explicit && selected.length === 0) {
+      if (selected.length === 0) {
         const kind = requestsPriorDecision(currentMessage) ? 'decision'
           : requestsPriorPreference(currentMessage) ? 'preference' : undefined
         if (kind !== undefined) {
@@ -495,16 +493,6 @@ function requestsPriorDecision(text: string): boolean {
 function requestsPriorPreference(text: string): boolean {
   return /\\b(?:preferen\\p{L}*|prefier\\p{L}*|gustos?|habitos?|costumbre\\p{L}*|preference\\p{L}*|usual)\\b/iu
     .test(normalizedMemoryRequest(text))
-}
-
-/** Lexical overlap is measured by the existing index, not guessed from rank. */
-function memoryMatchFraction(reasons: readonly string[]): number {
-  const lexical = reasons.find(reason => reason.startsWith('lexical:'))
-  const match = lexical?.match(/^lexical:(\\d+)\\/(\\d+)$/u)
-  if (match === null || match === undefined) return 0
-  const numerator = Number(match[1])
-  const denominator = Number(match[2])
-  return denominator > 0 ? numerator / denominator : 0
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
