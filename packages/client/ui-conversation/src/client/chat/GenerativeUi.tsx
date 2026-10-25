@@ -92,6 +92,7 @@ type SportsGameCard = {
     highlights?: Array<{ label: string; value: string; image?: string; detail?: string }>
     pitchers?: SportsPitcher[]; lineups?: SportsLineup[]; bullpen?: SportsBullpen[]
     sport?: string; eventId?: string; broadcast?: string; research?: SportsResearch
+    periods?: Array<{label:string;away:string;home:string}>
     note?: string; askPrompt?: string
   }
 }
@@ -280,13 +281,15 @@ const sportsOdds = (v:Record<string,unknown>):v is SportsOddsCard => {
 }
 const sportsGame = (value: Record<string, unknown>): value is SportsGameCard => {
   if (!isRecord(value.props) || !hasOnlyKeys(value.props,
-    ['title','subtitle','status','when','venue','home','away','source','highlights','note','askPrompt','pitchers','lineups','bullpen','sport','eventId','broadcast','research'])) return false
+    ['title','subtitle','status','when','venue','home','away','source','highlights','note','askPrompt','pitchers','lineups','bullpen','sport','eventId','broadcast','research','periods'])) return false
   const p = value.props
   return isText(p.title) && optionalText(p.subtitle) && optionalText(p.status,60)
     && isText(p.when) && optionalText(p.venue) && sportsSide(p.home) && sportsSide(p.away)
     && isText(p.source,320) && optionalText(p.note,MAX_TEXT) && optionalText(p.askPrompt,400)
     && optionalText(p.sport,60) && optionalText(p.eventId,50) && optionalText(p.broadcast,150)
     && (p.research===undefined || sportsResearch(p.research))
+    && (p.periods===undefined || Array.isArray(p.periods) && p.periods.length<=12 && p.periods.every(x=>isRecord(x)
+      && hasOnlyKeys(x,['label','away','home']) && isText(x.label,30) && isText(x.away,30) && isText(x.home,30)))
     && (p.pitchers===undefined || Array.isArray(p.pitchers) && p.pitchers.length<=4 && p.pitchers.every(sportsPitcher))
     && (p.lineups===undefined || Array.isArray(p.lineups) && p.lineups.length<=2 && p.lineups.every(sportsLineup))
     && (p.bullpen===undefined || Array.isArray(p.bullpen) && p.bullpen.length<=2 && p.bullpen.every(sportsBullpen))
@@ -571,6 +574,12 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
             <strong>{p.home.label}</strong>{p.home.meta&&<small>{p.home.meta}</small>}
             {p.home.score!==undefined&&<b>{p.home.score}</b>}</div>
         </div>
+        {p.periods?.length?<section className={css.sportsDetailSection} aria-label="Parciales del partido">
+          <h4>Marcador por período</h4><div className={css.sportsTableScroll}><table className={css.sportsTable}>
+            <thead><tr><th>Equipo</th>{p.periods.map((period,i)=><th key={i}>{period.label}</th>)}</tr></thead>
+            <tbody><tr><th>{p.away.label}</th>{p.periods.map((period,i)=><td key={i}>{period.away}</td>)}</tr>
+              <tr><th>{p.home.label}</th>{p.periods.map((period,i)=><td key={i}>{period.home}</td>)}</tr></tbody>
+          </table></div></section>:null}
         {p.pitchers?.length?<section className={css.sportsDetailSection} aria-label="Lanzadores probables">
           <h4>Abridores probables</h4>
           <div className={css.sportsStarters}>{p.pitchers.map((pitcher,i)=>
