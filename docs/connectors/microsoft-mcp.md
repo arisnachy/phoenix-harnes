@@ -1,5 +1,7 @@
 # Microsoft MCP en Phoenix (octubre de 2026)
 
+English | [中文](microsoft-mcp.zh.md)
+
 Phoenix ofrece integraciones Microsoft separadas: Microsoft Learn, Graph gratuito por servicio (implementación local Phoenix), Work IQ y Azure. Los servidores **oficiales** de Microsoft Learn, Work IQ y Azure siguen instalables desde Configuración → Conectores. **Microsoft Learn Docs** se prepara automáticamente como MCP público y gratuito en el paquete básico de Phoenix; **Work IQ y Azure** son opcionales y no se instalan ni usan sin una acción del usuario y sus requisitos. El equipo Windows necesita actualizar el Host para recibir estos cambios.
 
 ## 1. Microsoft Learn Docs MCP — público y gratuito

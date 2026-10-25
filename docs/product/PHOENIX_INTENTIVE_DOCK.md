@@ -1,5 +1,7 @@
 # Phoenix Intentive Dock — Especificación de producto v1.0
 
+English | [中文](PHOENIX_INTENTIVE_DOCK.zh.md)
+
 **Estado:** propuesta funcional y técnica para Kira y Phoenix. **No equivale a una implementación.** **Fecha:** 2026-10-14 **Área:** UI / Kira / UME / programador de tareas / conectores **Objetivo:** aprovechar de manera optativa el espacio libre de la barra superior para información breve, contextual y útil, sin dejar un panel permanentemente visible.
 
 ## Decisión de producto

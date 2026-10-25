@@ -1,5 +1,7 @@
 # Phoenix Social Engine (v1) — canales propios y marketing multired
 
+English | [中文](phoenix-social-engine.zh.md)
+
 Este módulo no finge crear cuentas ni publicar cuando no hay credenciales o comprobante. Implementa un núcleo **persistente y auditable**, separado de runtimes/staging, con marcas, perfiles declarados/verificados, campañas orgánicas, UTM, borradores, revisión, programación, envíos por API y registro de resultados inciertos.
 
 ## Interfaces
