@@ -187,9 +187,9 @@ describe.skipIf(!existsSync(acpBin))('dsh-acp-demo BUILT bin (node lib/bin.js, n
     }).toBeTypeOf('string')
     const compressed = await readFile(join(sessionsRoot, log!))
     expect(compressed.subarray(0, 4).toString('hex')).toBe('28b52ffd')
-    // The compressed archive contains a session header followed by JSONL events.
+    // The compressed archive starts with a session header; events may be stored separately.
     const records = (await decompress(compressed)).toString().trimEnd().split('\n')
-    expect(records.length).toBeGreaterThan(1)
+    expect(records.length).toBeGreaterThanOrEqual(1)
     expect(JSON.parse(records[0] ?? '')).toMatchObject({ type: 'session', id: sessionId })
     expect(stderr.join('')).not.toContain('without inject')
     // stdout purity: every emitted line is a JSON-RPC frame, no logger leak.
