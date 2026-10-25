@@ -3,7 +3,8 @@
 [CmdletBinding()]
 param(
   [ValidateRange(1, 65535)][int]$Port = 3080,
-  [switch]$Apply
+  [switch]$Apply,
+  [switch]$LegacyOnly
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -68,6 +69,14 @@ try {
     Write-Host "[PHOENIX REPAIR] Supervisor verified: PID $($supervisor.ProcessId)"
   }
 
+  # Automatic takeover is allowed ONLY for a directly launched legacy Node
+  # web Host, never a managed supervisor or a Phoenix desktop executable.
+  # The user may still explicitly use -Apply without -LegacyOnly.
+  if ($LegacyOnly -and ((-not $nodePhoenixHost) -or $null -ne $supervisor)) {
+    Write-Error '[PHOENIX REPAIR] No es un Host heredado sin supervisor verificable; se conserva.'
+    exit 3
+  }
+
   if (-not $Apply) {
     Write-Host '[PHOENIX REPAIR] Solo diagnóstico. Ejecuta este script con -Apply para detener exclusivamente el Phoenix identificado.'
     exit 0
@@ -105,6 +114,13 @@ try {
         $null -eq $stillHost -or
         $stillHost.CreationDate -ne $hostProcess.CreationDate) {
       Write-Error '[PHOENIX REPAIR] El proceso cambió durante el cierre; no se tocará al nuevo propietario.'
+      exit 3
+    }
+    # Recheck the Node Host identity before retiring any legacy listener.
+    if ($LegacyOnly -and (([string]$stillHost.CommandLine -ne $hostCommand) -or
+        $stillHost.Name -ine 'node.exe' -or
+        [int]$stillHost.ParentProcessId -ne [int]$hostProcess.ParentProcessId)) {
+      Write-Error '[PHOENIX REPAIR] Host legado cambió de identidad; no se detuvo.'
       exit 3
     }
     Stop-Process -Id $hostPid -Force -ErrorAction Stop
