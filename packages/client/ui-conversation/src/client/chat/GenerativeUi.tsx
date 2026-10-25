@@ -605,7 +605,7 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
         <footer className={css.sportsSourceBar}>
           <span>Datos · {p.source}</span>
           {p.note&&<small>{p.note}</small>}
-          {p.askPrompt&&onAction&&<button type="button" onClick={()=>{ onAction(p.askPrompt!,'draft') }}>
+          {p.askPrompt&&onAction&&<button type="button" onClick={() => { if (p.askPrompt) onAction(p.askPrompt, 'draft') }}>
             Investigar análisis y mercados</button>}
         </footer>
       </section>
@@ -636,7 +636,7 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
           {p.stake && <div><small>Importe simulado</small><strong>{p.stake}</strong></div>}
           {p.grossReturn && <div><small>Retorno bruto potencial</small><strong>{p.grossReturn}</strong></div>}</div>
         <footer className={css.sportsFoot}>Fuente: {p.source}<span>{p.note}</span>
-          {p.askPrompt && onAction && <button type="button" onClick={() =>{  onAction(p.askPrompt!, 'draft') }}>Revisar selección</button>}
+          {p.askPrompt && onAction && <button type="button" onClick={() => { if (p.askPrompt) onAction(p.askPrompt, 'draft') }}>Revisar selección</button>}
         </footer>
       </section>
     }

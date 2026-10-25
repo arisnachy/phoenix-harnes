@@ -16,7 +16,10 @@ export const sportsCatalog: Readonly<Record<string, readonly string[]>> = {
   'water-polo':['mens-college-water-polo'],'field-hockey':['womens-college-field-hockey'],
   'rugby-league':['3'],'australian-football':['afl'],
 }
-const title=(v:unknown,max=170):string => String(v??'Sin confirmar').replace(/[\u0000-\u001f]/gu,' ').trim().slice(0,max)||'Sin confirmar'
+const title=(v:unknown,max=170):string => {
+  const value=typeof v==='string'||typeof v==='number'||typeof v==='boolean'?String(v):'Sin confirmar'
+  return value.replace(/[\u0000-\u001f]/gu,' ').trim().slice(0,max)||'Sin confirmar'
+}
 const date=(v?:string):string => {
   const d=v??new Intl.DateTimeFormat('en-CA',{ timeZone:'America/Santo_Domingo',year:'numeric',month:'2-digit',day:'2-digit' }).format(new Date())
   if(!/^\d{4}-\d{2}-\d{2}$/u.test(d)||Number.isNaN(Date.parse(d+'T00:00:00Z'))||new Date(d+'T00:00:00Z').toISOString().slice(0,10)!==d)throw Error('Fecha inválida (AAAA-MM-DD)')
@@ -69,7 +72,7 @@ export async function getFeed<T>(url:string, fetcher:typeof fetch=fetch):Promise
   const u=new URL(url)
   if(u.protocol!=='https:'||u.username||u.password||!['site.api.espn.com','site.web.api.espn.com','sports.core.api.espn.com','statsapi.mlb.com','api.the-odds-api.com'].includes(u.hostname))throw Error('Host no permitido')
   const response=await fetcher(u.toString(),{ headers:{ accept:'application/json' },redirect:'error',signal:AbortSignal.timeout(9000) })
-  if(!response.ok)throw Error('Proveedor HTTP '+response.status)
+  if(!response.ok)throw Error(`Proveedor HTTP ${response.status}`)
   if(Number(response.headers.get('content-length')||0)>4_000_000)throw Error('Respuesta supera 4 MB')
   const text=await response.text()
   if(text.length>4_000_000)throw Error('Respuesta supera 4 MB')
@@ -112,7 +115,7 @@ export async function chatGames(sport:string,league:string,requestedDate?:string
         const side=(p:typeof home)=>({
           label:title(p?.team?.name),
           ...(showScores&&p?.score!==undefined?{ score:String(p.score) }:{}),
-          ...(p?.team?.id&&logosEnabled(env)?{ logo:'https://www.mlbstatic.com/team-logos/'+p.team.id+'.svg' }:{}),
+          ...(p?.team?.id&&logosEnabled(env)?{ logo:`https://www.mlbstatic.com/team-logos/${p.team.id}.svg` }:{}),
         })
         // Limit deep MLB requests on large game days; the user can drill down any remaining matchup.
         const details=index<3?await enrichMlbMatch(
@@ -125,7 +128,7 @@ export async function chatGames(sport:string,league:string,requestedDate?:string
         const highlights=details?.pitchers.length
           ? details.pitchers.map(p=>({ label:'Abridor probable · '+p.team,value:p.name,...(p.image?{ image:p.image }:{}),...(p.stats?{ detail:p.stats }:{}) }))
           : ([['away',away],['home',home]] as const).filter(([,t])=>t?.probablePitcher?.fullName)
-            .map(([side,t])=>({ label:'Abridor probable · '+(side==='home'?homeName:awayName),value:title(t?.probablePitcher?.fullName) }))
+            .map(([side,t])=>({ label:`Abridor probable · ${side==='home'?homeName:awayName}`,value:title(t?.probablePitcher?.fullName) }))
         return { component:'sports_game_card' as const,version:1 as const,props:{
           title:homeName+' vs '+awayName,
           subtitle:g.seriesDescription?(g.seriesDescription+' · Juego '+(g.seriesGameNumber??'por confirmar')):'MLB · '+day,
@@ -134,7 +137,7 @@ export async function chatGames(sport:string,league:string,requestedDate?:string
           highlights,pitchers:details?.pitchers??[],lineups:details?.lineups??[],
           bullpen:details?.bullpen??[],sport:'baseball',eventId:String(g.gamePk),...(research?{ research }:{}) ,
           note:details?.notes.join(' · ')||'Los abridores y las alineaciones están sujetos a confirmación.',
-          askPrompt:'Kira, investiga el partido MLB '+g.gamePk+' con pitchers probables, bullpen, alineaciones y cuotas verificables. Si hay estimaciones de favoritos, distingue tus cálculos de ESPN.',
+          askPrompt:`Kira, investiga el partido MLB ${g.gamePk} con pitchers probables, bullpen, alineaciones y cuotas verificables. Si hay estimaciones de favoritos, distingue tus cálculos de ESPN.`,
         } }
       }))
       rows.push(...cards)

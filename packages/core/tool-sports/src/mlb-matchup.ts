@@ -17,13 +17,13 @@ const safeId=(id:unknown):number|null=>typeof id==='number'&&Number.isSafeIntege
 /** ESPN/MLB photos are external assets: operators may opt out of media display. */
 const mediaEnabled=(env:NodeJS.ProcessEnv)=>env.PHOENIX_SPORTS_IMAGES_DISABLED!=='1'
 const playerImage=(id:number,env:NodeJS.ProcessEnv)=>mediaEnabled(env)
-  ? 'https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_213,q_auto:best/v1/people/'+id+'/headshot/67/current'
+  ? `https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_213,q_auto:best/v1/people/${id}/headshot/67/current`
   : undefined
 const fmt=(v:unknown)=>typeof v==='number'||typeof v==='string'?String(v).slice(0,18):'—'
 function orderedHitters(team:BoxTeam|undefined,teamName:string,env:NodeJS.ProcessEnv):SportsLineup {
   const order=Array.isArray(team?.battingOrder)?[...new Set(team.battingOrder.filter(id=>safeId(id)!==null))]:[]
   const players=order.slice(0,9).flatMap((id)=>{
-    const row=team?.players?.['ID'+id]
+    const row=team?.players?.[`ID${id}`]
     if(!row?.person?.fullName)return []
     const s=row.seasonStats?.batting
     const image=playerImage(id,env)
@@ -34,7 +34,7 @@ function orderedHitters(team:BoxTeam|undefined,teamName:string,env:NodeJS.Proces
 }
 async function pitcherSeason(id:number,season:number,fetcher:typeof fetch):Promise<string|undefined>{
   try {
-    const data=await getFeed<SeasonStats>('https://statsapi.mlb.com/api/v1/people/'+id+'/stats?stats=season&group=pitching&season='+season,fetcher)
+    const data=await getFeed<SeasonStats>(`https://statsapi.mlb.com/api/v1/people/${id}/stats?stats=season&group=pitching&season=${season}`,fetcher)
     const stat=data.stats?.[0]?.splits?.[0]?.stat
     if(!stat)return undefined
     const parts=[['ERA',stat.era],['WHIP',stat.whip],['IP',stat.inningsPitched],['K',stat.strikeOuts]]
@@ -73,14 +73,14 @@ export async function enrichMlbMatch(
   }))
   const pitchers=starterStats.filter((x):x is NonNullable<typeof x>=>x!==null)
   let box:Boxscore|null=null
-  try {box=await getFeed<Boxscore>('https://statsapi.mlb.com/api/v1/game/'+gamePk+'/boxscore',fetcher)}
+  try {box=await getFeed<Boxscore>(`https://statsapi.mlb.com/api/v1/game/${gamePk}/boxscore`,fetcher)}
   catch {notes.push('Alineaciones oficiales aún no disponibles')}
   const lineups=entries.map(([side,name])=>orderedHitters(box?.teams?.[side],name,env))
   if(lineups.some(l=>!l.confirmed))notes.push('Alineaciones pendientes de confirmación; no se muestran jugadores inventados')
   const bullpen=await Promise.all(([['away',awayId,awayName],['home',homeId,homeName]] as const).map(async([side,teamId,name])=>{
     if(!safeId(teamId))return { team:name,pitchers:[],note:'Equipo no confirmado' }
     try {
-      const r=await getFeed<Roster>('https://statsapi.mlb.com/api/v1/teams/'+teamId+'/roster?rosterType=active',fetcher)
+      const r=await getFeed<Roster>(`https://statsapi.mlb.com/api/v1/teams/${teamId}/roster?rosterType=active`,fetcher)
       const starterId=safeId(starting[side]?.id)
       const available=(r.roster??[]).filter(p=>p.position?.type==='Pitcher'||p.position?.abbreviation==='P')
         .filter(p=>safeId(p.person?.id)!==null&&!!p.person?.fullName&&p.person?.id!==starterId)
