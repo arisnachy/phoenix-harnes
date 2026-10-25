@@ -1,5 +1,5 @@
 /** Ticket de pronósticos con encuentros verificables aunque falten cuotas comerciales. */
-import { getFeed, sportsCatalog, type ChatBlock } from './sports.ts'
+import { getFeed, hasSportsPermission, sportsCatalog, type ChatBlock } from './sports.ts'
 
 /** Selección propuesta por Kira, independiente de cualquier precio de apuestas. */
 export type ResearchTicketLeg = {
@@ -55,6 +55,7 @@ const whenLocal = (value:string):string=>
  * @param requestedDate - Fecha del calendario local dominicano.
  * @param fetcher - Transporte HTTP inyectable para las pruebas.
  * @param now - Instante de validación; permite pruebas deterministas.
+ * @param env - Política de proveedores del operador de Phoenix.
  * @returns Tarjeta nativa y lista de partidos validados; nunca una apuesta real.
  */
 export async function researchTicket(
@@ -62,7 +63,9 @@ export async function researchTicket(
   requestedDate = dateInSantoDomingo(),
   fetcher: typeof fetch = fetch,
   now = Date.now(),
+  env: NodeJS.ProcessEnv = process.env,
 ):Promise<{card:ChatBlock;verifiedEvents:number;priced:false;placed:false}> {
+  if(!hasSportsPermission('espn',env))throw Error('ESPN deshabilitado por configuración del operador')
   if(!validDay(requestedDate))throw Error('Fecha de ticket inválida (AAAA-MM-DD)')
   if(!Array.isArray(selections)||selections.length<1||selections.length>6)throw Error('El ticket de pronósticos requiere entre 1 y 6 selecciones')
   const cache=new Map<string,EspnBoard>()
@@ -94,7 +97,7 @@ export async function researchTicket(
     const event=board.events?.find(e=>String(e.id??'')===eventId)
     if(!event)throw Error('Partido no encontrado en la cartelera verificada de '+league)
     const kickoff=new Date(event.date??'')
-    if(!Number.isFinite(kickoff.getTime())||kickoff.getTime()<=now||event.status?.type?.state&&event.status.type.state!=='pre'){
+    if(!Number.isFinite(kickoff.getTime())||kickoff.getTime()<=now||(event.status?.type?.state!==undefined && event.status.type.state!=='pre')){
       throw Error('Encuentro iniciado o finalizado: no se incluye en un ticket previo al partido')
     }
     const teams=event.competitions?.[0]?.competitors
