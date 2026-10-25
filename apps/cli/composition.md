@@ -40,6 +40,8 @@ flowchart LR
   cfg --> plugin_dsh_base_tool_living
   plugin_dsh_base_tool_business["tool-business<br/>@phoenix-ai/dsh-tool-business"]
   cfg --> plugin_dsh_base_tool_business
+  plugin_dsh_base_tool_sports["tool-sports<br/>@phoenix-ai/dsh-tool-sports"]
+  cfg --> plugin_dsh_base_tool_sports
   plugin_dsh_base_llm_retry["llm-retry<br/>@phoenix-ai/dsh-llm-retry"]
   cfg --> plugin_dsh_base_llm_retry
   plugin_dsh_base_settings["settings<br/>@phoenix-ai/dsh-settings-file"]
@@ -244,6 +246,7 @@ flowchart LR
 | `living-local` | `@phoenix-ai/dsh-living-local` |
 | `tool-living` | `@phoenix-ai/dsh-tool-living` |
 | `tool-business` | `@phoenix-ai/dsh-tool-business` |
+| `tool-sports` | `@phoenix-ai/dsh-tool-sports` |
 | `llm-retry` | `@phoenix-ai/dsh-llm-retry` |
 | `settings` | `@phoenix-ai/dsh-settings-file` |
 | `user-profile` | `@phoenix-ai/dsh-user-profile` |

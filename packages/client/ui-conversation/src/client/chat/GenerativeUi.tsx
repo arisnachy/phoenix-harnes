@@ -79,11 +79,11 @@ type SmartCard = {
 }
 
 type SportsSide = { label: string; score?: string; logo?: string; meta?: string }
-type SportsPlayer = {name:string;role?:string;image?:string;stats?:string;id?:number}
-type SportsPitcher = {team:string;name:string;id?:number;image?:string;stats?:string;probable:boolean}
-type SportsLineup = {team:string;confirmed:boolean;players:SportsPlayer[]}
-type SportsBullpen = {team:string;pitchers:SportsPlayer[];note:string}
-type SportsResearch = {favorite:string;method:string;source:string;evidence:string[]}
+type SportsPlayer = { name:string;role?:string;image?:string;stats?:string;id?:number }
+type SportsPitcher = { team:string;name:string;id?:number;image?:string;stats?:string;probable:boolean }
+type SportsLineup = { team:string;confirmed:boolean;players:SportsPlayer[] }
+type SportsBullpen = { team:string;pitchers:SportsPlayer[];note:string }
+type SportsResearch = { favorite:string;method:string;source:string;evidence:string[] }
 type SportsGameCard = {
   component: 'sports_game_card'; version: 1
   props: {
@@ -92,14 +92,14 @@ type SportsGameCard = {
     highlights?: Array<{ label: string; value: string; image?: string; detail?: string }>
     pitchers?: SportsPitcher[]; lineups?: SportsLineup[]; bullpen?: SportsBullpen[]
     sport?: string; eventId?: string; broadcast?: string; research?: SportsResearch
-    periods?: Array<{label:string;away:string;home:string}>
+    periods?: Array<{ label:string;away:string;home:string }>
     note?: string; askPrompt?: string
   }
 }
 type SportsOddsCard = {
   component: 'sports_odds_card'; version: 1
-  props: {title:string;source:string;subtitle?:string;note:string
-    rows:Array<{event:string;market:string;selection:string;bookmaker:string;price:string;point?:string}>}
+  props: { title:string;source:string;subtitle?:string;note:string
+    rows:Array<{ event:string;market:string;selection:string;bookmaker:string;price:string;point?:string }> }
 }
 type SportsTicketCard = {
   component: 'sports_ticket_card'; version: 1
@@ -479,14 +479,14 @@ function expandRawCanvases(segments: GenerativeUiSegment[], streaming: boolean):
   return result
 }
 
-const SportsPortrait = ({label,logo}:{label:string;logo?:string|undefined}) => (
+const SportsPortrait = ({ label,logo }:{ label:string;logo?:string|undefined }) => (
   <span className={css.sportsPortrait}>
     <span>{label.slice(0,2).toUpperCase()}</span>
     {logo && <img src={logo} alt={label} loading="lazy" referrerPolicy="no-referrer"
-      onError={event=>{event.currentTarget.style.display='none'}}/>}
+      onError={(event)=>{event.currentTarget.style.display='none'}}/>}
   </span>
 )
-const SportsLineups = ({lineups}:{lineups:SportsLineup[]}) => {
+const SportsLineups = ({ lineups }:{ lineups:SportsLineup[] }) => {
   const [selected,setSelected]=useState(0)
   const lineup=lineups[selected]
   if(!lineup)return null
@@ -494,7 +494,7 @@ const SportsLineups = ({lineups}:{lineups:SportsLineup[]}) => {
     <h4>Alineaciones</h4>
     <div className={css.sportsTabs} role="group" aria-label="Seleccionar equipo">
       {lineups.map((side,i)=><button key={side.team} type="button"
-        aria-pressed={selected===i} onClick={()=>setSelected(i)}>{side.team}</button>)}
+        aria-pressed={selected===i} onClick={()=>{ setSelected(i) }}>{side.team}</button>)}
     </div>
     {!lineup.confirmed&&<p className={css.sportsNote}>Alineación pendiente de confirmación: solo jugadores publicados por MLB.</p>}
     {lineup.players.length>0?<div className={css.sportsTableScroll}><table className={css.sportsTable}>
@@ -507,7 +507,7 @@ const SportsLineups = ({lineups}:{lineups:SportsLineup[]}) => {
       </tr>)}</tbody></table></div>:<p className={css.sportsNote}>MLB todavía no publicó la alineación oficial.</p>}
   </section>
 }
-const SportsBullpen = ({bullpen}:{bullpen:SportsBullpen[]}) => (
+const SportsBullpen = ({ bullpen }:{ bullpen:SportsBullpen[] }) => (
   <section className={css.sportsDetailSection} aria-label="Bullpen MLB">
     <h4>Bullpen y cuerpo de lanzadores</h4>
     <div className={css.sportsBulpenGrid}>{bullpen.map((b,i)=><div key={i} className={css.sportsBullpenTeam}>
@@ -605,7 +605,7 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
         <footer className={css.sportsSourceBar}>
           <span>Datos · {p.source}</span>
           {p.note&&<small>{p.note}</small>}
-          {p.askPrompt&&onAction&&<button type="button" onClick={()=>onAction(p.askPrompt!,'draft')}>
+          {p.askPrompt&&onAction&&<button type="button" onClick={()=>{ onAction(p.askPrompt!,'draft') }}>
             Investigar análisis y mercados</button>}
         </footer>
       </section>
@@ -636,7 +636,7 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
           {p.stake && <div><small>Importe simulado</small><strong>{p.stake}</strong></div>}
           {p.grossReturn && <div><small>Retorno bruto potencial</small><strong>{p.grossReturn}</strong></div>}</div>
         <footer className={css.sportsFoot}>Fuente: {p.source}<span>{p.note}</span>
-          {p.askPrompt && onAction && <button type="button" onClick={() => onAction(p.askPrompt!, 'draft')}>Revisar selección</button>}
+          {p.askPrompt && onAction && <button type="button" onClick={() =>{  onAction(p.askPrompt!, 'draft') }}>Revisar selección</button>}
         </footer>
       </section>
     }
