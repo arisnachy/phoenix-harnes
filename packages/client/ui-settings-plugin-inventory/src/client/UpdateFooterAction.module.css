@@ -361,3 +361,34 @@
   font: 10px/1.55 ui-monospace, SFMono-Regular, Consolas, monospace;
   color: var(--dsw-alias-label-primary);
 }
+
+/* Live command output stays compact in the sidebar and distinguishes stderr. */
+.liveConsole {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 190px;
+  padding: 8px;
+  overflow: auto;
+  user-select: text;
+  font: 10px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace;
+  color: var(--dsw-alias-label-primary);
+}
+.liveLine {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 7px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.liveLine time {
+  color: var(--dsw-alias-label-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+.liveLine[data-stream='stderr'] {
+  color: var(--dsw-alias-state-error-primary);
+}
+.liveWaiting {
+  color: var(--dsw-alias-label-secondary);
+  font-style: italic;
+}

@@ -908,16 +908,25 @@ function runChecked(cwd, bin, args, label) {
     'smoke-test isolated runtime': 'smoke',
   }[label]
   if (step) reportSupervisorStep(step, 'started')
-  const result = spawnSync(bin, args, {
+  const currentTarget = restartRequestTarget() ?? readUpdateState()?.target
+  const journalStatePath = updateStatePath()
+  const live = step !== undefined && typeof currentTarget === 'string'
+    && /^[a-f0-9]{40}$/iu.test(currentTarget) && journalStatePath !== undefined
+  // The separate helper is asynchronous even while this supervisor remains
+  // synchronous: its streams reach both the console and the Host journal while
+  // pnpm/PowerShell is still working, not only after process exit.
+  const liveArgs = live ? [
+    fileURLToPath(new URL('./phoenix-update-live-command.mjs', import.meta.url)),
+    JSON.stringify({ cwd, bin, args, step, target: currentTarget, statePath: journalStatePath }),
+  ] : args
+  const result = spawnSync(live ? process.execPath : bin, liveArgs, {
     cwd,
     env: process.env,
     encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'pipe'],
+    stdio: live ? 'inherit' : ['ignore', 'pipe', 'pipe'],
     maxBuffer: 64 * 1024 * 1024,
     windowsHide: hideRuntimeWindows,
   })
-  // Preserve the native console output while retaining the real failure trace
-  // for the browser, rather than showing only "exit code: 1".
   if (result.stdout) process.stdout.write(result.stdout)
   if (result.stderr) process.stderr.write(result.stderr)
   if (result.error !== undefined || (result.status ?? 1) !== 0) {
