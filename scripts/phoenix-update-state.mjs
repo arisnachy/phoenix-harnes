@@ -12,6 +12,7 @@ const HOST_RESTART_FILE = 'phoenix-host-restart-request.json'
 const ACTIVE_RUNTIME_FILE = 'phoenix-active-runtime.json'
 const PROGRESS_JOURNAL_FILE = 'phoenix-update-events.jsonl'
 const MAX_PROGRESS_JOURNAL_BYTES = 512 * 1024
+const MAX_DIAGNOSTIC_CHARS = 96 * 1024
 const RETAIN_PROGRESS_JOURNAL_BYTES = 32 * 1024
 const COMMAND_STEPS = new Set([
   'git-worktree', 'git-reset', 'git-clean', 'dependencies', 'build',
@@ -69,15 +70,18 @@ function writeJsonAtomic(path, value) {
  * @param {'started'|'ok'|'failed'|'info'} result - observed command outcome.
  * @param {string|undefined} target - exact stable commit when available.
  * @param {number|undefined} exitCode - observed process exit code.
+ * @param {string|undefined} diagnostic - captured process output (redacted before persistence).
  * @returns {void}
  */
-export function recordPhoenixUpdateStep(statePath, step, result, target, exitCode) {
+export function recordPhoenixUpdateStep(statePath, step, result, target, exitCode, diagnostic) {
   if (!COMMAND_STEPS.has(step) && !UPDATE_STATUSES.has(step)) return
   if (!['started', 'ok', 'failed', 'info'].includes(result)) return
   const entry = {
     schema: 1, at: new Date().toISOString(), step, result,
     ...(typeof target === 'string' && /^[a-f0-9]{40}$/iu.test(target) ? { target } : {}),
     ...(Number.isInteger(exitCode) && exitCode >= 0 && exitCode <= 255 ? { exitCode } : {}),
+    ...(result === 'failed' && sanitizePhoenixUpdateDiagnostic(diagnostic) !== undefined
+      ? { diagnostic: sanitizePhoenixUpdateDiagnostic(diagnostic) } : {}),
   }
   try {
     const path = join(dirname(statePath), PROGRESS_JOURNAL_FILE)
@@ -96,6 +100,30 @@ export function recordPhoenixUpdateStep(statePath, step, result, target, exitCod
   } catch {
     // Informational progress is never authority for activation or rollback.
   }
+}
+
+/**
+ * Display useful command errors without storing credentials in the Git-owned
+ * journal or sending an unfiltered PowerShell console to the browser.
+ * A typical exception stack is preserved in full; an unusually large output
+ * is explicitly marked as truncated rather than silently misrepresented.
+ *
+ * @param {unknown} raw - collected stderr/stdout/exception detail.
+ * @returns {string|undefined} safe bounded diagnostic text.
+ */
+export function sanitizePhoenixUpdateDiagnostic(raw) {
+  if (typeof raw !== 'string' || raw.trim().length === 0) return undefined
+  let safe = raw
+    .replace(/\u001b\[[0-9;]*[a-z]/giu, '')
+    .replace(/\r\n?/gu, '\n')
+    .replace(/https?:\/\/[^\s/@]+:[^\s/@]+@/giu, 'https://[CREDENTIALS_REMOVED]@')
+    .replace(/\b(?:sk-(?:proj-)?[A-Za-z0-9_-]{12,}|gh[pousr]_[A-Za-z0-9_]{12,}|github_pat_[A-Za-z0-9_]{12,})\b/giu, '[SECRET_REMOVED]')
+    .replace(/\bBearer\s+[^\s"']+/giu, 'Bearer [SECRET_REMOVED]')
+    .replace(/(\b(?:password|passwd|token|access_token|refresh_token|api[_-]?key|client_secret|authorization|secret|_authToken)\b\s*[:=]\s*)("[^"]*"|'[^']*'|[^\s,;]+)/giu, '$1[SECRET_REMOVED]')
+  if (safe.length > MAX_DIAGNOSTIC_CHARS) {
+    safe = '[Earlier output truncated; last 96 KiB shown]\n' + safe.slice(-MAX_DIAGNOSTIC_CHARS)
+  }
+  return safe
 }
 
 function recordStateTransition(path, state) {
