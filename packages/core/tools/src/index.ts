@@ -1374,30 +1374,26 @@ export class ToolRuntime extends Service {
         continue
       }
 
-      // The full schema is still selected for the next prompt assembly; the
-      // result carries a bounded summary so one giant MCP schema cannot defeat
-      // the result budget. Measure the complete wrapper, not just entries.
-      let resultEntry: JsonValue
+      // Discovery activates the complete schema in the NEXT model request.
+      // Echoing its parameters in this tool result sends the same large schema
+      // twice (as conversation history and as a wire tool definition), and the
+      // duplicate can persist throughout the turn. Return only bounded metadata
+      // while preserving the full validated definition for subsequent dispatch.
       const resultLength = (entry: JsonValue): number => JSON.stringify({
         enabled: true,
         matched: matched.length,
         selected: selectedNames.length + 1,
         tools: [...selected, entry],
       }).length
-      if (resultLength(detachedSchema) <= MAX_MCP_TOOL_SEARCH_RESULT_CHARS) {
-        resultEntry = detachedSchema
-      } else {
-        const summaryWithDescription = {
-          name: schema.name,
-          description: schema.description.slice(0, MAX_MCP_TOOL_SUMMARY_DESCRIPTION_CHARS),
-          schemaDeferred: true,
-        }
-        const summary = resultLength(summaryWithDescription) <= MAX_MCP_TOOL_SEARCH_RESULT_CHARS
-          ? summaryWithDescription
-          : { name: schema.name, description: '', schemaDeferred: true }
-        if (resultLength(summary) > MAX_MCP_TOOL_SEARCH_RESULT_CHARS) continue
-        resultEntry = summary
+      const summaryWithDescription = {
+        name: schema.name,
+        description: schema.description.slice(0, MAX_MCP_TOOL_SUMMARY_DESCRIPTION_CHARS),
+        schemaDeferred: true,
       }
+      const resultEntry: JsonValue = resultLength(summaryWithDescription) <= MAX_MCP_TOOL_SEARCH_RESULT_CHARS
+        ? summaryWithDescription
+        : { name: schema.name, description: '', schemaDeferred: true }
+      if (resultLength(resultEntry) > MAX_MCP_TOOL_SEARCH_RESULT_CHARS) continue
 
       const alreadyActive = discovered.has(definition.name)
       if (candidateLength > MAX_DISCOVERED_MCP_SCHEMA_CHARS && !oversizedException) continue

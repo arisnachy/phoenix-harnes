@@ -60,8 +60,18 @@ export function apply(ctx: Context, config: Config): void {
     return agent === undefined ? undefined
       : agent.session === undefined ? String(agent.id) : learningOwnerSessionId(agent.session)
   }
-  const taskForAssembly = (assembly: unknown): string | undefined =>
-    tasks.currentTask(taskSession(assembly))
+  // A memory search must be driven by the owning conversation's most recent
+  // HUMAN message, never by a previous task from a different chat or an agent.
+  const userTextForAssembly = (assembly: unknown): string | undefined => {
+    const agent = (assembly as { agent?: { session?: { events?: readonly {
+      type: string
+      data: unknown
+    }[] } } }).agent
+    const latest = agent?.session?.events?.findLast(event =>
+      event.type === 'user/message' && isRecord(event.data)
+      && isRecord(event.data.source) && event.data.source.kind === 'user')
+    return latest === undefined ? undefined : messageText(latest.data)
+  }
   // Do not substitute the newest *other* chat's project for this assembly.
   const projectForAssembly = (assembly: unknown): string | undefined => {
     const sessionId = taskSession(assembly)
@@ -153,7 +163,10 @@ export function apply(ctx: Context, config: Config): void {
           pendingToolNames.set(learningOwnerId, names)
         }
         names.set(`${sessionId}:${data.callId}`, data.name)
-        if (names.size > 128) names.delete(names.keys().next().value!)
+        if (names.size > 128) {
+          const oldest = names.keys().next().value
+          if (oldest !== undefined) names.delete(oldest)
+        }
       }
       return
     }
@@ -244,92 +257,84 @@ export function apply(ctx: Context, config: Config): void {
   ctx.systemPrompt.context({
     name: 'context:recent-learning-memory',
     order: 118,
-    text: assembly => {
+    text: (assembly) => {
+      const currentMessage = userTextForAssembly(assembly)
+      // Memory is a cold, durable index, not a permanent prompt attachment.
+      // Only an explicit prior-context cue opens it. Learned procedures have
+      // their own matching gate below and the model can call memory_search.
+      if (currentMessage === undefined || !requestsPriorMemory(currentMessage)) return ''
+      const prior = tasks.resolvedReference(taskSession(assembly))
+      const query = prior?.task.text ?? currentMessage
       const projectId = projectForAssembly(assembly)
-      const durable = ctx.learningMemory.recallCognitive({
-        layers: ['semantic'],
-        limit: 4,
+      const scoped = (hit: { record: { projectId?: string } }): boolean =>
+        hit.record.projectId === undefined || hit.record.projectId === projectId
+      const relevant = ctx.learningMemory.recallCognitive({
+        query,
+        limit: 12,
+        layers: ['semantic', 'procedural', 'episodic'],
         ...projectId === undefined ? {} : { projectId },
-      })
-      return formatRecentMemoryContext([
-        ...ctx.learningMemory.recall(4),
-        ...durable,
-      ])
+      }).filter(hit => scoped(hit) && hit.reasons.some(reason => reason.startsWith('lexical:')))
+      // The user requested prior context; only matched memories enter the
+      // prompt. Full records remain available through memory_search.
+      const selected = relevant.slice(0, 4)
+      // Generic requests for prior preferences or choices have no identifying
+      // search terms. Offer a small matching class instead of all recent events.
+      if (selected.length === 0) {
+        const kind = requestsPriorDecision(currentMessage) ? 'decision'
+          : requestsPriorPreference(currentMessage) ? 'preference' : undefined
+        if (kind !== undefined) {
+          selected.push(...ctx.learningMemory.recallCognitive({
+            kind, limit: 2,
+            ...projectId === undefined ? {} : { projectId },
+          }).filter(scoped))
+        }
+      }
+      return formatRecentMemoryContext(selected)
     },
     interpolateVariables: false,
   })
-  // Historical choices are model statements, not verified game outcomes.
-  // Only surface a few when the human task refers to a prior prediction.
-  ctx.systemPrompt.context({
-    name: 'context:prior-assistant-decisions',
-    order: 118.5,
-    text: assembly => {
-      const task = taskForAssembly(assembly)
-      if (task === undefined) return ''
-      const folded = task.normalize('NFKD').replace(/\p{Diacritic}/gu, '').toLocaleLowerCase()
-      if (!/\b(?:favorit[oa]s?|prediccion|pronostico|seleccion|eleccion|elegiste|escogiste|escogio|eligio|pick|predijiste|habias elegido)\b/u.test(folded)) return ''
-      const projectId = projectForAssembly(assembly)
-      return formatRecentMemoryContext(ctx.learningMemory.recallCognitive({
-        kind: 'decision',
-        limit: 4,
-        ...projectId === undefined ? {} : { projectId },
-      }))
-    },
-    interpolateVariables: false,
-  })
-  ctx.systemPrompt.context({
-    name: 'context:experiential-learning-memory',
-    order: 119,
-    text: assembly => {
-      const projectId = projectForAssembly(assembly)
-      const taskContext = taskForAssembly(assembly)
-      const hits = ctx.learningMemory.recallCognitive({
-        query: taskContext ?? '',
-        limit: 24,
-        ...projectId === undefined ? {} : { projectId },
-      })
-      const usable = filterProceduralSearchHits(filterAdaptiveSearchHits(hits))
-        .filter(hit => hit.record.confidence >= 0.8 && hit.record.importance >= 0.7)
-        .slice(0, 6)
-      return formatRecentMemoryContext(usable)
-    },
-    interpolateVariables: false,
-  })
+  // All other memory remains retrievable with memory_search, including old
+  // decisions, errors, candidate lessons and full provenance. The stored
+  // ledger and its event replay are deliberately left unchanged.
   ctx.systemPrompt.context({
     name: 'context:validated-procedures',
     order: 120,
-    text: assembly => {
+    text: (assembly) => {
+      const currentMessage = userTextForAssembly(assembly)
+      if (currentMessage === undefined) return ''
       const projectId = projectForAssembly(assembly)
-      const taskContext = taskForAssembly(assembly)
+      const taskContext = tasks.resolvedReference(taskSession(assembly))?.task.text ?? currentMessage
       return formatProceduralContext(procedural.recommend({
         limit: 4,
         ...projectId === undefined ? {} : { projectId },
-        ...taskContext === undefined ? {} : { taskContext },
-      }))
+        taskContext,
+      }).filter(state => state.projectId === undefined || state.projectId === projectId))
     },
     interpolateVariables: false,
   })
   ctx.systemPrompt.context({
     name: 'context:unverified-recovery-experience',
     order: 120.5,
-    text: assembly => {
-      const taskContext = taskForAssembly(assembly)
-      if (taskContext === undefined) return ''
+    text: (assembly) => {
+      const currentMessage = userTextForAssembly(assembly)
+      if (currentMessage === undefined) return ''
       const projectId = projectForAssembly(assembly)
+      const taskContext = tasks.resolvedReference(taskSession(assembly))?.task.text ?? currentMessage
       return formatRecoveryCandidates(procedural.recoveryCandidates({
         taskContext, limit: 2,
         ...projectId === undefined ? {} : { projectId },
-      }))
+      }).filter(state => state.projectId === undefined || state.projectId === projectId))
     },
     interpolateVariables: false,
   })
   ctx.systemPrompt.context({
     name: 'context:habit-guidance',
     order: 121,
-    text: assembly => {
-      const taskContext = taskForAssembly(assembly)
-      if (taskContext === undefined) return ''
+    text: (assembly) => {
+      const currentMessage = userTextForAssembly(assembly)
+      if (currentMessage === undefined) return ''
       const projectId = projectForAssembly(assembly)
+      const taskContext = tasks.resolvedReference(taskSession(assembly))?.task.text ?? currentMessage
       const matched = experience.matchTask(taskContext, projectId)
       if (matched === undefined) return ''
       return [formatHabitGuidance(assessHabitExperience(matched)),
@@ -469,6 +474,36 @@ export function apply(ctx: Context, config: Config): void {
     },
     presentCall: args => ({ card: 'generic', title: 'Learn procedure', kind: 'other', rawInput: args.title }),
   }))
+}
+
+/** Decide whether a prior memory is needed without an extra model call. */
+function normalizedMemoryRequest(text: string): string {
+  return text.normalize('NFKD').replace(/\p{Diacritic}/gu, '').toLocaleLowerCase()
+}
+
+function requestsPriorMemory(text: string): boolean {
+  const normalized = normalizedMemoryRequest(text)
+  return /\b(?:recuerd\p{L}*|record\p{L}*|memoria|recordatorio|anterior\p{L}*|previo\p{L}*|antes)\b/iu.test(normalized)
+    || /\b(?:pasado|histor\p{L}*|habia|dijiste|dije|elegiste|escogiste|elegimos|guardad\p{L}*)\b/iu.test(normalized)
+    || /\b(?:preferencias?|costumbre\p{L}*|usual|siempre|repetimos|funciono|funcionaba)\b/iu.test(normalized)
+    || /\b(?:remember|recall|memory|before|previous|earlier|last time|used to|usually|history)\b/iu.test(normalized)
+    || /\b(?:fue|era|fueron|eran|did (?:we|you))\b.{0,100}\b(?:favorit\p{L}*|pronostic\p{L}*|prediccion\p{L}*)\b/iu
+      .test(normalized)
+    || /\b(?:fue|era|fueron|eran)\b.{0,100}\b(?:pick|seleccion\p{L}*|eleccion\p{L}*|estrategia|solucion|plan|metodo)\b/iu
+      .test(normalized)
+    || /\b(?:retom\p{L}*|continu\p{L}*|sigamos|seguimos|aprendimos|hicimos|usamos|logramos|reutiliz\p{L}*)\b/iu
+      .test(normalized)
+}
+
+function requestsPriorDecision(text: string): boolean {
+  return /\b(?:favorit\p{L}*|pronostic\p{L}*|prediccion\p{L}*|pick|decision\p{L}*|eleg\p{L}*|escog\p{L}*)\b/iu
+    .test(normalizedMemoryRequest(text))
+    || /\b(?:chose|picked|predicted)\b/iu.test(normalizedMemoryRequest(text))
+}
+
+function requestsPriorPreference(text: string): boolean {
+  return /\b(?:preferen\p{L}*|prefier\p{L}*|gustos?|habitos?|costumbre\p{L}*|preference\p{L}*|usual)\b/iu
+    .test(normalizedMemoryRequest(text))
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
