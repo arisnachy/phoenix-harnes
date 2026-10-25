@@ -196,6 +196,13 @@ export function UpdateFooterAction({
     }
   }, [])
 
+  // Follow incoming console output as commands print new lines. The log has a
+  // fixed visual height, so a long build cannot take over the chat/sidebar.
+  useEffect(() => {
+    const view = consoleRef.current
+    if (view !== null) view.scrollTop = view.scrollHeight
+  }, [snapshot.console])
+
   const reportReadFailure = useCallback((_error: unknown) => {
     // The Host intentionally disappears during an accepted restart. Do not
     // replace its durable state with a fabricated success or failure.
