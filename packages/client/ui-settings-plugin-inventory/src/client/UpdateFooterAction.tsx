@@ -376,16 +376,14 @@ export function UpdateFooterAction({
               <div className={css.progressValue} style={{ width: `${String(progress)}%` }} />
             </div>
           ) : null}
-          {(errorState || unverifiedActivation) && (
+          {errorState && (
             <p className={css.failureNotice} role="alert">
-              {unverifiedActivation
-                ? t('updateRestartUnverifiedHint')
-                : lastFailedStep === undefined
-                  ? detail ?? t('updateErrorHint')
-                  : <>
-                    {t('updateFailedAt')}: {t(updateStepLabelKey(lastFailedStep.step) ?? 'updateError')}
-                    {lastFailedStep.exitCode === undefined ? null : ` · ${t('updateExitCode')}: ${String(lastFailedStep.exitCode)}`}
-                  </>}
+              {lastFailedStep === undefined
+                ? detail ?? t('updateErrorHint')
+                : <>
+                  {t('updateFailedAt')}: {t(updateStepLabelKey(lastFailedStep.step) ?? 'updateError')}
+                  {lastFailedStep.exitCode === undefined ? null : ` · ${t('updateExitCode')}: ${String(lastFailedStep.exitCode)}`}
+                </>}
             </p>
           )}
           {connectionLost && <p className={css.reconnecting}>{t('updateReconnect')}</p>}

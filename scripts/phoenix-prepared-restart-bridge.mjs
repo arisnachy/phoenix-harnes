@@ -86,7 +86,10 @@ function readActiveRuntime(controlDir) {
 
 function targetAlreadyActive(controlDir, target) {
   const active = readActiveRuntime(controlDir)
-  if (active?.target !== target) return false
+  // Prewarm creates the runtime marker before the new Host is running. A
+  // candidate must never cause the bridge to discard a pending handoff.
+  if (active?.target !== target || typeof active.healthyAt !== 'string'
+    || !Number.isFinite(Date.parse(active.healthyAt))) return false
   const activePath = resolve(active.path)
   return existsSync(activePath) && currentTarget(activePath) === target
 }

@@ -169,6 +169,16 @@ function preparedPath(root) {
   return join(controlDirectory(root), PREPARED_FILE)
 }
 
+/** Read only the durable updater state; journal and checkout data stay separate. */
+function durableUpdateState(root) {
+  try {
+    const value = JSON.parse(readFileSync(statePath(root), 'utf8'))
+    return value?.schema === 1 && typeof value.status === 'string' ? value : undefined
+  } catch {
+    return undefined
+  }
+}
+
 function activeRuntimePath(root) {
   return join(controlDirectory(root), ACTIVE_RUNTIME_FILE)
 }
@@ -189,6 +199,11 @@ function readActiveRuntime(root) {
 function validatedActiveRuntime(root) {
   const value = readActiveRuntime(root)
   if (value === undefined) return undefined
+
+  // The supervisor writes the active-runtime marker during prewarm, while
+  // the OLD Host can still be serving requests. A marker without the
+  // supervisor's post-boot health attestation is a candidate, not "current".
+  if (typeof value.healthyAt !== 'string' || !Number.isFinite(Date.parse(value.healthyAt))) return undefined
 
   const candidate = resolve(value.path)
   if (!existsSync(candidate) || !sameRepositoryWorktree(root, candidate)) return undefined
@@ -1198,13 +1213,20 @@ async function watch(root, parentPid) {
   cleanupUpdaterRuntimeStorage(root)
   recoverStaleStagingIndexLock(root)
   clearRefreshRequest(root)
-  writeState(root, {
-    status: 'checking',
-    phase: 'channel',
-    current: effectiveCurrentCommit(root),
-  })
+  const retained = durableUpdateState(root)
+  // The watcher may restart while the supervisor is relaunching the Host.
+  // Never erase its in-flight status or a real failed health checkpoint.
+  if (retained?.status !== 'restarting' && retained?.status !== 'applying'
+    && !(retained?.status === 'error' && retained.phase === 'health-check')) {
+    writeState(root, {
+      status: 'checking',
+      phase: 'channel',
+      current: effectiveCurrentCommit(root),
+    })
+  }
 
   while (parentAlive(parentPid)) {
+    const manualRefreshRequested = existsSync(refreshRequestPath(root))
     clearRefreshRequest(root)
     let inspection
     let repollImmediately = false
@@ -1243,6 +1265,20 @@ async function watch(root, parentPid) {
     }
 
     try {
+      // A new Host that repeatedly crashes before its health checkpoint must
+      // not be relaunched automatically on every stable-channel poll. Preserve
+      // the last-known-good Host and wait for a new release or an explicit Retry.
+      const failedActivation = durableUpdateState(root)
+      if (process.env.PHOENIX_UPDATE_SUPERVISED === '1'
+        && !manualRefreshRequested
+        && failedActivation?.status === 'error'
+        && failedActivation.phase === 'health-check'
+        && failedActivation.target === inspection.target) {
+        pending = undefined
+        preparedTarget = undefined
+        await waitForPollOrParentExit(root, parentPid, pollInterval())
+        continue
+      }
       const action = stableUpdateAction(root, inspection)
       switch (action) {
         case 'development':

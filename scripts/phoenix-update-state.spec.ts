@@ -113,7 +113,7 @@ describe('PHOENIX updater state persistence', () => {
       .split('\n').filter(line => line.includes('"step":"restarting"'))).toHaveLength(2)
   })
 
-  it('suppresses and clears duplicate restart requests when the same SHA is already active', () => {
+  it('requires a healthy Host attestation before suppressing duplicate activation requests', () => {
     const root = mkdtempSync(join(tmpdir(), 'phoenix-update-already-active-'))
     roots.push(root)
     const path = join(root, 'phoenix-update-state.json')
@@ -145,6 +145,25 @@ describe('PHOENIX updater state persistence', () => {
       reason: `verified stable update ${activeTarget.slice(0, 12)} ready; activate and restart`,
     }), 'utf8')
 
+    // Prewarm can create a candidate marker while the old Host still runs.
+    // This MUST NOT be interpreted as a successfully activated update.
+    writePhoenixUpdateState(path, { schema: 1, status: 'ready', target: activeTarget })
+    expect(JSON.parse(readFileSync(path, 'utf8'))).toMatchObject({
+      schema: 1,
+      status: 'restarting',
+      target: activeTarget,
+    })
+    expect(existsSync(join(root, 'phoenix-update-restart-request.json'))).toBe(true)
+
+    // Only after the actual target Host passes its stable checkpoint may the
+    // supervisor attest its health and retire a stale restart request.
+    writeFileSync(join(root, 'phoenix-active-runtime.json'), JSON.stringify({
+      schema: 1,
+      target: activeTarget,
+      path: root,
+      healthyAt: new Date().toISOString(),
+    }), 'utf8')
+    writePhoenixUpdateState(path, { schema: 1, status: 'updated', current: activeTarget, target: activeTarget })
     writePhoenixUpdateState(path, { schema: 1, status: 'ready', target: activeTarget })
 
     expect(JSON.parse(readFileSync(path, 'utf8'))).toMatchObject({
