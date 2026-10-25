@@ -383,9 +383,9 @@ export function UpdateFooterAction({
                 : lastFailedStep === undefined
                   ? detail ?? t('updateErrorHint')
                   : <>
-                      {t('updateFailedAt')}: {t(updateStepLabelKey(lastFailedStep.step) ?? 'updateError')}
-                      {lastFailedStep.exitCode === undefined ? null : ` · ${t('updateExitCode')}: ${String(lastFailedStep.exitCode)}`}
-                    </>}
+                    {t('updateFailedAt')}: {t(updateStepLabelKey(lastFailedStep.step) ?? 'updateError')}
+                    {lastFailedStep.exitCode === undefined ? null : ` · ${t('updateExitCode')}: ${String(lastFailedStep.exitCode)}`}
+                  </>}
             </p>
           )}
           {connectionLost && <p className={css.reconnecting}>{t('updateReconnect')}</p>}
@@ -459,7 +459,7 @@ export function UpdateFooterAction({
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={unverifiedActivation ? undefined : progress}
-            aria-valuetext={unverifiedActivation ? label : undefined}
+          aria-valuetext={unverifiedActivation ? label : undefined}
           aria-label={label}
         />
         {content}
