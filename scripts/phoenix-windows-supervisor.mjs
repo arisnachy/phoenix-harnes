@@ -1574,7 +1574,7 @@ function startHost() {
     ...hostArgs,
   ]), {
     cwd: runtimeRoot,
-    stdio: 'inherit',
+    stdio: ['inherit', 'pipe', 'pipe'],
     windowsHide: hideRuntimeWindows,
     env: {
       ...hydratePhoenixEnvironment(process.env),
@@ -2039,6 +2039,14 @@ while (true) {
   const startedAt = Date.now()
   const hostRuntimeRoot = runtimeRoot
   const host = startHost()
+  // Forward the real Host console as usual, but retain a bounded stderr tail
+  // so an early crash can display the actual exception/stack in the updater.
+  let hostErrorTail = ''
+  host.stdout?.on('data', chunk => { process.stdout.write(chunk) })
+  host.stderr?.on('data', chunk => {
+    process.stderr.write(chunk)
+    hostErrorTail = (hostErrorTail + String(chunk)).slice(-96 * 1024)
+  })
   startupDuration('first Host process spawned', startupStartedAt)
   activeHost = host
   host.once('error', (error) => {
@@ -2306,7 +2314,8 @@ while (true) {
     const stateFile = updateStatePath()
     if (stateFile !== undefined) {
       const exitCode = Number.isInteger(hostExit.code) && hostExit.code >= 0 ? hostExit.code : 1
-      recordPhoenixUpdateStep(stateFile, 'health-check', 'failed', exitedTarget, exitCode, `Host exit ${String(exitCode)} before health checkpoint; runtime ${exitedTarget}`)
+      recordPhoenixUpdateStep(stateFile, 'health-check', 'failed', exitedTarget, exitCode,
+        hostErrorTail.trim() || `Host exit ${String(exitCode)} before health checkpoint; runtime ${exitedTarget}`)
       writePhoenixUpdateState(stateFile, {
         ...failedUpdateState,
         status: 'error',
