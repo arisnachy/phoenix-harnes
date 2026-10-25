@@ -2,6 +2,7 @@ import {test} from 'node:test'
 import assert from 'node:assert/strict'
 import {chatGames} from '../src/sports.ts'
 import {enrichMlbMatch} from '../src/mlb-matchup.ts'
+import {researchMlbTrend} from '../src/mlb-research.ts'
 
 const fixture=(value)=>new Response(JSON.stringify(value),{status:200,headers:{'content-type':'application/json'}})
 const schedule={dates:[{games:[{gamePk:849802,gameDate:'2026-10-25T00:00:00Z',
@@ -83,4 +84,21 @@ test('untrusted MLB roster and repeated batting IDs do not create invented playe
   assert.equal(report.lineups[0].players.length,1,'each published batter appears only once')
   assert.deepEqual(report.bullpen[0].pitchers.map(p=>p.name),['Relevista identificado'])
   assert.ok(!JSON.stringify(report).includes('No confirmado'),'do not synthesize anonymous roster entries')
+})
+
+test('MLB trends require complete published season statistics and never invent a favorite',async()=>{
+  const complete={records:[{teamRecords:[
+    {team:{id:139},wins:92,losses:70,runsScored:780,runsAllowed:665},
+    {team:{id:158},wins:70,losses:92,runsScored:640,runsAllowed:770},
+  ]}]}
+  const trend=await researchMlbTrend(139,158,2026,'Local','Visita',async()=>fixture(complete))
+  assert.equal(trend.favorite,'Local')
+  assert.match(trend.method,/no es una predicción calibrada/)
+  assert.equal(trend.evidence.length,2)
+  const missing={records:[{teamRecords:[
+    {team:{id:139},wins:0,losses:0,runsScored:780,runsAllowed:665},
+    {team:{id:158},wins:70,losses:92,runsScored:640,runsAllowed:770},
+  ]}]}
+  const unavailable=await researchMlbTrend(139,158,2026,'Local','Visita',async()=>fixture(missing))
+  assert.equal(unavailable,undefined,'0-0 standings cannot support a numeric trend')
 })
