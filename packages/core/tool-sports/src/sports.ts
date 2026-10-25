@@ -117,7 +117,7 @@ export async function chatGames(sport:string,league:string,requestedDate?:string
       // Limit deep MLB requests on large game days; the user can drill down any remaining matchup.
       const details=index<3?await enrichMlbMatch(
         g.gamePk,home?.team?.id??0,away?.team?.id??0,homeName,awayName,
-        {home:home?.probablePitcher,away:away?.probablePitcher},Number(day.slice(0,4)),env,fetcher,
+        {...(home?.probablePitcher?{home:home.probablePitcher}:{}),...(away?.probablePitcher?{away:away.probablePitcher}:{})},Number(day.slice(0,4)),env,fetcher,
       ):null
       const research=index<3?await researchMlbTrend(
         home?.team?.id??0,away?.team?.id??0,Number(day.slice(0,4)),homeName,awayName,fetcher,
