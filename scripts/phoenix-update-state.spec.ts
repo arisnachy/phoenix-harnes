@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { spawnSync } from 'node:child_process'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { recordPhoenixUpdateStep, writePhoenixUpdateState } from './phoenix-update-state.mjs'
+import { recordPhoenixUpdateStep, sanitizePhoenixUpdateDiagnostic, writePhoenixUpdateState } from './phoenix-update-state.mjs'
 
 const roots: string[] = []
 const originalSupervised = process.env.PHOENIX_UPDATE_SUPERVISED
@@ -38,6 +38,42 @@ describe('PHOENIX updater state persistence', () => {
       expect.objectContaining({ step: 'dependencies', result: 'failed', exitCode: 9, target }),
     ])
     expect(JSON.stringify(entries)).not.toContain('supersecret')
+  })
+
+  it('keeps the complete failing command trace but strips credentials before writing the journal', () => {
+    const root = mkdtempSync(join(tmpdir(), 'phoenix-update-error-output-'))
+    roots.push(root)
+    const path = join(root, 'phoenix-update-state.json')
+    const target = 'e'.repeat(40)
+    const trace = [
+      'PowerShell : Failed to start new Host',
+      '  at C:\\Phoenix\\scripts\\activate.ps1:102 char:5',
+      'Error: EADDRINUSE: address already in use 127.0.0.1:3080',
+      '    at Server.setupListenHandle (node:net:1900:16)',
+      'Authorization: Bearer token-that-must-not-appear',
+      'password=private-pw-123',
+      'client_secret: sensitive-secret-xyz',
+      'OPENROUTER_API_KEY=supersecret-openrouter-key',
+      'sk-proj-abcdefghijklmnopqrstuvwxyz123456',
+    ].join('\n')
+    recordPhoenixUpdateStep(path, 'runtime-activation', 'failed', target, 1, trace)
+    const journal = readFileSync(join(root, 'phoenix-update-events.jsonl'), 'utf8')
+    const event = JSON.parse(journal) as { diagnostic: string; exitCode: number }
+    expect(event.exitCode).toBe(1)
+    expect(event.diagnostic).toContain('EADDRINUSE')
+    expect(event.diagnostic).toContain('node:net:1900:16')
+    expect(event.diagnostic).toContain('activate.ps1')
+    expect(event.diagnostic).not.toContain('private-pw-123')
+    expect(event.diagnostic).not.toContain('token-that-must-not-appear')
+    expect(event.diagnostic).not.toContain('sensitive-secret-xyz')
+    expect(event.diagnostic).not.toContain('supersecret-openrouter-key')
+    expect(event.diagnostic).not.toContain('sk-proj-abcdefghijklmnopqrstuvwxyz123456')
+    expect(event.diagnostic).toContain('[SECRET_REMOVED]')
+    expect(sanitizePhoenixUpdateDiagnostic('Error: unavailable')).toBe('Error: unavailable')
+    expect(sanitizePhoenixUpdateDiagnostic('')).toBeUndefined()
+    expect(sanitizePhoenixUpdateDiagnostic('x'.repeat(110_000))).toContain('[Earlier output truncated')
+    recordPhoenixUpdateStep(path, 'build', 'ok', target, 0, 'should not be shown')
+    expect(readFileSync(join(root, 'phoenix-update-events.jsonl'), 'utf8')).not.toContain('should not be shown')
   })
 
   it('replaces the state document atomically and leaves no temporary file', () => {

@@ -323,6 +323,31 @@ describe('UpdateFooterAction', () => {
     expect(screen.queryByText('cccccccccccc')).toBeNull()
   })
 
+  it('opens the real, copyable PowerShell error automatically after an update failure', async () => {
+    const copy = vi.fn(async (_text: string) => {})
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: copy } })
+    const diagnostic = 'PowerShell failed at activate.ps1:93\nError: EADDRINUSE 127.0.0.1:3080'
+    render(<UpdateFooterAction {...updateProps(async () => ({
+      status: 'error',
+      target: 'e'.repeat(40),
+      phase: 'runtime-activation',
+      detail: 'Candidate could not start',
+      events: [{
+        at: new Date().toISOString(),
+        step: 'runtime-activation',
+        result: 'failed',
+        exitCode: 1,
+        diagnostic,
+      }],
+    }))} />)
+    const trace = await screen.findByTestId('phoenix-update-diagnostic')
+    expect(trace.textContent).toContain('EADDRINUSE 127.0.0.1:3080')
+    expect(trace.textContent).toContain('activate.ps1:93')
+    expect(screen.getByRole('button', { name: en.updateHideDetails })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: en.updateDiagnosticCopy }))
+    expect(copy).toHaveBeenCalledWith(diagnostic)
+  })
+
   it('renders a ready update as a compact restart action', async () => {
     const target = 'b'.repeat(40)
     render(<UpdateFooterAction {...updateProps(async () => ({ status: 'ready', target }))} />)

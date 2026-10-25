@@ -92,13 +92,18 @@ function command(bin, args, options = {}) {
   const result = spawnSync(bin, args, {
     cwd: options.cwd,
     encoding: 'utf8',
-    stdio: options.inherit ? 'inherit' : ['ignore', 'pipe', 'pipe'],
+    stdio: ['ignore', 'pipe', 'pipe'],
+    maxBuffer: 64 * 1024 * 1024,
     windowsHide: true,
     env,
     ...(options.timeoutMs === undefined ? {} : { timeout: options.timeoutMs, killSignal: 'SIGTERM' }),
   })
+  // Preserve the native log stream while collecting any real exception output.
+  if (options.inherit && result.stdout) process.stdout.write(result.stdout)
+  if (options.inherit && result.stderr) process.stderr.write(result.stderr)
   if (result.error !== undefined) {
     if (options.allowFailure) return { ok: false, stdout: '', stderr: result.error.message, status: 1 }
+    result.error.diagnostic = [result.error.stack, result.stderr, result.stdout].filter(Boolean).join('\n')
     throw result.error
   }
   const status = result.status ?? 1
@@ -107,6 +112,7 @@ function command(bin, args, options = {}) {
   if (status !== 0 && !options.allowFailure) {
     const error = new Error(`${bin} ${args.join(' ')} failed (${status})${stderr.length > 0 ? `: ${stderr}` : ''}`)
     error.exitCode = status
+    error.diagnostic = [stderr && `STDERR:\n${stderr}`, stdout && `STDOUT:\n${stdout}`].filter(Boolean).join('\n')
     throw error
   }
   return { ok: status === 0, stdout, stderr, status }
@@ -385,7 +391,9 @@ function updateCommandStep(root, step, commandFn) {
     recordPhoenixUpdateStep(path, step, 'ok', target, 0)
     return result
   } catch (error) {
-    recordPhoenixUpdateStep(path, step, 'failed', target, Number.isInteger(error?.exitCode) ? error.exitCode : 1)
+    recordPhoenixUpdateStep(path, step, 'failed', target,
+      Number.isInteger(error?.exitCode) ? error.exitCode : 1,
+      error?.diagnostic || (error instanceof Error ? error.stack ?? error.message : String(error)))
     throw error
   }
 }

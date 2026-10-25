@@ -323,3 +323,41 @@
   background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 6%, transparent);
   font-weight: 580;
 }
+
+/* Keep actual error output readable without turning the sidebar into a terminal. */
+.diagnosticPanel {
+  margin-top: 7px;
+  min-width: 0;
+  border: 1px solid color-mix(in srgb, var(--dsw-alias-state-error-primary) 22%, transparent);
+  border-radius: 7px;
+  overflow: hidden;
+}
+.diagnosticHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 8px;
+  gap: 8px;
+  color: var(--dsw-alias-label-primary);
+  background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 6%, transparent);
+}
+.diagnosticCopy {
+  border: 1px solid var(--dsw-alias-border-l2);
+  color: var(--dsw-alias-label-primary);
+  background: transparent;
+  border-radius: 6px;
+  font: inherit;
+  padding: 3px 7px;
+  cursor: pointer;
+}
+.diagnosticText {
+  max-height: 240px;
+  margin: 0;
+  padding: 9px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+  font: 10px/1.55 ui-monospace, SFMono-Regular, Consolas, monospace;
+  color: var(--dsw-alias-label-primary);
+}

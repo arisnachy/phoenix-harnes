@@ -14,7 +14,8 @@ import type {
 
 const STATE_FILE = 'phoenix-update-state.json'
 const PROGRESS_JOURNAL_FILE = 'phoenix-update-events.jsonl'
-const MAX_EVENT_READ_BYTES = 64 * 1024
+const MAX_EVENT_READ_BYTES = 256 * 1024
+const MAX_DIAGNOSTIC_CHARS = 96 * 1024
 const MAX_DISPLAY_EVENTS = 24
 const RESTART_REQUEST_FILE = 'phoenix-update-restart-request.json'
 const REFRESH_REQUEST_FILE = 'phoenix-update-refresh-request.json'
@@ -235,12 +236,24 @@ export function parsePhoenixUpdateEvents(content: string, target?: string): read
         || typeof value.at !== 'string' || !Number.isFinite(Date.parse(value.at))
         || (target !== undefined && value.target !== target)) continue
       const exitCode = value.exitCode
+      // Never trust a journal edited externally: validate length, result and
+      // redact again at the RPC boundary before returning browser-visible data.
+      const diagnostic = typeof value.diagnostic === 'string' && value.result === 'failed'
+        ? value.diagnostic.slice(0, MAX_DIAGNOSTIC_CHARS + 100)
+          .replace(/\u001b\[[0-9;]*[a-z]/giu, '')
+          .replace(/https?:\/\/[^\s/@]+:[^\s/@]+@/giu, 'https://[CREDENTIALS_REMOVED]@')
+          .replace(/\b(?:sk-(?:proj-)?[A-Za-z0-9_-]{12,}|gh[pousr]_[A-Za-z0-9_]{12,}|github_pat_[A-Za-z0-9_]{12,})\b/giu, '[SECRET_REMOVED]')
+          .replace(/\bBearer\s+[^\s"']+/giu, 'Bearer [SECRET_REMOVED]')
+          .replace(/(\b(?:password|passwd|token|access_token|refresh_token|api[_-]?key|client_secret|authorization|secret|_authToken)\b\s*[:=]\s*)("[^"]*"|'[^']*'|[^\s,;]+)/giu, '$1[SECRET_REMOVED]')
+    .replace(/(\b[A-Za-z0-9_]*(?:TOKEN|API_KEY|PASSWORD|SECRET|AUTH_KEY|PRIVATE_KEY|ACCESS_KEY)\b\s*[:=]\s*)("[^"]*"|'[^']*'|[^\s,;]+)/giu, '$1[SECRET_REMOVED]')
+        : undefined
       events.push({
         step: value.step,
         result: value.result as PhoenixUpdateEvent['result'],
         at: value.at,
         ...(typeof exitCode === 'number' && Number.isSafeInteger(exitCode)
           && exitCode >= 0 && exitCode <= 255 ? { exitCode } : {}),
+        ...(diagnostic === undefined || diagnostic.length === 0 ? {} : { diagnostic }),
       })
     } catch {
       // Torn/legacy lines are never surfaced to the browser.
