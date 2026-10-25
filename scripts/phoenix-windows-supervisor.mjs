@@ -339,6 +339,8 @@ function reportSupervisorHeartbeat(host, hostRuntimeRoot) {
   const path = gitControlPath(SUPERVISOR_HEARTBEAT_FILE)
   if (path === undefined) return
   const temp = path + '.' + String(process.pid) + '.tmp'
+  // Throttle failed writes too: disk locks should not flood the console.
+  lastSupervisorHeartbeatAt = now
   try {
     writeFileSync(temp, JSON.stringify({
       schema: 1, at: new Date(now).toISOString(),
@@ -347,7 +349,6 @@ function reportSupervisorHeartbeat(host, hostRuntimeRoot) {
       runtimeRoot: hostRuntimeRoot,
     }) + '\n', { mode: 0o600 })
     renameSync(temp, path)
-    lastSupervisorHeartbeatAt = now
   } catch (error) {
     try { unlinkSync(temp) } catch { /* best-effort telemetry only */ }
     console.error('[PHOENIX UPDATE] supervisor heartbeat write failed: '
