@@ -519,8 +519,10 @@ function explicitCognitiveInput(input: MemoryRecordInput, projectId: string | un
 
 function eventText(event: SessionEvent): string {
   switch (event.type) {
-    case 'user/message':
-    case 'assistant/message': return messageText(event.data) ?? event.type
+    case 'user/message': return messageText(event.data) ?? event.type
+    // Assistant events wrap their Message in { turn, step, message }.
+    // Reading the envelope silently reduced every model answer to a label.
+    case 'assistant/message': return messageText(event.data.message) ?? event.type
     case 'tool/result': return toolResultText(event.data.message)
     case 'tool/call': return sanitize(`${event.data.name}: ${event.data.arguments}`)
     case 'turn/end': return event.data.reason.kind === 'error' ? `turn failed: ${errorText(event.data.reason.error)}` : `turn ${event.data.reason.kind}`
