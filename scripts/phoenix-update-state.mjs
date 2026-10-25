@@ -327,6 +327,10 @@ export function diagnoseStalledPhoenixActivation(statePath, now = Date.now()) {
     'Commit: ' + state.target,
     'Tiempo sin confirmación: ' + String(elapsedMinutes) + ' minutos',
     'Supervisor observado en los últimos 30 segundos: ' + (supervisorVisible ? 'sí' : 'no'),
+    'PID del supervisor: ' + (supervisorVisible && Number.isSafeInteger(supervisor.supervisorPid)
+      ? String(supervisor.supervisorPid) : 'no verificado'),
+    'PID del Host: ' + (supervisorVisible && Number.isSafeInteger(supervisor.hostPid)
+      ? String(supervisor.hostPid) : 'no verificado'),
     'Solicitud de activación pendiente: ' + (requestPending ? 'sí' : 'no'),
     'Estado original: ' + state.status + '; fase: ' + String(state.phase ?? 'desconocida'),
     detail,
