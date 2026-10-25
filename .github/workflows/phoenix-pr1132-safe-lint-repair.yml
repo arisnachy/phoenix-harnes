@@ -1,0 +1,69 @@
+name: PR1132 safe oxlint repair
+on:
+  push:
+    branches:
+      - fix/phoenix-dual-core-integration-20261023
+    paths:
+      - .github/workflows/phoenix-pr1132-safe-lint-repair.yml
+permissions:
+  contents: write
+concurrency:
+  group: pr1132-safe-lint-repair
+  cancel-in-progress: false
+jobs:
+  safe-fix:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: fix/phoenix-dual-core-integration-20261023
+          fetch-depth: 0
+          persist-credentials: true
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+      - name: Install locked deps
+        run: pnpm install --frozen-lockfile
+      - name: Apply only oxlint safe automatic fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Oxlint --fix excludes dangerous and suggestion-only fixes.
+          set +e
+          pnpm exec tsx scripts/run-oxlint.ts . --fix
+          status=$?
+          set -e
+          if [ "$status" -gt 1 ]; then
+            echo "Oxlint infrastructure failed with exit $status" >&2
+            exit "$status"
+          fi
+          echo 'Changed files after safe fixer:'
+          git diff --stat
+          git diff --check
+          pnpm run build:lib:host
+      - name: Report unresolved lint without hiding it
+        shell: bash
+        run: |
+          set +e
+          pnpm run lint:contracts-ready
+          echo "Residual lint exit=$?"
+          exit 0
+      - name: Safely commit changed sources and delete this temporary workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Phoenix Safe Lint Repair'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git rm .github/workflows/phoenix-pr1132-safe-lint-repair.yml
+          git add -u
+          git diff --cached --check
+          git commit -m 'fix(pr1132): apply safe oxlint changes without reducing lint gates'
+          git fetch origin fix/phoenix-dual-core-integration-20261023
+          if ! git merge-base --is-ancestor origin/fix/phoenix-dual-core-integration-20261023 HEAD; then
+            echo 'Concurrent changes detected; did not overwrite the PR branch' >&2
+            exit 1
+          fi
+          git push origin HEAD:fix/phoenix-dual-core-integration-20261023
