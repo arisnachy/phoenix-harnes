@@ -88,10 +88,8 @@ describe('optional live update helper fallback', () => {
       'create isolated runtime worktree')
     expect(spawn).toHaveBeenCalledWith('git', ['worktree', 'add', '--detach', 'replacement', 'target'],
       expect.objectContaining({ cwd: 'checkout', stdio: 'inherit' }))
-    expect(steps.mock.calls.map(call => call.slice(0, 2))).toEqual([
-      ['git-worktree', 'started'],
-      ['git-worktree', 'ok'],
-    ])
+    expect(steps).toHaveBeenNthCalledWith(1, 'git-worktree', 'started')
+    expect(steps).toHaveBeenNthCalledWith(2, 'git-worktree', 'ok', 0)
     expect(errors).toHaveBeenCalledWith(expect.stringContaining('optional live output helper missing'))
     expect(updater).toContain('const directStream = liveEligible && !streamLive')
     expect(updater).toContain("stdio: streamLive || directStream ? 'inherit'")
@@ -118,7 +116,8 @@ describe('optional live update helper fallback', () => {
     expect(() => runChecked('checkout', 'git', ['worktree', 'add'], 'create isolated runtime worktree'))
       .toThrow('create isolated runtime worktree exited with 31')
     expect(steps).toHaveBeenCalledWith('git-worktree', 'failed', 31, '')
-    expect(spawn.mock.calls[0]?.[0]).toBe('git')
+    expect(spawn).toHaveBeenCalledWith('git', ['worktree', 'add'],
+      expect.objectContaining({ cwd: 'checkout', stdio: 'inherit' }))
   })
 
   it('keeps rich journal streaming when the helper exists', () => {
