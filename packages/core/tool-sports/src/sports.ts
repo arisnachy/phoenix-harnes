@@ -18,36 +18,36 @@ export const sportsCatalog: Readonly<Record<string, readonly string[]>> = {
   'rugby-league':['3'],'australian-football':['afl'],
 }
 // League labels are explicit and stable catalog metadata, never fabricated live results.
-const leaguePresentation: Record<string,{league:string;country?:string}> = {
-  'eng.1':{league:'Premier League',country:'Inglaterra'},
-  'esp.1':{league:'LaLiga',country:'España'},
-  'mex.1':{league:'Liga MX',country:'México'},
-  'usa.1':{league:'MLS',country:'Estados Unidos / Canadá'},
-  'uefa.champions':{league:'UEFA Champions League',country:'Europa'},
-  'fifa.world':{league:'Copa Mundial',country:'Internacional'},
-  'mlb':{league:'MLB'},'nba':{league:'NBA'},'wnba':{league:'WNBA'},
-  'nfl':{league:'NFL'},'nhl':{league:'NHL'},
+const leaguePresentation: Record<string,{ league:string;country?:string }> = {
+  'eng.1':{ league:'Premier League',country:'Inglaterra' },
+  'esp.1':{ league:'LaLiga',country:'España' },
+  'mex.1':{ league:'Liga MX',country:'México' },
+  'usa.1':{ league:'MLS',country:'Estados Unidos / Canadá' },
+  'uefa.champions':{ league:'UEFA Champions League',country:'Europa' },
+  'fifa.world':{ league:'Copa Mundial',country:'Internacional' },
+  'mlb':{ league:'MLB' },'nba':{ league:'NBA' },'wnba':{ league:'WNBA' },
+  'nfl':{ league:'NFL' },'nhl':{ league:'NHL' },
 }
-const oddsPresentation:Record<string,{sport:string;country?:string;league?:string}> = {
-  soccer_epl:{sport:'Fútbol',country:'Inglaterra',league:'Premier League'},
-  soccer_spain_la_liga:{sport:'Fútbol',country:'España',league:'LaLiga'},
-  soccer_mexico_ligamx:{sport:'Fútbol',country:'México',league:'Liga MX'},
-  soccer_usa_mls:{sport:'Fútbol',country:'Estados Unidos / Canadá',league:'MLS'},
-  soccer_uefa_champs_league:{sport:'Fútbol',country:'Europa',league:'Champions League'},
-  baseball_mlb:{sport:'Béisbol',league:'MLB'},
-  basketball_nba:{sport:'Baloncesto',league:'NBA'},
-  basketball_wnba:{sport:'Baloncesto',league:'WNBA'},
-  americanfootball_nfl:{sport:'Fútbol americano',league:'NFL'},
-  icehockey_nhl:{sport:'Hockey',league:'NHL'},
+const oddsPresentation:Record<string,{ sport:string;country?:string;league?:string }> = {
+  soccer_epl:{ sport:'Fútbol',country:'Inglaterra',league:'Premier League' },
+  soccer_spain_la_liga:{ sport:'Fútbol',country:'España',league:'LaLiga' },
+  soccer_mexico_ligamx:{ sport:'Fútbol',country:'México',league:'Liga MX' },
+  soccer_usa_mls:{ sport:'Fútbol',country:'Estados Unidos / Canadá',league:'MLS' },
+  soccer_uefa_champs_league:{ sport:'Fútbol',country:'Europa',league:'Champions League' },
+  baseball_mlb:{ sport:'Béisbol',league:'MLB' },
+  basketball_nba:{ sport:'Baloncesto',league:'NBA' },
+  basketball_wnba:{ sport:'Baloncesto',league:'WNBA' },
+  americanfootball_nfl:{ sport:'Fútbol americano',league:'NFL' },
+  icehockey_nhl:{ sport:'Hockey',league:'NHL' },
 }
-const categoryFromSportKey=(sportKey?:string):{sport?:string;country?:string;league?:string}=>{
+const categoryFromSportKey=(sportKey?:string):{ sport?:string;country?:string;league?:string }=>{
   if(!sportKey)return {}
   const known=oddsPresentation[sportKey]
   if(known)return known
   const category=sportKey.split('_')[0]??''
-  const sport:Record<string,string>={soccer:'Fútbol',baseball:'Béisbol',basketball:'Baloncesto',
-    americanfootball:'Fútbol americano',icehockey:'Hockey',tennis:'Tenis',cricket:'Críquet'}
-  return sport[category]?{sport:sport[category]}:{}
+  const sport:Record<string,string>={ soccer:'Fútbol',baseball:'Béisbol',basketball:'Baloncesto',
+    americanfootball:'Fútbol americano',icehockey:'Hockey',tennis:'Tenis',cricket:'Críquet' }
+  return sport[category]?{ sport:sport[category] }:{}
 }
 const title=(v:unknown,max=170):string => {
   const value=typeof v==='string'||typeof v==='number'||typeof v==='boolean'?String(v):'Sin confirmar'
@@ -218,7 +218,7 @@ export async function chatGames(sport:string,league:string,requestedDate?:string
       rows.push({ component:'sports_game_card',version:1,props:{
         title:title(e.name,95),subtitle:(leagueInfo?.league??title(league,45))+' · '+sportLabel,
         league:leagueInfo?.league??title(league,45),
-        ...(leagueInfo?.country?{country:leagueInfo.country}:{}),
+        ...(leagueInfo?.country?{ country:leagueInfo.country }:{}),
         status:title(e.status?.type?.description,55),when:localTime(e.date),
         venue:title(comp?.venue?.fullName),home:side(home),away:side(away),
         source:'ESPN Site API · '+new Date().toISOString(),
