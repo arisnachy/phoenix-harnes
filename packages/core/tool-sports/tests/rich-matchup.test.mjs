@@ -63,3 +63,24 @@ test('direct match enrichment does not trust arbitrary IDs or treat missing fact
   assert.equal(report.pitchers.length,0)
   assert.match(report.notes[0],/inválido/)
 })
+
+test('untrusted MLB roster and repeated batting IDs do not create invented players or a confirmed lineup',async()=>{
+  const badBox={teams:{away:{battingOrder:Array(9).fill(101),players:{
+    ID101:{person:{id:101,fullName:'Único bateador'},position:{abbreviation:'DH'}},
+  }},home:{battingOrder:[],players:{}}}}
+  const badRoster={roster:[
+    {person:{id:678032},position:{type:'Pitcher'}},
+    {person:{id:678033,fullName:'Relevista identificado'},position:{type:'Pitcher'}},
+  ]}
+  const badSource=async url=>{
+    if(url.includes('/boxscore'))return fixture(badBox)
+    if(url.includes('/roster?'))return fixture(badRoster)
+    if(url.includes('/stats?'))return fixture(pitching)
+    return fixture({})
+  }
+  const report=await enrichMlbMatch(849802,158,139,'Local','Visita',{},2026,{},badSource)
+  assert.equal(report.lineups[0].confirmed,false,'nine repeated IDs must not confirm a lineup')
+  assert.equal(report.lineups[0].players.length,1,'each published batter appears only once')
+  assert.deepEqual(report.bullpen[0].pitchers.map(p=>p.name),['Relevista identificado'])
+  assert.ok(!JSON.stringify(report).includes('No confirmado'),'do not synthesize anonymous roster entries')
+})

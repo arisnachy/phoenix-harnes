@@ -21,7 +21,7 @@ const playerImage=(id:number,env:NodeJS.ProcessEnv)=>mediaEnabled(env)
  : undefined
 const fmt=(v:unknown)=>typeof v==='number'||typeof v==='string'?String(v).slice(0,18):'—'
 function orderedHitters(team:BoxTeam|undefined,teamName:string,env:NodeJS.ProcessEnv):SportsLineup {
-  const order=Array.isArray(team?.battingOrder)?team.battingOrder:[]
+  const order=Array.isArray(team?.battingOrder)?[...new Set(team.battingOrder.filter(id=>safeId(id)!==null))]:[]
   const players=order.slice(0,9).flatMap(id=>{
     const row=team?.players?.['ID'+id]
     if(!row?.person?.fullName)return []
@@ -83,15 +83,19 @@ export async function enrichMlbMatch(
       const r=await getFeed<Roster>('https://statsapi.mlb.com/api/v1/teams/'+teamId+'/roster?rosterType=active',fetcher)
       const starterId=safeId(starting[side]?.id)
       const available=(r.roster??[]).filter(p=>p.position?.type==='Pitcher'||p.position?.abbreviation==='P')
-        .filter(p=>safeId(p.person?.id)!==null&&p.person?.id!==starterId)
+        .filter(p=>safeId(p.person?.id)!==null&&!!p.person?.fullName&&p.person?.id!==starterId)
         .slice(0,4)
       const profiles=await Promise.all(available.map(async p=>{
-        const id=p.person!.id!, image=playerImage(id,env)
+        const id=safeId(p.person?.id)
+        const name=p.person?.fullName
+        if(id===null||!name)return null
+        const image=playerImage(id,env)
         const stats=await pitcherSeason(id,season,fetcher)
-        return {name:p.person?.fullName||'No confirmado',role:'Plantilla de lanzadores',id,...(image?{image}:{}),
+        return {name,role:'Plantilla de lanzadores',id,...(image?{image}:{}),
           ...(stats?{stats}:{})}
       }))
-      return {team:name,pitchers:profiles,note:'Lanzadores de plantilla activa; su aparición en el juego no está confirmada'}
+      return {team:name,pitchers:profiles.filter(p=>p!==null),
+        note:'Lanzadores de plantilla activa; su aparición en el juego no está confirmada'}
     }catch{return {team:name,pitchers:[],note:'Bullpen no disponible en la fuente'}}
   }))
   return {pitchers,lineups,bullpen,notes}
