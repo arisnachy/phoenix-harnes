@@ -326,7 +326,7 @@ describe('UpdateFooterAction', () => {
   it('opens the real, copyable PowerShell error automatically after an update failure', async () => {
     const copy = vi.fn(async (_text: string) => {})
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: copy } })
-    const diagnostic = 'PowerShell failed at activate.ps1:93\\nError: EADDRINUSE 127.0.0.1:3080'
+    const diagnostic = 'PowerShell failed at activate.ps1:93\nError: EADDRINUSE 127.0.0.1:3080'
     render(<UpdateFooterAction {...updateProps(async () => ({
       status: 'error',
       target: 'e'.repeat(40),
