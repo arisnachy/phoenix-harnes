@@ -3,8 +3,8 @@ import { getFeed,hasSportsPermission } from './sports.ts'
 
 type RosterPlayer={ person:{ id:number;fullName:string };position?:{ type?:string;abbreviation?:string } }
 type PitcherStat={
-  era?:string;whip?:string;inningsPitched?:string;strikeOuts?:number,
-  gamesPlayed?:number;gamesStarted?:number;wins?:number;losses?:number,
+  era?:string;whip?:string;inningsPitched?:string;strikeOuts?:number
+  gamesPlayed?:number;gamesStarted?:number;wins?:number;losses?:number
 }
 type PitchStatsResponse={ stats?:Array<{ splits?:Array<{ stat?:PitcherStat }> }> }
 /** Attributed pitching roster and its companion inline statistics table. */

@@ -3,10 +3,10 @@
  */
 import { getFeed } from './sports.ts'
 type P={
-  person?:{ id?:number;fullName?:string },
-  position?:{ abbreviation?:string;type?:string },
-  battingOrder?:string,
-  seasonStats?:{ batting?:Record<string,number|string> },
+  person?:{ id?:number;fullName?:string }
+  position?:{ abbreviation?:string;type?:string }
+  battingOrder?:string
+  seasonStats?:{ batting?:Record<string,number|string> }
 }
 type BoxTeam={ battingOrder?:number[];players?:Record<string,P>;bullpen?:number[];team?:{ id?:number;name?:string } }
 type Boxscore={ teams?:{ home?:BoxTeam;away?:BoxTeam } }
