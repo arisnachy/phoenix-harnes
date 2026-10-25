@@ -43,7 +43,7 @@ const categoryFromSportKey=(sportKey?:string):{sport?:string;country?:string;lea
   if(!sportKey)return {}
   const known=oddsPresentation[sportKey]
   if(known)return known
-  const category=sportKey.split('_')[0]
+  const category=sportKey.split('_')[0]??''
   const sport:Record<string,string>={soccer:'Fútbol',baseball:'Béisbol',basketball:'Baloncesto',
     americanfootball:'Fútbol americano',icehockey:'Hockey',tennis:'Tenis',cricket:'Críquet'}
   return sport[category]?{sport:sport[category]}:{}
@@ -133,6 +133,7 @@ export async function chatGames(sport:string,league:string,requestedDate?:string
   if(!Object.hasOwn(sportsCatalog,sport)||!leagueValid(league))throw Error('Disciplina o liga inválida')
   if(!sportsCatalog[sport]?.includes(league)&&!(await discoverEspnLeagues(sport,env,fetcher)).includes(league))throw Error('Liga no encontrada en el catálogo público de ESPN')
   const day=date(requestedDate),rows:ChatBlock[]=[]
+  const leagueInfo=leaguePresentation[league]
   const isMlb=sport==='baseball'&&league==='mlb'&&hasSportsPermission('mlb',env)
   const source=isMlb?'MLB Stats API':'ESPN Site API'
   if(isMlb){
@@ -214,9 +215,9 @@ export async function chatGames(sport:string,league:string,requestedDate?:string
         ),
       )
       rows.push({ component:'sports_game_card',version:1,props:{
-        title:title(e.name,95),subtitle:(leaguePresentation[league]?.league??title(league,45))+' · '+sportLabel,
-        league:leaguePresentation[league]?.league??title(league,45),
-        ...(leaguePresentation[league]?.country?{country:leaguePresentation[league].country}:{}),
+        title:title(e.name,95),subtitle:(leagueInfo?.league??title(league,45))+' · '+sportLabel,
+        league:leagueInfo?.league??title(league,45),
+        ...(leagueInfo?.country?{country:leagueInfo.country}:{}),
         status:title(e.status?.type?.description,55),when:localTime(e.date),
         venue:title(comp?.venue?.fullName),home:side(home),away:side(away),
         source:'ESPN Site API · '+new Date().toISOString(),
