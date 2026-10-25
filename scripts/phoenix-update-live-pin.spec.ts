@@ -1,9 +1,9 @@
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { afterEach, describe, expect, it } from 'vitest'
-import { pinPhoenixUpdateLiveHelper } from './phoenix-update-live-pin.mjs'
+import { pinPhoenixUpdateLiveHelper, validPinnedPhoenixUpdateLiveHelper } from './phoenix-update-live-pin.mjs'
 
 const directories: string[] = []
 
@@ -31,7 +31,8 @@ describe('durable live updater helper', () => {
     const pinned = pinPhoenixUpdateLiveHelper(source, state)
     expect(pinned).toBeDefined()
     expect(pinned).not.toBe(helper)
-    expect(readFileSync(join(pinned!.slice(0, -'phoenix-update-live-command.mjs'.length), 'phoenix-update-state.mjs'), 'utf8'))
+    expect(validPinnedPhoenixUpdateLiveHelper(pinned)).toBe(true)
+    expect(readFileSync(join(dirname(pinned!), 'phoenix-update-state.mjs'), 'utf8'))
       .toBe(readFileSync(module, 'utf8'))
     rmSync(source, { recursive: true, force: true })
     const child = spawnSync(process.execPath, [pinned!], { encoding: 'utf8', windowsHide: true })
@@ -47,6 +48,7 @@ describe('durable live updater helper', () => {
     const pinned = pinPhoenixUpdateLiveHelper(source, state)
     expect(pinned).toBeDefined()
     writeFileSync(pinned!, 'tampered')
+    expect(validPinnedPhoenixUpdateLiveHelper(pinned)).toBe(false)
     expect(pinPhoenixUpdateLiveHelper(source, state)).toBeUndefined()
   })
 
