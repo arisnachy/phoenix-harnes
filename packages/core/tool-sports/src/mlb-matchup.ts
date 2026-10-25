@@ -68,8 +68,9 @@ export async function enrichMlbMatch(
     const row=starting[side],id=safeId(row?.id)
     if(!id||!row?.fullName)return null
     const image=playerImage(id,env)
+    const stats=await pitcherSeason(id,season,fetcher)
     return {team:name,name:row.fullName,id,probable:true,...(image?{image}:{}),
-      stats:await pitcherSeason(id,season,fetcher)}
+      ...(stats?{stats}:{})}
   }))
   const pitchers=starterStats.filter((x):x is NonNullable<typeof x>=>x!==null)
   let box:Boxscore|null=null
