@@ -94,6 +94,7 @@ describe('AgentDefaultModelConfig', () => {
     const bench = await boot()
     const profile = {
       mode: 'hybrid' as const,
+      executionEngine: 'codex' as const,
       planner: { provider: 'openai-codex', model: 'gpt-6.1-sol', reasoningEffort: 'medium' },
       coordinator: { provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'max' },
       escalationSensitivity: 'adaptive' as const,

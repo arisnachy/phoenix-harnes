@@ -393,9 +393,9 @@ export function AgentPresetSection(props: AgentPresetSectionProps): ReactNode {
             <div className={css.viewerPanel}>
               <div className={css.viewerTabs} role="tablist">
                 <button type="button" role="tab" aria-selected={sourceViewId !== state.view.id}
-                  onClick={() => setSourceViewId(null)}>{t('viewerOverview')}</button>
+                  onClick={() =>{  setSourceViewId(null) }}>{t('viewerOverview')}</button>
                 <button type="button" role="tab" aria-selected={sourceViewId === state.view.id}
-                  onClick={() => setSourceViewId(state.view?.id ?? null)}>{t('viewerSource')}</button>
+                  onClick={() =>{  setSourceViewId(state.view?.id ?? null) }}>{t('viewerSource')}</button>
               </div>
               {sourceViewId === state.view.id
                 ? (
@@ -405,8 +405,8 @@ export function AgentPresetSection(props: AgentPresetSectionProps): ReactNode {
                   </div>
                 )
                 : <div role="tabpanel" className={css.viewerContent}>
-                    <CompositionOverview content={state.view.content} t={t} />
-                  </div>}
+                  <CompositionOverview content={state.view.content} t={t} />
+                </div>}
             </div>
           )}
       </Modal>

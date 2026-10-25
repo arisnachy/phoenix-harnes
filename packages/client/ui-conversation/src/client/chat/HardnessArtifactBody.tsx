@@ -382,7 +382,7 @@ function MiniApp({ html, title, executable = false, minimumHeight = 1, gameDiagn
     if (document.body) observer.observe(document.body, {
       attributes: true, attributeFilter: ['class', 'style', 'data-theme', 'data-appearance'],
     })
-    return () => observer.disconnect()
+    return () =>{  observer.disconnect() }
   }, [executable])
 
   const measureStaticDocument = (): void => {
@@ -415,16 +415,16 @@ function MiniApp({ html, title, executable = false, minimumHeight = 1, gameDiagn
         onClick={() => { setAllowExternalImages(value => !value) }}>
         {allowExternalImages ? 'Bloquear imágenes externas' : 'Cargar imágenes externas'}
       </button>}
-    <iframe
-      ref={frameRef}
-      className={styles.frame}
-      title={title}
-      srcDoc={srcDoc}
-      sandbox={executable ? 'allow-scripts' : 'allow-same-origin'}
-      referrerPolicy="no-referrer"
-      style={{ height: Math.max(frameHeight, minimumHeight) }}
-      onLoad={() => { measureStaticDocument(); syncTheme() }}
-    />
+      <iframe
+        ref={frameRef}
+        className={styles.frame}
+        title={title}
+        srcDoc={srcDoc}
+        sandbox={executable ? 'allow-scripts' : 'allow-same-origin'}
+        referrerPolicy="no-referrer"
+        style={{ height: Math.max(frameHeight, minimumHeight) }}
+        onLoad={() => { measureStaticDocument(); syncTheme() }}
+      />
     </div>
   )
 }
@@ -665,7 +665,7 @@ function GameStudioPreview({ html, title }: { readonly html: string; readonly ti
       </div>
       {libraryOpen && (
         <dialog ref={dialogRef} className={styles.gameLibraryDialog} aria-label="Biblioteca de juegos"
-          onCancel={event => { event.preventDefault(); closeLibrary() }}
+          onCancel={(event) => { event.preventDefault(); closeLibrary() }}
           onClose={() => { setLibraryOpen(false) }}>
           <div className={styles.gameLibraryHeading}>
             <h3>Biblioteca de juegos</h3>

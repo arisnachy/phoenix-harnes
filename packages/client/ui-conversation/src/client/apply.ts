@@ -55,7 +55,7 @@ declare module '@phoenix-ai/dsh-client-ui-slots' {
 
 /** Services required by the conversation plugin. */
 export const inject = [
-  'slots', 'layout', 'sessions', 'workspaces', 'locale', 'connection', 'remote', 'remote.voice', 'settingsScope',
+  'slots', 'layout', 'sessions', 'workspaces', 'locale', 'connection', 'remote', 'settingsScope',
   'conversationEvents', 'conversationViews',
 ]
 
@@ -156,9 +156,13 @@ export function apply(ctx: Context): void {
   const layout = ctx.layout
   const slots = ctx.slots
 
-  const disposeVoiceRemote = configureVoiceAssistantRemote(
-    ctx.remote.voice,
-  )
+  ctx.inject(['remote.voice'], (voiceCtx) => {
+    const remote = voiceCtx.get('remote.voice')
+    if (remote === undefined) return
+    const disposeVoiceRemote = configureVoiceAssistantRemote(remote)
+    voiceCtx.effect(() => () => { disposeVoiceRemote() }, 'ui-conversation: optional host voice remote')
+    voiceCtx.on('connection/reset', () => { void refreshVoiceAssistantRemote() })
+  })
   const disposeVoiceRoute = configureVoiceModelRouteResolver(async (sessionKey) => {
     const connection = ctx.get('connection') as ConnectionHandle | undefined
     if (connection === undefined) return undefined
@@ -167,9 +171,7 @@ export function apply(ctx: Context): void {
   })
   ctx.effect(() => () => {
     disposeVoiceRoute()
-    disposeVoiceRemote()
   }, 'ui-conversation: host voice remote')
-  ctx.on('connection/reset', () => { void refreshVoiceAssistantRemote() })
 
   registerConversationNodes(ctx)
   registerChatNodeRenderers(ctx)

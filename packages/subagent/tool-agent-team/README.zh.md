@@ -2,6 +2,12 @@
 
 [English](README.md) | 中文
 
+## 原生执行回执
+
+`execution_steer` 向同一正在执行的 Codex 回合发送一条有界指令。输入键在派发前持久化，重试时必须保留；预留或结果不确定的输入回执不会被自动重发。不同指令需要不同键。其他引擎在适配器支持引导当前操作之前会明确拒绝。
+
+仅 Lead 可用的 `execution_run` 根据已保存的 Eclipse 偏好和实际解析的工作模型，选择一个兼容引擎。`execution_list` 最多返回最近 32 个回执标识和状态，不启动工作。`execution_recover` 在中断后核对同一原生操作；`execution_cancel` 在中断前持久化取消状态。同一任务重用同一幂等键，结果不确定时检查已有回执，不派发替代任务。回执证明执行状态，使命是否成功仍需验证产物。
+
 [`ctx.agentTeams`](../agent-team/README.zh.md) 的 scoped 模型适配器。它会在每个隐式 Lead 与持久 teammate scope 中安装 Agent Teams 策略和协作工具。scoped Team 定义会覆盖同名的旧全局 continuable-subagent control，因此同时挂载两者的组合必须禁用旧定义。
 
 ## 主会话工具

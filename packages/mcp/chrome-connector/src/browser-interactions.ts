@@ -45,6 +45,7 @@ export type BrowserInteractionResult = {
  * Keep results bounded and never return sensitive field values.
  * @param input - Validated locator, operation and bounded user-intended value.
  * @returns A sanitized DOM action result without credentials or field secrets.
+ * @param cache - Cache supplied to this operation.
  */
 export function executeBrowserInteraction(
   input: BrowserInteraction,

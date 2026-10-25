@@ -2,6 +2,8 @@
 
 Status: proposed
 
+[English](2026-10-24-autonomous-sports-source-intelligence.md) | 中文
+
 ## Problem
 
 Phoenix has general tools but no production sports source registry with verified provenance, bookmaker odds and sport-specific match presentation. Unverified sources could mislead users or expose keys.

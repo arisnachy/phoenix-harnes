@@ -1097,3 +1097,7 @@ One session committed a different agent preset to its durable log. Consumers inv
 
 Source: [`packages/preset/agent-presets/src/types.ts`](../../packages/preset/agent-presets/src/types.ts)
 <!-- END GENERATED cordis-surface -->
+
+## Eclipse 路由设置
+
+`EclipseRoutingSettings` 存储编排路由模式、模型路由和推理偏好、团队成员上限，以及可选的独立执行引擎偏好。引擎选择不会改写当前对话的提供商或模型。[默认模型包](../../packages/core/agent-default-model/README.zh.md) 负责设置校验与迁移。

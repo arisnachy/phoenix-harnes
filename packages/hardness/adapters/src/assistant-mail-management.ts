@@ -8,6 +8,7 @@ import { agentMailRequest } from './assistant-mail-agentmail.ts'
 import { mailAddress, mailRecord, mailString } from './assistant-mail-store.ts'
 import type { MailAccount, MailJob } from './assistant-mail-types.ts'
 
+/** Supported management operations for the assistant mailbox. */
 export type KiraMailOperation =
   | 'list' | 'search' | 'read' | 'threads' | 'search_threads' | 'thread'
   | 'read_status' | 'unread_status' | 'trash' | 'restore'
@@ -16,6 +17,7 @@ export type KiraMailOperation =
   | 'drafts' | 'draft' | 'draft_create' | 'draft_update' | 'draft_delete' | 'draft_send'
   | 'reply' | 'forward' | 'attachment'
 
+/** Inputs required for one assistant mailbox management operation. */
 export interface KiraMailOperationInput {
   readonly action: KiraMailOperation
   readonly messageId?: string
@@ -34,6 +36,7 @@ export interface KiraMailOperationInput {
   readonly idempotencyKey?: string
 }
 
+/** Host configuration for assistant mailbox management. */
 export interface KiraMailManagementConfig {
   readonly account: () => Promise<MailAccount>
   readonly key: () => Promise<string | undefined>

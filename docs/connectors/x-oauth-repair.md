@@ -1,5 +1,7 @@
 # X/Twitter: reparación de OAuth en Phoenix
 
+English | [中文](x-oauth-repair.zh.md)
+
 ## Identidades distintas
 
 - `x-docs`: documentación oficial pública; **no** autoriza una cuenta.

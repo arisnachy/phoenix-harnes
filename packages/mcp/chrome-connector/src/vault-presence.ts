@@ -6,7 +6,10 @@
 export type BrowserVaultPresence =
   | { known: false; reason: 'vault-unavailable' | 'no-web-origin' }
   | { known: true; saved: boolean; automatic: boolean; relatedSaved: boolean; relatedOrigin?: string }
-/** Agent-readable instruction derived only from verified Vault metadata. */
+/** Agent-readable instruction derived only from verified Vault metadata.
+ * @param state - State supplied to this operation.
+ * @returns The result produced by this operation.
+ */
 export function browserVaultHint(state: BrowserVaultPresence): string {
   if (!state.known) return 'Estado de bóveda desconocido: no afirmes que faltan credenciales; usa Acceso seguro para verificar.'
   if (state.saved) return state.automatic
@@ -17,6 +20,12 @@ export function browserVaultHint(state: BrowserVaultPresence): string {
   return 'No hay un acceso guardado para este origen exacto en Phoenix; esto no demuestra que el navegador o un dominio distinto carezcan de credenciales.'
 }
 
+/** Inspect credential availability for the current browser origin.
+ * @param pageUrl - Page url supplied to this operation.
+ * @param query - Search or selection query.
+ * @param localPort - Local port supplied to this operation.
+ * @returns The result produced by this operation.
+ */
 export async function inspectVaultPresence(
   pageUrl: string,
   query: typeof fetch = fetch,

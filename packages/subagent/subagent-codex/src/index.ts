@@ -27,9 +27,12 @@ import {
   type CodexRunSpec,
 } from './run.ts'
 import { observeCodexRateLimitsUpdate, registerCodexAccountFlow } from './account.ts'
+import { CodexExecutionAdapter, type CodexExecutionAdapterConfig } from './execution-adapter.ts'
 
 export { CODEX_ACCOUNT_KEY, readCodexAccountSnapshot } from './account.ts'
 export type { CodexAccountBridgeConfig, CodexAccountSnapshot } from './account.ts'
+export { CodexExecutionAdapter }
+export type { CodexExecutionAdapterConfig }
 
 export const name = 'subagent-codex'
 export const inject = ['subagents', 'subprocess']
@@ -50,6 +53,8 @@ export interface Config {
   permissionMode?: CodexPermissionMode
   /** Grace in milliseconds for app-server process-tree termination. */
   disposeGraceMs?: number
+  /** Milliseconds for which a Codex readiness result may be reused. */
+  probeTtlMs?: number
 }
 
 export const Config: z<Config> = z.object({
@@ -58,6 +63,7 @@ export const Config: z<Config> = z.object({
   permissionMode: z.union([...CODEX_PERMISSION_MODES])
     .default(DEFAULT_CODEX_PERMISSION_MODE),
   disposeGraceMs: z.number().default(DEFAULT_DISPOSE_GRACE_MS),
+  probeTtlMs: z.number().default(30_000),
 })
 
 type ResolvedConfig = Required<Config>
@@ -128,6 +134,7 @@ export function apply(ctx: Context, config: Config): void {
     env: config.env as Record<string, string>,
     permissionMode: config.permissionMode ?? DEFAULT_CODEX_PERMISSION_MODE,
     disposeGraceMs: config.disposeGraceMs as number,
+    probeTtlMs: config.probeTtlMs ?? 30_000,
   }
   assertPositiveFinite(
     'subagent-codex',
@@ -139,6 +146,12 @@ export function apply(ctx: Context, config: Config): void {
       `subagent-codex: disposeGraceMs must be no greater than ${MAX_TIMER_DELAY_MS}`,
     )
   }
+  assertPositiveFinite('subagent-codex', 'probeTtlMs', resolved.probeTtlMs)
+  if (resolved.probeTtlMs > MAX_TIMER_DELAY_MS) {
+    throw new Error(
+      `subagent-codex: probeTtlMs must be no greater than ${MAX_TIMER_DELAY_MS}`,
+    )
+  }
   ctx.subagents.registerProvider(new CodexProvider(
     resolved.providerName,
     ctx,
@@ -146,6 +159,16 @@ export function apply(ctx: Context, config: Config): void {
   ))
 
   if (resolved.providerName === DEFAULT_PROVIDER_NAME) {
+    ctx.inject(['agentTeams'], (teamContext) => {
+      teamContext.effect(() => teamContext.agentTeams.executions.register(
+        new CodexExecutionAdapter(teamContext, {
+          permissionMode: resolved.permissionMode,
+          env: resolved.env,
+          disposeGraceMs: resolved.disposeGraceMs,
+          probeTtlMs: resolved.probeTtlMs,
+        }),
+      ), 'subagent-codex.execution-adapter')
+    })
     ctx.inject(['authorization', 'credentials'], (authorized) => {
       registerCodexAccountFlow(authorized, {
         env: resolved.env,

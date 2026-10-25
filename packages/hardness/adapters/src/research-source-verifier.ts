@@ -4,6 +4,7 @@
  */
 import { defineTool, ToolArgsError, type ToolDefinition } from '@phoenix-ai/dsh-tools'
 
+/** Candidate bibliographic reference awaiting source verification. */
 export type ReferenceCandidate = { key: string; title: string; authors?: string; year?: string; doi?: string; pmid?: string }
 type SourceResult = {
   key: string
@@ -39,8 +40,8 @@ function object(value: unknown): Record<string, unknown> {
 }
 async function queryJson(url: string, fetcher: Fetcher, signal?: AbortSignal): Promise<Record<string, unknown>> {
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), 12000)
-  const cancel = () => controller.abort()
+  const timer = setTimeout(() =>{  controller.abort() }, 12000)
+  const cancel = () =>{  controller.abort() }
   signal?.addEventListener('abort', cancel, { once: true })
   try {
     const response = await fetcher(url, {
@@ -61,7 +62,7 @@ async function queryJson(url: string, fetcher: Fetcher, signal?: AbortSignal): P
 function retractionFromCrossref(record: Record<string, unknown>): boolean {
   const fields = [record['updated-by'], record['update-to']]
   const entries = fields.flatMap(value => Array.isArray(value) ? value : value ? [value] : [])
-  return entries.some(update => {
+  return entries.some((update) => {
     const type = String(object(update).type ?? '').toLowerCase()
     return /retract|withdraw/iu.test(type)
   })
@@ -69,7 +70,7 @@ function retractionFromCrossref(record: Record<string, unknown>): boolean {
 function retractionFromEuropePmc(record: Record<string, unknown>): boolean {
   if (record.isRetracted === true || record.isRetracted === 'Y') return true
   const corrections = object(record.commentCorrectionList).commentCorrection
-  return Array.isArray(corrections) && corrections.some(value => {
+  return Array.isArray(corrections) && corrections.some((value) => {
     const correction = object(value)
     return /retract/iu.test(String(correction.type ?? ''))
   })
@@ -162,7 +163,7 @@ export async function verifyResearchSources(
   }
   return { state: out.every(row => row.status === 'verified_metadata' && row.retraction !== 'flagged')
     ? 'AUDITED' : 'PARTIAL', checked_at: checkedAt, sources: out,
-    disclaimer: 'Se verifican identificadores y metadatos consultables, no resultados ni validez científica. La detección de retractaciones es parcial y nunca constituye una garantía.' }
+  disclaimer: 'Se verifican identificadores y metadatos consultables, no resultados ni validez científica. La detección de retractaciones es parcial y nunca constituye una garantía.' }
 }
 /**
  * Provide real metadata and retraction flag checks to the orchestrated research workflow.

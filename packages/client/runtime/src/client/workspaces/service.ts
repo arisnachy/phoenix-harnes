@@ -174,8 +174,8 @@ export class WorkspaceRuntime implements IWorkspaces {
           // Recovery must not depend on a future workspace.list frame: a
           // transient admission failure could otherwise leave the welcome
           // composer permanently read-only despite a valid Workspace.
-          if (retryIndex < INITIAL_SELECTION_RETRY_DELAYS_MS.length) {
-            const delay = INITIAL_SELECTION_RETRY_DELAYS_MS[retryIndex]!
+          const delay = INITIAL_SELECTION_RETRY_DELAYS_MS[retryIndex]
+          if (delay !== undefined) {
             retryIndex++
             retryTimer = setTimeout(() => {
               retryTimer = undefined

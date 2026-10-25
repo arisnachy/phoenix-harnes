@@ -103,6 +103,12 @@ Agent Teams service backed by the exact live Lead Session log.
  */
 @Remote('chatMessages') async chatMessages(request: TeamChatReadRequest): Promise<TeamChatReadResult>
 
+/**
+ * Inspect connected execution engines without starting a task or changing models.
+ * @returns Native readiness and supported capabilities without credentials.
+ */
+@Remote('executionEngines') async executionEngines(): Promise<ExecutionEngineStatus[]>
+
 /** Read a bounded transcript for the exact live caller.
  * @param actor - actual agent.
  * @param limit - protocol message bound.
@@ -343,3 +349,9 @@ interface TeamChatReplyRequest extends TeamChatReadRequest {
   readonly replyTo?: string | undefined
 }
 ```
+
+## 执行引擎状态
+
+`ExecutionEngineStatus` 描述一个引擎（`internal`、`codex` 或 `openclaw`）、连接状态、原生版本、已经验证的能力、支持的提供商和可选的不含凭据诊断。只有连接成功并支持所有所需能力及所选提供商时，引擎才可被选择。`ExecutionMemoryContext` 包含有界参考内容和派发前记录的来源记忆标识，不增加任何授权。
+
+[执行包契约](../../packages/subagent/agent-team/README.zh.md) 定义派发、恢复、不确定性与取消语义。

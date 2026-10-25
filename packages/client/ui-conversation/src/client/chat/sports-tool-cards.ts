@@ -6,12 +6,12 @@
  * This is a DISPLAY adapter. It never calls providers or places a wager.
  * It does not derive facts from unstructured prose, screenshots, or search.
  */
-import {parseGenerativeUiBlock, splitGenerativeUiText, type GenerativeUiBlock} from './GenerativeUi.tsx'
+import { parseGenerativeUiBlock, splitGenerativeUiText, type GenerativeUiBlock } from './GenerativeUi.tsx'
 
 type ResultBlock = {
   kind?: unknown
-  call?: {name?: string} | null
-  content?: readonly {type?: string; text?: string}[]
+  call?: { name?: string } | null
+  content?: readonly { type?: string; text?: string }[]
   isError?: boolean
   subCalls?: readonly ResultBlock[]
 }
@@ -38,7 +38,7 @@ function verifiedCard(value: unknown): GenerativeUiBlock | null {
  */
 export function sportsCardsFromToolResult(root: unknown): GenerativeUiBlock[] {
   if(root===null||typeof root!=='object')return []
-  const stack:[ResultBlock,number][]=[[root as ResultBlock,0]]
+  const stack:[ResultBlock,number][]=[[root,0]]
   const cards:GenerativeUiBlock[]=[]
   let visited=0
   while(stack.length&&visited<MAX_NODES&&cards.length<MAX_SPORTS_CARDS){

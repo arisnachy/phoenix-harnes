@@ -37,7 +37,10 @@ describe('automatic Windows capability context', () => {
   it('runs once in the background, then informs the model without delaying startup', () => {
     const changed = vi.fn()
     let done: ((error: Error | null, stdout: string) => void) | undefined
-    const execute = vi.fn((_bin: string, _args: string[], _opts: unknown, cb: (error: Error | null, stdout: string) => void) => { done = cb })
+    const execute = vi.fn((
+      _bin: string, _args: string[], _opts: unknown,
+      cb: (error: Error | null, stdout: string) => void,
+    ) => { done = cb })
     const read = startWindowsCapabilityDiscovery(changed, {
       platform: 'win32', supervised: true, runtimeRoot: 'C:/Phoenix', exists: () => true, execute,
     })
@@ -64,7 +67,7 @@ describe('automatic Windows capability context', () => {
       const changed = vi.fn()
       const read = startWindowsCapabilityDiscovery(changed, {
         platform: 'win32', supervised: true, exists: () => true,
-        execute: (_binary, _args, _options, callback) => callback(error, stdout),
+        execute: (_binary, _args, _options, callback) =>{  callback(error, stdout) },
       })
       expect(read()).toBe('')
       expect(changed).not.toHaveBeenCalled()

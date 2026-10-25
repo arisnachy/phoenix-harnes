@@ -2,16 +2,26 @@
  * Fixed ESPN/MLB hosts, per-request timeout and bounded enrichment budget are inherited from getFeed.
  */
 import { getFeed } from './sports.ts'
-type P={ person?:{ id?:number;fullName?:string };position?:{ abbreviation?:string;type?:string };battingOrder?:string;seasonStats?:{ batting?:Record<string,number|string> } }
+type P={
+  person?:{ id?:number;fullName?:string }
+  position?:{ abbreviation?:string;type?:string }
+  battingOrder?:string
+  seasonStats?:{ batting?:Record<string,number|string> }
+}
 type BoxTeam={ battingOrder?:number[];players?:Record<string,P>;bullpen?:number[];team?:{ id?:number;name?:string } }
 type Boxscore={ teams?:{ home?:BoxTeam;away?:BoxTeam } }
 type SeasonStats={ stats?:Array<{ splits?:Array<{ stat?:Record<string,number|string> }> }> }
 type Roster={ roster?:Array<{ person?:{ id?:number;fullName?:string };position?:{ abbreviation?:string;type?:string } }> }
 
+/** One MLB player's published identity, role, optional licensed image and statistics. */
 export type SportsPlayer={ name:string;role?:string;image?:string;stats?:string;id?:number }
+/** A team batting order, distinguishing confirmed lineups from incomplete source data. */
 export type SportsLineup={ team:string;confirmed:boolean;players:SportsPlayer[] }
+/** Starter identity and probable-status from a verifiable MLB source. */
 export type SportsPitcher={ team:string;name:string;id?:number;image?:string;stats?:string;probable:boolean }
+/** Team relief-pitcher details and any source-availability note. */
 export type SportsBullpen={ team:string;pitchers:SportsPlayer[];note:string }
+/** Bounded, provenance-aware enrichment of pitchers, batting orders and bullpen. */
 export type MlbEnrichment={ pitchers:SportsPitcher[];lineups:SportsLineup[];bullpen:SportsBullpen[];notes:string[] }
 const safeId=(id:unknown):number|null=>typeof id==='number'&&Number.isSafeInteger(id)&&id>0&&id<100000000?id:null
 /** ESPN/MLB photos are external assets: operators may opt out of media display. */
@@ -38,7 +48,7 @@ async function pitcherSeason(id:number,season:number,fetcher:typeof fetch):Promi
     const stat=data.stats?.[0]?.splits?.[0]?.stat
     if(!stat)return undefined
     const parts=[['ERA',stat.era],['WHIP',stat.whip],['IP',stat.inningsPitched],['K',stat.strikeOuts]]
-    return parts.filter(([,value])=>value!==undefined).map(([key,value])=>key+' '+fmt(value)).join(' · ')||undefined
+    return parts.filter(([,value])=>value!==undefined).map(([key,value])=>String(key)+' '+fmt(value)).join(' · ')||undefined
   }catch{return undefined}
 }
 /**

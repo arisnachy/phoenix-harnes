@@ -64,9 +64,9 @@ export function admitPhoenixSceneMap(raw:unknown,title:string):PhoenixSceneMap {
       || !str(p.id,80)||!str(p.name,110)||!str(p.description,650)
       ||!position(p.x)||!position(p.y)||!kinds.includes(p.kind as Kind)
       ||ids.has(p.id))invalid('Lugar '+(index+1)+': id único, name, x/y 5..95, kind y description obligatorios.')
-    ids.add(p.id as string)
-    checked.push({id:p.id as string,name:p.name as string,x:p.x as number,y:p.y as number,
-      kind:p.kind as Kind,description:p.description as string})
+    ids.add(p.id)
+    checked.push({ id:p.id,name:p.name,x:p.x,y:p.y,
+      kind:p.kind as Kind,description:p.description })
   }
   const routes:Route[]=[]
   if(raw.routes!==undefined){
@@ -77,8 +77,8 @@ export function admitPhoenixSceneMap(raw:unknown,title:string):PhoenixSceneMap {
         ||!ids.has(edge.from)||!ids.has(edge.to)||edge.from===edge.to
         ||(edge.label!==undefined&&!str(edge.label,120)))
         invalid('Ruta inválida: from/to deben señalar ids distintos de los lugares.')
-      routes.push({from:edge.from as string,to:edge.to as string,
-        ...(edge.label===undefined?{}:{label:edge.label as string})})
+      routes.push({ from:edge.from,to:edge.to,
+        ...(edge.label===undefined?{}:{ label:edge.label }) })
     }
   }
   let coast:Point[]|undefined
@@ -93,15 +93,15 @@ export function admitPhoenixSceneMap(raw:unknown,title:string):PhoenixSceneMap {
   if(raw.description!==undefined&&!str(raw.description,650))invalid('Descripción de atlas inválida.')
   if(raw.theme!==undefined&&!themes.includes(raw.theme as Theme))invalid('Tema inválido: fantasy, treasure o atlas.')
   const id=raw.id===undefined?'mapa-'+title.normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase()
-    .replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,75):raw.id as string
+    .replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,75):raw.id
   return {
     component:'scene_map',version:1,
-    props:{id:id||'mapa-narrativo',title,places:checked,
-      ...(raw.theme===undefined?{}:{theme:raw.theme as Theme}),
-      ...(raw.subtitle===undefined?{}:{subtitle:raw.subtitle as string}),
-      ...(raw.description===undefined?{}:{description:raw.description as string}),
-      ...(routes.length===0?{}:{routes}),
-      ...(coast===undefined?{}:{coast}),
+    props:{ id:id||'mapa-narrativo',title,places:checked,
+      ...(raw.theme===undefined?{}:{ theme:raw.theme as Theme }),
+      ...(raw.subtitle===undefined?{}:{ subtitle:raw.subtitle }),
+      ...(raw.description===undefined?{}:{ description:raw.description }),
+      ...(routes.length===0?{}:{ routes }),
+      ...(coast===undefined?{}:{ coast }),
     },
   }
 }
@@ -116,14 +116,14 @@ export function demoIslandMap(title:string):PhoenixSceneMap {
     subtitle:'Atlas narrativo interactivo · Datos completamente ficticios',
     description:'Isla de fantasía ficticia, con rutas narrativas no geográficas.',
     places:[
-      {id:'puerto',name:'Puerto de la Niebla',x:24,y:66,kind:'port',description:'El puerto occidental recibe navíos al amanecer.'},
-      {id:'bosque',name:'Bosque Susurrante',x:36,y:49,kind:'forest',description:'Árboles ancestrales guardan viejos caminos.'},
-      {id:'torre',name:'Torre del Viento',x:66,y:28,kind:'tower',description:'El vigía escucha los nombres del viento.'},
-      {id:'ruinas',name:'Ruinas del Alba',x:72,y:67,kind:'ruins',description:'Un templo sumergido en neblina y leyendas.'},
-      {id:'ciudad',name:'Ciudad de Sal',x:55,y:51,kind:'city',description:'Capital de los cartógrafos y comerciantes.'},
+      { id:'puerto',name:'Puerto de la Niebla',x:24,y:66,kind:'port',description:'El puerto occidental recibe navíos al amanecer.' },
+      { id:'bosque',name:'Bosque Susurrante',x:36,y:49,kind:'forest',description:'Árboles ancestrales guardan viejos caminos.' },
+      { id:'torre',name:'Torre del Viento',x:66,y:28,kind:'tower',description:'El vigía escucha los nombres del viento.' },
+      { id:'ruinas',name:'Ruinas del Alba',x:72,y:67,kind:'ruins',description:'Un templo sumergido en neblina y leyendas.' },
+      { id:'ciudad',name:'Ciudad de Sal',x:55,y:51,kind:'city',description:'Capital de los cartógrafos y comerciantes.' },
     ],
-    routes:[{from:'puerto',to:'bosque',label:'Senda del musgo'},
-      {from:'bosque',to:'ciudad'},{from:'ciudad',to:'torre'},{from:'ciudad',to:'ruinas'}],
+    routes:[{ from:'puerto',to:'bosque',label:'Senda del musgo' },
+      { from:'bosque',to:'ciudad' },{ from:'ciudad',to:'torre' },{ from:'ciudad',to:'ruinas' }],
   },title)
 }
 /**
@@ -136,28 +136,28 @@ export function createPhoenixSceneMapTool():ToolDefinition {
     name:'phoenix_scene_map',
     description:'MOTOR REAL DE MAPAS FICTICIOS: usar esta herramienta cuando el usuario solicite crear, mostrar, dibujar, publicar o explorar mapas narrativos, islas inventadas, mundos de fantasía, mapas de videojuegos, cuentos, reinos imaginarios o Isla Bruma. LA HERRAMIENTA PUBLICA UN ARTEFACTO NATIVO INTERACTIVO en el chat; no basta responder "hecho", no usar MiniBrowser, localhost ni imágenes estáticas, y no usar geo_map real/OpenStreetMap para ficción. Para una demo inmediata de Isla Bruma usa {"title":"Isla Bruma","demo":true}. Para mapas originales proporciona "map":{"theme":"fantasy"|"treasure"|"atlas","places":[{"id":"puerto","name":"Puerto ...","x":24,"y":66,"kind":"port","description":"..."}],"routes":[{"from":"puerto","to":"bosque"}],"coast":[[18,29],...]}. De 2 a 35 lugares únicos, x/y de 5 a 95, kind city/port/forest/mountain/ruins/castle/tower/temple/cave/village. El mapa admite selección, lista, zoom, reinicio, senderos y descarga SVG; funciona offline. Los resultados registran un artifactId y un contrato de render verificable. Al recibir el resultado de esta herramienta, redacta una respuesta final corta con el identificador real. Nunca cierres el turno antes de esa respuesta; no digas "render comprobado" sin una prueba real del cliente. Para mapas reales y rutas verificadas usar las herramientas geográficas separadas.',
     parameters:{
-      title:{type:'string',required:true,description:'Nombre del mundo/isla en el encabezado del mapa.'},
-      demo:{type:'boolean',description:'Para demo explícita y rápida genera cinco lugares ficticios coherentes sin copiar JSON.'},
-      map:{type:'object',additionalProperties:true,description:'Contrato narrativo con places:[{id,name,x,y,kind,description}], routes?:[{from,to,label}], coast?:[[x,y]], subtitle?, description?, theme?'},
-      continueAfterDisplay:{type:'boolean',description:'Deprecated, retained for compatibility. The agent always gets a final-response step.'},
+      title:{ type:'string',required:true,description:'Nombre del mundo/isla en el encabezado del mapa.' },
+      demo:{ type:'boolean',description:'Para demo explícita y rápida genera cinco lugares ficticios coherentes sin copiar JSON.' },
+      map:{ type:'object',additionalProperties:true,description:'Contrato narrativo con places:[{id,name,x,y,kind,description}], routes?:[{from,to,label}], coast?:[[x,y]], subtitle?, description?, theme?' },
+      continueAfterDisplay:{ type:'boolean',description:'Deprecated, retained for compatibility. The agent always gets a final-response step.' },
     },
     output:{
       nestedPresentationMeta:true,
-      schema:{type:'object',additionalProperties:false,properties:{
-        artifactId:{type:'string',required:true},
-        title:{type:'string',required:true},
-        map:{type:'json',required:true},
-        publication:{type:'string',required:true},
-      }},
-      render:(_args,result)=>[{type:'text',text:'Mapa narrativo emitido como artefacto nativo: '+result.title+'. '
-        +'Publicación de datos confirmada; el render visual del cliente necesita comprobarse en la interfaz.'}],
-      presentationMeta:(_args,result)=>({artifact:{
+      schema:{ type:'object',additionalProperties:false,properties:{
+        artifactId:{ type:'string',required:true },
+        title:{ type:'string',required:true },
+        map:{ type:'json',required:true },
+        publication:{ type:'string',required:true },
+      } },
+      render:(_args,result)=>[{ type:'text',text:'Mapa narrativo emitido como artefacto nativo: '+result.title+'. '
+        +'Publicación de datos confirmada; el render visual del cliente necesita comprobarse en la interfaz.' }],
+      presentationMeta:(_args,result)=>({ artifact:{
         id:result.artifactId,
         mime:PHOENIX_SCENE_MAP_MIME,
         title:result.title,
         data:result.map,
         executable:false,
-      }}),
+      } }),
     },
     execute(args,exec){
       const title=args.title.trim()

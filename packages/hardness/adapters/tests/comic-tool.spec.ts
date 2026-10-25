@@ -76,7 +76,7 @@ describe('Phoenix Comic Studio: actual in-chat publication', () => {
       const args = { title: 'Cómic original', file_path: 'comic.html' }
       const receipt = await tool.execute(args, execContext(workspace)) as { html: string; artifactId: string }
       writeFileSync(join(workspace, 'comic.html'), '<html>Alterado</html>')
-      const meta = tool.output.presentationMeta?.(args, receipt as never) as { artifact?: { data?: unknown } }
+      const meta = tool.output.presentationMeta?.(args, receipt) as { artifact?: { data?: unknown } }
       expect(meta.artifact?.data).toBe(html)
     } finally { rmSync(workspace, { recursive: true, force: true }); rmSync(outside, { recursive: true, force: true }) }
   })

@@ -1,97 +1,5 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`sidebar shell snapshots > renders the collapsed rail after the crossfade settles, in place 1`] = `
-<div
-  data-slot="sidebar"
-  style="display: contents;"
->
-  <div
-    class="root collapsed railIn quietBars"
-    style=""
-  >
-    <div
-      class="logoRow"
-    >
-      <button
-        aria-label="Open sidebar"
-        class="iconButton toggle"
-        type="button"
-      >
-        <span
-          aria-hidden="true"
-          class="railMark"
-        >
-          <div
-            data-slot="sidebar.brand.mark"
-            style="display: contents;"
-          >
-            <img
-              alt=""
-              aria-hidden="true"
-              draggable="false"
-              height="24"
-              src="/phoenix-emblem.png"
-              width="24"
-            />
-          </div>
-        </span>
-        <svg
-          class="panelIcon"
-          data-content="35f95b0c"
-          fill="none"
-          height="18"
-          viewBox="0 0 16 16"
-          width="18"
-          xmlns="http://www.w3.org/2000/svg"
-        />
-      </button>
-    </div>
-    <button
-      aria-label="New session"
-      class="newSession"
-      type="button"
-    >
-      <svg
-        data-content="c0ce4dcc"
-        fill="none"
-        height="18"
-        viewBox="0 0 16 16"
-        width="18"
-        xmlns="http://www.w3.org/2000/svg"
-      />
-    </button>
-    <div
-      class="regionArea"
-    >
-      <div
-        data-slot="sidebar.workspaces"
-        style="display: contents;"
-      />
-    </div>
-    <div
-      class="footArea"
-    >
-      <div
-        class="footerActions"
-      >
-        <div
-          data-slot="sidebar.footer.action"
-          style="display: contents;"
-        />
-      </div>
-      <div
-        class="settingsArea"
-      >
-        <div
-          data-slot="sidebar.settings"
-          style="display: contents;"
-        />
-      </div>
-    </div>
-  </div>
-</div>
-`;
-
 exports[`sidebar shell snapshots > renders the expanded column (wordmark, capsule, empty holes) 1`] = `
 <div
   data-slot="sidebar"
@@ -99,7 +7,6 @@ exports[`sidebar shell snapshots > renders the expanded column (wordmark, capsul
 >
   <div
     class="root quietBars"
-    style="width: 300px;"
   >
     <div
       class="logoRow"
@@ -124,9 +31,9 @@ exports[`sidebar shell snapshots > renders the expanded column (wordmark, capsul
                 alt=""
                 aria-hidden="true"
                 draggable="false"
-                height="24"
+                height="38"
                 src="/phoenix-emblem.png"
-                width="24"
+                width="38"
               />
             </div>
           </span>
@@ -186,6 +93,99 @@ exports[`sidebar shell snapshots > renders the expanded column (wordmark, capsul
         New Session
       </span>
     </button>
+    <nav
+      aria-label="Navegación principal"
+      class="primaryNavigation"
+    >
+      <button
+        aria-label="Home"
+        class="navLink"
+        type="button"
+      >
+        <svg
+          aria-hidden="true"
+          data-content="8c4dfd2f"
+          fill="none"
+          height="19"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="1.9"
+          viewBox="0 0 24 24"
+          width="19"
+        />
+        <span>
+          Home
+        </span>
+      </button>
+      <button
+        aria-label="Discover"
+        class="navLink"
+        type="button"
+      >
+        <svg
+          data-content="f23fa4b8"
+          fill="none"
+          height="19"
+          viewBox="0 0 14 14"
+          width="19"
+          xmlns="http://www.w3.org/2000/svg"
+        />
+        <span>
+          Discover
+        </span>
+      </button>
+      <button
+        aria-label="Connectors"
+        class="navLink"
+        type="button"
+      >
+        <svg
+          data-content="dc3fcb5f"
+          fill="none"
+          height="19"
+          viewBox="0 0 16 16"
+          width="19"
+          xmlns="http://www.w3.org/2000/svg"
+        />
+        <span>
+          Connectors
+        </span>
+      </button>
+      <button
+        aria-label="Team"
+        class="navLink"
+        type="button"
+      >
+        <svg
+          data-content="56ac24c5"
+          fill="none"
+          height="19"
+          viewBox="0 0 16 16"
+          width="19"
+          xmlns="http://www.w3.org/2000/svg"
+        />
+        <span>
+          Team
+        </span>
+      </button>
+      <button
+        aria-label="Library"
+        class="navLink"
+        type="button"
+      >
+        <svg
+          data-content="7d0b657c"
+          fill="none"
+          height="19"
+          viewBox="0 0 16 16"
+          width="19"
+        />
+        <span>
+          Library
+        </span>
+      </button>
+    </nav>
     <div
       class="regionArea"
     >
@@ -225,7 +225,6 @@ exports[`sidebar shell snapshots > renders the expanded column in the default lo
 >
   <div
     class="root quietBars"
-    style="width: 300px;"
   >
     <div
       class="logoRow"
@@ -250,9 +249,9 @@ exports[`sidebar shell snapshots > renders the expanded column in the default lo
                 alt=""
                 aria-hidden="true"
                 draggable="false"
-                height="24"
+                height="38"
                 src="/phoenix-emblem.png"
-                width="24"
+                width="38"
               />
             </div>
           </span>
@@ -312,6 +311,99 @@ exports[`sidebar shell snapshots > renders the expanded column in the default lo
         新会话
       </span>
     </button>
+    <nav
+      aria-label="Navegación principal"
+      class="primaryNavigation"
+    >
+      <button
+        aria-label="首页"
+        class="navLink"
+        type="button"
+      >
+        <svg
+          aria-hidden="true"
+          data-content="8c4dfd2f"
+          fill="none"
+          height="19"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="1.9"
+          viewBox="0 0 24 24"
+          width="19"
+        />
+        <span>
+          首页
+        </span>
+      </button>
+      <button
+        aria-label="探索"
+        class="navLink"
+        type="button"
+      >
+        <svg
+          data-content="f23fa4b8"
+          fill="none"
+          height="19"
+          viewBox="0 0 14 14"
+          width="19"
+          xmlns="http://www.w3.org/2000/svg"
+        />
+        <span>
+          探索
+        </span>
+      </button>
+      <button
+        aria-label="连接器"
+        class="navLink"
+        type="button"
+      >
+        <svg
+          data-content="dc3fcb5f"
+          fill="none"
+          height="19"
+          viewBox="0 0 16 16"
+          width="19"
+          xmlns="http://www.w3.org/2000/svg"
+        />
+        <span>
+          连接器
+        </span>
+      </button>
+      <button
+        aria-label="团队"
+        class="navLink"
+        type="button"
+      >
+        <svg
+          data-content="56ac24c5"
+          fill="none"
+          height="19"
+          viewBox="0 0 16 16"
+          width="19"
+          xmlns="http://www.w3.org/2000/svg"
+        />
+        <span>
+          团队
+        </span>
+      </button>
+      <button
+        aria-label="资料库"
+        class="navLink"
+        type="button"
+      >
+        <svg
+          data-content="7d0b657c"
+          fill="none"
+          height="19"
+          viewBox="0 0 16 16"
+          width="19"
+        />
+        <span>
+          资料库
+        </span>
+      </button>
+    </nav>
     <div
       class="regionArea"
     >

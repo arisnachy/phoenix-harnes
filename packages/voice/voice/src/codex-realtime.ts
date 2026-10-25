@@ -179,6 +179,11 @@ export function queueCodexLiveRepair(
 /** Read the existing updater's progress without starting npm or exposing credentials. */
 export type CodexLiveRepairPhase = 'idle' | 'checking' | 'updating' | 'waiting-upstream' | 'ready' | 'blocked' | 'disabled'
 
+/** Resolve the current Codex realtime recovery phase.
+ * @param home - Home supplied to this operation.
+ * @param now - Now supplied to this operation.
+ * @returns The result produced by this operation.
+ */
 export function codexLiveRepairPhase(home: string, now = Date.now()): CodexLiveRepairPhase {
   const root = join(resolve(home), 'codex-cli')
   const requestPath = join(root, 'live-repair-request.json')
@@ -245,6 +250,7 @@ export function findManagedCodexRealtimeBin(dshHome: string): string | undefined
  * @param platform - Runtime platform, injectable for tests.
  * @param comSpec - Windows command interpreter.
  * @returns Command and argument vector for the Codex app-server.
+ * @param sqliteHome - Isolated directory holding native SQLite state.
  */
 export function codexRealtimeLaunchCommand(
   managed: string | undefined,
@@ -289,6 +295,7 @@ export function codexRealtimeLaunchCommand(
  * budget while the standard Codex account connection was already healthy.
  * Separate voice threads/sessions remain isolated by their RPC identity.
  * @param parent Process environment, injectable for regression tests.
+ * @returns The result produced by this operation.
  */
 export function codexRealtimeEnvironment(parent: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
   const env = { ...parent }

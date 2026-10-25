@@ -34,7 +34,10 @@ describe('Lumen Circuit independent playable puzzle genre', () => {
     const canvas = {
       width: 760, height: 590, getContext: () => ctx, focus: noop,
       getBoundingClientRect: () => ({ left: 0, top: 0, width: 760, height: 590 }),
-      addEventListener: (name: string, fn: (e: { code?: string; clientX?: number; clientY?: number; preventDefault?: () => void }) => void) => { events[name] = fn },
+      addEventListener: (
+        name: string,
+        fn: (e: { code?: string; clientX?: number; clientY?: number; preventDefault?: () => void }) => void,
+      ) => { events[name] = fn },
     }
     const status = { textContent: '' }
     const buttons = { reset: { addEventListener: noop }, mute: { addEventListener: noop } }
@@ -64,11 +67,11 @@ describe('Lumen Circuit independent playable puzzle genre', () => {
     const initialRotations: Record<string, number> = {}
     for (let y = 0; y < 5; y++) for (let x = 0; x < 5; x++) {
       if (!solution.some(([a, b]) => a === x && b === y)) { random(); random() }
-      initialRotations[x + ',' + y] = Math.floor(random() * 4)
+      initialRotations[`${x},${y}`] = Math.floor(random() * 4)
     }
     for (const [x, y] of solution) {
       if (x === undefined || y === undefined) continue
-      const rotation = ((initialRotations[x + ',' + y] ?? 0) + (x === 1 && y === 2 ? 1 : 0)) % 4
+      const rotation = ((initialRotations[`${x},${y}`] ?? 0) + (x === 1 && y === 2 ? 1 : 0)) % 4
       for (let n = 0; n < (4 - rotation) % 4; n++) {
         pointer({ clientX: 152 + x * 91 + 45, clientY: 62 + y * 91 + 45 })
       }

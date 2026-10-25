@@ -66,7 +66,7 @@ export function hydrateFetchMcpNodeEnvironment(
   const pathKeys = Object.keys(result).filter(item => item.toUpperCase() === 'PATH')
   const key = pathKeys.at(-1) ?? 'Path'
   const current = result[key] ?? ''
-  for (const alias of pathKeys) if (alias !== key) delete result[alias]
+  for (const alias of pathKeys) if (alias !== key) Reflect.deleteProperty(result, alias)
   const validDirectory = (directory: string): boolean => {
     if (!win32.isAbsolute(directory) || !exists(win32.join(directory, 'node.exe'))) return false
     return exists(win32.join(directory, 'npm.cmd')) || exists(win32.join(directory, 'npm.exe'))
@@ -101,7 +101,7 @@ export function hydrateFetchMcpNodeEnvironment(
     const pythonKeys = Object.keys(result).filter(name => name.toUpperCase() === 'PYTHONPATH')
     const pythonKey = pythonKeys.at(-1) ?? 'PYTHONPATH'
     const pythonPath = result[pythonKey] ?? ''
-    for (const alias of pythonKeys) if (alias !== pythonKey) delete result[alias]
+    for (const alias of pythonKeys) if (alias !== pythonKey) Reflect.deleteProperty(result, alias)
     const siteDirectory = dirname(FETCH_MCP_NPM_SITE_FILE)
     const segments = pythonPath.split(';').map(value => value.replace(/^"(.*)"$/u, '$1').trim())
     result[pythonKey] = segments.some(value => value.toLowerCase() === siteDirectory.toLowerCase())
@@ -170,7 +170,12 @@ const MICROSOFT_GRAPH_SCOPED_SERVICES: Readonly<Record<string, string>> = {
   sharepoint: 'sharepoint',
 }
 
-/** Resolve the locally pinned Microsoft/Social MCP from this active runtime, not the process cwd. */
+/** Resolve the locally pinned Microsoft/Social MCP from this active runtime, not the process cwd.
+ * @param serverName - Server name supplied to this operation.
+ * @param command - Command supplied to this operation.
+ * @param args - Validated arguments for the requested operation.
+ * @returns The matching projected records.
+ */
 export function normalizeMicrosoftPersonalMcpLaunch(
   serverName: string, command: string, args: readonly string[],
 ): { command: string; args: string[] } {

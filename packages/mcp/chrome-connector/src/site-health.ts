@@ -15,6 +15,7 @@ export interface SitePageHealth {
   scriptCount: number
 }
 
+/** Classification of an observed site availability problem. */
 export type SiteHealthKind =
   | 'partial_or_embedded_block'
   | 'page_reports_blocked'
@@ -23,6 +24,10 @@ export type SiteHealthKind =
   | 'loading'
   | 'content_visible'
 
+/** Classify site health from the observed page evidence.
+ * @param p - P supplied to this operation.
+ * @returns The result produced by this operation.
+ */
 export function classifySiteHealth(p: SitePageHealth): SiteHealthKind {
   if (p.blockedMarker && (p.mainTextLength > 90 || p.crossOriginFrames > 0)) return 'partial_or_embedded_block'
   if (p.blockedMarker) return 'page_reports_blocked'
@@ -32,6 +37,7 @@ export function classifySiteHealth(p: SitePageHealth): SiteHealthKind {
   return 'content_visible'
 }
 
+/** Browser expression used to inspect site health. */
 export const siteHealthExpression = `(() => {
   const body = document.body;
   const visible = (body?.innerText || '').slice(0, 15000);
@@ -66,6 +72,10 @@ export const siteHealthExpression = `(() => {
   });
 })()`
 
+/** Choose the next bounded recovery action from site health evidence.
+ * @param kind - Kind supplied to this operation.
+ * @returns The result produced by this operation.
+ */
 export function nextSiteRecoveryStep(kind: SiteHealthKind): string {
   switch (kind) {
     case 'loading':

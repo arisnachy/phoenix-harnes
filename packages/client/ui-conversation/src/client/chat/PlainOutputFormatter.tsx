@@ -56,8 +56,8 @@ export function parsePlainOutputCard(input:string):PlainOutputCard|null {
     const field=content.match(/^([^:：]{2,55})[:：]\s*(.{1,350})$/u)
     if(field){
       fieldCount++
-      rows.push({kind:'field',label:field[1]?.trim()??'',value:field[2]?.trim()??''})
-    }else rows.push({kind:'text',value:content})
+      rows.push({ kind:'field',label:field[1]?.trim()??'',value:field[2]?.trim()??'' })
+    }else rows.push({ kind:'text',value:content })
     if(rows.length+sections.reduce((sum,section)=>sum+section.length,0)>MAX_ROWS)return null
   }
   finish()
@@ -75,7 +75,7 @@ function appendMarkdown(out:PlainOutputSegment[],text:string):void{
   if(!text)return
   const last=out.at(-1)
   if(last?.kind==='markdown')last.text+=text
-  else out.push({kind:'markdown',text})
+  else out.push({ kind:'markdown',text })
 }
 
 /** Convert complete plaintext fences; leave code, prose and tables unchanged. */
@@ -90,21 +90,21 @@ export function splitPlainOutputText(text:string):PlainOutputSegment[]{
     const card=transformed<6?parsePlainOutputCard(body):null
     if(!card)continue
     appendMarkdown(output,text.slice(cursor,start))
-    output.push({kind:'formatted',card})
+    output.push({ kind:'formatted',card })
     cursor=start+match[0].length
     transformed++
   }
   const tail=text.slice(cursor)
   if(transformed===0 && /^\s*[╔┏┌]/u.test(tail) && !tail.includes('\x60\x60\x60')){
     const card=parsePlainOutputCard(tail)
-    if(card)return [{kind:'formatted',card}]
+    if(card)return [{ kind:'formatted',card }]
   }
   appendMarkdown(output,tail)
   return output
 }
 
 /** Phoenix-native display for plaintext legacy tickets and boxed summaries. */
-export function PlainOutputFormatter({card}:{card:PlainOutputCard}){
+export function PlainOutputFormatter({ card }:{ card:PlainOutputCard }){
   return <section className={css.card} data-phoenix-formatted-output={card.ticket?'ticket':'panel'}
     aria-label={card.ticket?'Boleto de texto formateado':'Panel de texto formateado'}>
     <header className={css.header}>

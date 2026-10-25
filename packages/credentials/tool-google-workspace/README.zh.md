@@ -30,7 +30,7 @@ See the generated Google Workspace entries in [the tool catalog](../../../docs/t
 
 ## 已知限制与暂缓事项
 
-- Google OAuth 当前是进程本地状态，因此 Phoenix 重启后需要再次显式授权 Google，直到存在能够与同 UID 工具进程隔离的凭据后端。
+- Google OAuth 通过 Host 持有的持久化 grant 和静默刷新令牌，在 Phoenix 正常重启后保持连接。默认本地凭据提供方仅供文件所有者访问，无法防御刻意恶意的同 UID 进程；需要更强隔离的部署应使用操作系统隔离的凭据提供方。
 - Google installed application 会在一次 consent 流程中请求配置好的 Workspace scope 集合；未授予 scope 的能力会 fail closed，并需要显式重新连接来改变授权。
 - 当前专用高层工具主要覆盖 Gmail、Calendar 和 Drive。Docs、Sheets、Slides、Contacts 与较少使用的操作暂时通过 `google_workspace_request` 使用，直到增加专用工具。
 - 高级请求工具故意不接受任意 URL、调用方认证 header、cookie 或调用方选择的 OAuth scope。

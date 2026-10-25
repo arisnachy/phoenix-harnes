@@ -55,7 +55,7 @@ beforeEach(() => {
   localStorage.clear()
   vi.stubGlobal('ResizeObserver', ResizeObserverStub)
   vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => window.setTimeout(() => { callback(0) }, 16))
-  vi.stubGlobal('cancelAnimationFrame', (id: number) => window.clearTimeout(id))
+  vi.stubGlobal('cancelAnimationFrame', (id: number) =>{  window.clearTimeout(id) })
 })
 
 // Mirrors the real lookup chain (conversation namespace, then common).
@@ -644,7 +644,7 @@ describe('Contextual focus chrome', () => {
       vi.useFakeTimers()
       vi.stubGlobal('requestAnimationFrame',
         (callback: FrameRequestCallback) => window.setTimeout(() => { callback(0) }, 16))
-      vi.stubGlobal('cancelAnimationFrame', (id: number) => window.clearTimeout(id))
+      vi.stubGlobal('cancelAnimationFrame', (id: number) =>{  window.clearTimeout(id) })
       try {
         const b = mount(
           conversationSnapshot({ composerPhase: 'blank', blank: true }),

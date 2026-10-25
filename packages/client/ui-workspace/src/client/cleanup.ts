@@ -4,6 +4,7 @@
  */
 import type { SessionId, SessionListState } from '@phoenix-ai/dsh-client-runtime/client'
 
+/** Selection strategy used to preview conversation cleanup. */
 export type SessionCleanupMode = 'selected' | 'before' | 'between' | 'all'
 
 /** Local end-of-day boundary for a date input; invalid/empty dates select nothing. */
@@ -17,7 +18,14 @@ function dayLimit(value: string, endOfDay: boolean): number | undefined {
   return parsed.getTime()
 }
 
-/** Preview exact session ids, including archived rows, without selecting unknown identities. */
+/** Preview exact session ids, including archived rows, without selecting unknown identities.
+ * @param list - List supplied to this operation.
+ * @param mode - Mode supplied to this operation.
+ * @param selected - Selected supplied to this operation.
+ * @param before - Before supplied to this operation.
+ * @param after - After supplied to this operation.
+ * @returns The matching projected records.
+ */
 export function cleanupCandidateIds(
   list: Pick<SessionListState, 'ids' | 'byId'>,
   mode: SessionCleanupMode,

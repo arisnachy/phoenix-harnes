@@ -2,6 +2,8 @@
 
 Status: proposed
 
+English | [中文](2026-10-24-autonomous-sports-source-intelligence.zh.md)
+
 ## Problem
 
 Phoenix has general tool and provider orchestration, but no native sports data capability with provenance, documented source approval, bookmaker odds, and sport-specific presentation. An unverified source registry could mislabel unreliable feeds as predictors of outcomes and leak provider credentials.

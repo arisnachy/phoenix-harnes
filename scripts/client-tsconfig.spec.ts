@@ -25,14 +25,14 @@ function clientCssDeclarations(): string[] {
 function clientPackageTestFiles(): string[] {
   const packages = resolve(root, 'packages/client')
   const walk = (directory: string): string[] =>
-    readdirSync(directory, { withFileTypes: true }).flatMap(entry => {
+    readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
       const path = resolve(directory, entry.name)
       return entry.isDirectory() ? walk(path)
         : /\.tsx?$/.test(entry.name) ? [path.replaceAll(sep, '/')] : []
     })
   return readdirSync(packages, { withFileTypes: true })
     .filter(entry => entry.isDirectory())
-    .flatMap(entry => {
+    .flatMap((entry) => {
       const tests = resolve(packages, entry.name, 'tests')
       return existsSync(tests) ? walk(tests) : []
     })
@@ -51,7 +51,7 @@ describe('client TypeScript aggregate', () => {
   it('keeps every client test in exactly the Host or Client typecheck, not both', () => {
     const host = aggregateFiles('host')
     const client = aggregateFiles('client')
-    const misplaced = clientPackageTestFiles().filter(file => {
+    const misplaced = clientPackageTestFiles().filter((file) => {
       const expected = /\.client\.(?:spec\.)?tsx?$/.test(file) ? 'client'
         : /\.host\.(?:spec\.)?tsx?$/.test(file) ? 'host' : undefined
       return expected === undefined

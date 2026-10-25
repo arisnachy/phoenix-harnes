@@ -77,6 +77,7 @@ function wakePrompt(input: WakeExecution): string {
  * Create the wake executor that hands matched events to a live Phoenix agent.
  * @param agents - Registry view used to resolve the requested or fallback agent.
  * @returns Executor that converts durable wake executions into agent follow-ups.
+ * @param options - Explicit options controlling this operation.
  */
 export function createWakeExecutor(
   agents: Pick<AgentRegistry, 'get' | 'roots' | 'list'> & Partial<Pick<AgentRegistry, 'resume'>>,

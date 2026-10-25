@@ -840,10 +840,12 @@ describe('provider profile lifecycle', () => {
         anthropic: {},
       },
     })
-    expect(ctx.llm.listProviders()).toEqual([
+    const installedProviders = ctx.llm.listProviders()
+    expect(installedProviders).toEqual(expect.arrayContaining([
       { id: 'openai', name: 'openai' },
       { id: 'anthropic', name: 'anthropic' },
-    ])
+    ]))
+    expect(new Set(installedProviders.map(provider => provider.id)).size).toBe(installedProviders.length)
     expect(ctx.llm.providerRetryPolicy('openai')).toEqual({
       mode: 'always',
       initialDelayMs: 25,

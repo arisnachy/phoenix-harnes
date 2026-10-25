@@ -166,6 +166,10 @@ export interface Config {
   readonly maxPendingMessagesPerMember?: number
   /** Maximum UTF-8 bytes in one complete sender-framed delivery. */
   readonly maxMessageBytes?: number
+  /** Maximum UTF-8 bytes of selective recalled context per execution; zero disables recall. */
+  readonly maxExecutionContextBytes?: number
+  /** Maximum durable progress receipts per execution before interruption. */
+  readonly maxExecutionProgressEvents?: number
   /** Maximum milliseconds allowed for Team-owned runtime disposal. */
   readonly disposalTimeoutMs?: number
 }

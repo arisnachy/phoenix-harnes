@@ -33,7 +33,10 @@ function primitiveTriangles(node:Node):number[]{
     const p:V3[]=[[-.5,-.5,-.5],[.5,-.5,-.5],[.5,.5,-.5],[-.5,.5,-.5],
       [-.5,-.5,.5],[.5,-.5,.5],[.5,.5,.5],[-.5,.5,.5]]
     for(const ids of [[4,5,6,7],[1,0,3,2],[0,4,7,3],[5,1,2,6],[3,7,6,2],[0,1,5,4]])
-      quad(p[ids[0]!]!,p[ids[1]!]!,p[ids[2]!]!,p[ids[3]!]!)
+      quad(
+        requiredValue(p[requiredValue(ids[0])]),requiredValue(p[requiredValue(ids[1])]),
+        requiredValue(p[requiredValue(ids[2])]),requiredValue(p[requiredValue(ids[3])]),
+      )
   }else{
     const slices=16,rings=node.type==='sphere'?10:1
     for(let j=0;j<rings;j++)for(let i=0;i<slices;i++){
@@ -56,9 +59,9 @@ function primitiveTriangles(node:Node):number[]{
 function normals(coords:readonly number[]):number[]{
   const result:number[]=[]
   for(let i=0;i<coords.length;i+=9){
-    const a=vector(coords[i]!,coords[i+1]!,coords[i+2]!)
-    const b=vector(coords[i+3]!,coords[i+4]!,coords[i+5]!)
-    const c=vector(coords[i+6]!,coords[i+7]!,coords[i+8]!)
+    const a=vector(requiredValue(coords[i]),requiredValue(coords[i+1]),requiredValue(coords[i+2]))
+    const b=vector(requiredValue(coords[i+3]),requiredValue(coords[i+4]),requiredValue(coords[i+5]))
+    const c=vector(requiredValue(coords[i+6]),requiredValue(coords[i+7]),requiredValue(coords[i+8]))
     const n=unit(cross(subtract(b,a),subtract(c,a)))
     for(let j=0;j<3;j++)result.push(...n)
   }
@@ -70,7 +73,9 @@ function colorFactor(hex:string):number[]{
 }
 function quaternion(euler:readonly number[]):number[]{
   const [x,y,z]=euler.map(v=>v*Math.PI/360)
-  const cx=Math.cos(x!),sx=Math.sin(x!),cy=Math.cos(y!),sy=Math.sin(y!),cz=Math.cos(z!),sz=Math.sin(z!)
+  const cx=Math.cos(requiredValue(x)),sx=Math.sin(requiredValue(x))
+  const cy=Math.cos(requiredValue(y)),sy=Math.sin(requiredValue(y))
+  const cz=Math.cos(requiredValue(z)),sz=Math.sin(requiredValue(z))
   return [sx*cy*cz-cx*sy*sz,cx*sy*cz+sx*cy*sz,cx*cy*sz-sx*sy*cz,cx*cy*cz+sx*sy*sz]
 }
 function objectMaterial(node:Node,texture:(image:string)=>number):R{
@@ -89,25 +94,25 @@ function objectMaterial(node:Node,texture:(image:string)=>number):R{
     emissiveFactor:material?.emissive===undefined?[0,0,0]:colorFactor(material.emissive).slice(0,3),
   }
   const pbr=mat.pbrMetallicRoughness as R
-  if(material?.baseColorTexture)pbr.baseColorTexture={index:texture(material.baseColorTexture)}
-  if(material?.metallicRoughnessTexture)pbr.metallicRoughnessTexture={index:texture(material.metallicRoughnessTexture)}
-  if(material?.normalTexture)mat.normalTexture={index:texture(material.normalTexture)}
-  if(material?.occlusionTexture)mat.occlusionTexture={index:texture(material.occlusionTexture)}
+  if(material?.baseColorTexture)pbr.baseColorTexture={ index:texture(material.baseColorTexture) }
+  if(material?.metallicRoughnessTexture)pbr.metallicRoughnessTexture={ index:texture(material.metallicRoughnessTexture) }
+  if(material?.normalTexture)mat.normalTexture={ index:texture(material.normalTexture) }
+  if(material?.occlusionTexture)mat.occlusionTexture={ index:texture(material.occlusionTexture) }
   if((material?.transmission??0)>0){
-    mat.extensions={KHR_materials_transmission:{transmissionFactor:material!.transmission}}
+    mat.extensions={ KHR_materials_transmission:{ transmissionFactor:requiredValue(material).transmission } }
   }
   if((material?.clearcoat??0)>0){
-    mat.extensions={...(mat.extensions as R|undefined),KHR_materials_clearcoat:{clearcoatFactor:material!.clearcoat}}
+    mat.extensions={ ...(mat.extensions as R|undefined),KHR_materials_clearcoat:{ clearcoatFactor:requiredValue(material).clearcoat } }
   }
   return mat
 }
-function buildDocument(scene:Scene3D):{json:R;binary:Uint8Array}{
+function buildDocument(scene:Scene3D):{ json:R;binary:Uint8Array }{
   if(scene.nodes.length>150)throw Error('Límite de 150 piezas por escena.')
   const chunks:Uint8Array[]=[],views:R[]=[],accessors:R[]=[],meshes:R[]=[],nodes:R[]=[],materials:R[]=[],images:R[]=[],textures:R[]=[]
   let offset=0,verticesCount=0
   const append=(data:Uint8Array,target?:number):number=>{
     const index=views.length
-    views.push({buffer:0,byteOffset:offset,byteLength:data.byteLength,...target===undefined?{}:{target}})
+    views.push({ buffer:0,byteOffset:offset,byteLength:data.byteLength,...target===undefined?{}:{ target } })
     chunks.push(data)
     offset+=align(data.length)
     return index
@@ -115,19 +120,23 @@ function buildDocument(scene:Scene3D):{json:R;binary:Uint8Array}{
   const texture=(uri:string):number=>{
     const parsed=/^data:image\/(png|jpeg);base64,([a-z0-9+/]+={0,2})$/iu.exec(uri)
     if(parsed===null)throw Error('Textura PBR inválida: PNG/JPEG incrustado requerido.')
-    const bytes=fromBase64(parsed[2]!)
+    const bytes=fromBase64(requiredValue(parsed[2]))
     if(bytes.length>1_100_000)throw Error('Textura PBR mayor de 1,1 MB.')
-    const source=images.push({bufferView:append(bytes),mimeType:'image/'+parsed[1]})-1
-    return textures.push({source})-1
+    const source=images.push({ bufferView:append(bytes),mimeType:'image/'+parsed[1] })-1
+    return textures.push({ source })-1
   }
   const attr=(v:number[],size:3,type:'VEC3'):number=>{
     const floats=new Float32Array(v)
     const view=append(new Uint8Array(floats.buffer),34962)
     const index=accessors.length
     const lows=[Infinity,Infinity,Infinity],highs=[-Infinity,-Infinity,-Infinity]
-    for(let i=0;i<v.length;i++){const axis=i%3; lows[axis]=Math.min(lows[axis]!,v[i]!);highs[axis]=Math.max(highs[axis]!,v[i]!)}
-    accessors.push({bufferView:view,componentType:5126,count:v.length/size,type,
-      min:lows,max:highs})
+    for(let i=0;i<v.length;i++){
+      const axis=i%3
+      lows[axis]=Math.min(requiredValue(lows[axis]),requiredValue(v[i]))
+      highs[axis]=Math.max(requiredValue(highs[axis]),requiredValue(v[i]))
+    }
+    accessors.push({ bufferView:view,componentType:5126,count:v.length/size,type,
+      min:lows,max:highs })
     return index
   }
   for(const node of scene.nodes.filter(item=>item.hidden!==true)){
@@ -137,10 +146,10 @@ function buildDocument(scene:Scene3D):{json:R;binary:Uint8Array}{
     if(verticesCount>MAX_TRIANGLES*3)throw Error('Límite de triángulos 3D excedido.')
     const pos=attr(vertices,3,'VEC3'),norm=attr(normals(vertices),3,'VEC3')
     const material=materials.push(objectMaterial(node,texture))-1
-    const mesh=meshes.push({primitives:[{attributes:{POSITION:pos,NORMAL:norm},material,mode:4}]})-1
-    const tr:R={mesh,name:node.name??node.type,
+    const mesh=meshes.push({ primitives:[{ attributes:{ POSITION:pos,NORMAL:norm },material,mode:4 }] })-1
+    const tr:R={ mesh,name:node.name??node.type,
       translation:node.position,scale:node.size,
-      rotation:quaternion(node.rotation??[0,0,0])}
+      rotation:quaternion(node.rotation??[0,0,0]) }
     nodes.push(tr)
   }
   if(nodes.length===0)throw Error('No hay piezas visibles para exportar.')
@@ -148,38 +157,46 @@ function buildDocument(scene:Scene3D):{json:R;binary:Uint8Array}{
   const camIndex=nodes.length
   const cameraName=scene.camera??'perspective'
   const cameraTranslation=cameraName==='top'?[0,40,0]:cameraName==='front'?[0,8,40]:[25,19,28]
-  nodes.push({name:'Phoenix Camera',camera:0,translation:cameraTranslation,
-    rotation:cameraName==='top'?quaternion([-90,0,0]):cameraName==='front'?quaternion([-12,0,0]):quaternion([-24,38,0])})
+  nodes.push({ name:'Phoenix Camera',camera:0,translation:cameraTranslation,
+    rotation:cameraName==='top'?quaternion([-90,0,0]):cameraName==='front'?quaternion([-12,0,0]):quaternion([-24,38,0]) })
   const lightIndex=nodes.length
-  nodes.push({name:'Phoenix Directional Light',translation:[10,25,14],
-    rotation:quaternion([-35,22,0]),extensions:{KHR_lights_punctual:{light:0}}})
+  nodes.push({ name:'Phoenix Directional Light',translation:[10,25,14],
+    rotation:quaternion([-35,22,0]),extensions:{ KHR_lights_punctual:{ light:0 } } })
   const binary=new Uint8Array(offset)
   let cursor=0
   for(const chunk of chunks){binary.set(chunk,cursor);cursor+=align(chunk.length)}
   const extensions=new Set<string>()
   if(materials.some(m=>obj(m.extensions)&&'KHR_materials_transmission'in m.extensions))extensions.add('KHR_materials_transmission')
   if(materials.some(m=>obj(m.extensions)&&'KHR_materials_clearcoat'in m.extensions))extensions.add('KHR_materials_clearcoat')
-  const json:R={asset:{version:'2.0',generator:'Phoenix 3D'},
-    scene:0,scenes:[{name:scene.name,nodes:nodes.map((_,i)=>i)}],
-    nodes,meshes,materials,images,textures,accessors,bufferViews:views,buffers:[{byteLength:binary.length}],
-    cameras:[{name:'Phoenix Camera',type:'perspective',perspective:{yfov:Math.PI/3,znear:.1,zfar:3000}}],
-    extensions:{KHR_lights_punctual:{lights:[{name:'Main Light',type:'directional',
+  const json:R={ asset:{ version:'2.0',generator:'Phoenix 3D' },
+    scene:0,scenes:[{ name:scene.name,nodes:nodes.map((_,i)=>i) }],
+    nodes,meshes,materials,images,textures,accessors,bufferViews:views,buffers:[{ byteLength:binary.length }],
+    cameras:[{ name:'Phoenix Camera',type:'perspective',perspective:{ yfov:Math.PI/3,znear:.1,zfar:3000 } }],
+    extensions:{ KHR_lights_punctual:{ lights:[{ name:'Main Light',type:'directional',
       color:scene.environment==='sunset'?[1,.74,.52]:[1,1,1],
-      intensity:scene.environment==='daylight'?2.4:1.8}]}},
+      intensity:scene.environment==='daylight'?2.4:1.8 }] } },
     extensionsUsed:[...extensions,'KHR_lights_punctual'],
-    extras:{phoenixSceneVersion:scene.version,units:'meters',background:scene.background,
-      environment:scene.environment??'studio',camera:cameraName,camIndex,lightIndex}}
-  return {json,binary}
+    extras:{ phoenixSceneVersion:scene.version,units:'meters',background:scene.background,
+      environment:scene.environment??'studio',camera:cameraName,camIndex,lightIndex } }
+  return { json,binary }
 }
 function gltfData(scene:Scene3D):string{
-  const {json,binary}=buildDocument(scene)
+  const { json,binary }=buildDocument(scene)
   const buffers=json.buffers as R[]
-  buffers[0]={...buffers[0],uri:'data:application/octet-stream;base64,'+bytesBase64(binary)}
+  buffers[0]={ ...buffers[0],uri:'data:application/octet-stream;base64,'+bytesBase64(binary) }
   return JSON.stringify(json,null,2)
 }
+/** Serialize a scene as textual glTF.
+ * @param scene - Scene data to serialize or render.
+ * @returns The result produced by this operation.
+ */
 export function exportSceneGLTF(scene:Scene3D):string{return gltfData(scene)}
+/** Serialize a scene as binary glTF.
+ * @param scene - Scene data to serialize or render.
+ * @returns The result produced by this operation.
+ */
 export function exportSceneGLB(scene:Scene3D):Uint8Array{
-  const {json,binary}=buildDocument(scene)
+  const { json,binary }=buildDocument(scene)
   const source=new TextEncoder().encode(JSON.stringify(json))
   const jsonLength=align(source.length),binLength=align(binary.length)
   const out=new Uint8Array(12+8+jsonLength+8+binLength)
@@ -192,7 +209,7 @@ export function exportSceneGLB(scene:Scene3D):Uint8Array{
   out.set(binary,cursor+8)
   return out
 }
-function readDocument(data:Uint8Array|string):{json:R;binary:Uint8Array}{
+function readDocument(data:Uint8Array|string):{ json:R;binary:Uint8Array }{
   if(typeof data==='string'){
     if(data.length>MAX_BYTES)throw Error('glTF demasiado grande.')
     const value:unknown=JSON.parse(data)
@@ -202,7 +219,7 @@ function readDocument(data:Uint8Array|string):{json:R;binary:Uint8Array}{
       ||!buffers[0].uri.startsWith('data:application/octet-stream;base64,')){
       throw Error('Este importador requiere glTF con buffer incrustado; utiliza GLB para recursos externos.')
     }
-    return {json:value,binary:fromBase64(buffers[0].uri.split(',')[1]!)}
+    return { json:value,binary:fromBase64(requiredValue(buffers[0].uri.split(',')[1])) }
   }
   if(data.byteLength>MAX_BYTES||data.byteLength<20)throw Error('GLB inválido o demasiado grande.')
   const dv=new DataView(data.buffer,data.byteOffset,data.byteLength)
@@ -216,11 +233,12 @@ function readDocument(data:Uint8Array|string):{json:R;binary:Uint8Array}{
   if(dv.getUint32(at+4,true)!==0x004e4942)throw Error('GLB no contiene geometría BIN.')
   const length=dv.getUint32(at,true)
   if(at+8+length>data.length)throw Error('BIN GLB incompleto.')
-  return {json:value,binary:data.subarray(at+8,at+8+length)}
+  return { json:value,binary:data.subarray(at+8,at+8+length) }
 }
 function matmul(a:number[],b:number[]):number[]{
   const o=new Array<number>(16).fill(0)
-  for(let c=0;c<4;c++)for(let r=0;r<4;r++)for(let k=0;k<4;k++)o[c*4+r]!+=a[k*4+r]!*b[c*4+k]!
+  for(let c=0;c<4;c++)for(let r=0;r<4;r++)for(let k=0;k<4;k++)
+    o[c*4+r]=requiredValue(o[c*4+r])+requiredValue(a[k*4+r])*requiredValue(b[c*4+k])
   return o
 }
 const identity=():number[]=>[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]
@@ -236,9 +254,9 @@ function matrix(node:R):number[]{
     t[0]??0,t[1]??0,t[2]??0,1]
 }
 function translate(m:number[],p:V3):V3{
-  return [m[0]!*p[0]+m[4]!*p[1]+m[8]!*p[2]+m[12]!,
-    m[1]!*p[0]+m[5]!*p[1]+m[9]!*p[2]+m[13]!,
-    m[2]!*p[0]+m[6]!*p[1]+m[10]!*p[2]+m[14]!]
+  return [requiredValue(m[0])*p[0]+requiredValue(m[4])*p[1]+requiredValue(m[8])*p[2]+requiredValue(m[12]),
+    requiredValue(m[1])*p[0]+requiredValue(m[5])*p[1]+requiredValue(m[9])*p[2]+requiredValue(m[13]),
+    requiredValue(m[2])*p[0]+requiredValue(m[6])*p[1]+requiredValue(m[10])*p[2]+requiredValue(m[14])]
 }
 function accessorValues(index:number,json:R,binary:Uint8Array):number[]{
   const accessors=Array.isArray(json.accessors)?json.accessors:[],views=Array.isArray(json.bufferViews)?json.bufferViews:[]
@@ -267,28 +285,32 @@ function hexColor(v:unknown):string{
   const xs=nums(v);if(xs.length<3)return '#d9c6ac'
   return '#'+xs.slice(0,3).map(n=>Math.max(0,Math.min(255,Math.round(n*255))).toString(16).padStart(2,'0')).join('')
 }
-function parseMaterial(m:unknown,texture:(index:number)=>string):{color:string;material:NonNullable<Node['material']>}{
+function parseMaterial(m:unknown,texture:(index:number)=>string):{ color:string;material:NonNullable<Node['material']> }{
   const data=obj(m)?m:{},p=obj(data.pbrMetallicRoughness)?data.pbrMetallicRoughness:{}
   const base=Array.isArray(p.baseColorFactor)?p.baseColorFactor:[.85,.76,.65,1]
   const color=hexColor(base)
   const ex=obj(data.extensions)?data.extensions:{}
   const trans=obj(ex.KHR_materials_transmission)?ex.KHR_materials_transmission:{}
   const coat=obj(ex.KHR_materials_clearcoat)?ex.KHR_materials_clearcoat:{}
-  return {color,material:{baseColor:color,
+  return { color,material:{ baseColor:color,
     metallic:typeof p.metallicFactor==='number'?p.metallicFactor:1,
     roughness:typeof p.roughnessFactor==='number'?p.roughnessFactor:1,
     opacity:typeof base[3]==='number'?base[3]:1,
     transmission:typeof trans.transmissionFactor==='number'?trans.transmissionFactor:0,
     clearcoat:typeof coat.clearcoatFactor==='number'?coat.clearcoatFactor:0,
     emissive:Array.isArray(data.emissiveFactor)?hexColor(data.emissiveFactor):'#000000',
-    ...(obj(p.baseColorTexture)?{baseColorTexture:texture(Number(p.baseColorTexture.index))}:{}),
-    ...(obj(p.metallicRoughnessTexture)?{metallicRoughnessTexture:texture(Number(p.metallicRoughnessTexture.index))}:{}),
-    ...(obj(data.normalTexture)?{normalTexture:texture(Number(data.normalTexture.index))}:{}),
-    ...(obj(data.occlusionTexture)?{occlusionTexture:texture(Number(data.occlusionTexture.index))}:{})
-  }}
+    ...(obj(p.baseColorTexture)?{ baseColorTexture:texture(Number(p.baseColorTexture.index)) }:{}),
+    ...(obj(p.metallicRoughnessTexture)?{ metallicRoughnessTexture:texture(Number(p.metallicRoughnessTexture.index)) }:{}),
+    ...(obj(data.normalTexture)?{ normalTexture:texture(Number(data.normalTexture.index)) }:{}),
+    ...(obj(data.occlusionTexture)?{ occlusionTexture:texture(Number(data.occlusionTexture.index)) }:{}),
+  } }
 }
+/** Load glTF scene content into the scene representation.
+ * @param input - Operation inputs validated at the owning boundary.
+ * @returns The result produced by this operation.
+ */
 export function importSceneGLTF(input:string|Uint8Array):Scene3D{
-  const {json,binary}=readDocument(input)
+  const { json,binary }=readDocument(input)
   if(!obj(json.asset)||(json.asset.version!=='2.0'&&json.asset.minVersion!=='2.0'))throw Error('Solo se admite glTF 2.0.')
   const nodes=Array.isArray(json.nodes)?json.nodes:[],meshes=Array.isArray(json.meshes)?json.meshes:[]
   const materials=Array.isArray(json.materials)?json.materials:[]
@@ -331,19 +353,19 @@ export function importSceneGLTF(input:string|Uint8Array):Scene3D{
           ||(prim.mode!==undefined&&prim.mode!==4))throw Error('Solo se admiten triángulos glTF.')
         const positions=accessorValues(prim.attributes.POSITION,json,binary)
         const indices=prim.indices===undefined
-          ?Array.from({length:positions.length/3},(_,i)=>i)
+          ?Array.from({ length:positions.length/3 },(_,i)=>i)
           :accessorValues(Number(prim.indices),json,binary)
         if(indices.length%3!==0)throw Error('Índices de triángulo inválidos.')
         const vertices:number[]=[]
         for(const i of indices){
           if(!Number.isInteger(i)||i<0||i>=positions.length/3)throw Error('Índice glTF fuera de rango.')
-          vertices.push(...translate(world,[positions[3*i]!,positions[3*i+1]!,positions[3*i+2]!]))
+          vertices.push(...translate(world,[requiredValue(positions[3*i]),requiredValue(positions[3*i+1]),requiredValue(positions[3*i+2])]))
         }
         total+=vertices.length/9
         if(total>MAX_TRIANGLES||output.length>=150)throw Error('Escena demasiado compleja; límite de 60 000 triángulos y 150 piezas.')
         const props=parseMaterial(materials[Number(prim.material??-1)],texture)
-        output.push({type:'mesh',name:typeof raw.name==='string'?raw.name:'Malla glTF',
-          position:[0,0,0],size:[1,1,1],color:props.color,vertices,material:props.material})
+        output.push({ type:'mesh',name:typeof raw.name==='string'?raw.name:'Malla glTF',
+          position:[0,0,0],size:[1,1,1],color:props.color,vertices,material:props.material })
       }
     }
     for(const child of Array.isArray(raw.children)?raw.children:[])visit(Number(child),world,depth+1)
@@ -357,6 +379,12 @@ export function importSceneGLTF(input:string|Uint8Array):Scene3D{
     ?extras.environment:'studio'
   const camera=extras.camera==='front'||extras.camera==='top'||extras.camera==='isometric'||extras.camera==='perspective'
     ?extras.camera:'perspective'
-  return {version:1,units:'meters',name:typeof root.name==='string'?root.name:'Modelo glTF importado',
-    background,nodes:output,environment,camera}
+  return { version:1,units:'meters',name:typeof root.name==='string'?root.name:'Modelo glTF importado',
+    background,nodes:output,environment,camera }
+}
+
+/** Reject absent entries before reading validated structured data. */
+function requiredValue<T>(value: T | undefined | null): T {
+  if (value === undefined || value === null) throw new Error('Required structured value is missing.')
+  return value
 }

@@ -41,8 +41,10 @@ describe('Codex image generation bridge', () => {
       '--enable','image_generation','-s','read-only','-']
     const cmd = codexImageInvocation('C:\\Program Files\\nodejs\\codex.cmd', tail, 'win32')
     expect(cmd.slice(1, 4)).toEqual(['/d', '/s', '/c'])
-    expect(cmd[4]).toBe('""C:\\Program Files\\nodejs\\codex.cmd" ' + tail.join(' ') + '"')
-    expect(cmd[4]).not.toContain('test image')
+    expect(cmd[4]).toBe('call')
+    expect(cmd[5]).toBe('C:\\Program Files\\nodejs\\codex.cmd')
+    expect(cmd.slice(6)).toEqual(tail)
+    expect(cmd.join(' ')).not.toContain('test image')
     expect(codexImageInvocation('C:\\codex\\codex.exe', tail, 'win32')).toEqual([
       'C:\\codex\\codex.exe', ...tail,
     ])
@@ -301,7 +303,7 @@ describe('Codex image generation bridge', () => {
           return { ref: attachment, data }
         },
       }
-      const exported = await materializeGeneratedImageInWorkspace(store as never, image, workspace)
+      const exported = await materializeGeneratedImageInWorkspace(store, image, workspace)
       expect(exported.path).toContain(join(workspace, '.artifacts', 'generated-images'))
       expect(exported.path).toMatch(/\.png$/u)
       expect(exported.attachment).toBe(attachment)

@@ -28,7 +28,7 @@ export function videoFrameTimes(duration: number, count: number): number[] {
   if (!Number.isFinite(duration) || duration <= 0 || !Number.isInteger(count) || count < 1 || count > 8) return []
   const length = Math.min(duration, 7200)
   const total = Math.min(count, Math.max(1, Math.floor(length * 2)))
-  return Array.from({length: total},
+  return Array.from({ length: total },
     (_, index) => Number(Math.max(0, (index + 0.5) * length / total).toFixed(2)))
 }
 
@@ -57,7 +57,7 @@ export async function videoMediaInput(path?: string): Promise<{ path: string; so
     if (!approved) throw new Error('VIDEO_FILE_NOT_APPROVED')
     const details = await stat(actual)
     if (!details.isFile() || details.size < 128 || details.size > MAX_BYTES) throw new Error('VIDEO_FILE_SIZE_INVALID')
-    return {path: actual, source: 'approved-local-file'}
+    return { path: actual, source: 'approved-local-file' }
   }
   let marker: unknown
   try { marker = JSON.parse(await readFile(join(CAPTURE_ROOT, 'latest.json'), 'utf8')) } catch {
@@ -73,20 +73,21 @@ export async function videoMediaInput(path?: string): Promise<{ path: string; so
   if (actual !== expected) throw new Error('VIDEO_CAPTURE_PATH_INVALID')
   const details = await stat(actual)
   if (!details.isFile() || details.size < 128 || details.size > MAX_BYTES) throw new Error('VIDEO_CAPTURE_BYTES_INVALID')
-  return {path: actual, source: 'authorized-browser-capture'}
+  return { path: actual, source: 'authorized-browser-capture' }
 }
 
 type CommandResult = { output: Buffer; stderr: string; code: number }
 async function execute(command: string, args: string[], timeout = 30_000, maxOutput = 5_000_000): Promise<CommandResult> {
   return await new Promise((resolvePromise, reject) => {
-    let output: Buffer[] = [], size = 0, stderr = '', finished = false
-    const child = spawn(command, args, {stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true, shell: false})
+    const output: Buffer[] = []
+    let size = 0, stderr = '', finished = false
+    const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true, shell: false })
     const finish = (error?: Error, code = -1) => {
       if (finished) return
       finished = true
       clearTimeout(timer)
       if (error) reject(error)
-      else resolvePromise({output: Buffer.concat(output), stderr, code})
+      else resolvePromise({ output: Buffer.concat(output), stderr, code })
     }
     const timer = setTimeout(() => { child.kill(); finish(new Error('VIDEO_DECODER_TIMEOUT')) }, timeout)
     child.stdout.on('data', (bytes: Buffer) => {
@@ -96,8 +97,8 @@ async function execute(command: string, args: string[], timeout = 30_000, maxOut
     })
     child.stderr.setEncoding('utf8')
     child.stderr.on('data', (chunk: string) => { stderr = (stderr + chunk).slice(-4000) })
-    child.once('error', () => finish(new Error('VIDEO_DECODER_UNAVAILABLE')))
-    child.once('close', code => finish(undefined, code ?? -1))
+    child.once('error', () =>{  finish(new Error('VIDEO_DECODER_UNAVAILABLE')) })
+    child.once('close', (code) =>{  finish(undefined, code ?? -1) })
   })
 }
 let cachedDecoder: Promise<string> | undefined
@@ -118,7 +119,7 @@ export async function resolveVideoDecoder(): Promise<string> {
     const verify = await execute(path, ['-version'], 7000, 5000)
     if (verify.code !== 0) throw new Error('VIDEO_FFMPEG_UNAVAILABLE')
     return path
-  })().catch(error => { cachedDecoder = undefined; throw error })
+  })().catch((error) => { cachedDecoder = undefined; throw error })
   return await cachedDecoder
 }
 
@@ -126,7 +127,7 @@ export async function resolveVideoDecoder(): Promise<string> {
  * @param input - Approved source, frame limit and audio seconds to inspect.
  * @returns Real JPEG frames and a bounded local speech transcription.
  */
-export async function inspectVideoMedia(input: {path?: string; frames: number; audioSeconds: number}): Promise<VideoMediaEvidence> {
+export async function inspectVideoMedia(input: { path?: string; frames: number; audioSeconds: number }): Promise<VideoMediaEvidence> {
   const selected = await videoMediaInput(input.path)
   const decoder = await resolveVideoDecoder()
   const info = await execute(decoder, ['-hide_banner', '-i', selected.path], 15_000, 50000)
@@ -142,11 +143,11 @@ export async function inspectVideoMedia(input: {path?: string; frames: number; a
         '-vf', 'scale=960:-2', '-f', 'image2pipe', '-vcodec', 'mjpeg', 'pipe:1'], 20_000)
       if (result.code === 0 && result.output.length > 128
         && result.output[0] === 0xff && result.output[1] === 0xd8) {
-        frames.push({atSeconds: time, jpeg: result.output.toString('base64')})
+        frames.push({ atSeconds: time, jpeg: result.output.toString('base64') })
       }
     } catch { /* Preserve any successfully decoded frames. */ }
   }
-  let audio: VideoMediaEvidence['audio'] = {status:'unavailable', reason:'AUDIO_DISABLED'}
+  let audio: VideoMediaEvidence['audio'] = { status:'unavailable', reason:'AUDIO_DISABLED' }
   if (input.audioSeconds >= 3) {
     const dir = await mkdtemp(join(tmpdir(), 'phoenix-video-analysis-'))
     const destination = join(dir, 'audio.wav')
@@ -161,14 +162,14 @@ export async function inspectVideoMedia(input: {path?: string; frames: number; a
       const cues = transcript.cues.slice(0, 200)
       const text = cues.map(cue => '[' + cue.start.toFixed(2) + 's] ' + cue.text).join('\n').slice(0, 24000)
       audio = text
-        ? {status:'ok', transcript:text, cueCount:cues.length,
-          ...(transcript.language ? {language:transcript.language} : {})}
-        : {status:'unavailable', reason:'VIDEO_AUDIO_SPEECH_NOT_DETECTED'}
+        ? { status:'ok', transcript:text, cueCount:cues.length,
+          ...(transcript.language ? { language:transcript.language } : {}) }
+        : { status:'unavailable', reason:'VIDEO_AUDIO_SPEECH_NOT_DETECTED' }
     } catch (error) {
-      audio = {status:'unavailable',reason: String(error).slice(0,160)}
+      audio = { status:'unavailable',reason: String(error).slice(0,160) }
     } finally {
-      await rm(dir,{recursive:true,force:true})
+      await rm(dir,{ recursive:true,force:true })
     }
   }
-  return {source:selected.source,durationSeconds:duration,frames,audio}
+  return { source:selected.source,durationSeconds:duration,frames,audio }
 }

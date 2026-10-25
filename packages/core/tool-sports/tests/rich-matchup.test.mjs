@@ -70,6 +70,7 @@ test('untrusted MLB roster and repeated batting IDs do not create invented playe
     ID101:{person:{id:101,fullName:'Único bateador'},position:{abbreviation:'DH'}},
   }},home:{battingOrder:[],players:{}}}}
   const badRoster={roster:[
+    {position:{type:'Pitcher'}}, // MLB can omit person; never dereference it
     {person:{id:678032},position:{type:'Pitcher'}},
     {person:{id:678033,fullName:'Relevista identificado'},position:{type:'Pitcher'}},
   ]}

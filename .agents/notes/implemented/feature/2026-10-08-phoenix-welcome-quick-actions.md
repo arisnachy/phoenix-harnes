@@ -2,6 +2,8 @@
 
 Status: implemented
 
+English | [中文](2026-10-08-phoenix-welcome-quick-actions.zh.md)
+
 ## Problem
 
 The previous new-session screen did not match the approved warm, spacious visual reference, and a quick-action widget risked bypassing the real workspace and composer state.

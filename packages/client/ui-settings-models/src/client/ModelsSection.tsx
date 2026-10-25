@@ -378,6 +378,7 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
                   schema,
                   api,
                   t,
+                  oauth: accountFlowFor(target.provider),
                   readOnly: !state.writable,
                   onClose: (changed) => { closeSetup(changed, target) },
                 })}
@@ -488,6 +489,7 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
                   schema,
                   api,
                   t,
+                  oauth: accountFlowFor(target.provider),
                   readOnly: !state.writable,
                   onClose: (changed) => { closeEditor(changed, target) },
                 })

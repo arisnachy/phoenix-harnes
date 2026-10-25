@@ -75,26 +75,26 @@ export const KIRA_ROSTER: readonly KiraRosterEntry[] = [
 
 /** Profiles describe fictional AI specialties, not personal life histories. */
 export const KIRA_TEAM_BIOGRAPHIES: Readonly<Record<string,string>> = {
-  vortice: "Optimiza tiempos de respuesta, memoria y rendimiento.",
-  aurora: "Diseña experiencias cálidas, accesibles y fáciles de comprender.",
-  atlas: "Ingeniero de software: construye arquitectura resistente y corrige errores.",
-  nova: "Investiga fuentes y reúne evidencia antes de concluir.",
-  lumen: "Organiza el conocimiento complejo y lo explica con claridad.",
-  helix: "Integra APIs, MCP, OAuth, webhooks y servicios externos.",
-  prisma: "Analiza datos, detecta patrones y construye métricas útiles.",
-  orion: "Reproduce fallos y verifica que las soluciones funcionen.",
-  vega: "Especialista en diseño de interfaces y experiencia de usuario.",
-  eclipse: "Anticipa riesgos y detecta fallos de seguridad.",
-  argo: "Comprueba entregas y recopila evidencia verificable.",
-  solaria: "Automatiza procesos, tareas repetitivas y despliegues.",
-  nexo: "Coordina agentes y herramientas para ejecutar objetivos.",
-  astra: "Planifica proyectos y transforma metas en pasos realizables.",
-  lyra: "Escribe mensajes, informes y documentos precisos.",
-  zenith: "Revisa calidad con independencia y criterio exigente.",
-  cobalto: "Protege sistemas, identidades y permisos.",
-  quasar: "Investiga problemas complejos mediante análisis profundo.",
-  senda: "Navega páginas y encuentra fuentes y evidencia.",
-  orbita: "Coordina tareas continuas y supervisa recursos del sistema.",
+  vortice: 'Optimiza tiempos de respuesta, memoria y rendimiento.',
+  aurora: 'Diseña experiencias cálidas, accesibles y fáciles de comprender.',
+  atlas: 'Ingeniero de software: construye arquitectura resistente y corrige errores.',
+  nova: 'Investiga fuentes y reúne evidencia antes de concluir.',
+  lumen: 'Organiza el conocimiento complejo y lo explica con claridad.',
+  helix: 'Integra APIs, MCP, OAuth, webhooks y servicios externos.',
+  prisma: 'Analiza datos, detecta patrones y construye métricas útiles.',
+  orion: 'Reproduce fallos y verifica que las soluciones funcionen.',
+  vega: 'Especialista en diseño de interfaces y experiencia de usuario.',
+  eclipse: 'Anticipa riesgos y detecta fallos de seguridad.',
+  argo: 'Comprueba entregas y recopila evidencia verificable.',
+  solaria: 'Automatiza procesos, tareas repetitivas y despliegues.',
+  nexo: 'Coordina agentes y herramientas para ejecutar objetivos.',
+  astra: 'Planifica proyectos y transforma metas en pasos realizables.',
+  lyra: 'Escribe mensajes, informes y documentos precisos.',
+  zenith: 'Revisa calidad con independencia y criterio exigente.',
+  cobalto: 'Protege sistemas, identidades y permisos.',
+  quasar: 'Investiga problemas complejos mediante análisis profundo.',
+  senda: 'Navega páginas y encuentra fuentes y evidencia.',
+  orbita: 'Coordina tareas continuas y supervisa recursos del sistema.',
 }
 
 export function activityOf(summary: SessionSummary): SubagentActivityProjection | undefined {
@@ -466,7 +466,7 @@ export function KiraTeamsDock({ useList, openChild, t, layout }: KiraTeamsDockPr
           <span className={directoryCss.personText}><strong>Kira</strong><small>Líder y coordinadora</small></span>
           <span className={directoryCss.personState}>✦</span>
         </button>
-        {KIRA_ROSTER.map(person => {
+        {KIRA_ROSTER.map((person) => {
           const live = cards.find(card => card.kind === person.kind)
           const summary = live?.summary
           return (
@@ -475,7 +475,8 @@ export function KiraTeamsDock({ useList, openChild, t, layout }: KiraTeamsDockPr
               onClick={() => { setSelectedPersona(person.kind) }} aria-label={person.name + ': ' + person.tagline}>
               <ModelActivityAvatar kind={person.kind}
                 model={summary === undefined ? undefined : root?.projectionValues?.teamChatParticipants?.[summary.id]?.model}
-                modelProvider={summary === undefined ? undefined : root?.projectionValues?.teamChatParticipants?.[summary.id]?.modelProvider}
+                modelProvider={summary === undefined
+                  ? undefined : root?.projectionValues?.teamChatParticipants?.[summary.id]?.modelProvider}
                 activity={summary === undefined ? undefined : activityOf(summary)}
                 running={summary?.running ?? false} pending={summary?.pendingInteraction !== undefined}
                 ready={summary === undefined} />
@@ -498,51 +499,51 @@ export function KiraTeamsDock({ useList, openChild, t, layout }: KiraTeamsDockPr
   return (
     <>
       {teamOpen && directory}
-    <div
-      className={css.root}
-      data-kira-teams
-      data-kira-layout="agent-rail"
-      data-kira-count={cards.length}
-    >
-      <aside className={css.rail} aria-label={t('team.aria')} data-kira-agent-rail-container>
-        <span className={css.railBrand} aria-hidden="true">
-          <span className={css.railBrandMark} />
-        </span>
-        <span className={css.railDivider} aria-hidden="true" />
-        <span className={css.railAgents}>
-          {cards.map((card) => {
-            const summary = card.summary
-            if (summary === undefined) return null
-            const actionKey = activityKeyOf(summary)
-            const selected = String(summary.id) === String(selectedSummaryId)
-            return (
-              <button
-                key={String(summary.id)}
-                type="button"
-                className={`${css.railAgent} ${selected ? css.railAgentSelected : ''}`}
-                aria-label={`${card.name} · ${t(actionKey)}`}
-                aria-pressed={selected}
-                title={`${card.name} · ${t(actionKey)}`}
-                data-kira-agent-rail
-                data-agent-kind={card.kind}
-                data-agent-id={String(summary.id)}
-                data-agent-activity={actionKey}
-                onClick={() => { setSelectedId(String(summary.id)); openAgent(card, openChild) }}
-              >
-                <ModelActivityAvatar
-                  kind={card.kind}
-                  model={root?.projectionValues?.teamChatParticipants?.[summary.id]?.model}
-                  modelProvider={root?.projectionValues?.teamChatParticipants?.[summary.id]?.modelProvider}
-                  activity={activityOf(summary)}
-                  running={summary.running}
-                  pending={summary.pendingInteraction !== undefined}
-                />
-              </button>
-            )
-          })}
-        </span>
-      </aside>
-    </div>
+      <div
+        className={css.root}
+        data-kira-teams
+        data-kira-layout="agent-rail"
+        data-kira-count={cards.length}
+      >
+        <aside className={css.rail} aria-label={t('team.aria')} data-kira-agent-rail-container>
+          <span className={css.railBrand} aria-hidden="true">
+            <span className={css.railBrandMark} />
+          </span>
+          <span className={css.railDivider} aria-hidden="true" />
+          <span className={css.railAgents}>
+            {cards.map((card) => {
+              const summary = card.summary
+              if (summary === undefined) return null
+              const actionKey = activityKeyOf(summary)
+              const selected = String(summary.id) === String(selectedSummaryId)
+              return (
+                <button
+                  key={String(summary.id)}
+                  type="button"
+                  className={`${css.railAgent} ${selected ? css.railAgentSelected : ''}`}
+                  aria-label={`${card.name} · ${t(actionKey)}`}
+                  aria-pressed={selected}
+                  title={`${card.name} · ${t(actionKey)}`}
+                  data-kira-agent-rail
+                  data-agent-kind={card.kind}
+                  data-agent-id={String(summary.id)}
+                  data-agent-activity={actionKey}
+                  onClick={() => { setSelectedId(String(summary.id)); openAgent(card, openChild) }}
+                >
+                  <ModelActivityAvatar
+                    kind={card.kind}
+                    model={root?.projectionValues?.teamChatParticipants?.[summary.id]?.model}
+                    modelProvider={root?.projectionValues?.teamChatParticipants?.[summary.id]?.modelProvider}
+                    activity={activityOf(summary)}
+                    running={summary.running}
+                    pending={summary.pendingInteraction !== undefined}
+                  />
+                </button>
+              )
+            })}
+          </span>
+        </aside>
+      </div>
     </>
   )
 }

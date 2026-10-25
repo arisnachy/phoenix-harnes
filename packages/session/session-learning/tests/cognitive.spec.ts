@@ -40,6 +40,36 @@ async function ledger(): Promise<CognitiveMemoryLedger> {
 }
 
 describe('CognitiveMemoryLedger', () => {
+  it('filters an authorized session set before lexical ranking', async () => {
+    const value = await ledger()
+    await value.remember(input({
+      sessionId: 'session-authorized-a',
+      eventSeq: 1,
+      kind: 'lesson',
+      layers: ['procedural', 'temporal'],
+      content: 'Use the isolated procedure for execution recall.',
+      summary: 'Isolated execution procedure.',
+      sourceEventType: 'memory/explicit',
+    }))
+    const foreign = await value.remember(input({
+      sessionId: 'session-foreign',
+      eventSeq: 2,
+      kind: 'lesson',
+      layers: ['procedural', 'temporal'],
+      content: 'Use the foreign procedure for execution recall.',
+      summary: 'Foreign execution procedure.',
+      sourceEventType: 'memory/explicit',
+    }))
+
+    const hits = value.search({
+      query: 'execution procedure',
+      sessionIds: ['session-authorized-a'],
+      limit: 10,
+    })
+    expect(hits.map(hit => hit.record.sessionId)).toEqual(['session-authorized-a'])
+    expect(hits.map(hit => hit.record.id)).not.toContain(foreign.id)
+  })
+
   it('keeps every canonical event and restores provenance after restart', async () => {
     const first = await ledger()
     const preference = await first.remember(input())

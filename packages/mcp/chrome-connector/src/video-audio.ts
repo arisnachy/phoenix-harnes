@@ -82,22 +82,22 @@ export function videoAudioCaptureExpression(startSeconds: number, durationSecond
  */
 export function parseCapturedVideoAudio(value: unknown): CapturedVideoAudio {
   let parsed: unknown
-  try { parsed = JSON.parse(String(value)) } catch { return {ok:false,reason:'AUDIO_CAPTURE_RESPONSE_INVALID'} }
-  if (!parsed || typeof parsed !== 'object') return {ok:false,reason:'AUDIO_CAPTURE_RESPONSE_INVALID'}
+  try { parsed = JSON.parse(String(value)) } catch { return { ok:false,reason:'AUDIO_CAPTURE_RESPONSE_INVALID' } }
+  if (!parsed || typeof parsed !== 'object') return { ok:false,reason:'AUDIO_CAPTURE_RESPONSE_INVALID' }
   const item = parsed as Record<string, unknown>
-  if (item.ok !== true) return {ok:false,reason:typeof item.reason === 'string' ? item.reason.slice(0,96) : 'AUDIO_CAPTURE_FAILED'}
+  if (item.ok !== true) return { ok:false,reason:typeof item.reason === 'string' ? item.reason.slice(0,96) : 'AUDIO_CAPTURE_FAILED' }
   if (typeof item.base64 !== 'string' || item.base64.length > 2_100_000
     || item.base64.length < 172 || !/^[A-Za-z0-9+/]+={0,2}$/.test(item.base64)
     || typeof item.startSeconds !== 'number' || !Number.isFinite(item.startSeconds)
     || typeof item.durationSeconds !== 'number' || item.durationSeconds < 3 || item.durationSeconds > 9) {
-    return {ok:false,reason:'AUDIO_CAPTURE_RESPONSE_INVALID'}
+    return { ok:false,reason:'AUDIO_CAPTURE_RESPONSE_INVALID' }
   }
   const bytes = Buffer.from(item.base64,'base64')
   if (bytes.length < 128 || bytes.length > MAX_AUDIO_BYTES
     || bytes[0] !== 0x1a || bytes[1] !== 0x45 || bytes[2] !== 0xdf || bytes[3] !== 0xa3) {
-    return {ok:false,reason:'AUDIO_WEBM_INVALID'}
+    return { ok:false,reason:'AUDIO_WEBM_INVALID' }
   }
-  return {ok:true,base64:item.base64,startSeconds:item.startSeconds,durationSeconds:item.durationSeconds}
+  return { ok:true,base64:item.base64,startSeconds:item.startSeconds,durationSeconds:item.durationSeconds }
 }
 
 /**
@@ -111,43 +111,43 @@ export function parseCapturedVideoAudio(value: unknown): CapturedVideoAudio {
  * @returns Recognized timecoded speech segments and detected language.
  */
 export async function transcribeLocalMediaFile(path: string): Promise<AudioTranscript> {
-    const configuredModel=process.env.PHOENIX_VIDEO_WHISPER_MODEL
-    const model=['tiny','base','small'].includes(configuredModel ?? '') ? configuredModel! : 'base'
-    const configuredPython=process.env.PHOENIX_VIDEO_PYTHON?.trim()
-    const program=configuredPython || 'uv'
-    const args=configuredPython
-      ? ['-c',TRANSCRIBE_SCRIPT,path,model]
-      : ['run','--no-project','--with','faster-whisper','python','-c',TRANSCRIBE_SCRIPT,path,model]
-    const output=await new Promise<string>((resolve,reject)=>{
-      let stdout='',settled=false
-      const child=spawn(program,args,{stdio:['ignore','pipe','pipe'],windowsHide:true,shell:false,
-        env:{...process.env,PYTHONIOENCODING:'utf-8'}})
-      const finish=(error?:Error)=>{
-        if(settled)return
-        settled=true;clearTimeout(timer)
-        if(error)reject(error);else resolve(stdout)
-      }
-      const timer=setTimeout(()=>{child.kill();finish(new Error('LOCAL_TRANSCRIPTION_TIMEOUT'))},180_000)
-      child.stdout.setEncoding('utf8')
-      child.stdout.on('data',(chunk:string)=>{
-        stdout+=chunk
-        if(stdout.length>60_000){child.kill();finish(new Error('LOCAL_TRANSCRIPT_TOO_LONG'))}
-      })
-      child.once('error',()=>finish(new Error('LOCAL_TRANSCRIBER_UNAVAILABLE: install uv')))
-      child.once('close',code=>finish(code===0?undefined:new Error('LOCAL_TRANSCRIPTION_FAILED: check uv and model download')))
+  const configuredModel=process.env.PHOENIX_VIDEO_WHISPER_MODEL
+  const model=configuredModel !== undefined && ['tiny','base','small'].includes(configuredModel) ? configuredModel : 'base'
+  const configuredPython=process.env.PHOENIX_VIDEO_PYTHON?.trim()
+  const program=configuredPython || 'uv'
+  const args=configuredPython
+    ? ['-c',TRANSCRIBE_SCRIPT,path,model]
+    : ['run','--no-project','--with','faster-whisper','python','-c',TRANSCRIBE_SCRIPT,path,model]
+  const output=await new Promise<string>((resolve,reject)=>{
+    let stdout='',settled=false
+    const child=spawn(program,args,{ stdio:['ignore','pipe','pipe'],windowsHide:true,shell:false,
+      env:{ ...process.env,PYTHONIOENCODING:'utf-8' } })
+    const finish=(error?:Error)=>{
+      if(settled)return
+      settled=true;clearTimeout(timer)
+      if(error)reject(error);else resolve(stdout)
+    }
+    const timer=setTimeout(()=>{child.kill();finish(new Error('LOCAL_TRANSCRIPTION_TIMEOUT'))},180_000)
+    child.stdout.setEncoding('utf8')
+    child.stdout.on('data',(chunk:string)=>{
+      stdout+=chunk
+      if(stdout.length>60_000){child.kill();finish(new Error('LOCAL_TRANSCRIPT_TOO_LONG'))}
     })
-    const parsed:unknown=JSON.parse(output)
-    if(!parsed||typeof parsed!=='object')throw new Error('LOCAL_TRANSCRIPT_INVALID')
-    const result=parsed as Record<string,unknown>
-    if(!Array.isArray(result.cues))throw new Error('LOCAL_TRANSCRIPT_INVALID')
-    const cues=result.cues.slice(0,150).filter((cue):cue is {start:number;end:number;text:string}=>{
-      if(!cue||typeof cue!=='object')return false
-      const item=cue as Record<string,unknown>
-      return typeof item.start==='number'&&Number.isFinite(item.start)
+    child.once('error',()=>{ finish(new Error('LOCAL_TRANSCRIBER_UNAVAILABLE: install uv')) })
+    child.once('close',(code)=>{ finish(code===0?undefined:new Error('LOCAL_TRANSCRIPTION_FAILED: check uv and model download')) })
+  })
+  const parsed:unknown=JSON.parse(output)
+  if(!parsed||typeof parsed!=='object')throw new Error('LOCAL_TRANSCRIPT_INVALID')
+  const result=parsed as Record<string,unknown>
+  if(!Array.isArray(result.cues))throw new Error('LOCAL_TRANSCRIPT_INVALID')
+  const cues=result.cues.slice(0,150).filter((cue):cue is { start:number;end:number;text:string }=>{
+    if(!cue||typeof cue!=='object')return false
+    const item=cue as Record<string,unknown>
+    return typeof item.start==='number'&&Number.isFinite(item.start)
         &&typeof item.end==='number'&&Number.isFinite(item.end)
         &&typeof item.text==='string'&&item.text.length<=2000
-    })
-    return {...(typeof result.language==='string' ? {language:result.language.slice(0,12)} : {}),cues}
+  })
+  return { ...(typeof result.language==='string' ? { language:result.language.slice(0,12) } : {}),cues }
 }
 
 /** Delete the private audio sample after transcribing it locally.
@@ -159,9 +159,9 @@ export async function transcribeCapturedVideoAudio(capture: CapturedVideoAudio):
   const directory = await mkdtemp(join(tmpdir(), 'phoenix-video-audio-'))
   const path = join(directory,'clip.webm')
   try {
-    await writeFile(path,Buffer.from(capture.base64,'base64'),{mode:0o600})
+    await writeFile(path,Buffer.from(capture.base64,'base64'),{ mode:0o600 })
     return await transcribeLocalMediaFile(path)
   } finally {
-    await rm(directory,{recursive:true,force:true})
+    await rm(directory,{ recursive:true,force:true })
   }
 }

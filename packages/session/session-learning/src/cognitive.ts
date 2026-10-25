@@ -108,6 +108,7 @@ export interface CognitiveMemoryQuery {
   readonly layers?: readonly CognitiveMemoryLayer[]
   readonly projectId?: string
   readonly sessionId?: string
+  readonly sessionIds?: readonly string[]
   readonly entity?: string
   readonly from?: number
   readonly to?: number
@@ -284,12 +285,14 @@ export class CognitiveMemoryLedger {
     const limit = query.limit ?? DEFAULT_LIMIT
     if (!Number.isSafeInteger(limit) || limit < 1) throw new TypeError('cognitive memory search limit must be a positive safe integer')
     const queryTokens = [...tokenize(query.query ?? '')]
+    const sessionIds = query.sessionIds === undefined ? undefined : new Set(query.sessionIds)
     const candidates = [...this.records.values()]
       .filter(record => query.includeHistory === true ? record.status !== 'forgotten' : record.status === 'active')
       .filter(record => query.layers === undefined || query.layers.some(layer => record.layers.includes(layer)))
       .filter(record => query.kind === undefined || record.kind === query.kind)
       .filter(record => query.projectId === undefined || record.projectId === query.projectId)
       .filter(record => query.sessionId === undefined || record.sessionId === query.sessionId)
+      .filter(record => sessionIds === undefined || sessionIds.has(record.sessionId))
       .filter(record => query.from === undefined || record.provenance.occurredAt >= query.from)
       .filter(record => query.to === undefined || record.provenance.occurredAt <= query.to)
       .filter(record => query.entity === undefined || hasEntity(record, query.entity))

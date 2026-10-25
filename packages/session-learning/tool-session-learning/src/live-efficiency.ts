@@ -45,7 +45,7 @@ function failedResult(data: Record<string, unknown>): boolean {
   if (data.error !== undefined) return true
   const message = record(data.message)
   if (message?.isError === true) return true
-  return Array.isArray(message?.content) && message.content.some(part => {
+  return Array.isArray(message?.content) && message.content.some((part) => {
     const item = record(part)
     return item?.isError === true
   })
@@ -68,7 +68,9 @@ function freshState(contextWindow?: number): SessionEfficiency {
 export class LiveEfficiencyMonitor {
   private readonly sessions = new Map<string, SessionEfficiency>()
 
-  /** Start a direct human task; prior task friction must not contaminate it. */
+  /** Start a direct human task; prior task friction must not contaminate it.
+ * @param sessionId - Identifier of the owning conversation.
+ */
   startTask(sessionId: string): void {
     const previous = this.sessions.get(sessionId)
     this.sessions.delete(sessionId)
@@ -79,12 +81,19 @@ export class LiveEfficiencyMonitor {
     }
   }
 
-  /** Drop all task counters after completion or explicit cancellation. */
+  /** Drop all task counters after completion or explicit cancellation.
+ * @param sessionId - Identifier of the owning conversation.
+ */
   clear(sessionId: string): void {
     this.sessions.delete(sessionId)
   }
 
-  /** Fold only known event shapes; missing provider metrics remain unknown. */
+  /** Fold only known event shapes; missing provider metrics remain unknown.
+ * @param sessionId - Identifier of the owning conversation.
+ * @param type - Observed session event type.
+ * @param data - Observed session event payload.
+ * @param occurredAt - Timestamp of the observed event.
+ */
   observe(sessionId: string, type: string, data: unknown, occurredAt?: number): void {
     const state = this.sessions.get(sessionId)
     const payload = record(data)
@@ -185,7 +194,9 @@ export class LiveEfficiencyMonitor {
   /**
    * Supply short, session-local execution advice only when evidence warrants.
    * Never block tools, force a model change, or skip required verification.
-   */
+ * @param sessionId - Identifier of the owning conversation.
+ * @returns The current result of this operation.
+ */
   guidance(sessionId: string): string {
     const state = this.sessions.get(sessionId)
     if (state === undefined) return ''

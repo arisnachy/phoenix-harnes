@@ -121,10 +121,10 @@ function save(name: string, data: string, type: string): void {
   a.href = url
   a.download = name
   a.click()
-  window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+  window.setTimeout(() =>{  URL.revokeObjectURL(url) }, 1000)
 }
 function toGeoJson(layers: readonly GeoLayer[]): object {
-  return { type: 'FeatureCollection', features: layers.flatMap(layer => layer.features.map(feature => {
+  return { type: 'FeatureCollection', features: layers.flatMap(layer => layer.features.map((feature) => {
     const coords = feature.coordinates
     const geometry = layer.kind === 'points' || layer.kind === 'heat'
       ? { type: 'Point', coordinates: coords[0] }
@@ -157,7 +157,7 @@ function initialView(spec: GeoMapSpec, conversationId?: string): View {
     if (!raw) return fallback
     const v: unknown = JSON.parse(raw)
     if (record(v) && coordinate([v.lng, v.lat]) && finite(v.zoom) && v.zoom >= 2 && v.zoom <= 17)
-      return { lng: v.lng as number, lat: v.lat as number, zoom: v.zoom as number }
+      return { lng: v.lng as number, lat: v.lat as number, zoom: v.zoom }
   } catch { /* blocked storage, invalid data: return transcript view */ }
   return fallback
 }
@@ -180,7 +180,7 @@ export function GeoMap({ spec, onAction, conversationId }: { spec: GeoMapSpec; o
       if (entry) setSize({ w: Math.max(280, Math.round(entry.contentRect.width)), h: 430 })
     })
     observer.observe(el)
-    return () => observer.disconnect()
+    return () =>{  observer.disconnect() }
   }, [])
   useEffect(() => {
     const key = localKey(spec, effectiveConversationId)
@@ -218,14 +218,14 @@ export function GeoMap({ spec, onAction, conversationId }: { spec: GeoMapSpec; o
       + JSON.stringify(feature.coordinates[0]) + (feature.value === undefined ? '' : ', valor: ' + feature.value)
       + '). Utiliza esta selección para la próxima consulta.', 'draft')
   }
-  const zoom = (delta: number): void => setView(v => ({ ...v, zoom: Math.max(2, Math.min(17, v.zoom + delta)) }))
+  const zoom = (delta: number): void =>{  setView(v => ({ ...v, zoom: Math.max(2, Math.min(17, v.zoom + delta)) })) }
   const exportSvg = (): void => {
     const w = 960, h = 590, c = toWorld(view.lng, view.lat, view.zoom)
     const point = (pos: Position): Position => {
       const xy = toWorld(pos[0], pos[1], view.zoom)
       return [xy[0] - c[0] + w / 2, xy[1] - c[1] + 100 + (h - 140) / 2]
     }
-    const markup = active.flatMap(layer => layer.features.map(f => {
+    const markup = active.flatMap(layer => layer.features.map((f) => {
       const pts = f.coordinates.map(point)
       const stroke = featureColor(f, layer.kind)
       if (layer.kind === 'points' || layer.kind === 'heat') return '<circle cx="' + pts[0]![0]
@@ -269,47 +269,47 @@ export function GeoMap({ spec, onAction, conversationId }: { spec: GeoMapSpec; o
       </div>
       <div className={css.toolbar} aria-label="Controles cartográficos">
         <div className={css.viewControls} role="group" aria-label="Navegación del mapa">
-          <button type="button" onClick={() => zoom(1)} aria-label="Acercar mapa">+</button>
-          <button type="button" onClick={() => zoom(-1)} aria-label="Alejar mapa">−</button>
-          <button type="button" onClick={() => setView(fitGeoView(active, size))} disabled={empty}>Ver todo</button>
-          <button type="button" onClick={() => setView({ ...p.center, zoom: p.zoom ?? 11 })}>Centrar</button>
+          <button type="button" onClick={() =>{  zoom(1) }} aria-label="Acercar mapa">+</button>
+          <button type="button" onClick={() =>{  zoom(-1) }} aria-label="Alejar mapa">−</button>
+          <button type="button" onClick={() =>{  setView(fitGeoView(active, size)) }} disabled={empty}>Ver todo</button>
+          <button type="button" onClick={() =>{  setView({ ...p.center, zoom: p.zoom ?? 11 }) }}>Centrar</button>
         </div>
         <div className={css.exportControls} role="group" aria-label="Exportar datos e informes">
-        <span className={css.toolbarCaption}>Exportar</span>
-        <button type="button" disabled={empty} onClick={() => save(fileName(p.title,'geojson'), JSON.stringify(toGeoJson(active), null, 2), 'application/geo+json')}>GeoJSON</button>
-        <button type="button" onClick={() => {
-          const lines = [['capa','id','lugar','longitud','latitud','valor','detalle'].map(csvCell).join(',')]
-          active.forEach(l => l.features.forEach(f => {
-            if (l.kind !== 'points' && l.kind !== 'heat') return
-            const coord = f.coordinates[0]
-            if (!coord) return
-            lines.push([l.name,f.id,f.label,String(coord[0]),String(coord[1]),String(f.value ?? ''),f.detail ?? ''].map(csvCell).join(','))
-          }))
-          save(fileName(p.title,'csv'), '\uFEFF' + lines.join('\r\n'), 'text/csv;charset=utf-8')
-        }} disabled={empty}>CSV</button>
-        <button type="button" onClick={exportSvg} disabled={empty} title="Geometrías vectoriales para informes, sin mapa base">SVG</button>
-        <button type="button" disabled={empty} title="Descargar mapa vectorial PDF con fuente y leyenda" onClick={() => {
-          if (active.every(layer => layer.features.length === 0)) return
-          const url = URL.createObjectURL(generateGeoPdf(active,p.title,p.source,p.metric))
-          const anchor = document.createElement('a')
-          anchor.href=url
-          anchor.download=fileName(p.title,'pdf')
-          anchor.click()
-          window.setTimeout(() => URL.revokeObjectURL(url),1000)
-        }}>PDF · Informe</button>
+          <span className={css.toolbarCaption}>Exportar</span>
+          <button type="button" disabled={empty} onClick={() =>{  save(fileName(p.title,'geojson'), JSON.stringify(toGeoJson(active), null, 2), 'application/geo+json') }}>GeoJSON</button>
+          <button type="button" onClick={() => {
+            const lines = [['capa','id','lugar','longitud','latitud','valor','detalle'].map(csvCell).join(',')]
+            active.forEach((l) =>{  l.features.forEach((f) => {
+              if (l.kind !== 'points' && l.kind !== 'heat') return
+              const coord = f.coordinates[0]
+              if (!coord) return
+              lines.push([l.name,f.id,f.label,String(coord[0]),String(coord[1]),String(f.value ?? ''),f.detail ?? ''].map(csvCell).join(','))
+            }) })
+            save(fileName(p.title,'csv'), '\uFEFF' + lines.join('\r\n'), 'text/csv;charset=utf-8')
+          }} disabled={empty}>CSV</button>
+          <button type="button" onClick={exportSvg} disabled={empty} title="Geometrías vectoriales para informes, sin mapa base">SVG</button>
+          <button type="button" disabled={empty} title="Descargar mapa vectorial PDF con fuente y leyenda" onClick={() => {
+            if (active.every(layer => layer.features.length === 0)) return
+            const url = URL.createObjectURL(generateGeoPdf(active,p.title,p.source,p.metric))
+            const anchor = document.createElement('a')
+            anchor.href=url
+            anchor.download=fileName(p.title,'pdf')
+            anchor.click()
+            window.setTimeout(() =>{  URL.revokeObjectURL(url) },1000)
+          }}>PDF · Informe</button>
         </div>
         <div className={css.modeControls} role="group" aria-label="Modo de visualización">
-          <button type="button" onClick={() => setShow3D(v => !v)} aria-pressed={show3D}>{show3D ? 'Volver a 2D' : 'Vista 3D'}</button>
+          <button type="button" onClick={() =>{  setShow3D(v => !v) }} aria-pressed={show3D}>{show3D ? 'Volver a 2D' : 'Vista 3D'}</button>
         </div>
       </div>
       {show3D && <Geo3DView layers={active} onSelect={select} />}
-      <div className={css.map} ref={frame} style={show3D ? { display: "none" } : undefined} role="region" aria-label={'Mapa interactivo: ' + p.title}
-        onPointerDown={e => {
+      <div className={css.map} ref={frame} style={show3D ? { display: 'none' } : undefined} role="region" aria-label={'Mapa interactivo: ' + p.title}
+        onPointerDown={(e) => {
           if (e.button !== 0 || (e.target as HTMLElement).closest('button')) return
           drag.current = { x: e.clientX, y: e.clientY, view }
           e.currentTarget.setPointerCapture(e.pointerId)
         }}
-        onPointerMove={e => {
+        onPointerMove={(e) => {
           if (!drag.current) return
           const first = drag.current
           const origin = toWorld(first.view.lng, first.view.lat, first.view.zoom)
@@ -322,10 +322,10 @@ export function GeoMap({ spec, onAction, conversationId }: { spec: GeoMapSpec; o
           <span className={css.mapHudText}>{p.metric ?? 'Mapa temático'} · Nivel {view.zoom.toFixed(0)}</span></div>
         {tiles.map(tile => <img key={tile.key} className={css.tile} src={tile.src} alt="" draggable={false}
           loading="lazy" style={{ left: tile.x, top: tile.y }}
-          onError={() => setTileFailures(old => old.includes(tile.key) ? old : [...old, tile.key].slice(-64))} />)}
+          onError={() =>{  setTileFailures(old => old.includes(tile.key) ? old : [...old, tile.key].slice(-64)) }} />)}
         {offline && <div className={css.tileWarning} role="status">Mapa base no disponible. Las ubicaciones y capas vectoriales siguen visibles.</div>}
         <svg className={css.overlay} width={size.w} height={size.h} viewBox={'0 0 ' + size.w + ' ' + size.h} aria-hidden="true">
-          {active.flatMap(layer => layer.features.map(f => {
+          {active.flatMap(layer => layer.features.map((f) => {
             if (layer.kind === 'points' || layer.kind === 'heat') return null
             const points = f.coordinates.map(project)
             const d = points.map((pt,i) => (i === 0 ? 'M' : 'L') + pt[0] + ' ' + pt[1]).join(' ')
@@ -335,7 +335,7 @@ export function GeoMap({ spec, onAction, conversationId }: { spec: GeoMapSpec; o
               strokeLinejoin="round" />
           }))}
         </svg>
-        {active.flatMap(layer => layer.features.flatMap(f => {
+        {active.flatMap(layer => layer.features.flatMap((f) => {
           const pos = f.coordinates[0]
           if (!pos) return []
           const pt = project(pos)
@@ -344,7 +344,7 @@ export function GeoMap({ spec, onAction, conversationId }: { spec: GeoMapSpec; o
             style={{ left: pt[0], top: pt[1], backgroundColor: featureColor(f,layer.kind) }}
             type="button" title={f.label} aria-label={'Seleccionar ' + f.label}
             aria-pressed={selected?.layer.id === layer.id && selected.feature.id === f.id}
-            onClick={() => select(layer,f)} />]
+            onClick={() =>{  select(layer,f) }} />]
         }))}
         <span className={css.attribution}>© OpenStreetMap contributors</span>
       </div>
@@ -360,15 +360,15 @@ export function GeoMap({ spec, onAction, conversationId }: { spec: GeoMapSpec; o
         <div className={css.layers} aria-label="Capas del mapa">
           <span className={css.layersTitle}>Capas</span>
           {p.layers.map(l => <label key={l.id}><input type="checkbox" checked={visible.includes(l.id)}
-            onChange={e => setVisible(old => e.target.checked ? [...old, l.id] : old.filter(id => id !== l.id))} />
-            <span>{l.name}</span><small>{l.features.length}</small></label>)}
+            onChange={(e) =>{  setVisible(old => e.target.checked ? [...old, l.id] : old.filter(id => id !== l.id)) }} />
+          <span>{l.name}</span><small>{l.features.length}</small></label>)}
         </div>
         {selected && <div className={css.selection}>
           <strong>{selected.feature.label}</strong>
           {selected.feature.value !== undefined && <span>{p.metric ?? 'Valor'}: {selected.feature.value.toLocaleString('es-DO')}</span>}
           {selected.feature.detail && <span>{selected.feature.detail}</span>}
           <small>{selected.layer.name} · {selected.feature.coordinates[0]?.join(', ')}</small>
-          {onAction && <button type="button" onClick={() => select(selected.layer,selected.feature)}>Consultar a Kira</button>}
+          {onAction && <button type="button" onClick={() =>{  select(selected.layer,selected.feature) }}>Consultar a Kira</button>}
         </div>}
       </div>
       <footer className={css.footer}>

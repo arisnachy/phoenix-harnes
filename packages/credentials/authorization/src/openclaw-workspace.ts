@@ -68,7 +68,7 @@ function defaultRun(command: string, args: readonly string[], options: CliRunOpt
         env: { ...process.env, ...(options.env ?? {}) },
       })
     } catch (error) {
-      reject(error)
+      reject(error instanceof Error ? error : new Error('OpenClaw process spawn failed', { cause: error }))
       return
     }
 
@@ -76,7 +76,7 @@ function defaultRun(command: string, args: readonly string[], options: CliRunOpt
       if (settled) return
       settled = true
       options.signal?.removeEventListener('abort', onAbort)
-      reject(error)
+      reject(error instanceof Error ? error : new Error('OpenClaw command failed', { cause: error }))
     }
     const onAbort = (): void => {
       child.kill()
@@ -88,12 +88,12 @@ function defaultRun(command: string, args: readonly string[], options: CliRunOpt
     }
     options.signal?.addEventListener('abort', onAbort, { once: true })
 
-    child.stdout?.on('data', (chunk: unknown) => {
+    child.stdout.on('data', (chunk: unknown) => {
       const text = String(chunk)
       stdout = appendBounded(stdout, text)
       options.onOutput?.(text)
     })
-    child.stderr?.on('data', (chunk: unknown) => {
+    child.stderr.on('data', (chunk: unknown) => {
       const text = String(chunk)
       stderr = appendBounded(stderr, text)
       options.onOutput?.(text)
@@ -130,9 +130,9 @@ function parseJson(text: string, label: string): unknown {
 }
 
 function missingExecutable(error: unknown): boolean {
-  const value = error as { code?: unknown; cause?: { code?: unknown } }
-  return value?.code === 'ENOENT'
-    || value?.cause?.code === 'ENOENT'
+  const value = (typeof error === 'object' && error !== null ? error : {}) as { code?: unknown; cause?: { code?: unknown } }
+  return value.code === 'ENOENT'
+    || value.cause?.code === 'ENOENT'
     || String(error).toLowerCase().includes('enoent')
     || String(error).toLowerCase().includes('not recognized as an internal or external command')
 }
@@ -449,7 +449,7 @@ export async function requestGoogleWithOpenClaw(
     const end = record(body?.end)
     if (typeof body?.summary === 'string' && typeof start?.dateTime === 'string' && typeof end?.dateTime === 'string') {
       const attendees = Array.isArray(body.attendees)
-        ? body.attendees.flatMap(candidate => {
+        ? body.attendees.flatMap((candidate) => {
           const item = record(candidate)
           return typeof item?.email === 'string' ? [item.email] : []
         })

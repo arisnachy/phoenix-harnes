@@ -24,6 +24,8 @@
 .actions .primary { background: var(--dsw-alias-interactive-bg-hover-solid); font-weight: 600; }
 .saved { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px; padding: 6px; border-bottom: 1px solid var(--dsw-alias-border-l2); font-size: 12px; }
 .error { color: var(--dsw-alias-state-error-primary); font-size: 12px; }
+.runtime { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; padding-top: 10px; border-top: 1px solid var(--dsw-alias-border-l2); }
+.runtime h4 { margin: 0; font-size: 14px; font-weight: 600; }
 @media (max-width: 620px) {
   .roles { grid-template-columns: 1fr; }
 }

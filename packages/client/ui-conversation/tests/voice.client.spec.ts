@@ -74,10 +74,10 @@ describe('browser voice adapter', () => {
     expect(hasApprovedVoiceFallback({
       getItem: () => { throw new Error('Storage blocked') },
     })).toBe(false)
-    expect(() => setApprovedVoiceFallback(true, {
+    expect(() =>{  setApprovedVoiceFallback(true, {
       setItem: () => { throw new Error('Storage blocked') },
       removeItem: () => {},
-    })).not.toThrow()
+    }) }).not.toThrow()
   })
 
   it('reports unsupported browsers without constructing a recognizer', () => {
@@ -709,7 +709,7 @@ describe('browser voice adapter', () => {
         expect(realtimeSpeak).toHaveBeenCalledTimes(beforeAdmission + 1)
         if (outcome === 'failed') rejectAdmission(new Error('fixture admission failed'))
         else resolveAdmission({ ok: true, value: { accepted: outcome === 'accepted', ...(outcome === 'rejected' ? { reason: 'disabled' } : {}) } })
-        await vi.waitFor(() => expect(document.documentElement.dataset.phoenixVoiceSpeechStatus).toBe(outcome))
+        await vi.waitFor(() =>{  expect(document.documentElement.dataset.phoenixVoiceSpeechStatus).toBe(outcome) })
         expect(audio?.muted).toBe(outcome !== 'accepted')
         expect(microphoneTrack.enabled).toBe(true)
         expect(document.documentElement.dataset.phoenixVoiceAudioMuteReason).toBe(

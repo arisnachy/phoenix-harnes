@@ -15,7 +15,12 @@ import type { ModelsSectionInjected } from './ModelsSection.tsx'
 import { ModelsWithLocalSection } from './ModelsWithLocalSection.tsx'
 import type { ModelsWithLocalSectionInjected } from './ModelsWithLocalSection.tsx'
 import { EclipseRoutingPanel } from './EclipseRoutingPanel.tsx'
-import type { EclipseCatalogChoice } from './EclipseRoutingPanel.tsx'
+import type {
+  EclipseCatalogChoice,
+  EclipseEngineStatus,
+  EclipseEnginePrepareReceipt,
+  EclipseEngineRuntimeSnapshot,
+} from './EclipseRoutingPanel.tsx'
 import type {
   PhoenixLocalModelClient,
   PhoenixLocalModelMode,
@@ -221,6 +226,11 @@ type PluginInventoryLocalRemote = {
   setDefaultLocalModel(request: { modelId: string }): Promise<PluginInventoryRemoteResult<PhoenixLocalModelSnapshot>>
 }
 
+type PluginInventoryEngineRuntimeRemote = {
+  engineRuntimeState(): Promise<PluginInventoryRemoteResult<EclipseEngineRuntimeSnapshot>>
+  prepareEngineRuntime(request: { version: string }): Promise<PluginInventoryRemoteResult<EclipseEnginePrepareReceipt>>
+}
+
 function unwrapPluginInventory<T>(operation: string, result: PluginInventoryRemoteResult<T>): T {
   if (result.ok) return result.value
   throw new Error(`pluginInventory.${operation} failed: ${result.error.code}: ${result.error.message}`)
@@ -391,11 +401,34 @@ export function apply(ctx: ClientContext): void {
     localModel,
     localT,
   })
+  const loadExecutionEngines = async () => {
+    const remote = ctx.get('remote.agentTeams') as {
+      executionEngines: () => Promise<PluginInventoryRemoteResult<readonly EclipseEngineStatus[]>>
+    } | undefined
+    if (remote === undefined) throw new Error('Execution engine status is unavailable on this Host')
+    const result = await remote.executionEngines()
+    if (!result.ok) throw new Error('Execution engine status is unavailable on this Host')
+    return result.value
+  }
+  const engineRuntime = (): PluginInventoryEngineRuntimeRemote | undefined =>
+    ctx.get('remote.pluginInventory') as PluginInventoryEngineRuntimeRemote | undefined
+  const loadEngineRuntime = async (): Promise<EclipseEngineRuntimeSnapshot> => {
+    const remote = engineRuntime()
+    if (remote === undefined) throw new Error('Unified runtime inspection is unavailable on this Host')
+    return unwrapPluginInventory('engineRuntimeState', await remote.engineRuntimeState())
+  }
+  const prepareOpenClaw = async (version: string): Promise<EclipseEnginePrepareReceipt> => {
+    const remote = engineRuntime()
+    if (remote === undefined) throw new Error('Unified runtime preparation is unavailable on this Host')
+    return unwrapPluginInventory('prepareEngineRuntime', await remote.prepareEngineRuntime({ version }))
+  }
   const eclipseInjected = () => ({
     controller,
     api: connection.api,
     t,
     loadCatalog: loadEclipseCatalog,
+    loadEngines: loadExecutionEngines,
+    ...(engineRuntime() === undefined ? {} : { loadRuntime: loadEngineRuntime, prepareOpenClaw }),
   })
   const assistantMailRecord = (value: unknown): value is Record<string, unknown> =>
     typeof value === 'object' && value !== null && !Array.isArray(value)

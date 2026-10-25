@@ -40,7 +40,10 @@ describe('universal native diagrams / genograms', () => {
     expect(parseDiagramSpec({ ...spec, props: { ...spec.props, script: 'alert(1)' } })).toBeNull()
     expect(parseDiagramSpec({ ...spec, props: { ...spec.props, nodes: [...spec.props.nodes, spec.props.nodes[0]] } })).toBeNull()
     expect(parseDiagramSpec({ ...spec, props: { ...spec.props, edges: [{ from: 'p1', to: 'unknown' }] } })).toBeNull()
-    expect(parseDiagramSpec({ ...spec, props: { ...spec.props, nodes: [{ ...spec.props.nodes[0], x: Infinity }, ...spec.props.nodes.slice(1)] } })).toBeNull()
+    expect(parseDiagramSpec({
+      ...spec,
+      props: { ...spec.props, nodes: [{ ...spec.props.nodes[0], x: Infinity }, ...spec.props.nodes.slice(1)] },
+    })).toBeNull()
     expect(parseDiagramSpec({ ...spec, props: { ...spec.props, edges: [{ from: 'p1', to: 'p2', via: [{ x: -1, y: 20 }] }] } })).toBeNull()
   })
 

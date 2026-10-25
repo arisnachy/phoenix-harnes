@@ -4,6 +4,14 @@ English | [中文](README.zh.md)
 
 Implicit-root Agent Teams domain. `ctx.agentTeams` owns a flat Lead/teammate roster, a durable peer mailbox, and a shared task DAG in the Lead Session log. The [Agent Teams Agent Note](../../../.agents/notes/implemented/feature/2026-08-05-agent-teams.md) owns the coordination and isolation decisions; the [Team subsystem catalog](../../../docs/subsystems/agent-team.md) records the literal durable shapes and service API.
 
+## Execution engines
+
+Trusted Host lifecycle code can use `executions.withMaintenance(assertIdle, operation)` to fence execution and recovery admission before checking idleness. The callback must also check legacy agents and persisted native work; this runtime alone cannot certify global idleness. Failed checks and updates release the fence. This API does not itself expose updater controls.
+
+`ctx.agentTeams.executions` reserves each operation in the existing Lead Session and flushes its receipt before native dispatch. Codex, OpenClaw and the internal adapter share capability routing and immutable provider/model selection. An idempotency key belongs to one mission and task; an uncertain native outcome blocks mission closure and must be reconciled with the same native binding, never silently dispatched again. A missing engine leaves its saved operation recoverable. User cancellation fences late results; Host disposal records uncertainty until recovery. The optional `maxExecutionContextBytes` budget bounds selective procedural recall from the existing learning service, with provenance recorded before dispatch. Recall is reference material, not instructions.
+
+The integration requires assembled and live engine verification before release; protocol fixture tests alone do not certify native runtime compatibility.
+
 ## Main chat
 
 The service publishes actual direct-child text in the root transcript, excluding inherited history, replacement output, reasoning and tool blocks. `teamChatParticipants` retains mission-owned names, portraits and operational states after completion. Capture and Unicode reaction set/remove mutations never wake a model. Reaction projection version 2 replays historical semantic Team reactions into the canonical emoji stream when restoring version 1 checkpoints, preserving the Lead or teammate reactor identity. Genuine non-completion work updates and blockers can appear before tool receipts, but operational completion claims retain their receipt gate. Each worker starts a real action in the first step; a separate `send_message` acknowledgement is unnecessary. Material findings and result/blocker handoffs remain durable peer messages. `team_chat_reply_to_peer` stores one actual Kira-authored answer to an already delivered peer result/question/review/blocker, preserving reply-to identity and the named specialist recipient without waking a finished worker. Follow-up work still uses `send_message` or `followup_task`. Pure Team reporting no longer needs a fabricated external tool receipt; genuine external action claims retain their real tool-evidence requirement. A received material handoff is model-visible at the next safe Lead step without interrupting its active call as though a human stopped it. Kira acknowledges the actual teammate by name in the same final response, without a ceremonial extra turn. New workers receive this start guidance directly with the actual assignment; emoji acknowledgement is optional.
@@ -93,6 +101,9 @@ Genuine messages add one peer result to the receiving agent; no fabricated shell
 Result handoffs append to the existing conversation rather than rewriting system-prompt prefixes.
 
 ## Known Limitations and Deferred Work
+
+A stop request after external dispatch persists `uncertain` with `EXECUTION_CANCELLATION_UNCONFIRMED`; a local abort signal cannot certify native termination. The native binding remains durable and mission closure stays blocked until recovery establishes a terminal outcome. Before dispatch, cancellation can close the reservation without native task effects.
+
 
 - **One process and one shared checkout** — members share cwd and observe edits immediately; this package provides no worktree, remote member, merge, or filesystem lock.
 - **Advisory write scopes** — Bash, formatters, code generators, and direct external writers can bypass filesystem version checks; Leads must coordinate ownership and review the final diff.

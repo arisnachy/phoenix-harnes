@@ -147,9 +147,11 @@ describe('CI workflow', () => {
     expect(aggregate.needs).toContain('windows-native')
     expect(aggregate.needs).not.toContain('serial-windows')
 
-    // Required Linux workers and the aggregate stay on standard hosted pools.
-    for (const [jobName, job] of [['node-24', node24], ['node-24-coverage', node24Coverage], ['node-24-consumers', node24Consumers]] as const) {
-      expect(job['runs-on'], `${jobName} must use a portable hosted pool`).toBe('ubuntu-latest')
+    // Ubuntu 24.04 remains a GitHub-hosted pool. The coverage and consumer
+    // lanes depend on the signed Ubuntu 24.04 bubblewrap package metadata.
+    expect(node24['runs-on']).toBe('ubuntu-latest')
+    for (const [jobName, job] of [['node-24-coverage', node24Coverage], ['node-24-consumers', node24Consumers]] as const) {
+      expect(job['runs-on'], `${jobName} must use the verified LTS image`).toBe('ubuntu-24.04')
     }
     expect(aggregate['runs-on']).toBe('ubuntu-latest')
   })

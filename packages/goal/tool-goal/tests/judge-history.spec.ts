@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { Session, SessionId } from '@phoenix-ai/dsh-session'
+import { buildVerificationContract } from '../src/verification-contract.ts'
 import { judgeGoalCompletion, recordGoalJudge } from '../src/judge.ts'
 
 function provider() {
@@ -19,13 +20,18 @@ const passingGateExecution = {
     artifact_integrity: 'pass',
     clean_room: 'pass',
   },
-  evidence_ledger: [{
-    criterion_id: 'REQ-001',
-    criterion: 'Keep the harness recoverable while satisfying the original request.',
+  evidence_ledger: buildVerificationContract('Make restart and configuration changes self-recovering').criteria.map(item => ({
+    criterion_id: item.id,
+    criterion: item.criterion,
     mandatory: true,
     status: 'verified',
     evidence: ['clean-room verification'],
+  })),
+  builder_test_audit: [{
+    test: 'restart regression suite', expected_source: 'specification', circular: false,
+    evidence: ['expected values traced to the original requirement'],
   }],
+  completion_report: { unverified_items: [], known_limitations: [] },
   artifact_fingerprint: 'sha256:judge-history-artifact',
   clean_room_evidence: 'verified extracted artifact in a clean temporary directory',
   findings: [],

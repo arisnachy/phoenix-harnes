@@ -17,6 +17,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { SlotTestRuntime, usePinnedBrowserLanguages, stubSettingsScope } from '@phoenix-ai/dsh-client-test-runtime'
 import type { SessionBehaviorOverrides } from '@phoenix-ai/dsh-client-test-runtime'
+import { refreshVoiceAssistantRemote } from '../src/client/voice.ts'
 import { LocaleRuntime } from '@phoenix-ai/dsh-client-locale/client'
 import type { ISession, SessionId } from '@phoenix-ai/dsh-client-runtime/client'
 import { apply, inject } from '@phoenix-ai/dsh-client-ui-conversation/client'
@@ -57,7 +58,7 @@ async function bench() {
     summary: { title: 'R', displayTitle: 'R', cwd: '/proj' },
     session: sessionFake,
   })
-  const layoutFake = { openDetails: vi.fn(), closeDetails: vi.fn() }
+  const layoutFake = { openDetails: vi.fn(), closeDetails: vi.fn(), setSidebarFocus: vi.fn() }
   runtime.provide('layout', layoutFake)
   const locale = new LocaleRuntime(runtime.ctx)
   runtime.provide('locale', locale)
@@ -129,6 +130,28 @@ async function bench() {
 }
 
 describe('conversation slot inject API', () => {
+  it('keeps text usable without voice and binds a late voice provider until unload', async () => {
+    const b = await bench()
+    expect(b.conversationApi(ROOT).injected.views.list().map(view => view.id)).toContain('chat')
+    await expect(refreshVoiceAssistantRemote()).resolves.toBe(false)
+    const status = vi.fn(async () => ({
+      ok: true as const, value: { enabled: true, provider: 'openai-codex' as const },
+    }))
+    const provider = b.runtime.ctx.plugin((ctx) => {
+      ctx.provide('remote.voice', {
+        conversationStatus: status,
+        conversationSpeak: async () => ({ ok: true, value: { accepted: true } }),
+        conversationCancel: async () => ({ ok: true, value: { cancelled: 0 } }),
+      } as never)
+    })
+    await provider.await()
+    await vi.waitFor(() => { expect(status).toHaveBeenCalled() })
+    await expect(refreshVoiceAssistantRemote()).resolves.toBe(true)
+    await provider.dispose()
+    await expect(refreshVoiceAssistantRemote()).resolves.toBe(false)
+    await b.runtime.dispose()
+  })
+
   it('assembles the thin API side-effect-free', async () => {
     const b = await bench()
     const { injected } = b.conversationApi(ROOT)
@@ -165,7 +188,9 @@ describe('conversation slot inject API', () => {
     await vi.waitFor(() => {
       expect(state.getSnapshot().draft).toBe('')
     })
-    expect(b.sessionFake.prompt).toHaveBeenCalledWith([{ type: 'text', text: 'hello' }], 'queue', expect.any(AbortSignal))
+    await vi.waitFor(() => {
+      expect(b.sessionFake.prompt).toHaveBeenCalledWith([{ type: 'text', text: 'hello' }], 'queue', expect.any(AbortSignal))
+    })
     // Failure: the draft is retained through the round-trip.
     b.sessionFake.prompt.mockResolvedValueOnce({ ok: false, error: { code: 'agent-busy', message: 'b', details: { reason: 'b' } } })
     actions.setDraft('retry me')

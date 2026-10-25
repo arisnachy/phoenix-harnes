@@ -559,9 +559,9 @@ describe('Codex Live on-demand updater', () => {
     mkdirSync(join(newerBin, '..'), { recursive: true })
     writeFileSync(firstBin, '')
     writeFileSync(newerBin, '')
-    const select = (version: string) => writeFileSync(marker, JSON.stringify({
+    const select = (version: string) =>{  writeFileSync(marker, JSON.stringify({
       schema: 1, version, bin: 'versions/' + version + '/codex.js',
-    }))
+    })) }
     const bridge = new CodexRealtimeBridge()
     const internal = bridge as unknown as {
       child?: { killed: boolean }

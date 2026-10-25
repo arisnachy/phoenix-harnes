@@ -21,3 +21,7 @@ Status: implemented
 ## Consequences
 
 Kira 不再依赖用户指挥内部步骤来加载游戏制作技能。不过，完整制作、测试和发布依然需要真实运行时能力，自动激活本身不是完成证明。
+
+## Alternatives considered
+
+要求用户明确指定并调用 Game Studio 技能。此方案暴露内部实施步骤，也使普通自然语言请求无法直接激活已安装且获授权的技能，因此未采用。

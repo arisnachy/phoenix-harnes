@@ -110,7 +110,11 @@ export function planBusinessMission(
   const text = normalize(request)
   const category = CATEGORY_PATTERNS.find(([, re]) => re.test(text))?.[0] ?? 'unspecified'
   const detectedActions = ACTION_PATTERNS.filter(([, re]) => re.test(text)).map(([name]) => name)
-  const publishingProhibited = /\b(?:no|nunca|sin|do not|don't|never|without)\s+(?:lo\s+|la\s+)?(?:publicar|publiques|publica(?:r)?|publish|upload|submit|lanzar)\b/u.test(text)
+  const publishingProhibited = new RegExp(
+    String.raw`\b(?:no|nunca|sin|do not|don't|never|without)\s+(?:lo\s+|la\s+)?`
+    + String.raw`(?:publicar|publiques|publica(?:r)?|publish|upload|submit|lanzar)\b`,
+    'u',
+  ).test(text)
   const actions = detectedActions.filter(action => !(action === 'publish' && publishingProhibited))
   if (actions.length === 0) actions.push('opportunity')
   const channel = CHANNEL_PATTERNS.find(([, re]) => re.test(text))?.[0] ?? null
@@ -119,8 +123,11 @@ export function planBusinessMission(
   const blockers: string[] = []
   if (runtime !== undefined && !Array.isArray(runtime)) throw new TypeError('Inventario MCP inválido.')
   if ((runtime?.length ?? 0) > MAX_CONNECTORS) throw new TypeError('Inventario MCP excesivamente grande.')
-  for (const entry of runtime ?? []) {
-    if (!entry || typeof entry.serverName !== 'string' || !SAFE_SERVER.test(entry.serverName) ||
+  const inventory: readonly RuntimeConnector[] = runtime ?? []
+  for (const candidate of inventory as readonly unknown[]) {
+    if (typeof candidate !== 'object' || candidate === null) continue
+    const entry = candidate as RuntimeConnector
+    if (typeof entry.serverName !== 'string' || !SAFE_SERVER.test(entry.serverName) ||
       !['ready','starting','disconnected','failed','auth-required'].includes(entry.status) ||
       !Array.isArray(entry.toolNames) || entry.toolNames.length > 400) continue
     const server = entry.serverName.toLowerCase()

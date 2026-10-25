@@ -741,6 +741,17 @@ describe('Team identity and provisioning', () => {
     await orphanRoot.dispose()
   })
 
+  it('does not grant a provider child Lead membership before its descriptor is appended', async () => {
+    const { ctx, lead } = await setup([])
+    const child = await ctx.agents.create({
+      sessionId: SessionId('published-provider-child'),
+      meta: { parentSession: lead.id, origin: 'subagent' },
+      agentOptions: { provider: 'mock', model: 'mock' },
+    })
+    expect(ctx.agentTeams.tryMembership(child.agent)).toBeUndefined()
+    await child.dispose()
+  })
+
   it('does not reinterpret an orphaned provider child or malformed parent stream as a Team root', async () => {
     const first = await setup([textResponse('ordinary child done')])
     const parent = await first.ctx.agents.create({
@@ -1438,10 +1449,10 @@ describe('Team mailbox and waiting', () => {
       .toContain('Respond to argo by name')
     expect(input.content.filter(block => block.type === 'text').map(block => block.text).join('\n'))
       .toContain('Check the actual proof')
-    await vi.waitFor(() => expect(adapter.requests.length).toBeGreaterThanOrEqual(2))
-    await vi.waitFor(() => expect(lead.session.events.some(event => event.type === 'assistant/message'
+    await vi.waitFor(() => { expect(adapter.requests.length).toBeGreaterThanOrEqual(2) })
+    await vi.waitFor(() => { expect(lead.session.events.some(event => event.type === 'assistant/message'
       && event.data.message.content.some(block => block.type === 'text'
-        && block.text === 'Argo, revisaré la alternativa y te diré cómo seguimos.'))).toBe(true))
+        && block.text === 'Argo, revisaré la alternativa y te diré cómo seguimos.'))).toBe(true) })
     await expect(ctx.agentTeams.sendMessage(worker, {
       target: 'lead', purpose: 'update', content: content('Sigo buscando.'), delivery: 'quiet', signal: SIGNAL,
     })).rejects.toMatchObject({ code: 'TEAM_NOT_MEMBER' })
@@ -1635,8 +1646,8 @@ describe('Team mailbox and waiting', () => {
     })).rejects.toMatchObject({ code: 'TEAM_SELF_REACTION' })
 
     const live = await waitRunning(ctx, worker.member.id)
-    await vi.waitFor(() => expect(live.session.events.some(event => event.type === 'assistant/message'
-      && event.data.usage?.inputTokens === 10)).toBe(true))
+    await vi.waitFor(() => { expect(live.session.events.some(event => event.type === 'assistant/message'
+      && event.data.usage?.inputTokens === 10)).toBe(true) })
     const listed = ctx.agentTeams.listMembers(lead).find(item => item.name === 'usage-worker')
     expect(listed?.status).toBe('running')
     expect(listed?.usage).toMatchObject({ inputTokens: 10, outputTokens: 'first turn'.length })

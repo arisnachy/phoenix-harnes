@@ -74,7 +74,7 @@ describe('Phoenix Game Studio publisher', () => {
     const source = runnable.replace(/<script id="phoenix-game-manifest" type="application\/json">[\s\S]*?<\/script>/u, '')
     const args = { title: 'Luz de selva', html: source, manifest_json: manifest }
     const receipt = await tool.execute(args, execution()) as { artifactId: string; title: string; preflight: string }
-    const output = tool.output.presentationMeta?.(args, receipt as never) as { artifact?: { data?: string } } | undefined
+    const output = tool.output.presentationMeta?.(args, receipt) as { artifact?: { data?: string } } | undefined
     expect(receipt.preflight).toBe('packaging-only')
     expect(output?.artifact?.data).toContain('id="phoenix-game-manifest" type="application/json"')
     expect(output?.artifact?.data).toContain('canvas.getContext')
@@ -104,7 +104,7 @@ describe('Phoenix Game Studio publisher', () => {
       expect(receipt.html).toBe(runnable)
       // A modified file AFTER the accepted call cannot alter the published artifact.
       writeFileSync(join(folder, filename), '<html>changed after publication</html>')
-      const presented = tool.output.presentationMeta?.(args, receipt as never) as {
+      const presented = tool.output.presentationMeta?.(args, receipt) as {
         artifact?: {
           data?: string
           mime?: string
@@ -130,7 +130,7 @@ describe('Phoenix Game Studio publisher', () => {
     }
     expect(receipt.preflight).toBe('prototype-only')
     expect(receipt.html).toBe(readFileSync(resolve(path), 'utf8'))
-    const output = tool.output.presentationMeta?.(args, receipt as never) as {
+    const output = tool.output.presentationMeta?.(args, receipt) as {
       artifact?: {
         mime?: string
         data?: string
@@ -157,7 +157,7 @@ describe('Phoenix Game Studio publisher', () => {
       const run = (file_path: string): Promise<unknown> =>
         tool.execute({ title: 'Check', file_path }, exec)
       await expect(run(join(outside, 'secret.html'))).rejects.toThrow('dentro del espacio de trabajo')
-      await expect(run('../' + outside.split(/[\\/]/u).at(-1) + '/secret.html')).rejects.toThrow('dentro del espacio de trabajo')
+      await expect(run('../' + (outside.split(/[\\/]/u).at(-1) ?? '') + '/secret.html')).rejects.toThrow('dentro del espacio de trabajo')
       await expect(run('https://example.org/demo.html')).rejects.toThrow('local')
       await expect(run('missing.html')).rejects.toThrow('no existe')
       await expect(run('oversize.html')).rejects.toThrow('16 MiB')

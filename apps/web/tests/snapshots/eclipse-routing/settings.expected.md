@@ -1,6 +1,6 @@
 - region "Fénix Eclipse · Orchestration":
   - heading "Fénix Eclipse · Orchestration" [level=2]
-  - paragraph: Choose independent planning, coordination and teammate models. Kira consults her planner as often as fresh task evidence requires.
+  - paragraph: Choose the model and reasoning effort for Kira coordination and for subagents. Strategic consultations adapt to the task.
   - status: 2 OpenAI Codex models available
   - button "Refresh models"
   - text: Routing mode
@@ -8,8 +8,8 @@
     - option "Automatic"
     - option "Hybrid"
     - option "Manual" [selected]
-  - text: Planning / strategy model
-  - combobox "Planning / strategy model":
+  - text: Execution / coordinator model
+  - combobox "Execution / coordinator model":
     - option "Automatic"
     - option "gpt-6.1-sol" [selected]
     - option "gpt-6-luna"
@@ -22,19 +22,6 @@
     - option "xhigh"
     - option "max"
     - option "ultra"
-  - text: Execution / coordinator model
-  - combobox "Execution / coordinator model":
-    - option "Automatic"
-    - option "gpt-6.1-sol"
-    - option "gpt-6-luna" [selected]
-  - text: Reasoning effort
-  - combobox "Reasoning effort":
-    - option "Provider default"
-    - option "low"
-    - option "medium"
-    - option "high"
-    - option "xhigh"
-    - option "max" [selected]
   - text: Subagent model
   - combobox "Subagent model":
     - option "Automatic"
@@ -60,6 +47,31 @@
     - option "1"
     - option "2" [selected]
     - option "3"
+  - heading "Execution engines" [level=3]
+  - paragraph: Automatic routing selects one compatible engine for each task. Model preferences remain independent.
+  - text: Preferred execution engine
+  - combobox "Preferred execution engine":
+    - option "Automatic"
+    - option "Codex"
+    - option "OpenClaw"
+    - option "Phoenix internal engine" [selected]
+  - list:
+    - listitem: Codex · Unavailable or not configured
+    - listitem: OpenClaw · Unavailable or not configured · unknown · OPENCLAW_NOT_CONFIGURED
+    - listitem: Phoenix internal engine · Connected · phoenix
+  - button "Check engine status"
+  - heading "Installed runtime updates" [level=4]
+  - paragraph: Inspect the official Codex/OpenClaw and Phoenix versions without exposing host paths or credentials.
+  - list:
+    - listitem: Codex · unavailable · ENGINE_UNAVAILABLE
+    - listitem: OpenClaw · unavailable · ENGINE_UNAVAILABLE
+    - listitem: PHOENIX · current · <COMMIT>
+  - button "Refresh runtime status"
+  - text: OpenClaw version to prepare
+  - textbox "OpenClaw version to prepare":
+    - /placeholder: 2026.10.6
+  - button "Prepare official OpenClaw" [disabled]
+  - status: Activation and rollback are not available yet. Phoenix must first verify that no current or saved tasks are still running.
   - status: Eclipse settings saved.
   - button "Save Eclipse"
   - button "Restore Eclipse defaults"

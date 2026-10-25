@@ -9,6 +9,8 @@ describe('Codex quota styling', () => {
     const rootBlock = css.match(/\.root\s*\{([\s\S]*?)\}/u)?.[1] ?? ''
 
     expect(rootBlock).not.toMatch(/^\s*(?:background|border|box-shadow|border-radius)\s*:/mu)
-    expect(css).not.toMatch(/conic-gradient|linear-gradient|#b96f55|#c5765a|#6f8eae/u)
+    // The card itself stays inline; the file's separate meter rule may use a
+    // circular gradient for the actual quota indicator.
+    expect(rootBlock).not.toMatch(/conic-gradient|linear-gradient|#b96f55|#c5765a|#6f8eae/u)
   })
 })

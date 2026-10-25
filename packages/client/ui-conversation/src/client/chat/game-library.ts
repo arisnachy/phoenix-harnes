@@ -44,20 +44,36 @@ function transact<T>(mode: IDBTransactionMode, createRequest: (store: IDBObjectS
   }))
 }
 
+/** Create the storage identifier for a saved game.
+ * @param title - Display title of the generated artifact.
+ * @returns The result produced by this operation.
+ */
 export function libraryGameId(title: string): string {
   return title.trim().normalize('NFKC').toLocaleLowerCase()
 }
 
+/** Persist a game in the local browser library.
+ * @param title - Display title of the generated artifact.
+ * @param html - HTML document content to inspect.
+ * @returns Completion of the operation.
+ */
 export async function saveLibraryGame(title: string, html: string): Promise<void> {
   const game: LibraryGame = { id: libraryGameId(title), title, html, updatedAt: Date.now() }
   await transact('readwrite', store => store.put(game))
 }
 
+/** Read the games saved in the local browser library.
+ * @returns The matching projected records.
+ */
 export async function listLibraryGames(): Promise<LibraryGame[]> {
   const games = await transact('readonly', store => store.getAll()) as LibraryGame[]
   return games.sort((a, b) => b.updatedAt - a.updatedAt)
 }
 
+/** Remove one game from the local browser library.
+ * @param id - Id supplied to this operation.
+ * @returns Completion of the operation.
+ */
 export async function removeLibraryGame(id: string): Promise<void> {
   await transact('readwrite', store => store.delete(id))
 }
@@ -73,6 +89,9 @@ function escapeHtmlText(value: string): string {
 /**
  * Open a game through an unprivileged sandboxed iframe inside its own window.
  * Never open untrusted game HTML directly as a blob document with Phoenix's origin.
+ * @param title - Display title of the generated artifact.
+ * @param sandboxedHtml - Sandboxed HTML content to display.
+ * @returns Completion of the operation.
  */
 export function openGameInWindow(title: string, sandboxedHtml: string): void {
   const wrapper = `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtmlText(title)}</title><style>html,body{margin:0;width:100%;height:100%;background:#101018}iframe{display:block;width:100%;height:100%;border:0}</style></head><body><iframe title="${escapeHtmlAttribute(title)}" sandbox="allow-scripts" referrerpolicy="no-referrer" srcdoc="${escapeHtmlAttribute(sandboxedHtml)}"></iframe></body></html>`

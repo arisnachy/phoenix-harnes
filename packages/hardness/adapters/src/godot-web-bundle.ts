@@ -77,7 +77,7 @@ function validateExport(exportDir: string): { files: Array<{ name: string; sourc
   for (const name of ['index.html', 'index.js', 'index.wasm', 'index.pck']) {
     if (!names.includes(name)) throw new Error('Missing Godot Web export file: ' + name)
   }
-  const files = names.map(name => {
+  const files = names.map((name) => {
     const source = exactFile(exportDir, name)
     const bytes = statSync(source).size
     if (bytes <= 0) throw new Error('Empty Godot Web asset: ' + name)
@@ -185,7 +185,7 @@ export function serveGodotWebFile(req: IncomingMessage, res: ServerResponse): vo
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
   if (extname(name).toLowerCase() === '.html') {
     res.setHeader('Content-Security-Policy', "default-src 'none'; script-src " + origin + " 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob:; " +
-      "style-src " + origin + " 'unsafe-inline'; img-src " + origin + " data: blob:; font-src " + origin + " data:; media-src " + origin + " data: blob:; " +
+      'style-src ' + origin + " 'unsafe-inline'; img-src " + origin + ' data: blob:; font-src ' + origin + ' data:; media-src ' + origin + ' data: blob:; ' +
       'connect-src ' + origin + "; worker-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'")
   }
   res.statusCode = 200

@@ -54,6 +54,12 @@ interface Config {
 
 通过配置创建的 agent 会自动启动。模型调用同时需要 `provider` 和 `model`；`agent/request` 可以在分发前补齐缺失的这一对值。可选的正数 `maxTokens` 会为每次对话请求提供初始输出上限，并记录在请求 header 中。`maxParallelToolCalls` 限制每个 agent 针对并行安全调用使用的滚动池，默认值为 `10`。`maxStepsPerTurn` 默认值为 `64`，会在第 65 步之前停止失控的模型／工具循环；用户可以在新轮次中显式继续。两个控制项都可通过 `agent-loop` Settings 段热重载，非正整数会在写入时被拒绝。`agents` 刻意不在该段中——它在服务启动时被消费一次，所以存储的改动只会看起来生效。`cwd` 仅应用于全新会话，而 `resumeSessionId` 保留持久化元数据。通过配置创建的 agent 使用部署 persona；编程式 setup 可以按 agent 遮蔽它。该插件为每个 agent 提供 `provider`、`model` 和 `cwd` 提示词变量；harness 身份与部署 persona 属于 `dsh-system-prompt`。
 
+### Phoenix Auto-Continue（短输出提供方）
+
+当选定的模型路由真正以 `max-tokens` 结束时，Phoenix 会保留已生成但被截断的助手文本，并在下一步骤注入带有明确标识和日志记录的续写请求。续写复用此前的上下文与已经验证的工具结果；丢弃的不完整工具调用绝不会当作已经执行。默认启用 `openrouter`、`deepseek` 和 `qwen` 路由，包括通过 OpenRouter 服务的 DeepSeek 与 Qwen 模型。即使通过 OpenRouter 访问，OpenAI Codex 路由和模型 ID 也明确排除。大型输出或没有截断的正常回复不受影响。
+
+`agent-loop` 设置提供 `autoContinueProviders`（精确路由 ID）及 `autoContinueMaxSegments`（0–8，默认 3）。零表示禁用。系统按最新人工消息之后的续写日志次数限制，在内部轮次检查点和重启之间保持有效；连续完全相同的文本会提前停止。用户的 steer 或明确取消仍沿用 inbox/abort 语义。成功续写以 `completed` 结束，无法恢复的截断仍保持 `max-tokens`。此逻辑位于 agent 步骤边界，确保先观察持久化的结束事件、再在轮次关闭前安排下一步。
+
 ### 包内部具体驱动器
 
 具体 `ReactLoopAgent`、其 inbox 与运行控制均为包内部实现。包根只导出插件／服务／配置约定，包导出映射不提供 `./src/*` 逃逸路径；生命周期拥有方通过 `ctx.agents` 创建 agent，而不是点名、构造或启动驱动器内部组件。一个准备完成的会话只能由一个具体驱动器认领；所有可观测行为都通过会话事件和 `agent/*` 事件分类体系发生。

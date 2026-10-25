@@ -20,6 +20,8 @@ import { MiniBrowserScopes, validBrowserScopeId } from './mini-browser-scopes.ts
 /**
  * The website header belongs to the containing publisher page, not a child
  * iframe. Map only publisher-verified HTTPS frame URLs, never guess origins.
+ * @param rawUrl - Embedded child-frame URL reported by the browser.
+ * @returns Official parent-site URL, or undefined for unsupported origins.
  */
 export function fullSiteForEmbeddedPage(rawUrl: string): string | undefined {
   try {
@@ -30,7 +32,11 @@ export function fullSiteForEmbeddedPage(rawUrl: string): string | undefined {
   } catch { return undefined }
 }
 
-/** Present the publisher's actual navigation, never a synthetic header over an iframe. */
+/**
+ * Present the publisher's actual navigation, never a synthetic header over an iframe.
+ * @param rawUrl - Current embedded page URL.
+ * @returns Publisher parent URL when recognized; otherwise the original URL.
+ */
 export function miniBrowserNavigationTarget(rawUrl: string): string {
   return fullSiteForEmbeddedPage(rawUrl) ?? rawUrl
 }
@@ -539,7 +545,7 @@ async function startScopedChromium(sessionId: string, signal?: AbortSignal): Pro
     const browser: ScopedBrowser = { child, profile }
     scopedBrowsers.set(sessionId, browser)
     let spawnFailure: Error | undefined
-    child.once('error', error => { spawnFailure = error })
+    child.once('error', (error) => { spawnFailure = error })
     try {
       const deadline = Date.now() + START_ACTION_LIMIT_MS
       while (Date.now() < deadline) {

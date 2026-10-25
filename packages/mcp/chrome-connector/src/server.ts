@@ -760,17 +760,17 @@ server.registerTool('fill_form', {
 }, async ({ tabId, fields, sessionId }) => {
   ensureBrowserActionPermission()
   const tab = await selectedTab(tabId, sessionId)
-  const result = await evaluate(tab, browserBatchExpression(fields as BrowserInteraction[]))
+  const result = await evaluate(tab, browserBatchExpression(fields))
   if ((result as { ok?: boolean } | undefined)?.ok === true) {
     const hints = sanitizeFormLayout(
-      [fields as BrowserInteraction[]],
+      [fields],
       fields.map(field => ({
         operation: 'verify' as const, ...(field.selector ? { selector: field.selector } : {}),
         ...(field.name ? { name: field.name } : {}),
       })),
     )
     if (hints !== undefined) {
-      const steps = hints.steps.map(step => ({ ...step } as BrowserInteraction))
+      const steps = hints.steps.map(step => ({ ...step }))
       pendingFormLayouts.set(tab.id, { pageKey: formLayoutKey(tab.url), steps })
     }
   } else {
@@ -792,7 +792,7 @@ server.registerTool('verify_form', {
   },
 }, async ({ tabId, fields, sessionId }) => {
   const tab = await selectedTab(tabId, sessionId)
-  const result = await evaluate(tab, browserBatchExpression(fields as BrowserInteraction[]))
+  const result = await evaluate(tab, browserBatchExpression(fields))
   if ((result as { ok?: boolean } | undefined)?.ok === true) {
     const remembered = pendingFormLayouts.get(tab.id)
     const steps = remembered?.pageKey === formLayoutKey(tab.url) ? remembered.steps : []
@@ -859,7 +859,7 @@ server.registerTool('interact', {
     value: z.string().max(4096).optional(), checked: z.boolean().optional() },
 }, async ({ tabId, sessionId, ...input }) => {
   ensureBrowserActionPermission()
-  return formatBrowserResult(await evaluate(await selectedTab(tabId, sessionId), browserInteractionExpression(input as BrowserInteraction)))
+  return formatBrowserResult(await evaluate(await selectedTab(tabId, sessionId), browserInteractionExpression(input)))
 })
 
 server.registerTool('submit_form', {
@@ -1266,6 +1266,11 @@ function parseBrowserModifier(value: string): number {
   }
   return bitmask
 }
+/** Normalize a supported browser target identifier.
+ * @param key - Key supplied to this operation.
+ * @param modifiers - Modifiers supplied to this operation.
+ * @returns The result produced by this operation.
+ */
 export function normalizeBrowserKey(key: string, modifiers: number | string | string[] = 0): NormalizedBrowserKey {
   const raw = key.trim()
   if (!raw) {

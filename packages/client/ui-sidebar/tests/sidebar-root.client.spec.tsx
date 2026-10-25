@@ -85,12 +85,15 @@ describe('SidebarRoot shell', () => {
   it('routes primary navigation to focused action surfaces instead of Settings navigation', () => {
     const b = mountShell()
     const features: Array<{ destination: string; label: string }> = []
+    let teamToggles = 0
     let libraries = 0
     const onFeature = (event: Event) => {
       features.push((event as CustomEvent<{ destination: string; label: string }>).detail)
     }
+    const onTeam = () => { teamToggles++ }
     const onLibrary = () => { libraries++ }
     window.addEventListener('phoenix:open-feature', onFeature)
+    window.addEventListener('phoenix:toggle-team-directory', onTeam)
     window.addEventListener('phoenix:open-workspace-library', onLibrary)
     try {
       fireEvent.click(screen.getByRole('button', { name: 'Home' }))
@@ -102,11 +105,12 @@ describe('SidebarRoot shell', () => {
       expect(features).toEqual([
         { destination: 'discover', label: 'Discover' },
         { destination: 'connectors', label: 'Connectors' },
-        { destination: 'team', label: 'Team' },
       ])
+      expect(teamToggles).toBe(1)
       expect(libraries).toBe(1)
     } finally {
       window.removeEventListener('phoenix:open-feature', onFeature)
+      window.removeEventListener('phoenix:toggle-team-directory', onTeam)
       window.removeEventListener('phoenix:open-workspace-library', onLibrary)
     }
   })

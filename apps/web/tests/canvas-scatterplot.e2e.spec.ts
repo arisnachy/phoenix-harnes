@@ -1,22 +1,54 @@
 import { chromium, type Browser, type Page } from 'playwright'
+import { createReadStream } from 'node:fs'
+import { createServer, type Server } from 'node:http'
+import { fileURLToPath } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
-const URL = process.env.CANVAS_SCATTERPLOT_URL ?? 'http://127.0.0.1:3080/demos/canvas-scatterplot.html'
+const configuredUrl = process.env.CANVAS_SCATTERPLOT_URL
+let url = configuredUrl
 
 describe('Canvas2D scatterplot live demo', () => {
   let browser: Browser
   let page: Page
+  let server: Server | undefined
   const consoleErrors: string[] = []
 
   beforeAll(async () => {
+    if (url === undefined) {
+      const htmlPath = fileURLToPath(new URL('../public/demos/canvas-scatterplot.html', import.meta.url))
+      server = createServer((request, response) => {
+        if (new URL(request.url ?? '/', 'http://127.0.0.1').pathname !== '/demos/canvas-scatterplot.html') {
+          response.writeHead(404).end()
+          return
+        }
+        response.setHeader('content-type', 'text/html; charset=utf-8')
+        createReadStream(htmlPath).pipe(response)
+      })
+      await new Promise<void>((resolve, reject) => {
+        server!.once('error', reject)
+        server!.listen(0, '127.0.0.1', resolve)
+      })
+      const address = server.address()
+      if (address === null || typeof address === 'string') throw new Error('scatterplot test server did not expose a TCP address')
+      url = `http://127.0.0.1:${address.port}/demos/canvas-scatterplot.html`
+    }
     browser = await chromium.launch()
     page = await browser.newPage({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 })
     page.on('console', (message) => { if (message.type() === 'error') consoleErrors.push(message.text()) })
     page.on('pageerror', (error) => { consoleErrors.push(error.message) })
-    await page.goto(URL, { waitUntil: 'networkidle' })
+    await page.goto(url, { waitUntil: 'networkidle' })
   }, 60_000)
 
-  afterAll(async () => { await browser?.close() })
+  afterAll(async () => {
+    await browser?.close()
+    const runningServer = server
+    if (runningServer !== undefined) {
+      await new Promise<void>((resolve, reject) => runningServer.close((error) => {
+        if (error) reject(error)
+        else resolve()
+      }))
+    }
+  }, 60_000)
 
   it('renders the 100,000-point analytical surface and accessible fallback', async () => {
     expect((await page.getByTestId('point-count').textContent())?.trim()).toBe('100000')

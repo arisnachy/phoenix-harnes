@@ -4,7 +4,9 @@
  */
 import { defineTool, ToolArgsError, type ToolDefinition } from '@phoenix-ai/dsh-tools'
 
+/** Identifier of a supported academic journal profile. */
 export type JournalName = 'jama' | 'jama-network-open' | 'custom'
+/** Article content and metadata required by a journal profile. */
 export type JournalArticle = 'original_investigation' | 'research_letter' | 'brief_report'
   | 'systematic_review' | 'narrative_review'
 type Profile = {
@@ -12,8 +14,10 @@ type Profile = {
   article_type: JournalArticle
   citation_style: 'ama' | null
   source_url: string | null
-  manuscript_limits: { max_words: number | null; max_abstract_words: number | null;
-    max_references: number | null; max_tables_figures: number | null }
+  manuscript_limits: { max_words: number | null
+    max_abstract_words: number | null
+    max_references: number | null
+    max_tables_figures: number | null }
   requires: string[]
   editorial_presentation: 'academic' | 'hybrid'
   compliant: false
@@ -90,7 +94,7 @@ export function createResearchJournalTool(): ToolDefinition {
         text: 'Normas editoriales candidatas: ' + JSON.stringify(value) + '. Verificación editorial pendiente.',
       }] },
     async execute(args) {
-      return journalPublicationProfile(args.journal as JournalName, args.article_type as JournalArticle)
+      return journalPublicationProfile(args.journal, args.article_type)
     },
     presentCall() { return { card: 'generic', title: 'Requisitos de revista científica', kind: 'execute' } },
   })

@@ -132,7 +132,9 @@ export class TeamRoster {
           // A direct child outside the durable roster is not a teammate. Ordinary
           // host forks are independent roots; subagent descriptors distinguish
           // provider-owned workers that must not receive a nested Team identity.
-          if (this.subagentDescriptor(agent)) return undefined
+          // Provider origin is already fixed at publication; its descriptor
+          // can arrive later. Do not install Lead tools during that window.
+          if (agent.session.header.origin === 'subagent' || this.subagentDescriptor(agent)) return undefined
           return { root: agent, id: TeamId(agent.id), role: 'lead', name: 'lead' }
         }
       }
@@ -140,7 +142,7 @@ export class TeamRoster {
       // Do not reinterpret that durable child as a new implicit root Team. A host-
       // resumed ordinary fork has no descriptor in its own suffix and remains a
       // valid new root whose inherited Team records fold out by TeamId.
-      if (this.subagentDescriptor(agent)) return undefined
+      if (agent.session.header.origin === 'subagent' || this.subagentDescriptor(agent)) return undefined
       return { root: agent, id: TeamId(agent.id), role: 'lead', name: 'lead' }
     } catch {
       // This method is used by lifecycle observers and teardown discovery. A

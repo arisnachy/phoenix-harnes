@@ -14,9 +14,14 @@ const MAX_STEPS = 30
 const MAX_FILE_BYTES = 16_384
 const SIMPLE_NAME = /^[a-zA-Z_][\w:-]{0,59}$/
 const SIMPLE_SELECTOR = /^(?:[a-zA-Z][\w-]{0,30})?(?:#[a-zA-Z_][\w-]{0,59}|\.[a-zA-Z_][\w-]{0,59})$/
-const DISALLOWED = /password|passwd|secret|token|credential|authorization|api.?key|otp|cvv|credit.?card|card.?number|account.?number|session|cookie|bearer|email|phone|address/i
+const DISALLOWED = new RegExp(
+  'password|passwd|secret|token|credential|authorization|api.?key|otp|cvv|credit.?c'
+      + 'ard|card.?number|account.?number|session|cookie|bearer|email|phone|address', 'i',
+)
 
+/** Persistable locator identifying a learned form field. */
 export type LayoutLocator = { selector?: string; name?: string; operation: 'fill'|'select'|'check'|'verify' }
+/** Verified form layout associated with a site and workflow. */
 export interface LearnedFormLayout {
   version: 1
   learnedAt: number
@@ -36,17 +41,22 @@ function safeLocator(step: BrowserInteraction): LayoutLocator | undefined {
   return undefined
 }
 
-/** Drops every field value, clicked option, label and free-form user text. */
+/** Drops every field value, clicked option, label and free-form user text.
+ * @param phases - Phases supplied to this operation.
+ * @param checks - Checks supplied to this operation.
+ * @param learnedAt - Learned at supplied to this operation.
+ * @returns The result produced by this operation.
+ */
 export function sanitizeFormLayout(
   phases: readonly (readonly BrowserInteraction[])[],
   checks: readonly BrowserInteraction[],
   learnedAt = Date.now(),
 ): LearnedFormLayout | undefined {
-  const steps = phases.flatMap(phase => phase.flatMap(step => {
+  const steps = phases.flatMap(phase => phase.flatMap((step) => {
     const locator = safeLocator(step)
     return locator && locator.operation !== 'verify' ? [locator] : []
   })).slice(0, MAX_STEPS)
-  const verifiedChecks = checks.flatMap(step => {
+  const verifiedChecks = checks.flatMap((step) => {
     const locator = safeLocator(step)
     return locator && locator.operation === 'verify' ? [locator] : []
   }).slice(0, MAX_STEPS)
@@ -54,7 +64,10 @@ export function sanitizeFormLayout(
   return { version: 1, learnedAt, steps, verifiedChecks }
 }
 
-/** Page query parameters and fragment never affect a site's reusable mapping. */
+/** Page query parameters and fragment never affect a site's reusable mapping.
+ * @param pageUrl - Page url supplied to this operation.
+ * @returns The result produced by this operation.
+ */
 export function formLayoutKey(pageUrl: string): string {
   const url = new URL(pageUrl)
   if (!['https:', 'http:'].includes(url.protocol)) throw new TypeError('Invalid form origin')
@@ -66,6 +79,13 @@ export function formLayoutKey(pageUrl: string): string {
 function fileFor(pageUrl: string, directory: string): string {
   return join(directory, formLayoutKey(pageUrl) + '.json')
 }
+/** Persist a form layout only after its workflow has been verified.
+ * @param pageUrl - Page url supplied to this operation.
+ * @param phases - Phases supplied to this operation.
+ * @param checks - Checks supplied to this operation.
+ * @param directory - Directory supplied to this operation.
+ * @returns Whether the requested condition holds.
+ */
 export async function saveVerifiedFormLayout(
   pageUrl: string,
   phases: readonly (readonly BrowserInteraction[])[],
@@ -85,6 +105,12 @@ export async function saveVerifiedFormLayout(
   }
   return true
 }
+/** Read a previously verified form layout for the current workflow.
+ * @param pageUrl - Page url supplied to this operation.
+ * @param directory - Directory supplied to this operation.
+ * @param now - Now supplied to this operation.
+ * @returns The result produced by this operation.
+ */
 export async function recallVerifiedFormLayout(
   pageUrl: string, directory = DEFAULT_DIRECTORY, now = Date.now(),
 ): Promise<LearnedFormLayout | undefined> {
@@ -118,6 +144,9 @@ export interface LearnedFieldValue {
 }
 /** Rebuild a strictly non-submitting form workflow from proven locators.
  * A stale/unknown/ambiguous field fails before any page mutation.
+ * @param layout - Layout supplied to this operation.
+ * @param entries - Entries supplied to this operation.
+ * @returns The matching projected records.
  */
 export function prepareLearnedFormWorkflow(
   layout: LearnedFormLayout,

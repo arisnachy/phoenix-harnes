@@ -103,6 +103,12 @@ Agent Teams service backed by the exact live Lead Session log.
  */
 @Remote('chatMessages') async chatMessages(request: TeamChatReadRequest): Promise<TeamChatReadResult>
 
+/**
+ * Inspect connected execution engines without starting a task or changing models.
+ * @returns Native readiness and supported capabilities without credentials.
+ */
+@Remote('executionEngines') async executionEngines(): Promise<ExecutionEngineStatus[]>
+
 /** Read a bounded transcript for the exact live caller.
  * @param actor - actual agent.
  * @param limit - protocol message bound.
@@ -341,3 +347,9 @@ interface TeamChatReplyRequest extends TeamChatReadRequest {
   readonly replyTo?: string | undefined
 }
 ```
+
+## Execution engine facts
+
+`ExecutionEngineStatus` describes one engine (`internal`, `codex`, or `openclaw`), its connection state, native version, verified capabilities, supported providers, and optional credential-free diagnostic. A connected engine is eligible only when it supports every requested capability and the selected provider. `ExecutionMemoryContext` contains bounded reference content and the source memory identities committed before dispatch; it confers no additional authority.
+
+The [execution package contract](../../packages/subagent/agent-team/README.md) owns dispatch, recovery, uncertainty and cancellation semantics.

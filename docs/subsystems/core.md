@@ -1087,3 +1087,7 @@ One session committed a different agent preset to its durable log. Consumers inv
 
 Source: [`packages/preset/agent-presets/src/types.ts`](../../packages/preset/agent-presets/src/types.ts)
 <!-- END GENERATED cordis-surface -->
+
+## Eclipse routing settings
+
+`EclipseRoutingSettings` stores the orchestration routing mode, model routes and reasoning preferences, teammate limit, and optional independent execution-engine preference. Engine selection never rewrites the selected conversation provider or model. The [default-model package](../../packages/core/agent-default-model/README.md) owns settings validation and migration.

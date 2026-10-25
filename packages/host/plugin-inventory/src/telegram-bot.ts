@@ -8,6 +8,7 @@ import { SessionId } from '@phoenix-ai/dsh-session'
 import type { Agent } from '@phoenix-ai/dsh-agent'
 import type { TelegramBotSnapshot } from './types.ts'
 
+/** Write-only credential reference for the configured Telegram bot token. */
 export const TELEGRAM_BOT_TOKEN_REF = 'PHOENIX_TELEGRAM_BOT_TOKEN'
 const OWNER_REF = 'PHOENIX_TELEGRAM_OWNER_CHAT_ID'
 const OFFSET_REF = 'PHOENIX_TELEGRAM_UPDATE_OFFSET'
@@ -58,11 +59,13 @@ interface TelegramGateway {
     create(request: { rpcId: string; payload: { sessionId: ReturnType<typeof SessionId> } }): Promise<{
       result: { ok: true; value: { sessionId: ReturnType<typeof SessionId> } } | { ok: false; error: { code: string } }
     }>
-    prompt(request: { rpcId: string; payload: {
-      sessionId: ReturnType<typeof SessionId>
-      mode: 'queue'
-      content: Array<{ type: 'text'; text: string }>
-    } }): Promise<{
+    prompt(request: { rpcId: string
+      payload: {
+        sessionId: ReturnType<typeof SessionId>
+        mode: 'queue'
+        content: Array<{ type: 'text'
+          text: string }>
+      } }): Promise<{
       result: { ok: true; value: { accepted: true } } | { ok: false; error: { code: string } }
     }>
   }
@@ -94,7 +97,7 @@ async function botApi(
     throw new Error('telegram-invalid-response')
   }
   const parsed = payload as TelegramApiResponse
-  if (parsed.ok !== true) {
+  if (!parsed.ok) {
     if (parsed.error_code === 409) {
       throw new Error(typeof parsed.description === 'string' && /webhook/i.test(parsed.description)
         ? 'telegram-webhook-active' : 'telegram-polling-conflict')
@@ -105,7 +108,11 @@ async function botApi(
   return parsed
 }
 
-/** Guard against invalid bot responses instead of mistaking HTTP success for identity proof. */
+/** Guard against invalid bot responses instead of mistaking HTTP success for identity proof.
+ * @param token - Private bot token retained within the credential boundary.
+ * @param request - Request payload or transport used by the operation.
+ * @returns The result produced by this operation.
+ */
 export async function verifyTelegramBotToken(
   token: string, request: typeof fetch = fetch,
 ): Promise<{ username?: string }> {
@@ -160,6 +167,7 @@ export class TelegramInbox {
       if (controller.signal.aborted) this.phase = 'idle'
     })
   }
+  /** Stop the owned Telegram polling loop. */
   stop(): void {
     this.controller?.abort()
     this.token = undefined
@@ -173,7 +181,9 @@ export class TelegramInbox {
     if (prior === undefined) this.start()
     else void prior.finally(() => { if (this.worker === undefined) this.start() })
   }
-  /** A code survives Host restarts but expires after fifteen minutes. */
+  /** A code survives Host restarts but expires after fifteen minutes.
+ * @returns The current result of this operation.
+ */
   async pairing(): Promise<string> {
     const creds = vault(this.ctx)
     if (creds === undefined || await stored(creds, TELEGRAM_BOT_TOKEN_REF) === undefined) {
@@ -196,10 +206,19 @@ export class TelegramInbox {
     await creds.unset(ref(PAIR_REF))
     return undefined
   }
+  /** Report whether Telegram inbox polling is active.
+ * @returns The current result of this operation.
+ */
   isPolling(): boolean {
     return this.phase === 'polling' && Date.now() - this.lastPoll < 50_000
   }
+  /** Read the latest credential-free Telegram polling error.
+ * @returns The current result of this operation.
+ */
   error(): string | undefined { return this.failure }
+  /** Report whether a Telegram owner has been paired.
+ * @returns The current result of this operation.
+ */
   async isPaired(): Promise<boolean> {
     const creds = vault(this.ctx)
     if (creds === undefined) return false
@@ -207,7 +226,7 @@ export class TelegramInbox {
   }
   private async sleep(signal: AbortSignal, duration: number): Promise<void> {
     if (signal.aborted) return
-    await new Promise<void>(resolve => {
+    await new Promise<void>((resolve) => {
       const timer = setTimeout(() => { signal.removeEventListener('abort', done); resolve() }, duration)
       const done = (): void => { clearTimeout(timer); signal.removeEventListener('abort', done); resolve() }
       signal.addEventListener('abort', done, { once: true })
@@ -412,6 +431,10 @@ export class TelegramInbox {
 
 /** Isolated Host lifecycle. Remote Settings and the worker share this instance. */
 const inboxes = new WeakMap<Context, TelegramInbox>()
+/** Resolve the inbox owned by the Telegram integration.
+ * @param ctx - Cordis context providing the owning services.
+ * @returns The result produced by this operation.
+ */
 export function telegramInbox(ctx: Context): TelegramInbox {
   let inbox = inboxes.get(ctx)
   if (inbox === undefined) {
@@ -420,6 +443,11 @@ export function telegramInbox(ctx: Context): TelegramInbox {
   }
   return inbox
 }
+/** Read a credential-free snapshot of Telegram bot configuration.
+ * @param ctx - Cordis context providing the owning services.
+ * @param receiver - Receiver supplied to this operation.
+ * @returns The result produced by this operation.
+ */
 export async function readTelegramBotState(ctx: Context, receiver?: TelegramInbox): Promise<TelegramBotSnapshot> {
   const creds = vault(ctx)
   if (creds === undefined) return { configured: false, verified: false, phase: 'credentials-unavailable', inboxActive: false, paired: false }
@@ -437,6 +465,12 @@ export async function readTelegramBotState(ctx: Context, receiver?: TelegramInbo
       ...(reason === undefined ? {} : { reason }) }
   }
 }
+/** Store the Telegram bot configuration through the Host credential boundary.
+ * @param ctx - Cordis context providing the owning services.
+ * @param value - Value to normalize or classify.
+ * @param receiver - Receiver supplied to this operation.
+ * @returns The result produced by this operation.
+ */
 export async function saveTelegramBot(ctx: Context, value: string, receiver?: TelegramInbox): Promise<TelegramBotSnapshot> {
   const creds = vault(ctx)
   if (creds === undefined) throw new Error('Telegram credential storage unavailable')
@@ -452,6 +486,11 @@ export async function saveTelegramBot(ctx: Context, value: string, receiver?: Te
   return { configured: true, verified: true, phase: 'verified', inboxActive: worker.isPolling(),
     paired: previous === token && await worker.isPaired(), ...verified }
 }
+/** Remove the configured Telegram bot and its credential binding.
+ * @param ctx - Cordis context providing the owning services.
+ * @param receiver - Receiver supplied to this operation.
+ * @returns The result produced by this operation.
+ */
 export async function removeTelegramBot(ctx: Context, receiver?: TelegramInbox): Promise<TelegramBotSnapshot> {
   const creds = vault(ctx)
   if (creds === undefined) throw new Error('Telegram credential storage unavailable')

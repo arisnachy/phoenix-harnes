@@ -35,7 +35,9 @@
 | `@phoenix-ai/dsh-tool-google-workspace` | `gmail_read`, `gmail_search`, `gmail_send`, `google_calendar_create_event`, `google_calendar_list_events`, `google_drive_search`, `google_workspace_request` | `ctx.tools`, `ctx.googleApi` | `tool/call`, `bounded Google Workspace request through the host OAuth broker`, `tool/result` | - | schema 提取提供不联网的 googleApi seam。实时调用始终在 Host 拥有的 OAuth broker 内执行：它固定 Google 服务根地址和 scope，仅在 fetch 时注入 Bearer token，绝不向面向模型的工具包暴露 OAuth 材料。 |
 | `@phoenix-ai/dsh-tool-home-gateway` | `home_control`、`home_list_devices` | `ctx.tools`、`ctx.home`、`ctx.systemPrompt` | `tool/call`、`tool/result`、`Home Assistant request at execution time` | - | schema harvest 使用私有 fake endpoint，绝不发起请求。Live 部署在操作员提供私有 endpoint、token 变量和两个 allowlist 前保持禁用。 |
 | `@phoenix-ai/dsh-schedule` | `schedule_create`、`schedule_delete`、`schedule_list` | `ctx.tools`、`ctx.sessions`、Session 持久化、未来创建的 live 根 Agent | `tool/call`、`schedule/change create or delete`、`tool/result` | - | 仅在选择启用的 Schedule 插件加载后创建的 live 根 Agent scope 内注册。版本 1 接受 after_seconds、显式绝对 at 和有界固定速率 every_seconds，并披露 session-local 交付；管理读取与变更必须通过共享的 Session 持久化 barrier。 |
+| `@phoenix-ai/dsh-tool-business` | `business_plan_mission` | `ctx.tools`, `ctx.systemPrompt`, `ctx.mcpConnectors (optional at execution)` | `tool/call`, `tool/result` | - | Read-only intent and live MCP capability planning. Tool names and connection status never confer publication rights. |
 | `@phoenix-ai/dsh-tool-living` | `living_act`、`living_forget_creation`、`living_get_connector_kit`、`living_inspect_creation`、`living_list_creations`、`living_read_state`、`living_register_creation`、`living_verify_creation` | `ctx.tools`、`ctx.living`、`ctx.systemPrompt` | `tool/call`、`durable living creation manifest`、`live creation state/actions/events through ctx.living`、`tool/result` | - | 通用、领域无关的控制表面：任意未来创建物类型自行描述状态、动作、事件、资源、参与者及目标集成级别；低于目标级别时验证会拒绝交付。 |
+| `@phoenix-ai/dsh-tool-sports` | `sports_chat_catalog`, `sports_chat_discover`, `sports_chat_games`, `sports_chat_mlb_pitchers`, `sports_chat_odds`, `sports_chat_ticket` | `ctx.tools`、`ctx.systemPrompt` | `tool/call`、`tool/result` | - | 只读体育比赛与赔率上下文通过聊天内卡片呈现；投注单仅模拟收益，不执行交易，也不保证获胜。 |
 | `@phoenix-ai/dsh-tool-lsp` | `lsp` | `ctx.tools`、`ctx.lsp`、`ctx.systemPrompt` | `tool/call`、`tool/result` | - | lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，因此其模型可见 schema 在更换提供方时保持稳定。运行时要求已注册提供方，例如 `@phoenix-ai/dsh-lsp-stdio`；如果没有提供方，查询会返回结构化 `LSP_UNAVAILABLE` 错误，而不会改变 schema。 |
 | `@phoenix-ai/dsh-tool-ralph` | `ralph` | `ctx.tools`、`ctx.workflowEngine`、`ctx.subagents`、`ctx.systemPrompt`、`a calling Agent (exec.agent parents every fresh round)` | `tool/call`、`tool/result`、`workflow and child session events during execution` | - | 固定的前台工作流会在每个 Round 启动一个全新的结构化子级；模型只能选择不可变目标和可选的 Round 上限。 |
 | `@phoenix-ai/dsh-tool-skill` | `skill` | `ctx.tools`、`ctx.agents`、`ctx.skills` | `tool/call`、`tool/result`、`user/message replacement catalogs via agent.inject()` | - | - |
@@ -45,10 +47,10 @@
 | `@phoenix-ai/dsh-tool-subagent-control` | `interrupt_agent`、`list_agents`、`send_message` | `ctx.tools`、`ctx.subagents`、`ctx.agents and ctx.sessionProjections (list_agents only)` | `tool/call`、`tool/result`、`child session events through ctx.subagents` | - | 这些是控制可继续后台 subagent 的全局命名工具：绑定提供方的 `tool-subagent` 实例注册不同的委派工具；本包注册一次 `send_message` 和 `interrupt_agent`，另由 `list_agents` 通过单独加载的 `/list-agents` 插件提供，其目录行使用 sessionProjections 和实时 Agent 注册表。 |
 | `@phoenix-ai/dsh-tool-subagent-report` | `report` | `ctx.subagents`、`ctx.systemPrompt`、`a live continuable in-process child Agent` | `tool/call`、`tool/result`、`a user-role message in the direct parent session` | - | 按可继续的进程内子级注册，而非全局注册，因此该 schema 仅在这种子级内部可见，并且不受其全局 `toolFilter` 影响。同一份贡献还会安装子级作用域的 `tool:report` 系统提示词 section，本目录不渲染该 section。面向父级的 `send_message` 工具单独安装。 |
 | `@phoenix-ai/dsh-tool-jobs` | `job_kill`、`job_list`、`job_output` | `ctx.tools`、`ctx.jobs`、`ctx.systemPrompt` | `tool/call`、`tool/result`、`user/message via agent.inject() for background completion notices` | - | 与任务种类无关的后台任务控制器：后台 bash 命令、PTY 发送和 subagent 都通过相同的 3 个工具读取、列出和终止。加载该插件会挂接控制器，从而启用生产方的 `ctx.jobs.start()`。 |
-| `@phoenix-ai/dsh-tool-agent-team` | `followup_task`, `interrupt_agent`, `list_agents`, `send_message`, `spawn_teammate`, `team_chat_answer`, `team_chat_react`, `team_chat_read`, `team_react`, `team_task_create`, `team_task_get`, `team_task_list`, `team_task_update`, `wait_agent` | `ctx.tools`、`ctx.systemPrompt`、`ctx.agentTeams`、`an exact live Team member Agent` | `tool/call`、`team/member`、`team/message/queued`、`team/message/delivered`、`team/task`、`tool/result` | - | Team 工具限定于隐式 Team Lead 与持久 teammate 作用域。随产品发布的 dsh-base bundle 默认禁用该包；文档中的 Agent Teams profile patch 会启用它，并禁用旧 continuable child 的同名控制工具。 |
+| `@phoenix-ai/dsh-tool-agent-team` | `execution_cancel`, `execution_list`, `execution_recover`, `execution_run`, `execution_steer`, `followup_task`, `interrupt_agent`, `list_agents`, `send_message`, `spawn_teammate`, `team_chat_answer`, `team_chat_react`, `team_chat_read`, `team_chat_reply_to_peer`, `team_react`, `team_task_create`, `team_task_get`, `team_task_list`, `team_task_update`, `wait_agent` | `ctx.tools`、`ctx.systemPrompt`、`ctx.agentTeams`、`an exact live Team member Agent` | `tool/call`、`team/member`、`team/message/queued`、`team/message/delivered`、`team/task`、`tool/result` | - | Team 工具限定于隐式 Team Lead 与持久 teammate 作用域。随产品发布的 dsh-base bundle 默认禁用该包；文档中的 Agent Teams profile patch 会启用它，并禁用旧 continuable child 的同名控制工具。 |
 | `@phoenix-ai/dsh-tool-todo` | `todo_write` | `ctx.tools`、`owning Agent session` | `tool/call`、`todo/write`、`tool/result` | - | todo_write 是会话所有的状态；UI 将最新的 todo/write 事件渲染为检查清单。`allowParallelInProgress` 是没有默认值的必填项，因此本目录明确选择 `true`，对应描述允许同时存在多个 `in_progress` 项。选择 `false` 的部署会获得同一工具，但描述会要求只能有 1 个活动任务。 |
 | `@phoenix-ai/dsh-tool-workflow` | `workflow` | `ctx.tools`、`ctx.workflowEngine`、`ctx.systemPrompt`、`a calling Agent (exec.agent parents the script children)` | `tool/call`、`tool/result` | - | - |
-| `@phoenix-ai/dsh-tool-web` | `web_fetch`、`web_search` | `ctx.tools`、`ctx.web`、`ctx.systemPrompt` | `tool/call`、`tool/result` | - | web_search 和 web_fetch 将提供方选择置于 ctx.web 之后，使模型可见 schema 在更换后端时保持稳定。 |
+| `@phoenix-ai/dsh-tool-web` | `research_scholar`, `research_search`, `research_sources`, `web_fetch`, `web_search` | `ctx.tools`、`ctx.web`、`ctx.systemPrompt` | `tool/call`、`tool/result` | - | web_search 和 web_fetch 将提供方选择置于 ctx.web 之后，使模型可见 schema 在更换后端时保持稳定。 |
 
 <a id="phoenix-aidsh-tool-ask-user"></a>
 
@@ -1958,6 +1960,33 @@ schema harvest 使用私有 fake endpoint，绝不发起请求。Live 部署在�
 
 仅在选择启用的 Schedule 插件加载后创建的 live 根 Agent scope 内注册。版本 1 接受 after_seconds、显式绝对 at 和有界固定速率 every_seconds，并披露 session-local 交付；管理读取与变更必须通过共享的 Session 持久化 barrier。
 
+<a id="phoenix-aidsh-tool-business"></a>
+
+## `@phoenix-ai/dsh-tool-business`
+
+### `business_plan_mission`
+
+解读商业任务的意图，并查询 Phoenix 真实的 MCP 工具清单，提出已就绪的工具、待授权项目和安全替代方案。只做规划，绝不发布或支付费用。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "request": {
+      "type": "string",
+      "description": "La petición comercial exacta del usuario, sin credenciales."
+    }
+  },
+  "required": [
+    "request"
+  ]
+}
+```
+
+来源：[`packages/core/tool-business/src/index.ts`](../packages/core/tool-business/src/index.ts)
+
+Read-only intent and live MCP capability planning. Tool names and connection status never confer publication rights.
+
 <a id="phoenix-aidsh-tool-living"></a>
 
 ## `@phoenix-ai/dsh-tool-living`
@@ -2180,6 +2209,194 @@ schema harvest 使用私有 fake endpoint，绝不发起请求。Live 部署在�
 通用、领域无关的控制表面：任意未来创建物类型自行描述状态、动作、事件、资源、参与者及目标集成级别；低于目标级别时验证会拒绝交付。
 
 
+<a id="phoenix-aidsh-tool-sports"></a>
+
+## `@phoenix-ai/dsh-tool-sports`
+
+### `sports_chat_catalog`
+
+列出已记录的体育项目与联赛，不创建菜单或跳转到其他界面。
+
+```json
+{
+  "type": "object",
+  "properties": {}
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_discover`
+
+直接从 ESPN 公开目录发现额外赛事，无须 API 密钥或访问任意网址。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "sport": {
+      "type": "string",
+      "description": "Disciplina ESPN como soccer, baseball, basketball, cricket, golf o hockey."
+    }
+  },
+  "required": [
+    "sport"
+  ]
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_games`
+
+在聊天中提供真实比赛，包括联赛、开赛时间、场馆、队伍及可验证统计信息，返回可渲染卡片。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "sport": {
+      "type": "string",
+      "description": "Deporte: soccer, baseball, basketball, etc."
+    },
+    "league": {
+      "type": "string",
+      "description": "Liga: mlb, nba, mex.1, eng.1, etc."
+    },
+    "date": {
+      "type": "string",
+      "description": "Fecha AAAA-MM-DD, opcional: hoy en Santo Domingo."
+    }
+  },
+  "required": [
+    "sport",
+    "league"
+  ]
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_mlb_pitchers`
+
+按 MLB 球队使用经过验证的赛季数据分析先发轮值、牛棚、ERA、WHIP、投球局数和三振。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "teamId": {
+      "type": "integer",
+      "description": "ID del equipo, extraído de datos reales MLB."
+    },
+    "season": {
+      "type": "integer",
+      "description": "Año de la temporada MLB."
+    }
+  },
+  "required": [
+    "teamId",
+    "season"
+  ]
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_odds`
+
+查询无需密钥的 ESPN 公开赔率，或配置完成时查询 The Odds API；ESPN 未发布价格时可能返回空结果。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "sportKey": {
+      "type": "string",
+      "description": "Clave del proveedor: baseball_mlb, basketball_nba, soccer_epl, etc."
+    },
+    "markets": {
+      "type": "string",
+      "description": "h2h, totals o spreads. Por defecto h2h."
+    }
+  },
+  "required": [
+    "sportKey"
+  ]
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_ticket`
+
+基于重新验证的真实赔率生成模拟投注单卡片，不会执行实际投注。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "sportKey": {
+      "type": "string",
+      "description": "Clave deportiva de The Odds API. Para varios deportes utiliza sportKeys."
+    },
+    "sportKeys": {
+      "type": "array",
+      "description": "Claves para ticket multisport, máximo cuatro.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "markets": {
+      "type": "string",
+      "description": "h2h, totals o spreads, mismo mercado de las selecciones."
+    },
+    "selections": {
+      "type": "array",
+      "description": "Entre una y diez selecciones verificables.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "eventId": {
+            "type": "string"
+          },
+          "bookmaker": {
+            "type": "string"
+          },
+          "market": {
+            "type": "string"
+          },
+          "selection": {
+            "type": "string"
+          },
+          "point": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "eventId",
+          "bookmaker",
+          "market",
+          "selection"
+        ]
+      }
+    },
+    "stake": {
+      "type": "number",
+      "description": "Importe ficticio para simular el retorno; no es una operación financiera."
+    }
+  },
+  "required": [
+    "selections"
+  ]
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+只读比赛和体育赔率信息以聊天内卡片呈现；投注单仅模拟收益，不执行交易，也不保证获胜。
+
 <a id="phoenix-aidsh-tool-lsp"></a>
 
 ## `@phoenix-ai/dsh-tool-lsp`
@@ -2355,6 +2572,24 @@ Search Phoenix cognitive memory with bounded provenance, layers, project, tempor
         "prospective",
         "associative",
         "temporal"
+      ]
+    },
+    "kind": {
+      "type": "string",
+      "description": "Exact memory category. Use decision for Kira previous predictions and selections.",
+      "enum": [
+        "decision",
+        "fact",
+        "preference",
+        "lesson",
+        "skill",
+        "pending",
+        "mission",
+        "error",
+        "success",
+        "conversation",
+        "event",
+        "interaction"
       ]
     },
     "from": {
@@ -2879,6 +3114,135 @@ memory_search and memory_remember expose only bounded, provenance-preserving lea
 
 ## `@phoenix-ai/dsh-tool-agent-team`
 
+### `execution_cancel`
+
+取消本任务中的一次执行，并中断对应的原生操作。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "execution_id": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "execution_id"
+  ]
+}
+```
+
+来源：[`packages/subagent/tool-agent-team/src/index.ts`](../packages/subagent/tool-agent-team/src/index.ts)
+
+### `execution_list`
+
+在中断后读取 Team 的最新执行回执。不确定的任务应使用 execution_recover 恢复；列表查询绝不启动原生工作。
+
+```json
+{
+  "type": "object",
+  "properties": {}
+}
+```
+
+来源：[`packages/subagent/tool-agent-team/src/index.ts`](../packages/subagent/tool-agent-team/src/index.ts)
+
+### `execution_recover`
+
+检查并恢复中断后的同一次原生执行。结果不确定的操作绝不启动替代任务。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "execution_id": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "execution_id"
+  ]
+}
+```
+
+来源：[`packages/subagent/tool-agent-team/src/index.ts`](../packages/subagent/tool-agent-team/src/index.ts)
+
+### `execution_run`
+
+使用兼容的 Codex、OpenClaw 或原生引擎完成一项具体任务。重试同一任务时保留原有 idempotency_key，只声明真正需要的能力。执行回执不代表整个任务完成；报告成功前必须验证产物。前一次执行结果不确定时，不能交由其他引擎重新执行，应使用 execution_recover。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "task": {
+      "type": "string"
+    },
+    "idempotency_key": {
+      "type": "string"
+    },
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "conversation",
+          "code",
+          "artifact",
+          "browser",
+          "connector",
+          "automation"
+        ]
+      }
+    },
+    "engine": {
+      "type": "string",
+      "description": "Omit for the saved preference and automatic capability routing.",
+      "enum": [
+        "internal",
+        "codex",
+        "openclaw"
+      ]
+    }
+  },
+  "required": [
+    "task",
+    "idempotency_key",
+    "capabilities"
+  ]
+}
+```
+
+来源：[`packages/subagent/tool-agent-team/src/index.ts`](../packages/subagent/tool-agent-team/src/index.ts)
+
+### `execution_steer`
+
+向同一次正在运行的原生执行发送一条指令。重试时保留原有 idempotency_key。预留或结果不确定的回执不得换键重复发送，必须先检查原生执行。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "execution_id": {
+      "type": "string"
+    },
+    "idempotency_key": {
+      "type": "string"
+    },
+    "text": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "execution_id",
+    "idempotency_key",
+    "text"
+  ]
+}
+```
+
+来源：[`packages/subagent/tool-agent-team/src/index.ts`](../packages/subagent/tool-agent-team/src/index.ts)
+
 ### `followup_task`
 
 向另一名 Team member 发送持久 follow-up task，并在需要时启动一个 turn。
@@ -2893,7 +3257,7 @@ memory_search and memory_remember expose only bounded, provenance-preserving lea
     },
     "purpose": {
       "type": "string",
-      "description": "Operational purpose. Use blocker only for a real obstacle that needs the Lead to change strategy.",
+      "description": "Operational purpose. A natural conversational answer to Kira may use result without an external tool. Use blocker only for a genuine unresolved task obstacle, never a routine conversation or wait.",
       "enum": [
         "assignment",
         "question",
@@ -2967,7 +3331,7 @@ memory_search and memory_remember expose only bounded, provenance-preserving lea
     },
     "purpose": {
       "type": "string",
-      "description": "Operational purpose. Use blocker only for a real obstacle that needs the Lead to change strategy.",
+      "description": "Operational purpose. A natural conversational answer to Kira may use result without an external tool. Use blocker only for a genuine unresolved task obstacle, never a routine conversation or wait.",
       "enum": [
         "assignment",
         "question",
@@ -3110,6 +3474,32 @@ Read recent real user/Kira/agent conversation messages and IDs for replies or re
 ```
 
 Source: [`packages/subagent/tool-agent-team/src/index.ts`](../packages/subagent/tool-agent-team/src/index.ts)
+
+### `team_chat_reply_to_peer`
+
+仅限 Kira：针对确实送达的队友结果、问题、阻碍或审核发布一次真实、直接的回应，不唤醒队友。必须提供原始 Team 消息 ID 和有意义的接受／决策，不得虚构发言。新任务使用 send_message 或 followup_task。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "message_id": {
+      "type": "string",
+      "description": "Id of the actual delivered specialist-to-Kira handoff."
+    },
+    "text": {
+      "type": "string",
+      "description": "Brief answer addressed to the specialist in the user language, maximum 800 UTF-8 bytes."
+    }
+  },
+  "required": [
+    "message_id",
+    "text"
+  ]
+}
+```
+
+来源：[`packages/subagent/tool-agent-team/src/index.ts`](../packages/subagent/tool-agent-team/src/index.ts)
 
 ### `team_react`
 
@@ -3321,7 +3711,7 @@ Source: [`packages/subagent/tool-agent-team/src/index.ts`](../packages/subagent/
   "properties": {
     "timeout_ms": {
       "type": "integer",
-      "description": "Requested wait duration 5000 through 3600000ms, capped internally at 12000ms. Defaults to 5000ms."
+      "description": "Requested wait duration 5000 through 3600000ms, capped internally at 12000ms. Defaults to 12000ms; completes earlier on actual teammate activity."
     }
   }
 }
@@ -3481,6 +3871,73 @@ todo_write 是会话所有的状态；UI 将最新的 todo/write 事件渲染为
 <a id="phoenix-aidsh-tool-web"></a>
 
 ## `@phoenix-ai/dsh-tool-web`
+
+### `research_scholar`
+
+通过官方 Europe PMC 公共 API 检索真实科研元数据，涵盖 PubMed、PubMed Central、论文、预印本和其他索引资源。返回作者、标题、年份、期刊、DOI/PMID/PMCID、原始 URL、可获得的摘要以及查询日期。在撰写生物医学报告或核查文献之前使用；这不意味着论文经过同行评审、能获得全文或具有充分临床证据。最多返回 10 条结果，不得编造 API 密钥。提供商故障时返回 unavailable。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "query": {
+      "type": "string",
+      "description": "Consulta académica, 3 a 400 caracteres."
+    },
+    "limit": {
+      "type": "integer",
+      "description": "Resultados 1 a 10, por defecto 5."
+    }
+  },
+  "required": [
+    "query"
+  ]
+}
+```
+
+来源：[`packages/web/tool-web/src/index.ts`](../packages/web/tool-web/src/index.ts)
+
+### `research_search`
+
+执行有界的跨学科实时网络研究，按研究领域限定查询来源、去重并在部分失败时恢复。结果提供线索及出处，不等于已验证的 API 数据。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "question": {
+      "type": "string"
+    },
+    "domain": {
+      "type": "string",
+      "description": "Optional source domain. Call research_sources to list valid values."
+    }
+  },
+  "required": [
+    "question"
+  ]
+}
+```
+
+来源：[`packages/web/tool-web/src/index.ts`](../packages/web/tool-web/src/index.ts)
+
+### `research_sources`
+
+按研究领域列出候选的权威来源网站。这只是元数据，不表示已有 API 连接、凭证或实时可用性证明。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "domain": {
+      "type": "string",
+      "description": "Optional domain, for example sports, fx, medicine, science, economics, weather, law or general."
+    }
+  }
+}
+```
+
+来源：[`packages/web/tool-web/src/index.ts`](../packages/web/tool-web/src/index.ts)
 
 ### `web_fetch`
 

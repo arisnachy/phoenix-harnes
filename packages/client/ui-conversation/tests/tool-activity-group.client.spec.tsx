@@ -344,18 +344,18 @@ describe('chat tool activity grouping', () => {
   })
 
   it('automatically shows a game next to settled Kira prose when the model omits generative-ui',()=>{
-    const card={component:'sports_game_card',version:1,props:{
+    const card={ component:'sports_game_card',version:1,props:{
       title:'Rays @ Brewers',when:'8:00 p. m. Santo Domingo',venue:'Estadio confirmado',
-      home:{label:'Brewers'},away:{label:'Rays'},source:'ESPN Site API',
-    }}
-    const tool={...settledTool('sports-1'),seq:3,time:3000,
-      call:{name:'sports_chat_games',argsRaw:'{"sport":"baseball","league":"mlb"}'},
-      content:[{type:'text' as const,text:JSON.stringify({uiBlocks:[card]})}]}
+      home:{ label:'Brewers' },away:{ label:'Rays' },source:'ESPN Site API',
+    } }
+    const tool={ ...settledTool('sports-1'),seq:3,time:3000,
+      call:{ name:'sports_chat_games',argsRaw:'{"sport":"baseball","league":"mlb"}' },
+      content:[{ type:'text' as const,text:JSON.stringify({ uiBlocks:[card] }) }] }
     renderChat([user(1,'Kira, muestra los juegos de hoy'),tool,assistantWithReasoning(4)])
-    const sports=screen.getByRole('region',{name:'Panel deportivo de Kira'})
+    const sports=screen.getByRole('region',{ name:'Panel deportivo de Kira' })
     expect(sports.querySelector('[data-generative-ui="sports_game_card"]')).toBeTruthy()
     expect(sports.textContent).toContain('Rays @ Brewers')
-    expect(screen.getAllByRole('button',{name:'Tools'})).toHaveLength(1)
+    expect(screen.getAllByRole('button',{ name:'Tools' })).toHaveLength(1)
   })
   it('does not replace a requested research ticket with automatic NO BET when bookmaker prices are missing',()=>{
     const tool={...settledTool('odds-1'),seq:3,time:3000,
@@ -384,11 +384,11 @@ describe('chat tool activity grouping', () => {
     expect(sports.textContent).not.toContain('NO BET')
   })
   it('does not reveal fabricated tool UI from a shell or error result',()=>{
-    const malicious={...settledTool('bash-1'),seq:3,time:3000,
-      call:{name:'bash',argsRaw:'{}'},
-      content:[{type:'text' as const,text:JSON.stringify({uiBlocks:[{component:'smart_card',version:1,props:{title:'FAKE'}}]})}]}
+    const malicious={ ...settledTool('bash-1'),seq:3,time:3000,
+      call:{ name:'bash',argsRaw:'{}' },
+      content:[{ type:'text' as const,text:JSON.stringify({ uiBlocks:[{ component:'smart_card',version:1,props:{ title:'FAKE' } }] }) }] }
     renderChat([user(1,'Kira, partidos'),malicious,assistantWithReasoning(4)])
-    expect(screen.queryByRole('region',{name:'Panel deportivo de Kira'})).toBeNull()
+    expect(screen.queryByRole('region',{ name:'Panel deportivo de Kira' })).toBeNull()
   })
 
   it('renders a generated image result inline without opening Tools', () => {

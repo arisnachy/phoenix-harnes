@@ -131,7 +131,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'agent/model-selection': ModelSelectionPreference
 ```
 
-来源： [`packages/core/agent/src/model-selection.ts:34`](../packages/core/agent/src/model-selection.ts)
+来源：[`packages/core/agent/src/model-selection.ts:96`](../packages/core/agent/src/model-selection.ts)
 
 ### `agent-preset/*`
 
@@ -871,7 +871,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
   readonly message: TeamChatMessage }
 ```
 
-Source: [`packages/subagent/agent-team/src/chat-types.ts:71`](../packages/subagent/agent-team/src/chat-types.ts)
+Source: [`packages/subagent/agent-team/src/chat-types.ts:75`](../packages/subagent/agent-team/src/chat-types.ts)
 
 <a id="teamchat-participant--log-only"></a>
 
@@ -883,7 +883,7 @@ Source: [`packages/subagent/agent-team/src/chat-types.ts:71`](../packages/subage
   readonly participant: TeamChatParticipant }
 ```
 
-Source: [`packages/subagent/agent-team/src/chat-types.ts:68`](../packages/subagent/agent-team/src/chat-types.ts)
+Source: [`packages/subagent/agent-team/src/chat-types.ts:72`](../packages/subagent/agent-team/src/chat-types.ts)
 
 <a id="teamchat-reaction--log-only"></a>
 
@@ -896,7 +896,51 @@ Source: [`packages/subagent/agent-team/src/chat-types.ts:68`](../packages/subage
   readonly active: boolean }
 ```
 
-Source: [`packages/subagent/agent-team/src/chat-types.ts:75`](../packages/subagent/agent-team/src/chat-types.ts)
+Source: [`packages/subagent/agent-team/src/chat-types.ts:79`](../packages/subagent/agent-team/src/chat-types.ts)
+
+<a id="teamexecution--log-only"></a>
+
+#### `team/execution` — log-only
+
+```ts persistence-catalog
+/** Versioned whole execution value committed before native dispatch. */
+'team/execution': { readonly version: 1; readonly snapshot: ExecutionSnapshot }
+```
+
+Source: [`packages/subagent/agent-team/src/execution-types.ts:130`](../packages/subagent/agent-team/src/execution-types.ts)
+
+<a id="teamexecution-context--log-only"></a>
+
+#### `team/execution-context` — log-only
+
+```ts persistence-catalog
+/** Selective memory supplied to an external execution; never re-indexed as a new memory. */
+'team/execution-context': { readonly version: 1; readonly executionId: ExecutionId; readonly content: string; readonly memoryIds: readonly string[] }
+```
+
+Source: [`packages/subagent/agent-team/src/execution-types.ts:134`](../packages/subagent/agent-team/src/execution-types.ts)
+
+<a id="teamexecution-input--log-only"></a>
+
+#### `team/execution-input` — log-only
+
+```ts persistence-catalog
+/** Persisted before native steering; transport uncertainty prevents blind retries. */
+'team/execution-input': { readonly version: 1 } & ExecutionInputReceipt
+```
+
+Source: [`packages/subagent/agent-team/src/execution-types.ts:128`](../packages/subagent/agent-team/src/execution-types.ts)
+
+<a id="teamexecution-progress--log-only"></a>
+
+#### `team/execution-progress` — log-only
+
+```ts persistence-catalog
+/** Metadata from one native event, deduplicated within the execution. */
+'team/execution-progress': { readonly version: 1; readonly executionId: ExecutionId; readonly event: ExecutionProgress }
+```
+
+Source: [`packages/subagent/agent-team/src/execution-types.ts:132`](../packages/subagent/agent-team/src/execution-types.ts)
 
 <a id="teammember--log-only"></a>
 
@@ -909,7 +953,7 @@ Source: [`packages/subagent/agent-team/src/chat-types.ts:75`](../packages/subage
 
 类型：[TeamId](subsystems/agent-team.zh.md) · [TeamMemberSnapshot](subsystems/agent-team.zh.md)
 
-来源：[`packages/subagent/agent-team/src/types.ts:257`](../packages/subagent/agent-team/src/types.ts)
+来源：[`packages/subagent/agent-team/src/types.ts:264`](../packages/subagent/agent-team/src/types.ts)
 
 <a id="teammessagedelivered--log-only"></a>
 
@@ -927,7 +971,7 @@ Source: [`packages/subagent/agent-team/src/chat-types.ts:75`](../packages/subage
 
 类型：[TeamId](subsystems/agent-team.zh.md) · [TeamMessageId](subsystems/agent-team.zh.md)
 
-来源：[`packages/subagent/agent-team/src/types.ts:263`](../packages/subagent/agent-team/src/types.ts)
+来源：[`packages/subagent/agent-team/src/types.ts:270`](../packages/subagent/agent-team/src/types.ts)
 
 <a id="teammessagequeued--log-only"></a>
 
@@ -940,7 +984,18 @@ Source: [`packages/subagent/agent-team/src/chat-types.ts:75`](../packages/subage
 
 类型：[TeamId](subsystems/agent-team.zh.md) · [TeamMessageSnapshot](subsystems/agent-team.zh.md)
 
-来源：[`packages/subagent/agent-team/src/types.ts:261`](../packages/subagent/agent-team/src/types.ts)
+来源：[`packages/subagent/agent-team/src/types.ts:268`](../packages/subagent/agent-team/src/types.ts)
+
+<a id="teammission--log-only"></a>
+
+#### `team/mission` — log-only
+
+```ts persistence-catalog
+/** Versioned root-owned universal mission checkpoint. */
+'team/mission': UniversalMissionEvent
+```
+
+Source: [`packages/subagent/agent-team/src/universal-mission.ts:42`](../packages/subagent/agent-team/src/universal-mission.ts)
 
 <a id="teamreaction--log-only"></a>
 
@@ -957,7 +1012,7 @@ Source: [`packages/subagent/agent-team/src/chat-types.ts:75`](../packages/subage
 
 类型：[TeamId](subsystems/agent-team.zh.md)
 
-来源：[`packages/subagent/agent-team/src/types.ts:270`](../packages/subagent/agent-team/src/types.ts)
+来源：[`packages/subagent/agent-team/src/types.ts:277`](../packages/subagent/agent-team/src/types.ts)
 
 <a id="teamtask--log-only"></a>
 
@@ -970,7 +1025,7 @@ Source: [`packages/subagent/agent-team/src/chat-types.ts:75`](../packages/subage
 
 类型：[TeamId](subsystems/agent-team.zh.md) · [TeamTaskSnapshot](subsystems/agent-team.zh.md)
 
-来源：[`packages/subagent/agent-team/src/types.ts:259`](../packages/subagent/agent-team/src/types.ts)
+来源：[`packages/subagent/agent-team/src/types.ts:266`](../packages/subagent/agent-team/src/types.ts)
 
 ### `todo/*`
 
@@ -1029,7 +1084,7 @@ Source: [`packages/subagent/agent-team/src/chat-types.ts:75`](../packages/subage
 'tool/code-dispatch': CodeDispatchEventData
 ```
 
-来源：[`packages/core/tools/src/types.ts:56`](../packages/core/tools/src/types.ts)
+来源：[`packages/core/tools/src/types.ts:58`](../packages/core/tools/src/types.ts)
 
 <a id="toolcode-dispatch-start--log-only"></a>
 
@@ -1052,7 +1107,7 @@ Source: [`packages/subagent/agent-team/src/chat-types.ts:75`](../packages/subage
 'tool/code-dispatch-start': CodeDispatchStartEventData
 ```
 
-来源：[`packages/core/tools/src/types.ts:40`](../packages/core/tools/src/types.ts)
+来源：[`packages/core/tools/src/types.ts:42`](../packages/core/tools/src/types.ts)
 
 <a id="toolresult--surface"></a>
 

@@ -70,8 +70,12 @@ describe('PluginInventoryGateway', () => {
       { method: 'updateState', invocation: { kind: 'direct' } },
       { method: 'restartForUpdate', invocation: { kind: 'direct' } },
       { method: 'refreshForUpdate', invocation: { kind: 'direct' } },
+      { method: 'engineRuntimeState', invocation: { kind: 'direct' } },
+      { method: 'prepareEngineRuntime', invocation: { kind: 'direct' } },
       { method: 'mcpConnectorHubState', invocation: { kind: 'direct' } },
     ]))
+    expect(exposed.some(entry => entry.method === 'activateEngineRuntime')).toBe(false)
+    expect(exposed.some(entry => entry.method === 'rollbackEngineRuntime')).toBe(false)
     expect(new Set(exposed.map(entry => entry.method)).size).toBe(exposed.length)
     expect(exposed.every(entry => entry.invocation.kind === 'direct')).toBe(true)
   })

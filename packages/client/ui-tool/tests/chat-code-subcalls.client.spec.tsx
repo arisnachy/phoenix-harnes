@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { usePinnedBrowserLanguages } from '@phoenix-ai/dsh-client-test-runtime'
 // Code Mode sub-call acceptance on the REAL machinery stack (same bench as
 // chat-toolview-slot.spec): a run_code result renders the 'code' variant row
 // (description summary, program body), its logged sub-dispatches render as
@@ -26,6 +27,8 @@ import type { PropsRenderSlots } from '@phoenix-ai/dsh-client-ui-slots'
 import { apply as applyConversation, inject as injectConversation } from '@phoenix-ai/dsh-client-ui-conversation/client'
 import { apply as applyTool, inject as injectTool } from '../src/client/apply.ts'
 import { toolChatSnapshot } from './tool-details-render.client.tsx'
+
+usePinnedBrowserLanguages('en-US')
 
 const SID = 's1' as SessionId
 
@@ -116,7 +119,7 @@ async function bench(snapshot: ConversationSnapshot) {
     phase: 'ready', subagentsByParent: {}, jobsBySession: {}, currentAddress: undefined,
   })
   const scoped = { send: vi.fn(async () => {}), cancel: vi.fn(async () => {}) }
-  const layout = { openDetails: vi.fn(), closeDetails: vi.fn() }
+  const layout = { openDetails: vi.fn(), closeDetails: vi.fn(), setSidebarFocus: vi.fn() }
   // Provide-channel contributions land in this bundle the way the runtime
   // materializes them; the renderer host serves it through provideInfo.
   const provided: { hooks: Record<string, unknown>; props: Record<string, unknown> } = { hooks: {}, props: {} }
@@ -187,7 +190,11 @@ async function bench(snapshot: ConversationSnapshot) {
 }
 
 function mountApp(slots: SlotRegistry) {
-  return render(<>{slots.renderSlot('root', {})}</>)
+  const view = render(<>{slots.renderSlot('root', {})}</>)
+  for (const toggle of view.container.querySelectorAll('[data-chat-flow-kind="tool-activity"] button[aria-expanded="false"]')) {
+    fireEvent.click(toggle)
+  }
+  return view
 }
 
 describe('run_code sub-calls through the real chat machinery', () => {
@@ -213,9 +220,9 @@ describe('run_code sub-calls through the real chat machinery', () => {
     const nest = view.container.querySelector('[data-subcalls]')
     expect(nest).not.toBeNull()
     expect(nest!.querySelector('[data-sample="bash"]')).not.toBeNull()
-    expect(view.getByText('Bash')).toBeTruthy()
+    expect(view.getByText('Ran')).toBeTruthy()
     expect(view.getByText('List notes')).toBeTruthy()
-    expect(view.getByText('Tool call')).toBeTruthy()
+    expect(view.getByText('mystery')).toBeTruthy()
   })
 
   it('renders Cordis sub-calls with lifecycle titles over the generic variants', async () => {

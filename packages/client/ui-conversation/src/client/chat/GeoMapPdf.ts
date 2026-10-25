@@ -20,7 +20,7 @@ function rgb(input:string):string{
 }
 function tint(input:string,ratio=.14):string{
   const c=/^#[a-f0-9]{6}$/i.test(input)?input:'#d26634'
-  return '#'+[1,3,5].map(i=>{
+  return '#'+[1,3,5].map((i)=>{
     const v=parseInt(c.slice(i,i+2),16)
     return Math.round(255*(1-ratio)+v*ratio).toString(16).padStart(2,'0')
   }).join('')
@@ -43,7 +43,7 @@ function circle(x:number,y:number,r:number,color:string):string{
     +(x+r).toFixed(1)+' '+(y-k).toFixed(1)+' '+(x+k).toFixed(1)+' '+(y-r).toFixed(1)+' '+x.toFixed(1)+' '+(y-r).toFixed(1)+' c '
     +(x-k).toFixed(1)+' '+(y-r).toFixed(1)+' '+(x-r).toFixed(1)+' '+(y-k).toFixed(1)+' '+(x-r).toFixed(1)+' '+y.toFixed(1)+' c f\n'
 }
-function numbers(n:number):string{return n.toLocaleString('es-DO',{maximumFractionDigits:1})}
+function numbers(n:number):string{return n.toLocaleString('es-DO',{ maximumFractionDigits:1 })}
 function lines(text:string,chars:number,max=3):string[]{
   const words=plain(text,800).split(/\s+/)
   const out:string[]=[];let line=''
@@ -77,7 +77,7 @@ function drawMap(layers:readonly GeoLayer[]):string{
   const scaleX=Math.cos(latMid*Math.PI/180)
   const spanX=Math.max((maxLng-minLng)*scaleX,.0003)
   const spanY=Math.max(maxLat-minLat,.0003)
-  const area={x:52,y:328,w:508,h:298}
+  const area={ x:52,y:328,w:508,h:298 }
   const scale=Math.min((area.w-52)/spanX,(area.h-50)/spanY)
   const xy=(p:Pos):Pos=>[
     area.x+area.w/2+(p[0]-(minLng+maxLng)/2)*scaleX*scale,
@@ -102,7 +102,7 @@ function drawMap(layers:readonly GeoLayer[]):string{
         continue
       }
       if(pts.length<2)continue
-      const first=pts[0]!
+      const first=requiredValue(pts[0])
       page+=rgb(c)+' RG '+(layer.kind==='polygon'?1.7:2.7)+' w '
         +first[0].toFixed(1)+' '+first[1].toFixed(1)+' m\n'
       for(const pt of pts.slice(1))page+=pt[0].toFixed(1)+' '+pt[1].toFixed(1)+' l\n'
@@ -173,9 +173,9 @@ function secondPage(layers:readonly GeoLayer[],title:string,source:string,metric
   p+=label('Ubicacion / Area',62,252,9,true)
   p+=label('Capa',301,252,9,true)
   p+=label('Valor',504,252,9,true)
-  const sample=layers.flatMap(layer=>layer.features.map(f=>({layer,feature:f}))).slice(0,9)
+  const sample=layers.flatMap(layer=>layer.features.map(f=>({ layer,feature:f }))).slice(0,9)
   y=228
-  for(const {layer,feature} of sample){
+  for(const { layer,feature } of sample){
     p+=label(plain(feature.label,33),62,y,8)
     p+=label(plain(layer.name,27),301,y,8)
     p+=label(feature.value===undefined?'--':numbers(feature.value),507,y,8,true)
@@ -217,8 +217,21 @@ function encode(pages:readonly string[]):Uint8Array<ArrayBuffer>{
   for(let i=0;i<output.length;i++)binary[i]=output.charCodeAt(i)&255
   return binary
 }
+/** Generate a PDF containing the geographic scene and its legend.
+ * @param layers - Geographic layers to inspect or render.
+ * @param title - Display title of the generated artifact.
+ * @param source - Source supplied to this operation.
+ * @param metric - Metric supplied to this operation.
+ * @returns The result produced by this operation.
+ */
 export function generateGeoPdf(layers:readonly GeoLayer[],title:string,source:string,metric?:string):Blob{
   if(!layers.some(l=>l.features.length))throw Error('No hay geometrías para exportar')
   return new Blob([encode([firstPage(layers,title),
-    secondPage(layers,title,source,metric)])],{type:'application/pdf'})
+    secondPage(layers,title,source,metric)])],{ type:'application/pdf' })
+}
+
+/** Reject absent entries before reading validated structured data. */
+function requiredValue<T>(value: T | undefined | null): T {
+  if (value === undefined || value === null) throw new Error('Required structured value is missing.')
+  return value
 }

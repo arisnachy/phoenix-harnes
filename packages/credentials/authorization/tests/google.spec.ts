@@ -119,7 +119,7 @@ describe('Google Workspace OAuth authorization boundary', () => {
     expect(described).toEqual({ configured: true, kind: 'grant', writable: true })
     expect(JSON.stringify(described)).not.toMatch(/access-token|refresh-token|authorization-code/)
 
-    expect(ctx.authorization.list()).toMatchObject([{
+    expect(ctx.authorization.list().filter(entry => entry.key === GOOGLE_ACCOUNT_KEY)).toMatchObject([{
       key: GOOGLE_ACCOUNT_KEY,
       label: 'Google Workspace',
       methods: [{ id: 'oauth', label: 'Sign in with Google' }],

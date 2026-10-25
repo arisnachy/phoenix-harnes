@@ -63,15 +63,15 @@ notice 是单向的，且从不携带机密：一条消息，以及可选的“�
 
 ## Google Workspace Host broker
 
-`@phoenix-ai/dsh-authorization/google` 是位于中立 seam 旁边、由协议所有者实现的 Host Service。它注册一个 `Google Workspace` flow，并采用 Google Desktop 应用的授权码流程：随机 loopback listener、PKCE S256 与 `state`。配置中的 `clientId` 只标识 OAuth 应用，并不是用户密码或 OAuth token；发布组合从 `PHOENIX_GOOGLE_OAUTH_CLIENT_ID` 读取它。
+`@phoenix-ai/dsh-authorization/google` 是位于中立授权层旁、由协议所有者实现的 Host Service。它注册 `Google Workspace` 授权流程，使用 Google 桌面应用授权码模式，包括随机的 loopback 回调监听器、PKCE S256 与 `state`。配置中的 `clientId` 只代表 OAuth 应用标识，而不是用户密码或 OAuth token；发行组合从 `PHOENIX_GOOGLE_OAUTH_CLIENT_ID` 读取它。
 
-Google 的 access token 与 refresh token 被明确限制为**仅当前进程可用**。授权成功后，broker 只把它们保存在 Host Service 的私有内存中，并在 `authorization-google/account` 下提交一个不含机密的 `{ kind: 'api-key' }` marker，让中立 authorization seam 能确认人工授权已经提交。面向浏览器的 `list()`、`describe()`、`inspect()`、credential metadata、配置、环境变量以及 marker 本身都不包含 OAuth token、authorization code 或 PKCE verifier。PHOENIX 重启后必须重新进行 Google 授权；这是有意设计，直到 PHOENIX 拥有一个能够隔离同 UID 工具进程的 credential backend。`credentials-local` 明确不是这种边界。
+Google access token 和 refresh token 由 Host 独占管理，并作为带版本的持久化 `grant` 记录保存在 `authorization-google/account` 下。下次启动 PHOENIX 时，broker 会恢复该授权；只要 Google 仍接受 refresh 凭据，就能静默更新已过期的 access token。面向浏览器的 `list()`、`describe()`、`inspect()`、配置、环境和工具结果都不能包含秘密；OAuth token、authorization code 和 PKCE verifier 不会进入模型可见内容。默认本地凭据提供方将 grant 存于仅所有者可访问的凭据文件；需要防御恶意同 UID 进程的部署应改用操作系统隔离的凭据提供方。
 
-Host integration 通过 `ctx.get('googleApi')` 显式取得 broker，再调用 `request({ service, path, ... })`；这个 submodule 刻意不扩大全局 `Context` API。调用方不能提供任意 URL 再自行声明 scope。`service` 只能是 `gmail`、`calendar`、`drive`、`docs`、`sheets`、`slides` 或 `contacts`；每个 service 的 API root 与所需 OAuth scope 都由 broker 固定。path 必须保持在该 service root 下，credential/cookie header 会被拒绝，携带凭据的请求强制使用 `redirect: 'error'`，Bearer token 只在最后的 Google `fetch` 边界注入。结果只返回 status、media type 与 body，不返回 access/refresh token。`disconnect()` 即使 Google 的 best-effort revoke 失败，也会清空 Host 内存并删除 marker。
+Host 集成使用 `ctx.get('googleApi')` 显式获取 broker，然后调用 `request({ service, path, ... })`；该子模块不会扩大全局 `Context` API。调用方不能同时提供任意 URL 与自称的 scope。`service` 只能是 `gmail`、`calendar`、`drive`、`docs`、`sheets`、`slides` 或 `contacts`，每个服务的 API 根路径和必要 OAuth scope 都由 broker 确定。路径必须保持相对形式；禁止自带凭据或 cookie header；带凭据的请求设置 `redirect: 'error'`，仅在最终 Google `fetch` 边界添加 Bearer token。结果只能返回 status、media type 和 body，不得包含 access 或 refresh token。即使向 Google 撤销授权的尽力请求失败，`disconnect()` 也会清空 Host 内存并删除持久 grant。
 
-Google installed application 不支持 incremental authorization，因此挂载的 provider 会在一次浏览器授权中请求配置的 suite scope 集合。但它会在 Host 内存中保留 Google **实际** 返回的 scopes，而不是假设用户同意了全部权限。未获授权 scope 对应的能力会以 `GOOGLE_SCOPE_DENIED` fail closed；如果用户希望更改授权范围，可以明确重新连接。在同一个 PHOENIX 进程内，接近过期的 access token 会由 Host broker 刷新；refresh-token rotation 只存在于 Host 内存中，绝不持久化。使用 sensitive/restricted scopes 的部署仍必须满足 Google 的 OAuth verification 要求。
+Google 桌面应用不支持增量授权，因此 provider 在一次浏览器授权流程中请求配置好的全部 Workspace scope，但只保留 Google **实际授予**的 scope，绝不假设用户同意全部权限。缺失权限的功能会以 `GOOGLE_SCOPE_DENIED` 拒绝运行，用户可明确重新连接以调整同意范围。即将到期的 access token 在 Host broker 内刷新；refresh token 轮换则原子地写回持久 grant，使正常重启不必反复授权。使用敏感或受限 scope 的部署仍需满足 Google OAuth 验证要求。
 
-当前 Windows restricted-token sandbox 限制写操作，但不限制读操作，因此不能把 `$DSH_HOME/.credentials.yaml` 变成 secret vault。不得在 `credentials-local` 上重新启用 durable Google refresh token。要实现安全的持久化，必须使用独立 credential broker，其存储与 IPC 对任意同 UID 的模型/工具进程不可访问。
+当前 Windows restricted-token sandbox 限制写入而非读取，所以 `$DSH_HOME/.credentials.yaml` 是仅所有者可访问的本地凭据存储，**不是**操作系统隔离的保险库。Google 持久 grant 现在使用与其他提供方 grant 相同、已有文档说明的凭据边界。若必须防范恶意同 UID 进程，仍须使用独立的 OS keychain 或 credential broker。
 
 ## Model Experience
 

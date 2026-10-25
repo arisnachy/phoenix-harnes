@@ -485,7 +485,7 @@ export class McpOAuthController {
     // as observed without changing the rejection delivered to the awaiting flow.
     void attempt.code.catch(() => undefined)
     const preparationDeadline = new AbortController()
-    let consentUrlPublished = false
+    const consentState = { published: false }
     let preparingConsent = true
     const timeout = setTimeout(() => {
       preparationDeadline.abort(preconsentTimeoutError(this.serverName))
@@ -501,7 +501,7 @@ export class McpOAuthController {
         // Ignore a late redirect from an SDK request that timed out or was
         // cancelled. The browser must not open a stale authorization attempt.
         if (preparationDeadline.signal.aborted || session.signal.aborted) return
-        consentUrlPublished = true
+        consentState.published = true
         session.notify({
           message: `Continúa en tu navegador para autorizar ${this.serverName}. PHOENIX conserva los tokens solo en el Host.`,
           url: String(url),
@@ -547,7 +547,7 @@ export class McpOAuthController {
             AbortSignal.timeout(30_000),
             ...(init?.signal == null ? [] : [init.signal]),
           ]),
-        }).then(response => {
+        }).then((response) => {
           // 4xx from optional well-known documents may be normal SDK fallback.
           // Keep it only for diagnosis if the entire OAuth flow fails.
           if (!response.ok) lastHttpStatus = response.status
@@ -560,7 +560,9 @@ export class McpOAuthController {
       // Once the URL is published, user approval has no time limit.
       const aborted = new Promise<never>((_resolve, reject) => {
         preparationDeadline.signal.addEventListener('abort', () => {
-          reject(preparationDeadline.signal.reason)
+          reject(preparationDeadline.signal.reason instanceof Error
+            ? preparationDeadline.signal.reason
+            : new Error('MCP OAuth preparation aborted', { cause: preparationDeadline.signal.reason }))
         }, { once: true })
       })
       const first = await Promise.race([
@@ -578,7 +580,7 @@ export class McpOAuthController {
         }
         return
       }
-      if (!consentUrlPublished) {
+      if (!consentState.published) {
         throw Object.assign(
           new Error(`MCP OAuth for ${this.serverName} did not publish a consent URL`),
           { code: 'MCP_OAUTH_NO_CONSENT_URL' },
@@ -588,7 +590,7 @@ export class McpOAuthController {
       const final = await auth(provider, { serverUrl: this.serverUrl, authorizationCode: code, fetchFn })
       if (final !== 'AUTHORIZED') throw new Error(`MCP OAuth did not authorize ${this.serverName}`)
     } catch (error) {
-      if (!session.signal.aborted && !consentUrlPublished) {
+      if (!session.signal.aborted && !consentState.published) {
         session.notify({
           message: `No se obtuvo la página OAuth de ${this.serverName}. Última etapa: ${lastStage}${lastHttpStatus === undefined ? '' : ` (última respuesta HTTP ${lastHttpStatus})`}. Revisa el error del conector en PHOENIX.`,
         })

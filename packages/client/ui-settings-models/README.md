@@ -1,5 +1,7 @@
 # @phoenix-ai/dsh-client-ui-settings-models
 
+The Eclipse panel keeps two model seats and adds an independent execution-engine preference: automatic, internal, Codex or OpenClaw. The status refresh reads actual registered adapters and their versions or safe diagnostics. Saving or clearing this preference preserves the selected conversation model; a disconnected engine is displayed as unavailable rather than reported ready.
+
 English | [中文](README.zh.md)
 
 Authorization preparation and configuration prompts stay in a persistent panel above the connector catalog, independent of search filters and account refreshes. Phoenix opens a tab only for a validated provider consent URL and retains a manual link when popups are blocked. Outcomes remain visible instead of disappearing on a timer; authorization failures appear at the top of the page.
@@ -38,6 +40,8 @@ Authorization polling survives panel refreshes and uses the latest completion ca
 ## Eclipse routing
 
 Fénix Eclipse exposes two model and reasoning selections: Kira's coordinator and her subagents. Its picker uses the connected Codex account catalog, keeping the newest GPT generation and family revision plus specialized account-visible models. Reasoning options come from each model's advertised capabilities. Saving clears former planner and specialist overrides; planner-only preferences migrate to coordination. Manual mode uses the provider default when effort is unset; hybrid mode adapts unset effort to the task. Rejected writes remain visible without claiming success.
+
+The same panel inspects Host-owned Codex, OpenClaw, and Phoenix runtime versions without exposing paths, process ids, or credentials. Official OpenClaw preparation is offered through the verified launcher manager, with bounded cleanup that preserves active, previous and candidate runtimes. Uncertain installer shutdown blocks safely. Activation and rollback remain unavailable until Team proves global idleness across legacy and persisted execution roots under a shared admission fence. Failed inspection stays visibly unavailable.
 
 ## Model Experience
 

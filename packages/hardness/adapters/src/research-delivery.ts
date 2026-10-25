@@ -21,6 +21,9 @@ type Receipt = { channel: Channel; format: Format; state: 'sent' | 'blocked' | '
 /**
  * Construct a file path only from an authenticated Research Studio digest, never
  * from an arbitrary model-supplied filesystem path.
+ * @param reportId - Report id supplied to this operation.
+ * @param format - Format supplied to this operation.
+ * @returns The result produced by this operation.
  */
 export function researchDeliveryFile(reportId: string, format: Format): string {
   if (!/^[0-9a-f]{16}$/u.test(reportId) || !['pdf', 'docx'].includes(format)) {
@@ -29,7 +32,11 @@ export function researchDeliveryFile(reportId: string, format: Format): string {
   return join(homedir(), '.dsh', 'research-reports', reportId, 'informe.' + format)
 }
 
-/** Admission: a file is eligible only when its original publisher manifest points to that file. */
+/** Admission: a file is eligible only when its original publisher manifest points to that file.
+ * @param reportId - Report id supplied to this operation.
+ * @param format - Format supplied to this operation.
+ * @returns The result produced by this operation.
+ */
 export async function verifyPublishedDocument(reportId: string, format: Format): Promise<{ path: string; bytes: Uint8Array }> {
   const path = researchDeliveryFile(reportId, format)
   const manifestPath = join(homedir(), '.dsh', 'research-reports', reportId, 'manifest.json')
@@ -111,7 +118,7 @@ async function sendByEmail(
   const idempotencyKey = createHash('sha256').update(reportId + ':email:' + format + ':' + identity.ownerEmail).digest('hex')
   return await sendExactlyOnce(reportId, 'email', format, identity.ownerEmail, async () => {
     const response = await agentMailRequest(
-      '/inboxes/' + encodeURIComponent(identity.inboxId!) + '/messages/send',
+      '/inboxes/' + encodeURIComponent(requiredValue(identity.inboxId)) + '/messages/send',
       key.value, 30000, fetch,
       {
         to: [identity.ownerEmail], subject: 'Phoenix Research Studio · Informe ' + reportId,
@@ -148,7 +155,7 @@ async function sendByTelegram(
     form.append('chat_id', chat.value)
     form.append('caption', 'Phoenix Research Studio · Informe ' + reportId)
     const ownedBytes = Uint8Array.from(file.bytes)
-    form.append('document', new Blob([ownedBytes.buffer as ArrayBuffer], {
+    form.append('document', new Blob([ownedBytes.buffer], {
       type: format === 'pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     }), 'informe.' + format)
     let response: Response
@@ -170,6 +177,8 @@ async function sendByTelegram(
 /**
  * Send a previously verified report only after native user approval; each
  * recipient/format gets an isolated durable receipt and no blind retry.
+ * @param deps - Deps supplied to this operation.
+ * @returns The result produced by this operation.
  */
 export function createResearchDeliverTool(deps: ResearchDeliveryDeps): ToolDefinition {
   return defineTool({
@@ -186,8 +195,8 @@ export function createResearchDeliverTool(deps: ResearchDeliveryDeps): ToolDefin
     async execute(args, exec) {
       const id = args.report_id
       if (!/^[0-9a-f]{16}$/u.test(id)) throw new ToolArgsError(['report_id inválido.'])
-      const channels: Channel[] = args.channel === 'both' ? ['email', 'telegram'] : [args.channel as Channel]
-      const formats: Format[] = args.format === 'both' ? ['pdf', 'docx'] : [args.format as Format]
+      const channels: Channel[] = args.channel === 'both' ? ['email', 'telegram'] : [args.channel]
+      const formats: Format[] = args.format === 'both' ? ['pdf', 'docx'] : [args.format]
       // Verify all files before soliciting an irreversible external action.
       await Promise.all(formats.map(format => verifyPublishedDocument(id, format)))
       if (exec.agent === undefined) throw new Error('La entrega requiere una sesión de agente autenticada.')
@@ -225,4 +234,10 @@ export function createResearchDeliverTool(deps: ResearchDeliveryDeps): ToolDefin
       return { card: 'generic', title: 'Entregar investigación por ' + args.channel, kind: 'execute' }
     },
   })
+}
+
+/** Reject absent entries before reading validated structured data. */
+function requiredValue<T>(value: T | undefined | null): T {
+  if (value === undefined || value === null) throw new Error('Required structured value is missing.')
+  return value
 }

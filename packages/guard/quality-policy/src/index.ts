@@ -40,16 +40,29 @@ export const Config: z<Config> = z.object({
   maxStopNudges: z.number().step(1).min(0).max(3).default(1),
 })
 
-const MUTATION_NAME = /^(?:write|edit|str_replace_editor|apply_patch|create_file|update_file|delete_file|move_file|rename_file|upload(?:_.*)?|deploy(?:_.*)?|publish(?:_.*)?)$/
+const MUTATION_NAME = new RegExp(
+  '^(?:write|edit|str_replace_editor|apply_patch|create_file|update_file|delete_fil'
+      + 'e|move_file|rename_file|upload(?:_.*)?|deploy(?:_.*)?|publish(?:_.*)?)$',
+)
 const VERIFICATION_NAME = /^(?:verify(?:_.*)?|check(?:_.*)?|test(?:_.*)?|lint(?:_.*)?|typecheck(?:_.*)?|build(?:_.*)?|smoke(?:_.*)?)$/
 const INSPECTION_NAME = /^(?:read|grep|glob|search|find|fetch|web_fetch|screenshot(?:_.*)?)$/
 const SHELL_NAME = /^(?:bash|pwsh|run_code)$/
-const SHELL_VERIFY = /\b(?:vitest|pytest|unittest|jest|mocha|tsc|oxlint|eslint|ruff|mypy|cargo\s+test|go\s+test|dotnet\s+test|pnpm\s+(?:run\s+)?(?:test|check|lint|typecheck|build|verify)|npm\s+(?:run\s+)?(?:test|check|lint|build|verify)|yarn\s+(?:test|check|lint|build)|python\s+-m\s+pytest)\b/i
-const SHELL_MUTATE = /(?:^|[\s;&|])(?:rm|mv|cp|mkdir|touch|git\s+(?:add|commit|merge|rebase|cherry-pick|reset|checkout|switch)|npm\s+(?:install|i)|pnpm\s+(?:install|add|remove)|pip\s+install|Set-Content|Add-Content|Out-File|Remove-Item|Move-Item|Copy-Item|New-Item|Rename-Item)\b|(?:>>?|\b(?:sed\s+-i|tee)\b)/i
+const SHELL_VERIFY = new RegExp(
+  '\\b(?:vitest|pytest|unittest|jest|mocha|tsc|oxlint|eslint|ruff|mypy|cargo\\s+test|'
+      + 'go\\s+test|dotnet\\s+test|pnpm\\s+(?:run\\s+)?(?:test|check|lint|typecheck|build|ver'
+      + 'ify)|npm\\s+(?:run\\s+)?(?:test|check|lint|build|verify)|yarn\\s+(?:test|check|lint'
+      + '|build)|python\\s+-m\\s+pytest)\\b', 'i',
+)
+const SHELL_MUTATE = new RegExp(
+  '(?:^|[\\s;&|])(?:rm|mv|cp|mkdir|touch|git\\s+(?:add|commit|merge|rebase|cherry-pic'
+      + 'k|reset|checkout|switch)|npm\\s+(?:install|i)|pnpm\\s+(?:install|add|remove)|pip\\s'
+      + '+install|Set-Content|Add-Content|Out-File|Remove-Item|Move-Item|Copy-Item|New-It'
+      + 'em|Rename-Item)\\b|(?:>>?|\\b(?:sed\\s+-i|tee)\\b)', 'i',
+)
 
 const DOMAIN_PATTERNS: ReadonlyArray<readonly [QualityDomain, RegExp]> = [
   ['web', /\.(?:html?|css|scss|sass|less|tsx|jsx|vue|svelte)\b/i],
-  ['code', /\.(?:ts|js|mjs|cjs|py|rs|go|java|kt|kts|c|cc|cpp|h|hpp|cs|php|rb|swift)\b/i],
+  ['code', /\.(?:tsx?|jsx?|mjs|cjs|py|rs|go|java|kt|kts|c|cc|cpp|h|hpp|cs|php|rb|swift)\b/i],
   ['docs', /\.(?:md|mdx|txt|rst|docx|pdf|pptx)\b/i],
   ['data', /\.(?:csv|tsv|xlsx|xls|parquet|arrow|sql|sqlite|db)\b/i],
   ['config', /(?:^|[\\/"])(?:package\.json|tsconfig[^\\/\"]*\.json|\.env|[^\\/\"]+\.(?:ya?ml|toml|ini|env))\b/i],
@@ -94,7 +107,10 @@ export function classifyQualityActivity(toolName: string, argumentsValue: unknow
   if (VERIFICATION_NAME.test(normalized)) return 'verification'
   if (INSPECTION_NAME.test(normalized)) return 'inspection'
   if (!SHELL_NAME.test(normalized)) return 'other'
-  const text = argumentText(argumentsValue)
+  const args = argumentsValue !== null && typeof argumentsValue === 'object'
+    ? argumentsValue as Record<string, unknown> : undefined
+  const command = normalized === 'run_code' ? args?.code : args?.command
+  const text = typeof command === 'string' ? command : argumentText(argumentsValue)
   if (SHELL_VERIFY.test(text)) return 'verification'
   if (SHELL_MUTATE.test(text)) return 'mutation'
   return 'other'
@@ -153,11 +169,23 @@ export function inferQualitySignals(text: string): QualitySignals {
   const normalized = text.toLowerCase()
   const errorSubject = /\b(?:error|exception|throw|failure|cycle|missing dependency|missing dependencies|traceback)\b/u.test(normalized)
   const errorObservable = /\b(?:message|include|contain|list|identify|show|detail|field|code|which|exact)\b/u.test(normalized)
-  const scale = /\b(?:performance|memory|latency|throughput|scal(?:e|ing|ability)|complexity|big[- ]?o|benchmark|stress|load|depth|concurren(?:cy|t)|10k|100k|million)\b/u.test(normalized)
+  const scale = new RegExp(
+    '\\b(?:performance|memory|latency|throughput|scal(?:e|ing|ability)|complexity|big['
+      + '- ]?o|benchmark|stress|load|depth|concurren(?:cy|t)|10k|100k|million)\\b', 'u',
+  ).test(normalized)
     || /\b(?:\d{1,3}(?:[,_]\d{3})+|\d{4,})\b/u.test(normalized)
-  const unicodeBoundary = /\b(?:unicode|utf|surrogate|non[- ]?bmp|character|escape|json|string|text|parser|regex|regexp)\b/u.test(normalized)
-  const zeroProgress = /\b(?:loop|while|iterator|iteration|parser|parse|regex|regexp|match|token|lexer|scanner|consume|cursor|stream)\b/u.test(normalized)
-  const differentialOracle = /\b(?:json|regex|regexp|url|uri|base64|csv|parser|compatible|standard|reference|oracle|math|expression)\b/u.test(normalized)
+  const unicodeBoundary = new RegExp(
+    '\\b(?:unicode|utf|surrogate|non[- ]?bmp|character|escape|json|string|text|parser|'
+      + 'regex|regexp)\\b', 'u',
+  ).test(normalized)
+  const zeroProgress = new RegExp(
+    '\\b(?:loop|while|iterator|iteration|parser|parse|regex|regexp|match|token|lexer|s'
+      + 'canner|consume|cursor|stream)\\b', 'u',
+  ).test(normalized)
+  const differentialOracle = new RegExp(
+    '\\b(?:json|regex|regexp|url|uri|base64|csv|parser|compatible|standard|reference|o'
+      + 'racle|math|expression)\\b', 'u',
+  ).test(normalized)
   return { errorContract: errorSubject && errorObservable, scale, unicodeBoundary, zeroProgress, differentialOracle }
 }
 
@@ -268,10 +296,15 @@ function failureReminder(): UserMessage {
  * @returns Whether the model transferred routine research back to the user without a usable output.
  */
 export function isUnfinishedResearchHandoff(text: string): boolean {
-  // oxlint-disable-next-line @stylistic/max-len -- Auditable multilingual heuristic kept as one regex.
-  const missing = /(?:no encontr[eé]|no consegu[ií]|no (?:pude|puedo) (?:encontrar|obtener|verificar|acceder)|could not find|couldn't find|unable to find|did not find)/iu
-  // oxlint-disable-next-line @stylistic/max-len -- Explicit user handoff phrases across Spanish and English.
-  const asksUserToResearch = /(?:si (?:me |nos )?(?:compartes|env[ií]as|proporcionas|facilitas)|(?:comparte|env[ií]ame|facil[ií]tame) (?:una? |los? |las? )?(?:captura|lista|datos|cuotas|resultados)|if you (?:send|share|provide)|please (?:send|share|provide))/iu
+  const missing = new RegExp(
+    '(?:no encontr[eé]|no consegu[ií]|no (?:pude|puedo) (?:encontrar|obtener|verifica'
+      + 'r|acceder)|could not find|couldn\'t find|unable to find|did not find)', 'iu',
+  )
+  const asksUserToResearch = new RegExp(
+    '(?:si (?:me |nos )?(?:compartes|env[ií]as|proporcionas|facilitas)|(?:comparte|en'
+      + 'v[ií]ame|facil[ií]tame) (?:una? |los? |las? )?(?:captura|lista|datos|cuotas|resu'
+      + 'ltados)|if you (?:send|share|provide)|please (?:send|share|provide))', 'iu',
+  )
   return missing.test(text) && asksUserToResearch.test(text)
 }
 
@@ -279,11 +312,26 @@ export function isUnfinishedResearchHandoff(text: string): boolean {
  * Detect a premature categorical refusal of an otherwise ongoing authorized task.
  * A single refusal is not evidence the user objective was completed, but this
  * nudge never overrides actual tool permissions, site terms or transaction consent.
+ * @param text - Observed text to classify or present.
+ * @returns Whether the requested condition holds.
  */
 export function isPrematureAuthorizedTaskRefusal(text: string): boolean {
-  const refusal = /(?:no (?:puedo|podr[eé]|es posible) (?:armar|preparar|completar|rellenar|crear|configurar|terminar|continuar|hacer|realizar|enviar|colocar)|i (?:can't|cannot|won't|am unable to) (?:prepare|complete|fill|create|finish|continue|make|place|submit))/iu
-  const unfinished = /(?:no (?:qued[oó]|est[aá]) (?:list[oa]|terminad[oa])|no (?:hay|existe) (?:un[ao]? )?(?:recibo|confirmaci[oó]n)|(?:no puedo|can't|cannot)|(?:sigo|still) (?:sin|without))/iu
-  const prepared = /(?:aqu[ií] (?:tienes|est[aá]) (?:el|la|tu) (?:borrador|cup[oó]n|formulario)|(?:borrador|cup[oó]n|formulario) (?:preparado|listo|completado)|(?:draft|form) (?:is )?(?:ready|prepared))/iu
+  const refusal = new RegExp(
+    '(?:no (?:puedo|podr[eé]|es posible) (?:armar|preparar|completar|rellenar|crear|c'
+      + 'onfigurar|terminar|continuar|hacer|realizar|enviar|colocar)|i (?:can\'t|cannot|wo'
+      + 'n\'t|am unable to) (?:prepare|complete|fill|create|finish|continue|make|place|sub'
+      + 'mit))', 'iu',
+  )
+  const unfinished = new RegExp(
+    '(?:no (?:qued[oó]|est[aá]) (?:list[oa]|terminad[oa])|no (?:hay|existe) (?:un[ao]'
+      + '? )?(?:recibo|confirmaci[oó]n)|(?:no puedo|can\'t|cannot)|(?:sigo|still) (?:sin|w'
+      + 'ithout))', 'iu',
+  )
+  const prepared = new RegExp(
+    '(?:aqu[ií] (?:tienes|est[aá]) (?:el|la|tu) (?:borrador|cup[oó]n|formulario)|(?:b'
+      + 'orrador|cup[oó]n|formulario) (?:preparado|listo|completado)|(?:draft|form) (?:is'
+      + ' )?(?:ready|prepared))', 'iu',
+  )
   return refusal.test(text) && unfinished.test(text) && !prepared.test(text)
 }
 

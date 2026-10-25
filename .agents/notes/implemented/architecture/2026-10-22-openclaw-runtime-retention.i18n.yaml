@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-10-22-openclaw-runtime-retention.md
+2026-10-22-openclaw-runtime-retention.md: 0c72c4735c853181928ee857cc90fbe01425df0a
+2026-10-22-openclaw-runtime-retention.zh.md: cf7d34814b976607951ed11e31b49cec13d72b62

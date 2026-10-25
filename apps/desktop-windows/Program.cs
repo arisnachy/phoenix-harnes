@@ -173,39 +173,60 @@ internal static class Program
         var port = ((IPEndPoint)listener.LocalEndpoint).Port;
         using var cancellation = new CancellationTokenSource();
 
+        // WebView2 can open an idle speculative connection before sending its real
+        // navigation request. Never let that connection monopolize the accept loop.
+        var acceptedCount = 0;
+        var responseCount = 0;
         var serverTask = Task.Run(async () =>
         {
             var body = "<!doctype html><html><head><title>PHOENIX HARDNESS</title></head><body><div id=\"root\">loopback-smoke</div></body></html>";
             var bodyBytes = Encoding.UTF8.GetBytes(body);
             var headers = Encoding.ASCII.GetBytes(
                 $"HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {bodyBytes.Length}\r\nConnection: close\r\n\r\n");
+            var requests = new List<Task>();
 
-            while (!cancellation.IsCancellationRequested)
+            async Task ServeAsync(TcpClient connection)
             {
-                TcpClient? client = null;
-                try
+                using (connection)
+                using (var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellation.Token))
                 {
-                    client = await listener.AcceptTcpClientAsync(cancellation.Token);
-                    using (client)
-                    using (var stream = client.GetStream())
+                    // Idle preconnects must not hold the smoke server open forever.
+                    deadline.CancelAfter(TimeSpan.FromSeconds(3));
+                    try
                     {
+                        using var stream = connection.GetStream();
                         var request = new byte[8192];
-                        _ = await stream.ReadAsync(request, cancellation.Token);
-                        await stream.WriteAsync(headers, cancellation.Token);
-                        await stream.WriteAsync(bodyBytes, cancellation.Token);
-                        await stream.FlushAsync(cancellation.Token);
+                        if (await stream.ReadAsync(request, deadline.Token) == 0) return;
+                        await stream.WriteAsync(headers, deadline.Token);
+                        await stream.WriteAsync(bodyBytes, deadline.Token);
+                        await stream.FlushAsync(deadline.Token);
+                        Interlocked.Increment(ref responseCount);
                     }
+                    catch (OperationCanceledException) { /* idle connection or smoke shutdown */ }
+                    catch (IOException) { /* browser closed a speculative connection */ }
+                    catch (ObjectDisposedException) { /* connection closed during shutdown */ }
                 }
-                catch (OperationCanceledException)
+            }
+
+            try
+            {
+                while (!cancellation.IsCancellationRequested)
                 {
-                    client?.Dispose();
-                    break;
+                    try
+                    {
+                        var client = await listener.AcceptTcpClientAsync(cancellation.Token);
+                        Interlocked.Increment(ref acceptedCount);
+                        requests.Add(ServeAsync(client));
+                        requests.RemoveAll(task => task.IsCompleted);
+                    }
+                    catch (OperationCanceledException) { break; }
+                    catch (ObjectDisposedException) { break; }
                 }
-                catch (ObjectDisposedException)
-                {
-                    client?.Dispose();
-                    break;
-                }
+            }
+            finally
+            {
+                try { await Task.WhenAll(requests); }
+                catch (Exception ex) { DesktopLog.Write("Loopback smoke HTTP worker failed.", ex); }
             }
         });
 
@@ -244,7 +265,7 @@ internal static class Program
             {
                 poll.Stop();
                 timeout.Stop();
-                DesktopLog.Write("Loopback WebView smoke timed out before NavigationCompleted success.");
+                DesktopLog.Write($"Loopback WebView smoke timed out before NavigationCompleted success; accepted={Volatile.Read(ref acceptedCount)}, responses={Volatile.Read(ref responseCount)}.");
                 window.Dispose();
                 Application.ExitThread();
             };

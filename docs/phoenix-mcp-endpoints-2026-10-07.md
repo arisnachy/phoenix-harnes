@@ -1,5 +1,7 @@
 # Phoenix MCP: official endpoints and authentication review (2026-10-07)
 
+English | [中文](phoenix-mcp-endpoints-2026-10-07.zh.md)
+
 This document reviews the Host-pinned connectors in `packages/host/plugin-inventory/src/mcp-managed.ts` against provider-published setup instructions. **Documentation verification is not live user-account authentication**. A runtime may still require provider approval, client registration, installed local binaries, a login, or a workspace entitlement.
 
 | Phoenix connector | MCP transport URL / runner | Authentication and requirements | Official reference |

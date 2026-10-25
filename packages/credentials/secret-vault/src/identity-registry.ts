@@ -1,16 +1,27 @@
 /** Immutable identity policy and selectors; no secrets or browser access. */
 export type LoginProfile = 'personal' | 'kira'
+/** Supported site-specific credential form profiles. */
 export const LOGIN_PROFILES = ['personal', 'kira'] as const
+/** Field requirements and identity for a supported login form. */
 export interface LoginProfileInfo {
   id: LoginProfile
   saved: boolean
   automatic: boolean
   source: 'dpapi' | 'legacy-vault' | 'none'
 }
+/** Resolve the login form profile for a site.
+ * @param value - Value to normalize or classify.
+ * @returns The result produced by this operation.
+ */
 export function loginProfile(value: unknown): LoginProfile {
   if (value === 'personal' || value === 'kira') return value
   throw new TypeError('Perfil de acceso no válido')
 }
+/** Choose the preferred configured login form profile.
+ * @param profiles - Profiles supplied to this operation.
+ * @param preferred - Preferred supplied to this operation.
+ * @returns The result produced by this operation.
+ */
 export function preferredLoginProfile(
   profiles: readonly LoginProfileInfo[], preferred?: LoginProfile,
 ): LoginProfile {
@@ -28,6 +39,12 @@ export type AccountProvisionDecision =
   | 'explicit-consent-required'
   | 'site-adapter-required'
   | 'restricted-service'
+/** Determine whether an account can be provisioned for the requested site.
+ * @param origin - Credential or workflow origin to inspect.
+ * @param authorized - Authorized supplied to this operation.
+ * @param supportedAdapter - Supported adapter supplied to this operation.
+ * @returns The result produced by this operation.
+ */
 export function accountProvisionDecision(
   origin: string,
   authorized: boolean,

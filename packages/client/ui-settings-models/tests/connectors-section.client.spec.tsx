@@ -79,7 +79,7 @@ describe('connectors settings section', () => {
     const disconnect = Array.from(deepSeekCard?.querySelectorAll('button') ?? [])
       .find(button => button.textContent === 'Disconnect')
     expect(disconnect).toBeTruthy()
-    api.disconnect = vi.fn(async () => ok({ disconnected: true as const })) as typeof api.disconnect
+    api.disconnect = vi.fn(async () => ok({ disconnected: true as const }))
     fireEvent.click(disconnect!)
     await waitFor(() => { expect(api.disconnect).toHaveBeenCalledWith({ key: 'llm-pi-ai/deepseek' }) })
   })
@@ -280,7 +280,7 @@ describe('connectors settings section', () => {
       const authorize = Array.from(card.querySelectorAll('button')).find(button => button.textContent === 'Authorize')
       expect(authorize).toBeTruthy()
       fireEvent.click(authorize!)
-      await waitFor(() => expect(begin).toHaveBeenCalledWith({ key: 'mcp-client/cloudflare', method: 'oauth' }))
+      await waitFor(() =>{  expect(begin).toHaveBeenCalledWith({ key: 'mcp-client/cloudflare', method: 'oauth' }) })
       expect(begin).not.toHaveBeenCalledWith({ key: 'authorization-cloudflare/account', method: 'api-key' })
     } finally {
       open.mockRestore()
@@ -326,9 +326,9 @@ describe('connectors settings section', () => {
         .find(item => item.textContent === 'Install')
       expect(button).toBeTruthy()
       fireEvent.click(button!)
-      await waitFor(() => expect(begin).toHaveBeenCalledWith({
+      await waitFor(() =>{  expect(begin).toHaveBeenCalledWith({
         key: 'mcp-client/canva', method: 'oauth',
-      }))
+      }) })
       expect(installCurated).toHaveBeenCalledWith({ connectorId: 'canva' })
     } finally {
       popup.mockRestore()
@@ -351,8 +351,8 @@ describe('connectors settings section', () => {
       }],
     }))
     renderHub(api, { mcpRegistry: { state, install: vi.fn(), search: vi.fn() } })
-    await waitFor(() => expect(document.querySelector('[data-connector-id="canva"]')?.textContent)
-      .toContain(connectorEn.registryNoToolsStatus))
+    await waitFor(() =>{  expect(document.querySelector('[data-connector-id="canva"]')?.textContent)
+      .toContain(connectorEn.registryNoToolsStatus) })
     fireEvent.click(screen.getByRole('button', { name: connectorEn.connected }))
     expect(document.querySelector('[data-connector-id="canva"]')).toBeNull()
   })
@@ -380,7 +380,7 @@ describe('connectors settings section', () => {
     const install = Array.from(card?.querySelectorAll('button') ?? []).find(button => button.textContent === 'Install')
     expect(install).toBeTruthy()
     fireEvent.click(install!)
-    await waitFor(() => expect(installCurated).toHaveBeenCalledWith({ connectorId: 'cloudflare' }))
+    await waitFor(() =>{  expect(installCurated).toHaveBeenCalledWith({ connectorId: 'cloudflare' }) })
   })
 
   it('keeps the legacy Models authorization panel empty', () => {
@@ -471,7 +471,7 @@ describe('connectors settings section', () => {
       install: vi.fn(), installCurated: vi.fn(), search: vi.fn(),
     } })
     const card = document.querySelector('[data-connector-id="github"]')!
-    await waitFor(() => expect(card.querySelector('details')).toBeTruthy())
+    await waitFor(() =>{  expect(card.querySelector('details')).toBeTruthy() })
     const link = Array.from(card.querySelectorAll('a'))
       .find(a => a.textContent === 'Crear token en GitHub')
     expect(link?.getAttribute('href'))
@@ -492,9 +492,9 @@ describe('connectors settings section', () => {
       stored: { kind: 'grant' as const },
       methods: [{ id: 'credentials', label: 'Configure github token' }],
     }] })),
-      begin, status: vi.fn(async () => ok({
-        attemptId: 'github-pat', status: 'pending', nextSeq: 0, notices: [],
-      })), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    begin, status: vi.fn(async () => ok({
+      attemptId: 'github-pat', status: 'pending', nextSeq: 0, notices: [],
+    })), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
     } as unknown as IApiClient['authorization']
     renderHub(api, { mcpRegistry: {
       state: vi.fn(async () => ({ managed: [{ entryId: 'git-1',
@@ -505,14 +505,14 @@ describe('connectors settings section', () => {
       search: vi.fn(), install: vi.fn(),
     } })
     const card = document.querySelector('[data-connector-id="github"]')!
-    await waitFor(() => expect(card.textContent).toContain('Configurar token GitHub'))
+    await waitFor(() =>{  expect(card.textContent).toContain('Configurar token GitHub') })
     expect(card.textContent).toContain('no admite registro OAuth dinámico')
     const button = Array.from(card.querySelectorAll('button'))
       .find(item => item.textContent === 'Configurar token GitHub')
     fireEvent.click(button!)
-    await waitFor(() => expect(begin).toHaveBeenCalledWith({
+    await waitFor(() =>{  expect(begin).toHaveBeenCalledWith({
       key: 'mcp-client/github', method: 'credentials',
-    }))
+    }) })
   })
 
   it('never mistakes a github-copilot runtime for the GitHub repository MCP', async () => {
@@ -531,7 +531,7 @@ describe('connectors settings section', () => {
       install: vi.fn(), installCurated: vi.fn(), search: vi.fn(),
     } })
     const card = document.querySelector('[data-connector-id="github"]')!
-    await waitFor(() => expect(card.textContent).toContain('Instalar MCP GitHub'))
+    await waitFor(() =>{  expect(card.textContent).toContain('Instalar MCP GitHub') })
     expect(card.textContent).not.toContain('Connected')
     expect(card.textContent).not.toContain('Callable')
     expect(document.querySelector('[data-authorization-key="llm-pi-ai/github-copilot"]')).toBeNull()
@@ -562,7 +562,7 @@ describe('connectors settings section', () => {
       .find(item => item.textContent === 'Instalar MCP GitHub')
     expect(button).toBeTruthy()
     fireEvent.click(button!)
-    await waitFor(() => expect(installCurated).toHaveBeenCalledWith({ connectorId: 'github' }))
+    await waitFor(() =>{  expect(installCurated).toHaveBeenCalledWith({ connectorId: 'github' }) })
     expect(api.begin).not.toHaveBeenCalled()
   })
 
@@ -575,9 +575,9 @@ describe('connectors settings section', () => {
       key: 'llm-pi-ai/github-copilot', label: 'GitHub Copilot',
       methods: [{ id: 'oauth', label: 'Authorize Copilot' }], inFlight: false,
     }] })),
-      begin, status: vi.fn(async () => ok({
-        attemptId: 'github-mcp-auth', status: 'pending', nextSeq: 0, notices: [],
-      })), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    begin, status: vi.fn(async () => ok({
+      attemptId: 'github-mcp-auth', status: 'pending', nextSeq: 0, notices: [],
+    })), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
     } as unknown as IApiClient['authorization']
     renderHub(api, { mcpRegistry: {
       state: vi.fn(async () => ({
@@ -594,14 +594,14 @@ describe('connectors settings section', () => {
       install: vi.fn(), search: vi.fn(),
     } })
     const card = document.querySelector('[data-connector-id="github"]')!
-    await waitFor(() => expect(card.textContent).toContain('Authorization required'))
+    await waitFor(() =>{  expect(card.textContent).toContain('Authorization required') })
     expect(card.textContent).not.toContain('Connected · OpenClaw')
     const button = Array.from(card.querySelectorAll('button')).find(item => item.textContent === 'Authorize')
     expect(button).toBeTruthy()
     fireEvent.click(button!)
-    await waitFor(() => expect(begin).toHaveBeenCalledWith({
+    await waitFor(() =>{  expect(begin).toHaveBeenCalledWith({
       key: 'mcp-client/github', method: 'oauth',
-    }))
+    }) })
     expect(begin).not.toHaveBeenCalledWith({
       key: 'llm-pi-ai/github-copilot', method: 'oauth',
     })
@@ -780,7 +780,7 @@ describe('connectors settings section', () => {
     const installMeta = Array.from(devtools.querySelectorAll('button')).find(b => b.textContent === 'Install')
     expect(installMeta).toBeTruthy()
     fireEvent.click(installMeta!)
-    await waitFor(() => expect(installCurated).toHaveBeenCalledWith({ connectorId: 'meta-devtools' }))
+    await waitFor(() =>{  expect(installCurated).toHaveBeenCalledWith({ connectorId: 'meta-devtools' }) })
     expect(search).not.toHaveBeenCalled()
     expect(api.begin).not.toHaveBeenCalled()
   })
@@ -806,7 +806,7 @@ describe('connectors settings section', () => {
     expect(install).toBeTruthy()
     expect(install.disabled).toBe(false)
     fireEvent.click(install)
-    await waitFor(() => expect(installCurated).toHaveBeenCalledWith({ connectorId: 'microsoft-learn' }))
+    await waitFor(() =>{  expect(installCurated).toHaveBeenCalledWith({ connectorId: 'microsoft-learn' }) })
     expect(api.begin).not.toHaveBeenCalled()
   })
 
@@ -832,7 +832,7 @@ describe('connectors settings section', () => {
     for (const id of ids) {
       const card = document.querySelector(`[data-connector-id="${id}"]`)
       expect(card).not.toBeNull()
-      await waitFor(() => expect(card?.textContent).toContain('MCP iniciado · verifica OAuth con Kira'))
+      await waitFor(() =>{  expect(card?.textContent).toContain('MCP iniciado · verifica OAuth con Kira') })
       expect(card?.textContent).toContain('microsoft_login_start')
     }
     const xCard = document.querySelector('[data-connector-id="x"]')
@@ -865,7 +865,7 @@ describe('connectors settings section', () => {
       expect(install).toBeTruthy()
       expect(install!.disabled).toBe(false)
       fireEvent.click(install!)
-      await waitFor(() => expect(installCurated).toHaveBeenCalledWith({ connectorId: id }))
+      await waitFor(() =>{  expect(installCurated).toHaveBeenCalledWith({ connectorId: id }) })
       expect(api.begin).not.toHaveBeenCalled()
     },
   )
@@ -897,7 +897,7 @@ describe('connectors settings section', () => {
       expect(checkbox.checked).toBe(true)
       expect(install.disabled).toBe(false)
       fireEvent.click(install)
-      await waitFor(() => expect(installCurated).toHaveBeenCalledWith({ connectorId: id }))
+      await waitFor(() =>{  expect(installCurated).toHaveBeenCalledWith({ connectorId: id }) })
     }
     expect(api.begin).not.toHaveBeenCalled()
   })
@@ -1021,17 +1021,17 @@ describe('connectors settings section', () => {
     }
     renderHub(api, { mcpRegistry })
     const card = document.querySelector('[data-connector-id="brave-search"]')!
-    await waitFor(() => expect(card.querySelector('button')).toBeTruthy())
+    await waitFor(() =>{  expect(card.querySelector('button')).toBeTruthy() })
     fireEvent.click(Array.from(card.querySelectorAll('button')).find(b => b.textContent === 'Authorize')!)
-    await waitFor(() => expect(card.textContent).toContain('Introduce BRAVE_API_KEY'), { timeout: 2500 })
+    await waitFor(() =>{  expect(card.textContent).toContain('Introduce BRAVE_API_KEY') }, { timeout: 2500 })
     const input = card.querySelector('input[type="password"]') as HTMLInputElement | null
     expect(input).not.toBeNull()
     expect(document.querySelector('.authorizationPanel input[type="password"]')).toBeNull()
     fireEvent.change(input!, { target: { value: 'test-brave-key' } })
     fireEvent.click(Array.from(card.querySelectorAll('button')).find(b => b.textContent === 'Continue')!)
-    await waitFor(() => expect(answer).toHaveBeenCalledWith({
+    await waitFor(() =>{  expect(answer).toHaveBeenCalledWith({
       attemptId: 'brave-secret', promptId: 'api-key', value: 'test-brave-key',
-    }))
+    }) })
   })
 
   it('provides a real curated Vercel MCP installer instead of an inert available card', async () => {
@@ -1052,7 +1052,7 @@ describe('connectors settings section', () => {
     const button = Array.from(card.querySelectorAll('button')).find(b => b.textContent === 'Install')
     expect(button).toBeTruthy()
     fireEvent.click(button!)
-    await waitFor(() => expect(installCurated).toHaveBeenCalledWith({ connectorId: 'vercel' }))
+    await waitFor(() =>{  expect(installCurated).toHaveBeenCalledWith({ connectorId: 'vercel' }) })
   })
 
   it('offers official MCP registry discovery for an uninstalled provider without a pinned id', async () => {
@@ -1070,7 +1070,7 @@ describe('connectors settings section', () => {
       .find(b => b.textContent === 'Find connector')
     expect(button).toBeTruthy()
     fireEvent.click(button!)
-    await waitFor(() => expect(search).toHaveBeenCalledWith({ query: 'Neon', limit: 12 }))
+    await waitFor(() =>{  expect(search).toHaveBeenCalledWith({ query: 'Neon', limit: 12 }) })
   })
 
   it('lets auth-required runtime state override stale connected telemetry', async () => {
@@ -2080,7 +2080,7 @@ describe('connectors settings section', () => {
     expect(repairButton).toBeTruthy()
     expect(Array.from(card.querySelectorAll('button')).some(button => button.textContent === 'Authorize')).toBe(false)
     fireEvent.click(repairButton!)
-    await waitFor(() => expect(repair).toHaveBeenCalledWith({ entryId: 'notion-stale' }))
+    await waitFor(() =>{  expect(repair).toHaveBeenCalledWith({ entryId: 'notion-stale' }) })
     expect(reconnect).not.toHaveBeenCalled()
     expect(api.begin).not.toHaveBeenCalled()
   })
@@ -2355,8 +2355,8 @@ describe('connectors settings section', () => {
     const configure = Array.from(card.querySelectorAll('button')).find(b => /Configure/i.test(b.textContent || ''))!
     fireEvent.click(configure)
     fireEvent.click(screen.getByRole('button', { name: 'Conectar cuenta X personal' }))
-    await waitFor(() => expect(connectX).toHaveBeenCalledWith({ identity: 'user' }))
-    await waitFor(() => expect(reconnect).toHaveBeenCalledWith({ serverName: 'x-api' }))
+    await waitFor(() =>{  expect(connectX).toHaveBeenCalledWith({ identity: 'user' }) })
+    await waitFor(() =>{  expect(reconnect).toHaveBeenCalledWith({ serverName: 'x-api' }) })
     expect(document.body.textContent).not.toContain('cuenta esté autenticada por instalar')
   })
 

@@ -13,6 +13,7 @@ type Standings = {
   records?: Array<{ teamRecords?: Standing[] }>
 }
 
+/** Research-only trend with stated method, source and supporting evidence; not a win probability. */
 export type ResearchTrend = {
   favorite: string
   method: string

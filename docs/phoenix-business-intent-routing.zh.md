@@ -1,6 +1,6 @@
 # Business Mission：可验证的意图与连接器
 
-[Español](phoenix-business-intent-routing.md) | 中文
+[English](phoenix-business-intent-routing.md) | 中文
 
 **范围：** 商业任务规划，不会发布或花费资金。目前位于开发分支，不代表已完成生产环境集成。
 

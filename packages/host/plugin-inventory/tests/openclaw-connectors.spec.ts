@@ -90,11 +90,11 @@ describe('OpenClaw connector bridge', () => {
     const root = home()
     installSkill(root, 'openclaw-github')
     const run: OpenClawCommandRunner = (_bin, args) => args[0] === 'api'
-      ? { status: 1, stdout: '', stderr: 'unavailable' }
+      ? { status: 1, stdout: '', stderr: 'github-api-private-failure' }
       : { status: 0, stdout: '', stderr: '' }
     const state = new OpenClawConnectorBridge(run).state('github')
     expect(state).toMatchObject({ connected: false, phase: 'api-unavailable' })
-    expect(JSON.stringify(state)).not.toContain('unavailable')
+    expect(JSON.stringify(state)).not.toContain('github-api-private-failure')
   })
 
   it('never labels GitHub connected when its OpenClaw skill is absent', () => {
