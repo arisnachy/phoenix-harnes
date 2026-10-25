@@ -39,7 +39,7 @@ Phoenix 将 Microsoft Learn、按服务划分的免费 Graph（Phoenix 本地实
 
 官方仓库 https://github.com/microsoft/mcp 中的许多企业服务器托管在 Agent 365，需要租户 ID、Microsoft Entra 应用注册、组织身份、订阅及相应授权。**没有适用于所有 Microsoft 应用的匿名免费通用 MCP 入口**。
 
-因此，在目录中单独显示的 Outlook、Teams、OneDrive 和 SharePoint 卡片不能因为 Work IQ 已安装就标成已连接。Kira 必须实际检查目标服务的连接、可用工具和权限；Graph 管理与写入权限需独立开通。SharePoint Embedded 另有 https://github.com/microsoft/SharePoint-Embedded-MCP-Server，但它需要独立应用注册、租户及 Embedded 资源，不代替普通 SharePoint。
+因此，在目录中单独显示的 Outlook、Teams、OneDrive 和 SharePoint 卡片不能因为 Work IQ 已安装就标成已连接。Kira 必须实际检查目标服务的连接、可用工具和权限；Graph 管理与写入权限需独立开通。SharePoint Embedded 另有 [SharePoint Embedded MCP](https://github.com/microsoft/SharePoint-Embedded-MCP-Server)，但它需要独立应用注册、租户及 Embedded 资源，不代替普通 SharePoint。
 
 ## 5. 安装后如何验证
 

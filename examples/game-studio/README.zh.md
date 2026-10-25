@@ -26,7 +26,11 @@
 
 ### 复用已有素材和音效
 
-可使用 `node examples/game-studio/plan-game-assets.mjs manifest.json plan.json assets.json` 读取现有素材清单。规划器会核验本地 PNG/WAV/OGG/MP3 文件签名、游戏美术 ID 及声音事件 ID，并报告 `reusable-needs-integration`、`existingAssets.unbound` 和 `existingAssets.invalid`。优先复用已有文件，生成新资源后立刻接入动画、绘制或音频事件；不可仅凭文件存在就认定游戏完成。打包器拒绝没有可检测绘制或播放路径的素材，动态渲染器仍需实际游戏画面与声音测试。
+将当前兼容打包器的 `assets.json` 作为规划器的可选第三个参数：
+
+    node examples/game-studio/plan-game-assets.mjs manifest.json plan.json assets.json
+
+规划器会核验本地 PNG/WAV/OGG/MP3 文件签名、游戏美术 ID 及声音事件 ID，并报告 `reusable-needs-integration`、`existingAssets.unbound` 和 `existingAssets.invalid`。优先复用已有文件，生成新资源后立刻接入动画、绘制或音频事件；不可仅凭文件存在就认定游戏完成。打包器拒绝没有可检测绘制或播放路径的素材，动态渲染器仍需实际游戏画面与声音测试。
 
 ## Godot 原生 Game Studio（按需自动启用）
 
