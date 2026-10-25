@@ -55,6 +55,21 @@ describe('native bash resolution', () => {
     expect(resolved).toBe(second)
     expect(probed).toEqual([first, second])
   })
+
+  it('allows an explicit cold-start health timeout without weakening the executable probe', () => {
+    const root = mkdtempSync(join(tmpdir(), 'phoenix-git-bash-cold-start-'))
+    const executable = join(root, 'Git', 'bin', 'bash.exe')
+    mkdirSync(join(root, 'Git', 'bin'), { recursive: true })
+    writeFileSync(executable, '')
+    const checks: number[] = []
+    const path = resolveBashPath(undefined, { ProgramW6432: root, ProgramFiles: join(root, 'missing') },
+      'win32', (_candidate, timeoutMs) => {
+        checks.push(timeoutMs)
+        return timeoutMs === 8_000
+      })
+    expect(path).toBe(executable)
+    expect(checks).toEqual([8_000])
+  })
 })
 
 async function setup(config: ConstructorParameters<typeof LocalBashExecutor>[1] = {}) {
