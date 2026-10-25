@@ -1,6 +1,6 @@
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { spawnSync } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { diagnoseStalledPhoenixActivation, recordPhoenixUpdateStep, sanitizePhoenixUpdateDiagnostic, writePhoenixUpdateState } from './phoenix-update-state.mjs'
@@ -106,6 +106,31 @@ describe('PHOENIX updater state persistence', () => {
     const events = readFileSync(join(dir, 'phoenix-update-events.jsonl'), 'utf8')
     expect(events).toContain('"exitCode":7')
   })
+
+  it('publishes live output while the command is STILL running', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'phoenix-update-live-before-exit-'))
+    roots.push(dir)
+    const statePath = join(dir, 'phoenix-update-state.json')
+    const target = 'a'.repeat(40)
+    const js = "process.stdout.write('STARTED\\n'); setTimeout(() => process.exit(0), 4000)"
+    const child = spawn(process.execPath, [
+      join(process.cwd(), 'scripts', 'phoenix-update-live-command.mjs'),
+      JSON.stringify({ statePath, target, step: 'build',
+        cwd: process.cwd(), bin: process.execPath, args: ['-e', js] }),
+    ], { stdio: ['ignore', 'pipe', 'pipe'] })
+    const closed = new Promise<number | null>(resolve => child.once('close', resolve))
+    let captured = false
+    for (let index = 0; index < 120; index++) {
+      try {
+        captured = readFileSync(join(dir, 'phoenix-update-live.jsonl'), 'utf8').includes('STARTED')
+      } catch { /* waiting for child startup */ }
+      if (captured) break
+      await new Promise(resolve => setTimeout(resolve, 40))
+    }
+    expect(captured).toBe(true)
+    expect(child.exitCode).toBeNull()
+    expect(await closed).toBe(0)
+  }, 12000)
 
   it('turns a genuinely stalled restart into an actionable diagnostic without inventing a PowerShell error', () => {
     const root = mkdtempSync(join(tmpdir(), 'phoenix-update-stall-'))
