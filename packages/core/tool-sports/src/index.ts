@@ -117,25 +117,25 @@ export function apply(ctx: Context): void {
     name:'sports_chat_ticket_research',
     description:'GENERA UN TICKET VISUAL REALMENTE RENDERIZABLE de pronósticos para encuentros futuros verificados en ESPN, incluso SIN cuotas ni API key. Úsalo cuando un usuario pida un ticket y sports_chat_odds venga vacío. No lo confundas con un boleto cotizado.',
     parameters:{
-      date:{type:'string',description:'Fecha de los eventos AAAA-MM-DD; por defecto hoy en Santo Domingo.'},
-      legs:{type:'array',required:true,description:'De 1 a 6 selecciones, con IDs de los partidos obtenidos de sports_chat_games y motivos basados en investigación. No inventar IDs.',
-        items:{type:'object',additionalProperties:false,properties:{
-          sport:{type:'string',required:true,description:'Deporte de la cartelera, normalmente soccer.'},
-          league:{type:'string',required:true,description:'Liga ESPN válida, por ejemplo mex.1 o usa.1.'},
-          eventId:{type:'string',required:true,description:'ID real de un partido confirmado en sports_chat_games.'},
-          pick:{type:'string',required:true,description:'home o away; draw solo si es soccer.'},
-          rationale:{type:'string',description:'Fundamento breve de la selección; hipótesis de Kira, no una certeza.'},
-        }},
+      date:{ type:'string',description:'Fecha de los eventos AAAA-MM-DD; por defecto hoy en Santo Domingo.' },
+      legs:{ type:'array',required:true,description:'De 1 a 6 selecciones, con IDs de los partidos obtenidos de sports_chat_games y motivos basados en investigación. No inventar IDs.',
+        items:{ type:'object',additionalProperties:false,properties:{
+          sport:{ type:'string',required:true,description:'Deporte de la cartelera, normalmente soccer.' },
+          league:{ type:'string',required:true,description:'Liga ESPN válida, por ejemplo mex.1 o usa.1.' },
+          eventId:{ type:'string',required:true,description:'ID real de un partido confirmado en sports_chat_games.' },
+          pick:{ type:'string',required:true,description:'home o away; draw solo si es soccer.' },
+          rationale:{ type:'string',description:'Fundamento breve de la selección; hipótesis de Kira, no una certeza.' },
+        } },
       },
     },
-    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    output:{ schema:{ type:'string' },render:(_a,v)=>[{ type:'text' as const,text:v }] },
     isConcurrencySafe:()=>true,
     async execute(args){
       const result=await researchTicket(args.legs as ResearchTicketLeg[],args.date)
-      return JSON.stringify({uiBlock:result.card,priced:false,placed:false,verifiedEvents:result.verifiedEvents,
-        instruction:'Phoenix renderiza el ticket nativo sin código ni JSON. Explica el fundamento de tus picks y busca casas y cuotas verificables si se solicita un boleto cotizado. No calcules retorno sin cuotas.'})
+      return JSON.stringify({ uiBlock:result.card,priced:false,placed:false,verifiedEvents:result.verifiedEvents,
+        instruction:'Phoenix renderiza el ticket nativo sin código ni JSON. Explica el fundamento de tus picks y busca casas y cuotas verificables si se solicita un boleto cotizado. No calcules retorno sin cuotas.' })
     },
-    presentCall:()=>({card:'generic',title:'Crear ticket de pronósticos',kind:'read' as const}),
+    presentCall:()=>({ card:'generic',title:'Crear ticket de pronósticos',kind:'read' as const }),
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_ticket',
