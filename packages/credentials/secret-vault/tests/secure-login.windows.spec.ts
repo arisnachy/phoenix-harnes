@@ -226,7 +226,7 @@ describe.skipIf(!WINDOWS)('Windows DPAPI secure-login integration', () => {
         automatic: true,
         profile: 'personal',
       })
-      expect(JSON.parse(status.body).profiles[0]).toEqual({
+      expect((JSON.parse(status.body) as { profiles: unknown[] }).profiles[0]).toEqual({
         id: 'personal', source: 'dpapi', saved: true, automatic: true,
       })
       expect(status.body).not.toContain(secret)
