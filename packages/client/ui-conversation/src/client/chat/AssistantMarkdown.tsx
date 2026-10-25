@@ -74,7 +74,7 @@ export const AssistantMarkdown = memo(function AssistantMarkdown({
           const segment = segments[index]
           if (!segment) continue
           if (segment.kind === 'ui') {
-            rendered.push(<GenerativeUi key={first+':ui:'+index} block={segment.block}
+            rendered.push(<GenerativeUi key={`${first}:ui:${index}`} block={segment.block}
               onAction={onUiAction} {...(conversationId === undefined ? {} : { conversationId })} />)
             continue
           }
@@ -86,8 +86,8 @@ export const AssistantMarkdown = memo(function AssistantMarkdown({
             const part = presentation[j]
             if (!part) continue
             rendered.push(part.kind === 'formatted'
-              ? <PlainOutputFormatter key={first+':formatted:'+index+':'+j} card={part.card} />
-              : <MarkdownText key={first+':markdown:'+index+':'+j}
+              ? <PlainOutputFormatter key={`${first}:formatted:${index}:${j}`} card={part.card} />
+              : <MarkdownText key={`${first}:markdown:${index}:${j}`}
                 text={part.text} streaming={streaming} codeLabels={codeLabels} fileMentions={mentions} />)
           }
         }

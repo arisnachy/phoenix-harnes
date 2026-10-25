@@ -71,7 +71,12 @@ export function BusinessLibrarySettingsTab({ readBusinessLibrary,t }:BusinessLib
           <div className={css.productHead}><span>{product.type}</span><span>{t(buildKeys[product.buildStatus])}</span></div>
           <h4>{product.title}</h4>
           <p>{product.chapterCount} capítulos · {product.fileCount} archivos · {product.listingCount} fichas</p>
-          {product.targetWords!==null && <p>{product.writtenWords.toLocaleString()} / {product.targetWords.toLocaleString()} palabras · {product.plannedChapters} capítulos previstos</p>}
+          {product.targetWords !== null && (
+            <p>
+              {product.writtenWords.toLocaleString()} / {product.targetWords.toLocaleString()} palabras ·{' '}
+              {product.plannedChapters} capítulos previstos
+            </p>
+          )}
           <p>{t(listingKeys[product.listingStage])}</p>
           <small>{product.updatedAt ? new Date(product.updatedAt).toLocaleDateString() : '—'}</small>
         </article>)}
