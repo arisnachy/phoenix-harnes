@@ -75,7 +75,7 @@ export async function getFeed<T>(url:string, fetcher:typeof fetch=fetch):Promise
   if(text.length>4_000_000)throw Error('Respuesta supera 4 MB')
   return JSON.parse(text) as T
 }
-type FeedEvent = {id?:string|number;date?:string;name?:string;status?:{type?:{description?:string;state?:string}};competitions?:Array<{venue?:{fullName?:string;address?:{city?:string}};competitors?:Array<{id?:string;homeAway?:string;score?:string|number;team?:{displayName?:string;name?:string;id?:string;logo?:string;logos?:Array<{href?:string}>};records?:Array<{summary?:string}>;leaders?:Array<{name?:string;leaders?:Array<{athlete?:{displayName?:string;headshot?:{href?:string}};displayValue?:string}>}>}>;broadcasts?:Array<{names?:string[]}>}>}
+type FeedEvent = {id?:string|number;date?:string;name?:string;status?:{type?:{description?:string;state?:string}};competitions?:Array<{venue?:{fullName?:string;address?:{city?:string}};competitors?:Array<{id?:string;homeAway?:string;score?:string|number;team?:{displayName?:string;name?:string;id?:string;logo?:string;logos?:Array<{href?:string}>};records?:Array<{summary?:string}>;linescores?:Array<{value?:number|string;displayValue?:string}>;leaders?:Array<{name?:string;leaders?:Array<{athlete?:{displayName?:string;headshot?:{href?:string}};displayValue?:string}>}>}>;broadcasts?:Array<{names?:string[]}>}>}
 type MlbGame = {gamePk:number;gameDate?:string;venue?:{name?:string};seriesDescription?:string;seriesGameNumber?:number;status?:{detailedState?:string;abstractGameState?:string};teams?:Record<'home'|'away',{team?:{id?:number;name?:string};score?:number;probablePitcher?:{id?:number;fullName?:string}}>}
 /** Safe, minimal sports UI payload; the client validates it before rendering. */
 export type ChatBlock = {component:'sports_game_card'|'sports_ticket_card'|'sports_odds_card';version:1;props:Record<string,unknown>}
@@ -155,12 +155,20 @@ export async function chatGames(sport:string,league:string,requestedDate?:string
         const allowed=!!logo&&/^https:\/\/a\.espncdn\.com\//u.test(logo)&&logosEnabled(env)
         return {label:name,...(c?.score===undefined||e.status?.type?.state==='pre'?{}:{score:String(c.score)}),...(allowed?{logo}:{}) ,...(c?.records?.[0]?.summary?{meta:c.records[0].summary}:{})}
       }
+      const competitionTeams=comp?.competitors||[]
+      const visiting=competitionTeams.find(c=>c.homeAway==='away'),hosting=competitionTeams.find(c=>c.homeAway==='home')
+      const homePeriods=hosting?.linescores??[],awayPeriods=visiting?.linescores??[]
+      const periods=awayPeriods.length>0&&awayPeriods.length===homePeriods.length
+        ?awayPeriods.slice(0,9).map((v,i)=>({label:String(i+1),
+          away:String(v.displayValue??v.value??'—'),home:String(homePeriods[i]?.displayValue??homePeriods[i]?.value??'—')})):[]
+      const sportLabel={soccer:'Fútbol',basketball:'Baloncesto',football:'Fútbol americano',hockey:'Hockey',
+        tennis:'Tenis',mma:'MMA',racing:'Automovilismo',golf:'Golf',baseball:'Béisbol'}[sport]||sport
       rows.push({component:'sports_game_card',version:1,props:{
-        title:title(league,45)+' · '+title(e.name,95),subtitle:title(sport,45),
+        title:title(e.name,95),subtitle:title(league,45)+' · '+sportLabel,
         status:title(e.status?.type?.description,55),when:localTime(e.date),
         venue:title(comp?.venue?.fullName),home:side(home),away:side(away),
         source:'ESPN Site API · '+new Date().toISOString(),
-        sport,eventId:String(e.id??''),highlights:(comp?.competitors??[]).flatMap(team=>(team.leaders??[]).slice(0,2).flatMap(group=>(group.leaders??[]).slice(0,1).map(leader=>({label:title(group.name),value:title(leader.athlete?.displayName),...(leader.displayValue?{detail:title(leader.displayValue)}:{})})))),
+        sport,eventId:String(e.id??''),periods,highlights:(comp?.competitors??[]).flatMap(team=>(team.leaders??[]).slice(0,2).flatMap(group=>(group.leaders??[]).slice(0,1).map(leader=>({label:title(group.name),value:title(leader.athlete?.displayName),...(leader.displayValue?{detail:title(leader.displayValue)}:{}),...(logosEnabled(env)&&/^https:\/\/a\.espncdn\.com\//u.test(leader.athlete?.headshot?.href??'')?{image:leader.athlete!.headshot!.href}:{})})))),
         ...(comp?.broadcasts?.length?{broadcast:comp.broadcasts.flatMap(x=>x.names??[]).slice(0,3).join(', ')}:{}),
         askPrompt:'Kira, amplía el análisis verificado del evento '+title(e.id,50)+' de '+league+'. Incluye métricas específicas de '+sport+' con sus fuentes.',
       }})
