@@ -1,6 +1,7 @@
 /** Read-only sports information adapters for Kira's conversation tools. */
 import {fetchPublicEspnOdds} from './espn-odds.ts'
 import {enrichMlbMatch} from './mlb-matchup.ts'
+import {researchMlbTrend} from './mlb-research.ts'
 export const sportsCatalog: Readonly<Record<string, readonly string[]>> = {
   soccer: ['eng.1','esp.1','mex.1','usa.1','uefa.champions','fifa.world'],
   basketball: ['nba','wnba','mens-college-basketball'],
@@ -77,7 +78,7 @@ export async function getFeed<T>(url:string, fetcher:typeof fetch=fetch):Promise
 type FeedEvent = {id?:string|number;date?:string;name?:string;status?:{type?:{description?:string;state?:string}};competitions?:Array<{venue?:{fullName?:string;address?:{city?:string}};competitors?:Array<{id?:string;homeAway?:string;score?:string|number;team?:{displayName?:string;name?:string;id?:string;logo?:string;logos?:Array<{href?:string}>};records?:Array<{summary?:string}>;leaders?:Array<{name?:string;leaders?:Array<{athlete?:{displayName?:string;headshot?:{href?:string}};displayValue?:string}>}>}>;broadcasts?:Array<{names?:string[]}>}>}
 type MlbGame = {gamePk:number;gameDate?:string;venue?:{name?:string};seriesDescription?:string;seriesGameNumber?:number;status?:{detailedState?:string;abstractGameState?:string};teams?:Record<'home'|'away',{team?:{id?:number;name?:string};score?:number;probablePitcher?:{id?:number;fullName?:string}}>}
 /** Safe, minimal sports UI payload; the client validates it before rendering. */
-export type ChatBlock = {component:'sports_game_card'|'sports_ticket_card';version:1;props:Record<string,unknown>}
+export type ChatBlock = {component:'sports_game_card'|'sports_ticket_card'|'sports_odds_card';version:1;props:Record<string,unknown>}
 function localTime(dateString?:string):string {
   if(!dateString)return 'Hora no confirmada'
   const parsed=new Date(dateString)
@@ -118,6 +119,9 @@ export async function chatGames(sport:string,league:string,requestedDate?:string
         g.gamePk,home?.team?.id??0,away?.team?.id??0,homeName,awayName,
         {home:home?.probablePitcher,away:away?.probablePitcher},Number(day.slice(0,4)),env,fetcher,
       ):null
+      const research=index<3?await researchMlbTrend(
+        home?.team?.id??0,away?.team?.id??0,Number(day.slice(0,4)),homeName,awayName,fetcher,
+      ):undefined
       const highlights=details?.pitchers.length
         ? details.pitchers.map(p=>({label:'Abridor probable · '+p.team,value:p.name,...(p.image?{image:p.image}:{}),...(p.stats?{detail:p.stats}:{})}))
         : ([['away',away],['home',home]] as const).filter(([,t])=>t?.probablePitcher?.fullName)
@@ -128,7 +132,7 @@ export async function chatGames(sport:string,league:string,requestedDate?:string
         status:title(g.status?.detailedState,55),when:localTime(g.gameDate),venue:title(g.venue?.name),
         home:side(home),away:side(away),source:'MLB Stats API · '+new Date().toISOString(),
         highlights,pitchers:details?.pitchers??[],lineups:details?.lineups??[],
-        bullpen:details?.bullpen??[],sport:'baseball',eventId:String(g.gamePk),
+        bullpen:details?.bullpen??[],sport:'baseball',eventId:String(g.gamePk),...(research?{research}:{}) ,
         note:details?.notes.join(' · ')||'Los abridores y las alineaciones están sujetos a confirmación.',
         askPrompt:'Kira, investiga el partido MLB '+g.gamePk+' con pitchers probables, bullpen, alineaciones y cuotas verificables. Si hay estimaciones de favoritos, distingue tus cálculos de ESPN.',
       }}
