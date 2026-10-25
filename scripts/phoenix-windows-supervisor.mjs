@@ -33,6 +33,7 @@ const hostArgs = process.argv.slice(2)
 const desktopConsoleVisible = ['1', 'true', 'yes']
   .includes((process.env.PHOENIX_DESKTOP_CONSOLE ?? '').trim().toLowerCase())
 const hideRuntimeWindows = !desktopConsoleVisible
+let missingLiveHelperReported = false
 // The supervisor itself may be loaded from a newer isolated runtime while cwd
 // remains the durable checkout. Keep compatibility helpers on the same code
 // generation as the supervisor so a stale source checkout cannot reintroduce
@@ -910,20 +911,29 @@ function runChecked(cwd, bin, args, label) {
   if (step) reportSupervisorStep(step, 'started')
   const currentTarget = restartRequestTarget() ?? readUpdateState()?.target
   const journalStatePath = updateStatePath()
-  const live = step !== undefined && typeof currentTarget === 'string'
+  const liveEligible = step !== undefined && typeof currentTarget === 'string'
     && /^[a-f0-9]{40}$/iu.test(currentTarget) && journalStatePath !== undefined
-  // The separate helper is asynchronous even while this supervisor remains
-  // synchronous: its streams reach both the console and the Host journal while
-  // pnpm/PowerShell is still working, not only after process exit.
+  // A previous runtime can supervise a newer stable update. The optional
+  // live-output helper may not exist in that older runtime. Never invoke Node
+  // with a missing path: run the ORIGINAL command and stream it directly
+  // instead. The same supervisor journals started/failed/ok in both modes.
+  const liveHelper = join(supervisorSourceRoot, 'scripts', 'phoenix-update-live-command.mjs')
+  const live = liveEligible && existsSync(liveHelper)
+  const directStream = liveEligible && !live
+  if (directStream && !missingLiveHelperReported) {
+    missingLiveHelperReported = true
+    console.error('[PHOENIX UPDATE] optional live output helper missing in the running supervisor; '
+      + 'executing the updater step directly with visible console output while preserving the current Host.')
+  }
   const liveArgs = live ? [
-    fileURLToPath(new URL('./phoenix-update-live-command.mjs', import.meta.url)),
+    liveHelper,
     JSON.stringify({ cwd, bin, args, step, target: currentTarget, statePath: journalStatePath }),
   ] : args
   const result = spawnSync(live ? process.execPath : bin, liveArgs, {
     cwd,
     env: process.env,
     encoding: 'utf8',
-    stdio: live ? 'inherit' : ['ignore', 'pipe', 'pipe'],
+    stdio: live || directStream ? 'inherit' : ['ignore', 'pipe', 'pipe'],
     maxBuffer: 64 * 1024 * 1024,
     windowsHide: hideRuntimeWindows,
   })
