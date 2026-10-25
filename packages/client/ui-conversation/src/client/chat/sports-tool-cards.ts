@@ -6,12 +6,12 @@
  * This is a DISPLAY adapter. It never calls providers or places a wager.
  * It does not derive facts from unstructured prose, screenshots, or search.
  */
-import {parseGenerativeUiBlock, splitGenerativeUiText, type GenerativeUiBlock} from './GenerativeUi.tsx'
+import { parseGenerativeUiBlock, splitGenerativeUiText, type GenerativeUiBlock } from './GenerativeUi.tsx'
 
 type ResultBlock = {
   kind?: unknown
-  call?: {name?: string} | null
-  content?: readonly {type?: string; text?: string}[]
+  call?: { name?: string } | null
+  content?: readonly { type?: string; text?: string }[]
   isError?: boolean
   subCalls?: readonly ResultBlock[]
 }
@@ -41,9 +41,9 @@ function noOddsCard(reason: 'unavailable'|'failed'): GenerativeUiBlock {
         ? 'No se completó la consulta de cuotas. No es posible calcular un boleto con precios vigentes.'
         : 'El proveedor consultado no entregó precios verificables para la fecha y mercado solicitados.',
       fields:[
-        {label:'Resultado',value:'Sin apuesta'},
-        {label:'Cuota conjunta',value:'No disponible'},
-        {label:'Retorno potencial',value:'No calculado'},
+        { label:'Resultado',value:'Sin apuesta' },
+        { label:'Cuota conjunta',value:'No disponible' },
+        { label:'Retorno potencial',value:'No calculado' },
       ],
       footer:'ESPN / proveedor de cuotas · No se inventaron líneas ni probabilidades. Una consulta posterior puede tener cobertura diferente.',
     },
@@ -58,7 +58,7 @@ function noOddsCard(reason: 'unavailable'|'failed'): GenerativeUiBlock {
  */
 export function sportsCardsFromToolResult(root: unknown): GenerativeUiBlock[] {
   if(root===null||typeof root!=='object')return []
-  const stack:[ResultBlock,number][]=[[root as ResultBlock,0]]
+  const stack:[ResultBlock,number][]=[[root,0]]
   const cards:GenerativeUiBlock[]=[]
   let visited=0
   while(stack.length&&visited<MAX_NODES&&cards.length<MAX_SPORTS_CARDS){

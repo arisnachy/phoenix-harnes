@@ -180,7 +180,7 @@ describe.skipIf(!WINDOWS)('Windows DPAPI secure-login integration', () => {
           resolve({
             host: `127.0.0.1:${address.port}`,
             close: async () =>{  await new Promise<void>((done, reject) => {
-              server?.close(error =>{  error === undefined ? done() : reject(error); })
+              server?.close((error) =>{  error === undefined ? done() : reject(error) })
             }) },
           })
         })

@@ -3,7 +3,7 @@ import type { Context } from '@phoenix-ai/cordis'
 import { defineTool } from '@phoenix-ai/dsh-tools'
 import type {} from '@phoenix-ai/dsh-system-prompt'
 import { sportsCatalog, discoverEspnLeagues, chatGames, marketOdds, pricedTicket, type MarketSelection } from './sports.ts'
-import {getMlbPitcherReport} from './mlb.ts'
+import { getMlbPitcherReport } from './mlb.ts'
 
 export const name = 'tool-sports'
 export const inject = ['tools','systemPrompt']
@@ -21,101 +21,101 @@ export function apply(ctx: Context): void {
     name:'sports_chat_catalog',
     description:'Lista disciplinas y ligas documentadas. No crea menú ni abre otra pantalla.',
     parameters:{},
-    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    output:{ schema:{ type:'string' },render:(_a,v)=>[{ type:'text' as const,text:v }] },
     isConcurrencySafe:()=>true,
-    execute:()=>Promise.resolve(JSON.stringify({sports:sportsCatalog,notice:'La disponibilidad de ligas y recursos varía por proveedor.'})),
-    presentCall:()=>({card:'generic',title:'Consultar deportes',kind:'read' as const}),
+    execute:()=>Promise.resolve(JSON.stringify({ sports:sportsCatalog,notice:'La disponibilidad de ligas y recursos varía por proveedor.' })),
+    presentCall:()=>({ card:'generic',title:'Consultar deportes',kind:'read' as const }),
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_discover',
     description:'Descubre competiciones adicionales directamente en el catálogo público ESPN, sin API key ni acceso a URLs arbitrarias.',
-    parameters:{sport:{type:'string',required:true,description:'Disciplina ESPN como soccer, baseball, basketball, cricket, golf o hockey.'}},
-    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    parameters:{ sport:{ type:'string',required:true,description:'Disciplina ESPN como soccer, baseball, basketball, cricket, golf o hockey.' } },
+    output:{ schema:{ type:'string' },render:(_a,v)=>[{ type:'text' as const,text:v }] },
     isConcurrencySafe:()=>true,
     async execute(args){
       const leagues=await discoverEspnLeagues(args.sport)
-      return JSON.stringify({sport:args.sport,source:'ESPN Core/Web API (consulta pública)',leagues,
-        note:'Los slugs se obtuvieron del catálogo ESPN; no todas las ligas tienen un scoreboard activo. Solicita deportes individuales con sports_chat_games.'})
+      return JSON.stringify({ sport:args.sport,source:'ESPN Core/Web API (consulta pública)',leagues,
+        note:'Los slugs se obtuvieron del catálogo ESPN; no todas las ligas tienen un scoreboard activo. Solicita deportes individuales con sports_chat_games.' })
     },
-    presentCall:()=>({card:'generic',title:'Descubrir ligas en ESPN',kind:'read' as const}),
+    presentCall:()=>({ card:'generic',title:'Descubrir ligas en ESPN',kind:'read' as const }),
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_games',
     description:'Eventos reales en el chat: liga, horario, estadio, equipos y estadísticas verificables. Devuelve tarjetas renderizables.',
     parameters:{
-      sport:{type:'string',required:true,description:'Deporte: soccer, baseball, basketball, etc.'},
-      league:{type:'string',required:true,description:'Liga: mlb, nba, mex.1, eng.1, etc.'},
-      date:{type:'string',description:'Fecha AAAA-MM-DD, opcional: hoy en Santo Domingo.'},
+      sport:{ type:'string',required:true,description:'Deporte: soccer, baseball, basketball, etc.' },
+      league:{ type:'string',required:true,description:'Liga: mlb, nba, mex.1, eng.1, etc.' },
+      date:{ type:'string',description:'Fecha AAAA-MM-DD, opcional: hoy en Santo Domingo.' },
     },
-    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    output:{ schema:{ type:'string' },render:(_a,v)=>[{ type:'text' as const,text:v }] },
     isConcurrencySafe:()=>true,
     async execute(args){
       const result=await chatGames(args.sport,args.league,args.date)
-      return JSON.stringify({summary:result.summary,date:result.date,source:result.source,count:result.count,
+      return JSON.stringify({ summary:result.summary,date:result.date,source:result.source,count:result.count,
         uiBlocks:result.items.slice(0,6),remaining:Math.max(0,result.items.length-6),
-        instruction:'Phoenix renderiza uiBlocks automáticamente en el chat. No vuelvas a imprimirlos como JSON o código; comenta datos y fuentes en prosa.'})
+        instruction:'Phoenix renderiza uiBlocks automáticamente en el chat. No vuelvas a imprimirlos como JSON o código; comenta datos y fuentes en prosa.' })
     },
-    presentCall:()=>({card:'generic',title:'Buscar partidos y sus datos',kind:'read' as const}),
+    presentCall:()=>({ card:'generic',title:'Buscar partidos y sus datos',kind:'read' as const }),
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_mlb_pitchers',
     description:'Analiza rotación y bullpen de MLB por equipo, ERA, WHIP, entradas y ponches con datos de temporada verificados.',
     parameters:{
-      teamId:{type:'integer',required:true,description:'ID del equipo, extraído de datos reales MLB.'},
-      season:{type:'integer',required:true,description:'Año de la temporada MLB.'},
+      teamId:{ type:'integer',required:true,description:'ID del equipo, extraído de datos reales MLB.' },
+      season:{ type:'integer',required:true,description:'Año de la temporada MLB.' },
     },
-    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    output:{ schema:{ type:'string' },render:(_a,v)=>[{ type:'text' as const,text:v }] },
     isConcurrencySafe:()=>true,
     async execute(args){
       const report=await getMlbPitcherReport(args.teamId,args.season)
-      return JSON.stringify({source:report.source,roster:report.pitchers,missingStats:report.unavailableStats,
-        uiBlock:report.uiBlock,instruction:'Phoenix muestra uiBlock automáticamente en el chat. No repitas su JSON; explica la comparación y distingue estadísticas ausentes.'})
+      return JSON.stringify({ source:report.source,roster:report.pitchers,missingStats:report.unavailableStats,
+        uiBlock:report.uiBlock,instruction:'Phoenix muestra uiBlock automáticamente en el chat. No repitas su JSON; explica la comparación y distingue estadísticas ausentes.' })
     },
-    presentCall:()=>({card:'generic',title:'Analizar abridores y bullpen MLB',kind:'read' as const}),
+    presentCall:()=>({ card:'generic',title:'Analizar abridores y bullpen MLB',kind:'read' as const }),
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_odds',
     description:'Busca cuotas públicas ESPN sin clave o The Odds API si está configurada; puede devolver vacío cuando ESPN no publica precios.',
     parameters:{
-      sportKey:{type:'string',required:true,description:'Clave del proveedor: baseball_mlb, basketball_nba, soccer_epl, etc.'},
-      markets:{type:'string',description:'h2h, totals o spreads. Por defecto h2h.'},
+      sportKey:{ type:'string',required:true,description:'Clave del proveedor: baseball_mlb, basketball_nba, soccer_epl, etc.' },
+      markets:{ type:'string',description:'h2h, totals o spreads. Por defecto h2h.' },
     },
-    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    output:{ schema:{ type:'string' },render:(_a,v)=>[{ type:'text' as const,text:v }] },
     isConcurrencySafe:()=>true,
     async execute(args){
       const quotes=await marketOdds(args.sportKey,args.markets)
-      return JSON.stringify({source:quotes[0]?.source||'ESPN público (sin cuotas disponibles) / The Odds API opcional',observedAt:new Date().toISOString(),outcomes:quotes.slice(0,120),
+      return JSON.stringify({ source:quotes[0]?.source||'ESPN público (sin cuotas disponibles) / The Odds API opcional',observedAt:new Date().toISOString(),outcomes:quotes.slice(0,120),
         total:quotes.length,remaining:Math.max(0,quotes.length-120),
-        note:quotes.length?'Cuotas verificadas, no probabilidades propias. Actualizar antes de componer tickets.':'ESPN no publicó moneylines accesibles para ese día y mercado; no hace falta una clave para ver partidos. Las cuotas faltantes no se inventan.'})
+        note:quotes.length?'Cuotas verificadas, no probabilidades propias. Actualizar antes de componer tickets.':'ESPN no publicó moneylines accesibles para ese día y mercado; no hace falta una clave para ver partidos. Las cuotas faltantes no se inventan.' })
     },
-    presentCall:()=>({card:'generic',title:'Comparar cuotas',kind:'read' as const}),
+    presentCall:()=>({ card:'generic',title:'Comparar cuotas',kind:'read' as const }),
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_ticket',
     description:'Genera un ticket visual SIMULADO con selecciones verificadas nuevamente en cuotas reales. No ejecuta apuestas.',
     parameters:{
-      sportKey:{type:'string',description:'Clave deportiva de The Odds API. Para varios deportes utiliza sportKeys.'},
-      sportKeys:{type:'array',description:'Claves para ticket multisport, máximo cuatro.',items:{type:'string'}},
-      markets:{type:'string',description:'h2h, totals o spreads, mismo mercado de las selecciones.'},
-      selections:{type:'array',required:true,description:'Entre una y diez selecciones verificables.',
-        items:{type:'object',additionalProperties:false,properties:{
-          eventId:{type:'string',required:true},bookmaker:{type:'string',required:true},
-          market:{type:'string',required:true},selection:{type:'string',required:true},
-          point:{type:'number'},
-        }}},
-      stake:{type:'number',description:'Importe ficticio para simular el retorno; no es una operación financiera.'},
+      sportKey:{ type:'string',description:'Clave deportiva de The Odds API. Para varios deportes utiliza sportKeys.' },
+      sportKeys:{ type:'array',description:'Claves para ticket multisport, máximo cuatro.',items:{ type:'string' } },
+      markets:{ type:'string',description:'h2h, totals o spreads, mismo mercado de las selecciones.' },
+      selections:{ type:'array',required:true,description:'Entre una y diez selecciones verificables.',
+        items:{ type:'object',additionalProperties:false,properties:{
+          eventId:{ type:'string',required:true },bookmaker:{ type:'string',required:true },
+          market:{ type:'string',required:true },selection:{ type:'string',required:true },
+          point:{ type:'number' },
+        } } },
+      stake:{ type:'number',description:'Importe ficticio para simular el retorno; no es una operación financiera.' },
     },
-    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    output:{ schema:{ type:'string' },render:(_a,v)=>[{ type:'text' as const,text:v }] },
     isConcurrencySafe:()=>true,
     async execute(args){
       const requestedKeys = args.sportKeys?.length ? args.sportKeys : args.sportKey ? [args.sportKey] : []
       const keys = [...new Set(requestedKeys)]
       if (keys.length < 1 || keys.length > 4) throw new Error('Indica entre 1 y 4 disciplinas para el ticket.')
       const quotes = (await Promise.all(keys.map(key => marketOdds(key,args.markets)))).flat()
-      const {card,warning}=pricedTicket(args.selections as MarketSelection[],quotes,args.stake)
-      return JSON.stringify({uiBlock:card,warning,simulationOnly:true,placed:false,
-        instruction:'Phoenix muestra uiBlock automáticamente en el chat. No reproduzcas su JSON ni un bloque de código. Nunca prometas que ganará.'})
+      const { card,warning }=pricedTicket(args.selections as MarketSelection[],quotes,args.stake)
+      return JSON.stringify({ uiBlock:card,warning,simulationOnly:true,placed:false,
+        instruction:'Phoenix muestra uiBlock automáticamente en el chat. No reproduzcas su JSON ni un bloque de código. Nunca prometas que ganará.' })
     },
-    presentCall:()=>({card:'generic',title:'Crear ticket visual de análisis',kind:'read' as const}),
+    presentCall:()=>({ card:'generic',title:'Crear ticket visual de análisis',kind:'read' as const }),
   }))
 }

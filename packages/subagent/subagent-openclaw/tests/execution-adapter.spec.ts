@@ -111,7 +111,7 @@ async function gatewayFor(options: {
     requests,
     async close() {
       for (const socket of server.clients) socket.close()
-      await new Promise<void>((resolve) =>{  server.close(() =>{  resolve(); }) })
+      await new Promise<void>((resolve) =>{  server.close(() =>{  resolve() }) })
     },
   }
   gateways.push(gateway)
