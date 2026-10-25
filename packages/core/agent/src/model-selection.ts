@@ -1054,11 +1054,12 @@ function phoenixAutoRoute(
       }
     }
     if (isConversationalFastPathText(directText) || isContextualConversationFastPathText(directText)) {
-      // Eclipse's conversational path uses Luna Max directly; no Sol plan.
+      // Preserve Luna as the conversational worker without spending Max
+      // reasoning on greetings and other short, tool-free exchanges.
       return {
         provider: 'openai-codex',
         model: PHOENIX_CODEX_AUTO_WORKER_MODEL,
-        reasoningEffort: ReasoningEffortId('max'),
+        reasoningEffort: ReasoningEffortId('low'),
       }
     }
     if (isStandaloneVisualPreviewRequest(directText)) {
@@ -1079,10 +1080,13 @@ function phoenixAutoRoute(
       }
     }
     if (isPhoenixAutoQuickTurn(directText)) {
+      // A single low-risk operation needs tools and accuracy, not Max
+      // reasoning. Consequential, multi-step and exceptional work never
+      // enters this fast lane.
       return {
         provider: 'openai-codex',
         model: PHOENIX_CODEX_AUTO_WORKER_MODEL,
-        reasoningEffort: ReasoningEffortId('max'),
+        reasoningEffort: ReasoningEffortId('medium'),
       }
     }
     if (phoenixAutoTaskRequest(directText)) {
@@ -1319,7 +1323,9 @@ export function installModelSelection(
           && isPhoenixAutoQuickTurn(directText)
         const role = automatic.model === PHOENIX_CODEX_AUTO_PLANNER_MODEL ? 'planner' : 'coordinator'
         const routed = quick
-          ? { ...automatic, reasoningEffort: ReasoningEffortId('max') }
+          // Keep Luna as the direct fast-path model; retain its proportional
+          // low/medium effort instead of silently upgrading every quick turn.
+          ? automatic
           : resolveEclipseRoleRoute(
             eclipseProfile,
             role,
