@@ -16,7 +16,8 @@ Phoenix 将 Microsoft Learn、按服务划分的免费 Graph（Phoenix 本地实
 ## 2. Microsoft 365 Work IQ MCP — 统一套件，需要计费
 
 - 官方说明：https://learn.microsoft.com/en-us/microsoft-365/copilot/extensibility/work-iq/cli
-- 官方包：`@microsoft/workiq`；MCP 启动命令：`npx -y @microsoft/workiq mcp`。
+- 官方包：`@microsoft/workiq`。
+- Microsoft 已验证的 MCP 启动命令：`npx -y @microsoft/workiq mcp`。
 - Phoenix 安装路径：**Microsoft 365 Work IQ** → 查看成本提示 → **安装**。
 - 根据租户与许可情况，可查询 Outlook 邮件、会议、日历、OneDrive/SharePoint 文档、Teams 和人员；不保证全部数据或写权限可用。
 - 必要条件包括 Node.js、与 Azure 订阅及资源组关联的 Copilot Studio 按量计费计划、已分配计费的用户、管理员对 Entra 权限的批准。

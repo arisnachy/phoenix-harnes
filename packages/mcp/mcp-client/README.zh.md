@@ -125,7 +125,7 @@ MCP 客户端桥接插件：连接外部 [Model Context Protocol](https://modelc
 ##### 模型可见的 MCP 结果示例
 
 ```markdown
-MCP 工具已完成。文本内容与该模型路由支持的图片按照原始响应顺序呈现。
+MCP tool completed. Text content and any route-supported images appear in their original response order.
 ```
 
 ## 已知限制与暂缓事项
