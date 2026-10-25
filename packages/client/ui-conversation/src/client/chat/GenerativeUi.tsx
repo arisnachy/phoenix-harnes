@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { PhoenixStatusPill, PhoenixAgentLine, type PhoenixUiIconName, type PhoenixStatusTone } from '@phoenix-ai/dsh-client-ui-primitives'
 import { ScaleForm, parseScaleForm, type ScaleFormSpec } from './ScaleForm.tsx'
 import { SpreadsheetSurface, parseSpreadsheet, type SpreadsheetSpec } from './SpreadsheetSurface.tsx'
@@ -79,12 +79,18 @@ type SmartCard = {
 }
 
 type SportsSide = { label: string; score?: string; logo?: string; meta?: string }
+type SportsPlayer = { name: string; role?: string; image?: string; stats?: string; id?: number }
+type SportsPitcher = { team: string; name: string; id?: number; image?: string; stats?: string; probable: boolean }
+type SportsLineup = { team: string; confirmed: boolean; players: SportsPlayer[] }
+type SportsBullpen = { team: string; pitchers: SportsPlayer[]; note: string }
 type SportsGameCard = {
   component: 'sports_game_card'; version: 1
   props: {
     title: string; subtitle?: string; status?: string; when: string; venue?: string
     home: SportsSide; away: SportsSide; source: string
-    highlights?: Array<{ label: string; value: string; image?: string }>
+    highlights?: Array<{ label: string; value: string; image?: string; detail?: string }>
+    pitchers?: SportsPitcher[]; lineups?: SportsLineup[]; bullpen?: SportsBullpen[]
+    eventId?: string; sport?: string; broadcast?: string
     note?: string; askPrompt?: string
   }
 }
@@ -230,22 +236,45 @@ const trustedPortrait = (value: unknown): value is string | undefined => {
   if (value === undefined) return true
   if (typeof value !== 'string' || value.length > 500) return false
   try { const u = new URL(value); return u.protocol === 'https:' && !u.username && !u.password
-    && ['a.espncdn.com','img.mlbstatic.com'].includes(u.hostname) } catch { return false }
+    && ['a.espncdn.com','img.mlbstatic.com','www.mlbstatic.com'].includes(u.hostname) } catch { return false }
 }
 const sportsSide = (value: unknown): value is SportsSide => isRecord(value)
   && hasOnlyKeys(value, ['label','score','logo','meta'])
   && isText(value.label) && optionalText(value.score,32) && optionalText(value.meta)
   && trustedPortrait(value.logo)
+const sportsPlayer = (value: unknown): value is SportsPlayer => isRecord(value)
+  && hasOnlyKeys(value, ['name','role','image','stats','id'])
+  && isText(value.name) && optionalText(value.role,60) && optionalText(value.stats,240)
+  && trustedPortrait(value.image)
+  && (value.id === undefined || typeof value.id==='number' && Number.isSafeInteger(value.id))
+const sportsPitcher = (value: unknown): value is SportsPitcher => isRecord(value)
+  && hasOnlyKeys(value, ['team','name','id','image','stats','probable'])
+  && isText(value.team) && isText(value.name) && typeof value.probable==='boolean'
+  && optionalText(value.stats,240) && trustedPortrait(value.image)
+  && (value.id === undefined || typeof value.id==='number' && Number.isSafeInteger(value.id))
+const sportsLineup = (value: unknown): value is SportsLineup => isRecord(value)
+  && hasOnlyKeys(value, ['team','confirmed','players']) && isText(value.team)
+  && typeof value.confirmed==='boolean' && Array.isArray(value.players)
+  && value.players.length<=12 && value.players.every(sportsPlayer)
+const sportsBullpen = (value: unknown): value is SportsBullpen => isRecord(value)
+  && hasOnlyKeys(value, ['team','pitchers','note']) && isText(value.team)
+  && isText(value.note,320) && Array.isArray(value.pitchers)
+  && value.pitchers.length<=8 && value.pitchers.every(sportsPlayer)
+
 const sportsGame = (value: Record<string, unknown>): value is SportsGameCard => {
   if (!isRecord(value.props) || !hasOnlyKeys(value.props,
-    ['title','subtitle','status','when','venue','home','away','source','highlights','note','askPrompt'])) return false
+    ['title','subtitle','status','when','venue','home','away','source','highlights','note','askPrompt','pitchers','lineups','bullpen','sport','eventId','broadcast'])) return false
   const p = value.props
   return isText(p.title) && optionalText(p.subtitle) && optionalText(p.status,60)
     && isText(p.when) && optionalText(p.venue) && sportsSide(p.home) && sportsSide(p.away)
     && isText(p.source,320) && optionalText(p.note,MAX_TEXT) && optionalText(p.askPrompt,400)
+    && optionalText(p.sport,60) && optionalText(p.eventId,50) && optionalText(p.broadcast,150)
+    && (p.pitchers===undefined || Array.isArray(p.pitchers) && p.pitchers.length<=4 && p.pitchers.every(sportsPitcher))
+    && (p.lineups===undefined || Array.isArray(p.lineups) && p.lineups.length<=2 && p.lineups.every(sportsLineup))
+    && (p.bullpen===undefined || Array.isArray(p.bullpen) && p.bullpen.length<=2 && p.bullpen.every(sportsBullpen))
     && (p.highlights === undefined || Array.isArray(p.highlights) && p.highlights.length <= 8
-      && p.highlights.every(x => isRecord(x) && hasOnlyKeys(x,['label','value','image'])
-        && isText(x.label,70) && isText(x.value,180) && trustedPortrait(x.image)))
+      && p.highlights.every(x => isRecord(x) && hasOnlyKeys(x,['label','value','image','detail'])
+        && isText(x.label,70) && isText(x.value,180) && trustedPortrait(x.image) && optionalText(x.detail,240)))
 }
 const sportsTicket = (value: Record<string, unknown>): value is SportsTicketCard => {
   if (!isRecord(value.props) || !hasOnlyKeys(value.props,
@@ -430,8 +459,44 @@ function expandRawCanvases(segments: GenerativeUiSegment[], streaming: boolean):
 
 const SportsPortrait = ({ label, logo }: {label: string; logo?: string | undefined}) => (
   <span className={css.sportsPortrait}>
-    {logo ? <img src={logo} alt={label} loading="lazy" referrerPolicy="no-referrer" /> : label.slice(0,2).toUpperCase()}
+    {logo ? <img src={logo} alt={label} loading="lazy" referrerPolicy="no-referrer"
+      onError={event => {event.currentTarget.style.display='none'}} /> : <span>{label.slice(0,2).toUpperCase()}</span>}
   </span>
+)
+
+const SportsLineups = ({ lineups }: {lineups: SportsLineup[]}) => {
+  const [selected,setSelected] = useState(0)
+  const lineup = lineups[selected]
+  if (!lineup) return null
+  return <section className={css.sportsDetailSection} aria-label="Alineaciones MLB">
+    <h4>Alineaciones</h4>
+    <div className={css.sportsTabs} role="group" aria-label="Seleccionar equipo">
+      {lineups.map((side,i) => <button key={side.team} type="button"
+        aria-pressed={selected === i} onClick={() => setSelected(i)}>
+        {side.team}</button>)}
+    </div>
+    {!lineup.confirmed && <p className={css.sportsNote}>Alineación pendiente de confirmación. Solo aparecen jugadores publicados por MLB.</p>}
+    {lineup.players.length > 0 ? <div className={css.sportsTableScroll}><table className={css.sportsTable}>
+      <thead><tr><th scope="col">Bateador</th><th scope="col">Pos.</th><th scope="col">Temporada</th></tr></thead>
+      <tbody>{lineup.players.map((p,i)=><tr key={p.id??i}>
+        <th scope="row"><span className={css.sportsPlayerName}>{p.image && <SportsPortrait label={p.name} logo={p.image}/>} {i+1}. {p.name}</span></th>
+        <td>{p.role??'—'}</td><td>{p.stats??'Pendiente'}</td>
+      </tr>)}</tbody>
+    </table></div> : <p className={css.sportsNote}>MLB todavía no ha publicado la alineación oficial.</p>}
+  </section>
+}
+const SportsBullpen = ({ bullpen }: {bullpen: SportsBullpen[]}) => (
+  <section className={css.sportsDetailSection} aria-label="Bullpen MLB">
+    <h4>Bullpen y cuerpo de lanzadores</h4>
+    <div className={css.sportsBulpenGrid}>{bullpen.map((b,i)=><div className={css.sportsBullpenTeam} key={i}>
+      <strong>{b.team}</strong>
+      {b.pitchers.length ? b.pitchers.map((p,j)=><div key={p.id??j} className={css.sportsPitcherRow}>
+        <SportsPortrait label={p.name} logo={p.image}/>
+        <span><b>{p.name}</b><small>{p.stats??'Estadísticas no disponibles'}</small></span>
+      </div>):<p className={css.sportsNote}>Sin datos de bullpen verificables.</p>}
+      <p className={css.sportsNote}>{b.note}</p>
+    </div>)}</div>
+  </section>
 )
 
 const Initial = ({ label, symbol }: EventSide) => (
@@ -470,23 +535,41 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
     case 'sports_game_card': {
       const p = block.props
       return <section className={css.sportsCard} data-generative-ui="sports_game_card">
-        <Header title={p.title} subtitle={p.subtitle} badge={p.status} />
-        <div className={css.sportsVenue}>{p.when} · {p.venue ?? 'Sede sin confirmar'}</div>
+        <header className={css.sportsHeadline}>
+          <div><span className={css.sportsKicker}>PHOENIX / {p.sport?.toUpperCase()??'DEPORTES'}</span>
+            <h3>{p.title}</h3>{p.subtitle && <p>{p.subtitle}</p>}</div>
+          {p.status && <span className={css.sportsStatus}>{p.status}</span>}
+        </header>
+        <div className={css.sportsVenue}><span>◷ {p.when}</span><span>⌖ {p.venue||'Sede sin confirmar'}</span>
+          {p.broadcast && <span>TV · {p.broadcast}</span>}</div>
         <div className={css.sportsVersus}>
           <div className={css.sportsTeam}><SportsPortrait label={p.away.label} logo={p.away.logo} />
-            <strong>{p.away.label}</strong>{p.away.score && <b>{p.away.score}</b>}
-            {p.away.meta && <small>{p.away.meta}</small>}</div>
-          <span className={css.sportsVs}>VS</span>
+            <strong>{p.away.label}</strong>{p.away.meta && <small>{p.away.meta}</small>}
+            {p.away.score!==undefined && <b>{p.away.score}</b>}</div>
+          <span className={css.sportsVs}>{p.away.score!==undefined||p.home.score!==undefined?'—':'VS'}</span>
           <div className={css.sportsTeam}><SportsPortrait label={p.home.label} logo={p.home.logo} />
-            <strong>{p.home.label}</strong>{p.home.score && <b>{p.home.score}</b>}
-            {p.home.meta && <small>{p.home.meta}</small>}</div>
+            <strong>{p.home.label}</strong>{p.home.meta && <small>{p.home.meta}</small>}
+            {p.home.score!==undefined && <b>{p.home.score}</b>}</div>
         </div>
-        {p.highlights && <dl className={css.sportsFacts}>{p.highlights.map((h,i) =>
-          <div key={i}>{h.image && <SportsPortrait label={h.value} logo={h.image} />}<dt>{h.label}</dt><dd>{h.value}</dd></div>)}</dl>}
-        <footer className={css.sportsFoot}>Fuente: {p.source}
-          {p.note && <span>{p.note}</span>}
-          {p.askPrompt && onAction && <button type="button" onClick={() => onAction(p.askPrompt!, 'draft')}>Ampliar análisis</button>}
-        </footer>
+        {p.pitchers?.length ? <section className={css.sportsDetailSection} aria-label="Lanzadores probables">
+          <h4>Abridores probables</h4>
+          <div className={css.sportsStarters}>{p.pitchers.map((pitcher,i)=><div className={css.sportsStarter} key={pitcher.id??i}>
+            <SportsPortrait label={pitcher.name} logo={pitcher.image}/>
+            <div><span>{pitcher.team}</span><strong>{pitcher.name}</strong>
+              <small>{pitcher.stats??'Estadísticas de temporada no disponibles'}</small></div>
+          </div>)}</div>
+          <p className={css.sportsNote}>Probables según MLB; sujetos a cambios hasta la confirmación.</p>
+        </section>:null}
+        {!p.pitchers?.length && p.highlights?.length ? <dl className={css.sportsFacts}>{p.highlights.map((h,i)=>
+          <div key={i}>{h.image && <SportsPortrait label={h.value} logo={h.image}/>}
+            <dt>{h.label}</dt><dd>{h.value}</dd>{h.detail && <small>{h.detail}</small>}</div>)}</dl>:null}
+        {p.lineups?.length ? <SportsLineups lineups={p.lineups}/>:null}
+        {p.bullpen?.length ? <SportsBullpen bullpen={p.bullpen}/>:null}
+        <div className={css.sportsSourceBar}>
+          <span>Datos · {p.source}</span>
+          {p.note && <small>{p.note}</small>}
+          {p.askPrompt && onAction && <button type="button" onClick={() => onAction(p.askPrompt!, 'draft')}>Investigar análisis y mercados</button>}
+        </div>
       </section>
     }
     case 'sports_ticket_card': {
