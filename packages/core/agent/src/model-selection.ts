@@ -1322,9 +1322,9 @@ export function installModelSelection(
           && automatic.model === PHOENIX_CODEX_AUTO_WORKER_MODEL
           && isPhoenixAutoQuickTurn(directText)
         const role = automatic.model === PHOENIX_CODEX_AUTO_PLANNER_MODEL ? 'planner' : 'coordinator'
+        // Keep Luna as the direct fast-path model; retain its proportional
+        // low/medium effort instead of silently upgrading every quick turn.
         const routed = quick
-          // Keep Luna as the direct fast-path model; retain its proportional
-          // low/medium effort instead of silently upgrading every quick turn.
           ? automatic
           : resolveEclipseRoleRoute(
             eclipseProfile,
