@@ -1,4 +1,5 @@
 name: Phoenix PR1132 exact merge conflict probe
+# Refresh pairing, lint and strict TS checks after bilingual repairs.
 on:
   push:
     branches:
