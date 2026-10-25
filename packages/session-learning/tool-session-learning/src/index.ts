@@ -62,6 +62,18 @@ export function apply(ctx: Context, config: Config): void {
   }
   const taskForAssembly = (assembly: unknown): string | undefined =>
     tasks.currentTask(taskSession(assembly))
+  // A memory search must be driven by the owning conversation's most recent
+  // HUMAN message, never by a previous task from a different chat or an agent.
+  const userTextForAssembly = (assembly: unknown): string | undefined => {
+    const agent = (assembly as { agent?: { session?: { events?: readonly {
+      type: string
+      data: unknown
+    }[] } } }).agent
+    const latest = agent?.session?.events?.findLast(event =>
+      event.type === 'user/message' && isRecord(event.data)
+      && isRecord(event.data.source) && event.data.source.kind === 'user')
+    return latest === undefined ? undefined : messageText(latest.data)
+  }
   // Do not substitute the newest *other* chat's project for this assembly.
   const projectForAssembly = (assembly: unknown): string | undefined => {
     const sessionId = taskSession(assembly)
@@ -245,56 +257,46 @@ export function apply(ctx: Context, config: Config): void {
     name: 'context:recent-learning-memory',
     order: 118,
     text: assembly => {
+      const currentMessage = userTextForAssembly(assembly)
+      // Memory is a cold, durable index, not a permanent prompt attachment.
+      // Plain greetings and unrelated tasks send ZERO memory records.
+      if (currentMessage === undefined) return ''
+      const prior = tasks.resolvedReference(taskSession(assembly))
+      const query = prior?.task.text ?? currentMessage
       const projectId = projectForAssembly(assembly)
-      const durable = ctx.learningMemory.recallCognitive({
-        layers: ['semantic'],
-        limit: 4,
+      const scoped = (hit: { record: { projectId?: string } }): boolean =>
+        hit.record.projectId === undefined || hit.record.projectId === projectId
+      const relevant = ctx.learningMemory.recallCognitive({
+        query,
+        limit: 12,
+        layers: ['semantic', 'procedural', 'episodic'],
         ...projectId === undefined ? {} : { projectId },
-      })
-      return formatRecentMemoryContext([
-        ...ctx.learningMemory.recall(4),
-        ...durable,
-      ])
+      }).filter(hit => scoped(hit) && hit.reasons.some(reason => reason.startsWith('lexical:')))
+      const explicit = requestsPriorMemory(currentMessage)
+      // Semantic association uses only strong overlaps. Explicit historical
+      // requests can include weaker matches; manual memory_search remains
+      // available to recover any record that was not placed in the prompt.
+      const selected = relevant.filter(hit => explicit || memoryMatchFraction(hit.reasons) >= 0.4)
+        .slice(0, explicit ? 4 : 2)
+      // Generic requests for prior preferences or choices have no identifying
+      // search terms. Offer a small matching class instead of all recent events.
+      if (explicit && selected.length === 0) {
+        const kind = requestsPriorDecision(currentMessage) ? 'decision'
+          : requestsPriorPreference(currentMessage) ? 'preference' : undefined
+        if (kind !== undefined) {
+          selected.push(...ctx.learningMemory.recallCognitive({
+            kind, limit: 2,
+            ...projectId === undefined ? {} : { projectId },
+          }).filter(scoped))
+        }
+      }
+      return formatRecentMemoryContext(selected)
     },
     interpolateVariables: false,
   })
-  // Historical choices are model statements, not verified game outcomes.
-  // Only surface a few when the human task refers to a prior prediction.
-  ctx.systemPrompt.context({
-    name: 'context:prior-assistant-decisions',
-    order: 118.5,
-    text: assembly => {
-      const task = taskForAssembly(assembly)
-      if (task === undefined) return ''
-      const folded = task.normalize('NFKD').replace(/\p{Diacritic}/gu, '').toLocaleLowerCase()
-      if (!/\b(?:favorit[oa]s?|prediccion|pronostico|seleccion|eleccion|elegiste|escogiste|escogio|eligio|pick|predijiste|habias elegido)\b/u.test(folded)) return ''
-      const projectId = projectForAssembly(assembly)
-      return formatRecentMemoryContext(ctx.learningMemory.recallCognitive({
-        kind: 'decision',
-        limit: 4,
-        ...projectId === undefined ? {} : { projectId },
-      }))
-    },
-    interpolateVariables: false,
-  })
-  ctx.systemPrompt.context({
-    name: 'context:experiential-learning-memory',
-    order: 119,
-    text: assembly => {
-      const projectId = projectForAssembly(assembly)
-      const taskContext = taskForAssembly(assembly)
-      const hits = ctx.learningMemory.recallCognitive({
-        query: taskContext ?? '',
-        limit: 24,
-        ...projectId === undefined ? {} : { projectId },
-      })
-      const usable = filterProceduralSearchHits(filterAdaptiveSearchHits(hits))
-        .filter(hit => hit.record.confidence >= 0.8 && hit.record.importance >= 0.7)
-        .slice(0, 6)
-      return formatRecentMemoryContext(usable)
-    },
-    interpolateVariables: false,
-  })
+  // All other memory remains retrievable with memory_search, including old
+  // decisions, errors, candidate lessons and full provenance. The stored
+  // ledger and its event replay are deliberately left unchanged.
   ctx.systemPrompt.context({
     name: 'context:validated-procedures',
     order: 120,
@@ -469,6 +471,36 @@ export function apply(ctx: Context, config: Config): void {
     },
     presentCall: args => ({ card: 'generic', title: 'Learn procedure', kind: 'other', rawInput: args.title }),
   }))
+}
+
+/** Read-only recall cues; never classify by an additional model request. */
+function normalizedMemoryRequest(text: string): string {
+  return text.normalize('NFKD').replace(/\\p{Diacritic}/gu, '').toLocaleLowerCase()
+}
+
+function requestsPriorMemory(text: string): boolean {
+  return /\\b(?:recuerd\\p{L}*|record\\p{L}*|memoria|recordatorio|anterior\\p{L}*|previo\\p{L}*|antes|pasado|histor\\p{L}*|habia\\p{L}*|dijiste|dije|elegiste|escogiste|elegimos|guardad\\p{L}*|preferencias?|costumbre\\p{L}*|usual|siempre|repetimos|funciono|funcionaba|remember|recall|memory|before|previous|earlier|last time|used to|usually|history)\\b/iu
+    .test(normalizedMemoryRequest(text))
+}
+
+function requestsPriorDecision(text: string): boolean {
+  return /\\b(?:favorit\\p{L}*|pronostic\\p{L}*|prediccion\\p{L}*|pick|decision\\p{L}*|elegi\\p{L}*|escogi\\p{L}*|chose|picked|predicted)\\b/iu
+    .test(normalizedMemoryRequest(text))
+}
+
+function requestsPriorPreference(text: string): boolean {
+  return /\\b(?:preferen\\p{L}*|prefier\\p{L}*|gustos?|habitos?|costumbre\\p{L}*|preference\\p{L}*|usual)\\b/iu
+    .test(normalizedMemoryRequest(text))
+}
+
+/** Lexical overlap is measured by the existing index, not guessed from rank. */
+function memoryMatchFraction(reasons: readonly string[]): number {
+  const lexical = reasons.find(reason => reason.startsWith('lexical:'))
+  const match = lexical?.match(/^lexical:(\\d+)\\/(\\d+)$/u)
+  if (match === null || match === undefined) return 0
+  const numerator = Number(match[1])
+  const denominator = Number(match[2])
+  return denominator > 0 ? numerator / denominator : 0
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
