@@ -78,11 +78,11 @@ describe('PHOENIX updater state bridge', () => {
     const at = new Date().toISOString()
     const entries = [
       { schema: 1, at, step: 'build', result: 'failed', target, exitCode: 3,
-        diagnostic: 'Error at line 27\\nAuthorization: Bearer hidden-token-123\\npassword=never-expose' },
+        diagnostic: 'Error at line 27\nAuthorization: Bearer hidden-token-123\npassword=never-expose' },
       { schema: 1, at, step: 'health-check', result: 'failed', target: 'b'.repeat(40),
         diagnostic: 'private-other-release' },
       { schema: 1, at, step: 'build', result: 'ok', target, diagnostic: 'not-a-failure' },
-    ].map(entry => JSON.stringify(entry)).join('\\n')
+    ].map(entry => JSON.stringify(entry)).join('\n')
     const events = parsePhoenixUpdateEvents(entries, target)
     expect(events).toHaveLength(2)
     expect(events[0]).toMatchObject({ exitCode: 3, diagnostic: expect.stringContaining('Error at line 27') })
