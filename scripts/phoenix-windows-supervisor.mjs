@@ -2286,6 +2286,28 @@ while (true) {
 
   if (runtimeRoot !== root) {
     const failedRuntime = runtimeRoot
+    const failedTarget = gitValue(failedRuntime, ['rev-parse', 'HEAD'])
+    const updateState = readUpdateState()
+    // Preflight and smoke only prove that a candidate starts as a process.
+    // If its real Host exits before the healthy checkpoint, retain the old
+    // checkout and record the failed activation instead of leaving the UI
+    // indefinitely stuck at "restarting".
+    if (!plannedHostRestart && !healthyCheckpointWritten
+      && failedTarget !== undefined && updateState?.target === failedTarget
+      && (updateState.status === 'restarting' || updateState.status === 'applying')) {
+      const stateFile = updateStatePath()
+      if (stateFile !== undefined) {
+        const exitCode = Number.isInteger(hostExit.code) && hostExit.code >= 0 ? hostExit.code : 1
+        recordPhoenixUpdateStep(stateFile, 'health-check', 'failed', failedTarget, exitCode)
+        writePhoenixUpdateState(stateFile, {
+          ...updateState,
+          status: 'error',
+          phase: 'health-check',
+          at: new Date().toISOString(),
+          detail: `The new Host exited before its healthy startup checkpoint (exit code ${String(exitCode)}). PHOENIX reverted to the previous runtime.`,
+        })
+      }
+    }
     runtimeRoot = root
     clearActiveRuntime()
     cleanupObsoleteRuntimes()
