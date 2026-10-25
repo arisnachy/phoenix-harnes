@@ -3,7 +3,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { Context } from '@phoenix-ai/cordis'
-import SessionStore from '@phoenix-ai/dsh-session'
+import SessionStore, { SessionId } from '@phoenix-ai/dsh-session'
+import { createUserMessage } from '@phoenix-ai/dsh-llm'
 import SystemPrompt, { renderContextSnapshot } from '@phoenix-ai/dsh-system-prompt'
 import ToolRegistry from '@phoenix-ai/dsh-tools'
 import LearningMemoryService from '@phoenix-ai/dsh-session-learning'
@@ -27,7 +28,7 @@ async function createRuntime(memoryPath: string): Promise<Context> {
 }
 
 describe('durable experiential recall across restart', () => {
-  it('reloads a verified learned correction into a fresh runtime and keeps provenance private', async () => {
+  it('reloads a verified correction on request after restart and keeps provenance private', async () => {
     const root = await mkdtemp(join(tmpdir(), 'phoenix-learning-restart-'))
     roots.push(root)
     const memoryPath = join(root, 'memory.jsonl')
@@ -56,7 +57,14 @@ describe('durable experiential recall across restart', () => {
     })
     expect(persisted.some(hit => hit.record.summary.includes('Verify the actual working directory silently'))).toBe(true)
 
-    const snapshot = renderContextSnapshot(await restartedRuntime.systemPrompt.assemble())
+    const session = restartedRuntime.sessions.create(SessionId('memory-restart-scope'), { meta: {} })
+    session.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: 'Recuerda la solución que aprendimos para working directory en file operations.' }],
+      source: { kind: 'user' },
+    }), { surfaceOp: 'append' })
+    const snapshot = renderContextSnapshot(await restartedRuntime.systemPrompt.assemble({
+      agent: { id: String(session.id), session },
+    } as never))
     expect(snapshot).toContain('Verify the actual working directory silently before file operations when location matters.')
     expect(snapshot).toMatch(/apply relevant learned memory silently/i)
     expect(snapshot).toMatch(/experience and verified outcomes/i)
