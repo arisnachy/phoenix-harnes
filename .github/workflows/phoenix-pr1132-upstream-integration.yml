@@ -87,6 +87,12 @@ jobs:
           pnpm run gen-tool-catalog
           pnpm run gen-module-graph
           pnpm run verify-translation-pairing --write docs/subsystems/core.md
+      - name: Synchronize generated config catalog with reviewed localized content
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/sync-generated-config-catalog.py
+          pnpm run verify-translation-pairing --write docs/config-catalog.md
       - name: Verify no TypeScript regression
         run: pnpm run build:lib
       - name: Verify strict bilingual documentation
