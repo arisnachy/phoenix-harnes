@@ -53,6 +53,7 @@ describe('PHOENIX updater state persistence', () => {
       'Authorization: Bearer token-that-must-not-appear',
       'password=private-pw-123',
       'client_secret: sensitive-secret-xyz',
+      'OPENROUTER_API_KEY=supersecret-openrouter-key',
       'sk-proj-abcdefghijklmnopqrstuvwxyz123456',
     ].join('\n')
     recordPhoenixUpdateStep(path, 'runtime-activation', 'failed', target, 1, trace)
@@ -65,6 +66,7 @@ describe('PHOENIX updater state persistence', () => {
     expect(event.diagnostic).not.toContain('private-pw-123')
     expect(event.diagnostic).not.toContain('token-that-must-not-appear')
     expect(event.diagnostic).not.toContain('sensitive-secret-xyz')
+    expect(event.diagnostic).not.toContain('supersecret-openrouter-key')
     expect(event.diagnostic).not.toContain('sk-proj-abcdefghijklmnopqrstuvwxyz123456')
     expect(event.diagnostic).toContain('[SECRET_REMOVED]')
     expect(sanitizePhoenixUpdateDiagnostic('Error: unavailable')).toBe('Error: unavailable')
