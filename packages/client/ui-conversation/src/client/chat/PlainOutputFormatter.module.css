@@ -1,0 +1,34 @@
+.card{
+  min-width:0;max-width:100%;overflow:hidden;box-sizing:border-box;
+  color:var(--dsw-alias-label-primary,inherit);
+  border:1px solid var(--dsw-alias-border-subtle,rgba(125,125,125,.22));
+  border-radius:18px;background:var(--dsw-alias-surface-primary,transparent);
+  line-height:1.45;font:inherit;
+}
+.header{padding:clamp(14px,2.3vw,22px);border-bottom:1px dashed var(--dsw-alias-border-subtle,rgba(125,125,125,.28));
+  background:var(--dsw-alias-interactive-bg-hover,rgba(125,125,125,.04))}
+.eyebrow{display:block;color:var(--dsw-alias-label-secondary,#777);font-size:11px;font-weight:750;
+  letter-spacing:.07em;margin-bottom:7px}
+.titleRow{display:flex;flex-wrap:wrap;gap:8px;justify-content:space-between;align-items:center}
+.titleRow h3{font-size:clamp(16px,2vw,20px);margin:0;font-weight:750;overflow-wrap:anywhere}
+.pill{font-size:10px;font-weight:700;letter-spacing:.03em;border:1px solid var(--dsw-alias-border-subtle,#ccc);
+  border-radius:100px;padding:4px 9px;white-space:nowrap}
+.sections{padding:clamp(12px,2vw,20px);display:grid;gap:11px}
+.section{display:grid;gap:9px;padding:12px;border-radius:12px;
+  background:var(--dsw-alias-interactive-bg-hover,rgba(120,120,120,.035));
+  border:1px solid var(--dsw-alias-border-subtle,rgba(125,125,125,.17));min-width:0}
+.sectionLead{font-size:14px;font-weight:750;margin:0;overflow-wrap:anywhere}
+.plainLine{font-size:13px;margin:0;overflow-wrap:anywhere}
+.field{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:4px 16px;margin:0;
+  min-width:0;font-size:13px}
+.field dt{margin:0;color:var(--dsw-alias-label-secondary,#777);overflow-wrap:anywhere}
+.field dd{margin:0;font-weight:700;overflow-wrap:anywhere;min-width:0}
+.footer{padding:12px clamp(14px,2.3vw,22px);font-size:11px;
+  color:var(--dsw-alias-label-secondary,#777);border-top:1px solid var(--dsw-alias-border-subtle,#ddd);
+  display:grid;gap:8px}
+.details summary{cursor:pointer;display:inline-block;font-weight:700;
+  padding:5px 0;color:var(--dsw-alias-label-primary,inherit)}
+.details pre{margin:6px 0 0;padding:11px;white-space:pre;overflow:auto;max-height:320px;
+  border-radius:8px;font-size:12px;line-height:1.4;
+  background:var(--dsw-alias-interactive-bg-hover,rgba(125,125,125,.04))}
+@media(max-width:480px){.field{display:grid;gap:3px}.titleRow{align-items:flex-start}}
