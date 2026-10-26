@@ -310,7 +310,7 @@ const AUTO_COMPLEX_TASK = /\b(?:complex|complicated|multi[-\s]?step|end[-\s]?to[
  */
 export function adaptiveCodexReasoningEffort(text: string): ReasoningEffortId {
   if (AUTO_EXCEPTIONAL_TASK.test(text)) return ReasoningEffortId('max')
-  if (AUTO_COMPLEX_TASK.test(text) || AUTO_DEEP_REPLY.test(text) || text.length > 480)
+  if (AUTO_COMPLEX_TASK.test(text) || AUTO_DEEP_REPLY.test(text))
     return ReasoningEffortId('xhigh')
   return ReasoningEffortId('high')
 }
@@ -318,7 +318,7 @@ export function adaptiveCodexReasoningEffort(text: string): ReasoningEffortId {
 /** Keep the visible strategy pass cheap; substantive execution gets the adaptive tier. */
 function adaptiveCodexPlanningEffort(text: string): ReasoningEffortId {
   if (AUTO_EXCEPTIONAL_TASK.test(text)) return ReasoningEffortId('max')
-  if (AUTO_COMPLEX_TASK.test(text) || AUTO_DEEP_REPLY.test(text) || text.length > 480)
+  if (AUTO_COMPLEX_TASK.test(text) || AUTO_DEEP_REPLY.test(text))
     return ReasoningEffortId('medium')
   return ReasoningEffortId('low')
 }
