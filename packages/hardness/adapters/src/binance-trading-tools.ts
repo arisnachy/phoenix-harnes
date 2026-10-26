@@ -103,6 +103,18 @@ function candleJson(candle: BinanceCandle): Record<string, JsonValue> {
   }
 }
 
+function testnetStatusJson(status: Awaited<ReturnType<BinanceSpotTestnet['status']>>): Record<string, JsonValue> {
+  return {
+    mode: status.mode,
+    configured: status.configured,
+    connected: status.connected,
+    nextAction: status.nextAction,
+    ...(status.canTrade === undefined ? {} : { canTrade: status.canTrade }),
+    ...(status.balances === undefined ? {}
+      : { balances: status.balances.map(row => ({ asset: row.asset, free: row.free, locked: row.locked })) }),
+  }
+}
+
 function agentOsJson(state: BinanceAgentOsSnapshot): Record<string, JsonValue> {
   return {
     configured: state.configured,
@@ -152,7 +164,7 @@ function activateTool(deps: BinanceTradingToolDependencies): ToolDefinition {
       if (args.mode === 'testnet') {
         const readiness = await (deps.testnet ?? new BinanceSpotTestnet()).status()
         return {
-          ...readiness,
+          ...testnetStatusJson(readiness),
           realTradingEnabled: false,
           message: 'Spot Testnet uses separate testing API keys and test funds, NOT the Binance Agentic OAuth MCP. No test order has been placed.',
         }
@@ -304,7 +316,7 @@ function testnetAccountTool(deps: BinanceTradingToolDependencies): ToolDefinitio
     parameters: {},
     output: { schema: { type: 'object', additionalProperties: true },
       render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }] },
-    async execute() { return (deps.testnet ?? new BinanceSpotTestnet()).status() },
+    async execute() { return testnetStatusJson(await (deps.testnet ?? new BinanceSpotTestnet()).status()) },
     presentCall() { return { card: 'generic', title: 'Binance Spot Testnet', kind: 'read' } },
   })
 }
