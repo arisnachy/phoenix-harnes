@@ -73,7 +73,7 @@ describe('Eclipse model settings', () => {
     expect(result[3]).toEqual({
       provider: 'openai-codex', model: 'gpt-6.1-sol', name: 'gpt-6.1-sol', reasoningEfforts: ['medium'],
     })
-    expect(result[3]?.reasoningEfforts).not.toBe(ids)
+    expect(result).toHaveLength(ids.length)
   })
 
   it('keeps older available model generations even when newer ones are announced', () => {
@@ -85,6 +85,24 @@ describe('Eclipse model settings', () => {
     ]).map(choice => choice.model)).toEqual([
       'gpt-5.5', 'gpt-5.6', 'gpt-5-sol', 'gpt-5.6-sol',
     ])
+  })
+
+  it('refreshes the choices when Codex announces a new model without reloading settings', async () => {
+    const controller = controllerWith({ mode: 'hybrid' })
+    const next = { provider: 'openai-codex', model: 'gpt-6.1-terra', name: 'GPT-6.1 Terra',
+      reasoningEfforts: ['high'] }
+    const loadCatalog = vi.fn()
+      .mockResolvedValueOnce(catalog)
+      .mockResolvedValueOnce([...catalog, next])
+    render(<EclipseRoutingPanel controller={controller as never}
+      api={{ settings: { mutate: vi.fn() } } as never}
+      loadCatalog={loadCatalog} t={t} />)
+
+    await waitFor(() => expect(loadCatalog).toHaveBeenCalledOnce())
+    expect(screen.queryByRole('option', { name: 'GPT-6.1 Terra' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: en.eclipseRefresh }))
+    await waitFor(() => expect(loadCatalog).toHaveBeenCalledTimes(2))
+    expect(await screen.findAllByRole('option', { name: 'GPT-6.1 Terra' })).toHaveLength(3)
   })
 
   it('renders three independent seats with unlimited strategy calls and saves canonical fields', async () => {
