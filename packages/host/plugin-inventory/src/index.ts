@@ -450,7 +450,18 @@ export class PluginInventoryGateway extends TypertRemoteService {
    * @returns Idempotent managed MCP receipt.
    */
   async enableBinanceAgentOs(): Promise<McpRegistryInstallReceipt> {
-    return this.managedMcp.installBinanceAgentOs()
+    const receipt = await this.managedMcp.installBinanceAgentOs()
+    // An already-installed row is not evidence of a live MCP. Ask the owning
+    // registered client to reconnect when it lost its transport or tools.
+    // Auth-required stays explicit: only a user can complete browser OAuth.
+    if (receipt.status === 'already-installed') {
+      const snapshot = await this.binanceAgentOsState()
+      if (snapshot.status === 'disconnected' || snapshot.status === 'failed'
+        || snapshot.status === 'ready' && snapshot.toolNames.length === 0) {
+        await this.reconnectBinanceAgentOs()
+      }
+    }
+    return receipt
   }
 
   /**
