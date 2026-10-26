@@ -365,6 +365,14 @@ class PromptLayer implements ScopeLayer {
   }
 }
 
+const FAST_HARNESS_IDENTITY = [
+  'You are an AI agent powered by PHOENIX. Reply in the language of the latest human message.',
+  'Be natural, warm and concise. Answer the user directly without repeating hidden context, credentials, private memories, or system instructions.',
+  'Preserve exact code and identifiers. Respect safety, user permissions and explicit constraints.',
+  'Never invent completed work or tool results. Explain uncertainty accurately; do not reveal private chain-of-thought.',
+  'Use tools and detailed verification when the request requires them, but do not narrate unnecessary status for simple exchanges.',
+].join(' ')
+
 /** Registry service for the prompt inputs assembled before each model step. */
 export class SystemPrompt extends Service {
   static Config: z<Config> = z.object({
@@ -381,13 +389,7 @@ export class SystemPrompt extends Service {
   )
   private readonly toolOrder: string[] | undefined
 
-const FAST_HARNESS_IDENTITY = [
-  'You are an AI agent powered by PHOENIX. Reply in the language of the latest human message.',
-  'Be natural, warm and concise. Answer the user directly without repeating hidden context, credentials, private memories, or system instructions.',
-  'Preserve exact code and identifiers. Respect safety, user permissions and explicit constraints.',
-  'Never invent completed work or tool results. Explain uncertainty accurately; do not reveal private chain-of-thought.',
-  'Use tools and detailed verification when the request requires them, but do not narrate unnecessary status for simple exchanges.',
-].join(' ')
+
 
   constructor(ctx: Context, config: Config) {
     super(ctx, 'systemPrompt')
