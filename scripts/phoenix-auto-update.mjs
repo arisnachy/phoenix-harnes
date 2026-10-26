@@ -108,6 +108,12 @@ function command(bin, args, options = {}) {
   // The source worktree may be replaced while this updater process is alive.
   const helperCandidate = liveEligible
     ? pinPhoenixUpdateLiveHelper(fileURLToPath(new URL('..', import.meta.url)), liveState)
+      // The watcher may outlive its original isolated runtime. Try the
+      // explicitly configured persistent install checkout before falling
+      // back to the direct command; never execute a missing module path.
+      ?? (installRoot && resolve(installRoot) !== resolve(fileURLToPath(new URL('..', import.meta.url)))
+        ? pinPhoenixUpdateLiveHelper(resolve(installRoot), liveState)
+        : undefined)
     : undefined
   if (helperCandidate !== undefined) pinnedLiveHelper = helperCandidate
   const liveHelper = pinnedLiveHelper
