@@ -10,7 +10,7 @@ Generated landing pages and reports often contain external photographs but no Ja
 
 ## Decision
 
-The conversation artifact renderer uses a script-disabled, same-origin sandbox for HTML without script tags, inline event handlers, or JavaScript URLs. Such documents may load remote images without granting author scripts execution rights. HTML with those executable constructs, and Game Studio previews, retain the opaque-origin script sandbox and require an explicit user action to load remote images. Image consent belongs to the exact HTML text displayed in that viewer and does not authorize different content. Protocol-relative remote images are recognized by the consent detector.
+The conversation artifact renderer uses a script-disabled, same-origin sandbox when HTML references remote images but has no script tags, inline event handlers, or JavaScript URLs. Such documents may load remote images without granting author scripts execution rights. Pages without remote images retain their existing executable behavior. HTML with those executable constructs, and Game Studio previews, retain the opaque-origin script sandbox and require an explicit user action to load remote images. Image consent belongs to the exact HTML text displayed in that viewer and does not authorize different content. Protocol-relative remote images are recognized by the consent detector.
 
 ## Alternatives considered
 

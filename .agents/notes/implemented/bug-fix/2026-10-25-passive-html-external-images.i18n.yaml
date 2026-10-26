@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-10-25-passive-html-external-images.md
-2026-10-25-passive-html-external-images.md: 5b6ca9dc83f4907fb4217887328f52eafdc43efe
-2026-10-25-passive-html-external-images.zh.md: 60599292dbce19d76785da9f1bb95867a0488a6e
+2026-10-25-passive-html-external-images.md: 6f3ceee7eb52d23e4b2cab8bf96ab7a8653f2681
+2026-10-25-passive-html-external-images.zh.md: eb13ccd7fdd510dd19a7c8126177bb92da4e96e4

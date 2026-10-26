@@ -327,9 +327,11 @@ interface MiniAppProps {
 
 function MiniApp({ html, title, executable = false, minimumHeight = 1, gameDiagnostics = false }: MiniAppProps) {
   const [approvedExternalImagesFor, setApprovedExternalImagesFor] = useState<string>()
-  const runScripts = executable && (gameDiagnostics || hasExecutableHtmlBehavior(html))
+  // Preserve interactive HTML unless a remote-image page has no authored code.
+  const remoteImages = hasExternalImageReferences(html)
+  const runScripts = executable && (gameDiagnostics || !remoteImages || hasExecutableHtmlBehavior(html))
   const allowExternalImages = runScripts && approvedExternalImagesFor === html
-  const externalImagesAvailable = runScripts && hasExternalImageReferences(html)
+  const externalImagesAvailable = runScripts && remoteImages
   const [frameHeight, setFrameHeight] = useState(1)
   const frameRef = useRef<HTMLIFrameElement>(null)
   const srcDoc = useMemo(() => sandboxDocument(html, runScripts, gameDiagnostics, allowExternalImages),
