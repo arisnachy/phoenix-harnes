@@ -321,6 +321,10 @@ function embeddedBrowserUse(block: ToolCallBlock): EmbeddedBrowserUse {
  */
 export function isTradingPanelPrompt(text: string): boolean {
   const normalized = text.normalize('NFD').replace(/[\u0300-\u036f]/gu, '').toLowerCase()
+  // REAL requires explicit Binance Agentic OAuth onboarding; never present a
+  // PAPER-only visor as if it represented the user's funded real account.
+  if (/\b(?:real|reales|live)\b/u.test(normalized)
+    && !/\b(?:paper|simulacion|simulado|simulada)\b/u.test(normalized)) return false
   return /\b(?:binance|trading|cripto|criptomonedas)\b/u.test(normalized)
     && /\b(?:visor|panel|dashboard|opera|operar|operaciones|inicia|iniciar|comienza|empezar|automat|muestra|mostrar|abre|abrir|hace|hacer|haz|deten|detener)\b/u.test(normalized)
 }
