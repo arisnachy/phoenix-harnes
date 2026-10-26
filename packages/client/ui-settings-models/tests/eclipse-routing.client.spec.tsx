@@ -55,35 +55,35 @@ describe('Eclipse model settings', () => {
     expect(existingProfile(undefined, {})).toEqual({ mode: 'automatic', escalationSensitivity: 'adaptive', maxTeammates: 3 })
   })
 
-  it('keeps only the newest numeric Codex tier and unknown live Codex ids', () => {
-    expect(selectCurrentCodexModels([
-      { provider: 'openai-codex', model: 'gpt-5.6-sol', name: 'old sol', reasoningEfforts: [] },
-      { provider: 'openai-codex', model: 'gpt-5.3-codex', name: 'old codex', reasoningEfforts: [] },
-      { provider: 'openai-codex', model: 'gpt-6-sol', name: 'sol', reasoningEfforts: [] },
-      { provider: 'openai-codex', model: 'gpt-6.1-sol', name: 'new sol', reasoningEfforts: [] },
-      { provider: 'openai-codex', model: 'gpt-5.5', name: 'old generic', reasoningEfforts: [] },
-      { provider: 'openai-codex', model: 'gpt-6', name: 'generic', reasoningEfforts: [] },
-      { provider: 'openai-codex', model: 'gpt-5.6-luna', name: 'old luna', reasoningEfforts: [] },
-      { provider: 'openai-codex', model: 'gpt-6-luna', name: 'new luna', reasoningEfforts: [] },
-      { provider: 'openai-codex', model: 'gpt-5.6-terra', name: 'old terra', reasoningEfforts: [] },
-      { provider: 'openai-codex', model: 'gpt-6-terra', name: 'terra', reasoningEfforts: [] },
-      { provider: 'openai-codex', model: 'codex-specialized', name: 'specialized', reasoningEfforts: ['none'] },
+  it('preserves every live Codex model across generations and future model families', () => {
+    const ids = [
+      'gpt-5.6-sol', 'gpt-5.3-codex', 'gpt-6-sol', 'gpt-6.1-sol', 'gpt-5.5',
+      'gpt-6', 'gpt-5.6-luna', 'gpt-6-luna', 'gpt-5.6-terra', 'gpt-6-terra',
+      'gpt-6.1-terra', 'codex-specialized',
+    ]
+    const result = selectCurrentCodexModels([
+      ...ids.map(model => ({
+        provider: 'openai-codex', model, name: model, reasoningEfforts: ['medium'],
+      })),
+      { provider: 'openai-codex', model: 'gpt-6.1-sol', name: 'duplicate', reasoningEfforts: [] },
       { provider: 'openrouter', model: 'gpt-9-sol', name: 'wrong provider', reasoningEfforts: [] },
       { provider: 'openai-codex', model: 'phoenix-auto', name: 'virtual', reasoningEfforts: [] },
-    ])).toMatchObject([
-      { model: 'gpt-6.1-sol' }, { model: 'gpt-6' }, { model: 'gpt-6-luna' }, { model: 'gpt-6-terra' },
-      { model: 'codex-specialized' },
     ])
+    expect(result.map(choice => choice.model)).toEqual(ids)
+    expect(result[3]).toEqual({
+      provider: 'openai-codex', model: 'gpt-6.1-sol', name: 'gpt-6.1-sol', reasoningEfforts: ['medium'],
+    })
+    expect(result[3]?.reasoningEfforts).not.toBe(ids)
   })
 
-  it('derives the newest available generation when the live catalog has no newer major', () => {
+  it('keeps older available model generations even when newer ones are announced', () => {
     expect(selectCurrentCodexModels([
       { provider: 'openai-codex', model: 'gpt-5.5', name: 'generic old', reasoningEfforts: [] },
       { provider: 'openai-codex', model: 'gpt-5.6', name: 'generic current', reasoningEfforts: [] },
       { provider: 'openai-codex', model: 'gpt-5-sol', name: 'sol old', reasoningEfforts: [] },
       { provider: 'openai-codex', model: 'gpt-5.6-sol', name: 'sol current', reasoningEfforts: [] },
-    ])).toMatchObject([
-      { model: 'gpt-5.6' }, { model: 'gpt-5.6-sol' },
+    ]).map(choice => choice.model)).toEqual([
+      'gpt-5.5', 'gpt-5.6', 'gpt-5-sol', 'gpt-5.6-sol',
     ])
   })
 
