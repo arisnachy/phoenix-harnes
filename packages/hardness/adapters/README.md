@@ -69,6 +69,10 @@ Abstract games that request character or background assets also require an asset
 
 Paper candle reads clamp both the provider request and returned rows to 1–1000. Shell mutation classification reads the command argument. Runtime-service telemetry performs an immediate first probe and then reuses observations until their TTL expires.
 
+## Binance adaptive paper trading
+
+The on-demand `binance_adaptive_cycle` tool ranks up to five Spot USDT pairs using closed Binance candles and deterministic breakout, uptrend-pullback, and range-reversion candidates. `scan` is read-only; `paper-step` may place one virtual order in the existing fee-aware paper ledger while limiting each new position to 5% of virtual equity, aggregate exposure to 20%, and simultaneous holdings to two. Defensive liquidation takes precedence over new buys. Scores represent a rule ranking, not calibrated win probabilities; fresh prices are re-read before the virtual order. The scanner does not authorize real orders, manage Binance account credentials, or start a continuous background process.
+
 ## Model Experience
 
 ### Projected capability metadata and operating protocol
@@ -120,10 +124,6 @@ The model also receives the read-only connector_list tool when the authorization
 ```markdown
 Full model-tool scopes also expose `x_mcp_activate`. It is usable only after an explicit user request and one-shot medium-risk approval. The user identity maps to `x-api`; the Phoenix-owned identity maps to `x-api-phoenix`, so their OAuth sessions stay separate. If the Phoenix-owned account does not exist yet, activation returns `setup-required`, defers an instruction to continue through Computer Use at `https://x.com/signup`, and stops for required human verification before connecting the resulting username. Setup never posts, follows, DMs, or performs another social action.
 ```
-
-## Binance adaptive paper trading
-
-The on-demand `binance_adaptive_cycle` tool ranks up to five Spot USDT pairs using closed Binance candles and deterministic breakout, uptrend-pullback, and range-reversion candidates. `scan` is read-only; `paper-step` may place one virtual order in the existing fee-aware paper ledger while limiting each new position to 5% of virtual equity, aggregate exposure to 20%, and simultaneous holdings to two. Defensive liquidation takes precedence over new buys. Scores represent a rule ranking, not calibrated win probabilities; fresh prices are re-read before the virtual order. The scanner does not authorize real orders, manage Binance account credentials, or start a continuous background process.
 
 #### Token effect
 
