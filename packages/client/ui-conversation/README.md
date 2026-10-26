@@ -2,6 +2,8 @@
 
 English | [中文](README.zh.md)
 
+Passive HTML pages show remote images in a script-disabled iframe; executable HTML requests image-network consent per document and cannot use script network connections.
+
 Comic Studio artifacts expose an expandable static reader and a self-contained `.html` download. Closing the reader restores the inline edition; neither view enables scripts. Downloaded editions carry a Content Security Policy that blocks scripts and remote resources outside the iframe as well. Native map artifacts retain their interactive selection and export controls.
 
 Conversation domain: skeleton (header/tabs/composer/empty state), chat view (grouped step-summary flow, streaming tail isolation, and turn status), composer dock (session stats sticky with the input), input dock (queue rows plus the todo plan strip), details shell, and scope-addressed ConversationController. Tool presentation belongs to [`ui-tool`](../ui-tool/README.md). Turn footers retain the exact durable end reason and render a localized status even without assistant text. User cancellation, parent cancellation, process disposal, crash recovery, blocked turns and terminal failures are distinguished. Empty completion is not presented as task success. These notices do not spend a model turn, promise automatic resumption, or bypass provider retry and user cancellation policies.

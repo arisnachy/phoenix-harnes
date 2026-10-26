@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { hasExternalImageReferences, inlineBundledImages } from '../src/client/chat/html-preview-assets.ts'
+import { hasExecutableHtmlBehavior, hasExternalImageReferences, inlineBundledImages } from '../src/client/chat/html-preview-assets.ts'
 
 describe('HARDNESS packaged HTML image assets', () => {
   const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4//8/AwAI/AL+e6I6JwAAAABJRU5ErkJggg=='
@@ -54,5 +54,14 @@ describe('HARDNESS packaged HTML image assets', () => {
     expect(hasExternalImageReferences('<style>.hero{background-image:url(https://images.example.com/hero)}</style>')).toBe(true)
     expect(hasExternalImageReferences('<a href="https://example.com">Visitar</a>')).toBe(false)
     expect(hasExternalImageReferences('<img src="data:image/png;base64,QUJDRA==">')).toBe(false)
+    expect(hasExternalImageReferences('<img src="//images.example.com/cat.webp">')).toBe(true)
+  })
+
+  it('keeps passive image-first pages separate from executable mini-apps', () => {
+    expect(hasExecutableHtmlBehavior('<main><img src="https://images.example.test/hero.webp"><h1>Ideas claras</h1></main>')).toBe(false)
+    expect(hasExecutableHtmlBehavior('<main><style>.hero{background:url(https://images.example.test/x.jpg)}</style></main>')).toBe(false)
+    expect(hasExecutableHtmlBehavior('<script>document.body.dataset.active="1"</script>')).toBe(true)
+    expect(hasExecutableHtmlBehavior('<button onclick="run()">Abrir</button>')).toBe(true)
+    expect(hasExecutableHtmlBehavior('<a href="javascript:run()">Abrir</a>')).toBe(true)
   })
 })

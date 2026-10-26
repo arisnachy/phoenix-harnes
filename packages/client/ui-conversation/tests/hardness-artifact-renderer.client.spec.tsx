@@ -425,6 +425,18 @@ describe('HARDNESS inline artifact renderer', () => {
     expect(screen.queryByRole('button', { name: /sandboxed interaction/i })).toBeNull()
   })
 
+  it('loads external imagery in passive HTML with all author scripts disabled', () => {
+    render(<HardnessArtifactNodeView {...props({
+      artifactId: 'passive-landing', mime: 'text/html', title: 'Creative agency',
+      data: '<main><h1>Ideas claras</h1><img src="https://images.example.test/hero.webp" alt="Estudio"></main>',
+    })} />)
+    const frame = screen.getByTitle('Creative agency')
+    expect(frame.getAttribute('sandbox')).toBe('allow-same-origin')
+    expect(frame.getAttribute('srcdoc')).toContain('img-src data: blob: https: http:')
+    expect(frame.getAttribute('srcdoc')).toContain("connect-src 'none'")
+    expect(screen.queryByRole('button', { name: 'Cargar imágenes externas' })).toBeNull()
+  })
+
   it('offers a deliberate external-image opt-in without allowing script network access', () => {
     render(<HardnessArtifactNodeView {...props({
       artifactId: 'hero-page', mime: 'text/html', title: 'Landing page',
@@ -442,6 +454,23 @@ describe('HARDNESS inline artifact renderer', () => {
     const disable = screen.getByRole('button', { name: 'Bloquear imágenes externas' })
     fireEvent.click(disable)
     expect(frame.getAttribute('srcdoc')).not.toContain('img-src data: blob: https: http:')
+  })
+
+  it('does not reuse outbound-image consent after executable HTML content changes', () => {
+    const first = props({
+      artifactId: 'changing-page', mime: 'text/html', title: 'Changing preview',
+      data: '<img src="https://first.example.test/a.jpg"><script>document.body.dataset.ready="1"</script>',
+    })
+    const view = render(<HardnessArtifactNodeView {...first} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Cargar imágenes externas' }))
+    const frame = screen.getByTitle('Changing preview')
+    expect(frame.getAttribute('srcdoc')).toContain('img-src data: blob: https: http:')
+    view.rerender(<HardnessArtifactNodeView {...props({
+      artifactId: 'changing-page', mime: 'text/html', title: 'Changing preview',
+      data: '<img src="https://second.example.test/b.jpg"><script>document.body.dataset.ready="2"</script>',
+    })} />)
+    expect(frame.getAttribute('srcdoc')).not.toContain('img-src data: blob: https: http:')
+    expect(screen.getByRole('button', { name: 'Cargar imágenes externas' }).getAttribute('aria-pressed')).toBe('false')
   })
 
   it('displays image files packed alongside an HTML entry within its isolated iframe', () => {
