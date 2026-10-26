@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
-import {describe,expect,it} from 'vitest'
-import {render,screen,fireEvent} from '@testing-library/react'
+import {describe,expect,it,afterEach} from 'vitest'
+import {render,screen,fireEvent,cleanup} from '@testing-library/react'
 import {parseGenerativeUiBlock,GenerativeUi} from '../src/client/chat/GenerativeUi.tsx'
+afterEach(cleanup)
 const trusted='https://img.mlbstatic.com/mlb-photos/image/upload/v1/people/678021/headshot/67/current'
 const rich={
   component:'sports_game_card',version:1,props:{
