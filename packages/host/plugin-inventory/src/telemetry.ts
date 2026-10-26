@@ -131,8 +131,9 @@ export class TokenTelemetryCollector {
 
   /** Dispose listeners and flush counters after a Host plugin unload. */
   dispose(): void {
-    (process as EventEmitter).off('phoenix:telemetry:input', this.receiveInput)
-    (process as EventEmitter).off('phoenix:telemetry:usage', this.receiveUsage)
+    const telemetryEvents: EventEmitter = process
+    telemetryEvents.off('phoenix:telemetry:input', this.receiveInput)
+    telemetryEvents.off('phoenix:telemetry:usage', this.receiveUsage)
     if (this.timer !== undefined) clearTimeout(this.timer)
     this.timer = undefined
     void this.flush()
