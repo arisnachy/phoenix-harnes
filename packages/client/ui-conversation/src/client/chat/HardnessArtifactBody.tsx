@@ -9,7 +9,7 @@ import { GeoMap, parseGeoMapSpec } from './GeoMap.tsx'
 import { SceneMap, parseSceneMapSpec } from './SceneMap.tsx'
 import { DiagramSurface, parseDiagramSpec } from './DiagramSurface.tsx'
 import { auditGameHtml, readGameManifest } from './game-studio-quality.ts'
-import { hasExternalImageReferences, inlineBundledImages } from './html-preview-assets.ts'
+import { hasExecutableHtmlBehavior, hasExternalImageReferences, inlineBundledImages } from './html-preview-assets.ts'
 import {
   libraryGameId, listLibraryGames, openGameInWindow, removeLibraryGame, saveLibraryGame,
   type LibraryGame,
@@ -326,12 +326,14 @@ interface MiniAppProps {
 }
 
 function MiniApp({ html, title, executable = false, minimumHeight = 1, gameDiagnostics = false }: MiniAppProps) {
-  const [allowExternalImages, setAllowExternalImages] = useState(false)
-  const externalImagesAvailable = executable && hasExternalImageReferences(html)
+  const [approvedExternalImagesFor, setApprovedExternalImagesFor] = useState<string>()
+  const runScripts = executable && (gameDiagnostics || hasExecutableHtmlBehavior(html))
+  const allowExternalImages = runScripts && approvedExternalImagesFor === html
+  const externalImagesAvailable = runScripts && hasExternalImageReferences(html)
   const [frameHeight, setFrameHeight] = useState(1)
   const frameRef = useRef<HTMLIFrameElement>(null)
-  const srcDoc = useMemo(() => sandboxDocument(html, executable, gameDiagnostics, allowExternalImages),
-    [html, executable, gameDiagnostics, allowExternalImages])
+  const srcDoc = useMemo(() => sandboxDocument(html, runScripts, gameDiagnostics, allowExternalImages),
+    [html, runScripts, gameDiagnostics, allowExternalImages])
 
   useEffect(() => {
     const onMessage = (event: MessageEvent<unknown>): void => {
@@ -366,7 +368,7 @@ function MiniApp({ html, title, executable = false, minimumHeight = 1, gameDiagn
     }
     frame.contentWindow?.postMessage({ type: 'phoenix-artifact-theme', colors }, '*')
     // Static previews have no script privileges and are same-origin sandboxed.
-    if (!executable) {
+    if (!runScripts) {
       const rootElement = frame.contentDocument?.documentElement
       if (rootElement) {
         for (const [name, color] of Object.entries(colors))
@@ -383,10 +385,10 @@ function MiniApp({ html, title, executable = false, minimumHeight = 1, gameDiagn
       attributes: true, attributeFilter: ['class', 'style', 'data-theme', 'data-appearance'],
     })
     return () => observer.disconnect()
-  }, [executable])
+  }, [runScripts])
 
   const measureStaticDocument = (): void => {
-    if (executable) return
+    if (runScripts) return
     const frame = frameRef.current
     const documentElement = frame?.contentDocument?.documentElement
     const body = frame?.contentDocument?.body
@@ -412,7 +414,7 @@ function MiniApp({ html, title, executable = false, minimumHeight = 1, gameDiagn
     <div className={styles.miniAppWrap}>
       {externalImagesAvailable && <button type="button" className={styles.remoteImageToggle}
         aria-pressed={allowExternalImages}
-        onClick={() => { setAllowExternalImages(value => !value) }}>
+        onClick={() => { setApprovedExternalImagesFor(value => value === html ? undefined : html) }}>
         {allowExternalImages ? 'Bloquear imágenes externas' : 'Cargar imágenes externas'}
       </button>}
     <iframe
@@ -420,7 +422,7 @@ function MiniApp({ html, title, executable = false, minimumHeight = 1, gameDiagn
       className={styles.frame}
       title={title}
       srcDoc={srcDoc}
-      sandbox={executable ? 'allow-scripts' : 'allow-same-origin'}
+      sandbox={runScripts ? 'allow-scripts' : 'allow-same-origin'}
       referrerPolicy="no-referrer"
       style={{ height: Math.max(frameHeight, minimumHeight) }}
       onLoad={() => { measureStaticDocument(); syncTheme() }}

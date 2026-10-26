@@ -108,6 +108,12 @@ export function inlineBundledImages(entry: string, html: string, files: AssetMap
  * Scripts retain connect-src 'none', but can request images once authorized.
  */
 export function hasExternalImageReferences(html: string): boolean {
-  return /https?:\/\//iu.test(html)
+  return /(?:https?:)?\/\//iu.test(html)
     && /(?:<img\b|<picture\b|\bsrcset\b|background-image|image\s*\(|new\s+Image\s*\(|createElement\(\s*['"]img)/iu.test(html)
+}
+/** Executable HTML requires an explicit script-capable sandbox. Passive HTML
+ * cannot execute any author script and may fetch images without elevation.
+ */
+export function hasExecutableHtmlBehavior(html: string): boolean {
+  return /<script\b|\bon[a-z][a-z\d_-]*\s*=|\b(?:java|vb)script\s*:/iu.test(html)
 }
