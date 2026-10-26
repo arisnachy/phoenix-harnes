@@ -201,7 +201,7 @@ export async function autoResearchTicket(
       if(!home?.team?.displayName&&!home?.team?.name || !away?.team?.displayName&&!away?.team?.name)continue
       const record=(team:EspnTeam):{wins:number;losses:number;name:string}|null=>{
         const match=team.records?.map(x=>x.summary??'')
-          .find(x=>/^\d{1,3}-\d{1,3}(?:-\d{1,3})?$/u.test(x))?.match(/^(\d+)-(\d+)/u)
+          .find(x=>/^\d{1,3}-\d{1,3}$/u.test(x))?.match(/^(\d+)-(\d+)$/u)
         if(!match)return null
         const wins=Number(match[1]),losses=Number(match[2])
         if(wins+losses<1)return null
