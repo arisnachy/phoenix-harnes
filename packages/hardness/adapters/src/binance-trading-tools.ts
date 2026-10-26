@@ -1,6 +1,7 @@
 import type { ApprovalService } from '@phoenix-ai/dsh-user-approval'
 import { defineTool, type JsonValue, type ToolDefinition } from '@phoenix-ai/dsh-tools'
 import { runBinanceAdaptiveCycle } from './binance-adaptive.ts'
+import type { BinancePaperAutomation, BinancePaperAutomationView } from './binance-paper-automation.ts'
 import type {
   BinanceCandle,
   BinancePaperAccount,
@@ -28,6 +29,7 @@ export interface BinanceAgentOsHostService {
 /** Runtime dependencies for the on-demand Binance tool family. */
 export interface BinanceTradingToolDependencies {
   broker: BinancePaperBroker
+  automation?: BinancePaperAutomation
   approval: Pick<ApprovalService, 'request'>
   agentOs?: Partial<BinanceAgentOsHostService>
 }
@@ -369,6 +371,98 @@ function adaptiveCycleTool(deps: BinanceTradingToolDependencies): ToolDefinition
   })
 }
 
+function dashboardJson(view: BinancePaperAutomationView): Record<string, JsonValue> {
+  return {
+    mode: 'paper', phase: view.phase, enabled: view.enabled,
+    settings: { symbols: [...view.settings.symbols], interval: view.settings.interval, pollMs: view.settings.pollMs },
+    ...(view.lastAttemptAt === undefined ? {} : { lastAttemptAt: view.lastAttemptAt }),
+    ...(view.lastSuccessAt === undefined ? {} : { lastSuccessAt: view.lastSuccessAt }),
+    ...(view.nextCheckAt === undefined ? {} : { nextCheckAt: view.nextCheckAt }),
+    ...(view.lastError === undefined ? {} : { lastError: view.lastError }),
+    account: paperAccountJson(view.account),
+    recentTrades: view.recentTrades.map(paperTradeJson),
+    signals: view.lastCycle?.signals.map(signal => ({
+      symbol: signal.symbol, regime: signal.regime, strategy: signal.strategy,
+      action: signal.action, score: signal.score, reason: signal.reason,
+    })) ?? [],
+    lastDecision: view.lastCycle?.decision ?? 'none',
+    rationale: view.lastCycle?.rationale ?? 'No analysis executed in the current Host session',
+  }
+}
+
+function dashboardTool(deps: BinanceTradingToolDependencies): ToolDefinition {
+  return defineTool({
+    name: 'binance_paper_dashboard',
+    description: 'Open a first-party PHOENIX trading dashboard inside chat. Read real PAPER ledger, strategy signals, last engine decision, verified virtual fills, and auto-run status. Does not place an order. An enabled automation runs independently of the chat model; use the dashboard to inspect why it traded or held.',
+    parameters: {},
+    output: {
+      schema: { type: 'object', additionalProperties: true },
+      render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
+    },
+    async execute() {
+      if (deps.automation === undefined) throw new Error('PAPER automation is unavailable')
+      const view = await deps.automation.dashboard()
+      const dashboard = dashboardJson(view)
+      return {
+        dashboard,
+        uiBlock: {
+          component: 'trading_dashboard',
+          version: 1,
+          props: {
+            title: 'Phoenix Trading · Binance',
+            ...dashboard,
+          },
+        },
+      }
+    },
+    presentCall() { return { card: 'generic', title: 'Visor de trading Binance', kind: 'read' } },
+  })
+}
+
+function paperAutoTool(deps: BinanceTradingToolDependencies): ToolDefinition {
+  return defineTool({
+    name: 'binance_paper_auto',
+    description: 'Start, stop, or request one immediate check of REAL background PAPER trading automation, independently of ChatGPT tokens. Start requires an explicitly user-requested virtual automation and a comma-separated 1-5 pair USDT watchlist; future checks run automatically while the Host runs, and resume after restart. It never connects to real funds or bypasses Binance order confirmation. Always report genuine tradeCount from the dashboard, not a fabricated fill.',
+    parameters: {
+      action: { type: 'string', required: true, enum: ['start', 'stop', 'check-now'] },
+      requestedByUser: { type: 'boolean', description: 'Required true to START and only when the user asked for automatic paper trading.' },
+      watchlist: { type: 'string', description: 'Comma-separated unique Spot USDT pairs; required on START.' },
+      interval: { type: 'string', enum: ['15m', '1h', '4h', '1d'], description: 'Closed-candle strategy interval; default 15m.' },
+      pollMinutes: { type: 'integer', description: 'How often the Host checks, 1–60 minutes; default 1.' },
+    },
+    output: {
+      schema: { type: 'object', additionalProperties: true },
+      render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
+    },
+    async execute(args) {
+      if (deps.automation === undefined) throw new Error('PAPER automation is unavailable')
+      if (args.action === 'start') {
+        if (args.requestedByUser !== true) throw new Error('Starting automatic paper trading requires an explicit user request')
+        if (typeof args.watchlist !== 'string') throw new Error('Starting paper trading requires a watchlist')
+        await deps.automation.start({
+          symbols: args.watchlist.split(','),
+          ...(args.interval === undefined ? {} : { interval: args.interval }),
+          ...(args.pollMinutes === undefined ? {} : { pollMs: args.pollMinutes * 60_000 }),
+        })
+      } else if (args.action === 'stop') {
+        await deps.automation.stop()
+      } else {
+        await deps.automation.step()
+      }
+      return dashboardJson(await deps.automation.dashboard())
+    },
+    presentCall(args) {
+      return {
+        card: 'generic',
+        title: args.action === 'start' ? 'Iniciar trading PAPER' : args.action === 'stop'
+          ? 'Detener trading PAPER' : 'Comprobar trading PAPER',
+        kind: args.action === 'check-now' ? 'read' : 'execute',
+        rawInput: args.action,
+      }
+    },
+  })
+}
+
 /**
  * Build the complete on-demand Binance model-tool family.
  * @param deps - Paper broker, approval seam, and optional Agent OS host controls.
@@ -383,5 +477,7 @@ export function createBinanceTradingTools(deps: BinanceTradingToolDependencies):
     paperAccountTool(deps),
     paperJournalTool(deps),
     adaptiveCycleTool(deps),
+    dashboardTool(deps),
+    paperAutoTool(deps),
   ]
 }
