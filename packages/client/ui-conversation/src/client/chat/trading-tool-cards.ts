@@ -32,7 +32,11 @@ function finite(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value)
 }
 
-/** Reject fabricated or malformed dashboard payloads rather than styling arbitrary JSON. */
+/**
+ * Reject malformed virtual dashboard payloads rather than styling arbitrary JSON.
+ * @param value - Unknown tool or Host response.
+ * @returns Validated read-only trading evidence, or undefined.
+ */
 export function parseTradingDashboard(value: unknown): TradingDashboardSnapshot | undefined {
   const root = record(value)
   if (root?.mode !== 'paper' || !['running', 'stopped', 'error'].includes(String(root.phase))
