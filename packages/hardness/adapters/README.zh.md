@@ -68,6 +68,10 @@ Email 有两个独立 identity reference。`userMailIdentity` 表示获授权的
 
 模拟蜡烛图读取将 provider 请求和返回行数都限制为 1–1000。Shell 修改分类读取 command 参数。运行时服务遥测立即执行首次探测，随后在 TTL 过期前复用观察结果。
 
+## Binance 自适应模拟交易
+
+按需使用的 `binance_adaptive_cycle` 工具根据已收盘的 Binance K 线，对最多五个 Spot USDT 交易对评分，比较突破、上涨趋势回调和区间均值回归等确定性候选策略。`scan` 只读；`paper-step` 最多在现有、计入手续费的模拟账本中执行一笔虚拟交易，新仓位不超过模拟权益的 5%，总持仓敞口不超过 20%，同时最多持有两个币种。已有仓位的防御性退出优先于新买入。评分是规则排序，不代表经过校准的胜率；执行虚拟订单前会重新读取市场价格。此工具不授权真实订单、不持有 Binance 账户凭据，也不会启动持续后台进程。
+
 ## Model Experience
 
 ### 投影的 capability metadata 与 operating protocol
@@ -119,10 +123,6 @@ The model also receives the read-only connector_list tool when the authorization
 ```markdown
 Full model-tool scopes also expose `x_mcp_activate`. It is usable only after an explicit user request and one-shot medium-risk approval. The user identity maps to `x-api`; the Phoenix-owned identity maps to `x-api-phoenix`, so their OAuth sessions stay separate. If the Phoenix-owned account does not exist yet, activation returns `setup-required`, defers an instruction to continue through Computer Use at `https://x.com/signup`, and stops for required human verification before connecting the resulting username. Setup never posts, follows, DMs, or performs another social action.
 ```
-
-## Binance 自适应模拟交易
-
-按需使用的 `binance_adaptive_cycle` 工具根据已收盘的 Binance K 线，对最多五个 Spot USDT 交易对评分，比较突破、上涨趋势回调和区间均值回归等确定性候选策略。`scan` 只读；`paper-step` 最多在现有、计入手续费的模拟账本中执行一笔虚拟交易，新仓位不超过模拟权益的 5%，总持仓敞口不超过 20%，同时最多持有两个币种。已有仓位的防御性退出优先于新买入。评分是规则排序，不代表经过校准的胜率；执行虚拟订单前会重新读取市场价格。此工具不授权真实订单、不持有 Binance 账户凭据，也不会启动持续后台进程。
 
 #### Token effect
 
