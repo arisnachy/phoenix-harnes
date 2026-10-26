@@ -970,10 +970,7 @@ function BrowserWorkspace({
           {items.map(item => (
             <Fragment key={item.key}>
               {item.kind === 'trading'
-                ? <TradingDashboard initial={item.snapshot} onAction={prompt => {
-                  inputActions.setDraft(prompt)
-                  inputActions.submit()
-                }} />
+                ? <TradingDashboard initial={item.snapshot} />
                 : item.kind === 'sports'
                 ? <SportsEvidenceSurface blocks={item.blocks} inputActions={inputActions} />
                 : item.kind === 'node'
@@ -1071,10 +1068,7 @@ export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, browserT
             />
           )}
           {item.kind === 'trading'
-            ? <TradingDashboard initial={item.snapshot} onAction={prompt => {
-              inputActions.setDraft(prompt)
-              inputActions.submit()
-            }} />
+            ? <TradingDashboard initial={item.snapshot} />
             : item.kind === 'sports'
             ? <SportsEvidenceSurface blocks={item.blocks} inputActions={inputActions} />
             : item.kind === 'desktop'
