@@ -71,7 +71,7 @@ type ResultBlock = {
   isError?: boolean
   subCalls?: readonly ResultBlock[]
 }
-const NAMES = new Set(['binance_paper_dashboard', 'binance_paper_auto'])
+const NAMES = new Set(['binance_paper_dashboard', 'binance_paper_auto', 'binance_paper_order', 'binance_adaptive_cycle'])
 const MAX_TEXT = 65_000
 
 /**
