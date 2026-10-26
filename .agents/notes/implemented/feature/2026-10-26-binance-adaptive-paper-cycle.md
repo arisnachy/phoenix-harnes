@@ -12,7 +12,7 @@ The HARDNESS Binance adapter provides `binance_adaptive_cycle` for up to five US
 
 The strategy calculation runs in the Host without LLM tokens per candle, performs bounded public market requests, and returns summaries instead of raw OHLCV history. Each cycle is serialized per broker to avoid competing virtual allocations in the same runtime.
 
-The Host worker performs only virtual transactions, and the in-chat visor refreshes read-only portfolio snapshots without a model call. The execution path never accesses the Binance Agent OS connector or authorizes real orders. Official real-account actions remain subject to the existing explicit user approval, OAuth scopes and Binance order confirmations.
+The Host worker performs only virtual transactions. The in-chat visor reads live PAPER ledger snapshots and executes explicit user-clicked start/stop/check controls through a same-origin, POST-only route, without any model call. The route rejects mismatched Origins, oversized or invalid JSON, and REAL parameters. The execution path never accesses the Binance Agent OS connector or authorizes real orders. Official real-account actions remain subject to the existing explicit user approval, OAuth scopes and Binance order confirmations.
 
 ## Alternatives considered
 
