@@ -26,8 +26,8 @@ export interface BinanceAgentOsHostService {
     connector: { entryId: string; serverName: string; url: string }
   }>
   disableBinanceAgentOs(): Promise<{ disabled: boolean }>
-  reconnectBinanceAgentOs(): Promise<{ accepted: boolean }>
-  repairBinanceAgentOs(): Promise<{ status: 'installed' | 'already-installed'; connector: { entryId: string; serverName: string; url: string } }>
+  reconnectBinanceAgentOs?(): Promise<{ accepted: boolean }>
+  repairBinanceAgentOs?(): Promise<{ status: 'installed' | 'already-installed'; connector: { entryId: string; serverName: string; url: string } }>
 }
 
 /** Runtime dependencies for the on-demand Binance tool family. */
