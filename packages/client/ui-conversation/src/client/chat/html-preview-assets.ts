@@ -46,6 +46,11 @@ function assetUri(path: string, raw: unknown): string | undefined {
 /** Replace only references to known bundled raster images.
  * Bare URLs, absolute host paths, traversal outside the bundle, and unknown
  * files are never converted into network requests.
+ * @param entry - Relative path of the entry HTML document.
+ * @param html - Entry document contents.
+ * @param files - Companion files indexed by relative path.
+ * @param includeStylesheets - Whether to embed companion stylesheets.
+ * @returns HTML with matching bundled image references embedded.
  */
 export function inlineBundledImages(entry: string, html: string, files: AssetMap, includeStylesheets = true): string {
   const normalizedEntry = normalizedPath(entry)
@@ -104,15 +109,18 @@ export function inlineBundledImages(entry: string, html: string, files: AssetMap
   })
 }
 
-/** Explicitly consent before enabling outbound image loads in executable HTML.
+/** Identify remote image requests that require consent in executable HTML.
  * Scripts retain connect-src 'none', but can request images once authorized.
+ * @param html - HTML document contents.
+ * @returns Whether remote image references are present.
  */
 export function hasExternalImageReferences(html: string): boolean {
   return /(?:https?:)?\/\//iu.test(html)
     && /(?:<img\b|<picture\b|\bsrcset\b|background-image|image\s*\(|new\s+Image\s*\(|createElement\(\s*['"]img)/iu.test(html)
 }
-/** Executable HTML requires an explicit script-capable sandbox. Passive HTML
- * cannot execute any author script and may fetch images without elevation.
+/** Detect authored JavaScript that requires a script-capable sandbox.
+ * @param html - HTML document contents.
+ * @returns Whether the document carries executable author code.
  */
 export function hasExecutableHtmlBehavior(html: string): boolean {
   return /<script\b|\bon[a-z][a-z\d_-]*\s*=|\b(?:java|vb)script\s*:/iu.test(html)
