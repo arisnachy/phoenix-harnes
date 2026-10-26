@@ -148,6 +148,13 @@ describe('token-efficient MCP schema admission', () => {
       })
       expect(hidden.isError).toBe(true)
       if (mode === 'both') {
+        // The scoped fake agent needs the durable-session append expected by run_code.
+        Object.assign(agent, {
+          session: {
+            header: { cwd: '/workspace' },
+            append: (_type: string, _data: unknown) => undefined,
+          },
+        })
         // run_code still sees and executes an undiscovered MCP through its
         // nested transport: lazy native schemas never disable a skill.
         runtime.behavior = async (request) => {
