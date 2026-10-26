@@ -112,6 +112,7 @@ function command(bin, args, options = {}) {
       // explicitly configured persistent install checkout before falling
       // back to the direct command; never execute a missing module path.
       ?? (installRoot && resolve(installRoot) !== resolve(fileURLToPath(new URL('..', import.meta.url)))
+        && remoteMatchesExpected(resolve(installRoot))
         ? pinPhoenixUpdateLiveHelper(resolve(installRoot), liveState)
         : undefined)
     : undefined
