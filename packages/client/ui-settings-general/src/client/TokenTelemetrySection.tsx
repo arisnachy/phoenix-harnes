@@ -1,5 +1,5 @@
 /** Live, locally collected token-usage dashboard inside Settings. */
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { TokenTelemetrySnapshot } from '@phoenix-ai/dsh-api-remotes/client'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@phoenix-ai/dsh-client-ui-slots'
 import type { SettingsKey } from './locales.ts'
@@ -48,18 +48,22 @@ export function TokenTelemetrySection({
 }: TokenTelemetrySectionProps): ReactNode {
   const [snapshot, setSnapshot] = useState<TokenTelemetrySnapshot | undefined>()
   const [period, setPeriod] = useState<Period>('5h')
-  const [error, setError] = useState(false)
+  const [error, setError] = useState<string | undefined>()
+  const operationId = useRef(0)
   const [busy, setBusy] = useState(false)
   const [now, setNow] = useState(() => Date.now())
 
   const refresh = useCallback(async (): Promise<void> => {
+    const request = operationId.current
     try {
       const data = await readTelemetry()
+      if (request !== operationId.current) return
       setSnapshot(data)
       setNow(Date.now())
-      setError(false)
-    } catch {
-      setError(true)
+      setError(undefined)
+    } catch (reason: unknown) {
+      if (request !== operationId.current) return
+      setError(reason instanceof Error ? reason.message : 'UNAVAILABLE')
     }
   }, [readTelemetry])
 
@@ -71,13 +75,14 @@ export function TokenTelemetrySection({
 
   const mutate = async (operation: () => Promise<TokenTelemetrySnapshot>): Promise<void> => {
     if (busy) return
+    operationId.current += 1
     setBusy(true)
     try {
       setSnapshot(await operation())
       setNow(Date.now())
-      setError(false)
-    } catch {
-      setError(true)
+      setError(undefined)
+    } catch (reason: unknown) {
+      setError(reason instanceof Error ? reason.message : 'UNAVAILABLE')
     } finally {
       setBusy(false)
     }
@@ -124,9 +129,12 @@ export function TokenTelemetrySection({
         <label className={css.toggle}>
           <input
             type="checkbox"
-            disabled={busy || snapshot === undefined}
+            disabled={busy}
             checked={snapshot?.enabled ?? false}
-            onChange={event => { void mutate(() => setTelemetry(event.currentTarget.checked)) }}
+            onChange={(event) => {
+              const enabled = event.currentTarget.checked
+              void mutate(() => setTelemetry(enabled))
+            }}
           />
           <span>{t('telemetry.enabled')}</span>
         </label>
@@ -142,8 +150,15 @@ export function TokenTelemetrySection({
           ))}
         </div>
       </div>
-      {error ? <p className={css.notice} role="alert">{t('telemetry.error')}</p> : null}
-      {!snapshot?.enabled ? <p className={css.notice}>{t('telemetry.disabled')}</p> : null}
+      {error !== undefined ? (
+        <div className={css.notice} role="alert">
+          <p>{error === 'TELEMETRY_HOST_UPDATE_REQUIRED'
+            ? t('telemetry.hostUnavailable')
+            : t('telemetry.error')}</p>
+          <code>{error.replace(/[^a-zA-Z0-9_.:-]/gu, '').slice(0, 64)}</code>
+        </div>
+      ) : null}
+      {snapshot?.enabled === false ? <p className={css.notice}>{t('telemetry.disabled')}</p> : null}
       <div className={css.stats}>
         {([
           [t('telemetry.input'), inputTokens],
