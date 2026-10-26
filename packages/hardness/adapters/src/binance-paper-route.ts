@@ -7,7 +7,12 @@ const ROUTE = '/phoenix-trading/paper'
 const ENDPOINT = ROUTE + '/dashboard'
 const CACHE_TTL_MS = 8_000
 
-/** Publish only true virtual ledger data; never expose real Binance accounts or commands. */
+/**
+ * Publish only true virtual ledger data; never expose real Binance accounts or commands.
+ * @param host - Phoenix local web route registration service.
+ * @param engine - Read-only projection source for virtual trades.
+ * @returns Disposer that unmounts the viewer route.
+ */
 export function mountBinancePaperDashboardRoute(
   host: GameWebRouteHost,
   engine: BinancePaperAutomation,
