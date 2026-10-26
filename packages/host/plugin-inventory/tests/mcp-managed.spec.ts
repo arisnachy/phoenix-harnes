@@ -829,6 +829,10 @@ describe('ManagedMcpController', () => {
         url: 'https://agent.binance.com/mcp/agentic',
         headers: {},
         oauth: true,
+        toolCallTimeoutMs: 60_000,
+        startupTimeoutMs: 5_000,
+        failOnStartupError: false,
+        reconnect: { enabled: true, initialDelayMs: 1000, maxDelayMs: 30_000, maxAttempts: 3 },
       },
     })
     await expect(controller.installBinanceAgentOs()).resolves.toMatchObject({
