@@ -4,9 +4,16 @@ import SystemPrompt from '@phoenix-ai/dsh-system-prompt'
 import { ReasoningEffortId } from '@phoenix-ai/dsh-llm'
 import { agentEvents, installModelSelection, defaultExecutionHandoff, isPhoenixCodexAutoStalled,
   jevSelectedModelId, isContextualConversationFastPathText, PHOENIX_CODEX_AUTO_MODEL,
-  type Agent, type ModelSelectionRef } from '../src/index.ts'
+  adaptiveCodexReasoningEffort, type Agent, type ModelSelectionRef } from '../src/index.ts'
 
 describe('routing evidence from durable and external input', () => {
+  it('does not buy xhigh reasoning simply because a routine request is wordy', () => {
+    const verbose = 'Revisa un ajuste pequeño. ' + 'Contexto habitual sin acciones nuevas. '.repeat(24)
+    expect(verbose.length).toBeGreaterThan(480)
+    expect(adaptiveCodexReasoningEffort(verbose)).toBe(ReasoningEffortId('high'))
+    expect(adaptiveCodexReasoningEffort('Revisa a fondo la arquitectura compleja')).toBe(ReasoningEffortId('xhigh'))
+  })
+
   it('accepts an explicit allowed Jev choice through list envelopes and rejects incomplete choices', () => {
     const candidates = ['gpt-6-sol', 'gpt-6-luna']
     for (const value of [undefined, null, 7, 'unknown', [], [null, 'unknown'], { choice: 7 }, { result: null }]) {

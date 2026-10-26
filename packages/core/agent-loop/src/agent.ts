@@ -40,6 +40,7 @@ import { joinContextSections, renderContextSections, renderPrompt } from '@phoen
 import type { PromptAssembly } from '@phoenix-ai/dsh-system-prompt'
 import type { Context } from '@phoenix-ai/cordis'
 import { projectRequestHistory } from './request-history.ts'
+import { tokenInputInventory } from './token-audit.ts'
 import { RuntimeContextProjection } from './runtime-context.ts'
 import { executeToolCalls } from './tool-calls.ts'
 import { DEFAULT_AUTO_CONTINUE_MAX_SEGMENTS, DEFAULT_AUTO_CONTINUE_PROVIDERS, DEFAULT_MAX_STEPS_PER_TURN } from './constants.ts'
@@ -362,6 +363,7 @@ export class ReactLoopAgent implements Agent {
     // retaining memory/initiative context and full conversational continuity.
     const assembled = await this.loopCtx.systemPrompt.assemble({
       ...assembleContextFor(this, signal),
+      ...directText.length > 0 ? { incomingUserText: directText } : {},
       ...toolFreeConversation ? { omitTools: true } : {},
       ...fastConversation ? { omitRuntimeContext: true } : {},
     })
@@ -621,6 +623,20 @@ export class ReactLoopAgent implements Agent {
         },
         { surfaceOp: 'append', sourceEventSeqs: chunkSeqs },
       )
+      if (process.env.PHOENIX_TOKEN_AUDIT === '1' && assembler.usage !== undefined) {
+        const usage = assembler.usage
+        console.info('[PHOENIX TOKEN USAGE] ' + JSON.stringify({
+          turn,
+          step,
+          provider: request.provider,
+          model: request.model,
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+          cacheReadTokens: usage.cacheReadTokens,
+          cacheWriteTokens: usage.cacheWriteTokens,
+          reasoningTokens: usage.reasoningTokens,
+        }))
+      }
       if (finish.kind === 'max-tokens') return { kind: 'max-tokens' }
 
       const toolCalls = message.content.filter(block => block.type === 'tool-call')
@@ -745,6 +761,16 @@ export class ReactLoopAgent implements Agent {
       sessionId: this.session.id,
       signal,
     }))
+    if (process.env.PHOENIX_TOKEN_AUDIT === '1') {
+      console.info('[PHOENIX TOKEN INPUT] ' + JSON.stringify({
+        turn,
+        step,
+        provider: config.provider,
+        model: config.model,
+        reasoningEffort: config.reasoningEffort,
+        ...tokenInputInventory(system, tools, boundaryMessages),
+      }))
+    }
     return { request, ...preparedCall === undefined ? {} : { preparedCall } }
   }
 }
