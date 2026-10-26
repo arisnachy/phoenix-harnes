@@ -1,6 +1,7 @@
 import type { ApprovalService } from '@phoenix-ai/dsh-user-approval'
 import { defineTool, type JsonValue, type ToolDefinition } from '@phoenix-ai/dsh-tools'
 import { runBinanceAdaptiveCycle } from './binance-adaptive.ts'
+import { BinanceSpotTestnet } from './binance-spot-testnet.ts'
 import type { BinancePaperAutomation, BinancePaperAutomationView } from './binance-paper-automation.ts'
 import type {
   BinanceCandle,
@@ -35,6 +36,7 @@ export interface BinanceTradingToolDependencies {
   automation?: BinancePaperAutomation
   approval: Pick<ApprovalService, 'request'>
   agentOs?: Partial<BinanceAgentOsHostService>
+  testnet?: BinanceSpotTestnet
 }
 
 function accountSummary(account: Awaited<ReturnType<BinancePaperBroker['account']>>): string {
@@ -121,7 +123,7 @@ function activateTool(deps: BinanceTradingToolDependencies): ToolDefinition {
     name: 'binance_trading_activate',
     description: 'Start the explicitly selected Binance mode. Before calling, ASK whether the user wants TESTING/PAPER or REAL if not stated. PAPER uses a local virtual ledger. REAL requires explicit user consent and one-shot high-risk approval to install the official Streamable HTTP OAuth MCP. The subsequent Binance browser OAuth/scope grant must be completed separately. This never executes real orders.',
     parameters: {
-      mode: { type: 'string', required: true, enum: ['paper', 'real'] },
+      mode: { type: 'string', required: true, enum: ['paper', 'testnet', 'real'] },
       requestedByUser: { type: 'boolean', description: 'Must be true for REAL and only when the user explicitly requested real operation.' },
       initialCashUsdt: { type: 'number', description: 'Virtual starting balance for a new/reset paper ledger.' },
       resetPaper: { type: 'boolean', description: 'Reset the local PAPER ledger before starting. This never affects Binance.' },
@@ -144,6 +146,15 @@ function activateTool(deps: BinanceTradingToolDependencies): ToolDefinition {
           realTradingEnabled: false,
           account: paperAccountJson(account),
           message: `${accountSummary(account)}. Real Binance tools are not used in PAPER mode.`,
+        }
+      }
+
+      if (args.mode === 'testnet') {
+        const readiness = await (deps.testnet ?? new BinanceSpotTestnet()).status()
+        return {
+          ...readiness,
+          realTradingEnabled: false,
+          message: 'Spot Testnet uses separate testing API keys and test funds, NOT the Binance Agentic OAuth MCP. No test order has been placed.',
         }
       }
 
@@ -202,7 +213,8 @@ function activateTool(deps: BinanceTradingToolDependencies): ToolDefinition {
     presentCall(args) {
       return {
         card: 'generic',
-        title: args.mode === 'real' ? 'Enable Binance REAL' : 'Start Binance PAPER',
+        title: args.mode === 'real' ? 'Autorizar Binance Agentic REAL'
+          : args.mode === 'testnet' ? 'Comprobar Binance Spot Testnet' : 'Start Binance PAPER',
         kind: args.mode === 'real' ? 'edit' : 'execute',
         rawInput: args.mode,
       }
@@ -278,6 +290,68 @@ function agentOsHealthTool(deps: BinanceTradingToolDependencies): ToolDefinition
       return { card: 'generic',
         title: args.action === 'repair' ? 'Reparar MCP Binance' : 'Diagnóstico MCP Binance',
         kind: args.action === 'repair' ? 'execute' : 'read' }
+    },
+  })
+}
+
+/**
+ * Read only Binance Spot Testnet account state; this API is never the Agentic MCP.
+ */
+function testnetAccountTool(deps: BinanceTradingToolDependencies): ToolDefinition {
+  return defineTool({
+    name: 'binance_testnet_account',
+    description: 'Check your actual Binance SPOT TESTNET account and fake-asset balances using dedicated Host-only testnet credentials. This is NOT the Binance Agentic MCP and cannot access real funds.',
+    parameters: {},
+    output: { schema: { type: 'object', additionalProperties: true },
+      render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }] },
+    async execute() { return (deps.testnet ?? new BinanceSpotTestnet()).status() },
+    presentCall() { return { card: 'generic', title: 'Binance Spot Testnet', kind: 'read' } },
+  })
+}
+
+/** Explicit consent and one-shot approval on each real TESTNET API request. */
+function testnetOrderTool(deps: BinanceTradingToolDependencies): ToolDefinition {
+  return defineTool({
+    name: 'binance_testnet_order',
+    description: 'Send ONE Spot Testnet market order with fake exchange funds. Never uses production Binance account or Agentic MCP. Requires a specific user-requested test order and one-shot Phoenix approval; no unattended Testnet orders.',
+    parameters: {
+      symbol: { type: 'string', required: true, description: 'Spot Testnet USDT trading pair.' },
+      side: { type: 'string', required: true, enum: ['BUY', 'SELL'] },
+      quoteUsdt: { type: 'number', description: 'BUY: 10–100 TESTNET USDT.' },
+      quantity: { type: 'number', description: 'SELL: >0 and <=100 TESTNET asset units.' },
+      requestedByUser: { type: 'boolean', required: true, description: 'Must be true only for the user specified test order.' },
+    },
+    output: { schema: { type: 'object', additionalProperties: true },
+      render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }] },
+    async execute(args, exec) {
+      if (args.requestedByUser !== true || exec.agent === undefined) {
+        throw new Error('A specific user request and active session are required for a Testnet order')
+      }
+      const testnet = deps.testnet ?? new BinanceSpotTestnet()
+      const status = await testnet.status()
+      if (!status.connected || status.canTrade !== true) {
+        throw new Error('Spot Testnet account is not authenticated with trading enabled')
+      }
+      const outcome = await deps.approval.request({
+        agent: exec.agent,
+        toolName: 'binance_testnet_order',
+        callId: exec.callId,
+        reason: 'Send an actual Binance Spot TESTNET market order using FAKE testing funds only. Confirm symbol, side, and quantity.',
+        risk: 'high',
+        reversible: false,
+        signal: exec.signal,
+      })
+      if (outcome !== 'allowed-once') return { mode: 'testnet', status: 'denied', approvalOutcome: outcome }
+      const receipt = await testnet.order({
+        symbol: args.symbol, side: args.side,
+        ...(args.quoteUsdt === undefined ? {} : { quoteUsdt: args.quoteUsdt }),
+        ...(args.quantity === undefined ? {} : { quantity: args.quantity }),
+      })
+      return { ...receipt, filled: receipt.status === 'FILLED' && Number(receipt.executedQty) > 0 }
+    },
+    presentCall(args) {
+      return { card: 'generic', title: 'Binance TESTNET ' + args.side + ' ' + args.symbol,
+        kind: 'execute', rawInput: args.quoteUsdt ?? args.quantity ?? '' }
     },
   })
 }
@@ -553,6 +627,8 @@ export function createBinanceTradingTools(deps: BinanceTradingToolDependencies):
     activateTool(deps),
     statusTool(deps),
     agentOsHealthTool(deps),
+    testnetAccountTool(deps),
+    testnetOrderTool(deps),
     candlesTool(deps),
     paperOrderTool(deps),
     paperAccountTool(deps),
