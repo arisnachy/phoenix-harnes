@@ -23,6 +23,7 @@ function clock(value?: string): string {
 export function TradingDashboard({ initial, onAction }: Props) {
   const [state, setState] = useState<TradingDashboardSnapshot>(initial)
   const [connection, setConnection] = useState<'connected' | 'offline'>('connected')
+  const [refreshKey, setRefreshKey] = useState(0)
   useEffect(() => {
     let mounted = true
     let controller: AbortController | undefined
@@ -49,7 +50,7 @@ export function TradingDashboard({ initial, onAction }: Props) {
     void refresh()
     const timer = setInterval(() => { void refresh() }, REFRESH_MS)
     return () => { mounted = false; controller?.abort(); clearInterval(timer) }
-  }, [])
+  }, [refreshKey])
 
   const { account, settings } = state
   const running = state.enabled && state.phase === 'running'
@@ -84,7 +85,7 @@ export function TradingDashboard({ initial, onAction }: Props) {
           <small>{settings.symbols.join(' · ')} · {settings.interval} · Revisión cada {settings.pollMs / 60_000} min</small>
         </div>
         <div className={css.actions}>
-          <button type="button" onClick={() => { onAction('Abre el visor de Binance PAPER y actualiza el estado real de operaciones.') }}>Actualizar</button>
+          <button type="button" onClick={() => { setRefreshKey(current => current + 1) }}>Actualizar</button>
           {running
             ? <button type="button" className={css.danger} onClick={() => { onAction('Detén ahora el trading PAPER automático de Binance y muéstrame el visor actualizado.') }}>Detener</button>
             : <button type="button" className={css.primary} onClick={() => { onAction('Inicia trading PAPER automático en Binance con '+ settings.symbols.join(',') + ', intervalo '+settings.interval+', y muéstrame el visor.') }}>Iniciar PAPER</button>}
