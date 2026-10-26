@@ -371,7 +371,8 @@ function adaptiveCycleTool(deps: BinanceTradingToolDependencies): ToolDefinition
   })
 }
 
-function dashboardJson(view: BinancePaperAutomationView): Record<string, JsonValue> {
+/** Project only public virtual account evidence for the in-chat and HTTP trading viewer. */
+export function dashboardJson(view: BinancePaperAutomationView): Record<string, JsonValue> {
   return {
     mode: 'paper', phase: view.phase, enabled: view.enabled,
     settings: { symbols: [...view.settings.symbols], interval: view.settings.interval, pollMs: view.settings.pollMs },
