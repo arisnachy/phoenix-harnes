@@ -24,6 +24,7 @@ Binance is an optional, on-demand connector. Keep it dormant unless the user's t
 - Reuse PHOENIX session learning for durable lessons about regimes, signals, failures, and strategy parameters, but do not let learned prose override deterministic risk/approval gates.
 
 4. Autonomy is scheduled/event-driven, not an always-awake LLM.
+- For a bounded strategy comparison use binance_adaptive_cycle in scan mode; paper-step may execute at most one virtual Spot order within portfolio limits. It never grants real-trading authority.
 - For repeated paper experiments, use PHOENIX durable scheduling/wake capabilities rather than keeping a model running continuously.
 - A scheduled/woken run must re-read fresh market data before acting. Stale observations are not trading signals.
 - Real unattended work remains bounded by the user's live Binance scopes and every required approval/confirmation.
