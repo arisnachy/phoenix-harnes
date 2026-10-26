@@ -15,6 +15,8 @@ import { DesktopLive } from './DesktopLive.tsx'
 import { SecureAsk } from './SecureAsk.tsx'
 import { GenerativeUi, type GenerativeUiBlock } from './GenerativeUi.tsx'
 import { sportsCardsFromToolResult, unrenderedSportsCards } from './sports-tool-cards.ts'
+import { TradingDashboard } from './TradingDashboard.tsx'
+import { tradingDashboardFromToolResult, type TradingDashboardSnapshot } from './trading-tool-cards.ts'
 import { toolActivity, type TurnActivity, type TurnProgress } from './turn-progress.ts'
 import chatCss from './ChatView.module.css'
 import css from './ToolActivityFlow.module.css'
@@ -76,6 +78,7 @@ type FlowItem =
     readonly images: readonly { readonly attachment: ImageAttachmentRef }[]
   }
   | { readonly kind: 'sports'; readonly key: string; readonly blocks: readonly GenerativeUiBlock[] }
+  | { readonly kind: 'trading'; readonly key: string; readonly snapshot: TradingDashboardSnapshot }
 
 function imageActivity(node: OrderedChatNode): readonly { readonly attachment: ImageAttachmentRef }[] {
   if (node.kind !== 'tool-call') return []
@@ -345,6 +348,13 @@ function buildFlow(nodes: readonly OrderedChatNode[]): FlowItem[] {
         const result = (node.data as ToolChatData).root
         sportsCards.push(...sportsCardsFromToolResult(result))
         sportsCards = sportsCards.slice(-12)
+        // A settled Binance result owns its native dashboard immediately.
+        // Do not depend on the assistant generating JSON or a special fence.
+        const trading = tradingDashboardFromToolResult(result)
+        if (trading !== undefined) {
+          flush()
+          flow.push({ kind: 'trading', key: 'trading:' + node.key, snapshot: trading })
+        }
       }
       const images = imageActivity(node)
       if (images.length > 0) {
@@ -929,7 +939,12 @@ function BrowserWorkspace({
         <div ref={activityRef} className={css.activityMessages} aria-live="polite" aria-relevant="additions text">
           {items.map(item => (
             <Fragment key={item.key}>
-              {item.kind === 'sports'
+              {item.kind === 'trading'
+                ? <TradingDashboard initial={item.snapshot} onAction={prompt => {
+                  inputActions.setDraft(prompt)
+                  inputActions.submit()
+                }} />
+                : item.kind === 'sports'
                 ? <SportsEvidenceSurface blocks={item.blocks} inputActions={inputActions} />
                 : item.kind === 'node'
                 ? <ChatNodeSeat nodeKey={item.key} {...seatProps} />
@@ -1025,7 +1040,12 @@ export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, browserT
               t={seatProps.t}
             />
           )}
-          {item.kind === 'sports'
+          {item.kind === 'trading'
+            ? <TradingDashboard initial={item.snapshot} onAction={prompt => {
+              inputActions.setDraft(prompt)
+              inputActions.submit()
+            }} />
+            : item.kind === 'sports'
             ? <SportsEvidenceSurface blocks={item.blocks} inputActions={inputActions} />
             : item.kind === 'desktop'
             ? <DesktopLive sessionId={sessionId} active={item.key === latestDesktopKey} />
