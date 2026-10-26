@@ -3,7 +3,7 @@ import { parseTradingDashboard, type TradingDashboardSnapshot } from './trading-
 import css from './TradingDashboard.module.css'
 
 type Props = {
-  readonly initial: TradingDashboardSnapshot
+  readonly initial?: TradingDashboardSnapshot
   readonly onAction: (prompt: string) => void
 }
 const ENDPOINT = '/phoenix-trading/paper/dashboard'
@@ -21,7 +21,7 @@ function clock(value?: string): string {
 
 /** Phoenix in-chat trading visor, synchronized with real local PAPER journal. */
 export function TradingDashboard({ initial, onAction }: Props) {
-  const [state, setState] = useState<TradingDashboardSnapshot>(initial)
+  const [state, setState] = useState<TradingDashboardSnapshot | undefined>(initial)
   const [connection, setConnection] = useState<'connected' | 'offline'>('connected')
   const [refreshKey, setRefreshKey] = useState(0)
   useEffect(() => {
@@ -52,6 +52,19 @@ export function TradingDashboard({ initial, onAction }: Props) {
     return () => { mounted = false; controller?.abort(); clearInterval(timer) }
   }, [refreshKey])
 
+  if (state === undefined) {
+    return (
+      <section className={css.panel} data-trading-mode="paper" aria-label="Visor de trading Binance PAPER">
+        <div className={css.heading}>
+          <div><p className={css.eyebrow}>PHOENIX / TRADING INTELLIGENCE</p><h3>Binance · Trading PAPER</h3></div>
+          <span className={css.status} data-phase={connection === 'offline' ? 'offline' : 'stopped'}>
+            {connection === 'offline' ? 'Host sin conexión · sin operaciones confirmadas' : 'Cargando operaciones verificadas…'}
+          </span>
+        </div>
+        <p className={css.empty}>No mostraré balances ni operaciones hasta leer el libro virtual real de Phoenix.</p>
+      </section>
+    )
+  }
   const { account, settings } = state
   const running = state.enabled && state.phase === 'running'
   const status = connection === 'offline' ? 'Sin conexión al Host'
