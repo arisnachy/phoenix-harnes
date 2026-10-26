@@ -97,7 +97,7 @@ export function TokenTelemetrySection({
   const models = useMemo(() => {
     const grouped = new Map<string, { calls: number; input: number; output: number }>()
     for (const item of selected) {
-      const key = [item.provider, item.model].filter(Boolean).join(' / ') || '—'
+      const key = [item.provider, item.model, item.reasoningEffort].filter(Boolean).join(' / ') || '—'
       const previous = grouped.get(key) ?? { calls: 0, input: 0, output: 0 }
       grouped.set(key, {
         calls: previous.calls + 1,
