@@ -775,6 +775,7 @@ export class ReactLoopAgent implements Agent {
       sessionId: this.session.id,
       signal,
     }))
+    const auditInput = tokenInputInventory(system, tools, boundaryMessages)
     const telemetryEvents: EventEmitter = process
     telemetryEvents.emit('phoenix:telemetry:input', {
       id: auditId,
@@ -782,7 +783,7 @@ export class ReactLoopAgent implements Agent {
       provider: config.provider,
       model: config.model,
       reasoningEffort: config.reasoningEffort,
-      ...tokenInputInventory(system, tools, boundaryMessages),
+      ...auditInput,
     })
     if (process.env.PHOENIX_TOKEN_AUDIT === '1') {
       console.info('[PHOENIX TOKEN INPUT] ' + JSON.stringify({
@@ -791,7 +792,7 @@ export class ReactLoopAgent implements Agent {
         provider: config.provider,
         model: config.model,
         reasoningEffort: config.reasoningEffort,
-        ...tokenInputInventory(system, tools, boundaryMessages),
+        ...auditInput,
       }))
     }
     return { request, ...preparedCall === undefined ? {} : { preparedCall } }
