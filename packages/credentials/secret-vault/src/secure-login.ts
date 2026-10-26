@@ -120,7 +120,7 @@ async function dpapi(mode: 'protect' | 'unprotect', body: string, origin: string
       child.kill()
       finish(new Error('La bóveda no respondió'))
     }, 12_000)
-    child.on('error', () => finish(new Error('La bóveda no está disponible')))
+    child.on('error', () => { finish(new Error('La bóveda no está disponible')) })
     child.stdout.on('data', (chunk: Buffer) => {
       result += chunk.toString('utf8')
       if (result.length > 65_536) {
@@ -161,12 +161,16 @@ Promise<{ login: LoginContent; automatic: boolean } | undefined> {
 
 async function load(origin: string, profile: LoginProfile = 'personal'): Promise<LoginRecord | undefined> {
   try {
-    const row = JSON.parse(await readFile(filename(origin, profile), 'utf8')) as LoginRecord
+    const decoded: unknown = JSON.parse(await readFile(filename(origin, profile), 'utf8'))
+    if (typeof decoded !== 'object' || decoded === null || Array.isArray(decoded)) {
+      throw new Error('Registro de acceso dañado')
+    }
+    const row = decoded as Record<string, unknown>
     if (row.version !== 1 || row.origin !== origin || typeof row.sealed !== 'string'
       || !row.sealed || typeof row.automatic !== 'boolean') {
       throw new Error('Registro de acceso dañado')
     }
-    return row
+    return row as unknown as LoginRecord
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined
     // An unreadable or damaged record is not an absent credential.
@@ -533,8 +537,8 @@ async function inspectLoginGate(tab: BrowserTab, action: 'inspect' | 'open' = 'i
       else if (value) resolve(value)
       else reject(new Error('La inspección segura no devolvió un estado'))
     }
-    const timer = setTimeout(() => finish(undefined, new Error('Chrome no respondió al acceso seguro')), 5_000)
-    ws.addEventListener('error', () => finish(undefined, new Error('Conexión segura con Chrome no disponible')))
+    const timer = setTimeout(() => { finish(undefined, new Error('Chrome no respondió al acceso seguro')) }, 5_000)
+    ws.addEventListener('error', () => { finish(undefined, new Error('Conexión segura con Chrome no disponible')) })
     ws.addEventListener('open', () => {
       try { ws.send(JSON.stringify({ id: 1, method: 'Runtime.evaluate',
         params: { expression: loginGateExpression(action), returnByValue: true } }))
@@ -641,8 +645,8 @@ async function injectLogin(tab: BrowserTab, login: LoginContent): Promise<string
       if (error) reject(error)
       else resolve(status ?? 'failed')
     }
-    const timer = setTimeout(() => finish(new Error('Chrome no respondió')), 12_000)
-    ws.addEventListener('error', () => finish(new Error('Conexión segura con Chrome fallida')))
+    const timer = setTimeout(() => { finish(new Error('Chrome no respondió')) }, 12_000)
+    ws.addEventListener('error', () => { finish(new Error('Conexión segura con Chrome fallida')) })
     ws.addEventListener('open', () => {
       ws.send(JSON.stringify({
         id: 1, method: 'Runtime.evaluate',
@@ -657,8 +661,16 @@ async function injectLogin(tab: BrowserTab, login: LoginContent): Promise<string
           result?: { exceptionDetails?: unknown; result?: { value?: unknown } }
         }
         if (data.id !== 1) return
-        if (data.error || data.result?.exceptionDetails) return finish(new Error('El formulario rechazó el inicio de sesión'))
-        finish(undefined, String(data.result?.result?.value ?? 'failed'))
+        if (data.error || data.result?.exceptionDetails) {
+          finish(new Error('El formulario rechazó el inicio de sesión'))
+          return
+        }
+        const returned = data.result?.result?.value
+        const safeResult = returned == null ? 'failed'
+          : typeof returned === 'object' ? (JSON.stringify(returned) ?? 'failed')
+            : typeof returned === 'string' || typeof returned === 'number' || typeof returned === 'boolean'
+              ? String(returned) : 'failed'
+        finish(undefined, safeResult)
       } catch { finish(new Error('Respuesta inválida de Chrome')) }
     })
   })
@@ -690,7 +702,11 @@ async function useLogin(origin: string, tabId: string, manual: boolean,
   return result
 }
 
-/** Stable human-readable failure codes. Never reflect raw secrets or CDP payloads. */
+/**
+ * Produce stable human-readable failure codes without reflecting secrets or CDP payloads.
+ * @param error - Internal login failure to classify without exposing its raw message.
+ * @returns A safe HTTP status and public error body.
+ */
 export function safeSecureLoginFailure(error: unknown): { code: number; body: { error: string; reason: string } } {
   const message = error instanceof Error ? error.message : ''
   if (/bóveda|vault|no se pudo leer el acceso cifrado|registro de acceso dañado/i.test(message)
@@ -740,7 +756,7 @@ export function registerSecureLogin(ctx: Context, vault?: CredentialProvider): (
         }
         if (req.method !== 'POST') { respond(res, 405, { error: 'Operación no permitida' }); return }
         const payload = await input(req)
-        const origin = loginOrigin(String(payload.origin ?? ''))
+        const origin = loginOrigin(typeof payload.origin === 'string' ? payload.origin : '')
         if (route.pathname === PREFIX + '/select') {
           if (typeof payload.tabId !== 'string' || !/^[A-Za-z0-9_-]{1,200}$/.test(payload.tabId)) {
             throw new Error('Pestaña no válida')

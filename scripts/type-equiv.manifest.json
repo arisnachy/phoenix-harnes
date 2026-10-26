@@ -263,6 +263,16 @@
     },
     {
       "doc": "docs/subsystems/schedule.md",
+      "symbol": "SchedulePauseChange",
+      "source": "packages/schedule/schedule/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/schedule.md",
+      "symbol": "ScheduleResumeChange",
+      "source": "packages/schedule/schedule/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/schedule.md",
       "symbol": "ScheduleDeleteChange",
       "source": "packages/schedule/schedule/src/types.ts"
     },

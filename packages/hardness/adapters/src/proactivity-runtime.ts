@@ -14,6 +14,7 @@ import {
   type ProactivityExecution,
   type ProactivityExecutionResult,
   type ProactivityExecutor,
+  type CreateProactivityTaskInput,
   type ProactivitySenderIdentity,
   type ProactivityTask,
 } from './proactivity-engine.ts'
@@ -581,17 +582,109 @@ function rpcFailure(message: string): RpcResult<never> {
   return { ok: false, error: { code: 'internal', message, details: {} } }
 }
 
+
+/** Restrict the loopback task-center write API to explicit human-created chat work.
+ * Client claims of system or harness authority are never accepted, even from loopback.
+ * Other task kinds and conditional/automated creation use the scoped Host/model tools.
+ * @param input - Untrusted form payload received by the Host loopback RPC.
+ * @param now - Host wall-clock timestamp of the request.
+ * @returns Exactly one validated user-owned task definition.
+ */
+export function parseBrowserTaskCreate(input: unknown, now: number): CreateProactivityTaskInput {
+  if (typeof input !== 'object' || input === null || Array.isArray(input)) {
+    throw new Error('scheduled task must be a structured request')
+  }
+  const row = input as Record<string, unknown>
+  const fields = ['title', 'prompt', 'nextRunAt', 'recurrence', 'catchUp', 'delivery', 'createdBy', 'senderIdentity']
+  if (fields.some(field => !Object.hasOwn(row, field))
+    || Object.keys(row).some(field => !fields.includes(field) && field !== 'targetAgentId')
+    || (row.targetAgentId !== undefined && (typeof row.targetAgentId !== 'string'
+      || row.targetAgentId.trim() !== row.targetAgentId
+      || row.targetAgentId.length === 0 || row.targetAgentId.length > 256))) {
+    throw new Error('scheduled task has missing or unauthorized fields')
+  }
+  if (row.createdBy !== 'user' || row.senderIdentity !== 'user'
+    || row.delivery !== 'chat' || row.catchUp !== 'latest') {
+    throw new Error('task center cannot claim system authority or another delivery channel')
+  }
+  if (typeof row.title !== 'string' || row.title.trim().length === 0 || row.title.trim().length > 160
+    || typeof row.prompt !== 'string' || row.prompt.trim().length === 0 || row.prompt.trim().length > 8_000) {
+    throw new Error('scheduled task title or instruction is invalid')
+  }
+  if (typeof row.nextRunAt !== 'string' || !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/u.test(row.nextRunAt)) {
+    throw new Error('scheduled task time must be canonical UTC')
+  }
+  const target = Date.parse(row.nextRunAt)
+  if (!Number.isFinite(now) || !Number.isFinite(target)
+    || target <= now || new Date(target).toISOString() !== row.nextRunAt) {
+    throw new Error('scheduled task must begin at a valid future time')
+  }
+  const rule = row.recurrence
+  if (typeof rule !== 'object' || rule === null || Array.isArray(rule)) {
+    throw new Error('invalid scheduled task recurrence')
+  }
+  const ruleRecord = rule as Record<string, unknown>
+  let recurrence: CreateProactivityTaskInput['recurrence']
+  if (ruleRecord.kind === 'once' && Object.keys(ruleRecord).length === 1) {
+    recurrence = { kind: 'once' }
+  } else if (ruleRecord.kind === 'interval' && Object.keys(ruleRecord).length === 2
+    && Number.isSafeInteger(ruleRecord.everyMs)
+    && (ruleRecord.everyMs as number) >= 300_000) {
+    recurrence = { kind: 'interval', everyMs: ruleRecord.everyMs as number }
+  } else {
+    throw new Error('invalid scheduled task recurrence')
+  }
+  return {
+    title: row.title.trim(), instruction: row.prompt.trim(), runAt: row.nextRunAt,
+    createdBy: 'user', senderIdentity: 'user', delivery: 'chat', catchUp: 'latest',
+    recurrence,
+  }
+}
+
 /** Mount the loopback endpoints used by the browser task and attention surfaces. */
 function installProactivityRpc(connection: HostConnectionHandle,
   engine: ProactivityEngine,
   attention?: AttentionStore,
-  extraAttention?: () => Promise<readonly ProactivityAttentionItem[]>): () => Promise<void> {
-  return connection.rpc.handle('/phoenix-tasks', async (endpoint, input): Promise<RpcResult<readonly ProactivityTaskView[] | readonly ProactivityAttentionItem[] | null>> => {
+  extraAttention?: () => Promise<readonly ProactivityAttentionItem[]>,
+  availableTargets?: () => readonly string[]): () => Promise<void> {
+  return connection.rpc.handle('/phoenix-tasks', async (endpoint, input): Promise<RpcResult<ProactivityTaskView | readonly ProactivityTaskView[] | readonly ProactivityAttentionItem[] | readonly { readonly id: string }[] | { readonly id: string; readonly deleted: boolean } | null>> => {
     try {
       // `list()` intentionally omits surprises until reveal time. Hidden task
       // content therefore never crosses the browser transport ahead of time.
       const tasks = await engine.list()
       if (endpoint === 'list') return { ok: true, value: tasks.map(taskView) }
+      if (endpoint === 'targets') return { ok: true, value: (availableTargets?.() ?? []).map(id => ({ id })) }
+      if (endpoint === 'pause' || endpoint === 'resume' || endpoint === 'cancel' || endpoint === 'delete') {
+        if (typeof input !== 'object' || input === null || Array.isArray(input)
+          || Object.keys(input).length !== 1 || !Object.hasOwn(input, 'id')
+          || typeof (input as { id?: unknown }).id !== 'string') {
+          return rpcFailure('task action requires an exact id')
+        }
+        const id = (input as { id: string }).id
+        // Never disclose or mutate unrevealed surprise tasks via the browser.
+        if (!tasks.some(task => task.id === id)) return rpcFailure('task is not visible')
+        if (endpoint === 'delete') {
+          const deleted = await engine.delete(id)
+          return deleted ? { ok: true, value: { id, deleted } } : rpcFailure('task no longer exists')
+        }
+        const updated = await engine[endpoint](id)
+        return { ok: true, value: taskView(updated) }
+      }
+      if (endpoint === 'create') {
+        const parsed = parseBrowserTaskCreate(input, Date.now())
+        const roots = availableTargets?.() ?? []
+        const request = input as Record<string, unknown>
+        const chosen = request['targetAgentId']
+        const targetAgentId = chosen === undefined
+          ? roots.length === 1 ? roots[0] : undefined
+          : typeof chosen === 'string' && roots.includes(chosen) ? chosen : undefined
+        if (targetAgentId === undefined) {
+          return rpcFailure('Select an active Phoenix conversation before creating this scheduled task')
+        }
+        // The engine commits the durable ledger before returning success.
+        const created = await engine.create({ ...parsed, targetAgentId })
+        return { ok: true, value: taskView(created) }
+      }
       if (endpoint === 'attention') {
         const items = [...buildProactivityAttentionItems(tasks),
           ...await extraAttention?.() ?? []].sort((a,
@@ -646,7 +739,11 @@ export function installProactivityRuntime(ctx: Context,
     if (previous !== undefined) void previous()
     if (connection === undefined) return
     activeConnection = connection
-    rpcDispose = installProactivityRpc(connection, engine, attention, extraAttention)
+    rpcDispose = installProactivityRpc(connection, engine, attention, extraAttention, () => {
+      const agents = ctx.get('agents')
+      // Only session ids from active rooted conversations may own browser-created work.
+      return (agents?.roots() ?? []).map(agent => agent.id)
+    })
   }
 
   const pump = async (): Promise<void> => {

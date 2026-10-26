@@ -72,6 +72,8 @@ jobs:
           wait "$sandbox_pid" || sandbox_status=$?
           if (( install_status != 0 )); then exit "$install_status"; fi
           exit "$sandbox_status"
+      - name: Install Playwright Chromium for coverage browser regressions
+        run: pnpm --filter @phoenix-ai/dsh-web-frontend exec playwright install --with-deps chromium
       - name: Run exhaustive coverage
         run: pnpm run check:ci:coverage
 

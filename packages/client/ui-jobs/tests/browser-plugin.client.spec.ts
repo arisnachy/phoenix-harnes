@@ -22,6 +22,11 @@ function headerEntryIds(ctx: Context): (string | undefined)[] {
     .map(entry => entry.options.id)
 }
 
+/** Registered global scheduler surfaces mounted in the sidebar footer. */
+function taskCenterEntryIds(ctx: Context): (string | undefined)[] {
+  return ctx.slots.entries('sidebar.footer.action').map(entry => entry.options.id)
+}
+
 /** Boot the browser half over a real slot tree that declares the header list. */
 async function bench(): Promise<{ ctx: Context; fiber: ReturnType<Context['plugin']> }> {
   const ctx = new Context()
@@ -30,6 +35,7 @@ async function bench(): Promise<{ ctx: Context; fiber: ReturnType<Context['plugi
     name: 'root',
     children: {
       'conversation.session.header.actions': { kind: 'list', scope: 'session' },
+      'sidebar.footer.action': { kind: 'list', scope: 'root' },
     },
   } as never, () => null)
   ctx.provide('sessions', {})
@@ -50,14 +56,18 @@ async function bench(): Promise<{ ctx: Context; fiber: ReturnType<Context['plugi
 
 describe('ui-job browser half', () => {
   it('declares the services it binds', () => {
-    expect(inject).toEqual(['sessions', 'slots', 'locale'])
+    expect(inject).toEqual(['sessions', 'slots', 'locale', 'connection'])
   })
 
   it('registers the header action, and fiber teardown removes it (HMR safety)', async () => {
     const { ctx, fiber } = await bench()
     expect(headerEntryIds(ctx)).toContain('job-list')
+    expect(headerEntryIds(ctx)).toContain('phoenix-task-list')
+    expect(taskCenterEntryIds(ctx)).toContain('phoenix-scheduled-task-center')
     await fiber.dispose()
     expect(headerEntryIds(ctx)).not.toContain('job-list')
+    expect(headerEntryIds(ctx)).not.toContain('phoenix-task-list')
+    expect(taskCenterEntryIds(ctx)).not.toContain('phoenix-scheduled-task-center')
   })
 
   it('registers both dictionaries under its own namespace and releases them with the fiber', async () => {

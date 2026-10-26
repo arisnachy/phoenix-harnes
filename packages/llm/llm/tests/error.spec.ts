@@ -6,6 +6,7 @@ describe('quota error classification', () => {
     'The usage limit has been reached',
     'usage limit reached',
     'usage limit exceeded',
+    'You have hit your ChatGPT usage limit (plus plan). Try again in ~239 min.',
     'quota exhausted',
   ])('recognizes terminal quota wording: %s', (message) => {
     expect(isQuotaExceededError(message)).toBe(true)
