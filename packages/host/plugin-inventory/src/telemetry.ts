@@ -112,19 +112,29 @@ export class TokenTelemetryCollector {
     return this.saving
   }
 
-  /** Return only counters, model labels and dates; records are newest first. */
+  /**
+   * Return only counters, model labels and dates; records are newest first.
+   * @returns Current sanitized telemetry snapshot.
+   */
   snapshot(): TokenTelemetrySnapshot {
     return { enabled: this.enabled, records: this.records.map(({ id: _id, ...record }) => record).reverse() }
   }
 
-  /** Persist collection preference without touching LLM routing or credentials. */
+  /**
+   * Persist collection preference without touching LLM routing or credentials.
+   * @param enabled - Whether new requests should be collected.
+   * @returns Updated sanitized telemetry snapshot.
+   */
   async setEnabled(enabled: boolean): Promise<TokenTelemetrySnapshot> {
     this.enabled = enabled
     await this.flush()
     return this.snapshot()
   }
 
-  /** Clear retained counters but never erase sessions or cognitive memories. */
+  /**
+   * Clear retained counters but never erase sessions or cognitive memories.
+   * @returns Empty sanitized telemetry snapshot.
+   */
   async clear(): Promise<TokenTelemetrySnapshot> {
     this.records = []
     await this.flush()
