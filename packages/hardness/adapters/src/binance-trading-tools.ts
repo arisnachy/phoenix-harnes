@@ -269,9 +269,16 @@ function paperOrderTool(deps: BinanceTradingToolDependencies): ToolDefinition {
         ...(args.strategyId === undefined ? {} : { strategyId: args.strategyId }),
         ...(args.reason === undefined ? {} : { reason: args.reason }),
       })
+      const dashboard = deps.automation === undefined
+        ? undefined : dashboardJson(await deps.automation.dashboard())
       return {
         trade: paperTradeJson(result.trade),
         account: paperAccountJson(result.account),
+        ...(dashboard === undefined ? {} : { uiBlock: {
+          component: 'trading_dashboard',
+          version: 1,
+          props: { title: 'Phoenix Trading · Binance', ...dashboard },
+        } }),
       }
     },
     presentCall(args) {
@@ -358,6 +365,12 @@ function adaptiveCycleTool(deps: BinanceTradingToolDependencies): ToolDefinition
         })),
         ...(result.trade === undefined ? {} : { trade: paperTradeJson(result.trade) }),
         account: paperAccountJson(result.account),
+        ...(deps.automation === undefined ? {} : { uiBlock: {
+          component: 'trading_dashboard',
+          version: 1,
+          props: { title: 'Phoenix Trading · Binance',
+            ...dashboardJson(await deps.automation.dashboard()) },
+        } }),
       }
     },
     presentCall(args) {
