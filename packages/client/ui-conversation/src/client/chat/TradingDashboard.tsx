@@ -4,7 +4,6 @@ import css from './TradingDashboard.module.css'
 
 type Props = {
   readonly initial?: TradingDashboardSnapshot
-  readonly onAction: (prompt: string) => void
 }
 const ENDPOINT = '/phoenix-trading/paper/dashboard'
 const REFRESH_MS = 10_000
@@ -24,10 +23,12 @@ function clock(value?: string): string {
  * @param props - Initial verified account and user-action bridge.
  * @returns A native, read-only market monitoring card with chat-mediated controls.
  */
-export function TradingDashboard({ initial, onAction }: Props) {
+export function TradingDashboard({ initial }: Props) {
   const [state, setState] = useState<TradingDashboardSnapshot | undefined>(initial)
   const [connection, setConnection] = useState<'connected' | 'offline'>('connected')
   const [refreshKey, setRefreshKey] = useState(0)
+  const [controlBusy, setControlBusy] = useState(false)
+  const [controlError, setControlError] = useState<string | undefined>()
   useEffect(() => {
     let mounted = true
     let controller: AbortController | undefined
@@ -69,6 +70,32 @@ export function TradingDashboard({ initial, onAction }: Props) {
       </section>
     )
   }
+  async function control(action: 'start' | 'stop' | 'check-now'): Promise<void> {
+    if (state === undefined || controlBusy) return
+    setControlBusy(true)
+    setControlError(undefined)
+    try {
+      const payload = action === 'start'
+        ? { action, symbols: [...state.settings.symbols], interval: state.settings.interval,
+          pollMinutes: state.settings.pollMs / 60_000 }
+        : { action }
+      const response = await fetch('/phoenix-trading/paper/control', {
+        method: 'POST', cache: 'no-store', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+      })
+      if (!response.ok) throw new Error('PAPER control rejected')
+      const updated: unknown = await response.json()
+      const valid = parseTradingDashboard(updated)
+      if (valid === undefined) throw new Error('Invalid PAPER control reply')
+      setState(valid)
+      setConnection('connected')
+      setRefreshKey(current => current + 1)
+    } catch {
+      setControlError('No se pudo confirmar la acción PAPER desde el Host. No se asume ninguna orden ejecutada.')
+    } finally {
+      setControlBusy(false)
+    }
+  }
   const { account, settings } = state
   const running = state.enabled && state.phase === 'running'
   const status = connection === 'offline' ? 'Sin conexión al Host'
@@ -102,10 +129,11 @@ export function TradingDashboard({ initial, onAction }: Props) {
           <small>{settings.symbols.join(' · ')} · {settings.interval} · Revisión cada {settings.pollMs / 60_000} min</small>
         </div>
         <div className={css.actions}>
-          <button type="button" onClick={() => { setRefreshKey(current => current + 1) }}>Actualizar</button>
+          <button type="button" disabled={controlBusy} onClick={() => { setRefreshKey(current => current + 1) }}>Actualizar</button>
+          <button type="button" disabled={controlBusy || !running} onClick={() => { void control('check-now') }}>Evaluar ahora</button>
           {running
-            ? <button type="button" className={css.danger} onClick={() => { onAction('Detén ahora el trading PAPER automático de Binance y muéstrame el visor actualizado.') }}>Detener</button>
-            : <button type="button" className={css.primary} onClick={() => { onAction('Inicia trading PAPER automático en Binance con '+ settings.symbols.join(',') + ', intervalo '+settings.interval+', y muéstrame el visor.') }}>Iniciar PAPER</button>}
+            ? <button type="button" className={css.danger} disabled={controlBusy} onClick={() => { void control('stop') }}>Detener</button>
+            : <button type="button" className={css.primary} disabled={controlBusy} onClick={() => { void control('start') }}>Iniciar PAPER</button>}
         </div>
       </div>
       <div className={css.twoColumns}>
@@ -157,6 +185,7 @@ export function TradingDashboard({ initial, onAction }: Props) {
         <span>Última comprobación: {clock(state.lastAttemptAt)}</span>
         <span>Próximo ciclo: {running ? clock(state.nextCheckAt) : 'Sin programación'}</span>
         {state.lastError ? <strong role="alert">{state.lastError}</strong> : null}
+        {controlError ? <strong role="alert">{controlError}</strong> : null}
         {connection === 'offline' ? <span>El visor conserva los últimos datos recibidos. No se confirma actividad en vivo.</span> : null}
       </div>
     </section>
