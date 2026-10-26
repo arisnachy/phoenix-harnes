@@ -21,6 +21,8 @@ export type {
   ChatGptWebSnapshot,
   PhoenixUpdateRestartReceipt,
   PhoenixUpdateSnapshot,
+  TokenTelemetrySnapshot,
+  TokenTelemetryRecord,
   PluginInventorySnapshot,
 } from '@phoenix-ai/dsh-host-plugin-inventory/types'
 export type {} from '@phoenix-ai/dsh-commands/remote'
