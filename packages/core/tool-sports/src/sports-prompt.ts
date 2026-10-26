@@ -15,7 +15,7 @@ function recentHumanMessages(events: readonly PromptEvent[] | undefined): string
   if (events === undefined) return messages
   for (let i = events.length - 1; i >= 0 && messages.length < 2; i--) {
     const event = events[i]
-    if (event.type !== 'user/message') continue
+    if (event === undefined || event.type !== 'user/message') continue
     const data = event.data as {
       source?: { kind?: string }
       content?: readonly { type?: string; text?: string }[]
