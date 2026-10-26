@@ -1,0 +1,44 @@
+.panel { width:100%; box-sizing:border-box; color:var(--dsw-alias-label-primary,inherit); background:var(--dsw-alias-surface-primary,#171a20); border:1px solid var(--dsw-alias-border-subtle,rgba(150,155,170,.25)); border-radius:18px; padding:clamp(14px,2.5vw,22px); display:grid; gap:18px; font-size:13px; line-height:1.45; overflow:hidden }
+.heading { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:flex-start; gap:14px }
+.heading h3 { margin:2px 0 3px; font-size:19px; font-weight:700 }
+.heading p { margin:0; color:var(--dsw-alias-label-secondary,#999); font-size:12px }
+.eyebrow { color:#cba95c !important; font-size:10px !important; font-weight:700; letter-spacing:.14em }
+.status { border:1px solid var(--dsw-alias-border-subtle,rgba(150,155,170,.25)); border-radius:999px; padding:6px 11px; font-size:11px; font-weight:650; display:inline-flex; gap:7px; align-items:center }
+.dot { width:7px; height:7px; border-radius:50%; background:#a0a0a0 }
+.status[data-phase=running] .dot { background:#39b981; box-shadow:0 0 0 3px rgba(57,185,129,.13) }
+.status[data-phase=error] .dot,.status[data-phase=offline] .dot { background:#e39c50 }
+.metrics { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:9px }
+.metric { border-radius:12px; border:1px solid var(--dsw-alias-border-subtle,rgba(150,155,170,.18)); padding:12px; min-width:0; display:flex; flex-direction:column; gap:5px; background:var(--dsw-alias-surface-secondary,rgba(115,130,145,.07)) }
+.metric span { color:var(--dsw-alias-label-secondary,#999); font-size:11px }
+.metric strong { font-size:clamp(14px,1.8vw,20px); overflow-wrap:anywhere; font-variant-numeric:tabular-nums }
+.metric small { font-size:11px; font-weight:500 }
+.metric em { color:var(--dsw-alias-label-secondary,#999); font-size:11px; font-style:normal }
+[data-pnl=positive] { color:#36b989 }
+[data-pnl=negative] { color:#ed7575 }
+.toolbar { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; padding:3px 0 }
+.toolbar>div:first-child { display:grid; gap:3px }
+.toolbar small { color:var(--dsw-alias-label-secondary,#999) }
+.actions { display:flex; gap:7px; flex-wrap:wrap }
+.actions button { font:inherit; cursor:pointer; font-weight:600; padding:8px 11px; border-radius:9px; border:1px solid var(--dsw-alias-border-subtle,rgba(150,155,170,.35)); background:transparent; color:inherit }
+.actions button:focus-visible { outline:2px solid #cba95c; outline-offset:2px }
+.actions .primary { background:#b3904b; color:#161616; border-color:#b3904b }
+.actions .danger { border-color:rgba(238,110,110,.5); color:#ed8e8e }
+.twoColumns { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px }
+.section { border:1px solid var(--dsw-alias-border-subtle,rgba(150,155,170,.19)); border-radius:12px; padding:12px; min-width:0 }
+.section h4 { margin:0 0 10px; font-size:13px; font-weight:700 }
+.empty { margin:12px 0; color:var(--dsw-alias-label-secondary,#999) }
+.rows { display:grid; gap:0 }
+.row { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:9px 0; min-width:0; border-top:1px solid var(--dsw-alias-border-subtle,rgba(150,155,170,.16)) }
+.row:first-child { border-top:0 }
+.row>div { display:flex; flex-direction:column; gap:3px; min-width:0 }
+.row strong { overflow-wrap:anywhere }
+.row small { color:var(--dsw-alias-label-secondary,#999); font-size:11px; overflow-wrap:anywhere }
+.row>[data-signal] { white-space:nowrap; font-size:10px; font-weight:750; color:#9c9c9c; border:1px solid currentColor; padding:3px 6px; border-radius:5px }
+.row>[data-signal=buy] { color:#40b58b }
+.row>[data-signal=sell] { color:#f19a80 }
+.right { text-align:right; align-items:flex-end }
+.footnote { margin:10px 0 0; font-size:11px; color:var(--dsw-alias-label-secondary,#999) }
+.footer { display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px; font-size:11px; border-top:1px solid var(--dsw-alias-border-subtle,rgba(150,155,170,.18)); padding-top:12px; color:var(--dsw-alias-label-secondary,#999) }
+.footer strong { color:#ed8e8e }
+@media (max-width:700px) { .metrics{grid-template-columns:repeat(2,minmax(0,1fr))} .twoColumns{grid-template-columns:1fr} .panel{padding:13px} }
+@media (prefers-reduced-motion:reduce){ .dot{box-shadow:none!important} }
