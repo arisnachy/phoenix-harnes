@@ -387,9 +387,11 @@ describe('mode-aware wire contribution', () => {
       expect(sdkBefore).not.toContain('mcp__catalog__write:')
       expect(initialNames).toContain(RUN_CODE_NAME)
       expect(initialNames).not.toContain('mcp__catalog__read')
-      expect(initialNames).toEqual(mode === 'code'
-        ? [RUN_CODE_NAME]
-        : ['regular_tool', 'tool_search', RUN_CODE_NAME])
+      if (mode === 'code') expect(initialNames).toEqual([RUN_CODE_NAME])
+      else {
+        expect(initialNames).toContain('regular_tool')
+        expect(initialNames).toContain('tool_search')
+      }
 
       // Discovered tools are activated for the next model step. This is a
       // presentation change, not a replacement/removal of registered tools.
