@@ -1,0 +1,37 @@
+name: Phoenix token telemetry Settings
+
+on:
+  pull_request:
+    paths:
+      - 'packages/host/plugin-inventory/src/telemetry.ts'
+      - 'packages/host/plugin-inventory/src/index.ts'
+      - 'packages/host/plugin-inventory/tests/telemetry.spec.ts'
+      - 'packages/client/ui-settings-general/src/client/TokenTelemetrySection.tsx'
+      - 'packages/client/ui-settings-general/src/client/index.ts'
+      - 'packages/client/ui-settings-general/tests/token-telemetry.client.spec.tsx'
+      - '.github/workflows/phoenix-token-telemetry.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  telemetry:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Confirm token telemetry collection and interactive Settings behavior
+        run: >-
+          pnpm exec vitest run
+          packages/host/plugin-inventory/tests/telemetry.spec.ts
+          packages/client/ui-settings-general/tests/token-telemetry.client.spec.tsx
+      - name: Compile Host Remote and client contracts
+        run: pnpm run build:lib:host && pnpm run build:lib:client
