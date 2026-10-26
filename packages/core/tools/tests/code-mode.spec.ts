@@ -43,6 +43,7 @@ class FakeRuntime extends CodeRuntime {
 interface SetupOptions {
   mode?: Config['mode']
   maxParallelSubCalls?: number
+  mcpToolLazyThreshold?: number
   runtime?: false | { language?: string }
   toolOrder?: string[]
 }
@@ -50,7 +51,13 @@ interface SetupOptions {
 async function setup(options: SetupOptions = {}) {
   const ctx = new Context()
   await ctx.plugin(SystemPrompt, { ...options.toolOrder ? { toolOrder: options.toolOrder } : {} })
-  await ctx.plugin(ToolRuntime, { mode: options.mode ?? 'code', ...options.maxParallelSubCalls !== undefined ? { maxParallelSubCalls: options.maxParallelSubCalls } : {} })
+  await ctx.plugin(ToolRuntime, {
+    mode: options.mode ?? 'code',
+    ...options.maxParallelSubCalls !== undefined ? { maxParallelSubCalls: options.maxParallelSubCalls } : {},
+    ...options.mcpToolLazyThreshold !== undefined
+      ? { mcpToolLazyThreshold: options.mcpToolLazyThreshold }
+      : {},
+  })
   let runtime: FakeRuntime | undefined
   if (options.runtime !== false) {
     await ctx.plugin(FakeRuntime, options.runtime ?? {})
@@ -361,6 +368,53 @@ describe('mode-aware wire contribution', () => {
     expect(assembly.tools.map(tool => tool.name)).toEqual(['echo', RUN_CODE_NAME])
     expect(assembly.sections.some(section => section.name === 'tools:sdk')).toBe(true)
   })
+
+  it.each(['code', 'both'] as const)(
+    'defers large MCP catalogs in %s, discovers by name, and keeps capabilities available',
+    async (mode) => {
+      const { ctx, systemPrompt } = await setup({ mode, mcpToolLazyThreshold: 2 })
+      registerEcho(ctx, 'regular_tool')
+      registerEcho(ctx, 'mcp__catalog__read')
+      registerEcho(ctx, 'mcp__catalog__write')
+      registerEcho(ctx, 'mcp__catalog__search')
+      const { agent } = await mintAgentScope(ctx, 'mcp-deferred-' + mode)
+      const before = await systemPrompt.assemble({ scope: agent, agent })
+      const initialNames = before.tools.map(tool => tool.name)
+      const sdkBefore = before.sections.find(section => section.name === 'tools:sdk')?.text ?? ''
+      expect(sdkBefore).toContain('regular_tool:')
+      expect(sdkBefore).toContain('tool_search:')
+      expect(sdkBefore).not.toContain('mcp__catalog__read:')
+      expect(sdkBefore).not.toContain('mcp__catalog__write:')
+      expect(initialNames).toContain(RUN_CODE_NAME)
+      expect(initialNames).not.toContain('mcp__catalog__read')
+      expect(initialNames).toEqual(mode === 'code'
+        ? [RUN_CODE_NAME]
+        : ['regular_tool', 'tool_search', RUN_CODE_NAME])
+
+      // Discovered tools are activated for the next model step. This is a
+      // presentation change, not a replacement/removal of registered tools.
+      const search = ctx.tools.get('tool_search', agent)
+      expect(search).toBeDefined()
+      const discovery = await search!.execute!(
+        { names: ['mcp__catalog__read'], limit: 1 },
+        { agent } as never,
+      )
+      expect(discovery).toMatchObject({ enabled: true, selected: 1 })
+      const after = await systemPrompt.assemble({ scope: agent, agent })
+      const sdkAfter = after.sections.find(section => section.name === 'tools:sdk')?.text ?? ''
+      expect(sdkAfter).toContain('mcp__catalog__read:')
+      expect(sdkAfter).not.toContain('mcp__catalog__write:')
+      if (mode === 'both') {
+        expect(after.tools.map(tool => tool.name)).toContain('mcp__catalog__read')
+      }
+      expect(ctx.tools.get('mcp__catalog__write', agent)).toBeDefined()
+
+      const secondAgent = (await mintAgentScope(ctx, 'other-agent-' + mode)).agent
+      const privateSdk = (await systemPrompt.assemble({ scope: secondAgent, agent: secondAgent }))
+        .sections.find(section => section.name === 'tools:sdk')?.text ?? ''
+      expect(privateSdk).not.toContain('mcp__catalog__read:')
+    },
+  )
 
   it.each(['code', 'both'] as const)('keeps the run_code transport outside scoped allow-list filtering in mode %s', async (mode) => {
     const { ctx, systemPrompt, runtime } = await setup({ mode })
