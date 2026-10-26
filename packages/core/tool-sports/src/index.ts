@@ -5,6 +5,7 @@ import type {} from '@phoenix-ai/dsh-system-prompt'
 import { sportsCatalog, discoverEspnLeagues, chatGames, marketOdds, pricedTicket, type MarketSelection } from './sports.ts'
 import { getMlbPitcherReport } from './mlb.ts'
 import { researchTicket, type ResearchTicketLeg } from './research-ticket.ts'
+import { sportsPromptNeeded } from './sports-prompt.ts'
 
 export const name = 'tool-sports'
 export const inject = ['tools','systemPrompt']
@@ -18,7 +19,16 @@ const GUIDANCE = [
 ].join(' ')
 
 export function apply(ctx: Context): void {
-  ctx.systemPrompt.section({ name:'tool:sports', order:118, text:GUIDANCE })
+  ctx.systemPrompt.section({
+    name: 'tool:sports',
+    order: 118,
+    text: assembly => {
+      const agent = (assembly as { agent?: { session?: { events?: readonly {
+        type: string; data: unknown
+      }[] } } }).agent
+      return sportsPromptNeeded(assembly.incomingUserText, agent?.session?.events) ? GUIDANCE : ''
+    },
+  })
   ctx.tools.register(defineTool({
     name:'sports_chat_catalog',
     description:'Lista disciplinas y ligas documentadas. No crea menú ni abre otra pantalla.',
