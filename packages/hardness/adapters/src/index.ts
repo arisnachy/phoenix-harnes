@@ -31,7 +31,7 @@ import { installHumanPresenceProtocol } from './presence-protocol.ts'
 import { installHumanOSSelfModel, type HumanOSPromptRegistrar } from './humanos-self-model.ts'
 import { installInitiativeContextProjection, type InitiativePromptRegistrar } from './initiative-context.ts'
 import { installConnectorProtocol } from './connector-protocol.ts'
-import { BinancePaperBroker } from './binance-paper.ts'
+import { acquireBinancePaperAutomation } from './binance-paper-automation.ts'
 import { installBinanceTradingProtocol } from './binance-trading-protocol.ts'
 import { createBinanceTradingTools } from './binance-trading-tools.ts'
 import type { BinanceAgentOsHostService } from './binance-trading-tools.ts'
@@ -367,6 +367,9 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
     }))
     disposers.push(() => { removeGodotRoute?.() })
   }
+  const binance = acquireBinancePaperAutomation(binancePaperLedgerPath())
+  disposers.push(() => { binance.release() })
+  if (!modelTools) await binance.engine.restore()
   const proactivity = acquireProactivityEngine(taskLedgerPath(config))
   disposers.push(() =>{  proactivity.release() })
   const wake = acquireWakeEngine(wakeLedgerPath(config))
@@ -485,9 +488,10 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
         disposers.push(ctx.tools.register(tool))
       }
       disposers.push(ctx.tools.register(createLearnedSkillTool()))
-      const binancePaper = new BinancePaperBroker(binancePaperLedgerPath())
+      const binancePaper = binance.engine.broker
       for (const tool of createBinanceTradingTools({
         broker: binancePaper,
+        automation: binance.engine,
         approval,
         ...(pluginInventory === undefined ? {} : { agentOs: pluginInventory }),
       })) {
