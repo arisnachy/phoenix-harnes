@@ -12,7 +12,7 @@ HARDNESS Binance 适配器提供 `binance_adaptive_cycle`，一次最多处理�
 
 策略计算在 Host 内完成，不需要每根 K 线调用 LLM；公共市场请求有上限，返回摘要而非原始 OHLCV 数组。同一 broker 的计算周期串行化，以免并行虚拟分配互相冲突。
 
-Host 工作进程只进行虚拟交易，聊天内面板无需模型调用即可读取账户快照。执行路径不访问 Binance Agent OS，也不授权真实订单。正式账户操作继续要求用户明确批准、OAuth 范围和 Binance 下单确认。
+Host 工作进程只进行虚拟交易。聊天内面板无需模型调用即可读取 PAPER 账户快照，也能通过同源且只接受 POST 的端点处理用户明确点击的开始、停止和立即检查操作。端点拒绝不匹配的 Origin、过大或无效 JSON，以及 REAL 参数。执行路径不访问 Binance Agent OS，也不授权真实订单。正式账户操作继续要求用户明确批准、OAuth 范围和 Binance 下单确认。
 
 ## Alternatives considered
 
