@@ -119,9 +119,10 @@ describe('token-efficient MCP schema admission', () => {
   it.each(['native', 'both'] as const)(
     'defers 17 MCP definitions in %s while preserving search and every executable capability',
     async (mode) => {
-      const { ctx, systemPrompt } = await setup({ mode })
+      const { ctx, systemPrompt, runtime } = await setup({ mode })
       registerEcho(ctx, 'read')
-      for (let index = 0; index < 17; index++) registerEcho(ctx, `mcp__sample__action_${index}`)
+      const codeCalls = registerEcho(ctx, 'mcp__sample__action_0')
+      for (let index = 1; index < 17; index++) registerEcho(ctx, `mcp__sample__action_${index}`)
       const { agent } = await mintAgentScope(ctx, 'token-efficient-mcp-' + mode)
       const all = ctx.tools.schemas(agent)
       expect(all.filter(tool => tool.name.startsWith('mcp__'))).toHaveLength(17)
@@ -146,6 +147,17 @@ describe('token-efficient MCP schema admission', () => {
         name: 'mcp__sample__action_0', arguments: { value: 'before' },
       })
       expect(hidden.isError).toBe(true)
+      if (mode === 'both') {
+        // run_code still sees and executes an undiscovered MCP through its
+        // nested transport: lazy native schemas never disable a skill.
+        runtime.behavior = async (request) => {
+          const nested = await request.bindings[0]!.functions.mcp__sample__action_0!({ value: 'from-code' })
+          return { logs: [], value: nested }
+        }
+        const coded = await runCode(ctx, 'program', { agent })
+        expect(coded.isError).toBe(false)
+        expect(codeCalls).toEqual([{ value: 'from-code' }])
+      }
 
       const search = await ctx.tools.execute({
         signal: testToolSignal, agent, callId: CallId('discover-mcp'),
