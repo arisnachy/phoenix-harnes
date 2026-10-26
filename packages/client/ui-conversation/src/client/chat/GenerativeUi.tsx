@@ -308,7 +308,7 @@ const sportsTicket = (value: Record<string, unknown>): value is SportsTicketCard
     && isText(p.combinedOdds,40) && optionalText(p.stake,50)
     && optionalText(p.grossReturn,50) && isText(p.note,MAX_TEXT)
     && optionalText(p.askPrompt,400) && (p.requestedLegs===undefined ||
-      (Number.isInteger(p.requestedLegs)&&Number(p.requestedLegs)>=1&&Number(p.requestedLegs)<=6))
+      (typeof p.requestedLegs==='number'&&Number.isInteger(p.requestedLegs)&&p.requestedLegs>=1&&p.requestedLegs<=6))
     && Array.isArray(p.legs) && (p.requestedLegs===undefined||p.legs.length<=Number(p.requestedLegs))
     && p.legs.length >= 1 && p.legs.length <= 12 && p.legs.every(x => isRecord(x)
       && hasOnlyKeys(x,['event','selection','price','bookmaker','when','image','sport','country','league','market','player','rationale','homeLogo','awayLogo'])
