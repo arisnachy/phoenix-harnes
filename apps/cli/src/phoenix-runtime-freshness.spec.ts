@@ -35,7 +35,9 @@ function repository(): string {
   writeFileSync(join(root, 'apps', 'cli', 'package.json'), JSON.stringify({ name: '@phoenix-ai/dsh' }), 'utf8')
   writeFileSync(join(root, 'apps', 'cli', 'lib', 'bin.js'), '', 'utf8')
   writeFileSync(join(root, 'scripts', 'phoenix-windows-supervisor.mjs'), '// supervisor\n', 'utf8')
-  git(root, ['add', '.gitignore', 'state.txt', 'apps/cli/package.json', 'apps/cli/lib/bin.js', 'scripts/phoenix-windows-supervisor.mjs'])
+  writeFileSync(join(root, 'scripts', 'phoenix-update-live-command.mjs'), '// verified release helper\n', 'utf8')
+  git(root, ['add', '.gitignore', 'state.txt', 'apps/cli/package.json', 'apps/cli/lib/bin.js',
+    'scripts/phoenix-windows-supervisor.mjs', 'scripts/phoenix-update-live-command.mjs'])
   git(root, ['commit', '-m', 'initial'])
   return root
 }
@@ -170,6 +172,47 @@ describe('PHOENIX runtime freshness', () => {
     writeFileSync(join(root, 'protected-local-work.txt'), 'do not touch\n', 'utf8')
 
     expect(phoenixSupervisorSourceRoot(root)).toBe(resolve(runtime))
+  })
+
+  it('restores only an absent helper from verified old runtime HEAD before launching its supervisor', () => {
+    const root = repository()
+    const target = git(root, ['rev-parse', 'HEAD'])
+    const holder = mkdtempSync(join(tmpdir(), 'phoenix-missing-live-helper-'))
+    roots.push(holder)
+    const runtime = join(holder, 'old-runtime')
+    git(root, ['worktree', 'add', '--detach', runtime, target])
+    const helper = join(runtime, 'scripts', 'phoenix-update-live-command.mjs')
+    rmSync(helper)
+    const gitDir = git(root, ['rev-parse', '--git-dir'])
+    writeFileSync(resolve(root, gitDir, 'phoenix-active-runtime.json'), JSON.stringify({
+      schema: 1, target, path: runtime,
+    }), 'utf8')
+    const protectedFile = join(root, 'my-uncommitted-changes.txt')
+    writeFileSync(protectedFile, 'do not overwrite\n', 'utf8')
+
+    expect(existsSync(helper)).toBe(false)
+    expect(phoenixSupervisorSourceRoot(root)).toBe(resolve(runtime))
+    expect(readFileSync(helper, 'utf8')).toBe('// verified release helper\n')
+    expect(git(runtime, ['status', '--porcelain'])).toBe('')
+    expect(readFileSync(protectedFile, 'utf8')).toBe('do not overwrite\n')
+  })
+
+  it('never overwrites a present helper even if its local contents were edited', () => {
+    const root = repository()
+    const target = git(root, ['rev-parse', 'HEAD'])
+    const holder = mkdtempSync(join(tmpdir(), 'phoenix-custom-live-helper-'))
+    roots.push(holder)
+    const runtime = join(holder, 'custom-runtime')
+    git(root, ['worktree', 'add', '--detach', runtime, target])
+    const helper = join(runtime, 'scripts', 'phoenix-update-live-command.mjs')
+    writeFileSync(helper, '// preserve custom contents\n', 'utf8')
+    const gitDir = git(root, ['rev-parse', '--git-dir'])
+    writeFileSync(resolve(root, gitDir, 'phoenix-active-runtime.json'), JSON.stringify({
+      schema: 1, target, path: runtime,
+    }), 'utf8')
+
+    expect(phoenixSupervisorSourceRoot(root)).toBe(resolve(runtime))
+    expect(readFileSync(helper, 'utf8')).toBe('// preserve custom contents\n')
   })
 
   it('falls back to durable supervisor code when the active runtime marker is not verifiable', () => {

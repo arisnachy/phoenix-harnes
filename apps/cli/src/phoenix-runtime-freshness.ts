@@ -54,6 +54,26 @@ function readActiveRuntime(root: string): { readonly path: string; readonly reco
   }
 }
 
+const LIVE_COMMAND_HELPER = 'scripts/phoenix-update-live-command.mjs'
+
+/**
+ * Recover a missing, TRACKED updater helper from the selected runtime's own
+ * Git HEAD. Old supervisors can predate our missing-file fallback, so repair
+ * their disposable isolated worktree before starting that old process.
+ *
+ * Never reset/clean the runtime, change the branch, or copy a helper from
+ * a different release. A modified (present) helper is never overwritten.
+ */
+function restoreTrackedRuntimeHelper(runtime: string): boolean {
+  const helper = join(runtime, LIVE_COMMAND_HELPER)
+  if (existsSync(helper)) return true
+  if (!gitSucceeds(runtime, ['cat-file', '-e', 'HEAD:' + LIVE_COMMAND_HELPER])) return false
+  if (!gitSucceeds(runtime, ['restore', '--source=HEAD', '--worktree', '--', LIVE_COMMAND_HELPER])) return false
+  if (!existsSync(helper)) return false
+  console.error('[PHOENIX RECOVERY] restored missing tracked updater helper from isolated runtime HEAD: ' + helper)
+  return true
+}
+
 /**
  * Choose the code location for the external Windows supervisor.
  *
@@ -82,6 +102,15 @@ export function phoenixSupervisorSourceRoot(root: string): string {
   const absoluteCandidateCommon = resolve(isAbsolute(candidateCommon) ? candidateCommon : resolve(candidate, candidateCommon))
   if (absoluteSourceCommon.toLowerCase() !== absoluteCandidateCommon.toLowerCase()) return sourceRoot
 
+  // A valid, older isolated runtime may be missing one tracked helper on disk
+  // even though its own Git HEAD contains it. Repair BEFORE choosing and
+  // executing that supervisor; a fix only in stable cannot patch a running
+  // process that still uses the old unguarded runChecked implementation.
+  if (!restoreTrackedRuntimeHelper(candidate)) {
+    console.error('[PHOENIX RECOVERY] isolated supervisor is missing its tracked live-command helper; '
+      + 'falling back to the durable supervisor instead of starting the broken runtime: ' + candidate)
+    return sourceRoot
+  }
   return candidate
 }
 
