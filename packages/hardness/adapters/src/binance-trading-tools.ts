@@ -1,5 +1,6 @@
 import type { ApprovalService } from '@phoenix-ai/dsh-user-approval'
 import { defineTool, type JsonValue, type ToolDefinition } from '@phoenix-ai/dsh-tools'
+import { runBinanceAdaptiveCycle } from './binance-adaptive.ts'
 import type {
   BinanceCandle,
   BinancePaperAccount,
@@ -320,6 +321,54 @@ function paperJournalTool(deps: BinanceTradingToolDependencies): ToolDefinition 
   })
 }
 
+function adaptiveCycleTool(deps: BinanceTradingToolDependencies): ToolDefinition {
+  return defineTool({
+    name: 'binance_adaptive_cycle',
+    description: 'Run a token-free multi-strategy Binance Spot scan over 1-5 USDT pairs. SCAN returns ranked signals without trading. PAPER-STEP can place at most ONE VIRTUAL order per call with deterministic position/exposure caps; it never accesses or trades a real account. Use this tool instead of guessing a profitable strategy. Live automation is not implemented by this tool.',
+    parameters: {
+      watchlist: { type: 'string', required: true, description: 'Comma-separated Spot symbols, for example BTCUSDT,ETHUSDT. Maximum five unique USDT pairs.' },
+      interval: { type: 'string', enum: ['15m', '1h', '4h', '1d'], description: 'Closed-candle analysis interval; default 1h.' },
+      mode: { type: 'string', enum: ['scan', 'paper-step'], description: 'Default scan. paper-step authorizes only a virtual trade.' },
+    },
+    output: {
+      schema: { type: 'object', additionalProperties: true },
+      render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
+    },
+    async execute(args) {
+      const result = await runBinanceAdaptiveCycle(deps.broker, {
+        symbols: args.watchlist.split(','),
+        ...(args.interval === undefined ? {} : { interval: args.interval }),
+        ...(args.mode === undefined ? {} : { mode: args.mode }),
+      })
+      return {
+        mode: result.mode,
+        interval: result.interval,
+        decision: result.decision,
+        rationale: result.rationale,
+        signals: result.signals.map(signal => ({
+          symbol: signal.symbol,
+          regime: signal.regime,
+          strategy: signal.strategy,
+          action: signal.action,
+          score: signal.score,
+          lastClose: signal.lastClose,
+          reason: signal.reason,
+        })),
+        ...(result.trade === undefined ? {} : { trade: paperTradeJson(result.trade) }),
+        account: paperAccountJson(result.account),
+      }
+    },
+    presentCall(args) {
+      return {
+        card: 'generic',
+        title: args.mode === 'paper-step' ? 'Adaptive Binance PAPER trade' : 'Adaptive Binance scan',
+        kind: args.mode === 'paper-step' ? 'execute' : 'read',
+        rawInput: args.watchlist,
+      }
+    },
+  })
+}
+
 /**
  * Build the complete on-demand Binance model-tool family.
  * @param deps - Paper broker, approval seam, and optional Agent OS host controls.
@@ -333,5 +382,6 @@ export function createBinanceTradingTools(deps: BinanceTradingToolDependencies):
     paperOrderTool(deps),
     paperAccountTool(deps),
     paperJournalTool(deps),
+    adaptiveCycleTool(deps),
   ]
 }
