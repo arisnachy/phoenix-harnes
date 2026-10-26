@@ -115,6 +115,65 @@ async function runCode(
   })
 }
 
+describe('token-efficient MCP schema admission', () => {
+  it.each(['native', 'both'] as const)(
+    'defers 17 MCP definitions in %s while preserving search and every executable capability',
+    async (mode) => {
+      const { ctx, systemPrompt } = await setup({ mode })
+      registerEcho(ctx, 'read')
+      for (let index = 0; index < 17; index++) registerEcho(ctx, `mcp__sample__action_${index}`)
+      const { agent } = await mintAgentScope(ctx, 'token-efficient-mcp-' + mode)
+      const all = ctx.tools.schemas(agent)
+      expect(all.filter(tool => tool.name.startsWith('mcp__'))).toHaveLength(17)
+
+      const deferred = await systemPrompt.assemble({ scope: agent, agent })
+      expect(deferred.tools.map(tool => tool.name)).toContain('read')
+      expect(deferred.tools.map(tool => tool.name)).toContain('tool_search')
+      expect(deferred.tools.map(tool => tool.name)).not.toContain('mcp__sample__action_0')
+      if (mode === 'both') {
+        expect(deferred.tools.map(tool => tool.name)).toContain(RUN_CODE_NAME)
+        expect(deferred.sections.find(section => section.name === 'tools:sdk')?.text)
+          .toContain('mcp__sample__action_0')
+      }
+      // Model-visible native schema bytes drop without deleting registry tools.
+      const fullChars = JSON.stringify(all).length
+      const deferredChars = JSON.stringify(deferred.tools).length
+      expect(deferredChars).toBeLessThan(fullChars / 2)
+      expect(ctx.tools.get('mcp__sample__action_0', agent)).toBeDefined()
+
+      const hidden = await ctx.tools.execute({
+        signal: testToolSignal, agent, callId: CallId('before-discovery'),
+        name: 'mcp__sample__action_0', arguments: { value: 'before' },
+      })
+      expect(hidden.isError).toBe(true)
+
+      const search = await ctx.tools.execute({
+        signal: testToolSignal, agent, callId: CallId('discover-mcp'),
+        name: 'tool_search', arguments: { names: ['mcp__sample__action_0'] },
+      })
+      expect(search.isError).toBe(false)
+      const admitted = await systemPrompt.assemble({ scope: agent, agent })
+      expect(admitted.tools.map(tool => tool.name)).toContain('mcp__sample__action_0')
+      const allowed = await ctx.tools.execute({
+        signal: testToolSignal, agent, callId: CallId('after-discovery'),
+        name: 'mcp__sample__action_0', arguments: { value: 'after' },
+      })
+      expect(allowed).toMatchObject({ isError: false, value: 'mcp__sample__action_0:after' })
+    },
+  )
+
+  it('does not defer small MCP sets, and Code Mode keeps complete SDK bindings', async () => {
+    const { ctx, systemPrompt } = await setup({ mode: 'code' })
+    registerEcho(ctx, 'read')
+    for (let index = 0; index < 17; index++) registerEcho(ctx, `mcp__sample__action_${index}`)
+    const { agent } = await mintAgentScope(ctx, 'coded-mcp-completeness')
+    const assembled = await systemPrompt.assemble({ scope: agent, agent })
+    expect(assembled.tools.map(tool => tool.name)).toEqual([RUN_CODE_NAME])
+    expect(assembled.sections.find(section => section.name === 'tools:sdk')?.text)
+      .toContain('mcp__sample__action_16')
+  })
+})
+
 describe('mode-aware wire contribution', () => {
   it.each(['native', 'code'] as const)('keeps project and publication tools for illustrated deliverables in %s', async (mode) => {
     const { ctx, systemPrompt } = await setup({ mode })
