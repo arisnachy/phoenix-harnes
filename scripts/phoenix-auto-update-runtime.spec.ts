@@ -98,6 +98,74 @@ describe('optional live update helper fallback', () => {
     expect(updater).toContain("stdio: streamLive || directStream ? 'inherit'")
   })
 
+  it('recovers an obsolete supervisor helper from the verified persistent checkout', () => {
+    const helper = join('durable-git', 'checked-pair', 'phoenix-update-live-command.mjs')
+    const attempted: string[] = []
+    const spawn = vi.fn(() => ({ status: 0, stdout: null, stderr: null }))
+    const { runChecked } = runInNewContext(runner, {
+      root: 'durable-checkout',
+      supervisorSourceRoot: 'old-runtime-without-command-helper',
+      officialPhoenixRemote: () => true,
+      pinPhoenixUpdateLiveHelper: (source: string) => {
+        attempted.push(source)
+        return source === 'durable-checkout' ? helper : undefined
+      },
+      validPinnedPhoenixUpdateLiveHelper: (path: string) => path === helper,
+      pinnedLiveHelper: undefined,
+      restartRequestTarget: () => 'f'.repeat(40),
+      readUpdateState: () => undefined,
+      updateStatePath: () => 'durable-git/state.json',
+      existsSync: () => true,
+      join,
+      process: { execPath: 'node.exe', env: {} },
+      hideRuntimeWindows: true,
+      missingLiveHelperReported: false,
+      spawnSync: spawn,
+      reportSupervisorStep: vi.fn(),
+      console: { error: vi.fn() },
+    }) as { runChecked: (cwd: string, bin: string, args: string[], label: string) => void }
+
+    runChecked('durable-checkout', 'git', ['status'], 'create isolated runtime worktree')
+    expect(attempted).toEqual(['old-runtime-without-command-helper', 'durable-checkout'])
+    expect(spawn).toHaveBeenCalledWith('node.exe', [
+      helper,
+      JSON.stringify({ cwd: 'durable-checkout', bin: 'git', args: ['status'],
+        step: 'git-worktree', target: 'f'.repeat(40), statePath: 'durable-git/state.json' }),
+    ], expect.objectContaining({ cwd: 'durable-checkout', stdio: 'inherit' }))
+  })
+
+  it('never reads helper scripts from a different untrusted checkout', () => {
+    const pins: string[] = []
+    const spawn = vi.fn(() => ({ status: 0, stdout: null, stderr: null }))
+    const { runChecked } = runInNewContext(runner, {
+      root: 'untrusted-checkout',
+      supervisorSourceRoot: 'old-runtime',
+      officialPhoenixRemote: () => false,
+      pinPhoenixUpdateLiveHelper: (source: string) => {
+        pins.push(source)
+        return undefined
+      },
+      validPinnedPhoenixUpdateLiveHelper: () => false,
+      pinnedLiveHelper: undefined,
+      restartRequestTarget: () => 'a'.repeat(40),
+      readUpdateState: () => undefined,
+      updateStatePath: () => 'state.json',
+      existsSync: () => false,
+      join,
+      process: { execPath: 'node.exe', env: {} },
+      hideRuntimeWindows: true,
+      missingLiveHelperReported: false,
+      spawnSync: spawn,
+      reportSupervisorStep: vi.fn(),
+      console: { error: vi.fn() },
+    }) as { runChecked: (cwd: string, bin: string, args: string[], label: string) => void }
+
+    runChecked('untrusted-checkout', 'git', ['status'], 'create isolated runtime worktree')
+    expect(pins).toEqual(['old-runtime'])
+    expect(spawn).toHaveBeenCalledWith('git', ['status'],
+      expect.objectContaining({ cwd: 'untrusted-checkout', stdio: 'inherit' }))
+  })
+
   it('reports a real failing native command rather than a missing Node module error', () => {
     const spawn = vi.fn(() => ({ status: 31, stdout: null, stderr: null }))
     const steps = vi.fn()
