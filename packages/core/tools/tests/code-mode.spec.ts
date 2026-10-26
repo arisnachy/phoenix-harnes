@@ -418,6 +418,26 @@ describe('mode-aware wire contribution', () => {
     },
   )
 
+  it.each(['code', 'both'] as const)(
+    'reduces an oversized MCP SDK over 70% in %s without deregistering tools',
+    async (mode) => {
+      const { ctx, systemPrompt } = await setup({ mode, mcpToolLazyThreshold: 2 })
+      for (let n = 0; n < 25; n += 1) registerEcho(ctx, 'mcp__catalog__item_' + n)
+      const unscoped = await systemPrompt.assemble()
+      const { agent } = await mintAgentScope(ctx, 'bounded-schemas-' + mode)
+      const scoped = await systemPrompt.assemble({ scope: agent, agent })
+      const eager = unscoped.sections.find(section => section.name === 'tools:sdk')?.text ?? ''
+      const deferred = scoped.sections.find(section => section.name === 'tools:sdk')?.text ?? ''
+      expect(eager.length).toBeGreaterThan(0)
+      expect(deferred.length).toBeLessThan(eager.length * 0.30)
+      expect(ctx.tools.get('mcp__catalog__item_24', agent)).toBeDefined()
+      expect(deferred).toContain('tool_search:')
+      if (mode === 'both') {
+        expect(scoped.tools.length).toBeLessThan(unscoped.tools.length / 2)
+      }
+    },
+  )
+
   it.each(['code', 'both'] as const)('keeps the run_code transport outside scoped allow-list filtering in mode %s', async (mode) => {
     const { ctx, systemPrompt, runtime } = await setup({ mode })
     registerEcho(ctx, 'echo')
