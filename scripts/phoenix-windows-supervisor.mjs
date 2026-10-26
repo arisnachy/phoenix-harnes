@@ -923,6 +923,13 @@ function runChecked(cwd, bin, args, label) {
   // A live supervisor can outlast the runtime that originally supplied them.
   const helperCandidate = liveEligible
     ? pinPhoenixUpdateLiveHelper(supervisorSourceRoot, journalStatePath)
+      // A legacy supervisor can still be executing from an old isolated
+      // runtime whose scripts were pruned. Rescue the matching helper/state
+      // pair from the OFFICIAL durable checkout instead of asking Node to
+      // execute an absent helper under phoenix-runtime-*/scripts.
+      ?? (typeof root === 'string' && root !== supervisorSourceRoot && officialPhoenixRemote()
+        ? pinPhoenixUpdateLiveHelper(root, journalStatePath)
+        : undefined)
     : undefined
   if (helperCandidate !== undefined) pinnedLiveHelper = helperCandidate
   const liveHelper = pinnedLiveHelper
