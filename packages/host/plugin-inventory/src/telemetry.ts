@@ -1,5 +1,6 @@
 /** Privacy-safe token telemetry visible inside Settings, never a provider call. */
 import { readFileSync, statSync } from 'node:fs'
+import type { EventEmitter } from 'node:events'
 import { writeFileAtomic } from '@phoenix-ai/dsh-atomic-write'
 import { dshHomePath } from '@phoenix-ai/dsh-home-paths'
 import type { TokenTelemetryRecord, TokenTelemetrySnapshot } from './types.ts'
@@ -65,8 +66,8 @@ export class TokenTelemetryCollector {
         }
       }
     } catch { /* Missing/invalid state is not allowed to block Host startup. */ }
-    process.on('phoenix:telemetry:input', this.receiveInput)
-    process.on('phoenix:telemetry:usage', this.receiveUsage)
+    (process as EventEmitter).on('phoenix:telemetry:input', this.receiveInput)
+    (process as EventEmitter).on('phoenix:telemetry:usage', this.receiveUsage)
   }
 
   private readonly receiveInput = (raw: unknown): void => {
@@ -129,8 +130,8 @@ export class TokenTelemetryCollector {
 
   /** Dispose listeners and flush counters after a Host plugin unload. */
   dispose(): void {
-    process.off('phoenix:telemetry:input', this.receiveInput)
-    process.off('phoenix:telemetry:usage', this.receiveUsage)
+    (process as EventEmitter).off('phoenix:telemetry:input', this.receiveInput)
+    (process as EventEmitter).off('phoenix:telemetry:usage', this.receiveUsage)
     if (this.timer !== undefined) clearTimeout(this.timer)
     this.timer = undefined
     void this.flush()
