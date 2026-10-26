@@ -140,7 +140,7 @@ export class PluginInventoryGateway extends TypertRemoteService {
     this.openClawConnectors = new OpenClawConnectorBridge()
     // One receiver owned by this Host service, shared by all Settings RPCs.
     this.telemetry = new TokenTelemetryCollector()
-    ctx.effect(() => () => { this.telemetry.dispose() }, 'token telemetry counters and listener cleanup')
+    ctx.effect(() => async () => { await this.telemetry.dispose() }, 'token telemetry counters and listener cleanup')
     this.telegram = new TelegramInbox(ctx)
     this.telegram.start()
     ctx.effect(() => () => { this.telegram.stop() }, 'telegram inbound message receiver')
