@@ -9,6 +9,7 @@ on:
       - 'packages/client/ui-settings-general/src/client/TokenTelemetrySection.tsx'
       - 'packages/client/ui-settings-general/src/client/index.ts'
       - 'packages/client/ui-settings-general/tests/token-telemetry.client.spec.tsx'
+      - 'packages/client/ui-settings-general/tests/telemetry-remote-inject.client.spec.tsx'
       - '.github/workflows/phoenix-token-telemetry.yml'
 
 permissions:
@@ -33,5 +34,6 @@ jobs:
           pnpm exec vitest run
           packages/host/plugin-inventory/tests/telemetry.spec.ts
           packages/client/ui-settings-general/tests/token-telemetry.client.spec.tsx
+          packages/client/ui-settings-general/tests/telemetry-remote-inject.client.spec.tsx
       - name: Compile Host Remote and client contracts
         run: pnpm run build:lib:host && pnpm run build:lib:client
