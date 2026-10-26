@@ -26,6 +26,22 @@ function send(agent: Agent, text: string): void {
 }
 
 describe('Agent', () => {
+  it('keeps complete capabilities for operational tasks but avoids verbose identity on greetings', async () => {
+    const adapter = new MockAdapter([textResponse('hola'), textResponse('verificado')])
+    const ctx = await harness(adapter)
+    const agent = ctx.agentLoop.create(SessionId('prompt-fast-identity'), { provider: 'mock', model: 'mock' })
+    send(agent, 'hola')
+    await agent.whenIdle()
+    send(agent, 'Analiza la arquitectura de Phoenix y verifica las integraciones')
+    await agent.whenIdle()
+    const fast = adapter.requests[0]?.system ?? ''
+    const operational = adapter.requests[1]?.system ?? ''
+    expect(fast).toContain('PHOENIX')
+    expect(operational).toContain('PHOENIX')
+    expect(fast.length).toBeLessThan(operational.length / 3)
+    expect(operational).toContain('requirement ledger')
+  })
+
   it('idle inject() durably stages context without opening a turn', async () => {
     const adapter = new MockAdapter([textResponse('ok')])
     const ctx = await harness(adapter)
