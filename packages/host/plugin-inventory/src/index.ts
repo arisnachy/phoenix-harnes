@@ -463,6 +463,15 @@ export class PluginInventoryGateway extends TypertRemoteService {
   }
 
   /**
+   * Repair the managed official OAuth MCP using its pinned endpoint, without
+   * deleting the user's separately stored Binance authorization grant.
+   * @returns New Loader receipt; actual connectivity must be reverified.
+   */
+  async repairBinanceAgentOs(): Promise<McpRegistryInstallReceipt> {
+    return this.managedMcp.repairBinanceAgentOs()
+  }
+
+  /**
    * Read the official X MCP bundle state without exposing OAuth application secrets.
    * @returns Secret-free credential presence plus API/Docs connector lifecycle.
    */
