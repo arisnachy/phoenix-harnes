@@ -1221,13 +1221,42 @@ export class ManagedMcpController {
    * @returns Idempotent managed connector installation receipt.
    */
   async installBinanceAgentOs(): Promise<McpRegistryInstallReceipt> {
+    // Binance's official Agentic server uses Streamable HTTP with browser
+    // OAuth; this is a host-configured MCP, not an HTTP API key or an API bot.
+    // Non-strict startup keeps the UI responsive until user consent is granted.
     return this.installManagedConfig({
-      transport: 'streamable-http',
-      serverName: BINANCE_AGENT_OS_SERVER_NAME,
-      url: BINANCE_AGENT_OS_URL,
-      headers: {},
-      oauth: true,
+      ...remoteOauthMcpConfig(BINANCE_AGENT_OS_SERVER_NAME, BINANCE_AGENT_OS_URL),
+      reconnect: { enabled: true, initialDelayMs: 1000, maxDelayMs: 30_000, maxAttempts: 3 },
     }, 'Binance Agent OS')
+  }
+
+  /**
+   * Repair legacy Binance MCP installations which were saved without a
+   * bounded startup budget. Preserve OAuth credentials in the secure vault;
+   * replace only the managed Loader row and restore it if installation fails.
+   * @returns Receipt for a freshly configured official MCP connection.
+   */
+  async repairBinanceAgentOs(): Promise<McpRegistryInstallReceipt> {
+    const matches = (await readManagedRows(this.path)).filter(isBinanceAgentOsManagedRow)
+    if (matches.length === 0) return this.installBinanceAgentOs()
+    if (matches.length !== 1 || matches[0]?.config.serverName !== BINANCE_AGENT_OS_SERVER_NAME
+      || matches[0]?.config.transport !== 'streamable-http'
+      || matches[0]?.config.url !== BINANCE_AGENT_OS_URL) {
+      throw new Error('Conflicting Binance MCP entries: remove duplicate connections before repair')
+    }
+    const previous = matches[0]
+    if (previous === undefined) throw new Error('Binance MCP entry unavailable')
+    const removed = await this.removeManagedRowsReceipt(row => row.id === previous.id)
+    if (!removed.removed || !removed.liveUnloaded) {
+      await this.restoreRemovedManagedRow(previous)
+      throw new Error('Binance MCP could not be safely unloaded; old configuration retained')
+    }
+    try {
+      return await this.installBinanceAgentOs()
+    } catch {
+      await this.restoreRemovedManagedRow(previous)
+      throw new Error('Binance MCP repair failed; old configuration preserved for Host restart')
+    }
   }
 
   /**
