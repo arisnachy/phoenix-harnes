@@ -42,6 +42,7 @@ import type { Context } from '@phoenix-ai/cordis'
 import { projectRequestHistory } from './request-history.ts'
 import { tokenInputInventory } from './token-audit.ts'
 import { randomUUID } from 'node:crypto'
+import type { EventEmitter } from 'node:events'
 import { RuntimeContextProjection } from './runtime-context.ts'
 import { executeToolCalls } from './tool-calls.ts'
 import { DEFAULT_AUTO_CONTINUE_MAX_SEGMENTS, DEFAULT_AUTO_CONTINUE_PROVIDERS, DEFAULT_MAX_STEPS_PER_TURN } from './constants.ts'
@@ -626,7 +627,7 @@ export class ReactLoopAgent implements Agent {
         { surfaceOp: 'append', sourceEventSeqs: chunkSeqs },
       )
       if (assembler.usage !== undefined) {
-        process.emit('phoenix:telemetry:usage', {
+        (process as EventEmitter).emit('phoenix:telemetry:usage', {
           id: auditId,
           inputTokens: assembler.usage.inputTokens,
           outputTokens: assembler.usage.outputTokens,
@@ -774,7 +775,7 @@ export class ReactLoopAgent implements Agent {
       sessionId: this.session.id,
       signal,
     }))
-    process.emit('phoenix:telemetry:input', {
+    (process as EventEmitter).emit('phoenix:telemetry:input', {
       id: auditId,
       at: Date.now(),
       provider: config.provider,
@@ -783,7 +784,7 @@ export class ReactLoopAgent implements Agent {
       ...tokenInputInventory(system, tools, boundaryMessages),
     })
     if (process.env.PHOENIX_TOKEN_AUDIT === '1') {
-      console.info('[PHOENIX TOKEN INPUT]  + JSON.stringify({
+      console.info('[PHOENIX TOKEN INPUT] ' + JSON.stringify({
         turn,
         step,
         provider: config.provider,
