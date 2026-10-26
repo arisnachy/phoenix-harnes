@@ -41,6 +41,8 @@ import type { PromptAssembly } from '@phoenix-ai/dsh-system-prompt'
 import type { Context } from '@phoenix-ai/cordis'
 import { projectRequestHistory } from './request-history.ts'
 import { tokenInputInventory } from './token-audit.ts'
+import { randomUUID } from 'node:crypto'
+import type { EventEmitter } from 'node:events'
 import { RuntimeContextProjection } from './runtime-context.ts'
 import { executeToolCalls } from './tool-calls.ts'
 import { DEFAULT_AUTO_CONTINUE_MAX_SEGMENTS, DEFAULT_AUTO_CONTINUE_PROVIDERS, DEFAULT_MAX_STEPS_PER_TURN } from './constants.ts'
@@ -550,8 +552,9 @@ export class ReactLoopAgent implements Agent {
     while (true) {
       const derived = this.session.deriveMessages()
       const boundaryMessages = projectRequestHistory(derived, this.session.events.findLast(event => event.type === 'step/start')?.data.historyProjection)
+      const auditId = randomUUID()
       const { request, preparedCall } = await this.buildRequest(
-        turn, step, assembly.tools, system, boundaryMessages, signal,
+        turn, step, assembly.tools, system, boundaryMessages, signal, auditId,
       )
       const assembler = new BlockAssembler()
       const chunkSeqs: number[] = []
@@ -623,6 +626,16 @@ export class ReactLoopAgent implements Agent {
         },
         { surfaceOp: 'append', sourceEventSeqs: chunkSeqs },
       )
+      if (assembler.usage !== undefined) {
+        (process as EventEmitter).emit('phoenix:telemetry:usage', {
+          id: auditId,
+          inputTokens: assembler.usage.inputTokens,
+          outputTokens: assembler.usage.outputTokens,
+          cacheReadTokens: assembler.usage.cacheReadTokens,
+          cacheWriteTokens: assembler.usage.cacheWriteTokens,
+          reasoningTokens: assembler.usage.reasoningTokens,
+        })
+      }
       if (process.env.PHOENIX_TOKEN_AUDIT === '1' && assembler.usage !== undefined) {
         const usage = assembler.usage
         console.info('[PHOENIX TOKEN USAGE] ' + JSON.stringify({
@@ -680,6 +693,7 @@ export class ReactLoopAgent implements Agent {
     system: string,
     boundaryMessages: Message[],
     signal: AbortSignal,
+    auditId: string,
   ): Promise<{ request: GenerateOptions; preparedCall?: PreparedLlmCall }> {
     const { session } = this
 
@@ -761,6 +775,16 @@ export class ReactLoopAgent implements Agent {
       sessionId: this.session.id,
       signal,
     }))
+    const auditInput = tokenInputInventory(system, tools, boundaryMessages)
+    const telemetryEvents: EventEmitter = process
+    telemetryEvents.emit('phoenix:telemetry:input', {
+      id: auditId,
+      at: Date.now(),
+      provider: config.provider,
+      model: config.model,
+      reasoningEffort: config.reasoningEffort,
+      ...auditInput,
+    })
     if (process.env.PHOENIX_TOKEN_AUDIT === '1') {
       console.info('[PHOENIX TOKEN INPUT] ' + JSON.stringify({
         turn,
@@ -768,7 +792,7 @@ export class ReactLoopAgent implements Agent {
         provider: config.provider,
         model: config.model,
         reasoningEffort: config.reasoningEffort,
-        ...tokenInputInventory(system, tools, boundaryMessages),
+        ...auditInput,
       }))
     }
     return { request, ...preparedCall === undefined ? {} : { preparedCall } }

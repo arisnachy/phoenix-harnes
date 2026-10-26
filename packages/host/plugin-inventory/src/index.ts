@@ -22,6 +22,7 @@ import {
 import { searchOfficialMcpRegistry } from './mcp-registry.ts'
 import { readBusinessLibrarySnapshot } from './business-library.ts'
 import { OpenClawConnectorBridge } from './openclaw-connectors.ts'
+import { TokenTelemetryCollector } from './telemetry.ts'
 import { readTelegramBotState, saveTelegramBot, removeTelegramBot, TelegramInbox } from './telegram-bot.ts'
 import {
   BINANCE_AGENT_OS_SERVER_NAME,
@@ -59,6 +60,8 @@ import type {
   PhoenixUpdateRestartReceipt,
   PhoenixUpdateRefreshReceipt,
   PhoenixUpdateSnapshot,
+  TokenTelemetrySnapshot,
+  TokenTelemetryPreference,
   TelegramBotSnapshot,
   PluginEntryId,
   PluginFiberPhase,
@@ -127,6 +130,7 @@ export class PluginInventoryGateway extends TypertRemoteService {
   private readonly managedMcp: ManagedMcpController
   private readonly openClawConnectors: OpenClawConnectorBridge
   private readonly telegram: TelegramInbox
+  private readonly telemetry: TokenTelemetryCollector
 
   constructor(ctx: Context) {
     super(ctx, 'pluginInventory')
@@ -135,6 +139,8 @@ export class PluginInventoryGateway extends TypertRemoteService {
     this.managedMcp = new ManagedMcpController(ctx.loader)
     this.openClawConnectors = new OpenClawConnectorBridge()
     // One receiver owned by this Host service, shared by all Settings RPCs.
+    this.telemetry = new TokenTelemetryCollector()
+    ctx.effect(() => () => { this.telemetry.dispose() }, 'token telemetry counters and listener cleanup')
     this.telegram = new TelegramInbox(ctx)
     this.telegram.start()
     ctx.effect(() => () => { this.telegram.stop() }, 'telegram inbound message receiver')
@@ -682,6 +688,31 @@ export class PluginInventoryGateway extends TypertRemoteService {
   @Remote('disableChatGptWeb')
   async disableChatGptWeb(): Promise<ChatGptWebSnapshot> {
     return this.chatGptWeb.disable()
+  }
+
+  /** Read bounded local request counters without exposing prompts or identities.
+   * @returns Current telemetry status and recent model-request counters.
+   */
+  @Remote('tokenTelemetry')
+  tokenTelemetry(): TokenTelemetrySnapshot {
+    return this.telemetry.snapshot()
+  }
+
+  /** Set persisted, local-only telemetry collection preference.
+   * @param request - Explicit enabled value.
+   * @returns Updated counters and collection state.
+   */
+  @Remote('setTokenTelemetry')
+  setTokenTelemetry(request: TokenTelemetryPreference): Promise<TokenTelemetrySnapshot> {
+    return this.telemetry.setEnabled(request.enabled)
+  }
+
+  /** Clear telemetry counters without altering user conversations or model memory.
+   * @returns Empty telemetry snapshot with previous preference unchanged.
+   */
+  @Remote('clearTokenTelemetry')
+  clearTokenTelemetry(): Promise<TokenTelemetrySnapshot> {
+    return this.telemetry.clear()
   }
 
   /**

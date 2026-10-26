@@ -1,5 +1,41 @@
 import type { Branded } from '@phoenix-ai/dsh-brand'
 
+/** One request's bounded input and actual provider token counters. No text or session IDs. */
+export interface TokenTelemetryRecord {
+  readonly at: number
+  readonly provider: string
+  readonly model: string
+  readonly reasoningEffort: string
+  readonly systemChars: number
+  readonly schemaChars: number
+  readonly historyChars: number
+  readonly humanChars: number
+  readonly assistantChars: number
+  readonly toolResultChars: number
+  readonly runtimeContextChars: number
+  readonly otherHistoryChars: number
+  readonly messageCount: number
+  readonly toolCount: number
+  readonly approximateInputTokens: number
+  readonly inputTokens?: number
+  readonly outputTokens?: number
+  readonly cacheReadTokens?: number
+  readonly cacheWriteTokens?: number
+  readonly reasoningTokens?: number
+}
+
+/** Counters collected locally; percentages of provider quotas are not inferred. */
+export interface TokenTelemetrySnapshot {
+  readonly enabled: boolean
+  readonly records: readonly TokenTelemetryRecord[]
+}
+
+/** Explicit Settings preference update, validated at the Host boundary. */
+export interface TokenTelemetryPreference {
+  readonly enabled: boolean
+}
+
+
 /** Stable Loader-tree identity of one configured plugin entry. */
 export type PluginEntryId = Branded<'PluginEntryId'>
 

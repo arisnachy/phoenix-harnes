@@ -23,6 +23,7 @@ import { SettingsRoot } from './SettingsRoot.tsx'
 import { CloseLabel, HeaderContent, TriggerContent } from './chrome.tsx'
 import { GeneralSection } from './GeneralSection.tsx'
 import { DiagnosticsRow } from './DiagnosticsRow.tsx'
+import { TokenTelemetrySection, type TokenTelemetrySectionInjected } from './TokenTelemetrySection.tsx'
 import type { DiagnosticsRowInjected } from './DiagnosticsRow.tsx'
 import { SettingsDocumentAction } from './SettingsDocumentAction.tsx'
 import type { SettingsDocumentActionInjected } from './SettingsDocumentAction.tsx'
@@ -36,6 +37,7 @@ export type {
   GeneralSectionComponentProps,
 } from './GeneralSection.tsx'
 export type { DiagnosticsRowInjected, DiagnosticsRowProps } from './DiagnosticsRow.tsx'
+export type { TokenTelemetrySectionInjected, TokenTelemetrySectionProps } from './TokenTelemetrySection.tsx'
 export type { SettingsDocumentActionInjected, SettingsDocumentActionProps } from './SettingsDocumentAction.tsx'
 export type { SettingsDocumentState } from './settings-document-store.ts'
 export { SettingsDocumentStore } from './settings-document-store.ts'
@@ -56,7 +58,7 @@ const NS = 'settings'
  * ui-settings' apply, whose activation order relative to this one is NOT
  * constrained; registrations depend on their slots through `slots.inject()`.
  */
-export const inject = ['slots', 'locale', 'connection', 'settingsScope']
+export const inject = ['slots', 'locale', 'connection', 'settingsScope', 'remote']
 
 /**
  * Register the `settings` dictionaries, the chrome content, and the General
@@ -178,6 +180,32 @@ export function apply(ctx: ClientContext): void {
     locale: NS,
     children: { 'settings.general.item': { kind: 'list', scope: 'root' } },
   }, GeneralSection))
+  const telemetry: TokenTelemetrySectionInjected = {
+    readTelemetry: async () => {
+      const reply = await ctx.remote.pluginInventory.tokenTelemetry()
+      if (!reply.ok) throw new Error(reply.error.code)
+      return reply.value
+    },
+    setTelemetry: async (enabled) => {
+      const reply = await ctx.remote.pluginInventory.setTokenTelemetry({ enabled })
+      if (!reply.ok) throw new Error(reply.error.code)
+      return reply.value
+    },
+    clearTelemetry: async () => {
+      const reply = await ctx.remote.pluginInventory.clearTokenTelemetry()
+      if (!reply.ok) throw new Error(reply.error.code)
+      return reply.value
+    },
+  }
+  ctx.slots.inject('settings.section', () => ctx.slots.register({
+    name: 'settings.section',
+    id: 'telemetry',
+    order: 65,
+    label: () => t('telemetry.nav'),
+    locale: NS,
+    inject: () => telemetry,
+  }, TokenTelemetrySection))
+
   ctx.slots.inject('settings.general.item', () => ctx.slots.register({
     name: 'settings.general.item',
     id: 'phoenix-diagnostics',
