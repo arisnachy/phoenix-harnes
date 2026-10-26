@@ -16,6 +16,13 @@ export interface TokenInputInventory {
   readonly approximateInputTokens: number
 }
 
+/**
+ * Count request component sizes without retaining any model-visible content.
+ * @param system - Fully rendered system prompt.
+ * @param tools - Complete wire tool schemas for this model step.
+ * @param messages - Model-visible conversation history after projection.
+ * @returns Size breakdown and rough, non-billing token estimate.
+ */
 export function tokenInputInventory(
   system: string,
   tools: readonly unknown[],
@@ -28,9 +35,9 @@ export function tokenInputInventory(
   let otherHistoryChars = 0
   for (const message of messages) {
     const size = JSON.stringify(message).length
-    if (message.source.kind === 'user') humanChars += size
+    if (message.content.some(block => block.type === 'tool-result')) toolResultChars += size
+    else if (message.source.kind === 'user') humanChars += size
     else if (message.source.kind === 'model') assistantChars += size
-    else if (message.source.kind === 'tool') toolResultChars += size
     else if (message.source.kind === 'plugin'
       && message.source.plugin === '@phoenix-ai/dsh-system-prompt') runtimeContextChars += size
     else otherHistoryChars += size
