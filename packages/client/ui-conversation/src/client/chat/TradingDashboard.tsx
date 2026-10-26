@@ -19,7 +19,11 @@ function clock(value?: string): string {
   return Number.isFinite(time) ? new Date(time).toLocaleString('es-DO') : 'Sin registro'
 }
 
-/** Phoenix in-chat trading visor, synchronized with real local PAPER journal. */
+/**
+ * Phoenix in-chat trading visor, synchronized with the local PAPER journal.
+ * @param props - Initial verified account and user-action bridge.
+ * @returns A native, read-only market monitoring card with chat-mediated controls.
+ */
 export function TradingDashboard({ initial, onAction }: Props) {
   const [state, setState] = useState<TradingDashboardSnapshot | undefined>(initial)
   const [connection, setConnection] = useState<'connected' | 'offline'>('connected')
