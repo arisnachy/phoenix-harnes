@@ -4,7 +4,7 @@ import SystemPrompt from '@phoenix-ai/dsh-system-prompt'
 import { ReasoningEffortId } from '@phoenix-ai/dsh-llm'
 import { agentEvents, installModelSelection, defaultExecutionHandoff, isPhoenixCodexAutoStalled,
   jevSelectedModelId, isContextualConversationFastPathText, PHOENIX_CODEX_AUTO_MODEL,
-  type Agent, type ModelSelectionRef } from '../src/index.ts'
+  adaptiveCodexReasoningEffort, type Agent, type ModelSelectionRef } from '../src/index.ts'
 
 describe('routing evidence from durable and external input', () => {
   it('accepts an explicit allowed Jev choice through list envelopes and rejects incomplete choices', () => {
