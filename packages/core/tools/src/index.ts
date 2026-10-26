@@ -815,9 +815,9 @@ export interface Config {
    */
   maxParallelSubCalls?: number
   /**
-   * Number of visible `mcp__*` tools at which native presentation switches to
-   * deferred discovery. Native tools remain in the prompt; MCP schemas are
-   * returned by `tool_search` and become visible only for the calling agent.
+   * Number of visible `mcp__*` tools at which a presentation switches to
+   * deferred discovery. Native, code and both modes retain all capabilities;
+   * MCP schemas are admitted per agent through `tool_search` as needed.
    * Must be a positive integer.
    */
   mcpToolLazyThreshold?: number
@@ -1243,11 +1243,11 @@ export class ToolRuntime extends Service {
     return false
   }
 
-  /** Deferred MCP discovery applies only to native function-tool projection. */
+  /** Decide whether an agent needs MCP discovery in native, code or both mode. */
   private deferredMcpCatalog(definitions: Iterable<ToolDefinition>, scope?: ScopeKey): boolean {
-    // Discovery state belongs to an agent scope. Keep the unscoped registry
-    // view complete for host/inventory callers and direct execution paths.
-    return scope !== undefined && this.modeFor(scope) === 'native' && this.defersMcpTools(definitions)
+    // Scoped discovery changes only prompt presentation, not registrations.
+    // Leave unscoped Host/inventory views complete for direct execution.
+    return scope !== undefined && this.defersMcpTools(definitions)
   }
 
   /** Exact-agent selection; no unscoped or ancestor/global selection exists. */
@@ -1444,10 +1444,9 @@ export class ToolRuntime extends Service {
   private wireSchemas(scope?: ScopeKey, agent?: Agent): ToolProviderResult {
     const view = this.view(scope)
     const mode = this.modeFor(scope)
-    // Deferred MCP projection is a Native function-tool optimization only.
-    // Code Mode keeps its complete generated SDK binding list, and `both`
-    // keeps its existing native+transport surface for compatibility.
-    const definitions = mode === 'native' ? this.promptVisibleDefinitions(view, scope) : [...view.visible.values()]
+    // Reuse one discovery window for both native schemas and the Code SDK;
+    // sending both full catalogs in `both` mode duplicates MCP overhead.
+    const definitions = this.promptVisibleDefinitions(view, scope)
     const visible = this.modelVisibleDefinitions(definitions, agent)
     if (mode === 'native') {
       const schemas = visible.map(definition => this.schemaOf(definition, false))
@@ -1661,10 +1660,9 @@ export class ToolRuntime extends Service {
     if (this.modeFor(scope) !== 'native') {
       visible.set(RUN_CODE_NAME, this.requireCodeTransport())
     }
-    // Discovery is virtual infrastructure: it must not pollute the ordinary
-    // registry/catalog or Code Mode SDK in small-MCP deployments. Once the
-    // visible MCP catalog is large, add it after restrictions so allow/deny
-    // masks still govern the synthetic capability as they do native globals.
+    // Discovery is virtual infrastructure, absent for small MCP catalogs.
+    // For large catalogs, add it after restrictions so allow/deny masks
+    // govern the synthetic capability in native, code and both modes.
     const deferred = this.deferredMcpCatalog(visible.values(), scope)
     // `tool_search` is a virtual global only for an exposed deferred catalog;
     // empty/small scopes must keep the historical known-name set unchanged.
@@ -1706,9 +1704,9 @@ export class ToolRuntime extends Service {
     const view = this.view(scope)
     const tool = view.visible.get(name)
     if (tool === undefined) return undefined
-    // Deferred MCP tools are still registered and retain their normal policy
-    // path, but a model/direct call cannot bypass discovery by guessing a
-    // hidden name. Discovery selection is exact-agent state.
+    // Deferred MCP tools remain registered and guarded. Neither direct calls
+    // nor nested run_code sub-dispatches may bypass discovery by guessing a
+    // name omitted from the wire/SDK. Selection is exact-agent state.
     if (isMcpToolName(name)
       && view.visible.has(TOOL_SEARCH_NAME)
       && this.deferredMcpCatalog(view.visible.values(), scope)
@@ -1744,9 +1742,10 @@ export class ToolRuntime extends Service {
       definition.name === NATIVE_IMAGE_GENERATION_TOOL || definition.name === RUN_CODE_NAME)
   }
 
-  /** Project visible callable tools onto the generated Code Mode SDK contract. */
+  /** Project admitted/discovered MCP tools into the Code Mode SDK. */
   private sdkSchemas(scope?: ScopeKey, agent?: Agent): ToolSdkSchema[] {
-    return this.modelVisibleDefinitions(this.view(scope).visible.values(), agent)
+    const view = this.view(scope)
+    return this.modelVisibleDefinitions(this.promptVisibleDefinitions(view, scope), agent)
       .filter(definition => definition.name !== RUN_CODE_NAME)
       .map((definition): ToolSdkSchema => {
         const output = snapshotJsonValue(definition.output.schema)
