@@ -3,7 +3,7 @@ import { parseTradingDashboard, type TradingDashboardSnapshot } from './trading-
 import css from './TradingDashboard.module.css'
 
 type Props = {
-  readonly initial?: TradingDashboardSnapshot
+  readonly initial?: TradingDashboardSnapshot | undefined
 }
 const ENDPOINT = '/phoenix-trading/paper/dashboard'
 const REFRESH_MS = 10_000
