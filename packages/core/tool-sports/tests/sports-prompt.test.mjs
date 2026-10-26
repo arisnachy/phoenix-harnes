@@ -22,7 +22,7 @@ test('sports prose is available before first user-message commit and on subseque
 
 test('short followups keep relevant sports context, unrelated new tasks replace it', () => {
   assert.equal(sportsPromptNeeded('dale', [human('Investiga fútbol')]), true)
-  assert.equal(sportsPromptNeeded(undefined, [human('Deportes'), human('dale')]), false)
-  assert.equal(sportsPromptNeeded(undefined, [human('Deportes'), human('dale')].reverse()), true)
+  assert.equal(sportsPromptNeeded(undefined, [human('Deportes'), human('Otro tema'), human('dale')]), false)
+  assert.equal(sportsPromptNeeded(undefined, [human('Deportes'), human('dale')]), true)
   assert.equal(sportsPromptNeeded('Arregla el updater de Windows', [human('NBA')]), false)
 })
