@@ -314,7 +314,11 @@ function embeddedBrowserUse(block: ToolCallBlock): EmbeddedBrowserUse {
   return found ? tabId === undefined ? { found: true } : { found: true, tabId } : { found: false }
 }
 
-/** Only explicit user requests to operate/open Binance should show a live trading visor. */
+/**
+ * Only explicit user trading requests open a live viewer without model formatting.
+ * @param text - User's ordinary chat prompt.
+ * @returns Whether a Binance trading viewer is relevant to the user request.
+ */
 export function isTradingPanelPrompt(text: string): boolean {
   const normalized = text.normalize('NFD').replace(/[\u0300-\u036f]/gu, '').toLowerCase()
   return /\b(?:binance|trading|cripto|criptomonedas)\b/u.test(normalized)
