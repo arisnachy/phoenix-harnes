@@ -397,7 +397,7 @@ describe('mode-aware wire contribution', () => {
       // presentation change, not a replacement/removal of registered tools.
       const search = ctx.tools.get('tool_search', agent)
       expect(search).toBeDefined()
-      const discovery = await search!.execute!(
+      const discovery = await search!.execute(
         { names: ['mcp__catalog__read'], limit: 1 },
         { agent } as never,
       )
@@ -422,7 +422,7 @@ describe('mode-aware wire contribution', () => {
     'reduces an oversized MCP SDK over 70% in %s without deregistering tools',
     async (mode) => {
       const { ctx, systemPrompt } = await setup({ mode, mcpToolLazyThreshold: 2 })
-      for (let n = 0; n < 25; n += 1) registerEcho(ctx, 'mcp__catalog__item_' + n)
+      for (let n = 0; n < 25; n += 1) registerEcho(ctx, `mcp__catalog__item_${n}`)
       const unscoped = await systemPrompt.assemble()
       const { agent } = await mintAgentScope(ctx, 'bounded-schemas-' + mode)
       const scoped = await systemPrompt.assemble({ scope: agent, agent })
