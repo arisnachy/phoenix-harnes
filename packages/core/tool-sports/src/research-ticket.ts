@@ -68,7 +68,7 @@ export async function researchTicket(
   fetcher: typeof fetch = fetch,
   now = Date.now(),
   env: NodeJS.ProcessEnv = process.env,
-  requestedLegs = selections.length,
+  requestedLegs = Array.isArray(selections)?selections.length:0,
   allowPartial = false,
   preloadedBoards?:Map<string,EspnBoard>,
 ):Promise<{ card:ChatBlock;verifiedEvents:number;priced:false;placed:false;complete:boolean }> {
