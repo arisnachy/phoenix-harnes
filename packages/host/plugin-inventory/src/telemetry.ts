@@ -98,7 +98,9 @@ export class TokenTelemetryCollector {
     if (this.timer !== undefined) return
     this.timer = setTimeout(() => {
       this.timer = undefined
-      void this.flush()
+      void this.flush().catch(() => {
+        // Disk failures must not crash a running model turn or create an unhandled rejection.
+      })
     }, FLUSH_DELAY_MS)
     this.timer.unref()
   }
@@ -110,32 +112,42 @@ export class TokenTelemetryCollector {
     return this.saving
   }
 
-  /** Return only counters, model labels and dates; records are newest first. */
+  /**
+   * Return only counters, model labels and dates; records are newest first.
+   * @returns Current sanitized telemetry snapshot.
+   */
   snapshot(): TokenTelemetrySnapshot {
     return { enabled: this.enabled, records: this.records.map(({ id: _id, ...record }) => record).reverse() }
   }
 
-  /** Persist collection preference without touching LLM routing or credentials. */
+  /**
+   * Persist collection preference without touching LLM routing or credentials.
+   * @param enabled - Whether new requests should be collected.
+   * @returns Updated sanitized telemetry snapshot.
+   */
   async setEnabled(enabled: boolean): Promise<TokenTelemetrySnapshot> {
     this.enabled = enabled
     await this.flush()
     return this.snapshot()
   }
 
-  /** Clear retained counters but never erase sessions or cognitive memories. */
+  /**
+   * Clear retained counters but never erase sessions or cognitive memories.
+   * @returns Empty sanitized telemetry snapshot.
+   */
   async clear(): Promise<TokenTelemetrySnapshot> {
     this.records = []
     await this.flush()
     return this.snapshot()
   }
 
-  /** Dispose listeners and flush counters after a Host plugin unload. */
-  dispose(): void {
+  /** Dispose listeners and wait for the final write before the Host/plugin is released. */
+  async dispose(): Promise<void> {
     const telemetryEvents: EventEmitter = process
     telemetryEvents.off('phoenix:telemetry:input', this.receiveInput)
     telemetryEvents.off('phoenix:telemetry:usage', this.receiveUsage)
     if (this.timer !== undefined) clearTimeout(this.timer)
     this.timer = undefined
-    void this.flush()
+    await this.flush()
   }
 }
