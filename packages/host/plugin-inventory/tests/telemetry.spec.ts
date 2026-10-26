@@ -1,5 +1,6 @@
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
+import type { EventEmitter } from 'node:events'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { TokenTelemetryCollector } from '../src/telemetry.ts'
@@ -20,7 +21,7 @@ describe('Settings token telemetry collector', () => {
     instances.push(collector)
     expect(collector.snapshot().records).toHaveLength(0)
 
-    process.emit('phoenix:telemetry:input', {
+    (process as EventEmitter).emit('phoenix:telemetry:input', {
       id: 'request-1',
       at: Date.now(),
       provider: 'openai-codex',
@@ -40,7 +41,7 @@ describe('Settings token telemetry collector', () => {
       text: 'SHOULD_NEVER_BE_STORED',
       secret: 'SHOULD_NEVER_BE_STORED',
     })
-    process.emit('phoenix:telemetry:usage', {
+    (process as EventEmitter).emit('phoenix:telemetry:usage', {
       id: 'request-1', inputTokens: 927, outputTokens: 148,
       cacheReadTokens: 500, reasoningTokens: 70,
       prompt: 'SHOULD_NEVER_BE_STORED',
@@ -52,7 +53,7 @@ describe('Settings token telemetry collector', () => {
     expect(JSON.stringify(collector.snapshot())).not.toContain('request-1')
 
     await collector.setEnabled(false)
-    process.emit('phoenix:telemetry:input', { id: 'other', at: Date.now(), model: 'other' })
+    (process as EventEmitter).emit('phoenix:telemetry:input', { id: 'other', at: Date.now(), model: 'other' })
     expect(collector.snapshot().records).toHaveLength(1)
     const persisted = await readFile(join(folder, 'nested', 'usage.json'), 'utf8')
     expect(persisted).not.toContain('SHOULD_NEVER_BE_STORED')
