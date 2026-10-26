@@ -34,7 +34,12 @@ export interface BinancePaperAutomationView {
   readonly recentTrades: Awaited<ReturnType<BinancePaperBroker['journal']>>
 }
 
-/** Verify an unattended run's complete user-owned configuration before enabling it. */
+/**
+ * Verify an unattended run's complete user-owned configuration before enabling it.
+ * @param input - Watchlist and bounded period selected by the user.
+ * @param enabled - Persisted PAPER-only enablement switch.
+ * @returns Validated PAPER scheduler settings.
+ */
 export function binancePaperAutomationConfig(input: {
   symbols: readonly string[]
   interval?: BinancePaperAutomationConfig['interval']
@@ -235,7 +240,11 @@ export class BinancePaperAutomation {
 
 const automationByPath = new Map<string, { instance: BinancePaperAutomation; refs: number }>()
 
-/** Share one Host-scoped virtual worker across agent tool registries. */
+/**
+ * Share one Host-scoped virtual worker across agent tool registries.
+ * @param path - Host-owned virtual portfolio ledger path.
+ * @returns Automation service and reversible process ownership handle.
+ */
 export function acquireBinancePaperAutomation(path: string): {
   readonly engine: BinancePaperAutomation
   release(): void
