@@ -4,7 +4,7 @@ import { writeFileAtomic } from '@phoenix-ai/dsh-atomic-write'
 import { dshHomePath } from '@phoenix-ai/dsh-home-paths'
 import type { TokenTelemetryRecord, TokenTelemetrySnapshot } from './types.ts'
 
-const PATH = dshHomePath('telemetry', 'token-usage.json')
+const DEFAULT_PATH = dshHomePath('telemetry', 'token-usage.json')
 const RECORD_LIMIT = 600
 const FILE_BYTES_LIMIT = 1_000_000
 const FLUSH_DELAY_MS = 2_000
@@ -54,10 +54,10 @@ export class TokenTelemetryCollector {
   private timer: NodeJS.Timeout | undefined
   private saving: Promise<void> = Promise.resolve()
 
-  constructor() {
+  constructor(private readonly path = DEFAULT_PATH) {
     try {
-      if (statSync(PATH).size <= FILE_BYTES_LIMIT) {
-        const data = asRecord(JSON.parse(readFileSync(PATH, 'utf8')) as unknown)
+      if (statSync(this.path).size <= FILE_BYTES_LIMIT) {
+        const data = asRecord(JSON.parse(readFileSync(this.path, 'utf8')) as unknown)
         if (typeof data?.enabled === 'boolean') this.enabled = data.enabled
         if (Array.isArray(data?.records)) {
           this.records = data.records.map(parseInput).filter((v): v is InputPayload => v !== undefined)
@@ -104,7 +104,7 @@ export class TokenTelemetryCollector {
   private flush(): Promise<void> {
     const snapshot = JSON.stringify({ version: 1, enabled: this.enabled, records: this.records })
     this.saving = this.saving.catch(() => undefined).then(() =>
-      writeFileAtomic(PATH, snapshot, { mode: 0o600, dirMode: 0o700 }))
+      writeFileAtomic(this.path, snapshot, { mode: 0o600, dirMode: 0o700 }))
     return this.saving
   }
 
