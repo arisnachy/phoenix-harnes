@@ -22,6 +22,20 @@ Host 工作进程只进行虚拟交易。聊天内面板无需模型调用即可
 
 **让 LLM 持续保持活动以轮询行情。** 这种方式的 token 用量会随轮询次数增长。改为由 Host 拥有的 PAPER 工作进程持久保存用户的明确启用选择，按配置周期进行检查，连续错误时停止，并通过只读聊天面板展示结果。
 
+## 官方 MCP 和测试环境的区别
+
+Binance Agentic MCP 使用官方 OAuth Streamable HTTP 地址
+https://agent.binance.com/mcp/agentic。安装成功不代表同步了工具或取得 Trade
+权限，也不证明账户符合条件、余额充足。每笔真实 Agentic 订单仍需用户确认，
+Agentic 子账户必须由用户自行在 Binance 中转入资金。Phoenix 提供显式的
+重连与修复，同时保留 Host 持有的独立 OAuth 授权记录。
+
+Binance Spot Testnet 是另一个仅使用模拟资金的环境。它使用 Host 独立保存
+的测试 API 密钥和固定签名地址 https://testnet.binance.vision，并不使用
+Agentic MCP。测试订单要求用户明确提出、通过 Phoenix 单次批准，并受到
+金额上限限制。Kira 在启用前会询问 Testing 或 Real，再区分 PAPER 与
+Spot Testnet。
+
 ## Consequences
 
 Phoenix 可使用确定性计算检查小型关注列表，并在无需每根 K 线消耗模型 token 的情况下执行可复现的虚拟操作。分数是启发式排序，并非经过校准的盈利概率。broker 采用既有的 Spot 模拟成交与手续费模型；滑点、交易所过滤规则、汇率约束、组合相关性、全面策略学习、Settings 控制、Testnet 和自主真实交易仍需独立实现。PAPER 重复周期由用户明确启用后的 Host 工作进程驱动；真实账户操作仍不在此工作进程内。
