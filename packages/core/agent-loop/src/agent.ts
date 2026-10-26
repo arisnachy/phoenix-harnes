@@ -775,7 +775,8 @@ export class ReactLoopAgent implements Agent {
       sessionId: this.session.id,
       signal,
     }))
-    (process as EventEmitter).emit('phoenix:telemetry:input', {
+    const telemetryEvents: EventEmitter = process
+    telemetryEvents.emit('phoenix:telemetry:input', {
       id: auditId,
       at: Date.now(),
       provider: config.provider,
