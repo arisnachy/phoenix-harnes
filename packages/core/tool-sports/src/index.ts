@@ -22,11 +22,11 @@ export function apply(ctx: Context): void {
   ctx.systemPrompt.section({
     name: 'tool:sports',
     order: 118,
-    text: assembly => {
-      const agent = (assembly as { agent?: { session?: { events?: readonly {
-        type: string; data: unknown
-      }[] } } }).agent
-      return sportsPromptNeeded(assembly.incomingUserText, agent?.session?.events) ? GUIDANCE : ''
+    text: (assembly) => {
+      const context = assembly as { incomingUserText?: string; agent?: { session?: {
+        events?: readonly { type: string; data: unknown }[]
+      } } }
+      return sportsPromptNeeded(context.incomingUserText, context.agent?.session?.events) ? GUIDANCE : ''
     },
   })
   ctx.tools.register(defineTool({
