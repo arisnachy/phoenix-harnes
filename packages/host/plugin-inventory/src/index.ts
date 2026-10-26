@@ -411,6 +411,7 @@ export class PluginInventoryGateway extends TypertRemoteService {
     configured: boolean
     status?: McpConnectorRuntimeEntry['status']
     reasonCode?: McpConnectorRuntimeEntry['reasonCode']
+    toolNames: readonly string[]
   }> {
     const managed = await this.managedMcp.snapshot()
     const configured = managed.some(connector =>
@@ -421,11 +422,26 @@ export class PluginInventoryGateway extends TypertRemoteService {
     const runtime = registry?.list().find(entry => entry.serverName === BINANCE_AGENT_OS_SERVER_NAME)
     return {
       configured,
+      toolNames: runtime?.status === 'ready' ? [...runtime.toolNames] : [],
       ...(runtime === undefined ? {} : {
         status: runtime.status,
         ...(runtime.reasonCode === undefined ? {} : { reasonCode: runtime.reasonCode }),
       }),
     }
+  }
+
+  /**
+   * Request a safe reconnect for the already-installed official Binance MCP.
+   * Does not authorize scopes, refresh grants silently, or place orders.
+   * @returns Whether an existing live MCP connector accepted the request.
+   */
+  async reconnectBinanceAgentOs(): Promise<{ accepted: boolean }> {
+    const state = await this.binanceAgentOsState()
+    if (!state.configured) return { accepted: false }
+    const registry = (this.ctx.get as (name: string) => unknown)('mcpConnectors') as
+      | { reconnect(serverName: string): boolean }
+      | undefined
+    return { accepted: registry?.reconnect(BINANCE_AGENT_OS_SERVER_NAME) ?? false }
   }
 
   /**
