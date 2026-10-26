@@ -22,6 +22,21 @@ The Host worker performs only virtual transactions. The in-chat visor reads live
 
 **Keeping the LLM awake to poll.** Rejected because token use scales with polling. Instead a Host-owned PAPER worker persists explicit user enablement and polls independently, with a configurable period, error shutdown, and a read-only in-chat viewer.
 
+## Official MCP and testing distinction
+
+The official Binance Agentic MCP uses the pinned OAuth-enabled Streamable HTTP
+endpoint https://agent.binance.com/mcp/agentic. Tool synchronization is verified
+separately from installation. Connecting does not prove Trade scopes, account
+eligibility, or funding; every real Agentic order requires user confirmation.
+The user funds the isolated sub-account manually in Binance. Phoenix offers
+explicit reconnect/repair while preserving host-owned authorization records.
+
+Binance Spot Testnet is a different test-funds environment. It uses dedicated
+host-only API keys and a fixed signed endpoint at https://testnet.binance.vision,
+not the Agentic MCP. The test order tool requires the user's specific request,
+one-shot Phoenix approval and strict order amount bounds. Kira asks Testing or
+Real before activation and distinguishes PAPER from Spot Testnet.
+
 ## Consequences
 
 Phoenix can evaluate a small watchlist and execute a reproducible virtual action with no per-bar model cost. The score is a heuristic ranking, not an estimated probability or an independently validated source of profit. The broker assumes Spot-like virtual fills and its existing fee model; slippage, exchange filters, exchange-rate constraints, portfolio correlations, comprehensive strategy learning, Settings controls, Testnet, and autonomous live execution remain separate work. Repeated PAPER cycles are driven by the Host worker after explicit activation; account-changing REAL actions remain outside this worker.
