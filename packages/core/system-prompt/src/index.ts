@@ -61,8 +61,6 @@ export interface AssembleContext {
    * not clear or mutate the retained runtime-context projection.
    */
   omitRuntimeContext?: boolean
-  /** Current human input before it is committed; never store it in snapshots. */
-  incomingUserText?: string
 }
 
 /** One contributed section of the system prompt (registry input). */
