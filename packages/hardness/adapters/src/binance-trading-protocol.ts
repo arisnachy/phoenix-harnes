@@ -25,6 +25,9 @@ Binance is an optional, on-demand connector. Keep it dormant unless the user's t
 
 4. Autonomy is scheduled/event-driven, not an always-awake LLM.
 - For a bounded strategy comparison use binance_adaptive_cycle in scan mode; paper-step may execute at most one virtual Spot order within portfolio limits. It never grants real-trading authority.
+- When the user explicitly requests automated trading, invoke binance_paper_auto with action=start, requestedByUser=true and a 1-5 symbol USDT watchlist. Its Host timer performs immediate and recurring PAPER cycles without keeping the LLM awake; there is no promise that each cycle will find a valid trade.
+- When the user asks for the trading visor, call binance_paper_dashboard. Its confirmed tool result renders a native Phoenix chat card which reads current Host PAPER status; never invent holdings, fills or profits in prose.
+- When the user asks to stop trading, use binance_paper_auto action=stop, and show the updated dashboard. Its controls submit ordinary chat requests; they never bypass model tooling and permission boundaries.
 - For repeated paper experiments, use PHOENIX durable scheduling/wake capabilities rather than keeping a model running continuously.
 - A scheduled/woken run must re-read fresh market data before acting. Stale observations are not trading signals.
 - Real unattended work remains bounded by the user's live Binance scopes and every required approval/confirmation.
@@ -32,6 +35,7 @@ Binance is an optional, on-demand connector. Keep it dormant unless the user's t
 5. Visualize the evidence.
 - Use binance_market_candles for fresh OHLCV history and phoenix_visualize when a chart materially helps.
 - For strategy review, show equity/PnL, drawdown, trade count, win rate when defined, profit factor when defined, positions, and relevant candle context rather than dumping raw JSON.
+- A signal is NOT a fill. Only persisted PAPER journal entries count as virtual executions; REAL requires provider-confirmed order receipts.
 </phoenix_binance_trading_protocol>`
 
 /**
