@@ -106,14 +106,36 @@ try {
     Stop-Process -Id ([int]$supervisor.ProcessId) -Force -ErrorAction Stop
   }
 
-  $remaining = @(Get-LoopbackListener $Port)
-  if ($remaining.Count -gt 0) {
+  # Windows can retain a TCP LISTEN record briefly while a stopped supervisor
+  # and its Host exit. Never interpret this teardown race as permission to kill
+  # a different process. Retry only for the originally VERIFIED PID and require
+  # the port to actually become free before reporting success.
+  $hostStopRequested = $false
+  for ($attempt = 0; $attempt -lt 12; $attempt++) {
+    $remaining = @(Get-LoopbackListener $Port)
+    if ($remaining.Count -eq 0) {
+      Write-Host '[PHOENIX REPAIR] Instancia anterior detenida y puerto liberado. Ahora puedes ejecutar pnpm phoenix.'
+      exit 0
+    }
+    if ($remaining.Count -ne 1) {
+      Write-Error "[PHOENIX REPAIR] El puerto $Port tiene varios listeners tras el cierre; no se tocará ninguno."
+      exit 3
+    }
+    $remainingPid = [int]$remaining[0].OwningProcess
+    if ($remainingPid -ne $hostPid) {
+      Write-Error "[PHOENIX REPAIR] El propietario del puerto cambió durante el cierre ($hostPid -> $remainingPid). El nuevo PID no se tocará; ejecuta el diagnóstico nuevamente."
+      exit 3
+    }
+
     $stillHost = Get-PidProcess $hostPid
-    if ($remaining.Count -ne 1 -or
-        [int]$remaining[0].OwningProcess -ne $hostPid -or
-        $null -eq $stillHost -or
-        $stillHost.CreationDate -ne $hostProcess.CreationDate) {
-      Write-Error '[PHOENIX REPAIR] El proceso cambió durante el cierre; no se tocará al nuevo propietario.'
+    if ($null -eq $stillHost) {
+      # The Host exited, but Windows still exposes its transient TCP record.
+      Start-Sleep -Milliseconds 250
+      continue
+    }
+    if ($stillHost.CreationDate -ne $hostProcess.CreationDate -or
+        -not (Get-OwnerIsCurrentUser $stillHost)) {
+      Write-Error '[PHOENIX REPAIR] La identidad del Host cambió durante el cierre; se conserva.'
       exit 3
     }
     # Recheck the Node Host identity before retiring any legacy listener.
@@ -123,10 +145,14 @@ try {
       Write-Error '[PHOENIX REPAIR] Host legado cambió de identidad; no se detuvo.'
       exit 3
     }
-    Stop-Process -Id $hostPid -Force -ErrorAction Stop
+    if (-not $hostStopRequested) {
+      Stop-Process -Id $hostPid -Force -ErrorAction Stop
+      $hostStopRequested = $true
+    }
+    Start-Sleep -Milliseconds 250
   }
-  Write-Host '[PHOENIX REPAIR] Instancia anterior detenida. Ahora puedes ejecutar pnpm phoenix.'
-  exit 0
+  Write-Error "[PHOENIX REPAIR] El puerto $Port no quedó libre tras el cierre verificado; se conserva cualquier nuevo propietario."
+  exit 3
 }
 catch {
   Write-Error "[PHOENIX REPAIR] Error: $($_.Exception.Message)" -ErrorAction Continue

@@ -57,6 +57,14 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(repair).toContain('Stop-Process -Id ([int]$supervisor.ProcessId) -Force')
     expect(repair).toContain('Stop-Process -Id $hostPid -Force')
     expect(repair).toContain('El listener no es un Host Phoenix propio verificable')
+    expect(repair).toContain('for ($attempt = 0; $attempt -lt 12; $attempt++)')
+    expect(repair).toContain('if ($remaining.Count -eq 0)')
+    expect(repair).toContain('if ($remainingPid -ne $hostPid)')
+    expect(repair).toContain('Get-OwnerIsCurrentUser $stillHost')
+    expect(repair).toContain('if (-not $hostStopRequested)')
+    expect(repair).toContain('Start-Sleep -Milliseconds 250')
+    expect(repair).toContain('Instancia anterior detenida y puerto liberado')
+    expect(repair).not.toContain('Stop-Process -Name node')
   })
 
   it('retries failed updater watchers with capped backoff instead of a one-second hot loop', () => {

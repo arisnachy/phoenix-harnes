@@ -24,6 +24,17 @@ describe('one-time Windows recovery for deleted runtime helper', () => {
     expect(recovery).toContain('const directStream = liveEligible && !streamLive')
   })
 
+  it('revalidates port ownership on every bounded recovery attempt', () => {
+    expect(recovery).toContain('for ($attempt = 1; $attempt -le 3; $attempt++)')
+    expect(recovery).toContain('-File $repair -Port $Port -Apply')
+    expect(recovery).toContain('if ($LASTEXITCODE -eq 0)')
+    expect(recovery).toContain('Get-NetTCPConnection -State Listen -LocalPort $Port')
+    expect(recovery).toContain('if ($remaining.Count -eq 0)')
+    expect(recovery).toContain('if (-not $portReleased)')
+    expect(recovery).toContain('No se iniciará otra instancia')
+    expect(recovery).not.toContain('Stop-Process')
+  })
+
   it('launches the repaired checkout while preserving local profiles and logging', () => {
     expect(recovery).toContain('$env:PHOENIX_INSTALL_ROOT = $root')
     expect(recovery).toContain('$env:PHOENIX_SOURCE_ROOT = $root')

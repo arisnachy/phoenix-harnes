@@ -59,9 +59,25 @@ try {
   }
 
   Write-Host '[PHOENIX RECOVERY] Retirando exclusivamente el Host/supervisor Phoenix verificado...'
-  & powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $repair -Port $Port -Apply
-  if ($LASTEXITCODE -ne 0) {
-    throw 'No fue posible confirmar el cierre seguro. No se iniciará otra instancia.'
+  $portReleased = $false
+  # A retired legacy supervisor may release its Host asynchronously or a
+  # second verified Phoenix may briefly inherit the port. Re-run the SAME
+  # ownership-checking repair; never kill processes by name or PID alone.
+  for ($attempt = 1; $attempt -le 3; $attempt++) {
+    & powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $repair -Port $Port -Apply
+    if ($LASTEXITCODE -eq 0) {
+      $remaining = @(Get-NetTCPConnection -State Listen -LocalPort $Port -ErrorAction SilentlyContinue |
+        Where-Object { $_.LocalAddress -eq '127.0.0.1' })
+      if ($remaining.Count -eq 0) {
+        $portReleased = $true
+        break
+      }
+      Write-Warning '[PHOENIX RECOVERY] El puerto fue ocupado nuevamente; comprobando el nuevo propietario.'
+    }
+    if ($attempt -lt 3) { Start-Sleep -Milliseconds 500 }
+  }
+  if (-not $portReleased) {
+    throw 'No se confirmó el cierre seguro ni la liberación del puerto. No se iniciará otra instancia.'
   }
 
   if ($NoLaunch) {
