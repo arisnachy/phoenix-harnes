@@ -65,50 +65,20 @@ const LOCAL_NS = 'settings.models.local'
 const CONNECTORS_NS = 'settings.connectors'
 export type { ModelsSettingsState, ProviderRow } from './store.ts'
 
-const CODEX_TIER = /^gpt-(\d+(?:\.\d+)?)(?:-([a-z][a-z0-9-]*))?$/iu
-
-/** Keep the newest live numeric GPT model for each Codex tier and every
- * provider-owned id that does not follow that naming convention.
- *
- * The app-server catalog is authoritative. This helper only removes older
- * numeric siblings already present in that response; it never synthesizes a
- * model or turns a virtual picker value into an executable route.
- * @param choices - Choices projected from the connected Codex catalog.
- * @returns A detached list containing the current tier representatives.
+/** Preserve every account-visible model from Codex, in its reported order.
+ * A newer GPT family must never hide older models that the account can still
+ * select. Only remove duplicate route ids and PHOENIX's virtual auto route.
+ * @param choices - Live choices reported by the connected Codex adapter.
+ * @returns Detached available Codex choices, without synthetic model ids.
  */
 export function selectCurrentCodexModels(
   choices: readonly EclipseCatalogChoice[],
 ): EclipseCatalogChoice[] {
-  const numeric = choices.flatMap((choice) => {
-    if (choice.provider !== 'openai-codex' || choice.model === 'phoenix-auto') return []
-    const match = CODEX_TIER.exec(choice.model)
-    const version = match?.[1]
-    if (match === null || version === undefined) return []
-    const [major, minor = '0'] = version.split('.')
-    return [{ choice, score: Number(minor), major: Number(major), tier: (match[2] ?? 'generic').toLowerCase() }]
-  })
-  const highestMajor = numeric.reduce((highest, item) => Math.max(highest, item.major), -1)
-  const latest = new Map<string, { score: number; model: string }>()
-  for (const item of numeric) {
-    if (item.major !== highestMajor) continue
-    const previous = latest.get(item.tier)
-    if (previous === undefined || item.score > previous.score) {
-      latest.set(item.tier, { score: item.score, model: item.choice.model })
-    }
-  }
   const seen = new Set<string>()
   return choices.filter((choice) => {
     if (choice.provider !== 'openai-codex' || choice.model === 'phoenix-auto') return false
-    const match = CODEX_TIER.exec(choice.model)
-    const version = match?.[1]
-    if (match !== null && version !== undefined) {
-      const major = Number(version.split('.')[0])
-      const tier = (match[2] ?? 'generic').toLowerCase()
-      if (major !== highestMajor || latest.get(tier)?.model !== choice.model) return false
-    }
-    const key = `${choice.provider}\u0000${choice.model}`
-    if (seen.has(key)) return false
-    seen.add(key)
+    if (seen.has(choice.model)) return false
+    seen.add(choice.model)
     return true
   }).map(choice => ({ ...choice, reasoningEfforts: [...choice.reasoningEfforts] }))
 }

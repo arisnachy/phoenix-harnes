@@ -23,12 +23,15 @@ export function startPhoenixUpdateWatcher(): void {
     stdio: ['ignore', 'pipe', 'ignore'],
     env: safeEnv,
   })
-  if (rootResult.status !== 0 || typeof rootResult.stdout !== 'string') return
-  const detectedRoot = resolve(rootResult.stdout.trim())
+  // A packaged Windows Host may start outside a Git checkout. Its explicit
+  // install root is still authoritative for the managed Codex/upstream watchers;
+  // do not return before launching them just because git rev-parse failed.
+  const gitRoot = rootResult.status === 0 && typeof rootResult.stdout === 'string'
+    && rootResult.stdout.trim().length > 0 ? resolve(rootResult.stdout.trim()) : undefined
   const root = installRoot === undefined || installRoot.length === 0
-    ? detectedRoot
+    ? gitRoot
     : resolve(installRoot)
-  if (root.length === 0) return
+  if (root === undefined) return
 
   // Windows runtime/storage garbage collection is owned by the external
   // supervisor at startup and safe handoff boundaries. Launching another

@@ -1,7 +1,7 @@
 - region "Fénix Eclipse · Orchestration":
   - heading "Fénix Eclipse · Orchestration" [level=2]
   - paragraph: Choose independent planning, coordination and teammate models. Kira consults her planner as often as fresh task evidence requires.
-  - status: 2 OpenAI Codex models available
+  - status: 5 OpenAI Codex models available
   - button "Refresh models"
   - text: Routing mode
   - combobox "Routing mode":
@@ -12,7 +12,10 @@
   - combobox "Planning / strategy model":
     - option "Automatic"
     - option "gpt-6.1-sol" [selected]
+    - option "gpt-6-sol"
+    - option "gpt-5.6-sol"
     - option "gpt-6-luna"
+    - option "gpt-5.6-luna"
   - text: Reasoning effort
   - combobox "Reasoning effort":
     - option "Provider default"
@@ -26,7 +29,10 @@
   - combobox "Execution / coordinator model":
     - option "Automatic"
     - option "gpt-6.1-sol"
+    - option "gpt-6-sol"
+    - option "gpt-5.6-sol"
     - option "gpt-6-luna" [selected]
+    - option "gpt-5.6-luna"
   - text: Reasoning effort
   - combobox "Reasoning effort":
     - option "Provider default"
@@ -39,7 +45,10 @@
   - combobox "Subagent model":
     - option "Automatic"
     - option "gpt-6.1-sol"
+    - option "gpt-6-sol"
+    - option "gpt-5.6-sol"
     - option "gpt-6-luna" [selected]
+    - option "gpt-5.6-luna"
   - text: Reasoning effort
   - combobox "Reasoning effort":
     - option "Provider default"

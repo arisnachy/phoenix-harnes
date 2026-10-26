@@ -51,7 +51,7 @@ it('saves three independent Codex roles and unlimited adaptive strategy mode acr
     expect(await content.locator('#eclipse-planner').count()).toBe(1)
     expect(await content.locator('#eclipse-specialist').count()).toBe(0)
     expect(await content.locator('#eclipse-coordinator option').allTextContents()).toEqual(['Automatic',
-      'gpt-6.1-sol', 'gpt-6-luna'])
+      'gpt-6.1-sol', 'gpt-6-sol', 'gpt-5.6-sol', 'gpt-6-luna', 'gpt-5.6-luna'])
     await content.locator('#eclipse-mode').selectOption('manual')
     await content.locator('#eclipse-planner').selectOption(JSON.stringify(['openai-codex', 'gpt-6.1-sol']))
     expect(await content.locator('#eclipse-effort-planner option[value="ultra"]').count()).toBe(1)

@@ -20,6 +20,8 @@ Automatic reasoning uses the existing request text and execution evidence withou
 
 Focused routing tests cover selected models, effort precedence, task effort and child dispatch. The assembled browser scenario uses a synthetic catalog with the real settings RPC and file provider to check two groups, supported reasoning choices, saving and browser reload. This validates routing behavior and persistence; it does not establish a measured token saving or provider quality benchmark.
 
+The generation-pruning decision above is superseded by [Preserve live Codex models and updater availability](2026-10-26-codex-live-model-catalog-and-updater.md). The coordinator, subagent, and effort-routing policy remains unchanged.
+
 ## Alternatives considered
 
 Hiding the planner field alone leaves its dispatch override active. A hardcoded model menu becomes stale and can advertise unavailable models. Calling a model solely to select another model adds cost and latency. Forcing max on every operation prevents the requested task-sensitive budget.

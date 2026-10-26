@@ -20,7 +20,7 @@ import { dirname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const STATE_SCHEMA = 1
-const DEFAULT_POLL_MS = 6 * 60 * 60 * 1000
+const DEFAULT_POLL_MS = 30 * 60 * 1000
 const MIN_POLL_MS = 30 * 60 * 1000
 const REGISTRY_URL = 'https://registry.npmjs.org/@openai%2fcodex/latest'
 const PACKAGE_NAME = '@openai/codex'
@@ -305,7 +305,9 @@ async function cycle(home, mode, options = {}) {
     if (!quiet) {
       process.stdout.write(`UPDATE Codex CLI: ${active?.version ?? 'unmanaged'} -> ${latest}\n`)
     }
-    if (mode === 'notify' || options.apply !== true) return 0
+    // An explicit --apply is authoritative even in notify mode; the watcher
+    // still passes apply only for auto, so notify never auto-installs.
+    if (options.apply !== true) return 0
 
     const bin = installVersion(home, latest)
     activateVersion(home, latest, bin)

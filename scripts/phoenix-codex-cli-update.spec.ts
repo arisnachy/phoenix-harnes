@@ -111,11 +111,21 @@ describe('PHOENIX managed Codex CLI updater', () => {
     expect(readCodexLiveRepairRequest(home)).toBeUndefined()
   })
 
-  it('wakes the existing updater for Live rather than waiting for the six-hour poll', () => {
+  it('wakes the updater for Live without waiting for the 30-minute stable poll', () => {
     const script = readFileSync(join(process.cwd(), 'scripts', 'phoenix-codex-cli-update.mjs'), 'utf8')
     expect(script).toContain('request.requestedAt !== handledRepairAt')
     expect(script).toContain('await waitForPollOrParentExit(parentPid, pollInterval(), home, handledRepairAt)')
     expect(script).toContain("status: options.repair === true ? 'waiting-upstream' : 'current'")
+    expect(script).toContain('const DEFAULT_POLL_MS = 30 * 60 * 1000')
+    expect(script).toContain('if (options.apply !== true) return 0')
+  })
+
+  it('starts the Codex watcher when the Host has an install root but no Git checkout', () => {
+    const launcher = readFileSync(join(process.cwd(), 'apps', 'cli', 'src', 'phoenix-update-watch.ts'), 'utf8')
+    expect(launcher).toContain('const gitRoot = rootResult.status === 0')
+    expect(launcher).toContain('if (root === undefined) return')
+    expect(launcher).toContain("startWatcher(root, codexWorker, 'PHOENIX CODEX UPDATE'")
+    expect(launcher).not.toContain("if (rootResult.status !== 0 || typeof rootResult.stdout !== 'string') return")
   })
 
   it('prunes obsolete managed versions and incomplete staging directories', () => {
