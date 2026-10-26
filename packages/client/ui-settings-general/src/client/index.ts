@@ -182,17 +182,29 @@ export function apply(ctx: ClientContext): void {
   }, GeneralSection))
   const telemetry: TokenTelemetrySectionInjected = {
     readTelemetry: async () => {
-      const reply = await ctx.remote.pluginInventory.tokenTelemetry()
+      const bridge = ctx.remote.pluginInventory
+      if (typeof bridge.tokenTelemetry !== 'function') {
+        throw new Error('TELEMETRY_HOST_UPDATE_REQUIRED')
+      }
+      const reply = await bridge.tokenTelemetry()
       if (!reply.ok) throw new Error(reply.error.code)
       return reply.value
     },
     setTelemetry: async (enabled) => {
-      const reply = await ctx.remote.pluginInventory.setTokenTelemetry({ enabled })
+      const bridge = ctx.remote.pluginInventory
+      if (typeof bridge.setTokenTelemetry !== 'function') {
+        throw new Error('TELEMETRY_HOST_UPDATE_REQUIRED')
+      }
+      const reply = await bridge.setTokenTelemetry({ enabled })
       if (!reply.ok) throw new Error(reply.error.code)
       return reply.value
     },
     clearTelemetry: async () => {
-      const reply = await ctx.remote.pluginInventory.clearTokenTelemetry()
+      const bridge = ctx.remote.pluginInventory
+      if (typeof bridge.clearTokenTelemetry !== 'function') {
+        throw new Error('TELEMETRY_HOST_UPDATE_REQUIRED')
+      }
+      const reply = await bridge.clearTokenTelemetry()
       if (!reply.ok) throw new Error(reply.error.code)
       return reply.value
     },
