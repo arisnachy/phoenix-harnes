@@ -1,0 +1,35 @@
+name: Phoenix MCP token efficiency
+
+on:
+  pull_request:
+    paths:
+      - 'packages/core/tools/src/index.ts'
+      - 'packages/core/tools/tests/code-mode.spec.ts'
+      - '.github/workflows/phoenix-mcp-token-efficiency.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  mcp-token-efficiency:
+    name: Tools schema optimization and capability preservation
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Install immutable workspace
+        run: pnpm install --frozen-lockfile
+      - name: Verify MCP discovery, native and code-mode execution compatibility
+        run: >-
+          pnpm exec vitest run
+          packages/core/tools/tests/code-mode.spec.ts
+          packages/core/tools/tests/tools.spec.ts
+      - name: Compile Host and client consumers
+        run: pnpm run build:lib:host && pnpm run build:lib:client
