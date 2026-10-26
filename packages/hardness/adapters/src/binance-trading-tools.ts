@@ -13,7 +13,8 @@ import type {
 export interface BinanceAgentOsSnapshot {
   configured: boolean
   status?: 'starting' | 'ready' | 'disconnected' | 'failed' | 'auth-required'
-  reasonCode?: 'connection-failed' | 'connection-lost' | 'authorization-required' | 'retry-exhausted'
+  reasonCode?: 'connection-failed' | 'endpoint-not-found' | 'connection-lost' | 'authorization-required' | 'retry-exhausted'
+  toolNames?: readonly string[]
 }
 
 /** Host operations exposed to the model-facing Binance activation boundary. */
@@ -24,6 +25,8 @@ export interface BinanceAgentOsHostService {
     connector: { entryId: string; serverName: string; url: string }
   }>
   disableBinanceAgentOs(): Promise<{ disabled: boolean }>
+  reconnectBinanceAgentOs(): Promise<{ accepted: boolean }>
+  repairBinanceAgentOs(): Promise<{ status: 'installed' | 'already-installed'; connector: { entryId: string; serverName: string; url: string } }>
 }
 
 /** Runtime dependencies for the on-demand Binance tool family. */
@@ -103,13 +106,20 @@ function agentOsJson(state: BinanceAgentOsSnapshot): Record<string, JsonValue> {
     configured: state.configured,
     ...(state.status === undefined ? {} : { status: state.status }),
     ...(state.reasonCode === undefined ? {} : { reasonCode: state.reasonCode }),
+    ready: state.configured && state.status === 'ready' && (state.toolNames?.length ?? 0) > 0,
+    toolCount: state.toolNames?.length ?? 0,
+    toolNames: (state.toolNames ?? []).slice(0, 60),
+    nextAction: !state.configured ? 'install'
+      : state.status === 'auth-required' ? 'authorize-in-settings'
+        : state.status === 'ready' && (state.toolNames?.length ?? 0) > 0 ? 'use-live-mcp-tools'
+          : 'reconnect-or-repair',
   }
 }
 
 function activateTool(deps: BinanceTradingToolDependencies): ToolDefinition {
   return defineTool({
     name: 'binance_trading_activate',
-    description: 'Activate the special Binance capability on demand. PAPER is the default and uses only public market data plus a local virtual ledger. REAL may be requested only after the user explicitly asks for real Binance operation; set requestedByUser=true and PHOENIX will ask for one-shot high-risk approval before installing the pinned official Binance Agent OS MCP. Activating REAL does not place an order.',
+    description: 'Start the explicitly selected Binance mode. Before calling, ASK whether the user wants TESTING/PAPER or REAL if not stated. PAPER uses a local virtual ledger. REAL requires explicit user consent and one-shot high-risk approval to install the official Streamable HTTP OAuth MCP. The subsequent Binance browser OAuth/scope grant must be completed separately. This never executes real orders.',
     parameters: {
       mode: { type: 'string', required: true, enum: ['paper', 'real'] },
       requestedByUser: { type: 'boolean', description: 'Must be true for REAL and only when the user explicitly requested real operation.' },
@@ -171,16 +181,22 @@ function activateTool(deps: BinanceTradingToolDependencies): ToolDefinition {
       const state = deps.agentOs.binanceAgentOsState === undefined
         ? undefined
         : await deps.agentOs.binanceAgentOsState()
+      // Installation is not proof of OAuth consent, Trade scope or funding.
+      // The runtime may be waiting for Binance user authorization.
       return {
         mode: 'real',
-        realTradingEnabled: true,
+        realTradingEnabled: false,
+        mcpOperational: state?.status === 'ready' && (state.toolNames?.length ?? 0) > 0,
+        tradeScopeVerified: false,
         status: receipt.status,
         connector: {
           serverName: receipt.connector.serverName,
           url: receipt.connector.url,
         },
         ...(state === undefined ? {} : { connectorState: agentOsJson(state) }),
-        message: 'Binance Agent OS is enabled. Complete Binance authorization/scopes if requested. No real order has been placed.',
+        message: state?.status === 'ready' && (state.toolNames?.length ?? 0) > 0
+          ? 'Binance MCP tools discovered. Verify actual price data and permitted account scope using the MCP tools; REAL orders still require provider confirmation.'
+          : 'Binance MCP installed, NOT YET VERIFIED. Authorize the Binance Agentic sub-account in Settings > Connectors > Binance, grant the intended scopes, and recheck MCP tools. No real order has been placed.',
       }
     },
     presentCall(args) {
@@ -212,6 +228,56 @@ function statusTool(deps: BinanceTradingToolDependencies): ToolDefinition {
     },
     presentCall() {
       return { card: 'generic', title: 'Binance trading status', kind: 'read' }
+    },
+  })
+}
+
+/**
+ * Operational probe for the official Binance Agentic MCP. A ready transport
+ * with discovered tools proves MCP readiness, NOT Binance Trade scope.
+ */
+function agentOsHealthTool(deps: BinanceTradingToolDependencies): ToolDefinition {
+  return defineTool({
+    name: 'binance_mcp_health',
+    description: 'Check the official Binance Agentic MCP after user authorization. Return configured/auth-required/ready, actual discovered tool names, and next step. If it reports ready, CALL a discovered Binance MCP market-data tool for BTCUSDT to verify a live response. Do not claim REAL trading is authorized from this probe alone.',
+    parameters: {
+      action: { type: 'string', enum: ['status', 'reconnect', 'repair'],
+        description: 'Default status is read-only. Reconnect retries a live MCP transport; repair replaces the old managed MCP row without erasing the vault grant.' },
+      requestedByUser: { type: 'boolean', description: 'Required true for repair; do not repair automatically.' },
+    },
+    output: { schema: { type: 'object', additionalProperties: true },
+      render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }] },
+    async execute(args) {
+      if (deps.agentOs?.binanceAgentOsState === undefined) {
+        return { configured: false, ready: false, nextAction: 'host-service-unavailable' }
+      }
+      if (args.action === 'repair') {
+        if (args.requestedByUser !== true) throw new Error('Binance MCP repair requires explicit user request')
+        if (deps.agentOs.repairBinanceAgentOs === undefined) {
+          throw new Error('Binance MCP host repair is unavailable')
+        }
+        await deps.agentOs.repairBinanceAgentOs()
+      } else if (args.action === 'reconnect') {
+        if (deps.agentOs.reconnectBinanceAgentOs === undefined) {
+          throw new Error('Binance MCP reconnect is unavailable')
+        }
+        const receipt = await deps.agentOs.reconnectBinanceAgentOs()
+        if (!receipt.accepted) return {
+          ...(agentOsJson(await deps.agentOs.binanceAgentOsState())),
+          reconnectAccepted: false,
+        }
+      }
+      const state = await deps.agentOs.binanceAgentOsState()
+      return {
+        ...agentOsJson(state),
+        ...(args.action === 'reconnect' ? { reconnectAccepted: true } : {}),
+        note: 'This checks MCP tool synchronization, NOT Trade scope, Agentic balance or order confirmation.',
+      }
+    },
+    presentCall(args) {
+      return { card: 'generic',
+        title: args.action === 'repair' ? 'Reparar MCP Binance' : 'Diagnóstico MCP Binance',
+        kind: args.action === 'repair' ? 'execute' : 'read' }
     },
   })
 }
@@ -486,6 +552,7 @@ export function createBinanceTradingTools(deps: BinanceTradingToolDependencies):
   return [
     activateTool(deps),
     statusTool(deps),
+    agentOsHealthTool(deps),
     candlesTool(deps),
     paperOrderTool(deps),
     paperAccountTool(deps),
