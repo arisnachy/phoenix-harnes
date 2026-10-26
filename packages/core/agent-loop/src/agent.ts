@@ -362,6 +362,7 @@ export class ReactLoopAgent implements Agent {
     // retaining memory/initiative context and full conversational continuity.
     const assembled = await this.loopCtx.systemPrompt.assemble({
       ...assembleContextFor(this, signal),
+      ...directText.length > 0 ? { incomingUserText: directText } : {},
       ...toolFreeConversation ? { omitTools: true } : {},
       ...fastConversation ? { omitRuntimeContext: true } : {},
     })
