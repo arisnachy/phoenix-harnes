@@ -38,6 +38,11 @@ function number(value: number): string {
   return new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(value)
 }
 
+/**
+ * Show current provider usage and non-sensitive request composition in Settings.
+ * @param props - Host-backed telemetry actions and the current Settings locale.
+ * @returns A themed interactive dashboard without any model request.
+ */
 export function TokenTelemetrySection({
   t, readTelemetry, setTelemetry, clearTelemetry,
 }: TokenTelemetrySectionProps): ReactNode {
