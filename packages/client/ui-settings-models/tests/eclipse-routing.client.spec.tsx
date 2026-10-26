@@ -98,10 +98,10 @@ describe('Eclipse model settings', () => {
       api={{ settings: { mutate: vi.fn() } } as never}
       loadCatalog={loadCatalog} t={t} />)
 
-    await waitFor(() => expect(loadCatalog).toHaveBeenCalledOnce())
+    await waitFor(() => { expect(loadCatalog).toHaveBeenCalledOnce() })
     expect(screen.queryByRole('option', { name: 'GPT-6.1 Terra' })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: en.eclipseRefresh }))
-    await waitFor(() => expect(loadCatalog).toHaveBeenCalledTimes(2))
+    await waitFor(() => { expect(loadCatalog).toHaveBeenCalledTimes(2) })
     expect(await screen.findAllByRole('option', { name: 'GPT-6.1 Terra' })).toHaveLength(3)
   })
 
