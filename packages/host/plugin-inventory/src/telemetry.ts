@@ -66,8 +66,9 @@ export class TokenTelemetryCollector {
         }
       }
     } catch { /* Missing/invalid state is not allowed to block Host startup. */ }
-    (process as EventEmitter).on('phoenix:telemetry:input', this.receiveInput)
-    (process as EventEmitter).on('phoenix:telemetry:usage', this.receiveUsage)
+    const telemetryEvents: EventEmitter = process
+    telemetryEvents.on('phoenix:telemetry:input', this.receiveInput)
+    telemetryEvents.on('phoenix:telemetry:usage', this.receiveUsage)
   }
 
   private readonly receiveInput = (raw: unknown): void => {
