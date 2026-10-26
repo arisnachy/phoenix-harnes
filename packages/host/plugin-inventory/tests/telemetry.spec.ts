@@ -10,7 +10,7 @@ const roots: string[] = []
 const instances: TokenTelemetryCollector[] = []
 
 afterEach(async () => {
-  for (const instance of instances.splice(0)) instance.dispose()
+  await Promise.all(instances.splice(0).map(async instance => instance.dispose()))
   await Promise.all(roots.splice(0).map(path => rm(path, { recursive: true, force: true })))
 })
 
@@ -58,7 +58,7 @@ describe('Settings token telemetry collector', () => {
     expect(collector.snapshot().records).toHaveLength(1)
     const persisted = await readFile(join(folder, 'nested', 'usage.json'), 'utf8')
     expect(persisted).not.toContain('SHOULD_NEVER_BE_STORED')
-    expect(JSON.parse(persisted).enabled).toBe(false)
+    expect((JSON.parse(persisted) as { enabled: boolean }).enabled).toBe(false)
 
     await collector.clear()
     expect(collector.snapshot().records).toHaveLength(0)
@@ -72,7 +72,7 @@ describe('Settings token telemetry collector', () => {
     const collector = new TokenTelemetryCollector(filename)
     instances.push(collector)
     await collector.setEnabled(false)
-    collector.dispose()
+    await collector.dispose()
     instances.pop()
 
     const restarted = new TokenTelemetryCollector(filename)
