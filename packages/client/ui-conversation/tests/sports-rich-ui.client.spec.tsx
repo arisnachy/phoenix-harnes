@@ -102,3 +102,45 @@ describe('Phoenix Sports ticket hierarchy and theme compatibility',()=>{
       {...ticket.props.legs[0],image:'https://untrusted.example/bad.png'}]}})).toBeNull()
   })
 })
+
+describe('Five-leg Phoenix ticket completion and compact progress',()=>{
+  const makeLeg=(i:number)=>({
+    event:'Away '+i+' vs Home '+i,
+    selection:'Home '+i,
+    price:'Por verificar',
+    bookmaker:'Sin casa confirmada',
+    sport:'Baloncesto',
+    league:'NBA',
+    market:'Ganador · Pronóstico',
+    rationale:'Forma reciente y localía; sin probabilidad calibrada.',
+  })
+  it('renders all five numbered legs and an accessible complete progress indicator',()=>{
+    const fixture={component:'sports_ticket_card',version:1,props:{
+      title:'PHOENIX · Ticket de pronósticos',source:'ESPN Site API',
+      combinedOdds:'No disponible',requestedLegs:5,note:'SIN APUESTA REAL',
+      legs:Array.from({length:5},(_,i)=>makeLeg(i+1)),
+    }}
+    const card=parseGenerativeUiBlock(fixture)
+    expect(card).not.toBeNull()
+    if(!card)throw Error('Five-leg ticket rejected')
+    render(<GenerativeUi block={card}/>)
+    expect(screen.getByRole('progressbar',{name:'Patas verificadas'}).getAttribute('aria-valuenow')).toBe('5')
+    expect(screen.getByText('05')).toBeTruthy()
+    expect(screen.getAllByText('Ver fundamento')).toHaveLength(5)
+    expect(screen.getByText('Home 5')).toBeTruthy()
+    expect(screen.getByText('Sin verificar')).toBeTruthy()
+  })
+  it('marks an incomplete ticket clearly and rejects mismatched overfilled counts',()=>{
+    const props={title:'Borrador',source:'ESPN',combinedOdds:'No disponible',
+      requestedLegs:5,note:'Incompleto',legs:[makeLeg(1)]}
+    const card=parseGenerativeUiBlock({component:'sports_ticket_card',version:1,props})
+    expect(card).not.toBeNull()
+    if(!card)throw Error('Draft card rejected')
+    render(<GenerativeUi block={card}/>)
+    expect(screen.getByText('INCOMPLETO')).toBeTruthy()
+    expect(screen.getByText(/Faltan 4 selecciones/)).toBeTruthy()
+    expect(screen.getByRole('progressbar',{name:'Patas verificadas'}).getAttribute('aria-valuenow')).toBe('1')
+    expect(parseGenerativeUiBlock({component:'sports_ticket_card',version:1,
+      props:{...props,requestedLegs:0}})).toBeNull()
+  })
+})
