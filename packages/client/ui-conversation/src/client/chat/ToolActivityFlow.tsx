@@ -78,7 +78,7 @@ type FlowItem =
     readonly images: readonly { readonly attachment: ImageAttachmentRef }[]
   }
   | { readonly kind: 'sports'; readonly key: string; readonly blocks: readonly GenerativeUiBlock[] }
-  | { readonly kind: 'trading'; readonly key: string; readonly snapshot: TradingDashboardSnapshot }
+  | { readonly kind: 'trading'; readonly key: string; readonly snapshot?: TradingDashboardSnapshot }
 
 function imageActivity(node: OrderedChatNode): readonly { readonly attachment: ImageAttachmentRef }[] {
   if (node.kind !== 'tool-call') return []
@@ -314,11 +314,28 @@ function embeddedBrowserUse(block: ToolCallBlock): EmbeddedBrowserUse {
   return found ? tabId === undefined ? { found: true } : { found: true, tabId } : { found: false }
 }
 
+/** Only explicit user requests to operate/open Binance should show a live trading visor. */
+export function isTradingPanelPrompt(text: string): boolean {
+  const normalized = text.normalize('NFD').replace(/[\\u0300-\\u036f]/gu, '').toLowerCase()
+  return /\\b(?:binance|trading|cripto|criptomonedas)\\b/u.test(normalized)
+    && /\\b(?:visor|panel|dashboard|opera|operar|operaciones|inicia|iniciar|comienza|empezar|automat|muestra|mostrar|abre|abrir|hace|hacer|haz|deten|detener)\\b/u.test(normalized)
+}
+
+function userRequestsTrading(node: OrderedChatNode): boolean {
+  if (node.kind !== 'user' && node.kind !== 'steering') return false
+  const content = (node.data as { content?: unknown }).content
+  if (!Array.isArray(content)) return false
+  return isTradingPanelPrompt(content.map((block: unknown) =>
+    block !== null && typeof block === 'object' && 'text' in block
+      && typeof block.text === 'string' ? block.text : '').join(' '))
+}
+
 function buildFlow(nodes: readonly OrderedChatNode[]): FlowItem[] {
   const flow: FlowItem[] = []
   let pending: ActivityItem[] = []
   let pendingAnchorKey: string | undefined
   let sportsCards: GenerativeUiBlock[] = []
+  let tradingVisible = false
 
   const flush = (avoidAnchorKey?: string): void => {
     const first = pending[0]
@@ -351,9 +368,10 @@ function buildFlow(nodes: readonly OrderedChatNode[]): FlowItem[] {
         // A settled Binance result owns its native dashboard immediately.
         // Do not depend on the assistant generating JSON or a special fence.
         const trading = tradingDashboardFromToolResult(result)
-        if (trading !== undefined) {
+        if (trading !== undefined && !tradingVisible) {
           flush()
           flow.push({ kind: 'trading', key: 'trading:' + node.key, snapshot: trading })
+          tradingVisible = true
         }
       }
       const images = imageActivity(node)
@@ -389,8 +407,16 @@ function buildFlow(nodes: readonly OrderedChatNode[]): FlowItem[] {
 
     flush()
     flow.push({ kind: 'node', key: node.key })
-    // Never carry a previous user's sports analysis into another turn.
-    if (node.kind === 'user' || node.kind === 'steering') sportsCards = []
+    // User-owned trading launch guarantees a truthful visor even if Kira's
+    // assistant response forgets to emit a visual artifact/tool call.
+    if (node.kind === 'user' || node.kind === 'steering') {
+      sportsCards = []
+      tradingVisible = false
+      if (userRequestsTrading(node)) {
+        flow.push({ kind: 'trading', key: 'trading:user:' + node.key })
+        tradingVisible = true
+      }
+    }
   }
 
   flush()
