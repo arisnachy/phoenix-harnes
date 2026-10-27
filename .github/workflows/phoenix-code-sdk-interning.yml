@@ -1,0 +1,34 @@
+name: Phoenix lossless token input compaction
+on:
+  pull_request:
+    paths:
+      - 'packages/core/tools/src/ts-types.ts'
+      - 'packages/core/tools/tests/ts-types.spec.ts'
+      - '.github/workflows/phoenix-code-sdk-interning.yml'
+      - 'packages/core/agent-loop/src/token-audit.ts'
+      - 'packages/core/agent-loop/tests/token-audit.spec.ts'
+permissions:
+  contents: read
+jobs:
+  code-sdk-compaction:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Verify complete SDK contracts and real Code Mode execution
+        run: >-
+          pnpm exec vitest run
+          packages/core/tools/tests/ts-types.spec.ts
+          packages/core/tools/tests/code-mode.spec.ts
+          packages/core/tools/tests/tools.spec.ts
+          packages/core/agent-loop/tests/token-audit.spec.ts
+      - name: Compile Host and client
+        run: pnpm run build:lib:host && pnpm run build:lib:client
