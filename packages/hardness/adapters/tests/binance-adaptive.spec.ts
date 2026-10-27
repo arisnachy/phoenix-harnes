@@ -89,9 +89,9 @@ describe('adaptive Binance paper cycle', () => {
     const result = await runBinanceAdaptiveCycle(paper, {
       mode: 'scan', symbols: ['BTCUSDT', 'ETHUSDT'],
     }, NOW)
-    expect(result).toMatchObject({
-      mode: 'scan', decision: 'hold', signals: [{ symbol: 'BTCUSDT', action: 'buy' }],
-    })
+    expect(result).toMatchObject({ mode: 'scan', decision: 'hold' })
+    expect(result.signals[0]).toMatchObject({ symbol: 'BTCUSDT', action: 'buy' })
+    expect(result.signals).toHaveLength(2)
     expect(result.trade).toBeUndefined()
     expect(result.account.tradeCount).toBe(0)
   })
