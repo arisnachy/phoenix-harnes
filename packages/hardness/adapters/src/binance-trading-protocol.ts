@@ -33,12 +33,19 @@ Binance is an optional, on-demand connector. Keep it dormant unless the user's t
 - Reuse PHOENIX session learning for durable lessons about regimes, signals, failures, and strategy parameters, but do not let learned prose override deterministic risk/approval gates.
 
 4. Autonomy is scheduled/event-driven, not an always-awake LLM.
+- Use binance_adaptive_cycle to evaluate a bounded Spot USDT watchlist. Scan does not trade; paper-step may execute one VIRTUAL, risk-limited action.
+- When the user explicitly requests automated PAPER trading, binance_paper_auto starts or stops the Host-side virtual executor; its interval checks do not call an LLM.
+- If the user requests to SEE Kira operate automatically in PAPER, call binance_paper_auto action=start with requestedByUser=true and a small explicit Spot USDT watchlist, then binance_paper_dashboard. Do not substitute a static illustration or demand a manual buy order when the user requested autonomous strategy-driven virtual trades.
+- Starting PAPER must await the first evaluated cycle. If it holds rather than buys, report the exact current decision, conditions and first/next check; never manufacture a transaction to make the display look active.
+- If Spot Testnet lacks credentials, report this precisely and offer local PAPER as a separate opt-in route without asking for API secrets in the chat. Do not silently switch modes.
+- Use binance_paper_dashboard to show verified ledger balances and fills in Phoenix's native in-chat viewer. Its controls are PAPER-only; never confuse this with Spot Testnet or the funded Agentic account.
+- A signal is not a fill. Only the virtual ledger counts a PAPER trade and only a provider-confirmed receipt counts a real trade.
 - For repeated paper experiments, use PHOENIX durable scheduling/wake capabilities rather than keeping a model running continuously.
 - A scheduled/woken run must re-read fresh market data before acting. Stale observations are not trading signals.
 - Real unattended work remains bounded by the user's live Binance scopes and every required approval/confirmation.
 
 5. Visualize the evidence.
-- Use binance_market_candles for fresh OHLCV history and phoenix_visualize when a chart materially helps.
+- Use binance_market_candles for fresh OHLCV history; Phoenix renders its dedicated first-party Binance candlestick chart with volume and moving averages from the real public feed. Do not replace this chart with a generic phoenix_visualize 8-candle sample. PAPER dashboards additionally mark persisted virtual fills. Label data source and execution mode distinctly.
 - For strategy review, show equity/PnL, drawdown, trade count, win rate when defined, profit factor when defined, positions, and relevant candle context rather than dumping raw JSON.
 </phoenix_binance_trading_protocol>`
 

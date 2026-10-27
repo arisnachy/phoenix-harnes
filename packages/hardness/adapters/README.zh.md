@@ -68,6 +68,16 @@ Email 有两个独立 identity reference。`userMailIdentity` 表示获授权的
 
 模拟蜡烛图读取将 provider 请求和返回行数都限制为 1–1000。Shell 修改分类读取 command 参数。运行时服务遥测立即执行首次探测，随后在 TTL 过期前复用观察结果。
 
+## Binance 自适应模拟交易
+
+按需使用的 `binance_adaptive_cycle` 工具根据已收盘的 Binance K 线，对最多五个 Spot USDT 交易对评分，比较突破、上涨趋势回调和区间均值回归等确定性候选策略。`scan` 只读；`paper-step` 最多在现有、计入手续费的模拟账本中执行一笔虚拟交易，新仓位不超过模拟权益的 5%，总持仓敞口不超过 20%，同时最多持有两个币种。已有仓位的防御性退出优先于新买入。评分是规则排序，不代表经过校准的胜率；执行虚拟订单前会重新读取市场价格。本扫描器不会授权真实订单或管理 Binance 账户凭据。用户通过 `binance_paper_auto` 明确启用 PAPER 自动交易后，Host 持久化关注列表，立即运行一个有上限的虚拟交易周期，并按 1–60 分钟的配置间隔重复运行，不持续调用语言模型。独立的 `binance_paper_dashboard` 工具将可信的 Host 模拟账本投影为聊天内的原生交易面板；只读、同源 HTTP 端点约每十秒刷新一次，不消耗模型 token。面板中的开始、停止和立即检查按钮调用同源的 POST-only PAPER 端点；该端点先验证浏览器 Origin、Content-Type 和有界关注列表，才允许改变虚拟自动交易状态，因此按钮不消耗 LLM token。该端点完全不开放 REAL 账户操作。
+
+## Binance 官方 Agentic MCP 与 Spot Testnet
+
+真实账户的官方 MCP 使用固定的 Streamable HTTP 服务 `https://agent.binance.com/mcp/agentic`。Phoenix 通过用户主动完成的浏览器 OAuth 连接，而不是使用生产 API 密钥。`binance_mcp_health` 报告实际 MCP 连接状态和同步的工具名称；仅安装连接器不代表授权成功或取得 Trade 权限。 `reconnect` 重试已有连接；仅在用户明确要求时，`repair` 更换受管配置行， 而不删除 Host Vault 中保存的授权记录。用户需在浏览器完成 Binance 授权及 Agentic 子账户设置。主账户仅在允许时只读；必须由用户自行向 Agentic 子账户 划转资金。每笔真实订单、撤单和钱包划转都需要用户确认。
+
+测试模式包括本地 PAPER 和单独认证的 Binance Spot Testnet (`https://testnet.binance.vision`)。Spot Testnet 必须在 Host 中分别配置 `PHOENIX_BINANCE_TESTNET_API_KEY` 和 `PHOENIX_BINANCE_TESTNET_API_SECRET`，不能通过聊天提交。 `binance_testnet_account` 检查模拟资金账户；`binance_testnet_order` 仅在用户明确要求并完成 Phoenix 单次批准后提交有金额限制的测试订单。 Kira 应先询问 Testing 或 Real，再区分 PAPER 与 Spot Testnet。
+
 ## Model Experience
 
 ### 投影的 capability metadata 与 operating protocol
