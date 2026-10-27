@@ -7,6 +7,8 @@ export interface TokenTelemetryRecord {
   readonly model: string
   readonly reasoningEffort: string
   readonly systemChars: number
+  /** Identical leading system text versus previous request to the same model; not a provider cache hit. */
+  readonly reusedSystemPrefixChars?: number
   readonly schemaChars: number
   readonly historyChars: number
   readonly humanChars: number
