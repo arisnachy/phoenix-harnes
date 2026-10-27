@@ -3,6 +3,7 @@
  * attributed unpriced research otherwise. This never transacts or guarantees returns.
  */
 import {autoResearchTicket} from './research-ticket.ts'
+import {loadMarketMatchups,findVerifiedMatchup,type MarketMatchup} from './matchup-context.ts'
 import {marketOdds,pricedTicket,type ChatBlock,type MarketOutcome,type MarketSelection} from './sports.ts'
 
 const DEFAULT_SPORTS=['basketball_nba','americanfootball_nfl','soccer_epl','baseball_mlb'] as const
@@ -42,6 +43,7 @@ type ResearchFallback=(count:number,date:string,leagues:readonly string[])=>Prom
   card:ChatBlock;verifiedEvents:number;complete:boolean
 }>
 type OddsLookup=(sportKey:string,date:string)=>Promise<MarketOutcome[]>
+type MatchupLookup=(sportKey:string,date:string)=>Promise<MarketMatchup[]>
 /** Choose only one favorite for each real event/bookmaker; never mix bookmakers. */
 export function rankMarketFavorites(quotes:readonly MarketOutcome[],count:number,now=Date.now()):BookCandidate[]{
   const books=new Map<string,Map<string,MarketOutcome[]>>()
@@ -98,6 +100,7 @@ export async function buildAutomaticSportsTicket(
   },
   fallback:ResearchFallback=(legs,date,leagues)=>autoResearchTicket(legs,date,fetch,Date.now(),process.env,leagues),
   now=Date.now(),
+  matchupLookup:MatchupLookup=(key,date)=>loadMarketMatchups(key,date,fetch,now),
 ):Promise<AutomaticSportsTicket>{
   if(!Number.isInteger(count)||count<1||count>6)throw Error('Número de patas inválido (1 a 6)')
   if(!validDay(requestedDate))throw Error('Fecha inválida')
@@ -125,13 +128,37 @@ export async function buildAutomaticSportsTicket(
         uniqueQuotes.set(key,quote)
     }
     const {card,warning}=pricedTicket(picks,[...uniqueQuotes.values()],stake)
+    const categories=[...new Set(group.legs.map(x=>x.quote.sportKey).filter((v):v is string=>!!v))]
+    const researchJobs=await Promise.allSettled(categories.map(key=>matchupLookup(key,requestedDate)))
+    const researched=new Map<string,MarketMatchup[]>()
+    researchJobs.forEach((job,i)=>{
+      const key=categories[i]
+      if(key&&job.status==='fulfilled')researched.set(key,job.value)
+    })
+    let corroborated=0,conflicts=0
     const props=card.props
     const current=Array.isArray(props.legs)?props.legs as Array<Record<string,unknown>>:[]
-    props.legs=current.map((leg,index)=>({
-      ...leg,
-      rationale:('Favorito observado en '+group.bookmaker+' (cuota '+group.legs[index]?.quote.price.toFixed(2)+
-        '). El precio refleja el mercado; no es probabilidad calibrada ni garantiza valor esperado.').slice(0,240),
-    }))
+    props.legs=current.map((leg,index)=>{
+      const quote=group.legs[index]?.quote
+      if(!quote)return leg
+      const matchup=findVerifiedMatchup(researched.get(quote.sportKey??'')??[],quote.home,quote.away)
+      if(matchup)corroborated++
+      const pickedSide=quote.selection===quote.home?'home':quote.selection===quote.away?'away':null
+      const trend=matchup?.signal.pick
+      const conflicting=!!pickedSide&&!!trend&&pickedSide!==trend
+      if(conflicting)conflicts++
+      const evidence=matchup
+        ?matchup.signal.research.evidence.slice(0,2).join('; ')+
+          (conflicting?'. ALERTA: récords favorecen al rival.':'. Récords contextualizados, sin calibrar.')
+        :'Sin ficha ESPN coincidente; pendiente de revisar bajas y forma.'
+      return {
+        ...leg,homeTeam:quote.home,awayTeam:quote.away,
+        ...(matchup?.homeLogo?{homeLogo:matchup.homeLogo}:{}),
+        ...(matchup?.awayLogo?{awayLogo:matchup.awayLogo}:{}),
+        rationale:('Favorito por cuota '+quote.price.toFixed(2)+' en '+group.bookmaker+
+          '. '+evidence+' Cuota no equivale a valor esperado.').slice(0,240),
+      }
+    })
     props.title='PHOENIX · Ticket cotizado de '+count+' selecciones'
     props.subtitle='Favoritos de mercado · Una sola casa · Apuesta NO colocada'
     props.requestedLegs=count
@@ -143,6 +170,8 @@ export async function buildAutomaticSportsTicket(
     return {card,mode:'priced',verifiedEvents:count,requestedLegs:count,complete:true,
       priced:true,placed:false,providerErrors,dataGaps:[
         'No hay modelo probabilístico calibrado ni valor esperado positivo demostrado.',
+        ...(conflicts?['Conflicto entre favoritos de mercado y tendencias ESPN en '+conflicts+' partidos.']:[]),
+        ...(corroborated<count?['Falta cotejar encuentros con ESPN en '+(count-corroborated)+' patas.']:[]),
         ...(group.unknownFreshness?['Hay cuotas sin hora de actualización publicada.']:[]),
         'Confirmación de mercados y disponibilidad en la banca pendiente.',
       ]}
