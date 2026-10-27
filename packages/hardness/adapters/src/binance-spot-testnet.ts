@@ -47,7 +47,7 @@ function pair(raw: string): string {
  */
 export class BinanceSpotTestnet {
   constructor(
-    private readonly credentials: () => BinanceTestnetCredentials | undefined = binanceTestnetCredentials,
+    private readonly credentials: () => BinanceTestnetCredentials | undefined | Promise<BinanceTestnetCredentials | undefined> = binanceTestnetCredentials,
     private readonly request: typeof fetch = fetch,
     private readonly clock: () => number = Date.now,
   ) {}
@@ -56,7 +56,7 @@ export class BinanceSpotTestnet {
     method: 'GET' | 'POST',
     fields: Readonly<Record<string, string>> = {},
   ): Promise<Record<string, unknown>> {
-    const credentials = this.credentials()
+    const credentials = await this.credentials()
     if (credentials === undefined) throw new Error('Testnet API credentials missing in Phoenix Host')
     const query = new URLSearchParams({ ...fields, recvWindow: '5000', timestamp: String(this.clock()) }).toString()
     const signature = createHmac('sha256', credentials.secret).update(query).digest('hex')
@@ -86,9 +86,9 @@ export class BinanceSpotTestnet {
     readonly balances?: readonly { asset: string; free: string; locked: string }[]
     readonly nextAction: string
   }> {
-    if (this.credentials() === undefined) {
+    if (await this.credentials() === undefined) {
       return { mode: 'testnet', configured: false, connected: false,
-        nextAction: 'Configure PHOENIX_BINANCE_TESTNET_API_KEY and PHOENIX_BINANCE_TESTNET_API_SECRET in the Host, never in chat' }
+        nextAction: 'Save PHOENIX_BINANCE_TESTNET_API_KEY and PHOENIX_BINANCE_TESTNET_API_SECRET in Phoenix secure credentials or Host environment, never in chat' }
     }
     try {
       const value = await this.signed('/api/v3/account', 'GET')
