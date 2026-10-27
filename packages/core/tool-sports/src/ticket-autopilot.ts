@@ -88,7 +88,13 @@ export async function buildAutomaticSportsTicket(
   requestedDate=dateInDominicanRepublic(),
   sportKeys:readonly string[]=DEFAULT_SPORTS,
   stake=0,
-  lookup:OddsLookup=(key,date)=>marketOdds(key,'h2h',process.env,fetch,date),
+  lookup:OddsLookup=async(key,date)=>{
+    try{
+      const paid=await marketOdds(key,'h2h',process.env,fetch,date)
+      if(paid.length)return paid
+    }catch{ /* Try free source when commercial provider fails. */ }
+    return marketOdds(key,'h2h',{...process.env,THE_ODDS_API_KEY:''},fetch,date)
+  },
   fallback:ResearchFallback=(legs,date,leagues)=>autoResearchTicket(legs,date,fetch,Date.now(),process.env,leagues),
   now=Date.now(),
 ):Promise<AutomaticSportsTicket>{
@@ -123,7 +129,7 @@ export async function buildAutomaticSportsTicket(
     props.legs=current.map((leg,index)=>({
       ...leg,
       rationale:'Favorito observado en '+group.bookmaker+' (cuota '+group.legs[index]?.quote.price.toFixed(2)+
-        '). El precio refleja el mercado; no es una probabilidad calibrada ni garantiza valor esperado.',
+        '). El precio refleja el mercado; no es probabilidad calibrada ni garantiza valor esperado.'.slice(0,240),
     }))
     props.title='PHOENIX · Ticket cotizado de '+count+' selecciones'
     props.subtitle='Favoritos de mercado · Una sola casa · Apuesta NO colocada'
