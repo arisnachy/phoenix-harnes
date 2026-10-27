@@ -106,8 +106,9 @@ type SportsTicketCard = {
   props: {
     title: string; subtitle?: string; source: string
     legs: Array<{ event: string; selection: string; price: string; bookmaker: string; when?: string; image?: string;
-      sport?:string;country?:string;league?:string;market?:string;player?:string;rationale?:string }>
-    combinedOdds: string; stake?: string; grossReturn?: string; note: string
+      sport?:string;country?:string;league?:string;market?:string;player?:string;rationale?:string
+      homeLogo?:string;awayLogo?:string;homeTeam?:string;awayTeam?:string }>
+    requestedLegs?:number; combinedOdds: string; stake?: string; grossReturn?: string; note: string
     askPrompt?: string
   }
 }
@@ -301,16 +302,20 @@ const sportsGame = (value: Record<string, unknown>): value is SportsGameCard => 
 }
 const sportsTicket = (value: Record<string, unknown>): value is SportsTicketCard => {
   if (!isRecord(value.props) || !hasOnlyKeys(value.props,
-    ['title','subtitle','source','legs','combinedOdds','stake','grossReturn','note','askPrompt'])) return false
+    ['title','subtitle','source','legs','requestedLegs','combinedOdds','stake','grossReturn','note','askPrompt'])) return false
   const p = value.props
   return isText(p.title) && optionalText(p.subtitle) && isText(p.source,320)
     && isText(p.combinedOdds,40) && optionalText(p.stake,50)
     && optionalText(p.grossReturn,50) && isText(p.note,MAX_TEXT)
-    && optionalText(p.askPrompt,400) && Array.isArray(p.legs)
+    && optionalText(p.askPrompt,400) && (p.requestedLegs===undefined ||
+      (typeof p.requestedLegs==='number'&&Number.isInteger(p.requestedLegs)&&p.requestedLegs>=1&&p.requestedLegs<=6))
+    && Array.isArray(p.legs) && (p.requestedLegs===undefined||p.legs.length<=Number(p.requestedLegs))
     && p.legs.length >= 1 && p.legs.length <= 12 && p.legs.every(x => isRecord(x)
-      && hasOnlyKeys(x,['event','selection','price','bookmaker','when','image','sport','country','league','market','player','rationale'])
+      && hasOnlyKeys(x,['event','selection','price','bookmaker','when','image','sport','country','league','market','player','rationale','homeLogo','awayLogo','homeTeam','awayTeam'])
       && isText(x.event) && isText(x.selection) && isText(x.price,32)
       && isText(x.bookmaker) && optionalText(x.when) && trustedPortrait(x.image)
+      && trustedPortrait(x.homeLogo) && trustedPortrait(x.awayLogo)
+      && optionalText(x.homeTeam,100) && optionalText(x.awayTeam,100)
       && optionalText(x.sport,60) && optionalText(x.country,100) && optionalText(x.league,100)
       && optionalText(x.market,70) && optionalText(x.player,140) && optionalText(x.rationale,240))
 }
@@ -630,7 +635,10 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
     }
     case 'sports_ticket_card': {
       const p = block.props
-      // Group only attributed taxonomy from the sportsbook result; unknown leagues stay unlabelled.
+      const requested = p.requestedLegs ?? p.legs.length
+      const incomplete = p.legs.length < requested
+      const unpriced = p.combinedOdds === 'No disponible'
+      // Keep only attributed competition taxonomy; do not infer unnamed leagues.
       const groups = new Map<string,typeof p.legs>()
       for (const leg of p.legs) {
         const heading=[leg.sport??'Deporte no clasificado',leg.country,leg.league].filter(Boolean).join(' · ')
@@ -638,31 +646,57 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
       }
       return <section className={`${css.sportsCard} ${css.sportsTicketCard}`} data-generative-ui="sports_ticket_card">
         <header className={css.sportsTicketHeading}>
-          <span className={css.sportsKicker}>PHOENIX / SPORTS INTELLIGENCE</span>
-          <div className={css.sportsHeadline}><div><h3>{p.title}</h3>
-            {p.subtitle&&<p>{p.subtitle}</p>}</div>
-            <span className={css.sportsStatus}>SIMULACIÓN</span></div>
-          <span className={css.sportsTicketCount}>{p.legs.length} {p.legs.length===1?'selección':'selecciones'} · {groups.size} {groups.size===1?'grupo':'grupos'}</span>
+          <div className={css.sportsTicketRibbon}>
+            <span className={css.sportsKicker}>PHOENIX / SPORTS INTELLIGENCE</span>
+            <span className={css.sportsStatus}>{incomplete?'BORRADOR INCOMPLETO':unpriced?'PRONÓSTICOS · SIN APUESTA':'SIMULACIÓN'}</span>
+          </div>
+          <div className={css.sportsTicketIntro}>
+            <div><h3>{p.title}</h3>{p.subtitle&&<p>{p.subtitle}</p>}</div>
+            <div className={css.sportsTicketCount}><strong>{p.legs.length}<span> / {requested}</span></strong><small>PATAS</small></div>
+          </div>
+          <div className={css.sportsTicketProgress} role="progressbar" aria-label="Patas verificadas"
+            aria-valuemin={0} aria-valuemax={requested} aria-valuenow={p.legs.length}>
+            <span style={{width:`${100*p.legs.length/requested}%`}}/>
+          </div>
+          {incomplete&&<p className={css.sportsTicketMissing}>Faltan {requested-p.legs.length} selecciones por verificar. Esto no es un ticket completo.</p>}
         </header>
         <div className={css.sportsTicketGroups}>{[...groups].map(([heading,legs])=>
           <section key={heading} className={css.sportsTicketGroup} aria-label={heading}>
-            <h4>{heading}</h4>
-            <div className={css.sportsLegs}>{legs.map((leg,i)=><div key={i} className={css.sportsLeg}>
-              {leg.image&&<SportsPortrait label={leg.player??leg.selection} logo={leg.image}/>}
-              <div><small>{leg.event}{leg.when?' · '+leg.when:''}</small>
-                {leg.player&&<small>Jugador · {leg.player}</small>}
-                <strong>{leg.selection}</strong>
-                <small>{[leg.market,leg.bookmaker].filter(Boolean).join(' · ')}</small>
-                {leg.rationale&&<small>Hipótesis de Kira · {leg.rationale}</small>}
-              </div><b aria-label={`Cuota ${leg.price}`}>{leg.price}</b>
-            </div>)}</div>
+            <h4>{heading}<small>{legs.length} {legs.length===1?'pata':'patas'}</small></h4>
+            <div className={css.sportsLegs}>{legs.map(leg=><article key={p.legs.indexOf(leg)} className={css.sportsLeg}>
+              <span className={css.sportsTicketLegNumber}>{String(p.legs.indexOf(leg)+1).padStart(2,'0')}</span>
+              <div className={css.sportsTicketLegMain}>
+                <span className={css.sportsTicketEvent}>{leg.event}{leg.when?' · '+leg.when:''}</span>
+                <div className={css.sportsTicketPick}>
+                  {(leg.homeLogo||leg.awayLogo||leg.homeTeam||leg.awayTeam||leg.image)&&<span className={css.sportsTicketLogos}>
+                    {(leg.awayTeam||leg.awayLogo)&&<SportsPortrait label={leg.awayTeam??'Visitante'} logo={leg.awayLogo}/>}
+                    {(leg.homeTeam||leg.homeLogo)&&<SportsPortrait label={leg.homeTeam??'Local'} logo={leg.homeLogo}/>}
+                    {leg.image&&<SportsPortrait label={leg.player??leg.selection} logo={leg.image}/>}
+                  </span>}
+                  <strong>{leg.selection}</strong>
+                </div>
+                <small>{[leg.market,leg.player?'Jugador · '+leg.player:undefined,unpriced?undefined:leg.bookmaker].filter(Boolean).join(' · ')}</small>
+                {leg.rationale&&<details className={css.sportsTicketReason}><summary>Ver fundamento</summary><p>{leg.rationale}</p></details>}
+              </div>
+              {unpriced
+                ? <span className={css.sportsTicketVerified} aria-label="Partido verificado">✓ Evento</span>
+                : <div className={css.sportsTicketPrice}>
+                    <small>CUOTA</small>
+                    <b aria-label={`Cuota ${leg.price}`}>{leg.price}</b>
+                  </div>}
+            </article>)}</div>
           </section>)}</div>
-        <div className={css.sportsTicketTotal}><div><small>Cuota combinada</small><strong>{p.combinedOdds}</strong></div>
-          {p.stake && <div><small>Importe simulado</small><strong>{p.stake}</strong></div>}
-          {p.grossReturn && <div><small>Retorno bruto potencial</small><strong>{p.grossReturn}</strong></div>}</div>
-        <footer className={css.sportsFoot}><strong>Solo análisis · No se ha realizado ninguna apuesta</strong>
-          <span>Fuente: {p.source}</span><span>{p.note}</span>
-          {p.askPrompt && onAction && <button type="button" onClick={() => { if (p.askPrompt) onAction(p.askPrompt, 'draft') }}>Revisar selección</button>}
+        <div className={css.sportsTicketTotal}>
+          <div><small>{unpriced?'Estado de las cuotas':'Cuota combinada'}</small>
+            <strong>{unpriced?'Pendientes de confirmar':p.combinedOdds}</strong></div>
+          {p.stake&&<div><small>Importe simulado</small><strong>{p.stake}</strong></div>}
+          {p.grossReturn&&<div><small>Retorno bruto potencial</small><strong>{p.grossReturn}</strong></div>}
+        </div>
+        <footer className={css.sportsFoot}>
+          <strong>Solo análisis · No se ha realizado ninguna apuesta</strong>
+          <span>Fuente: {p.source}</span>
+          <details className={css.sportsTicketDisclaimer}><summary>Fuentes, metodología y advertencias</summary><p>{p.note}</p></details>
+          {p.askPrompt&&onAction&&<button type="button" onClick={() => {if(p.askPrompt)onAction(p.askPrompt,'draft')}}>Revisar selecciones</button>}
         </footer>
       </section>
     }

@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
-import {describe,expect,it} from 'vitest'
-import {render,screen,fireEvent} from '@testing-library/react'
+import {describe,expect,it,afterEach} from 'vitest'
+import {render,screen,fireEvent,cleanup} from '@testing-library/react'
 import {parseGenerativeUiBlock,GenerativeUi} from '../src/client/chat/GenerativeUi.tsx'
+afterEach(cleanup)
 const trusted='https://img.mlbstatic.com/mlb-photos/image/upload/v1/people/678021/headshot/67/current'
 const rich={
   component:'sports_game_card',version:1,props:{
@@ -100,5 +101,82 @@ describe('Phoenix Sports ticket hierarchy and theme compatibility',()=>{
       {...ticket.props.legs[0],html:'<iframe />'}]}})).toBeNull()
     expect(parseGenerativeUiBlock({...ticket,props:{...ticket.props,legs:[
       {...ticket.props.legs[0],image:'https://untrusted.example/bad.png'}]}})).toBeNull()
+  })
+})
+
+describe('Five-leg Phoenix ticket completion and compact progress',()=>{
+  const makeLeg=(i:number)=>({
+    event:'Away '+i+' vs Home '+i,
+    selection:'Home '+i,
+    price:'Por verificar',
+    bookmaker:'Sin casa confirmada',
+    sport:'Baloncesto',
+    league:'NBA',
+    market:'Ganador · Pronóstico',
+    rationale:'Forma reciente y localía; sin probabilidad calibrada.',
+  })
+  it('renders all five numbered legs and an accessible complete progress indicator',()=>{
+    const fixture={component:'sports_ticket_card',version:1,props:{
+      title:'PHOENIX · Ticket de pronósticos',source:'ESPN Site API',
+      combinedOdds:'No disponible',requestedLegs:5,note:'SIN APUESTA REAL',
+      legs:Array.from({length:5},(_,i)=>makeLeg(i+1)),
+    }}
+    const card=parseGenerativeUiBlock(fixture)
+    expect(card).not.toBeNull()
+    if(!card)throw Error('Five-leg ticket rejected')
+    render(<GenerativeUi block={card}/>)
+    expect(screen.getByRole('progressbar',{name:'Patas verificadas'}).getAttribute('aria-valuenow')).toBe('5')
+    expect(screen.getByText('05')).toBeTruthy()
+    expect(screen.getAllByText('Ver fundamento')).toHaveLength(5)
+    expect(screen.getByText('Home 5')).toBeTruthy()
+    expect(screen.getAllByLabelText('Partido verificado')).toHaveLength(5)
+    expect(screen.queryByText('Por verificar')).toBeNull()
+    expect(screen.queryByText('Sin casa confirmada')).toBeNull()
+    expect(screen.getByText('Pendientes de confirmar')).toBeTruthy()
+  })
+  it('marks an incomplete ticket clearly and rejects mismatched overfilled counts',()=>{
+    const props={title:'Borrador',source:'ESPN',combinedOdds:'No disponible',
+      requestedLegs:5,note:'Incompleto',legs:[makeLeg(1)]}
+    const card=parseGenerativeUiBlock({component:'sports_ticket_card',version:1,props})
+    expect(card).not.toBeNull()
+    if(!card)throw Error('Draft card rejected')
+    render(<GenerativeUi block={card}/>)
+    expect(screen.getByText('BORRADOR INCOMPLETO')).toBeTruthy()
+    expect(screen.getByText(/Faltan 4 selecciones/)).toBeTruthy()
+    expect(screen.getByRole('progressbar',{name:'Patas verificadas'}).getAttribute('aria-valuenow')).toBe('1')
+    expect(parseGenerativeUiBlock({component:'sports_ticket_card',version:1,
+      props:{...props,requestedLegs:0}})).toBeNull()
+  })
+})
+
+describe('Phoenix ticket verified team logos and no price hallucinations',()=>{
+  it('shows provider team logos with correct names and ONE quote-status summary',()=>{
+    const ticket={component:'sports_ticket_card',version:1,props:{
+      title:'Phoenix ticket',source:'ESPN Site API',combinedOdds:'No disponible',
+      note:'Solo análisis',requestedLegs:1,legs:[{
+        event:'Phoenix Suns vs Oklahoma City Thunder',selection:'Oklahoma City Thunder',
+        price:'Por verificar',bookmaker:'Sin casa confirmada',market:'Ganador',
+        homeTeam:'Oklahoma City Thunder',awayTeam:'Phoenix Suns',
+        homeLogo:'https://a.espncdn.com/okc-logo.png',awayLogo:'https://a.espncdn.com/phx-logo.png',
+      }],
+    }}
+    const card=parseGenerativeUiBlock(ticket)
+    expect(card).not.toBeNull()
+    if(!card)throw Error('Valid ticket rejected')
+    render(<GenerativeUi block={card}/>)
+    expect(screen.getByAltText('Oklahoma City Thunder')).toBeTruthy()
+    expect(screen.getByAltText('Phoenix Suns')).toBeTruthy()
+    expect(screen.getAllByText('Pendientes de confirmar')).toHaveLength(1)
+    expect(screen.queryByText('Por verificar')).toBeNull()
+    expect(screen.queryByText('Sin casa confirmada')).toBeNull()
+    expect(screen.getByLabelText('Partido verificado')).toBeTruthy()
+  })
+  it('rejects untrusted team logos in a ticket',()=>{
+    const card={component:'sports_ticket_card',version:1,props:{
+      title:'Ticket',source:'ESPN',combinedOdds:'No disponible',note:'Solo análisis',
+      legs:[{event:'A vs B',selection:'A',price:'Por verificar',
+        bookmaker:'Sin casa confirmada',homeTeam:'A',homeLogo:'https://example.invalid/logo.svg'}],
+    }}
+    expect(parseGenerativeUiBlock(card)).toBeNull()
   })
 })
