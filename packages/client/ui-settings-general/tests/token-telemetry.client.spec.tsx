@@ -41,11 +41,11 @@ describe('Settings → Telemetría', () => {
       systemChars: 100, reusedSystemPrefixChars: 80, schemaChars: 30,
       historyChars: 10, humanChars: 5, assistantChars: 5, toolResultChars: 0,
       runtimeContextChars: 0, otherHistoryChars: 0, messageCount: 2, toolCount: 2,
-      approximateInputTokens: 35, inputTokens: 2000, outputTokens: 20,
+      approximateInputTokens: 35, inputTokens: 505, outputTokens: 20,
     }
     const readTelemetry = vi.fn().mockResolvedValue({ enabled: true, records: [record] })
     mount({ readTelemetry, setTelemetry: vi.fn(), clearTelemetry: vi.fn() })
-    await screen.findByText('2000')
+    await screen.findByText('505')
     expect(screen.getByText(es['telemetry.cachePrefix'])).toBeTruthy()
     expect(screen.getByText(es['telemetry.cacheUnknown'])).toBeTruthy()
     expect(screen.getByText('80% ' + es['telemetry.cachePrefixReused'])).toBeTruthy()
