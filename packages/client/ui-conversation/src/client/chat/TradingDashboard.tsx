@@ -155,7 +155,7 @@ export function TradingDashboard({ initial }: Props) {
     setControlError(undefined)
     try {
       const watchlist = (watchlistDraft ?? state.settings.symbols.join(','))
-        .split(/[,\\s]+/u).map(item => item.trim().toUpperCase()).filter(Boolean)
+        .split(/[,\s]+/u).map(item => item.trim().toUpperCase()).filter(Boolean)
       if (action === 'start' && (watchlist.length < 1 || watchlist.length > 12
         || new Set(watchlist).size !== watchlist.length
         || watchlist.some(item => !/^[A-Z0-9]{3,16}USDT$/u.test(item)))) {
