@@ -13,11 +13,62 @@ const SUPPORTED_INTERVALS = new Set([
 
 const PATH_LOCKS = new Map<string, Promise<void>>()
 
+/** A durable, deterministic exit policy attached to a real PAPER ledger position. */
+export interface BinancePaperExitPlan {
+  readonly strategyId: string
+  readonly entryPriceUsdt: number
+  readonly stopLossPrice: number
+  readonly tp1Price: number
+  readonly tp2Price: number
+  readonly tp1Fraction: number
+  readonly tp1Taken: boolean
+  readonly createdAt: string
+  readonly origin: 'execution' | 'legacy-adopted'
+}
+
+/**
+ * Build a transparent strategy-specific PAPER exit policy, not a provider order.
+ * @param entry - Actual virtual fill price, exclusive of transaction fees.
+ * @param strategyId - Persisted rule identifier.
+ * @param origin - Whether the policy was attached on fill or adopted for an old position.
+ * @returns Strict ordered SL, TP1, TP2 levels in quote currency.
+ */
+export function paperExitPlan(
+  entry: number, strategyId = 'manual-paper',
+  origin: BinancePaperExitPlan['origin'] = 'execution',
+): BinancePaperExitPlan {
+  if (!Number.isFinite(entry) || entry <= 0) throw new Error('Invalid PAPER entry price for exits')
+  const [stop, first, second] = strategyId.includes('mean-reversion')
+    ? [0.014, 0.012, 0.025]
+    : strategyId.includes('breakout') ? [0.018, 0.022, 0.044]
+      : strategyId.includes('trend-pullback') ? [0.018, 0.018, 0.036]
+        : [0.025, 0.025, 0.05]
+  return {
+    strategyId, entryPriceUsdt: entry, stopLossPrice: Number((entry * (1 - stop)).toPrecision(14)),
+    tp1Price: Number((entry * (1 + first)).toPrecision(14)), tp2Price: Number((entry * (1 + second)).toPrecision(14)),
+    tp1Fraction: 0.5, tp1Taken: false, createdAt: new Date().toISOString(), origin,
+  }
+}
+
+function validExitPlan(plan: unknown): plan is BinancePaperExitPlan {
+  if (!isRecord(plan) || typeof plan.strategyId !== 'string' || !plan.strategyId
+    || typeof plan.createdAt !== 'string' || !Number.isFinite(Date.parse(plan.createdAt))
+    || !['execution', 'legacy-adopted'].includes(String(plan.origin))
+    || typeof plan.tp1Taken !== 'boolean'
+    || !finitePositive(plan.entryPriceUsdt) || !finitePositive(plan.stopLossPrice)
+    || !finitePositive(plan.tp1Price) || !finitePositive(plan.tp2Price)
+    || !finitePositive(plan.tp1Fraction) || plan.tp1Fraction >= 1) return false
+  const levels = plan as unknown as BinancePaperExitPlan
+  return levels.stopLossPrice < levels.entryPriceUsdt
+    && levels.entryPriceUsdt < levels.tp1Price && levels.tp1Price < levels.tp2Price
+}
+
 /** One virtual spot position held by the Phoenix Binance paper broker. */
 export interface BinancePaperPosition {
   symbol: string
   quantity: number
   costBasisUsdt: number
+  exitPlan?: BinancePaperExitPlan
 }
 
 /** One persisted virtual Binance paper fill and its marked portfolio outcome. */
@@ -84,6 +135,8 @@ export interface BinancePaperAccount {
     marketValueUsdt: number
     costBasisUsdt: number
     unrealizedPnlUsdt: number
+    unrealizedReturnPct: number
+    exitPlan?: BinancePaperExitPlan
   }>
 }
 
@@ -236,10 +289,12 @@ function parseState(raw: string): BinancePaperState {
       || !finitePositive(position.quantity) || !finitePositive(position.costBasisUsdt)) {
       throw new Error('Binance paper ledger contains an invalid position; refusing to trade')
     }
+    if (position.exitPlan !== undefined && !validExitPlan(position.exitPlan)) {
+      throw new Error('Binance PAPER position exit policy is invalid')
+    }
     positions[key] = {
-      symbol: key,
-      quantity: position.quantity,
-      costBasisUsdt: position.costBasisUsdt,
+      symbol: key, quantity: position.quantity, costBasisUsdt: position.costBasisUsdt,
+      ...(position.exitPlan === undefined ? {} : { exitPlan: position.exitPlan as unknown as BinancePaperExitPlan }),
     }
   }
 
@@ -268,6 +323,17 @@ function parseState(raw: string): BinancePaperState {
     }
   })
 
+  // Backward-compatible adoption of open PAPER positions created before
+  // the exit-plan feature: derive the plan from their persisted actual buy
+  // receipt, never from a guessed market price or an LLM response.
+  for (const [symbol, position] of Object.entries(positions)) {
+    if (position.exitPlan !== undefined) continue
+    const entry = [...trades].reverse().find(trade => trade.symbol === symbol && trade.side === 'buy')
+    // Cost basis represents all open lots and their entry fees; reconstruct
+    // the weighted fill price rather than reusing only the latest buy price.
+    const price = position.costBasisUsdt / position.quantity / (1 + value.feeRate)
+    position.exitPlan = paperExitPlan(price, entry?.strategyId ?? 'legacy-paper', 'legacy-adopted')
+  }
   return {
     schema: 1,
     initialCashUsdt: value.initialCashUsdt,
@@ -401,6 +467,8 @@ export class BinancePaperBroker {
         marketValueUsdt: round(marketValueUsdt),
         costBasisUsdt: round(position.costBasisUsdt),
         unrealizedPnlUsdt: round(marketValueUsdt - position.costBasisUsdt),
+        unrealizedReturnPct: round(((marketValueUsdt - position.costBasisUsdt) / position.costBasisUsdt) * 100, 4),
+        ...(position.exitPlan === undefined ? {} : { exitPlan: position.exitPlan }),
       }
     })
     const marketValue = positions.reduce((sum, position) => sum + position.marketValueUsdt, 0)
@@ -487,6 +555,13 @@ export class BinancePaperBroker {
           symbol,
           quantity: (current?.quantity ?? 0) + quantity,
           costBasisUsdt: (current?.costBasisUsdt ?? 0) + debit,
+          // Each new PAPER buy defines a fresh plan on the weighted entry;
+          // this path is intentionally not usable by the REAL MCP broker.
+          exitPlan: paperExitPlan(
+            ((current?.exitPlan?.entryPriceUsdt ?? price) * (current?.quantity ?? 0) + price * quantity)
+              / ((current?.quantity ?? 0) + quantity),
+            strategyId || current?.exitPlan?.strategyId || 'manual-paper',
+          ),
         }
       } else {
         const current = state.positions[symbol]
@@ -506,6 +581,12 @@ export class BinancePaperBroker {
             symbol,
             quantity: remainingQuantity,
             costBasisUsdt: current.costBasisUsdt - releasedBasis,
+            ...(current.exitPlan === undefined ? {} : {
+              exitPlan: {
+                ...current.exitPlan,
+                tp1Taken: current.exitPlan.tp1Taken || (reason === 'paper-tp1'),
+              },
+            }),
           }
         }
       }

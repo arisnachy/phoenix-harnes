@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, rmSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -99,6 +99,28 @@ describe('BinancePaperBroker', () => {
     const resumed = new BinancePaperBroker(path, feed)
     await expect(resumed.journal()).resolves.toHaveLength(2)
     await expect(resumed.account()).resolves.toMatchObject({ equityUsdt: 1_098.9 })
+  })
+
+  it('reconstructs an honest exit policy for an existing historical PAPER position', async () => {
+    const path = ledger()
+    const feed = market(100)
+    const paper = new BinancePaperBroker(path, feed)
+    await paper.order({ symbol: 'ETHUSDT', side: 'buy', quoteAmountUsdt: 500,
+      strategyId: 'adaptive-mean-reversion-v1' })
+    // Simulate an older ledger written before exit plans were supported.
+    const state = JSON.parse(readFileSync(path, 'utf8')) as { positions: Record<string, { exitPlan?: unknown }> }
+    const legacy = state.positions.ETHUSDT
+    if (legacy === undefined) throw new Error('Missing test position')
+    delete legacy.exitPlan
+    writeFileSync(path, JSON.stringify(state), 'utf8')
+    const recovered = new BinancePaperBroker(path, feed)
+    const position = (await recovered.account()).positions[0]
+    expect(position?.exitPlan).toMatchObject({
+      origin: 'legacy-adopted', strategyId: 'adaptive-mean-reversion-v1',
+      stopLossPrice: 98.6, tp1Price: 101.2, tp2Price: 102.5,
+    })
+    expect(position?.unrealizedReturnPct).toBeCloseTo(-0.0999, 3)
+    expect(position?.unrealizedPnlUsdt).toBe(-0.5)
   })
 
   it('fails closed on overselling and never creates a short paper position', async () => {
