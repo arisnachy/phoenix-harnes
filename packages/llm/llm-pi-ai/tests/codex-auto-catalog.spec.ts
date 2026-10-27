@@ -158,7 +158,7 @@ describe('Codex automatic live catalog policy', () => {
     }
 
     await expect(catalog.refresh(CODEX_PROVIDER, pinned[CODEX_PROVIDER]))
-      .resolves.toEqual(['gpt-5.6-luna', 'gpt-6-luna'])
+      .resolves.toEqual(['gpt-6-luna', 'gpt-6-astra'])
     expect(list).toHaveBeenCalledOnce()
     expect(catalog.reasoningForModel('gpt-6-luna')).toEqual({
       efforts: [
@@ -232,12 +232,44 @@ describe('Codex automatic live catalog policy', () => {
     })
     const pinned = { [CODEX_PROVIDER]: { models: [{ id: 'gpt-5.5', name: 'GPT-5.5' }] } }
     await expect(catalog.refresh(CODEX_PROVIDER, pinned[CODEX_PROVIDER]))
-      .resolves.toEqual(['gpt-5.5'])
+      .resolves.toEqual(['gpt-6.1-terra'])
     expect(catalog.overlayProviders(pinned)[CODEX_PROVIDER]?.models).toMatchObject([
       { id: 'gpt-5.5', name: 'GPT-5.5' },
       { id: 'gpt-6.1-terra', name: 'GPT-6.1 Terra', reasoningEfforts: { high: 'high' } },
     ])
     expect(pinned[CODEX_PROVIDER].models).toEqual([{ id: 'gpt-5.5', name: 'GPT-5.5' }])
+  })
+
+  it('shows exactly the fresh nine visible Codex models in the chat selector despite pinned old ids', async () => {
+    let now = 0
+    const visible = [
+      'gpt-6.1-sol', 'gpt-6-astra', 'gpt-6.1-terra',
+      'gpt-6-sol', 'gpt-6-luna', 'gpt-5.6-sol',
+      'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-daybreak-blue-latest',
+    ]
+    const catalog = new CodexLiveCatalog({
+      transport: { list: async () => visible.map(id => ({
+        id, name: id === 'gpt-6.1-terra' ? 'GPT-6.1 Terra' : id,
+      })) },
+      now: () => now,
+      refreshIntervalMs: 10,
+      installedModelIds: () => ['gpt-5.5'],
+    })
+    const pinned = { [CODEX_PROVIDER]: { models: [
+      { id: 'gpt-5.5', name: 'GPT-5.5' },
+      { id: 'gpt-6-astra', name: 'GPT-6 Astra (custom)' },
+    ] } }
+    expect(await catalog.refresh(CODEX_PROVIDER, pinned[CODEX_PROVIDER])).toEqual(visible)
+    // Dispatch still honors configured names and previously selected ids.
+    expect(catalog.overlayProviders(pinned)[CODEX_PROVIDER]?.models?.find(m => m.id === 'gpt-5.5')).toBeDefined()
+    expect(catalog.overlayProviders(pinned)[CODEX_PROVIDER]?.models?.find(m => m.id === 'gpt-6-astra')?.name)
+      .toBe('GPT-6 Astra (custom)')
+    // A newer list replaces visibility without exposing retired fallback ids.
+    now = 11
+    visible.splice(0, 1)
+    expect(await catalog.refresh(CODEX_PROVIDER, pinned[CODEX_PROVIDER])).toEqual(visible)
+    expect(catalog.visibleIds()).toEqual(visible)
+    expect(pinned[CODEX_PROVIDER].models).toHaveLength(2)
   })
 
   it('keeps explicit reasoning disablement on a pinned Codex row', async () => {
