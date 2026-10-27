@@ -332,26 +332,8 @@ export function apply(ctx: ClientContext): void {
   const localModel = localModelClient(ctx)
   const mcpRegistry = mcpRegistryClient(ctx)
   const telegram = telegramBotClient(ctx)
-  const loadEclipseCatalog = async (): Promise<readonly EclipseCatalogChoice[]> => {
-    // Host-wide llm.models queries every registered runtime, including the
-    // connected Codex app-server's live model/reasoning metadata. No session
-    // is required: Settings can render before the first conversation exists.
-    const response = await connection.api.llm.models({})
-    if (!response.result.ok) throw new Error(response.result.error.message)
-    const { groups, failures } = response.result.value
-    const codex = groups.find(group => group.id === 'openai-codex')
-    if (codex === undefined) {
-      const failure = failures.find(item => item.id === 'openai-codex')
-      if (failure !== undefined) throw new Error(failure.message)
-    }
-    if (codex === undefined) return []
-    return selectCurrentCodexModels(codex.models.map(model => ({
-      provider: 'openai-codex',
-      model: model.id,
-      name: model.name,
-      reasoningEfforts: model.reasoning?.efforts.map(effort => effort.id) ?? [],
-    })))
-  }
+  const loadEclipseCatalog = (): Promise<readonly EclipseCatalogChoice[]> =>
+    loadEclipseCodexCatalog(connection.api)
   const injected = (): ModelsWithLocalSectionInjected => ({
     controller,
     hooks: { snapshot: controller.store },
