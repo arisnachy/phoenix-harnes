@@ -35,6 +35,8 @@ function parseInput(raw: unknown): InputPayload | undefined {
   const metrics = Object.fromEntries(METRICS.map(key => [key, count(input[key])]))
   return {
     ...metrics,
+    ...input.reusedSystemPrefixChars === undefined ? {}
+      : { reusedSystemPrefixChars: count(input.reusedSystemPrefixChars) },
     id: input.id,
     at: input.at,
     provider: name(input.provider),
