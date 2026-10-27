@@ -6,7 +6,6 @@ import { dashboardJson } from './binance-trading-tools.ts'
 const ROUTE = '/phoenix-trading/paper'
 const ENDPOINT = ROUTE + '/dashboard'
 const CONTROL = ROUTE + '/control'
-const CACHE_TTL_MS = 8_000
 const MAX_BODY_BYTES = 2048
 
 function localUserAction(req: IncomingMessage): boolean {
@@ -79,21 +78,10 @@ export function mountBinancePaperDashboardRoute(
   host: GameWebRouteHost,
   engine: BinancePaperAutomation,
 ): () => void {
-  let cached: { at: number; json: string } | undefined
-  let running: Promise<string> | undefined
-  let generation = 0
-
+  // Never cache virtual fills: a background paper-step can settle between
+  // two browser polls without going through this HTTP route.
   async function latest(): Promise<string> {
-    if (cached !== undefined && Date.now() - cached.at < CACHE_TTL_MS) return cached.json
-    if (running !== undefined) return running
-    const version = generation
-    const job = (async () => {
-      const json = JSON.stringify(dashboardJson(await engine.dashboard()))
-      if (version === generation) cached = { at: Date.now(), json }
-      return json
-    })()
-    running = job
-    try { return await job } finally { if (running === job) running = undefined }
+    return JSON.stringify(dashboardJson(await engine.dashboard()))
   }
 
   const handler = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
@@ -135,9 +123,6 @@ export function mountBinancePaperDashboardRoute(
       } else {
         await engine.step()
       }
-      generation++
-      cached = undefined
-      running = undefined
       res.statusCode = 200
       res.end(await latest())
     } catch {
