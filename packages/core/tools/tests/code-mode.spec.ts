@@ -133,8 +133,9 @@ describe('token-efficient MCP schema admission', () => {
       expect(deferred.tools.map(tool => tool.name)).not.toContain('mcp__sample__action_0')
       if (mode === 'both') {
         expect(deferred.tools.map(tool => tool.name)).toContain(RUN_CODE_NAME)
-        expect(deferred.sections.find(section => section.name === 'tools:sdk')?.text)
-          .toContain('mcp__sample__action_0')
+        const sdk = deferred.sections.find(section => section.name === 'tools:sdk')?.text ?? ''
+        expect(sdk).toContain('tool_search:')
+        expect(sdk).not.toContain('mcp__sample__action_0:')
       }
       // Model-visible native schema bytes drop without deleting registry tools.
       const fullChars = JSON.stringify(all).length
@@ -181,15 +182,43 @@ describe('token-efficient MCP schema admission', () => {
     },
   )
 
-  it('does not defer small MCP sets, and Code Mode keeps complete SDK bindings', async () => {
-    const { ctx, systemPrompt } = await setup({ mode: 'code' })
+  it('keeps small Code Mode MCP SDK fully typed and defers large SDKs without dropping bindings', async () => {
+    const { ctx, systemPrompt, runtime } = await setup({ mode: 'code' })
     registerEcho(ctx, 'read')
-    for (let index = 0; index < 17; index++) registerEcho(ctx, `mcp__sample__action_${index}`)
+    registerEcho(ctx, 'mcp__sample__action_0')
     const { agent } = await mintAgentScope(ctx, 'coded-mcp-completeness')
-    const assembled = await systemPrompt.assemble({ scope: agent, agent })
-    expect(assembled.tools.map(tool => tool.name)).toEqual([RUN_CODE_NAME])
-    expect(assembled.sections.find(section => section.name === 'tools:sdk')?.text)
-      .toContain('mcp__sample__action_16')
+    const small = await systemPrompt.assemble({ scope: agent, agent })
+    expect(small.tools.map(tool => tool.name)).toEqual([RUN_CODE_NAME])
+    expect(small.sections.find(section => section.name === 'tools:sdk')?.text)
+      .toContain('mcp__sample__action_0:')
+
+    for (let index = 1; index < 24; index++) registerEcho(ctx, `mcp__sample__action_${index}`)
+    const eager = await systemPrompt.assemble()
+    const large = await systemPrompt.assemble({ scope: agent, agent })
+    const eagerSdk = eager.sections.find(section => section.name === 'tools:sdk')?.text ?? ''
+    const deferredSdk = large.sections.find(section => section.name === 'tools:sdk')?.text ?? ''
+    expect(large.tools.map(tool => tool.name)).toEqual([RUN_CODE_NAME])
+    expect(deferredSdk).toContain('tool_search:')
+    expect(deferredSdk).not.toContain('mcp__sample__action_23:')
+    expect(deferredSdk.length).toBeLessThan(eagerSdk.length / 3)
+    expect(ctx.tools.get('mcp__sample__action_23', agent)).toBeDefined()
+
+    // Code Mode bindings still enumerate registered tools, even when their
+    // verbose model-visible signatures have not been expanded yet.
+    Object.assign(agent, {
+      session: { header: { cwd: '/workspace' }, append: (_type: string, _data: unknown) => undefined },
+    })
+    runtime.behavior = async (request) => {
+      const bindings = request.bindings[0]!.functions
+      const hidden = await bindings.mcp__sample__action_23!({ value: 'allowed' })
+      const found = await bindings.tool_search!({ names: ['mcp__sample__action_23'] })
+      return { logs: [], value: { hidden, found } }
+    }
+    const executed = await runCode(ctx, 'program', { agent })
+    expect(executed.isError).toBe(false)
+    const selected = await systemPrompt.assemble({ scope: agent, agent })
+    expect(selected.sections.find(section => section.name === 'tools:sdk')?.text)
+      .toContain('mcp__sample__action_23:')
   })
 })
 
