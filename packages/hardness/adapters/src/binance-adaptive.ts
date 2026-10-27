@@ -47,7 +47,6 @@ const MAX_SYMBOLS = 12
 const MAX_POSITION_FRACTION = 0.05
 const MAX_PORTFOLIO_EXPOSURE = 0.20
 const MAX_OPEN_POSITIONS = 2
-const PAPER_STOP_PCT = -2.5
 const MAX_MARKET_DATA_AGE = 2
 const cycleLocks = new WeakMap<BinanceAdaptiveBroker, Promise<void>>()
 
@@ -213,14 +212,23 @@ export async function runBinanceAdaptiveCycle(
       throw new Error('No Binance Spot pairs returned verified candles')
     }
     const sorted = [...signals].sort((a, b) => b.score - a.score || a.symbol.localeCompare(b.symbol))
-    const exits = sorted.flatMap((signal) => {
-      const position = account.positions.find(item => item.symbol === signal.symbol)
-      if (position === undefined) return []
-      const pnl = (position.marketPriceUsdt / position.averageEntryUsdt - 1) * 100
-      return pnl <= PAPER_STOP_PCT || signal.action === 'sell'
-        ? [{ signal, position }] : []
+    // Enforce registered exit plans using fresh broker marks even when
+    // today's watchlist no longer contains an existing open position.
+    const exits = account.positions.flatMap(position => {
+      const plan = position.exitPlan
+      const mark = position.marketPriceUsdt
+      if (plan === undefined) return []
+      const crossed = mark <= plan.stopLossPrice ? 'paper-stop-loss'
+        : mark >= plan.tp2Price ? 'paper-tp2'
+          : !plan.tp1Taken && mark >= plan.tp1Price ? 'paper-tp1'
+            : undefined
+      return crossed === undefined ? [] : [{
+        position, reason: crossed,
+        quantity: crossed === 'paper-tp1' ? position.quantity * plan.tp1Fraction : position.quantity,
+      }]
     })
-    const exit = exits[0]
+    const exit = exits.sort((a, b) =>
+      (a.reason === 'paper-stop-loss' ? -1 : 0) - (b.reason === 'paper-stop-loss' ? -1 : 0))[0]
     const exposure = account.positions.reduce((sum, position) => sum + position.marketValueUsdt, 0)
     const candidate = sorted.find(signal => signal.action === 'buy'
       && !account.positions.some(position => position.symbol === signal.symbol))
@@ -234,15 +242,27 @@ export async function runBinanceAdaptiveCycle(
     }
     if (exit !== undefined) {
       const result = await broker.order({
-        symbol: exit.signal.symbol,
-        side: 'sell',
-        quantity: exit.position.quantity,
-        strategyId: 'adaptive-defensive-v1',
-        reason: exit.signal.reason,
+        symbol: exit.position.symbol,
+        side: 'sell', quantity: exit.quantity,
+        strategyId: exit.position.exitPlan?.strategyId ?? 'adaptive-exit',
+        reason: exit.reason,
       })
       return { mode, interval, signals: sorted, decision: 'sell',
-        rationale: 'Risk or defensive exit from an existing virtual position',
+        rationale: 'Persisted PAPER exit executed: ' + exit.reason,
         trade: result.trade, account: result.account }
+    }
+    // A bearish defensive signal can exit a held position independently of
+    // TP/SL, but never treat an absent signal as permission to liquidate.
+    const defensive = sorted.find(signal => signal.action === 'sell'
+      && account.positions.some(position => position.symbol === signal.symbol))
+    if (defensive !== undefined) {
+      const position = account.positions.find(item => item.symbol === defensive.symbol)!
+      const result = await broker.order({
+        symbol: position.symbol, side: 'sell', quantity: position.quantity,
+        strategyId: 'adaptive-defensive-v1', reason: defensive.reason,
+      })
+      return { mode, interval, signals: sorted, decision: 'sell',
+        rationale: 'Confirmed bearish defensive exit', trade: result.trade, account: result.account }
     }
     if (candidate !== undefined && budget >= 10
       && account.positions.length < MAX_OPEN_POSITIONS
