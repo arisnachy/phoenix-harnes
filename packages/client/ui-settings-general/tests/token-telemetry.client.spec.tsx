@@ -38,7 +38,7 @@ describe('Settings → Telemetría', () => {
   it('does not mislabel missing Codex cached-token metrics as zero and shows reusable prefix', async () => {
     const record: TokenTelemetrySnapshot['records'][number] = {
       at: Date.now(), provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'high',
-      systemChars: 100, reusedSystemPrefixChars: 80, schemaChars: 30,
+      systemChars: 100, systemSdkChars: 40, reusedSystemPrefixChars: 80, schemaChars: 30,
       historyChars: 10, humanChars: 5, assistantChars: 5, toolResultChars: 0,
       runtimeContextChars: 0, otherHistoryChars: 0, messageCount: 2, toolCount: 2,
       approximateInputTokens: 35, inputTokens: 505, outputTokens: 20,
@@ -48,6 +48,7 @@ describe('Settings → Telemetría', () => {
     await screen.findByText('505')
     expect(screen.getByText(es['telemetry.cachePrefix'])).toBeTruthy()
     expect(screen.getByText(es['telemetry.cacheUnknown'])).toBeTruthy()
+    expect(screen.queryByText(es['telemetry.sdkLegacyUnknown'])).toBeNull()
     expect(screen.getByText('80% ' + es['telemetry.cachePrefixReused'])).toBeTruthy()
     expect(screen.getAllByText('—').length).toBeGreaterThan(0)
   })
@@ -89,6 +90,7 @@ describe('Settings → Telemetría', () => {
     await waitFor(() => { expect((screen.getByRole('checkbox') as HTMLInputElement).checked).toBe(true) })
     expect(screen.getByText('505')).toBeTruthy()
     expect(screen.getByText('205')).toBeTruthy()
+    expect(screen.getByText(es['telemetry.sdkLegacyUnknown'])).toBeTruthy()
 
     fireEvent.click(screen.getByRole('checkbox'))
     await waitFor(() => { expect(setTelemetry).toHaveBeenCalledWith(false) })

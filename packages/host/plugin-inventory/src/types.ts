@@ -7,6 +7,8 @@ export interface TokenTelemetryRecord {
   readonly model: string
   readonly reasoningEffort: string
   readonly systemChars: number
+  /** Portion of systemChars occupied by Code Mode SDK; absent for historical records. */
+  readonly systemSdkChars?: number
   /** Identical leading system text versus previous request to the same model; not a provider cache hit. */
   readonly reusedSystemPrefixChars?: number
   /** 'baseline' = no previous request on this provider/model route; never report zero reuse for it. */

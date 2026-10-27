@@ -108,9 +108,15 @@ export function TokenTelemetrySection({
   const prefixReusePercent = systemChars > 0 ? number(reusedPrefixChars / systemChars * 100) : undefined
   const reasoningTokens = completed.reduce((sum, record) => sum + (record.reasoningTokens ?? 0), 0)
   const contributions: Contribution[] = COMPONENT_KEYS.map(([key, property]) => ({
-    key, size: selected.reduce((sum, record) => sum + record[property], 0),
+    key, size: selected.reduce((sum, record) => {
+      const sdk = Math.min(record.systemChars, record.systemSdkChars ?? 0)
+      if (property === 'systemChars') return sum + record.systemChars - sdk
+      if (property === 'schemaChars') return sum + record.schemaChars + sdk
+      return sum + record[property]
+    }, 0),
   })).sort((a, b) => b.size - a.size)
   const totalChars = contributions.reduce((sum, item) => sum + item.size, 0)
+  const legacySdkUnknown = selected.some(record => record.systemSdkChars === undefined)
   const models = useMemo(() => {
     const grouped = new Map<string, { calls: number; input: number; output: number }>()
     for (const item of selected) {
@@ -205,6 +211,7 @@ export function TokenTelemetrySection({
       </div>
       <div className={css.panel}>
         <h3>{t('telemetry.breakdown')}</h3>
+        {legacySdkUnknown ? <p className={css.note}>{t('telemetry.sdkLegacyUnknown')}</p> : null}
         {selected.length === 0 ? <p className={css.notice}>{t('telemetry.empty')}</p> : (
           <>
             {contributions.map(item => (

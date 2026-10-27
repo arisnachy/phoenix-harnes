@@ -6,6 +6,8 @@ on:
       - 'packages/core/agent-loop/src/cache-prefix.ts'
       - 'packages/core/agent-loop/tests/cache-prefix.spec.ts'
       - 'packages/core/agent-loop/src/agent.ts'
+      - 'packages/core/agent-loop/src/token-audit.ts'
+      - 'packages/core/agent-loop/tests/token-audit.spec.ts'
       - 'packages/host/plugin-inventory/src/types.ts'
       - 'packages/host/plugin-inventory/src/telemetry.ts'
       - 'packages/host/plugin-inventory/src/index.ts'
@@ -38,6 +40,7 @@ jobs:
         run: >-
           pnpm exec vitest run
           packages/core/agent-loop/tests/cache-prefix.spec.ts
+          packages/core/agent-loop/tests/token-audit.spec.ts
           packages/host/plugin-inventory/tests/telemetry.spec.ts
           packages/client/ui-settings-general/tests/token-telemetry.client.spec.tsx
           packages/client/ui-settings-general/tests/telemetry-remote-inject.client.spec.tsx

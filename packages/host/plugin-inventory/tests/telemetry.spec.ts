@@ -29,6 +29,7 @@ describe('Settings token telemetry collector', () => {
       model: 'gpt-6-luna',
       reasoningEffort: 'high',
       systemChars: 1000,
+      systemSdkChars: 250,
       reusedSystemPrefixChars: 620,
       prefixComparison: 'compared',
       schemaChars: 180,
@@ -52,7 +53,7 @@ describe('Settings token telemetry collector', () => {
     const record = collector.snapshot().records[0]
     expect(record).toMatchObject({ provider: 'openai-codex', model: 'gpt-6-luna',
       inputTokens: 927, outputTokens: 148, cacheReadTokens: 500, systemChars: 1000,
-      reusedSystemPrefixChars: 620, prefixComparison: 'compared' })
+      reusedSystemPrefixChars: 620, prefixComparison: 'compared', systemSdkChars: 250 })
     expect(JSON.stringify(collector.snapshot())).not.toContain('SHOULD_NEVER_BE_STORED')
     expect(JSON.stringify(collector.snapshot())).not.toContain('request-1')
 

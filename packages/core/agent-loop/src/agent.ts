@@ -36,7 +36,7 @@ import type { Scope } from '@phoenix-ai/dsh-scope'
 import { createScope } from '@phoenix-ai/dsh-scope'
 import type { EpochHeader, RequestContext, Session, SessionId, TurnEndReason, UserMessage } from '@phoenix-ai/dsh-session'
 import { canonicalHeader, headerEquals } from '@phoenix-ai/dsh-session'
-import { joinContextSections, renderCacheFriendlyPrompt, renderContextSections } from '@phoenix-ai/dsh-system-prompt'
+import { joinContextSections, renderCacheFriendlyPrompt, renderContextSections, renderPrompt } from '@phoenix-ai/dsh-system-prompt'
 import type { PromptAssembly } from '@phoenix-ai/dsh-system-prompt'
 import type { Context } from '@phoenix-ai/cordis'
 import { projectRequestHistory } from './request-history.ts'
@@ -552,13 +552,19 @@ export class ReactLoopAgent implements Agent {
     const { turn, step, abort: { signal } } = this.phase
     signal.throwIfAborted()
     const system = renderCacheFriendlyPrompt(assembly)
+    // SDK signatures are emitted at the end of system instructions. Attribute
+    // their rendered size to tools in telemetry, not to Kira's stable policy.
+    const sdkSection = assembly.sections.find(section => section.name === 'tools:sdk')
+    const sdkText = sdkSection === undefined ? '' : renderPrompt({ ...assembly, sections: [sdkSection] })
+    const systemSdkChars = sdkText.length === 0 ? 0
+      : sdkText.length + (system.length > sdkText.length ? 2 : 0)
 
     while (true) {
       const derived = this.session.deriveMessages()
       const boundaryMessages = projectRequestHistory(derived, this.session.events.findLast(event => event.type === 'step/start')?.data.historyProjection)
       const auditId = randomUUID()
       const { request, preparedCall } = await this.buildRequest(
-        turn, step, assembly.tools, system, boundaryMessages, signal, auditId,
+        turn, step, assembly.tools, system, boundaryMessages, signal, auditId, systemSdkChars,
       )
       const assembler = new BlockAssembler()
       const chunkSeqs: number[] = []
@@ -698,6 +704,7 @@ export class ReactLoopAgent implements Agent {
     boundaryMessages: Message[],
     signal: AbortSignal,
     auditId: string,
+    systemSdkChars: number,
   ): Promise<{ request: GenerateOptions; preparedCall?: PreparedLlmCall }> {
     const { session } = this
 
@@ -779,7 +786,7 @@ export class ReactLoopAgent implements Agent {
       sessionId: this.session.id,
       signal,
     }))
-    const auditInput = tokenInputInventory(system, tools, boundaryMessages)
+    const auditInput = tokenInputInventory(system, tools, boundaryMessages, systemSdkChars)
     const prefixObservation = systemPrefixObserver.observeWithStatus(config.provider, config.model, system)
     const telemetryEvents: EventEmitter = process
     telemetryEvents.emit('phoenix:telemetry:input', {
