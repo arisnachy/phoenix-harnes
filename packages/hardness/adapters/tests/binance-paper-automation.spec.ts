@@ -102,8 +102,25 @@ describe('Binance Host PAPER automation', () => {
     expect((await paper.account()).tradeCount).toBe(0)
   })
 
+  it('emits only meaningful fill events for Kira, not one per candle', async () => {
+    const { worker } = setup()
+    const events: Array<{ kind: string; symbol: string }> = []
+    worker.setAttentionSink(event => { events.push({ kind: event.kind, symbol: event.symbol }) })
+    await worker.start({ symbols: ['BTCUSDT'] })
+    expect(events).toEqual([{ kind: 'paper-trade', symbol: 'BTCUSDT' }])
+    await worker.step()
+    expect(events).toHaveLength(1)
+  })
+
+  it('allows a twelve-symbol PAPER watchlist without changing per-position risk caps', () => {
+    const symbols = ['BTCUSDT','ETHUSDT','SOLUSDT','BNBUSDT','XRPUSDT','ADAUSDT',
+      'DOGEUSDT','LINKUSDT','AVAXUSDT','TRXUSDT','DOTUSDT','LTCUSDT']
+    expect(binancePaperAutomationConfig({ symbols }).symbols).toHaveLength(12)
+    expect(() => binancePaperAutomationConfig({ symbols: [...symbols, 'ATOMUSDT'] })).toThrow('1-12')
+  })
+
   it('rejects invalid cadence and watchlists before scheduling', () => {
-    expect(() => binancePaperAutomationConfig({ symbols: [] })).toThrow('1-5')
+    expect(() => binancePaperAutomationConfig({ symbols: [] })).toThrow('1-12')
     expect(() => binancePaperAutomationConfig({ symbols: ['BTCUSDT','BTCUSDT'] })).toThrow('unique')
     expect(() => binancePaperAutomationConfig({ symbols: ['BTCUSDT'], pollMs: 200 })).toThrow('60,000')
   })
