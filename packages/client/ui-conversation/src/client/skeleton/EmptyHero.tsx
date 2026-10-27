@@ -176,6 +176,50 @@ export function HeroAttentionList({
 }
 
 
+/** Zero-token entry points: selecting one only edits the existing composer draft. */
+export const HERO_MISSION_STARTERS = [
+  {
+    id: 'continue',
+    label: 'Continuar misión',
+    hint: 'Retomar lo pendiente',
+    prompt: 'Kira, recupera el estado verificado de la misión activa en este espacio. Identifica lo pendiente, revisa los bloqueos y continúa por el siguiente paso útil hasta entregar un resultado comprobable. Si no hay contexto suficiente, dilo antes de actuar.',
+  },
+  {
+    id: 'investigate',
+    label: 'Investigar',
+    hint: 'Evidencia antes de concluir',
+    prompt: 'Kira, investiga este tema con fuentes verificables, fechas, perspectivas relevantes y límites de la evidencia: [escribe aquí el tema]. Distingue hechos de hipótesis y entrega conclusiones accionables.',
+  },
+  {
+    id: 'build',
+    label: 'Construir',
+    hint: 'De idea a entrega real',
+    prompt: 'Kira, quiero construir lo siguiente: [describe aquí tu idea]. Define criterios de aceptación, usa las herramientas disponibles, verifica el resultado y explica qué quedó realmente terminado y qué falta.',
+  },
+] as const
+
+export type HeroMissionStarter = (typeof HERO_MISSION_STARTERS)[number]
+
+/** Universal mission shortcuts; no model call or submission occurs on click. */
+export function HeroMissionLaunchpad({ onSelect }: { onSelect: (mission: HeroMissionStarter) => void }) {
+  return (
+    <nav className={css.missionLaunchpad} aria-label="Empezar una misión con Kira">
+      {HERO_MISSION_STARTERS.map(mission => (
+        <button
+          key={mission.id}
+          type="button"
+          className={css.missionShortcut}
+          onClick={() => { onSelect(mission) }}
+          title={mission.hint}
+        >
+          <span className={css.missionLabel}>{mission.label}</span>
+          <IconChevronRightOutline14 className={css.missionArrow} size={13} />
+        </button>
+      ))}
+    </nav>
+  )
+}
+
 /** Hero chrome props. The workspace row rides the InputBar accessory hole, not here. */
 export interface HeroShellProps {
   /** The owner's locale seat, retained for the workspace chip contract. */
