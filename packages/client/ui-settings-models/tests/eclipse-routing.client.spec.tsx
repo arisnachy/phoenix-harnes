@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createSnapshotStore } from '@phoenix-ai/dsh-client-runtime/client'
 import { EclipseRoutingPanel, existingProfile } from '../src/client/EclipseRoutingPanel.tsx'
-import { selectCurrentCodexModels } from '../src/client/index.ts'
+import { loadEclipseCodexCatalog, selectCurrentCodexModels } from '../src/client/index.ts'
 import { en } from '../src/client/locales.ts'
 
 afterEach(cleanup)
@@ -34,6 +34,33 @@ const catalog = [
 ] as const
 
 describe('Eclipse model settings', () => {
+  it('loads the authoritative account-visible Codex catalog, not cached or pinned adapter models', async () => {
+    const discoverModels = vi.fn(async () => ({ result: { ok: true as const, value: {
+      models: [
+        { id: 'gpt-6.1-sol', name: 'GPT-6.1-Sol', reasoning: {
+          efforts: [{ id: 'medium', name: 'Medium' }] } },
+        { id: 'gpt-6.1-terra', name: 'GPT-6.1 Terra', reasoning: {
+          efforts: [{ id: 'high', name: 'High' }, { id: 'xhigh', name: 'Extra High' }] } },
+        { id: 'gpt-5.6-luna', name: 'GPT-5.6 Luna' },
+      ],
+    } } }))
+    const api = { llm: { discoverModels, models: vi.fn(() => {
+      throw new Error('the old llm.models route must not be used')
+    }) } }
+    const choices = await loadEclipseCodexCatalog(api as never)
+    expect(discoverModels).toHaveBeenCalledWith({ settingsNs: 'llm-pi-ai', provider: 'openai-codex' })
+    expect(choices.map(model => model.model)).toEqual(['gpt-6.1-sol', 'gpt-6.1-terra', 'gpt-5.6-luna'])
+    expect(choices[1]?.reasoningEfforts).toEqual(['high', 'xhigh'])
+    expect(choices.some(model => model.model === 'gpt-5.5')).toBe(false)
+  })
+
+  it('surfaces failed Codex discovery rather than presenting cached models as live', async () => {
+    const api = { llm: { discoverModels: vi.fn(async () => ({
+      result: { ok: false as const, error: { message: 'Codex unavailable' } },
+    })) } }
+    await expect(loadEclipseCodexCatalog(api as never)).rejects.toThrow('Codex unavailable')
+  })
+
   it('uses independent Eclipse namespace rather than Agent defaults', () => {
     const agentDefault = { provider: 'openai-codex', model: 'gpt-6-luna' }
     const eclipse = {
