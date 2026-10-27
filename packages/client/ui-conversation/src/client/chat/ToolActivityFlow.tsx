@@ -16,7 +16,8 @@ import { SecureAsk } from './SecureAsk.tsx'
 import { GenerativeUi, type GenerativeUiBlock } from './GenerativeUi.tsx'
 import { sportsCardsFromToolResult, unrenderedSportsCards } from './sports-tool-cards.ts'
 import { TradingDashboard } from './TradingDashboard.tsx'
-import { tradingDashboardFromToolResult, type TradingDashboardSnapshot } from './trading-tool-cards.ts'
+import { TradingMarketChart } from './TradingMarketChart.tsx'
+import { tradingDashboardFromToolResult, tradingMarketFromToolResult, type TradingDashboardSnapshot, type TradingMarketSelection } from './trading-tool-cards.ts'
 import { toolActivity, type TurnActivity, type TurnProgress } from './turn-progress.ts'
 import chatCss from './ChatView.module.css'
 import css from './ToolActivityFlow.module.css'
@@ -79,6 +80,7 @@ type FlowItem =
   }
   | { readonly kind: 'sports'; readonly key: string; readonly blocks: readonly GenerativeUiBlock[] }
   | { readonly kind: 'trading'; readonly key: string; readonly snapshot?: TradingDashboardSnapshot }
+  | { readonly kind: 'trading-market'; readonly key: string; readonly selection: TradingMarketSelection }
 
 function imageActivity(node: OrderedChatNode): readonly { readonly attachment: ImageAttachmentRef }[] {
   if (node.kind !== 'tool-call') return []
@@ -382,6 +384,14 @@ function buildFlow(nodes: readonly OrderedChatNode[]): FlowItem[] {
           flush()
           flow.push({ kind: 'trading', key: 'trading:' + node.key, snapshot: trading })
           tradingVisible = true
+        }
+        if (!tradingVisible) {
+          const selection = tradingMarketFromToolResult(result)
+          if (selection !== undefined) {
+            flush()
+            flow.push({ kind: 'trading-market', key: 'market:' + node.key, selection })
+            tradingVisible = true
+          }
         }
       }
       const images = imageActivity(node)
@@ -977,6 +987,8 @@ function BrowserWorkspace({
             <Fragment key={item.key}>
               {item.kind === 'trading'
                 ? <TradingDashboard initial={item.snapshot} />
+                : item.kind === 'trading-market'
+                ? <TradingMarketChart symbols={[item.selection.symbol]} initialInterval={item.selection.interval} trades={[]} />
                 : item.kind === 'sports'
                 ? <SportsEvidenceSurface blocks={item.blocks} inputActions={inputActions} />
                 : item.kind === 'node'
@@ -1075,6 +1087,8 @@ export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, browserT
           )}
           {item.kind === 'trading'
             ? <TradingDashboard initial={item.snapshot} />
+            : item.kind === 'trading-market'
+            ? <TradingMarketChart symbols={[item.selection.symbol]} initialInterval={item.selection.interval} trades={[]} />
             : item.kind === 'sports'
             ? <SportsEvidenceSurface blocks={item.blocks} inputActions={inputActions} />
             : item.kind === 'desktop'
