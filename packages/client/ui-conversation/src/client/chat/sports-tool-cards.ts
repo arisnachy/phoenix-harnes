@@ -16,7 +16,7 @@ type ResultBlock = {
   subCalls?: readonly ResultBlock[]
 }
 const ALLOWED_NAMES = new Set([
-  'sports_chat_games','sports_chat_odds','sports_chat_ticket','sports_chat_ticket_research',
+  'sports_chat_games','sports_chat_odds','sports_chat_ticket','sports_chat_ticket_research','sports_chat_ticket_research_auto',
   'sports_chat_mlb_pitchers',
 ])
 const ALLOWED_COMPONENTS = new Set([
@@ -24,6 +24,7 @@ const ALLOWED_COMPONENTS = new Set([
 ])
 const MAX_TEXT_BYTES = 125_000
 const MAX_SPORTS_CARDS = 6
+const MAX_COLLECTED_CARDS = 30
 const MAX_NODES = 64
 
 /** Distinguish a validated first-party sports card from arbitrary model JSON. */
@@ -41,7 +42,7 @@ export function sportsCardsFromToolResult(root: unknown): GenerativeUiBlock[] {
   const stack:[ResultBlock,number][]=[[root as ResultBlock,0]]
   const cards:GenerativeUiBlock[]=[]
   let visited=0
-  while(stack.length&&visited<MAX_NODES&&cards.length<MAX_SPORTS_CARDS){
+  while(stack.length&&visited<MAX_NODES&&cards.length<MAX_COLLECTED_CARDS){
     const next=stack.pop()
     if(!next)break
     const [tool,depth]=next
@@ -65,10 +66,14 @@ export function sportsCardsFromToolResult(root: unknown): GenerativeUiBlock[] {
       :result.uiBlock===undefined?[]:[result.uiBlock]
     for(const value of values){
       const card=verifiedCard(value)
-      if(card!==null&&cards.length<MAX_SPORTS_CARDS)cards.push(card)
+      if(card!==null&&cards.length<MAX_COLLECTED_CARDS)cards.push(card)
     }
   }
-  return cards
+  // A requested betting slip must not disappear behind six fixture cards.
+  // This adapter presents verified data only; it cannot create or place wagers.
+  const tickets=cards.filter(card=>card.component==='sports_ticket_card')
+  const others=cards.filter(card=>card.component!=='sports_ticket_card')
+  return [...tickets,...others].slice(0,MAX_SPORTS_CARDS)
 }
 /**
  * Remove exact duplicates authored by the assistant and duplicates across
