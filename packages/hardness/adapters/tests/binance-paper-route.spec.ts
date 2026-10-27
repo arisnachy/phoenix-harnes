@@ -49,10 +49,10 @@ async function serverWithTrading() {
     if (handle === undefined) { res.writeHead(404).end(); return }
     void Promise.resolve(handle(req, res)).catch(() => { res.writeHead(503).end() })
   })
-  await new Promise<void>(resolve => { server.listen(0, '127.0.0.1', resolve) })
+  await new Promise<void>((resolve) => { server.listen(0, '127.0.0.1', resolve) })
   const address = server.address()
   if (address === null || typeof address === 'string') throw new Error('No listening HTTP server')
-  const origin = 'http://127.0.0.1:' + address.port
+  const origin = `http://127.0.0.1:${address.port}`
   disposers.push(async () => {
     disposeRoute()
     await engine.dispose()
