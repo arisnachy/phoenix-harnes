@@ -829,6 +829,10 @@ describe('ManagedMcpController', () => {
         url: 'https://agent.binance.com/mcp/agentic',
         headers: {},
         oauth: true,
+        toolCallTimeoutMs: 60_000,
+        startupTimeoutMs: 5_000,
+        failOnStartupError: false,
+        reconnect: { enabled: true, initialDelayMs: 1000, maxDelayMs: 30_000, maxAttempts: 3 },
       },
     })
     await expect(controller.installBinanceAgentOs()).resolves.toMatchObject({
@@ -841,6 +845,22 @@ describe('ManagedMcpController', () => {
     expect(live.remove).toHaveBeenCalledWith('live-entry-id')
     await expect(controller.snapshot()).resolves.toEqual([])
     await expect(controller.removeBinanceAgentOs()).resolves.toBe(false)
+  })
+
+  it('repairs an existing Binance MCP without deleting its managed identity', async () => {
+    const patchPath = tempPatch()
+    const live = loader()
+    const controller = new ManagedMcpController(live, { patchPath, registrySearch: registry([]) })
+    await controller.installBinanceAgentOs()
+    const repaired = await controller.repairBinanceAgentOs()
+    expect(repaired).toMatchObject({
+      status: 'installed',
+      connector: { serverName: 'binance-agent-os',
+        url: 'https://agent.binance.com/mcp/agentic' },
+    })
+    expect(live.remove).toHaveBeenCalledWith('live-entry-id')
+    expect(live.create).toHaveBeenCalledTimes(2)
+    expect(await controller.snapshot()).toHaveLength(1)
   })
 
   it('installs and removes only the pinned official X API and Docs MCP pair', async () => {

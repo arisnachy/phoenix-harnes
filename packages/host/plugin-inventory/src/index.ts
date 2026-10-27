@@ -411,6 +411,7 @@ export class PluginInventoryGateway extends TypertRemoteService {
     configured: boolean
     status?: McpConnectorRuntimeEntry['status']
     reasonCode?: McpConnectorRuntimeEntry['reasonCode']
+    toolNames: readonly string[]
   }> {
     const managed = await this.managedMcp.snapshot()
     const configured = managed.some(connector =>
@@ -421,6 +422,7 @@ export class PluginInventoryGateway extends TypertRemoteService {
     const runtime = registry?.list().find(entry => entry.serverName === BINANCE_AGENT_OS_SERVER_NAME)
     return {
       configured,
+      toolNames: runtime?.status === 'ready' ? [...runtime.toolNames] : [],
       ...(runtime === undefined ? {} : {
         status: runtime.status,
         ...(runtime.reasonCode === undefined ? {} : { reasonCode: runtime.reasonCode }),
@@ -429,12 +431,37 @@ export class PluginInventoryGateway extends TypertRemoteService {
   }
 
   /**
+   * Request a safe reconnect for the already-installed official Binance MCP.
+   * Does not authorize scopes, refresh grants silently, or place orders.
+   * @returns Whether an existing live MCP connector accepted the request.
+   */
+  async reconnectBinanceAgentOs(): Promise<{ accepted: boolean }> {
+    const state = await this.binanceAgentOsState()
+    if (!state.configured) return { accepted: false }
+    const registry = (this.ctx.get as (name: string) => unknown)('mcpConnectors') as
+      | { reconnect(serverName: string): boolean }
+      | undefined
+    return { accepted: registry?.reconnect(BINANCE_AGENT_OS_SERVER_NAME) ?? false }
+  }
+
+  /**
    * Activate the pinned official Binance Agent OS MCP after the model-facing
    * approval boundary has been satisfied. This method never places an order.
    * @returns Idempotent managed MCP receipt.
    */
   async enableBinanceAgentOs(): Promise<McpRegistryInstallReceipt> {
-    return this.managedMcp.installBinanceAgentOs()
+    const receipt = await this.managedMcp.installBinanceAgentOs()
+    // An already-installed row is not evidence of a live MCP. Ask the owning
+    // registered client to reconnect when it lost its transport or tools.
+    // Auth-required stays explicit: only a user can complete browser OAuth.
+    if (receipt.status === 'already-installed') {
+      const snapshot = await this.binanceAgentOsState()
+      if (snapshot.status === 'disconnected' || snapshot.status === 'failed'
+        || snapshot.status === 'ready' && snapshot.toolNames.length === 0) {
+        await this.reconnectBinanceAgentOs()
+      }
+    }
+    return receipt
   }
 
   /**
@@ -444,6 +471,15 @@ export class PluginInventoryGateway extends TypertRemoteService {
    */
   async disableBinanceAgentOs(): Promise<{ disabled: boolean }> {
     return { disabled: await this.managedMcp.removeBinanceAgentOs() }
+  }
+
+  /**
+   * Repair the managed official OAuth MCP using its pinned endpoint, without
+   * deleting the user's separately stored Binance authorization grant.
+   * @returns New Loader receipt; actual connectivity must be reverified.
+   */
+  async repairBinanceAgentOs(): Promise<McpRegistryInstallReceipt> {
+    return this.managedMcp.repairBinanceAgentOs()
   }
 
   /**
