@@ -536,7 +536,11 @@ function adaptiveCycleTool(deps: BinanceTradingToolDependencies): ToolDefinition
   })
 }
 
-/** Project only public virtual account evidence for the in-chat and HTTP trading viewer. */
+/**
+ * Project only public virtual account evidence for the in-chat viewer.
+ * @param view - Host-backed PAPER scheduler and portfolio data.
+ * @returns Sanitized UI-friendly JSON without credentials.
+ */
 export function dashboardJson(view: BinancePaperAutomationView): Record<string, JsonValue> {
   return {
     mode: 'paper', phase: view.phase, enabled: view.enabled,
