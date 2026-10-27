@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { GameWebRouteHost } from './godot-web-bundle.ts'
 import type { BinancePaperAutomation } from './binance-paper-automation.ts'
-import { dashboardJson } from './binance-trading-tools.ts'
+import { dashboardJson, type BinanceAgentOsHostService } from './binance-trading-tools.ts'
 import { BinanceSpotTestnet } from './binance-spot-testnet.ts'
 import { credentialRef, type CredentialProvider } from '@phoenix-ai/dsh-credentials'
 
@@ -11,6 +11,7 @@ const CONTROL = ROUTE + '/control'
 const CANDLES = ROUTE + '/candles'
 const TESTNET_STATUS = ROUTE + '/testnet-status'
 const TESTNET_CONNECT = ROUTE + '/testnet-connect'
+const MCP_STATUS = ROUTE + '/mcp-status'
 const CHART_INTERVALS = new Set(['15m', '1h', '4h', '1d'])
 const MAX_BODY_BYTES = 2048
 
@@ -96,7 +97,7 @@ async function readControl(req: IncomingMessage): Promise<{
 export function mountBinancePaperDashboardRoute(
   host: GameWebRouteHost,
   engine: BinancePaperAutomation,
-  options: { testnet?: BinanceSpotTestnet; credentials?: Pick<CredentialProvider, 'set'> } = {},
+  options: { testnet?: BinanceSpotTestnet; credentials?: Pick<CredentialProvider, 'set'>; agentOs?: Partial<BinanceAgentOsHostService> } = {},
 ): () => void {
   // Never cache virtual fills: a background paper-step can settle between
   // two browser polls without going through this HTTP route.
@@ -111,18 +112,36 @@ export function mountBinancePaperDashboardRoute(
     const market = url.pathname === CANDLES
     const testing = url.pathname === TESTNET_STATUS
     const connect = url.pathname === TESTNET_CONNECT
-    if (!read && !write && !market && !testing && !connect) { res.writeHead(404).end(); return }
+    const mcpStatus = url.pathname === MCP_STATUS
+    if (!read && !write && !market && !testing && !connect && !mcpStatus) { res.writeHead(404).end(); return }
     res.setHeader('Cache-Control', 'no-store')
     res.setHeader('Content-Type', 'application/json; charset=utf-8')
     res.setHeader('X-Content-Type-Options', 'nosniff')
     res.setHeader('Referrer-Policy', 'no-referrer')
-    if ((read || market || testing) && req.method !== 'GET' && req.method !== 'HEAD'
+    if ((read || market || testing || mcpStatus) && req.method !== 'GET' && req.method !== 'HEAD'
       || (write || connect) && req.method !== 'POST') { res.writeHead(405).end(); return }
     if ((write || connect) && !localUserAction(req)) {
       res.writeHead(403).end(JSON.stringify({ error: 'Same-origin user action required' }))
       return
     }
     try {
+      if (mcpStatus) {
+        const state = await options.agentOs?.binanceAgentOsState?.()
+        const connected = state?.configured === true && state.status === 'ready'
+          && (state.toolNames?.length ?? 0) > 0
+        res.statusCode = 200
+        if (req.method === 'HEAD') res.end()
+        else res.end(JSON.stringify({
+          configured: state?.configured === true, connected,
+          status: state?.status ?? 'disconnected',
+          toolCount: state?.toolNames?.length ?? 0,
+          tradeScopeVerified: false, accountVerified: false,
+          nextAction: connected ? 'Verify live MCP ticker, Agentic balance and granted Trade scope'
+            : state?.status === 'auth-required' ? 'Authorize Binance Agentic OAuth in Phoenix Settings > Connectors'
+              : 'Install or reconnect the official Binance Agentic MCP in Phoenix Settings',
+        }))
+        return
+      }
       if (testing) {
         if (options.testnet === undefined) {
           res.writeHead(503).end(JSON.stringify({ error: 'Spot Testnet Host unavailable' }))
