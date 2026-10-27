@@ -120,3 +120,30 @@
   border: 1px solid #dfe4eb; border-radius: 9px; padding: 10px 12px; font: inherit; font-size: 12px; }
 .watchlist input:focus-visible { outline: 2px solid #e65b29; outline-offset: 1px; }
 .watchlist input:disabled { background: #f6f7f8; color: #6b7889; }
+
+
+.connectionPanel { background: #fff; border: 1px solid #e5e8ee; border-radius: 13px; padding: 13px; color: #293444; display: grid; gap: 12px; }
+.connectionHeading { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 9px; }
+.connectionHeading>div { display: grid; gap: 3px; }
+.connectionHeading strong { font-size: 13px; }
+.connectionHeading small { font-size: 11px; color: #758296; }
+.connectionHeading button,.connectionItem button,.credentialForm button {
+  cursor: pointer; font: inherit; background: #fff; color: #263544; border: 1px solid #d9dfe6;
+  border-radius: 8px; padding: 7px 11px;
+}
+.connectionPanel button:focus-visible { outline: 2px solid #e65b29; outline-offset: 2px; }
+.connectionPanel button:disabled { opacity: .5; cursor: not-allowed; }
+.connectionItem button { justify-self: start; color: #c65325; border-color: #f3cab9; }
+.connectionGrid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; }
+.connectionItem { background: #fafbfc; border: 1px solid #e8edf2; border-radius: 10px; padding: 13px; display: grid; align-content: start; gap: 7px; }
+.connectionItem strong { color: #253142; }
+.connectionItem span { color: #526277; font-size: 12px; }
+.connectionItem small { color: #758294; line-height: 1.45; }
+.credentialForm { display: grid; gap: 9px; background: #fff8f2; border: 1px solid #f1d9c7; border-radius: 10px; padding: 12px; }
+.credentialForm strong { color: #47372a; }
+.credentialForm small { color: #795b46; }
+.credentialForm input { width: 100%; box-sizing: border-box; font: inherit; padding: 10px;
+  border: 1px solid #d4dce6; border-radius: 8px; background: #fff; color: #243143; }
+.credentialForm button { justify-self: start; background: #e65b29; color: #fff; border-color: #e65b29; font-weight: 700; }
+.connectionError { margin: 0; color: #b43b3b; font-size: 12px; }
+@media (max-width: 700px) { .connectionGrid { grid-template-columns: minmax(0,1fr); } }
