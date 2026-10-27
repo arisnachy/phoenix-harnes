@@ -1,5 +1,6 @@
 /** Read-only sports information adapters for Kira's conversation tools. */
 import { fetchPublicEspnOdds } from './espn-odds.ts'
+import { compareStandings } from './standings-research.ts'
 import { enrichMlbMatch } from './mlb-matchup.ts'
 import { researchMlbTrend } from './mlb-research.ts'
 export const sportsCatalog: Readonly<Record<string, readonly string[]>> = {
@@ -204,7 +205,7 @@ export async function chatGames(sport:string,league:string,requestedDate?:string
           (group.leaders ?? []).slice(0, 1).map((leader) => {
             const headshot = leader.athlete?.headshot?.href
             return {
-              label: title(group.name),
+              label: title(team.team?.displayName??team.team?.name,34)+' · '+title(group.name,30),
               value: title(leader.athlete?.displayName),
               ...(leader.displayValue ? { detail: title(leader.displayValue) } : {}),
               ...(logosEnabled(env) && headshot && /^https:\/\/a\.espncdn\.com\//u.test(headshot)
@@ -224,6 +225,7 @@ export async function chatGames(sport:string,league:string,requestedDate?:string
         sport,
         ...(e.id !== undefined && String(e.id).trim() !== '' ? { eventId: String(e.id) } : {}),
         periods, highlights,
+        ...(e.status?.type?.state==='pre'?{research:compareStandings(home,away).research}:{}),
         ...(comp?.broadcasts?.length?{ broadcast:comp.broadcasts.flatMap(x=>x.names??[]).slice(0,3).join(', ') }:{}),
         askPrompt:'Kira, amplía el análisis verificado del evento '+title(e.id,50)+' de '+league+'. Incluye métricas específicas de '+sport+' con sus fuentes.',
       } })
