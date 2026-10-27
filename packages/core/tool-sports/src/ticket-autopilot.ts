@@ -61,11 +61,12 @@ export function rankMarketFavorites(quotes:readonly MarketOutcome[],count:number
       if(choices.size<2)return []
       const quote=[...outcomes].sort((a,b)=>a.price-b.price)[0]
       if(!quote)return []
-      return [{
+      const candidate:Candidate={
         quote,
         selection:{eventId:quote.eventId,bookmaker:quote.bookmaker,market:'h2h',
           selection:quote.selection,point:quote.point??null},
-      }]
+      }
+      return [candidate]
     }).sort((a,b)=>a.quote.price-b.quote.price).slice(0,count)
     return {
       bookmaker:legs[0]?.quote.bookmaker??'',
@@ -128,8 +129,8 @@ export async function buildAutomaticSportsTicket(
     const current=Array.isArray(props.legs)?props.legs as Array<Record<string,unknown>>:[]
     props.legs=current.map((leg,index)=>({
       ...leg,
-      rationale:'Favorito observado en '+group.bookmaker+' (cuota '+group.legs[index]?.quote.price.toFixed(2)+
-        '). El precio refleja el mercado; no es probabilidad calibrada ni garantiza valor esperado.'.slice(0,240),
+      rationale:('Favorito observado en '+group.bookmaker+' (cuota '+group.legs[index]?.quote.price.toFixed(2)+
+        '). El precio refleja el mercado; no es probabilidad calibrada ni garantiza valor esperado.').slice(0,240),
     }))
     props.title='PHOENIX · Ticket cotizado de '+count+' selecciones'
     props.subtitle='Favoritos de mercado · Una sola casa · Apuesta NO colocada'
