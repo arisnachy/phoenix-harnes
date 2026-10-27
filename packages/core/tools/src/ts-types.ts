@@ -291,7 +291,8 @@ export function renderToolsSdk(schemas: ToolSdkSchema[]): string {
   for (const entry of types) {
     for (const shape of [entry.args, entry.output]) {
       if (aliases.has(shape)) continue
-      const count = counts.get(shape) ?? 0
+      // Every shape was counted above; an absent entry is unreachable.
+      const count = counts.get(shape) as number
       if (count < 2) continue
       const alias = `PhoenixSharedShape${aliases.size + 1}`
       const declaration = `type ${alias} = ${shape}`
