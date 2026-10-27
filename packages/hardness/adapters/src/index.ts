@@ -45,6 +45,7 @@ import { createRealitySnapshotTool } from './reality-tool.ts'
 import { createProactivityExecutor, installProactivityRuntime } from './proactivity-runtime.ts'
 import { createProactivityTools } from './proactivity-tools.ts'
 import { acquireWakeEngine } from './wake-registry.ts'
+import { wakeEvent } from './wake-engine.ts'
 import { createWakeExecutor, installWakeRuntime } from './wake-runtime.ts'
 import { createWakeTools } from './wake-tools.ts'
 import { createRoutineTools } from './routine-tools.ts'
@@ -370,7 +371,21 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
   }
   const binance = acquireBinancePaperAutomation(binancePaperLedgerPath())
   disposers.push(() => { binance.release() })
-  if (!modelTools) await binance.engine.restore()
+  if (!modelTools) {
+    // Only the Host publishes PAPER attention events; agent-scoped projections
+    // must not create duplicate notifications for the same virtual fill.
+    binance.engine.setAttentionSink(event => {
+      ctx.emit('phoenix/wake-event', wakeEvent({
+        id: 'binance-paper:' + crypto.randomUUID(),
+        source: 'phoenix-trading',
+        eventType: 'paper.attention',
+        summary: event.detail,
+        attributes: { kind: event.kind, symbol: event.symbol, mode: 'paper' },
+      }))
+    })
+    disposers.push(() => { binance.engine.setAttentionSink(undefined) })
+    await binance.engine.restore()
+  }
   if (!modelTools) {
     let removeTradingRoute: (() => void) | undefined
     const mountTradingRoute = (): void => {
@@ -506,6 +521,7 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
       for (const tool of createBinanceTradingTools({
         broker: binancePaper,
         automation: binance.engine,
+        wake: wake.engine,
         approval,
         ...(pluginInventory === undefined ? {} : { agentOs: pluginInventory }),
       })) {
