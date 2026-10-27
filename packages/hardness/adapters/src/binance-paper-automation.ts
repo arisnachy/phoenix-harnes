@@ -112,7 +112,7 @@ export class BinancePaperAutomation {
         throw new Error('Invalid saved paper settings')
       }
       this.config = binancePaperAutomationConfig({
-        symbols: record.symbols as string[],
+        symbols: record.symbols,
         interval: record.interval as BinancePaperAutomationConfig['interval'],
         pollMs: record.pollMs,
       }, record.enabled)
