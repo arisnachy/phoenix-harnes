@@ -8,6 +8,22 @@ type Props = {
 }
 const ENDPOINT = '/phoenix-trading/paper/dashboard'
 const REFRESH_MS = 10_000
+type TestnetState = {
+  mode: 'testnet'
+  configured: boolean
+  connected: boolean
+  canTrade: boolean
+  nextAction: string
+}
+type McpState = {
+  configured: boolean
+  connected: boolean
+  status: string
+  toolCount: number
+  tradeScopeVerified: boolean
+  accountVerified: boolean
+  nextAction: string
+}
 
 function amount(value: number, maximumFractionDigits = 2): string {
   return new Intl.NumberFormat('es-DO', { minimumFractionDigits: 2, maximumFractionDigits }).format(value)
@@ -32,6 +48,13 @@ export function TradingDashboard({ initial }: Props) {
   const [controlError, setControlError] = useState<string | undefined>()
   // A user can configure a multi-asset PAPER watchlist without spending tokens.
   const [watchlistDraft, setWatchlistDraft] = useState<string | undefined>()
+  const [testnetState, setTestnetState] = useState<TestnetState | undefined>()
+  const [mcpState, setMcpState] = useState<McpState | undefined>()
+  const [connectionIssue, setConnectionIssue] = useState<string | undefined>()
+  const [credentialOpen, setCredentialOpen] = useState(false)
+  const [testingKey, setTestingKey] = useState('')
+  const [testingSecret, setTestingSecret] = useState('')
+  const [connectionBusy, setConnectionBusy] = useState(false)
   useEffect(() => {
     let mounted = true
     let controller: AbortController | undefined
@@ -59,6 +82,59 @@ export function TradingDashboard({ initial }: Props) {
     const timer = setInterval(() => { void refresh() }, REFRESH_MS)
     return () => { mounted = false; controller?.abort(); clearInterval(timer) }
   }, [refreshKey])
+
+  async function checkConnections(): Promise<void> {
+    if (connectionBusy) return
+    setConnectionBusy(true)
+    setConnectionIssue(undefined)
+    try {
+      const [testReply, mcpReply] = await Promise.all([
+        fetch('/phoenix-trading/paper/testnet-status', { credentials: 'same-origin', cache: 'no-store' }),
+        fetch('/phoenix-trading/paper/mcp-status', { credentials: 'same-origin', cache: 'no-store' }),
+      ])
+      if (!testReply.ok || !mcpReply.ok) throw new Error('Host connection status unavailable')
+      const testing = await testReply.json() as TestnetState
+      const agentic = await mcpReply.json() as McpState
+      if (testing.mode !== 'testnet' || typeof testing.connected !== 'boolean'
+        || typeof agentic.connected !== 'boolean' || typeof agentic.toolCount !== 'number') {
+        throw new Error('Invalid provider status')
+      }
+      setTestnetState(testing)
+      setMcpState(agentic)
+    } catch {
+      setConnectionIssue('No fue posible verificar Binance desde este Host.')
+    } finally {
+      setConnectionBusy(false)
+    }
+  }
+
+  async function saveTestnetCredentials(): Promise<void> {
+    if (connectionBusy || testingKey.length < 12 || testingSecret.length < 12) {
+      setConnectionIssue('Introduce una clave y secreto exclusivos de Spot Testnet.')
+      return
+    }
+    setConnectionBusy(true)
+    setConnectionIssue(undefined)
+    try {
+      const response = await fetch('/phoenix-trading/paper/testnet-connect', {
+        method: 'POST', credentials: 'same-origin', cache: 'no-store',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey: testingKey, secret: testingSecret }),
+      })
+      if (!response.ok) throw new Error('Testnet credential verification rejected')
+      const value = await response.json() as TestnetState
+      if (value.mode !== 'testnet' || value.connected !== true) throw new Error('Testnet not verified')
+      setTestnetState(value)
+      setCredentialOpen(false)
+    } catch {
+      setConnectionIssue('Testnet no pudo autenticar o guardar las claves. Revisa la cuenta de prueba y el Host.')
+    } finally {
+      // Never persist private keys in the browser's chart state or model context.
+      setTestingKey('')
+      setTestingSecret('')
+      setConnectionBusy(false)
+    }
+  }
 
   if (state === undefined) {
     return (
@@ -167,6 +243,45 @@ export function TradingDashboard({ initial }: Props) {
           placeholder="BTCUSDT, ETHUSDT, SOLUSDT, BNBUSDT" />
       </label>
       <TradingMarketChart symbols={settings.symbols} trades={state.recentTrades} />
+      <section className={css.connectionPanel} aria-label="Conexiones a Binance">
+        <header className={css.connectionHeading}>
+          <div><strong>Conexiones Binance</strong>
+            <small>PAPER, Spot Testnet y Agentic REAL son cuentas y ejecuciones distintas.</small></div>
+          <button type="button" disabled={connectionBusy} onClick={() => { void checkConnections() }}>
+            Verificar conexiones
+          </button>
+        </header>
+        <div className={css.connectionGrid}>
+          <div className={css.connectionItem}>
+            <strong>Spot Testnet · fondos ficticios</strong>
+            <span>{testnetState === undefined ? 'Estado pendiente de comprobar'
+              : testnetState.connected ? testnetState.canTrade ? 'Autenticado · órdenes de prueba habilitadas' : 'Autenticado · sin permiso de operar'
+                : testnetState.configured ? 'Configurado · conexión fallida' : 'Sin credenciales de prueba'}</span>
+            <small>{testnetState?.nextAction ?? 'Necesita claves exclusivas de Binance Spot Testnet.'}</small>
+            <button type="button" disabled={connectionBusy} onClick={() => { setCredentialOpen(open => !open) }}>
+              {credentialOpen ? 'Cerrar configuración' : 'Configurar Testnet'}
+            </button>
+          </div>
+          <div className={css.connectionItem}>
+            <strong>Agentic MCP · subcuenta REAL</strong>
+            <span>{mcpState === undefined ? 'Estado pendiente de comprobar'
+              : mcpState.connected ? 'MCP conectado · permiso de trading aún no verificado'
+                : mcpState.status === 'auth-required' ? 'Pendiente OAuth de Binance' : 'MCP sin conexión verificada'}</span>
+            <small>{mcpState?.nextAction ?? 'Autorización OAuth desde Configuración > Conectores > Binance.'}</small>
+            <span>Operaciones reales: confirmación individual en Binance.</span>
+          </div>
+        </div>
+        {credentialOpen && <div className={css.credentialForm}>
+          <strong>Guardar claves exclusivas de Spot Testnet</strong>
+          <small>Solo se envían directamente al Host para verificar la cuenta ficticia y guardarlas en su bóveda. Nunca uses claves reales.</small>
+          <input type="password" aria-label="Clave API de Spot Testnet" autoComplete="off"
+            placeholder="Testnet API key" value={testingKey} onChange={event => { setTestingKey(event.currentTarget.value) }} />
+          <input type="password" aria-label="Secreto API de Spot Testnet" autoComplete="off"
+            placeholder="Testnet API secret" value={testingSecret} onChange={event => { setTestingSecret(event.currentTarget.value) }} />
+          <button type="button" disabled={connectionBusy} onClick={() => { void saveTestnetCredentials() }}>Verificar y guardar Testnet</button>
+        </div>}
+        {connectionIssue && <p role="alert" className={css.connectionError}>{connectionIssue}</p>}
+      </section>
       <div className={css.twoColumns}>
         <section className={css.section}>
           <h4>Radar de estrategias</h4>
