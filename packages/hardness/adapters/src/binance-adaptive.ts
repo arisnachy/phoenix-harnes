@@ -208,9 +208,9 @@ export async function runBinanceAdaptiveCycle(
         signals.push(hold(symbol, 'No verified public candles; retry in the next scan'))
       }
     }
-    if (failedSymbols === symbols.length) {
-      throw new Error('No Binance Spot pairs returned verified candles')
-    }
+    // Existing PAPER stops must still be serviced from fresh authenticated
+    // public prices even when the candle scanner for a watchlist is down.
+    const scannerUnavailable = failedSymbols === symbols.length
     const sorted = [...signals].sort((a, b) => b.score - a.score || a.symbol.localeCompare(b.symbol))
     // Enforce registered exit plans using fresh broker marks even when
     // today's watchlist no longer contains an existing open position.
@@ -237,6 +237,7 @@ export async function runBinanceAdaptiveCycle(
       account.cashUsdt / (1 + account.feeRate))
 
     if (mode === 'scan') {
+      if (scannerUnavailable) throw new Error('No Binance Spot pairs returned verified candles')
       return { mode, interval, signals: sorted, decision: 'hold',
         rationale: 'Read-only ranked scan; paper orders require paper-step mode', account }
     }
@@ -251,6 +252,7 @@ export async function runBinanceAdaptiveCycle(
         rationale: 'Persisted PAPER exit executed: ' + exit.reason,
         trade: result.trade, account: result.account }
     }
+    if (scannerUnavailable) throw new Error('No Binance Spot pairs returned verified candles')
     // A bearish defensive signal can exit a held position independently of
     // TP/SL, but never treat an absent signal as permission to liquidate.
     const defensive = sorted.find(signal => signal.action === 'sell'
