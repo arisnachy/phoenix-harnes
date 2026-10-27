@@ -62,6 +62,18 @@ test('only real bookmaker lines match a ticket; correlation is flagged',()=>{
   assert.throws(()=>pricedTicket([{...selected[0],selection:'No existe'}],odds),/no verificable/)
   assert.throws(()=>pricedTicket([selected[0],selected[0]],odds),/duplicada/)
 })
+test('a single ticket cannot combine independently quoted prices from two bookmakers',()=>{
+  const quotes=[
+    {eventId:'a',bookmaker:'Banca A',market:'h2h',selection:'Home A',price:1.9,
+      home:'Home A',away:'Away A',time:'tomorrow',updatedAt:'now'},
+    {eventId:'b',bookmaker:'Banca B',market:'h2h',selection:'Home B',price:1.8,
+      home:'Home B',away:'Away B',time:'tomorrow',updatedAt:'now'},
+  ]
+  const selections=quotes.map(({eventId,bookmaker,market,selection})=>({
+    eventId,bookmaker,market,selection,
+  }))
+  assert.throws(()=>pricedTicket(selections,quotes,100),/una sola banca/i)
+})
 test('bookmaker quotes include provenance and never permit invalid sport keys',async()=>{
   const mock=await response([{id:'e',home_team:'Local',away_team:'Visita',commence_time:'2026-10-24T20:00:00Z',
     bookmakers:[{key:'provider',title:'Casa',markets:[{key:'h2h',last_update:'2026-10-24T18:00:00Z',outcomes:[{name:'Local',price:1.8}]}]}]}])
