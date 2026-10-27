@@ -33,7 +33,7 @@ export const zh = {
   'telemetry.cachePrefixPending': '还没有可比较的请求。',
   'telemetry.cachePrefixReused': '的系统指令前缀与此前同模型请求相同',
   'telemetry.cachePrefixExplainer': '这是本地文本复用估算，不是提供商确认的缓存命中率。',
-  'telemetry.cacheUnknown': '模型提供商尚未报告缓存读取；无法将缺失数据判断为零。'
+  'telemetry.cacheUnknown': '模型提供商尚未报告缓存读取；无法将缺失数据判断为零。',
   'telemetry.reasoning': '推理 Tokens',
   'telemetry.actualNote': 'Token 数值来自模型提供商，可能不覆盖所有请求。',
   'telemetry.breakdown': '输入上下文组成',
@@ -91,7 +91,7 @@ export const en = {
   'telemetry.cachePrefixPending': 'No comparable requests yet.',
   'telemetry.cachePrefixReused': 'of system-prompt text matched the previous same-model request',
   'telemetry.cachePrefixExplainer': 'Local prefix stability is not a confirmed provider cache hit.',
-  'telemetry.cacheUnknown': 'The provider has not reported cached-input usage; unavailable is not zero.'
+  'telemetry.cacheUnknown': 'The provider has not reported cached-input usage; unavailable is not zero.',
   'telemetry.reasoning': 'Reasoning tokens',
   'telemetry.actualNote': 'Actual token counts are provider-reported and may be missing for some requests.',
   'telemetry.breakdown': 'Input context composition',
@@ -147,7 +147,7 @@ export const es = {
   'telemetry.cachePrefixPending': 'Aún no hay solicitudes comparables.',
   'telemetry.cachePrefixReused': 'del texto del sistema coincide con la solicitud anterior del mismo modelo',
   'telemetry.cachePrefixExplainer': 'La estabilidad del prefijo es una estimación local, no una lectura confirmada de caché.',
-  'telemetry.cacheUnknown': 'El proveedor no informó lecturas de caché; dato no disponible no significa cero.'
+  'telemetry.cacheUnknown': 'El proveedor no informó lecturas de caché; dato no disponible no significa cero.',
   'telemetry.reasoning': 'Tokens de razonamiento',
   'telemetry.actualNote': 'Los tokens reales proceden del proveedor y pueden faltar en algunas solicitudes.',
   'telemetry.breakdown': 'Composición del contexto de entrada',
