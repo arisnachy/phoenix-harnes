@@ -1,6 +1,8 @@
 import type { ApprovalService } from '@phoenix-ai/dsh-user-approval'
 import { defineTool, type JsonValue, type ToolDefinition } from '@phoenix-ai/dsh-tools'
+import { runBinanceAdaptiveCycle } from './binance-adaptive.ts'
 import { BinanceSpotTestnet } from './binance-spot-testnet.ts'
+import type { BinancePaperAutomation, BinancePaperAutomationView } from './binance-paper-automation.ts'
 import type {
   BinanceCandle,
   BinancePaperAccount,
@@ -31,6 +33,7 @@ export interface BinanceAgentOsHostService {
 /** Runtime dependencies for the on-demand Binance tool family. */
 export interface BinanceTradingToolDependencies {
   broker: BinancePaperBroker
+  automation?: BinancePaperAutomation
   approval: Pick<ApprovalService, 'request'>
   agentOs?: Partial<BinanceAgentOsHostService>
   testnet?: BinanceSpotTestnet
@@ -253,6 +256,10 @@ function statusTool(deps: BinanceTradingToolDependencies): ToolDefinition {
   })
 }
 
+/**
+ * Operational probe for the official Binance Agentic MCP. A ready transport
+ * with discovered tools proves MCP readiness, NOT Binance Trade scope.
+ */
 function agentOsHealthTool(deps: BinanceTradingToolDependencies): ToolDefinition {
   return defineTool({
     name: 'binance_mcp_health',
@@ -364,7 +371,7 @@ function testnetOrderTool(deps: BinanceTradingToolDependencies): ToolDefinition 
 function candlesTool(deps: BinanceTradingToolDependencies): ToolDefinition {
   return defineTool({
     name: 'binance_market_candles',
-    description: 'Read public Binance Spot OHLCV candles for analysis and charting. No Binance account or API key is used. Use phoenix_visualize when the user would benefit from a chart.',
+    description: 'Read real public Binance Spot OHLCV candles. Phoenix renders a native light-theme candlestick, volume and MA chart automatically from the verified tool result; do not call phoenix_visualize for an 8-candle imitation. No account credentials are used.',
     parameters: {
       symbol: { type: 'string', required: true, description: 'Binance Spot symbol such as BTCUSDT.' },
       interval: { type: 'string', required: true, description: 'Binance interval such as 1m, 5m, 1h, 4h, 1d.' },
@@ -414,9 +421,16 @@ function paperOrderTool(deps: BinanceTradingToolDependencies): ToolDefinition {
         ...(args.strategyId === undefined ? {} : { strategyId: args.strategyId }),
         ...(args.reason === undefined ? {} : { reason: args.reason }),
       })
+      const dashboard = deps.automation === undefined
+        ? undefined : dashboardJson(await deps.automation.dashboard())
       return {
         trade: paperTradeJson(result.trade),
         account: paperAccountJson(result.account),
+        ...(dashboard === undefined ? {} : { uiBlock: {
+          component: 'trading_dashboard',
+          version: 1,
+          props: { title: 'Phoenix Trading · Binance', ...dashboard },
+        } }),
       }
     },
     presentCall(args) {
@@ -468,6 +482,157 @@ function paperJournalTool(deps: BinanceTradingToolDependencies): ToolDefinition 
   })
 }
 
+function adaptiveCycleTool(deps: BinanceTradingToolDependencies): ToolDefinition {
+  return defineTool({
+    name: 'binance_adaptive_cycle',
+    description: 'Run a token-free multi-strategy Binance Spot scan over 1-5 USDT pairs. SCAN returns ranked signals without trading. PAPER-STEP can place at most ONE VIRTUAL order per call with deterministic position/exposure caps; it never accesses or trades a real account. Use this tool instead of guessing a profitable strategy. Live automation is not implemented by this tool.',
+    parameters: {
+      watchlist: { type: 'string', required: true, description: 'Comma-separated Spot symbols, for example BTCUSDT,ETHUSDT. Maximum five unique USDT pairs.' },
+      interval: { type: 'string', enum: ['15m', '1h', '4h', '1d'], description: 'Closed-candle analysis interval; default 1h.' },
+      mode: { type: 'string', enum: ['scan', 'paper-step'], description: 'Default scan. paper-step authorizes only a virtual trade.' },
+    },
+    output: {
+      schema: { type: 'object', additionalProperties: true },
+      render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
+    },
+    async execute(args) {
+      const result = await runBinanceAdaptiveCycle(deps.broker, {
+        symbols: args.watchlist.split(','),
+        ...(args.interval === undefined ? {} : { interval: args.interval }),
+        ...(args.mode === undefined ? {} : { mode: args.mode }),
+      })
+      return {
+        mode: result.mode,
+        interval: result.interval,
+        decision: result.decision,
+        rationale: result.rationale,
+        signals: result.signals.map(signal => ({
+          symbol: signal.symbol,
+          regime: signal.regime,
+          strategy: signal.strategy,
+          action: signal.action,
+          score: signal.score,
+          lastClose: signal.lastClose,
+          reason: signal.reason,
+        })),
+        ...(result.trade === undefined ? {} : { trade: paperTradeJson(result.trade) }),
+        account: paperAccountJson(result.account),
+        ...(deps.automation === undefined ? {} : { uiBlock: {
+          component: 'trading_dashboard',
+          version: 1,
+          props: { title: 'Phoenix Trading · Binance',
+            ...dashboardJson(await deps.automation.dashboard()) },
+        } }),
+      }
+    },
+    presentCall(args) {
+      return {
+        card: 'generic',
+        title: args.mode === 'paper-step' ? 'Adaptive Binance PAPER trade' : 'Adaptive Binance scan',
+        kind: args.mode === 'paper-step' ? 'execute' : 'read',
+        rawInput: args.watchlist,
+      }
+    },
+  })
+}
+
+/**
+ * Project only public virtual account evidence for the in-chat viewer.
+ * @param view - Host-backed PAPER scheduler and portfolio data.
+ * @returns Sanitized UI-friendly JSON without credentials.
+ */
+export function dashboardJson(view: BinancePaperAutomationView): Record<string, JsonValue> {
+  return {
+    mode: 'paper', phase: view.phase, enabled: view.enabled,
+    settings: { symbols: [...view.settings.symbols], interval: view.settings.interval, pollMs: view.settings.pollMs },
+    ...(view.lastAttemptAt === undefined ? {} : { lastAttemptAt: view.lastAttemptAt }),
+    ...(view.lastSuccessAt === undefined ? {} : { lastSuccessAt: view.lastSuccessAt }),
+    ...(view.nextCheckAt === undefined ? {} : { nextCheckAt: view.nextCheckAt }),
+    ...(view.lastError === undefined ? {} : { lastError: view.lastError }),
+    account: paperAccountJson(view.account),
+    recentTrades: view.recentTrades.map(paperTradeJson),
+    signals: view.lastCycle?.signals.map(signal => ({
+      symbol: signal.symbol, regime: signal.regime, strategy: signal.strategy,
+      action: signal.action, score: signal.score, reason: signal.reason,
+    })) ?? [],
+    lastDecision: view.lastCycle?.decision ?? 'none',
+    rationale: view.lastCycle?.rationale ?? 'No analysis executed in the current Host session',
+  }
+}
+
+function dashboardTool(deps: BinanceTradingToolDependencies): ToolDefinition {
+  return defineTool({
+    name: 'binance_paper_dashboard',
+    description: 'Open a first-party PHOENIX trading dashboard inside chat. Read real PAPER ledger, strategy signals, last engine decision, verified virtual fills, and auto-run status. Does not place an order. An enabled automation runs independently of the chat model; use the dashboard to inspect why it traded or held.',
+    parameters: {},
+    output: {
+      schema: { type: 'object', additionalProperties: true },
+      render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
+    },
+    async execute() {
+      if (deps.automation === undefined) throw new Error('PAPER automation is unavailable')
+      const view = await deps.automation.dashboard()
+      const dashboard = dashboardJson(view)
+      return {
+        dashboard,
+        uiBlock: {
+          component: 'trading_dashboard',
+          version: 1,
+          props: {
+            title: 'Phoenix Trading · Binance',
+            ...dashboard,
+          },
+        },
+      }
+    },
+    presentCall() { return { card: 'generic', title: 'Visor de trading Binance', kind: 'read' } },
+  })
+}
+
+function paperAutoTool(deps: BinanceTradingToolDependencies): ToolDefinition {
+  return defineTool({
+    name: 'binance_paper_auto',
+    description: 'Start, stop, or request one immediate check of REAL background PAPER trading automation, independently of ChatGPT tokens. Start requires an explicitly user-requested virtual automation and a comma-separated 1-5 pair USDT watchlist; future checks run automatically while the Host runs, and resume after restart. It never connects to real funds or bypasses Binance order confirmation. Always report genuine tradeCount from the dashboard, not a fabricated fill.',
+    parameters: {
+      action: { type: 'string', required: true, enum: ['start', 'stop', 'check-now'] },
+      requestedByUser: { type: 'boolean', description: 'Required true to START and only when the user asked for automatic paper trading.' },
+      watchlist: { type: 'string', description: 'Comma-separated unique Spot USDT pairs; required on START.' },
+      interval: { type: 'string', enum: ['15m', '1h', '4h', '1d'], description: 'Closed-candle strategy interval; default 15m.' },
+      pollMinutes: { type: 'integer', description: 'How often the Host checks, 1–60 minutes; default 1.' },
+    },
+    output: {
+      schema: { type: 'object', additionalProperties: true },
+      render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
+    },
+    async execute(args) {
+      if (deps.automation === undefined) throw new Error('PAPER automation is unavailable')
+      if (args.action === 'start') {
+        if (args.requestedByUser !== true) throw new Error('Starting automatic paper trading requires an explicit user request')
+        if (typeof args.watchlist !== 'string') throw new Error('Starting paper trading requires a watchlist')
+        await deps.automation.start({
+          symbols: args.watchlist.split(','),
+          ...(args.interval === undefined ? {} : { interval: args.interval }),
+          ...(args.pollMinutes === undefined ? {} : { pollMs: args.pollMinutes * 60_000 }),
+        })
+      } else if (args.action === 'stop') {
+        await deps.automation.stop()
+      } else {
+        await deps.automation.step()
+      }
+      return dashboardJson(await deps.automation.dashboard())
+    },
+    presentCall(args) {
+      return {
+        card: 'generic',
+        title: args.action === 'start' ? 'Iniciar trading PAPER' : args.action === 'stop'
+          ? 'Detener trading PAPER' : 'Comprobar trading PAPER',
+        kind: args.action === 'check-now' ? 'read' : 'execute',
+        rawInput: args.action,
+      }
+    },
+  })
+}
+
 /**
  * Build the complete on-demand Binance model-tool family.
  * @param deps - Paper broker, approval seam, and optional Agent OS host controls.
@@ -484,5 +649,8 @@ export function createBinanceTradingTools(deps: BinanceTradingToolDependencies):
     paperOrderTool(deps),
     paperAccountTool(deps),
     paperJournalTool(deps),
+    adaptiveCycleTool(deps),
+    dashboardTool(deps),
+    paperAutoTool(deps),
   ]
 }
