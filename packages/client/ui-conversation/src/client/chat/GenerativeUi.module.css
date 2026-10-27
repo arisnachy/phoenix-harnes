@@ -251,3 +251,19 @@
   .sportsTicketPick strong{font-size:13px}
   .sportsTicketCard .sportsTicketTotal{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
+
+/* Ticket picks separate fixture verification from unverified commercial prices. */
+.sportsTicketVerified{
+  flex:0 0 auto;align-self:center;white-space:nowrap;
+  font-size:11px;font-weight:700;padding:6px 9px;border-radius:999px;
+  color:var(--dsw-alias-label-secondary,#687078);
+  border:1px solid var(--dsw-alias-border-subtle,rgba(125,125,125,.3));
+  background:var(--dsw-alias-interactive-bg-hover,rgba(120,120,120,.045))
+}
+.sportsTicketLogos .sportsPortrait{
+  background:var(--dsw-alias-interactive-bg-hover,rgba(125,125,125,.04));
+  border:1px solid var(--dsw-alias-border-subtle,rgba(125,125,125,.25))
+}
+@media(max-width:560px){
+ .sportsTicketVerified{font-size:10px;padding:5px 7px}
+}
