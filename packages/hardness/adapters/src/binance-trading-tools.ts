@@ -70,6 +70,20 @@ function paperAccountJson(account: BinancePaperAccount): Record<string, JsonValu
       marketValueUsdt: position.marketValueUsdt,
       costBasisUsdt: position.costBasisUsdt,
       unrealizedPnlUsdt: position.unrealizedPnlUsdt,
+      unrealizedReturnPct: position.unrealizedReturnPct,
+      ...(position.exitPlan === undefined ? {} : {
+        exitPlan: {
+          strategyId: position.exitPlan.strategyId,
+          entryPriceUsdt: position.exitPlan.entryPriceUsdt,
+          stopLossPrice: position.exitPlan.stopLossPrice,
+          tp1Price: position.exitPlan.tp1Price,
+          tp2Price: position.exitPlan.tp2Price,
+          tp1Taken: position.exitPlan.tp1Taken,
+          tp1Fraction: position.exitPlan.tp1Fraction,
+          origin: position.exitPlan.origin,
+          createdAt: position.exitPlan.createdAt,
+        },
+      }),
     })),
   }
 }
@@ -552,6 +566,7 @@ export function dashboardJson(view: BinancePaperAutomationView): Record<string, 
     ...(view.nextCheckAt === undefined ? {} : { nextCheckAt: view.nextCheckAt }),
     ...(view.lastError === undefined ? {} : { lastError: view.lastError }),
     account: paperAccountJson(view.account),
+    markedAt: view.markedAt,
     recentTrades: view.recentTrades.map(paperTradeJson),
     signals: view.lastCycle?.signals.map(signal => ({
       symbol: signal.symbol, regime: signal.regime, strategy: signal.strategy,
