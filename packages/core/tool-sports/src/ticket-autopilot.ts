@@ -6,6 +6,11 @@ import {autoResearchTicket} from './research-ticket.ts'
 import {marketOdds,pricedTicket,type ChatBlock,type MarketOutcome,type MarketSelection} from './sports.ts'
 
 const DEFAULT_SPORTS=['basketball_nba','americanfootball_nfl','soccer_epl','baseball_mlb'] as const
+const ESPN_LEAGUES:Readonly<Record<string,string>>={
+  basketball_nba:'nba',basketball_wnba:'wnba',americanfootball_nfl:'nfl',
+  icehockey_nhl:'nhl',soccer_epl:'eng.1',soccer_spain_la_liga:'esp.1',
+  soccer_uefa_champs_league:'uefa.champions',baseball_mlb:'mlb',
+}
 const validDay=(value:string):boolean=>/^\d{4}-\d{2}-\d{2}$/u.test(value)
   &&Number.isFinite(Date.parse(value+'T00:00:00Z'))
   &&new Date(value+'T00:00:00Z').toISOString().slice(0,10)===value
@@ -33,7 +38,7 @@ export type AutomaticSportsTicket={
   dataGaps:string[]
   providerErrors:string[]
 }
-type ResearchFallback=(count:number,date:string)=>Promise<{
+type ResearchFallback=(count:number,date:string,leagues:readonly string[])=>Promise<{
   card:ChatBlock;verifiedEvents:number;complete:boolean
 }>
 type OddsLookup=(sportKey:string,date:string)=>Promise<MarketOutcome[]>
@@ -84,7 +89,7 @@ export async function buildAutomaticSportsTicket(
   sportKeys:readonly string[]=DEFAULT_SPORTS,
   stake=0,
   lookup:OddsLookup=(key,date)=>marketOdds(key,'h2h',process.env,fetch,date),
-  fallback:ResearchFallback=(legs,date)=>autoResearchTicket(legs,date),
+  fallback:ResearchFallback=(legs,date,leagues)=>autoResearchTicket(legs,date,fetch,Date.now(),process.env,leagues),
   now=Date.now(),
 ):Promise<AutomaticSportsTicket>{
   if(!Number.isInteger(count)||count<1||count>6)throw Error('Número de patas inválido (1 a 6)')
@@ -135,7 +140,8 @@ export async function buildAutomaticSportsTicket(
         'Confirmación de mercados y disponibilidad en la banca pendiente.',
       ]}
   }
-  const researched=await fallback(count,requestedDate)
+  const limitedLeagues=[...new Set(sportKeys.map(key=>ESPN_LEAGUES[key]).filter((v):v is string=>!!v))]
+  const researched=await fallback(count,requestedDate,limitedLeagues)
   if(!researched.card||researched.card.component!=='sports_ticket_card')
     throw Error('Fuente de pronósticos no generó un ticket deportivo verificable')
   return {
