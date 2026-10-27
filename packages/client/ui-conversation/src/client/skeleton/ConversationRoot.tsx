@@ -8,8 +8,10 @@ import { IconSearchOutline16 } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { SessionId, WorkspaceId } from '@phoenix-ai/dsh-client-runtime/client'
 import type { ConversationSlotProps, InputZone } from '../contract/slots.ts'
 import {
-  HeroAttentionList, HeroGlow, HeroShell, WorkspaceChip, heroAttentionPrompt, workspaceLabel,
+  HeroAttentionList, HeroGlow, HeroMissionLaunchpad, HeroShell, WorkspaceChip,
+  heroAttentionPrompt, workspaceLabel,
 } from './EmptyHero.tsx'
+import type { HeroMissionStarter } from './EmptyHero.tsx'
 import css from './ConversationRoot.module.css'
 
 /** Full props composed from the slot contract. */
@@ -172,6 +174,15 @@ export function ConversationRoot({
     })
   }, [inputActions, recordAttention])
 
+  const selectMission = useCallback((mission: HeroMissionStarter): void => {
+    // Never overwrite an unsent user draft and never trigger a model request.
+    if (inputActions === undefined || (inputState?.draft ?? '').trim() !== '') return
+    inputActions.setDraft(mission.prompt)
+    requestAnimationFrame(() => {
+      rootRef.current?.querySelector('textarea')?.focus()
+    })
+  }, [inputActions, inputState?.draft])
+
   // Publishes the seat's live height as --dsh-composer-height on the scroll
   // body so floating controls (ChatView back-to-bottom) clear the composer as
   // it grows. Callback ref, not an effect; stable identity prevents observer
@@ -304,6 +315,9 @@ export function ConversationRoot({
       {zone !== undefined && renderSlot('conversation.input.dock', zone)}
       {inputBar}
       {hero && <HeroAttentionList attention={proactiveAttention} onSelect={selectAttention} onDismiss={(item) => { void recordAttention(item, 'dismissed') }} />}
+      {hero && !inert && !blocked && proactiveAttention.length === 0
+        && (inputState?.draft ?? '').trim() === ''
+        && <HeroMissionLaunchpad onSelect={selectMission} />}
     </div>
   )
 

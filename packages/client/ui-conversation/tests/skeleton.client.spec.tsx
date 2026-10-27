@@ -338,7 +338,7 @@ describe('Approved welcome chrome', () => {
 })
 
 describe('ConversationRoot resident composer', () => {
-  it('keeps the original input and workspace controls without starter cards', () => {
+  it('keeps the original composer and universal Kira mission starters', () => {
     const b = mount(conversationSnapshot({ composerPhase: 'blank', blank: true }))
     expect(b.view.getByRole('textbox')).toBeTruthy()
     expect(b.view.getByText(/podemos trabajar hoy/)).toBeTruthy()
@@ -350,6 +350,17 @@ describe('ConversationRoot resident composer', () => {
     expect(b.slotCalls).toContain('conversation.hero.agentPreset')
     expect(b.slotCalls).toContain('conversation.input.model')
     expect(b.sink).not.toHaveBeenCalled()
+    const textarea = b.view.getByRole('textbox') as HTMLTextAreaElement
+    // The restored draft wins over shortcuts. They must never overwrite user input.
+    expect(b.view.queryByRole('button', { name: 'Continuar misión' })).toBeNull()
+    fireEvent.change(textarea, { target: { value: '' } })
+    expect(b.view.getByRole('button', { name: 'Continuar misión' })).toBeTruthy()
+    expect(b.view.getByRole('button', { name: 'Investigar' })).toBeTruthy()
+    expect(b.view.getByRole('button', { name: 'Construir' })).toBeTruthy()
+    fireEvent.click(b.view.getByRole('button', { name: 'Continuar misión' }))
+    expect(textarea.value).toContain('estado verificado de la misión activa')
+    expect(b.sink).not.toHaveBeenCalled()
+    expect(b.view.queryByRole('button', { name: 'Continuar misión' })).toBeNull()
   })
 
   it('renders the composer inert with the blocker\u2019s own reason', () => {

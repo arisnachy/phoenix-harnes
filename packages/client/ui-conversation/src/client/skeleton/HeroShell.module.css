@@ -427,3 +427,48 @@
   .fish { width: 80px; height: 80px; }
 }
 
+
+/* Mission launchpad: quiet, theme-native, keyboard accessible, no extra RPCs. */
+.missionLaunchpad {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  width: min(100%, var(--dsh-composer-card-max-width));
+  margin: 10px auto 0;
+}
+
+.missionShortcut {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 6px 12px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 18px;
+  background: var(--dsw-alias-bg-base);
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color 120ms var(--ds-ease-in-out), color 120ms var(--ds-ease-in-out);
+}
+
+.missionShortcut:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.missionShortcut:focus-visible {
+  outline: 2px solid var(--dsw-alias-border-l2);
+  outline-offset: 2px;
+}
+
+.missionLabel { font-weight: 500; }
+.missionArrow { color: var(--dsw-alias-label-caption); }
+
+@media (max-width: 720px) {
+  .missionLaunchpad { gap: 6px; margin-top: 8px; }
+  .missionShortcut { min-height: 32px; padding: 5px 10px; }
+}
