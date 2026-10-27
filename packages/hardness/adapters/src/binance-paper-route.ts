@@ -39,7 +39,7 @@ function privateCredentialAction(req: IncomingMessage): boolean {
 }
 
 async function readRequestObject(req: IncomingMessage): Promise<Record<string, unknown>> {
-  if (!/^application\\/json(?:\\s*;|\\s*$)/iu.test(req.headers['content-type'] ?? '')) {
+  if (!/^application\/json(?:\s*;|\s*$)/iu.test(req.headers['content-type'] ?? '')) {
     throw new Error('JSON content type required')
   }
   const chunks: Uint8Array[] = []
@@ -170,7 +170,7 @@ export function mountBinancePaperDashboardRoute(
           if (Object.keys(body).some(field => field !== 'apiKey' && field !== 'secret')
             || typeof body.apiKey !== 'string' || typeof body.secret !== 'string'
             || !/^[A-Za-z0-9_-]{12,256}$/u.test(body.apiKey)
-            || body.secret.length < 12 || body.secret.length > 256 || /\\s/u.test(body.secret)) {
+            || body.secret.length < 12 || body.secret.length > 256 || /\s/u.test(body.secret)) {
             throw new Error('Invalid test credentials')
           }
           key = body.apiKey
