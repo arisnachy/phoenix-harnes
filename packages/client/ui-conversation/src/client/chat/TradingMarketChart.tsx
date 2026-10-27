@@ -78,7 +78,7 @@ function movingAverage(data: readonly Candle[], length: number, x: (index: numbe
 /** Exchange OHLCV, never synthetic candle shapes or model-generated predictions. */
 export function TradingMarketChart({ symbols, trades }: Props) {
   const [selectedSymbol, setSelectedSymbol] = useState('BTCUSDT')
-  const [interval, setInterval] = useState<Interval>('1h')
+  const [interval, setTimeframe] = useState<Interval>('1h')
   const [candles, setCandles] = useState<readonly Candle[]>([])
   const [loadedKey, setLoadedKey] = useState('')
   const [error, setError] = useState<string | undefined>()
@@ -151,7 +151,7 @@ export function TradingMarketChart({ symbols, trades }: Props) {
         </select>
         <div className={css.marketPeriods} role="group" aria-label="Temporalidad">
           {INTERVALS.map(frame => <button type="button" key={frame}
-            aria-pressed={interval === frame} onClick={() => { setInterval(frame) }}>{frame}</button>)}
+            aria-pressed={interval === frame} onClick={() => { setTimeframe(frame) }}>{frame}</button>)}
         </div>
       </div>
     </header>
