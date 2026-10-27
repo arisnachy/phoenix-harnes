@@ -137,7 +137,11 @@ export type TradingMarketSelection = {
   readonly interval: '15m' | '1h' | '4h' | '1d'
 }
 
-/** Recognize genuine first-party OHLCV tool output, without trusting assistant prose. */
+/**
+ * Recognize first-party OHLCV results rather than accepting assistant prose.
+ * @param root - Settled tool output and nested code-mode calls.
+ * @returns Public chart selection, or undefined when evidence is absent.
+ */
 export function tradingMarketFromToolResult(root: unknown): TradingMarketSelection | undefined {
   if (record(root) === undefined) return undefined
   const stack: ResultBlock[] = [root as ResultBlock]
