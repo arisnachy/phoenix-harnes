@@ -17,7 +17,11 @@ type TradeMarker = {
   readonly executedAt: string
   readonly side: 'buy' | 'sell'
 }
-type Props = { readonly symbols: readonly string[]; readonly trades: readonly TradeMarker[] }
+type Props = {
+  readonly symbols: readonly string[]
+  readonly trades: readonly TradeMarker[]
+  readonly initialInterval?: Interval
+}
 const FRAME_WIDTH = 1100
 const FRAME_HEIGHT = 440
 const LEFT = 18
@@ -76,9 +80,9 @@ function movingAverage(data: readonly Candle[], length: number, x: (index: numbe
 }
 
 /** Exchange OHLCV, never synthetic candle shapes or model-generated predictions. */
-export function TradingMarketChart({ symbols, trades }: Props) {
+export function TradingMarketChart({ symbols, trades, initialInterval = '1h' }: Props) {
   const [selectedSymbol, setSelectedSymbol] = useState('BTCUSDT')
-  const [interval, setTimeframe] = useState<Interval>('1h')
+  const [interval, setTimeframe] = useState<Interval>(initialInterval)
   const [candles, setCandles] = useState<readonly Candle[]>([])
   const [loadedKey, setLoadedKey] = useState('')
   const [error, setError] = useState<string | undefined>()
