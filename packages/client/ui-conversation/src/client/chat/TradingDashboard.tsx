@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { parseTradingDashboard, type TradingDashboardSnapshot } from './trading-tool-cards.ts'
 import css from './TradingDashboard.module.css'
+import { TradingMarketChart } from './TradingMarketChart.tsx'
 
 type Props = {
   readonly initial?: TradingDashboardSnapshot | undefined
@@ -140,6 +141,7 @@ export function TradingDashboard({ initial }: Props) {
                 onClick={() => { void control('start') }}>Iniciar PAPER</button>}
         </div>
       </div>
+      <TradingMarketChart symbols={settings.symbols} trades={state.recentTrades} />
       <div className={css.twoColumns}>
         <section className={css.section}>
           <h4>Radar de estrategias</h4>
