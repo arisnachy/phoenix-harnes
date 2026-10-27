@@ -371,7 +371,7 @@ function testnetOrderTool(deps: BinanceTradingToolDependencies): ToolDefinition 
 function candlesTool(deps: BinanceTradingToolDependencies): ToolDefinition {
   return defineTool({
     name: 'binance_market_candles',
-    description: 'Read public Binance Spot OHLCV candles for analysis and charting. No Binance account or API key is used. Use phoenix_visualize when the user would benefit from a chart.',
+    description: 'Read real public Binance Spot OHLCV candles. Phoenix renders a native light-theme candlestick, volume and MA chart automatically from the verified tool result; do not call phoenix_visualize for an 8-candle imitation. No account credentials are used.',
     parameters: {
       symbol: { type: 'string', required: true, description: 'Binance Spot symbol such as BTCUSDT.' },
       interval: { type: 'string', required: true, description: 'Binance interval such as 1m, 5m, 1h, 4h, 1d.' },
