@@ -102,7 +102,9 @@ export function TokenTelemetrySection({
   const prefixReusePercent = systemChars > 0 ? number(reusedPrefixChars / systemChars * 100) : undefined
   const reasoningTokens = completed.reduce((sum, record) => sum + (record.reasoningTokens ?? 0), 0)
   const contributions: Contribution[] = COMPONENT_KEYS.map(([key, property]) => ({
-    key, size: selected.reduce((sum, record) => sum + record[property], 0),
+    key, size: selected.reduce((sum, record) => sum + (key === 'telemetry.system'
+      ? Math.max(0, record.systemChars - (record.codeSdkChars ?? 0))
+      : (record[property] ?? 0)), 0),
   })).sort((a, b) => b.size - a.size)
   const totalChars = contributions.reduce((sum, item) => sum + item.size, 0)
   const models = useMemo(() => {
