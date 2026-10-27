@@ -94,3 +94,11 @@ test('requires provider comparisons within the same house even if other houses h
   assert.equal(result.priced,false)
   assert.equal(result.requestedLegs,3)
 })
+
+test('near-coinflip bookmaker lines are not promoted as strong favorites',()=>{
+  const balanced=rankMarketFavorites(quotes('Casa A','300',1.94,1.96),1,now)
+  assert.deepEqual(balanced,[])
+  const favorite=rankMarketFavorites(quotes('Casa A','300',1.55,2.6),1,now)
+  assert.equal(favorite.length,1)
+  assert.equal(favorite[0].legs[0].quote.selection,'Home 300')
+})
