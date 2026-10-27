@@ -199,3 +199,37 @@ test('sportsbook taxonomy groups sourced sports, countries and leagues without i
   assert.equal(result.card.props.legs[0].player,undefined)
   assert.doesNotMatch(result.warning,/mismo encuentro/)
 })
+
+test('NBA pregame game cards include a sourced favorite and explicitly low-confidence rationale',async()=>{
+  const board={events:[{id:'2028',name:'Heat at Hawks',date:new Date(Date.now()+86400000).toISOString(),
+    status:{type:{state:'pre',description:'Scheduled'}},competitions:[{competitors:[
+      {homeAway:'home',team:{displayName:'Atlanta Hawks'},records:[{name:'overall',summary:'2-2'}]},
+      {homeAway:'away',team:{displayName:'Miami Heat'},records:[{name:'overall',summary:'0-4'}]},
+    ]}]}]}
+  const out=await chatGames('basketball','nba',undefined,{},await response(board))
+  const research=out.items[0].props.research
+  assert.match(research.favorite,/Tendencia provisional: Atlanta Hawks/)
+  assert.match(research.evidence.join(' '),/Muestra pequeña/)
+  assert.match(research.source,/ESPN/)
+})
+
+test('ESPN market search honors the user-requested future date, not just today',async()=>{
+  const kickoff=new Date(Date.now()+3*86400000).toISOString()
+  const day=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santo_Domingo',year:'numeric',
+    month:'2-digit',day:'2-digit'}).format(new Date(kickoff))
+  const urls=[]
+  const mock=async url=>{
+    urls.push(String(url))
+    return new Response(JSON.stringify({events:[{
+      id:'987654',date:kickoff,competitions:[{id:'987654',competitors:[
+        {homeAway:'home',team:{displayName:'Local'}},
+        {homeAway:'away',team:{displayName:'Visita'}},
+      ],odds:[{provider:{name:'Test house'},homeTeamOdds:{moneyLine:-120},
+        awayTeamOdds:{moneyLine:110}}]}],
+    }]}),{status:200})
+  }
+  const odds=await marketOdds('basketball_nba','h2h',{},mock,day)
+  assert.equal(odds.length,2)
+  assert.ok(urls[0].includes('dates='+day.replaceAll('-','')))
+  await assert.rejects(()=>marketOdds('basketball_nba','h2h',{},mock,'2026-02-31'),/Fecha/)
+})
