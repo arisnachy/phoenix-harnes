@@ -1,5 +1,6 @@
 /** Ticket de pronósticos con encuentros verificables aunque falten cuotas comerciales. */
 import { getFeed, hasSportsPermission, sportsCatalog, type ChatBlock } from './sports.ts'
+import { compareStandings } from './standings-research.ts'
 
 /** Selección propuesta por Kira, independiente de cualquier precio de apuestas. */
 export type ResearchTicketLeg = {
@@ -160,7 +161,7 @@ export async function researchTicket(
   }
 }
 
-/** Candidates come only from ESPN fixtures and reported win-loss records, never synthetic IDs.
+/** Candidates come only from ESPN fixtures and reported team records, never synthetic IDs.
  * A simple record comparison is a transparent heuristic, NOT a calibrated predictive model.
  * Returns a visibly incomplete draft when fewer than the requested legs have evidence.
  */
@@ -201,29 +202,18 @@ export async function autoResearchTicket(
       const home=teams?.find(team=>team.homeAway==='home')
       const away=teams?.find(team=>team.homeAway==='away')
       if(!home?.team?.displayName&&!home?.team?.name || !away?.team?.displayName&&!away?.team?.name)continue
-      const record=(team:EspnTeam):{wins:number;losses:number;name:string}|null=>{
-        const match=team.records?.map(x=>x.summary??'')
-          .find(x=>/^\d{1,3}-\d{1,3}$/u.test(x))?.match(/^(\d+)-(\d+)$/u)
-        if(!match)return null
-        const wins=Number(match[1]),losses=Number(match[2])
-        if(wins+losses<1)return null
-        return {wins,losses,name:clean(team.team?.displayName??team.team?.name??'',75)}
-      }
-      const h=record(home),a=record(away)
-      if(!h||!a)continue
-      // Laplace smoothing avoids treating a 1-0 early-season record as certainty.
-      const hp=(h.wins+1)/(h.wins+h.losses+2)
-      const ap=(a.wins+1)/(a.wins+a.losses+2)
-      const difference=hp-ap
-      if(Math.abs(difference)<0.055)continue
-      const winner=difference>0?h:a
-      const loser=difference>0?a:h
+      const signal=compareStandings(home,away)
+      if(signal.pick===null)continue
+      const winner=signal.pick==='home'?home:away
+      const loser=signal.pick==='home'?away:home
       candidates.push({
-        edge:Math.abs(difference),
-        leg:{ sport,league,eventId:String(event.id),pick:difference>0?'home':'away',
-          rationale:clean('Tendencia descriptiva: '+winner.name+' '+winner.wins+'-'+winner.losses+
-            ' ante '+loser.name+' '+loser.wins+'-'+loser.losses+
-            '. Muestra inicial; no considera bajas, rivales ni cuotas. No es probabilidad de ganar.',240) },
+        edge:signal.edge,
+        leg:{ sport,league,eventId:String(event.id),pick:signal.pick,
+          rationale:clean(signal.research.favorite+'. '+
+            (winner.team?.displayName??winner.team?.name??'Equipo')+' frente a '+
+            (loser.team?.displayName??loser.team?.name??'rival')+'. '+
+            signal.research.evidence.join('; ')+
+            '. Predicción NO calibrada. Verificar lesiones, enfrentamientos, forma y cuotas.',240) },
       })
     }
   }
