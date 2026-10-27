@@ -35,6 +35,23 @@ describe('Settings → Telemetría', () => {
     expect(screen.queryByText(es['telemetry.hostUnavailable'])).toBeNull()
   })
 
+  it('does not mislabel missing Codex cached-token metrics as zero and shows reusable prefix', async () => {
+    const record: TokenTelemetrySnapshot['records'][number] = {
+      at: Date.now(), provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'high',
+      systemChars: 100, reusedSystemPrefixChars: 80, schemaChars: 30,
+      historyChars: 10, humanChars: 5, assistantChars: 5, toolResultChars: 0,
+      runtimeContextChars: 0, otherHistoryChars: 0, messageCount: 2, toolCount: 2,
+      approximateInputTokens: 35, inputTokens: 2000, outputTokens: 20,
+    }
+    const readTelemetry = vi.fn().mockResolvedValue({ enabled: true, records: [record] })
+    mount({ readTelemetry, setTelemetry: vi.fn(), clearTelemetry: vi.fn() })
+    await screen.findByText('2000')
+    expect(screen.getByText(es['telemetry.cachePrefix'])).toBeTruthy()
+    expect(screen.getByText(es['telemetry.cacheUnknown'])).toBeTruthy()
+    expect(screen.getByText('80% ' + es['telemetry.cachePrefixReused'])).toBeTruthy()
+    expect(screen.getAllByText('—').length).toBeGreaterThan(0)
+  })
+
   it('shows collected real tokens and updates the checkbox after a successful Host mutation', async () => {
     const record: TokenTelemetrySnapshot['records'][number] = {
       at: Date.now(), provider: 'codex', model: 'luna', reasoningEffort: 'medium',
