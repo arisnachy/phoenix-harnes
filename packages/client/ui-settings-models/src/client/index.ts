@@ -83,6 +83,31 @@ export function selectCurrentCodexModels(
   }).map(choice => ({ ...choice, reasoningEfforts: [...choice.reasoningEfforts] }))
 }
 
+/**
+ * Read Eclipse choices from the authenticated Codex app-server itself.
+ * llm.models can contain configured/pinned or last-good adapter models and is
+ * deliberately not an account-visibility authority. Never synthesize models
+ * or silently fall back on a stale catalog after discovery fails.
+ *
+ * @param api - Connected Host API exposing account-scoped model discovery.
+ * @returns Every non-hidden Codex model and its advertised reasoning levels.
+ */
+export async function loadEclipseCodexCatalog(
+  api: ConnectionHandle['api'],
+): Promise<readonly EclipseCatalogChoice[]> {
+  const response = await api.llm.discoverModels({
+    settingsNs: 'llm-pi-ai',
+    provider: 'openai-codex',
+  })
+  if (!response.result.ok) throw new Error(response.result.error.message)
+  return selectCurrentCodexModels(response.result.value.models.map(model => ({
+    provider: 'openai-codex',
+    model: model.id,
+    name: model.name ?? model.id,
+    reasoningEfforts: model.reasoning?.efforts.map(effort => effort.id) ?? [],
+  })))
+}
+
 type PluginInventoryRemoteResult<T> =
   | { ok: true; value: T }
   | { ok: false; error: { code: string; message: string } }
