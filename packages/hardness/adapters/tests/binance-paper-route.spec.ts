@@ -73,6 +73,12 @@ describe('Binance chat viewer HTTP integration', () => {
       body: JSON.stringify({ action: 'start', symbols: ['BTCUSDT'], interval: '15m', pollMinutes: 1 }),
     })
     expect(start.status).toBe(200)
+    // HTTP acknowledgement must contain the completed initial scan, not a
+    // 'running' state that hides a pending first execution.
+    expect(await start.json()).toMatchObject({
+      mode: 'paper', enabled: true, account: { tradeCount: 1 },
+      recentTrades: [{ symbol: 'BTCUSDT', side: 'buy' }],
+    })
     await engine.step()
     const current = await fetch(endpoint + 'dashboard')
     expect(await current.json()).toMatchObject({
@@ -85,6 +91,22 @@ describe('Binance chat viewer HTTP integration', () => {
     })
     expect(stop.status).toBe(200)
     expect(await stop.json()).toMatchObject({ enabled: false })
+  })
+
+  it('serves real-source market candles without exposing an account or accepting unsafe queries', async () => {
+    const { origin } = await serverWithTrading()
+    const path = origin + '/phoenix-trading/paper/candles'
+    const result = await fetch(path + '?symbol=BTCUSDT&interval=1h')
+    expect(result.status).toBe(200)
+    const payload = await result.json()
+    expect(payload).toMatchObject({ source: 'binance-spot-public', symbol: 'BTCUSDT', interval: '1h' })
+    expect(payload.candles).toHaveLength(80)
+    expect(payload).not.toHaveProperty('account')
+    expect(payload).not.toHaveProperty('credentials')
+    expect((await fetch(path + '?symbol=BTCUSDT&interval=1m')).status).toBe(400)
+    expect((await fetch(path + '?symbol=BTCUSDT&interval=1h&mode=real')).status).toBe(400)
+    expect((await fetch(path + '?symbol=../ETHUSDT&interval=1h')).status).toBe(400)
+    expect((await fetch(path + '?symbol=BTCUSDT&interval=1h', { method: 'POST' })).status).toBe(405)
   })
 
   it('rejects CSRF and REAL fields before any account action', async () => {
