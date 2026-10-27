@@ -132,6 +132,20 @@ describe('Eclipse model settings', () => {
     expect(await screen.findAllByRole('option', { name: 'GPT-6.1 Terra' })).toHaveLength(3)
   })
 
+  it('clears stale Eclipse model choices if a subsequent live Codex refresh fails', async () => {
+    const controller = controllerWith({ mode: 'hybrid' })
+    const loadCatalog = vi.fn()
+      .mockResolvedValueOnce(catalog)
+      .mockRejectedValueOnce(new Error('Codex discovery failed'))
+    render(<EclipseRoutingPanel controller={controller as never}
+      api={{ settings: { mutate: vi.fn() } } as never}
+      loadCatalog={loadCatalog} t={t} />)
+    expect(await screen.findAllByRole('option', { name: 'GPT-6.1 Sol' })).toHaveLength(3)
+    fireEvent.click(screen.getByRole('button', { name: en.eclipseRefresh }))
+    expect(await screen.findByText('Codex discovery failed')).toBeTruthy()
+    expect(screen.queryByRole('option', { name: 'GPT-6.1 Sol' })).toBeNull()
+  })
+
   it('renders three independent seats with unlimited strategy calls and saves canonical fields', async () => {
     const controller = controllerWith({
       mode: 'manual', planner: { provider: 'openai-codex', model: 'gpt-6.1-sol' },
