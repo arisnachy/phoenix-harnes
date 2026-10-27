@@ -114,3 +114,9 @@
 .tradingRadarMeta span { font-size: 12px; }
 .tradingReason { display: block; max-width: 310px; margin-top: 3px; font-size: 11px; color: #718092; }
 .tradingNotice { font-size: 12px; color: #6a788a; margin: 5px 0 0; }
+
+.watchlist { display: grid; gap: 6px; min-width: 0; font-size: 11px; font-weight: 650; color: #556478; }
+.watchlist input { box-sizing: border-box; display: block; width: 100%; min-width: 0; background: #fff; color: #233041;
+  border: 1px solid #dfe4eb; border-radius: 9px; padding: 10px 12px; font: inherit; font-size: 12px; }
+.watchlist input:focus-visible { outline: 2px solid #e65b29; outline-offset: 1px; }
+.watchlist input:disabled { background: #f6f7f8; color: #6b7889; }
