@@ -130,3 +130,39 @@ export function tradingDashboardFromToolResult(root: unknown): TradingDashboardS
   }
   return undefined
 }
+
+/** Market chart is public Binance Spot context, not evidence of a funded account. */
+export type TradingMarketSelection = {
+  readonly symbol: string
+  readonly interval: '15m' | '1h' | '4h' | '1d'
+}
+
+/** Recognize genuine first-party OHLCV tool output, without trusting assistant prose. */
+export function tradingMarketFromToolResult(root: unknown): TradingMarketSelection | undefined {
+  if (record(root) === undefined) return undefined
+  const stack: ResultBlock[] = [root as ResultBlock]
+  let visits = 0
+  while (stack.length > 0 && visits++ < 40) {
+    const node = stack.pop()
+    if (node === undefined) continue
+    for (const child of [...(node.subCalls ?? [])].slice(0, 16).reverse()) stack.push(child)
+    if (node.kind !== 'tool-result' || node.isError === true
+      || node.call?.name !== 'binance_market_candles') continue
+    const raw = node.content?.filter(part => part.type === 'text')
+      .map(part => part.text ?? '').join('') ?? ''
+    if (!raw || raw.length > 150_000) continue
+    try {
+      const payload = record(JSON.parse(raw))
+      if (payload === undefined || payload.mode !== 'public-market-data'
+        || typeof payload.symbol !== 'string' || !/^[A-Z0-9]{3,16}USDT$/u.test(payload.symbol)
+        || !['15m', '1h', '4h', '1d'].includes(String(payload.interval))
+        || !Array.isArray(payload.candles) || payload.candles.length < 1
+        || payload.candles.length > 1000) continue
+      return {
+        symbol: payload.symbol,
+        interval: payload.interval as TradingMarketSelection['interval'],
+      }
+    } catch { /* Broken or unverified tool result: do not display a fabricated chart. */ }
+  }
+  return undefined
+}
