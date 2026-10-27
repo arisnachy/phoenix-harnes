@@ -5,6 +5,8 @@ import z from '@phoenix-ai/schemastery'
 import { SessionId } from '@phoenix-ai/dsh-session'
 import type { LearningMemoryService } from '@phoenix-ai/dsh-session-learning'
 import { scoreAttention } from './attention.ts'
+import { deriveOperationalSelfModel } from './self-model.ts'
+import type { OperationalSelfModel } from './self-model.ts'
 import { validateCognitiveState } from './invariant.ts'
 import { partitionWorkingMemory } from './working-memory.ts'
 import { createGlobalWorkspace } from './workspace.ts'
@@ -12,6 +14,8 @@ import { cloneAttentionCandidate } from './clone.ts'
 import type { AttentionWeights, CognitiveState } from './types.ts'
 
 export { scoreAttention } from './attention.ts'
+export { deriveOperationalSelfModel } from './self-model.ts'
+export type { OperationalSelfModel, SelfEvidence, SelfEvidenceCategory } from './self-model.ts'
 export { partitionWorkingMemory } from './working-memory.ts'
 export { createGlobalWorkspace } from './workspace.ts'
 export type * from './types.ts'
@@ -125,6 +129,12 @@ export class CognitiveRuntimeService extends Service {
     if (this.ctx.sessions.get(sessionId) === undefined) return undefined
     const state = this.states.get(String(sessionId))
     return state === undefined ? undefined : cloneState(state)
+  }
+
+  /** Return a detached, evidence-based self-model without extra model calls. */
+  introspect(sessionId: SessionId): OperationalSelfModel | undefined {
+    const state = this.get(sessionId)
+    return state === undefined ? undefined : deriveOperationalSelfModel(state)
   }
 
   /**
