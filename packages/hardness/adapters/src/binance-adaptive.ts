@@ -161,7 +161,7 @@ function normalizedSymbols(raw: readonly string[]): string[] {
 async function serialized<T>(broker: BinanceAdaptiveBroker, fn: () => Promise<T>): Promise<T> {
   const prior = cycleLocks.get(broker) ?? Promise.resolve()
   let unlock: (() => void) | undefined
-  const gate = new Promise<void>(resolve => { unlock = resolve })
+  const gate = new Promise<void>((resolve) => { unlock = resolve })
   const next = prior.catch(() => undefined).then(() => gate)
   cycleLocks.set(broker, next)
   await prior.catch(() => undefined)
@@ -188,11 +188,13 @@ export async function runBinanceAdaptiveCycle(
 ): Promise<BinanceAdaptiveCycle> {
   return serialized(broker, async () => {
     const symbols = normalizedSymbols(request.symbols)
-    const interval = request.interval ?? '1h'
+    const requestedInterval: string = request.interval ?? '1h'
+    if (!Object.hasOwn(INTERVAL_MS, requestedInterval)) throw new Error('Unsupported Binance adaptive interval')
+    const interval = requestedInterval as keyof typeof INTERVAL_MS
     const intervalMs = INTERVAL_MS[interval]
-    if (intervalMs === undefined) throw new Error('Unsupported Binance adaptive interval')
-    const mode = request.mode ?? 'scan'
-    if (mode !== 'scan' && mode !== 'paper-step') throw new Error('Invalid adaptive mode')
+    const requestedMode: string = request.mode ?? 'scan'
+    if (!['scan', 'paper-step'].includes(requestedMode)) throw new Error('Invalid adaptive mode')
+    const mode = requestedMode as BinanceAdaptiveCycle['mode']
     const account = await broker.account()
     const signals: BinanceAdaptiveSignal[] = []
     for (const symbol of symbols) {
@@ -200,7 +202,7 @@ export async function runBinanceAdaptiveCycle(
       signals.push(evaluateBinanceAdaptiveSignal(symbol, bars, intervalMs, now))
     }
     const sorted = [...signals].sort((a, b) => b.score - a.score || a.symbol.localeCompare(b.symbol))
-    const exits = sorted.flatMap(signal => {
+    const exits = sorted.flatMap((signal) => {
       const position = account.positions.find(item => item.symbol === signal.symbol)
       if (position === undefined) return []
       const pnl = (position.marketPriceUsdt / position.averageEntryUsdt - 1) * 100
@@ -214,9 +216,6 @@ export async function runBinanceAdaptiveCycle(
     const budget = Math.min(account.equityUsdt * MAX_POSITION_FRACTION,
       Math.max(0, account.equityUsdt * MAX_PORTFOLIO_EXPOSURE - exposure),
       account.cashUsdt / (1 + account.feeRate))
-    const canBuy = candidate !== undefined && budget >= 10
-      && account.positions.length < MAX_OPEN_POSITIONS
-      && account.maxDrawdownPct < 5
 
     if (mode === 'scan') {
       return { mode, interval, signals: sorted, decision: 'hold',
@@ -234,7 +233,9 @@ export async function runBinanceAdaptiveCycle(
         rationale: 'Risk or defensive exit from an existing virtual position',
         trade: result.trade, account: result.account }
     }
-    if (canBuy && candidate !== undefined) {
+    if (candidate !== undefined && budget >= 10
+      && account.positions.length < MAX_OPEN_POSITIONS
+      && account.maxDrawdownPct < 5) {
       const result = await broker.order({
         symbol: candidate.symbol,
         side: 'buy',
