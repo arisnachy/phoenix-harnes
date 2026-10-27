@@ -11,7 +11,7 @@ import { captureStableAria, compareOrRefreshGolden, launchWebScaffold, watchCons
 import { newEnglishPage, REPO_ROOT } from './support.ts'
 
 const OVERLAY = fileURLToPath(new URL('./eclipse-routing.overlay.yml', import.meta.url))
-const MODELS = ['gpt-6.1-sol', 'gpt-6-sol', 'gpt-5.6-sol', 'gpt-6-luna', 'gpt-5.6-luna']
+const MODELS = ['gpt-6.1-sol', 'gpt-6.1-terra', 'gpt-6-sol', 'gpt-5.6-sol', 'gpt-6-luna', 'gpt-5.6-luna']
 const profile = { mode: 'manual', planner: { provider: 'openai-codex', model: 'gpt-6.1-sol', reasoningEffort: 'medium' },
   coordinator: { provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'max' },
   subagent: { provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'xhigh' },
@@ -63,7 +63,7 @@ it('saves three independent Codex roles and unlimited adaptive strategy mode acr
     expect(await content.locator('#eclipse-planner').count()).toBe(1)
     expect(await content.locator('#eclipse-specialist').count()).toBe(0)
     expect(await content.locator('#eclipse-coordinator option').allTextContents()).toEqual(['Automatic',
-      'gpt-6.1-sol', 'gpt-6-sol', 'gpt-5.6-sol', 'gpt-6-luna', 'gpt-5.6-luna'])
+      'gpt-6.1-sol', 'gpt-6.1-terra', 'gpt-6-sol', 'gpt-5.6-sol', 'gpt-6-luna', 'gpt-5.6-luna'])
     await content.locator('#eclipse-mode').selectOption('manual')
     await content.locator('#eclipse-planner').selectOption(JSON.stringify(['openai-codex', 'gpt-6.1-sol']))
     expect(await content.locator('#eclipse-effort-planner option[value="ultra"]').count()).toBe(1)
