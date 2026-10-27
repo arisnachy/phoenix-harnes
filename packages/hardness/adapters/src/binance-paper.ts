@@ -329,7 +329,9 @@ function parseState(raw: string): BinancePaperState {
   for (const [symbol, position] of Object.entries(positions)) {
     if (position.exitPlan !== undefined) continue
     const entry = [...trades].reverse().find(trade => trade.symbol === symbol && trade.side === 'buy')
-    const price = entry?.price ?? position.costBasisUsdt / position.quantity
+    // Cost basis represents all open lots and their entry fees; reconstruct
+    // the weighted fill price rather than reusing only the latest buy price.
+    const price = position.costBasisUsdt / position.quantity / (1 + value.feeRate)
     position.exitPlan = paperExitPlan(price, entry?.strategyId ?? 'legacy-paper', 'legacy-adopted')
   }
   return {
