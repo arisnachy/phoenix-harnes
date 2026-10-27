@@ -1,0 +1,31 @@
+name: Phoenix cache-stable system prompt
+on:
+  pull_request:
+    paths:
+      - 'packages/core/system-prompt/src/index.ts'
+      - 'packages/core/agent-loop/src/agent.ts'
+      - 'packages/core/system-prompt/tests/system-prompt.spec.ts'
+      - '.github/workflows/phoenix-cache-stable-prefix.yml'
+permissions:
+  contents: read
+jobs:
+  cache-stable-prefix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Verify all system instructions survive prompt reordering
+        run: >-
+          pnpm exec vitest run
+          packages/core/system-prompt/tests/system-prompt.spec.ts
+          packages/core/agent-loop/tests/agent.spec.ts
+      - name: Compile Host and client with cache-stable assembly
+        run: pnpm run build:lib:host && pnpm run build:lib:client

@@ -36,7 +36,7 @@ import type { Scope } from '@phoenix-ai/dsh-scope'
 import { createScope } from '@phoenix-ai/dsh-scope'
 import type { EpochHeader, RequestContext, Session, SessionId, TurnEndReason, UserMessage } from '@phoenix-ai/dsh-session'
 import { canonicalHeader, headerEquals } from '@phoenix-ai/dsh-session'
-import { joinContextSections, renderContextSections, renderPrompt } from '@phoenix-ai/dsh-system-prompt'
+import { joinContextSections, renderCacheFriendlyPrompt, renderContextSections } from '@phoenix-ai/dsh-system-prompt'
 import type { PromptAssembly } from '@phoenix-ai/dsh-system-prompt'
 import type { Context } from '@phoenix-ai/cordis'
 import { projectRequestHistory } from './request-history.ts'
@@ -551,7 +551,7 @@ export class ReactLoopAgent implements Agent {
     if (this.phase.kind !== 'running') throw new Error(`agent "${this.id}": step outside running phase`)
     const { turn, step, abort: { signal } } = this.phase
     signal.throwIfAborted()
-    const system = renderPrompt(assembly)
+    const system = renderCacheFriendlyPrompt(assembly)
 
     while (true) {
       const derived = this.session.deriveMessages()
