@@ -26,7 +26,7 @@ type McpState = {
 }
 
 function amount(value: number, maximumFractionDigits = 2): string {
-  return new Intl.NumberFormat('es-DO', { minimumFractionDigits: 2, maximumFractionDigits }).format(value)
+  return new Intl.NumberFormat('es-DO', { minimumFractionDigits: Math.min(2, maximumFractionDigits), maximumFractionDigits }).format(value)
 }
 
 function strategyLabel(id: string): string {
