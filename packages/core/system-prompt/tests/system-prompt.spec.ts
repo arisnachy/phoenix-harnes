@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { Context } from '@phoenix-ai/cordis'
-import SystemPrompt, { AssembleContext, PromptAssembly, renderContextSnapshot, renderPrompt } from '@phoenix-ai/dsh-system-prompt'
+import SystemPrompt, { AssembleContext, PromptAssembly, renderCacheFriendlyPrompt, renderContextSnapshot, renderPrompt } from '@phoenix-ai/dsh-system-prompt'
 
 /**
  * Every assembly carries the plugin's own built-ins — `harness:identity`
@@ -421,6 +421,64 @@ describe('SystemPrompt', () => {
     expect(() => renderPrompt(invalid)).toThrow(
       'unknown prompt variable "{{unknown}}" in section "untrusted-persona-reference"',
     )
+  })
+
+  it('moves only volatile SDK text after stable guidance without dropping, changing, or mutating instructions', () => {
+    const assembly: PromptAssembly = {
+      sections: [
+        { name: 'harness:identity', text: 'Core identity' },
+        { name: 'deployment:persona', text: 'Persona {{model}}' },
+        { name: 'tools:sdk', text: 'declare tool: {{literal}}', interpolateVariables: false },
+        { name: 'verification:guidance', text: 'Verify all user-facing requirements' },
+        { name: 'output:guidance', text: 'Present evidence and uncertainty' },
+      ],
+      contexts: [], tools: [], variables: { model: 'gpt-6' },
+    }
+    const previousSections = structuredClone(assembly.sections)
+    expect(renderCacheFriendlyPrompt(assembly)).toBe(
+      'Core identity\\n\\nPersona gpt-6\\n\\nVerify all user-facing requirements'
+      + '\\n\\nPresent evidence and uncertainty\\n\\ndeclare tool: {{literal}}',
+    )
+    expect(assembly.sections).toEqual(previousSections)
+    expect(renderPrompt(assembly)).toContain('declare tool: {{literal}}')
+    expect(renderPrompt(assembly)).toContain('Verify all user-facing requirements')
+  })
+
+  it('extends the stable cache prefix across changes in only SDK declarations', () => {
+    const make = (sdk: string): PromptAssembly => ({
+      sections: [
+        { name: 'harness:identity', text: 'Foundational safety and quality requirements' },
+        { name: 'tools:sdk', text: sdk, interpolateVariables: false },
+        { name: 'presentation', text: 'Respond in Spanish and cite actual evidence' },
+        { name: 'workflow', text: 'Run appropriate tests without sacrificing coverage' },
+      ],
+      contexts: [], tools: [], variables: {},
+    })
+    const oldPrompt = renderPrompt(make('SDK stage A'))
+    const newPrompt = renderPrompt(make('SDK stage B'))
+    const oldOptimized = renderCacheFriendlyPrompt(make('SDK stage A'))
+    const newOptimized = renderCacheFriendlyPrompt(make('SDK stage B'))
+    const commonPrefix = (a: string, b: string) => {
+      let n = 0
+      while (n < Math.min(a.length, b.length) && a[n] === b[n]) n += 1
+      return n
+    }
+    expect(commonPrefix(oldOptimized, newOptimized))
+      .toBeGreaterThan(commonPrefix(oldPrompt, newPrompt))
+    expect(oldOptimized).toContain('SDK stage A')
+    expect(newOptimized).toContain('SDK stage B')
+  })
+
+  it('preserves complete, tool-free and SDK-at-end prompt behavior', () => {
+    for (const sections of [
+      [{ name: 'complete', text: 'Exact complete system prompt' }],
+      [{ name: 'persona', text: 'Friendly and precise' }],
+      [{ name: 'identity', text: 'A' }, { name: 'tools:sdk', text: 'B' }],
+      [{ name: 'identity', text: 'A' }, { name: 'tools:sdk', text: '' }, { name: 'help', text: 'C' }],
+    ]) {
+      const assembly: PromptAssembly = { sections, contexts: [], tools: [], variables: {} }
+      expect(renderCacheFriendlyPrompt(assembly)).toBe(renderPrompt(assembly))
+    }
   })
 
   it('filters out empty section text from renderPrompt', () => {
