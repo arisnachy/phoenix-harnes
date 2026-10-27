@@ -611,11 +611,6 @@ function paperAutoTool(deps: BinanceTradingToolDependencies): ToolDefinition {
       if (args.action === 'start') {
         if (args.requestedByUser !== true) throw new Error('Starting automatic paper trading requires an explicit user request')
         if (typeof args.watchlist !== 'string') throw new Error('Starting paper trading requires a watchlist')
-        await deps.automation.start({
-          symbols: args.watchlist.split(','),
-          ...(args.interval === undefined ? {} : { interval: args.interval }),
-          ...(args.pollMinutes === undefined ? {} : { pollMs: args.pollMinutes * 60_000 }),
-        })
         // A durable wake rule belongs to the explicit initiating conversation.
         // Subsequent evaluations use zero LLM tokens unless a significant
         // PAPER event arrives. No real order authority is granted.
@@ -636,6 +631,13 @@ function paperAutoTool(deps: BinanceTradingToolDependencies): ToolDefinition {
             // A notification setup issue must not claim a trading failure.
           }
         }
+        // Create the wake trigger before the first cycle so the first actual
+        // virtual fill can be reviewed by the initiating conversation.
+        await deps.automation.start({
+          symbols: args.watchlist.split(','),
+          ...(args.interval === undefined ? {} : { interval: args.interval }),
+          ...(args.pollMinutes === undefined ? {} : { pollMs: args.pollMinutes * 60_000 }),
+        })
       } else if (args.action === 'stop') {
         await deps.automation.stop()
       } else {
