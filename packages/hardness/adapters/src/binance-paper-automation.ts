@@ -144,8 +144,10 @@ export class BinancePaperAutomation {
       this.failures = 0
       this.lastError = undefined
       this.schedule()
-      void this.step()
     })
+    // Do not acknowledge a newly started worker before its first scan settles.
+    // A HOLD is an explicit result; it must never be presented as a fill.
+    await this.step()
   }
 
   /** Disable future virtual entries and await an already-running decision cycle. */
