@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { BinancePaperBroker, type BinancePublicMarket, type BinanceCandle } from '../src/binance-paper.ts'
 import { BinancePaperAutomation } from '../src/binance-paper-automation.ts'
 import { mountBinancePaperDashboardRoute } from '../src/binance-paper-route.ts'
+import { BinanceSpotTestnet } from '../src/binance-spot-testnet.ts'
 
 const roots: string[] = []
 const disposers: Array<() => Promise<void>> = []
@@ -34,7 +35,7 @@ function market(): BinancePublicMarket {
   }
 }
 
-async function serverWithTrading() {
+async function serverWithTrading(options: Parameters<typeof mountBinancePaperDashboardRoute>[2] = {}) {
   const root = mkdtempSync(join(tmpdir(), 'phoenix-trading-route-'))
   roots.push(root)
   const engine = new BinancePaperAutomation(
@@ -44,7 +45,7 @@ async function serverWithTrading() {
   let handle: ((req: IncomingMessage, res: ServerResponse) => Promise<void> | void) | undefined
   const disposeRoute = mountBinancePaperDashboardRoute({
     register(input) { handle = input.handler; return () => { handle = undefined } },
-  }, engine)
+  }, engine, options)
   const server = createServer((req, res) => {
     if (handle === undefined) { res.writeHead(404).end(); return }
     void Promise.resolve(handle(req, res)).catch(() => { res.writeHead(503).end() })
@@ -107,6 +108,57 @@ describe('Binance chat viewer HTTP integration', () => {
     expect((await fetch(path + '?symbol=BTCUSDT&interval=1h&mode=real')).status).toBe(400)
     expect((await fetch(path + '?symbol=../ETHUSDT&interval=1h')).status).toBe(400)
     expect((await fetch(path + '?symbol=BTCUSDT&interval=1h', { method: 'POST' })).status).toBe(405)
+  })
+
+  it('checks real MCP lifecycle without claiming account or Trade scopes', async () => {
+    const { origin } = await serverWithTrading({
+      agentOs: { async binanceAgentOsState() {
+        return { configured: true, status: 'ready', toolNames: ['binance_spot_ticker'] }
+      } },
+    })
+    const reply = await fetch(origin + '/phoenix-trading/paper/mcp-status')
+    expect(reply.status).toBe(200)
+    expect(await reply.json()).toMatchObject({
+      configured: true, connected: true, toolCount: 1,
+      tradeScopeVerified: false, accountVerified: false,
+    })
+  })
+
+  it('validates keys only against Spot Testnet and never echoes or logs secrets', async () => {
+    const secretValues = new Map<string, string>()
+    const credentials = {
+      async set(ref: string, value: string) { secretValues.set(ref, value) },
+    }
+    const request: typeof fetch = async (input, init) => {
+      expect(String(input)).toContain('https://testnet.binance.vision/api/v3/account')
+      expect(init?.headers).toMatchObject({ 'X-MBX-APIKEY': 'TESTNET_KEY_1234567890' })
+      return new Response(JSON.stringify({ canTrade: true, balances: [] }), { status: 200 })
+    }
+    const testnet = new BinanceSpotTestnet(async () => {
+      const key = secretValues.get('PHOENIX_BINANCE_TESTNET_API_KEY')
+      const secret = secretValues.get('PHOENIX_BINANCE_TESTNET_API_SECRET')
+      return key && secret ? { apiKey: key, secret } : undefined
+    }, request)
+    const { origin } = await serverWithTrading({ testnet, credentials: credentials as never })
+    const url = origin + '/phoenix-trading/paper/testnet-connect'
+    const wrongOrigin = await fetch(url, {
+      method: 'POST', headers: { Origin: 'https://attacker.example', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ apiKey: 'TESTNET_KEY_1234567890', secret: 'TESTNET_SECRET_1234567890' }),
+    })
+    expect(wrongOrigin.status).toBe(403)
+    expect(secretValues.size).toBe(0)
+    const success = await fetch(url, {
+      method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ apiKey: 'TESTNET_KEY_1234567890', secret: 'TESTNET_SECRET_1234567890' }),
+    })
+    expect(success.status).toBe(200)
+    const text = await success.text()
+    expect(text).not.toContain('TESTNET_KEY_1234567890')
+    expect(text).not.toContain('TESTNET_SECRET_1234567890')
+    expect(JSON.parse(text)).toMatchObject({ mode: 'testnet', configured: true, connected: true, canTrade: true })
+    expect(secretValues.size).toBe(2)
+    const check = await fetch(origin + '/phoenix-trading/paper/testnet-status')
+    expect(await check.json()).toMatchObject({ configured: true, connected: true, canTrade: true })
   })
 
   it('rejects CSRF and REAL fields before any account action', async () => {
