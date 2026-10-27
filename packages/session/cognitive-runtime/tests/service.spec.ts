@@ -52,7 +52,7 @@ describe('CognitiveRuntimeService', () => {
     const ctx = new Context()
     await ctx.plugin(SessionStore)
     await ctx.plugin(LearningMemoryService, { path: join(root, 'memory.jsonl') })
-    const session = ctx.sessions.create(SessionId('seeded-session'), { meta: { cwd: 'C:\\workspace\\phoenix' } })
+    const session = ctx.sessions.create(SessionId('seeded-session'), { meta: { cwd: join(root, 'phoenix') } })
     session.append('user/message', userMessage('The seeded session remembers a pending mission.'), { surfaceOp: 'append' })
     await ctx.learningMemory.ready()
 
