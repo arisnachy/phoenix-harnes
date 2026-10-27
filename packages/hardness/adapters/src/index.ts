@@ -11,6 +11,7 @@ import { join } from 'node:path'
 import type { Context } from '@phoenix-ai/cordis'
 import z from '@phoenix-ai/schemastery'
 import type { AuthorizationService } from '@phoenix-ai/dsh-authorization'
+import { credentialRef, type CredentialProvider } from '@phoenix-ai/dsh-credentials'
 import { GOOGLE_ACCOUNT_KEY } from '@phoenix-ai/dsh-authorization/google'
 import type { HostConnectionHandle } from '@phoenix-ai/dsh-client-connection'
 import type { HardnessService } from '@phoenix-ai/dsh-hardness/src/types.ts'
@@ -36,6 +37,7 @@ import { acquireBinancePaperAutomation } from './binance-paper-automation.ts'
 import { mountBinancePaperDashboardRoute } from './binance-paper-route.ts'
 import { installBinanceTradingProtocol } from './binance-trading-protocol.ts'
 import { createBinanceTradingTools } from './binance-trading-tools.ts'
+import { BinanceSpotTestnet, binanceTestnetCredentials } from './binance-spot-testnet.ts'
 import type { BinanceAgentOsHostService } from './binance-trading-tools.ts'
 import { installCapabilityOperatingProtocol } from './capability-protocol.ts'
 import { acquireProactivityEngine } from './proactivity-registry.ts'
@@ -519,10 +521,24 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
       }
       disposers.push(ctx.tools.register(createLearnedSkillTool()))
       const binancePaper = binance.engine.broker
+      // Resolve each test-only key at operation time from the Host vault; do
+      // not require process.env or copy any secret into a model-facing result.
+      const secretProvider = ctx.get('credentials') as CredentialProvider | undefined
+      const testnet = new BinanceSpotTestnet(async () => {
+        if (secretProvider === undefined) return binanceTestnetCredentials()
+        const [key, secret] = await Promise.all([
+          secretProvider.resolve(credentialRef('PHOENIX_BINANCE_TESTNET_API_KEY')),
+          secretProvider.resolve(credentialRef('PHOENIX_BINANCE_TESTNET_API_SECRET')),
+        ])
+        return key?.value && secret?.value
+          ? { apiKey: key.value, secret: secret.value }
+          : undefined
+      })
       for (const tool of createBinanceTradingTools({
         broker: binancePaper,
         automation: binance.engine,
         wake: wake.engine,
+        testnet,
         approval,
         ...(pluginInventory === undefined ? {} : { agentOs: pluginInventory }),
       })) {
