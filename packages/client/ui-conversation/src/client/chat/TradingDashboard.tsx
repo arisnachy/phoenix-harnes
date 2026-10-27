@@ -137,7 +137,7 @@ export function TradingDashboard({ initial }: Props) {
           {running
             ? <button type="button" className={css.danger} disabled={controlBusy} onClick={() => { void control('stop') }}>Detener</button>
             : <button type="button" className={css.primary} disabled={controlBusy}
-                onClick={() => { void control('start') }}>Iniciar PAPER</button>
+                onClick={() => { void control('start') }}>Iniciar PAPER</button>}
         </div>
       </div>
       <div className={css.twoColumns}>
