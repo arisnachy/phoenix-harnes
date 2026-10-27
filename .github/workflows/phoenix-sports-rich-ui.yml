@@ -33,6 +33,9 @@ jobs:
           node --experimental-strip-types --test packages/core/tool-sports/tests/chat-sports.test.mjs
           node --experimental-strip-types --test packages/core/tool-sports/tests/sports-prompt.test.mjs
           node --experimental-strip-types --test packages/core/tool-sports/tests/research-ticket.test.mjs
+          node --experimental-strip-types --test packages/core/tool-sports/tests/standings-research.test.mjs
+          node --experimental-strip-types --test packages/core/tool-sports/tests/ticket-autopilot.test.mjs
+          node --experimental-strip-types --test packages/core/tool-sports/tests/matchup-context.test.mjs
       - name: Verify chat schema, visuals and prior UI compatibility
         run: pnpm exec vitest run packages/client/ui-conversation/tests/sports-rich-ui.client.spec.tsx packages/client/ui-conversation/tests/generative-ui.client.spec.tsx packages/client/ui-conversation/tests/tool-activity-group.client.spec.tsx packages/client/ui-conversation/tests/sports-tool-visual.client.spec.ts
       - name: Compile shared server contracts

@@ -1,5 +1,6 @@
 /** Ticket de pronósticos con encuentros verificables aunque falten cuotas comerciales. */
 import { getFeed, hasSportsPermission, sportsCatalog, type ChatBlock } from './sports.ts'
+import { compareStandings } from './standings-research.ts'
 
 /** Selección propuesta por Kira, independiente de cualquier precio de apuestas. */
 export type ResearchTicketLeg = {
@@ -22,6 +23,20 @@ type EspnEvent = {
   competitions?:Array<{ competitors?:EspnTeam[] }>
 }
 type EspnBoard = { events?:EspnEvent[] }
+type EspnSummary = {
+  injuries?:Array<{team?:{displayName?:string;name?:string};injuries?:unknown[]}>
+  seasonseries?:{summary?:string}
+}
+const summaryEvidence=(summary:EspnSummary):string=>{
+  const injuries=Array.isArray(summary.injuries)?summary.injuries.filter(group=>
+    group&&Array.isArray(group.injuries)&&typeof(group.team?.displayName??group.team?.name)==='string'):[]
+  const medical=injuries.length?injuries.slice(0,2).map(group=>
+    (group.team?.displayName??group.team?.name??'Equipo').slice(0,30)+
+    ': '+(group.injuries?.length??0)+' registros médicos').join('; '):'Parte médico no publicado'
+  const h2h=typeof summary.seasonseries?.summary==='string'&&summary.seasonseries.summary.length<80
+    ?'Serie: '+summary.seasonseries.summary:'Cara a cara sin confirmar'
+  return medical+'; '+h2h
+}
 const dateInSantoDomingo = ():string =>
   new Intl.DateTimeFormat('en-CA',{ timeZone:'America/Santo_Domingo',year:'numeric',month:'2-digit',day:'2-digit' })
     .format(new Date())
@@ -160,7 +175,7 @@ export async function researchTicket(
   }
 }
 
-/** Candidates come only from ESPN fixtures and reported win-loss records, never synthetic IDs.
+/** Candidates come only from ESPN fixtures and reported team records, never synthetic IDs.
  * A simple record comparison is a transparent heuristic, NOT a calibrated predictive model.
  * Returns a visibly incomplete draft when fewer than the requested legs have evidence.
  */
@@ -170,6 +185,7 @@ export async function autoResearchTicket(
   fetcher:typeof fetch=fetch,
   now=Date.now(),
   env:NodeJS.ProcessEnv=process.env,
+  allowedLeagues?:readonly string[],
 ):Promise<{ card:ChatBlock;verifiedEvents:number;priced:false;placed:false;complete:boolean }> {
   if(!hasSportsPermission('espn',env))throw Error('ESPN deshabilitado por configuración del operador')
   if(!validDay(requestedDate))throw Error('Fecha de ticket inválida (AAAA-MM-DD)')
@@ -182,7 +198,8 @@ export async function autoResearchTicket(
   ] as const
   const boards=new Map<string,EspnBoard>()
   const candidates:Array<{leg:ResearchTicketLeg;edge:number}>=[]
-  const jobs=await Promise.allSettled(leagues.map(async([sport,league])=>{
+  const scheduled=allowedLeagues?.length?leagues.filter(([,league])=>allowedLeagues.includes(league)):leagues
+  const jobs=await Promise.allSettled(scheduled.map(async([sport,league])=>{
     const url='https://site.api.espn.com/apis/site/v2/sports/'+sport+'/'+league+
       '/scoreboard?dates='+requestedDate.replaceAll('-','')
     const board=await getFeed<EspnBoard>(url,fetcher)
@@ -201,34 +218,37 @@ export async function autoResearchTicket(
       const home=teams?.find(team=>team.homeAway==='home')
       const away=teams?.find(team=>team.homeAway==='away')
       if(!home?.team?.displayName&&!home?.team?.name || !away?.team?.displayName&&!away?.team?.name)continue
-      const record=(team:EspnTeam):{wins:number;losses:number;name:string}|null=>{
-        const match=team.records?.map(x=>x.summary??'')
-          .find(x=>/^\d{1,3}-\d{1,3}$/u.test(x))?.match(/^(\d+)-(\d+)$/u)
-        if(!match)return null
-        const wins=Number(match[1]),losses=Number(match[2])
-        if(wins+losses<1)return null
-        return {wins,losses,name:clean(team.team?.displayName??team.team?.name??'',75)}
-      }
-      const h=record(home),a=record(away)
-      if(!h||!a)continue
-      // Laplace smoothing avoids treating a 1-0 early-season record as certainty.
-      const hp=(h.wins+1)/(h.wins+h.losses+2)
-      const ap=(a.wins+1)/(a.wins+a.losses+2)
-      const difference=hp-ap
-      if(Math.abs(difference)<0.055)continue
-      const winner=difference>0?h:a
-      const loser=difference>0?a:h
+      const signal=compareStandings(home,away)
+      if(signal.pick===null)continue
+      const winner=signal.pick==='home'?home:away
+      const loser=signal.pick==='home'?away:home
       candidates.push({
-        edge:Math.abs(difference),
-        leg:{ sport,league,eventId:String(event.id),pick:difference>0?'home':'away',
-          rationale:clean('Tendencia descriptiva: '+winner.name+' '+winner.wins+'-'+winner.losses+
-            ' ante '+loser.name+' '+loser.wins+'-'+loser.losses+
-            '. Muestra inicial; no considera bajas, rivales ni cuotas. No es probabilidad de ganar.',240) },
+        edge:signal.edge,
+        leg:{ sport,league,eventId:String(event.id),pick:signal.pick,
+          rationale:clean(signal.research.favorite+'. '+
+            (winner?.team?.displayName??winner?.team?.name??'Equipo')+' frente a '+
+            (loser?.team?.displayName??loser?.team?.name??'rival')+'. '+
+            signal.research.evidence.join('; ')+
+            '. Predicción NO calibrada. Verificar lesiones, enfrentamientos, forma y cuotas.',240) },
       })
     }
   }
   candidates.sort((a,b)=>b.edge-a.edge||a.leg.eventId.localeCompare(b.leg.eventId))
   const chosen=candidates.slice(0,count).map(x=>x.leg)
   if(!chosen.length)throw Error('No hay eventos futuros con registros contrastables suficientes para proponer un ticket; no inventaré patas.')
-  return researchTicket(chosen,requestedDate,fetcher,now,env,count,true,boards)
+  // Bounded, on-demand secondary research: one ESPN event summary per shortlisted leg.
+  // A missing medical or head-to-head report remains missing, not an assumed zero.
+  const researched=await Promise.all(chosen.map(async leg=>{
+    let context='Parte médico y cara a cara sin verificar'
+    try{
+      const summary=await getFeed<EspnSummary>(
+        'https://site.api.espn.com/apis/site/v2/sports/'+leg.sport+'/'+leg.league+
+        '/summary?event='+leg.eventId,fetcher)
+      context=summaryEvidence(summary)
+    }catch{ /* ESPN summary unavailable: preserve the documented research gap. */ }
+    const primary=(leg.rationale??'Tendencia descriptiva').slice(0,112)
+    return {...leg,rationale:clean(primary+'. ESPN: '+context+
+      '. Sin probabilidades calibradas ni cuotas confirmadas.',240)}
+  }))
+  return researchTicket(researched,requestedDate,fetcher,now,env,count,true,boards)
 }

@@ -6,16 +6,18 @@ import { sportsCatalog, discoverEspnLeagues, chatGames, marketOdds, pricedTicket
 import { getMlbPitcherReport } from './mlb.ts'
 import { researchTicket, autoResearchTicket, type ResearchTicketLeg } from './research-ticket.ts'
 import { sportsPromptNeeded } from './sports-prompt.ts'
+import { buildAutomaticSportsTicket } from './ticket-autopilot.ts'
 
 export const name = 'tool-sports'
 export const inject = ['tools','systemPrompt']
 const GUIDANCE = [
-  'Solo cuando el usuario pida deportes, juegos del día, jugadores, cuotas o tickets, consulta las herramientas sports_chat_catalog, sports_chat_discover, sports_chat_games, sports_chat_mlb_pitchers, sports_chat_odds, sports_chat_ticket, sports_chat_ticket_research o sports_chat_ticket_research_auto.',
-  'NO abras pantallas independientes ni crees entradas de menú. Antes de redactar una cartelera o boleto, llama sports_chat_games y, cuando corresponda, sports_chat_mlb_pitchers / sports_chat_odds / sports_chat_ticket. Phoenix dibuja de manera nativa las tarjetas verificadas de los resultados. NO copies el JSON de los resultados en la respuesta, NO escribas fences generative-ui ni bloques de código, aunque una herramienta los incluya en sus datos. No dibujes tickets con caracteres ASCII, bordes de texto ni bloques de código etiquetados text: para eventos y selecciones reales usa exclusivamente los contratos nativos, conservando la presentación original de Phoenix. Si el usuario quiere solo una demostración, descríbela explícitamente como ficticia y no introduzcas cuotas o equipos inventados como hechos. Explica los hallazgos y las fuentes con un texto humano breve.',
-  'Para muchos partidos muestra como máximo seis tarjetas relevantes y ofrece ampliar; nunca inventes eventos, cuotas, lanzadores, lesiones ni resultados ausentes.',
+  'Solo cuando el usuario pida deportes, juegos del día, jugadores, cuotas o tickets, consulta las herramientas sports_chat_catalog, sports_chat_discover, sports_chat_games, sports_chat_mlb_pitchers, sports_chat_odds, sports_chat_ticket, sports_chat_ticket_research, sports_chat_ticket_research_auto o sports_chat_ticket_auto.',
+  'NO abras pantallas independientes ni crees entradas de menú. Antes de redactar una cartelera llama sports_chat_games. Si piden un ticket, empieza por sports_chat_ticket_auto; investiga con sports_chat_games, sports_chat_mlb_pitchers / sports_chat_odds / sports_chat_ticket según la necesidad. Phoenix dibuja de manera nativa las tarjetas verificadas de los resultados. NO copies el JSON de los resultados en la respuesta, NO escribas fences generative-ui ni bloques de código, aunque una herramienta los incluya en sus datos. No dibujes tickets con caracteres ASCII, bordes de texto ni bloques de código etiquetados text: para eventos y selecciones reales usa exclusivamente los contratos nativos, conservando la presentación original de Phoenix. Si el usuario quiere solo una demostración, descríbela explícitamente como ficticia y no introduzcas cuotas o equipos inventados como hechos. Explica los hallazgos y las fuentes con un texto humano breve.',
+  'Para muchos partidos muestra como máximo seis tarjetas relevantes y ofrece ampliar; nunca inventes eventos, cuotas, lanzadores, lesiones ni resultados ausentes. Las tarjetas de eventos previos deben mostrar el favorito como tendencia sustentada cuando exista evidencia, o explicar por qué no hay favorito fundamentado.',
   'CONTRATO DE PATAS: cuando el usuario pide 5 patas, el resultado DEBE contener exactamente cinco selecciones verificadas; jamás presentes 1 de 5 como ticket completo. Si faltan datos, muestra explícitamente el número conseguido y el número pendiente como borrador incompleto. Respeta igualmente cualquier otro número de 1 a 6. No afirmes que una combinada ganará.',
-  'Si piden un ticket y sports_chat_odds no devuelve cuotas, NO termines con NO BET. Usa sports_chat_ticket_research_auto con count igual al número solicitado cuando no dispongas de IDs: esta herramienta investiga carteleras y registros de los equipos en varias ligas y propone hasta esa cantidad de eventos reales, sin cuotas. Si la investigación especializada ya confirmó tus eventId y fundamentos, llama sports_chat_ticket_research con requestedLegs igual al número solicitado y todas las patas. El resultado con menos patas debe identificarse como borrador incompleto. No afirmes que los registros tempranos sean probabilidades calibradas. Si no hay partidos futuros verificados, explica la limitación.',
+  'Si piden un ticket utiliza sports_chat_ticket_auto con el número EXACTO de patas, fecha y deporte solicitados. Su motor consulta cuotas atribuidas de una sola banca y, si no consigue un boleto cotizado completo, intenta automáticamente investigación ESPN y produce un ticket sin cuotas en vez de finalizar con una cartelera. Si piden un ticket y sports_chat_odds no devuelve cuotas, NO termines con NO BET. Usa sports_chat_ticket_research_auto con count igual al número solicitado cuando no dispongas de IDs: esta herramienta investiga carteleras y registros de los equipos en varias ligas y propone hasta esa cantidad de eventos reales, sin cuotas. Si la investigación especializada ya confirmó tus eventId y fundamentos, llama sports_chat_ticket_research con requestedLegs igual al número solicitado y todas las patas. El resultado con menos patas debe identificarse como borrador incompleto. No afirmes que los registros tempranos sean probabilidades calibradas. Si no hay partidos futuros verificados, explica la limitación.',
   'Usa ESPN Site/Core como proveedor gratuito para marcadores y, cuando ESPN los publique, moneylines sin claves; usa The Odds API solo como opción ampliada si existe THE_ODDS_API_KEY. Si ESPN no presenta cuotas, no inventes precios: sports_chat_ticket_research ofrece un ticket de pronósticos sin cotización basado en encuentros futuros verificados. sports_chat_ticket es un ticket COTIZADO y solo puede usar precios del proveedor consultados en ese momento. Ambos son simulaciones; no hay garantía de acierto. Identifica correlaciones y ausencia de predicción calibrada.',
+  'Si el usuario pide COLOCAR el ticket en su banca en línea: primero prepara el boleto con sports_chat_ticket_auto y luego comprueba las herramientas de navegador ya disponibles en Phoenix (mcp__browser__status/tabs/inspect_page/complete_form/wait_for o Computer browser_open/browser_inspect/browser_fill_form). Trabaja únicamente en la banca elegida por el usuario y su sesión autorizada, sin suponer login ni inventar direcciones; las credenciales se gestionan por Secure Ask/Vault, nunca por el chat. Verifica cada evento, mercado, precio, cantidad, cuenta y coste visibles antes de cualquier envío. Si falta el nombre de la banca o la autorización para interactuar, solicita SOLO ese dato o permiso y conserva el ticket en el chat: no respondas con una negativa genérica, ni concluyas después de mostrar la cartelera. Antes de realizar una transacción real exige aprobación explícita de ese ticket y monto; si la cuota cambia, se requiere nueva aprobación. Ejecuta el envío solo una vez y únicamente con permisos habilitados; comprueba el recibo/id real de la banca antes de decir apostado. Ante CAPTCHA, MFA, fallos de sesión o controles restringidos, explica el bloqueo comprobable y pide intervención, sin saltar permisos. Nunca inventes apuestas, precios, cuentas ni recibos. Cuando piden juegos para otra fecha, usa la misma fecha en cartelera, cuotas y ticket.',
   'Los datos deben indicar su fuente, fecha y zona horaria, y adaptar el detalle a cada deporte. Cuando el usuario pida favoritos, muestra primero los encuentros reales con escudos, horarios, país y liga (si son conocidos), y solo después una tendencia propia sustentada en investigación verificable; una cuota baja no prueba cuál equipo es favorito de tu modelo. En tickets separa visualmente por deporte, país y liga y, si hay un mercado de jugador respaldado por el proveedor, muestra también el jugador; no inventes nombres, mercados ni fotos. Los tickets heredan el tema claro/oscuro de Phoenix. Nunca presentes porcentajes de ESPN como estimaciones propias ni afirmes un porcentaje sin calibración.',
 ].join(' ')
 
@@ -92,11 +94,12 @@ export function apply(ctx: Context): void {
     parameters:{
       sportKey:{ type:'string',required:true,description:'Clave del proveedor: baseball_mlb, basketball_nba, soccer_epl, etc.' },
       markets:{ type:'string',description:'h2h, totals o spreads. Por defecto h2h.' },
+      date:{ type:'string',description:'Fecha del calendario AAAA-MM-DD; usa la fecha solicitada, no hoy automáticamente.' },
     },
     output:{ schema:{ type:'string' },render:(_a,v)=>[{ type:'text' as const,text:v }] },
     isConcurrencySafe:()=>true,
     async execute(args){
-      const quotes=await marketOdds(args.sportKey,args.markets)
+      const quotes=await marketOdds(args.sportKey,args.markets,process.env,fetch,args.date)
       const events=new Map<string,typeof quotes>()
       for(const quote of quotes.slice(0,96)){
         const rows=events.get(quote.eventId)??[]
@@ -123,6 +126,36 @@ export function apply(ctx: Context): void {
         note:quotes.length?'Cuotas verificadas, no probabilidades propias. Actualizar antes de componer tickets.':'ESPN no publicó moneylines accesibles para ese día y mercado; no hace falta una clave para ver partidos. Las cuotas faltantes no se inventan.' })
     },
     presentCall:()=>({ card:'generic',title:'Comparar cuotas',kind:'read' as const }),
+  }))
+  ctx.tools.register(defineTool({
+    name:'sports_chat_ticket_auto',
+    description:'Motor de tickets que no abandona por ausencia de cuotas: intenta precios reales de UNA banca y luego pronósticos respaldados por encuentros ESPN. Ticket visual; no coloca apuestas.',
+    parameters:{
+      count:{type:'integer',required:true,description:'Cantidad exacta de patas solicitada (1 a 6).'},
+      date:{type:'string',description:'Fecha de los encuentros AAAA-MM-DD, zona RD.'},
+      sportKeys:{type:'array',description:'Claves proveedor, por ejemplo basketball_nba, soccer_epl o baseball_mlb. Máximo cuatro.',items:{type:'string'}},
+      stake:{type:'number',description:'Importe de simulación, no apuesta real.'},
+    },
+    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    isConcurrencySafe:()=>true,
+    async execute(args){
+      try{
+        const result=await buildAutomaticSportsTicket(args.count,args.date,args.sportKeys,args.stake)
+        return JSON.stringify({uiBlock:result.card,mode:result.mode,verifiedEvents:result.verifiedEvents,
+          requestedLegs:result.requestedLegs,complete:result.complete,priced:result.priced,
+          placed:false,dataGaps:result.dataGaps,providerErrors:result.providerErrors,
+          instruction:'Phoenix renderiza el boleto investigado. No respondas con cartelera. Si el usuario pidió colocarlo, CONTINÚA con las herramientas Browser/Computer de Phoenix en la banca autorizada; verifica selecciones, cuotas y monto, solicita aprobación antes del envío y confirma el recibo real. No afirmes ejecución sin recibo ni eludas permisos.'})
+      }catch(error){
+        const blocker=error instanceof Error?error.message.slice(0,260):'Fuente o validación no disponible'
+        return JSON.stringify({complete:false,priced:false,placed:false,verifiedEvents:0,
+          requestedLegs:args.count,blocker,
+          nextActions:['Comprobar otra fecha sin alterar silenciosamente la solicitada',
+            'Consultar ligas o fuentes disponibles mediante herramientas deportivas',
+            'Conectar una fuente autorizada si el mercado o la casa no publica datos'],
+          instruction:'No digas que preparaste ni colocaste un boleto inexistente. Explica el bloqueo verificable, conserva las restricciones del usuario y ofrece ejecutar el próximo paso concreto; no respondas con una negativa genérica.'})
+      }
+    },
+    presentCall:()=>({card:'generic',title:'Investigar y construir boleto automáticamente',kind:'read' as const}),
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_ticket_research_auto',
@@ -181,6 +214,7 @@ export function apply(ctx: Context): void {
           point:{ type:'number' },
         } } },
       stake:{ type:'number',description:'Importe ficticio para simular el retorno; no es una operación financiera.' },
+      date:{ type:'string',description:'Fecha de los partidos AAAA-MM-DD, para filtrar cuotas vigentes del día solicitado.' },
     },
     output:{ schema:{ type:'string' },render:(_a,v)=>[{ type:'text' as const,text:v }] },
     isConcurrencySafe:()=>true,
@@ -188,7 +222,7 @@ export function apply(ctx: Context): void {
       const requestedKeys = args.sportKeys?.length ? args.sportKeys : args.sportKey ? [args.sportKey] : []
       const keys = [...new Set(requestedKeys)]
       if (keys.length < 1 || keys.length > 4) throw new Error('Indica entre 1 y 4 disciplinas para el ticket.')
-      const quotes = (await Promise.all(keys.map(key => marketOdds(key,args.markets)))).flat()
+      const quotes = (await Promise.all(keys.map(key => marketOdds(key,args.markets,process.env,fetch,args.date)))).flat()
       const { card,warning }=pricedTicket(args.selections as MarketSelection[],quotes,args.stake)
       return JSON.stringify({ uiBlock:card,warning,simulationOnly:true,placed:false,
         instruction:'Phoenix muestra uiBlock automáticamente en el chat. No reproduzcas su JSON ni un bloque de código. Nunca prometas que ganará.' })

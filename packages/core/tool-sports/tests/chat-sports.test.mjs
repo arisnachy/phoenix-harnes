@@ -62,8 +62,21 @@ test('only real bookmaker lines match a ticket; correlation is flagged',()=>{
   assert.throws(()=>pricedTicket([{...selected[0],selection:'No existe'}],odds),/no verificable/)
   assert.throws(()=>pricedTicket([selected[0],selected[0]],odds),/duplicada/)
 })
+test('a single ticket cannot combine independently quoted prices from two bookmakers',()=>{
+  const quotes=[
+    {eventId:'a',bookmaker:'Banca A',market:'h2h',selection:'Home A',price:1.9,
+      home:'Home A',away:'Away A',time:'tomorrow',updatedAt:'now'},
+    {eventId:'b',bookmaker:'Banca B',market:'h2h',selection:'Home B',price:1.8,
+      home:'Home B',away:'Away B',time:'tomorrow',updatedAt:'now'},
+  ]
+  const selections=quotes.map(({eventId,bookmaker,market,selection})=>({
+    eventId,bookmaker,market,selection,
+  }))
+  assert.throws(()=>pricedTicket(selections,quotes,100),/una sola banca/i)
+})
 test('bookmaker quotes include provenance and never permit invalid sport keys',async()=>{
-  const mock=await response([{id:'e',home_team:'Local',away_team:'Visita',commence_time:'2026-10-24T20:00:00Z',
+  const future=new Date(Date.now()+86400000).toISOString()
+  const mock=await response([{id:'e',home_team:'Local',away_team:'Visita',commence_time:future,
     bookmakers:[{key:'provider',title:'Casa',markets:[{key:'h2h',last_update:'2026-10-24T18:00:00Z',outcomes:[{name:'Local',price:1.8}]}]}]}])
   const quotes=await marketOdds('baseball_mlb','h2h',{THE_ODDS_API_KEY:'test-only'},mock)
   assert.equal(quotes[0].bookmaker,'Casa')
@@ -198,4 +211,65 @@ test('sportsbook taxonomy groups sourced sports, countries and leagues without i
   assert.equal(result.card.props.legs[1].league,'MLB')
   assert.equal(result.card.props.legs[0].player,undefined)
   assert.doesNotMatch(result.warning,/mismo encuentro/)
+})
+
+test('NBA pregame game cards include a sourced favorite and explicitly low-confidence rationale',async()=>{
+  const board={events:[{id:'2028',name:'Heat at Hawks',date:new Date(Date.now()+86400000).toISOString(),
+    status:{type:{state:'pre',description:'Scheduled'}},competitions:[{competitors:[
+      {homeAway:'home',team:{displayName:'Atlanta Hawks'},records:[{name:'overall',summary:'2-2'}]},
+      {homeAway:'away',team:{displayName:'Miami Heat'},records:[{name:'overall',summary:'0-4'}]},
+    ]}]}]}
+  const out=await chatGames('basketball','nba',undefined,{},await response(board))
+  const research=out.items[0].props.research
+  assert.match(research.favorite,/Tendencia provisional: Atlanta Hawks/)
+  assert.match(research.evidence.join(' '),/Muestra pequeña/)
+  assert.match(research.source,/ESPN/)
+})
+
+test('ESPN market search honors the user-requested future date, not just today',async()=>{
+  const kickoff=new Date(Date.now()+3*86400000).toISOString()
+  const day=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santo_Domingo',year:'numeric',
+    month:'2-digit',day:'2-digit'}).format(new Date(kickoff))
+  const urls=[]
+  const mock=async url=>{
+    urls.push(String(url))
+    return new Response(JSON.stringify({events:[{
+      id:'987654',date:kickoff,competitions:[{id:'987654',competitors:[
+        {homeAway:'home',team:{displayName:'Local'}},
+        {homeAway:'away',team:{displayName:'Visita'}},
+      ],odds:[{provider:{name:'Test house'},homeTeamOdds:{moneyLine:-120},
+        awayTeamOdds:{moneyLine:110}}]}],
+    }]}),{status:200})
+  }
+  const odds=await marketOdds('basketball_nba','h2h',{},mock,day)
+  assert.equal(odds.length,2)
+  assert.ok(urls[0].includes('dates='+day.replaceAll('-','')))
+  await assert.rejects(()=>marketOdds('basketball_nba','h2h',{},mock,'2026-02-31'),/Fecha/)
+})
+
+test('commercial sportsbook quotes exclude already started events',async()=>{
+  const mock=await response([
+    {id:'past',home_team:'Home',away_team:'Away',
+      commence_time:new Date(Date.now()-60000).toISOString(),bookmakers:[{
+        key:'book',title:'Book',markets:[{key:'h2h',outcomes:[{name:'Home',price:1.8}]}],
+      }]},
+    {id:'future',home_team:'Home2',away_team:'Away2',
+      commence_time:new Date(Date.now()+60000).toISOString(),bookmakers:[{
+        key:'book',title:'Book',markets:[{key:'h2h',outcomes:[{name:'Home2',price:1.8}]}],
+      }]},
+  ])
+  const out=await marketOdds('basketball_nba','h2h',{THE_ODDS_API_KEY:'fixture'},mock)
+  assert.equal(out.length,1)
+  assert.equal(out[0].eventId,'future')
+})
+
+test('online sportsbook request instructs Kira to use authorized browser, not a generic refusal',()=>{
+  const source=readFileSync(new URL('../src/index.ts',import.meta.url),'utf8')
+  assert.match(source,/COLOCAR el ticket/)
+  assert.match(source,/mcp__browser__status\/tabs\/inspect_page\/complete_form\/wait_for/)
+  assert.match(source,/Computer browser_open\/browser_inspect\/browser_fill_form/)
+  assert.match(source,/aprobación explícita/)
+  assert.match(source,/comprueba el recibo\/id real/)
+  assert.match(source,/sin saltar permisos/)
+  assert.match(source,/sports_chat_ticket_auto/)
 })

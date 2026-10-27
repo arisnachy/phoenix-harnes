@@ -98,8 +98,9 @@ test('automatic research discovers five unique real ESPN fixtures without synthe
   assert.equal(result.card.props.legs[0].homeTeam,'Home 301')
   assert.equal(result.card.props.legs[0].awayTeam,'Away 301')
   assert.equal(result.card.props.legs[0].price,'Por verificar')
-  assert.equal(urls.length,8)
-  assert.equal(urls.filter(u=>u.includes('/basketball/nba/')).length,1)
+  assert.equal(urls.length,13) // Eight league scoreboards and five verified event summaries.
+  assert.equal(urls.filter(u=>u.includes('/basketball/nba/scoreboard')).length,1)
+  assert.equal(urls.filter(u=>u.includes('/basketball/nba/summary?event=')).length,5)
 })
 test('automatic research marks 2 of 5 as incomplete instead of claiming success',async()=>{
   const at=future()
@@ -123,4 +124,39 @@ test('automatic research will not fabricate legs when records or fixture data ar
     ]}],
   }]}),{status:200})
   await assert.rejects(()=>autoResearchTicket(5,dayOf(at),fetched),/No hay eventos futuros/)
+})
+
+test('automatic ticket checks injury records and head-to-head without inventing availability',async()=>{
+  const at=future()
+  const fetcher=async url=>{
+    const data=String(url).includes('/summary?event=')
+      ?{injuries:[{team:{displayName:'Home 501'},injuries:[{status:'Out'}]}],
+        seasonseries:{summary:'Serie igualada'}}
+      :String(url).includes('/basketball/nba/scoreboard')
+        ?{events:[recordEvent(501,at)]}:{events:[]}
+    return new Response(JSON.stringify(data),{status:200})
+  }
+  const result=await autoResearchTicket(1,dayOf(at),fetcher)
+  const rationale=result.card.props.legs[0].rationale
+  assert.match(rationale,/Home 501/)
+  assert.match(rationale,/registros médicos/)
+  assert.match(rationale,/Serie igualada/)
+  assert.match(rationale,/Sin probabilidades calibradas/)
+})
+
+test('NBA-only request never fills ticket with unrelated NHL or football games',async()=>{
+  const at=future(),urls=[]
+  const fetcher=async url=>{
+    urls.push(String(url))
+    const events=String(url).includes('/basketball/nba/scoreboard')
+      ?Array.from({length:2},(_,i)=>recordEvent(900+i,at))
+      :Array.from({length:8},(_,i)=>recordEvent(1000+i,at))
+    return new Response(JSON.stringify({events}),{status:200})
+  }
+  const result=await autoResearchTicket(5,dayOf(at),fetcher,Date.now(),{},['nba'])
+  assert.equal(result.complete,false)
+  assert.equal(result.verifiedEvents,2)
+  assert.equal(result.card.props.legs.length,2)
+  assert.ok(result.card.props.legs.every(leg=>leg.league==='NBA'))
+  assert.ok(urls.every(url=>url.includes('/basketball/nba/')))
 })

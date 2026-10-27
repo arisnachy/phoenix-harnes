@@ -584,6 +584,13 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
             <strong>{p.home.label}</strong>{p.home.meta&&<small>{p.home.meta}</small>}
             {p.home.score!==undefined&&<b>{p.home.score}</b>}</div>
         </div>
+        {p.research&&<section className={css.sportsDetailSection} aria-label="Investigación de Phoenix">
+          <h4>Investigación Phoenix · Tendencia</h4>
+          <div className={css.sportsResearch}><strong>{p.research.favorite}</strong>
+            <p>{p.research.method}</p>
+            <ul>{p.research.evidence.map((line,i)=><li key={i}>{line}</li>)}</ul>
+            <small>Fuente: {p.research.source}</small></div>
+        </section>}
         {p.periods?.length?<section className={css.sportsDetailSection} aria-label="Parciales del partido">
           <h4>Marcador por período</h4><div className={css.sportsTableScroll}><table className={css.sportsTable}>
             <thead><tr><th>Equipo</th>{p.periods.map((period,i)=><th key={i}>{period.label}</th>)}</tr></thead>
@@ -603,13 +610,6 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
         {!p.pitchers?.length&&p.highlights?.length?<dl className={css.sportsFacts}>{p.highlights.map((h,i)=>
           <div key={i}>{h.image&&<SportsPortrait label={h.value} logo={h.image}/>}
             <dt>{h.label}</dt><dd>{h.value}</dd>{h.detail&&<small>{h.detail}</small>}</div>)}</dl>:null}
-        {p.research&&<section className={css.sportsDetailSection} aria-label="Investigación de Phoenix">
-          <h4>Investigación Phoenix · Tendencia</h4>
-          <div className={css.sportsResearch}><strong>{p.research.favorite}</strong>
-            <p>{p.research.method}</p>
-            <ul>{p.research.evidence.map((line,i)=><li key={i}>{line}</li>)}</ul>
-            <small>Fuente: {p.research.source}</small></div>
-        </section>}
         {p.lineups?.length?<SportsLineups lineups={p.lineups}/>:null}
         {p.bullpen?.length?<SportsBullpen bullpen={p.bullpen}/>:null}
         <footer className={css.sportsSourceBar}>
@@ -676,7 +676,7 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
                   <strong>{leg.selection}</strong>
                 </div>
                 <small>{[leg.market,leg.player?'Jugador · '+leg.player:undefined,unpriced?undefined:leg.bookmaker].filter(Boolean).join(' · ')}</small>
-                {leg.rationale&&<details className={css.sportsTicketReason}><summary>Ver fundamento</summary><p>{leg.rationale}</p></details>}
+                {leg.rationale&&<details className={css.sportsTicketReason} open><summary>Ver fundamento</summary><p>{leg.rationale}</p></details>}
               </div>
               {unpriced
                 ? <span className={css.sportsTicketVerified} aria-label="Partido verificado">✓ Evento</span>

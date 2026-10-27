@@ -1,5 +1,6 @@
 /** Read-only sports information adapters for Kira's conversation tools. */
 import { fetchPublicEspnOdds } from './espn-odds.ts'
+import { compareStandings } from './standings-research.ts'
 import { enrichMlbMatch } from './mlb-matchup.ts'
 import { researchMlbTrend } from './mlb-research.ts'
 export const sportsCatalog: Readonly<Record<string, readonly string[]>> = {
@@ -204,7 +205,7 @@ export async function chatGames(sport:string,league:string,requestedDate?:string
           (group.leaders ?? []).slice(0, 1).map((leader) => {
             const headshot = leader.athlete?.headshot?.href
             return {
-              label: title(group.name),
+              label: title(team.team?.displayName??team.team?.name,34)+' · '+title(group.name,30),
               value: title(leader.athlete?.displayName),
               ...(leader.displayValue ? { detail: title(leader.displayValue) } : {}),
               ...(logosEnabled(env) && headshot && /^https:\/\/a\.espncdn\.com\//u.test(headshot)
@@ -224,6 +225,7 @@ export async function chatGames(sport:string,league:string,requestedDate?:string
         sport,
         ...(e.id !== undefined && String(e.id).trim() !== '' ? { eventId: String(e.id) } : {}),
         periods, highlights,
+        ...(e.status?.type?.state==='pre'?{research:compareStandings(home,away).research}:{}),
         ...(comp?.broadcasts?.length?{ broadcast:comp.broadcasts.flatMap(x=>x.names??[]).slice(0,3).join(', ') }:{}),
         askPrompt:'Kira, amplía el análisis verificado del evento '+title(e.id,50)+' de '+league+'. Incluye métricas específicas de '+sport+' con sus fuentes.',
       } })
@@ -242,18 +244,24 @@ export type MarketOutcome = MarketSelection & { price:number;home:string;away:st
  * @param fetcher - HTTP adapter for isolated tests.
  * @returns Normalized quotes with bookmaker names and update times.
  */
-export async function marketOdds(sportKey:string,markets='h2h',env:NodeJS.ProcessEnv=process.env,fetcher:typeof fetch=fetch):Promise<MarketOutcome[]> {
+export async function marketOdds(sportKey:string,markets='h2h',env:NodeJS.ProcessEnv=process.env,fetcher:typeof fetch=fetch,requestedDate?:string):Promise<MarketOutcome[]> {
   if(!/^[a-z0-9_]{3,80}$/u.test(sportKey)||!/^(h2h|totals|spreads)(,(h2h|totals|spreads))*$/u.test(markets))throw Error('Mercado inválido')
+  if(requestedDate!==undefined)date(requestedDate)
   if(!hasSportsPermission('odds',env)){
     if(!hasSportsPermission('espn',env))throw Error('Sin proveedor de cuotas disponible: ESPN deshabilitado y THE_ODDS_API_KEY ausente.')
-    const fromEspn=await fetchPublicEspnOdds(sportKey,markets,<T>(url:string)=>getFeed<T>(url,fetcher))
+    const fromEspn=await fetchPublicEspnOdds(sportKey,markets,<T>(url:string)=>getFeed<T>(url,fetcher),requestedDate)
     return fromEspn.map(quote=>({ ...quote,sportKey,source:'ESPN Site/Core (sin clave)' }))
   }
   const u=new URL('https://api.the-odds-api.com/v4/sports/'+sportKey+'/odds')
   for(const [k,v] of Object.entries({ apiKey:env.THE_ODDS_API_KEY??'',regions:'us',markets,oddsFormat:'decimal' }))u.searchParams.set(k,v)
   const feed=await getFeed<Array<{ id:string;home_team:string;away_team:string;commence_time:string;bookmakers?:Array<{ key:string;title:string;last_update?:string;markets?:Array<{ key:string;last_update?:string;outcomes?:Array<{ name:string;price:number;point?:number }> }> }> }>>(u.toString(),fetcher)
   if(!Array.isArray(feed))throw Error('Respuesta de cuotas inválida')
-  return feed.flatMap(event=>(event.bookmakers??[]).flatMap(book=>(book.markets??[]).flatMap(market=>(market.outcomes??[]).filter(o=>o.price>1&&Number.isFinite(o.price)).map(o=>({
+  // A sportsbook slip can only contain events which have not started.
+  const upcoming=feed.filter(event=>Number.isFinite(Date.parse(event.commence_time))
+    &&Date.parse(event.commence_time)>Date.now())
+  const dated=requestedDate?upcoming.filter(event=>Number.isFinite(Date.parse(event.commence_time))
+    &&new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santo_Domingo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(event.commence_time))===requestedDate):upcoming
+  return dated.flatMap(event=>(event.bookmakers??[]).flatMap(book=>(book.markets??[]).flatMap(market=>(market.outcomes??[]).filter(o=>o.price>1&&Number.isFinite(o.price)).map(o=>({
     eventId:title(event.id,100),bookmaker:title(book.title||book.key,120),market:title(market.key,60),selection:title(o.name,120),point:o.point??null,sportKey,
     price:o.price,home:title(event.home_team),away:title(event.away_team),time:localTime(event.commence_time),updatedAt:title(market.last_update??book.last_update),source:'The Odds API',
   }))))).slice(0,500)
@@ -280,6 +288,8 @@ export function pricedTicket(selections:MarketSelection[],quotes:MarketOutcome[]
     return { event:match.away+' vs '+match.home,selection:match.selection+(match.point==null?'':' '+match.point),
       bookmaker:match.bookmaker,price:match.price.toFixed(2),when:match.time,market:match.market,...taxonomy }
   })
+  const houses=new Set(selections.map(sel=>sel.bookmaker))
+  if(houses.size!==1)throw Error('Una combinada real requiere una sola banca: no mezcles cuotas de casas diferentes en un ticket.')
   const correlated=events.size!==legs.length
   const warning=correlated?'Incluye selecciones del mismo encuentro; no asumas independencia ni que todas pueden combinarse.':'No se ha estimado probabilidad conjunta ni ventaja estadística calibrada.'
   return { warning,card:{ component:'sports_ticket_card',version:1,props:{
