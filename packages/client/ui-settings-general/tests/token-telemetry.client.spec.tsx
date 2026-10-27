@@ -31,7 +31,7 @@ describe('Settings → Telemetría', () => {
 
     fireEvent.click(checkbox)
     await waitFor(() => { expect(setTelemetry).toHaveBeenCalledWith(true) })
-    await waitFor(() => { expect((screen.getByRole('checkbox') as HTMLInputElement).checked).toBe(true) })
+    await waitFor(() => { expect(screen.getByRole('checkbox').checked).toBe(true) })
     expect(screen.queryByText(es['telemetry.hostUnavailable'])).toBeNull()
   })
 
@@ -87,14 +87,14 @@ describe('Settings → Telemetría', () => {
     const readTelemetry = vi.fn().mockResolvedValue(loaded)
     const setTelemetry = vi.fn().mockResolvedValue({ ...loaded, enabled: false })
     mount({ readTelemetry, setTelemetry, clearTelemetry: vi.fn().mockResolvedValue(EMPTY) })
-    await waitFor(() => { expect((screen.getByRole('checkbox') as HTMLInputElement).checked).toBe(true) })
+    await waitFor(() => { expect(screen.getByRole('checkbox').checked).toBe(true) })
     expect(screen.getByText('505')).toBeTruthy()
     expect(screen.getByText('205')).toBeTruthy()
     expect(screen.getByText(es['telemetry.sdkLegacyUnknown'])).toBeTruthy()
 
     fireEvent.click(screen.getByRole('checkbox'))
     await waitFor(() => { expect(setTelemetry).toHaveBeenCalledWith(false) })
-    await waitFor(() => { expect((screen.getByRole('checkbox') as HTMLInputElement).checked).toBe(false) })
+    await waitFor(() => { expect(screen.getByRole('checkbox').checked).toBe(false) })
     expect(screen.getByText(es['telemetry.disabled'])).toBeTruthy()
   })
 })
