@@ -241,6 +241,29 @@ export function renderPrompt(assembly: PromptAssembly): string {
 }
 
 /**
+ * Render cache-friendly instructions for the model boundary without changing
+ * the assembly or dropping any instruction. The generated Code Mode SDK changes
+ * as MCP tools are discovered; putting that volatile declaration block after
+ * other guidance gives the provider a longer identical initial system prefix.
+ * All non-SDK sections keep their relative order and original text.
+ *
+ * @param assembly - Complete prompt assembly (never mutated).
+ * @returns All rendered sections with a populated SDK section last.
+ */
+export function renderCacheFriendlyPrompt(assembly: PromptAssembly): string {
+  const sdkIndex = assembly.sections.findIndex(section => section.name === 'tools:sdk')
+  if (sdkIndex < 0 || sdkIndex === assembly.sections.length - 1) return renderPrompt(assembly)
+  const sdk = assembly.sections[sdkIndex]
+  if (sdk === undefined || sdk.text.length === 0) return renderPrompt(assembly)
+  const reordered = [
+    ...assembly.sections.slice(0, sdkIndex),
+    ...assembly.sections.slice(sdkIndex + 1),
+    sdk,
+  ]
+  return renderPrompt({ ...assembly, sections: reordered })
+}
+
+/**
  * Render the complete dynamic context snapshot.
  * @param assembly - the assembly whose contexts and variables to render.
  * @returns the current full snapshot, or `''` when no context is active.
