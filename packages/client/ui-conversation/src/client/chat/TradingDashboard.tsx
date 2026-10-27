@@ -302,6 +302,11 @@ export function TradingDashboard({ initial }: Props) {
         </div>}
         {connectionIssue && <p role="alert" className={css.connectionError}>{connectionIssue}</p>}
       </section>
+      <p className={css.markTimestamp} aria-live="polite">
+        PnL marcado con cotizaciones públicas de Binance · actualización cada 10 s mientras el visor está abierto ·
+        última lectura: {clock(state.markedAt)}.
+        Los TP/SL se ejecutan solo cuando el Host evalúa el motor PAPER.
+      </p>
       <div className={css.twoColumns}>
         <section className={css.section}>
           <h4>Radar de estrategias</h4>
@@ -322,18 +327,59 @@ export function TradingDashboard({ initial }: Props) {
         </section>
         <section className={css.section}>
           <h4>Posiciones virtuales</h4>
-          {account.positions.length === 0 ? <p className={css.empty}>Sin posiciones abiertas. No se simulan compras sin señal.</p>
-            : <div className={css.rows}>
-              {account.positions.map(position => (
-                <div key={position.symbol} className={css.row}>
-                  <div><strong>{position.symbol}</strong><small>{amount(position.quantity, 7)} unidades</small></div>
-                  <div className={css.right}><strong>{amount(position.marketValueUsdt)} USDT</strong>
-                    <small data-pnl={position.unrealizedPnlUsdt >= 0 ? 'positive' : 'negative'}>
-                      {position.unrealizedPnlUsdt > 0 ? '+' : ''}{amount(position.unrealizedPnlUsdt)} USDT
-                    </small>
+          {account.positions.length === 0
+            ? <p className={css.empty}>Sin posiciones abiertas. Esperando una señal de entrada validada.</p>
+            : <div className={css.positionCards}>
+              {account.positions.map(position => {
+                const plan = position.exitPlan
+                const lastPrice = position.marketPriceUsdt
+                const pnl = position.unrealizedPnlUsdt
+                const pct = position.unrealizedReturnPct
+                const strategy = plan?.strategyId
+                  ?? state.recentTrades.findLast(trade => trade.side === 'buy' && trade.symbol === position.symbol)?.strategyId
+                  ?? 'No registrada'
+                return <article key={position.symbol} className={css.positionCard} aria-label={position.symbol + ' PnL y salidas PAPER'}>
+                  <div className={css.positionHeading}>
+                    <div><strong>{position.symbol.replace(/USDT$/u, '/USDT')}</strong>
+                      <small>{amount(position.quantity, 7)} unidades · {strategy}</small></div>
+                    <div className={css.positionPnl} data-pnl={pnl >= 0 ? 'positive' : 'negative'}>
+                      <strong>{pnl >= 0 ? '+' : ''}{amount(pnl)} USDT</strong>
+                      <span>{pct === undefined ? 'Retorno no disponible'
+                        : (pct >= 0 ? '+' : '') + amount(pct) + '%'} · sin realizar</span>
+                    </div>
                   </div>
-                </div>
-              ))}
+                  <div className={css.positionPrices}>
+                    <div><span>Entrada</span><strong>{position.averageEntryUsdt === undefined
+                      ? 'Sin dato' : amount(position.averageEntryUsdt, 7)}</strong></div>
+                    <div><span>Mercado (USDT)</span><strong>{lastPrice === undefined ? 'Sin dato' : amount(lastPrice, 7)}</strong></div>
+                    <div><span>Valor actual</span><strong>{amount(position.marketValueUsdt)} USDT</strong></div>
+                  </div>
+                  {plan === undefined
+                    ? <p className={css.exitMissing}>Sin plan de salida verificado. No se muestran TP/SL ficticios.</p>
+                    : <div className={css.exitLevels}>
+                        <div className={css.exitLevel} data-level="stop">
+                          <span>Stop-loss</span><strong>{amount(plan.stopLossPrice, 7)}</strong>
+                          <small>{lastPrice === undefined ? 'Sin cotización' : lastPrice <= plan.stopLossPrice ? 'Nivel alcanzado · pendiente de ciclo' : 'Vigilando'}</small>
+                        </div>
+                        <div className={css.exitLevel} data-level="tp1">
+                          <span>TP1 · {amount(plan.tp1Fraction * 100, 0)}%</span>
+                          <strong>{amount(plan.tp1Price, 7)}</strong>
+                          <small>{plan.tp1Taken ? 'Parcial ejecutado'
+                            : lastPrice !== undefined && lastPrice >= plan.tp1Price ? 'Nivel alcanzado · pendiente de ciclo' : 'Pendiente'}</small>
+                        </div>
+                        <div className={css.exitLevel} data-level="tp2">
+                          <span>TP2 · salida final</span><strong>{amount(plan.tp2Price, 7)}</strong>
+                          <small>{lastPrice !== undefined && lastPrice >= plan.tp2Price ? 'Nivel alcanzado · pendiente de ciclo' : 'Pendiente'}</small>
+                        </div>
+                      </div>}
+                  {plan !== undefined && <p className={css.positionFootnote}>
+                    Estrategia: {strategy} · {plan.origin === 'legacy-adopted'
+                      ? 'Plan adoptado para una posición histórica'
+                      : 'Plan persistido en el ledger al ejecutar la compra'}
+                    . SL/TP virtuales: se evalúan en cada ciclo del Host, no son órdenes stop/limit de Binance.
+                  </p>}
+                </article>
+              })}
             </div>}
         </section>
       </div>
