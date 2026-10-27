@@ -30,6 +30,8 @@ export function TradingDashboard({ initial }: Props) {
   const [refreshKey, setRefreshKey] = useState(0)
   const [controlBusy, setControlBusy] = useState(false)
   const [controlError, setControlError] = useState<string | undefined>()
+  // A user can configure a multi-asset PAPER watchlist without spending tokens.
+  const [watchlistDraft, setWatchlistDraft] = useState<string | undefined>()
   useEffect(() => {
     let mounted = true
     let controller: AbortController | undefined
@@ -76,8 +78,16 @@ export function TradingDashboard({ initial }: Props) {
     setControlBusy(true)
     setControlError(undefined)
     try {
+      const watchlist = (watchlistDraft ?? state.settings.symbols.join(','))
+        .split(/[,\\s]+/u).map(item => item.trim().toUpperCase()).filter(Boolean)
+      if (action === 'start' && (watchlist.length < 1 || watchlist.length > 12
+        || new Set(watchlist).size !== watchlist.length
+        || watchlist.some(item => !/^[A-Z0-9]{3,16}USDT$/u.test(item)))) {
+        setControlError('Selecciona entre 1 y 12 pares Spot USDT únicos, separados por coma.')
+        return
+      }
       const payload = action === 'start'
-        ? { action, symbols: [...state.settings.symbols], interval: state.settings.interval,
+        ? { action, symbols: watchlist, interval: state.settings.interval,
           pollMinutes: state.settings.pollMs / 60_000 }
         : { action }
       const response = await fetch('/phoenix-trading/paper/control', {
@@ -89,6 +99,7 @@ export function TradingDashboard({ initial }: Props) {
       const valid = parseTradingDashboard(updated)
       if (valid === undefined) throw new Error('Invalid PAPER control reply')
       setState(valid)
+      if (action === 'start') setWatchlistDraft(undefined)
       setConnection('connected')
       setRefreshKey(current => current + 1)
     } catch {
@@ -129,8 +140,8 @@ export function TradingDashboard({ initial }: Props) {
       </div>
       <div className={css.toolbar}>
         <div>
-          <strong>Estrategias activas</strong>
-          <small>{settings.symbols.join(' · ')} · {settings.interval} · Revisión cada {settings.pollMs / 60_000} min</small>
+          <strong>Escáner multimoneda · {settings.symbols.length} pares configurados</strong>
+          <small>{settings.interval} · Revisión cada {settings.pollMs / 60_000} min mientras el Host esté activo</small>
         </div>
         <div className={css.actions}>
           <button type="button" disabled={controlBusy} onClick={() => { setRefreshKey(current => current + 1) }}>Actualizar</button>
@@ -141,6 +152,20 @@ export function TradingDashboard({ initial }: Props) {
                 onClick={() => { void control('start') }}>Iniciar PAPER</button>}
         </div>
       </div>
+      <div className={css.tradingRadarMeta} aria-live="polite">
+        <strong>{running ? 'Radar encendido' : 'Radar detenido'}</strong>
+        <span>Último análisis: {clock(state.lastSuccessAt)}</span>
+        <span>Resultado: {state.lastDecision === 'buy' ? 'Compra PAPER' : state.lastDecision === 'sell' ? 'Venta PAPER' : 'Esperar / sin señal'}</span>
+        <span>{state.signals.length} de {settings.symbols.length} pares evaluados</span>
+      </div>
+      <label className={css.watchlist}>
+        <span>Mercados vigilados (1–12 pares USDT, separados por coma)</span>
+        <input type="text" spellCheck={false} aria-label="Lista de mercados PAPER"
+          disabled={running || controlBusy}
+          value={watchlistDraft ?? settings.symbols.join(', ')}
+          onChange={event => { setWatchlistDraft(event.currentTarget.value) }}
+          placeholder="BTCUSDT, ETHUSDT, SOLUSDT, BNBUSDT" />
+      </label>
       <TradingMarketChart symbols={settings.symbols} trades={state.recentTrades} />
       <div className={css.twoColumns}>
         <section className={css.section}>
@@ -149,7 +174,8 @@ export function TradingDashboard({ initial }: Props) {
             : <div className={css.rows}>
               {state.signals.map(signal => (
                 <div key={signal.symbol} className={css.row}>
-                  <div><strong>{signal.symbol}</strong><small>{signal.strategy} · {signal.regime}</small></div>
+                  <div><strong>{signal.symbol}</strong><small>{signal.strategy} · {signal.regime}</small>
+                    <span className={css.tradingReason}>{signal.reason}</span></div>
                   <span data-signal={signal.action}>
                     {signal.action === 'buy' ? 'COMPRAR' : signal.action === 'sell' ? 'VENDER' : 'ESPERAR'}
                   </span>
@@ -192,6 +218,10 @@ export function TradingDashboard({ initial }: Props) {
             ))}
           </div>}
       </section>
+      <p className={css.tradingNotice}>
+        Kira supervisa cuando recibe un evento o una petición; el escáner PAPER funciona en el Host sin mantener un modelo de IA ejecutándose por cada vela.
+        Las señales no son órdenes y nunca se atribuyen a la cuenta real de Binance.
+      </p>
       <div className={css.footer} aria-live="polite">
         <span>Última comprobación: {clock(state.lastAttemptAt)}</span>
         <span>Próximo ciclo: {running ? clock(state.nextCheckAt) : 'Sin programación'}</span>
