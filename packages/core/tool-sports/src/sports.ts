@@ -256,8 +256,11 @@ export async function marketOdds(sportKey:string,markets='h2h',env:NodeJS.Proces
   for(const [k,v] of Object.entries({ apiKey:env.THE_ODDS_API_KEY??'',regions:'us',markets,oddsFormat:'decimal' }))u.searchParams.set(k,v)
   const feed=await getFeed<Array<{ id:string;home_team:string;away_team:string;commence_time:string;bookmakers?:Array<{ key:string;title:string;last_update?:string;markets?:Array<{ key:string;last_update?:string;outcomes?:Array<{ name:string;price:number;point?:number }> }> }> }>>(u.toString(),fetcher)
   if(!Array.isArray(feed))throw Error('Respuesta de cuotas inválida')
-  const dated=requestedDate?feed.filter(event=>Number.isFinite(Date.parse(event.commence_time))
-    &&new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santo_Domingo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(event.commence_time))===requestedDate):feed
+  // A sportsbook slip can only contain events which have not started.
+  const upcoming=feed.filter(event=>Number.isFinite(Date.parse(event.commence_time))
+    &&Date.parse(event.commence_time)>Date.now())
+  const dated=requestedDate?upcoming.filter(event=>Number.isFinite(Date.parse(event.commence_time))
+    &&new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santo_Domingo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(event.commence_time))===requestedDate):upcoming
   return dated.flatMap(event=>(event.bookmakers??[]).flatMap(book=>(book.markets??[]).flatMap(market=>(market.outcomes??[]).filter(o=>o.price>1&&Number.isFinite(o.price)).map(o=>({
     eventId:title(event.id,100),bookmaker:title(book.title||book.key,120),market:title(market.key,60),selection:title(o.name,120),point:o.point??null,sportKey,
     price:o.price,home:title(event.home_team),away:title(event.away_team),time:localTime(event.commence_time),updatedAt:title(market.last_update??book.last_update),source:'The Odds API',
