@@ -143,3 +143,20 @@ test('automatic ticket checks injury records and head-to-head without inventing 
   assert.match(rationale,/Serie igualada/)
   assert.match(rationale,/Sin probabilidades calibradas/)
 })
+
+test('NBA-only request never fills ticket with unrelated NHL or football games',async()=>{
+  const at=future(),urls=[]
+  const fetcher=async url=>{
+    urls.push(String(url))
+    const events=String(url).includes('/basketball/nba/scoreboard')
+      ?Array.from({length:2},(_,i)=>recordEvent(900+i,at))
+      :Array.from({length:8},(_,i)=>recordEvent(1000+i,at))
+    return new Response(JSON.stringify({events}),{status:200})
+  }
+  const result=await autoResearchTicket(5,dayOf(at),fetcher,Date.now(),{},['nba'])
+  assert.equal(result.complete,false)
+  assert.equal(result.verifiedEvents,2)
+  assert.equal(result.card.props.legs.length,2)
+  assert.ok(result.card.props.legs.every(leg=>leg.league==='NBA'))
+  assert.ok(urls.every(url=>url.includes('/basketball/nba/')))
+})
