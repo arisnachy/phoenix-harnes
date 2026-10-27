@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { dirname } from 'node:path'
 import { mailAddress } from './assistant-mail-store.ts'
 import { installAssistantMail } from './assistant-mail-runtime.ts'
@@ -376,7 +377,7 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
     // must not create duplicate notifications for the same virtual fill.
     binance.engine.setAttentionSink(event => {
       ctx.emit('phoenix/wake-event', wakeEvent({
-        id: 'binance-paper:' + crypto.randomUUID(),
+        id: 'binance-paper:' + randomUUID(),
         source: 'phoenix-trading',
         eventType: 'paper.attention',
         summary: event.detail,
