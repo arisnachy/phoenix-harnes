@@ -10,7 +10,7 @@ The Eclipse model selector collapsed the authenticated Codex catalog to the high
 
 ## Decision
 
-The authenticated Codex app-server remains authoritative for model availability and reasoning capabilities. Eclipse preserves every account-visible model ID in Codex order, removes duplicate IDs and the virtual Phoenix auto route, and does not infer retirement from model names. A selected model is still validated against its actual advertised reasoning capabilities before settings are saved.
+The authenticated Codex app-server remains authoritative for model availability and reasoning capabilities. Eclipse preserves every account-visible model ID in Codex order, removes duplicate IDs and the virtual Phoenix auto route, and does not infer retirement from model names. Eclipse Settings queries the authenticated Codex app-server directly using `llm.discoverModels` rather than the adapter-backed `llm.models` registry, which may contain pinned or last-good entries. The discovery RPC preserves advertised reasoning efforts and surfaces errors instead of silently substituting a stale list. A selected model is still validated against its actual advertised reasoning capabilities before settings are saved.
 
 The Codex updater starts from PHOENIX_INSTALL_ROOT even when Git root detection fails, checks the official stable npm version at 30-minute intervals, and stages, smoke-tests, and activates verified upgrades. Explicit --apply works in notify mode, whereas the unattended watcher installs only in auto mode.
 
