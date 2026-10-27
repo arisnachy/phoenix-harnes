@@ -67,13 +67,13 @@ export function parseTradingDashboard(value: unknown): TradingDashboardSnapshot 
   const account = record(root.account)
   const settings = record(root.settings)
   if (account === undefined || settings === undefined
-    || !Array.isArray(settings.symbols) || settings.symbols.length > 5
+    || !Array.isArray(settings.symbols) || settings.symbols.length > 12
     || !settings.symbols.every(s => typeof s === 'string' && /^[A-Z0-9]{3,16}USDT$/u.test(s))
     || typeof settings.interval !== 'string' || !finite(settings.pollMs)
     || !['equityUsdt', 'cashUsdt', 'totalPnlUsdt', 'totalReturnPct', 'maxDrawdownPct', 'tradeCount']
       .every(key => finite(account[key]))
     || !Array.isArray(account.positions) || account.positions.length > 12
-    || !Array.isArray(root.signals) || root.signals.length > 5
+    || !Array.isArray(root.signals) || root.signals.length > 12
     || !Array.isArray(root.recentTrades) || root.recentTrades.length > 12
     || typeof root.lastDecision !== 'string' || typeof root.rationale !== 'string') return undefined
   const positions = account.positions.map(record)
