@@ -38,6 +38,7 @@ export interface BinancePaperAutomationView {
   readonly lastCycle?: BinanceAdaptiveCycle
   readonly settings: BinancePaperAutomationConfig
   readonly account: Awaited<ReturnType<BinancePaperBroker['account']>>
+  readonly markedAt: string
   readonly recentTrades: Awaited<ReturnType<BinancePaperBroker['journal']>>
 }
 
@@ -275,6 +276,7 @@ export class BinancePaperAutomation {
       ...(this.lastCycle === undefined ? {} : { lastCycle: this.lastCycle }),
       settings: this.config,
       account,
+      markedAt: new Date().toISOString(),
       recentTrades: trades,
     }
   }

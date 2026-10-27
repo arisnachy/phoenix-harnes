@@ -159,6 +159,66 @@ describe('adaptive Binance paper cycle', () => {
     expect(result.trade).toBeUndefined()
   })
 
+  it('persists TP1 partial execution exactly once and exits remaining units at TP2', async () => {
+    const base = market({ BTCUSDT: 'flat' })
+    let quote = 100
+    const feed: BinancePublicMarket = {
+      async price() { return quote },
+      async prices(symbols) { return Object.fromEntries(symbols.map(symbol => [symbol, quote])) },
+      candles: base.candles.bind(base),
+    }
+    const root = mkdtempSync(join(tmpdir(), 'phoenix-paper-exit-'))
+    temporary.push(root)
+    const paper = new BinancePaperBroker(join(root, 'paper.json'), feed)
+    const first = await paper.order({
+      symbol: 'BTCUSDT', side: 'buy', quoteAmountUsdt: 100,
+      strategyId: 'adaptive-mean-reversion-v1',
+    })
+    expect(first.account.positions[0]?.exitPlan).toMatchObject({
+      strategyId: 'adaptive-mean-reversion-v1',
+      stopLossPrice: 98.6, tp1Price: 101.2, tp2Price: 102.5,
+      tp1Taken: false, origin: 'execution',
+    })
+    quote = 101.3
+    const tp1 = await runBinanceAdaptiveCycle(paper,
+      { mode: 'paper-step', symbols: ['BTCUSDT'] }, NOW)
+    expect(tp1.trade).toMatchObject({ side: 'sell', reason: 'paper-tp1' })
+    expect(tp1.trade?.quantity).toBe(0.5)
+    expect(tp1.account.positions[0]?.exitPlan?.tp1Taken).toBe(true)
+    const holdAfterTp1 = await runBinanceAdaptiveCycle(paper,
+      { mode: 'paper-step', symbols: ['BTCUSDT'] }, NOW)
+    expect(holdAfterTp1.trade).toBeUndefined()
+    expect((await paper.account()).tradeCount).toBe(2)
+    quote = 102.6
+    const tp2 = await runBinanceAdaptiveCycle(paper,
+      { mode: 'paper-step', symbols: ['BTCUSDT'] }, NOW)
+    expect(tp2.trade).toMatchObject({ side: 'sell', reason: 'paper-tp2', quantity: 0.5 })
+    expect(tp2.account.positions).toHaveLength(0)
+    expect((await paper.journal()).map(row => row.reason)).toEqual([
+      undefined, 'paper-tp1', 'paper-tp2',
+    ])
+  })
+
+  it('exits legacy positions on a marked stop even if excluded from the watchlist', async () => {
+    const base = market({ ETHUSDT: 'flat', BTCUSDT: 'flat' })
+    let quote = 100
+    const feed: BinancePublicMarket = {
+      async price() { return quote },
+      async prices(symbols) { return Object.fromEntries(symbols.map(symbol => [symbol, quote])) },
+      candles: base.candles.bind(base),
+    }
+    const root = mkdtempSync(join(tmpdir(), 'phoenix-paper-stop-'))
+    temporary.push(root)
+    const paper = new BinancePaperBroker(join(root, 'paper.json'), feed)
+    await paper.order({ symbol: 'ETHUSDT', side: 'buy', quoteAmountUsdt: 100,
+      strategyId: 'adaptive-breakout-v1' })
+    quote = 97
+    const exit = await runBinanceAdaptiveCycle(paper,
+      { mode: 'paper-step', symbols: ['BTCUSDT'] }, NOW)
+    expect(exit.trade).toMatchObject({ side: 'sell', symbol: 'ETHUSDT', reason: 'paper-stop-loss' })
+    expect(exit.account.positions).toHaveLength(0)
+  })
+
   it('rejects broad, duplicate, and non-USDT watchlists before fetching markets', async () => {
     const paper = broker({})
     await expect(runBinanceAdaptiveCycle(paper, { symbols: [] }, NOW)).rejects.toThrow('between 1 and 12')

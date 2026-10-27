@@ -147,3 +147,33 @@
 .credentialForm button { justify-self: start; background: #e65b29; color: #fff; border-color: #e65b29; font-weight: 700; }
 .connectionError { margin: 0; color: #b43b3b; font-size: 12px; }
 @media (max-width: 700px) { .connectionGrid { grid-template-columns: minmax(0,1fr); } }
+
+
+/* Verified PAPER exit ladder and mark-to-market detail in Phoenix light theme. */
+.markTimestamp { margin: -5px 0 0; font-size: 11px; color: #64748b; line-height: 1.5; }
+.positionCards { display: grid; gap: 12px; }
+.positionCard { border: 1px solid #dfe7eb; border-radius: 12px; padding: 13px; background: #fff; display: grid; gap: 13px; min-width: 0; }
+.positionHeading { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.positionHeading>div:first-child { display: grid; gap: 3px; min-width: 0; }
+.positionHeading strong { color: #1d2937; font-size: 15px; }
+.positionHeading small { color: #6a7b90; font-size: 11px; overflow-wrap: anywhere; }
+.positionPnl { text-align: right; display: grid; gap: 2px; font-variant-numeric: tabular-nums; }
+.positionPnl strong { font-size: 17px; }
+.positionPnl[data-pnl=positive],.positionPnl[data-pnl=positive] strong { color: #078262; }
+.positionPnl[data-pnl=negative],.positionPnl[data-pnl=negative] strong { color: #bf3b48; }
+.positionPnl span { color: inherit; font-size: 11px; }
+.positionPrices { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 6px; }
+.positionPrices>div { display: grid; gap: 4px; min-width: 0; }
+.positionPrices span { color: #78889a; font-size: 10px; }
+.positionPrices strong { color: #263447; font-size: 12px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.exitLevels { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 6px; }
+.exitLevel { border: 1px solid #e7e9ed; background: #f7f9fb; border-radius: 9px; padding: 9px; display: grid; gap: 4px; min-width: 0; }
+.exitLevel[data-level=stop] { border-color: #f4d8dc; background: #fff7f8; }
+.exitLevel[data-level=tp1],.exitLevel[data-level=tp2] { border-color: #d1e8dc; background: #f6fcf8; }
+.exitLevel span { font-size: 10px; color: #63758b; font-weight: 700; }
+.exitLevel strong { font-size: 12px; color: #24354a; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.exitLevel small { font-size: 10px; color: #64758b; }
+.exitMissing { margin: 0; color: #a23c42; font-size: 11px; }
+.positionFootnote { margin: 0; font-size: 10px; color: #798698; line-height: 1.55; }
+@media (max-width: 820px) { .positionPrices,.exitLevels { grid-template-columns: repeat(2,minmax(0,1fr)); } }
+@media (max-width: 380px) { .positionPrices,.exitLevels { grid-template-columns: minmax(0,1fr); } }
