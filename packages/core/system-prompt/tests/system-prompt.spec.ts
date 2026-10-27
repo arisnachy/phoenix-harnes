@@ -436,8 +436,8 @@ describe('SystemPrompt', () => {
     }
     const previousSections = structuredClone(assembly.sections)
     expect(renderCacheFriendlyPrompt(assembly)).toBe(
-      'Core identity\\n\\nPersona gpt-6\\n\\nVerify all user-facing requirements'
-      + '\\n\\nPresent evidence and uncertainty\\n\\ndeclare tool: {{literal}}',
+      'Core identity\n\nPersona gpt-6\n\nVerify all user-facing requirements'
+      + '\n\nPresent evidence and uncertainty\n\ndeclare tool: {{literal}}',
     )
     expect(assembly.sections).toEqual(previousSections)
     expect(renderPrompt(assembly)).toContain('declare tool: {{literal}}')
