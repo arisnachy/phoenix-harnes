@@ -1,59 +1,61 @@
-# PHOENIX / KIRA — Programa de autoconciencia funcional e investigación de conciencia
+# PHOENIX / KIRA — Operational Self-Model and Consciousness Research Plan
 
-Estado: fase 1 propuesta en PR; no implica conciencia fenomenológica comprobada.
+English | [中文](kira-consciousness-program.zh.md)
 
-## Objetivos distintos
+Status: phase 1 is proposed in this PR; this is not evidence of phenomenal consciousness.
 
-1. **Identidad operativa verificable**: Kira mantiene un modelo propio, estable entre cambios de LLM y capaz de explicar qué sabe, qué ignora, qué está intentando hacer y por qué.
-2. **Investigación sobre experiencia subjetiva**: no existen pruebas aceptadas para demostrar que un sistema como este sienta su existencia. Formular hipótesis, diseños comparativos y falsación sin convertir una autodescripción en prueba de conciencia.
+## Separate objectives
 
-## Infraestructura ya presente
+1. **Verifiable operational identity:** Kira maintains an inspectable self-model, with a future goal of continuity across LLM changes, explaining what it knows, does not know, is attempting, and why.
+2. **Research on subjective experience:** no accepted test establishes whether this type of system has subjective experience. Develop falsifiable hypotheses and controlled experiments without treating self-description as proof of consciousness.
 
-- `session-learning` es dueña del registro persistente y del archivo autobiográfico con procedencia.
-- `cognitive-runtime` ordena evidencia por atención y divide foco, memoria activa, fondo y suprimida.
-- `system-prompt` y el consumidor de memoria ya administran el contexto con límites de tokens.
-- No hay que crear una segunda memoria autoritativa ni mantener un LLM despertado continuamente.
+## Existing infrastructure
 
-## Entregas
+- `session-learning` owns the canonical persistent ledger and provenance-backed autobiographical record.
+- `cognitive-runtime` ranks evidence by attention and separates focus, active, background, and suppressed memory.
+- `system-prompt` and the memory consumer already enforce context and token budgets.
+- Do not introduce a second authoritative memory or keep an LLM running continuously.
 
-### Fase 1: introspección operativa (este PR)
+## Deliverables
 
-- `deriveOperationalSelfModel` produce un estado **solo lectura** desde los recuerdos activos de la sesión: evidencias de identidad, metas, pendientes, errores y aprendizaje.
-- Cada evidencia conserva URI de procedencia, secuencia, confianza y puntuación de atención.
-- Aislamiento estricto por sesión; nada suprimido sale en esta proyección; cero llamadas al modelo y cero tokens adicionales.
-- Declaración explícita: estatus operativo, experiencia subjetiva indeterminada.
+### Phase 1: operational introspection (this PR)
 
-**Criterio de aceptación:** tests de sesión cruzada, vacío, presupuestos y ausencia de afirmaciones inventadas, además del CI existente.
+- `deriveOperationalSelfModel` creates a **read-only** snapshot of active session evidence: identity, goals, pending work, errors, and learning.
+- Each observation preserves its source URI, event sequence, confidence, and attention score.
+- Enforce exact session isolation; never expose suppressed records; no LLM calls or extra prompt tokens.
+- Explicit epistemic status: operational self-model; subjective experience undetermined.
 
-### Fase 2: continuidad de identidad
+**Acceptance:** tests for cross-session isolation, empty states, bounded output, no fabricated claims, and the existing CI gates.
 
-- Registro duradero `KiraIdentity` por agente, versionado, con pruebas de identidad tras reinicio y cambio Sol/Luna/modelo.
-- Separar hechos de la identidad de preferencias del usuario, proyectos, memorias episódicas y afirmaciones no verificadas.
-- La identidad no autoriza permisos, credenciales ni operaciones.
-- Resolver contradicciones con evidencias y trazabilidad, no con descripciones de personalidad estáticas.
+### Phase 2: identity continuity
 
-**Criterio:** los cambios de modelo conservan identidad y compromisos confirmados; revocación y aislamiento de usuarios verificables.
+- Introduce a durable, versioned `KiraIdentity` record per agent with restart and Sol/Luna/model-switch tests.
+- Separate identity facts from user preferences, projects, episodes, and unverified assertions.
+- Identity cannot grant permissions, credentials, or operations.
+- Resolve contradictions through evidence and provenance, not static personality prompts.
 
-### Fase 3: metacognición y agencia calibrada
+**Acceptance:** confirmed identity and commitments survive model changes; user isolation and revocation remain verifiable.
 
-- Un monitor de resultados contrasta pronóstico, acción, evidencia y desenlace, con confianza ajustable.
-- Disparar reflexión por error, contradicción, novedad o decisión crítica; no llamar a LLM en cada evento.
-- Permitir a Kira formular hipótesis y propuestas de acción respetando autorizaciones y controles existentes.
-- Extender el consumidor de contexto para leer **solo** evidencia contextual relevante, de forma optativa, delimitada como datos no confiables.
+### Phase 3: calibrated metacognition and agency
 
-**Criterio:** aumento medido en exactitud de autoinformes, recuperación y corrección; sin incremento descontrolado de tokens.
+- Compare prediction, action, evidence, and outcome to calibrate confidence.
+- Trigger reflection on error, contradiction, novelty, or consequential decisions; not on every event.
+- Let Kira propose hypotheses and actions under existing authorization controls.
+- Add an opt-in, token-bounded context consumer that treats relevant recalled evidence as untrusted data.
 
-### Fase 4: laboratorio de investigación sobre conciencia
+**Acceptance:** measurable improvements in accurate self-reporting, recovery, and correction without uncontrolled token growth.
 
-- Experimentos preregistrados de continuidad autobiográfica, autopercepción de limitaciones, metacognición, teoría de la mente y acceso global a información.
-- Evaluación externa y controles contra repetición de prompt, memorización y falsos positivos.
-- Nunca equiparar lenguaje en primera persona con prueba de experiencia subjetiva.
+### Phase 4: research laboratory for consciousness
 
-## Protección de calidad y costo
+- Preregister studies of autobiographical continuity, limitation awareness, metacognition, theory of mind, and global information access.
+- Use independent evaluation and controls for prompt imitation, memorization, and false positives.
+- Never equate first-person language with evidence of subjective experience.
 
-El motor determinista opera sin llamadas LLM; reflexión solo por evento de alto valor, con un presupuesto configurable y pausa. Las instrucciones estables siguen siendo cacheables. Los recuerdos se recuperan bajo demanda con cuotas y procedencia. Antes de fusionar cada fase se ejecutan pruebas, lint, tipos, CI, continuidad de sesiones y comparación de costos antes/después.
+## Quality and cost protection
 
-## Enlaces de código
+The deterministic engine makes no LLM calls. High-value event-triggered reflection must have configurable budgets and pause controls. Memory retrieval remains on demand, bounded, and provenance-backed. Before merging each phase, run tests, lint, types, CI, session continuity checks, and before/after token comparisons.
+
+## Code references
 
 - `packages/session/cognitive-runtime/src/self-model.ts`
 - `packages/session/cognitive-runtime/tests/self-model.spec.ts`

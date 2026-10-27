@@ -30,6 +30,8 @@
 
 `maxCandidates` 接受 1–128 条记录，默认值为 64。`activeLimit` 和 `backgroundLimit` 接受 0–128 条记录，默认值分别为 8 和 16。每个注意力权重都必须是有限的非负数；基础组合将所有权重设为 1。`suppressed` 表示候选超出配置的记忆预算；它不是安全抑制、权限拒绝或策略决策。
 
+只读方法 `ctx.cognitiveRuntime.introspect(sessionId)` 从已有会话投影派生 `OperationalSelfModel`，返回有界且可追溯来源的身份、焦点、目标、待办事项、错误和学习证据。它不会包含超出预算而被抑制的记录，也不会包含其他会话的记录。结果明确声明 `epistemicStatus: 'operational-model-only'` 和 `subjectiveExperience: 'undetermined'`。此方法不创建模型请求、新的持久记忆或授权。
+
 该投影不宣称具有意识、感知能力、与人等同，或具有人类式主观体验。它为后续消费者提供可检查的状态模型，同时将目标、权限、审批、凭据、工具、提示和 agent-loop 控制留给现有所有者。
 
 ## 失败和持久化行为

@@ -1,0 +1,4 @@
+# Confirmed bilingual pair; git blob SHA of each reviewed counterpart.
+# See docs/i18n/README.md and verify-translation-pairing --write.
+kira-consciousness-program.md: 02f1a85d78031ca98ae6f5ab3bfd308479147627
+kira-consciousness-program.zh.md: f91027e13a5e0529159db8345ebb37c0766ef5d3
