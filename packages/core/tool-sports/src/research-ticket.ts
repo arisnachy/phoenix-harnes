@@ -224,8 +224,8 @@ export async function autoResearchTicket(
         edge:signal.edge,
         leg:{ sport,league,eventId:String(event.id),pick:signal.pick,
           rationale:clean(signal.research.favorite+'. '+
-            (winner.team?.displayName??winner.team?.name??'Equipo')+' frente a '+
-            (loser.team?.displayName??loser.team?.name??'rival')+'. '+
+            (winner?.team?.displayName??winner?.team?.name??'Equipo')+' frente a '+
+            (loser?.team?.displayName??loser?.team?.name??'rival')+'. '+
             signal.research.evidence.join('; ')+
             '. Predicción NO calibrada. Verificar lesiones, enfrentamientos, forma y cuotas.',240) },
       })
