@@ -405,7 +405,7 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
     const mountTradingRoute = (): void => {
       if (removeTradingRoute !== undefined) return
       const server = (ctx.get as unknown as (name: string) => unknown)('webServer') as GameWebRouteHost | undefined
-      if (server?.register !== undefined) removeTradingRoute = mountBinancePaperDashboardRoute(server, binance.engine, { testnet, ...(secretProvider === undefined ? {} : { credentials: secretProvider }) })
+      if (server?.register !== undefined) removeTradingRoute = mountBinancePaperDashboardRoute(server, binance.engine, { testnet, ...(secretProvider === undefined ? {} : { credentials: secretProvider }), ...(pluginInventory === undefined ? {} : { agentOs: pluginInventory }) })
     }
     mountTradingRoute()
     disposers.push(ctx.on('internal/service', name => {
