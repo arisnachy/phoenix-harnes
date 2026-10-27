@@ -24,6 +24,17 @@ Each sports request contributes only source-attributed event fields and bounded 
 
 Live fixtures and odds can change between requests, so dynamic tool results may alter the request prefix and reduce KV-cache reuse; stable static tool schemas and instructions remain cacheable.
 
+## PHOENIX Sports Intelligence: automatic ticket execution flow
+
+- `sports_chat_ticket_auto` is the primary ticket-research tool. Pass the exact leg count (1–6), Dominican Republic match date and source sports keys such as `basketball_nba`. Do not show a scoreboard in lieu of the ticket.
+- Search attributed h2h prices with a commercial source when configured. A failed or empty paid feed retries free ESPN pricing. A priced combined slip is built only if **all** legs have two competing outcomes, each event is future, quotes are not demonstrably stale, and every selection belongs to the **same bookmaker**.
+- Match reported home/away team names against ESPN to enrich sourced logos and standings evidence, showing contradictions instead of masking them. A low bookmaker price is a **market favorite**, not a model's calibrated win probability or a guarantee of value.
+- If a complete same-house price set is missing, bounded ESPN research proposes a visually distinct unpriced ticket. Exact league requests remain scoped (e.g. five NBA legs must not silently include NHL).
+- Each requested leg is visible in the native ticket; incomplete output is explicitly labelled as a draft. Provider outages do not automatically erase other sources.
+- The research engine currently lacks a calibrated predictive model, comprehensive injury/lineup confirmation and reliable across-provider market coverage. A fully priced ticket is **not** proof of positive expected value.
+- Placing a real wager requires a named online bookmaker, an authorized user session, platform-specific support, a confirmed amount and market, explicit user approval and a real bookmaker receipt. None of the read-only sports tools performs this transaction. Kira must preserve the prepared ticket and explain the exact missing capability, rather than claim execution or refuse to construct the draft.
+- Keep source timestamps and never synthesize odds, matchups, account access, booking links or transaction receipts.
+
 ## Known Limitations and Deferred Work
 
 - ESPN's public endpoints are unofficial and can change or stop responding. Provider terms and image redistribution rights require independent review.
