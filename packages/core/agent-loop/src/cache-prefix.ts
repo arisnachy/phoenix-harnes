@@ -76,13 +76,13 @@ export class SystemPrefixObserver {
  * Section identifiers and SHA-256 signatures remain in process memory only.
  */
 export class SystemSectionObserver {
-  private readonly previous = new Map<string, readonly { name: string, hash: string }[]>()
+  private readonly previous = new Map<string, readonly { name: string; hash: string }[]>()
   constructor(private readonly maxRoutes = 16) {}
 
   observe(
     provider: string,
     model: string,
-    sections: readonly { readonly name: string, readonly text: string }[],
+    sections: readonly { readonly name: string; readonly text: string }[],
   ): string | undefined {
     const key = JSON.stringify([provider, model])
     const current = sections.map(section => ({
