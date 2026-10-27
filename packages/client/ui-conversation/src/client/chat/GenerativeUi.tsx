@@ -107,7 +107,7 @@ type SportsTicketCard = {
     title: string; subtitle?: string; source: string
     legs: Array<{ event: string; selection: string; price: string; bookmaker: string; when?: string; image?: string;
       sport?:string;country?:string;league?:string;market?:string;player?:string;rationale?:string
-      homeLogo?:string;awayLogo?:string }>
+      homeLogo?:string;awayLogo?:string;homeTeam?:string;awayTeam?:string }>
     requestedLegs?:number; combinedOdds: string; stake?: string; grossReturn?: string; note: string
     askPrompt?: string
   }
@@ -311,10 +311,11 @@ const sportsTicket = (value: Record<string, unknown>): value is SportsTicketCard
       (typeof p.requestedLegs==='number'&&Number.isInteger(p.requestedLegs)&&p.requestedLegs>=1&&p.requestedLegs<=6))
     && Array.isArray(p.legs) && (p.requestedLegs===undefined||p.legs.length<=Number(p.requestedLegs))
     && p.legs.length >= 1 && p.legs.length <= 12 && p.legs.every(x => isRecord(x)
-      && hasOnlyKeys(x,['event','selection','price','bookmaker','when','image','sport','country','league','market','player','rationale','homeLogo','awayLogo'])
+      && hasOnlyKeys(x,['event','selection','price','bookmaker','when','image','sport','country','league','market','player','rationale','homeLogo','awayLogo','homeTeam','awayTeam'])
       && isText(x.event) && isText(x.selection) && isText(x.price,32)
       && isText(x.bookmaker) && optionalText(x.when) && trustedPortrait(x.image)
       && trustedPortrait(x.homeLogo) && trustedPortrait(x.awayLogo)
+      && optionalText(x.homeTeam,100) && optionalText(x.awayTeam,100)
       && optionalText(x.sport,60) && optionalText(x.country,100) && optionalText(x.league,100)
       && optionalText(x.market,70) && optionalText(x.player,140) && optionalText(x.rationale,240))
 }
@@ -647,7 +648,7 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
         <header className={css.sportsTicketHeading}>
           <div className={css.sportsTicketRibbon}>
             <span className={css.sportsKicker}>PHOENIX / SPORTS INTELLIGENCE</span>
-            <span className={css.sportsStatus}>{incomplete?'INCOMPLETO':unpriced?'PREVIA SIN CUOTAS':'SIMULACIÓN'}</span>
+            <span className={css.sportsStatus}>{incomplete?'BORRADOR INCOMPLETO':unpriced?'PRONÓSTICOS · SIN APUESTA':'SIMULACIÓN'}</span>
           </div>
           <div className={css.sportsTicketIntro}>
             <div><h3>{p.title}</h3>{p.subtitle&&<p>{p.subtitle}</p>}</div>
@@ -667,25 +668,27 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
               <div className={css.sportsTicketLegMain}>
                 <span className={css.sportsTicketEvent}>{leg.event}{leg.when?' · '+leg.when:''}</span>
                 <div className={css.sportsTicketPick}>
-                  {(leg.homeLogo||leg.awayLogo||leg.image)&&<span className={css.sportsTicketLogos}>
-                    {leg.awayLogo&&<SportsPortrait label="Visitante" logo={leg.awayLogo}/>}
-                    {leg.homeLogo&&<SportsPortrait label="Local" logo={leg.homeLogo}/>}
+                  {(leg.homeLogo||leg.awayLogo||leg.homeTeam||leg.awayTeam||leg.image)&&<span className={css.sportsTicketLogos}>
+                    {(leg.awayTeam||leg.awayLogo)&&<SportsPortrait label={leg.awayTeam??'Visitante'} logo={leg.awayLogo}/>}
+                    {(leg.homeTeam||leg.homeLogo)&&<SportsPortrait label={leg.homeTeam??'Local'} logo={leg.homeLogo}/>}
                     {leg.image&&<SportsPortrait label={leg.player??leg.selection} logo={leg.image}/>}
                   </span>}
                   <strong>{leg.selection}</strong>
                 </div>
-                <small>{[leg.market,leg.player?'Jugador · '+leg.player:undefined,leg.bookmaker].filter(Boolean).join(' · ')}</small>
+                <small>{[leg.market,leg.player?'Jugador · '+leg.player:undefined,unpriced?undefined:leg.bookmaker].filter(Boolean).join(' · ')}</small>
                 {leg.rationale&&<details className={css.sportsTicketReason}><summary>Ver fundamento</summary><p>{leg.rationale}</p></details>}
               </div>
-              <div className={css.sportsTicketPrice}>
-                <small>{unpriced?'ESTADO':'CUOTA'}</small>
-                <b aria-label={`Cuota ${leg.price}`}>{leg.price}</b>
-              </div>
+              {unpriced
+                ? <span className={css.sportsTicketVerified} aria-label="Partido verificado">✓ Evento</span>
+                : <div className={css.sportsTicketPrice}>
+                    <small>CUOTA</small>
+                    <b aria-label={`Cuota ${leg.price}`}>{leg.price}</b>
+                  </div>}
             </article>)}</div>
           </section>)}</div>
         <div className={css.sportsTicketTotal}>
-          <div><small>{unpriced?'Cotización':'Cuota combinada'}</small>
-            <strong>{unpriced?'Sin verificar':p.combinedOdds}</strong></div>
+          <div><small>{unpriced?'Estado de las cuotas':'Cuota combinada'}</small>
+            <strong>{unpriced?'Pendientes de confirmar':p.combinedOdds}</strong></div>
           {p.stake&&<div><small>Importe simulado</small><strong>{p.stake}</strong></div>}
           {p.grossReturn&&<div><small>Retorno bruto potencial</small><strong>{p.grossReturn}</strong></div>}
         </div>
