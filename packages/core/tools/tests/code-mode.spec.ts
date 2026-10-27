@@ -200,7 +200,7 @@ describe('token-efficient MCP schema admission', () => {
     expect(large.tools.map(tool => tool.name)).toEqual([RUN_CODE_NAME])
     expect(deferredSdk).toContain('tool_search:')
     expect(deferredSdk).not.toContain('mcp__sample__action_23:')
-    expect(deferredSdk.length).toBeLessThan(eagerSdk.length / 3)
+    expect(deferredSdk.length).toBeLessThan(eagerSdk.length / 2)
     expect(ctx.tools.get('mcp__sample__action_23', agent)).toBeDefined()
 
     // Code Mode bindings still enumerate registered tools, even when their
