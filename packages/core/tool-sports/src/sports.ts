@@ -285,6 +285,8 @@ export function pricedTicket(selections:MarketSelection[],quotes:MarketOutcome[]
     return { event:match.away+' vs '+match.home,selection:match.selection+(match.point==null?'':' '+match.point),
       bookmaker:match.bookmaker,price:match.price.toFixed(2),when:match.time,market:match.market,...taxonomy }
   })
+  const houses=new Set(selections.map(sel=>sel.bookmaker))
+  if(houses.size!==1)throw Error('Una combinada real requiere una sola banca: no mezcles cuotas de casas diferentes en un ticket.')
   const correlated=events.size!==legs.length
   const warning=correlated?'Incluye selecciones del mismo encuentro; no asumas independencia ni que todas pueden combinarse.':'No se ha estimado probabilidad conjunta ni ventaja estadística calibrada.'
   return { warning,card:{ component:'sports_ticket_card',version:1,props:{
