@@ -75,7 +75,8 @@ test('a single ticket cannot combine independently quoted prices from two bookma
   assert.throws(()=>pricedTicket(selections,quotes,100),/una sola banca/i)
 })
 test('bookmaker quotes include provenance and never permit invalid sport keys',async()=>{
-  const mock=await response([{id:'e',home_team:'Local',away_team:'Visita',commence_time:'2026-10-24T20:00:00Z',
+  const future=new Date(Date.now()+86400000).toISOString()
+  const mock=await response([{id:'e',home_team:'Local',away_team:'Visita',commence_time:future,
     bookmakers:[{key:'provider',title:'Casa',markets:[{key:'h2h',last_update:'2026-10-24T18:00:00Z',outcomes:[{name:'Local',price:1.8}]}]}]}])
   const quotes=await marketOdds('baseball_mlb','h2h',{THE_ODDS_API_KEY:'test-only'},mock)
   assert.equal(quotes[0].bookmaker,'Casa')
@@ -244,4 +245,20 @@ test('ESPN market search honors the user-requested future date, not just today',
   assert.equal(odds.length,2)
   assert.ok(urls[0].includes('dates='+day.replaceAll('-','')))
   await assert.rejects(()=>marketOdds('basketball_nba','h2h',{},mock,'2026-02-31'),/Fecha/)
+})
+
+test('commercial sportsbook quotes exclude already started events',async()=>{
+  const mock=await response([
+    {id:'past',home_team:'Home',away_team:'Away',
+      commence_time:new Date(Date.now()-60000).toISOString(),bookmakers:[{
+        key:'book',title:'Book',markets:[{key:'h2h',outcomes:[{name:'Home',price:1.8}]}],
+      }]},
+    {id:'future',home_team:'Home2',away_team:'Away2',
+      commence_time:new Date(Date.now()+60000).toISOString(),bookmakers:[{
+        key:'book',title:'Book',markets:[{key:'h2h',outcomes:[{name:'Home2',price:1.8}]}],
+      }]},
+  ])
+  const out=await marketOdds('basketball_nba','h2h',{THE_ODDS_API_KEY:'fixture'},mock)
+  assert.equal(out.length,1)
+  assert.equal(out[0].eventId,'future')
 })
