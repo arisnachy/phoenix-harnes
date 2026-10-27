@@ -79,7 +79,11 @@ function movingAverage(data: readonly Candle[], length: number, x: (index: numbe
   return path.join(' ')
 }
 
-/** Exchange OHLCV, never synthetic candle shapes or model-generated predictions. */
+/**
+ * Render verified public Spot OHLCV and PAPER-only fill markers in a light viewer.
+ * @param props - Symbols, bounded settled virtual fills, and preferred timeframe.
+ * @returns Native chart without a model call on each browser refresh.
+ */
 export function TradingMarketChart({ symbols, trades, initialInterval = '1h' }: Props) {
   const [selectedSymbol, setSelectedSymbol] = useState('BTCUSDT')
   const [interval, setTimeframe] = useState<Interval>(initialInterval)
