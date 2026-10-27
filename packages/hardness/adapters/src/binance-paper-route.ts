@@ -35,7 +35,7 @@ async function readControl(req: IncomingMessage): Promise<{
   const chunks: Buffer[] = []
   let size = 0
   for await (const chunk of req) {
-    const binary = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
+    const binary = new Uint8Array(chunk as Uint8Array)
     size += binary.byteLength
     if (size > MAX_BODY_BYTES) throw new Error('Request too large')
     chunks.push(binary)
@@ -51,14 +51,14 @@ async function readControl(req: IncomingMessage): Promise<{
   }
   if (payload.action === 'start') {
     if (!Array.isArray(payload.symbols) || !payload.symbols.every(symbol => typeof symbol === 'string')
-      || (payload.interval !== undefined && !['15m', '1h', '4h', '1d'].includes(String(payload.interval)))
+      || (payload.interval !== undefined && (typeof payload.interval !== 'string' || !['15m', '1h', '4h', '1d'].includes(payload.interval)))
       || (payload.pollMinutes !== undefined && (!Number.isInteger(payload.pollMinutes)
         || !Number.isFinite(payload.pollMinutes) || Number(payload.pollMinutes) < 1
         || Number(payload.pollMinutes) > 60))) {
       throw new Error('Invalid PAPER start request')
     }
     return {
-      action: 'start', symbols: payload.symbols as string[],
+      action: 'start', symbols: payload.symbols,
       ...(payload.interval === undefined ? {} : { interval: payload.interval as '15m' | '1h' | '4h' | '1d' }),
       ...(payload.pollMinutes === undefined ? {} : { pollMinutes: payload.pollMinutes as number }),
     }
