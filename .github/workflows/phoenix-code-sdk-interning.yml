@@ -1,10 +1,12 @@
-name: Phoenix lossless Code Mode SDK compaction
+name: Phoenix lossless token input compaction
 on:
   pull_request:
     paths:
       - 'packages/core/tools/src/ts-types.ts'
       - 'packages/core/tools/tests/ts-types.spec.ts'
       - '.github/workflows/phoenix-code-sdk-interning.yml'
+      - 'packages/core/agent-loop/src/token-audit.ts'
+      - 'packages/core/agent-loop/tests/token-audit.spec.ts'
 permissions:
   contents: read
 jobs:
@@ -27,5 +29,6 @@ jobs:
           packages/core/tools/tests/ts-types.spec.ts
           packages/core/tools/tests/code-mode.spec.ts
           packages/core/tools/tests/tools.spec.ts
+          packages/core/agent-loop/tests/token-audit.spec.ts
       - name: Compile Host and client
         run: pnpm run build:lib:host && pnpm run build:lib:client

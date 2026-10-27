@@ -1,5 +1,38 @@
 /** Privacy-safe request size inventory. No prompt text, arguments or secrets are logged. */
-import type { Message } from '@phoenix-ai/dsh-llm'
+import type { ContentBlock, Message } from '@phoenix-ai/dsh-llm'
+
+/**
+ * Mirror the pi-ai request estimator: source identity, memory section receipts,
+ * timestamps and durable provenance are NOT model-visible content. Counting the
+ * entire serialized harness Message can double-charge runtime context, because
+ * its source.sections repeat the same text carried in its content block.
+ */
+function modelContentChars(blocks: readonly ContentBlock[]): number {
+  let chars = 0
+  for (const block of blocks) {
+    switch (block.type) {
+      case 'text':
+      case 'reasoning':
+        chars += block.text.length
+        break
+      case 'tool-call':
+        chars += block.name.length + block.arguments.length
+        break
+      case 'tool-result':
+        chars += modelContentChars(block.content)
+        break
+      case 'image':
+        // Same rough image budget as the pi-ai Context estimator, not raw base64.
+        chars += 4800
+        break
+      case 'file':
+        // The adapter may limit inline text bytes at the provider boundary.
+        chars += block.attachment.bytes
+        break
+    }
+  }
+  return chars
+}
 
 export interface TokenInputInventory {
   readonly systemChars: number
@@ -17,7 +50,7 @@ export interface TokenInputInventory {
 }
 
 /**
- * Count request component sizes without retaining any model-visible content.
+ * Estimate model-visible content sizes without retaining prompt text or source metadata.
  * @param system - Fully rendered system prompt.
  * @param tools - Complete wire tool schemas for this model step.
  * @param messages - Model-visible conversation history after projection.
@@ -34,7 +67,7 @@ export function tokenInputInventory(
   let runtimeContextChars = 0
   let otherHistoryChars = 0
   for (const message of messages) {
-    const size = JSON.stringify(message).length
+    const size = modelContentChars(message.content)
     if (message.content.some(block => block.type === 'tool-result')) toolResultChars += size
     else if (message.source.kind === 'user') humanChars += size
     else if (message.source.kind === 'model') assistantChars += size
