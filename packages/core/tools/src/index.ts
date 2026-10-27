@@ -815,9 +815,9 @@ export interface Config {
    */
   maxParallelSubCalls?: number
   /**
-   * Number of visible `mcp__*` tools at which native presentation switches to
-   * deferred discovery. Native tools remain in the prompt; MCP schemas are
-   * returned by `tool_search` and become visible only for the calling agent.
+   * Number of MCP tools at which an agent receives deferred discovery.
+   * Native tools remain available; the Code Mode SDK shows tool_search
+   * before full MCP signatures, which are admitted per agent on demand.
    * Must be a positive integer.
    */
   mcpToolLazyThreshold?: number
@@ -1085,7 +1085,14 @@ export class ToolRuntime extends Service {
         const render = SDK_RENDERERS[runtime.language]
         /* v8 ignore next -- requireCodeRuntime rejects an unknown language before this runs. */
         if (render === undefined) throw new Error(`dsh-tools: no SDK renderer for ${runtime.language}`)
-        return render(this.sdkSchemas(context.scope, context.agent))
+        const sdk = render(this.sdkSchemas(context.scope, context.agent))
+        const view = this.view(context.scope)
+        if (!view.visible.has(TOOL_SEARCH_NAME)
+          || !this.deferredMcpCatalog(view.visible.values(), context.scope)) return sdk
+        // Full signatures appear on discovery, but code bindings remain
+        // callable and authorization still happens on every execution.
+        return sdk + '\nTo use other MCP capabilities, call tools.tool_search({ query: "task keywords" })'
+          + ' inside run_code. The next step shows their exact full signatures.'
       },
     }
   }
@@ -1243,11 +1250,11 @@ export class ToolRuntime extends Service {
     return false
   }
 
-  /** Deferred MCP discovery covers native calling, including the native half of `both`. */
+  /** Deferred MCP schemas apply to every presentation mode for scoped agents. */
   private deferredMcpCatalog(definitions: Iterable<ToolDefinition>, scope?: ScopeKey): boolean {
-    // Discovery state belongs to an agent scope. Keep the unscoped registry
-    // view complete for host/inventory callers and direct execution paths.
-    return scope !== undefined && this.modeFor(scope) !== 'code' && this.defersMcpTools(definitions)
+    // Prompt presentation is deferred, not registration, Code bindings or
+    // execution permissions. Host and inventory views retain full schemas.
+    return scope !== undefined && this.defersMcpTools(definitions)
   }
 
   /** Exact-agent selection; no unscoped or ancestor/global selection exists. */
@@ -1661,10 +1668,8 @@ export class ToolRuntime extends Service {
     if (this.modeFor(scope) !== 'native') {
       visible.set(RUN_CODE_NAME, this.requireCodeTransport())
     }
-    // Discovery is virtual infrastructure: it must not pollute the ordinary
-    // registry/catalog or Code Mode SDK in small-MCP deployments. Once the
-    // visible MCP catalog is large, add it after restrictions so allow/deny
-    // masks still govern the synthetic capability as they do native globals.
+    // Discovery remains absent for small catalogs and Host inventory views.
+    // Larger scoped catalogs expose one searchable entry across all modes.
     const deferred = this.deferredMcpCatalog(visible.values(), scope)
     // `tool_search` is a virtual global only for an exposed deferred catalog;
     // empty/small scopes must keep the historical known-name set unchanged.
@@ -1745,9 +1750,10 @@ export class ToolRuntime extends Service {
       definition.name === NATIVE_IMAGE_GENERATION_TOOL || definition.name === RUN_CODE_NAME)
   }
 
-  /** Project visible callable tools onto the generated Code Mode SDK contract. */
+  /** Project admitted/discovered MCP tools, retaining full run_code bindings. */
   private sdkSchemas(scope?: ScopeKey, agent?: Agent): ToolSdkSchema[] {
-    return this.modelVisibleDefinitions(this.view(scope).visible.values(), agent)
+    const view = this.view(scope)
+    return this.modelVisibleDefinitions(this.promptVisibleDefinitions(view, scope), agent)
       .filter(definition => definition.name !== RUN_CODE_NAME)
       .map((definition): ToolSdkSchema => {
         const output = snapshotJsonValue(definition.output.schema)
