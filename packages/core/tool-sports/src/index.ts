@@ -139,11 +139,21 @@ export function apply(ctx: Context): void {
     output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
     isConcurrencySafe:()=>true,
     async execute(args){
-      const result=await buildAutomaticSportsTicket(args.count,args.date,args.sportKeys,args.stake)
-      return JSON.stringify({uiBlock:result.card,mode:result.mode,verifiedEvents:result.verifiedEvents,
-        requestedLegs:result.requestedLegs,complete:result.complete,priced:result.priced,
-        placed:false,dataGaps:result.dataGaps,providerErrors:result.providerErrors,
-        instruction:'Phoenix renderiza el boleto investigado. No respondas con cartelera. Si el usuario pidió colocarlo, CONTINÚA con las herramientas Browser/Computer de Phoenix en la banca autorizada; verifica selecciones, cuotas y monto, solicita aprobación antes del envío y confirma el recibo real. No afirmes ejecución sin recibo ni eludas permisos.'})
+      try{
+        const result=await buildAutomaticSportsTicket(args.count,args.date,args.sportKeys,args.stake)
+        return JSON.stringify({uiBlock:result.card,mode:result.mode,verifiedEvents:result.verifiedEvents,
+          requestedLegs:result.requestedLegs,complete:result.complete,priced:result.priced,
+          placed:false,dataGaps:result.dataGaps,providerErrors:result.providerErrors,
+          instruction:'Phoenix renderiza el boleto investigado. No respondas con cartelera. Si el usuario pidió colocarlo, CONTINÚA con las herramientas Browser/Computer de Phoenix en la banca autorizada; verifica selecciones, cuotas y monto, solicita aprobación antes del envío y confirma el recibo real. No afirmes ejecución sin recibo ni eludas permisos.'})
+      }catch(error){
+        const blocker=error instanceof Error?error.message.slice(0,260):'Fuente o validación no disponible'
+        return JSON.stringify({complete:false,priced:false,placed:false,verifiedEvents:0,
+          requestedLegs:args.count,blocker,
+          nextActions:['Comprobar otra fecha sin alterar silenciosamente la solicitada',
+            'Consultar ligas o fuentes disponibles mediante herramientas deportivas',
+            'Conectar una fuente autorizada si el mercado o la casa no publica datos'],
+          instruction:'No digas que preparaste ni colocaste un boleto inexistente. Explica el bloqueo verificable, conserva las restricciones del usuario y ofrece ejecutar el próximo paso concreto; no respondas con una negativa genérica.'})
+      }
     },
     presentCall:()=>({card:'generic',title:'Investigar y construir boleto automáticamente',kind:'read' as const}),
   }))
