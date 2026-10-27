@@ -12,6 +12,7 @@ const CANDLES = ROUTE + '/candles'
 const TESTNET_STATUS = ROUTE + '/testnet-status'
 const TESTNET_CONNECT = ROUTE + '/testnet-connect'
 const MCP_STATUS = ROUTE + '/mcp-status'
+const MCP_RECONNECT = ROUTE + '/mcp-reconnect'
 const CHART_INTERVALS = new Set(['15m', '1h', '4h', '1d'])
 const MAX_BODY_BYTES = 2048
 
@@ -113,18 +114,30 @@ export function mountBinancePaperDashboardRoute(
     const testing = url.pathname === TESTNET_STATUS
     const connect = url.pathname === TESTNET_CONNECT
     const mcpStatus = url.pathname === MCP_STATUS
-    if (!read && !write && !market && !testing && !connect && !mcpStatus) { res.writeHead(404).end(); return }
+    const reconnect = url.pathname === MCP_RECONNECT
+    if (!read && !write && !market && !testing && !connect && !mcpStatus && !reconnect) { res.writeHead(404).end(); return }
     res.setHeader('Cache-Control', 'no-store')
     res.setHeader('Content-Type', 'application/json; charset=utf-8')
     res.setHeader('X-Content-Type-Options', 'nosniff')
     res.setHeader('Referrer-Policy', 'no-referrer')
     if ((read || market || testing || mcpStatus) && req.method !== 'GET' && req.method !== 'HEAD'
-      || (write || connect) && req.method !== 'POST') { res.writeHead(405).end(); return }
-    if ((write || connect) && !localUserAction(req)) {
+      || (write || connect || reconnect) && req.method !== 'POST') { res.writeHead(405).end(); return }
+    if ((write || connect || reconnect) && !localUserAction(req)) {
       res.writeHead(403).end(JSON.stringify({ error: 'Same-origin user action required' }))
       return
     }
     try {
+      if (reconnect) {
+        const receipt = await options.agentOs?.reconnectBinanceAgentOs?.()
+        res.statusCode = receipt?.accepted === true ? 200 : 409
+        res.end(JSON.stringify({
+          reconnectAccepted: receipt?.accepted === true,
+          nextAction: receipt?.accepted === true
+            ? 'Connector reconnect requested; run MCP health check again and complete OAuth if prompted'
+            : 'Install or authorize Binance Agentic MCP from Phoenix Settings > Connectors',
+        }))
+        return
+      }
       if (mcpStatus) {
         const state = await options.agentOs?.binanceAgentOsState?.()
         const connected = state?.configured === true && state.status === 'ready'
