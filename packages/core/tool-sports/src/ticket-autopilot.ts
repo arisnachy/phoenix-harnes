@@ -61,8 +61,13 @@ export function rankMarketFavorites(quotes:readonly MarketOutcome[],count:number
       // distinct outcomes from the SAME bookmaker are publicly available.
       const choices=new Set(outcomes.map(x=>x.selection))
       if(choices.size<2)return []
-      const quote=[...outcomes].sort((a,b)=>a.price-b.price)[0]
-      if(!quote)return []
+      const ordered=[...outcomes].sort((a,b)=>a.price-b.price)
+      const quote=ordered[0]
+      const challenger=ordered.find(x=>x.selection!==quote?.selection)
+      if(!quote||!challenger)return []
+      // Near-even moneylines are not credible strong favorites; this is a
+      // market separation filter, NOT calibrated win probability or positive EV.
+      if(1/quote.price-1/challenger.price<0.025)return []
       const candidate:Candidate={
         quote,
         selection:{eventId:quote.eventId,bookmaker:quote.bookmaker,market:'h2h',
