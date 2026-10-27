@@ -16,7 +16,7 @@ type ResultBlock = {
   subCalls?: readonly ResultBlock[]
 }
 const ALLOWED_NAMES = new Set([
-  'sports_chat_games','sports_chat_odds','sports_chat_ticket','sports_chat_ticket_research','sports_chat_ticket_research_auto',
+  'sports_chat_games','sports_chat_odds','sports_chat_ticket','sports_chat_ticket_research','sports_chat_ticket_research_auto','sports_chat_ticket_auto',
   'sports_chat_mlb_pitchers',
 ])
 const ALLOWED_COMPONENTS = new Set([
