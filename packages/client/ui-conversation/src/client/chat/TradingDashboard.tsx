@@ -108,6 +108,24 @@ export function TradingDashboard({ initial }: Props) {
     }
   }
 
+  async function reconnectAgentic(): Promise<void> {
+    if (connectionBusy) return
+    setConnectionBusy(true)
+    setConnectionIssue(undefined)
+    try {
+      const reply = await fetch('/phoenix-trading/paper/mcp-reconnect', {
+        method: 'POST', cache: 'no-store', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' }, body: '{}',
+      })
+      if (!reply.ok) throw new Error('MCP reconnect unavailable')
+      setMcpState(undefined) // Do not report connected until next live tool inventory.
+    } catch {
+      setConnectionIssue('No se pudo reconectar Binance MCP. Usa Configuración > Conectores > Binance para OAuth.')
+    } finally {
+      setConnectionBusy(false)
+    }
+  }
+
   async function saveTestnetCredentials(): Promise<void> {
     if (connectionBusy || testingKey.length < 12 || testingSecret.length < 12) {
       setConnectionIssue('Introduce una clave y secreto exclusivos de Spot Testnet.')
@@ -268,6 +286,8 @@ export function TradingDashboard({ initial }: Props) {
               : mcpState.connected ? 'MCP conectado · permiso de trading aún no verificado'
                 : mcpState.status === 'auth-required' ? 'Pendiente OAuth de Binance' : 'MCP sin conexión verificada'}</span>
             <small>{mcpState?.nextAction ?? 'Autorización OAuth desde Configuración > Conectores > Binance.'}</small>
+            <button type="button" disabled={connectionBusy || mcpState?.configured !== true}
+              onClick={() => { void reconnectAgentic() }}>Reconectar MCP</button>
             <span>Operaciones reales: confirmación individual en Binance.</span>
           </div>
         </div>
