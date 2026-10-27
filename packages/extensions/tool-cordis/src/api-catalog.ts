@@ -712,7 +712,6 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'A detached state, or `undefined` when the session is not live.',
       },
       {
-      {
         signature: 'introspect(sessionId: SessionId): OperationalSelfModel | undefined',
         description: 'Return a detached, evidence-based self-model without extra model calls.',
         parameters: [{ name: 'sessionId', description: 'Exact live session whose evidence may be inspected.' }],
