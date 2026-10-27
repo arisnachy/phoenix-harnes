@@ -41,12 +41,16 @@ import type { PromptAssembly } from '@phoenix-ai/dsh-system-prompt'
 import type { Context } from '@phoenix-ai/cordis'
 import { projectRequestHistory } from './request-history.ts'
 import { tokenInputInventory } from './token-audit.ts'
+import { SystemPrefixObserver } from './cache-prefix.ts'
 import { randomUUID } from 'node:crypto'
 import type { EventEmitter } from 'node:events'
 import { RuntimeContextProjection } from './runtime-context.ts'
 import { executeToolCalls } from './tool-calls.ts'
 import { DEFAULT_AUTO_CONTINUE_MAX_SEGMENTS, DEFAULT_AUTO_CONTINUE_PROVIDERS, DEFAULT_MAX_STEPS_PER_TURN } from './constants.ts'
 import { isExplicitUserStop } from './user-stop.ts'
+
+// Provider-side caching is automatic; track repeatable prefixes without retaining text.
+const systemPrefixObserver = new SystemPrefixObserver()
 
 type Phase =
   | { kind: 'idle'; lastTurn: number }
@@ -776,6 +780,7 @@ export class ReactLoopAgent implements Agent {
       signal,
     }))
     const auditInput = tokenInputInventory(system, tools, boundaryMessages)
+    const reusedSystemPrefixChars = systemPrefixObserver.observe(config.provider, config.model, system)
     const telemetryEvents: EventEmitter = process
     telemetryEvents.emit('phoenix:telemetry:input', {
       id: auditId,
@@ -784,6 +789,7 @@ export class ReactLoopAgent implements Agent {
       model: config.model,
       reasoningEffort: config.reasoningEffort,
       ...auditInput,
+      reusedSystemPrefixChars,
     })
     if (process.env.PHOENIX_TOKEN_AUDIT === '1') {
       console.info('[PHOENIX TOKEN INPUT] ' + JSON.stringify({
@@ -793,6 +799,7 @@ export class ReactLoopAgent implements Agent {
         model: config.model,
         reasoningEffort: config.reasoningEffort,
         ...auditInput,
+      reusedSystemPrefixChars,
       }))
     }
     return { request, ...preparedCall === undefined ? {} : { preparedCall } }
