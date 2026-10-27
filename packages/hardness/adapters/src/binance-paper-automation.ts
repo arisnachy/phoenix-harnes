@@ -208,7 +208,10 @@ export class BinancePaperAutomation {
     return result
   }
 
-  /** Read genuine account and journal for the Phoenix chat trading dashboard. */
+  /**
+   * Read genuine account and journal for the Phoenix chat trading dashboard.
+   * @returns Actual virtual account and latest persisted PAPER operations.
+   */
   async dashboard(): Promise<BinancePaperAutomationView> {
     const [account, trades] = await Promise.all([
       this.broker.account(),
