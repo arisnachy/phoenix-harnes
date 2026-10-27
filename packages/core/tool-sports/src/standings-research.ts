@@ -17,7 +17,7 @@ const parseRecord=(side?:StandingsTeam):ParsedRecord|null=>{
     Number(b.type==='total'||b.name==='overall')-Number(a.type==='total'||a.name==='overall'))
   for(const record of preferred){
     const summary=record.summary??''
-    const m=summary.match(/^(\\d{1,3})-(\\d{1,3})(?:-(\\d{1,3}))?$/u)
+    const m=summary.match(/^(\d{1,3})-(\d{1,3})(?:-(\d{1,3}))?$/u)
     if(!m)continue
     // ESPN soccer records may be W-D-L; two-part records are W-L.
     const wins=Number(m[1]),draws=m[3]===undefined?0:Number(m[2])
