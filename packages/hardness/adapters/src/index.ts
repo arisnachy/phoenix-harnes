@@ -373,6 +373,17 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
     disposers.push(() => { removeGodotRoute?.() })
   }
   const binance = acquireBinancePaperAutomation(binancePaperLedgerPath())
+  const secretProvider = ctx.get('credentials') as CredentialProvider | undefined
+  const testnet = new BinanceSpotTestnet(async () => {
+    if (secretProvider === undefined) return binanceTestnetCredentials()
+    const [key, secret] = await Promise.all([
+      secretProvider.resolve(credentialRef('PHOENIX_BINANCE_TESTNET_API_KEY')),
+      secretProvider.resolve(credentialRef('PHOENIX_BINANCE_TESTNET_API_SECRET')),
+    ])
+    return key?.value && secret?.value
+      ? { apiKey: key.value, secret: secret.value }
+      : undefined
+  })
   disposers.push(() => { binance.release() })
   if (!modelTools) {
     // Only the Host publishes PAPER attention events; agent-scoped projections
@@ -394,7 +405,7 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
     const mountTradingRoute = (): void => {
       if (removeTradingRoute !== undefined) return
       const server = (ctx.get as unknown as (name: string) => unknown)('webServer') as GameWebRouteHost | undefined
-      if (server?.register !== undefined) removeTradingRoute = mountBinancePaperDashboardRoute(server, binance.engine)
+      if (server?.register !== undefined) removeTradingRoute = mountBinancePaperDashboardRoute(server, binance.engine, { testnet, ...(secretProvider === undefined ? {} : { credentials: secretProvider }) })
     }
     mountTradingRoute()
     disposers.push(ctx.on('internal/service', name => {
@@ -521,19 +532,6 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
       }
       disposers.push(ctx.tools.register(createLearnedSkillTool()))
       const binancePaper = binance.engine.broker
-      // Resolve each test-only key at operation time from the Host vault; do
-      // not require process.env or copy any secret into a model-facing result.
-      const secretProvider = ctx.get('credentials') as CredentialProvider | undefined
-      const testnet = new BinanceSpotTestnet(async () => {
-        if (secretProvider === undefined) return binanceTestnetCredentials()
-        const [key, secret] = await Promise.all([
-          secretProvider.resolve(credentialRef('PHOENIX_BINANCE_TESTNET_API_KEY')),
-          secretProvider.resolve(credentialRef('PHOENIX_BINANCE_TESTNET_API_SECRET')),
-        ])
-        return key?.value && secret?.value
-          ? { apiKey: key.value, secret: secret.value }
-          : undefined
-      })
       for (const tool of createBinanceTradingTools({
         broker: binancePaper,
         automation: binance.engine,
