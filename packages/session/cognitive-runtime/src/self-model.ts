@@ -1,7 +1,7 @@
 /** Evidence-based, read-only operational introspection for one PHOENIX session. */
 import type { AttentionCandidate, CognitiveState } from './types.ts'
 
-export type SelfEvidenceCategory = 'identity' | 'goal' | 'pending' | 'error' | 'learning'
+export type SelfEvidenceCategory = 'focus' | 'identity' | 'goal' | 'pending' | 'error' | 'learning'
 
 export interface SelfEvidence {
   readonly category: SelfEvidenceCategory
@@ -71,7 +71,7 @@ export function deriveOperationalSelfModel(
     observedSeq: state.observedSeq,
     candidateCount: state.candidateCount,
     suppressedCount: state.suppressed.length,
-    ...focusCandidate === undefined ? {} : { focus: toEvidence(focusCandidate, 'goal') },
+    ...focusCandidate === undefined ? {} : { focus: toEvidence(focusCandidate, 'focus') },
     identity: pick('identity', candidate =>
       /^(?:assistant|phoenix)\.identity\./u.test(candidate.record.subject ?? '')),
     goals: pick('goal', candidate => candidate.record.kind === 'mission'),
