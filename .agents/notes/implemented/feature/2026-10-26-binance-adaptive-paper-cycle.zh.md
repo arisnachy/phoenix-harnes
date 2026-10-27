@@ -2,6 +2,8 @@
 
 Status: implemented
 
+[English](2026-10-26-binance-adaptive-paper-cycle.md) | 中文
+
 ## Problem
 
 Binance 集成已有公开 K 线、虚拟账本及需要批准的官方 Agent OS 连接器。过去若要为多种资产选择策略，每次运行都需要语言模型决策，且缺乏有上限的确定性组合分配器。
@@ -24,9 +26,9 @@ Host 工作进程只进行虚拟交易。聊天内面板无需模型调用即可
 
 ## 官方 MCP 和测试环境的区别
 
-Binance Agentic MCP 使用官方 OAuth Streamable HTTP 地址 https://agent.binance.com/mcp/agentic。安装成功不代表同步了工具或取得 Trade 权限，也不证明账户符合条件、余额充足。每笔真实 Agentic 订单仍需用户确认， Agentic 子账户必须由用户自行在 Binance 中转入资金。Phoenix 提供显式的 重连与修复，同时保留 Host 持有的独立 OAuth 授权记录。
+Binance Agentic MCP 使用官方 OAuth Streamable HTTP 地址 [Binance Agentic MCP](https://agent.binance.com/mcp/agentic)。安装成功不代表同步了工具或取得 Trade 权限，也不证明账户符合条件、余额充足。每笔真实 Agentic 订单仍需用户确认， Agentic 子账户必须由用户自行在 Binance 中转入资金。Phoenix 提供显式的 重连与修复，同时保留 Host 持有的独立 OAuth 授权记录。
 
-Binance Spot Testnet 是另一个仅使用模拟资金的环境。它使用 Host 独立保存 的测试 API 密钥和固定签名地址 https://testnet.binance.vision，并不使用 Agentic MCP。测试订单要求用户明确提出、通过 Phoenix 单次批准，并受到 金额上限限制。Kira 在启用前会询问 Testing 或 Real，再区分 PAPER 与 Spot Testnet。
+Binance Spot Testnet 是另一个仅使用模拟资金的环境。它使用 Host 独立保存 的测试 API 密钥和固定签名地址 [Binance Spot Testnet](https://testnet.binance.vision)，并不使用 Agentic MCP。测试订单要求用户明确提出、通过 Phoenix 单次批准，并受到 金额上限限制。Kira 在启用前会询问 Testing 或 Real，再区分 PAPER 与 Spot Testnet。
 
 ## Consequences
 
