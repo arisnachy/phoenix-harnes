@@ -6,6 +6,8 @@ import { dashboardJson } from './binance-trading-tools.ts'
 const ROUTE = '/phoenix-trading/paper'
 const ENDPOINT = ROUTE + '/dashboard'
 const CONTROL = ROUTE + '/control'
+const CANDLES = ROUTE + '/candles'
+const CHART_INTERVALS = new Set(['15m', '1h', '4h', '1d'])
 const MAX_BODY_BYTES = 2048
 
 function localUserAction(req: IncomingMessage): boolean {
@@ -88,18 +90,35 @@ export function mountBinancePaperDashboardRoute(
     const url = new URL(req.url ?? '/', 'http://localhost')
     const read = url.pathname === ENDPOINT
     const write = url.pathname === CONTROL
-    if (!read && !write) { res.writeHead(404).end(); return }
+    const market = url.pathname === CANDLES
+    if (!read && !write && !market) { res.writeHead(404).end(); return }
     res.setHeader('Cache-Control', 'no-store')
     res.setHeader('Content-Type', 'application/json; charset=utf-8')
     res.setHeader('X-Content-Type-Options', 'nosniff')
     res.setHeader('Referrer-Policy', 'no-referrer')
-    if (read && req.method !== 'GET' && req.method !== 'HEAD'
+    if ((read || market) && req.method !== 'GET' && req.method !== 'HEAD'
       || write && req.method !== 'POST') { res.writeHead(405).end(); return }
     if (write && !localUserAction(req)) {
       res.writeHead(403).end(JSON.stringify({ error: 'Same-origin user action required' }))
       return
     }
     try {
+      if (market) {
+        const symbol = url.searchParams.get('symbol') ?? ''
+        const interval = url.searchParams.get('interval') ?? ''
+        if (!/^[A-Z0-9]{3,16}USDT$/u.test(symbol) || !CHART_INTERVALS.has(interval)
+          || [...url.searchParams.keys()].some(key => key !== 'symbol' && key !== 'interval')) {
+          res.writeHead(400).end(JSON.stringify({ error: 'Invalid public market request' }))
+          return
+        }
+        // Public Binance Spot OHLCV only. Never use account credentials or
+        // virtual-order receipts as the source of exchange market candles.
+        const candles = await engine.broker.candles(symbol, interval, 150)
+        res.statusCode = 200
+        if (req.method === 'HEAD') res.end()
+        else res.end(JSON.stringify({ source: 'binance-spot-public', symbol, interval, candles }))
+        return
+      }
       if (read) {
         const body = await latest()
         res.statusCode = 200
