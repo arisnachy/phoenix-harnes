@@ -93,7 +93,12 @@ export function TokenTelemetrySection({
   const completed = selected.filter(record => record.inputTokens !== undefined)
   const inputTokens = completed.reduce((sum, record) => sum + (record.inputTokens ?? 0), 0)
   const outputTokens = completed.reduce((sum, record) => sum + (record.outputTokens ?? 0), 0)
-  const cacheTokens = completed.reduce((sum, record) => sum + (record.cacheReadTokens ?? 0), 0)
+  const cacheReported = completed.filter(record => record.cacheReadTokens !== undefined)
+  const cacheTokens = cacheReported.reduce((sum, record) => sum + (record.cacheReadTokens ?? 0), 0)
+  const prefixSamples = selected.filter(record => record.reusedSystemPrefixChars !== undefined)
+  const systemChars = prefixSamples.reduce((sum, record) => sum + record.systemChars, 0)
+  const reusedPrefixChars = prefixSamples.reduce((sum, record) => sum + (record.reusedSystemPrefixChars ?? 0), 0)
+  const prefixReusePercent = systemChars > 0 ? number(reusedPrefixChars / systemChars * 100) : undefined
   const reasoningTokens = completed.reduce((sum, record) => sum + (record.reasoningTokens ?? 0), 0)
   const contributions: Contribution[] = COMPONENT_KEYS.map(([key, property]) => ({
     key, size: selected.reduce((sum, record) => sum + record[property], 0),
@@ -161,18 +166,30 @@ export function TokenTelemetrySection({
       {snapshot?.enabled === false ? <p className={css.notice}>{t('telemetry.disabled')}</p> : null}
       <div className={css.stats}>
         {([
-          [t('telemetry.input'), inputTokens],
-          [t('telemetry.output'), outputTokens],
-          [t('telemetry.cache'), cacheTokens],
-          [t('telemetry.reasoning'), reasoningTokens],
+          [t('telemetry.input'), completed.length > 0 ? number(inputTokens) : '—'],
+          [t('telemetry.output'), completed.length > 0 ? number(outputTokens) : '—'],
+          [t('telemetry.cache'), cacheReported.length > 0 ? number(cacheTokens) : '—'],
+          [t('telemetry.reasoning'),
+            completed.some(record => record.reasoningTokens !== undefined) ? number(reasoningTokens) : '—'],
         ] as const).map(([label, amount]) => (
           <div className={css.stat} key={label}>
             <span>{label}</span>
-            <strong>{completed.length > 0 ? number(amount) : '—'}</strong>
+            <strong>{amount}</strong>
           </div>
         ))}
       </div>
       <p className={css.note}>{t('telemetry.actualNote')}</p>
+      <div className={css.panel}>
+        <h3>{t('telemetry.cachePrefix')}</h3>
+        <p className={css.diagnosis}>
+          {prefixReusePercent === undefined ? t('telemetry.cachePrefixPending')
+            : `${prefixReusePercent}% ${t('telemetry.cachePrefixReused')}`}
+        </p>
+        <p className={css.note}>{t('telemetry.cachePrefixExplainer')}</p>
+        {completed.length > 0 && cacheReported.length === 0
+          ? <p className={css.notice}>{t('telemetry.cacheUnknown')}</p>
+          : null}
+      </div>
       <div className={css.panel}>
         <h3>{t('telemetry.breakdown')}</h3>
         {selected.length === 0 ? <p className={css.notice}>{t('telemetry.empty')}</p> : (
