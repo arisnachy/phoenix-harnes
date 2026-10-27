@@ -121,7 +121,10 @@ export function TradingDashboard({ initial }: Props) {
           </strong><em>{account.totalReturnPct > 0 ? '+' : ''}{amount(account.totalReturnPct)}%</em>
         </div>
         <div className={css.metric}><span>Disponible</span><strong>{amount(account.cashUsdt)} <small>USDT</small></strong></div>
-        <div className={css.metric}><span>Operaciones virtuales</span><strong>{account.tradeCount}</strong><em>DD máx. {amount(account.maxDrawdownPct)}%</em></div>
+        <div className={css.metric}>
+          <span>Operaciones virtuales</span><strong>{account.tradeCount}</strong>
+          <em>DD máx. {amount(account.maxDrawdownPct)}%</em>
+        </div>
       </div>
       <div className={css.toolbar}>
         <div>
@@ -176,7 +179,10 @@ export function TradingDashboard({ initial }: Props) {
               <div key={trade.id} className={css.row}>
                 <span data-signal={trade.side}>{trade.side === 'buy' ? 'COMPRA' : 'VENTA'}</span>
                 <div><strong>{trade.symbol}</strong><small>{trade.strategyId ?? 'Manual'} · {clock(trade.executedAt)}</small></div>
-                <div className={css.right}><strong>{amount(trade.grossUsdt)} USDT</strong><small>Precio {amount(trade.price, 7)}</small></div>
+                <div className={css.right}>
+                    <strong>{amount(trade.grossUsdt)} USDT</strong>
+                    <small>Precio {amount(trade.price, 7)}</small>
+                  </div>
               </div>
             ))}
           </div>}
