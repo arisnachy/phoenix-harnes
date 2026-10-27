@@ -11,7 +11,7 @@ import { captureStableAria, compareOrRefreshGolden, launchWebScaffold, watchCons
 import { newEnglishPage, REPO_ROOT } from './support.ts'
 
 const OVERLAY = fileURLToPath(new URL('./eclipse-routing.overlay.yml', import.meta.url))
-const MODELS = ['gpt-6.1-sol', 'gpt-6-sol', 'gpt-5.6-sol', 'gpt-6-luna', 'gpt-5.6-luna']
+const MODELS = ['gpt-6.1-sol', 'gpt-6.1-terra', 'gpt-6-sol', 'gpt-5.6-sol', 'gpt-6-luna', 'gpt-5.6-luna']
 const profile = { mode: 'manual', planner: { provider: 'openai-codex', model: 'gpt-6.1-sol', reasoningEffort: 'medium' },
   coordinator: { provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'max' },
   subagent: { provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'xhigh' },
@@ -33,6 +33,18 @@ class SettingsCatalog extends LlmAdapter {
 it('saves three independent Codex roles and unlimited adaptive strategy mode across reload', async () => {
   const scaffold = await launchWebScaffold({ extraOverlayPath: OVERLAY })
   const registration = scaffold.ctx.llm.registerAdapter(['openai-codex'], new SettingsCatalog())
+  // Eclipse queries the genuine Host discovery RPC, not the adapter's pinned
+  // or cached list. Keep its Codex catalog deterministic for this browser test.
+  const discoverRegistration = scaffold.ctx.llm.registerModelDiscovery('llm-pi-ai', async () =>
+    MODELS.map(id => ({
+      id,
+      name: id,
+      reasoning: {
+        efforts: ['low', 'medium', 'high', 'xhigh', 'max', ...id.endsWith('-sol') ? ['ultra'] : []]
+          .map(level => ({ id: level, name: level })),
+        defaultEffort: 'high',
+      },
+    })))
   const browser = await chromium.launch()
   try {
     // Real settings authority must advertise Eclipse before the browser starts.
@@ -51,7 +63,7 @@ it('saves three independent Codex roles and unlimited adaptive strategy mode acr
     expect(await content.locator('#eclipse-planner').count()).toBe(1)
     expect(await content.locator('#eclipse-specialist').count()).toBe(0)
     expect(await content.locator('#eclipse-coordinator option').allTextContents()).toEqual(['Automatic',
-      'gpt-6.1-sol', 'gpt-6-sol', 'gpt-5.6-sol', 'gpt-6-luna', 'gpt-5.6-luna'])
+      'gpt-6.1-sol', 'gpt-6.1-terra', 'gpt-6-sol', 'gpt-5.6-sol', 'gpt-6-luna', 'gpt-5.6-luna'])
     await content.locator('#eclipse-mode').selectOption('manual')
     await content.locator('#eclipse-planner').selectOption(JSON.stringify(['openai-codex', 'gpt-6.1-sol']))
     expect(await content.locator('#eclipse-effort-planner option[value="ultra"]').count()).toBe(1)
@@ -88,6 +100,7 @@ it('saves three independent Codex roles and unlimited adaptive strategy mode acr
     expect(tripwire.pageErrors).toEqual([])
   } finally {
     await browser.close()
+    discoverRegistration()
     registration()
     await scaffold.close()
   }

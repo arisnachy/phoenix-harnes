@@ -83,6 +83,31 @@ export function selectCurrentCodexModels(
   }).map(choice => ({ ...choice, reasoningEfforts: [...choice.reasoningEfforts] }))
 }
 
+/**
+ * Read Eclipse choices from the authenticated Codex app-server itself.
+ * llm.models can contain configured/pinned or last-good adapter models and is
+ * deliberately not an account-visibility authority. Never synthesize models
+ * or silently fall back on a stale catalog after discovery fails.
+ *
+ * @param api - Connected Host API exposing account-scoped model discovery.
+ * @returns Every non-hidden Codex model and its advertised reasoning levels.
+ */
+export async function loadEclipseCodexCatalog(
+  api: ConnectionHandle['api'],
+): Promise<readonly EclipseCatalogChoice[]> {
+  const response = await api.llm.discoverModels({
+    settingsNs: 'llm-pi-ai',
+    provider: 'openai-codex',
+  })
+  if (!response.result.ok) throw new Error(response.result.error.message)
+  return selectCurrentCodexModels(response.result.value.models.map(model => ({
+    provider: 'openai-codex',
+    model: model.id,
+    name: model.name ?? model.id,
+    reasoningEfforts: model.reasoning?.efforts.map(effort => effort.id) ?? [],
+  })))
+}
+
 type PluginInventoryRemoteResult<T> =
   | { ok: true; value: T }
   | { ok: false; error: { code: string; message: string } }
@@ -332,26 +357,8 @@ export function apply(ctx: ClientContext): void {
   const localModel = localModelClient(ctx)
   const mcpRegistry = mcpRegistryClient(ctx)
   const telegram = telegramBotClient(ctx)
-  const loadEclipseCatalog = async (): Promise<readonly EclipseCatalogChoice[]> => {
-    // Host-wide llm.models queries every registered runtime, including the
-    // connected Codex app-server's live model/reasoning metadata. No session
-    // is required: Settings can render before the first conversation exists.
-    const response = await connection.api.llm.models({})
-    if (!response.result.ok) throw new Error(response.result.error.message)
-    const { groups, failures } = response.result.value
-    const codex = groups.find(group => group.id === 'openai-codex')
-    if (codex === undefined) {
-      const failure = failures.find(item => item.id === 'openai-codex')
-      if (failure !== undefined) throw new Error(failure.message)
-    }
-    if (codex === undefined) return []
-    return selectCurrentCodexModels(codex.models.map(model => ({
-      provider: 'openai-codex',
-      model: model.id,
-      name: model.name,
-      reasoningEfforts: model.reasoning?.efforts.map(effort => effort.id) ?? [],
-    })))
-  }
+  const loadEclipseCatalog = (): Promise<readonly EclipseCatalogChoice[]> =>
+    loadEclipseCodexCatalog(connection.api)
   const injected = (): ModelsWithLocalSectionInjected => ({
     controller,
     hooks: { snapshot: controller.store },

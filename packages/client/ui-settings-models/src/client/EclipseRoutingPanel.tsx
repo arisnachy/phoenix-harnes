@@ -135,6 +135,8 @@ export function EclipseRoutingPanel(props: {
       setCatalog(rows)
       setCatalogError(undefined)
     }, (error: unknown) => {
+      // Never continue presenting yesterday's models as the live Codex list.
+      setCatalog([])
       setCatalogError(error instanceof Error ? error.message : String(error))
     }).finally(() => { setCatalogLoading(false) })
   }
@@ -144,7 +146,10 @@ export function EclipseRoutingPanel(props: {
     void props.loadCatalog().then((rows) => {
       if (alive) { setCatalog(rows); setCatalogError(undefined) }
     }, (error: unknown) => {
-      if (alive) setCatalogError(error instanceof Error ? error.message : String(error))
+      if (alive) {
+        setCatalog([])
+        setCatalogError(error instanceof Error ? error.message : String(error))
+      }
     }).finally(() => { if (alive) setCatalogLoading(false) })
     return () => { alive = false }
   }, [props.loadCatalog])

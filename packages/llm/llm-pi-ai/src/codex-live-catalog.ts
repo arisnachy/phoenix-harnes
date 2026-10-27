@@ -197,10 +197,10 @@ export class CodexLiveCatalog {
    * model list.
    *
    * Automatic routes receive the full dispatch superset exactly as before.
-   * A non-empty configured list remains the visibility/filter authority, but
-   * each retained id is enriched from Codex's last-good profile so a model
-   * adopted from Settings does not lose capabilities merely because it became
-   * pinned. Explicit `reasoningEfforts: false` still wins as the supported
+   * Configured Codex models retain precedence and explicit overrides.
+   * Account-visible new models are appended for exact-route dispatch even when
+   * a saved list predates their release; the user-facing Eclipse picker obtains
+   * its own account catalog directly from Codex model/list. Explicit `reasoningEfforts: false` still wins as the supported
    * opt-out; otherwise Codex's live reasoning declaration is authoritative.
    *
    * @param providers - Raw provider settings before live Codex augmentation.
@@ -237,6 +237,17 @@ export class CodexLiveCatalog {
             : { reasoningEfforts: { ...live.reasoningEfforts } },
       }
     })
+    // A pinned Codex list controls saved preferences and listing order, not
+    // whether a newly account-visible model selected in Eclipse can execute.
+    // Keep overrides for configured IDs and add only genuinely live IDs;
+    // previously retired dispatch models remain available to old sessions.
+    const pinnedIds = new Set(enriched.map(model => model.id))
+    for (const live of this.visible ?? []) {
+      if (!pinnedIds.has(live.id)) {
+        enriched.push(live)
+        pinnedIds.add(live.id)
+      }
+    }
 
     return {
       ...providers,
