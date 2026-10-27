@@ -180,6 +180,7 @@ export async function buildAutomaticSportsTicket(
   const researched=await fallback(count,requestedDate,limitedLeagues)
   if(!researched.card||researched.card.component!=='sports_ticket_card')
     throw Error('Fuente de pronósticos no generó un ticket deportivo verificable')
+  if(stake>0)researched.card.props.stake=stake.toFixed(2)
   return {
     card:researched.card,mode:'research',verifiedEvents:researched.verifiedEvents,
     requestedLegs:count,complete:researched.complete,priced:false,placed:false,
