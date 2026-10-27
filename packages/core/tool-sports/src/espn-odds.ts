@@ -87,12 +87,17 @@ export function normalizeEspnMoneylines(event:EEvent,oddEntries:EspnOdds[]):Espn
  * @returns Actual ESPN odds or an empty list when unavailable.
  */
 export async function fetchPublicEspnOdds(
-  sportKey:string,requestedMarkets:string,getJSON:<T>(url:string)=>Promise<T>,
+  sportKey:string,requestedMarkets:string,getJSON:<T>(url:string)=>Promise<T>,requestedDate?:string,
 ):Promise<EspnMarketQuote[]>{
   const route=slugs[sportKey]
   if(!route)return []
   if(!requestedMarkets.split(',').includes('h2h'))return []
-  const localDate=new Intl.DateTimeFormat('en-CA',{ timeZone:'America/Santo_Domingo',year:'numeric',month:'2-digit',day:'2-digit' }).format(new Date()).replaceAll('-','')
+  const day=requestedDate??new Intl.DateTimeFormat('en-CA',{
+    timeZone:'America/Santo_Domingo',year:'numeric',month:'2-digit',day:'2-digit',
+  }).format(new Date())
+  if(!/^\\d{4}-\\d{2}-\\d{2}$/u.test(day)||!Number.isFinite(Date.parse(day+'T00:00:00Z'))
+    ||new Date(day+'T00:00:00Z').toISOString().slice(0,10)!==day)throw Error('Fecha de cuotas inválida')
+  const localDate=day.replaceAll('-','')
   const root='https://site.api.espn.com/apis/site/v2/sports/'+route[0]+'/'+route[1]+'/scoreboard?dates='+localDate
   const board=await getJSON<ESPNBoard>(root)
   if(!Array.isArray(board.events))throw new Error('ESPN devolvió un scoreboard sin eventos válidos')
