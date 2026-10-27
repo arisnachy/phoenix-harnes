@@ -30,6 +30,7 @@ describe('Settings token telemetry collector', () => {
       reasoningEffort: 'high',
       systemChars: 1000,
       reusedSystemPrefixChars: 620,
+      prefixComparison: 'compared',
       schemaChars: 180,
       historyChars: 3000,
       humanChars: 100,
@@ -50,13 +51,23 @@ describe('Settings token telemetry collector', () => {
     })
     const record = collector.snapshot().records[0]
     expect(record).toMatchObject({ provider: 'openai-codex', model: 'gpt-6-luna',
-      inputTokens: 927, outputTokens: 148, cacheReadTokens: 500, systemChars: 1000, reusedSystemPrefixChars: 620 })
+      inputTokens: 927, outputTokens: 148, cacheReadTokens: 500, systemChars: 1000,
+      reusedSystemPrefixChars: 620, prefixComparison: 'compared' })
     expect(JSON.stringify(collector.snapshot())).not.toContain('SHOULD_NEVER_BE_STORED')
     expect(JSON.stringify(collector.snapshot())).not.toContain('request-1')
 
+    telemetryEvents.emit('phoenix:telemetry:input', {
+      id: 'request-baseline', at: Date.now(), provider: 'openai-codex',
+      model: 'gpt-6-sol', prefixComparison: 'baseline', systemChars: 700,
+      // Malformed status is not copied into persistent telemetry.
+      secret: 'SHOULD_NEVER_BE_STORED',
+    })
+    expect(collector.snapshot().records[1]?.prefixComparison).toBe('baseline')
+    expect(collector.snapshot().records[1]?.reusedSystemPrefixChars).toBeUndefined()
+
     await collector.setEnabled(false)
     telemetryEvents.emit('phoenix:telemetry:input', { id: 'other', at: Date.now(), model: 'other' })
-    expect(collector.snapshot().records).toHaveLength(1)
+    expect(collector.snapshot().records).toHaveLength(2)
     const persisted = await readFile(join(folder, 'nested', 'usage.json'), 'utf8')
     expect(persisted).not.toContain('SHOULD_NEVER_BE_STORED')
     expect((JSON.parse(persisted) as { enabled: boolean }).enabled).toBe(false)

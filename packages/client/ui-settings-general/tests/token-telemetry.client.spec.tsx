@@ -52,6 +52,28 @@ describe('Settings → Telemetría', () => {
     expect(screen.getAllByText('—').length).toBeGreaterThan(0)
   })
 
+  it('separates cold baselines and ambiguous legacy zeros from actual comparisons', async () => {
+    const values = [0, 0, 80]
+    const records: TokenTelemetrySnapshot['records'][number][] = values.map((reused, index) => ({
+      at: Date.now(), provider: 'codex', model: 'luna', reasoningEffort: 'high',
+      systemChars: 100, schemaChars: 20, historyChars: 0, humanChars: 0,
+      assistantChars: 0, toolResultChars: 0, runtimeContextChars: 0,
+      otherHistoryChars: 0, messageCount: 1, toolCount: 1,
+      approximateInputTokens: 30, inputTokens: 50,
+      ...(index === 0 ? { prefixComparison: 'baseline' as const } : {}),
+      ...(index === 1 ? { reusedSystemPrefixChars: 0 } : {}),
+      ...(index === 2 ? { reusedSystemPrefixChars: reused, prefixComparison: 'compared' as const } : {}),
+    }))
+    mount({
+      readTelemetry: vi.fn().mockResolvedValue({ enabled: true, records }),
+      setTelemetry: vi.fn(), clearTelemetry: vi.fn(),
+    })
+    await screen.findByText('150')
+    expect(screen.getByText('80% ' + es['telemetry.cachePrefixReused'])).toBeTruthy()
+    expect(screen.getByText('1 ' + es['telemetry.cachePrefixBaseline'])).toBeTruthy()
+    expect(screen.getByText('1 ' + es['telemetry.cachePrefixLegacyUnknown'])).toBeTruthy()
+  })
+
   it('shows collected real tokens and updates the checkbox after a successful Host mutation', async () => {
     const record: TokenTelemetrySnapshot['records'][number] = {
       at: Date.now(), provider: 'codex', model: 'luna', reasoningEffort: 'medium',

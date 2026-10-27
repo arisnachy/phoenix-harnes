@@ -9,6 +9,8 @@ export interface TokenTelemetryRecord {
   readonly systemChars: number
   /** Identical leading system text versus previous request to the same model; not a provider cache hit. */
   readonly reusedSystemPrefixChars?: number
+  /** 'baseline' = no previous request on this provider/model route; never report zero reuse for it. */
+  readonly prefixComparison?: 'baseline' | 'compared'
   readonly schemaChars: number
   readonly historyChars: number
   readonly humanChars: number

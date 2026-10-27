@@ -95,7 +95,14 @@ export function TokenTelemetrySection({
   const outputTokens = completed.reduce((sum, record) => sum + (record.outputTokens ?? 0), 0)
   const cacheReported = completed.filter(record => record.cacheReadTokens !== undefined)
   const cacheTokens = cacheReported.reduce((sum, record) => sum + (record.cacheReadTokens ?? 0), 0)
-  const prefixSamples = selected.filter(record => record.reusedSystemPrefixChars !== undefined)
+  // Pre-fix legacy zeros cannot be distinguished from first-after-restart.
+  // Do not misrepresent those unknown comparisons as confirmed 0% stability.
+  const legacyUnknownCount = selected.filter(record =>
+    record.prefixComparison === undefined && record.reusedSystemPrefixChars === 0).length
+  const baselineCount = selected.filter(record => record.prefixComparison === 'baseline').length
+  const prefixSamples = selected.filter(record => record.reusedSystemPrefixChars !== undefined
+    && (record.prefixComparison === 'compared'
+      || (record.prefixComparison === undefined && record.reusedSystemPrefixChars > 0)))
   const systemChars = prefixSamples.reduce((sum, record) => sum + record.systemChars, 0)
   const reusedPrefixChars = prefixSamples.reduce((sum, record) => sum + (record.reusedSystemPrefixChars ?? 0), 0)
   const prefixReusePercent = systemChars > 0 ? number(reusedPrefixChars / systemChars * 100) : undefined
@@ -186,6 +193,12 @@ export function TokenTelemetrySection({
             : `${prefixReusePercent}% ${t('telemetry.cachePrefixReused')}`}
         </p>
         <p className={css.note}>{t('telemetry.cachePrefixExplainer')}</p>
+        {baselineCount > 0 ? (
+          <p className={css.note}>{baselineCount} {t('telemetry.cachePrefixBaseline')}</p>
+        ) : null}
+        {legacyUnknownCount > 0 ? (
+          <p className={css.note}>{legacyUnknownCount} {t('telemetry.cachePrefixLegacyUnknown')}</p>
+        ) : null}
         {completed.length > 0 && cacheReported.length === 0
           ? <p className={css.notice}>{t('telemetry.cacheUnknown')}</p>
           : null}

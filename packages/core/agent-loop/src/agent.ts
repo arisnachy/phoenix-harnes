@@ -780,7 +780,7 @@ export class ReactLoopAgent implements Agent {
       signal,
     }))
     const auditInput = tokenInputInventory(system, tools, boundaryMessages)
-    const reusedSystemPrefixChars = systemPrefixObserver.observe(config.provider, config.model, system)
+    const prefixObservation = systemPrefixObserver.observeWithStatus(config.provider, config.model, system)
     const telemetryEvents: EventEmitter = process
     telemetryEvents.emit('phoenix:telemetry:input', {
       id: auditId,
@@ -789,7 +789,8 @@ export class ReactLoopAgent implements Agent {
       model: config.model,
       reasoningEffort: config.reasoningEffort,
       ...auditInput,
-      reusedSystemPrefixChars,
+      prefixComparison: prefixObservation.comparable ? 'compared' : 'baseline',
+      ...prefixObservation.comparable ? { reusedSystemPrefixChars: prefixObservation.reusedChars } : {},
     })
     if (process.env.PHOENIX_TOKEN_AUDIT === '1') {
       console.info('[PHOENIX TOKEN INPUT] ' + JSON.stringify({
@@ -799,7 +800,8 @@ export class ReactLoopAgent implements Agent {
         model: config.model,
         reasoningEffort: config.reasoningEffort,
         ...auditInput,
-      reusedSystemPrefixChars,
+        prefixComparison: prefixObservation.comparable ? 'compared' : 'baseline',
+        ...prefixObservation.comparable ? { reusedSystemPrefixChars: prefixObservation.reusedChars } : {},
       }))
     }
     return { request, ...preparedCall === undefined ? {} : { preparedCall } }

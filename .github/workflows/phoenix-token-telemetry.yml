@@ -11,6 +11,7 @@ on:
       - 'packages/host/plugin-inventory/src/index.ts'
       - 'packages/host/plugin-inventory/tests/telemetry.spec.ts'
       - 'packages/client/ui-settings-general/src/client/TokenTelemetrySection.tsx'
+      - 'packages/client/ui-settings-general/src/client/locales.ts'
       - 'packages/client/ui-settings-general/src/client/index.ts'
       - 'packages/client/ui-settings-general/tests/token-telemetry.client.spec.tsx'
       - 'packages/client/ui-settings-general/tests/telemetry-remote-inject.client.spec.tsx'
