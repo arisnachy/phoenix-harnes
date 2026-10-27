@@ -47,6 +47,17 @@ describe('native sports chat presentation fallback',()=>{
     expect(parseGenerativeUiBlock(researched)).not.toBeNull()
     expect(sportsCardsFromToolResult(tool('sports_chat_ticket_research',{uiBlock:researched}))).toEqual([researched])
   })
+  it('renders auto-research tickets and prioritizes a ticket over six game cards',()=>{
+    const games={kind:'tool-result',call:{name:'sports_chat_games'},content:[{
+      type:'text',text:JSON.stringify({uiBlocks:Array.from({length:6},()=>sportsGame)}),
+    }],subCalls:[]}
+    const automated=tool('sports_chat_ticket_research_auto',{uiBlock:ticket})
+    expect(sportsCardsFromToolResult(automated)).toEqual([ticket])
+    const combined={kind:'tool-result',call:{name:'Code'},subCalls:[games,automated]}
+    const result=sportsCardsFromToolResult(combined)
+    expect(result[0]).toEqual(ticket)
+    expect(result).toHaveLength(6)
+  })
   it('never invents or reconstructs cards from shell tools or arbitrary prose',()=>{
     expect(sportsCardsFromToolResult(tool('bash',{uiBlocks:[sportsGame]}))).toEqual([])
     expect(sportsCardsFromToolResult(tool('sports_chat_games',{uiBlocks:[{component:'sports_game_card',version:1,props:{
