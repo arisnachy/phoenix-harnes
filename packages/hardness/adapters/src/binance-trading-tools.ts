@@ -336,7 +336,7 @@ function testnetOrderTool(deps: BinanceTradingToolDependencies): ToolDefinition 
     output: { schema: { type: 'object', additionalProperties: true },
       render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }] },
     async execute(args, exec) {
-      if (args.requestedByUser !== true || exec.agent === undefined) {
+      if (!args.requestedByUser || exec.agent === undefined) {
         throw new Error('A specific user request and active session are required for a Testnet order')
       }
       const testnet = deps.testnet ?? new BinanceSpotTestnet()
