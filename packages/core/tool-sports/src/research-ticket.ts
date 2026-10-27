@@ -129,6 +129,8 @@ export async function researchTicket(
     const awayLogo=trustedLogo(away?.logo??away?.logos?.[0]?.href)
     legs.push({
       event:clean(awayName+' vs '+homeName,180),
+      homeTeam:clean(homeName,100),
+      awayTeam:clean(awayName,100),
       selection:clean(label,140),
       price:'Por verificar',
       bookmaker:'Sin casa confirmada',
