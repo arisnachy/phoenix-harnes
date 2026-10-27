@@ -172,7 +172,7 @@ describe('Codex automatic live catalog policy', () => {
     })
 
     const overlaid = catalog.overlayProviders(pinned)[CODEX_PROVIDER]
-    expect(overlaid?.models?.map(model => model.id)).toEqual(['gpt-5.6-luna', 'gpt-6-luna'])
+    expect(overlaid?.models?.map(model => model.id)).toEqual(['gpt-5.6-luna', 'gpt-6-luna', 'gpt-6-astra'])
     expect(overlaid?.models?.[1]).toMatchObject({
       id: 'gpt-6-luna',
       reasoningEfforts: {
@@ -219,6 +219,25 @@ describe('Codex automatic live catalog policy', () => {
     await expect(catalog.refresh(CODEX_PROVIDER, pinned)).resolves.toEqual(['gpt-6-luna'])
     expect(list).toHaveBeenCalledTimes(2)
     expect(catalog.reasoningForModel('gpt-6-luna')?.defaultEffort).toBe('medium')
+  })
+
+  it('permits a newly account-visible Terra model to dispatch after a legacy pinned list', async () => {
+    const catalog = new CodexLiveCatalog({
+      transport: { list: async () => [{
+        id: 'gpt-6.1-terra',
+        name: 'GPT-6.1 Terra',
+        reasoning: { efforts: [{ id: 'high', name: 'High' }], defaultEffort: 'high' },
+      }] },
+      installedModelIds: () => [],
+    })
+    const pinned = { [CODEX_PROVIDER]: { models: [{ id: 'gpt-5.5', name: 'GPT-5.5' }] } }
+    await expect(catalog.refresh(CODEX_PROVIDER, pinned[CODEX_PROVIDER]))
+      .resolves.toEqual(['gpt-5.5'])
+    expect(catalog.overlayProviders(pinned)[CODEX_PROVIDER]?.models).toMatchObject([
+      { id: 'gpt-5.5', name: 'GPT-5.5' },
+      { id: 'gpt-6.1-terra', name: 'GPT-6.1 Terra', reasoningEfforts: { high: 'high' } },
+    ])
+    expect(pinned[CODEX_PROVIDER].models).toEqual([{ id: 'gpt-5.5', name: 'GPT-5.5' }])
   })
 
   it('keeps explicit reasoning disablement on a pinned Codex row', async () => {
