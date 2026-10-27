@@ -262,3 +262,14 @@ test('commercial sportsbook quotes exclude already started events',async()=>{
   assert.equal(out.length,1)
   assert.equal(out[0].eventId,'future')
 })
+
+test('online sportsbook request instructs Kira to use authorized browser, not a generic refusal',()=>{
+  const source=readFileSync(new URL('../src/index.ts',import.meta.url),'utf8')
+  assert.match(source,/COLOCAR el ticket/)
+  assert.match(source,/mcp__browser__status\/tabs\/inspect_page\/complete_form\/wait_for/)
+  assert.match(source,/Computer browser_open\/browser_inspect\/browser_fill_form/)
+  assert.match(source,/aprobación explícita/)
+  assert.match(source,/comprueba el recibo\/id real/)
+  assert.match(source,/sin saltar permisos/)
+  assert.match(source,/sports_chat_ticket_auto/)
+})
