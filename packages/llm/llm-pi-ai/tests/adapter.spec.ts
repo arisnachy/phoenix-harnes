@@ -20,6 +20,7 @@ import {
   DEFAULT_STREAM_IDLE_TIMEOUT_MS,
   resolveProfiles,
 } from '../src/config.ts'
+import { CodexLiveCatalog } from '../src/codex-live-catalog.ts'
 import { memoryAuth } from './auth-double.ts'
 import { assemble } from './assemble.ts'
 import { closeMockServers, mockServer, textEvents } from './mock-server.ts'
@@ -93,6 +94,34 @@ describe('PiAiAdapter provider routing', () => {
     await expect(adapter.resolveModel('deepseek', 'phoenix-retired-but-dispatchable'))
       .resolves.toMatchObject({ provider: 'deepseek', id: 'phoenix-retired-but-dispatchable' })
     expect(refreshModels).toHaveBeenCalledTimes(1)
+  })
+
+  it('sends all account-visible Codex models to the actual chat adapter despite legacy pins', async () => {
+    const catalog = new CodexLiveCatalog({
+      transport: { list: async () => [
+        { id: 'gpt-6-astra', name: 'GPT-6 Astra' },
+        { id: 'gpt-6.1-terra', name: 'GPT-6.1 Terra',
+          reasoning: { efforts: [{ id: 'high', name: 'High' }], defaultEffort: 'high' } },
+        { id: 'gpt-6-luna', name: 'GPT-6 Luna' },
+      ] },
+      installedModelIds: () => [],
+    })
+    const profile = { models: [{ id: 'gpt-6-astra', name: 'Existing custom label' }] }
+    const providers = { 'openai-codex': profile }
+    const adapter = new PiAiAdapter({
+      profiles: () => resolveProfiles(catalog.overlayProviders(providers)),
+      resolveApiKey: () => Promise.resolve(undefined),
+      auth: memoryAuth(),
+      refreshModels: (provider, force) => catalog.refresh(provider, profile, force),
+    })
+    const listed = await adapter.listModels('openai-codex')
+    expect(listed.map(model => model.id)).toEqual([
+      'gpt-6-astra', 'gpt-6.1-terra', 'gpt-6-luna',
+    ])
+    expect(listed[1]?.name).toBe('GPT-6.1 Terra')
+    await expect(adapter.resolveModel('openai-codex', 'gpt-6.1-terra'))
+      .resolves.toMatchObject({ provider: 'openai-codex', id: 'gpt-6.1-terra' })
+    expect(profile.models).toEqual([{ id: 'gpt-6-astra', name: 'Existing custom label' }])
   })
 
   it('forces one refresh when an exact model is absent from the current snapshot', async () => {
