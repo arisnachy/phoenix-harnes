@@ -58,6 +58,10 @@ describe('native sports chat presentation fallback',()=>{
     expect(result[0]).toEqual(ticket)
     expect(result).toHaveLength(6)
   })
+  it('renders an automatic real-bookmaker or unpriced research ticket without model-fenced markup',()=>{
+    const auto=tool('sports_chat_ticket_auto',{uiBlock:ticket,mode:'priced',placed:false})
+    expect(sportsCardsFromToolResult(auto)).toEqual([ticket])
+  })
   it('never invents or reconstructs cards from shell tools or arbitrary prose',()=>{
     expect(sportsCardsFromToolResult(tool('bash',{uiBlocks:[sportsGame]}))).toEqual([])
     expect(sportsCardsFromToolResult(tool('sports_chat_games',{uiBlocks:[{component:'sports_game_card',version:1,props:{
