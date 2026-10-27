@@ -43,7 +43,7 @@ const INTERVAL_MS: Record<BinanceAdaptiveCycle['interval'], number> = {
   '4h': 14_400_000,
   '1d': 86_400_000,
 }
-const MAX_SYMBOLS = 5
+const MAX_SYMBOLS = 12
 const MAX_POSITION_FRACTION = 0.05
 const MAX_PORTFOLIO_EXPOSURE = 0.20
 const MAX_OPEN_POSITIONS = 2
@@ -149,7 +149,7 @@ export function evaluateBinanceAdaptiveSignal(
 
 function normalizedSymbols(raw: readonly string[]): string[] {
   if (raw.length === 0 || raw.length > MAX_SYMBOLS) {
-    throw new Error('Adaptive Binance scan requires between 1 and 5 symbols')
+    throw new Error('Adaptive Binance scan requires between 1 and 12 symbols')
   }
   const symbols = [...new Set(raw.map(symbol => symbol.trim().toUpperCase()))]
   if (symbols.length !== raw.length || symbols.some(symbol => !/^[A-Z0-9]{3,16}USDT$/u.test(symbol))) {
@@ -197,9 +197,20 @@ export async function runBinanceAdaptiveCycle(
     const mode = requestedMode as BinanceAdaptiveCycle['mode']
     const account = await broker.account()
     const signals: BinanceAdaptiveSignal[] = []
+    let failedSymbols = 0
     for (const symbol of symbols) {
-      const bars = await broker.candles(symbol, interval, 80)
-      signals.push(evaluateBinanceAdaptiveSignal(symbol, bars, intervalMs, now))
+      try {
+        const bars = await broker.candles(symbol, interval, 80)
+        signals.push(evaluateBinanceAdaptiveSignal(symbol, bars, intervalMs, now))
+      } catch {
+        // A temporarily unavailable pair must not stop the rest of the radar.
+        // Keep the failure visible and never turn missing data into a buy signal.
+        failedSymbols += 1
+        signals.push(hold(symbol, 'No verified public candles; retry in the next scan'))
+      }
+    }
+    if (failedSymbols === symbols.length) {
+      throw new Error('No Binance Spot pairs returned verified candles')
     }
     const sorted = [...signals].sort((a, b) => b.score - a.score || a.symbol.localeCompare(b.symbol))
     const exits = sorted.flatMap((signal) => {

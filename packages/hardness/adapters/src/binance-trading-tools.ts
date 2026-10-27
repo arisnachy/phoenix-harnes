@@ -2,6 +2,7 @@ import type { ApprovalService } from '@phoenix-ai/dsh-user-approval'
 import { defineTool, type JsonValue, type ToolDefinition } from '@phoenix-ai/dsh-tools'
 import { runBinanceAdaptiveCycle } from './binance-adaptive.ts'
 import { BinanceSpotTestnet } from './binance-spot-testnet.ts'
+import type { WakeEngine } from './wake-engine.ts'
 import type { BinancePaperAutomation, BinancePaperAutomationView } from './binance-paper-automation.ts'
 import type {
   BinanceCandle,
@@ -34,6 +35,7 @@ export interface BinanceAgentOsHostService {
 export interface BinanceTradingToolDependencies {
   broker: BinancePaperBroker
   automation?: BinancePaperAutomation
+  wake?: Pick<WakeEngine, 'create' | 'list'>
   approval: Pick<ApprovalService, 'request'>
   agentOs?: Partial<BinanceAgentOsHostService>
   testnet?: BinanceSpotTestnet
@@ -487,7 +489,7 @@ function adaptiveCycleTool(deps: BinanceTradingToolDependencies): ToolDefinition
     name: 'binance_adaptive_cycle',
     description: 'Run a token-free multi-strategy Binance Spot scan over 1-5 USDT pairs. SCAN returns ranked signals without trading. PAPER-STEP can place at most ONE VIRTUAL order per call with deterministic position/exposure caps; it never accesses or trades a real account. Use this tool instead of guessing a profitable strategy. Live automation is not implemented by this tool.',
     parameters: {
-      watchlist: { type: 'string', required: true, description: 'Comma-separated Spot symbols, for example BTCUSDT,ETHUSDT. Maximum five unique USDT pairs.' },
+      watchlist: { type: 'string', required: true, description: 'Comma-separated Spot symbols, for example BTCUSDT,ETHUSDT. Maximum twelve unique USDT pairs.' },
       interval: { type: 'string', enum: ['15m', '1h', '4h', '1d'], description: 'Closed-candle analysis interval; default 1h.' },
       mode: { type: 'string', enum: ['scan', 'paper-step'], description: 'Default scan. paper-step authorizes only a virtual trade.' },
     },
@@ -592,11 +594,11 @@ function dashboardTool(deps: BinanceTradingToolDependencies): ToolDefinition {
 function paperAutoTool(deps: BinanceTradingToolDependencies): ToolDefinition {
   return defineTool({
     name: 'binance_paper_auto',
-    description: 'Start, stop, or request one immediate check of REAL background PAPER trading automation, independently of ChatGPT tokens. Start requires an explicitly user-requested virtual automation and a comma-separated 1-5 pair USDT watchlist; future checks run automatically while the Host runs, and resume after restart. It never connects to real funds or bypasses Binance order confirmation. Always report genuine tradeCount from the dashboard, not a fabricated fill.',
+    description: 'Start, stop, or request one immediate check of REAL background PAPER trading automation, independently of ChatGPT tokens. Start requires an explicitly user-requested virtual automation and a comma-separated 1-12 pair USDT watchlist; future checks run automatically while the Host runs, and resume after restart. It never connects to real funds or bypasses Binance order confirmation. Always report genuine tradeCount from the dashboard, not a fabricated fill.',
     parameters: {
       action: { type: 'string', required: true, enum: ['start', 'stop', 'check-now'] },
       requestedByUser: { type: 'boolean', description: 'Required true to START and only when the user asked for automatic paper trading.' },
-      watchlist: { type: 'string', description: 'Comma-separated unique Spot USDT pairs; required on START.' },
+      watchlist: { type: 'string', description: 'Comma-separated 1-12 unique Spot USDT pairs; required on START.' },
       interval: { type: 'string', enum: ['15m', '1h', '4h', '1d'], description: 'Closed-candle strategy interval; default 15m.' },
       pollMinutes: { type: 'integer', description: 'How often the Host checks, 1–60 minutes; default 1.' },
     },
@@ -604,11 +606,33 @@ function paperAutoTool(deps: BinanceTradingToolDependencies): ToolDefinition {
       schema: { type: 'object', additionalProperties: true },
       render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
     },
-    async execute(args) {
+    async execute(args, exec) {
       if (deps.automation === undefined) throw new Error('PAPER automation is unavailable')
       if (args.action === 'start') {
         if (args.requestedByUser !== true) throw new Error('Starting automatic paper trading requires an explicit user request')
         if (typeof args.watchlist !== 'string') throw new Error('Starting paper trading requires a watchlist')
+        // A durable wake rule belongs to the explicit initiating conversation.
+        // Subsequent evaluations use zero LLM tokens unless a significant
+        // PAPER event arrives. No real order authority is granted.
+        if (deps.wake !== undefined && exec.agent?.id !== undefined) {
+          const target = exec.agent.id
+          try {
+            const existing = (await deps.wake.list()).some(trigger =>
+              trigger.source === 'phoenix-trading' && trigger.eventType === 'paper.attention'
+              && trigger.targetAgentId === target && trigger.status === 'active')
+            if (!existing) await deps.wake.create({
+              title: 'Kira · supervision trading PAPER',
+              source: 'phoenix-trading', eventType: 'paper.attention',
+              instruction: 'Review the persisted PAPER ledger, market evidence and risk. Explain verified fills, denied entries or Host failures. Only adjust virtual strategy settings if the user authorized that action. Never place a REAL exchange order from an event.',
+              mode: 'act', once: false, createdBy: 'user',
+              targetAgentId: target,
+            })
+          } catch {
+            // A notification setup issue must not claim a trading failure.
+          }
+        }
+        // Create the wake trigger before the first cycle so the first actual
+        // virtual fill can be reviewed by the initiating conversation.
         await deps.automation.start({
           symbols: args.watchlist.split(','),
           ...(args.interval === undefined ? {} : { interval: args.interval }),
