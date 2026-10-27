@@ -29,6 +29,11 @@ function amount(value: number, maximumFractionDigits = 2): string {
   return new Intl.NumberFormat('es-DO', { minimumFractionDigits: Math.min(2, maximumFractionDigits), maximumFractionDigits }).format(value)
 }
 
+function quote(value: number): string {
+  const digits = value > 0 && value < 0.01 ? 12 : value < 1 ? 8 : 7
+  return amount(value, digits)
+}
+
 function strategyLabel(id: string): string {
   if (id.includes('mean-reversion')) return 'Reversión a la media'
   if (id.includes('trend-pullback')) return 'Retroceso en tendencia'
@@ -363,25 +368,25 @@ export function TradingDashboard({ initial }: Props) {
                   </div>
                   <div className={css.positionPrices}>
                     <div><span>Entrada</span><strong>{position.averageEntryUsdt === undefined
-                      ? 'Sin dato' : amount(position.averageEntryUsdt, 7)}</strong></div>
-                    <div><span>Mercado (USDT)</span><strong>{lastPrice === undefined ? 'Sin dato' : amount(lastPrice, 7)}</strong></div>
+                      ? 'Sin dato' : quote(position.averageEntryUsdt)}</strong></div>
+                    <div><span>Mercado (USDT)</span><strong>{lastPrice === undefined ? 'Sin dato' : quote(lastPrice)}</strong></div>
                     <div><span>Valor actual</span><strong>{amount(position.marketValueUsdt)} USDT</strong></div>
                   </div>
                   {plan === undefined
                     ? <p className={css.exitMissing}>Sin plan de salida verificado. No se muestran TP/SL ficticios.</p>
                     : <div className={css.exitLevels}>
                         <div className={css.exitLevel} data-level="stop">
-                          <span>SL · {targetReturn(plan.stopLossPrice, plan.entryPriceUsdt)}</span><strong>{amount(plan.stopLossPrice, 7)}</strong>
+                          <span>SL · {targetReturn(plan.stopLossPrice, plan.entryPriceUsdt)}</span><strong>{quote(plan.stopLossPrice)}</strong>
                           <small>{lastPrice === undefined ? 'Sin cotización' : lastPrice <= plan.stopLossPrice ? 'Nivel alcanzado · pendiente de ciclo' : 'Vigilando'}</small>
                         </div>
                         <div className={css.exitLevel} data-level="tp1">
                           <span>TP1 · {targetReturn(plan.tp1Price, plan.entryPriceUsdt)} · venta {amount(plan.tp1Fraction * 100, 0)}%</span>
-                          <strong>{amount(plan.tp1Price, 7)}</strong>
+                          <strong>{quote(plan.tp1Price)}</strong>
                           <small>{plan.tp1Taken ? 'Parcial ejecutado'
                             : lastPrice !== undefined && lastPrice >= plan.tp1Price ? 'Nivel alcanzado · pendiente de ciclo' : 'Pendiente'}</small>
                         </div>
                         <div className={css.exitLevel} data-level="tp2">
-                          <span>TP2 · {targetReturn(plan.tp2Price, plan.entryPriceUsdt)} · salida final</span><strong>{amount(plan.tp2Price, 7)}</strong>
+                          <span>TP2 · {targetReturn(plan.tp2Price, plan.entryPriceUsdt)} · salida final</span><strong>{quote(plan.tp2Price)}</strong>
                           <small>{lastPrice !== undefined && lastPrice >= plan.tp2Price ? 'Nivel alcanzado · pendiente de ciclo' : 'Pendiente'}</small>
                         </div>
                       </div>}
