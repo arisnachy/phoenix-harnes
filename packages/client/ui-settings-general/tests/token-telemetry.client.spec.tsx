@@ -38,7 +38,7 @@ describe('Settings → Telemetría', () => {
   it('does not mislabel missing Codex cached-token metrics as zero and shows reusable prefix', async () => {
     const record: TokenTelemetrySnapshot['records'][number] = {
       at: Date.now(), provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'high',
-      systemChars: 100, reusedSystemPrefixChars: 80, schemaChars: 30,
+      systemChars: 100, codeSdkChars: 40, reusedSystemPrefixChars: 80, schemaChars: 30,
       historyChars: 10, humanChars: 5, assistantChars: 5, toolResultChars: 0,
       runtimeContextChars: 0, otherHistoryChars: 0, messageCount: 2, toolCount: 2,
       approximateInputTokens: 35, inputTokens: 505, outputTokens: 20,
@@ -47,6 +47,7 @@ describe('Settings → Telemetría', () => {
     mount({ readTelemetry, setTelemetry: vi.fn(), clearTelemetry: vi.fn() })
     await screen.findByText('505')
     expect(screen.getByText(es['telemetry.cachePrefix'])).toBeTruthy()
+    expect(screen.getByText(es['telemetry.sdk'])).toBeTruthy()
     expect(screen.getByText(es['telemetry.cacheUnknown'])).toBeTruthy()
     expect(screen.getByText('80% ' + es['telemetry.cachePrefixReused'])).toBeTruthy()
     expect(screen.getAllByText('—').length).toBeGreaterThan(0)
