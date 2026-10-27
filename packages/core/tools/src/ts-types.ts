@@ -272,16 +272,47 @@ The available tools:`
  */
 export function renderToolsSdk(schemas: ToolSdkSchema[]): string {
   const sorted = [...schemas].sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0)
+  const types = sorted.map(schema => ({
+    schema,
+    args: jsonSchemaToTs(schema.parameters, 1),
+    output: jsonSchemaToTs(schema.output, 1),
+  }))
+  // Code Mode must preserve complete input/output contracts. Reusing an exact
+  // TypeScript type literal only changes its spelling, never its semantics or
+  // which tools can execute. Small/unshared shapes remain inline: an alias
+  // that is longer than the text it replaces would waste input tokens.
+  const counts = new Map<string, number>()
+  for (const entry of types) {
+    counts.set(entry.args, (counts.get(entry.args) ?? 0) + 1)
+    counts.set(entry.output, (counts.get(entry.output) ?? 0) + 1)
+  }
+  const aliases = new Map<string, string>()
+  const sharedDeclarations: string[] = []
+  for (const entry of types) {
+    for (const shape of [entry.args, entry.output]) {
+      if (aliases.has(shape)) continue
+      const count = counts.get(shape) ?? 0
+      if (count < 2) continue
+      const alias = `PhoenixSharedShape${aliases.size + 1}`
+      const declaration = `type ${alias} = ${shape}`
+      // Conservatively include alias references and the declaration's separator.
+      const savings = count * (shape.length - alias.length) - declaration.length - 2
+      if (savings <= 0) continue
+      aliases.set(shape, alias)
+      sharedDeclarations.push(declaration)
+    }
+  }
   const argsMembers: string[] = []
   const outputMembers: string[] = []
-  for (const schema of sorted) {
+  for (const { schema, args, output } of types) {
     argsMembers.push(...docLines(schema.description, 1))
-    argsMembers.push(`${pad(1)}${renderKey(schema.name)}: ${jsonSchemaToTs(schema.parameters, 1)};`)
-    outputMembers.push(`${pad(1)}${renderKey(schema.name)}: ${jsonSchemaToTs(schema.output, 1)};`)
+    argsMembers.push(`${pad(1)}${renderKey(schema.name)}: ${aliases.get(args) ?? args};`)
+    outputMembers.push(`${pad(1)}${renderKey(schema.name)}: ${aliases.get(output) ?? output};`)
   }
   const argsMap = `interface ToolArgsMap {${argsMembers.length > 0 ? `\n${argsMembers.join('\n')}\n` : ''}}`
   const outputMap = `interface ToolOutputMap {${outputMembers.length > 0 ? `\n${outputMembers.join('\n')}\n` : ''}}`
   const declaration = [
+    ...sharedDeclarations,
     argsMap,
     outputMap,
     'type ToolName = keyof ToolOutputMap',

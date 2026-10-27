@@ -174,6 +174,61 @@ describe('renderToolsSdk', () => {
     expect(renderToolsSdk([bash, bash])).toBe(renderToolsSdk([bash, bash]))
   })
 
+  it('interns identical long output contracts without losing fields or descriptions', () => {
+    const output = {
+      type: 'object' as const,
+      additionalProperties: false,
+      properties: Object.fromEntries(Array.from({ length: 20 }, (_, index) => [
+        `validatedField${index}`, { type: 'string' as const, description: `Canonical response value ${index}` },
+      ])),
+      required: Array.from({ length: 20 }, (_, index) => `validatedField${index}`),
+    }
+    const tools = Array.from({ length: 24 }, (_, index): ToolSdkSchema => ({
+      name: `mcp__record_${index.toString().padStart(2, '0')}`,
+      description: `Fetch record ${index}`,
+      parameters: {
+        type: 'object',
+        properties: { recordId: { type: 'string' } },
+        required: ['recordId'],
+        additionalProperties: false,
+      },
+      output,
+    }))
+    const shared = renderToolsSdk(tools)
+    const distinct = renderToolsSdk(tools.map((tool, index) => ({
+      ...tool,
+      output: {
+        ...output,
+        properties: {
+          ...output.properties,
+          version: { type: 'string' as const, const: String(index) },
+        },
+        required: [...output.required, 'version'],
+      },
+    })))
+    expect(shared).toContain('type PhoenixSharedShape')
+    for (let index = 0; index < 20; index++) {
+      expect(shared).toContain(`validatedField${index}: string;`)
+    }
+    for (const tool of tools) {
+      expect(shared).toContain(`${tool.name}: PhoenixSharedShape`)
+      expect(shared).toContain(`/** ${tool.description} */`)
+    }
+    expect(shared.match(/validatedField0: string;/gu)).toHaveLength(1)
+    expect(shared.length).toBeLessThan(distinct.length * 0.65)
+    expect(renderToolsSdk([...tools].reverse())).toBe(shared)
+    // Output aliases do not change inputs: exact parameters remain described.
+    expect(shared).toContain('recordId: string;')
+  })
+
+  it('keeps nonrepeating and short contracts inline with no wasted aliases', () => {
+    const text = renderToolsSdk([bash, exotic])
+    expect(text).not.toContain('type PhoenixSharedShape')
+    expect(text).toContain('bash: {')
+    expect(text).toContain('exitCode: number;')
+    expect(text).toContain('"my-mcp.tool": string[];')
+  })
+
   it('renders an empty declaration for an empty tool set', () => {
     const text = renderToolsSdk([])
     expect(text).toContain('interface ToolArgsMap {}')
