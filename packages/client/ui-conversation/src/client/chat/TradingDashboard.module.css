@@ -66,3 +66,51 @@
 .marketLegend i { width:13px; height:3px; display:inline-block }
 .marketLegend strong { margin-left:auto; color:#344455; font-weight:600 }
 .marketEmpty { display:flex; justify-content:center; align-items:center; min-height:230px; margin:0; color:#708092; text-align:center }
+
+/* Phoenix Trading inherits the LIGHT workspace, not the previous dark fallback.
+   Declare chart and panel colors together to preserve readable contrast. */
+.panel {
+  color-scheme: light;
+  --tr-ink: #222c39;
+  --tr-muted: #687586;
+  --tr-line: #e5e7eb;
+  --tr-accent: #e65b29;
+  color: var(--tr-ink);
+  background: #fcfbf9;
+  border-color: #e9e3da;
+  box-shadow: 0 7px 28px rgb(63 50 32 / 5%);
+}
+.panel .heading h3,.panel .toolbar strong,.panel .metric strong,.panel .section h4,.panel .row strong {
+  color: var(--tr-ink);
+}
+.panel .heading p,.panel .metric span,.panel .metric em,.panel .toolbar small,
+.panel .row small,.panel .footnote,.panel .footer,.panel .empty {
+  color: var(--tr-muted);
+}
+.panel .eyebrow { color: #bb5827 !important; }
+.panel .status { color: #356453; background: #eff9f2; border-color: #d0e9d9; }
+.panel .status[data-phase=stopped] { color: #687586; background: #f5f6f7; border-color: #e2e5e9; }
+.panel .status[data-phase=error],.panel .status[data-phase=offline] {
+  color: #96511f; background: #fff5e6; border-color: #f3d8b0;
+}
+.panel .metric { background: #fff; border-color: var(--tr-line); }
+.panel .metric strong[data-pnl=positive],.panel [data-pnl=positive] { color: #087a59; }
+.panel .metric strong[data-pnl=negative],.panel [data-pnl=negative] { color: #c43e47; }
+.panel .actions button { background: #fff; color: var(--tr-ink); border-color: #dadfe6; }
+.panel .actions button:hover:not(:disabled) { border-color: #dd845e; background: #fff6f1; }
+.panel .actions button:disabled { cursor: not-allowed; opacity: .55; }
+.panel .actions .primary { color: #fff; background: var(--tr-accent); border-color: var(--tr-accent); }
+.panel .actions .danger { color: #b83840; background: #fff7f7; border-color: #e8adb1; }
+.panel .section { background: #fff; border-color: var(--tr-line); }
+.panel .row { border-top-color: #edf0f2; }
+.panel .row>[data-signal=buy] { color: #078361; }
+.panel .row>[data-signal=sell] { color: #ba3a49; }
+.panel .row>[data-signal=hold] { color: #6d7785; }
+.panel .footer { border-top-color: var(--tr-line); }
+.panel .footer strong { color: #bd3c48; }
+.panel .marketChart { box-shadow: none; background: #fff; border-color: #e5e8ee; }
+.tradingRadarMeta { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 10px 12px; border: 1px solid #e9e3da; border-radius: 10px; background: #fff8ee; color: #6b5138; }
+.tradingRadarMeta strong { color: #3b2b1e; }
+.tradingRadarMeta span { font-size: 12px; }
+.tradingReason { display: block; max-width: 310px; margin-top: 3px; font-size: 11px; color: #718092; }
+.tradingNotice { font-size: 12px; color: #6a788a; margin: 5px 0 0; }
