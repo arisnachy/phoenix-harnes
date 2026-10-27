@@ -49,7 +49,7 @@ export function tokenInputInventory(
   // The Code Mode SDK is appended at the end of the system prompt. Attribute
   // its rendered declarations separately so a large tool catalog does not
   // masquerade as permanent behavioral instructions in Telemetry.
-  const sdkMarker = '\\n\\n## Writing code for run_code'
+  const sdkMarker = '\n\n## Writing code for run_code'
   const sdkStart = system.lastIndexOf(sdkMarker)
   const codeSdkChars = sdkStart < 0 ? 0 : system.length - sdkStart - 2
   return {
