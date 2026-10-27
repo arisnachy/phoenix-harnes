@@ -29,8 +29,18 @@ test('autopilot provides complete priced ticket with one bookmaker and correct s
   const api=[...quotes('Casa Uno','101'),...quotes('Casa Uno','102'),
     ...quotes('Casa Uno','103'),...quotes('Casa Dos','104')]
   const calls=[]
+  const matchup=id=>({
+    home:'Home '+id,away:'Away '+id,eventId:id,
+    homeLogo:'https://a.espncdn.com/home.png',
+    awayLogo:'https://a.espncdn.com/away.png',
+    signal:{pick:'home',edge:0.3,research:{
+      favorite:'Home '+id,method:'Récords descriptivos',source:'ESPN',
+      evidence:['Home '+id+': 3-1','Away '+id+': 1-3'],
+    }},
+  })
   const result=await buildAutomaticSportsTicket(3,day,['basketball_nba'],100,
-    async(key,date)=>{calls.push([key,date]);return api},mockFallback,now)
+    async(key,date)=>{calls.push([key,date]);return api},mockFallback,now,
+    async()=>['101','102','103'].map(matchup))
   assert.deepEqual(calls,[['basketball_nba',day]])
   assert.equal(result.mode,'priced')
   assert.equal(result.complete,true)
@@ -41,7 +51,9 @@ test('autopilot provides complete priced ticket with one bookmaker and correct s
   assert.equal(result.card.props.stake,'100.00')
   assert.equal(result.card.props.grossReturn,'491.30')
   assert.ok(result.card.props.legs.every(x=>x.bookmaker==='Casa Uno'))
-  assert.ok(result.card.props.legs.every(x=>x.rationale.includes('Favorito observado')))
+  assert.ok(result.card.props.legs.every(x=>x.rationale.includes('Favorito por cuota')))
+  assert.ok(result.card.props.legs.every(x=>x.rationale.includes('Récords contextualizados')))
+  assert.ok(result.card.props.legs.every(x=>x.homeLogo==='https://a.espncdn.com/home.png'))
 })
 test('autopilot continues through provider failures and returns a clearly unpriced research card',async()=>{
   const result=await buildAutomaticSportsTicket(5,day,['basketball_nba'],100,
