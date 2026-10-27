@@ -75,24 +75,9 @@ The on-demand `binance_adaptive_cycle` tool ranks up to five Spot USDT pairs usi
 
 ## Official Binance Agentic MCP and Spot Testnet
 
-The official real-account MCP is the pinned Streamable HTTP server
-`https://agent.binance.com/mcp/agentic`. Phoenix connects using user-initiated
-browser OAuth, not production API keys. `binance_mcp_health` reports the actual
-MCP lifecycle and synchronized tool names; an installed connector alone is never
-proof of successful authentication or Trade scope. A `reconnect` retries the
-existing transport; `repair` (only on explicit user request) replaces the
-managed row while leaving credentials in the Host vault. Complete Binance
-authorization and the Agentic sub-account setup in the browser. The main account
-is read-only where permitted; Agentic must be funded manually. Every REAL order,
-cancel, or wallet transfer requires user confirmation at the provider.
+The official real-account MCP is the pinned Streamable HTTP server `https://agent.binance.com/mcp/agentic`. Phoenix connects using user-initiated browser OAuth, not production API keys. `binance_mcp_health` reports the actual MCP lifecycle and synchronized tool names; an installed connector alone is never proof of successful authentication or Trade scope. A `reconnect` retries the existing transport; `repair` (only on explicit user request) replaces the managed row while leaving credentials in the Host vault. Complete Binance authorization and the Agentic sub-account setup in the browser. The main account is read-only where permitted; Agentic must be funded manually. Every REAL order, cancel, or wallet transfer requires user confirmation at the provider.
 
-Testing offers local PAPER and a separate authenticated Binance Spot Testnet
-adapter (`https://testnet.binance.vision`). For Spot Testnet, set dedicated
-`PHOENIX_BINANCE_TESTNET_API_KEY` and `PHOENIX_BINANCE_TESTNET_API_SECRET` in
-the Host (never in chat); `binance_testnet_account` verifies the test-funds
-account, and `binance_testnet_order` submits one capped fake-funds order only
-after specific user intent and one-shot Phoenix approval. Kira first asks the
-user to choose Testing or Real, then distinguishes PAPER from Spot Testnet.
+Testing offers local PAPER and a separate authenticated Binance Spot Testnet adapter (`https://testnet.binance.vision`). For Spot Testnet, set dedicated `PHOENIX_BINANCE_TESTNET_API_KEY` and `PHOENIX_BINANCE_TESTNET_API_SECRET` in the Host (never in chat); `binance_testnet_account` verifies the test-funds account, and `binance_testnet_order` submits one capped fake-funds order only after specific user intent and one-shot Phoenix approval. Kira first asks the user to choose Testing or Real, then distinguishes PAPER from Spot Testnet.
 
 ## Model Experience
 

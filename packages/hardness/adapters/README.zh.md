@@ -74,22 +74,9 @@ Email 有两个独立 identity reference。`userMailIdentity` 表示获授权的
 
 ## Binance 官方 Agentic MCP 与 Spot Testnet
 
-真实账户的官方 MCP 使用固定的 Streamable HTTP 服务
-`https://agent.binance.com/mcp/agentic`。Phoenix 通过用户主动完成的浏览器
-OAuth 连接，而不是使用生产 API 密钥。`binance_mcp_health` 报告实际 MCP
-连接状态和同步的工具名称；仅安装连接器不代表授权成功或取得 Trade 权限。
-`reconnect` 重试已有连接；仅在用户明确要求时，`repair` 更换受管配置行，
-而不删除 Host Vault 中保存的授权记录。用户需在浏览器完成 Binance 授权及
-Agentic 子账户设置。主账户仅在允许时只读；必须由用户自行向 Agentic 子账户
-划转资金。每笔真实订单、撤单和钱包划转都需要用户确认。
+真实账户的官方 MCP 使用固定的 Streamable HTTP 服务 `https://agent.binance.com/mcp/agentic`。Phoenix 通过用户主动完成的浏览器 OAuth 连接，而不是使用生产 API 密钥。`binance_mcp_health` 报告实际 MCP 连接状态和同步的工具名称；仅安装连接器不代表授权成功或取得 Trade 权限。 `reconnect` 重试已有连接；仅在用户明确要求时，`repair` 更换受管配置行， 而不删除 Host Vault 中保存的授权记录。用户需在浏览器完成 Binance 授权及 Agentic 子账户设置。主账户仅在允许时只读；必须由用户自行向 Agentic 子账户 划转资金。每笔真实订单、撤单和钱包划转都需要用户确认。
 
-测试模式包括本地 PAPER 和单独认证的 Binance Spot Testnet
-(`https://testnet.binance.vision`)。Spot Testnet 必须在 Host 中分别配置
-`PHOENIX_BINANCE_TESTNET_API_KEY` 和
-`PHOENIX_BINANCE_TESTNET_API_SECRET`，不能通过聊天提交。
-`binance_testnet_account` 检查模拟资金账户；`binance_testnet_order`
-仅在用户明确要求并完成 Phoenix 单次批准后提交有金额限制的测试订单。
-Kira 应先询问 Testing 或 Real，再区分 PAPER 与 Spot Testnet。
+测试模式包括本地 PAPER 和单独认证的 Binance Spot Testnet (`https://testnet.binance.vision`)。Spot Testnet 必须在 Host 中分别配置 `PHOENIX_BINANCE_TESTNET_API_KEY` 和 `PHOENIX_BINANCE_TESTNET_API_SECRET`，不能通过聊天提交。 `binance_testnet_account` 检查模拟资金账户；`binance_testnet_order` 仅在用户明确要求并完成 Phoenix 单次批准后提交有金额限制的测试订单。 Kira 应先询问 Testing 或 Real，再区分 PAPER 与 Spot Testnet。
 
 ## Model Experience
 
