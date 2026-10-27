@@ -393,7 +393,9 @@ export class BinancePaperBroker {
       const marketValueUsdt = position.quantity * marketPriceUsdt
       return {
         symbol,
-        quantity: round(position.quantity),
+        // Keep exact virtual position size for full exits; rounding to 8 digits
+        // caused tiny phantom balances after a supposedly complete liquidation.
+        quantity: position.quantity,
         averageEntryUsdt: round(position.costBasisUsdt / position.quantity),
         marketPriceUsdt: round(marketPriceUsdt),
         marketValueUsdt: round(marketValueUsdt),

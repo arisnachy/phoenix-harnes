@@ -69,6 +69,31 @@ Abstract games that request character or background assets also require an asset
 
 Paper candle reads clamp both the provider request and returned rows to 1–1000. Shell mutation classification reads the command argument. Runtime-service telemetry performs an immediate first probe and then reuses observations until their TTL expires.
 
+## Binance adaptive paper trading
+
+The on-demand `binance_adaptive_cycle` tool ranks up to five Spot USDT pairs using closed Binance candles and deterministic breakout, uptrend-pullback, and range-reversion candidates. `scan` is read-only; `paper-step` may place one virtual order in the existing fee-aware paper ledger while limiting each new position to 5% of virtual equity, aggregate exposure to 20%, and simultaneous holdings to two. Defensive liquidation takes precedence over new buys. Scores represent a rule ranking, not calibrated win probabilities; fresh prices are re-read before the virtual order. The scanner cannot authorize real orders or manage Binance account credentials. When the user explicitly starts PAPER automation through `binance_paper_auto`, the Host persists the chosen watchlist and runs one bounded virtual cycle immediately and on the configured 1–60 minute cadence without ongoing model inference. The separate `binance_paper_dashboard` tool publishes authenticated Host ledger evidence to a native in-chat visor. Its read-only same-origin endpoint refreshes the viewer approximately every ten seconds without model tokens. The visor's Start, Stop, and Check Now controls call a same-origin, POST-only PAPER endpoint that validates the browser Origin, content type, and bounded watchlist before modifying virtual automation; buttons do not consume LLM tokens. No REAL account action is exposed by that endpoint.
+
+## Official Binance Agentic MCP and Spot Testnet
+
+The official real-account MCP is the pinned Streamable HTTP server
+`https://agent.binance.com/mcp/agentic`. Phoenix connects using user-initiated
+browser OAuth, not production API keys. `binance_mcp_health` reports the actual
+MCP lifecycle and synchronized tool names; an installed connector alone is never
+proof of successful authentication or Trade scope. A `reconnect` retries the
+existing transport; `repair` (only on explicit user request) replaces the
+managed row while leaving credentials in the Host vault. Complete Binance
+authorization and the Agentic sub-account setup in the browser. The main account
+is read-only where permitted; Agentic must be funded manually. Every REAL order,
+cancel, or wallet transfer requires user confirmation at the provider.
+
+Testing offers local PAPER and a separate authenticated Binance Spot Testnet
+adapter (`https://testnet.binance.vision`). For Spot Testnet, set dedicated
+`PHOENIX_BINANCE_TESTNET_API_KEY` and `PHOENIX_BINANCE_TESTNET_API_SECRET` in
+the Host (never in chat); `binance_testnet_account` verifies the test-funds
+account, and `binance_testnet_order` submits one capped fake-funds order only
+after specific user intent and one-shot Phoenix approval. Kira first asks the
+user to choose Testing or Real, then distinguishes PAPER from Spot Testnet.
+
 ## Model Experience
 
 ### Projected capability metadata and operating protocol

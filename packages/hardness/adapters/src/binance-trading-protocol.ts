@@ -33,6 +33,10 @@ Binance is an optional, on-demand connector. Keep it dormant unless the user's t
 - Reuse PHOENIX session learning for durable lessons about regimes, signals, failures, and strategy parameters, but do not let learned prose override deterministic risk/approval gates.
 
 4. Autonomy is scheduled/event-driven, not an always-awake LLM.
+- Use binance_adaptive_cycle to evaluate a bounded Spot USDT watchlist. Scan does not trade; paper-step may execute one VIRTUAL, risk-limited action.
+- When the user explicitly requests automated PAPER trading, binance_paper_auto starts or stops the Host-side virtual executor; its interval checks do not call an LLM.
+- Use binance_paper_dashboard to show verified ledger balances and fills in Phoenix's native in-chat viewer. Its controls are PAPER-only; never confuse this with Spot Testnet or the funded Agentic account.
+- A signal is not a fill. Only the virtual ledger counts a PAPER trade and only a provider-confirmed receipt counts a real trade.
 - For repeated paper experiments, use PHOENIX durable scheduling/wake capabilities rather than keeping a model running continuously.
 - A scheduled/woken run must re-read fresh market data before acting. Stale observations are not trading signals.
 - Real unattended work remains bounded by the user's live Binance scopes and every required approval/confirmation.
