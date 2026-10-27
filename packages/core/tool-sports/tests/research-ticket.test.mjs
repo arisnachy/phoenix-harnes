@@ -95,6 +95,8 @@ test('automatic research discovers five unique real ESPN fixtures without synthe
   assert.equal(result.card.props.legs.length,5)
   assert.equal(new Set(result.card.props.legs.map(x=>x.event)).size,5)
   assert.equal(result.card.props.legs[0].homeLogo,'https://a.espncdn.com/logo.png')
+  assert.equal(result.card.props.legs[0].homeTeam,'Home 301')
+  assert.equal(result.card.props.legs[0].awayTeam,'Away 301')
   assert.equal(result.card.props.legs[0].price,'Por verificar')
   assert.equal(urls.length,8)
   assert.equal(urls.filter(u=>u.includes('/basketball/nba/')).length,1)
