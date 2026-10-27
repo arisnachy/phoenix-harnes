@@ -46,9 +46,9 @@ export function binancePaperAutomationConfig(input: {
   pollMs?: number
 }, enabled = true): BinancePaperAutomationConfig {
   const symbols = input.symbols.map(item => item.trim().toUpperCase())
-  if (symbols.length < 1 || symbols.length > 5 || new Set(symbols).size !== symbols.length
+  if (symbols.length < 1 || symbols.length > 12 || new Set(symbols).size !== symbols.length
     || symbols.some(symbol => !/^[A-Z0-9]{3,16}USDT$/u.test(symbol))) {
-    throw new Error('Trading watchlist must contain 1-5 unique Spot USDT symbols')
+    throw new Error('Trading watchlist must contain 1-12 unique Spot USDT symbols')
   }
   const interval = input.interval ?? '15m'
   if (!['15m', '1h', '4h', '1d'].includes(interval)) throw new Error('Unsupported paper trading interval')
