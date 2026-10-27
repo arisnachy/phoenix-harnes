@@ -29,6 +29,19 @@ function amount(value: number, maximumFractionDigits = 2): string {
   return new Intl.NumberFormat('es-DO', { minimumFractionDigits: 2, maximumFractionDigits }).format(value)
 }
 
+function strategyLabel(id: string): string {
+  if (id.includes('mean-reversion')) return 'Reversión a la media'
+  if (id.includes('trend-pullback')) return 'Retroceso en tendencia'
+  if (id.includes('breakout')) return 'Ruptura de rango'
+  if (id.includes('defensive')) return 'Salida defensiva'
+  if (id.includes('manual')) return 'Operación manual'
+  return id
+}
+
+function targetReturn(price: number, entry: number): string {
+  return (price / entry > 1 ? '+' : '') + amount((price / entry - 1) * 100, 2) + '%'
+}
+
 function clock(value?: string): string {
   if (value === undefined) return 'Sin registro'
   const time = Date.parse(value)
@@ -341,7 +354,7 @@ export function TradingDashboard({ initial }: Props) {
                 return <article key={position.symbol} className={css.positionCard} aria-label={position.symbol + ' PnL y salidas PAPER'}>
                   <div className={css.positionHeading}>
                     <div><strong>{position.symbol.replace(/USDT$/u, '/USDT')}</strong>
-                      <small>{amount(position.quantity, 7)} unidades · {strategy}</small></div>
+                      <small>{amount(position.quantity, 7)} unidades · {strategyLabel(strategy)}</small></div>
                     <div className={css.positionPnl} data-pnl={pnl >= 0 ? 'positive' : 'negative'}>
                       <strong>{pnl >= 0 ? '+' : ''}{amount(pnl)} USDT</strong>
                       <span>{pct === undefined ? 'Retorno no disponible'
@@ -358,25 +371,25 @@ export function TradingDashboard({ initial }: Props) {
                     ? <p className={css.exitMissing}>Sin plan de salida verificado. No se muestran TP/SL ficticios.</p>
                     : <div className={css.exitLevels}>
                         <div className={css.exitLevel} data-level="stop">
-                          <span>Stop-loss</span><strong>{amount(plan.stopLossPrice, 7)}</strong>
+                          <span>SL · {targetReturn(plan.stopLossPrice, plan.entryPriceUsdt)}</span><strong>{amount(plan.stopLossPrice, 7)}</strong>
                           <small>{lastPrice === undefined ? 'Sin cotización' : lastPrice <= plan.stopLossPrice ? 'Nivel alcanzado · pendiente de ciclo' : 'Vigilando'}</small>
                         </div>
                         <div className={css.exitLevel} data-level="tp1">
-                          <span>TP1 · {amount(plan.tp1Fraction * 100, 0)}%</span>
+                          <span>TP1 · {targetReturn(plan.tp1Price, plan.entryPriceUsdt)} · venta {amount(plan.tp1Fraction * 100, 0)}%</span>
                           <strong>{amount(plan.tp1Price, 7)}</strong>
                           <small>{plan.tp1Taken ? 'Parcial ejecutado'
                             : lastPrice !== undefined && lastPrice >= plan.tp1Price ? 'Nivel alcanzado · pendiente de ciclo' : 'Pendiente'}</small>
                         </div>
                         <div className={css.exitLevel} data-level="tp2">
-                          <span>TP2 · salida final</span><strong>{amount(plan.tp2Price, 7)}</strong>
+                          <span>TP2 · {targetReturn(plan.tp2Price, plan.entryPriceUsdt)} · salida final</span><strong>{amount(plan.tp2Price, 7)}</strong>
                           <small>{lastPrice !== undefined && lastPrice >= plan.tp2Price ? 'Nivel alcanzado · pendiente de ciclo' : 'Pendiente'}</small>
                         </div>
                       </div>}
                   {plan !== undefined && <p className={css.positionFootnote}>
-                    Estrategia: {strategy} · {plan.origin === 'legacy-adopted'
+                    Estrategia: {strategyLabel(strategy)} ({strategy}) · {plan.origin === 'legacy-adopted'
                       ? 'Plan adoptado para una posición histórica'
                       : 'Plan persistido en el ledger al ejecutar la compra'}
-                    . SL/TP virtuales: se evalúan en cada ciclo del Host, no son órdenes stop/limit de Binance.
+                    . PnL incluye el coste de entrada, no la comisión de salida. SL/TP virtuales se evalúan en cada ciclo del Host y no son órdenes stop/limit de Binance.
                   </p>}
                 </article>
               })}
