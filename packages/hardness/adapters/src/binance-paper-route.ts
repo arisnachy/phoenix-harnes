@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { GameWebRouteHost } from './godot-web-bundle.ts'
 import type { BinancePaperAutomation } from './binance-paper-automation.ts'
 import { dashboardJson, type BinanceAgentOsHostService } from './binance-trading-tools.ts'
-import { BinanceSpotTestnet } from './binance-spot-testnet.ts'
+import type { BinanceSpotTestnet } from './binance-spot-testnet.ts'
 import { credentialRef, type CredentialProvider } from '@phoenix-ai/dsh-credentials'
 
 const ROUTE = '/phoenix-trading/paper'
@@ -181,7 +181,7 @@ export function mountBinancePaperDashboardRoute(
         }
         // Credentials are tested against the FIXED fake-funds API before saving
         // into the Host vault. Neither key is ever returned in the response.
-        const probe = await new BinanceSpotTestnet(() => ({ apiKey: key, secret })).status()
+        const probe = await options.testnet.forCredentials({ apiKey: key, secret }).status()
         if (!probe.connected) {
           res.writeHead(422).end(JSON.stringify({ error: 'Spot Testnet rejected credentials or is unreachable' }))
           return
