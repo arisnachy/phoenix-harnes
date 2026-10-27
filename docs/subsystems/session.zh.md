@@ -643,6 +643,13 @@ async ready(): Promise<void>
 get(sessionId: SessionId): CognitiveState | undefined
 
 /**
+ * Return a detached, evidence-based self-model without extra model calls.
+ * @param sessionId - Exact live session whose evidence may be inspected.
+ * @returns A detached operational self-model, or undefined for a missing session.
+ */
+introspect(sessionId: SessionId): OperationalSelfModel | undefined
+
+/**
  * Rebuild one session's state through the serialized refresh queue.
  * @param sessionId - Session identity to refresh.
  * @returns The newly rebuilt state, the retained prior state after failure, or `undefined` for a missing session.

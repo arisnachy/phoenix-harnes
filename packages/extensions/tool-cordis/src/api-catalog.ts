@@ -712,6 +712,13 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'A detached state, or `undefined` when the session is not live.',
       },
       {
+      {
+        signature: 'introspect(sessionId: SessionId): OperationalSelfModel | undefined',
+        description: 'Return a detached, evidence-based self-model without extra model calls.',
+        parameters: [{ name: 'sessionId', description: 'Exact live session whose evidence may be inspected.' }],
+        returns: 'A detached operational self-model, or undefined for a missing session.',
+      },
+      {
         signature: 'async refresh(sessionId: SessionId): Promise<CognitiveState | undefined>',
         description: 'Rebuild one session\'s state through the serialized refresh queue.',
         parameters: [{ name: 'sessionId', description: 'Session identity to refresh.' }],
