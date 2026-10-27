@@ -25,6 +25,7 @@ type Contribution = {
 
 const COMPONENT_KEYS = [
   ['telemetry.system', 'systemChars'],
+  ['telemetry.sdk', 'codeSdkChars'],
   ['telemetry.tools', 'schemaChars'],
   ['telemetry.human', 'humanChars'],
   ['telemetry.assistant', 'assistantChars'],
