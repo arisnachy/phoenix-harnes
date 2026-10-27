@@ -44,8 +44,8 @@ export function paperExitPlan(
       : strategyId.includes('trend-pullback') ? [0.018, 0.018, 0.036]
         : [0.025, 0.025, 0.05]
   return {
-    strategyId, entryPriceUsdt: entry, stopLossPrice: round(entry * (1 - stop), 8),
-    tp1Price: round(entry * (1 + first), 8), tp2Price: round(entry * (1 + second), 8),
+    strategyId, entryPriceUsdt: entry, stopLossPrice: Number((entry * (1 - stop)).toPrecision(14)),
+    tp1Price: Number((entry * (1 + first)).toPrecision(14)), tp2Price: Number((entry * (1 + second)).toPrecision(14)),
     tp1Fraction: 0.5, tp1Taken: false, createdAt: new Date().toISOString(), origin,
   }
 }
@@ -58,8 +58,9 @@ function validExitPlan(plan: unknown): plan is BinancePaperExitPlan {
     || !finitePositive(plan.entryPriceUsdt) || !finitePositive(plan.stopLossPrice)
     || !finitePositive(plan.tp1Price) || !finitePositive(plan.tp2Price)
     || !finitePositive(plan.tp1Fraction) || plan.tp1Fraction >= 1) return false
-  return plan.stopLossPrice < plan.entryPriceUsdt
-    && plan.entryPriceUsdt < plan.tp1Price && plan.tp1Price < plan.tp2Price
+  const levels = plan as unknown as BinancePaperExitPlan
+  return levels.stopLossPrice < levels.entryPriceUsdt
+    && levels.entryPriceUsdt < levels.tp1Price && levels.tp1Price < levels.tp2Price
 }
 
 /** One virtual spot position held by the Phoenix Binance paper broker. */
@@ -293,7 +294,7 @@ function parseState(raw: string): BinancePaperState {
     }
     positions[key] = {
       symbol: key, quantity: position.quantity, costBasisUsdt: position.costBasisUsdt,
-      ...(position.exitPlan === undefined ? {} : { exitPlan: position.exitPlan }),
+      ...(position.exitPlan === undefined ? {} : { exitPlan: position.exitPlan as unknown as BinancePaperExitPlan }),
     }
   }
 
@@ -555,8 +556,8 @@ export class BinancePaperBroker {
           // Each new PAPER buy defines a fresh plan on the weighted entry;
           // this path is intentionally not usable by the REAL MCP broker.
           exitPlan: paperExitPlan(
-            (current?.costBasisUsdt ?? 0) / (current?.quantity ?? 1) * (current === undefined ? 0 : current.quantity / (current.quantity + quantity))
-              + price * quantity / ((current?.quantity ?? 0) + quantity),
+            ((current?.exitPlan?.entryPriceUsdt ?? price) * (current?.quantity ?? 0) + price * quantity)
+              / ((current?.quantity ?? 0) + quantity),
             strategyId || current?.exitPlan?.strategyId || 'manual-paper',
           ),
         }
