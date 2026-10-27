@@ -1,3 +1,26 @@
+interface TradingPosition {
+  readonly symbol: string
+  readonly quantity: number
+  readonly marketValueUsdt: number
+  readonly unrealizedPnlUsdt: number
+}
+interface TradingSignal {
+  readonly symbol: string
+  readonly action: string
+  readonly strategy: string
+  readonly regime: string
+  readonly score: number
+  readonly reason: string
+}
+interface TradingTrade {
+  readonly id: string
+  readonly symbol: string
+  readonly side: 'buy' | 'sell'
+  readonly executedAt: string
+  readonly grossUsdt: number
+  readonly price: number
+  readonly strategyId?: string
+}
 /** First-party, read-only Binance PAPER evidence projected from settled tool output. */
 export interface TradingDashboardSnapshot {
   readonly mode: 'paper'
@@ -11,10 +34,10 @@ export interface TradingDashboardSnapshot {
     readonly totalReturnPct: number
     readonly maxDrawdownPct: number
     readonly tradeCount: number
-    readonly positions: readonly { readonly symbol: string; readonly quantity: number; readonly marketValueUsdt: number; readonly unrealizedPnlUsdt: number }[]
+    readonly positions: readonly TradingPosition[]
   }
-  readonly signals: readonly { readonly symbol: string; readonly action: string; readonly strategy: string; readonly regime: string; readonly score: number; readonly reason: string }[]
-  readonly recentTrades: readonly { readonly id: string; readonly symbol: string; readonly side: 'buy' | 'sell'; readonly executedAt: string; readonly grossUsdt: number; readonly price: number; readonly strategyId?: string }[]
+  readonly signals: readonly TradingSignal[]
+  readonly recentTrades: readonly TradingTrade[]
   readonly lastDecision: string
   readonly rationale: string
   readonly lastAttemptAt?: string
