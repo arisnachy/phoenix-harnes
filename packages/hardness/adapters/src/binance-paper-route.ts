@@ -32,7 +32,7 @@ async function readControl(req: IncomingMessage): Promise<{
   if (!/^application\/json(?:\s*;|\s*$)/iu.test(req.headers['content-type'] ?? '')) {
     throw new Error('JSON content type required')
   }
-  const chunks: Buffer[] = []
+  const chunks: Uint8Array[] = []
   let size = 0
   for await (const chunk of req) {
     const binary = new Uint8Array(chunk as Uint8Array)
