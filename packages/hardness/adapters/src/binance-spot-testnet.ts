@@ -66,7 +66,7 @@ export class BinanceSpotTestnet {
       redirect: 'error',
       signal: AbortSignal.timeout(TIMEOUT_MS),
     })
-    if (!response.ok) throw new Error('Binance Spot Testnet request failed (HTTP ' + response.status + ')')
+    if (!response.ok) throw new Error(`Binance Spot Testnet request failed (HTTP ${response.status})`)
     const value: unknown = await response.json()
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
       throw new Error('Invalid Binance Spot Testnet response')
@@ -93,7 +93,7 @@ export class BinanceSpotTestnet {
     try {
       const value = await this.signed('/api/v3/account', 'GET')
       if (!Array.isArray(value.balances)) throw new Error('Invalid account balances')
-      const balances = value.balances.flatMap(balance => {
+      const balances = value.balances.flatMap((balance) => {
         if (!balance || typeof balance !== 'object' || Array.isArray(balance)) return []
         const row = balance as Record<string, unknown>
         return typeof row.asset === 'string' && typeof row.free === 'string' && typeof row.locked === 'string'
@@ -121,7 +121,8 @@ export class BinanceSpotTestnet {
     readonly quantity?: number
   }): Promise<BinanceTestnetOrderReceipt> {
     const symbol = pair(input.symbol)
-    if (input.side !== 'BUY' && input.side !== 'SELL') throw new Error('Invalid Testnet side')
+    const side: unknown = input.side
+    if (side !== 'BUY' && side !== 'SELL') throw new Error('Invalid Testnet side')
     const buy = input.side === 'BUY'
     if (buy && (input.quantity !== undefined || !Number.isFinite(input.quoteUsdt)
       || (input.quoteUsdt ?? 0) < 10 || (input.quoteUsdt ?? 0) > MAX_ORDER_USDT)) {
