@@ -71,3 +71,40 @@ export class SystemPrefixObserver {
     return { reusedChars, comparable: prior !== undefined }
   }
 }
+
+/** Track which fully rendered system section first changed on the same model route.
+ * Section identifiers and SHA-256 signatures remain in process memory only.
+ */
+export class SystemSectionObserver {
+  private readonly previous = new Map<string, readonly { name: string, hash: string }[]>()
+  constructor(private readonly maxRoutes = 16) {}
+
+  observe(
+    provider: string,
+    model: string,
+    sections: readonly { readonly name: string, readonly text: string }[],
+  ): string | undefined {
+    const key = JSON.stringify([provider, model])
+    const current = sections.map(section => ({
+      name: section.name,
+      hash: createHash('sha256').update(section.text).digest('hex'),
+    }))
+    const prior = this.previous.get(key)
+    let firstChanged: string | undefined
+    if (prior !== undefined) {
+      for (let i = 0; i < Math.max(prior.length, current.length); i++) {
+        if (prior[i]?.name !== current[i]?.name || prior[i]?.hash !== current[i]?.hash) {
+          firstChanged = current[i]?.name ?? prior[i]?.name
+          break
+        }
+      }
+    }
+    this.previous.delete(key)
+    this.previous.set(key, current)
+    if (this.previous.size > this.maxRoutes) {
+      const oldest = this.previous.keys().next().value
+      if (oldest !== undefined) this.previous.delete(oldest)
+    }
+    return firstChanged
+  }
+}

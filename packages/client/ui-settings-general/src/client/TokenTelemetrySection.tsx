@@ -100,6 +100,7 @@ export function TokenTelemetrySection({
   const legacyUnknownCount = selected.filter(record =>
     record.prefixComparison === undefined && record.reusedSystemPrefixChars === 0).length
   const baselineCount = selected.filter(record => record.prefixComparison === 'baseline').length
+  const recentChangedSection = selected.find(record => record.firstChangedSystemSection)?.firstChangedSystemSection
   const prefixSamples = selected.filter(record => record.reusedSystemPrefixChars !== undefined
     && (record.prefixComparison === 'compared'
       || (record.prefixComparison === undefined && record.reusedSystemPrefixChars > 0)))
@@ -199,6 +200,9 @@ export function TokenTelemetrySection({
             : `${prefixReusePercent}% ${t('telemetry.cachePrefixReused')}`}
         </p>
         <p className={css.note}>{t('telemetry.cachePrefixExplainer')}</p>
+        {recentChangedSection ? (
+          <p className={css.note}>{t('telemetry.cachePrefixChangedSection')}: <code>{recentChangedSection}</code></p>
+        ) : null}
         {baselineCount > 0 ? (
           <p className={css.note}>{baselineCount} {t('telemetry.cachePrefixBaseline')}</p>
         ) : null}

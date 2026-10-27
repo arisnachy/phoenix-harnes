@@ -38,6 +38,9 @@ function parseInput(raw: unknown): InputPayload | undefined {
     ...input.systemSdkChars === undefined ? {} : {
       systemSdkChars: Math.min(count(input.systemChars), count(input.systemSdkChars)),
     },
+    ...input.firstChangedSystemSection === undefined ? {} : {
+      firstChangedSystemSection: name(input.firstChangedSystemSection),
+    },
     ...input.prefixComparison === 'baseline' || input.prefixComparison === 'compared'
       ? { prefixComparison: input.prefixComparison } : {},
     ...input.reusedSystemPrefixChars === undefined ? {}

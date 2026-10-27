@@ -41,7 +41,7 @@ import type { PromptAssembly } from '@phoenix-ai/dsh-system-prompt'
 import type { Context } from '@phoenix-ai/cordis'
 import { projectRequestHistory } from './request-history.ts'
 import { tokenInputInventory } from './token-audit.ts'
-import { SystemPrefixObserver } from './cache-prefix.ts'
+import { SystemPrefixObserver, SystemSectionObserver } from './cache-prefix.ts'
 import { randomUUID } from 'node:crypto'
 import type { EventEmitter } from 'node:events'
 import { RuntimeContextProjection } from './runtime-context.ts'
@@ -51,6 +51,7 @@ import { isExplicitUserStop } from './user-stop.ts'
 
 // Provider-side caching is automatic; track repeatable prefixes without retaining text.
 const systemPrefixObserver = new SystemPrefixObserver()
+const systemSectionObserver = new SystemSectionObserver()
 
 type Phase =
   | { kind: 'idle'; lastTurn: number }
@@ -555,7 +556,14 @@ export class ReactLoopAgent implements Agent {
     // SDK signatures are emitted at the end of system instructions. Attribute
     // their rendered size to tools in telemetry, not to Kira's stable policy.
     const sdkSection = assembly.sections.find(section => section.name === 'tools:sdk')
-    const sdkText = sdkSection === undefined ? '' : renderPrompt({ ...assembly, sections: [sdkSection] })
+    const orderedSections = sdkSection === undefined
+      ? assembly.sections
+      : [...assembly.sections.filter(section => section.name !== 'tools:sdk'), sdkSection]
+    const renderedSections = orderedSections.map(section => ({
+      name: section.name,
+      text: renderPrompt({ ...assembly, sections: [section] }),
+    }))
+    const sdkText = renderedSections.find(section => section.name === 'tools:sdk')?.text ?? ''
     const systemSdkChars = sdkText.length === 0 ? 0
       : sdkText.length + (system.length > sdkText.length ? 2 : 0)
 
@@ -564,7 +572,7 @@ export class ReactLoopAgent implements Agent {
       const boundaryMessages = projectRequestHistory(derived, this.session.events.findLast(event => event.type === 'step/start')?.data.historyProjection)
       const auditId = randomUUID()
       const { request, preparedCall } = await this.buildRequest(
-        turn, step, assembly.tools, system, boundaryMessages, signal, auditId, systemSdkChars,
+        turn, step, assembly.tools, system, boundaryMessages, signal, auditId, systemSdkChars, renderedSections,
       )
       const assembler = new BlockAssembler()
       const chunkSeqs: number[] = []
@@ -705,6 +713,7 @@ export class ReactLoopAgent implements Agent {
     signal: AbortSignal,
     auditId: string,
     systemSdkChars: number,
+    renderedSections: readonly { readonly name: string, readonly text: string }[],
   ): Promise<{ request: GenerateOptions; preparedCall?: PreparedLlmCall }> {
     const { session } = this
 
@@ -788,6 +797,7 @@ export class ReactLoopAgent implements Agent {
     }))
     const auditInput = tokenInputInventory(system, tools, boundaryMessages, systemSdkChars)
     const prefixObservation = systemPrefixObserver.observeWithStatus(config.provider, config.model, system)
+    const changedSystemSection = systemSectionObserver.observe(config.provider, config.model, renderedSections)
     const telemetryEvents: EventEmitter = process
     telemetryEvents.emit('phoenix:telemetry:input', {
       id: auditId,
@@ -797,6 +807,7 @@ export class ReactLoopAgent implements Agent {
       reasoningEffort: config.reasoningEffort,
       ...auditInput,
       prefixComparison: prefixObservation.comparable ? 'compared' : 'baseline',
+      ...changedSystemSection === undefined ? {} : { firstChangedSystemSection: changedSystemSection },
       ...prefixObservation.comparable ? { reusedSystemPrefixChars: prefixObservation.reusedChars } : {},
     })
     if (process.env.PHOENIX_TOKEN_AUDIT === '1') {
@@ -808,6 +819,7 @@ export class ReactLoopAgent implements Agent {
         reasoningEffort: config.reasoningEffort,
         ...auditInput,
         prefixComparison: prefixObservation.comparable ? 'compared' : 'baseline',
+        ...changedSystemSection === undefined ? {} : { firstChangedSystemSection: changedSystemSection },
         ...prefixObservation.comparable ? { reusedSystemPrefixChars: prefixObservation.reusedChars } : {},
       }))
     }

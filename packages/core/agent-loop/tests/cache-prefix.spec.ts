@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { SystemPrefixObserver } from '../src/cache-prefix.ts'
+import { SystemPrefixObserver, SystemSectionObserver } from '../src/cache-prefix.ts'
 
 describe('system prompt prefix observer', () => {
   it('recognizes an identical prefix and ignores changing task-specific suffixes', () => {
@@ -68,5 +68,25 @@ describe('prefix comparison diagnostics and partial paragraph stability', () => 
     observer.observe('codex', 'luna', 'same')
     observer.observe('codex', 'sol', 'other')
     expect(observer.observeWithStatus('codex', 'luna', 'same').comparable).toBe(false)
+  })
+})
+
+describe('privacy-safe section change identification', () => {
+  it('identifies changed SDK, rules and inserted sections per provider/model', () => {
+    const observer = new SystemSectionObserver()
+    const first = [
+      { name: 'harness:identity', text: 'Stable identity' },
+      { name: 'tools:sdk', text: 'Tool declarations A' },
+    ]
+    expect(observer.observe('codex', 'luna', first)).toBeUndefined()
+    expect(observer.observe('codex', 'luna', [
+      first[0]!, { name: 'tools:sdk', text: 'Tool declarations B' },
+    ])).toBe('tools:sdk')
+    expect(observer.observe('codex', 'sol', first)).toBeUndefined()
+    expect(observer.observe('codex', 'luna', [
+      { name: 'harness:identity', text: 'Updated identity' }, first[1]!,
+    ])).toBe('harness:identity')
+    expect(JSON.stringify(observer)).not.toContain('Tool declarations')
+    expect(JSON.stringify(observer)).not.toContain('Stable identity')
   })
 })

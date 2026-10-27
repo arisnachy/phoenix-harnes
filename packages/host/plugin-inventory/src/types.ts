@@ -13,6 +13,8 @@ export interface TokenTelemetryRecord {
   readonly reusedSystemPrefixChars?: number
   /** 'baseline' = no previous request on this provider/model route; never report zero reuse for it. */
   readonly prefixComparison?: 'baseline' | 'compared'
+  /** First changed rendered section versus previous same-route request; identifiers only. */
+  readonly firstChangedSystemSection?: string
   readonly schemaChars: number
   readonly historyChars: number
   readonly humanChars: number
