@@ -33,6 +33,18 @@ class SettingsCatalog extends LlmAdapter {
 it('saves three independent Codex roles and unlimited adaptive strategy mode across reload', async () => {
   const scaffold = await launchWebScaffold({ extraOverlayPath: OVERLAY })
   const registration = scaffold.ctx.llm.registerAdapter(['openai-codex'], new SettingsCatalog())
+  // Eclipse queries the genuine Host discovery RPC, not the adapter's pinned
+  // or cached list. Keep its Codex catalog deterministic for this browser test.
+  const discoverRegistration = scaffold.ctx.llm.registerModelDiscovery('llm-pi-ai', async () =>
+    MODELS.map(id => ({
+      id,
+      name: id,
+      reasoning: {
+        efforts: ['low', 'medium', 'high', 'xhigh', 'max', ...id.endsWith('-sol') ? ['ultra'] : []]
+          .map(level => ({ id: level, name: level })),
+        defaultEffort: 'high',
+      },
+    })))
   const browser = await chromium.launch()
   try {
     // Real settings authority must advertise Eclipse before the browser starts.
@@ -88,6 +100,7 @@ it('saves three independent Codex roles and unlimited adaptive strategy mode acr
     expect(tripwire.pageErrors).toEqual([])
   } finally {
     await browser.close()
+    discoverRegistration()
     registration()
     await scaffold.close()
   }
