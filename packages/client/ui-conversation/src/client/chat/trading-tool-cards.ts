@@ -1,8 +1,24 @@
+interface TradingExitPlan {
+  readonly strategyId: string
+  readonly entryPriceUsdt: number
+  readonly stopLossPrice: number
+  readonly tp1Price: number
+  readonly tp2Price: number
+  readonly tp1Fraction: number
+  readonly tp1Taken: boolean
+  readonly origin: 'execution' | 'legacy-adopted'
+  readonly createdAt: string
+}
 interface TradingPosition {
   readonly symbol: string
   readonly quantity: number
+  readonly averageEntryUsdt?: number
+  readonly costBasisUsdt?: number
+  readonly marketPriceUsdt?: number
   readonly marketValueUsdt: number
   readonly unrealizedPnlUsdt: number
+  readonly unrealizedReturnPct?: number
+  readonly exitPlan?: TradingExitPlan
 }
 interface TradingSignal {
   readonly symbol: string
@@ -38,6 +54,7 @@ export interface TradingDashboardSnapshot {
   }
   readonly signals: readonly TradingSignal[]
   readonly recentTrades: readonly TradingTrade[]
+  readonly markedAt?: string
   readonly lastDecision: string
   readonly rationale: string
   readonly lastAttemptAt?: string
@@ -53,6 +70,21 @@ function record(value: unknown): Record<string, unknown> | undefined {
 
 function finite(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value)
+}
+
+function validTradingExitPlan(value: unknown): boolean {
+  const plan = record(value)
+  if (plan === undefined || typeof plan.strategyId !== 'string'
+    || typeof plan.tp1Taken !== 'boolean' || !['execution', 'legacy-adopted'].includes(String(plan.origin))
+    || typeof plan.createdAt !== 'string' || !Number.isFinite(Date.parse(plan.createdAt))
+    || !['entryPriceUsdt', 'stopLossPrice', 'tp1Price', 'tp2Price', 'tp1Fraction'].every(key => finite(plan[key]))) {
+    return false
+  }
+  return (plan.stopLossPrice as number) > 0
+    && (plan.stopLossPrice as number) < (plan.entryPriceUsdt as number)
+    && (plan.entryPriceUsdt as number) < (plan.tp1Price as number)
+    && (plan.tp1Price as number) < (plan.tp2Price as number)
+    && (plan.tp1Fraction as number) > 0 && (plan.tp1Fraction as number) < 1
 }
 
 /**
@@ -78,7 +110,13 @@ export function parseTradingDashboard(value: unknown): TradingDashboardSnapshot 
     || typeof root.lastDecision !== 'string' || typeof root.rationale !== 'string') return undefined
   const positions = account.positions.map(record)
   if (positions.some(p => p === undefined || typeof p.symbol !== 'string'
-    || !finite(p.quantity) || !finite(p.marketValueUsdt) || !finite(p.unrealizedPnlUsdt))) return undefined
+    || !finite(p.quantity) || !finite(p.marketValueUsdt) || !finite(p.unrealizedPnlUsdt)
+    || (p.averageEntryUsdt !== undefined && !finite(p.averageEntryUsdt))
+    || (p.marketPriceUsdt !== undefined && !finite(p.marketPriceUsdt))
+    || (p.unrealizedReturnPct !== undefined && !finite(p.unrealizedReturnPct))
+    || (p.exitPlan !== undefined && !validTradingExitPlan(p.exitPlan)))) return undefined
+  if (root.markedAt !== undefined && (typeof root.markedAt !== 'string'
+    || !Number.isFinite(Date.parse(root.markedAt)))) return undefined
   const signals = root.signals.map(record)
   if (signals.some(s => s === undefined || typeof s.symbol !== 'string' || typeof s.action !== 'string'
     || typeof s.strategy !== 'string' || typeof s.regime !== 'string'
