@@ -38,7 +38,7 @@ describe('Settings → Telemetría', () => {
   it('does not mislabel missing Codex cached-token metrics as zero and shows reusable prefix', async () => {
     const record: TokenTelemetrySnapshot['records'][number] = {
       at: Date.now(), provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'high',
-      systemChars: 100, reusedSystemPrefixChars: 80, schemaChars: 30,
+      systemChars: 100, codeSdkChars: 40, reusedSystemPrefixChars: 80, schemaChars: 30,
       historyChars: 10, humanChars: 5, assistantChars: 5, toolResultChars: 0,
       runtimeContextChars: 0, otherHistoryChars: 0, messageCount: 2, toolCount: 2,
       approximateInputTokens: 35, inputTokens: 505, outputTokens: 20,
@@ -47,9 +47,27 @@ describe('Settings → Telemetría', () => {
     mount({ readTelemetry, setTelemetry: vi.fn(), clearTelemetry: vi.fn() })
     await screen.findByText('505')
     expect(screen.getByText(es['telemetry.cachePrefix'])).toBeTruthy()
+    expect(screen.getByText(es['telemetry.sdk'])).toBeTruthy()
     expect(screen.getByText(es['telemetry.cacheUnknown'])).toBeTruthy()
     expect(screen.getByText('80% ' + es['telemetry.cachePrefixReused'])).toBeTruthy()
     expect(screen.getAllByText('—').length).toBeGreaterThan(0)
+  })
+
+  it('shows pending rather than 0% for the first same-model cold-start request', async () => {
+    const first: TokenTelemetrySnapshot['records'][number] = {
+      at: Date.now(), provider: 'codex', model: 'luna', reasoningEffort: 'high',
+      systemChars: 5000, reusedSystemPrefixChars: 0, schemaChars: 200,
+      historyChars: 0, humanChars: 0, assistantChars: 0, toolResultChars: 0,
+      runtimeContextChars: 0, otherHistoryChars: 0, messageCount: 0,
+      toolCount: 2, approximateInputTokens: 1300, inputTokens: 2000,
+    }
+    mount({
+      readTelemetry: vi.fn().mockResolvedValue({ enabled: true, records: [first] }),
+      setTelemetry: vi.fn(),
+      clearTelemetry: vi.fn(),
+    })
+    await screen.findByText(es['telemetry.cachePrefixPending'])
+    expect(screen.queryByText('0% ' + es['telemetry.cachePrefixReused'])).toBeNull()
   })
 
   it('shows collected real tokens and updates the checkbox after a successful Host mutation', async () => {
