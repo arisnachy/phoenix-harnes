@@ -62,8 +62,8 @@ describe('Settings token telemetry collector', () => {
       // Malformed status is not copied into persistent telemetry.
       secret: 'SHOULD_NEVER_BE_STORED',
     })
-    expect(collector.snapshot().records[1]?.prefixComparison).toBe('baseline')
-    expect(collector.snapshot().records[1]?.reusedSystemPrefixChars).toBeUndefined()
+    expect(collector.snapshot().records[0]?.prefixComparison).toBe('baseline')
+    expect(collector.snapshot().records[0]?.reusedSystemPrefixChars).toBeUndefined()
 
     await collector.setEnabled(false)
     telemetryEvents.emit('phoenix:telemetry:input', { id: 'other', at: Date.now(), model: 'other' })
