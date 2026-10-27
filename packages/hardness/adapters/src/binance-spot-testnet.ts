@@ -52,6 +52,16 @@ export class BinanceSpotTestnet {
     private readonly clock: () => number = Date.now,
   ) {}
 
+  /**
+   * Validate a candidate test-only key pair with the same fixed Testnet
+   * transport before any credential is saved to the Host vault.
+   * @param value - Explicit user-supplied fake-funds Testnet credentials.
+   * @returns Separate credential-bound client using the same Testnet API.
+   */
+  forCredentials(value: BinanceTestnetCredentials): BinanceSpotTestnet {
+    return new BinanceSpotTestnet(() => value, this.request, this.clock)
+  }
+
   private async signed(path: '/api/v3/account' | '/api/v3/order',
     method: 'GET' | 'POST',
     fields: Readonly<Record<string, string>> = {},
