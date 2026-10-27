@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-10-26-codex-live-model-catalog-and-updater.md
-2026-10-26-codex-live-model-catalog-and-updater.md: cd5aed95588ffbf424934d28a32ef43cea06e807
-2026-10-26-codex-live-model-catalog-and-updater.zh.md: 29547c334546b6eef29c99c805229904d7117b22
+2026-10-26-codex-live-model-catalog-and-updater.md: fc9cc4b3cb9a8d21eb3a502b08b4c2fd94c4dbed
+2026-10-26-codex-live-model-catalog-and-updater.zh.md: c8c07ef6f7ab62fdeda0d6b9fcf05f833cd272a9
