@@ -53,6 +53,23 @@ describe('Settings → Telemetría', () => {
     expect(screen.getAllByText('—').length).toBeGreaterThan(0)
   })
 
+  it('shows pending rather than 0% for the first same-model cold-start request', async () => {
+    const first: TokenTelemetrySnapshot['records'][number] = {
+      at: Date.now(), provider: 'codex', model: 'luna', reasoningEffort: 'high',
+      systemChars: 5000, reusedSystemPrefixChars: 0, schemaChars: 200,
+      historyChars: 0, humanChars: 0, assistantChars: 0, toolResultChars: 0,
+      runtimeContextChars: 0, otherHistoryChars: 0, messageCount: 0,
+      toolCount: 2, approximateInputTokens: 1300, inputTokens: 2000,
+    }
+    mount({
+      readTelemetry: vi.fn().mockResolvedValue({ enabled: true, records: [first] }),
+      setTelemetry: vi.fn(),
+      clearTelemetry: vi.fn(),
+    })
+    await screen.findByText(es['telemetry.cachePrefixPending'])
+    expect(screen.queryByText('0% ' + es['telemetry.cachePrefixReused'])).toBeNull()
+  })
+
   it('shows collected real tokens and updates the checkbox after a successful Host mutation', async () => {
     const record: TokenTelemetrySnapshot['records'][number] = {
       at: Date.now(), provider: 'codex', model: 'luna', reasoningEffort: 'medium',
