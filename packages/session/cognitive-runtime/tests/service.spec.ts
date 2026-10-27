@@ -152,6 +152,29 @@ describe('CognitiveRuntimeService', () => {
     await expect(ctx.cognitiveRuntime.refresh(session.id)).resolves.toBeDefined()
   })
 
+  it('exposes introspection for live sessions and never invents evidence for missing ones', async () => {
+    const ctx = await setup()
+    const sessionId = SessionId('introspection-session')
+    expect(ctx.cognitiveRuntime.introspect(sessionId)).toBeUndefined()
+    const session = ctx.sessions.create(sessionId, { meta: {} })
+    await ctx.cognitiveRuntime.ready()
+    expect(ctx.cognitiveRuntime.introspect(session.id)).toMatchObject({
+      sessionId,
+      candidateCount: 0,
+      identity: [],
+      epistemicStatus: 'operational-model-only',
+      subjectiveExperience: 'undetermined',
+    })
+
+    session.append('user/message', userMessage('Track the current report objective.'), { surfaceOp: 'append' })
+    await ctx.cognitiveRuntime.ready()
+    const observation = ctx.cognitiveRuntime.introspect(session.id)
+    expect(observation?.candidateCount).toBeGreaterThan(0)
+    expect(observation?.subjectiveExperience).toBe('undetermined')
+    ctx.emit('session/disposed', session)
+    expect(ctx.cognitiveRuntime.introspect(session.id)).toBeUndefined()
+  })
+
   it('exposes bounded resolved configuration', async () => {
     const ctx = await setup()
     expect(ctx.cognitiveRuntime.config).toEqual(config)

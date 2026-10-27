@@ -1,8 +1,10 @@
 /** Evidence-based, read-only operational introspection for one PHOENIX session. */
 import type { AttentionCandidate, CognitiveState } from './types.ts'
 
+/** Supported categories of provenance-backed self-observation. */
 export type SelfEvidenceCategory = 'focus' | 'identity' | 'goal' | 'pending' | 'error' | 'learning'
 
+/** One bounded observation linked to its canonical session event. */
 export interface SelfEvidence {
   readonly category: SelfEvidenceCategory
   readonly summary: string
@@ -32,7 +34,12 @@ export interface OperationalSelfModel {
   readonly subjectiveExperience: 'undetermined'
 }
 
-/** Build one detached, strictly session-scoped self-observation without LLM calls. */
+/**
+ * Build one detached, strictly session-scoped self-observation without LLM calls.
+ * @param state - Previously validated cognitive state for one session.
+ * @param maxPerCategory - Maximum evidence entries in each category (1–16).
+ * @returns Detached operational observations without any claim of sentience.
+ */
 export function deriveOperationalSelfModel(
   state: CognitiveState,
   maxPerCategory = 4,

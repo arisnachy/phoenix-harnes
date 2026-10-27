@@ -131,7 +131,11 @@ export class CognitiveRuntimeService extends Service {
     return state === undefined ? undefined : cloneState(state)
   }
 
-  /** Return a detached, evidence-based self-model without extra model calls. */
+  /**
+   * Return a detached, evidence-based self-model without extra model calls.
+   * @param sessionId - Exact live session whose evidence may be inspected.
+   * @returns A detached operational self-model, or undefined for a missing session.
+   */
   introspect(sessionId: SessionId): OperationalSelfModel | undefined {
     const state = this.get(sessionId)
     return state === undefined ? undefined : deriveOperationalSelfModel(state)

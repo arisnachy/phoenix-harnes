@@ -3,7 +3,7 @@ import { SessionId } from '@phoenix-ai/dsh-session'
 import type { AttentionCandidate, CognitiveState } from '../src/types.ts'
 import { deriveOperationalSelfModel } from '../src/self-model.ts'
 
-function candidate(sessionId: string, kind: string, summary: string, subject: string, seq: number): AttentionCandidate {
+function candidate(sessionId: string, kind: string, summary: string, subject: string | undefined, seq: number): AttentionCandidate {
   return {
     record: {
       id: 'id-' + String(seq),
@@ -12,7 +12,7 @@ function candidate(sessionId: string, kind: string, summary: string, subject: st
       kind,
       layers: kind === 'pending' ? ['prospective'] : ['episodic'],
       summary,
-      subject,
+      ...subject === undefined ? {} : { subject },
       status: 'active',
       confidence: 0.8,
       provenance: { sessionId, eventSeq: seq, sourceUri: 'session:' + sessionId + '#event:' + String(seq) },
@@ -70,6 +70,19 @@ describe('operational self model', () => {
     expect(result.identity).toEqual([])
     expect(result.pending).toEqual([])
     expect(result.epistemicStatus).toBe('operational-model-only')
+  })
+
+  it('preserves optional project provenance and tolerates records without subjects', () => {
+    const current = state()
+    const unclassified = candidate(String(current.sessionId), 'fact', 'No subject record', undefined, 7)
+    const result = deriveOperationalSelfModel({
+      ...current,
+      projectId: 'phoenix',
+      background: [unclassified],
+    })
+    expect(result.projectId).toBe('phoenix')
+    expect(result.identity.map(item => item.summary)).toEqual(['Kira coordinates Phoenix'])
+    expect(result.focus?.category).toBe('focus')
   })
 
   it('bounds evidence and rejects invalid limits', () => {
