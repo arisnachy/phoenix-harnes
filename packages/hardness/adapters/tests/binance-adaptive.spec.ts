@@ -133,9 +133,35 @@ describe('adaptive Binance paper cycle', () => {
     expect(result.account.positions).toHaveLength(0)
   })
 
+  it('scans twelve assets and isolates unavailable pairs without fabricating entries', async () => {
+    const names = [
+      'BTCUSDT','ETHUSDT','SOLUSDT','BNBUSDT','XRPUSDT','ADAUSDT',
+      'DOGEUSDT','LINKUSDT','AVAXUSDT','TRXUSDT','DOTUSDT','LTCUSDT',
+    ]
+    const feed = market(Object.fromEntries(names.map(symbol => [symbol, 'flat' as const])))
+    const original = feed.candles.bind(feed)
+    const brokenFeed: BinancePublicMarket = {
+      price: feed.price.bind(feed), prices: feed.prices.bind(feed),
+      async candles(symbol, interval, limit) {
+        if (symbol === 'DOGEUSDT') throw new Error('temporary provider outage')
+        return original(symbol, interval, limit)
+      },
+    }
+    const paper = new BinancePaperBroker(
+      join(mkdtempSync(join(tmpdir(), 'phoenix-twelve-pairs-')), 'paper.json'),
+      brokenFeed,
+    )
+    const result = await runBinanceAdaptiveCycle(paper, { mode: 'scan', symbols: names }, NOW)
+    expect(result.signals).toHaveLength(12)
+    expect(result.signals.find(row => row.symbol === 'DOGEUSDT')).toMatchObject({
+      action: 'hold', score: 0,
+    })
+    expect(result.trade).toBeUndefined()
+  })
+
   it('rejects broad, duplicate, and non-USDT watchlists before fetching markets', async () => {
     const paper = broker({})
-    await expect(runBinanceAdaptiveCycle(paper, { symbols: [] }, NOW)).rejects.toThrow('between 1 and 5')
+    await expect(runBinanceAdaptiveCycle(paper, { symbols: [] }, NOW)).rejects.toThrow('between 1 and 12')
     await expect(runBinanceAdaptiveCycle(paper, { symbols: ['BTCUSDT', 'BTCUSDT'] }, NOW))
       .rejects.toThrow('unique Spot USDT')
     await expect(runBinanceAdaptiveCycle(paper, { symbols: ['BTCBTC'] }, NOW))

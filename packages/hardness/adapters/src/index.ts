@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { dirname } from 'node:path'
 import { mailAddress } from './assistant-mail-store.ts'
 import { installAssistantMail } from './assistant-mail-runtime.ts'
@@ -10,6 +11,7 @@ import { join } from 'node:path'
 import type { Context } from '@phoenix-ai/cordis'
 import z from '@phoenix-ai/schemastery'
 import type { AuthorizationService } from '@phoenix-ai/dsh-authorization'
+import { credentialRef, type CredentialProvider } from '@phoenix-ai/dsh-credentials'
 import { GOOGLE_ACCOUNT_KEY } from '@phoenix-ai/dsh-authorization/google'
 import type { HostConnectionHandle } from '@phoenix-ai/dsh-client-connection'
 import type { HardnessService } from '@phoenix-ai/dsh-hardness/src/types.ts'
@@ -35,6 +37,7 @@ import { acquireBinancePaperAutomation } from './binance-paper-automation.ts'
 import { mountBinancePaperDashboardRoute } from './binance-paper-route.ts'
 import { installBinanceTradingProtocol } from './binance-trading-protocol.ts'
 import { createBinanceTradingTools } from './binance-trading-tools.ts'
+import { BinanceSpotTestnet, binanceTestnetCredentials } from './binance-spot-testnet.ts'
 import type { BinanceAgentOsHostService } from './binance-trading-tools.ts'
 import { installCapabilityOperatingProtocol } from './capability-protocol.ts'
 import { acquireProactivityEngine } from './proactivity-registry.ts'
@@ -45,6 +48,7 @@ import { createRealitySnapshotTool } from './reality-tool.ts'
 import { createProactivityExecutor, installProactivityRuntime } from './proactivity-runtime.ts'
 import { createProactivityTools } from './proactivity-tools.ts'
 import { acquireWakeEngine } from './wake-registry.ts'
+import { wakeEvent } from './wake-engine.ts'
 import { createWakeExecutor, installWakeRuntime } from './wake-runtime.ts'
 import { createWakeTools } from './wake-tools.ts'
 import { createRoutineTools } from './routine-tools.ts'
@@ -369,14 +373,39 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
     disposers.push(() => { removeGodotRoute?.() })
   }
   const binance = acquireBinancePaperAutomation(binancePaperLedgerPath())
+  const secretProvider = ctx.get('credentials') as CredentialProvider | undefined
+  const testnet = new BinanceSpotTestnet(async () => {
+    if (secretProvider === undefined) return binanceTestnetCredentials()
+    const [key, secret] = await Promise.all([
+      secretProvider.resolve(credentialRef('PHOENIX_BINANCE_TESTNET_API_KEY')),
+      secretProvider.resolve(credentialRef('PHOENIX_BINANCE_TESTNET_API_SECRET')),
+    ])
+    return key?.value && secret?.value
+      ? { apiKey: key.value, secret: secret.value }
+      : undefined
+  })
   disposers.push(() => { binance.release() })
-  if (!modelTools) await binance.engine.restore()
+  if (!modelTools) {
+    // Only the Host publishes PAPER attention events; agent-scoped projections
+    // must not create duplicate notifications for the same virtual fill.
+    binance.engine.setAttentionSink(event => {
+      ctx.emit('phoenix/wake-event', wakeEvent({
+        id: 'binance-paper:' + randomUUID(),
+        source: 'phoenix-trading',
+        eventType: 'paper.attention',
+        summary: event.detail,
+        attributes: { kind: event.kind, symbol: event.symbol, mode: 'paper' },
+      }))
+    })
+    disposers.push(() => { binance.engine.setAttentionSink(undefined) })
+    await binance.engine.restore()
+  }
   if (!modelTools) {
     let removeTradingRoute: (() => void) | undefined
     const mountTradingRoute = (): void => {
       if (removeTradingRoute !== undefined) return
       const server = (ctx.get as unknown as (name: string) => unknown)('webServer') as GameWebRouteHost | undefined
-      if (server?.register !== undefined) removeTradingRoute = mountBinancePaperDashboardRoute(server, binance.engine)
+      if (server?.register !== undefined) removeTradingRoute = mountBinancePaperDashboardRoute(server, binance.engine, { testnet, ...(secretProvider === undefined ? {} : { credentials: secretProvider }), ...(pluginInventory === undefined ? {} : { agentOs: pluginInventory }) })
     }
     mountTradingRoute()
     disposers.push(ctx.on('internal/service', name => {
@@ -506,6 +535,8 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
       for (const tool of createBinanceTradingTools({
         broker: binancePaper,
         automation: binance.engine,
+        wake: wake.engine,
+        testnet,
         approval,
         ...(pluginInventory === undefined ? {} : { agentOs: pluginInventory }),
       })) {

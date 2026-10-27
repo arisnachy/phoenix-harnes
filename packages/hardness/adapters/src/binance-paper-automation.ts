@@ -10,6 +10,13 @@ const DEFAULT_POLL_MS = 60_000
 const DEFAULT_SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT']
 const MAX_RECENT_TRADES = 12
 
+/** Rare, meaningful events only; normal minute-by-minute monitoring costs no tokens. */
+export interface BinancePaperAttention {
+  readonly kind: 'paper-trade' | 'paper-error' | 'paper-risk-review'
+  readonly symbol: string
+  readonly detail: string
+}
+
 /** Settings saved separately from the virtual portfolio; never contains credentials. */
 export interface BinancePaperAutomationConfig {
   readonly schema: 1
@@ -46,9 +53,9 @@ export function binancePaperAutomationConfig(input: {
   pollMs?: number
 }, enabled = true): BinancePaperAutomationConfig {
   const symbols = input.symbols.map(item => item.trim().toUpperCase())
-  if (symbols.length < 1 || symbols.length > 5 || new Set(symbols).size !== symbols.length
+  if (symbols.length < 1 || symbols.length > 12 || new Set(symbols).size !== symbols.length
     || symbols.some(symbol => !/^[A-Z0-9]{3,16}USDT$/u.test(symbol))) {
-    throw new Error('Trading watchlist must contain 1-5 unique Spot USDT symbols')
+    throw new Error('Trading watchlist must contain 1-12 unique Spot USDT symbols')
   }
   const interval = input.interval ?? '15m'
   if (!['15m', '1h', '4h', '1d'].includes(interval)) throw new Error('Unsupported paper trading interval')
@@ -71,9 +78,24 @@ export class BinancePaperAutomation {
   private nextCheckAt: string | undefined
   private loaded = false
   private failures = 0
+  private attentionSink: ((event: BinancePaperAttention) => void) | undefined
+  private lastReviewKey: string | undefined
+  private lastReviewAt = 0
   private change: Promise<void> = Promise.resolve()
 
   constructor(readonly broker: BinancePaperBroker, private readonly settingsPath: string) {}
+
+  /**
+   * Attach a Host-owned event sink; event delivery never changes trade execution.
+   * @param sink - Process-local callback for meaningful PAPER outcomes.
+   */
+  setAttentionSink(sink: ((event: BinancePaperAttention) => void) | undefined): void {
+    this.attentionSink = sink
+  }
+
+  private reportAttention(event: BinancePaperAttention): void {
+    try { this.attentionSink?.(event) } catch { /* Notifications never block ledger writes. */ }
+  }
 
   private async persist(config: BinancePaperAutomationConfig): Promise<void> {
     await mkdir(dirname(this.settingsPath), { recursive: true, mode: 0o700 })
@@ -192,6 +214,25 @@ export class BinancePaperAutomation {
         this.lastSuccessAt = new Date().toISOString()
         this.lastError = undefined
         this.failures = 0
+        if (cycle.trade !== undefined) {
+          this.reportAttention({
+            kind: 'paper-trade', symbol: cycle.trade.symbol,
+            detail: `${cycle.trade.side} virtual confirmado por ledger; ${cycle.rationale}`,
+          })
+        } else {
+          const review = cycle.signals.find(signal => signal.action === 'buy' && signal.score >= 80)
+          if (review !== undefined) {
+            const key = `${review.symbol}:${review.strategy}`
+            if (key !== this.lastReviewKey || Date.now() - this.lastReviewAt > 1_800_000) {
+              this.lastReviewKey = key
+              this.lastReviewAt = Date.now()
+              this.reportAttention({
+                kind: 'paper-risk-review', symbol: review.symbol,
+                detail: 'Entrada potencial bloqueada o no ejecutada; revisar límites y exposición virtual',
+              })
+            }
+          }
+        }
       } catch {
         // Provider text can contain remote diagnostic details; do not reveal it in chat.
         this.lastError = 'Public Binance data or virtual execution failed; no order confirmed'
@@ -202,6 +243,10 @@ export class BinancePaperAutomation {
           this.timer = undefined
           this.nextCheckAt = undefined
           await this.persist(this.config)
+          this.reportAttention({
+            kind: 'paper-error', symbol: this.config.symbols[0] ?? 'BTCUSDT',
+            detail: 'Tres fallos de datos o ejecución PAPER; motor pausado de forma segura',
+          })
         }
       }
     })()

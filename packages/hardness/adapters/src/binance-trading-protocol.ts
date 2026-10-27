@@ -8,6 +8,7 @@ Binance is an optional, on-demand connector. Keep it dormant unless the user's t
 - Kira asks, in Spanish, "¿Quieres Trading Testing o Real?" unless the mode is clearly specified.
 - If Testing, ask whether to use local PAPER simulation or Binance Spot Testnet.
 - Testing Spot Testnet uses separate credentials and its own fake-funds exchange, NOT the Agentic MCP.
+- Spot Testnet can be connected from the secure Testnet form inside the Phoenix PAPER viewer; verify and save only dedicated fake-fund keys into the Host credential vault. Never ask for keys in chat, never use production keys for Testnet.
 - Use binance_trading_activate with mode=paper ONLY after the user chooses PAPER.
 - Paper mode uses only public Binance market data plus PHOENIX's local virtual ledger. It has no Binance account credentials and cannot move real funds.
 - binance_paper_order is ALWAYS virtual. Never describe a paper fill as a real Binance order.
@@ -34,10 +35,13 @@ Binance is an optional, on-demand connector. Keep it dormant unless the user's t
 
 4. Autonomy is scheduled/event-driven, not an always-awake LLM.
 - Use binance_adaptive_cycle to evaluate a bounded Spot USDT watchlist. Scan does not trade; paper-step may execute one VIRTUAL, risk-limited action.
+- For automated PAPER, accept up to 12 user-selected USDT pairs; all are evaluated independently on fresh verified candles. Default conservatively to BTCUSDT, ETHUSDT and SOLUSDT when no explicit watchlist was provided. A missing pair must show HOLD, not a fabricated price.
+- Kira can supervise through a durable Phoenix wake trigger, created on explicitly requested chat-initiated PAPER automation; significant virtual fills, high-scored blocked entries or circuit-breaker errors can wake Kira for a bounded review, not on every candle. A browser-only start without an originating Kira session is not equivalent to an agent subscription.
 - When the user explicitly requests automated PAPER trading, binance_paper_auto starts or stops the Host-side virtual executor; its interval checks do not call an LLM.
 - If the user requests to SEE Kira operate automatically in PAPER, call binance_paper_auto action=start with requestedByUser=true and a small explicit Spot USDT watchlist, then binance_paper_dashboard. Do not substitute a static illustration or demand a manual buy order when the user requested autonomous strategy-driven virtual trades.
 - Starting PAPER must await the first evaluated cycle. If it holds rather than buys, report the exact current decision, conditions and first/next check; never manufacture a transaction to make the display look active.
 - If Spot Testnet lacks credentials, report this precisely and offer local PAPER as a separate opt-in route without asking for API secrets in the chat. Do not silently switch modes.
+- When Testnet is missing credentials, direct the user to the Host-only Testnet configuration section in the in-chat viewer. Do not simply tell them to edit environment variables if secure setup is available. Testnet trading requires a verified simulated account and per-order authorization.
 - Use binance_paper_dashboard to show verified ledger balances and fills in Phoenix's native in-chat viewer. Its controls are PAPER-only; never confuse this with Spot Testnet or the funded Agentic account.
 - A signal is not a fill. Only the virtual ledger counts a PAPER trade and only a provider-confirmed receipt counts a real trade.
 - For repeated paper experiments, use PHOENIX durable scheduling/wake capabilities rather than keeping a model running continuously.

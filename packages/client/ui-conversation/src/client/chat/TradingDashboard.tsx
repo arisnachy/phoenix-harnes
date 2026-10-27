@@ -8,6 +8,22 @@ type Props = {
 }
 const ENDPOINT = '/phoenix-trading/paper/dashboard'
 const REFRESH_MS = 10_000
+type TestnetState = {
+  mode: 'testnet'
+  configured: boolean
+  connected: boolean
+  canTrade: boolean
+  nextAction: string
+}
+type McpState = {
+  configured: boolean
+  connected: boolean
+  status: string
+  toolCount: number
+  tradeScopeVerified: boolean
+  accountVerified: boolean
+  nextAction: string
+}
 
 function amount(value: number, maximumFractionDigits = 2): string {
   return new Intl.NumberFormat('es-DO', { minimumFractionDigits: 2, maximumFractionDigits }).format(value)
@@ -30,6 +46,15 @@ export function TradingDashboard({ initial }: Props) {
   const [refreshKey, setRefreshKey] = useState(0)
   const [controlBusy, setControlBusy] = useState(false)
   const [controlError, setControlError] = useState<string | undefined>()
+  // A user can configure a multi-asset PAPER watchlist without spending tokens.
+  const [watchlistDraft, setWatchlistDraft] = useState<string | undefined>()
+  const [testnetState, setTestnetState] = useState<TestnetState | undefined>()
+  const [mcpState, setMcpState] = useState<McpState | undefined>()
+  const [connectionIssue, setConnectionIssue] = useState<string | undefined>()
+  const [credentialOpen, setCredentialOpen] = useState(false)
+  const [testingKey, setTestingKey] = useState('')
+  const [testingSecret, setTestingSecret] = useState('')
+  const [connectionBusy, setConnectionBusy] = useState(false)
   useEffect(() => {
     let mounted = true
     let controller: AbortController | undefined
@@ -58,6 +83,77 @@ export function TradingDashboard({ initial }: Props) {
     return () => { mounted = false; controller?.abort(); clearInterval(timer) }
   }, [refreshKey])
 
+  async function checkConnections(): Promise<void> {
+    if (connectionBusy) return
+    setConnectionBusy(true)
+    setConnectionIssue(undefined)
+    try {
+      const [testReply, mcpReply] = await Promise.all([
+        fetch('/phoenix-trading/paper/testnet-status', { credentials: 'same-origin', cache: 'no-store' }),
+        fetch('/phoenix-trading/paper/mcp-status', { credentials: 'same-origin', cache: 'no-store' }),
+      ])
+      if (!testReply.ok || !mcpReply.ok) throw new Error('Host connection status unavailable')
+      const testing = await testReply.json() as TestnetState
+      const agentic = await mcpReply.json() as McpState
+      if (testing.mode !== 'testnet' || typeof testing.connected !== 'boolean'
+        || typeof agentic.connected !== 'boolean' || typeof agentic.toolCount !== 'number') {
+        throw new Error('Invalid provider status')
+      }
+      setTestnetState(testing)
+      setMcpState(agentic)
+    } catch {
+      setConnectionIssue('No fue posible verificar Binance desde este Host.')
+    } finally {
+      setConnectionBusy(false)
+    }
+  }
+
+  async function reconnectAgentic(): Promise<void> {
+    if (connectionBusy) return
+    setConnectionBusy(true)
+    setConnectionIssue(undefined)
+    try {
+      const reply = await fetch('/phoenix-trading/paper/mcp-reconnect', {
+        method: 'POST', cache: 'no-store', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' }, body: '{}',
+      })
+      if (!reply.ok) throw new Error('MCP reconnect unavailable')
+      setMcpState(undefined) // Do not report connected until next live tool inventory.
+    } catch {
+      setConnectionIssue('No se pudo reconectar Binance MCP. Usa Configuración > Conectores > Binance para OAuth.')
+    } finally {
+      setConnectionBusy(false)
+    }
+  }
+
+  async function saveTestnetCredentials(): Promise<void> {
+    if (connectionBusy || testingKey.length < 12 || testingSecret.length < 12) {
+      setConnectionIssue('Introduce una clave y secreto exclusivos de Spot Testnet.')
+      return
+    }
+    setConnectionBusy(true)
+    setConnectionIssue(undefined)
+    try {
+      const response = await fetch('/phoenix-trading/paper/testnet-connect', {
+        method: 'POST', credentials: 'same-origin', cache: 'no-store',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey: testingKey, secret: testingSecret }),
+      })
+      if (!response.ok) throw new Error('Testnet credential verification rejected')
+      const value = await response.json() as TestnetState
+      if (value.mode !== 'testnet' || value.connected !== true) throw new Error('Testnet not verified')
+      setTestnetState(value)
+      setCredentialOpen(false)
+    } catch {
+      setConnectionIssue('Testnet no pudo autenticar o guardar las claves. Revisa la cuenta de prueba y el Host.')
+    } finally {
+      // Never persist private keys in the browser's chart state or model context.
+      setTestingKey('')
+      setTestingSecret('')
+      setConnectionBusy(false)
+    }
+  }
+
   if (state === undefined) {
     return (
       <section className={css.panel} data-trading-mode="paper" aria-label="Visor de trading Binance PAPER">
@@ -76,8 +172,16 @@ export function TradingDashboard({ initial }: Props) {
     setControlBusy(true)
     setControlError(undefined)
     try {
+      const watchlist = (watchlistDraft ?? state.settings.symbols.join(','))
+        .split(/[,\s]+/u).map(item => item.trim().toUpperCase()).filter(Boolean)
+      if (action === 'start' && (watchlist.length < 1 || watchlist.length > 12
+        || new Set(watchlist).size !== watchlist.length
+        || watchlist.some(item => !/^[A-Z0-9]{3,16}USDT$/u.test(item)))) {
+        setControlError('Selecciona entre 1 y 12 pares Spot USDT únicos, separados por coma.')
+        return
+      }
       const payload = action === 'start'
-        ? { action, symbols: [...state.settings.symbols], interval: state.settings.interval,
+        ? { action, symbols: watchlist, interval: state.settings.interval,
           pollMinutes: state.settings.pollMs / 60_000 }
         : { action }
       const response = await fetch('/phoenix-trading/paper/control', {
@@ -89,6 +193,7 @@ export function TradingDashboard({ initial }: Props) {
       const valid = parseTradingDashboard(updated)
       if (valid === undefined) throw new Error('Invalid PAPER control reply')
       setState(valid)
+      if (action === 'start') setWatchlistDraft(undefined)
       setConnection('connected')
       setRefreshKey(current => current + 1)
     } catch {
@@ -129,8 +234,8 @@ export function TradingDashboard({ initial }: Props) {
       </div>
       <div className={css.toolbar}>
         <div>
-          <strong>Estrategias activas</strong>
-          <small>{settings.symbols.join(' · ')} · {settings.interval} · Revisión cada {settings.pollMs / 60_000} min</small>
+          <strong>Escáner multimoneda · {settings.symbols.length} pares configurados</strong>
+          <small>{settings.interval} · Revisión cada {settings.pollMs / 60_000} min mientras el Host esté activo</small>
         </div>
         <div className={css.actions}>
           <button type="button" disabled={controlBusy} onClick={() => { setRefreshKey(current => current + 1) }}>Actualizar</button>
@@ -141,7 +246,62 @@ export function TradingDashboard({ initial }: Props) {
                 onClick={() => { void control('start') }}>Iniciar PAPER</button>}
         </div>
       </div>
+      <div className={css.tradingRadarMeta} aria-live="polite">
+        <strong>{running ? 'Radar encendido' : 'Radar detenido'}</strong>
+        <span>Último análisis: {clock(state.lastSuccessAt)}</span>
+        <span>Resultado: {state.lastDecision === 'buy' ? 'Compra PAPER' : state.lastDecision === 'sell' ? 'Venta PAPER' : 'Esperar / sin señal'}</span>
+        <span>{state.signals.length} de {settings.symbols.length} pares evaluados</span>
+      </div>
+      <label className={css.watchlist}>
+        <span>Mercados vigilados (1–12 pares USDT, separados por coma)</span>
+        <input type="text" spellCheck={false} aria-label="Lista de mercados PAPER"
+          disabled={running || controlBusy}
+          value={watchlistDraft ?? settings.symbols.join(', ')}
+          onChange={event => { setWatchlistDraft(event.currentTarget.value) }}
+          placeholder="BTCUSDT, ETHUSDT, SOLUSDT, BNBUSDT" />
+      </label>
       <TradingMarketChart symbols={settings.symbols} trades={state.recentTrades} />
+      <section className={css.connectionPanel} aria-label="Conexiones a Binance">
+        <header className={css.connectionHeading}>
+          <div><strong>Conexiones Binance</strong>
+            <small>PAPER, Spot Testnet y Agentic REAL son cuentas y ejecuciones distintas.</small></div>
+          <button type="button" disabled={connectionBusy} onClick={() => { void checkConnections() }}>
+            Verificar conexiones
+          </button>
+        </header>
+        <div className={css.connectionGrid}>
+          <div className={css.connectionItem}>
+            <strong>Spot Testnet · fondos ficticios</strong>
+            <span>{testnetState === undefined ? 'Estado pendiente de comprobar'
+              : testnetState.connected ? testnetState.canTrade ? 'Autenticado · órdenes de prueba habilitadas' : 'Autenticado · sin permiso de operar'
+                : testnetState.configured ? 'Configurado · conexión fallida' : 'Sin credenciales de prueba'}</span>
+            <small>{testnetState?.nextAction ?? 'Necesita claves exclusivas de Binance Spot Testnet.'}</small>
+            <button type="button" disabled={connectionBusy} onClick={() => { setCredentialOpen(open => !open) }}>
+              {credentialOpen ? 'Cerrar configuración' : 'Configurar Testnet'}
+            </button>
+          </div>
+          <div className={css.connectionItem}>
+            <strong>Agentic MCP · subcuenta REAL</strong>
+            <span>{mcpState === undefined ? 'Estado pendiente de comprobar'
+              : mcpState.connected ? 'MCP conectado · permiso de trading aún no verificado'
+                : mcpState.status === 'auth-required' ? 'Pendiente OAuth de Binance' : 'MCP sin conexión verificada'}</span>
+            <small>{mcpState?.nextAction ?? 'Autorización OAuth desde Configuración > Conectores > Binance.'}</small>
+            <button type="button" disabled={connectionBusy || mcpState?.configured !== true}
+              onClick={() => { void reconnectAgentic() }}>Reconectar MCP</button>
+            <span>Operaciones reales: confirmación individual en Binance.</span>
+          </div>
+        </div>
+        {credentialOpen && <div className={css.credentialForm}>
+          <strong>Guardar claves exclusivas de Spot Testnet</strong>
+          <small>Solo se envían directamente al Host para verificar la cuenta ficticia y guardarlas en su bóveda. Nunca uses claves reales.</small>
+          <input type="password" aria-label="Clave API de Spot Testnet" autoComplete="off"
+            placeholder="Testnet API key" value={testingKey} onChange={event => { setTestingKey(event.currentTarget.value) }} />
+          <input type="password" aria-label="Secreto API de Spot Testnet" autoComplete="off"
+            placeholder="Testnet API secret" value={testingSecret} onChange={event => { setTestingSecret(event.currentTarget.value) }} />
+          <button type="button" disabled={connectionBusy} onClick={() => { void saveTestnetCredentials() }}>Verificar y guardar Testnet</button>
+        </div>}
+        {connectionIssue && <p role="alert" className={css.connectionError}>{connectionIssue}</p>}
+      </section>
       <div className={css.twoColumns}>
         <section className={css.section}>
           <h4>Radar de estrategias</h4>
@@ -149,7 +309,8 @@ export function TradingDashboard({ initial }: Props) {
             : <div className={css.rows}>
               {state.signals.map(signal => (
                 <div key={signal.symbol} className={css.row}>
-                  <div><strong>{signal.symbol}</strong><small>{signal.strategy} · {signal.regime}</small></div>
+                  <div><strong>{signal.symbol}</strong><small>{signal.strategy} · {signal.regime}</small>
+                    <span className={css.tradingReason}>{signal.reason}</span></div>
                   <span data-signal={signal.action}>
                     {signal.action === 'buy' ? 'COMPRAR' : signal.action === 'sell' ? 'VENDER' : 'ESPERAR'}
                   </span>
@@ -192,6 +353,10 @@ export function TradingDashboard({ initial }: Props) {
             ))}
           </div>}
       </section>
+      <p className={css.tradingNotice}>
+        Kira supervisa cuando recibe un evento o una petición; el escáner PAPER funciona en el Host sin mantener un modelo de IA ejecutándose por cada vela.
+        Las señales no son órdenes y nunca se atribuyen a la cuenta real de Binance.
+      </p>
       <div className={css.footer} aria-live="polite">
         <span>Última comprobación: {clock(state.lastAttemptAt)}</span>
         <span>Próximo ciclo: {running ? clock(state.nextCheckAt) : 'Sin programación'}</span>
