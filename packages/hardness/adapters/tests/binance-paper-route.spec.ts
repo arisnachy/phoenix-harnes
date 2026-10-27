@@ -122,6 +122,10 @@ describe('Binance chat viewer HTTP integration', () => {
       configured: true, connected: true, toolCount: 1,
       tradeScopeVerified: false, accountVerified: false,
     })
+    const rejected = await fetch(origin + '/phoenix-trading/paper/mcp-reconnect', {
+      method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' }, body: '{}',
+    })
+    expect(rejected.status).toBe(409)
   })
 
   it('validates keys only against Spot Testnet and never echoes or logs secrets', async () => {
