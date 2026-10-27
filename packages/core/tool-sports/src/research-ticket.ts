@@ -185,6 +185,7 @@ export async function autoResearchTicket(
   fetcher:typeof fetch=fetch,
   now=Date.now(),
   env:NodeJS.ProcessEnv=process.env,
+  allowedLeagues?:readonly string[],
 ):Promise<{ card:ChatBlock;verifiedEvents:number;priced:false;placed:false;complete:boolean }> {
   if(!hasSportsPermission('espn',env))throw Error('ESPN deshabilitado por configuración del operador')
   if(!validDay(requestedDate))throw Error('Fecha de ticket inválida (AAAA-MM-DD)')
@@ -197,7 +198,8 @@ export async function autoResearchTicket(
   ] as const
   const boards=new Map<string,EspnBoard>()
   const candidates:Array<{leg:ResearchTicketLeg;edge:number}>=[]
-  const jobs=await Promise.allSettled(leagues.map(async([sport,league])=>{
+  const scheduled=allowedLeagues?.length?leagues.filter(([,league])=>allowedLeagues.includes(league)):leagues
+  const jobs=await Promise.allSettled(scheduled.map(async([sport,league])=>{
     const url='https://site.api.espn.com/apis/site/v2/sports/'+sport+'/'+league+
       '/scoreboard?dates='+requestedDate.replaceAll('-','')
     const board=await getFeed<EspnBoard>(url,fetcher)
