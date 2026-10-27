@@ -3,6 +3,8 @@ import type { Message } from '@phoenix-ai/dsh-llm'
 
 export interface TokenInputInventory {
   readonly systemChars: number
+  /** SDK declarations included in the system prompt rather than wire tools. */
+  readonly codeSdkChars: number
   readonly schemaChars: number
   readonly historyChars: number
   readonly humanChars: number
@@ -44,8 +46,15 @@ export function tokenInputInventory(
   }
   const schemaChars = tools.reduce<number>((sum, schema) => sum + JSON.stringify(schema).length, 0)
   const historyChars = humanChars + assistantChars + toolResultChars + runtimeContextChars + otherHistoryChars
+  // The Code Mode SDK is appended at the end of the system prompt. Attribute
+  // its rendered declarations separately so a large tool catalog does not
+  // masquerade as permanent behavioral instructions in Telemetry.
+  const sdkMarker = '\\n\\n## Writing code for run_code'
+  const sdkStart = system.lastIndexOf(sdkMarker)
+  const codeSdkChars = sdkStart < 0 ? 0 : system.length - sdkStart - 2
   return {
     systemChars: system.length,
+    codeSdkChars,
     schemaChars,
     historyChars,
     humanChars,
