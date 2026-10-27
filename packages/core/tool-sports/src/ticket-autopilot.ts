@@ -6,7 +6,6 @@ import {autoResearchTicket} from './research-ticket.ts'
 import {marketOdds,pricedTicket,type ChatBlock,type MarketOutcome,type MarketSelection} from './sports.ts'
 
 const DEFAULT_SPORTS=['basketball_nba','americanfootball_nfl','soccer_epl','baseball_mlb'] as const
-const bookmakerIdentity=(value:string):string=>value.trim().toLocaleLowerCase('en-US')
 const validDay=(value:string):boolean=>/^\d{4}-\d{2}-\d{2}$/u.test(value)
   &&Number.isFinite(Date.parse(value+'T00:00:00Z'))
   &&new Date(value+'T00:00:00Z').toISOString().slice(0,10)===value
@@ -40,25 +39,29 @@ type ResearchFallback=(count:number,date:string)=>Promise<{
 type OddsLookup=(sportKey:string,date:string)=>Promise<MarketOutcome[]>
 /** Choose only one favorite for each real event/bookmaker; never mix bookmakers. */
 export function rankMarketFavorites(quotes:readonly MarketOutcome[],count:number,now=Date.now()):BookCandidate[]{
-  const books=new Map<string,Map<string,Candidate>>()
+  const books=new Map<string,Map<string,MarketOutcome[]>>()
   for(const quote of quotes){
     if(!validQuote(quote,now))continue
-    const house=bookmakerIdentity(quote.bookmaker)
+    const house=quote.bookmaker
     const event=(quote.sportKey??'')+'|'+quote.eventId
-    const book=books.get(house)??new Map<string,Candidate>()
-    const previous=book.get(event)
-    if(!previous||quote.price<previous.quote.price){
-      book.set(event,{
-        quote,
-        selection:{eventId:quote.eventId,bookmaker:quote.bookmaker,market:'h2h',
-          selection:quote.selection,point:quote.point??null},
-      })
-    }
+    const book=books.get(house)??new Map<string,MarketOutcome[]>()
+    book.set(event,[...(book.get(event)??[]),quote])
     books.set(house,book)
   }
   const ranked=[...books].map(([,events])=>{
-    const legs=[...events.values()].sort((a,b)=>a.quote.price-b.quote.price)
-      .slice(0,count)
+    const legs=[...events.values()].flatMap(outcomes=>{
+      // Do not name a selection the market favorite until at least two
+      // distinct outcomes from the SAME bookmaker are publicly available.
+      const choices=new Set(outcomes.map(x=>x.selection))
+      if(choices.size<2)return []
+      const quote=[...outcomes].sort((a,b)=>a.price-b.price)[0]
+      if(!quote)return []
+      return [{
+        quote,
+        selection:{eventId:quote.eventId,bookmaker:quote.bookmaker,market:'h2h',
+          selection:quote.selection,point:quote.point??null},
+      }]
+    }).sort((a,b)=>a.quote.price-b.quote.price).slice(0,count)
     return {
       bookmaker:legs[0]?.quote.bookmaker??'',
       legs,
@@ -101,7 +104,15 @@ export async function buildAutomaticSportsTicket(
     // All legs must be observed in one sportsbook. Moneylines are descriptive
     // market favorites and do not imply positive expected value.
     const picks=group.legs.map(x=>x.selection)
-    const {card,warning}=pricedTicket(picks,quotes,stake)
+    const uniqueQuotes=new Map<string,MarketOutcome>()
+    for(const quote of quotes){
+      const key=[quote.sportKey??'',quote.eventId,quote.bookmaker,quote.market,
+        quote.selection,quote.point??''].join('|')
+      const prior=uniqueQuotes.get(key)
+      if(!prior||Date.parse(quote.updatedAt)>Date.parse(prior.updatedAt))
+        uniqueQuotes.set(key,quote)
+    }
+    const {card,warning}=pricedTicket(picks,[...uniqueQuotes.values()],stake)
     const props=card.props
     const current=Array.isArray(props.legs)?props.legs as Array<Record<string,unknown>>:[]
     props.legs=current.map((leg,index)=>({
