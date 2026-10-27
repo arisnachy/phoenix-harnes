@@ -20,6 +20,7 @@ describe('privacy-safe token input audit', () => {
       { name: 'read', description: 'File read tool', parameters: {} },
     ], messages)
     expect(inventory.systemChars).toBe('system instruction'.length)
+    expect(inventory.systemSdkChars).toBe(0)
     expect(inventory.toolCount).toBe(1)
     expect(inventory.messageCount).toBe(3)
     expect(inventory.humanChars).toBeGreaterThan(0)
@@ -31,5 +32,14 @@ describe('privacy-safe token input audit', () => {
     )
     expect(inventory.approximateInputTokens).toBeGreaterThan(0)
     expect(JSON.stringify(inventory)).not.toContain(secret)
+  })
+  it('accounts for Code Mode SDK inside system without double-counting total size', () => {
+    const system = 'Stable policy\n\nSDK tool declarations'
+    const sdk = 'SDK tool declarations'
+    const inventory = tokenInputInventory(system, [], [], sdk.length + 2)
+    expect(inventory.systemSdkChars).toBe(sdk.length + 2)
+    expect(inventory.systemChars - inventory.systemSdkChars).toBe('Stable policy'.length)
+    expect(inventory.approximateInputTokens).toBe(Math.ceil(system.length / 4))
+    expect(tokenInputInventory('a', [], [], 100).systemSdkChars).toBe(1)
   })
 })

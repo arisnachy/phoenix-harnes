@@ -36,12 +36,12 @@ import type { Scope } from '@phoenix-ai/dsh-scope'
 import { createScope } from '@phoenix-ai/dsh-scope'
 import type { EpochHeader, RequestContext, Session, SessionId, TurnEndReason, UserMessage } from '@phoenix-ai/dsh-session'
 import { canonicalHeader, headerEquals } from '@phoenix-ai/dsh-session'
-import { joinContextSections, renderCacheFriendlyPrompt, renderContextSections } from '@phoenix-ai/dsh-system-prompt'
+import { joinContextSections, renderCacheFriendlyPrompt, renderContextSections, renderPrompt } from '@phoenix-ai/dsh-system-prompt'
 import type { PromptAssembly } from '@phoenix-ai/dsh-system-prompt'
 import type { Context } from '@phoenix-ai/cordis'
 import { projectRequestHistory } from './request-history.ts'
 import { tokenInputInventory } from './token-audit.ts'
-import { SystemPrefixObserver } from './cache-prefix.ts'
+import { SystemPrefixObserver, SystemSectionObserver } from './cache-prefix.ts'
 import { randomUUID } from 'node:crypto'
 import type { EventEmitter } from 'node:events'
 import { RuntimeContextProjection } from './runtime-context.ts'
@@ -51,6 +51,7 @@ import { isExplicitUserStop } from './user-stop.ts'
 
 // Provider-side caching is automatic; track repeatable prefixes without retaining text.
 const systemPrefixObserver = new SystemPrefixObserver()
+const systemSectionObserver = new SystemSectionObserver()
 
 type Phase =
   | { kind: 'idle'; lastTurn: number }
@@ -552,13 +553,26 @@ export class ReactLoopAgent implements Agent {
     const { turn, step, abort: { signal } } = this.phase
     signal.throwIfAborted()
     const system = renderCacheFriendlyPrompt(assembly)
+    // SDK signatures are emitted at the end of system instructions. Attribute
+    // their rendered size to tools in telemetry, not to Kira's stable policy.
+    const sdkSection = assembly.sections.find(section => section.name === 'tools:sdk')
+    const orderedSections = sdkSection === undefined
+      ? assembly.sections
+      : [...assembly.sections.filter(section => section.name !== 'tools:sdk'), sdkSection]
+    const renderedSections = orderedSections.map(section => ({
+      name: section.name,
+      text: renderPrompt({ ...assembly, sections: [section] }),
+    }))
+    const sdkText = renderedSections.find(section => section.name === 'tools:sdk')?.text ?? ''
+    const systemSdkChars = sdkText.length === 0 ? 0
+      : sdkText.length + (system.length > sdkText.length ? 2 : 0)
 
     while (true) {
       const derived = this.session.deriveMessages()
       const boundaryMessages = projectRequestHistory(derived, this.session.events.findLast(event => event.type === 'step/start')?.data.historyProjection)
       const auditId = randomUUID()
       const { request, preparedCall } = await this.buildRequest(
-        turn, step, assembly.tools, system, boundaryMessages, signal, auditId,
+        turn, step, assembly.tools, system, boundaryMessages, signal, auditId, systemSdkChars, renderedSections,
       )
       const assembler = new BlockAssembler()
       const chunkSeqs: number[] = []
@@ -698,6 +712,8 @@ export class ReactLoopAgent implements Agent {
     boundaryMessages: Message[],
     signal: AbortSignal,
     auditId: string,
+    systemSdkChars: number,
+    renderedSections: readonly { readonly name: string, readonly text: string }[],
   ): Promise<{ request: GenerateOptions; preparedCall?: PreparedLlmCall }> {
     const { session } = this
 
@@ -779,8 +795,9 @@ export class ReactLoopAgent implements Agent {
       sessionId: this.session.id,
       signal,
     }))
-    const auditInput = tokenInputInventory(system, tools, boundaryMessages)
-    const reusedSystemPrefixChars = systemPrefixObserver.observe(config.provider, config.model, system)
+    const auditInput = tokenInputInventory(system, tools, boundaryMessages, systemSdkChars)
+    const prefixObservation = systemPrefixObserver.observeWithStatus(config.provider, config.model, system)
+    const changedSystemSection = systemSectionObserver.observe(config.provider, config.model, renderedSections)
     const telemetryEvents: EventEmitter = process
     telemetryEvents.emit('phoenix:telemetry:input', {
       id: auditId,
@@ -789,7 +806,9 @@ export class ReactLoopAgent implements Agent {
       model: config.model,
       reasoningEffort: config.reasoningEffort,
       ...auditInput,
-      reusedSystemPrefixChars,
+      prefixComparison: prefixObservation.comparable ? 'compared' : 'baseline',
+      ...changedSystemSection === undefined ? {} : { firstChangedSystemSection: changedSystemSection },
+      ...prefixObservation.comparable ? { reusedSystemPrefixChars: prefixObservation.reusedChars } : {},
     })
     if (process.env.PHOENIX_TOKEN_AUDIT === '1') {
       console.info('[PHOENIX TOKEN INPUT] ' + JSON.stringify({
@@ -799,7 +818,9 @@ export class ReactLoopAgent implements Agent {
         model: config.model,
         reasoningEffort: config.reasoningEffort,
         ...auditInput,
-      reusedSystemPrefixChars,
+        prefixComparison: prefixObservation.comparable ? 'compared' : 'baseline',
+        ...changedSystemSection === undefined ? {} : { firstChangedSystemSection: changedSystemSection },
+        ...prefixObservation.comparable ? { reusedSystemPrefixChars: prefixObservation.reusedChars } : {},
       }))
     }
     return { request, ...preparedCall === undefined ? {} : { preparedCall } }

@@ -35,6 +35,14 @@ function parseInput(raw: unknown): InputPayload | undefined {
   const metrics = Object.fromEntries(METRICS.map(key => [key, count(input[key])]))
   return {
     ...metrics,
+    ...input.systemSdkChars === undefined ? {} : {
+      systemSdkChars: Math.min(count(input.systemChars), count(input.systemSdkChars)),
+    },
+    ...input.firstChangedSystemSection === undefined ? {} : {
+      firstChangedSystemSection: name(input.firstChangedSystemSection),
+    },
+    ...input.prefixComparison === 'baseline' || input.prefixComparison === 'compared'
+      ? { prefixComparison: input.prefixComparison } : {},
     ...input.reusedSystemPrefixChars === undefined ? {}
       : { reusedSystemPrefixChars: count(input.reusedSystemPrefixChars) },
     id: input.id,

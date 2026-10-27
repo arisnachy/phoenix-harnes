@@ -3,6 +3,8 @@ import type { Message } from '@phoenix-ai/dsh-llm'
 
 export interface TokenInputInventory {
   readonly systemChars: number
+  /** Code Mode tool SDK already included in systemChars, for exclusive UI attribution. */
+  readonly systemSdkChars: number
   readonly schemaChars: number
   readonly historyChars: number
   readonly humanChars: number
@@ -27,6 +29,7 @@ export function tokenInputInventory(
   system: string,
   tools: readonly unknown[],
   messages: readonly Message[],
+  systemSdkChars = 0,
 ): TokenInputInventory {
   let humanChars = 0
   let assistantChars = 0
@@ -46,6 +49,7 @@ export function tokenInputInventory(
   const historyChars = humanChars + assistantChars + toolResultChars + runtimeContextChars + otherHistoryChars
   return {
     systemChars: system.length,
+    systemSdkChars: Math.min(system.length, Math.max(0, systemSdkChars)),
     schemaChars,
     historyChars,
     humanChars,

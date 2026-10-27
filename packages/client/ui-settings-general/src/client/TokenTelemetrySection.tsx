@@ -95,15 +95,29 @@ export function TokenTelemetrySection({
   const outputTokens = completed.reduce((sum, record) => sum + (record.outputTokens ?? 0), 0)
   const cacheReported = completed.filter(record => record.cacheReadTokens !== undefined)
   const cacheTokens = cacheReported.reduce((sum, record) => sum + (record.cacheReadTokens ?? 0), 0)
-  const prefixSamples = selected.filter(record => record.reusedSystemPrefixChars !== undefined)
+  // Pre-fix legacy zeros cannot be distinguished from first-after-restart.
+  // Do not misrepresent those unknown comparisons as confirmed 0% stability.
+  const legacyUnknownCount = selected.filter(record =>
+    record.prefixComparison === undefined && record.reusedSystemPrefixChars === 0).length
+  const baselineCount = selected.filter(record => record.prefixComparison === 'baseline').length
+  const recentChangedSection = selected.find(record => record.firstChangedSystemSection)?.firstChangedSystemSection
+  const prefixSamples = selected.filter(record => record.reusedSystemPrefixChars !== undefined
+    && (record.prefixComparison === 'compared'
+      || (record.prefixComparison === undefined && record.reusedSystemPrefixChars > 0)))
   const systemChars = prefixSamples.reduce((sum, record) => sum + record.systemChars, 0)
   const reusedPrefixChars = prefixSamples.reduce((sum, record) => sum + (record.reusedSystemPrefixChars ?? 0), 0)
   const prefixReusePercent = systemChars > 0 ? number(reusedPrefixChars / systemChars * 100) : undefined
   const reasoningTokens = completed.reduce((sum, record) => sum + (record.reasoningTokens ?? 0), 0)
   const contributions: Contribution[] = COMPONENT_KEYS.map(([key, property]) => ({
-    key, size: selected.reduce((sum, record) => sum + record[property], 0),
+    key, size: selected.reduce((sum, record) => {
+      const sdk = Math.min(record.systemChars, record.systemSdkChars ?? 0)
+      if (property === 'systemChars') return sum + record.systemChars - sdk
+      if (property === 'schemaChars') return sum + record.schemaChars + sdk
+      return sum + record[property]
+    }, 0),
   })).sort((a, b) => b.size - a.size)
   const totalChars = contributions.reduce((sum, item) => sum + item.size, 0)
+  const legacySdkUnknown = selected.some(record => record.systemSdkChars === undefined)
   const models = useMemo(() => {
     const grouped = new Map<string, { calls: number; input: number; output: number }>()
     for (const item of selected) {
@@ -186,12 +200,22 @@ export function TokenTelemetrySection({
             : `${prefixReusePercent}% ${t('telemetry.cachePrefixReused')}`}
         </p>
         <p className={css.note}>{t('telemetry.cachePrefixExplainer')}</p>
+        {recentChangedSection ? (
+          <p className={css.note}>{t('telemetry.cachePrefixChangedSection')}: <code>{recentChangedSection}</code></p>
+        ) : null}
+        {baselineCount > 0 ? (
+          <p className={css.note}>{baselineCount} {t('telemetry.cachePrefixBaseline')}</p>
+        ) : null}
+        {legacyUnknownCount > 0 ? (
+          <p className={css.note}>{legacyUnknownCount} {t('telemetry.cachePrefixLegacyUnknown')}</p>
+        ) : null}
         {completed.length > 0 && cacheReported.length === 0
           ? <p className={css.notice}>{t('telemetry.cacheUnknown')}</p>
           : null}
       </div>
       <div className={css.panel}>
         <h3>{t('telemetry.breakdown')}</h3>
+        {legacySdkUnknown ? <p className={css.note}>{t('telemetry.sdkLegacyUnknown')}</p> : null}
         {selected.length === 0 ? <p className={css.notice}>{t('telemetry.empty')}</p> : (
           <>
             {contributions.map(item => (

@@ -31,14 +31,14 @@ describe('Settings → Telemetría', () => {
 
     fireEvent.click(checkbox)
     await waitFor(() => { expect(setTelemetry).toHaveBeenCalledWith(true) })
-    await waitFor(() => { expect((screen.getByRole('checkbox') as HTMLInputElement).checked).toBe(true) })
+    await waitFor(() => { expect(screen.getByRole('checkbox').checked).toBe(true) })
     expect(screen.queryByText(es['telemetry.hostUnavailable'])).toBeNull()
   })
 
   it('does not mislabel missing Codex cached-token metrics as zero and shows reusable prefix', async () => {
     const record: TokenTelemetrySnapshot['records'][number] = {
       at: Date.now(), provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'high',
-      systemChars: 100, reusedSystemPrefixChars: 80, schemaChars: 30,
+      systemChars: 100, systemSdkChars: 40, reusedSystemPrefixChars: 80, schemaChars: 30,
       historyChars: 10, humanChars: 5, assistantChars: 5, toolResultChars: 0,
       runtimeContextChars: 0, otherHistoryChars: 0, messageCount: 2, toolCount: 2,
       approximateInputTokens: 35, inputTokens: 505, outputTokens: 20,
@@ -48,8 +48,31 @@ describe('Settings → Telemetría', () => {
     await screen.findByText('505')
     expect(screen.getByText(es['telemetry.cachePrefix'])).toBeTruthy()
     expect(screen.getByText(es['telemetry.cacheUnknown'])).toBeTruthy()
+    expect(screen.queryByText(es['telemetry.sdkLegacyUnknown'])).toBeNull()
     expect(screen.getByText('80% ' + es['telemetry.cachePrefixReused'])).toBeTruthy()
     expect(screen.getAllByText('—').length).toBeGreaterThan(0)
+  })
+
+  it('separates cold baselines and ambiguous legacy zeros from actual comparisons', async () => {
+    const values = [0, 0, 80]
+    const records: TokenTelemetrySnapshot['records'][number][] = values.map((reused, index) => ({
+      at: Date.now(), provider: 'codex', model: 'luna', reasoningEffort: 'high',
+      systemChars: 100, schemaChars: 20, historyChars: 0, humanChars: 0,
+      assistantChars: 0, toolResultChars: 0, runtimeContextChars: 0,
+      otherHistoryChars: 0, messageCount: 1, toolCount: 1,
+      approximateInputTokens: 30, inputTokens: 50,
+      ...(index === 0 ? { prefixComparison: 'baseline' as const } : {}),
+      ...(index === 1 ? { reusedSystemPrefixChars: 0 } : {}),
+      ...(index === 2 ? { reusedSystemPrefixChars: reused, prefixComparison: 'compared' as const } : {}),
+    }))
+    mount({
+      readTelemetry: vi.fn().mockResolvedValue({ enabled: true, records }),
+      setTelemetry: vi.fn(), clearTelemetry: vi.fn(),
+    })
+    await screen.findByText('150')
+    expect(screen.getByText('80% ' + es['telemetry.cachePrefixReused'])).toBeTruthy()
+    expect(screen.getByText('1 ' + es['telemetry.cachePrefixBaseline'])).toBeTruthy()
+    expect(screen.getByText('1 ' + es['telemetry.cachePrefixLegacyUnknown'])).toBeTruthy()
   })
 
   it('shows collected real tokens and updates the checkbox after a successful Host mutation', async () => {
@@ -64,13 +87,14 @@ describe('Settings → Telemetría', () => {
     const readTelemetry = vi.fn().mockResolvedValue(loaded)
     const setTelemetry = vi.fn().mockResolvedValue({ ...loaded, enabled: false })
     mount({ readTelemetry, setTelemetry, clearTelemetry: vi.fn().mockResolvedValue(EMPTY) })
-    await waitFor(() => { expect((screen.getByRole('checkbox') as HTMLInputElement).checked).toBe(true) })
+    await waitFor(() => { expect(screen.getByRole('checkbox').checked).toBe(true) })
     expect(screen.getByText('505')).toBeTruthy()
     expect(screen.getByText('205')).toBeTruthy()
+    expect(screen.getByText(es['telemetry.sdkLegacyUnknown'])).toBeTruthy()
 
     fireEvent.click(screen.getByRole('checkbox'))
     await waitFor(() => { expect(setTelemetry).toHaveBeenCalledWith(false) })
-    await waitFor(() => { expect((screen.getByRole('checkbox') as HTMLInputElement).checked).toBe(false) })
+    await waitFor(() => { expect(screen.getByRole('checkbox').checked).toBe(false) })
     expect(screen.getByText(es['telemetry.disabled'])).toBeTruthy()
   })
 })
