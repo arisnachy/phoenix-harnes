@@ -258,11 +258,14 @@ export class CodexLiveCatalog {
     }
   }
 
-  /** Model ids the adapter should advertise for this profile after a refresh. */
+  /** Model ids the chat selector should advertise after a Codex refresh.
+   * A pinned model list is a dispatch/preferences override, not a replacement
+   * for the account-visible catalog. Only use it when live discovery has never
+   * succeeded, preserving the existing offline last-good behavior.
+   */
   private advertisedIds(profile: PiAiProviderProfile): readonly string[] | undefined {
-    return codexCatalogIsAutomatic(profile)
-      ? this.visibleIds()
-      : profile.models?.map(model => model.id)
+    return this.visibleIds()
+      ?? (codexCatalogIsAutomatic(profile) ? undefined : profile.models?.map(model => model.id))
   }
 
   /**
