@@ -6,6 +6,7 @@ import { sportsCatalog, discoverEspnLeagues, chatGames, marketOdds, pricedTicket
 import { getMlbPitcherReport } from './mlb.ts'
 import { researchTicket, autoResearchTicket, type ResearchTicketLeg } from './research-ticket.ts'
 import { sportsPromptNeeded } from './sports-prompt.ts'
+import { researchNbaSlate } from './nba-research.ts'
 
 export const name = 'tool-sports'
 export const inject = ['tools','systemPrompt']
@@ -71,6 +72,29 @@ export function apply(ctx: Context): void {
     presentCall:()=>({ card:'generic',title:'Buscar partidos y sus datos',kind:'read' as const }),
   }))
   ctx.tools.register(defineTool({
+    name:'sports_chat_nba_research',
+    description:'Investiga la forma NBA con marcadores FINALIZADOS de las últimas fechas: últimos resultados, márgenes de puntos, descanso, calidad de muestra y evidencia ausente. No infiere lesiones, cuotas ni probabilidades.',
+    parameters:{
+      date:{ type:'string',description:'Fecha del partido en Santo Domingo, AAAA-MM-DD; defecto hoy.' },
+      eventId:{ type:'string',description:'ID real ESPN NBA; si se omite investiga hasta seis encuentros futuros.' },
+      lookbackDays:{ type:'integer',description:'Histórico diario, 1-21 días; por defecto 14. Una consulta por fecha compartida entre los encuentros.' },
+    },
+    output:{ schema:{ type:'string' },render:(_a,v)=>[{ type:'text' as const,text:v }] },
+    isConcurrencySafe:()=>true,
+    async execute(args){
+      const report=await researchNbaSlate(args.date,args.eventId,fetch,Date.now(),process.env,args.lookbackDays??14)
+      return JSON.stringify({ ...report,
+        matches:report.matches.map(m=>({
+          ...m,
+          home:{ ...m.home,recentResults:m.home.recentResults.slice(0,5) },
+          away:{ ...m.away,recentResults:m.away.recentResults.slice(0,5) },
+        })),
+        instruction:'Datos calculados desde partidos concluidos, NO una predicción de acierto. Evalúa lesiones confirmadas, titulares, eficiencia, cuotas actuales y valor esperado antes de elegir; las ausencias de evidencia permanecen explícitas. No atribuyas nombres de jugadores sin comprobar su plantilla.',
+      })
+    },
+    presentCall:()=>({ card:'generic',title:'Investigar forma y descanso NBA',kind:'read' as const }),
+  }))
+  ctx.tools.register(defineTool({
     name:'sports_chat_mlb_pitchers',
     description:'Analiza rotación y bullpen de MLB por equipo, ERA, WHIP, entradas y ponches con datos de temporada verificados.',
     parameters:{
@@ -126,7 +150,7 @@ export function apply(ctx: Context): void {
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_ticket_research_auto',
-    description:'Descubre partidos futuros en varias ligas públicas ESPN y propone hasta el número EXACTO de patas solicitado. No pide IDs al modelo, no inventa cuotas y etiqueta el borrador como INCOMPLETO si no consigue todas.',
+    description:'PRESELECCIÓN HEURÍSTICA: usa SOLO récords iniciales de ESPN. No es investigación profunda ni probabilidad de ganar. Propone hasta el número de patas solicitado; requiere contrastar el informe de NBA, lesiones y cuotas.',
     parameters:{
       count:{ type:'integer',required:true,description:'Número de patas que pidió el usuario: de 1 a 6; por ejemplo 5 si pidió un ticket de 5 patas.' },
       date:{ type:'string',description:'Fecha de los partidos AAAA-MM-DD; por defecto hoy en Santo Domingo.' },
@@ -137,7 +161,7 @@ export function apply(ctx: Context): void {
       const result=await autoResearchTicket(args.count,args.date)
       return JSON.stringify({ uiBlock:result.card,verifiedEvents:result.verifiedEvents,
         requestedLegs:args.count,complete:result.complete,priced:false,placed:false,
-        instruction:result.complete?'Ticket completo de eventos verificados. Describe el razonamiento como tendencia, no certeza.':
+        instruction:result.complete?'Eventos verificados, PICKS SOLO HEURÍSTICOS POR RÉCORD. No afirmar investigación profunda; contrasta con sports_chat_nba_research, lesiones y cuotas antes de recomendar.':
           'BORRADOR INCOMPLETO: explica cuántas patas faltan; no digas que cumpliste el número solicitado. Amplía investigación para completar el ticket.' })
     },
     presentCall:()=>({ card:'generic',title:'Investigar ticket con número de patas',kind:'read' as const }),
