@@ -5,6 +5,7 @@
  */
 import type { DatabaseSync } from 'node:sqlite'
 import { createRequire } from 'node:module'
+import { planInterview, type InterviewPlan } from '@phoenix-ai/dsh-tool-health/src/clinical-flow'
 import { createCipheriv, createDecipheriv, createHmac, randomBytes, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto'
 import { mkdirSync, chmodSync, readdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -272,6 +273,19 @@ export class HealthClinicStore {
         item.modality===(actor.role==='lab'?'laboratory':'imaging'))
       .filter(item=>kind!=='encounters'||this.mayReadEncounter(actor,item))
   }
+  /** Build an authorized deterministic Kira questionnaire without a model call or PHI export. */
+  interviewGuide(actor:Actor,id:string):InterviewPlan {
+    if(!['clinician','psychologist'].includes(actor.role))fail('Solo profesional responsable puede orientar la entrevista')
+    const encounter=this.find(actor,'encounters',str(id,'Consulta',80)).data
+    if(encounter.practitioner!==actor.username)fail('Consulta de otro profesional')
+    if(encounter.status==='signed')fail('La consulta ya está firmada')
+    const answers=encounter.interviewAnswers
+    const answered=answers&&typeof answers==='object'&&!Array.isArray(answers)
+      ? Object.keys(answers):[]
+    const mode=encounter.mode==='manual'?'professional':encounter.mode==='kira'?'kira':'mixed'
+    return planInterview(String(encounter.complaint).slice(0,500),String(encounter.specialty).slice(0,100),
+      mode,answered.filter(key=>/^[a-z_]{1,40}$/u.test(key)).slice(0,50))
+  }
   /** Fail closed if the HMAC-linked clinical audit journal has been altered. */
   private verifyAudit():void {
     const history=this.db.prepare('SELECT org,actor,action,record_id,happened,prior_hash,hash FROM health_audit ORDER BY id ASC').all() as
@@ -352,7 +366,8 @@ export class HealthClinicStore {
       return this.insert(actor,kind,{patientId,practitioner:actor.username,specialty:str(x.specialty,'Especialidad',120),
         complaint:text(x.complaint,'Motivo de consulta',2000),mode:['kira','manual','mixed'].includes(String(x.mode))?x.mode:'mixed',
         confidentialPsychotherapy:actor.role==='psychologist'||/(?:psic[oó]log|psycholog|psicoterapi|psychiatr|psiquiatr)/iu.test(String(x.specialty)),
-        history:'',exam:'',assessment:'',plan:'',status:'draft',reviewedVersion:null,signedBy:null,signedAt:null})
+        history:'',exam:'',assessment:'',plan:'',interviewAnswers:{},status:'draft',
+        reviewedVersion:null,signedBy:null,signedAt:null})
     }
     if(kind==='appointments') {
       const patientId=str(x.patientId,'Paciente',80),startsAt=date(x.startsAt),practitioner=str(x.practitioner,'Profesional',80)
@@ -503,6 +518,20 @@ export class HealthClinicStore {
       const data=this.find(actor,kind,id).data
       if(data.practitioner!==actor.username)fail('Consulta de otro profesional')
       const action=str(x.action,'Acción',30)
+      if(action==='answer')return this.modify(actor,kind,id,version,current=>{
+        if(current.status==='signed')fail('No se pueden alterar respuestas de una consulta firmada')
+        const field=str(x.field,'Pregunta',40),answer=text(x.answer,'Respuesta',1600)
+        const answered=current.interviewAnswers
+        const previous=answered&&typeof answered==='object'&&!Array.isArray(answered)
+          ? answered as RecordData:{}
+        if(Object.hasOwn(previous,field))fail('La respuesta ya fue registrada; requiere corrección clínica formal')
+        const mode=current.mode==='manual'?'professional':current.mode==='kira'?'kira':'mixed'
+        const next=planInterview(String(current.complaint).slice(0,500),
+          String(current.specialty).slice(0,100),mode,Object.keys(previous))
+        if(!next.nextQuestions.some(question=>question.key===field))
+          fail('Pregunta fuera del interrogatorio propuesto')
+        return {...current,interviewAnswers:{...previous,[field]:answer},status:'draft',reviewedVersion:null}
+      })
       if(action==='document')return this.modify(actor,kind,id,version,current=>{
         if(current.status==='signed')fail('Historia firmada: requiere adenda independiente')
         return {...current,history:text(x.history,'Historia'),exam:typeof x.exam==='string'?x.exam.slice(0,4000):'',

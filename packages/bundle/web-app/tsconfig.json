@@ -36,6 +36,9 @@
       "path": "../../util/home-paths"
     },
     {
+      "path": "../../core/tool-health"
+    },
+    {
       "path": "../../core/system-prompt"
     },
     {
