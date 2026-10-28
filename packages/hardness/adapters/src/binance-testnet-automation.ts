@@ -196,7 +196,7 @@ export class BinanceTestnetAutomation {
     const quantity=Number(receipt.executedQty),quote=Number(receipt.cummulativeQuoteQty)
     if(!finite(quantity)||!finite(quote))throw new Error('invalid-provider-fill-quantities')
     if(this.state.journal.some(row=>row.clientOrderId===intent.clientOrderId)){
-      this.state.pending=undefined;await this.save();return
+      delete this.state.pending;await this.save();return
     }
     const price=quote/quantity
     if(receipt.side==='BUY'){
@@ -334,7 +334,7 @@ export class BinanceTestnetAutomation {
         requestedAt:new Date(now).toISOString(),
         clientOrderId:orderId(candidate.symbol,'BUY',candidate.strategy,barsBySymbol.get(candidate.symbol)??0),
       })
-      this.state.lastError=undefined;this.state.failureCount=0
+      delete this.state.lastError;this.state.failureCount=0
     }catch{
       // Never echo private provider failures or key-bearing requests.
       this.state.failureCount++
