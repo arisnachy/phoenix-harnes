@@ -8,7 +8,10 @@ import { planInterview, type InterviewMode } from './clinical-flow.ts'
 /** The types of human clinical workflow decisions made through existing ASK. */
 export type ClinicalAskAction = 'choose_mode' | 'screen_urgency' | 'next_question'
 /** Generic complaint categories only: no record identifier or clinical free text. */
-export type ClinicalAskPathway = 'general' | 'abdominal' | 'headache' | 'mental-health' | 'respiratory' | 'cardiovascular' | 'urinary' | 'musculoskeletal' | 'pediatric' | 'obstetric' | 'dermatology' | 'metabolic' | 'ent'
+export type ClinicalAskPathway =
+  | 'general' | 'abdominal' | 'headache' | 'mental-health'
+  | 'respiratory' | 'cardiovascular' | 'urinary' | 'musculoskeletal'
+  | 'pediatric' | 'obstetric' | 'dermatology' | 'metabolic' | 'ent'
 /** Minimal ASK option payload sent to the existing user-questions provider. */
 export interface ClinicalAskOption { readonly label:string;readonly description?:string }
 /** An ASK question with a stable, clinically sensitive ID and no PHI. */
