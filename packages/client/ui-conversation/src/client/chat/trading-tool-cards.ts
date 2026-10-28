@@ -28,6 +28,11 @@ interface TradingSignal {
   readonly score: number
   readonly reason: string
 }
+interface TradingSignalExecution {
+  readonly symbol: string
+  readonly status: 'executed' | 'watch' | 'blocked' | 'deferred' | 'position-open' | 'scan-only' | 'none'
+  readonly explanation: string
+}
 interface TradingTrade {
   readonly id: string
   readonly symbol: string
@@ -53,6 +58,7 @@ export interface TradingDashboardSnapshot {
     readonly positions: readonly TradingPosition[]
   }
   readonly signals: readonly TradingSignal[]
+  readonly execution?: readonly TradingSignalExecution[]
   readonly recentTrades: readonly TradingTrade[]
   readonly markedAt?: string
   readonly lastDecision: string
@@ -121,6 +127,14 @@ export function parseTradingDashboard(value: unknown): TradingDashboardSnapshot 
   if (signals.some(s => s === undefined || typeof s.symbol !== 'string' || typeof s.action !== 'string'
     || typeof s.strategy !== 'string' || typeof s.regime !== 'string'
     || typeof s.reason !== 'string' || !finite(s.score))) return undefined
+  if (root.execution !== undefined) {
+    if (!Array.isArray(root.execution) || root.execution.length > 12) return undefined
+    const executions = root.execution.map(record)
+    if (executions.some(item => item === undefined || typeof item.symbol !== 'string'
+      || typeof item.explanation !== 'string' || item.explanation.length > 500
+      || !['executed', 'watch', 'blocked', 'deferred', 'position-open', 'scan-only', 'none']
+        .includes(String(item.status)))) return undefined
+  }
   const trades = root.recentTrades.map(record)
   if (trades.some(t => t === undefined || typeof t.id !== 'string' || typeof t.symbol !== 'string'
     || (t.side !== 'buy' && t.side !== 'sell') || typeof t.executedAt !== 'string'
