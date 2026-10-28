@@ -110,7 +110,9 @@ export function normalizeOddsHarvester(
         if(period!=='FullTime'&&period!=='FullIncludingOT')continue
         const bookmaker=str(row.bookmaker_name,100)
         if(!bookmaker)continue
+        const blocked=new Set(Array.isArray(row.blocked_outcomes)?row.blocked_outcomes.filter(x=>typeof x==='string'):[])
         for(const [key,selection,point] of selections){
+          if(blocked.has(key))continue // Withdrawn markets are not active quotes.
           const decimal=price(row[key])
           if(decimal===null)continue
           const identity=[eventId,bookmaker,market,selection,point??''].join('|')
