@@ -469,6 +469,9 @@ const TOOL_PACKAGES: ToolPackage[] = [
     requires: ['ctx.tools', 'ctx.systemPrompt', 'ctx.userQuestions'],
     writes: ['tool/call', 'tool/result'],
     async mount(ctx) {
+      // HealthTool injects userQuestions; mount it in the isolated catalog
+      // context too, otherwise the plugin stays PENDING and yields no schemas.
+      await ctx.plugin(UserQuestionService)
       await ctx.plugin(ToolHealth)
     },
     note: 'Clinician-driven sensitive ASK prompts and de-identified planning; no patient data, signing, or clinical record writes.',
