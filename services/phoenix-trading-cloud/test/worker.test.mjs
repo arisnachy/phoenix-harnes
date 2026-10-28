@@ -9,6 +9,7 @@ class D1Fake {
   state=null;
   revision=0;
   fences=new Set();
+  eventLog=[];
   prepare(sql) {
     return {
       first:async()=>{
@@ -17,6 +18,12 @@ class D1Fake {
         throw new Error('unhandled-select');
       },
       bind:(...params)=>({
+      all:async()=>{
+        if(sql.startsWith('SELECT seq,payload FROM event_log')){
+          return {results:this.eventLog.filter(x=>x.seq>params[0]).slice(0,100)};
+        }
+        throw new Error('unhandled-all');
+      },
       run:async()=>{
         if(sql.startsWith('INSERT OR IGNORE INTO engine_state')){
           if(!this.state)this.state=JSON.parse(params[0]);
@@ -30,6 +37,11 @@ class D1Fake {
           if(params[1]!==this.revision)return {meta:{changes:0}};
           this.state=JSON.parse(params[0]);
           this.revision++;
+          return {meta:{changes:1}};
+        }
+        if(sql.startsWith('INSERT OR IGNORE INTO event_log')){
+          if(this.eventLog.some(x=>x.id===params[0]))return {meta:{changes:0}};
+          this.eventLog.push({seq:this.eventLog.length+1,id:params[0],at:params[1],payload:params[2]});
           return {meta:{changes:1}};
         }
         throw new Error('unhandled-sql');
