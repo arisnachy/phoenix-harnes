@@ -24,3 +24,20 @@ jobs:
           node-version: '24'
       - name: Validate deterministic clinical state and mail gates
         run: node --experimental-strip-types --test packages/core/tool-health/tests/*.test.mjs packages/bundle/web-app/tests/health-store.test.mjs packages/bundle/web-app/tests/health-ui.test.mjs
+
+  copilot-ask-integration:
+    name: Health Copilot ASK integration
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+      - name: Install workspace packages for ASK service integration
+        run: pnpm install --frozen-lockfile
+      - name: Verify clinical copilot through actual ASK service
+        run: pnpm exec vitest run packages/core/tool-health/tests/clinical-copilot-ask.spec.ts
