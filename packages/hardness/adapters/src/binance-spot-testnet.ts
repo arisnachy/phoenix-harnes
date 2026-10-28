@@ -116,12 +116,14 @@ export class BinanceSpotTestnet {
           })
           if (!timeResponse.ok) throw new Error('time-unavailable')
           const timeValue: unknown = await timeResponse.json()
-          if (typeof timeValue !== 'object' || timeValue === null || Array.isArray(timeValue)
-            || typeof (timeValue as Record<string, unknown>).serverTime !== 'number'
-            || !Number.isSafeInteger((timeValue as Record<string, number>).serverTime)) {
+          if (typeof timeValue !== 'object' || timeValue === null || Array.isArray(timeValue)) {
             throw new Error('time-invalid')
           }
-          offset = Number((timeValue as Record<string, unknown>).serverTime) - this.clock()
+          const serverTime: unknown = (timeValue as Record<string, unknown>).serverTime
+          if (typeof serverTime !== 'number' || !Number.isSafeInteger(serverTime)) {
+            throw new Error('time-invalid')
+          }
+          offset = serverTime - this.clock()
         } catch {
           throw new TestnetVerificationError('clock-skew')
         }
