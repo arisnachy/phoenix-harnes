@@ -3,7 +3,8 @@
  * All clinical payloads encrypted with AES-256-GCM, bound to record identity/version.
  * Authenticated roles and audited transactions; no model-facing service.
  */
-import { DatabaseSync } from 'node:sqlite'
+import type { DatabaseSync } from 'node:sqlite'
+import { createRequire } from 'node:module'
 import { createCipheriv, createDecipheriv, createHmac, randomBytes, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto'
 import { mkdirSync, chmodSync } from 'node:fs'
 import { dirname } from 'node:path'
@@ -66,7 +67,10 @@ export class HealthClinicStore {
   constructor(dbPath:string) {
     if(typeof dbPath!=='string'||dbPath===':memory:')fail('La clínica requiere una ruta persistente privada')
     mkdirSync(dirname(dbPath),{recursive:true,mode:0o700})
-    this.db=new DatabaseSync(dbPath,{timeout:5000})
+    // Load experimental SQLite only when an operator actually enables the clinical module.
+    // A static import emitted SQLite warnings in every ordinary PHOENIX CLI session on Node 22.
+    const sqlite = createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite')
+    this.db=new sqlite.DatabaseSync(dbPath,{timeout:5000})
     try {chmodSync(dbPath,0o600)}catch {/* Windows uses directory ACLs */ }
     this.db.exec("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON;")
     this.db.exec(
