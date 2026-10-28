@@ -23,6 +23,14 @@ Health se sirve en la **misma dirección local de PHOENIX** bajo `/health`. La o
 
 **Datos:** `$DSH_HOME/health/clinic.sqlite` (por defecto `~/.dsh/health/clinic.sqlite`). El modo WAL de SQLite requiere un plan de backup consistente y verificación de restauración; **no copie a mano un archivo SQLite mientras el Host siga escribiendo**. La interfaz no usa `localStorage` para datos de pacientes. Las sesiones son cookies HttpOnly, SameSite=Strict y solo válidas en local.
 
+## Integración con PHOENIX ASK (copiloto en el chat)
+
+Los médicos pueden pulsar **Kira · ASK clínico** desde Consultas. La acción abre el chat de PHOENIX y presenta un texto genérico, sin paciente, para solicitar a Kira la herramienta `health_copilot_ask`. Esta herramienta usa el servicio **original** `ctx.userQuestions.ask` y obliga a que todas las decisiones se marquen `sensitive: true`.
+
+Kira puede pedir al profesional que seleccione el modo (Kira/profesional/mixto), realice la evaluación inicial de signos de alarma y gestione preguntas pendientes. Si ASK expira, es omitido o recibe una opción no válida, no se presume un hallazgo negativo ni se registra consentimiento. La opción «Registrar en expediente protegido» indica **un trabajo pendiente**, no confirma que la respuesta se haya guardado.
+
+**Separación de seguridad:** la pestaña ASK de conversación y la página clínica autenticada `/health` NO comparten pacientes ni credenciales. La herramienta ASK del modelo **no puede abrir, leer, modificar ni firmar expedientes**. Las respuestas reales se documentan por el profesional dentro de la sesión clínica cifrada usando Entrevista Kira y el editor SOAP. Nunca copie PHI al chat para forzar una integración: esa conexión requiere autorización, retención, evaluación de proveedor y controles que aún no están implantados.
+
 ## Kira y la documentación clínica
 
 El profesional que haya sido asignado explícitamente a un paciente y sea titular del episodio puede abrir **Entrevista Kira** desde la lista de consultas. PHOENIX calcula localmente un conjunto limitado de preguntas dirigidas según el motivo y la especialidad; cada respuesta se registra en el expediente cifrado y la siguiente propuesta excluye las claves ya respondidas. Las respuestas faltantes **no** se interpretan como hallazgos negativos. El motor no formula diagnósticos ni autoriza tratamientos; las alertas y urgencias requieren evaluación humana.

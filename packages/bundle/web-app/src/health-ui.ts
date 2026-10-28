@@ -96,6 +96,7 @@ function render(){
  if(tab==="encounters"&&["clinician","psychologist"].includes(actor.role))form=p+field("specialty","Especialidad", "text", true,"Medicina familiar")+
  field("complaint","Motivo de consulta")+
  '<label>Modalidad Kira</label><select id="mode"><option value="kira">Kira interroga</option><option value="mixed">Mixto</option><option value="manual">Profesional</option></select>'+button("create","Abrir consulta")+
+ button("openAskCopilot","Kira · ASK clínico","secondary")+
  '<p class="notice">El profesional decide y firma. Kira puede guiar preguntas desde el chat, pero el contenido identificable del expediente no se envía al modelo.</p>';
  if(tab==="appointments")form=p+field("practitioner","Profesional")+field("startsAt","Fecha y hora","datetime-local")+field("reason","Motivo")+button("create","Programar cita");
  if(tab==="orders"&&actor.role==="clinician")form=pick("encounterId","Consulta firmada",data.encounters.filter(x=>x.status==="signed"),x=>x.complaint+" · "+x.practitioner)+
@@ -131,6 +132,26 @@ async function execute(action,id){
  if(action==="logout"){await api("logout","POST",{});actor=null;csrf="";data={};tab="patients";return splash()}
  if(action==="setup"){await api("setup","POST",{username:val("user"),password:val("pass"),organization:val("org")});notice("Clínica configurada. Inicia sesión.");return splash()}
  if(action==="login"){const x=await api("login","POST",{username:val("user"),password:val("pass")});csrf=x.csrf;actor=x.actor;data={};tab="patients";return load()}
+ if(action==="openAskCopilot"){
+  // The chat's genuine ASK provider belongs to PHOENIX, not the clinical HTTP session.
+  // Never transfer an encounter ID, a patient name or the protected encounter contents.
+  const promptText="Kira, usa health_copilot_ask con action=choose_mode para guiar una consulta desidentificada. Después realiza screen_urgency y next_question. Registraré las respuestas clínicas únicamente dentro de PHOENIX Health.";
+  const opened=window.open("/","_blank","noopener,noreferrer");
+  document.getElementById("view").insertAdjacentHTML("beforeend",
+    box("Kira Clínica · ASK de PHOENIX",
+      '<p class="notice">Se abrió el chat general de PHOENIX. ASK puede coordinar el interrogatorio, pero no lee ni escribe este expediente. No copies identificadores, nombres, imágenes, resultados o historia clínica a esa conversación.</p>'+
+      '<label>Petición genérica para Kira</label><textarea readonly id="ask-instructions">'+safe(promptText)+'</textarea>'+
+      '<p> '+button("copyAskInstructions","Copiar instrucciones sin datos personales","secondary")+'</p>'));
+  if(!opened)notice("Si el navegador bloqueó la nueva pestaña, abre el chat PHOENIX manualmente.");
+  return;
+ }
+ if(action==="copyAskInstructions"){
+  const content=val("ask-instructions");
+  if(!content)throw Error("No hay instrucciones");
+  await navigator.clipboard.writeText(content);
+  notice("Instrucciones genéricas copiadas; no incluyen datos de paciente.");
+  return;
+ }
  if(action==="interview"){
   const encounter=data.encounters?.find(x=>x.id===id);if(!encounter)throw Error("Consulta no disponible");
   const reply=await api("interview/"+id);
