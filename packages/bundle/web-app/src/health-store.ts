@@ -242,7 +242,7 @@ export class HealthClinicStore {
   private mayReadEncounter(actor:Actor,data:RecordData):boolean {
     const restricted=data.confidentialPsychotherapy===true ||
       /(?:psic[oó]log|psycholog|psicoterapi|psychiatr|psiquiatr)/iu.test(String(data.specialty??''))
-    if(restricted)return actor.role==='psychologist'&&data.practitioner===actor.username
+    if(restricted)return (actor.role==='psychologist'||actor.role==='clinician')&&data.practitioner===actor.username
     return actor.role==='admin'||actor.role==='nurse'||data.practitioner===actor.username
   }
   private find(actor:Actor,kind:Kind,id:string):{row:Row;data:RecordData} {
