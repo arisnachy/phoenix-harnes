@@ -22,7 +22,7 @@ describe('PHOENIX Cloud PAPER client', () => {
   })
 
   it('sends bearer only to the pinned HTTPS host and rejects unverified REAL semantics', async () => {
-    const seen: Array<{ url: string; authorization?: string; redirect?: string }> = []
+    const seen: Array<{ url: string; authorization: string | undefined; redirect: RequestRedirect | undefined }> = []
     vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit) => {
       seen.push({
         url, authorization: new Headers(init.headers).get('authorization') ?? undefined,
