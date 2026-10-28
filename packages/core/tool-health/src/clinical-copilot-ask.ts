@@ -8,7 +8,7 @@ import { planInterview, type InterviewMode } from './clinical-flow.ts'
 /** The types of human clinical workflow decisions made through existing ASK. */
 export type ClinicalAskAction = 'choose_mode' | 'screen_urgency' | 'next_question'
 /** Generic complaint categories only: no record identifier or clinical free text. */
-export type ClinicalAskPathway = 'general' | 'abdominal' | 'headache' | 'mental-health'
+export type ClinicalAskPathway = 'general' | 'abdominal' | 'headache' | 'mental-health' | 'respiratory' | 'cardiovascular' | 'urinary' | 'musculoskeletal' | 'pediatric' | 'obstetric' | 'dermatology' | 'metabolic' | 'ent'
 /** Minimal ASK option payload sent to the existing user-questions provider. */
 export interface ClinicalAskOption { readonly label:string;readonly description?:string }
 /** An ASK question with a stable, clinically sensitive ID and no PHI. */
@@ -50,9 +50,11 @@ const PROGRESS_OPTIONS=[
 ] as const
 const PATHWAY_COMPLAINT:Readonly<Record<ClinicalAskPathway,string>>={
  general:'síntomas generales',abdominal:'dolor abdominal',headache:'cefalea','mental-health':'ansiedad',
+ 'respiratory':'tos','cardiovascular':'dolor torácico','urinary':'disuria','musculoskeletal':'dolor articular','pediatric':'consulta pediátrica','obstetric':'embarazo','dermatology':'lesión cutánea','metabolic':'diabetes','ent':'dolor de oído',
 }
 const PATHWAY_SPECIALTY:Readonly<Record<ClinicalAskPathway,string>>={
  general:'medicina familiar',abdominal:'medicina familiar',headache:'neurología','mental-health':'psicología',
+ 'respiratory':'neumología','cardiovascular':'cardiología','urinary':'urología','musculoskeletal':'traumatología','pediatric':'pediatría','obstetric':'obstetricia','dermatology':'dermatología','metabolic':'endocrinología','ent':'otorrinolaringología',
 }
 function validAnswered(keys:readonly string[]):void {
  if(!Array.isArray(keys)||keys.length>50||keys.some(key=>typeof key!=='string'||!/^[a-z_]{1,40}$/u.test(key)))

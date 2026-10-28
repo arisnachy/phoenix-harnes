@@ -53,3 +53,14 @@ test('ASK distinguishes initial urgency check from completed EHR triage',()=>{
  assert.equal(interpretClinicalAsk(step,'Registrar en expediente protegido',false).status,'NEEDS_CLINIC_ENTRY')
  assert.equal(interpretClinicalAsk(step,'Dejar pendiente',false).status,'PENDING')
 })
+
+test('ASK supports expanded specialty categories without sending patient narratives',()=>{
+ const categories=["respiratory","cardiovascular","urinary","musculoskeletal","pediatric","obstetric","dermatology","metabolic","ent"]
+ for(const pathway of categories){
+  const step=buildClinicalAskStep('next_question',pathway)
+  assert.equal(step.question.sensitive,true)
+  assert.equal(typeof step.field,'string')
+  assert.match(step.question.question,/expediente protegido/)
+  assert.equal(interpretClinicalAsk(step,'Registrar en expediente protegido',false).acceptedClinicalFact,false)
+ }
+})

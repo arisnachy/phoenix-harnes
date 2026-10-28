@@ -113,6 +113,60 @@ const PATHWAYS: readonly { regex: RegExp; name: string; questions: readonly Ques
       { key: 'risk', question: '¿Existe riesgo actual para su seguridad o la de otras personas que exija evaluación inmediata?' },
       { key: 'support', question: '¿Con qué apoyos cuenta y qué tratamientos ha recibido antes?' },
     ] },
+  { regex: /(?:tos|disnea|dificultad respiratoria|falta de aire)/u, name: 'respiratory',
+    questions: [
+      { key: 'respiratory_duration', question: '¿Desde cuándo hay tos o dificultad respiratoria y cómo ha cambiado?' },
+      { key: 'respiratory_features', question: '¿Hay fiebre, expectoración o factores desencadenantes?' },
+      { key: 'respiratory_alarm', question: '¿Hay disnea en reposo, cianosis, confusión u otros signos de alarma?' },
+    ] },
+  { regex: /(?:dolor toracico|dolor en el pecho|palpitaciones)/u, name: 'cardiovascular',
+    questions: [
+      { key: 'chest_pattern', question: '¿Cómo comenzó el síntoma torácico, duración, esfuerzo y factores asociados?' },
+      { key: 'cardiac_associated', question: '¿Hay síncope, palpitaciones, sudoración o dificultad respiratoria?' },
+      { key: 'cardiac_alarm', question: '¿Existen dolor persistente, inestabilidad o signos de alarma que exijan atención inmediata?' },
+    ] },
+  { regex: /(?:disuria|dolor al orinar|hematuria|infeccion urinaria)/u, name: 'urinary',
+    questions: [
+      { key: 'urinary_symptoms', question: '¿Hay síntomas miccionales y cuál fue su evolución?' },
+      { key: 'urinary_associated', question: '¿Hay fiebre, dolor lumbar, sangrado o síntomas generales?' },
+      { key: 'urinary_alarm', question: '¿Hay retención, compromiso general o signos de infección grave?' },
+    ] },
+  { regex: /(?:dolor articular|dolor lumbar|rodilla|traumatismo|lesion muscular)/u, name: 'musculoskeletal',
+    questions: [
+      { key: 'injury_mechanism', question: '¿Hubo traumatismo o sobrecarga y cómo limita la movilidad?' },
+      { key: 'joint_features', question: '¿Existen inflamación, deformidad, fiebre o déficit funcional?' },
+      { key: 'joint_alarm', question: '¿Hay pérdida de fuerza, sensibilidad, compromiso vascular o dolor desproporcionado?' },
+    ] },
+  { regex: /(?:pediatria|nino|nina|lactante|fiebre infantil)/u, name: 'pediatric',
+    questions: [
+      { key: 'caregiver_history', question: '¿Quién aporta la historia y cuál es la evolución observada por el cuidador?' },
+      { key: 'child_intake', question: '¿Cómo están alimentación, hidratación y comportamiento habitual?' },
+      { key: 'pediatric_alarm', question: '¿Existen dificultad respiratoria, letargia, deshidratación u otros signos de alarma?' },
+    ] },
+  { regex: /(?:embarazo|prenatal|gestacion|obstetricia)/u, name: 'obstetric',
+    questions: [
+      { key: 'gestational_context', question: '¿Cuál es la edad gestacional documentada y el motivo de esta consulta?' },
+      { key: 'pregnancy_symptoms', question: '¿Qué síntomas o controles prenatales están registrados?' },
+      { key: 'obstetric_alarm', question: '¿Hay sangrado, dolor intenso, cefalea grave, convulsiones o signos de alarma?' },
+    ] },
+  { regex: /(?:piel|lesion cutanea|erupcion|sarpullido)/u, name: 'dermatology',
+    questions: [
+      { key: 'skin_timeline', question: '¿Cuándo apareció la lesión, dónde inició y cómo evolucionó?' },
+      { key: 'skin_exposure', question: '¿Qué exposiciones, tratamientos o síntomas asociados refiere?' },
+      { key: 'skin_alarm', question: '¿Hay fiebre, afectación mucosa, lesiones rápidamente progresivas o compromiso sistémico?' },
+    ] },
+  { regex: /(?:diabetes|glucosa|glicemia|hipoglucemia|hiperglucemia)/u, name: 'metabolic',
+    questions: [
+      { key: 'metabolic_history', question: '¿Qué tratamiento metabólico y controles previos están documentados?' },
+      { key: 'metabolic_symptoms', question: '¿Hay poliuria, polidipsia, cambios de peso o episodios de hipoglucemia?' },
+      { key: 'metabolic_alarm', question: '¿Hay alteración del sensorio, deshidratación o signos de descompensación aguda?' },
+    ] },
+  { regex: /(?:dolor de oido|otitis|hipoacusia|audicion|vertigo)/u, name: 'ent',
+    questions: [
+      { key: 'ear_history', question: '¿Cómo comenzaron los síntomas auditivos o vestibulares y cómo evolucionaron?' },
+      { key: 'ear_associated', question: '¿Hay secreción, fiebre, pérdida auditiva o vértigo asociado?' },
+      { key: 'ear_alarm', question: '¿Hay pérdida auditiva súbita, signos neurológicos o infección con compromiso general?' },
+    ] },
 ]
 function normalize(text: string): string {
   return text.toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/gu, '')
