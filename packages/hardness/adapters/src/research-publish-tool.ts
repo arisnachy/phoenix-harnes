@@ -233,6 +233,9 @@ type PublisherOutcome = {
   source_verification: string
   pagination?: { pdf_pages: number; requested_pages: number | null; scope: string; target_met: boolean | null }
   warnings?: string[]
+  advisories?: string[]
+  reference_review?: { level: string; advisory_min: number; advisory_max: number | null;
+    cited_count: number; institutional_rule_verified: boolean; meets_advisory: boolean } | null
   presentation?: string
   design_preset?: string
   document_type?: string
@@ -330,6 +333,8 @@ export function createResearchPublishTool(): ToolDefinition {
              + '; diseño: ' + String(value.design_preset ?? 'academic_classic')
             + '; páginas PDF: ' + String((value.pagination as Record<string, unknown> | undefined)?.pdf_pages ?? 'sin verificar')
             + '; observaciones: ' + (Array.isArray(value.warnings) ? value.warnings.map(String).join('; ') : 'ninguna')
+            + '; orientación bibliográfica: ' + (Array.isArray(value.advisories)
+              ? value.advisories.map(String).join('; ') : 'sin advertencias')
             + '. Estas son rutas locales de archivos, NO enlaces web. Ábrelos desde los archivos generados al pie del turno en Phoenix, no como una URL del navegador. No se ha certificado la veracidad de las fuentes ni el cumplimiento específico de una revista.'
           : 'El informe no alcanzó estado REPORT_READY.',
       }],
