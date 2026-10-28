@@ -43,7 +43,6 @@
     "@phoenix-ai/dsh-tools": "workspace:^",
     "@phoenix-ai/dsh-system-prompt": "workspace:^",
     "@phoenix-ai/dsh-invariants": "workspace:^",
-    "@phoenix-ai/dsh-user-questions": "workspace:^",
-    "@phoenix-ai/dsh-llm": "workspace:^"
+    "@phoenix-ai/dsh-user-questions": "workspace:^"
   }
 }
