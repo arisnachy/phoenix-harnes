@@ -315,7 +315,7 @@ export class CodexLiveCatalog {
     const now = this.now()
     // A model newly adopted from Settings must be enriched immediately even
     // when the previous live catalog is still inside its normal 60s TTL.
-    if (!runtimeChanged && !force && !pinnedModelsChanged && this.visible !== undefined && now - this.lastSuccessAt < this.refreshIntervalMs) {
+    if (!runtimeChanged && !pinnedModelsChanged && this.visible !== undefined && now - this.lastSuccessAt < this.refreshIntervalMs) {
       return this.advertisedIds(profile)
     }
     // After that one pin-change attempt, failures still respect the cooldown
