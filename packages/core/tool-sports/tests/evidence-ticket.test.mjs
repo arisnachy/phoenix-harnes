@@ -16,8 +16,8 @@ const fixture=(url,withHistory=true)=>{
   const key=String(url).match(/dates=([0-9]{8})/u)?.[1]
   if(!String(url).includes('/soccer/eng.1/'))return{events:[]}
   if(key==='20261028')return{events:Array.from({length:6},(_,i)=>base(100+i,future,'pre',null,null))}
-  if(withHistory&&['20261027','20261026'].includes(key)){
-    const stamp=key==='20261027'?'2026-10-27T21:00:00Z':'2026-10-26T21:00:00Z'
+  if(withHistory&&['20261027','20261026','20261025'].includes(key)){
+    const stamp=key==='20261027'?'2026-10-27T21:00:00Z':key==='20261026'?'2026-10-26T21:00:00Z':'2026-10-25T21:00:00Z'
     return{events:Array.from({length:6},(_,i)=>base(100+i,stamp,'post',3,0))}
   }
   return{events:[]}
