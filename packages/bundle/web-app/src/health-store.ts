@@ -173,6 +173,8 @@ export class HealthClinicStore {
     return rows.map(row=>({id:row.id,version:row.version,createdAt:row.created_at,updatedAt:row.updated_at,...this.open(row)}))
       .filter(item=>kind!=='orders'||actor.role!=='lab'&&actor.role!=='radiology'||
         item.modality===(actor.role==='lab'?'laboratory':'imaging'))
+      .filter(item=>kind!=='encounters'||!/(?:psicolog|psycholog|psicoterapi)/iu.test(String(item.specialty))||
+        actor.role==='psychologist'&&item.practitioner===actor.username)
   }
   private audit(actor:Actor,action:string,id:string):void {
     const prev=(this.db.prepare('SELECT hash FROM health_audit WHERE org=? ORDER BY id DESC LIMIT 1').get(actor.org) as {hash:string}|undefined)?.hash??'genesis'
@@ -258,6 +260,32 @@ export class HealthClinicStore {
         description:text(x.description,'Tarea',500),status:'pending'})
     }
     return fail('Operación no admitida')
+  }
+
+
+  /** Atomic pharmacy dispense: only one signed prescription, matching available stock. */
+  dispense(actor:Actor,prescriptionId:string,inventoryId:string):{prescription:RecordData;inventory:RecordData}{
+    if(actor.role!=='pharmacy')fail('Solo personal farmacéutico autorizado puede dispensar')
+    this.db.exec('BEGIN IMMEDIATE')
+    try {
+      const prescription=this.find(actor,'prescriptions',str(prescriptionId,'Receta',80))
+      const inventory=this.find(actor,'inventory',str(inventoryId,'Existencia',80))
+      if(prescription.data.status!=='prescribed')fail('La receta ya fue dispensada')
+      if(prescription.data.medication!==inventory.data.item)fail('El producto no corresponde a la receta firmada')
+      if(Number(inventory.data.units)<1)fail('Existencias insuficientes')
+      const now=new Date().toISOString()
+      const update=(kind:Kind,row:Row,data:RecordData)=>{
+        const nextVersion=row.version+1,sealed=this.seal(row.id,actor.org,kind,nextVersion,data)
+        const result=this.db.prepare('UPDATE health_records SET version=?,iv=?,tag=?,payload=?,updated_at=? WHERE id=? AND org=? AND kind=? AND version=?')
+          .run(nextVersion,sealed.iv,sealed.tag,sealed.payload,now,row.id,actor.org,kind,row.version)
+        if(Number(result.changes)!==1)fail('Conflicto de concurrencia de dispensación')
+        return {...data,id:row.id,version:nextVersion,createdAt:row.created_at,updatedAt:now}
+      }
+      const changedRx=update('prescriptions',prescription.row,{...prescription.data,status:'dispensed',dispensedBy:actor.username,dispensedAt:now})
+      const changedStock=update('inventory',inventory.row,{...inventory.data,units:Number(inventory.data.units)-1})
+      this.audit(actor,'prescription.dispense',prescription.row.id)
+      this.db.exec('COMMIT');return {prescription:changedRx,inventory:changedStock}
+    }catch(error){this.db.exec('ROLLBACK');throw error}
   }
 
   /** Reserve exactly one verified, clinician-authorized reminder. Never expose clinical details. */
