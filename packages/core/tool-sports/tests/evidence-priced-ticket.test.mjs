@@ -41,7 +41,7 @@ test('six-legged evidence path quotes only same bookmaker and preserves the requ
   assert.equal(complete.card.props.legs.length,5)
   assert.equal(complete.card.props.stake,'100.00')
   assert.equal(complete.card.props.requestedLegs,5)
-  assert.match(complete.card.props.legs[0].homeLogo,/a\\.espncdn\\.com/)
+  assert.match(complete.card.props.legs[0].homeLogo,/a\.espncdn\.com/)
   assert.match(complete.card.props.legs[0].rationale,/ESPN últimos 3 juegos/)
   assert.match(complete.card.props.note,/NO son probabilidades calibradas/)
   assert.equal(complete.placed,false)
@@ -53,4 +53,62 @@ test('does not combine prices from different bookmakers even when each leg was q
   assert.equal(result.quotedLegs,5)
   assert.equal(result.missingQuotes,0)
   assert.match(result.explanation,/distintas casas/)
+})
+
+test('1X double chance uses real matching bookmaker market, keeps branding and rationale',async()=>{
+  const markets=[]
+  const quotes=async(sport,market)=>{
+    markets.push([sport,market])
+    return Array.from({length:5},(_,i)=>({
+      eventId:'oddsportal-'+i,bookmaker:'Book A',market:'double_chance',
+      selection:'1X',point:null,price:1.34,home:'Home '+i,away:'Away '+i,
+      time:kick,updatedAt:'2026-10-28T14:30:00Z',
+      sportKey:'football',source:'OddsHarvester/OddsPortal (sin API key)',
+    }))
+  }
+  const result=await evidencePricedTicket(5,date,'soccer',100,now,enabled,feed,quotes,'double_chance')
+  assert.deepEqual(markets,[['football','double_chance']])
+  assert.equal(result.complete,true)
+  assert.equal(result.priced,true)
+  assert.equal(result.card.props.legs.length,5)
+  assert.equal(result.card.props.legs[0].selection,'1X · Local o empate')
+  assert.equal(result.card.props.legs[0].market,'Doble oportunidad (1X/X2)')
+  assert.equal(result.card.props.legs[0].price,'1.34')
+  assert.equal(result.card.props.legs[0].bookmaker,'Book A')
+  assert.match(result.card.props.legs[0].homeLogo,/^https:\/\/a\.espncdn\.com\//)
+  assert.match(result.card.props.legs[0].rationale,/ESPN últimos 3 juegos/)
+  assert.match(result.card.props.note,/NO asegura ganar/)
+  assert.equal(result.placed,false)
+})
+test('1X/X2 never silently falls back to a direct winner or the wrong double chance',async()=>{
+  const quotes=async(_sport,_market)=>Array.from({length:5},(_,i)=>({
+    eventId:'oddsportal-'+i,bookmaker:'Book A',market:'1x2',selection:'Home '+i,
+    point:null,price:1.91,home:'Home '+i,away:'Away '+i,
+    time:kick,updatedAt:'2026-10-28T14:30:00Z',
+    sportKey:'football',source:'OddsHarvester/OddsPortal (sin API key)',
+  }))
+  const wrongMarket=await evidencePricedTicket(5,date,'soccer',100,now,enabled,feed,quotes,'double_chance')
+  assert.equal(wrongMarket.priced,false)
+  assert.equal(wrongMarket.quotedLegs,0)
+  assert.equal(wrongMarket.card.props.combinedOdds,'No disponible')
+  const wrongSide=await evidencePricedTicket(5,date,'soccer',100,now,enabled,feed,
+    async()=>Array.from({length:5},(_,i)=>({...{
+      eventId:'oddsportal-'+i,bookmaker:'Book A',market:'double_chance',
+      selection:'X2',point:null,price:1.4,home:'Home '+i,away:'Away '+i,
+      time:kick,updatedAt:'2026-10-28T14:30:00Z',
+      sportKey:'football',source:'OddsHarvester/OddsPortal (sin API key)',
+    }})),'double_chance')
+  assert.equal(wrongSide.priced,false)
+  assert.equal(wrongSide.quotedLegs,0)
+})
+test('non-finite bookmaker prices are never used for a quoted ticket',async()=>{
+  const bad=async()=>Array.from({length:5},(_,i)=>({
+    eventId:'oddsportal-'+i,bookmaker:'Book A',market:'1x2',
+    selection:'Home '+i,point:null,price:Number.NaN,home:'Home '+i,away:'Away '+i,
+    time:kick,updatedAt:'2026-10-28T14:30:00Z',
+    sportKey:'football',source:'OddsHarvester/OddsPortal (sin API key)',
+  }))
+  const result=await evidencePricedTicket(5,date,'soccer',100,now,enabled,feed,bad)
+  assert.equal(result.priced,false)
+  assert.equal(result.quotedLegs,0)
 })
