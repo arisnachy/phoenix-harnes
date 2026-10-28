@@ -47,6 +47,45 @@ describe('FreeSearchProvider', () => {
     }])
   })
 
+  it('returns the backup when the primary stalls, then cancels the losing request', async () => {
+    let primaryAborted = false
+    const fetcher = vi.fn((url: string, init?: RequestInit): Promise<Response> => {
+      if (url.includes('bing.com')) {
+        return new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => {
+            primaryAborted = true
+            reject(new Error('cancelled by winner'))
+          }, { once: true })
+        })
+      }
+      return Promise.resolve(new Response(duckHtml, { status: 200 }))
+    })
+    const provider = new FreeSearchProvider({ fetcher, timeoutMs: 2_000 })
+    const result = await provider.search({ query: 'thesis' })
+    expect(result.sources[0]?.url).toBe('https://example.com/b')
+    expect(primaryAborted).toBe(true)
+    expect(fetcher).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not launch the delayed backup after a quick successful primary', async () => {
+    const fetcher = vi.fn(async () => new Response(bingHtml, { status: 200 }))
+    const provider = new FreeSearchProvider({ fetcher })
+    await expect(provider.search({ query: 'thesis' })).resolves.toMatchObject({
+      sources: [{ url: 'https://example.com/a' }],
+    })
+    expect(fetcher).toHaveBeenCalledTimes(1)
+  })
+
+  it('preserves caller cancellation rather than disguising it as an empty result', async () => {
+    const controller = new AbortController()
+    controller.abort(new Error('user cancelled research'))
+    const fetcher = vi.fn()
+    const provider = new FreeSearchProvider({ fetcher })
+    await expect(provider.search({ query: 'test', maxResults: 2 }, controller.signal))
+      .rejects.toThrow('user cancelled research')
+    expect(fetcher).not.toHaveBeenCalled()
+  })
+
   it('does not attach a later result snippet to a preceding empty result', async () => {
     const html = '<a class="result__a" href="https://one.edu">First</a>'
       + '<a class="result__a" href="https://two.edu">Second</a>'
