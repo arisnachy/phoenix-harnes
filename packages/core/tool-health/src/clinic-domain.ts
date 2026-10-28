@@ -73,8 +73,11 @@ export class ClinicSandbox {
   readonly #invoices = new Map<string,InvoiceRecord>()
   readonly #audit: ClinicAuditEvent[] = []
   #next = 0
-  constructor(readonly organization: string, readonly clock: () => string = () => new Date().toISOString()) {
-    checked(organization,'Organización',100)
+  readonly organization: string
+  readonly clock: () => string
+  constructor(organization: string, clock: () => string = () => new Date().toISOString()) {
+    this.organization = checked(organization,'Organización',100)
+    this.clock = clock
   }
   #authorize(actor: ClinicActor, module: ClinicModule): void {
     if (actor?.organization !== this.organization || !actor?.staffId ||
