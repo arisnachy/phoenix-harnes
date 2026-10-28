@@ -135,9 +135,10 @@ export async function researchNbaSlate(
       'Eficiencia avanzada y emparejamientos tácticos sin contrastar',
       'Cuotas por casa y valor esperado sin contrastar',
     ]
-    return [{eventId:String(event.id),matchup:teamName(away)+' vs '+teamName(home),kickoff:event.date??'',
+    const summary: NbaMatchResearch = {eventId:String(event.id),matchup:teamName(away)+' vs '+teamName(home),kickoff:event.date??'',
       home:homeReport,away:awayReport,sampleAdequate:enough,
-      evidenceStatus:enough?'limited':'insufficient',missing}]
+      evidenceStatus:enough?'limited':'insufficient',missing}
+    return [summary]
   })
   if(!matches.length)throw Error('ESPN no identificó correctamente a los equipos de los próximos partidos')
   return {sport:'basketball',league:'nba',date,source:'ESPN Site API · scoreboards históricos',
