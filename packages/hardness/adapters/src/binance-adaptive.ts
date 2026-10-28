@@ -139,12 +139,14 @@ export function evaluateBinanceAdaptiveSignal(
   // Avoid buying a falling trend; a pullback must recover the fast EMA.
   if (regime === 'uptrend' && lastClose >= fast && lastClose <= fast * 1.012
     && lastClose > (closes.at(-2) ?? lastClose) && historicMean > 0) {
-    return { symbol, regime, strategy: 'trend-pullback', action: 'buy', score: 65,
+    const quality = Math.min(15, Math.max(0, Math.round((volumeRatio - 1) * 25)))
+    return { symbol, regime, strategy: 'trend-pullback', action: 'buy', score: 65 + quality,
       lastClose, reason: 'Uptrend pullback recovering the fast moving average' }
   }
   if (regime === 'range' && zScore <= -1.5 && lastClose > previousLow * 0.995
     && volumeRatio > 0) {
-    return { symbol, regime, strategy: 'mean-reversion', action: 'buy', score: 60,
+    const quality = Math.min(20, Math.max(0, Math.round((-zScore - 1.5) * 12)))
+    return { symbol, regime, strategy: 'mean-reversion', action: 'buy', score: 60 + quality,
       lastClose, reason: 'Range-bound discount relative to recent mean' }
   }
   if (regime === 'downtrend') {
