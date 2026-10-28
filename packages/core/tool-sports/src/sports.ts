@@ -307,7 +307,11 @@ export function pricedTicket(selections:MarketSelection[],quotes:MarketOutcome[]
   return { warning,card:{ component:'sports_ticket_card',version:1,props:{
     title:'PHOENIX · Ticket de análisis',subtitle:'Cuotas consultadas en proveedor real · '+new Date().toISOString(),
     legs,combinedOdds:combined.toFixed(3),stake:stake?stake.toFixed(2):undefined,grossReturn:stake?(stake*combined).toFixed(2):undefined,
-    source:legs.length&&quotes.some(q=>q.source?.includes('ESPN'))?'ESPN Site/Core (cuotas públicas cuando ESPN las publique)':'The Odds API · precios de las casas indicadas',note:'SIMULACIÓN, SIN APUESTA REAL. '+warning+' Las cuotas pueden cambiar; no existe garantía de ganar.',
+    source:quotes.some(q=>q.source?.includes('OddsHarvester'))?
+      'OddsHarvester/OddsPortal · precios públicos observados':
+      quotes.some(q=>q.source?.includes('ESPN'))?
+        'ESPN Site/Core (cuotas públicas cuando ESPN las publique)':
+        'The Odds API · precios de las casas indicadas',note:'SIMULACIÓN, SIN APUESTA REAL. '+warning+' Las cuotas pueden cambiar; no existe garantía de ganar.',
     askPrompt:'Kira, revisa este ticket con datos actuales, riesgos, ausencias y correlaciones antes de recomendar nada.',
   } } }
 }
