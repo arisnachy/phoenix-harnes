@@ -71,7 +71,7 @@ function actionFor(o){
  if(tab==="orders")actions=o.status==="ordered"?[["result","Resultado"]]:o.status==="resulted"?[["reviewOrder","Revisar"]]:[];
  if(tab==="inventory")actions=[["receive","Movimiento"]];
  if(tab==="invoices")actions=[["pay","Cobrar"]];
- if(tab==="appointments"&&o.status==="scheduled")actions=[["completeAppointment","Completar"]];
+ if(tab==="appointments"&&o.status==="scheduled")actions=[["completeAppointment","Completar"],...(actor.role==="clinician"&&o.practitioner===actor.username?[["sendReminder","Kira: enviar recordatorio"]]:[])];
  if(tab==="followups"&&o.status==="pending")actions=[["finishFollowup","Completar"]];
  return actions.map(a=>'<button class="secondary" data-act="'+a[0]+'" data-id="'+safe(o.id)+'">'+a[1]+'</button>').join("");
 }
@@ -80,7 +80,8 @@ function render(){
  const p=pick("patientId","Paciente",patients,x=>x.name+" · "+x.dateOfBirth);
  let form="";
  if(tab==="patients")form=field("name","Nombre completo")+field("dateOfBirth","Nacimiento","date")+field("email","Correo","email",false)+field("phone","Teléfono","tel",false)+
- '<label><input type="checkbox" id="consent" style="width:auto;display:inline"> Consentimiento electrónico registrado</label>'+button("create","Registrar paciente");
+ '<label><input type="checkbox" id="consent" style="width:auto;display:inline"> Paciente autorizó comunicaciones electrónicas</label>'+
+ '<label><input type="checkbox" id="verified" style="width:auto;display:inline"> Correo electrónico verificado con el paciente</label>'+button("create","Registrar paciente");
  if(tab==="encounters")form=p+field("specialty","Especialidad", "text", true,"Medicina familiar")+
  field("complaint","Motivo de consulta")+
  '<label>Modalidad Kira</label><select id="mode"><option value="kira">Kira interroga</option><option value="mixed">Mixto</option><option value="manual">Profesional</option></select>'+button("create","Abrir consulta")+
@@ -116,7 +117,7 @@ async function execute(action,id){
  if(action==="login"){const x=await api("login","POST",{username:val("user"),password:val("pass")});csrf=x.csrf;actor=x.actor;return load()}
  if(action==="create"){
   const v={
-   patients:{name:val("name"),dateOfBirth:val("dateOfBirth"),email:val("email"),phone:val("phone"),emailConsent:!!document.getElementById("consent")?.checked},
+   patients:{name:val("name"),dateOfBirth:val("dateOfBirth"),email:val("email"),phone:val("phone"),emailConsent:!!document.getElementById("consent")?.checked,emailVerified:!!document.getElementById("verified")?.checked},
    encounters:{patientId:val("patientId"),specialty:val("specialty"),complaint:val("complaint"),mode:val("mode")},
    appointments:{patientId:val("patientId"),practitioner:val("practitioner"),startsAt:val("startsAt"),reason:val("reason")},
    orders:{encounterId:val("encounterId"),modality:val("modality"),description:val("description")},
@@ -126,6 +127,12 @@ async function execute(action,id){
    staff:{username:val("username"),password:val("password"),role:val("role")},
   };
   await api(tab,"POST",v[tab]);notice("Operación guardada en el expediente cifrado.");return load()
+ }
+ if(action==="sendReminder"){
+  if(!confirm("¿Confirma el profesional el recordatorio de cita al correo verificado, con consentimiento registrado? Se enviará realmente desde la cuenta institucional de Kira si está conectada."))return;
+  const result=await api("reminders/"+id,"POST",{});
+  if(result.status==="sent")notice("Kira confirmó el envío del recordatorio con Gmail.");
+  return;
  }
  const resource=data[tab]?.find(x=>x.id===id);if(!resource)throw Error("Registro no encontrado");
  let patch={version:resource.version};
