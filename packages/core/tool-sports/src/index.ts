@@ -82,7 +82,7 @@ export function apply(ctx: Context): void {
       return JSON.stringify({summary:selected.length?result.summary:'Ningún encuentro coincide con esos filtros.',
         date:result.date,source:result.source,count:selected.length,uiBlocks,
         remaining:Math.max(0,selected.length-25),
-        instruction:'Phoenix presenta varios partidos en una sola cartelera dentro del chat; un encuentro individual conserva su sports_game_card original. No imprimas JSON ni repliques las tarjetas en prosa.' })
+        instruction:'Phoenix renderiza uiBlocks automáticamente en el chat. Presenta varios partidos en una sola cartelera; un encuentro individual conserva su sports_game_card original. No imprimas JSON ni repliques las tarjetas en prosa.' })
     },
     presentCall:()=>({ card:'generic',title:'Buscar partidos y sus datos',kind:'read' as const }),
   }))
