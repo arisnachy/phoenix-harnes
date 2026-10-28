@@ -96,12 +96,13 @@ const nowDay=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santo_Doming
  */
 export async function researchNbaSlate(
   date=nowDay(),eventId?:string,fetcher:typeof fetch=fetch,now=Date.now(),
-  env:NodeJS.ProcessEnv=process.env,lookbackDays=14,
+  env:NodeJS.ProcessEnv=process.env,lookbackDays=14,maxMatches=6,
 ):Promise<NbaResearchReport>{
   if(!hasSportsPermission('espn',env))throw Error('ESPN deshabilitado por el operador')
   if(!dayValid(date))throw Error('Fecha NBA inválida (AAAA-MM-DD)')
   if(eventId!==undefined&&!/^\d{1,20}$/u.test(eventId))throw Error('ID NBA inválido')
   if(!Number.isInteger(lookbackDays)||lookbackDays<1||lookbackDays>21)throw Error('Ventana NBA fuera de rango')
+  if(!Number.isInteger(maxMatches)||maxMatches<1||maxMatches>25)throw Error('Cantidad de encuentros NBA fuera de rango')
   const root='https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates='
   const getBoard=async(day:string):Promise<Board>=>{
     const board=await getFeed<Board>(root+day.replaceAll('-',''),fetcher)
@@ -114,7 +115,7 @@ export async function researchNbaSlate(
     return Number.isFinite(kickoff)&&kickoff>now
       && (e.status?.type?.state===undefined||e.status?.type?.state==='pre')
       && (eventId===undefined||String(e.id)===eventId)
-  }).slice(0,6)??[]
+  }).slice(0,maxMatches)??[]
   if(!pending.length)throw Error('No hay partidos NBA futuros verificables con esos filtros')
   const starting=new Date(date+'T12:00:00Z').getTime()
   const days=Array.from({length:lookbackDays},(_,i)=>isoDay(new Date(starting-(i+1)*86_400_000)))
