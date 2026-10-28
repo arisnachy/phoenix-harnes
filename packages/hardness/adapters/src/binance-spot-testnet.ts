@@ -107,8 +107,9 @@ export class BinanceSpotTestnet {
       const code = body && typeof body === 'object' && !Array.isArray(body)
         ? (body as Record<string, unknown>).code : undefined
       if (code === -1021 && !retriedClock) {
-        // A wrong Windows clock must not prevent a valid Testnet key from
-        // being reused. Synchronize once against the fixed Testnet host.
+        // Synchronize once against the fixed public Testnet time endpoint;
+        // a subsequent auth error must retain its own classification.
+        let offset: number
         try {
           const timeResponse = await this.request(BASE + '/api/v3/time', {
             method: 'GET', redirect: 'error', signal: AbortSignal.timeout(TIMEOUT_MS),
@@ -120,11 +121,11 @@ export class BinanceSpotTestnet {
             || !Number.isSafeInteger((timeValue as Record<string, number>).serverTime)) {
             throw new Error('time-invalid')
           }
-          const delta = Number((timeValue as Record<string, unknown>).serverTime) - this.clock()
-          return await this.signed(path, method, fields, delta, true)
+          offset = Number((timeValue as Record<string, unknown>).serverTime) - this.clock()
         } catch {
           throw new TestnetVerificationError('clock-skew')
         }
+        return this.signed(path, method, fields, offset, true)
       }
       if (code === -1021) throw new TestnetVerificationError('clock-skew')
       if (code === -1022) throw new TestnetVerificationError('invalid-signature')
