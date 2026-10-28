@@ -15,6 +15,7 @@ type Event = {
 
 /** A remote, isolated PAPER executor. This client has no real-order methods. */
 export class BinanceCloudPaperClient {
+  /** Validated HTTPS origin of the owner's isolated Cloud PAPER Worker. */
   readonly endpoint: string
   private readonly authToken: () => Promise<string | undefined>
 
@@ -31,7 +32,7 @@ export class BinanceCloudPaperClient {
     this.authToken = authToken
   }
 
-  private async request(path: '/snapshot' | '/admin/control' | string, action?: 'start' | 'stop'): Promise<unknown> {
+  private async request(path: '/snapshot' | '/admin/control' | `/events?after=${number}`, action?: 'start' | 'stop'): Promise<unknown> {
     const token = await this.authToken()
     if (token === undefined || token.length < 32) {
       throw new Error('Cloud trading ADMIN_TOKEN is not connected to the Host credential vault')
@@ -40,12 +41,12 @@ export class BinanceCloudPaperClient {
       method: action === undefined ? 'GET' : 'POST',
       redirect: 'error', signal: AbortSignal.timeout(8_000),
       headers: {
-        authorization: 'Bearer ' + token,
+        authorization: `Bearer ${token}`,
         ...(action === undefined ? {} : { 'content-type': 'application/json' }),
       },
       ...(action === undefined ? {} : { body: JSON.stringify({ action }) }),
     })
-    if (!response.ok) throw new Error('Cloud PAPER service unavailable or unauthorized (' + response.status + ')')
+    if (!response.ok) throw new Error(`Cloud PAPER service unavailable or unauthorized (${response.status})`)
     return response.json() as Promise<unknown>
   }
 
@@ -64,11 +65,12 @@ export class BinanceCloudPaperClient {
 
   /**
    * Fetch bounded persisted cloud attention events.
+   * @param after - Last processed D1 event sequence.
    * @returns Event objects already verified by the remote bearer-protected API.
    */
   async events(after = 0): Promise<{ readonly events: readonly Event[]; readonly nextCursor: number }> {
     if (!Number.isSafeInteger(after) || after < 0) throw new Error('Invalid Cloud PAPER cursor')
-    const result = await this.request('/events?after=' + after)
+    const result = await this.request(`/events?after=${after}`)
     if (!result || typeof result !== 'object' || !('events' in result)
       || !Array.isArray(result.events) || result.events.length > 100) {
       throw new Error('Unexpected Cloud PAPER event response')
@@ -121,10 +123,13 @@ export function installBinanceCloudWakeBridge(
   let cursor = 0
   const hydrate = async (): Promise<void> => {
     try {
-      const stored: SeenLedger = JSON.parse(await readFile(ledgerPath, 'utf8')) as SeenLedger
-      if (stored.schema === 1 && Array.isArray(stored.ids)) {
-        for (const id of stored.ids.filter(x => typeof x === 'string').slice(-500)) seen.add(id)
-        if (typeof stored.cursor === 'number' && Number.isSafeInteger(stored.cursor) && stored.cursor >= 0) {
+      const stored: unknown = JSON.parse(await readFile(ledgerPath, 'utf8'))
+      if (stored !== null && typeof stored === 'object'
+        && 'schema' in stored && stored.schema === 1
+        && 'ids' in stored && Array.isArray(stored.ids)) {
+        for (const id of stored.ids.filter((x: unknown): x is string => typeof x === 'string').slice(-500)) seen.add(id)
+        if ('cursor' in stored && typeof stored.cursor === 'number'
+          && Number.isSafeInteger(stored.cursor) && stored.cursor >= 0) {
           cursor = stored.cursor
         }
       }
@@ -136,6 +141,7 @@ export function installBinanceCloudWakeBridge(
     await writeFile(temp, JSON.stringify({ schema: 1, cursor, ids: [...seen].slice(-500) }), { mode: 0o600 })
     await rename(temp, ledgerPath)
   }
+  const isDisposed = (): boolean => disposed
   const poll = async (): Promise<void> => {
     if (disposed || pending) return
     pending = true
@@ -145,7 +151,7 @@ export function installBinanceCloudWakeBridge(
       for (let page = 0; page < 5; page++) {
         const remote = await client.events(cursor)
         for (const event of remote.events) {
-          if (disposed) return
+          if (isDisposed()) return
           if (!seen.has(event.id)
             && ['paper-entry', 'paper-exit', 'risk-review', 'risk-halt'].includes(event.kind)) {
             const at = new Date(event.at)
@@ -162,7 +168,10 @@ export function installBinanceCloudWakeBridge(
             }
           }
           seen.add(event.id)
-          if (seen.size > 500) seen.delete(seen.values().next().value!)
+          if (seen.size > 500) {
+            const oldest = seen.values().next()
+            if (!oldest.done) seen.delete(oldest.value)
+          }
           cursor = Math.max(cursor, event.seq)
           await persist()
         }
