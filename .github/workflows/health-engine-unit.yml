@@ -1,0 +1,22 @@
+name: PHOENIX Health Clinical Flow Tests
+on:
+  pull_request:
+    paths:
+      - 'packages/core/tool-health/**'
+      - '.github/workflows/health-engine-unit.yml'
+  push:
+    paths:
+      - 'packages/core/tool-health/**'
+      - '.github/workflows/health-engine-unit.yml'
+jobs:
+  clinical-workflow:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Validate deterministic clinical state and mail gates
+        run: node --experimental-strip-types --test packages/core/tool-health/tests/clinical-flow.test.mjs
