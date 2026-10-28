@@ -59,7 +59,7 @@ test('clinical revision and signing enforce concurrency and professional ownersh
   let e=db.create(d,'encounters',{patientId:p.id,specialty:'General',complaint:'Control',mode:'manual'})
   assert.throws(()=>db.update(d,'encounters',e.id,e.version,{action:'sign'}),/revisada/)
   e=db.update(d,'encounters',e.id,e.version,{action:'document',history:'Anamnesis registrada',exam:'Sin datos ficticios'})
-  assert.throws(()=>db.update(other,'encounters',e.id,e.version,{action:'review'}),/otro profesional/)
+  assert.throws(()=>db.update(other,'encounters',e.id,e.version,{action:'review'}),/no asignado/)
   e=db.update(d,'encounters',e.id,e.version,{action:'review'})
   assert.throws(()=>db.update(d,'encounters',e.id,e.version-1,{action:'sign'}),/Conflicto/)
   e=db.update(d,'encounters',e.id,e.version,{action:'sign'})
