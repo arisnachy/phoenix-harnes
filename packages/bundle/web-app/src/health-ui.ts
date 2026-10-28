@@ -44,7 +44,7 @@ async function api(path,method="GET",body){
  const x=await r.json();if(!r.ok)throw Error(x.error||"Solicitud rechazada");return x;
 }
 async function refresh(){
- try{const x=await api("session");actor=x.actor;csrf=x.csrf;await load()}catch{actor=null;csrf="";await splash()}
+ try{const x=await api("session");actor=x.actor;csrf=x.csrf;data={};await load()}catch{actor=null;csrf="";await splash()}
 }
 async function splash(){
  let status=await api("status");
@@ -86,8 +86,8 @@ function actionFor(o){
  return actions.map(a=>'<button class="secondary" data-act="'+a[0]+'" data-id="'+safe(tab==="assignments"?o.patientId+"|"+o.staffId:o.id)+'">'+a[1]+'</button>').join("");
 }
 function render(){
- const d=tab==="backups"?(data.backups||[]).map(fileName=>({fileName})):data[tab]||[],patients=data.patients||data["patient-options"]||[];
- const p=pick("patientId","Paciente",patients,x=>x.name+" · "+x.dateOfBirth);
+ const d=tab==="backups"?(data.backups||[]).map(fileName=>({fileName})):data[tab]||[],patients=tab==="invoices"&&actor.role==="billing"?(data["patient-options"]||[]):data.patients||data["patient-options"]||[];
+ const p=pick("patientId","Paciente",patients,x=>x.name+(x.dateOfBirth?" · "+x.dateOfBirth:""));
  let form="";
  if(tab==="patients"&&["admin","clinician","reception"].includes(actor.role))form=field("name","Nombre completo")+field("dateOfBirth","Nacimiento","date")+field("email","Correo","email",false)+field("phone","Teléfono","tel",false)+
  '<p class="muted">El consentimiento se registra después de verificarlo, con responsable y referencia de evidencia.</p>'+button("create","Registrar paciente");
@@ -125,9 +125,9 @@ function render(){
  box("Registros",genericRows(d,cols))+(tab==="prescriptions"?'<p class="notice warning">Las recetas no se envían por correo desde esta versión. La firma clínica exige revisión profesional.</p>':'');
 }
 async function execute(action,id){
- if(action==="logout"){await api("logout","POST",{});actor=null;csrf="";return splash()}
+ if(action==="logout"){await api("logout","POST",{});actor=null;csrf="";data={};tab="patients";return splash()}
  if(action==="setup"){await api("setup","POST",{username:val("user"),password:val("pass"),organization:val("org")});notice("Clínica configurada. Inicia sesión.");return splash()}
- if(action==="login"){const x=await api("login","POST",{username:val("user"),password:val("pass")});csrf=x.csrf;actor=x.actor;return load()}
+ if(action==="login"){const x=await api("login","POST",{username:val("user"),password:val("pass")});csrf=x.csrf;actor=x.actor;data={};tab="patients";return load()}
  if(action==="backup"){
   if(!confirm("¿Crear una copia consistente del expediente cifrado?"))return;
   const result=await api("backups","POST",{});
