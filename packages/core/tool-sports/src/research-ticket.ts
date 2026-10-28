@@ -1,5 +1,6 @@
 /** Ticket de pronósticos con encuentros verificables aunque falten cuotas comerciales. */
 import { getFeed, hasSportsPermission, sportsCatalog, type ChatBlock } from './sports.ts'
+import { researchNbaSlate } from './nba-research.ts'
 
 /** Selección propuesta por Kira, independiente de cualquier precio de apuestas. */
 export type ResearchTicketLeg = {
@@ -161,7 +162,8 @@ export async function researchTicket(
 }
 
 /** Candidates come only from ESPN fixtures and reported win-loss records, never synthetic IDs.
- * A simple record comparison is a transparent heuristic, NOT a calibrated predictive model.
+ * NBA auto-picks additionally require recent completed games, margins and rest. Neither
+ * measure is a calibrated predictive model; unavailable evidence never becomes an NBA pick.
  * Returns a visibly incomplete draft when fewer than the requested legs have evidence.
  */
 export async function autoResearchTicket(
@@ -227,8 +229,39 @@ export async function autoResearchTicket(
       })
     }
   }
-  candidates.sort((a,b)=>b.edge-a.edge||a.leg.eventId.localeCompare(b.leg.eventId))
-  const chosen=candidates.slice(0,count).map(x=>x.leg)
+  // Never promote a record-only NBA candidate into an auto-pick.
+  // Historical scoreboards provide observed form and rest, not win probabilities.
+  let nbaEvidence=new Map<string,Awaited<ReturnType<typeof researchNbaSlate>>['matches'][number]>()
+  if(candidates.some(x=>x.leg.sport==='basketball'&&x.leg.league==='nba')){
+    try{
+      const report=await researchNbaSlate(requestedDate,undefined,fetcher,now,env,14,25)
+      nbaEvidence=new Map(report.matches.map(m=>[m.eventId,m]))
+    }catch{ /* Missing history must NOT turn into a record-only NBA recommendation. */ }
+  }
+  const researched=candidates.flatMap(candidate=>{
+    if(candidate.leg.sport!=='basketball'||candidate.leg.league!=='nba')return [candidate]
+    const game=nbaEvidence.get(candidate.leg.eventId)
+    if(!game?.sampleAdequate)return []
+    const homeMargin=game.home.recentAverageMargin,awayMargin=game.away.recentAverageMargin
+    if(homeMargin===null||awayMargin===null)return []
+    const restDifference=(game.home.restHours??0)-(game.away.restHours??0)
+    // Cap the context adjustment; no empirical calibration is claimed.
+    const restAdjustment=Math.max(-2,Math.min(2,restDifference/24))
+    const difference=homeMargin-awayMargin+restAdjustment
+    if(Math.abs(difference)<4)return []
+    const favorite=difference>0?game.home:game.away
+    const other=difference>0?game.away:game.home
+    return [{
+      edge:Math.min(Math.abs(difference)/25,0.95),
+      leg:{...candidate.leg,pick:difference>0?'home' as const:'away' as const,
+        rationale:clean('Forma verificada (últimos '+favorite.gamesObserved+' juegos): '+favorite.team+
+          ' margen '+favorite.recentAverageMargin+' frente a '+other.team+' '+
+          other.recentAverageMargin+'; descanso previo '+favorite.restHours+'h. '+
+          'Lesiones, eficiencia y cuotas pendientes; tendencia, no probabilidad.',240)},
+    }]
+  })
+  researched.sort((a,b)=>b.edge-a.edge||a.leg.eventId.localeCompare(b.leg.eventId))
+  const chosen=researched.slice(0,count).map(x=>x.leg)
   if(!chosen.length)throw Error('No hay eventos futuros con registros contrastables suficientes para proponer un ticket; no inventaré patas.')
   return researchTicket(chosen,requestedDate,fetcher,now,env,count,true,boards)
 }
