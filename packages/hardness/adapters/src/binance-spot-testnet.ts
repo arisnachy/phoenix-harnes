@@ -180,6 +180,44 @@ export class BinanceSpotTestnet {
     }
   }
 
+  /** Obtain a Testnet-only executable reference price without private keys. */
+  async quote(rawSymbol: string): Promise<number> {
+    const symbol = pair(rawSymbol)
+    const response = await this.request(BASE + '/api/v3/ticker/price?symbol=' + symbol, {
+      method: 'GET', redirect: 'error', signal: AbortSignal.timeout(TIMEOUT_MS),
+    })
+    if(!response.ok)throw new TestnetVerificationError('provider-unavailable')
+    const value: unknown = await response.json().catch(()=>undefined)
+    if(!value || typeof value !== 'object' || Array.isArray(value))throw new TestnetVerificationError('invalid-response')
+    const record=value as Record<string, unknown>
+    const price=Number(record.price)
+    if(record.symbol!==symbol || !Number.isFinite(price)||price<=0)throw new TestnetVerificationError('invalid-response')
+    return price
+  }
+
+  /** Read exchange LOT_SIZE rules before every autonomous partial/full SELL. */
+  async lotSize(rawSymbol: string): Promise<{ readonly minQty: string; readonly maxQty: string; readonly stepSize: string }> {
+    const symbol=pair(rawSymbol)
+    const response=await this.request(BASE+'/api/v3/exchangeInfo?symbol='+symbol,{
+      method:'GET',redirect:'error',signal:AbortSignal.timeout(TIMEOUT_MS),
+    })
+    if(!response.ok)throw new TestnetVerificationError('provider-unavailable')
+    const value: unknown=await response.json().catch(()=>undefined)
+    const rows=typeof value==='object'&&value!==null&&!Array.isArray(value)
+      ?(value as Record<string,unknown>).symbols:undefined
+    if(!Array.isArray(rows)||rows.length!==1)throw new TestnetVerificationError('invalid-response')
+    const row: unknown=rows[0]
+    if(!row||typeof row!=='object'||Array.isArray(row))throw new TestnetVerificationError('invalid-response')
+    const record=row as Record<string,unknown>
+    if(record.symbol!==symbol||!Array.isArray(record.filters))throw new TestnetVerificationError('invalid-response')
+    const filter=record.filters.find(f=>f!==null&&typeof f==='object'&&!Array.isArray(f)&&f.filterType==='LOT_SIZE') as Record<string,unknown>|undefined
+    if(!filter || typeof filter.stepSize!=='string' || typeof filter.minQty!=='string'
+      || typeof filter.maxQty!=='string' || ![filter.stepSize,filter.minQty,filter.maxQty].every(x=>Number(x)>0)) {
+      throw new TestnetVerificationError('invalid-response')
+    }
+    return {stepSize:filter.stepSize,minQty:filter.minQty,maxQty:filter.maxQty}
+  }
+
   /**
    * Submit one real TESTNET order, never a production Binance order.
    * Call only after the user explicitly requests this TESTNET transaction.
