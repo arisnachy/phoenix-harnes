@@ -217,7 +217,8 @@ export async function autoResearchTicket(
       const hp=(h.wins+1)/(h.wins+h.losses+2)
       const ap=(a.wins+1)/(a.wins+a.losses+2)
       const difference=hp-ap
-      if(Math.abs(difference)<0.055)continue
+      // A tied NBA record must not hide a meaningful recent-form divergence.
+      if(Math.abs(difference)<0.055&&!(sport==='basketball'&&league==='nba'))continue
       const winner=difference>0?h:a
       const loser=difference>0?a:h
       candidates.push({
