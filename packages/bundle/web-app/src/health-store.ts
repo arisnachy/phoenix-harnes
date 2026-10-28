@@ -329,7 +329,7 @@ export class HealthClinicStore {
       const patient=this.insert(actor,kind,{name:str(x.name,'Nombre',160),dateOfBirth:dob,
       email:email.slice(0,254),phone:typeof x.phone==='string'?x.phone.trim().slice(0,35):'',
       notes:typeof x.notes==='string'?x.notes.slice(0,4000):'',emailConsent:false,
-      emailVerified:false,contactEvidence:null})
+      emailVerified:false,contactEvidence:null,allergyReview:null})
       if(actor.role==='clinician'){
         // Registering a patient is an explicit treatment relationship for this clinician.
         const newPatientId=str(patient.id,'Paciente creado',80)
@@ -365,8 +365,17 @@ export class HealthClinicStore {
         return this.insert(actor,kind,{encounterId,patientId:enc.patientId,modality,description:text(x.description,'Estudio',600),
           status:'ordered',result:'',reviewedBy:null})
       }
+      const patient=this.find(actor,'patients',str(enc.patientId,'Paciente',80)).data
+      const allergy=patient.allergyReview
+      if(!allergy||typeof allergy!=='object'||Array.isArray(allergy))fail('Falta revisión de alergias del paciente')
+      const reviewed=allergy as RecordData
+      if(reviewed.reviewedBy!==actor.username||!['none-known','documented'].includes(String(reviewed.status)))
+        fail('El prescriptor debe verificar y documentar alergias antes de recetar')
+      if(x.safetyAcknowledged!==true)fail('Debe confirmar revisión de alergias, interacciones y dosis')
       return this.insert(actor,kind,{encounterId,patientId:enc.patientId,medication:text(x.medication,'Medicamento',240),
-        directions:text(x.directions,'Indicaciones',1400),signedBy:actor.username,status:'prescribed'})
+        directions:text(x.directions,'Indicaciones',1400),signedBy:actor.username,status:'prescribed',
+        safetyReview:{attestedBy:actor.username,at:new Date().toISOString(),allergyStatus:reviewed.status,
+          allergyReviewAt:reviewed.reviewedAt,drugInteractionCatalogChecked:false}})
     }
     if(kind==='inventory')return this.insert(actor,kind,{item:str(x.item,'Producto',200),units:0})
     if(kind==='invoices') {
@@ -458,6 +467,17 @@ export class HealthClinicStore {
     if(!Number.isSafeInteger(version)||version<1)fail('Versión inválida')
     const x=withLimit(value)
     if(kind==='patients'){
+      if(x.action==='allergy-review'){
+        if(actor.role!=='clinician')fail('Solo el médico responsable puede verificar alergias')
+        return this.modify(actor,kind,id,version,current=>{
+          const status=str(x.status,'Estado de alergias',24)
+          if(!['none-known','documented'].includes(status))fail('Estado de alergias no confirmado')
+          const details=typeof x.details==='string'?x.details.trim():''
+          if(status==='documented'&&(!details||details.length>2500))fail('Documente los alérgenos y reacciones')
+          return {...current,allergyReview:{status,details:status==='documented'?details:'',
+            reviewedBy:actor.username,reviewedAt:new Date().toISOString()}}
+        })
+      }
       if(x.action!=='contact')fail('Acción de contacto inválida')
       return this.modify(actor,kind,id,version,current=>{
         if(!['reception','clinician','admin'].includes(actor.role))fail('Acceso denegado')

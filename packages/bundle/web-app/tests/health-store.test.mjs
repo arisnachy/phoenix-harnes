@@ -66,7 +66,9 @@ test('clinical revision and signing enforce concurrency and professional ownersh
   assert.equal(e.signedBy,'doctor1')
   assert.throws(()=>db.update(d,'encounters',e.id,e.version,{action:'document',history:'Edit'}),/firmada/)
   let order=db.create(d,'orders',{encounterId:e.id,modality:'laboratory',description:'Control de laboratorio'})
-  const med=db.create(d,'prescriptions',{encounterId:e.id,medication:'Medicamento',directions:'Plan revisado'})
+  const profile=db.list(d,'patients').find(x=>x.id===p.id)
+  db.update(d,'patients',p.id,profile.version,{action:'allergy-review',status:'none-known',details:''})
+  const med=db.create(d,'prescriptions',{encounterId:e.id,medication:'Medicamento',directions:'Plan revisado',safetyAcknowledged:true})
   assert.equal(med.signedBy,'doctor1')
   db.createStaff(admin.actor,{username:'labuser',password:'another-secure-password-2026',role:'lab'})
   const lab=db.login('labuser','another-secure-password-2026').actor
@@ -128,7 +130,9 @@ test('real pharmacy dispensing is atomic, signed, single-use, and decrements sto
   encounter=db.update(doctor,'encounters',encounter.id,encounter.version,{action:'document',history:'Historia profesional'})
   encounter=db.update(doctor,'encounters',encounter.id,encounter.version,{action:'review'})
   encounter=db.update(doctor,'encounters',encounter.id,encounter.version,{action:'sign'})
-  const rx=db.create(doctor,'prescriptions',{encounterId:encounter.id,medication:'Producto autorizado',directions:'Instrucciones clínicas redactadas por profesional'})
+  const profile=db.list(doctor,'patients').find(x=>x.id===patient.id)
+  db.update(doctor,'patients',patient.id,profile.version,{action:'allergy-review',status:'none-known',details:''})
+  const rx=db.create(doctor,'prescriptions',{encounterId:encounter.id,medication:'Producto autorizado',directions:'Instrucciones clínicas redactadas por profesional',safetyAcknowledged:true})
   let stock=db.create(pharmacist,'inventory',{item:'Producto autorizado'})
   stock=db.update(pharmacist,'inventory',stock.id,stock.version,{delta:2})
   const result=db.dispense(pharmacist,rx.id,stock.id)
@@ -239,4 +243,25 @@ test('billing sees only minimum patient locator and cannot read clinical demogra
  assert.throws(()=>db.list(billing,'patients'),/Permiso/)
  const invoice=db.create(billing,'invoices',{patientId:patient.id,concept:'Consulta',amountCents:40000})
  assert.equal(invoice.patientId,patient.id)
+})
+
+test('prescription cannot bypass explicit professional allergy and pharmacology review',t=>{
+  const {db,admin}=fixture(t)
+  db.createStaff(admin.actor,{username:'doctor1',password:'another-secure-password-2026',role:'clinician'})
+  const doctor=db.login('doctor1','another-secure-password-2026').actor
+  const patient=db.create(admin.actor,'patients',{name:'Safety control',dateOfBirth:'1988-01-01'})
+  db.assignPatient(admin.actor,patient.id,'doctor1','Tratamiento')
+  let encounter=db.create(doctor,'encounters',{patientId:patient.id,specialty:'General',complaint:'Consulta',mode:'manual'})
+  encounter=db.update(doctor,'encounters',encounter.id,encounter.version,{action:'document',history:'Historia'})
+  encounter=db.update(doctor,'encounters',encounter.id,encounter.version,{action:'review'})
+  encounter=db.update(doctor,'encounters',encounter.id,encounter.version,{action:'sign'})
+  const rx={encounterId:encounter.id,medication:'Fármaco',directions:'Indicación profesional',safetyAcknowledged:true}
+  assert.throws(()=>db.create(doctor,'prescriptions',rx),/Falta revisión/)
+  const fresh=db.list(doctor,'patients')[0]
+  db.update(doctor,'patients',patient.id,fresh.version,{action:'allergy-review',status:'documented',
+    details:'Alergia declarada por el paciente; requiere contraste'})
+  assert.throws(()=>db.create(doctor,'prescriptions',{...rx,safetyAcknowledged:false}),/confirmar revisión/)
+  const result=db.create(doctor,'prescriptions',rx)
+  assert.equal(result.safetyReview.attestedBy,'doctor1')
+  assert.equal(result.safetyReview.drugInteractionCatalogChecked,false)
 })
