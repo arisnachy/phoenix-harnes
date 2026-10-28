@@ -68,6 +68,7 @@ export function TradingDashboard({ initial }: Props) {
   const [controlError, setControlError] = useState<string | undefined>()
   // A user can configure a multi-asset PAPER watchlist without spending tokens.
   const [watchlistDraft, setWatchlistDraft] = useState<string | undefined>()
+  const [autoDiscoverDraft, setAutoDiscoverDraft] = useState(true)
   const [testnetState, setTestnetState] = useState<TestnetState | undefined>()
   const [mcpState, setMcpState] = useState<McpState | undefined>()
   const [connectionIssue, setConnectionIssue] = useState<string | undefined>()
@@ -230,7 +231,7 @@ export function TradingDashboard({ initial }: Props) {
       }
       const payload = action === 'start'
         ? { action, symbols: watchlist, interval: state.settings.interval,
-          pollMinutes: state.settings.pollMs / 60_000 }
+          pollMinutes: state.settings.pollMs / 60_000, autoDiscover: autoDiscoverDraft }
         : { action }
       const response = await fetch('/phoenix-trading/paper/control', {
         method: 'POST', cache: 'no-store', credentials: 'same-origin',
@@ -282,7 +283,7 @@ export function TradingDashboard({ initial }: Props) {
       </div>
       <div className={css.toolbar}>
         <div>
-          <strong>Escáner multimoneda · {settings.symbols.length} pares configurados</strong>
+          <strong>Escáner multimoneda · {settings.autoDiscover ? 'Radar dinámico' : settings.symbols.length + ' pares fijos'}</strong>
           <small>{settings.interval} · Revisión cada {settings.pollMs / 60_000} min mientras el Host esté activo</small>
         </div>
         <div className={css.actions}>
@@ -295,19 +296,38 @@ export function TradingDashboard({ initial }: Props) {
         </div>
       </div>
       <div className={css.tradingRadarMeta} aria-live="polite">
+        <span>Ciclos válidos: {state.successfulCycles ?? 'sin telemetría'}</span>
+        <span>Oportunidades de 75/100+: {state.signalsQualified ?? 'sin telemetría'}</span>
+        <span>Ciclos con ejecución: {state.filledCycles ?? 'sin telemetría'}</span>
+        <span>Universo: {state.universeSize ?? 0} pares líquidos</span>
+        <span>Próximo análisis: {clock(state.nextCheckAt)}</span>
+        {state.lastDiscoveryIssue && <span role="status">{state.lastDiscoveryIssue}</span>}
         <strong>{running ? 'Radar encendido' : 'Radar detenido'}</strong>
         <span>Último análisis: {clock(state.lastSuccessAt)}</span>
         <span>Resultado: {state.lastDecision === 'buy' ? 'Compra PAPER' : state.lastDecision === 'sell' ? 'Venta PAPER' : 'Esperar / sin señal'}</span>
         <span>{state.signals.length} de {settings.symbols.length} pares evaluados</span>
       </div>
       <label className={css.watchlist}>
-        <span>Mercados vigilados (1–12 pares USDT, separados por coma)</span>
+        <span>Pares prioritarios (1–12, se mantienen al explorar)</span>
         <input type="text" spellCheck={false} aria-label="Lista de mercados PAPER"
           disabled={running || controlBusy}
           value={watchlistDraft ?? settings.symbols.join(', ')}
           onChange={event => { setWatchlistDraft(event.currentTarget.value) }}
           placeholder="BTCUSDT, ETHUSDT, SOLUSDT, BNBUSDT" />
       </label>
+      <label className={css.autoDiscovery}>
+        <input type="checkbox" checked={running ? settings.autoDiscover : autoDiscoverDraft}
+          disabled={running || controlBusy}
+          onChange={event => { setAutoDiscoverDraft(event.currentTarget.checked) }} />
+        <span>Al iniciar: descubrir hasta 120 pares Spot USDT líquidos y rotar 12 en cada análisis.
+          Mantener los tres primeros pares prioritarios. Solo PAPER.</span>
+      </label>
+      {running && !settings.autoDiscover && <p className={css.tradingNotice}>
+        El radar está limitado a una lista fija. Detén e inicia PAPER con descubrimiento automático para ampliar la búsqueda.
+      </p>}
+      {state.lastScannedSymbols && state.lastScannedSymbols.length > 0 && <p className={css.tradingNotice}>
+        Últimos mercados evaluados: {state.lastScannedSymbols.join(' · ')}
+      </p>}
       <TradingMarketChart symbols={settings.symbols} trades={state.recentTrades} />
       <section className={css.connectionPanel} aria-label="Conexiones a Binance">
         <header className={css.connectionHeading}>
