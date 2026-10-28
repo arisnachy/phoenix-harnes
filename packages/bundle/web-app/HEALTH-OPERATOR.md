@@ -47,9 +47,28 @@ Al solicitar un recordatorio desde **Agenda**, PHOENIX primero consulta `users/m
 
 **Esto es envío REAL cuando se satisfacen las credenciales/validaciones, pero no es un sistema de recordatorios automáticos ni entrega segura de recetas.** Recetas, planes y resultados clínicos requieren futuro portal de paciente cifrado y consentimiento adaptado; no se adjuntan a un correo ordinario.
 
+## Acceso por relación asistencial
+
+La cuenta profesional no recibe acceso automático a todos los pacientes. Administración y recepción pueden conceder y revocar asignaciones desde **Equipo asistencial**, indicando el profesional y la finalidad de atención. El servidor valida la institución y la función del destinatario, conserva un registro auditable y oculta los expedientes de pacientes no asignados. Un profesional que crea personalmente un registro de paciente obtiene su relación inicial de atención, también auditada. La interfaz limita las funciones por rol, pero la autorización definitiva ocurre en el servidor.
+
+## Consentimiento de contacto
+
+La creación inicial de un paciente **no** activa por sí misma el permiso de envío, aunque el formulario o una API intenten incluir `emailConsent: true`. Un usuario autenticado de recepción, administración o el clínico autorizado debe utilizar la acción **Consentimiento**, registrar el método de verificación (`in-person`, `signed-document` o `verified-call`) y aportar una referencia documental. La autorización y la revocación generan nuevas versiones de registro y eventos de auditoría. El envío de recordatorio queda bloqueado si falta esa evidencia.
+
+**Importante:** el mecanismo guarda una declaración verificable de personal autenticado. No valida de forma independiente el documento o la titularidad del correo. La verificación externa de identidad y las firmas legales siguen pendientes.
+
+## Respaldo y recuperación
+
+En el área **Respaldos**, el administrador puede solicitar una instantánea local mediante la API de copia online de SQLite; el proceso abre el archivo resultante y exige `PRAGMA integrity_check = ok`. Las copias se guardan en `$DSH_HOME/health/backups/` y los eventos se auditan. Los registros de la copia conservan su cifrado por registro, pero **el archivo SQLite no está cifrado por completo** y puede incluir metadatos operativos; resguardar carpeta, permisos y dispositivos.
+
+La prueba automatizada abre un respaldo como una nueva base y verifica que puede recuperar registros usando la contraseña del administrador original. Para una recuperación real deben detenerse todas las instancias de PHOENIX, archivarse el estado previo completo, probarse la copia en un entorno aislado y seguir un procedimiento institucional de restauración. No se ha implementado todavía el sistema completo de respaldos fuera del equipo, rotación, recuperación de claves ni recuperación ante desastres. Nunca sobrescribir una base abierta ni copiar solo el archivo principal cuando SQLite trabaja en WAL.
+
+El desbloqueo de la clínica verifica la cadena HMAC de auditoría; si detecta modificaciones, rechaza el acceso.
+
 ## Límites de la entrega
 
 - No es todavía un EHR certificado ni un sistema sanitario homologado en República Dominicana.
+- El control de acceso por relación asistencial y el respaldo local son primeros controles; faltan pruebas de penetración, licencia profesional verificable, controles de emergencia, relación por finalidad y recuperación completa de claves.
 - No hay visores DICOM, dispositivos LIS/RIS/PACS, facturación ARS, integración de caja externa, telemedicina ni recuperación ante desastres probada.
 - La historia clínica no está aún conectada de extremo a extremo con el razonamiento de Kira. El modelo no puede leerla directamente ni producir prescripciones firmadas.
 - Correo real limitado a recordatorios explícitamente aprobados, con Gmail institucional validado; no hay cron automático ni acceso remoto del paciente.
