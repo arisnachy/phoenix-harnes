@@ -41,18 +41,24 @@ export async function evidenceTicket(
   }))
   const eligible=slate.flatMap(r=>r.status==='fulfilled'&&r.value.active>0?[r.value]:[])
   eligible.sort((a,b)=>b.active-a.active||a.sport.localeCompare(b.sport))
-  // Investigate the three most promising supported leagues (<=3 * 15 history requests).
-  // Their match IDs are validated AGAIN when the actual ticket is composed.
-  const shortlist=eligible.slice(0,3)
-  const reports=await Promise.allSettled(shortlist.map(({sport,league})=>
-    researchSport(sport,league,date,fetcher,now,env,14)))
+  // Scan a bounded slate of six leagues, in batches of three. NFL needs
+  // several weeks to collect three real matches; soccer typically needs 21 days.
+  // Only verified future event IDs can ever be promoted to ticket legs.
+  const shortlist=eligible.slice(0,6)
+  const reports:Array<PromiseSettledResult<Awaited<ReturnType<typeof researchSport>>>>=[]
+  for(let offset=0;offset<shortlist.length;offset+=3){
+    const batch=await Promise.allSettled(shortlist.slice(offset,offset+3).map(({sport,league})=>
+      researchSport(sport,league,date,fetcher,now,env,
+        sport==='football'?28:sport==='soccer'?21:14)))
+    reports.push(...batch)
+  }
   const candidateLegs:Array<{pick:ResearchTicketLeg;rank:number;home:string;away:string;kickoff:string}>=[]
   let evaluated=0
   for(const report of reports){
     if(report.status!=='fulfilled')continue
     for(const match of report.value.matches){
       evaluated++
-      if(match.evidence!=='descriptive'||match.home.completedGames<2||match.away.completedGames<2)continue
+      if(match.evidence!=='descriptive'||match.home.completedGames<3||match.away.completedGames<3)continue
       const home=match.home,away=match.away
       if(home.averageMargin===null||away.averageMargin===null||home.averageScored===null||away.averageScored===null)continue
       const winDiff=percent(home.wins,home.completedGames)-percent(away.wins,away.completedGames)
@@ -63,10 +69,17 @@ export async function evidenceTicket(
       const rank=0.65*winDiff+0.30*marginDiff+0.05*restDiff
       if(Math.abs(rank)<0.14)continue
       const favorite=rank>0?home:away,opponent=rank>0?away:home
-      const rationale=('Formas verificadas: '+favorite.name+' '+favorite.wins+'V-'+favorite.losses+
-        'D frente a '+opponent.name+' '+opponent.wins+'V-'+opponent.losses+
-        'D; margen reciente '+favorite.averageMargin+' vs '+opponent.averageMargin+
-        '. Lesiones y cuotas pendientes; índice relativo NO probabilidad.').slice(0,240)
+      const sportRisks:Record<string,string>={
+        soccer:'once/lesiones y xG',basketball:'lesiones y rotaciones',
+        baseball:'abridores y bullpen',football:'QB y bajas',
+        hockey:'portero titular',tennis:'superficie y molestias físicas',
+      }
+      const rationale=('ESPN últimos '+favorite.completedGames+' juegos: '+favorite.name+' '+
+        favorite.wins+'V-'+favorite.losses+'D; rival '+opponent.name+' '+
+        opponent.wins+'V-'+opponent.losses+'D. Márgenes '+favorite.averageMargin+
+        ' vs '+opponent.averageMargin+'; descanso '+(favorite.restHours??'?')+
+        'h. Pendiente: '+(sportRisks[match.sport]??'alineación')+
+        ' y cuotas. Tendencia, NO probabilidad.').slice(0,240)
       candidateLegs.push({rank:Math.abs(rank),home:home.name,away:away.name,kickoff:match.date,pick:{
         sport:match.sport,league:match.league,eventId:match.eventId,
         pick:rank>0?'home':'away',rationale,

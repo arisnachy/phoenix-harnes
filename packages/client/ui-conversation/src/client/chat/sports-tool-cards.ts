@@ -17,14 +17,17 @@ type ResultBlock = {
 }
 const ALLOWED_NAMES = new Set([
   'sports_chat_games','sports_chat_odds','sports_chat_ticket','sports_chat_ticket_research',
+  'sports_chat_ticket_research_auto',
   'sports_chat_mlb_pitchers',
+  'sports_chat_ticket_evidence_auto','sports_chat_ticket_evidence_priced_auto',
+  'sports_chat_odds_keyless',
 ])
 const ALLOWED_COMPONENTS = new Set([
   'sports_game_card','sports_schedule_card','sports_ticket_card','sports_odds_card','comparison','smart_card',
 ])
-const MAX_TEXT_BYTES = 125_000
+const MAX_TEXT_BYTES = 1_000_000
 const MAX_SPORTS_CARDS = 6
-const MAX_NODES = 64
+const MAX_NODES = 128
 
 /** Distinguish a validated first-party sports card from arbitrary model JSON. */
 function verifiedCard(value: unknown): GenerativeUiBlock | null {
@@ -46,12 +49,17 @@ export function sportsCardsFromToolResult(root: unknown): GenerativeUiBlock[] {
     if(!next)break
     const [tool,depth]=next
     visited++
-    if(depth<6&&Array.isArray(tool.subCalls)){
+    if(depth<10&&Array.isArray(tool.subCalls)){
       for(const child of [...tool.subCalls].slice(0,24).reverse()){
         if(child&&typeof child==='object')stack.push([child,depth+1])
       }
     }
-    if(tool.kind!=='tool-result'||!ALLOWED_NAMES.has(tool.call?.name??''))continue
+    if(tool.kind!=='tool-result')continue
+    // MCP bridges can prefix the canonical tool name. Accept only known
+    // namespaces and the same strict first-party allowlist, never arbitrary JSON.
+    const called=tool.call?.name??''
+    const canonical=called.startsWith('mcp__') ? called.split('__').at(-1)??'' : called
+    if(!ALLOWED_NAMES.has(canonical))continue
     if(tool.isError)continue
     const data=Array.isArray(tool.content)?tool.content:[]
     const text=data.filter(b=>b.type==='text'&&typeof b.text==='string').map(b=>b.text).join('')
@@ -87,7 +95,11 @@ export function unrenderedSportsCards(
     }
   }
   const added=new Set<string>(),output:GenerativeUiBlock[]=[]
-  for(const card of cards){
+  // The requested ticket must never disappear behind six earlier fixtures
+  // from the same research round. Preserve original order inside each tier.
+  const prioritized=[...cards].sort((a,b)=>
+    Number(b.component==='sports_ticket_card')-Number(a.component==='sports_ticket_card'))
+  for(const card of prioritized){
     if(output.length>=MAX_SPORTS_CARDS)break
     const signature=JSON.stringify(card)
     if(present.has(signature)||added.has(signature))continue

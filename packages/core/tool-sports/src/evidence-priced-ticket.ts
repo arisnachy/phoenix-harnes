@@ -24,6 +24,7 @@ export async function evidencePricedTicket(
   count:number,date?:string,sport?:string,stake=0,now=Date.now(),
   env:NodeJS.ProcessEnv=process.env,fetcher:typeof fetch=fetch,
   quotesProvider?:(sport:string,market:string,day:string,env:NodeJS.ProcessEnv,now:number)=>Promise<KeylessQuote[]>,
+  marketPreference:'winner'|'double_chance'='winner',
 ):Promise<{card:ChatBlock;priced:boolean;placed:false;complete:boolean;
   verifiedEvents:number;quotedLegs:number;missingQuotes:number;
   explanation:string}>{
@@ -39,22 +40,30 @@ export async function evidencePricedTicket(
   const sources=await Promise.allSettled(categories.map(async category=>{
     const route=routing[category]
     if(!route)return {category,quotes:[] as KeylessQuote[]}
-    const quotes=quotesProvider?await quotesProvider(route.sport,route.market,day,env,now):
-      await keylessOdds(route.sport,route.market,day,env,now)
+    const market=category==='soccer'&&marketPreference==='double_chance'
+      ?'double_chance':route.market
+    const quotes=quotesProvider?await quotesProvider(route.sport,market,day,env,now):
+      await keylessOdds(route.sport,market,day,env,now)
     return {category,quotes}
   }))
   const all=sources.flatMap(s=>s.status==='fulfilled'?s.value.quotes:[])
   const groups:KeylessQuote[][]=research.events.map(event=>{
     const kickoff=Date.parse(event.kickoff)
+    const doubleChance=event.sport==='soccer'&&marketPreference==='double_chance'
+    const expectedMarket=doubleChance?'double_chance':event.sport==='soccer'?'1x2':'h2h'
     return all.filter(q=>{
       const updated=Date.parse(q.updatedAt),quoteKickoff=Date.parse(q.time)
       return Number.isFinite(kickoff)&&Number.isFinite(updated)&&Number.isFinite(quoteKickoff)
         &&Math.abs(kickoff-quoteKickoff)<=3_600_000
         &&now-updated>=0&&now-updated<=3_600_000
+        &&typeof q.bookmaker==='string'&&q.bookmaker.trim().length>0
+        &&typeof q.eventId==='string'&&q.eventId.length>0
+        &&Number.isFinite(q.price)&&q.price>1&&q.price<1000
         &&normalize(q.home)===normalize(event.home)
         &&normalize(q.away)===normalize(event.away)
-        &&normalize(q.selection)===normalize(event.pick==='home'?event.home:event.away)
-        &&q.market!=='totals'
+        &&q.market===expectedMarket
+        &&(doubleChance?q.selection===(event.pick==='home'?'1X':'X2'):
+          normalize(q.selection)===normalize(event.pick==='home'?event.home:event.away))
     })
   })
   const quotedLegs=groups.filter(g=>g.length>0).length
@@ -82,8 +91,37 @@ export async function evidencePricedTicket(
     eventId:q.eventId,bookmaker:q.bookmaker,market:q.market,selection:q.selection,point:q.point??null,
   }))
   const priced=pricedTicket(selections,marketQuotes,stake)
-  return{card:priced.card,priced:true,placed:false,complete:true,verifiedEvents:research.verifiedEvents,
+  // Do not discard verified fixture branding, league, or the reasoning in the
+  // unpriced evidence ticket when attaching bookmaker prices.
+  const original=Array.isArray(research.card.props.legs)?research.card.props.legs:[]
+  const pricedRows=Array.isArray(priced.card.props.legs)?priced.card.props.legs:[]
+  const legs=pricedRows.map((row,index)=>{
+    const estimate=original[index],quote=best.choices[index]
+    const prior=estimate&&typeof estimate==='object'&&!Array.isArray(estimate)
+      ?estimate as Record<string,unknown>:{}
+    const pricedRow=row&&typeof row==='object'&&!Array.isArray(row)
+      ?row as Record<string,unknown>:{}
+    return {...pricedRow,
+      ...Object.fromEntries(['homeTeam','awayTeam','homeLogo','awayLogo','sport',
+        'league','country','rationale','when'].filter(k=>typeof prior[k]==='string')
+        .map(k=>[k,prior[k]])),
+      ...(quote?{price:String(quote.price),bookmaker:quote.bookmaker,
+        ...(quote.market==='double_chance'?{selection:quote.selection==='1X'
+          ?'1X · Local o empate':'X2 · Visita o empate',
+          market:'Doble oportunidad (1X/X2)',
+          rationale:(String(prior.rationale??'').slice(0,175)+
+            ' · Cobertura del empate; cuota verificada, riesgo vigente.').slice(0,240)}:{})}:{})}
+  })
+  const card:ChatBlock={...priced.card,props:{
+    ...priced.card.props,legs,requestedLegs:count,
+    subtitle:'Cuotas verificadas · '+best.book+' · análisis de forma con datos ESPN',
+    note:'SIMULACIÓN, NO APUESTA REAL. '+(marketPreference==='double_chance'
+      ?'Fútbol: la doble oportunidad cubre empate (1X/X2), NO asegura ganar. ':'')+
+      'Formas y descanso históricos NO son probabilidades calibradas. Lesiones, alineaciones y disponibilidad exacta en la banca pendientes; cuotas variables. '+priced.warning,
+    askPrompt:'Kira, comprueba lesiones, titulares, estadísticas específicas, correlación y vigencia de las '+count+' cuotas antes de recomendar este ticket.',
+  }}
+  return{card,priced:true,placed:false,complete:true,verifiedEvents:research.verifiedEvents,
     quotedLegs:count,missingQuotes:0,
     explanation:'Las '+count+' selecciones tienen cuota vigente y la misma casa '+best.book+
-      '. Sus favoritos se preseleccionaron por forma histórica descriptiva, NO por una probabilidad calibrada; validar lesiones, titulares y restricciones del operador.'}
+      '. El boleto conserva logos, análisis y riesgos por partido; NO es un modelo de acierto calibrado. Validar lesiones, titulares, restricciones y precios antes de apostar.'}
 }
