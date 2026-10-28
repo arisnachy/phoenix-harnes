@@ -1,0 +1,8 @@
+{
+  "name": "@phoenix-ai/trading-cloud-paper",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  }
+}
