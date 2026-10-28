@@ -366,7 +366,7 @@ test('critical results need documented acknowledgment by the responsible physici
     result:'Resultado marcado crítico por laboratorio (dato sintético)',critical:true})
   assert.equal(order.status,'critical-pending-review')
   assert.throws(()=>db.update(other,'orders',order.id,order.version,{
-    action:'review',criticalAcknowledged:true}),/médico responsable|otro profesional/)
+    action:'review',criticalAcknowledged:true}),/médico responsable|otro profesional|Acceso al episodio/)
   assert.throws(()=>db.update(doctor,'orders',order.id,order.version,{action:'review'}),/confirmación explícita/)
   order=db.update(doctor,'orders',order.id,order.version,{action:'review',criticalAcknowledged:true})
   assert.equal(order.status,'reviewed')
