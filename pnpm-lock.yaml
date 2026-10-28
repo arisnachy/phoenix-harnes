@@ -1401,9 +1401,6 @@ importers:
 
   packages/bundle/web-app:
     dependencies:
-      '@phoenix-ai/dsh-tool-health':
-        specifier: workspace:^
-        version: link:../../core/tool-health
       '@phoenix-ai/dsh-home-paths':
         specifier: workspace:^
         version: link:../../util/home-paths
