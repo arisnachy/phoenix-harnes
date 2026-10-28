@@ -13,6 +13,8 @@ type TestnetState = {
   configured: boolean
   connected: boolean
   canTrade: boolean
+  saved?: boolean
+  issue?: string
   nextAction: string
 }
 type McpState = {
@@ -66,6 +68,7 @@ export function TradingDashboard({ initial }: Props) {
   const [controlError, setControlError] = useState<string | undefined>()
   // A user can configure a multi-asset PAPER watchlist without spending tokens.
   const [watchlistDraft, setWatchlistDraft] = useState<string | undefined>()
+  const [autoDiscoverDraft, setAutoDiscoverDraft] = useState(true)
   const [testnetState, setTestnetState] = useState<TestnetState | undefined>()
   const [mcpState, setMcpState] = useState<McpState | undefined>()
   const [connectionIssue, setConnectionIssue] = useState<string | undefined>()
@@ -100,6 +103,23 @@ export function TradingDashboard({ initial }: Props) {
     const timer = setInterval(() => { void refresh() }, REFRESH_MS)
     return () => { mounted = false; controller?.abort(); clearInterval(timer) }
   }, [refreshKey])
+
+  // A previously stored Host key must be recognized after reopening Phoenix
+  // without showing or requesting the private value in this browser view.
+  useEffect(() => {
+    const abort = new AbortController()
+    void fetch('/phoenix-trading/paper/testnet-status', {
+      method: 'GET', credentials: 'same-origin', cache: 'no-store', signal: abort.signal,
+    }).then(async response => {
+      if (!response.ok) return
+      const value = await response.json() as TestnetState
+      if (!abort.signal.aborted && value.mode === 'testnet'
+        && typeof value.configured === 'boolean' && typeof value.connected === 'boolean') {
+        setTestnetState(value)
+      }
+    }).catch(() => { /* The manual connection check remains available. */ })
+    return () => { abort.abort() }
+  }, [])
 
   async function checkConnections(): Promise<void> {
     if (connectionBusy) return
@@ -157,15 +177,26 @@ export function TradingDashboard({ initial }: Props) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ apiKey: testingKey, secret: testingSecret }),
       })
-      if (!response.ok) throw new Error('Testnet credential verification rejected')
-      const value = await response.json() as TestnetState
-      if (value.mode !== 'testnet' || value.connected !== true) throw new Error('Testnet not verified')
+      const value = await response.json() as TestnetState & { error?: string }
+      if (!response.ok) {
+        setConnectionIssue(value.nextAction ?? 'No se pudo guardar la clave en la bóveda. Revisa su disponibilidad.')
+        return
+      }
+      if (value.mode !== 'testnet' || value.configured !== true || value.saved !== true) {
+        setConnectionIssue('No se confirmó la lectura de las claves desde la bóveda; no se considera guardado.')
+        return
+      }
+      // Saved != authenticated. Keep credentials in the Host vault even when
+      // Binance is unreachable, then verify again using "Comprobar conexiones".
       setTestnetState(value)
       setCredentialOpen(false)
+      setTestingKey('')
+      setTestingSecret('')
     } catch {
-      setConnectionIssue('Testnet no pudo autenticar o guardar las claves. Revisa la cuenta de prueba y el Host.')
+      setConnectionIssue('No se pudo contactar al Host para guardar Testnet. Comprueba la conexión y vuelve a intentarlo.')
     } finally {
-      // Never persist private keys in the browser's chart state or model context.
+      // Never retain private Testnet values in browser component state after a
+      // submit attempt, whether the Host save succeeded or failed.
       setTestingKey('')
       setTestingSecret('')
       setConnectionBusy(false)
@@ -200,7 +231,7 @@ export function TradingDashboard({ initial }: Props) {
       }
       const payload = action === 'start'
         ? { action, symbols: watchlist, interval: state.settings.interval,
-          pollMinutes: state.settings.pollMs / 60_000 }
+          pollMinutes: state.settings.pollMs / 60_000, autoDiscover: autoDiscoverDraft }
         : { action }
       const response = await fetch('/phoenix-trading/paper/control', {
         method: 'POST', cache: 'no-store', credentials: 'same-origin',
@@ -252,7 +283,7 @@ export function TradingDashboard({ initial }: Props) {
       </div>
       <div className={css.toolbar}>
         <div>
-          <strong>Escáner multimoneda · {settings.symbols.length} pares configurados</strong>
+          <strong>Escáner multimoneda · {settings.autoDiscover ? 'Radar dinámico' : settings.symbols.length + ' pares fijos'}</strong>
           <small>{settings.interval} · Revisión cada {settings.pollMs / 60_000} min mientras el Host esté activo</small>
         </div>
         <div className={css.actions}>
@@ -265,19 +296,43 @@ export function TradingDashboard({ initial }: Props) {
         </div>
       </div>
       <div className={css.tradingRadarMeta} aria-live="polite">
+        <span>Ciclos válidos: {state.successfulCycles ?? 'sin telemetría'}</span>
+        <span>Oportunidades de 75/100+: {state.signalsQualified ?? 'sin telemetría'}</span>
+        <span>Ciclos con ejecución: {state.filledCycles ?? 'sin telemetría'}</span>
+        <span>Universo: {state.universeSize ?? 0} pares líquidos</span>
+        <span>Próximo análisis: {clock(state.nextCheckAt)}</span>
+        {state.lastDiscoveryIssue && <span role="status">{state.lastDiscoveryIssue}</span>}
         <strong>{running ? 'Radar encendido' : 'Radar detenido'}</strong>
         <span>Último análisis: {clock(state.lastSuccessAt)}</span>
         <span>Resultado: {state.lastDecision === 'buy' ? 'Compra PAPER' : state.lastDecision === 'sell' ? 'Venta PAPER' : 'Esperar / sin señal'}</span>
-        <span>{state.signals.length} de {settings.symbols.length} pares evaluados</span>
+        <span>{state.signals.length} pares evaluados en el último ciclo</span>
+        <span>Motivo de la última decisión: {state.rationale}</span>
+        {state.lastError && <span role="alert">Error del Host: {state.lastError}</span>}
+        {running && state.lastSuccessAt
+          && Date.now() - Date.parse(state.lastSuccessAt) > Math.max(180_000, settings.pollMs * 3)
+          && <span role="alert">Escáner sin ciclo válido reciente. Revisa el Host y la conectividad.</span>}
       </div>
       <label className={css.watchlist}>
-        <span>Mercados vigilados (1–12 pares USDT, separados por coma)</span>
+        <span>Pares prioritarios (1–12, se mantienen al explorar)</span>
         <input type="text" spellCheck={false} aria-label="Lista de mercados PAPER"
           disabled={running || controlBusy}
           value={watchlistDraft ?? settings.symbols.join(', ')}
           onChange={event => { setWatchlistDraft(event.currentTarget.value) }}
           placeholder="BTCUSDT, ETHUSDT, SOLUSDT, BNBUSDT" />
       </label>
+      <label className={css.autoDiscovery}>
+        <input type="checkbox" checked={running ? settings.autoDiscover : autoDiscoverDraft}
+          disabled={running || controlBusy}
+          onChange={event => { setAutoDiscoverDraft(event.currentTarget.checked) }} />
+        <span>Al iniciar: descubrir hasta 120 pares Spot USDT líquidos y rotar 12 en cada análisis.
+          Mantener todos tus pares prioritarios; los huecos restantes rotan automáticamente. Solo PAPER.</span>
+      </label>
+      {running && !settings.autoDiscover && <p className={css.tradingNotice}>
+        El radar está limitado a una lista fija. Detén e inicia PAPER con descubrimiento automático para ampliar la búsqueda.
+      </p>}
+      {state.lastScannedSymbols && state.lastScannedSymbols.length > 0 && <p className={css.tradingNotice}>
+        Últimos mercados evaluados: {state.lastScannedSymbols.join(' · ')}
+      </p>}
       <TradingMarketChart symbols={settings.symbols} trades={state.recentTrades} />
       <section className={css.connectionPanel} aria-label="Conexiones a Binance">
         <header className={css.connectionHeading}>
@@ -291,11 +346,12 @@ export function TradingDashboard({ initial }: Props) {
           <div className={css.connectionItem}>
             <strong>Spot Testnet · fondos ficticios</strong>
             <span>{testnetState === undefined ? 'Estado pendiente de comprobar'
-              : testnetState.connected ? testnetState.canTrade ? 'Autenticado · órdenes de prueba habilitadas' : 'Autenticado · sin permiso de operar'
-                : testnetState.configured ? 'Configurado · conexión fallida' : 'Sin credenciales de prueba'}</span>
+              : testnetState.connected ? testnetState.canTrade ? 'Claves guardadas · Testnet conectado' : 'Claves guardadas · sin permiso de operar'
+                : testnetState.configured ? 'Claves guardadas · pendiente de autenticar' : 'Sin credenciales de prueba'}</span>
             <small>{testnetState?.nextAction ?? 'Necesita claves exclusivas de Binance Spot Testnet.'}</small>
             <button type="button" disabled={connectionBusy} onClick={() => { setCredentialOpen(open => !open) }}>
-              {credentialOpen ? 'Cerrar configuración' : 'Configurar Testnet'}
+              {credentialOpen ? 'Cerrar configuración'
+                : testnetState?.configured ? 'Actualizar claves Testnet' : 'Configurar Testnet'}
             </button>
           </div>
           <div className={css.connectionItem}>
@@ -330,16 +386,32 @@ export function TradingDashboard({ initial }: Props) {
           <h4>Radar de estrategias</h4>
           {state.signals.length === 0 ? <p className={css.empty}>Todavía no hay un análisis confirmado en esta sesión.</p>
             : <div className={css.rows}>
-              {state.signals.map(signal => (
-                <div key={signal.symbol} className={css.row}>
-                  <div><strong>{signal.symbol}</strong><small>{signal.strategy} · {signal.regime}</small>
-                    <span className={css.tradingReason}>{signal.reason}</span></div>
-                  <span data-signal={signal.action}>
-                    {signal.action === 'buy' ? 'COMPRAR' : signal.action === 'sell' ? 'VENDER' : 'ESPERAR'}
+              {state.signals.map(signal => {
+                const evidence = state.execution?.find(item => item.symbol === signal.symbol)
+                // A technical BUY is NOT an exchange order or a PAPER fill.
+                const status = !running ? 'paused' : evidence?.status ?? 'scan-only'
+                const label = status === 'paused' ? 'PAUSADO'
+                  : status === 'executed' ? 'OPERACIÓN PAPER'
+                    : status === 'blocked' ? 'BLOQUEADA'
+                      : status === 'position-open' ? 'POSICIÓN ABIERTA'
+                        : status === 'deferred' ? 'EN RADAR'
+                          : status === 'watch' ? 'OBSERVAR'
+                            : status === 'scan-only' ? 'SEÑAL'
+                              : signal.action === 'sell' ? 'SALIDA DEFENSIVA' : 'ESPERAR'
+                return <div key={signal.symbol} className={css.row}>
+                  <div><strong>{signal.symbol}</strong><small>{strategyLabel(signal.strategy)} · {signal.regime}</small>
+                    <span className={css.tradingReason}>{signal.reason}</span>
+                    <span className={css.tradingReason}>
+                      {status === 'paused'
+                        ? 'Motor detenido: no se envían órdenes automáticas'
+                        : evidence?.explanation ?? 'Señal técnica sin recibo de ejecución'}
+                    </span></div>
+                  <span data-signal={status === 'executed' ? 'buy' : status === 'blocked' ? 'sell' : 'hold'}>
+                    {label}
                   </span>
-                  <small>{signal.score}/100</small>
+                  <small className={css.radarScore}>{signal.score}/100</small>
                 </div>
-              ))}
+              })}
             </div>}
           <p className={css.footnote}>{state.rationale}</p>
         </section>

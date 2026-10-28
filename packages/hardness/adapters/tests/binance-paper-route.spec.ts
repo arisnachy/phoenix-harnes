@@ -132,6 +132,12 @@ describe('Binance chat viewer HTTP integration', () => {
     const secretValues = new Map<string, string>()
     const credentials = {
       async set(ref: string, value: string) { secretValues.set(ref, value) },
+      async unset(ref: string) { secretValues.delete(ref) },
+      async resolve(ref: string) {
+        const value = secretValues.get(ref)
+        return value === undefined ? undefined : { value, source: 'file' }
+      },
+      async describe() { return { configured: true, writable: true } },
     }
     const request: typeof fetch = async (input, init) => {
       expect(String(input)).toContain('https://testnet.binance.vision/api/v3/account')
@@ -163,6 +169,97 @@ describe('Binance chat viewer HTTP integration', () => {
     expect(secretValues.size).toBe(2)
     const check = await fetch(origin + '/phoenix-trading/paper/testnet-status')
     expect(await check.json()).toMatchObject({ configured: true, connected: true, canTrade: true })
+  })
+
+  it('persists HMAC Testnet keys even if Binance is temporarily offline, and reuses them later', async () => {
+    const saved = new Map<string, string>()
+    const vault = {
+      async set(ref: string, value: string) { saved.set(ref, value) },
+      async unset(ref: string) { saved.delete(ref) },
+      async resolve(ref: string) {
+        const value = saved.get(ref)
+        return value === undefined ? undefined : { value, source: 'file' }
+      },
+      async describe() { return { configured: true, writable: true } },
+    }
+    let reachable = false
+    const testnet = new BinanceSpotTestnet(async () => {
+      const apiKey = saved.get('PHOENIX_BINANCE_TESTNET_API_KEY')
+      const secret = saved.get('PHOENIX_BINANCE_TESTNET_API_SECRET')
+      return apiKey && secret ? { apiKey, secret } : undefined
+    }, async (input, init) => {
+      expect(String(input)).toContain('https://testnet.binance.vision/api/v3/account')
+      expect(init?.headers).toEqual({ 'X-MBX-APIKEY': 'TESTNET_KEY_1234567890' })
+      return reachable
+        ? new Response(JSON.stringify({ canTrade: true, balances: [] }), { status: 200 })
+        : new Response(JSON.stringify({ code: -1003, msg: 'Rate limited' }), { status: 429 })
+    })
+    const { origin } = await serverWithTrading({ testnet, credentials: vault as never })
+    const savedReply = await fetch(origin + '/phoenix-trading/paper/testnet-connect', {
+      method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ apiKey: 'TESTNET_KEY_1234567890', secret: 'TESTNET_SECRET_1234567890' }),
+    })
+    expect(savedReply.status).toBe(200)
+    const pending = await savedReply.json()
+    expect(pending).toMatchObject({
+      mode: 'testnet', saved: true, configured: true,
+      connected: false, issue: 'rate-limited',
+    })
+    expect(JSON.stringify(pending)).not.toContain('TESTNET_SECRET_1234567890')
+    expect(saved.size).toBe(2)
+    const disconnected = await fetch(origin + '/phoenix-trading/paper/testnet-status')
+    expect(await disconnected.json()).toMatchObject({ configured: true, connected: false })
+    reachable = true
+    const reconnect = await fetch(origin + '/phoenix-trading/paper/testnet-status')
+    expect(await reconnect.json()).toMatchObject({ configured: true, connected: true, canTrade: true })
+    expect(saved.get('PHOENIX_BINANCE_TESTNET_API_SECRET')).toBe('TESTNET_SECRET_1234567890')
+    // A later Host session can use the same saved pair for an actual Testnet
+    // request; no API secret is copied through the dashboard JSON or chat.
+    const restarted = new BinanceSpotTestnet(async () => {
+      const apiKey = saved.get('PHOENIX_BINANCE_TESTNET_API_KEY')
+      const secret = saved.get('PHOENIX_BINANCE_TESTNET_API_SECRET')
+      return apiKey && secret ? { apiKey, secret } : undefined
+    }, async (input, init) => {
+      expect(String(input)).toContain('https://testnet.binance.vision/api/v3/order')
+      expect(init?.headers).toEqual({ 'X-MBX-APIKEY': 'TESTNET_KEY_1234567890' })
+      return new Response(JSON.stringify({
+        symbol: 'BTCUSDT', side: 'BUY', orderId: 4711, status: 'NEW',
+        executedQty: '0', cummulativeQuoteQty: '0',
+      }), { status: 200 })
+    })
+    expect(await restarted.order({ symbol: 'BTCUSDT', side: 'BUY', quoteUsdt: 10 }))
+      .toMatchObject({ mode: 'testnet', orderId: 4711, status: 'NEW' })
+  })
+
+  it('rolls back both credentials if the second vault write fails', async () => {
+    const saved = new Map<string, string>([
+      ['PHOENIX_BINANCE_TESTNET_API_KEY', 'OLD_TESTNET_KEY_012345678901'],
+      ['PHOENIX_BINANCE_TESTNET_API_SECRET', 'OLD_TESTNET_SECRET_012345678901'],
+    ])
+    const vault = {
+      async set(ref: string, value: string) {
+        if (ref === 'PHOENIX_BINANCE_TESTNET_API_SECRET' && value !== 'OLD_TESTNET_SECRET_012345678901') {
+          throw new Error('simulated-vault-write-failure')
+        }
+        saved.set(ref, value)
+      },
+      async unset(ref: string) { saved.delete(ref) },
+      async resolve(ref: string) {
+        const value = saved.get(ref)
+        return value === undefined ? undefined : { value, source: 'file' }
+      },
+      async describe() { return { configured: true, writable: true } },
+    }
+    const testnet = new BinanceSpotTestnet(async () => undefined)
+    const { origin } = await serverWithTrading({ testnet, credentials: vault as never })
+    const response = await fetch(origin + '/phoenix-trading/paper/testnet-connect', {
+      method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ apiKey: 'TESTNET_KEY_1234567890', secret: 'TESTNET_SECRET_1234567890' }),
+    })
+    expect(response.status).toBe(503)
+    expect(await response.json()).toMatchObject({ error: 'vault-write-failed' })
+    expect(saved.get('PHOENIX_BINANCE_TESTNET_API_KEY')).toBe('OLD_TESTNET_KEY_012345678901')
+    expect(saved.get('PHOENIX_BINANCE_TESTNET_API_SECRET')).toBe('OLD_TESTNET_SECRET_012345678901')
   })
 
   it('rejects CSRF and REAL fields before any account action', async () => {

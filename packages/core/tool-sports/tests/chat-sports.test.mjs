@@ -1,7 +1,7 @@
 import {test} from 'node:test'
 import assert from 'node:assert/strict'
 import {readFileSync} from 'node:fs'
-import {sportsCatalog,getFeed,discoverEspnLeagues,chatGames,marketOdds,pricedTicket} from '../src/sports.ts'
+import {sportsCatalog,getFeed,discoverEspnLeagues,chatGames,compactSportsSchedule,marketOdds,pricedTicket} from '../src/sports.ts'
 import {getMlbPitcherReport} from '../src/mlb.ts'
 import {normalizeEspnMoneylines} from '../src/espn-odds.ts'
 
@@ -198,4 +198,41 @@ test('sportsbook taxonomy groups sourced sports, countries and leagues without i
   assert.equal(result.card.props.legs[1].league,'MLB')
   assert.equal(result.card.props.legs[0].player,undefined)
   assert.doesNotMatch(result.warning,/mismo encuentro/)
+})
+
+test('NBA scoreboard does not attribute an unverified player to the wrong team',async()=>{
+  const bad=await response({events:[{id:'9201',date:'2026-10-28T23:00:00Z',name:'Heat vs Hawks',
+    status:{type:{state:'pre',description:'Previa'}},competitions:[{competitors:[
+      {homeAway:'home',team:{id:'1',displayName:'Atlanta Hawks'},leaders:[{name:'pointsPerGame',
+        leaders:[{athlete:{displayName:'Unverified Player'},displayValue:'28.5'}]}]},
+      {homeAway:'away',team:{id:'2',displayName:'Miami Heat'}},
+    ]}]}]})
+  const report=await chatGames('basketball','nba','2026-10-28',{},bad)
+  const card=report.items[0]
+  assert.deepEqual(card.props.highlights,[])
+  assert.match(card.props.note,/plantillas vigentes/)
+  assert.ok(!JSON.stringify(card).includes('Unverified Player'))
+})
+
+test('multi-game scoreboard is compact while individual matchup cards remain unchanged',async()=>{
+  const mock=await response({events:[
+    {id:'123',date:'2026-10-28T23:00:00Z',status:{type:{description:'Previa',state:'pre'}},
+      competitions:[{venue:{fullName:'Arena One'},competitors:[
+        {homeAway:'away',team:{displayName:'Visitante A'}},
+        {homeAway:'home',team:{displayName:'Local B'}}]}]},
+    {id:'124',date:'2026-10-28T23:30:00Z',status:{type:{description:'Previa',state:'pre'}},
+      competitions:[{venue:{fullName:'Arena Two'},competitors:[
+        {homeAway:'away',team:{displayName:'Visitante C'}},
+        {homeAway:'home',team:{displayName:'Local D'}}]}]},
+  ]})
+  const gameData=await chatGames('basketball','nba','2026-10-28',{},mock)
+  assert.equal(gameData.count,2)
+  assert.equal(gameData.items[0].component,'sports_game_card')
+  const slate=compactSportsSchedule(gameData.items,gameData.date,gameData.source)
+  assert.equal(slate.component,'sports_schedule_card')
+  assert.equal(slate.props.events.length,2)
+  assert.equal(slate.props.events[0].away.label,'Visitante A')
+  assert.equal(slate.props.events[1].eventId,'124')
+  assert.equal(slate.props.events[0].favorite,undefined)
+  assert.equal(compactSportsSchedule(gameData.items.slice(0,1),gameData.date,gameData.source),null)
 })

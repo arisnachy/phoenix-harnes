@@ -1,5 +1,7 @@
 /** Read-only sports information adapters for Kira's conversation tools. */
 import { fetchPublicEspnOdds } from './espn-odds.ts'
+import { fetchTheOddsApi } from './free-odds.ts'
+import { keylessEnabled, keylessOdds, type KeylessSport } from './keyless-odds.ts'
 import { enrichMlbMatch } from './mlb-matchup.ts'
 import { researchMlbTrend } from './mlb-research.ts'
 export const sportsCatalog: Readonly<Record<string, readonly string[]>> = {
@@ -113,7 +115,54 @@ export async function getFeed<T>(url:string, fetcher:typeof fetch=fetch):Promise
 type FeedEvent = { id?:string|number;date?:string;name?:string;status?:{ type?:{ description?:string;state?:string } };competitions?:Array<{ venue?:{ fullName?:string;address?:{ city?:string } };competitors?:Array<{ id?:string;homeAway?:string;score?:string|number;team?:{ displayName?:string;name?:string;id?:string;logo?:string;logos?:Array<{ href?:string }> };records?:Array<{ summary?:string }>;linescores?:Array<{ value?:number|string;displayValue?:string }>;leaders?:Array<{ name?:string;leaders?:Array<{ athlete?:{ displayName?:string;headshot?:{ href?:string } };displayValue?:string }> }> }>;broadcasts?:Array<{ names?:string[] }> }> }
 type MlbGame = { gamePk:number;gameDate?:string;venue?:{ name?:string };seriesDescription?:string;seriesGameNumber?:number;status?:{ detailedState?:string;abstractGameState?:string };teams?:Record<'home'|'away',{ team?:{ id?:number;name?:string };score?:number;probablePitcher?:{ id?:number;fullName?:string } }> }
 /** Safe, minimal sports UI payload; the client validates it before rendering. */
-export type ChatBlock = { component:'sports_game_card'|'sports_ticket_card'|'sports_odds_card';version:1;props:Record<string,unknown> }
+export type ChatBlock = { component:'sports_game_card'|'sports_schedule_card'|'sports_ticket_card'|'sports_odds_card';version:1;props:Record<string,unknown> }
+/**
+ * Build one bounded response surface from trusted provider game cards.
+ * @param games - Normalized first-party game cards for one requested league/date.
+ * @param day - Requested provider date in YYYY-MM-DD.
+ * @param source - Attribution for the schedule source.
+ * @returns Compact card when multiple events exist; null preserves the detailed individual card.
+ */
+export function compactSportsSchedule(games:readonly ChatBlock[],day:string,source:string):ChatBlock|null {
+  const cards=games.filter(game=>game.component==='sports_game_card').slice(0,25)
+  if(cards.length<2)return null
+  const text=(value:unknown,max=180)=>typeof value==='string'?value.slice(0,max):undefined
+  const object=(value:unknown):Record<string,unknown>=>
+    value!==null&&typeof value==='object'&&!Array.isArray(value)?value as Record<string,unknown>:{}
+  const first=cards[0]?.props??{}
+  const league=text(first.league,100)
+  const sport=text(first.sport,60)
+  const sameLeague=cards.every(card=>card.props.league===first.league)
+  const sameSport=cards.every(card=>card.props.sport===first.sport)
+  const events=cards.map(card=>{
+    const p=card.props
+    const highlights=Array.isArray(p.highlights)?p.highlights:[]
+    const firstHighlight=object(highlights[0])
+    const research=object(p.research)
+    const featured=text(firstHighlight.value,90)
+    const detail=text(firstHighlight.detail,55)
+    const favorite=text(research.favorite,170)
+    return {
+      ...(text(p.eventId,50)?{eventId:text(p.eventId,50)}:{}),
+      when:text(p.when,80)??'Hora no confirmada',
+      ...(text(p.status,60)?{status:text(p.status,60)}:{}),
+      ...(text(p.venue,180)?{venue:text(p.venue,180)}:{}),
+      away:p.away,home:p.home,
+      ...(featured?{featured:featured+(detail?' · '+detail:'')}:{}),
+      ...(favorite&&Array.isArray(research.evidence)&&research.evidence.length>0?{favorite}:{}),
+      ...(text(p.askPrompt,400)?{askPrompt:text(p.askPrompt,400)}:{}),
+    }
+  })
+  return {component:'sports_schedule_card',version:1,props:{
+    title:'Cartelera deportiva',
+    date:day,
+    ...(sameSport&&sport?{sport}:{}),
+    ...(sameLeague&&league?{league}:{}),
+    source,total:games.length,events,
+    note:'La cartelera muestra solo datos públicos verificados. Para profundizar, consulta un encuentro individual.',
+  }}
+}
+
 function localTime(dateString?:string):string {
   if(!dateString)return 'Hora no confirmada'
   const parsed=new Date(dateString)
@@ -199,7 +248,9 @@ export async function chatGames(sport:string,league:string,requestedDate?:string
           away:String(v.displayValue??v.value??'—'),home:String(homePeriods[i]?.displayValue??homePeriods[i]?.value??'—') })):[]
       const sportNames:Record<string,string>={ soccer:'Fútbol',basketball:'Baloncesto',football:'Fútbol americano',hockey:'Hockey',
         tennis:'Tenis',mma:'MMA',racing:'Automovilismo',golf:'Golf',baseball:'Béisbol' }; const sportLabel=sportNames[sport]||sport
-      const highlights = (comp?.competitors ?? []).flatMap(team =>
+      // NBA competitor.leaders is not a verified CURRENT roster: do not misattribute athletes.
+      // A roster-validated player surface will restore these cards separately.
+      const highlights = (sport==='basketball'&&league==='nba')?[]:(comp?.competitors ?? []).flatMap(team =>
         (team.leaders ?? []).slice(0, 2).flatMap(group =>
           (group.leaders ?? []).slice(0, 1).map((leader) => {
             const headshot = leader.athlete?.headshot?.href
@@ -224,6 +275,7 @@ export async function chatGames(sport:string,league:string,requestedDate?:string
         sport,
         ...(e.id !== undefined && String(e.id).trim() !== '' ? { eventId: String(e.id) } : {}),
         periods, highlights,
+        ...(sport==='basketball'&&league==='nba'?{ note:'Jugadores destacados omitidos hasta verificar su pertenencia a las plantillas vigentes.' }:{}),
         ...(comp?.broadcasts?.length?{ broadcast:comp.broadcasts.flatMap(x=>x.names??[]).slice(0,3).join(', ') }:{}),
         askPrompt:'Kira, amplía el análisis verificado del evento '+title(e.id,50)+' de '+league+'. Incluye métricas específicas de '+sport+' con sus fuentes.',
       } })
@@ -245,7 +297,30 @@ export type MarketOutcome = MarketSelection & { price:number;home:string;away:st
 export async function marketOdds(sportKey:string,markets='h2h',env:NodeJS.ProcessEnv=process.env,fetcher:typeof fetch=fetch):Promise<MarketOutcome[]> {
   if(!/^[a-z0-9_]{3,80}$/u.test(sportKey)||!/^(h2h|totals|spreads)(,(h2h|totals|spreads))*$/u.test(markets))throw Error('Mercado inválido')
   if(!hasSportsPermission('odds',env)){
-    if(!hasSportsPermission('espn',env))throw Error('Sin proveedor de cuotas disponible: ESPN deshabilitado y THE_ODDS_API_KEY ausente.')
+    // Keyless browser source is opt-in and never suppresses ESPN on failure.
+    if(keylessEnabled(env)){
+      const prefix=sportKey.split('_')[0]
+      const sportByPrefix:Record<string,KeylessSport>={
+        soccer:'football',basketball:'basketball',baseball:'baseball',
+        americanfootball:'american-football',icehockey:'ice-hockey',
+        tennis:'tennis',handball:'handball',volleyball:'volleyball',
+        cricket:'cricket',rugbyleague:'rugby-league',rugbyunion:'rugby-union',
+      }
+      const sport=sportByPrefix[prefix??'']
+      const market=markets==='h2h'?sport==='football'||sport==='handball'?'1x2':
+        sport==='tennis'?'match_winner':sport==='ice-hockey'||sport==='volleyball'
+          ||sport==='rugby-league'||sport==='rugby-union'||sport==='cricket'?'home_away':'moneyline':
+        markets==='totals'?'over_under':null
+      if(sport&&market){
+        try{
+          const verified=await keylessOdds(sport,market,undefined,env)
+          if(verified.length)return verified.map(q=>({...q,sportKey,time:localTime(q.time)}))
+        }catch{/* Fallback is a provider failure, never permission to synthesize odds. */}
+      }
+    }
+    const alternateKey=env.THEODDSAPI_API_KEY
+    if(alternateKey?.trim())return fetchTheOddsApi(sportKey,markets,alternateKey,fetcher)
+    if(!hasSportsPermission('espn',env))throw Error('No hay proveedor de cuotas: ESPN deshabilitado, THE_ODDS_API_KEY y THEODDSAPI_API_KEY ausentes.')
     const fromEspn=await fetchPublicEspnOdds(sportKey,markets,<T>(url:string)=>getFeed<T>(url,fetcher))
     return fromEspn.map(quote=>({ ...quote,sportKey,source:'ESPN Site/Core (sin clave)' }))
   }
@@ -285,7 +360,11 @@ export function pricedTicket(selections:MarketSelection[],quotes:MarketOutcome[]
   return { warning,card:{ component:'sports_ticket_card',version:1,props:{
     title:'PHOENIX · Ticket de análisis',subtitle:'Cuotas consultadas en proveedor real · '+new Date().toISOString(),
     legs,combinedOdds:combined.toFixed(3),stake:stake?stake.toFixed(2):undefined,grossReturn:stake?(stake*combined).toFixed(2):undefined,
-    source:legs.length&&quotes.some(q=>q.source?.includes('ESPN'))?'ESPN Site/Core (cuotas públicas cuando ESPN las publique)':'The Odds API · precios de las casas indicadas',note:'SIMULACIÓN, SIN APUESTA REAL. '+warning+' Las cuotas pueden cambiar; no existe garantía de ganar.',
+    source:quotes.some(q=>q.source?.includes('OddsHarvester'))?
+      'OddsHarvester/OddsPortal · cuotas públicas observadas':
+      quotes.some(q=>q.source?.includes('ESPN'))?'ESPN Site/Core (cuotas públicas cuando ESPN las publique)':
+      quotes.some(q=>q.source==='TheOddsAPI')?'TheOddsAPI · cuotas de casas identificadas':
+      'The Odds API · precios de las casas indicadas',note:'SIMULACIÓN, SIN APUESTA REAL. '+warning+' Las cuotas pueden cambiar; no existe garantía de ganar.',
     askPrompt:'Kira, revisa este ticket con datos actuales, riesgos, ausencias y correlaciones antes de recomendar nada.',
   } } }
 }

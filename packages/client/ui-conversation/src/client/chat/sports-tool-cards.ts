@@ -20,7 +20,7 @@ const ALLOWED_NAMES = new Set([
   'sports_chat_mlb_pitchers',
 ])
 const ALLOWED_COMPONENTS = new Set([
-  'sports_game_card','sports_ticket_card','sports_odds_card','comparison','smart_card',
+  'sports_game_card','sports_schedule_card','sports_ticket_card','sports_odds_card','comparison','smart_card',
 ])
 const MAX_TEXT_BYTES = 125_000
 const MAX_SPORTS_CARDS = 6

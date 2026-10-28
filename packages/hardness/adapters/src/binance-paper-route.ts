@@ -61,16 +61,18 @@ async function readControl(req: IncomingMessage): Promise<{
   symbols?: string[]
   interval?: '15m' | '1h' | '4h' | '1d'
   pollMinutes?: number
+  autoDiscover?: boolean
 }> {
   const payload = await readRequestObject(req)
-  if (Object.keys(payload).some(key => !['action', 'symbols', 'interval', 'pollMinutes'].includes(key))) {
+  if (Object.keys(payload).some(key => !['action', 'symbols', 'interval', 'pollMinutes', 'autoDiscover'].includes(key))) {
     throw new Error('Unsupported control field')
   }
   if (payload.action !== 'start' && payload.action !== 'stop' && payload.action !== 'check-now') {
     throw new Error('Unsupported paper action')
   }
   if (payload.action === 'start') {
-    if (!Array.isArray(payload.symbols) || !payload.symbols.every(symbol => typeof symbol === 'string')
+    if (!Array.isArray(payload.symbols) || !payload.symbols.every(symbol => typeof symbol === 'string'
+      || (payload.autoDiscover !== undefined && typeof payload.autoDiscover !== 'boolean'))
       || (payload.interval !== undefined && (typeof payload.interval !== 'string' || !['15m', '1h', '4h', '1d'].includes(payload.interval)))
       || (payload.pollMinutes !== undefined && (!Number.isInteger(payload.pollMinutes)
         || !Number.isFinite(payload.pollMinutes) || Number(payload.pollMinutes) < 1
@@ -79,12 +81,47 @@ async function readControl(req: IncomingMessage): Promise<{
     }
     return {
       action: 'start', symbols: payload.symbols,
+      ...(payload.autoDiscover === undefined ? {} : { autoDiscover: payload.autoDiscover as boolean }),
       ...(payload.interval === undefined ? {} : { interval: payload.interval as '15m' | '1h' | '4h' | '1d' }),
       ...(payload.pollMinutes === undefined ? {} : { pollMinutes: payload.pollMinutes as number }),
     }
   }
   if (Object.keys(payload).length !== 1) throw new Error('Stop and check-now accept only an action')
   return { action: payload.action }
+}
+
+type TestnetVault = Pick<CredentialProvider, 'set' | 'resolve' | 'unset' | 'describe'>
+
+/**
+ * Save a HMAC Testnet pair in the existing durable Phoenix credential provider.
+ * Verify read-back so a false UI success is impossible, and restore the previous
+ * pair if one of the two writes fails. No values are returned or logged.
+ */
+async function storeTestnetPair(vault: TestnetVault, apiKey: string, secret: string): Promise<void> {
+  const keyRef = credentialRef('PHOENIX_BINANCE_TESTNET_API_KEY')
+  const secretRef = credentialRef('PHOENIX_BINANCE_TESTNET_API_SECRET')
+  const before = await Promise.all([vault.resolve(keyRef), vault.resolve(secretRef)])
+  const writable = await Promise.all([vault.describe(keyRef), vault.describe(secretRef)])
+  if (writable.some(info => !info.writable)) throw new Error('vault-read-only')
+  try {
+    await vault.set(keyRef, apiKey)
+    await vault.set(secretRef, secret)
+    const [storedKey, storedSecret] = await Promise.all([
+      vault.resolve(keyRef), vault.resolve(secretRef),
+    ])
+    if (storedKey?.value !== apiKey || storedSecret?.value !== secret) {
+      throw new Error('vault-readback-mismatch')
+    }
+  } catch {
+    // Preserve a previously usable pair if a partial write failed.
+    try {
+      if (before[0] === undefined) await vault.unset(keyRef)
+      else if (before[0].source !== 'env') await vault.set(keyRef, before[0].value)
+      if (before[1] === undefined) await vault.unset(secretRef)
+      else if (before[1].source !== 'env') await vault.set(secretRef, before[1].value)
+    } catch { /* UI still receives failure; never claim storage succeeded. */ }
+    throw new Error('vault-write-failed')
+  }
 }
 
 /**
@@ -98,7 +135,7 @@ async function readControl(req: IncomingMessage): Promise<{
 export function mountBinancePaperDashboardRoute(
   host: GameWebRouteHost,
   engine: BinancePaperAutomation,
-  options: { testnet?: BinanceSpotTestnet; credentials?: Pick<CredentialProvider, 'set'>; agentOs?: Partial<BinanceAgentOsHostService> } = {},
+  options: { testnet?: BinanceSpotTestnet; credentials?: TestnetVault; agentOs?: Partial<BinanceAgentOsHostService> } = {},
 ): () => void {
   // Never cache virtual fills: a background paper-step can settle between
   // two browser polls without going through this HTTP route.
@@ -168,6 +205,7 @@ export function mountBinancePaperDashboardRoute(
           mode: 'testnet', configured: status.configured,
           connected: status.connected, canTrade: status.canTrade === true,
           nextAction: status.nextAction,
+          ...(status.issue === undefined ? {} : { issue: status.issue }),
         }))
         return
       }
@@ -192,20 +230,39 @@ export function mountBinancePaperDashboardRoute(
           res.writeHead(400).end(JSON.stringify({ error: 'Invalid Binance Spot Testnet credential format' }))
           return
         }
-        // Credentials are tested against the FIXED fake-funds API before saving
-        // into the Host vault. Neither key is ever returned in the response.
-        const probe = await options.testnet.forCredentials({ apiKey: key, secret }).status()
-        if (!probe.connected) {
-          res.writeHead(422).end(JSON.stringify({ error: 'Spot Testnet rejected credentials or is unreachable' }))
+        // Separate durable storage from network readiness. Binance Testnet
+        // can be offline, rate limited or reject an account temporarily; the
+        // owner should not need to enter the HMAC keys again after a restart.
+        try {
+          await storeTestnetPair(options.credentials, key, secret)
+        } catch (error) {
+          const locked = error instanceof Error && error.message === 'vault-read-only'
+          res.writeHead(locked ? 409 : 503).end(JSON.stringify({
+            error: locked ? 'vault-read-only' : 'vault-write-failed',
+            nextAction: locked
+              ? 'La bóveda tiene una variable de entorno de solo lectura que impide guardar esta clave. Revisa el origen de credenciales del Host.'
+              : 'No se pudo verificar el guardado de ambas claves en la bóveda. Las credenciales anteriores se conservaron cuando fue posible.',
+          }))
           return
         }
-        await options.credentials.set(credentialRef('PHOENIX_BINANCE_TESTNET_API_KEY'), key)
-        await options.credentials.set(credentialRef('PHOENIX_BINANCE_TESTNET_API_SECRET'), secret)
+        // Read the stored pair back via the Host-owned credential resolver,
+        // not the transient browser payload. Never report CONNECTED unless
+        // Binance responds with a successful authenticated account result.
+        let probe: Awaited<ReturnType<BinanceSpotTestnet['status']>>
+        try {
+          probe = await options.testnet.status()
+        } catch {
+          // A transient provider read or network exception AFTER confirmed
+          // durable storage must not turn a successful save into a UI failure.
+          probe = { mode: 'testnet', configured: true, connected: false,
+            nextAction: 'Claves guardadas en la bóveda; la verificación de Binance sigue pendiente.' }
+        }
         res.statusCode = 200
         res.end(JSON.stringify({
-          mode: 'testnet', configured: true, connected: true, canTrade: probe.canTrade === true,
-          nextAction: probe.canTrade ? 'Testnet ready; an individual testing order still needs approval'
-            : 'Testnet connected, but this account cannot currently submit orders',
+          mode: 'testnet', configured: true, saved: true,
+          connected: probe.connected, canTrade: probe.canTrade === true,
+          ...(probe.issue === undefined ? {} : { issue: probe.issue }),
+          nextAction: probe.nextAction,
         }))
         return
       }
@@ -240,6 +297,7 @@ export function mountBinancePaperDashboardRoute(
       if (action.action === 'start') {
         await engine.start({
           symbols: action.symbols ?? [],
+          ...(action.autoDiscover === undefined ? {} : { autoDiscover: action.autoDiscover }),
           ...(action.interval === undefined ? {} : { interval: action.interval }),
           ...(action.pollMinutes === undefined ? {} : { pollMs: action.pollMinutes * 60_000 }),
         })

@@ -16,11 +16,19 @@ export interface BinanceAdaptiveSignal {
   readonly reason: string
 }
 
+/** Why a valid technical signal did or did not produce a virtual fill. */
+export interface BinanceSignalExecution {
+  readonly symbol: string
+  readonly status: 'executed' | 'watch' | 'blocked' | 'deferred' | 'position-open' | 'scan-only' | 'none'
+  readonly explanation: string
+}
+
 /** One token-free decision against Phoenix's isolated virtual Spot ledger. */
 export interface BinanceAdaptiveCycle {
   readonly mode: 'scan' | 'paper-step'
   readonly interval: '15m' | '1h' | '4h' | '1d'
   readonly signals: readonly BinanceAdaptiveSignal[]
+  readonly execution: readonly BinanceSignalExecution[]
   readonly decision: 'buy' | 'sell' | 'hold'
   readonly rationale: string
   readonly trade?: BinancePaperTrade
@@ -44,6 +52,7 @@ const INTERVAL_MS: Record<BinanceAdaptiveCycle['interval'], number> = {
   '1d': 86_400_000,
 }
 const MAX_SYMBOLS = 12
+const MIN_AUTONOMOUS_SCORE = 75
 const MAX_POSITION_FRACTION = 0.05
 const MAX_PORTFOLIO_EXPOSURE = 0.20
 const MAX_OPEN_POSITIONS = 2
@@ -130,12 +139,14 @@ export function evaluateBinanceAdaptiveSignal(
   // Avoid buying a falling trend; a pullback must recover the fast EMA.
   if (regime === 'uptrend' && lastClose >= fast && lastClose <= fast * 1.012
     && lastClose > (closes.at(-2) ?? lastClose) && historicMean > 0) {
-    return { symbol, regime, strategy: 'trend-pullback', action: 'buy', score: 65,
+    const quality = Math.min(15, Math.max(0, Math.round((volumeRatio - 1) * 25)))
+    return { symbol, regime, strategy: 'trend-pullback', action: 'buy', score: 65 + quality,
       lastClose, reason: 'Uptrend pullback recovering the fast moving average' }
   }
   if (regime === 'range' && zScore <= -1.5 && lastClose > previousLow * 0.995
     && volumeRatio > 0) {
-    return { symbol, regime, strategy: 'mean-reversion', action: 'buy', score: 60,
+    const quality = Math.min(20, Math.max(0, Math.round((-zScore - 1.5) * 12)))
+    return { symbol, regime, strategy: 'mean-reversion', action: 'buy', score: 60 + quality,
       lastClose, reason: 'Range-bound discount relative to recent mean' }
   }
   if (regime === 'downtrend') {
@@ -231,14 +242,68 @@ export async function runBinanceAdaptiveCycle(
       (a.reason === 'paper-stop-loss' ? -1 : 0) - (b.reason === 'paper-stop-loss' ? -1 : 0))[0]
     const exposure = account.positions.reduce((sum, position) => sum + position.marketValueUsdt, 0)
     const candidate = sorted.find(signal => signal.action === 'buy'
+      && signal.score >= MIN_AUTONOMOUS_SCORE
       && !account.positions.some(position => position.symbol === signal.symbol))
     const budget = Math.min(account.equityUsdt * MAX_POSITION_FRACTION,
       Math.max(0, account.equityUsdt * MAX_PORTFOLIO_EXPOSURE - exposure),
       account.cashUsdt / (1 + account.feeRate))
 
+    const executionFor = (
+      decision: 'buy' | 'sell' | 'hold',
+      trade?: BinancePaperTrade,
+    ): BinanceSignalExecution[] => sorted.map(signal => {
+      if (trade?.symbol === signal.symbol) return {
+        symbol: signal.symbol, status: 'executed' as const,
+        explanation: trade.side === 'buy'
+          ? 'Compra virtual confirmada en el ledger'
+          : 'Venta virtual confirmada en el ledger',
+      }
+      if (signal.action === 'hold') return {
+        symbol: signal.symbol, status: 'none' as const,
+        explanation: signal.reason,
+      }
+      if (signal.action === 'sell') return {
+        symbol: signal.symbol, status: 'watch' as const,
+        explanation: account.positions.some(position => position.symbol === signal.symbol)
+          ? 'Venta defensiva sujeta a evaluación de posiciones abiertas'
+          : 'No hay posición abierta para vender',
+      }
+      if (signal.score < MIN_AUTONOMOUS_SCORE) return {
+        symbol: signal.symbol, status: 'watch' as const,
+        explanation: 'Puntuación ' + signal.score + '/100 inferior al mínimo autónomo de '
+          + MIN_AUTONOMOUS_SCORE + '/100',
+      }
+      if (mode === 'scan') return {
+        symbol: signal.symbol, status: 'scan-only' as const,
+        explanation: 'Exploración informativa, sin ejecución',
+      }
+      if (account.positions.some(position => position.symbol === signal.symbol)) return {
+        symbol: signal.symbol, status: 'position-open' as const,
+        explanation: 'Ya existe una posición virtual abierta en esta moneda',
+      }
+      if (account.maxDrawdownPct >= 5) return {
+        symbol: signal.symbol, status: 'blocked' as const,
+        explanation: 'Bloqueada por pérdida máxima permitida (DD 5%)',
+      }
+      if (account.positions.length >= MAX_OPEN_POSITIONS) return {
+        symbol: signal.symbol, status: 'blocked' as const,
+        explanation: 'Límite de ' + MAX_OPEN_POSITIONS + ' posiciones simultáneas',
+      }
+      if (budget < 10) return {
+        symbol: signal.symbol, status: 'blocked' as const,
+        explanation: 'Capital disponible o exposición insuficiente para 10 USDT',
+      }
+      return {
+        symbol: signal.symbol, status: 'deferred' as const,
+        explanation: decision === 'sell'
+          ? 'Primero se ejecutó una salida protectora'
+          : 'Otra señal obtuvo prioridad; se volverá a evaluar',
+      }
+    })
+
     if (mode === 'scan') {
       if (scannerUnavailable) throw new Error('No Binance Spot pairs returned verified candles')
-      return { mode, interval, signals: sorted, decision: 'hold',
+      return { mode, interval, signals: sorted, execution: executionFor('hold'), decision: 'hold',
         rationale: 'Read-only ranked scan; paper orders require paper-step mode', account }
     }
     if (exit !== undefined) {
@@ -248,7 +313,7 @@ export async function runBinanceAdaptiveCycle(
         strategyId: exit.position.exitPlan?.strategyId ?? 'adaptive-exit',
         reason: exit.reason,
       })
-      return { mode, interval, signals: sorted, decision: 'sell',
+      return { mode, interval, signals: sorted, execution: executionFor('sell', result.trade), decision: 'sell',
         rationale: 'Persisted PAPER exit executed: ' + exit.reason,
         trade: result.trade, account: result.account }
     }
@@ -263,7 +328,7 @@ export async function runBinanceAdaptiveCycle(
         symbol: position.symbol, side: 'sell', quantity: position.quantity,
         strategyId: 'adaptive-defensive-v1', reason: defensive.reason,
       })
-      return { mode, interval, signals: sorted, decision: 'sell',
+      return { mode, interval, signals: sorted, execution: executionFor('sell', result.trade), decision: 'sell',
         rationale: 'Confirmed bearish defensive exit', trade: result.trade, account: result.account }
     }
     if (candidate !== undefined && budget >= 10
@@ -276,11 +341,20 @@ export async function runBinanceAdaptiveCycle(
         strategyId: 'adaptive-' + candidate.strategy + '-v1',
         reason: candidate.reason,
       })
-      return { mode, interval, signals: sorted, decision: 'buy',
+      return { mode, interval, signals: sorted, execution: executionFor('buy', result.trade), decision: 'buy',
         rationale: 'Highest scored eligible virtual entry within portfolio limits',
         trade: result.trade, account: result.account }
     }
-    return { mode, interval, signals: sorted, decision: 'hold',
-      rationale: 'No eligible virtual order within signal and portfolio risk limits', account }
+    const why = candidate === undefined
+      ? 'Ninguna señal de compra supera el mínimo de ' + MIN_AUTONOMOUS_SCORE + '/100 sin posición existente'
+      : account.positions.length >= MAX_OPEN_POSITIONS
+        ? 'Bloqueada: ya hay ' + MAX_OPEN_POSITIONS + ' posiciones abiertas'
+        : account.maxDrawdownPct >= 5
+          ? 'Bloqueada: drawdown máximo de 5% alcanzado'
+          : budget < 10
+            ? 'Bloqueada: capital libre o exposición insuficiente'
+            : 'El motor no pudo encontrar una orden virtual apta'
+    return { mode, interval, signals: sorted, execution: executionFor('hold'), decision: 'hold',
+      rationale: why, account }
   })
 }

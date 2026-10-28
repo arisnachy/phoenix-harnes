@@ -40,6 +40,35 @@ describe('Official Binance Spot Testnet isolation', () => {
     expect(fetcher).toHaveBeenCalledTimes(1)
   })
 
+  it('reports invalid credentials without returning keys or arbitrary provider messages', async () => {
+    const client = new BinanceSpotTestnet(credentials, async () =>
+      new Response(JSON.stringify({ code: -2015, msg: 'Secret value: TEST_SECRET' }), { status: 401 }))
+    const status = await client.status()
+    expect(status).toMatchObject({
+      mode: 'testnet', configured: true, connected: false, issue: 'invalid-credentials',
+    })
+    expect(JSON.stringify(status)).not.toContain('TEST_SECRET')
+  })
+
+  it('recovers once from a wrong Host clock using Testnet server time and HMAC signing', async () => {
+    let accountCalls = 0
+    const test = new BinanceSpotTestnet(credentials, async (input, init) => {
+      const url = new URL(String(input))
+      expect(url.origin).toBe('https://testnet.binance.vision')
+      if (url.pathname === '/api/v3/time') {
+        expect(init?.headers).toBeUndefined()
+        return new Response(JSON.stringify({ serverTime: 1700000001400 }), { status: 200 })
+      }
+      expect(url.pathname).toBe('/api/v3/account')
+      accountCalls++
+      if (accountCalls === 1) return new Response(JSON.stringify({ code: -1021 }), { status: 400 })
+      expect(url.searchParams.get('timestamp')).toBe('1700000001400')
+      return new Response(JSON.stringify({ canTrade: true, balances: [] }), { status: 200 })
+    }, () => 1700000000000)
+    expect(await test.status()).toMatchObject({ connected: true, canTrade: true })
+    expect(accountCalls).toBe(2)
+  })
+
   it('sends a test-only order, confirms exchange receipt and does not invent fill status', async () => {
     const fetcher = vi.fn(async (url: string, init: RequestInit) => {
       const target = new URL(url)

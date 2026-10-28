@@ -77,15 +77,34 @@ test('five requested legs cannot silently become a one-leg completed ticket',asy
 })
 const recordEvent=(id,at,hw='3-0',aw='0-3')=>({
   id:String(id),date:at,status:{type:{state:'pre'}},competitions:[{competitors:[
-    {homeAway:'home',team:{displayName:'Home '+id,logo:'https://a.espncdn.com/logo.png'},records:[{summary:hw}]},
-    {homeAway:'away',team:{displayName:'Away '+id,logo:'https://a.espncdn.com/away.png'},records:[{summary:aw}]},
+    {homeAway:'home',team:{id:String(id)+'0',displayName:'Home '+id,logo:'https://a.espncdn.com/logo.png'},records:[{summary:hw}]},
+    {homeAway:'away',team:{id:String(id)+'1',displayName:'Away '+id,logo:'https://a.espncdn.com/away.png'},records:[{summary:aw}]},
   ]}],
 })
+const historicalDay=(day,offset)=>new Date(new Date(day+'T12:00:00Z').getTime()-offset*86_400_000).toISOString().slice(0,10)
+const completedEvent=(id,day,offset)=>({
+  ...recordEvent(id,day+'T23:00:00Z'),
+  id:String(id*100+offset),status:{type:{state:'post'}},
+  competitions:[{competitors:[
+    {...recordEvent(id,day).competitions[0].competitors[0],score:'110'},
+    {...recordEvent(id,day).competitions[0].competitors[1],score:'90'},
+  ]}],
+})
+const nbaFixtureBoard=(url,at,count)=>{
+  if(!String(url).includes('/basketball/nba/'))return {events:[]}
+  const match=String(url).match(/dates=([0-9]{8})/u)
+  const key=match?.[1]??''
+  const target=dayOf(at)
+  if(key===target.replaceAll('-',''))return {events:Array.from({length:count},(_,i)=>recordEvent(301+i,at))}
+  const offset=Array.from({length:4},(_,i)=>i+1).find(i=>historicalDay(target,i).replaceAll('-','')===key)
+  if(!offset)return {events:[]}
+  return {events:Array.from({length:count},(_,i)=>completedEvent(301+i,historicalDay(target,offset),offset))}
+}
 test('automatic research discovers five unique real ESPN fixtures without synthetic IDs',async()=>{
   const at=future(),urls=[]
   const mockBoards=async(url)=>{
     urls.push(String(url))
-    const board=String(url).includes('/basketball/nba/')?{events:Array.from({length:6},(_,i)=>recordEvent(301+i,at))}:{events:[]}
+    const board=nbaFixtureBoard(url,at,6)
     return new Response(JSON.stringify(board),{status:200})
   }
   const result=await autoResearchTicket(5,dayOf(at),mockBoards)
@@ -98,15 +117,12 @@ test('automatic research discovers five unique real ESPN fixtures without synthe
   assert.equal(result.card.props.legs[0].homeTeam,'Home 301')
   assert.equal(result.card.props.legs[0].awayTeam,'Away 301')
   assert.equal(result.card.props.legs[0].price,'Por verificar')
-  assert.equal(urls.length,8)
-  assert.equal(urls.filter(u=>u.includes('/basketball/nba/')).length,1)
+  assert.equal(urls.length,23)
+  assert.equal(urls.filter(u=>u.includes('/basketball/nba/')).length,16)
 })
 test('automatic research marks 2 of 5 as incomplete instead of claiming success',async()=>{
   const at=future()
-  const fetched=async(url)=>new Response(JSON.stringify(
-    String(url).includes('/basketball/nba/')?
-      {events:[recordEvent(401,at),recordEvent(402,at)]}:{events:[]},
-  ),{status:200})
+  const fetched=async(url)=>new Response(JSON.stringify(nbaFixtureBoard(url,at,2)),{status:200})
   const result=await autoResearchTicket(5,dayOf(at),fetched)
   assert.equal(result.complete,false)
   assert.equal(result.verifiedEvents,2)
@@ -123,4 +139,13 @@ test('automatic research will not fabricate legs when records or fixture data ar
     ]}],
   }]}),{status:200})
   await assert.rejects(()=>autoResearchTicket(5,dayOf(at),fetched),/No hay eventos futuros/)
+})
+
+test('NBA auto-picks are blocked when only win-loss records are present',async()=>{
+  const at=future()
+  const fetched=async url=>new Response(JSON.stringify(
+    String(url).includes('/basketball/nba/') && String(url).includes(dayOf(at).replaceAll('-',''))
+      ? {events:[recordEvent(801,at)]}:{events:[]},
+  ),{status:200})
+  await assert.rejects(()=>autoResearchTicket(1,dayOf(at),fetched),/No hay eventos futuros/)
 })

@@ -21,6 +21,17 @@ describe('native sports chat presentation fallback',()=>{
   it('renders a game from a real structured sports tool without assistant UI fences',()=>{
     expect(sportsCardsFromToolResult(tool('sports_chat_games',{uiBlocks:[sportsGame],count:1}))).toEqual([sportsGame])
   })
+  it('renders a compact multi-game slate while keeping single game cards',()=>{
+    const schedule={component:'sports_schedule_card',version:1,props:{
+      title:'Cartelera deportiva',date:'2026-10-28',source:'ESPN Site API',total:2,
+      events:[
+        {when:'7:00 p. m.',away:{label:'Heat'},home:{label:'Hawks'}},
+        {when:'8:00 p. m.',away:{label:'Rockets'},home:{label:'Lakers'}},
+      ],
+    }}
+    expect(sportsCardsFromToolResult(tool('sports_chat_games',{uiBlocks:[schedule]}))).toEqual([schedule])
+    expect(sportsCardsFromToolResult(tool('sports_chat_games',{uiBlocks:[sportsGame]}))).toEqual([sportsGame])
+  })
   it('keeps bullpen and ticket inside the chat',()=>{
     expect(sportsCardsFromToolResult(tool('sports_chat_mlb_pitchers',{uiBlock:mlbComparison}))).toEqual([mlbComparison])
     expect(sportsCardsFromToolResult(tool('sports_chat_ticket',{uiBlock:ticket}))).toEqual([ticket])

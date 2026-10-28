@@ -2,6 +2,7 @@ import type { ApprovalService } from '@phoenix-ai/dsh-user-approval'
 import { defineTool, type JsonValue, type ToolDefinition } from '@phoenix-ai/dsh-tools'
 import { runBinanceAdaptiveCycle } from './binance-adaptive.ts'
 import { BinanceSpotTestnet } from './binance-spot-testnet.ts'
+import type { BinanceCloudPaperClient } from './binance-cloud-bridge.ts'
 import type { WakeEngine } from './wake-engine.ts'
 import type { BinancePaperAutomation, BinancePaperAutomationView } from './binance-paper-automation.ts'
 import type {
@@ -39,6 +40,7 @@ export interface BinanceTradingToolDependencies {
   approval: Pick<ApprovalService, 'request'>
   agentOs?: Partial<BinanceAgentOsHostService>
   testnet?: BinanceSpotTestnet
+  cloud?: BinanceCloudPaperClient
 }
 
 function accountSummary(account: Awaited<ReturnType<BinancePaperBroker['account']>>): string {
@@ -560,17 +562,28 @@ function adaptiveCycleTool(deps: BinanceTradingToolDependencies): ToolDefinition
 export function dashboardJson(view: BinancePaperAutomationView): Record<string, JsonValue> {
   return {
     mode: 'paper', phase: view.phase, enabled: view.enabled,
-    settings: { symbols: [...view.settings.symbols], interval: view.settings.interval, pollMs: view.settings.pollMs },
+    settings: { symbols: [...view.settings.symbols], interval: view.settings.interval, pollMs: view.settings.pollMs,
+      autoDiscover: view.settings.autoDiscover },
     ...(view.lastAttemptAt === undefined ? {} : { lastAttemptAt: view.lastAttemptAt }),
     ...(view.lastSuccessAt === undefined ? {} : { lastSuccessAt: view.lastSuccessAt }),
     ...(view.nextCheckAt === undefined ? {} : { nextCheckAt: view.nextCheckAt }),
     ...(view.lastError === undefined ? {} : { lastError: view.lastError }),
+    successfulCycles: view.successfulCycles,
+    filledCycles: view.filledCycles,
+    signalsQualified: view.signalsQualified,
+    universeSize: view.universeSize,
+    lastScannedSymbols: [...view.lastScannedSymbols],
+    ...(view.lastDiscoveryAt === undefined ? {} : { lastDiscoveryAt: view.lastDiscoveryAt }),
+    ...(view.lastDiscoveryIssue === undefined ? {} : { lastDiscoveryIssue: view.lastDiscoveryIssue }),
     account: paperAccountJson(view.account),
     markedAt: view.markedAt,
     recentTrades: view.recentTrades.map(paperTradeJson),
     signals: view.lastCycle?.signals.map(signal => ({
       symbol: signal.symbol, regime: signal.regime, strategy: signal.strategy,
       action: signal.action, score: signal.score, reason: signal.reason,
+    })) ?? [],
+    execution: view.lastCycle?.execution.map(row => ({
+      symbol: row.symbol, status: row.status, explanation: row.explanation,
     })) ?? [],
     lastDecision: view.lastCycle?.decision ?? 'none',
     rationale: view.lastCycle?.rationale ?? 'No analysis executed in the current Host session',
@@ -616,6 +629,7 @@ function paperAutoTool(deps: BinanceTradingToolDependencies): ToolDefinition {
       watchlist: { type: 'string', description: 'Comma-separated 1-12 unique Spot USDT pairs; required on START.' },
       interval: { type: 'string', enum: ['15m', '1h', '4h', '1d'], description: 'Closed-candle strategy interval; default 15m.' },
       pollMinutes: { type: 'integer', description: 'How often the Host checks, 1–60 minutes; default 1.' },
+      autoDiscover: { type: 'boolean', description: 'On START, discover up to 120 liquid Spot pairs and rotate 12 per scan; requires explicit user-requested PAPER authorization.' },
     },
     output: {
       schema: { type: 'object', additionalProperties: true },
@@ -650,6 +664,7 @@ function paperAutoTool(deps: BinanceTradingToolDependencies): ToolDefinition {
         // virtual fill can be reviewed by the initiating conversation.
         await deps.automation.start({
           symbols: args.watchlist.split(','),
+          autoDiscover: args.autoDiscover === true,
           ...(args.interval === undefined ? {} : { interval: args.interval }),
           ...(args.pollMinutes === undefined ? {} : { pollMs: args.pollMinutes * 60_000 }),
         })
@@ -667,6 +682,77 @@ function paperAutoTool(deps: BinanceTradingToolDependencies): ToolDefinition {
           ? 'Detener trading PAPER' : 'Comprobar trading PAPER',
         kind: args.action === 'check-now' ? 'read' : 'execute',
         rawInput: args.action,
+      }
+    },
+  })
+}
+
+function cloudStatusTool(client: BinanceCloudPaperClient): ToolDefinition {
+  return defineTool({
+    name: 'binance_cloud_status',
+    description: 'Read authenticated PHOENIX Cloud PAPER ledger, market universe, risk halts, and event counters. Cloud is a separate virtual portfolio from Desktop PAPER, and never implies REAL Binance access.',
+    parameters: {},
+    output: {
+      schema: { type: 'object', additionalProperties: true },
+      render: (_args, result) => [{ type: 'text', text: JSON.stringify(result) }],
+    },
+    async execute() {
+      const value = await client.snapshot()
+      if (typeof value !== 'object' || value === null
+        || !('mode' in value) || value.mode !== 'paper') {
+        throw new Error('Cloud provider did not return a verified PAPER account')
+      }
+      return { mode: 'paper', origin: 'phoenix-cloud', snapshot: value as JsonValue }
+    },
+    presentCall() {
+      return { card: 'generic', title: 'PHOENIX Cloud · Estado PAPER', kind: 'read' }
+    },
+  })
+}
+
+function cloudControlTool(
+  client: BinanceCloudPaperClient, wake: Pick<WakeEngine, 'create' | 'list'> | undefined,
+): ToolDefinition {
+  return defineTool({
+    name: 'binance_cloud_control',
+    description: 'Start or stop only the independent CLOUD PAPER research runner. Requires explicitly requested user control. Never touches Binance real accounts, tests or API keys; a stopped or risk-halted worker does not auto-start.',
+    parameters: {
+      action: { type: 'string', enum: ['start', 'stop'], required: true },
+      requestedByUser: { type: 'boolean', required: true },
+    },
+    output: {
+      schema: { type: 'object', additionalProperties: true },
+      render: (_args, result) => [{ type: 'text', text: JSON.stringify(result) }],
+    },
+    async execute(args, exec) {
+      if (args.requestedByUser !== true) {
+        throw new Error('Cloud PAPER control requires an explicit user request')
+      }
+      // Bind Kira to the originating Phoenix conversation before the first
+      // remote PAPER event. The Host fetches queued events after reconnect.
+      if (args.action === 'start' && wake !== undefined && exec.agent?.id !== undefined) {
+        const target = exec.agent.id
+        const current = await wake.list()
+        const registered = current.some(item => item.source === 'phoenix-trading'
+          && item.eventType === 'paper.attention' && item.targetAgentId === target
+          && item.status === 'active')
+        if (!registered) await wake.create({
+          title: 'Kira · PHOENIX Cloud PAPER',
+          source: 'phoenix-trading', eventType: 'paper.attention',
+          instruction: 'Review independently persisted cloud PAPER fills, protective exits and warnings. Check freshness, risk and receipt evidence. Never claim REAL Binance execution or autonomously approve provider transfers.',
+          mode: 'act', once: false, createdBy: 'user', targetAgentId: target,
+        })
+      }
+      return {
+        mode: 'paper', origin: 'phoenix-cloud',
+        result: await client.control(args.action) as JsonValue,
+      }
+    },
+    presentCall(args) {
+      return {
+        card: 'generic',
+        title: args.action === 'start' ? 'Iniciar PHOENIX Cloud PAPER' : 'Detener PHOENIX Cloud PAPER',
+        kind: 'execute', rawInput: args.action,
       }
     },
   })
@@ -691,5 +777,6 @@ export function createBinanceTradingTools(deps: BinanceTradingToolDependencies):
     adaptiveCycleTool(deps),
     dashboardTool(deps),
     paperAutoTool(deps),
+    ...(deps.cloud === undefined ? [] : [cloudStatusTool(deps.cloud), cloudControlTool(deps.cloud, deps.wake)]),
   ]
 }
