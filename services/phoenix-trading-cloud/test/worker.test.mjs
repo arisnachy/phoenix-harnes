@@ -115,11 +115,42 @@ describe('Cloud worker auth and scheduling',()=>{
       const snapshot=await (await route(request('/snapshot'),env)).json();
       assert.equal(snapshot.universeCount,3);
       assert.equal(snapshot.lastScan,NOW);
+      assert.equal(snapshot.lastCycleAt,NOW);
+      assert.equal(snapshot.lastAttempt,NOW);
+      assert.equal(snapshot.lastScannedSymbols.length,3);
+      assert.equal(snapshot.evaluations.length,3);
+      assert.ok(snapshot.evaluations.every(x=>x.symbol && x.outcome && x.reason));
+      assert.equal(snapshot.failureCount,0);
       assert.equal(snapshot.mode,'paper');
       assert.equal(snapshot.enabled,true);
       const stop=await route(request('/admin/control',TOKEN,'POST',{action:'stop'}),env);
       assert.equal((await stop.json()).enabled,false);
       assert.equal((await cycle(env,NOW+60_000)).status,'disabled');
+    }finally{globalThis.fetch=original;}
+  });
+  it('does not claim a successful scan when every candle request fails',async()=>{
+    const env={DB:new D1Fake(),ADMIN_TOKEN:TOKEN};
+    await route(request('/admin/control',TOKEN,'POST',{action:'start'}),env);
+    const original=globalThis.fetch;
+    const healthy=mockedMarket(NOW);
+    globalThis.fetch=async input=>{
+      const u=new URL(input);
+      if(u.pathname==='/api/v3/klines')return new Response('{}',{status:429});
+      return healthy(input);
+    };
+    try{
+      const result=await cycle(env,NOW);
+      assert.equal(result.status,'error');
+      assert.equal(result.reason,'all-market-scans-failed');
+      const snapshot=await (await route(request('/snapshot'),env)).json();
+      assert.equal(snapshot.lastAttempt,NOW);
+      assert.equal(snapshot.lastScan,0);
+      assert.equal(snapshot.lastDecision,'error');
+      assert.equal(snapshot.lastDecisionReason,'all-market-scans-failed');
+      assert.equal(snapshot.failureCount,1);
+      assert.equal(snapshot.journal.length,0);
+      assert.equal(snapshot.evaluations.length,3);
+      assert.ok(snapshot.evaluations.every(x=>x.outcome==='market-unavailable'));
     }finally{globalThis.fetch=original;}
   });
   it('halts after three consecutive provider failures and refuses auto-restart',async()=>{
