@@ -562,11 +562,19 @@ function adaptiveCycleTool(deps: BinanceTradingToolDependencies): ToolDefinition
 export function dashboardJson(view: BinancePaperAutomationView): Record<string, JsonValue> {
   return {
     mode: 'paper', phase: view.phase, enabled: view.enabled,
-    settings: { symbols: [...view.settings.symbols], interval: view.settings.interval, pollMs: view.settings.pollMs },
+    settings: { symbols: [...view.settings.symbols], interval: view.settings.interval, pollMs: view.settings.pollMs,
+      autoDiscover: view.settings.autoDiscover },
     ...(view.lastAttemptAt === undefined ? {} : { lastAttemptAt: view.lastAttemptAt }),
     ...(view.lastSuccessAt === undefined ? {} : { lastSuccessAt: view.lastSuccessAt }),
     ...(view.nextCheckAt === undefined ? {} : { nextCheckAt: view.nextCheckAt }),
     ...(view.lastError === undefined ? {} : { lastError: view.lastError }),
+    successfulCycles: view.successfulCycles,
+    filledCycles: view.filledCycles,
+    signalsQualified: view.signalsQualified,
+    universeSize: view.universeSize,
+    lastScannedSymbols: [...view.lastScannedSymbols],
+    ...(view.lastDiscoveryAt === undefined ? {} : { lastDiscoveryAt: view.lastDiscoveryAt }),
+    ...(view.lastDiscoveryIssue === undefined ? {} : { lastDiscoveryIssue: view.lastDiscoveryIssue }),
     account: paperAccountJson(view.account),
     markedAt: view.markedAt,
     recentTrades: view.recentTrades.map(paperTradeJson),
@@ -621,6 +629,7 @@ function paperAutoTool(deps: BinanceTradingToolDependencies): ToolDefinition {
       watchlist: { type: 'string', description: 'Comma-separated 1-12 unique Spot USDT pairs; required on START.' },
       interval: { type: 'string', enum: ['15m', '1h', '4h', '1d'], description: 'Closed-candle strategy interval; default 15m.' },
       pollMinutes: { type: 'integer', description: 'How often the Host checks, 1–60 minutes; default 1.' },
+      autoDiscover: { type: 'boolean', description: 'On START, discover up to 120 liquid Spot pairs and rotate 12 per scan; requires explicit user-requested PAPER authorization.' },
     },
     output: {
       schema: { type: 'object', additionalProperties: true },
@@ -655,6 +664,7 @@ function paperAutoTool(deps: BinanceTradingToolDependencies): ToolDefinition {
         // virtual fill can be reviewed by the initiating conversation.
         await deps.automation.start({
           symbols: args.watchlist.split(','),
+          autoDiscover: args.autoDiscover === true,
           ...(args.interval === undefined ? {} : { interval: args.interval }),
           ...(args.pollMinutes === undefined ? {} : { pollMs: args.pollMinutes * 60_000 }),
         })

@@ -47,7 +47,8 @@ export interface TradingDashboardSnapshot {
   readonly mode: 'paper'
   readonly phase: 'running' | 'stopped' | 'error'
   readonly enabled: boolean
-  readonly settings: { readonly symbols: readonly string[]; readonly interval: string; readonly pollMs: number }
+  readonly settings: { readonly symbols: readonly string[]; readonly interval: string; readonly pollMs: number;
+    readonly autoDiscover?: boolean }
   readonly account: {
     readonly equityUsdt: number
     readonly cashUsdt: number
@@ -67,6 +68,13 @@ export interface TradingDashboardSnapshot {
   readonly lastSuccessAt?: string
   readonly nextCheckAt?: string
   readonly lastError?: string
+  readonly successfulCycles?: number
+  readonly filledCycles?: number
+  readonly signalsQualified?: number
+  readonly universeSize?: number
+  readonly lastScannedSymbols?: readonly string[]
+  readonly lastDiscoveryAt?: string
+  readonly lastDiscoveryIssue?: string
 }
 
 function record(value: unknown): Record<string, unknown> | undefined {
@@ -106,6 +114,7 @@ export function parseTradingDashboard(value: unknown): TradingDashboardSnapshot 
   const settings = record(root.settings)
   if (account === undefined || settings === undefined
     || !Array.isArray(settings.symbols) || settings.symbols.length > 12
+    || (settings.autoDiscover !== undefined && typeof settings.autoDiscover !== 'boolean')
     || !settings.symbols.every(s => typeof s === 'string' && /^[A-Z0-9]{3,16}USDT$/u.test(s))
     || typeof settings.interval !== 'string' || !finite(settings.pollMs)
     || !['equityUsdt', 'cashUsdt', 'totalPnlUsdt', 'totalReturnPct', 'maxDrawdownPct', 'tradeCount']
@@ -114,6 +123,15 @@ export function parseTradingDashboard(value: unknown): TradingDashboardSnapshot 
     || !Array.isArray(root.signals) || root.signals.length > 12
     || !Array.isArray(root.recentTrades) || root.recentTrades.length > 12
     || typeof root.lastDecision !== 'string' || typeof root.rationale !== 'string') return undefined
+  if (['successfulCycles', 'filledCycles', 'signalsQualified', 'universeSize'].some(key =>
+    root[key] !== undefined && (!Number.isSafeInteger(root[key]) || (root[key] as number) < 0))
+    || root.lastScannedSymbols !== undefined
+      && (!Array.isArray(root.lastScannedSymbols) || root.lastScannedSymbols.length > 12
+        || !root.lastScannedSymbols.every(s =>
+          typeof s === 'string' && /^[A-Z0-9]{3,16}USDT$/u.test(s)))
+    || root.lastDiscoveryIssue !== undefined && (
+      typeof root.lastDiscoveryIssue !== 'string' || root.lastDiscoveryIssue.length > 300
+    )) return undefined
   const positions = account.positions.map(record)
   if (positions.some(p => p === undefined || typeof p.symbol !== 'string'
     || !finite(p.quantity) || !finite(p.marketValueUsdt) || !finite(p.unrealizedPnlUsdt)
