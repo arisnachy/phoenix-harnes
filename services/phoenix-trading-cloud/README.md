@@ -1,5 +1,7 @@
 # PHOENIX Trading Cloud — PAPER research runner
 
+English | [中文](README.zh.md)
+
 Standalone, no LLM and no local Windows dependency. **PAPER ONLY**: never submits a real Binance order, and never accesses private account balances. The project is intentionally outside the pnpm monorepo workspace so it cannot accidentally become a production broker on build.
 
 ## Current scope

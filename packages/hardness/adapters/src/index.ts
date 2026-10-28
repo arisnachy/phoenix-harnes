@@ -38,6 +38,7 @@ import { mountBinancePaperDashboardRoute } from './binance-paper-route.ts'
 import { installBinanceTradingProtocol } from './binance-trading-protocol.ts'
 import { createBinanceTradingTools } from './binance-trading-tools.ts'
 import { BinanceSpotTestnet, binanceTestnetCredentials } from './binance-spot-testnet.ts'
+import { BinanceCloudPaperClient, installBinanceCloudWakeBridge } from './binance-cloud-bridge.ts'
 import type { BinanceAgentOsHostService } from './binance-trading-tools.ts'
 import { installCapabilityOperatingProtocol } from './capability-protocol.ts'
 import { acquireProactivityEngine } from './proactivity-registry.ts'
@@ -374,6 +375,20 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
   }
   const binance = acquireBinancePaperAutomation(binancePaperLedgerPath())
   const secretProvider = ctx.get('credentials') as CredentialProvider | undefined
+  // A Cloud runner is independent from local PAPER, and is never silently
+  // auto-provisioned. The operator must authorize a provider and vault secret.
+  const cloudUrl = process.env.PHOENIX_TRADING_CLOUD_URL?.trim()
+  let cloudClient: BinanceCloudPaperClient | undefined
+  if (cloudUrl && secretProvider !== undefined) {
+    try {
+      cloudClient = new BinanceCloudPaperClient(cloudUrl, async () => {
+        const credential = await secretProvider.resolve(credentialRef('PHOENIX_TRADING_CLOUD_ADMIN_TOKEN'))
+        return credential?.value
+      })
+    } catch {
+      ctx.logger.warn('PHOENIX Trading Cloud endpoint rejected; Host remains local PAPER only')
+    }
+  }
   const testnet = new BinanceSpotTestnet(async () => {
     if (secretProvider === undefined) return binanceTestnetCredentials()
     const [key, secret] = await Promise.all([
@@ -537,6 +552,7 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
         automation: binance.engine,
         wake: wake.engine,
         testnet,
+        ...(cloudClient === undefined ? {} : { cloud: cloudClient }),
         approval,
         ...(pluginInventory === undefined ? {} : { agentOs: pluginInventory }),
       })) {
@@ -596,6 +612,11 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
         composeResumedAgent: (agentCtx: Context) => composeResumedScheduledAgent(ctx, agentCtx),
       }))
       disposers.push(installWakeRuntime(ctx, wake.engine))
+      if (cloudClient !== undefined) {
+        disposers.push(installBinanceCloudWakeBridge(
+          ctx, cloudClient, join(dirname(binancePaperLedgerPath()), 'phoenix-cloud-paper-events.json'),
+        ))
+      }
       disposers.push(installConnectorEventBridge(ctx, mcpConnectors))
     }
 

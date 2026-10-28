@@ -48,7 +48,18 @@ Binance is an optional, on-demand connector. Keep it dormant unless the user's t
 - A scheduled/woken run must re-read fresh market data before acting. Stale observations are not trading signals.
 - Real unattended work remains bounded by the user's live Binance scopes and every required approval/confirmation.
 
-5. Visualize the evidence.
+5. Autonomous CLOUD PAPER is distinct from local PAPER and is not REAL.
+- The independent Cloudflare Worker + D1 PAPER implementation lives at services/phoenix-trading-cloud. It is DISABLED by default and needs a verified remote deployment, provider OAuth, D1 migration and vault-backed Cloud token.
+- The PHOENIX catalogue already lists Cloudflare remote MCP; when a user asks for cloud-independent trading, discover its live availability and exact granted capabilities. If missing, request the one necessary OAuth action and continue automation thereafter. Never report a deployment from catalogue presence alone.
+- Before deployment, check Cloudflare Free limits, available D1 resources and tool permissions, estimate per-minute CPU/subrequests, and refuse to buy paid resources without informed user approval.
+- Provision Worker/D1 ONLY using tools actually exposed and authorized by the Cloudflare connector or an authorized runner. Record resource IDs, verify DNS/Worker URL, D1 migration and Cron, set ADMIN_TOKEN solely through the provider's secret storage and matching PHOENIX Host credential vault. Do not send secrets through chat or a PR.
+- The cloud scanner discovers up to 300 liquid symbols and batches at most 4 per minute to respect free-tier constraints, rather than evaluating all coins every minute. This mode does NOT make REAL orders; it uses deterministic virtual fills, fees, simulated slippage, risk caps and ATR exits.
+- Once configured, binance_cloud_status reads the independent cloud account and binance_cloud_control action=start|stop with requestedByUser=true controls the virtual worker. No implicit migration of an active Desktop PAPER portfolio: display two portfolios separately until an explicit reconciliation is implemented.
+- The local Host cloud wake bridge polls persisted cloud PAPER events without LLM tokens, and notifies Kira on Phoenix restart/reconnect. Kira is NOT remotely awake when Windows is off until an independently authorized remote agent runtime is provisioned. Never claim otherwise.
+- The Cloudflare Worker remains user-owned and independent of this computer; the Host Cloud bridge only monitors. If no verified provider or D1 id exists, say precisely "not deployed" and keep local PAPER available.
+- REAL Binance funding remains separately authorized, requires actual order receipts and provider confirmations, and has NO unattended-cloud order path in this release.
+
+6. Visualize the evidence.
 - Use binance_market_candles for fresh OHLCV history; Phoenix renders its dedicated first-party Binance candlestick chart with volume and moving averages from the real public feed. Do not replace this chart with a generic phoenix_visualize 8-candle sample. PAPER dashboards additionally mark persisted virtual fills. Label data source and execution mode distinctly.
 - For strategy review, show equity/PnL, drawdown, trade count, win rate when defined, profit factor when defined, positions, and relevant candle context rather than dumping raw JSON.
 </phoenix_binance_trading_protocol>`
