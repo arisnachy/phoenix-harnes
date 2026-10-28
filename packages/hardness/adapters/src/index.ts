@@ -38,6 +38,7 @@ import { mountBinancePaperDashboardRoute } from './binance-paper-route.ts'
 import { installBinanceTradingProtocol } from './binance-trading-protocol.ts'
 import { createBinanceTradingTools } from './binance-trading-tools.ts'
 import { BinanceSpotTestnet, binanceTestnetCredentials } from './binance-spot-testnet.ts'
+import { acquireBinanceTestnetAutomation } from './binance-testnet-automation.ts'
 import { BinanceCloudPaperClient, installBinanceCloudWakeBridge } from './binance-cloud-bridge.ts'
 import type { BinanceAgentOsHostService } from './binance-trading-tools.ts'
 import { installCapabilityOperatingProtocol } from './capability-protocol.ts'
@@ -400,6 +401,22 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
       : undefined
   })
   disposers.push(() => { binance.release() })
+  const testnetAuto = acquireBinanceTestnetAutomation(
+    join(dirname(binancePaperLedgerPath()), 'phoenix-binance-testnet-auto.json'), testnet,
+  )
+  disposers.push(() => { testnetAuto.release() })
+  if (!modelTools) {
+    testnetAuto.engine.setAttentionSink(event => {
+      ctx.emit('phoenix/wake-event', wakeEvent({
+        id: 'binance-testnet:' + randomUUID(),
+        source: 'phoenix-trading', eventType: 'testnet.attention',
+        summary: event.detail,
+        attributes: { kind: event.kind, symbol: event.symbol, mode: 'testnet' },
+      }))
+    })
+    disposers.push(() => { testnetAuto.engine.setAttentionSink(undefined) })
+    await testnetAuto.engine.restore()
+  }
   if (!modelTools) {
     // Only the Host publishes PAPER attention events; agent-scoped projections
     // must not create duplicate notifications for the same virtual fill.
@@ -420,7 +437,7 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
     const mountTradingRoute = (): void => {
       if (removeTradingRoute !== undefined) return
       const server = (ctx.get as unknown as (name: string) => unknown)('webServer') as GameWebRouteHost | undefined
-      if (server?.register !== undefined) removeTradingRoute = mountBinancePaperDashboardRoute(server, binance.engine, { testnet, ...(secretProvider === undefined ? {} : { credentials: secretProvider }), ...(pluginInventory === undefined ? {} : { agentOs: pluginInventory }) })
+      if (server?.register !== undefined) removeTradingRoute = mountBinancePaperDashboardRoute(server, binance.engine, { testnet, testnetAuto: testnetAuto.engine, ...(secretProvider === undefined ? {} : { credentials: secretProvider }), ...(pluginInventory === undefined ? {} : { agentOs: pluginInventory }) })
     }
     mountTradingRoute()
     disposers.push(ctx.on('internal/service', name => {
@@ -552,6 +569,7 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
         automation: binance.engine,
         wake: wake.engine,
         testnet,
+        testnetAuto: testnetAuto.engine,
         ...(cloudClient === undefined ? {} : { cloud: cloudClient }),
         approval,
         ...(pluginInventory === undefined ? {} : { agentOs: pluginInventory }),

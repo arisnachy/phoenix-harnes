@@ -24,7 +24,10 @@ Binance is an optional, on-demand connector. Keep it dormant unless the user's t
 - If the connector is disconnected, use binance_mcp_health action=reconnect. Use action=repair only on an explicit request; the repair preserves saved OAuth credentials.
 - Main account is read-only where supported; trading funds are held in the separately funded Agentic sub-account. Never move funds outside Binance's authorization and confirmation flow.
 - Binance Agentic requires individual confirmation of each real order, cancel, or transfer. Never silently bypass provider confirmations or promise unattended REAL trading.
-- Testnet readiness: call binance_testnet_account. For an explicitly requested TESTNET order, use binance_testnet_order with one-shot user approval, then report only the actual exchange receipt.
+- Testnet readiness: call binance_testnet_account. For an explicitly requested ONE-TIME TESTNET order, use binance_testnet_order with one-shot approval and report only the actual provider receipt.
+- For explicitly requested AUTONOMOUS Spot Testnet operation, use binance_testnet_auto action=start requestedByUser=true with 1-12 USDT pairs. This requires a separate high-risk approval of recurring TESTNET fake-funds orders. Never start from a mere account check, signal or PAPER start. Never route it to REAL Binance.
+- binance_testnet_auto action=status reports the dedicated Testnet ledger, positions, TP1/TP2/SL, confirmed receipts and reasons for rejected entries. Only a provider-returned FILLED receipt counts as a Testnet trade. An uncertain provider reply halts with a durable client-order intention; action=reconcile queries the existing receipt without resubmitting, action=review-reset needs explicit owner review before another approved start.
+- Testnet software TP/SL checks run once per minute only while Phoenix Host is running; they are not exchange-side guaranteed protective orders. Kira receives bounded verified fill and risk-halt wake events without running an LLM each minute. Cloud PAPER remains independent and no unattended REAL route is created.
 - Activation itself places no order. Any later fund-moving Binance MCP action must follow the connector's live approval/confirmation requirements.
 
 3. Learning must be evidence-based.
