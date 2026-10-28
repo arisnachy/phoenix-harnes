@@ -8,7 +8,6 @@
  * @module dsh-llm-pi-ai/codex-auth
  */
 
-import type { ChildProcessWithoutNullStreams } from 'node:child_process'
 import { createInterface } from 'node:readline'
 import { LlmError } from '@phoenix-ai/dsh-llm'
 import {

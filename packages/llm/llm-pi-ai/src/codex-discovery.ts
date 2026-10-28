@@ -256,8 +256,8 @@ export function codexDiscoveryArgs(): string[] {
 }
 
 /** Inspect the single PHOENIX-managed Codex CLI activation marker. */
-function managedCodexRuntime(): { bin: string; signature: string } | undefined {
-  const configured = process.env.DSH_HOME?.trim()
+function managedCodexRuntime(homeOverride?: string): { bin: string; signature: string } | undefined {
+  const configured = homeOverride ?? process.env.DSH_HOME?.trim()
   const dshHome = configured && configured.length > 0 ? resolve(configured) : join(homedir(), '.dsh')
   const runtimeRoot = join(dshHome, 'codex-cli')
   const markerPath = join(runtimeRoot, 'active.json')
@@ -284,8 +284,8 @@ function managedCodexRuntime(): { bin: string; signature: string } | undefined {
 }
 
 /** Stable runtime identity used to invalidate model caches after managed CLI activation. */
-export function codexRuntimeSignature(): string {
-  return managedCodexRuntime()?.signature ?? 'system-path'
+export function codexRuntimeSignature(homeOverride?: string): string {
+  return managedCodexRuntime(homeOverride)?.signature ?? 'system-path'
 }
 
 /** Start the same official Codex installation for model discovery and native auth. */
