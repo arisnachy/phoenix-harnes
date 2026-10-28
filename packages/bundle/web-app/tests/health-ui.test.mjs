@@ -22,5 +22,8 @@ test('PHOENIX clinic page renders a real clinical workbench with valid inline Ja
  assert.doesNotMatch(html, /SOLO DATOS FICTICIOS/)
  const script=/<script nonce="test-nonce-opaque">([\s\S]+?)<\/script>/u.exec(html)?.[1]
  assert.equal(typeof script,'string')
+ // Form helper templates must close the dynamic id attribute before the element body.
+ assert.ok(script.includes(`<textarea id="'+id+'"></textarea>`))
+ assert.ok(script.includes(`<select id="'+id+'">`))
  assert.doesNotThrow(()=>new Script(script,{filename:'health-ui-inline.js'}))
 })
