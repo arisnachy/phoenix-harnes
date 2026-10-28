@@ -1,32 +1,35 @@
 # `@phoenix-ai/dsh-tool-health`
 
-PHOENIX Health Engine introduces a deterministic clinical workflow sandbox and optional inline PHOENIX desktop. All clinical content is **synthetic** and ephemeral: no actual patients, clinical decisions, prescriptions, email or persistent clinical records.
+Optional PHOENIX Health Engine planning tools, supporting a clinical pilot that stays within the existing PHOENIX Host. Health is not a standalone application and does not replace Kira.
+
+## Architecture
+
+The model-facing `tool-health` package deliberately **never** exposes patient records or credentials. Its `health_interview_plan` produces general adaptive interview prompts and `health_kira_mail_requirements` explains fail-closed sender checks.
+
+The separate opt-in web clinic runs at `/health` inside `packages/bundle/web-app` and has an encrypted, durable SQLite record store and local staff authentication. Clinical access is checked by role, organization and explicit care-team assignment, with audited grants and revocation. Patient contact consent is recorded with verification evidence and an auditable revocation. Records have revision guards, practitioner review and signing steps, study orders, inventory transactions and internal invoices. SQLite online backups can be created and integrity-checked by clinic administrators.
+
+The independent `ClinicSandbox` domain remains in the package for deterministic synthetic workflow tests. It does **not** represent the production store.
 
 ## Model Experience
 
-### Clinical consultation assistance
+### What the model sees
 
-#### What the model sees
+The model sees only a generic complaint, specialty, mode and **question keys** supplied to `health_interview_plan`. No patient names, identifiers, clinical narratives, imaging, diagnoses or medical records are automatically transmitted to the model. It also sees the list of required email checks through `health_kira_mail_requirements`, not the results of authorization checks or actual emails. The clinician opens protected records separately within the Health workspace.
 
-`health_interview_plan` proposes up to four adaptive questions from a generic complaint and specialty, without identifiable patient data. `health_kira_mail_requirements` lists eight prerequisites for a future authenticated email adapter; none can be self-attested by the model. These are *planning* tools, not medical decision engines.
+### Token effect
 
-#### Token effect
+The system-prompt guidance is only attached when medical intent is detected. Database reads and deterministic clinic workflows do not require an LLM invocation.
 
-The model prompt section is conditionally enabled only for health intent. The simulator does not invoke models, and does not inject hospital databases or patient data into prompt context.
+### KV Cache effect
 
-#### KV Cache effect
-
-Stable tool schemas and a short conditional health guidance section preserve otherwise reusable instructions. No changing patient data is serialized into the global system prompt.
-
-## Clinical sandbox
-
-The `ClinicSandbox` domain supports synthetic registration, appointments, signed encounter drafts, lab and imaging work orders, review of results, pharmacy stock, dispensing and invoices with role-based checks and institution scoping. The interactive PHOENIX visual workspace offers a sandboxed eight-area workbench via sidebar footer action. Data are not persisted when the visual workspace closes. The in-memory domain module and UI simulation are not yet wired into one clinical database.
+Stable tool schemas and bounded conditional guidance avoid injecting session-specific patient data into global model instructions, preserving the reusable system prompt.
 
 ## Known Limitations and Deferred Work
 
-- Not a clinical production system or electronic medical record. Do not enter real patient information into the demonstration.
-- No authenticated clinical staff identity, durable encrypted clinical storage, multi-tenant database, audit-proof logging, backups, legally compliant electronic signatures or patient portal.
-- No verified healthcare provider prescription, validated clinical decision support, real pharmacy dispensing, DICOM/PACS, LIS, RIS, ARS claims, payment processing or medical device interfaces.
-- The clinical UI and deterministic synthetic domain run separate demonstrations and do not persist the same data across sessions.
-- The existing Workspace Gmail/Calendar capability is not equivalent to a verified Kira institutional sender. No clinical email is sent or reminder scheduled.
-- Production deployment requires medical review, local privacy/legal approval, authenticated tenant isolation, code security audits, reliable provider integrations and end-to-end testing.
+- **Not certified or approved for clinical production.** Operator documentation: `packages/bundle/web-app/HEALTH-OPERATOR.md`.
+- Clinic storage encrypts clinical record payloads, **not the entire SQLite file or staff/organization metadata**. Host filesystem permissions, verified backups and security review remain essential.
+- Only locally bound operation is exposed. External hospital integration, FHIR interoperability, DICOM/PACS, LIS/RIS, medical-device connections, patient portal, verified identity credentials and legal digital signature are not implemented.
+- Kira cannot autonomously read protected patient records; a secure consent- and role-aware human-controlled context broker remains to be built and validated.
+- Phone/email confirmation is attested by authenticated staff and associated with an evidence reference, **not independently validated** by a verification service.
+- Gmail sending is limited to manually authorized, nonclinical appointment reminders from an account whose real provider profile matches Kira's configured sender. No patient documents or medical details are sent.
+- A local SQLite backup and restoration test are present; off-device recovery, retention, key recovery, external audit, threat assessment and end-to-end clinical validation are still missing.
