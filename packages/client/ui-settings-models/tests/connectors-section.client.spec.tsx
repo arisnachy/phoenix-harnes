@@ -36,7 +36,7 @@ describe('connectors settings section', () => {
       state: vi.fn(async () => ({runtime:[],managed:[]})),
       install: vi.fn(), search: vi.fn(),
     }
-    renderHub(api, { mcpRegistry })
+    renderHub(api, { mcpRegistry: mcpRegistry as unknown as NonNullable<ConnectorsSettingsSectionProps['mcpRegistry']> })
     const card = document.querySelector('[data-connector-id="binance"]')
     expect(card).toBeTruthy()
     expect(card?.textContent).toContain('Conectar / autenticar Binance')
