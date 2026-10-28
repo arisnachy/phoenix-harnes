@@ -8,15 +8,11 @@
  * @module dsh-llm-pi-ai/codex-auth
  */
 
-import { spawn } from 'node:child_process'
-import type { ChildProcessWithoutNullStreams } from 'node:child_process'
 import { createInterface } from 'node:readline'
 import { LlmError } from '@phoenix-ai/dsh-llm'
 import {
-  codexDiscoveryArgs,
-  codexEnvironment,
+  codexProcess,
   encodeCodexWireFrame,
-  finishProcessSetup,
   terminateCodexProcess,
 } from './codex-discovery.ts'
 import { isChatGptAccountJwt } from './codex-platform.ts'
@@ -78,23 +74,6 @@ export function readCodexNativeAuthStatus(result: unknown): string {
   return token
 }
 
-function codexAuthProcess(): ChildProcessWithoutNullStreams {
-  const args = codexDiscoveryArgs()
-  const common = {
-    cwd: process.cwd(),
-    env: codexEnvironment(),
-    windowsHide: true,
-  }
-  if (process.platform === 'win32') {
-    const shell = process.env.ComSpec ?? 'cmd.exe'
-    return finishProcessSetup(spawn(
-      shell,
-      ['/d', '/s', '/c', `codex ${args.join(' ')}`],
-      common,
-    ))
-  }
-  return finishProcessSetup(spawn('codex', args, common))
-}
 
 async function nextResponse(
   iterator: AsyncIterator<string>,
@@ -146,7 +125,7 @@ async function nextResponse(
 }
 
 async function readFromCodex(): Promise<string> {
-  const child = codexAuthProcess()
+  const child = codexProcess()
   const lines = createInterface({ input: child.stdout, crlfDelay: Number.POSITIVE_INFINITY })
   const iterator = lines[Symbol.asyncIterator]()
   try {

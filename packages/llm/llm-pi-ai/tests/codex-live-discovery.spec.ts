@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join, relative } from 'node:path'
 import type { CodexModelListTransport } from '../src/codex-discovery.ts'
-import { codexDiscoveryArgs, encodeCodexWireFrame, readCodexModelPage } from '../src/codex-discovery.ts'
+import { codexDiscoveryArgs, codexRuntimeSignature, encodeCodexWireFrame, readCodexModelPage } from '../src/codex-discovery.ts'
 import { discoverModels } from '../src/discovery.ts'
 
 describe('openai-codex live model discovery', () => {
@@ -44,6 +47,35 @@ describe('openai-codex live model discovery', () => {
     await discoverModels({ provider: 'openai-codex', signal: controller.signal }, undefined, { list })
 
     expect(list).toHaveBeenCalledWith(controller.signal)
+  })
+})
+
+describe('managed Codex CLI activation', () => {
+  it('changes the catalog fingerprint after a version switch and rejects missing runtimes', () => {
+    const home = mkdtempSync(join(tmpdir(), 'phoenix-codex-signature-'))
+    try {
+      const root = join(home, 'codex-cli')
+      const installed = join(root, 'versions', '0.1.0', 'codex.js')
+      mkdirSync(join(root, 'versions', '0.1.0'), { recursive: true })
+      writeFileSync(installed, '// installed CLI fixture', 'utf8')
+      const marker = (version: string, activatedAt: string) => {
+        writeFileSync(join(root, 'active.json'), JSON.stringify({
+          schema: 1, version, bin: relative(root, installed), activatedAt,
+        }), 'utf8')
+      }
+      expect(codexRuntimeSignature(home)).toBe('system-path')
+      marker('0.1.0', '2026-10-28T12:00:00Z')
+      const first = codexRuntimeSignature(home)
+      expect(first).toContain('0.1.0')
+      marker('0.2.0', '2026-10-28T13:00:00Z')
+      expect(codexRuntimeSignature(home)).not.toBe(first)
+      writeFileSync(join(root, 'active.json'), JSON.stringify({
+        schema: 1, version: '0.2.0', bin: '../../outside.js',
+      }), 'utf8')
+      expect(codexRuntimeSignature(home)).toBe('system-path')
+    } finally {
+      rmSync(home, { recursive: true, force: true })
+    }
   })
 })
 

@@ -255,8 +255,9 @@ export function codexDiscoveryArgs(): string[] {
   ]
 }
 
-function managedCodexBin(): string | undefined {
-  const configured = process.env.DSH_HOME?.trim()
+/** Inspect the single PHOENIX-managed Codex CLI activation marker. */
+function managedCodexRuntime(homeOverride?: string): { bin: string; signature: string } | undefined {
+  const configured = homeOverride ?? process.env.DSH_HOME?.trim()
   const dshHome = configured && configured.length > 0 ? resolve(configured) : join(homedir(), '.dsh')
   const runtimeRoot = join(dshHome, 'codex-cli')
   const markerPath = join(runtimeRoot, 'active.json')
@@ -266,30 +267,40 @@ function managedCodexBin(): string | undefined {
       schema?: unknown
       version?: unknown
       bin?: unknown
+      activatedAt?: unknown
     }
     if (marker.schema !== 1 || typeof marker.version !== 'string'
       || !/^\d+\.\d+\.\d+$/u.test(marker.version) || typeof marker.bin !== 'string') return undefined
     const candidate = resolve(runtimeRoot, marker.bin)
     const boundary = runtimeRoot.endsWith(sep) ? runtimeRoot : `${runtimeRoot}${sep}`
     if (candidate !== runtimeRoot && !candidate.startsWith(boundary)) return undefined
-    return existsSync(candidate) ? candidate : undefined
+    return existsSync(candidate) ? {
+      bin: candidate,
+      signature: JSON.stringify([marker.version, marker.bin, marker.activatedAt ?? null]),
+    } : undefined
   } catch {
     return undefined
   }
 }
 
-function codexProcess(signal?: AbortSignal): ChildProcessWithoutNullStreams {
+/** Stable runtime identity used to invalidate model caches after managed CLI activation. */
+export function codexRuntimeSignature(homeOverride?: string): string {
+  return managedCodexRuntime(homeOverride)?.signature ?? 'system-path'
+}
+
+/** Start the same official Codex installation for model discovery and native auth. */
+export function codexProcess(signal?: AbortSignal): ChildProcessWithoutNullStreams {
   const common = {
     cwd: process.cwd(),
     env: codexEnvironment(),
     windowsHide: true,
     signal,
   }
-  const managed = managedCodexBin()
+  const managed = managedCodexRuntime()
   if (managed !== undefined) {
     return finishProcessSetup(spawn(
       process.execPath,
-      [managed, ...codexDiscoveryArgs()],
+      [managed.bin, ...codexDiscoveryArgs()],
       common,
     ))
   }
@@ -506,7 +517,8 @@ export async function listCodexModels(signal?: AbortSignal): Promise<readonly Ll
 }
 
 let sharedDiscovery: Promise<readonly LlmDiscoveredModel[]> | undefined
-let lastDiscoveryFailure: { readonly at: number; readonly error: unknown } | undefined
+let sharedDiscoveryRuntime: string | undefined
+let lastDiscoveryFailure: { readonly at: number; readonly error: unknown; readonly runtime: string } | undefined
 
 function waitForSharedDiscovery(
   pending: Promise<readonly LlmDiscoveredModel[]>,
@@ -535,6 +547,12 @@ function waitForSharedDiscovery(
  */
 async function listSharedCodexModels(signal?: AbortSignal): Promise<readonly LlmDiscoveredModel[]> {
   const now = Date.now()
+  const runtime = codexRuntimeSignature()
+  // A replaced managed CLI is a genuinely different discovery transport:
+  // neither the old failure cooldown nor its in-flight app-server may block it.
+  if (lastDiscoveryFailure !== undefined && lastDiscoveryFailure.runtime !== runtime) {
+    lastDiscoveryFailure = undefined
+  }
   if (lastDiscoveryFailure !== undefined
     && now - lastDiscoveryFailure.at < DISCOVERY_FAILURE_COOLDOWN_MS) {
     const error = lastDiscoveryFailure.error
@@ -543,21 +561,27 @@ async function listSharedCodexModels(signal?: AbortSignal): Promise<readonly Llm
       : new LlmError('Codex model discovery is temporarily unavailable', 'DISCOVERY_FAILED')
   }
 
-  if (sharedDiscovery === undefined) {
+  if (sharedDiscovery === undefined || sharedDiscoveryRuntime !== runtime) {
     const job = listCodexModels().then(
       (models) => {
-        lastDiscoveryFailure = undefined
+        if (codexRuntimeSignature() === runtime) lastDiscoveryFailure = undefined
         return models
       },
       (error: unknown) => {
-        lastDiscoveryFailure = { at: Date.now(), error }
+        if (codexRuntimeSignature() === runtime) {
+          lastDiscoveryFailure = { at: Date.now(), error, runtime }
+        }
         throw error
       },
     )
     const tracked = job.finally(() => {
-      if (sharedDiscovery === tracked) sharedDiscovery = undefined
+      if (sharedDiscovery === tracked) {
+        sharedDiscovery = undefined
+        sharedDiscoveryRuntime = undefined
+      }
     })
     sharedDiscovery = tracked
+    sharedDiscoveryRuntime = runtime
   }
   return await waitForSharedDiscovery(sharedDiscovery, signal)
 }
