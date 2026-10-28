@@ -115,6 +115,8 @@ export class HealthClinicStore {
       this.key=derived
     }
     const cookie=randomBytes(32).toString('hex'),csrf=randomBytes(24).toString('hex')
+    for(const [id,entry] of this.sessions){if(entry.expires<Date.now())this.sessions.delete(id)}
+    if(this.sessions.size>=128)fail('Demasiadas sesiones clínicas activas')
     this.sessions.set(cookie,{actor:{username:s.username,org:s.org,role:s.role},csrf,expires:Date.now()+8*3600_000})
     return {cookie,csrf,actor:{username:s.username,org:s.org,role:s.role}}
   }
@@ -135,8 +137,12 @@ export class HealthClinicStore {
     const x=obj(value),username=str(x.username,'Usuario',80),pass=safePassword(x.password),role=str(x.role,'Rol',40) as Role
     if(!ROLES.has(role)||!(/^[a-zA-Z][a-zA-Z0-9._-]{2,79}$/u.test(username)))fail('Usuario o rol inválido')
     const salt=randomBytes(16).toString('hex')
-    this.db.prepare('INSERT INTO health_staff VALUES (?,?,?,?,?)').run(username,actor.org,role,salt,hash(pass,salt))
-    this.audit(actor,'staff.create',username)
+    this.db.exec('BEGIN IMMEDIATE')
+    try {
+      this.db.prepare('INSERT INTO health_staff VALUES (?,?,?,?,?)').run(username,actor.org,role,salt,hash(pass,salt))
+      this.audit(actor,'staff.create',username)
+      this.db.exec('COMMIT')
+    }catch(error){this.db.exec('ROLLBACK');throw error}
   }
   private encryptionKey():Buffer {if(!this.key)fail('Expediente clínico bloqueado');return this.key}
   private seal(id:string,org:string,kind:Kind,version:number,data:RecordData):{iv:string;tag:string;payload:string} {
@@ -165,6 +171,8 @@ export class HealthClinicStore {
     this.access(actor,kind)
     const rows=this.db.prepare('SELECT * FROM health_records WHERE org=? AND kind=? ORDER BY created_at DESC LIMIT 500').all(actor.org,kind) as Row[]
     return rows.map(row=>({id:row.id,version:row.version,createdAt:row.created_at,updatedAt:row.updated_at,...this.open(row)}))
+      .filter(item=>kind!=='orders'||actor.role!=='lab'&&actor.role!=='radiology'||
+        item.modality===(actor.role==='lab'?'laboratory':'imaging'))
   }
   private audit(actor:Actor,action:string,id:string):void {
     const prev=(this.db.prepare('SELECT hash FROM health_audit WHERE org=? ORDER BY id DESC LIMIT 1').get(actor.org) as {hash:string}|undefined)?.hash??'genesis'
@@ -203,9 +211,15 @@ export class HealthClinicStore {
   create(actor:Actor,kind:Kind,value:unknown):RecordData {
     this.access(actor,kind,true)
     const x=withLimit(value)
-    if(kind==='patients')return this.insert(actor,kind,{name:str(x.name,'Nombre',160),dateOfBirth:str(x.dateOfBirth,'Nacimiento',24),
-      email:typeof x.email==='string'?x.email.trim().slice(0,254):'',phone:typeof x.phone==='string'?x.phone.trim().slice(0,35):'',
+    if(kind==='patients'){
+      const dob=str(x.dateOfBirth,'Nacimiento',24)
+      if(!/^\d{4}-\d{2}-\d{2}$/u.test(dob)||!Number.isFinite(Date.parse(dob))||Date.parse(dob)>Date.now())fail('Fecha de nacimiento inválida')
+      const email=typeof x.email==='string'?x.email.trim():''
+      if(email&&!/^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/u.test(email))fail('Correo de paciente inválido')
+      return this.insert(actor,kind,{name:str(x.name,'Nombre',160),dateOfBirth:dob,
+      email:email.slice(0,254),phone:typeof x.phone==='string'?x.phone.trim().slice(0,35):'',
       notes:typeof x.notes==='string'?x.notes.slice(0,4000):'',emailConsent:x.emailConsent===true})
+    }
     if(kind==='encounters'){
       const patientId=str(x.patientId,'Paciente',80);this.find(actor,'patients',patientId)
       return this.insert(actor,kind,{patientId,practitioner:actor.username,specialty:str(x.specialty,'Especialidad',120),
