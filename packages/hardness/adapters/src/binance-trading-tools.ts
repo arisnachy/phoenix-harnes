@@ -347,7 +347,7 @@ function testnetAutoTool(deps: BinanceTradingToolDependencies): ToolDefinition {
     name: 'binance_testnet_auto',
     description: 'Start, stop or inspect unattended Spot TESTNET fake-funds orders. START needs explicit owner request and one-shot Phoenix high-risk approval for a bounded persistent testing run. Trades use HMAC testnet-only keys, fixed testnet endpoint and deterministic risk/ledger checks; never REAL MCP. Orders/positions remain Testnet-only. When no valid signal or no budget, it HOLDs with the exact reason.',
     parameters: {
-      action: { type: 'string', required: true, enum: ['status', 'start', 'stop'] },
+      action: { type: 'string', required: true, enum: ['status', 'start', 'stop', 'reconcile', 'review-reset'] },
       requestedByUser: { type: 'boolean', description: 'True only for an explicit owner request to start or stop.' },
       symbols: { type: 'array', items: { type: 'string' }, description: '1-12 USDT pairs; default BTCUSDT ETHUSDT SOLUSDT.' },
     },
@@ -357,8 +357,10 @@ function testnetAutoTool(deps: BinanceTradingToolDependencies): ToolDefinition {
       const auto=deps.testnetAuto
       if(auto===undefined)return {mode:'testnet',configured:false,status:'host-service-unavailable'}
       if(args.action==='status')return auto.snapshot() as unknown as Record<string, JsonValue>
+      if(args.action==='reconcile')return await auto.reconcilePending() as unknown as Record<string, JsonValue>
       if(args.requestedByUser!==true)throw new Error('Testnet automation control requires the owner request')
       if(args.action==='stop')return await auto.stop() as unknown as Record<string, JsonValue>
+      if(args.action==='review-reset')return await auto.clearReviewedHalt() as unknown as Record<string, JsonValue>
       if(args.action!=='start'||exec.agent===undefined)throw new Error('Testnet automation requires an active owner session')
       const readiness=await (deps.testnet??new BinanceSpotTestnet()).status()
       if(!readiness.connected||readiness.canTrade!==true)
@@ -373,8 +375,10 @@ function testnetAutoTool(deps: BinanceTradingToolDependencies): ToolDefinition {
     },
     presentCall(args) {
       return {card:'generic',title:args.action==='start'?'Autorizar trading automático TESTNET'
-        :args.action==='stop'?'Detener trading automático TESTNET':'Diagnóstico trading TESTNET',
-        kind:args.action==='status'?'read':'execute',rawInput:args.action}
+        :args.action==='stop'?'Detener trading automático TESTNET'
+          :args.action==='reconcile'?'Conciliar órdenes TESTNET'
+            :args.action==='review-reset'?'Revisar bloqueo TESTNET':'Diagnóstico trading TESTNET',
+        kind:['status','reconcile'].includes(args.action)?'read':'execute',rawInput:args.action}
     },
   })
 }
