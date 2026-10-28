@@ -278,9 +278,12 @@ export class BinanceTestnetAutomation {
     // Write-ahead intent is durable BEFORE the exchange request.
     this.state.pending=intent
     await this.save()
+    if(intent.side==='BUY' && !finite(intent.quoteUsdt ?? NaN)
+      || intent.side==='SELL' && !finite(intent.quantity ?? NaN))
+      throw new Error('invalid-testnet-order-intent')
     const receipt=await this.testnet.order({
       symbol:intent.symbol,side:intent.side,clientOrderId:intent.clientOrderId,
-      ...(intent.side==='BUY'?{quoteUsdt:intent.quoteUsdt}:{quantity:intent.quantity}),
+      ...(intent.side==='BUY' ? {quoteUsdt:intent.quoteUsdt!} : {quantity:intent.quantity!}),
     })
     await this.settle(receipt)
   }
