@@ -61,16 +61,18 @@ async function readControl(req: IncomingMessage): Promise<{
   symbols?: string[]
   interval?: '15m' | '1h' | '4h' | '1d'
   pollMinutes?: number
+  autoDiscover?: boolean
 }> {
   const payload = await readRequestObject(req)
-  if (Object.keys(payload).some(key => !['action', 'symbols', 'interval', 'pollMinutes'].includes(key))) {
+  if (Object.keys(payload).some(key => !['action', 'symbols', 'interval', 'pollMinutes', 'autoDiscover'].includes(key))) {
     throw new Error('Unsupported control field')
   }
   if (payload.action !== 'start' && payload.action !== 'stop' && payload.action !== 'check-now') {
     throw new Error('Unsupported paper action')
   }
   if (payload.action === 'start') {
-    if (!Array.isArray(payload.symbols) || !payload.symbols.every(symbol => typeof symbol === 'string')
+    if (!Array.isArray(payload.symbols) || !payload.symbols.every(symbol => typeof symbol === 'string'
+      || (payload.autoDiscover !== undefined && typeof payload.autoDiscover !== 'boolean'))
       || (payload.interval !== undefined && (typeof payload.interval !== 'string' || !['15m', '1h', '4h', '1d'].includes(payload.interval)))
       || (payload.pollMinutes !== undefined && (!Number.isInteger(payload.pollMinutes)
         || !Number.isFinite(payload.pollMinutes) || Number(payload.pollMinutes) < 1
@@ -79,6 +81,7 @@ async function readControl(req: IncomingMessage): Promise<{
     }
     return {
       action: 'start', symbols: payload.symbols,
+      ...(payload.autoDiscover === undefined ? {} : { autoDiscover: payload.autoDiscover as boolean }),
       ...(payload.interval === undefined ? {} : { interval: payload.interval as '15m' | '1h' | '4h' | '1d' }),
       ...(payload.pollMinutes === undefined ? {} : { pollMinutes: payload.pollMinutes as number }),
     }
@@ -294,6 +297,7 @@ export function mountBinancePaperDashboardRoute(
       if (action.action === 'start') {
         await engine.start({
           symbols: action.symbols ?? [],
+          ...(action.autoDiscover === undefined ? {} : { autoDiscover: action.autoDiscover }),
           ...(action.interval === undefined ? {} : { interval: action.interval }),
           ...(action.pollMinutes === undefined ? {} : { pollMs: action.pollMinutes * 60_000 }),
         })

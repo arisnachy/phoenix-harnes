@@ -184,3 +184,12 @@
 .panel .row>[data-signal=buy] { color: #087c60; background: #edf9f3; border-color: #94d2b4; }
 .panel .row>[data-signal=sell] { color: #a44c32; background: #fff2e9; border-color: #edc0aa; }
 .panel .row>[data-signal] { white-space: normal; text-align: center; max-width: 124px; min-width: 82px; overflow-wrap: anywhere; }
+
+
+/* Dynamic market radar deliberately retains the Phoenix light surface. */
+.autoDiscovery { display: flex; align-items: flex-start; gap: 10px; padding: 11px 13px;
+  color: #42566b; background: #fff; border: 1px solid #e6eaef;
+  border-radius: 10px; font-size: 12px; line-height: 1.45; }
+.autoDiscovery input { accent-color: #e65b29; margin: 3px 0 0; flex: none; }
+.autoDiscovery input:focus-visible { outline: 2px solid #e65b29; outline-offset: 2px; }
+.autoDiscovery input:disabled { opacity: .6; }
