@@ -86,3 +86,25 @@ test('CSRF, organization, collision and role gates are enforced',t=>{
   assert.deepEqual(db.list(byOrg,'patients'),[])
   assert.throws(()=>db.create(byOrg,'encounters',{patientId:patient.id,specialty:'General',complaint:'Prueba'}))
 })
+
+test('real Kira reminder reservation requires clinician ownership, verified email, consent and one delivery',t=>{
+  const {db,admin}=fixture(t)
+  db.createStaff(admin.actor,{username:'doctor1',password:'another-secure-password-2026',role:'clinician'})
+  db.createStaff(admin.actor,{username:'doctor2',password:'another-secure-password-2026',role:'clinician'})
+  const clinician=db.login('doctor1','another-secure-password-2026').actor
+  const other=db.login('doctor2','another-secure-password-2026').actor
+  const patientNoConsent=db.create(admin.actor,'patients',{name:'Sin consentimiento',dateOfBirth:'1974-04-01',email:'not-consented@example.org'})
+  const apptNo=db.create(admin.actor,'appointments',{patientId:patientNoConsent.id,practitioner:'doctor1',startsAt:'2026-12-20T13:00:00Z',reason:'Control'})
+  assert.throws(()=>db.beginReminder(clinician,apptNo.id,'kira@institution.org'),/consentimiento/)
+  const patient=db.create(admin.actor,'patients',{name:'Con consentimiento',dateOfBirth:'1975-04-02',
+    email:'verified@example.org',emailConsent:true,emailVerified:true})
+  const appt=db.create(admin.actor,'appointments',{patientId:patient.id,practitioner:'doctor1',startsAt:'2026-12-21T13:00:00Z',reason:'Control'})
+  assert.throws(()=>db.beginReminder(other,appt.id,'kira@institution.org'),/no corresponde/)
+  const plan=db.beginReminder(clinician,appt.id,'kira@institution.org')
+  assert.equal(plan.recipient,'verified@example.org')
+  assert(!plan.body.includes('Con consentimiento'))
+  assert.throws(()=>db.beginReminder(clinician,appt.id,'kira@institution.org'),/ya fue reservado/)
+  db.finishReminder(clinician,appt.id,'gmail-message-id-001')
+  assert.equal(db.reminders(admin.actor)[0].status,'sent')
+  assert.equal(db.reminders(admin.actor)[0].sender,'kira@institution.org')
+})
