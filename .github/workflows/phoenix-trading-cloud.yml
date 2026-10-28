@@ -1,0 +1,42 @@
+name: PHOENIX Trading Cloud PAPER
+
+on:
+  pull_request:
+    paths:
+      - "services/phoenix-trading-cloud/**"
+      - ".github/workflows/phoenix-trading-cloud.yml"
+  push:
+    branches: [main, stable]
+    paths:
+      - "services/phoenix-trading-cloud/**"
+      - ".github/workflows/phoenix-trading-cloud.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  standalone-paper:
+    name: Trading Cloud / Node 24 no-secrets tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Syntax and deterministic PAPER tests
+        run: |
+          node --check services/phoenix-trading-cloud/src/strategy.mjs
+          node --check services/phoenix-trading-cloud/src/worker.mjs
+          node --test services/phoenix-trading-cloud/test/*.test.mjs
+      - name: Guard against real exchange orders and plaintext credentials
+        run: |
+          if grep -REn '(api\.binance\.com/api/v3/order|POST[[:space:]]+/api/v3/order|TESTNET_API_SECRET=|sk-[a-zA-Z0-9]{12})' services/phoenix-trading-cloud/src; then
+            echo "Unsafe real execution or embedded credentials detected"
+            exit 1
+          fi
+          if ! grep -q 'enabled:false' services/phoenix-trading-cloud/src/strategy.mjs; then
+            echo "Cloud engine must default to disabled"
+            exit 1
+          fi
