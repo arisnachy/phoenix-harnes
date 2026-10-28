@@ -138,7 +138,8 @@ export class BinancePaperAutomation {
         if (this.universe.length === 0) return this.config.symbols
       }
     }
-    const pinned = this.config.symbols.slice(0, 3)
+    // Honor every user-selected priority; dynamic rotation uses remaining slots.
+    const pinned = [...this.config.symbols]
     const choices = this.universe.filter(symbol => !pinned.includes(symbol))
     const available = Math.max(0, MAX_SCAN_SYMBOLS - pinned.length)
     const rotating = choices.length === 0 ? [] : Array.from(
