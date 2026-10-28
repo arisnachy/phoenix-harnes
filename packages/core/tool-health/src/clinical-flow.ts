@@ -3,10 +3,14 @@
  * No patient records, diagnoses, prescriptions or email are persisted/sent here.
  * Do not pass directly identifying patient data to model-facing tools.
  */
+/** Clinical planning InterviewMode: documented type in the bounded PHOENIX clinical contract. */
 export type InterviewMode = 'kira' | 'professional' | 'mixed'
+/** Clinical planning EncounterStage: documented type in the bounded PHOENIX clinical contract. */
 export type EncounterStage = 'opened' | 'interviewed' | 'drafted' | 'reviewed' | 'signed' | 'closed'
+/** Clinical planning EncounterAction: documented type in the bounded PHOENIX clinical contract. */
 export type EncounterAction = 'record-interview' | 'draft-history' | 'review-history' | 'sign-history' | 'close-encounter'
 
+/** Clinical planning WorkflowSnapshot: documented interface in the bounded PHOENIX clinical contract. */
 export interface WorkflowSnapshot {
   readonly encounterRef: string
   readonly stage: EncounterStage
@@ -14,6 +18,7 @@ export interface WorkflowSnapshot {
   readonly reviewedRevision: number | null
   readonly signedBy: string | null
 }
+/** Clinical planning WorkflowEvent: documented interface in the bounded PHOENIX clinical contract. */
 export interface WorkflowEvent {
   readonly action: EncounterAction
   readonly actorRole: 'clinician' | 'assistant' | 'patient'
@@ -33,11 +38,20 @@ function required(value: string, field: string, max = 500): string {
   }
   return value.trim()
 }
+/** openEncounter provides bounded, deterministic clinical workflow guidance.
+ * @param encounterRef - Validated encounterRef used for this clinical workflow step.
+ * @returns The derived clinical workflow state or planning result.
+ */
 export function openEncounter(encounterRef: string): WorkflowSnapshot {
   return { encounterRef: required(encounterRef, 'Referencia', 128), stage: 'opened',
     revision: 0, reviewedRevision: null, signedBy: null }
 }
 /** A signature is an explicit, clinician-only state transition, never an LLM command. */
+/** advanceEncounter provides bounded, deterministic clinical workflow guidance.
+ * @param state - Validated state used for this clinical workflow step.
+ * @param event - Validated event used for this clinical workflow step.
+ * @returns The derived clinical workflow state or planning result.
+ */
 export function advanceEncounter(state: WorkflowSnapshot, event: WorkflowEvent): WorkflowSnapshot {
   if (!state || !event) throw new TypeError('Faltan el estado y el evento.')
   required(state.encounterRef, 'Referencia', 128)
@@ -58,6 +72,7 @@ export function advanceEncounter(state: WorkflowSnapshot, event: WorkflowEvent):
     signedBy: event.action === 'sign-history' ? event.actorRef : state.signedBy }
 }
 
+/** Clinical planning InterviewPlan: documented interface in the bounded PHOENIX clinical contract. */
 export interface InterviewPlan {
   readonly mode: InterviewMode
   readonly specialty: string
@@ -100,6 +115,13 @@ function normalize(text: string): string {
   return text.toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/gu, '')
 }
 /** One question set at a time; no inference that an unanswered item is negative. */
+/** planInterview provides bounded, deterministic clinical workflow guidance.
+ * @param complaint - Validated complaint used for this clinical workflow step.
+ * @param specialty - Validated specialty used for this clinical workflow step.
+ * @param mode - Validated mode used for this clinical workflow step.
+ * @param answeredFields - Validated answeredFields used for this clinical workflow step.
+ * @returns The derived clinical workflow state or planning result.
+ */
 export function planInterview(
   complaint: string, specialty = 'general', mode: InterviewMode = 'mixed',
   answeredFields: readonly string[] = [],
@@ -122,6 +144,7 @@ export function planInterview(
       'No se registran pacientes, ni se presume negativa ninguna respuesta faltante.' }
 }
 
+/** Clinical planning KiraMailPreflight: documented interface in the bounded PHOENIX clinical contract. */
 export interface KiraMailPreflight {
   readonly senderConnected: boolean
   readonly senderVerified: boolean
@@ -132,6 +155,7 @@ export interface KiraMailPreflight {
   readonly securePortalReady: boolean
   readonly idempotencyKeyPresent: boolean
 }
+/** Clinical planning KiraMailPlan: documented interface in the bounded PHOENIX clinical contract. */
 export interface KiraMailPlan {
   readonly approvedForQueue: boolean
   readonly blockers: readonly string[]
@@ -141,6 +165,10 @@ export interface KiraMailPlan {
   readonly requiredEvidence: readonly string[]
 }
 /** The transport adapter, *not* the model, must recheck evidence at send time. */
+/** planKiraMail provides bounded, deterministic clinical workflow guidance.
+ * @param input - Validated input used for this clinical workflow step.
+ * @returns The derived clinical workflow state or planning result.
+ */
 export function planKiraMail(input: KiraMailPreflight): KiraMailPlan {
   if (!input || typeof input !== 'object') throw new TypeError('Preflight inválido.')
   const rules: readonly [keyof KiraMailPreflight, string][] = [

@@ -13,6 +13,7 @@ import { dirname, join } from 'node:path'
 type Role = 'admin'|'clinician'|'psychologist'|'nurse'|'reception'|'lab'|'radiology'|'pharmacy'|'billing'
 type Kind = 'patients'|'encounters'|'appointments'|'orders'|'prescriptions'|'inventory'|'invoices'|'followups'
 type Actor = { username:string; role:Role; org:string }
+/** Authenticated clinical principal with organization and professional role. */
 export type ClinicActor = Readonly<Actor>
 type RecordData = Record<string,unknown>
 type Row = { id:string; org:string; kind:Kind; version:number; iv:string; tag:string; payload:string; created_at:string; updated_at:string }
@@ -61,6 +62,7 @@ function eq(a:string,b:string):boolean {
 }
 function date(x:unknown):string {const s=str(x,'Fecha',48);if(!/^\d{4}-\d\d-\d\dT/u.test(s)||!Number.isFinite(Date.parse(s)))fail('Fecha ISO requerida');return new Date(s).toISOString()}
 function withLimit(value:unknown):RecordData {const x=obj(value);if(JSON.stringify(x).length>MAX)fail('Registro excede el límite');return x}
+/** Durable opt-in clinical repository with authenticated roles and encrypted payloads. */
 export class HealthClinicStore {
   private readonly db:DatabaseSync
   private readonly dbPath:string
@@ -86,12 +88,25 @@ export class HealthClinicStore {
       "CREATE TABLE IF NOT EXISTS health_patient_access (org TEXT NOT NULL, patient_id TEXT NOT NULL, staff_id TEXT NOT NULL, purpose TEXT NOT NULL, granted_by TEXT NOT NULL, granted_at TEXT NOT NULL, PRIMARY KEY(org,patient_id,staff_id));"
     )
   }
+  /**
+   * Perform close within the isolated clinical workflow.
+   */
   close():void {this.sessions.clear();this.key?.fill(0);this.key=undefined;this.db.close()}
   private meta(name:string):string|undefined {
     return (this.db.prepare('SELECT value FROM health_meta WHERE name=?').get(name) as {value:string}|undefined)?.value
   }
+  /**
+   * Perform initialized within the isolated clinical workflow.
+   * @returns The operation result, restricted to this authorized clinical context.
+   */
   initialized():boolean {return this.meta('salt')!==undefined}
   /** Bootstrap must be accepted only from a loopback peer on a loopback-bound Host. */
+  /**
+   * Perform initialize within the isolated clinical workflow.
+   * @param username - Validated username input for this clinical operation.
+   * @param password - Validated password input for this clinical operation.
+   * @param organization - Validated organization input for this clinical operation.
+   */
   initialize(username:unknown,password:unknown,organization:unknown):void {
     if(this.initialized())fail('La clínica ya fue configurada')
     const user=str(username,'Usuario',80);if(!/^[a-zA-Z][a-zA-Z0-9._-]{2,79}$/u.test(user))fail('Usuario inválido')
@@ -108,6 +123,12 @@ export class HealthClinicStore {
       this.db.exec('COMMIT');this.key=key
     }catch(e){this.db.exec('ROLLBACK');key.fill(0);throw e}
   }
+  /**
+   * Perform login within the isolated clinical workflow.
+   * @param username - Validated username input for this clinical operation.
+   * @param password - Validated password input for this clinical operation.
+   * @returns The operation result, restricted to this authorized clinical context.
+   */
   login(username:unknown,password:unknown):{cookie:string;csrf:string;actor:Actor} {
     const user=str(username,'Usuario',80),pass=str(password,'Contraseña',256)
     const s=this.db.prepare('SELECT * FROM health_staff WHERE username=?').get(user) as Staff|undefined
@@ -129,18 +150,39 @@ export class HealthClinicStore {
     this.sessions.set(cookie,{actor:{username:s.username,org:s.org,role:s.role},csrf,expires:Date.now()+8*3600_000})
     return {cookie,csrf,actor:{username:s.username,org:s.org,role:s.role}}
   }
+  /**
+   * Perform session within the isolated clinical workflow.
+   * @param cookie - Validated cookie input for this clinical operation.
+   * @param csrf - Validated csrf input for this clinical operation.
+   * @param mutation - Validated mutation input for this clinical operation.
+   * @returns The operation result, restricted to this authorized clinical context.
+   */
   session(cookie:string|undefined,csrf?:string,mutation=false):{actor:Actor;csrf:string} {
     const s=cookie?this.sessions.get(cookie):undefined
     if(!s||Date.now()>s.expires||!this.key)fail('Sesión clínica caducada')
     if(mutation&&(!csrf||csrf!==s.csrf))fail('Protección CSRF: solicitud rechazada')
     return {actor:{...s.actor},csrf:s.csrf}
   }
+  /**
+   * Perform logout within the isolated clinical workflow.
+   * @param cookie - Validated cookie input for this clinical operation.
+   */
   logout(cookie:string|undefined):void {if(cookie)this.sessions.delete(cookie)}
+  /**
+   * Perform staff within the isolated clinical workflow.
+   * @param actor - Validated actor input for this clinical operation.
+   * @returns The operation result, restricted to this authorized clinical context.
+   */
   staff(actor:Actor):readonly {username:string;role:Role;org:string}[]{
     if(actor.role!=='admin')fail('Acceso administrativo requerido')
     return (this.db.prepare('SELECT username,role,org FROM health_staff WHERE org=? ORDER BY username').all(actor.org) as Staff[])
       .map(x=>({username:x.username,role:x.role,org:x.org}))
   }
+  /**
+   * Perform createStaff within the isolated clinical workflow.
+   * @param actor - Validated actor input for this clinical operation.
+   * @param value - Validated value input for this clinical operation.
+   */
   createStaff(actor:Actor,value:unknown):void {
     if(actor.role!=='admin')fail('Acceso administrativo requerido')
     const x=obj(value),username=str(x.username,'Usuario',80),pass=safePassword(x.password),role=str(x.role,'Rol',40) as Role
@@ -170,6 +212,11 @@ export class HealthClinicStore {
     return obj(JSON.parse(payload) as unknown)
   }
   /** Consistent, locally encrypted recovery point generated by SQLite's online backup API. */
+  /**
+   * Perform backup within the isolated clinical workflow.
+   * @param actor - Validated actor input for this clinical operation.
+   * @returns The operation result, restricted to this authorized clinical context.
+   */
   async backup(actor:Actor):Promise<{name:string;records:number}> {
     if(actor.role!=='admin')fail('Acceso administrativo requerido')
     this.encryptionKey()
@@ -191,6 +238,11 @@ export class HealthClinicStore {
     this.audit(actor,'backup.create',name)
     return {name,records}
   }
+  /**
+   * Perform backups within the isolated clinical workflow.
+   * @param actor - Validated actor input for this clinical operation.
+   * @returns The operation result, restricted to this authorized clinical context.
+   */
   backups(actor:Actor):readonly string[] {
     if(actor.role!=='admin')fail('Acceso administrativo requerido')
     try {return readdirSync(join(dirname(this.dbPath),'backups')).filter(x=>/^clinic-[0-9a-z]+-[0-9a-f]{12}\.sqlite$/u.test(x))}
@@ -206,6 +258,13 @@ export class HealthClinicStore {
     if(!this.hasPatient(actor,patientId))fail('Paciente no asignado a este profesional')
   }
   /** An authorized reception/admin explicitly assigns an existing patient to a professional. */
+  /**
+   * Perform assignPatient within the isolated clinical workflow.
+   * @param actor - Validated actor input for this clinical operation.
+   * @param patientId - Validated patientId input for this clinical operation.
+   * @param username - Validated username input for this clinical operation.
+   * @param purpose - Validated purpose input for this clinical operation.
+   */
   assignPatient(actor:Actor,patientId:string,username:string,purpose:string):void {
     if(actor.role!=='admin'&&actor.role!=='reception')fail('Solo admisión o administración puede asignar pacientes')
     const patient=this.db.prepare("SELECT id FROM health_records WHERE id=? AND org=? AND kind='patients'").get(patientId,actor.org)
@@ -221,6 +280,12 @@ export class HealthClinicStore {
       this.db.exec('COMMIT')
     }catch(error){this.db.exec('ROLLBACK');throw error}
   }
+  /**
+   * Perform revokePatient within the isolated clinical workflow.
+   * @param actor - Validated actor input for this clinical operation.
+   * @param patientId - Validated patientId input for this clinical operation.
+   * @param username - Validated username input for this clinical operation.
+   */
   revokePatient(actor:Actor,patientId:string,username:string):void {
     if(actor.role!=='admin'&&actor.role!=='reception')fail('Acceso denegado')
     this.db.exec('BEGIN IMMEDIATE')
@@ -232,6 +297,11 @@ export class HealthClinicStore {
       this.db.exec('COMMIT')
     }catch(error){this.db.exec('ROLLBACK');throw error}
   }
+  /**
+   * Perform assignments within the isolated clinical workflow.
+   * @param actor - Validated actor input for this clinical operation.
+   * @returns The operation result, restricted to this authorized clinical context.
+   */
   assignments(actor:Actor):readonly RecordData[] {
     if(actor.role!=='admin'&&actor.role!=='reception')fail('Acceso denegado')
     return this.db.prepare('SELECT patient_id AS patientId,staff_id AS staffId,purpose,granted_by AS grantedBy,granted_at AS grantedAt FROM health_patient_access WHERE org=? ORDER BY granted_at DESC LIMIT 500').all(actor.org) as RecordData[]
@@ -258,12 +328,23 @@ export class HealthClinicStore {
     return {row,data}
   }
   /** Billing may locate a patient for an invoice but never receives demographics or clinical notes. */
+  /**
+   * Perform patientOptions within the isolated clinical workflow.
+   * @param actor - Validated actor input for this clinical operation.
+   * @returns The operation result, restricted to this authorized clinical context.
+   */
   patientOptions(actor:Actor):readonly {id:string;name:string}[] {
     if(!['billing','admin','reception'].includes(actor.role))fail('Acceso al directorio restringido')
     const rows=this.db.prepare("SELECT * FROM health_records WHERE org=? AND kind='patients' ORDER BY created_at DESC LIMIT 500")
       .all(actor.org) as Row[]
     return rows.map(row=>({id:row.id,name:str(this.open(row).name,'Nombre',160)}))
   }
+  /**
+   * Perform list within the isolated clinical workflow.
+   * @param actor - Validated actor input for this clinical operation.
+   * @param kind - Validated kind input for this clinical operation.
+   * @returns The operation result, restricted to this authorized clinical context.
+   */
   list(actor:Actor,kind:Kind):readonly RecordData[] {
     this.access(actor,kind)
     const rows=this.db.prepare('SELECT * FROM health_records WHERE org=? AND kind=? ORDER BY created_at DESC LIMIT 500').all(actor.org,kind) as Row[]
@@ -274,6 +355,12 @@ export class HealthClinicStore {
       .filter(item=>kind!=='encounters'||this.mayReadEncounter(actor,item))
   }
   /** Build an authorized deterministic Kira questionnaire without a model call or PHI export. */
+  /**
+   * Perform interviewGuide within the isolated clinical workflow.
+   * @param actor - Validated actor input for this clinical operation.
+   * @param id - Validated id input for this clinical operation.
+   * @returns The operation result, restricted to this authorized clinical context.
+   */
   interviewGuide(actor:Actor,id:string):InterviewPlan {
     if(!['clinician','psychologist'].includes(actor.role))fail('Solo profesional responsable puede orientar la entrevista')
     const encounter=this.find(actor,'encounters',str(id,'Consulta',80)).data
@@ -308,6 +395,11 @@ export class HealthClinicStore {
     const digest=createHmac('sha256',this.encryptionKey()).update(content).digest('hex')
     this.db.prepare('INSERT INTO health_audit(org,actor,action,record_id,happened,prior_hash,hash) VALUES (?,?,?,?,?,?,?)').run(actor.org,actor.username,action,id,happened,prev,digest)
   }
+  /**
+   * Perform audits within the isolated clinical workflow.
+   * @param actor - Validated actor input for this clinical operation.
+   * @returns The operation result, restricted to this authorized clinical context.
+   */
   audits(actor:Actor):readonly RecordData[] {
     if(actor.role!=='admin')fail('Acceso administrativo requerido')
     this.verifyAudit()
@@ -336,6 +428,13 @@ export class HealthClinicStore {
       return {id,version,createdAt:row.created_at,updatedAt:now,...next}
     }catch(e){this.db.exec('ROLLBACK');throw e}
   }
+  /**
+   * Perform create within the isolated clinical workflow.
+   * @param actor - Validated actor input for this clinical operation.
+   * @param kind - Validated kind input for this clinical operation.
+   * @param value - Validated value input for this clinical operation.
+   * @returns The operation result, restricted to this authorized clinical context.
+   */
   create(actor:Actor,kind:Kind,value:unknown):RecordData {
     this.access(actor,kind,true)
     const x=withLimit(value)
@@ -413,6 +512,13 @@ export class HealthClinicStore {
 
 
   /** Atomic pharmacy dispense: only one signed prescription, matching available stock. */
+  /**
+   * Perform dispense within the isolated clinical workflow.
+   * @param actor - Validated actor input for this clinical operation.
+   * @param prescriptionId - Validated prescriptionId input for this clinical operation.
+   * @param inventoryId - Validated inventoryId input for this clinical operation.
+   * @returns The operation result, restricted to this authorized clinical context.
+   */
   dispense(actor:Actor,prescriptionId:string,inventoryId:string):{prescription:RecordData;inventory:RecordData}{
     if(actor.role!=='pharmacy')fail('Solo personal farmacéutico autorizado puede dispensar')
     this.db.exec('BEGIN IMMEDIATE')
@@ -438,6 +544,13 @@ export class HealthClinicStore {
   }
 
   /** Reserve exactly one verified, clinician-authorized reminder. Never expose clinical details. */
+  /**
+   * Perform beginReminder within the isolated clinical workflow.
+   * @param actor - Validated actor input for this clinical operation.
+   * @param appointmentId - Validated appointmentId input for this clinical operation.
+   * @param sender - Validated sender input for this clinical operation.
+   * @returns The operation result, restricted to this authorized clinical context.
+   */
   beginReminder(actor:Actor,appointmentId:string,sender:string):{recipient:string;subject:string;body:string;appointmentId:string}{
     if(actor.role!=='clinician')fail('El recordatorio requiere confirmación de profesional clínico')
     const appointment=this.find(actor,'appointments',str(appointmentId,'Cita',80)).data
@@ -464,6 +577,12 @@ export class HealthClinicStore {
       'Este es un recordatorio de su cita programada. Para cualquier cambio, contacte directamente al consultorio. No responda con información clínica por correo.\n\nPHOENIX Health'}
   }
   /** Record Gmail provider confirmation, or uncertainty without an automatic duplicate retry. */
+  /**
+   * Perform finishReminder within the isolated clinical workflow.
+   * @param actor - Validated actor input for this clinical operation.
+   * @param appointmentId - Validated appointmentId input for this clinical operation.
+   * @param providerId - Validated providerId input for this clinical operation.
+   */
   finishReminder(actor:Actor,appointmentId:string,providerId:string|undefined):void {
     if(actor.role!=='clinician')fail('Personal no autorizado')
     this.db.exec('BEGIN IMMEDIATE')
@@ -476,11 +595,25 @@ export class HealthClinicStore {
     }catch(error){this.db.exec('ROLLBACK');throw error}
   }
   /** Disclose delivery states to admin only, never recipient addresses. */
+  /**
+   * Perform reminders within the isolated clinical workflow.
+   * @param actor - Validated actor input for this clinical operation.
+   * @returns The operation result, restricted to this authorized clinical context.
+   */
   reminders(actor:Actor):readonly RecordData[] {
     if(actor.role!=='admin')fail('Acceso administrativo requerido')
     return this.db.prepare('SELECT appointment_id AS appointmentId,status,sender,started FROM health_reminders WHERE org=? ORDER BY started DESC LIMIT 300').all(actor.org) as RecordData[]
   }
 
+  /**
+   * Perform update within the isolated clinical workflow.
+   * @param actor - Validated actor input for this clinical operation.
+   * @param kind - Validated kind input for this clinical operation.
+   * @param id - Validated id input for this clinical operation.
+   * @param version - Validated version input for this clinical operation.
+   * @param value - Validated value input for this clinical operation.
+   * @returns The operation result, restricted to this authorized clinical context.
+   */
   update(actor:Actor,kind:Kind,id:string,version:number,value:unknown):RecordData {
     if(kind==='orders') this.access(actor,kind)
     else this.access(actor,kind,true)
@@ -579,4 +712,5 @@ export class HealthClinicStore {
     fail('Actualización no habilitada')
   }
 }
+/** The module names exposed to the validated clinical route layer. */
 export const healthKinds=[...TYPES]

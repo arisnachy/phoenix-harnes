@@ -3,31 +3,44 @@
  * No PHI, user-provided identifiers, external integrations or durable medical records.
  * Reuse these domain contracts only after replacing the authorization/persistence boundary.
  */
+/** Synthetic domain ClinicRole: documented type in the bounded PHOENIX clinical contract. */
 export type ClinicRole = 'clinician' | 'psychologist' | 'receptionist' | 'laboratory' | 'radiologist' | 'pharmacist' | 'billing'
+/** Synthetic domain ClinicModule: documented type in the bounded PHOENIX clinical contract. */
 export type ClinicModule = 'patients' | 'consultations' | 'psychology' | 'appointments' | 'laboratory' | 'imaging' | 'pharmacy' | 'billing'
+/** Synthetic domain OrderKind: documented type in the bounded PHOENIX clinical contract. */
 export type OrderKind = 'laboratory' | 'imaging'
+/** Synthetic domain ClinicActor: documented interface in the bounded PHOENIX clinical contract. */
 export interface ClinicActor { readonly organization: string; readonly staffId: string; readonly role: ClinicRole }
+/** Synthetic domain PatientRecord: documented interface in the bounded PHOENIX clinical contract. */
 export interface PatientRecord { readonly id: string; readonly organization: string; readonly synthetic: true; readonly display: string; readonly createdAt: string }
+/** Synthetic domain AppointmentRecord: documented interface in the bounded PHOENIX clinical contract. */
 export interface AppointmentRecord { readonly id: string; readonly patientId: string; readonly organization: string; readonly practitionerId: string; readonly at: string; status: 'scheduled' | 'completed' | 'cancelled' }
+/** Synthetic domain EncounterRecord: documented interface in the bounded PHOENIX clinical contract. */
 export interface EncounterRecord {
   readonly id: string; readonly organization: string; readonly patientId: string
   readonly practitionerId: string; readonly specialty: string; readonly complaint: string
   stage: 'open' | 'draft' | 'reviewed' | 'signed'; readonly openedAt: string
   notes: string; revision: number; reviewedRevision: number | null; signedBy: string | null
 }
+/** Synthetic domain OrderRecord: documented interface in the bounded PHOENIX clinical contract. */
 export interface OrderRecord {
   readonly id: string; readonly organization: string; readonly encounterId: string
   readonly kind: OrderKind; readonly description: string; status: 'ordered' | 'completed'
   report: string | null; reviewedBy: string | null
 }
+/** Synthetic domain MedicationRecord: documented interface in the bounded PHOENIX clinical contract. */
 export interface MedicationRecord {
   readonly id: string; readonly organization: string; readonly encounterId: string
   readonly medication: string; readonly instructions: string; readonly signedBy: string
   dispensedBy: string | null
 }
+/** Synthetic domain InventoryRecord: documented interface in the bounded PHOENIX clinical contract. */
 export interface InventoryRecord { readonly sku: string; readonly organization: string; quantity: number; readonly unit: string }
+/** Synthetic domain InvoiceRecord: documented interface in the bounded PHOENIX clinical contract. */
 export interface InvoiceRecord { readonly id: string; readonly organization: string; readonly patientId: string; readonly description: string; readonly amount: number; paid: number }
+/** Synthetic domain ClinicAuditEvent: documented interface in the bounded PHOENIX clinical contract. */
 export interface ClinicAuditEvent { readonly at: string; readonly organization: string; readonly actor: string; readonly action: string; readonly record: string }
+/** Synthetic domain ClinicSnapshot: documented interface in the bounded PHOENIX clinical contract. */
 export interface ClinicSnapshot {
   readonly patients: readonly PatientRecord[]
   readonly appointments: readonly AppointmentRecord[]
@@ -73,7 +86,9 @@ export class ClinicSandbox {
   readonly #invoices = new Map<string,InvoiceRecord>()
   readonly #audit: ClinicAuditEvent[] = []
   #next = 0
+  /** Institution to which this synthetic test sandbox is scoped. */
   readonly organization: string
+  /** Clock seam for deterministic synthetic clinical tests. */
   readonly clock: () => string
   constructor(organization: string, clock: () => string = () => new Date().toISOString()) {
     this.organization = checked(organization,'Organización',100)
@@ -102,6 +117,12 @@ export class ClinicSandbox {
     if (actor.staffId !== episode.practitionerId) throw new Error('Solo el profesional responsable puede validar este episodio.')
   }
   /** Seed only clearly fictional patient labels. This store is never an EHR. */
+  /**
+   * Operate the synthetic test-only step registerSyntheticPatient within the isolated clinical workflow.
+   * @param actor - Validated actor input for this clinical operation.
+   * @param syntheticLabel - Validated syntheticLabel input for this clinical operation.
+   * @returns The operation result, restricted to this authorized clinical context.
+   */
   registerSyntheticPatient(actor: ClinicActor, syntheticLabel: string): PatientRecord {
     this.#authorize(actor,'patients')
     const label=checked(syntheticLabel,'Etiqueta ficticia',90)
@@ -110,6 +131,14 @@ export class ClinicSandbox {
       display:label, createdAt:iso(this.clock())})
     this.#patients.set(p.id,p);this.#event(actor,'patient.create',p.id);return p
   }
+  /**
+   * Operate the synthetic test-only step schedule within the isolated clinical workflow.
+   * @param actor - Validated actor input for this clinical operation.
+   * @param patientId - Validated patientId input for this clinical operation.
+   * @param practitionerId - Validated practitionerId input for this clinical operation.
+   * @param at - Validated at input for this clinical operation.
+   * @returns The operation result, restricted to this authorized clinical context.
+   */
   schedule(actor: ClinicActor, patientId: string, practitionerId: string, at: string): AppointmentRecord {
     this.#authorize(actor,'appointments');this.#patient(patientId)
     const date=iso(at);const clinician=checked(practitionerId,'Profesional',100)
@@ -119,6 +148,14 @@ export class ClinicSandbox {
     this.#appointments.set(appointment.id,appointment);this.#event(actor,'appointment.schedule',appointment.id)
     return {...appointment}
   }
+  /**
+   * Operate the synthetic test-only step open within the isolated clinical workflow.
+   * @param actor - Validated actor input for this clinical operation.
+   * @param patientId - Validated patientId input for this clinical operation.
+   * @param specialty - Validated specialty input for this clinical operation.
+   * @param complaint - Validated complaint input for this clinical operation.
+   * @returns The operation result, restricted to this authorized clinical context.
+   */
   open(actor: ClinicActor, patientId: string, specialty: string, complaint: string): EncounterRecord {
     this.#authorize(actor,'consultations');this.#patient(patientId)
     const e: EncounterRecord={id:this.#id('encounter'),organization:this.organization,patientId,
@@ -127,23 +164,50 @@ export class ClinicSandbox {
       reviewedRevision:null,signedBy:null,openedAt:iso(this.clock())}
     this.#encounters.set(e.id,e);this.#event(actor,'encounter.open',e.id);return {...e}
   }
+  /**
+   * Operate the synthetic test-only step document within the isolated clinical workflow.
+   * @param actor - Validated actor input for this clinical operation.
+   * @param encounterId - Validated encounterId input for this clinical operation.
+   * @param text - Validated text input for this clinical operation.
+   * @returns The operation result, restricted to this authorized clinical context.
+   */
   document(actor: ClinicActor, encounterId: string, text: string): EncounterRecord {
     const e=this.#encounter(encounterId);this.#clinician(actor,e)
     if(e.stage==='signed')throw new Error('No se permite modificar una historia firmada.')
     e.notes=checked(text,'Nota de demostración',3000);e.stage='draft';e.revision++
     e.reviewedRevision=null;this.#event(actor,'encounter.draft',e.id);return {...e}
   }
+  /**
+   * Operate the synthetic test-only step review within the isolated clinical workflow.
+   * @param actor - Validated actor input for this clinical operation.
+   * @param encounterId - Validated encounterId input for this clinical operation.
+   * @returns The operation result, restricted to this authorized clinical context.
+   */
   review(actor: ClinicActor, encounterId: string): EncounterRecord {
     const e=this.#encounter(encounterId);this.#clinician(actor,e)
     if(e.stage!=='draft'||!e.notes)throw new Error('Se requiere borrador clínico antes de revisar.')
     e.reviewedRevision=e.revision;e.stage='reviewed'
     this.#event(actor,'encounter.review',e.id);return {...e}
   }
+  /**
+   * Operate the synthetic test-only step sign within the isolated clinical workflow.
+   * @param actor - Validated actor input for this clinical operation.
+   * @param encounterId - Validated encounterId input for this clinical operation.
+   * @returns The operation result, restricted to this authorized clinical context.
+   */
   sign(actor: ClinicActor, encounterId: string): EncounterRecord {
     const e=this.#encounter(encounterId);this.#clinician(actor,e)
     if(e.stage!=='reviewed'||e.reviewedRevision!==e.revision)throw new Error('Debe revisarse la versión actual antes de firmar.')
     e.stage='signed';e.signedBy=actor.staffId;this.#event(actor,'encounter.sign',e.id);return {...e}
   }
+  /**
+   * Operate the synthetic test-only step requestStudy within the isolated clinical workflow.
+   * @param actor - Validated actor input for this clinical operation.
+   * @param encounterId - Validated encounterId input for this clinical operation.
+   * @param kind - Validated kind input for this clinical operation.
+   * @param description - Validated description input for this clinical operation.
+   * @returns The operation result, restricted to this authorized clinical context.
+   */
   requestStudy(actor: ClinicActor, encounterId: string, kind: OrderKind, description: string): OrderRecord {
     const e=this.#encounter(encounterId);this.#clinician(actor,e)
     if(actor.role!=='clinician')throw new Error('Las órdenes médicas requieren un prescriptor habilitado.')
@@ -153,6 +217,13 @@ export class ClinicSandbox {
       description:checked(description,'Estudio',300),status:'ordered',report:null,reviewedBy:null}
     this.#orders.set(order.id,order);this.#event(actor,'order.create',order.id);return {...order}
   }
+  /**
+   * Operate the synthetic test-only step reportStudy within the isolated clinical workflow.
+   * @param actor - Validated actor input for this clinical operation.
+   * @param orderId - Validated orderId input for this clinical operation.
+   * @param report - Validated report input for this clinical operation.
+   * @returns The operation result, restricted to this authorized clinical context.
+   */
   reportStudy(actor: ClinicActor, orderId: string, report: string): OrderRecord {
     const o=this.#orders.get(orderId);if(!o)throw new Error('Orden no encontrada.')
     this.#authorize(actor,o.kind==='laboratory'?'laboratory':'imaging')
@@ -162,12 +233,26 @@ export class ClinicSandbox {
     o.status='completed';o.report=checked(report,'Resultado',1200)
     this.#event(actor,'order.report',o.id);return {...o}
   }
+  /**
+   * Operate the synthetic test-only step reviewStudy within the isolated clinical workflow.
+   * @param actor - Validated actor input for this clinical operation.
+   * @param orderId - Validated orderId input for this clinical operation.
+   * @returns The operation result, restricted to this authorized clinical context.
+   */
   reviewStudy(actor: ClinicActor, orderId: string): OrderRecord {
     const o=this.#orders.get(orderId);if(!o)throw new Error('Orden no encontrada.')
     const e=this.#encounter(o.encounterId);this.#clinician(actor,e)
     if(o.status!=='completed')throw new Error('El estudio aún no tiene resultados.')
     o.reviewedBy=actor.staffId;this.#event(actor,'order.review',o.id);return {...o}
   }
+  /**
+   * Operate the synthetic test-only step prescribe within the isolated clinical workflow.
+   * @param actor - Validated actor input for this clinical operation.
+   * @param encounterId - Validated encounterId input for this clinical operation.
+   * @param medication - Validated medication input for this clinical operation.
+   * @param instructions - Validated instructions input for this clinical operation.
+   * @returns The operation result, restricted to this authorized clinical context.
+   */
   prescribe(actor: ClinicActor, encounterId: string, medication: string, instructions: string): MedicationRecord {
     const e=this.#encounter(encounterId);this.#clinician(actor,e)
     if(actor.role!=='clinician')throw new Error('La prescripción requiere un prescriptor habilitado.')
@@ -177,6 +262,14 @@ export class ClinicSandbox {
       signedBy:actor.staffId,dispensedBy:null}
     this.#medications.set(rx.id,rx);this.#event(actor,'medication.prescribe',rx.id);return {...rx}
   }
+  /**
+   * Operate the synthetic test-only step stock within the isolated clinical workflow.
+   * @param actor - Validated actor input for this clinical operation.
+   * @param sku - Validated sku input for this clinical operation.
+   * @param quantity - Validated quantity input for this clinical operation.
+   * @param unit - Validated unit input for this clinical operation.
+   * @returns The operation result, restricted to this authorized clinical context.
+   */
   stock(actor: ClinicActor, sku: string, quantity: number, unit: string): InventoryRecord {
     this.#authorize(actor,'pharmacy')
     if(actor.role!=='pharmacist')throw new Error('Solo farmacia administra existencias.')
@@ -186,6 +279,12 @@ export class ClinicSandbox {
       unit:checked(unit,'Unidad',60)}
     this.#inventory.set(key,item);this.#event(actor,'stock.receive',key);return {...item}
   }
+  /**
+   * Operate the synthetic test-only step dispense within the isolated clinical workflow.
+   * @param actor - Validated actor input for this clinical operation.
+   * @param rxId - Validated rxId input for this clinical operation.
+   * @returns The operation result, restricted to this authorized clinical context.
+   */
   dispense(actor: ClinicActor, rxId: string): MedicationRecord {
     this.#authorize(actor,'pharmacy')
     if(actor.role!=='pharmacist')throw new Error('La dispensación corresponde a farmacia.')
@@ -195,12 +294,27 @@ export class ClinicSandbox {
     if(!item||item.quantity<1)throw new Error('Sin existencias; dispensación bloqueada.')
     item.quantity--;rx.dispensedBy=actor.staffId;this.#event(actor,'medication.dispense',rx.id);return {...rx}
   }
+  /**
+   * Operate the synthetic test-only step invoice within the isolated clinical workflow.
+   * @param actor - Validated actor input for this clinical operation.
+   * @param patientId - Validated patientId input for this clinical operation.
+   * @param description - Validated description input for this clinical operation.
+   * @param amountCents - Validated amountCents input for this clinical operation.
+   * @returns The operation result, restricted to this authorized clinical context.
+   */
   invoice(actor:ClinicActor,patientId:string,description:string,amountCents:number):InvoiceRecord {
     this.#authorize(actor,'billing');this.#patient(patientId)
     const item:InvoiceRecord={id:this.#id('invoice'),organization:this.organization,patientId,
       description:checked(description,'Concepto',200),amount:money(amountCents),paid:0}
     this.#invoices.set(item.id,item);this.#event(actor,'invoice.create',item.id);return {...item}
   }
+  /**
+   * Operate the synthetic test-only step payment within the isolated clinical workflow.
+   * @param actor - Validated actor input for this clinical operation.
+   * @param invoiceId - Validated invoiceId input for this clinical operation.
+   * @param amountCents - Validated amountCents input for this clinical operation.
+   * @returns The operation result, restricted to this authorized clinical context.
+   */
   payment(actor:ClinicActor,invoiceId:string,amountCents:number):InvoiceRecord {
     this.#authorize(actor,'billing')
     const inv=this.#invoices.get(invoiceId);if(!inv)throw new Error('Factura no encontrada.')
@@ -208,6 +322,11 @@ export class ClinicSandbox {
     inv.paid+=amount;this.#event(actor,'invoice.payment',inv.id);return {...inv}
   }
   /** Return copies so callers cannot mutate the audit trail or clinical records. */
+  /**
+   * Operate the synthetic test-only step snapshot within the isolated clinical workflow.
+   * @param actor - Validated actor input for this clinical operation.
+   * @returns The operation result, restricted to this authorized clinical context.
+   */
   snapshot(actor:ClinicActor):ClinicSnapshot {
     if(actor?.organization!==this.organization||!actor.staffId||!Object.values(ROLE_ACCESS).some(roles=>roles.includes(actor.role)))throw new Error('Acceso denegado.')
     const publicPatient=ROLE_ACCESS.patients.includes(actor.role)
@@ -229,5 +348,9 @@ export class ClinicSandbox {
     }
   }
   /** Synthetic-only audit export for test harness; never exposed through the model tool. */
+  /**
+   * Operate the synthetic test-only step auditForTests within the isolated clinical workflow.
+   * @returns The operation result, restricted to this authorized clinical context.
+   */
   auditForTests(): readonly ClinicAuditEvent[] { return this.#audit.map(x=>({...x})) }
 }
