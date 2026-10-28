@@ -103,6 +103,23 @@ export function TradingDashboard({ initial }: Props) {
     return () => { mounted = false; controller?.abort(); clearInterval(timer) }
   }, [refreshKey])
 
+  // A previously stored Host key must be recognized after reopening Phoenix
+  // without showing or requesting the private value in this browser view.
+  useEffect(() => {
+    const abort = new AbortController()
+    void fetch('/phoenix-trading/paper/testnet-status', {
+      method: 'GET', credentials: 'same-origin', cache: 'no-store', signal: abort.signal,
+    }).then(async response => {
+      if (!response.ok) return
+      const value = await response.json() as TestnetState
+      if (!abort.signal.aborted && value.mode === 'testnet'
+        && typeof value.configured === 'boolean' && typeof value.connected === 'boolean') {
+        setTestnetState(value)
+      }
+    }).catch(() => { /* The manual connection check remains available. */ })
+    return () => { abort.abort() }
+  }, [])
+
   async function checkConnections(): Promise<void> {
     if (connectionBusy) return
     setConnectionBusy(true)
@@ -304,7 +321,8 @@ export function TradingDashboard({ initial }: Props) {
                 : testnetState.configured ? 'Claves guardadas · pendiente de autenticar' : 'Sin credenciales de prueba'}</span>
             <small>{testnetState?.nextAction ?? 'Necesita claves exclusivas de Binance Spot Testnet.'}</small>
             <button type="button" disabled={connectionBusy} onClick={() => { setCredentialOpen(open => !open) }}>
-              {credentialOpen ? 'Cerrar configuración' : 'Configurar Testnet'}
+              {credentialOpen ? 'Cerrar configuración'
+                : testnetState?.configured ? 'Actualizar claves Testnet' : 'Configurar Testnet'}
             </button>
           </div>
           <div className={css.connectionItem}>
