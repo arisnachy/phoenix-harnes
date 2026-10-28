@@ -274,8 +274,8 @@ export class HealthClinicStore {
       if(email&&!/^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/u.test(email))fail('Correo de paciente inválido')
       const patient=this.insert(actor,kind,{name:str(x.name,'Nombre',160),dateOfBirth:dob,
       email:email.slice(0,254),phone:typeof x.phone==='string'?x.phone.trim().slice(0,35):'',
-      notes:typeof x.notes==='string'?x.notes.slice(0,4000):'',emailConsent:x.emailConsent===true,
-      emailVerified:x.emailVerified===true})
+      notes:typeof x.notes==='string'?x.notes.slice(0,4000):'',emailConsent:false,
+      emailVerified:false,contactEvidence:null})
       if(actor.role==='clinician'){
         // Registering a patient is an explicit treatment relationship for this clinician.
         this.db.exec('BEGIN IMMEDIATE')
@@ -360,7 +360,11 @@ export class HealthClinicStore {
     if(appointment.practitioner!==actor.username||appointment.status!=='scheduled')
       fail('Esta cita no corresponde al profesional o ya no está programada')
     const patient=this.find(actor,'patients',str(appointment.patientId,'Paciente',80)).data
-    if(patient.emailConsent!==true||patient.emailVerified!==true)fail('Correo no verificado o consentimiento no registrado')
+    const proof=patient.contactEvidence
+    if(!proof||typeof proof!=='object'||Array.isArray(proof)||
+      proof.consent!=='granted'||proof.verified!==true||proof.recipient!==patient.email||
+      typeof proof.recordedBy!=='string'||typeof proof.evidenceRef!=='string')
+      fail('Correo no verificado o consentimiento no registrado de forma auditable')
     const recipient=str(patient.email,'Correo electrónico',254)
     if(!/^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/u.test(recipient))fail('Correo electrónico inválido')
     const now=new Date().toISOString()
@@ -396,6 +400,23 @@ export class HealthClinicStore {
     else this.access(actor,kind,true)
     if(!Number.isSafeInteger(version)||version<1)fail('Versión inválida')
     const x=withLimit(value)
+    if(kind==='patients'){
+      if(x.action!=='contact')fail('Acción de contacto inválida')
+      return this.modify(actor,kind,id,version,current=>{
+        if(!['reception','clinician','admin'].includes(actor.role))fail('Acceso denegado')
+        const method=str(x.method,'Método',30)
+        if(!['in-person','signed-document','verified-call'].includes(method))fail('Método de verificación inválido')
+        const evidenceRef=str(x.evidenceRef,'Referencia de evidencia',160)
+        if(!/^[A-Za-z0-9._:/ -]{4,160}$/u.test(evidenceRef))fail('Referencia documental inválida')
+        if(x.consent!=='granted'&&x.consent!=='revoked')fail('Consentimiento inválido')
+        const consent=x.consent==='granted',verified=consent&&x.emailVerified===true
+        const recipient=typeof current.email==='string'?current.email:''
+        if(consent&&(!verified||!recipient))fail('Debe verificarse el correo antes de autorizar comunicaciones')
+        const contactEvidence={consent:x.consent,method,evidenceRef,recipient,
+          verified,recordedBy:actor.username,recordedAt:new Date().toISOString()}
+        return {...current,emailConsent:consent,emailVerified:verified,contactEvidence}
+      })
+    }
     if(kind==='encounters'){
       const data=this.find(actor,kind,id).data
       if(data.practitioner!==actor.username)fail('Consulta de otro profesional')

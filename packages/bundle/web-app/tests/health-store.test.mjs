@@ -102,6 +102,9 @@ test('real Kira reminder reservation requires clinician ownership, verified emai
   const patient=db.create(admin.actor,'patients',{name:'Con consentimiento',dateOfBirth:'1975-04-02',
     email:'verified@example.org',emailConsent:true,emailVerified:true})
   db.assignPatient(admin.actor,patient.id,'doctor1','Control médico')
+  const approved=db.update(admin.actor,'patients',patient.id,patient.version,
+    {action:'contact',consent:'granted',emailVerified:true,method:'signed-document',evidenceRef:'FORM-1001'})
+  assert.equal(approved.contactEvidence.recordedBy,'clinicaladmin')
   const appt=db.create(admin.actor,'appointments',{patientId:patient.id,practitioner:'doctor1',startsAt:'2026-12-21T13:00:00Z',reason:'Control'})
   assert.throws(()=>db.beginReminder(other,appt.id,'kira@institution.org'),/no asignado/)
   const plan=db.beginReminder(clinician,appt.id,'kira@institution.org')
@@ -172,4 +175,24 @@ test('patient assignments enforce consented care-team access and revocation in e
   assert.throws(()=>db.update(clinician,'encounters',encounter.id,encounter.version,{action:'document',history:'No autorizado'}),/no asignado/)
   assert.equal(db.assignments(admin.actor).length,0)
   assert(db.audits(admin.actor).some(x=>x.action==='patient.revoke'))
+})
+
+test('clinical email consent is not a boolean from the form; only auditable proof activates delivery',t=>{
+  const {db,admin}=fixture(t)
+  const p=db.create(admin.actor,'patients',{name:'Con consentimiento',dateOfBirth:'1984-03-04',
+    email:'example@hospital.org',emailConsent:true,emailVerified:true})
+  assert.equal(p.emailConsent,false)
+  assert.equal(p.emailVerified,false)
+  assert.equal(p.contactEvidence,null)
+  assert.throws(()=>db.update(admin.actor,'patients',p.id,p.version,
+    {action:'contact',consent:'granted',emailVerified:true,method:'bad',evidenceRef:'FORM-1234'}),/Método/)
+  const approved=db.update(admin.actor,'patients',p.id,p.version,
+    {action:'contact',consent:'granted',emailVerified:true,method:'in-person',evidenceRef:'FORM-1234'})
+  assert.equal(approved.contactEvidence.recordedBy,'clinicaladmin')
+  assert.equal(approved.contactEvidence.recipient,'example@hospital.org')
+  const revoked=db.update(admin.actor,'patients',p.id,approved.version,
+    {action:'contact',consent:'revoked',emailVerified:false,method:'in-person',evidenceRef:'REV-1235'})
+  assert.equal(revoked.emailConsent,false)
+  assert.equal(revoked.contactEvidence.consent,'revoked')
+  assert(db.audits(admin.actor).some(x=>x.action==='patients.update'))
 })
