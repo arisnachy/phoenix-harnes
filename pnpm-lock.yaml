@@ -1039,6 +1039,9 @@ importers:
 
   packages/bundle/base:
     dependencies:
+      '@phoenix-ai/dsh-tool-health':
+        specifier: workspace:^
+        version: link:../../core/tool-health
       '@phoenix-ai/cordis-plugin-hmr':
         specifier: workspace:^
         version: link:../../../vendor/hmr
