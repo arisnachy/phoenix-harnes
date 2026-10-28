@@ -82,8 +82,30 @@ export async function evidencePricedTicket(
     eventId:q.eventId,bookmaker:q.bookmaker,market:q.market,selection:q.selection,point:q.point??null,
   }))
   const priced=pricedTicket(selections,marketQuotes,stake)
-  return{card:priced.card,priced:true,placed:false,complete:true,verifiedEvents:research.verifiedEvents,
+  // Do not discard verified fixture branding, league, or the reasoning in the
+  // unpriced evidence ticket when attaching bookmaker prices.
+  const original=Array.isArray(research.card.props.legs)?research.card.props.legs:[]
+  const pricedRows=Array.isArray(priced.card.props.legs)?priced.card.props.legs:[]
+  const legs=pricedRows.map((row,index)=>{
+    const estimate=original[index],quote=best.choices[index]
+    const prior=estimate&&typeof estimate==='object'&&!Array.isArray(estimate)
+      ?estimate as Record<string,unknown>:{}
+    const pricedRow=row&&typeof row==='object'&&!Array.isArray(row)
+      ?row as Record<string,unknown>:{}
+    return {...pricedRow,
+      ...Object.fromEntries(['homeTeam','awayTeam','homeLogo','awayLogo','sport',
+        'league','country','rationale','when'].filter(k=>typeof prior[k]==='string')
+        .map(k=>[k,prior[k]])),
+      ...(quote?{price:quote.price.toFixed(2),bookmaker:quote.bookmaker}:{})}
+  })
+  const card:ChatBlock={...priced.card,props:{
+    ...priced.card.props,legs,requestedLegs:count,
+    subtitle:'Cuotas verificadas · '+best.book+' · análisis de forma con datos ESPN',
+    note:'SIMULACIÓN, NO APUESTA REAL. Formas y descanso históricos NO son probabilidades calibradas. Lesiones, alineaciones y disponibilidad exacta en la banca pendientes; cuotas variables. '+priced.warning,
+    askPrompt:'Kira, comprueba lesiones, titulares, estadísticas específicas, correlación y vigencia de las '+count+' cuotas antes de recomendar este ticket.',
+  }}
+  return{card,priced:true,placed:false,complete:true,verifiedEvents:research.verifiedEvents,
     quotedLegs:count,missingQuotes:0,
     explanation:'Las '+count+' selecciones tienen cuota vigente y la misma casa '+best.book+
-      '. Sus favoritos se preseleccionaron por forma histórica descriptiva, NO por una probabilidad calibrada; validar lesiones, titulares y restricciones del operador.'}
+      '. El boleto conserva logos, análisis y riesgos por partido; NO es un modelo de acierto calibrado. Validar lesiones, titulares, restricciones y precios antes de apostar.'}
 }
