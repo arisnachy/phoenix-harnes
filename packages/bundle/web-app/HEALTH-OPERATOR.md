@@ -23,6 +23,12 @@ Health se sirve en la **misma dirección local de PHOENIX** bajo `/health`. La o
 
 **Datos:** `$DSH_HOME/health/clinic.sqlite` (por defecto `~/.dsh/health/clinic.sqlite`). El modo WAL de SQLite requiere un plan de backup consistente y verificación de restauración; **no copie a mano un archivo SQLite mientras el Host siga escribiendo**. La interfaz no usa `localStorage` para datos de pacientes. Las sesiones son cookies HttpOnly, SameSite=Strict y solo válidas en local.
 
+## Kira y la documentación clínica
+
+El profesional que haya sido asignado explícitamente a un paciente y sea titular del episodio puede abrir **Entrevista Kira** desde la lista de consultas. PHOENIX calcula localmente un conjunto limitado de preguntas dirigidas según el motivo y la especialidad; cada respuesta se registra en el expediente cifrado y la siguiente propuesta excluye las claves ya respondidas. Las respuestas faltantes **no** se interpretan como hallazgos negativos. El motor no formula diagnósticos ni autoriza tratamientos; las alertas y urgencias requieren evaluación humana.
+
+La guía utiliza un algoritmo determinista local (`src/health-interview.ts`) aislado del modelo y no transmite narrativas, nombres o expedientes a proveedores externos. El profesional también puede seleccionar **Documentar**, usar el editor SOAP (anamnesis, exploración, evaluación y plan), guardar borradores versionados y realizar las acciones separadas de revisión y firma. Ninguna respuesta de entrevista equivale por sí misma a una historia revisada o firmada.
+
 ## Flujo real de la consulta
 
 - Recepción registra pacientes auténticos, datos de contacto y constancia de consentimiento.
