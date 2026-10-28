@@ -224,15 +224,35 @@ async function execute(action,id){
   if(result.status==="sent")notice("Kira confirmó el envío del recordatorio con Gmail.");
   return;
  }
+ if(action==="document"){
+  const encounter=data.encounters?.find(x=>x.id===id);
+  if(!encounter||encounter.practitioner!==actor.username||encounter.status==="signed")
+    throw Error("Consulta no disponible para edición");
+  current={kind:"soap",encounterId:id};
+  const section=(key,label,value)=>'<label for="soap-'+key+'">'+label+'</label><textarea id="soap-'+key+'">'+safe(value||"")+'</textarea>';
+  document.getElementById("view").insertAdjacentHTML("beforeend",box("Historia clínica estructurada · SOAP",
+    '<p class="notice">Borrador del profesional. Verifique cada hallazgo antes de revisar y firmar; los campos vacíos no significan hallazgos negativos.</p>'+
+    section("history","S · Anamnesis y relato",encounter.history)+
+    section("exam","O · Exploración y datos objetivos",encounter.exam)+
+    section("assessment","A · Evaluación y razonamiento clínico",encounter.assessment)+
+    section("plan","P · Plan diagnóstico y terapéutico",encounter.plan)+
+    '<button class="primary" data-act="saveDocument" data-id="'+safe(id)+'">Guardar borrador cifrado</button>'));
+  return;
+ }
+ if(action==="saveDocument"){
+  const encounter=data.encounters?.find(x=>x.id===id);
+  if(!encounter||current?.kind!=="soap"||current.encounterId!==id)
+    throw Error("Editor clínico no autorizado");
+  const history=val("soap-history").trim();
+  if(!history)throw Error("La anamnesis requiere información documentada");
+  await api("encounters/"+id,"PATCH",{version:encounter.version,action:"document",history,
+    exam:val("soap-exam"),assessment:val("soap-assessment"),plan:val("soap-plan")});
+  current=null;
+  notice("Historia clínica cifrada guardada como borrador");
+  return load();
+ }
  const resource=data[tab]?.find(x=>x.id===id);if(!resource)throw Error("Registro no encontrado");
  let patch={version:resource.version};
- if(action==="document"){
-  patch.action="document";
-  patch.history=prompt("Anamnesis / historia clínica:",resource.history||"");if(patch.history===null)return;
-  patch.exam=prompt("Examen físico / evaluación:",resource.exam||"");if(patch.exam===null)return;
-  patch.assessment=prompt("Valoración y diagnósticos clínicos:",resource.assessment||"");if(patch.assessment===null)return;
-  patch.plan=prompt("Plan terapéutico y seguimiento:",resource.plan||"");if(patch.plan===null)return;
- }
  if(action==="review"){if(!confirm("¿Revisaste íntegramente la historia?"))return;patch.action="review"}
  if(action==="sign"){if(!confirm("¿Confirmas tu firma profesional sobre la versión revisada?"))return;patch.action="sign"}
  if(action==="result"){
