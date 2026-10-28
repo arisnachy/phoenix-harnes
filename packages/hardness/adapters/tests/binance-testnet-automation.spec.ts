@@ -41,7 +41,8 @@ function setup(){
     async order(input:{symbol:string;side:'BUY'|'SELL';clientOrderId?:string;
       quoteUsdt?:number;quantity?:number}){
       orderAttempts++
-      sent.push({side:input.side,symbol:input.symbol,clientOrderId:input.clientOrderId})
+      sent.push({side:input.side,symbol:input.symbol,
+        ...(input.clientOrderId===undefined?{}:{clientOrderId:input.clientOrderId})})
       const quantity=input.side==='BUY'?input.quoteUsdt!/price:input.quantity!
       const quote=quantity*price
       if(input.side==='BUY'){usdt-=quote;btc+=quantity}
