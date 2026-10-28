@@ -180,3 +180,53 @@ describe('Phoenix ticket verified team logos and no price hallucinations',()=>{
     expect(parseGenerativeUiBlock(card)).toBeNull()
   })
 })
+
+
+describe('Universal chat: compact sports schedules do not replace single-game cards',()=>{
+  const slate={
+    component:'sports_schedule_card',version:1,props:{
+      title:'Cartelera deportiva',date:'2026-10-28',sport:'basketball',league:'NBA',
+      source:'ESPN Site API · 2026-10-28T17:00:00Z',total:2,
+      events:[
+        {eventId:'evt-1',when:'28 oct 2026, 7:00 p. m.',status:'Programado',
+          away:{label:'Miami Heat'},home:{label:'Atlanta Hawks'},venue:'State Farm Arena',
+          featured:'Líder verificado · 20 PTS',askPrompt:'Kira, investiga el evento evt-1.'},
+        {eventId:'evt-2',when:'28 oct 2026, 8:00 p. m.',
+          away:{label:'Houston Rockets'},home:{label:'Los Angeles Lakers'},venue:'Crypto.com Arena'},
+      ],
+    },
+  } as const
+  it('renders multiple games in one responsive response surface with no new navigation',()=>{
+    const parsed=parseGenerativeUiBlock(slate)
+    expect(parsed).not.toBeNull()
+    if(!parsed)throw Error('Schedule validation failed')
+    render(<GenerativeUi block={parsed}/>)
+    expect(document.querySelectorAll('[data-generative-ui="sports_schedule_card"]')).toHaveLength(1)
+    expect(screen.getByText('Miami Heat')).toBeTruthy()
+    expect(screen.getByText('Los Angeles Lakers')).toBeTruthy()
+    expect(screen.getByText('2 juegos')).toBeTruthy()
+    expect(screen.queryByText('Sin cuota')).toBeNull()
+    expect(screen.queryByText(/%/)).toBeNull()
+  })
+  it('offers an actionable drilldown without replacing the rich individual card',()=>{
+    const parsed=parseGenerativeUiBlock(slate)
+    if(!parsed)throw Error('Schedule validation failed')
+    const actions:string[]=[]
+    render(<GenerativeUi block={parsed} onAction={(message,mode)=>{
+      actions.push(message+':'+mode)
+    }}/>)
+    fireEvent.click(screen.getByRole('button',{name:'Ver análisis del encuentro ›'}))
+    expect(actions).toEqual(['Kira, investiga el evento evt-1.:draft'])
+    expect(parseGenerativeUiBlock(rich)?.component).toBe('sports_game_card')
+  })
+  it('rejects untrusted images, spoofed favorite fields and excessive matches',()=>{
+    const events=[...slate.props.events]
+    expect(parseGenerativeUiBlock({...slate,props:{...slate.props,events:[
+      {...events[0],away:{label:'Heat',logo:'https://untrusted.example/logo.png'}},events[1],
+    ]}})).toBeNull()
+    expect(parseGenerativeUiBlock({...slate,props:{...slate.props,events:[
+      {...events[0],probability:99},events[1],
+    ]}})).toBeNull()
+    expect(parseGenerativeUiBlock({...slate,props:{...slate.props,events:Array.from({length:26},()=>events[0])}})).toBeNull()
+  })
+})

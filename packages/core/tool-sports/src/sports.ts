@@ -115,7 +115,54 @@ export async function getFeed<T>(url:string, fetcher:typeof fetch=fetch):Promise
 type FeedEvent = { id?:string|number;date?:string;name?:string;status?:{ type?:{ description?:string;state?:string } };competitions?:Array<{ venue?:{ fullName?:string;address?:{ city?:string } };competitors?:Array<{ id?:string;homeAway?:string;score?:string|number;team?:{ displayName?:string;name?:string;id?:string;logo?:string;logos?:Array<{ href?:string }> };records?:Array<{ summary?:string }>;linescores?:Array<{ value?:number|string;displayValue?:string }>;leaders?:Array<{ name?:string;leaders?:Array<{ athlete?:{ displayName?:string;headshot?:{ href?:string } };displayValue?:string }> }> }>;broadcasts?:Array<{ names?:string[] }> }> }
 type MlbGame = { gamePk:number;gameDate?:string;venue?:{ name?:string };seriesDescription?:string;seriesGameNumber?:number;status?:{ detailedState?:string;abstractGameState?:string };teams?:Record<'home'|'away',{ team?:{ id?:number;name?:string };score?:number;probablePitcher?:{ id?:number;fullName?:string } }> }
 /** Safe, minimal sports UI payload; the client validates it before rendering. */
-export type ChatBlock = { component:'sports_game_card'|'sports_ticket_card'|'sports_odds_card';version:1;props:Record<string,unknown> }
+export type ChatBlock = { component:'sports_game_card'|'sports_schedule_card'|'sports_ticket_card'|'sports_odds_card';version:1;props:Record<string,unknown> }
+/**
+ * Build one bounded response surface from trusted provider game cards.
+ * @param games - Normalized first-party game cards for one requested league/date.
+ * @param day - Requested provider date in YYYY-MM-DD.
+ * @param source - Attribution for the schedule source.
+ * @returns Compact card when multiple events exist; null preserves the detailed individual card.
+ */
+export function compactSportsSchedule(games:readonly ChatBlock[],day:string,source:string):ChatBlock|null {
+  const cards=games.filter(game=>game.component==='sports_game_card').slice(0,25)
+  if(cards.length<2)return null
+  const text=(value:unknown,max=180)=>typeof value==='string'?value.slice(0,max):undefined
+  const object=(value:unknown):Record<string,unknown>=>
+    value!==null&&typeof value==='object'&&!Array.isArray(value)?value as Record<string,unknown>:{}
+  const first=cards[0]?.props??{}
+  const league=text(first.league,100)
+  const sport=text(first.sport,60)
+  const sameLeague=cards.every(card=>card.props.league===first.league)
+  const sameSport=cards.every(card=>card.props.sport===first.sport)
+  const events=cards.map(card=>{
+    const p=card.props
+    const highlights=Array.isArray(p.highlights)?p.highlights:[]
+    const firstHighlight=object(highlights[0])
+    const research=object(p.research)
+    const featured=text(firstHighlight.value,90)
+    const detail=text(firstHighlight.detail,55)
+    const favorite=text(research.favorite,170)
+    return {
+      ...(text(p.eventId,50)?{eventId:text(p.eventId,50)}:{}),
+      when:text(p.when,80)??'Hora no confirmada',
+      ...(text(p.status,60)?{status:text(p.status,60)}:{}),
+      ...(text(p.venue,180)?{venue:text(p.venue,180)}:{}),
+      away:p.away,home:p.home,
+      ...(featured?{featured:featured+(detail?' · '+detail:'')}:{}),
+      ...(favorite&&Array.isArray(research.evidence)&&research.evidence.length>0?{favorite}:{}),
+      ...(text(p.askPrompt,400)?{askPrompt:text(p.askPrompt,400)}:{}),
+    }
+  })
+  return {component:'sports_schedule_card',version:1,props:{
+    title:'Cartelera deportiva',
+    date:day,
+    ...(sameSport&&sport?{sport}:{}),
+    ...(sameLeague&&league?{league}:{}),
+    source,total:games.length,events,
+    note:'La cartelera muestra solo datos públicos verificados. Para profundizar, consulta un encuentro individual.',
+  }}
+}
+
 function localTime(dateString?:string):string {
   if(!dateString)return 'Hora no confirmada'
   const parsed=new Date(dateString)
