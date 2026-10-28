@@ -151,6 +151,7 @@ describe('Cloud worker auth and scheduling',()=>{
       assert.equal(snapshot.journal.length,0);
       assert.equal(snapshot.evaluations.length,3);
       assert.ok(snapshot.evaluations.every(x=>x.outcome==='market-unavailable'));
+      assert.ok(snapshot.evaluations.every(x=>x.reason==='market-rate-limited'));
     }finally{globalThis.fetch=original;}
   });
   it('records a real virtual BUY and subsequent TP2 SELL in the durable ledger',async()=>{
