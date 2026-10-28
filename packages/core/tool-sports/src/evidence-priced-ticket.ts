@@ -23,6 +23,7 @@ const leagueSportKey:Record<string,string>={
 export async function evidencePricedTicket(
   count:number,date?:string,sport?:string,stake=0,now=Date.now(),
   env:NodeJS.ProcessEnv=process.env,fetcher:typeof fetch=fetch,
+  quotesProvider?:(sport:string,market:string,day:string,env:NodeJS.ProcessEnv,now:number)=>Promise<KeylessQuote[]>,
 ):Promise<{card:ChatBlock;priced:boolean;placed:false;complete:boolean;
   verifiedEvents:number;quotedLegs:number;missingQuotes:number;
   explanation:string}>{
@@ -38,7 +39,8 @@ export async function evidencePricedTicket(
   const sources=await Promise.allSettled(categories.map(async category=>{
     const route=routing[category]
     if(!route)return {category,quotes:[] as KeylessQuote[]}
-    const quotes=await keylessOdds(route.sport,route.market,day,env,now)
+    const quotes=quotesProvider?await quotesProvider(route.sport,route.market,day,env,now):
+      await keylessOdds(route.sport,route.market,day,env,now)
     return {category,quotes}
   }))
   const all=sources.flatMap(s=>s.status==='fulfilled'?s.value.quotes:[])
