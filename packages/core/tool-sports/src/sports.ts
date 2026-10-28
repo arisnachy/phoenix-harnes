@@ -1,6 +1,7 @@
 /** Read-only sports information adapters for Kira's conversation tools. */
 import { fetchPublicEspnOdds } from './espn-odds.ts'
 import { fetchTheOddsApi } from './free-odds.ts'
+import { keylessEnabled, keylessOdds, type KeylessSport } from './keyless-odds.ts'
 import { enrichMlbMatch } from './mlb-matchup.ts'
 import { researchMlbTrend } from './mlb-research.ts'
 export const sportsCatalog: Readonly<Record<string, readonly string[]>> = {
@@ -249,6 +250,27 @@ export type MarketOutcome = MarketSelection & { price:number;home:string;away:st
 export async function marketOdds(sportKey:string,markets='h2h',env:NodeJS.ProcessEnv=process.env,fetcher:typeof fetch=fetch):Promise<MarketOutcome[]> {
   if(!/^[a-z0-9_]{3,80}$/u.test(sportKey)||!/^(h2h|totals|spreads)(,(h2h|totals|spreads))*$/u.test(markets))throw Error('Mercado inválido')
   if(!hasSportsPermission('odds',env)){
+    // Keyless browser source is opt-in and never suppresses ESPN on failure.
+    if(keylessEnabled(env)){
+      const prefix=sportKey.split('_')[0]
+      const sportByPrefix:Record<string,KeylessSport>={
+        soccer:'football',basketball:'basketball',baseball:'baseball',
+        americanfootball:'american-football',icehockey:'ice-hockey',
+        tennis:'tennis',handball:'handball',volleyball:'volleyball',
+        cricket:'cricket',rugbyleague:'rugby-league',rugbyunion:'rugby-union',
+      }
+      const sport=sportByPrefix[prefix??'']
+      const market=markets==='h2h'?sport==='football'||sport==='handball'?'1x2':
+        sport==='tennis'?'match_winner':sport==='ice-hockey'||sport==='volleyball'
+          ||sport==='rugby-league'||sport==='rugby-union'||sport==='cricket'?'home_away':'moneyline':
+        markets==='totals'?'over_under':null
+      if(sport&&market){
+        try{
+          const verified=await keylessOdds(sport,market,undefined,env)
+          if(verified.length)return verified.map(q=>({...q,sportKey,time:localTime(q.time)}))
+        }catch{/* Fallback is a provider failure, never permission to synthesize odds. */}
+      }
+    }
     const alternateKey=env.THEODDSAPI_API_KEY
     if(alternateKey?.trim())return fetchTheOddsApi(sportKey,markets,alternateKey,fetcher)
     if(!hasSportsPermission('espn',env))throw Error('No hay proveedor de cuotas: ESPN deshabilitado, THE_ODDS_API_KEY y THEODDSAPI_API_KEY ausentes.')
@@ -291,8 +313,11 @@ export function pricedTicket(selections:MarketSelection[],quotes:MarketOutcome[]
   return { warning,card:{ component:'sports_ticket_card',version:1,props:{
     title:'PHOENIX · Ticket de análisis',subtitle:'Cuotas consultadas en proveedor real · '+new Date().toISOString(),
     legs,combinedOdds:combined.toFixed(3),stake:stake?stake.toFixed(2):undefined,grossReturn:stake?(stake*combined).toFixed(2):undefined,
-    source:legs.length&&quotes.some(q=>q.source?.includes('ESPN'))?'ESPN Site/Core (cuotas públicas cuando ESPN las publique)':
-      quotes.some(q=>q.source==='TheOddsAPI')?'TheOddsAPI · cuotas de casas identificadas':'The Odds API · precios de las casas indicadas',note:'SIMULACIÓN, SIN APUESTA REAL. '+warning+' Las cuotas pueden cambiar; no existe garantía de ganar.',
+    source:quotes.some(q=>q.source?.includes('OddsHarvester'))?
+      'OddsHarvester/OddsPortal · cuotas públicas observadas':
+      quotes.some(q=>q.source?.includes('ESPN'))?'ESPN Site/Core (cuotas públicas cuando ESPN las publique)':
+      quotes.some(q=>q.source==='TheOddsAPI')?'TheOddsAPI · cuotas de casas identificadas':
+      'The Odds API · precios de las casas indicadas',note:'SIMULACIÓN, SIN APUESTA REAL. '+warning+' Las cuotas pueden cambiar; no existe garantía de ganar.',
     askPrompt:'Kira, revisa este ticket con datos actuales, riesgos, ausencias y correlaciones antes de recomendar nada.',
   } } }
 }
