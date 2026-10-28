@@ -1,12 +1,12 @@
 /** Staged browser form over the Host's user-profile settings namespace. */
 
 import { createSnapshotStore, type SettingsScope, type SnapshotStore } from '@phoenix-ai/dsh-client-runtime/client'
-import type { AssistantGender, AssistantGenderMode, UserProfileConsent, UserProfileFamilyMember, UserProfileRowState, UserProfileSettings } from './types.ts'
+import type { AssistantGender, AssistantGenderMode, UserAddressMode, UserProfileConsent, UserProfileFamilyMember, UserProfileRowState, UserProfileSettings } from './types.ts'
 
 /** Settings namespace join key; it intentionally does not import the Host package. */
 export const USER_PROFILE_SETTINGS_NAMESPACE = 'user-profile'
 
-const FIELDS = ['assistantName', 'preferredName', 'dateOfBirth', 'gender', 'pronouns', 'tone'] as const
+const FIELDS = ['assistantName', 'preferredName', 'profession', 'professionalTitle', 'dateOfBirth', 'gender', 'pronouns', 'tone'] as const
 type TextField = typeof FIELDS[number]
 type ConsentField = keyof UserProfileConsent
 
@@ -15,6 +15,7 @@ export interface UserProfileRowActions {
   edit: (field: TextField | 'family', text: string) => void
   setAssistantGender: (value: AssistantGender) => void
   setAssistantGenderAutomatic: () => void
+  setAddressingMode: (mode: UserAddressMode) => void
   setConsent: (field: ConsentField, value: boolean) => void
   save: () => void
   discard: () => void
@@ -31,6 +32,9 @@ interface Draft {
   assistantGender: AssistantGender
   assistantGenderSource: AssistantGenderMode
   preferredName: string
+  profession: string
+  professionalTitle: string
+  addressingMode: UserAddressMode
   dateOfBirth: string
   gender: string
   pronouns: string
@@ -41,6 +45,8 @@ interface Draft {
 
 const EMPTY_CONSENT: UserProfileConsent = {
   preferredName: false,
+  profession: false,
+  professionalTitle: false,
   dateOfBirth: false,
   gender: false,
   pronouns: false,
@@ -51,7 +57,8 @@ const EMPTY_CONSENT: UserProfileConsent = {
 function emptyDraft(): Draft {
   return {
     assistantName: 'KIRA', assistantGender: 'feminine', assistantGenderSource: 'auto',
-    preferredName: '', dateOfBirth: '', gender: '', pronouns: '', tone: '', family: '',
+    preferredName: '', profession: '', professionalTitle: '', addressingMode: 'automatic',
+    dateOfBirth: '', gender: '', pronouns: '', tone: '', family: '',
     consent: { ...EMPTY_CONSENT },
   }
 }
@@ -67,6 +74,9 @@ function toDraft(value: UserProfileSettings | undefined): Draft {
     assistantGender: value.assistantGender ?? 'feminine',
     assistantGenderSource: value.assistantGenderSource ?? 'auto',
     preferredName: textValue(value.preferredName),
+    profession: textValue(value.profession),
+    professionalTitle: textValue(value.professionalTitle),
+    addressingMode: value.addressingMode ?? 'automatic',
     dateOfBirth: textValue(value.dateOfBirth),
     gender: textValue(value.gender),
     pronouns: textValue(value.pronouns),
@@ -135,6 +145,7 @@ export class UserProfileForm {
       edit: (field, text) => { this.edit(field, text) },
       setAssistantGender: (value) => { this.setAssistantGender(value) },
       setAssistantGenderAutomatic: () => { this.setAssistantGenderAutomatic() },
+      setAddressingMode: (mode) => { this.setAddressingMode(mode) },
       setConsent: (field, value) => { this.setConsent(field, value) },
       save: () => { void this.save() },
       discard: () => { this.discard() },
@@ -172,6 +183,13 @@ export class UserProfileForm {
     this.publish()
   }
 
+  private setAddressingMode(mode: UserAddressMode): void {
+    this.draft.addressingMode = mode
+    this.failed = false
+    this.saved = false
+    this.publish()
+  }
+
   private setConsent(field: ConsentField, value: boolean): void {
     this.draft.consent = { ...this.draft.consent, [field]: value }
     this.failed = false
@@ -194,7 +212,7 @@ export class UserProfileForm {
     this.saved = false
     this.publish()
     let ok = true
-    for (const field of [...FIELDS, 'assistantGender' as const, 'assistantGenderSource' as const, 'family' as const, 'consent' as const]) {
+    for (const field of [...FIELDS, 'assistantGender' as const, 'assistantGenderSource' as const, 'addressingMode' as const, 'family' as const, 'consent' as const]) {
       try {
         await this.scope.unset(field)
       } catch {
@@ -222,6 +240,9 @@ export class UserProfileForm {
     const values: Record<string, unknown> = {
       assistantName: this.draft.assistantName.trim(),
       preferredName: this.draft.preferredName.trim(),
+      profession: this.draft.profession.trim(),
+      professionalTitle: this.draft.professionalTitle.trim(),
+      addressingMode: this.draft.addressingMode,
       dateOfBirth: this.draft.dateOfBirth.trim(),
       gender: this.draft.gender.trim(),
       pronouns: this.draft.pronouns.trim(),
@@ -239,6 +260,12 @@ export class UserProfileForm {
         await this.scope.set('assistantGenderSource', values.assistantGenderSource)
         await this.scope.set('assistantGender', values.assistantGender)
       }
+    } catch {
+      ok = false
+    }
+    try {
+      if (values.addressingMode === 'automatic') await this.scope.unset('addressingMode')
+      else await this.scope.set('addressingMode', values.addressingMode)
     } catch {
       ok = false
     }
@@ -279,6 +306,7 @@ export class UserProfileForm {
     return this.draft.assistantName.trim() !== textValue(value.assistantName)
       || this.draft.assistantGender !== value.assistantGender
       || this.draft.assistantGenderSource !== (value.assistantGenderSource ?? 'auto')
+      || this.draft.addressingMode !== (value.addressingMode ?? 'automatic')
       || this.draft.dateOfBirth.trim() !== textValue(value.dateOfBirth)
       || this.draft.family.trim() !== (value.family?.map(member => member.name === undefined ? member.relationship : `${member.relationship} | ${member.name}`).join('\n') ?? '')
   }
@@ -288,6 +316,7 @@ export class UserProfileForm {
     const next = toDraft(this.source)
     return FIELDS.some(field => this.draft[field].trim() !== next[field].trim())
       || this.draft.family.trim() !== next.family.trim()
+      || this.draft.addressingMode !== next.addressingMode
       || this.draft.assistantGender !== next.assistantGender
       || this.draft.assistantGenderSource !== next.assistantGenderSource
       || (Object.keys(EMPTY_CONSENT) as ConsentField[]).some(field => this.draft.consent[field] !== next.consent[field])
@@ -306,6 +335,9 @@ export class UserProfileForm {
       assistantGender: this.draft.assistantGender,
       assistantGenderSource: this.draft.assistantGenderSource,
       preferredName: fieldState(this.draft.preferredName),
+      profession: fieldState(this.draft.profession),
+      professionalTitle: fieldState(this.draft.professionalTitle),
+      addressingMode: this.draft.addressingMode,
       dateOfBirth: fieldState(this.draft.dateOfBirth, this.draft.dateOfBirth !== '' && !/^\d{4}-\d{2}-\d{2}$/.test(this.draft.dateOfBirth.trim())),
       gender: fieldState(this.draft.gender),
       pronouns: fieldState(this.draft.pronouns),
