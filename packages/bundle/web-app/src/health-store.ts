@@ -625,6 +625,9 @@ export class HealthClinicStore {
       if(x.action==='history'){
         // Longitudinal chart remains an authenticated, encrypted patient document.
         if(actor.role!=='clinician')fail('Historia longitudinal requiere profesional médico')
+        // Permission and optimistic version checks precede inspection of clinical fields.
+        const target=this.find(actor,'patients',id)
+        if(target.row.version!==version)fail('Conflicto de edición: recarga el registro')
         const details=obj(x.record)
         const fields=['pastMedical','pastSurgical','familyHistory','currentMedications','vaccinations','habits','problems'] as const
         if(Object.keys(details).some(key=>!fields.includes(key as typeof fields[number])))
