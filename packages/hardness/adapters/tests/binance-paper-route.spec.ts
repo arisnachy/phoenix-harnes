@@ -128,6 +128,52 @@ describe('Binance chat viewer HTTP integration', () => {
     expect(rejected.status).toBe(409)
   })
 
+  it('installs only the official Agentic OAuth MCP after same-origin owner click, without granting REAL orders', async () => {
+    let installations = 0
+    const { origin } = await serverWithTrading({
+      agentOs: {
+        async enableBinanceAgentOs() {
+          installations++
+          return { status: 'installed', connector: {
+            entryId: 'binance-agent-os', serverName: 'binance-agent-os',
+            url: 'https://agent.binance.com/mcp/agentic',
+          } }
+        },
+        async binanceAgentOsState() {
+          return { configured: true, status: 'auth-required' as const, toolNames: [] }
+        },
+      },
+    })
+    const url = origin + '/phoenix-trading/paper/mcp-activate'
+    const crossOrigin = await fetch(url, {
+      method: 'POST', headers: { Origin: 'https://untrusted.example', 'Content-Type': 'application/json' },
+      body: '{}',
+    })
+    expect(crossOrigin.status).toBe(403)
+    const rejected = await fetch(url, {
+      method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: 'real', trade: true }),
+    })
+    expect(rejected.status).toBe(400)
+    expect(installations).toBe(0)
+    const installed = await fetch(url, {
+      method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' },
+      body: '{}',
+    })
+    expect(installed.status).toBe(200)
+    expect(await installed.json()).toMatchObject({
+      installed: true, configured: true, mcpStatus: 'auth-required',
+      accountVerified: false, tradeScopeVerified: false,
+    })
+    expect(installations).toBe(1)
+    const status = await fetch(origin + '/phoenix-trading/paper/mcp-status')
+    expect(await status.json()).toMatchObject({
+      configured: true, connected: false, accountVerified: false,
+      tradeScopeVerified: false,
+    })
+    expect((await fetch(url)).status).toBe(405)
+  })
+
   it('validates keys only against Spot Testnet and never echoes or logs secrets', async () => {
     const secretValues = new Map<string, string>()
     const credentials = {
