@@ -183,7 +183,7 @@ export function planResearch(question: string, requestedDomain?: string): Resear
   }
   const candidates = (RESEARCH_SOURCES[domain] ?? []).slice(0, 2)
   // Preserve the full question for recall, shorten institution-scoped searches.
-  const academicStopwords = /^(las?|los?|del?|por|para|que|qu[eé]|con|una?|unos?|hay|son|exigen|existe|existen|cu[aá]nt[oa]s?|recomendad[oa]s?)$/iu
+  const academicStopwords = /^(las?|los?|del?|por|para|que|qu[eé]|con|una?|unos?|hay|son|exigen|existe|existen|cu[aá]nt[oa]s?)$/iu
   const keywords = domain === 'academic'
     ? q.replace(/[¿?¡!.,;:()[\]]/gu, ' ').split(/\s+/u).filter(word =>
       word.length > 2 && !academicStopwords.test(word))
@@ -315,16 +315,16 @@ export function applyResearchTools(ctx: Context, maxResults: number, timeoutMs: 
       render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
     },
     isConcurrencySafe: () => true,
-    execute: async (args) => {
+    execute: (args) => {
       const domain = args.domain?.trim().toLowerCase()
       if (domain !== undefined && domain !== '' && !Object.hasOwn(RESEARCH_SOURCES, domain)) {
         throw new ToolArgsError(['unknown domain; use research_sources without a domain to list domains'])
       }
-      return {
+      return Promise.resolve({
         domains: Object.keys(RESEARCH_SOURCES),
         sources: domain === undefined || domain === '' ? [] : [...(RESEARCH_SOURCES[domain] ?? [])],
         note: 'Candidates require independent checks for API capability, freshness, credentials, rate limits, license and coverage.',
-      }
+      })
     },
   }))
   ctx.tools.register(defineTool({
