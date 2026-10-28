@@ -15,6 +15,11 @@ const routing:Record<string,{sport:string;market:string;oddsSportKey:string}>={
   hockey:{sport:'ice-hockey',market:'home_away',oddsSportKey:'icehockey_nhl'},
   tennis:{sport:'tennis',market:'match_winner',oddsSportKey:'tennis_atp'},
 }
+const leagueSportKey:Record<string,string>={
+  'eng.1':'soccer_epl','esp.1':'soccer_spain_la_liga','usa.1':'soccer_usa_mls',
+  'uefa.champions':'soccer_uefa_champs_league','nba':'basketball_nba',
+  'wnba':'basketball_wnba','mlb':'baseball_mlb','nfl':'americanfootball_nfl','nhl':'icehockey_nhl',
+}
 export async function evidencePricedTicket(
   count:number,date?:string,sport?:string,stake=0,now=Date.now(),
   env:NodeJS.ProcessEnv=process.env,fetcher:typeof fetch=fetch,
@@ -69,7 +74,7 @@ export async function evidencePricedTicket(
   const marketQuotes:MarketOutcome[]=best.choices.map((q,index)=>({
     eventId:q.eventId,bookmaker:q.bookmaker,market:q.market,selection:q.selection,point:q.point,
     price:q.price,home:q.home,away:q.away,time:q.time,updatedAt:q.updatedAt,
-    source:q.source,sportKey:routing[research.events[index]?.sport??'']?.oddsSportKey??'sports_keyless',
+    source:q.source,sportKey:leagueSportKey[research.events[index]?.league??'']??routing[research.events[index]?.sport??'']?.oddsSportKey??'sports_keyless',
   }))
   const selections:MarketSelection[]=marketQuotes.map(q=>({
     eventId:q.eventId,bookmaker:q.bookmaker,market:q.market,selection:q.selection,point:q.point,
