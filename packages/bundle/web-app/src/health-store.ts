@@ -250,6 +250,13 @@ export class HealthClinicStore {
     if(kind==='orders'&&actor.role==='radiology'&&data.modality!=='imaging')fail('Orden no autorizada')
     return {row,data}
   }
+  /** Billing may locate a patient for an invoice but never receives demographics or clinical notes. */
+  patientOptions(actor:Actor):readonly {id:string;name:string}[] {
+    if(!['billing','admin','reception'].includes(actor.role))fail('Acceso al directorio restringido')
+    const rows=this.db.prepare("SELECT * FROM health_records WHERE org=? AND kind='patients' ORDER BY created_at DESC LIMIT 500")
+      .all(actor.org) as Row[]
+    return rows.map(row=>({id:row.id,name:str(this.open(row).name,'Nombre',160)}))
+  }
   list(actor:Actor,kind:Kind):readonly RecordData[] {
     this.access(actor,kind)
     const rows=this.db.prepare('SELECT * FROM health_records WHERE org=? AND kind=? ORDER BY created_at DESC LIMIT 500').all(actor.org,kind) as Row[]

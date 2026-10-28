@@ -64,10 +64,10 @@ async function load(){
  reception:["patients","appointments","followups","assignments"],lab:["orders"],radiology:["orders"],
  pharmacy:["prescriptions","inventory"],billing:["invoices"]};
  const resources=modules.filter(m=>(menu[actor.role]||[]).includes(m[0]));
- if(!resources.some(x=>x[0]===tab))tab="patients";
+ if(!resources.some(x=>x[0]===tab))tab=resources[0]?.[0]||"patients";
  root.innerHTML='<main><aside>'+resources.map(x=>'<button data-tab="'+x[0]+'" class="'+(x[0]===tab?'active':'')+'">'+x[1]+'</button>').join('')+
  '</aside><section><div id="view"><div class="card">Cargando…</div></div></section></main>';
- const ids=tab==="assignments"?["assignments","patients"]:tab==="orders"?["orders","encounters"]:tab==="prescriptions"?["prescriptions","encounters","inventory"]:tab==="encounters"?["encounters","patients"]:tab==="appointments"?["appointments","patients"]:tab==="invoices"?["invoices","patients"]:tab==="followups"?["followups","patients"]:["patients",tab];
+ const ids=tab==="assignments"?["assignments","patients"]:tab==="orders"?["orders","encounters"]:tab==="prescriptions"?["prescriptions","encounters","inventory"]:tab==="encounters"?["encounters","patients"]:tab==="appointments"?["appointments","patients"]:tab==="invoices"?["invoices","patient-options"]:tab==="followups"?["followups","patients"]:["patients",tab];
  for(const id of new Set(ids)){try{data[id]=(await api(id)).items}catch{data[id]=[]}}
  render()
 }
@@ -86,7 +86,7 @@ function actionFor(o){
  return actions.map(a=>'<button class="secondary" data-act="'+a[0]+'" data-id="'+safe(tab==="assignments"?o.patientId+"|"+o.staffId:o.id)+'">'+a[1]+'</button>').join("");
 }
 function render(){
- const d=tab==="backups"?(data.backups||[]).map(fileName=>({fileName})):data[tab]||[],patients=data.patients||[];
+ const d=tab==="backups"?(data.backups||[]).map(fileName=>({fileName})):data[tab]||[],patients=data.patients||data["patient-options"]||[];
  const p=pick("patientId","Paciente",patients,x=>x.name+" · "+x.dateOfBirth);
  let form="";
  if(tab==="patients"&&["admin","clinician","reception"].includes(actor.role))form=field("name","Nombre completo")+field("dateOfBirth","Nacimiento","date")+field("email","Correo","email",false)+field("phone","Teléfono","tel",false)+

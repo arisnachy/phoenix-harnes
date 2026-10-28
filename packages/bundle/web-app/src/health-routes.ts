@@ -166,6 +166,9 @@ export function registerHealthRoutes(ctx:Context):void {
           reply(res,201,{backup:receipt});return
         }
       }
+      if(operation==='patient-options'&&method==='GET'){
+        reply(res,200,{items:store.patientOptions(actor)});return
+      }
       if(operation==='assignments'){
         if(method==='GET'){reply(res,200,{items:store.assignments(actor)});return}
         if(method==='POST'){
