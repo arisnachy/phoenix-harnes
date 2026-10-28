@@ -267,7 +267,7 @@ export async function marketOdds(sportKey:string,markets='h2h',env:NodeJS.Proces
       if(sport&&market){
         try{
           const verified=await keylessOdds(sport,market,undefined,env)
-          if(verified.length)return verified.map(q=>({...q,time:localTime(q.time)}))
+          if(verified.length)return verified.map(q=>({...q,sportKey,time:localTime(q.time)}))
         }catch{/* Fallback is a provider failure, never permission to synthesize odds. */}
       }
     }
