@@ -81,9 +81,9 @@ describe('isolated simulated ledger and deterministic risk',()=>{
     assert.equal(riskBudget(state,signal,{}),500);
     state=paperFill(state,{id:'a',at:NOW,symbol:'BTCUSDT',side:'buy',
       price:100,quantity:5,strategy:'test',plan:exitPlan(100,2,'test')});
-    marketValue(state,{BTCUSDT:90});
+    marketValue(state,{BTCUSDT:0.01});
     assert.ok(state.equity<10000);
-    assert.equal(riskBudget(state,signal,{BTCUSDT:90}),0);
+    assert.equal(riskBudget(state,signal,{BTCUSDT:0.01}),0);
     assert.ok(state.positions.BTCUSDT.cost>state.positions.BTCUSDT.quantity*100);
     state.halted=true;
     assert.equal(riskBudget(state,signal,{BTCUSDT:90}),0);
