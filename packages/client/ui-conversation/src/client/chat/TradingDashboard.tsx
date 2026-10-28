@@ -13,6 +13,8 @@ type TestnetState = {
   configured: boolean
   connected: boolean
   canTrade: boolean
+  saved?: boolean
+  issue?: string
   nextAction: string
 }
 type McpState = {
@@ -157,17 +159,24 @@ export function TradingDashboard({ initial }: Props) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ apiKey: testingKey, secret: testingSecret }),
       })
-      if (!response.ok) throw new Error('Testnet credential verification rejected')
-      const value = await response.json() as TestnetState
-      if (value.mode !== 'testnet' || value.connected !== true) throw new Error('Testnet not verified')
+      const value = await response.json() as TestnetState & { error?: string }
+      if (!response.ok) {
+        setConnectionIssue(value.nextAction ?? 'No se pudo guardar la clave en la bóveda. Revisa su disponibilidad.')
+        return
+      }
+      if (value.mode !== 'testnet' || value.configured !== true || value.saved !== true) {
+        setConnectionIssue('No se confirmó la lectura de las claves desde la bóveda; no se considera guardado.')
+        return
+      }
+      // Saved != authenticated. Keep credentials in the Host vault even when
+      // Binance is unreachable, then verify again using "Comprobar conexiones".
       setTestnetState(value)
       setCredentialOpen(false)
-    } catch {
-      setConnectionIssue('Testnet no pudo autenticar o guardar las claves. Revisa la cuenta de prueba y el Host.')
-    } finally {
-      // Never persist private keys in the browser's chart state or model context.
       setTestingKey('')
       setTestingSecret('')
+    } catch {
+      setConnectionIssue('No se pudo contactar al Host para guardar Testnet. Comprueba la conexión y vuelve a intentarlo.')
+    } finally {
       setConnectionBusy(false)
     }
   }
@@ -291,8 +300,8 @@ export function TradingDashboard({ initial }: Props) {
           <div className={css.connectionItem}>
             <strong>Spot Testnet · fondos ficticios</strong>
             <span>{testnetState === undefined ? 'Estado pendiente de comprobar'
-              : testnetState.connected ? testnetState.canTrade ? 'Autenticado · órdenes de prueba habilitadas' : 'Autenticado · sin permiso de operar'
-                : testnetState.configured ? 'Configurado · conexión fallida' : 'Sin credenciales de prueba'}</span>
+              : testnetState.connected ? testnetState.canTrade ? 'Claves guardadas · Testnet conectado' : 'Claves guardadas · sin permiso de operar'
+                : testnetState.configured ? 'Claves guardadas · pendiente de autenticar' : 'Sin credenciales de prueba'}</span>
             <small>{testnetState?.nextAction ?? 'Necesita claves exclusivas de Binance Spot Testnet.'}</small>
             <button type="button" disabled={connectionBusy} onClick={() => { setCredentialOpen(open => !open) }}>
               {credentialOpen ? 'Cerrar configuración' : 'Configurar Testnet'}
