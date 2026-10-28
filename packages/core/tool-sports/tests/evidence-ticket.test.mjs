@@ -40,3 +40,23 @@ test('auto ticket rejects unsupported sports or leg counts',async()=>{
   await assert.rejects(()=>evidenceTicket(7,day,'soccer',mock(),now),/1 y 6/)
   await assert.rejects(()=>evidenceTicket(5,day,'unknown',mock(),now),/sin cobertura/)
 })
+
+test('six-leg ticket has six distinct upcoming ESPN events and no invented prices',async()=>{
+  const result=await evidenceTicket(6,day,'soccer',mock(),now)
+  assert.equal(result.complete,true)
+  assert.equal(result.verifiedEvents,6)
+  assert.equal(result.card.props.legs.length,6)
+  assert.equal(new Set(result.selections.map(x=>x.eventId)).size,6)
+  assert.equal(result.card.props.combinedOdds,'No disponible')
+})
+test('three completed matches must have three different ESPN IDs for each team',async()=>{
+  const repeated=async url=>{
+    const body=fixture(url,true)
+    if(String(url).includes('/soccer/eng.1/') && !String(url).includes('dates=20261028')){
+      for(const game of body.events)game.id='999'
+    }
+    return new Response(JSON.stringify(body),{status:200})
+  }
+  await assert.rejects(()=>evidenceTicket(5,day,'soccer',repeated,now),
+    /No hay encuentros con suficiente evidencia/)
+})
