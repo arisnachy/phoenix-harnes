@@ -1,7 +1,7 @@
 /** Validation and projection helpers for the private user-profile namespace. */
 
 import z from '@phoenix-ai/schemastery'
-import type { AssistantGender, AssistantGenderSource, UserProfileConsent, UserProfileFamilyMember, UserProfileSettings, UserProfileUpdate } from './types.ts'
+import type { AssistantGender, AssistantGenderSource, UserAddressMode, UserProfileConsent, UserProfileFamilyMember, UserProfileSettings, UserProfileUpdate } from './types.ts'
 
 /** Settings namespace stored in the Harness-home settings document. */
 export const USER_PROFILE_SETTINGS_NAMESPACE = 'user-profile' as const
@@ -14,10 +14,13 @@ export const DEFAULT_ASSISTANT_GENDER = 'feminine' as const
 export const ASSISTANT_GENDERS: readonly AssistantGender[] = ['masculine', 'feminine', 'neutral']
 /** Persisted provenance values; an absent source means inference is still open. */
 export const ASSISTANT_GENDER_SOURCES: readonly AssistantGenderSource[] = ['inferred', 'manual']
+export const USER_ADDRESS_MODES: readonly UserAddressMode[] = ['automatic', 'name', 'title', 'none']
 
 /** Default policy: no profile field is model-visible without an explicit opt-in. */
 export const DEFAULT_USER_PROFILE_CONSENT: UserProfileConsent = Object.freeze({
   preferredName: false,
+  profession: false,
+  professionalTitle: false,
   dateOfBirth: false,
   gender: false,
   pronouns: false,
@@ -40,6 +43,9 @@ export const UserProfileSettingsSchema: z<UserProfileSettings> = z.object({
   assistantGenderSource: z.union(['inferred', 'manual']).required(false),
   modelProviderOrder: z.array(z.string()).required(false),
   preferredName: z.string().required(false),
+  profession: z.string().required(false),
+  professionalTitle: z.string().required(false),
+  addressingMode: z.union(['automatic', 'name', 'title', 'none']).required(false),
   dateOfBirth: z.string().required(false),
   gender: z.string().required(false),
   pronouns: z.string().required(false),
@@ -50,6 +56,8 @@ export const UserProfileSettingsSchema: z<UserProfileSettings> = z.object({
   })).required(false),
   consent: z.object({
     preferredName: z.boolean().default(false),
+    profession: z.boolean().default(false),
+    professionalTitle: z.boolean().default(false),
     dateOfBirth: z.boolean().default(false),
     gender: z.boolean().default(false),
     pronouns: z.boolean().default(false),
@@ -59,9 +67,9 @@ export const UserProfileSettingsSchema: z<UserProfileSettings> = z.object({
 })
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
-const PROFILE_TEXT_FIELDS = ['assistantName', 'preferredName', 'gender', 'pronouns', 'tone'] as const
-const PROFILE_UPDATE_FIELDS = [...PROFILE_TEXT_FIELDS, 'assistantGender', 'assistantGenderSource', 'modelProviderOrder', 'dateOfBirth', 'family'] as const
-const CONSENT_FIELDS = ['preferredName', 'dateOfBirth', 'gender', 'pronouns', 'tone', 'family'] as const
+const PROFILE_TEXT_FIELDS = ['assistantName', 'preferredName', 'profession', 'professionalTitle', 'gender', 'pronouns', 'tone'] as const
+const PROFILE_UPDATE_FIELDS = [...PROFILE_TEXT_FIELDS, 'assistantGender', 'assistantGenderSource', 'modelProviderOrder', 'dateOfBirth', 'family', 'addressingMode'] as const
+const CONSENT_FIELDS = ['preferredName', 'profession', 'professionalTitle', 'dateOfBirth', 'gender', 'pronouns', 'tone', 'family'] as const
 
 /** Validate cross-field and bounded profile constraints.
  * @param profile - complete profile settings to validate.
@@ -76,6 +84,9 @@ export function validateUserProfile(profile: UserProfileSettings): void {
   }
   if (profile.assistantGenderSource !== undefined && !ASSISTANT_GENDER_SOURCES.includes(profile.assistantGenderSource)) {
     throw new TypeError(`user profile assistantGenderSource must be one of ${ASSISTANT_GENDER_SOURCES.join(', ')}`)
+  }
+  if (profile.addressingMode !== undefined && !USER_ADDRESS_MODES.includes(profile.addressingMode)) {
+    throw new TypeError('user profile addressingMode must be automatic, name, title, or none')
   }
   validateProviderOrder(profile.modelProviderOrder)
   if (profile.dateOfBirth !== undefined) validateDateOfBirth(profile.dateOfBirth)
@@ -107,6 +118,10 @@ export function validateUserProfileUpdate(patch: unknown): asserts patch is User
     if (field === 'assistantGenderSource' && value !== null && value !== undefined
       && !ASSISTANT_GENDER_SOURCES.includes(value as AssistantGenderSource)) {
       throw new TypeError(`user profile update assistantGenderSource must be one of ${ASSISTANT_GENDER_SOURCES.join(', ')}`)
+    }
+    if (field === 'addressingMode' && value !== null && value !== undefined
+      && !USER_ADDRESS_MODES.includes(value as UserAddressMode)) {
+      throw new TypeError('user profile update addressingMode must be automatic, name, title, or none')
     }
     if (field === 'modelProviderOrder' && value !== null && value !== undefined && !Array.isArray(value)) {
       throw new TypeError('user profile update field "modelProviderOrder" must be an array or null')
@@ -143,6 +158,9 @@ function clearProfileField(profile: UserProfileSettings, field: typeof PROFILE_U
     case 'assistantGenderSource': delete profile.assistantGenderSource; break
     case 'modelProviderOrder': delete profile.modelProviderOrder; break
     case 'preferredName': delete profile.preferredName; break
+    case 'profession': delete profile.profession; break
+    case 'professionalTitle': delete profile.professionalTitle; break
+    case 'addressingMode': delete profile.addressingMode; break
     case 'dateOfBirth': delete profile.dateOfBirth; break
     case 'gender': delete profile.gender; break
     case 'pronouns': delete profile.pronouns; break
