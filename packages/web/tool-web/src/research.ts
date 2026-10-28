@@ -183,7 +183,193 @@ export function planResearch(question: string, requestedDomain?: string): Resear
   }
   const candidates = (RESEARCH_SOURCES[domain] ?? []).slice(0, 2)
   // Preserve the full question for recall, shorten institution-scoped searches.
-  const academicStopwords = /^(las?|los?|del?|por|para|que|qu[eé]|con|una?|unos?|hay|son|exigen|existe|existen|cu[aá]nt[oa]s?|recomendad[oa]s?)$/iu
+  const academicStopwords = new RegExp(
+    '^(las?|los?|del?|por|para|que|qu[eé]|con|una?|unos?|hay|son|exigen|existe|existen|cu[aá]nt[oa]s?|recomendad[oa]s?)
+  const keywords = domain === 'academic'
+    ? q.replace(/[¿?¡!.,;:()[\]]/gu, ' ').split(/\s+/u).filter(word =>
+      word.length > 2 && !academicStopwords.test(word))
+      .slice(0, 14).join(' ')
+    : q
+  return { domain, candidates, queries: [q, ...candidates.map(source => `${keywords || q} site:${source.host}`)] }
+}
+
+function canonicalUrl(raw: string): string | undefined {
+  try {
+    const url = new URL(raw)
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') return undefined
+    url.hash = ''
+    for (const key of [...url.searchParams.keys()]) {
+      if (/^(utm_|fbclid$|gclid$)/iu.test(key)) url.searchParams.delete(key)
+    }
+    return url.toString()
+  } catch { return undefined }
+}
+
+/** Auditable research leads and explicit partial-failure outcome. */
+export interface ResearchOutcome {
+  readonly domain: string
+  readonly queries: string[]
+  readonly candidates: ResearchSource[]
+  readonly sources: WebSearchSource[]
+  readonly failedQueries: string[]
+  readonly truncated: boolean
+  readonly status: 'ok' | 'partial' | 'empty'
+  readonly note: string
+}
+
+/**
+ * Failures do not discard independent successful searches; no response is fabricated.
+ * @param ctx - host-owned web seam with configured search providers.
+ * @param plan - domain-aware research plan.
+ * @param maxResults - cap on retained result URLs.
+ * @param signal - cancellation signal for all live provider requests.
+ * @returns deduplicated search leads and diagnostic status.
+ */
+export async function executeResearch(
+  ctx: Pick<Context, 'web'>,
+  plan: ResearchPlan,
+  maxResults: number,
+  signal: AbortSignal,
+): Promise<ResearchOutcome> {
+  const outcomes = await Promise.allSettled(plan.queries.map(query => ctx.web.search({ query, maxResults }, signal)))
+  if (signal.aborted) throw signal.reason ?? new Error('research cancelled')
+  const failedQueries: string[] = []
+  const successful: WebSearchResult[] = []
+  for (let index = 0; index < outcomes.length; index++) {
+    const outcome = outcomes[index]
+    if (outcome?.status === 'fulfilled') successful.push(outcome.value)
+    else failedQueries.push(plan.queries[index] as string)
+  }
+  if (successful.length === 0) {
+    return {
+      domain: plan.domain, queries: plan.queries, candidates: plan.candidates,
+      sources: [], failedQueries, truncated: false, status: 'empty',
+      note: 'All search requests failed. Search providers may be blocked or unavailable. Do not repeat equivalent queries; try a directly known primary source or stop with a clearly disclosed evidence gap.',
+    }
+  }
+  const seen = new Set<string>()
+  const sources: WebSearchSource[] = []
+  let dropped = false
+  const maxRanks = Math.max(0, ...successful.map(result => result.sources.length))
+  outer: for (let rank = 0; rank < maxRanks; rank++) {
+    for (const result of successful) {
+      const source = result.sources[rank]
+      if (source === undefined) continue
+      const url = canonicalUrl(source.url)
+      if (url === undefined || seen.has(url)) continue
+      if (plan.domain === 'academic' && !/tesis|tesina|thesis|dissert|doctor|maestr|master|graduate|universid|universit|bibliograf|referenc|research|academic|posgrado|postgrado|reglamento/iu
+        .test([source.title ?? '', source.snippet ?? '', new URL(url).pathname].join(' '))) continue
+      seen.add(url)
+      if (sources.length >= maxResults) { dropped = true; break outer }
+      sources.push(source)
+    }
+  }
+  return {
+    domain: plan.domain,
+    queries: plan.queries,
+    candidates: plan.candidates,
+    sources,
+    failedQueries,
+    truncated: dropped || successful.some(result => result.truncated),
+    status: sources.length === 0 ? 'empty' : failedQueries.length > 0 ? 'partial' : 'ok',
+    note: sources.length === 0
+      ? 'No on-topic source was recovered. Do not loop through equivalent searches or interpret a blocked page as evidence; report the limitation and request an institutional document if essential.'
+      : 'Web-discovered links are leads, not verified API results. Open primary documents before making consequential claims; include source and as-of time for live data. No candidate API has been installed or authorized.',
+  }
+}
+
+const sourceSchema = {
+  type: 'object' as const,
+  additionalProperties: false,
+  properties: {
+    name: { type: 'string' as const, required: true },
+    host: { type: 'string' as const, required: true },
+    access: { type: 'string' as const, required: true },
+  },
+} as const
+
+/**
+ * Register bounded federated research and candidate source discovery in the existing tool registry.
+ * @param ctx - Cordis plugin context.
+ * @param maxResults - maximum result URLs per tool call.
+ * @param timeoutMs - existing cooperative web timeout budget.
+ */
+export function applyResearchTools(ctx: Context, maxResults: number, timeoutMs: number): void {
+  ctx.systemPrompt.section({
+    name: 'tool:research_search',
+    order: 112,
+    text: 'For evidence-intensive questions, use research_search for broad and authority-scoped leads; for thesis and dissertation regulations, seek original university guidelines and distinguish local requirements from general advice. A search result is not verified evidence: open primary sources using web_fetch. If search returns empty or blocked sources, change method once (direct university domain/document or another available provider), then finish with explicit limitations instead of repeating queries. Do not invent citations, assume universal numeric minima, or claim coverage from snippets.',
+  })
+  ctx.tools.register(defineTool({
+    name: 'research_sources',
+    description: 'List candidate authoritative source hosts by research domain. This is metadata, not an API connection, credential or live availability claim.',
+    parameters: { domain: { type: 'string', description: 'Optional domain, for example sports, fx, medicine, science, economics, weather, law or general.' } },
+    output: {
+      schema: {
+        type: 'object', additionalProperties: false,
+        properties: {
+          domains: { type: 'array', required: true, items: { type: 'string' } },
+          sources: { type: 'array', required: true, items: sourceSchema },
+          note: { type: 'string', required: true },
+        },
+      },
+      render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
+    },
+    isConcurrencySafe: () => true,
+    execute: (args) => {
+      const domain = args.domain?.trim().toLowerCase()
+      if (domain !== undefined && domain !== '' && !Object.hasOwn(RESEARCH_SOURCES, domain)) {
+        throw new ToolArgsError(['unknown domain; use research_sources without a domain to list domains'])
+      }
+      return {
+        domains: Object.keys(RESEARCH_SOURCES),
+        sources: domain === undefined || domain === '' ? [] : [...(RESEARCH_SOURCES[domain] ?? [])],
+        note: 'Candidates require independent checks for API capability, freshness, credentials, rate limits, license and coverage.',
+      }
+    },
+  }))
+  ctx.tools.register(defineTool({
+    name: 'research_search',
+    description: 'Run bounded multidisciplinary research with institution-aware academic queries, relevance filtering and partial-failure diagnostics. Empty or blocked provider results are explicit: avoid repeating equivalent searches. Returns leads, not verified claims.',
+    parameters: {
+      question: { type: 'string', required: true },
+      domain: { type: 'string', description: 'Optional source domain. Call research_sources to list valid values.' },
+    },
+    output: {
+      schema: {
+        type: 'object', additionalProperties: false,
+        properties: {
+          domain: { type: 'string', required: true },
+          queries: { type: 'array', required: true, items: { type: 'string' } },
+          candidates: { type: 'array', required: true, items: sourceSchema },
+          sources: { type: 'array', required: true, items: {
+            type: 'object', additionalProperties: false,
+            properties: {
+              url: { type: 'string', required: true },
+              title: { type: 'string' },
+              snippet: { type: 'string' },
+              publishedAt: { type: 'string' },
+            },
+          } },
+          failedQueries: { type: 'array', required: true, items: { type: 'string' } },
+          truncated: { type: 'boolean', required: true },
+          status: { type: 'string', required: true, enum: ['ok', 'partial', 'empty'] },
+          note: { type: 'string', required: true },
+        },
+      },
+      render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
+    },
+    timeoutMs,
+    isConcurrencySafe: () => true,
+    async execute(args, exec) {
+      const plan = planResearch(args.question, args.domain)
+      return executeResearch(ctx, plan, maxResults, exec.signal)
+    },
+  }))
+}
+,
+    'iu',
+  )
   const keywords = domain === 'academic'
     ? q.replace(/[¿?¡!.,;:()[\]]/gu, ' ').split(/\s+/u).filter(word =>
       word.length > 2 && !academicStopwords.test(word))
