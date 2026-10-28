@@ -121,6 +121,7 @@ export class HealthClinicStore {
       if(!eq(proof,this.meta('verify')??'')){derived.fill(0);fail('No se pudo desbloquear el expediente cifrado')}
       this.key=derived
     }
+    this.verifyAudit()
     const cookie=randomBytes(32).toString('hex'),csrf=randomBytes(24).toString('hex')
     for(const [id,entry] of this.sessions){if(entry.expires<Date.now())this.sessions.delete(id)}
     if(this.sessions.size>=128)fail('Demasiadas sesiones clínicas activas')
@@ -142,7 +143,8 @@ export class HealthClinicStore {
   createStaff(actor:Actor,value:unknown):void {
     if(actor.role!=='admin')fail('Acceso administrativo requerido')
     const x=obj(value),username=str(x.username,'Usuario',80),pass=safePassword(x.password),role=str(x.role,'Rol',40) as Role
-    if(!ROLES.has(role)||!(/^[a-zA-Z][a-zA-Z0-9._-]{2,79}$/u.test(username)))fail('Usuario o rol inválido')
+    if(!ROLES.has(role)||role==='admin'||!(/^[a-zA-Z][a-zA-Z0-9._-]{2,79}$/u.test(username)))
+      fail('Usuario o rol inválido: nuevas cuentas administradoras requieren gestión de claves')
     const salt=randomBytes(16).toString('hex')
     this.db.exec('BEGIN IMMEDIATE')
     try {
@@ -259,6 +261,21 @@ export class HealthClinicStore {
       .filter(item=>kind!=='encounters'||!/(?:psic[oó]log|psycholog|psicoterapi)/iu.test(String(item.specialty))||
         actor.role==='psychologist'&&item.practitioner===actor.username)
   }
+  /** Fail closed if the HMAC-linked clinical audit journal has been altered. */
+  private verifyAudit():void {
+    const history=this.db.prepare('SELECT org,actor,action,record_id,happened,prior_hash,hash FROM health_audit ORDER BY id ASC').all() as
+      {org:string;actor:string;action:string;record_id:string;happened:string;prior_hash:string;hash:string}[]
+    const previous=new Map<string,string>()
+    for(const event of history){
+      const expectedPrior=previous.get(event.org)??'genesis'
+      if(event.prior_hash!==expectedPrior)fail('Integridad del historial de auditoría comprometida')
+      const message=JSON.stringify([event.org,event.actor,event.action,event.record_id,event.happened,event.prior_hash])
+      const digest=createHmac('sha256',this.encryptionKey()).update(message).digest('hex')
+      if(!eq(event.hash,digest))fail('Integridad del historial de auditoría comprometida')
+      previous.set(event.org,event.hash)
+    }
+  }
+
   private audit(actor:Actor,action:string,id:string):void {
     const prev=(this.db.prepare('SELECT hash FROM health_audit WHERE org=? ORDER BY id DESC LIMIT 1').get(actor.org) as {hash:string}|undefined)?.hash??'genesis'
     const happened=new Date().toISOString()
@@ -268,6 +285,7 @@ export class HealthClinicStore {
   }
   audits(actor:Actor):readonly RecordData[] {
     if(actor.role!=='admin')fail('Acceso administrativo requerido')
+    this.verifyAudit()
     return this.db.prepare('SELECT id,org,actor,action,record_id AS recordId,happened FROM health_audit WHERE org=? ORDER BY id DESC LIMIT 500').all(actor.org) as RecordData[]
   }
   private insert(actor:Actor,kind:Kind,data:RecordData):RecordData {
