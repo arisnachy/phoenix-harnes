@@ -213,3 +213,17 @@ test('an online SQLite backup can be restored and retains encrypted clinical con
   }finally{restored.close()}
   assert(db.audits(admin.actor).some(x=>x.action==='backup.create'))
 })
+
+test('tampering with the authenticated clinical audit journal prevents reopening the clinic',async t=>{
+  const {db,admin,root}=fixture(t)
+  db.create(admin.actor,'patients',{name:'Audit tamper demonstration',dateOfBirth:'1991-01-01'})
+  const file=join(root,'clinic.sqlite')
+  db.close()
+  const { DatabaseSync }=await import('node:sqlite')
+  const raw=new DatabaseSync(file)
+  try{raw.prepare("UPDATE health_audit SET action=? WHERE action='patients.create'").run('patient.force-change')}
+  finally{raw.close()}
+  const reopened=new HealthClinicStore(file)
+  try{assert.throws(()=>reopened.login('clinicaladmin',PASSWORD),/Integridad del historial/)}
+  finally{reopened.close()}
+})
