@@ -74,7 +74,8 @@ async function load(){
 function actionFor(o){
  let actions=[];
  if(tab==="assignments")actions=[["revokePatient","Revocar acceso"]];
- if(tab==="patients"&&["admin","clinician","reception"].includes(actor.role))actions=[["contactEvidence","Consentimiento"]];
+ if(tab==="patients"&&["admin","clinician","reception"].includes(actor.role))actions=[["contactEvidence","Consentimiento"],
+   ...(actor.role==="clinician"?[["allergyReview","Revisar alergias"]]:[])];
  if(tab==="encounters"&&o.status!=="signed"&&o.practitioner===actor.username)actions=[["document","Documentar"],["review","Revisar"],["sign","Firmar"]];
  if(tab==="prescriptions"&&actor.role==="pharmacy"&&o.status==="prescribed")actions=[["dispense","Dispensar"]];
  if(tab==="orders")actions=o.status==="ordered"&&((actor.role==="lab"&&o.modality==="laboratory")||(actor.role==="radiology"&&o.modality==="imaging"))?[["result","Resultado"]]:
@@ -98,7 +99,8 @@ function render(){
  if(tab==="appointments")form=p+field("practitioner","Profesional")+field("startsAt","Fecha y hora","datetime-local")+field("reason","Motivo")+button("create","Programar cita");
  if(tab==="orders"&&actor.role==="clinician")form=pick("encounterId","Consulta firmada",data.encounters.filter(x=>x.status==="signed"),x=>x.complaint+" · "+x.practitioner)+
  '<label>Tipo</label><select id="modality"><option value="laboratory">Laboratorio</option><option value="imaging">Imagen</option></select>'+area("description","Descripción y estudio indicado")+button("create","Emitir orden");
- if(tab==="prescriptions"&&actor.role==="clinician")form=pick("encounterId","Consulta firmada",data.encounters.filter(x=>x.status==="signed"),x=>x.complaint)+field("medication","Medicamento")+area("directions","Indicaciones autorizadas")+button("create","Registrar prescripción");
+ if(tab==="prescriptions"&&actor.role==="clinician")form=pick("encounterId","Consulta firmada",data.encounters.filter(x=>x.status==="signed"),x=>x.complaint)+field("medication","Medicamento")+area("directions","Indicaciones autorizadas")+
+ '<label><input type="checkbox" id="safety" style="width:auto;display:inline"> Como prescriptor confirmo revisión de alergias registradas, interacciones y dosis. PHOENIX aún no dispone de catálogo farmacológico validado.</label>'+button("create","Registrar prescripción");
  if(tab==="inventory")form=field("item","Producto")+button("create","Agregar producto");
  if(tab==="invoices")form=p+field("concept","Concepto")+field("amountCents","Monto en centavos","number")+button("create","Emitir factura");
  if(tab==="followups")form=p+field("assignedTo","Asignado a")+field("dueAt","Fecha y hora","datetime-local")+area("description","Tarea de seguimiento")+button("create","Crear seguimiento");
@@ -133,6 +135,16 @@ async function execute(action,id){
   const result=await api("backups","POST",{});
   notice("Respaldo verificado: "+result.backup.name+" · "+result.backup.records+" registros");return load();
  }
+ if(action==="allergyReview"){
+  const patient=data.patients?.find(x=>x.id===id);if(!patient)throw Error("Paciente no encontrado");
+  const choice=prompt("Alergias: none-known (sin alergias conocidas) o documented (alergias reportadas)","documented");
+  if(choice===null)return;
+  const details=choice==="documented"?prompt("Documente alérgenos y reacciones, tal como fueron confirmados en la consulta:"): "";
+  if(details===null)return;
+  if(!confirm("¿Confirma como profesional que revisó alergias y consignó el estado real del paciente?"))return;
+  await api("patients/"+id,"PATCH",{version:patient.version,action:"allergy-review",status:choice,details});
+  notice("Revisión de alergias documentada y auditada.");return load();
+ }
  if(action==="contactEvidence"){
   const patient=data.patients?.find(x=>x.id===id);if(!patient)throw Error("Paciente no encontrado");
   const choice=prompt("¿Autoriza o revoca correo? Escriba GRANTED o REVOKED","REVOKED");if(choice===null)return;
@@ -161,7 +173,7 @@ async function execute(action,id){
    encounters:{patientId:val("patientId"),specialty:val("specialty"),complaint:val("complaint"),mode:val("mode")},
    appointments:{patientId:val("patientId"),practitioner:val("practitioner"),startsAt:val("startsAt"),reason:val("reason")},
    orders:{encounterId:val("encounterId"),modality:val("modality"),description:val("description")},
-   prescriptions:{encounterId:val("encounterId"),medication:val("medication"),directions:val("directions")},
+   prescriptions:{encounterId:val("encounterId"),medication:val("medication"),directions:val("directions"),safetyAcknowledged:!!document.getElementById("safety")?.checked},
    inventory:{item:val("item")},invoices:{patientId:val("patientId"),concept:val("concept"),amountCents:Number(val("amountCents"))},
    followups:{patientId:val("patientId"),assignedTo:val("assignedTo"),dueAt:val("dueAt"),description:val("description")},
    staff:{username:val("username"),password:val("password"),role:val("role")},
