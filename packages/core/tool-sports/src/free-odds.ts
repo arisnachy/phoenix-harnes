@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto'
+
 /** Optional independently keyed odds feed at api.theoddsapi.com.
  * This is NOT api.the-odds-api.com/v4. Endpoint, auth and JSON differ.
  * See https://theoddsapi.com/docs/ . Never echo the private credential.
@@ -41,7 +43,8 @@ export async function fetchTheOddsApi(
   if(!/^[a-z0-9_]{3,80}$/u.test(sportKey)||
     !/^(h2h|spreads|totals)(,(h2h|spreads|totals))*$/u.test(markets))throw Error('Filtros de cuotas inválidos')
   if(typeof credential!=='string'||!credential.trim())throw Error('THEODDSAPI_API_KEY no configurada')
-  const cacheKey=sportKey+'|'+markets
+  // Hash the credential for per-account cache separation; never retain raw secrets in keys.
+  const cacheKey=createHash('sha256').update(credential).digest('hex').slice(0,20)+'|'+sportKey+'|'+markets
   const cached=fetcher===fetch?cache.get(cacheKey):undefined
   if(cached&&now-cached.at>=0&&now-cached.at<90_000)return cached.quotes
   const url=new URL('https://api.theoddsapi.com/odds/')
