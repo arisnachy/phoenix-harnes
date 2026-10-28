@@ -89,6 +89,8 @@ export const RESEARCH_SOURCES: Record<string, readonly ResearchSource[]> = {
   academic: [
     { name: 'University graduate schools (.edu)', host: 'edu', access: 'public' },
     { name: 'United Kingdom university guidance (.ac.uk)', host: 'ac.uk', access: 'public' },
+    { name: 'Dominican university guidance (.edu.do)', host: 'edu.do', access: 'public' },
+    { name: 'Mexican university guidance (.edu.mx)', host: 'edu.mx', access: 'public' },
   ],
   education: [
     { name: 'ERIC', host: 'eric.ed.gov', access: 'public' },
@@ -170,18 +172,20 @@ export interface ResearchPlan {
  * Infer a research domain and create a bounded source-aware search plan.
  * @param question - user's research question, from 3 to 500 characters.
  * @param requestedDomain - optional explicit catalogue domain.
+ * @param depth - quick (default) or deep for up to four authority-scoped hosts.
  * @returns broad and authority-scoped queries plus candidate metadata.
  */
-export function planResearch(question: string, requestedDomain?: string): ResearchPlan {
+export function planResearch(question: string, requestedDomain?: string, depth = 'quick'): ResearchPlan {
   const q = question.trim()
   if (q.length < 3 || q.length > 500) throw new ToolArgsError(['question must contain 3–500 characters'])
+  if (depth !== 'quick' && depth !== 'deep') throw new ToolArgsError(['depth must be quick or deep'])
   const domain = requestedDomain === undefined || requestedDomain.trim() === ''
     ? (DOMAIN_PATTERNS.find(([, pattern]) => pattern.test(q))?.[0] ?? 'general')
     : requestedDomain.trim().toLowerCase()
   if (!Object.hasOwn(RESEARCH_SOURCES, domain)) {
     throw new ToolArgsError([`unknown domain: ${domain}; use research_sources to inspect supported domains`])
   }
-  const candidates = (RESEARCH_SOURCES[domain] ?? []).slice(0, 2)
+  const candidates = (RESEARCH_SOURCES[domain] ?? []).slice(0, depth === 'deep' ? 4 : 2)
   // Preserve the full question for recall, shorten institution-scoped searches.
   const academicStopwords = /^(las?|los?|del?|por|para|que|qu[eé]|con|una?|unos?|hay|son|exigen|existe|existen|cu[aá]nt[oa]s?)$/iu
   const keywords = domain === 'academic'
@@ -297,7 +301,7 @@ export function applyResearchTools(ctx: Context, maxResults: number, timeoutMs: 
   ctx.systemPrompt.section({
     name: 'tool:research_search',
     order: 112,
-    text: 'For evidence-intensive questions, use research_search for broad and authority-scoped leads; for thesis and dissertation regulations, seek original university guidelines and distinguish local requirements from general advice. A search result is not verified evidence: open primary sources using web_fetch. If search returns empty or blocked sources, change method once (direct university domain/document or another available provider), then finish with explicit limitations instead of repeating queries. Do not invent citations, assume universal numeric minima, or claim coverage from snippets.',
+    text: 'For evidence-intensive questions, use research_search for broad and authority-scoped leads; for thesis and dissertation regulations, seek original university guidelines and distinguish local requirements from general advice. A search result is not verified evidence: open primary sources using web_fetch. Use quick search by default; use depth=deep for comprehensive multi-institution coverage. If search returns empty or blocked sources, change method once (direct university domain/document or another available provider), then finish with explicit limitations instead of repeating queries. Do not invent citations, assume universal numeric minima, or claim coverage from snippets.',
   })
   ctx.tools.register(defineTool({
     name: 'research_sources',
@@ -329,10 +333,11 @@ export function applyResearchTools(ctx: Context, maxResults: number, timeoutMs: 
   }))
   ctx.tools.register(defineTool({
     name: 'research_search',
-    description: 'Run bounded multidisciplinary research with institution-aware academic queries, relevance filtering and partial-failure diagnostics. Empty or blocked provider results are explicit: avoid repeating equivalent searches. Returns leads, not verified claims.',
+    description: 'Run bounded multidisciplinary research; quick mode searches broad plus two trusted hosts, deep searches up to four hosts in parallel. Includes relevance filtering and partial-failure diagnostics. Returns leads, not verified claims.',
     parameters: {
       question: { type: 'string', required: true },
       domain: { type: 'string', description: 'Optional source domain. Call research_sources to list valid values.' },
+      depth: { type: 'string', description: 'quick (default) or deep for wider parallel primary-source discovery.' },
     },
     output: {
       schema: {
@@ -361,7 +366,7 @@ export function applyResearchTools(ctx: Context, maxResults: number, timeoutMs: 
     timeoutMs,
     isConcurrencySafe: () => true,
     async execute(args, exec) {
-      const plan = planResearch(args.question, args.domain)
+      const plan = planResearch(args.question, args.domain, args.depth)
       return executeResearch(ctx, plan, maxResults, exec.signal)
     },
   }))
