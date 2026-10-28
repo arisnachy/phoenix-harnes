@@ -114,7 +114,13 @@ type FeedEvent = { id?:string|number;date?:string;name?:string;status?:{ type?:{
 type MlbGame = { gamePk:number;gameDate?:string;venue?:{ name?:string };seriesDescription?:string;seriesGameNumber?:number;status?:{ detailedState?:string;abstractGameState?:string };teams?:Record<'home'|'away',{ team?:{ id?:number;name?:string };score?:number;probablePitcher?:{ id?:number;fullName?:string } }> }
 /** Safe, minimal sports UI payload; the client validates it before rendering. */
 export type ChatBlock = { component:'sports_game_card'|'sports_schedule_card'|'sports_ticket_card'|'sports_odds_card';version:1;props:Record<string,unknown> }
-/** A single bounded chat surface for multiple events, not a replacement for detailed cards. */
+/**
+ * Build one bounded response surface from trusted provider game cards.
+ * @param games - Normalized first-party game cards for one requested league/date.
+ * @param day - Requested provider date in YYYY-MM-DD.
+ * @param source - Attribution for the schedule source.
+ * @returns Compact card when multiple events exist; null preserves the detailed individual card.
+ */
 export function compactSportsSchedule(games:readonly ChatBlock[],day:string,source:string):ChatBlock|null {
   const cards=games.filter(game=>game.component==='sports_game_card').slice(0,25)
   if(cards.length<2)return null
