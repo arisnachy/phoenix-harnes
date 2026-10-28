@@ -146,6 +146,7 @@ export class ClinicSandbox {
   }
   requestStudy(actor: ClinicActor, encounterId: string, kind: OrderKind, description: string): OrderRecord {
     const e=this.#encounter(encounterId);this.#clinician(actor,e)
+    if(actor.role!=='clinician')throw new Error('Las órdenes médicas requieren un prescriptor habilitado.')
     if(e.stage!=='signed'||e.signedBy===null)throw new Error('Las órdenes requieren una consulta firmada.')
     if(kind!=='laboratory'&&kind!=='imaging')throw new TypeError('Tipo de estudio inválido.')
     const order: OrderRecord={id:this.#id('order'),organization:this.organization,encounterId,kind,

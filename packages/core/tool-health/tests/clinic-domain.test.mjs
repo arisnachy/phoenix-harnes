@@ -74,3 +74,14 @@ test('las vistas son copias y por rol',()=>{
   assert.deepEqual(c.snapshot(actor('billing')).patients,[])
   assert.deepEqual(c.snapshot(actor('clinician')).audit,[])
 })
+
+test('un psicólogo puede documentar notas pero no emitir órdenes médicas',()=>{
+  const c=new ClinicSandbox(org,()=>now)
+  const p=c.registerSyntheticPatient(actor('receptionist'),'DEMO-PSIC')
+  const e=c.open(actor('psychologist','psic-1'),p.id,'psicología','sesión ficticia')
+  c.document(actor('psychologist','psic-1'),e.id,'DEMO: sesión sintética')
+  c.review(actor('psychologist','psic-1'),e.id)
+  c.sign(actor('psychologist','psic-1'),e.id)
+  assert.throws(()=>c.requestStudy(actor('psychologist','psic-1'),e.id,'laboratory','DEMO estudio'),/prescriptor/)
+  assert.throws(()=>c.prescribe(actor('psychologist','psic-1'),e.id,'DEMO MED','DEMO'),/prescriptor/)
+})
