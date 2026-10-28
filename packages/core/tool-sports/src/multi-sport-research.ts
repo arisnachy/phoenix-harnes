@@ -69,7 +69,16 @@ const form=(current:Competitor,all:Game[],kickoff:number):FormSide=>{
 const today=()=>new Intl.DateTimeFormat('en-CA',{
   timeZone:'America/Santo_Domingo',year:'numeric',month:'2-digit',day:'2-digit',
 }).format(new Date())
-/** Research a verified slate for ANY ESPN sport and league, not a basketball-only code path. */
+/** Research ESPN results for a supported sport and league.
+ * @param sport - ESPN sport identifier.
+ * @param league - League identifier in the sports catalog.
+ * @param date - Fixture day in Santo Domingo.
+ * @param fetcher - Injected public ESPN fetch adapter.
+ * @param now - Reference instant for upcoming events.
+ * @param env - Host sports permissions.
+ * @param lookbackDays - Number of past scoreboards to inspect.
+ * @returns Verified upcoming match form with missing-evidence diagnostics; never calibrated win chances.
+ */
 export async function researchSport(
   sport:string,league:string,date=today(),fetcher:typeof fetch=fetch,
   now=Date.now(),env:NodeJS.ProcessEnv=process.env,lookbackDays=14,
