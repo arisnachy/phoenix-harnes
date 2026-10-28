@@ -4,8 +4,8 @@ import {evidenceTicket} from '../src/evidence-ticket.ts'
 
 const day='2026-10-28',now=Date.parse('2026-10-28T15:00:00Z')
 const future='2026-10-28T23:00:00Z'
-const base=(n,date,state,homeScore,awayScore)=>({
-  id:String(n),date,status:{type:{state}},competitions:[{competitors:[
+const base=(n,date,state,homeScore,awayScore,eventId=n)=>({
+  id:String(eventId),date,status:{type:{state}},competitions:[{competitors:[
     {homeAway:'home',team:{id:String(n)+'1',displayName:'Home '+n},records:[{summary:'2-0'}],
       ...(homeScore===null?{}:{score:String(homeScore)})},
     {homeAway:'away',team:{id:String(n)+'2',displayName:'Away '+n},records:[{summary:'0-2'}],
@@ -18,7 +18,7 @@ const fixture=(url,withHistory=true)=>{
   if(key==='20261028')return{events:Array.from({length:6},(_,i)=>base(100+i,future,'pre',null,null))}
   if(withHistory&&['20261027','20261026','20261025'].includes(key)){
     const stamp=key==='20261027'?'2026-10-27T21:00:00Z':key==='20261026'?'2026-10-26T21:00:00Z':'2026-10-25T21:00:00Z'
-    return{events:Array.from({length:6},(_,i)=>base(100+i,stamp,'post',3,0))}
+    return{events:Array.from({length:6},(_,i)=>base(100+i,stamp,'post',3,0,100+i+Number(key.slice(-2))*1000))}
   }
   return{events:[]}
 }
