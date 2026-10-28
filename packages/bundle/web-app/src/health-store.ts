@@ -278,11 +278,12 @@ export class HealthClinicStore {
       emailVerified:false,contactEvidence:null})
       if(actor.role==='clinician'){
         // Registering a patient is an explicit treatment relationship for this clinician.
+        const newPatientId=str(patient.id,'Paciente creado',80)
         this.db.exec('BEGIN IMMEDIATE')
         try {
           this.db.prepare('INSERT INTO health_patient_access VALUES (?,?,?,?,?,?)')
-            .run(actor.org,patient.id,actor.username,'initial-registration',actor.username,new Date().toISOString())
-          this.audit(actor,'patient.self-assign',patient.id)
+            .run(actor.org,newPatientId,actor.username,'initial-registration',actor.username,new Date().toISOString())
+          this.audit(actor,'patient.self-assign',newPatientId)
           this.db.exec('COMMIT')
         }catch(error){this.db.exec('ROLLBACK');throw error}
       }
