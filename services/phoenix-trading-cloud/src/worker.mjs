@@ -99,6 +99,10 @@ async function cycle(env,now=Date.now()){
     const quotes=Object.fromEntries(quotesRaw.map(q=>[q.symbol,Number(q.price)]));
     mark(state,quotes);
     let decision='hold';
+    state.lastAttempt=now;
+    state.lastScannedSymbols=[];
+    state.evaluations=[];
+    state.lastDecisionReason='No verified entry meets the strategy and risk gates';
     for(const p of Object.values(state.positions)){
       const current=quotes[p.symbol];
       if(!(current>0))throw new Error('missing-position-mark');
@@ -111,6 +115,9 @@ async function cycle(env,now=Date.now()){
         symbol:p.symbol,side:'sell',price:current*(1-SIMULATED_SLIPPAGE),quantity,
         strategy:p.strategy,reason});
       Object.assign(state,after);decision=reason;
+      state.lastDecisionReason='Virtual exit confirmed in ledger: '+reason;
+      state.evaluations=[{symbol:p.symbol,strategy:p.strategy,action:'sell',score:null,
+        outcome:'executed',reason}];
       emit(state,'paper-exit',reason+' virtual '+p.symbol,now,p.symbol);
       break;
     }
@@ -123,6 +130,15 @@ async function cycle(env,now=Date.now()){
           reason:'Market evidence unavailable'});
       signals.sort((a,b)=>b.score-a.score);
       state.signals=signals;
+      state.lastScannedSymbols=selected;
+      state.evaluations=signals.map(signal=>({
+        symbol:signal.symbol,strategy:signal.strategy,action:signal.action,score:signal.score,
+        outcome:signal.strategy==='market-error'?'market-unavailable'
+          :signal.action==='buy'?'candidate':'no-entry',
+        reason:signal.reason,
+      }));
+      // A total provider outage is an error, never a successful scan.
+      if(scanned.every(result=>result.status==='rejected'))throw new Error('all-market-scans-failed');
       const candidate=signals.find(s=>s.action==='buy' && s.score>=70);
       if(candidate){
         const budget=riskBudget(state,candidate,quotes);
@@ -132,6 +148,9 @@ async function cycle(env,now=Date.now()){
           const ticker=await market('/api/v3/ticker/price?symbol='+candidate.symbol);
           const last=Number(ticker.price);
           if(!(last>0) || Math.abs(last/candidate.price-1)>.02){
+            state.lastDecisionReason='Entry rejected: live quote unavailable or >2% from closed candle';
+            const entry=state.evaluations.find(row=>row.symbol===candidate.symbol);
+            if(entry){entry.outcome='blocked';entry.reason=state.lastDecisionReason;}
             emit(state,'risk-review','Quote drift >2% since closed candle; entry withheld',
               now,candidate.symbol);
           }else{
@@ -142,10 +161,30 @@ async function cycle(env,now=Date.now()){
               strategy:candidate.strategy,reason:candidate.reason,
               plan:exitPlan(price,candidate.atr,candidate.strategy)});
             Object.assign(state,next);decision='buy';
+            state.lastDecisionReason='Virtual buy confirmed in persistent journal';
+            const entry=state.evaluations.find(row=>row.symbol===candidate.symbol);
+            if(entry){entry.outcome='executed';entry.reason=state.lastDecisionReason;}
             emit(state,'paper-entry','Entry virtual '+candidate.symbol,now,candidate.symbol);
           }
-        }else emit(state,'risk-review','Entry blocked by deterministic risk gate',
-          now,candidate.symbol);
+        }else{
+          const positions=Object.keys(state.positions).length;
+          state.lastDecisionReason=state.halted?'risk-circuit-breaker'
+            :positions>=2?'maximum-open-positions'
+            :state.positions[candidate.symbol]?'existing-position'
+            :state.cash<10?'insufficient-virtual-cash'
+            :state.equity<=state.maxEquity*.95?'maximum-drawdown'
+            :state.dayLoss>=state.dayStartEquity*.03?'daily-loss-limit'
+            :'position-size-or-exposure-below-10-usdt';
+          const entry=state.evaluations.find(row=>row.symbol===candidate.symbol);
+          if(entry){entry.outcome='blocked';entry.reason=state.lastDecisionReason;}
+          emit(state,'risk-review','Entry blocked by deterministic risk gate: '+state.lastDecisionReason,
+            now,candidate.symbol);
+        }
+      }else if(signals.some(signal=>signal.action==='buy')){
+        state.lastDecisionReason='All entry signals below the minimum confidence score of 70';
+        for(const row of state.evaluations)if(row.outcome==='candidate'){
+          row.outcome='watch';row.reason=state.lastDecisionReason;
+        }
       }
     }
     const marks={...quotes};
@@ -155,13 +194,20 @@ async function cycle(env,now=Date.now()){
        state.dayLoss>=state.dayStartEquity*.03){
       state.enabled=false;state.halted=true;emit(state,'risk-halt','Drawdown/daily-loss circuit breaker',now);
     }
-    state.lastScan=now;state.lastError=null;state.failureCount=0;
+    if(state.lastScannedSymbols.length)state.lastScan=now;
+    state.lastCycleAt=now;state.lastDecision=decision;
+    state.lastError=null;state.failureCount=0;
     await write(env.DB,state);
     await flushEvents(env.DB,state);
     return {status:state.halted?'halted':'ok',slot,decision,scanned:selected.length,
       universe:state.universe.length,positions:Object.keys(state.positions).length};
   }catch(error){
-    state.lastError=error instanceof Error?error.message:'unknown-market-error';
+    // Do not persist or surface arbitrary provider/DB exception messages.
+    const raw=error instanceof Error?error.message:'unknown-market-error';
+    state.lastError=/^(all-market-scans-failed|insufficient-market-universe|bad-market-universe|market-rate-limited|market-http-[0-9]{3}|missing-position-mark|optimistic-lock-conflict|invalid-bars|missing-ledger)$/.test(raw)
+      ? raw:'cycle-execution-failed';
+    state.lastDecision='error';
+    state.lastDecisionReason=state.lastError;
     state.failureCount++;
     if(state.failureCount>=3){
       state.halted=true;state.enabled=false;
@@ -193,7 +239,12 @@ async function route(req,env){
   if(url.pathname==='/snapshot'&&req.method==='GET')
     return json({mode:'paper',revision:state.revision,enabled:state.enabled,halted:state.halted,
       cash:state.cash,equity:state.equity,realizedPnl:state.realized,
-      lastScan:state.lastScan,lastError:state.lastError,universeCount:state.universe.length,
+      lastScan:state.lastScan,lastAttempt:state.lastAttempt??0,
+      lastCycleAt:state.lastCycleAt??0,lastDecision:state.lastDecision??'not-run',
+      lastDecisionReason:state.lastDecisionReason??'No completed cycle',
+      lastScannedSymbols:state.lastScannedSymbols??[],
+      evaluations:state.evaluations??[],failureCount:state.failureCount,
+      lastError:state.lastError,universeCount:state.universe.length,
       positions:state.positions,signals:state.signals,journal:state.journal.slice(-50),
       warning:'Virtual trading only; software stops execute at the next Cron, not at Binance.'});
   if(url.pathname==='/events'&&req.method==='GET'){
