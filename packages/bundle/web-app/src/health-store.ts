@@ -5,7 +5,7 @@
  */
 import type { DatabaseSync } from 'node:sqlite'
 import { createRequire } from 'node:module'
-import { planInterview, type InterviewPlan } from '@phoenix-ai/dsh-tool-health/src/clinical-flow'
+import { planInterview, type InterviewPlan } from '@phoenix-ai/dsh-tool-health/src/clinical-flow.ts'
 import { createCipheriv, createDecipheriv, createHmac, randomBytes, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto'
 import { mkdirSync, chmodSync, readdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
