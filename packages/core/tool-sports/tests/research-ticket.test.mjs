@@ -92,7 +92,7 @@ const completedEvent=(id,day,offset)=>({
 })
 const nbaFixtureBoard=(url,at,count)=>{
   if(!String(url).includes('/basketball/nba/'))return {events:[]}
-  const match=String(url).match(/dates=(\\d{8})/u)
+  const match=String(url).match(/dates=([0-9]{8})/u)
   const key=match?.[1]??''
   const target=dayOf(at)
   if(key===target.replaceAll('-',''))return {events:Array.from({length:count},(_,i)=>recordEvent(301+i,at))}
