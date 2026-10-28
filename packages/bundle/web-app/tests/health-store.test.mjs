@@ -452,10 +452,21 @@ test('critical laboratory report atomically creates exactly one urgent encrypted
   assert.equal(tasks[0].patientId,patient.id)
   assert.equal(tasks[0].assignedTo,'doctor1')
   assert.equal(tasks[0].status,'pending')
+  assert.throws(()=>db.update(admin.actor,'followups',tasks[0].id,tasks[0].version,
+    {status:'done'}),/médico responsable/)
+  assert.throws(()=>db.update(doctor,'followups',tasks[0].id,tasks[0].version,
+    {status:'done'}),/revisar el resultado crítico/)
+  assert.throws(()=>db.update(doctor,'followups',tasks[0].id,tasks[0].version,
+    {status:'cancelled'}),/solo admite cierre/)
   assert(!readFileSync(join(root,'clinic.sqlite')).includes(Buffer.from('Resultado crítico pendiente')))
   assert.throws(()=>db.list(lab,'followups'),/Permiso/)
   assert.throws(()=>db.update(lab,'orders',o.id,o.version,{
     action:'result',result:'Duplicate',critical:true}),/Transición/)
   assert.equal(db.list(doctor,'followups').filter(x=>x.priority==='urgent').length,1)
   assert(db.audits(admin.actor).some(x=>x.action==='critical.followup.created'))
+  o=db.update(doctor,'orders',o.id,o.version,{action:'review',criticalAcknowledged:true})
+  const closed=db.update(doctor,'followups',tasks[0].id,tasks[0].version,{status:'done'})
+  assert.equal(closed.status,'done')
+  assert.equal(closed.completedBy,'doctor1')
+  assert.equal(db.list(doctor,'followups').filter(x=>x.status==='pending'&&x.priority==='urgent').length,0)
 })

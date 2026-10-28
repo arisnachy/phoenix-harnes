@@ -821,6 +821,17 @@ export class HealthClinicStore {
       const status=str(x.status,'Estado',24)
       if(kind==='appointments'&&!['scheduled','completed','cancelled'].includes(status))fail('Estado inválido')
       if(kind==='followups'&&!['pending','done','cancelled'].includes(status))fail('Estado inválido')
+      if(kind==='followups'&&current.origin==='critical-result'){
+        if(current.status!=='pending'||status!=='done')fail('Seguimiento crítico solo admite cierre documentado')
+        if(actor.role!=='clinician'||current.assignedTo!==actor.username)
+          fail('Solo el médico responsable puede cerrar un seguimiento crítico')
+        const sourceId=str(current.sourceOrderId,'Orden crítica',80)
+        const source=this.find(actor,'orders',sourceId).data
+        if(source.status!=='reviewed'||source.reviewedBy!==actor.username||
+            source.critical!==true||source.patientId!==current.patientId)
+          fail('El médico debe revisar el resultado crítico antes de completar el seguimiento')
+        return { ...current,status,completedBy:actor.username,completedAt:new Date().toISOString() }
+      }
       return { ...current,status }
     })
     fail('Actualización no habilitada')

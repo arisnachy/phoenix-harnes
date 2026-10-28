@@ -92,7 +92,11 @@ function actionFor(o){
  if(tab==="inventory")actions=[["receive","Movimiento"]];
  if(tab==="invoices")actions=[["pay","Cobrar"]];
  if(tab==="appointments"&&o.status==="scheduled")actions=[["completeAppointment","Completar"],...(actor.role==="clinician"&&o.practitioner===actor.username?[["sendReminder","Kira: enviar recordatorio"]]:[])];
- if(tab==="followups"&&o.status==="pending")actions=[["finishFollowup","Completar"]];
+ if(tab==="followups"&&o.status==="pending"){
+  if(o.origin!=="critical-result")actions=[["finishFollowup","Completar"]];
+  else if(actor.role==="clinician"&&o.assignedTo===actor.username)
+    actions=[["finishFollowup","Cerrar gestión crítica"]];
+ }
  return actions.map(a=>'<button class="secondary" data-act="'+a[0]+'" data-id="'+safe(tab==="assignments"?o.patientId+"|"+o.staffId:o.id)+'">'+a[1]+'</button>').join("");
 }
 function render(){
