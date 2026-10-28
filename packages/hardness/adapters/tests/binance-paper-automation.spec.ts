@@ -28,7 +28,7 @@ function breakoutHistory(): BinanceCandle[] {
   })
 }
 
-function setup(market?: BinancePublicMarket) {
+function setup(market?: BinancePublicMarket, discover?: () => Promise<readonly string[]>) {
   const folder = mkdtempSync(join(tmpdir(), 'phoenix-paper-auto-'))
   folders.push(folder)
   const feed: BinancePublicMarket = market ?? {
@@ -38,7 +38,7 @@ function setup(market?: BinancePublicMarket) {
   }
   const paper = new BinancePaperBroker(join(folder, 'ledger.json'), feed)
   const settings = join(folder, 'auto.json')
-  const worker = new BinancePaperAutomation(paper, settings)
+  const worker = new BinancePaperAutomation(paper, settings, discover)
   workers.push(worker)
   return { paper, settings, worker, feed }
 }
@@ -117,6 +117,36 @@ describe('Binance Host PAPER automation', () => {
       'DOGEUSDT','LINKUSDT','AVAXUSDT','TRXUSDT','DOTUSDT','LTCUSDT']
     expect(binancePaperAutomationConfig({ symbols }).symbols).toHaveLength(12)
     expect(() => binancePaperAutomationConfig({ symbols: [...symbols, 'ATOMUSDT'] })).toThrow('1-12')
+  })
+
+  it('rotates a liquid discovered universe while preserving pinned pairs and counts actual scans', async () => {
+    const universe = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'LTCUSDT', 'DOTUSDT', 'ADAUSDT',
+      'AVAXUSDT', 'XRPUSDT', 'LINKUSDT', 'BNBUSDT', 'TRXUSDT', 'DOGEUSDT',
+      'ATOMUSDT', 'UNIUSDT', 'NEARUSDT', 'ETCUSDT', 'AAVEUSDT']
+    let discoveryCalls = 0
+    const { worker } = setup(undefined, async () => { discoveryCalls++; return universe })
+    await worker.start({ symbols: universe.slice(0, 3), autoDiscover: true })
+    const first = await worker.dashboard()
+    expect(first.settings.autoDiscover).toBe(true)
+    expect(first.universeSize).toBe(universe.length)
+    expect(first.lastScannedSymbols).toHaveLength(12)
+    expect(first.successfulCycles).toBe(1)
+    expect(first.filledCycles).toBeGreaterThanOrEqual(0)
+    await worker.step()
+    const next = await worker.dashboard()
+    expect(next.successfulCycles).toBe(2)
+    expect(next.lastScannedSymbols.slice(0, 3)).toEqual(universe.slice(0, 3))
+    expect(next.lastScannedSymbols).not.toEqual(first.lastScannedSymbols)
+    expect(discoveryCalls).toBe(1)
+  })
+
+  it('falls back to the pinned watchlist if market discovery is unavailable', async () => {
+    const { worker } = setup(undefined, async () => { throw new Error('offline provider') })
+    await worker.start({ symbols: ['BTCUSDT', 'ETHUSDT'], autoDiscover: true })
+    const view = await worker.dashboard()
+    expect(view.lastScannedSymbols).toEqual(['BTCUSDT', 'ETHUSDT'])
+    expect(view.lastDiscoveryIssue).toContain('lista fija')
+    expect(view.successfulCycles).toBe(1)
   })
 
   it('rejects invalid cadence and watchlists before scheduling', () => {

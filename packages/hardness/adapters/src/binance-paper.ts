@@ -5,7 +5,7 @@ import { dirname } from 'node:path'
 const DEFAULT_INITIAL_CASH_USDT = 10_000
 const DEFAULT_FEE_RATE = 0.001
 const MAX_TRADES_RETAINED = 10_000
-const BINANCE_PUBLIC_API = 'https://api.binance.com'
+const BINANCE_PUBLIC_API = 'https://data-api.binance.vision'
 const SUPPORTED_INTERVALS = new Set([
   '1s', '1m', '3m', '5m', '15m', '30m', '1h', '2h', '4h', '6h', '8h',
   '12h', '1d', '3d', '1w', '1M',

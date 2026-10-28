@@ -1,5 +1,6 @@
 /** Read-only sports information adapters for Kira's conversation tools. */
 import { fetchPublicEspnOdds } from './espn-odds.ts'
+import { fetchTheOddsApi } from './free-odds.ts'
 import { enrichMlbMatch } from './mlb-matchup.ts'
 import { researchMlbTrend } from './mlb-research.ts'
 export const sportsCatalog: Readonly<Record<string, readonly string[]>> = {
@@ -246,7 +247,9 @@ export async function chatGames(sport:string,league:string,requestedDate?:string
           away:String(v.displayValue??v.value??'—'),home:String(homePeriods[i]?.displayValue??homePeriods[i]?.value??'—') })):[]
       const sportNames:Record<string,string>={ soccer:'Fútbol',basketball:'Baloncesto',football:'Fútbol americano',hockey:'Hockey',
         tennis:'Tenis',mma:'MMA',racing:'Automovilismo',golf:'Golf',baseball:'Béisbol' }; const sportLabel=sportNames[sport]||sport
-      const highlights = (comp?.competitors ?? []).flatMap(team =>
+      // NBA competitor.leaders is not a verified CURRENT roster: do not misattribute athletes.
+      // A roster-validated player surface will restore these cards separately.
+      const highlights = (sport==='basketball'&&league==='nba')?[]:(comp?.competitors ?? []).flatMap(team =>
         (team.leaders ?? []).slice(0, 2).flatMap(group =>
           (group.leaders ?? []).slice(0, 1).map((leader) => {
             const headshot = leader.athlete?.headshot?.href
@@ -271,6 +274,7 @@ export async function chatGames(sport:string,league:string,requestedDate?:string
         sport,
         ...(e.id !== undefined && String(e.id).trim() !== '' ? { eventId: String(e.id) } : {}),
         periods, highlights,
+        ...(sport==='basketball'&&league==='nba'?{ note:'Jugadores destacados omitidos hasta verificar su pertenencia a las plantillas vigentes.' }:{}),
         ...(comp?.broadcasts?.length?{ broadcast:comp.broadcasts.flatMap(x=>x.names??[]).slice(0,3).join(', ') }:{}),
         askPrompt:'Kira, amplía el análisis verificado del evento '+title(e.id,50)+' de '+league+'. Incluye métricas específicas de '+sport+' con sus fuentes.',
       } })
@@ -292,7 +296,9 @@ export type MarketOutcome = MarketSelection & { price:number;home:string;away:st
 export async function marketOdds(sportKey:string,markets='h2h',env:NodeJS.ProcessEnv=process.env,fetcher:typeof fetch=fetch):Promise<MarketOutcome[]> {
   if(!/^[a-z0-9_]{3,80}$/u.test(sportKey)||!/^(h2h|totals|spreads)(,(h2h|totals|spreads))*$/u.test(markets))throw Error('Mercado inválido')
   if(!hasSportsPermission('odds',env)){
-    if(!hasSportsPermission('espn',env))throw Error('Sin proveedor de cuotas disponible: ESPN deshabilitado y THE_ODDS_API_KEY ausente.')
+    const alternateKey=env.THEODDSAPI_API_KEY
+    if(alternateKey?.trim())return fetchTheOddsApi(sportKey,markets,alternateKey,fetcher)
+    if(!hasSportsPermission('espn',env))throw Error('No hay proveedor de cuotas: ESPN deshabilitado, THE_ODDS_API_KEY y THEODDSAPI_API_KEY ausentes.')
     const fromEspn=await fetchPublicEspnOdds(sportKey,markets,<T>(url:string)=>getFeed<T>(url,fetcher))
     return fromEspn.map(quote=>({ ...quote,sportKey,source:'ESPN Site/Core (sin clave)' }))
   }
@@ -332,7 +338,8 @@ export function pricedTicket(selections:MarketSelection[],quotes:MarketOutcome[]
   return { warning,card:{ component:'sports_ticket_card',version:1,props:{
     title:'PHOENIX · Ticket de análisis',subtitle:'Cuotas consultadas en proveedor real · '+new Date().toISOString(),
     legs,combinedOdds:combined.toFixed(3),stake:stake?stake.toFixed(2):undefined,grossReturn:stake?(stake*combined).toFixed(2):undefined,
-    source:legs.length&&quotes.some(q=>q.source?.includes('ESPN'))?'ESPN Site/Core (cuotas públicas cuando ESPN las publique)':'The Odds API · precios de las casas indicadas',note:'SIMULACIÓN, SIN APUESTA REAL. '+warning+' Las cuotas pueden cambiar; no existe garantía de ganar.',
+    source:legs.length&&quotes.some(q=>q.source?.includes('ESPN'))?'ESPN Site/Core (cuotas públicas cuando ESPN las publique)':
+      quotes.some(q=>q.source==='TheOddsAPI')?'TheOddsAPI · cuotas de casas identificadas':'The Odds API · precios de las casas indicadas',note:'SIMULACIÓN, SIN APUESTA REAL. '+warning+' Las cuotas pueden cambiar; no existe garantía de ganar.',
     askPrompt:'Kira, revisa este ticket con datos actuales, riesgos, ausencias y correlaciones antes de recomendar nada.',
   } } }
 }

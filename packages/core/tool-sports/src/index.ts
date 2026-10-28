@@ -6,16 +6,18 @@ import { sportsCatalog, discoverEspnLeagues, chatGames, compactSportsSchedule, m
 import { getMlbPitcherReport } from './mlb.ts'
 import { researchTicket, autoResearchTicket, type ResearchTicketLeg } from './research-ticket.ts'
 import { sportsPromptNeeded } from './sports-prompt.ts'
+import { researchNbaSlate } from './nba-research.ts'
 
 export const name = 'tool-sports'
 export const inject = ['tools','systemPrompt']
 const GUIDANCE = [
-  'Solo cuando el usuario pida deportes, juegos del día, jugadores, cuotas o tickets, consulta las herramientas sports_chat_catalog, sports_chat_discover, sports_chat_games, sports_chat_mlb_pitchers, sports_chat_odds, sports_chat_ticket, sports_chat_ticket_research o sports_chat_ticket_research_auto.',
+  'Solo cuando el usuario pida deportes, juegos del día, jugadores, cuotas o tickets, consulta las herramientas sports_chat_catalog, sports_chat_discover, sports_chat_games, sports_chat_mlb_pitchers, sports_chat_odds, sports_chat_ticket, sports_chat_ticket_research, sports_chat_ticket_research_auto o sports_chat_nba_research.',
   'NO abras pantallas independientes ni crees entradas de menú. Antes de redactar una cartelera o boleto, llama sports_chat_games y, cuando corresponda, sports_chat_mlb_pitchers / sports_chat_odds / sports_chat_ticket. Phoenix dibuja de manera nativa las tarjetas verificadas de los resultados. NO copies el JSON de los resultados en la respuesta, NO escribas fences generative-ui ni bloques de código, aunque una herramienta los incluya en sus datos. No dibujes tickets con caracteres ASCII, bordes de texto ni bloques de código etiquetados text: para eventos y selecciones reales usa exclusivamente los contratos nativos, conservando la presentación original de Phoenix. Si el usuario quiere solo una demostración, descríbela explícitamente como ficticia y no introduzcas cuotas o equipos inventados como hechos. Explica los hallazgos y las fuentes con un texto humano breve.',
+  'INVESTIGACIÓN NBA: antes de defender cualquier favorito o selección NBA, consulta sports_chat_nba_research (y sports_chat_odds cuando existan cuotas). Contrasta forma en marcadores finales, márgenes, descanso y muestra; revisa además informe oficial de lesiones, rotaciones, estadísticas avanzadas, rival, localía y movimiento de precios desde fuentes autorizadas. Lo no consultado debe permanecer explícitamente SIN VERIFICAR. No transformes la forma descriptiva en porcentajes de victoria ni cites atletas que no tengan plantilla actual confirmada. Un ticket automático se considera SOLO una preselección, nunca una investigación completa.',
   'Cuando el usuario pida una cartelera, deja que sports_chat_games entregue una sola cartelera compacta en el chat con hasta 25 encuentros reales. Para un partido, cruce o equipo concreto, pasa team, opponent o eventId a sports_chat_games: así se mantiene la sports_game_card detallada existente. No cambies el menú, la página ni la caja del chat. Nunca inventes eventos, cuotas, lanzadores, lesiones ni resultados ausentes.',
   'CONTRATO DE PATAS: cuando el usuario pide 5 patas, el resultado DEBE contener exactamente cinco selecciones verificadas; jamás presentes 1 de 5 como ticket completo. Si faltan datos, muestra explícitamente el número conseguido y el número pendiente como borrador incompleto. Respeta igualmente cualquier otro número de 1 a 6. No afirmes que una combinada ganará.',
-  'Si piden un ticket y sports_chat_odds no devuelve cuotas, NO termines con NO BET. Usa sports_chat_ticket_research_auto con count igual al número solicitado cuando no dispongas de IDs: esta herramienta investiga carteleras y registros de los equipos en varias ligas y propone hasta esa cantidad de eventos reales, sin cuotas. Si la investigación especializada ya confirmó tus eventId y fundamentos, llama sports_chat_ticket_research con requestedLegs igual al número solicitado y todas las patas. El resultado con menos patas debe identificarse como borrador incompleto. No afirmes que los registros tempranos sean probabilidades calibradas. Si no hay partidos futuros verificados, explica la limitación.',
-  'Usa ESPN Site/Core como proveedor gratuito para marcadores y, cuando ESPN los publique, moneylines sin claves; usa The Odds API solo como opción ampliada si existe THE_ODDS_API_KEY. Si ESPN no presenta cuotas, no inventes precios: sports_chat_ticket_research ofrece un ticket de pronósticos sin cotización basado en encuentros futuros verificados. sports_chat_ticket es un ticket COTIZADO y solo puede usar precios del proveedor consultados en ese momento. Ambos son simulaciones; no hay garantía de acierto. Identifica correlaciones y ausencia de predicción calibrada.',
+  'Si solicitan un ticket y no hay cuotas, primero investiga las fuentes disponibles; para NBA llama sports_chat_nba_research. sports_chat_ticket_research_auto sirve SOLO para un borrador HEURÍSTICO de eventos cuando no haya IDs, nunca como prueba de ventaja real. Después, si hay evidencias por evento, usa sports_chat_ticket_research con los IDs confirmados, el número exacto de patas y un fundamento trazable; si hay cuotas verificadas, usa sports_chat_ticket para la simulación cotizada. Si la evidencia es insuficiente, identifica las patas como tentativas y explica exactamente qué falta. No digas que hiciste análisis de lesiones o eficiencia si no los consultaste.',
+  'Usa ESPN Site/Core como proveedor público para marcadores y moneylines cuando se publiquen. Hay DOS proveedores comerciales distintos, opcionales: TheOddsAPI (api.theoddsapi.com, THEODDSAPI_API_KEY, acceso gratuito con cupo) y The Odds API v4 (api.the-odds-api.com, THE_ODDS_API_KEY); no confundas claves, endpoints ni formatos. Si ambos están configurados, prioriza THE_ODDS_API_KEY como se implementó en marketOdds. Si ESPN no presenta cuotas, no inventes precios: sports_chat_ticket_research ofrece un ticket de pronósticos sin cotización basado en encuentros futuros verificados. sports_chat_ticket es un ticket COTIZADO y solo puede usar precios del proveedor consultados en ese momento. Ambos son simulaciones; no hay garantía de acierto. Identifica correlaciones y ausencia de predicción calibrada.',
   'Los datos deben indicar su fuente, fecha y zona horaria, y adaptar el detalle a cada deporte. Cuando el usuario pida favoritos, muestra primero los encuentros reales con escudos, horarios, país y liga (si son conocidos), y solo después una tendencia propia sustentada en investigación verificable; una cuota baja no prueba cuál equipo es favorito de tu modelo. En tickets separa visualmente por deporte, país y liga y, si hay un mercado de jugador respaldado por el proveedor, muestra también el jugador; no inventes nombres, mercados ni fotos. Los tickets heredan el tema claro/oscuro de Phoenix. Nunca presentes porcentajes de ESPN como estimaciones propias ni afirmes un porcentaje sin calibración.',
 ].join(' ')
 
@@ -77,14 +79,38 @@ export function apply(ctx: Context): void {
         if(args.opponent&&!matches(home?.label,args.opponent)&&!matches(away?.label,args.opponent))return false
         return true
       })
-      const slate=compactSportsSchedule(selected,result.date,result.source)
-      const uiBlocks=slate?[slate]:selected.slice(0,1)
+      const listMode=!args.team&&!args.opponent&&!args.eventId
+      const slate=listMode?compactSportsSchedule(selected,result.date,result.source):null
+      const uiBlocks=slate?[slate]:selected.slice(0,6)
       return JSON.stringify({summary:selected.length?result.summary:'Ningún encuentro coincide con esos filtros.',
         date:result.date,source:result.source,count:selected.length,uiBlocks,
-        remaining:Math.max(0,selected.length-25),
+        remaining:Math.max(0,selected.length-(slate?25:6)),
         instruction:'Phoenix renderiza uiBlocks automáticamente en el chat. Presenta varios partidos en una sola cartelera; un encuentro individual conserva su sports_game_card original. No imprimas JSON ni repliques las tarjetas en prosa.' })
     },
     presentCall:()=>({ card:'generic',title:'Buscar partidos y sus datos',kind:'read' as const }),
+  }))
+  ctx.tools.register(defineTool({
+    name:'sports_chat_nba_research',
+    description:'Investiga la forma NBA con marcadores FINALIZADOS de las últimas fechas: últimos resultados, márgenes de puntos, descanso, calidad de muestra y evidencia ausente. No infiere lesiones, cuotas ni probabilidades.',
+    parameters:{
+      date:{ type:'string',description:'Fecha del partido en Santo Domingo, AAAA-MM-DD; defecto hoy.' },
+      eventId:{ type:'string',description:'ID real ESPN NBA; si se omite investiga hasta seis encuentros futuros.' },
+      lookbackDays:{ type:'integer',description:'Histórico diario, 1-21 días; por defecto 14. Una consulta por fecha compartida entre los encuentros.' },
+    },
+    output:{ schema:{ type:'string' },render:(_a,v)=>[{ type:'text' as const,text:v }] },
+    isConcurrencySafe:()=>true,
+    async execute(args){
+      const report=await researchNbaSlate(args.date,args.eventId,fetch,Date.now(),process.env,args.lookbackDays??14)
+      return JSON.stringify({ ...report,
+        matches:report.matches.map(m=>({
+          ...m,
+          home:{ ...m.home,recentResults:m.home.recentResults.slice(0,5) },
+          away:{ ...m.away,recentResults:m.away.recentResults.slice(0,5) },
+        })),
+        instruction:'Datos calculados desde partidos concluidos, NO una predicción de acierto. Evalúa lesiones confirmadas, titulares, eficiencia, cuotas actuales y valor esperado antes de elegir; las ausencias de evidencia permanecen explícitas. No atribuyas nombres de jugadores sin comprobar su plantilla.',
+      })
+    },
+    presentCall:()=>({ card:'generic',title:'Investigar forma y descanso NBA',kind:'read' as const }),
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_mlb_pitchers',
@@ -104,7 +130,7 @@ export function apply(ctx: Context): void {
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_odds',
-    description:'Busca cuotas públicas ESPN sin clave o The Odds API si está configurada; puede devolver vacío cuando ESPN no publica precios.',
+    description:'Busca cuotas públicas ESPN sin clave, el proveedor de nivel gratuito TheOddsAPI con THEODDSAPI_API_KEY o The Odds API v4 con THE_ODDS_API_KEY; mercados y cuota dependen de cada proveedor.',
     parameters:{
       sportKey:{ type:'string',required:true,description:'Clave del proveedor: baseball_mlb, basketball_nba, soccer_epl, etc.' },
       markets:{ type:'string',description:'h2h, totals o spreads. Por defecto h2h.' },
@@ -134,15 +160,15 @@ export function apply(ctx: Context): void {
           },
         }]
       })
-      return JSON.stringify({ uiBlocks,source:quotes[0]?.source||'ESPN público (sin cuotas disponibles) / The Odds API opcional',observedAt:new Date().toISOString(),outcomes:quotes.slice(0,120),
+      return JSON.stringify({ uiBlocks,source:quotes[0]?.source||'ESPN público (sin cuotas disponibles) / TheOddsAPI o The Odds API v4 opcionales',observedAt:new Date().toISOString(),outcomes:quotes.slice(0,120),
         total:quotes.length,remaining:Math.max(0,quotes.length-120),
-        note:quotes.length?'Cuotas verificadas, no probabilidades propias. Actualizar antes de componer tickets.':'ESPN no publicó moneylines accesibles para ese día y mercado; no hace falta una clave para ver partidos. Las cuotas faltantes no se inventan.' })
+        note:quotes.length?'Cuotas verificadas, no probabilidades propias. Actualizar antes de componer tickets.':'No hubo cotizaciones accesibles con los proveedores configurados. ESPN puede mostrar partidos sin moneylines; TheOddsAPI y The Odds API requieren claves diferentes, y pueden aplicar límites. No se inventan precios.' })
     },
     presentCall:()=>({ card:'generic',title:'Comparar cuotas',kind:'read' as const }),
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_ticket_research_auto',
-    description:'Descubre partidos futuros en varias ligas públicas ESPN y propone hasta el número EXACTO de patas solicitado. No pide IDs al modelo, no inventa cuotas y etiqueta el borrador como INCOMPLETO si no consigue todas.',
+    description:'PRESELECCIÓN HEURÍSTICA: para NBA exige además resultados completos, margen y descanso, pero NO es probabilidad calibrada ni análisis de lesiones o cuotas; para otros deportes usa récords descriptivos. Respeta el número de patas y marca faltantes.',
     parameters:{
       count:{ type:'integer',required:true,description:'Número de patas que pidió el usuario: de 1 a 6; por ejemplo 5 si pidió un ticket de 5 patas.' },
       date:{ type:'string',description:'Fecha de los partidos AAAA-MM-DD; por defecto hoy en Santo Domingo.' },
@@ -153,7 +179,7 @@ export function apply(ctx: Context): void {
       const result=await autoResearchTicket(args.count,args.date)
       return JSON.stringify({ uiBlock:result.card,verifiedEvents:result.verifiedEvents,
         requestedLegs:args.count,complete:result.complete,priced:false,placed:false,
-        instruction:result.complete?'Ticket completo de eventos verificados. Describe el razonamiento como tendencia, no certeza.':
+        instruction:result.complete?'Eventos verificados, preselección HEURÍSTICA. NBA requiere marcadores y descanso verificados; aún faltan lesiones, métricas avanzadas y cuotas. No afirmar probabilidad calibrada ni investigación completa.':
           'BORRADOR INCOMPLETO: explica cuántas patas faltan; no digas que cumpliste el número solicitado. Amplía investigación para completar el ticket.' })
     },
     presentCall:()=>({ card:'generic',title:'Investigar ticket con número de patas',kind:'read' as const }),

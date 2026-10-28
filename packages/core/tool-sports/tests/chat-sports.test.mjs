@@ -200,6 +200,19 @@ test('sportsbook taxonomy groups sourced sports, countries and leagues without i
   assert.doesNotMatch(result.warning,/mismo encuentro/)
 })
 
+test('NBA scoreboard does not attribute an unverified player to the wrong team',async()=>{
+  const bad=await response({events:[{id:'9201',date:'2026-10-28T23:00:00Z',name:'Heat vs Hawks',
+    status:{type:{state:'pre',description:'Previa'}},competitions:[{competitors:[
+      {homeAway:'home',team:{id:'1',displayName:'Atlanta Hawks'},leaders:[{name:'pointsPerGame',
+        leaders:[{athlete:{displayName:'Unverified Player'},displayValue:'28.5'}]}]},
+      {homeAway:'away',team:{id:'2',displayName:'Miami Heat'}},
+    ]}]}]})
+  const report=await chatGames('basketball','nba','2026-10-28',{},bad)
+  const card=report.items[0]
+  assert.deepEqual(card.props.highlights,[])
+  assert.match(card.props.note,/plantillas vigentes/)
+  assert.ok(!JSON.stringify(card).includes('Unverified Player'))
+})
 
 test('multi-game scoreboard is compact while individual matchup cards remain unchanged',async()=>{
   const mock=await response({events:[

@@ -35,6 +35,7 @@ Binance is an optional, on-demand connector. Keep it dormant unless the user's t
 
 4. Autonomy is scheduled/event-driven, not an always-awake LLM.
 - Use binance_adaptive_cycle to evaluate a bounded Spot USDT watchlist. Scan does not trade; paper-step may execute one VIRTUAL, risk-limited action.
+- When the user asks to search broadly for autonomous PAPER opportunities (not only a fixed watchlist), set autoDiscover=true on binance_paper_auto START. The Host discovers up to 120 verified liquid Spot USDT pairs without API keys and rotates at most 12 per minute, retaining the user's priority symbols. Inspect binance_paper_dashboard counters and rationale when the system has no fills for hours; do not lower minimum signal quality or invent a trade.
 - For automated PAPER, accept up to 12 user-selected USDT pairs; all are evaluated independently on fresh verified candles. Default conservatively to BTCUSDT, ETHUSDT and SOLUSDT when no explicit watchlist was provided. A missing pair must show HOLD, not a fabricated price.
 - Kira can supervise through a durable Phoenix wake trigger, created on explicitly requested chat-initiated PAPER automation; significant virtual fills, high-scored blocked entries or circuit-breaker errors can wake Kira for a bounded review, not on every candle. A browser-only start without an originating Kira session is not equivalent to an agent subscription.
 - When the user explicitly requests automated PAPER trading, binance_paper_auto starts or stops the Host-side virtual executor; its interval checks do not call an LLM.
