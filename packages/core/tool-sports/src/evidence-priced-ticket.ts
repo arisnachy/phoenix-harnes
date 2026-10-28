@@ -49,17 +49,21 @@ export async function evidencePricedTicket(
   const all=sources.flatMap(s=>s.status==='fulfilled'?s.value.quotes:[])
   const groups:KeylessQuote[][]=research.events.map(event=>{
     const kickoff=Date.parse(event.kickoff)
+    const doubleChance=event.sport==='soccer'&&marketPreference==='double_chance'
+    const expectedMarket=doubleChance?'double_chance':event.sport==='soccer'?'1x2':'h2h'
     return all.filter(q=>{
       const updated=Date.parse(q.updatedAt),quoteKickoff=Date.parse(q.time)
       return Number.isFinite(kickoff)&&Number.isFinite(updated)&&Number.isFinite(quoteKickoff)
         &&Math.abs(kickoff-quoteKickoff)<=3_600_000
         &&now-updated>=0&&now-updated<=3_600_000
+        &&typeof q.bookmaker==='string'&&q.bookmaker.trim().length>0
+        &&typeof q.eventId==='string'&&q.eventId.length>0
+        &&Number.isFinite(q.price)&&q.price>1&&q.price<1000
         &&normalize(q.home)===normalize(event.home)
         &&normalize(q.away)===normalize(event.away)
-        &&(event.sport==='soccer'&&marketPreference==='double_chance'
-          ?q.market==='double_chance'&&q.selection===(event.pick==='home'?'1X':'X2')
-          :q.market!=='totals'&&normalize(q.selection)===
-            normalize(event.pick==='home'?event.home:event.away))
+        &&q.market===expectedMarket
+        &&(doubleChance?q.selection===(event.pick==='home'?'1X':'X2'):
+          normalize(q.selection)===normalize(event.pick==='home'?event.home:event.away))
     })
   })
   const quotedLegs=groups.filter(g=>g.length>0).length
