@@ -24,6 +24,6 @@ PHOENIX 的无密钥搜索提供程序。按顺序查询 Bing HTML 和 DuckDuckG
 
 ## Known Limitations and Deferred Work
 
-- 公共 HTML 搜索可能返回 CAPTCHA、地区化结果或变化的标记；提供程序会尝试下一个引擎并有界失败。
+- 公共 HTML 搜索可能返回 CAPTCHA、地区化结果或变化的标记；提供程序可处理属性重排、DuckDuckGo 重定向链接和无摘要的结果，随后尝试下一个引擎并有界失败。
 - 它不替代有可用性保证的 API，也不提供 JavaScript 导航；独立的 Chrome 提供程序可以补足这一能力。
 - 使用返回内容作为证据前必须核验页面。
