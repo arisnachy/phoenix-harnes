@@ -160,6 +160,12 @@ export function registerHealthRoutes(ctx:Context):void {
         if(method==='POST'){store.createStaff(actor,await readBody(req));reply(res,201,{ok:true});return}
       }
       if(operation==='audit'&&method==='GET'){reply(res,200,{items:store.audits(actor)});return}
+      if(operation==='dispense'&&method==='POST'&&id!==undefined){
+        const body=await readBody(req)
+        if(typeof body.inventoryId!=='string')throw new Error('Producto no válido')
+        const receipt=store.dispense(actor,id,body.inventoryId)
+        reply(res,200,{dispensed:true,prescriptionId:receipt.prescription.id,remainingUnits:receipt.inventory.units});return
+      }
       if(operation==='reminders'&&method==='GET'){
         reply(res,200,{items:store.reminders(actor),senderConfigured:!!process.env.PHOENIX_HEALTH_KIRA_SENDER});return
       }

@@ -173,7 +173,7 @@ export class HealthClinicStore {
     return rows.map(row=>({id:row.id,version:row.version,createdAt:row.created_at,updatedAt:row.updated_at,...this.open(row)}))
       .filter(item=>kind!=='orders'||actor.role!=='lab'&&actor.role!=='radiology'||
         item.modality===(actor.role==='lab'?'laboratory':'imaging'))
-      .filter(item=>kind!=='encounters'||!/(?:psicolog|psycholog|psicoterapi)/iu.test(String(item.specialty))||
+      .filter(item=>kind!=='encounters'||!/(?:psic[oó]log|psycholog|psicoterapi)/iu.test(String(item.specialty))||
         actor.role==='psychologist'&&item.practitioner===actor.username)
   }
   private audit(actor:Actor,action:string,id:string):void {

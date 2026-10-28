@@ -61,13 +61,14 @@ async function load(){
  if(!resources.some(x=>x[0]===tab))tab="patients";
  root.innerHTML='<main><aside>'+resources.map(x=>'<button data-tab="'+x[0]+'" class="'+(x[0]===tab?'active':'')+'">'+x[1]+'</button>').join('')+
  '</aside><section><div id="view"><div class="card">Cargando…</div></div></section></main>';
- const ids=tab==="orders"?["orders","encounters"]:tab==="prescriptions"?["prescriptions","encounters"]:tab==="encounters"?["encounters","patients"]:tab==="appointments"?["appointments","patients"]:tab==="invoices"?["invoices","patients"]:tab==="followups"?["followups","patients"]:["patients",tab];
+ const ids=tab==="orders"?["orders","encounters"]:tab==="prescriptions"?["prescriptions","encounters","inventory"]:tab==="encounters"?["encounters","patients"]:tab==="appointments"?["appointments","patients"]:tab==="invoices"?["invoices","patients"]:tab==="followups"?["followups","patients"]:["patients",tab];
  for(const id of new Set(ids)){try{data[id]=(await api(id)).items}catch{data[id]=[]}}
  render()
 }
 function actionFor(o){
  let actions=[];
  if(tab==="encounters"&&o.status!=="signed"&&o.practitioner===actor.username)actions=[["document","Documentar"],["review","Revisar"],["sign","Firmar"]];
+ if(tab==="prescriptions"&&actor.role==="pharmacy"&&o.status==="prescribed")actions=[["dispense","Dispensar"]];
  if(tab==="orders")actions=o.status==="ordered"?[["result","Resultado"]]:o.status==="resulted"?[["reviewOrder","Revisar"]]:[];
  if(tab==="inventory")actions=[["receive","Movimiento"]];
  if(tab==="invoices")actions=[["pay","Cobrar"]];
@@ -127,6 +128,13 @@ async function execute(action,id){
    staff:{username:val("username"),password:val("password"),role:val("role")},
   };
   await api(tab,"POST",v[tab]);notice("Operación guardada en el expediente cifrado.");return load()
+ }
+ if(action==="dispense"){
+  const rx=data.prescriptions?.find(x=>x.id===id);
+  const stock=(data.inventory||[]).find(x=>x.item===rx?.medication&&x.units>0);
+  if(!rx||!stock)throw Error("No existe un producto correspondiente con existencias.");
+  if(!confirm("¿Confirma la dispensación farmacéutica de esta receta firmada? Se descontará una unidad del inventario."))return;
+  await api("dispense/"+rx.id,"POST",{inventoryId:stock.id});notice("Dispensación registrada y existencias actualizadas.");return load();
  }
  if(action==="sendReminder"){
   if(!confirm("¿Confirma el profesional el recordatorio de cita al correo verificado, con consentimiento registrado? Se enviará realmente desde la cuenta institucional de Kira si está conectada."))return;
