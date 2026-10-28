@@ -4,7 +4,7 @@ import {join} from 'node:path'
 import {afterEach,describe,expect,it} from 'vitest'
 import {BinanceTestnetAutomation} from '../src/binance-testnet-automation.ts'
 import type {BinanceSpotTestnet,BinanceTestnetOrderReceipt} from '../src/binance-spot-testnet.ts'
-import type {BinancePublicMarket,BinanceCandle} from '../src/binance-paper.ts'
+import type {BinanceCandle} from '../src/binance-paper.ts'
 
 const BAR=900_000
 const NOW=80*BAR
@@ -17,10 +17,6 @@ function candles():BinanceCandle[]{
       open:close,high:close*1.005,low:close*.995,close,
       volume:i===79?20:10,quoteVolume:close*10,trades:100}
   })
-}
-function makeMarket():BinancePublicMarket{
-  return {async price(){return 141.5},async prices(){return {BTCUSDT:141.5}},
-    async candles(){return candles()}}
 }
 function setup(){
   const root=mkdtempSync(join(tmpdir(),'phoenix-testnet-autonomous-'))
@@ -37,6 +33,7 @@ function setup(){
       balances:[{asset:'USDT',free:String(usdt),locked:'0'},
         {asset:'BTC',free:String(btc),locked:'0'}],nextAction:'ready'}},
     async quote(){return price},
+    async candles(){return candles()},
     async lotSize(){return {stepSize:'0.00000100',minQty:'0.00000100',maxQty:'100'}},
     async order(input:{symbol:string;side:'BUY'|'SELL';clientOrderId?:string;
       quoteUsdt?:number;quantity?:number}){
@@ -60,7 +57,7 @@ function setup(){
     },
   }
   const file=join(root,'testnet-automation.json')
-  const worker=new BinanceTestnetAutomation(file,testnet as unknown as BinanceSpotTestnet,makeMarket())
+  const worker=new BinanceTestnetAutomation(file,testnet as unknown as BinanceSpotTestnet)
   return {worker,file,testnet,price:(value:number)=>{price=value},
     acknowledge:(value:boolean)=>{acknowledge=value},sent,
     get attempts(){return orderAttempts},
@@ -98,7 +95,7 @@ describe('Binance Spot TESTNET autonomous operation',()=>{
       lastError:'testnet-order-needs-reconciliation'})
     expect(worker.snapshot().pending?.clientOrderId).toMatch(/^px[a-f0-9]{30}$/)
     expect(sent).toHaveLength(1)
-    const restarted=new BinanceTestnetAutomation(file,testnet as unknown as BinanceSpotTestnet,makeMarket())
+    const restarted=new BinanceTestnetAutomation(file,testnet as unknown as BinanceSpotTestnet)
     await restarted.restore()
     await restarted.step(NOW+60_000)
     expect(restarted.snapshot().pending?.clientOrderId).toBe(worker.snapshot().pending?.clientOrderId)
