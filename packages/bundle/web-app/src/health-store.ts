@@ -391,9 +391,11 @@ export class HealthClinicStore {
       fail('Esta cita no corresponde al profesional o ya no está programada')
     const patient=this.find(actor,'patients',str(appointment.patientId,'Paciente',80)).data
     const proof=patient.contactEvidence
-    if(!proof||typeof proof!=='object'||Array.isArray(proof)||
-      proof.consent!=='granted'||proof.verified!==true||proof.recipient!==patient.email||
-      typeof proof.recordedBy!=='string'||typeof proof.evidenceRef!=='string')
+    if(!proof||typeof proof!=='object'||Array.isArray(proof))
+      fail('Falta registro verificable de consentimiento')
+    const evidence=proof as RecordData
+    if(evidence.consent!=='granted'||evidence.verified!==true||evidence.recipient!==patient.email||
+      typeof evidence.recordedBy!=='string'||typeof evidence.evidenceRef!=='string')
       fail('Correo no verificado o consentimiento no registrado de forma auditable')
     const recipient=str(patient.email,'Correo electrónico',254)
     if(!/^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/u.test(recipient))fail('Correo electrónico inválido')
