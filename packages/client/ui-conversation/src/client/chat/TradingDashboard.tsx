@@ -194,6 +194,10 @@ export function TradingDashboard({ initial }: Props) {
     } catch {
       setConnectionIssue('No se pudo contactar al Host para guardar Testnet. Comprueba la conexión y vuelve a intentarlo.')
     } finally {
+      // Never retain private Testnet values in browser component state after a
+      // submit attempt, whether the Host save succeeded or failed.
+      setTestingKey('')
+      setTestingSecret('')
       setConnectionBusy(false)
     }
   }
