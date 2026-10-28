@@ -48,7 +48,7 @@ const form=(current:Competitor,all:Game[],kickoff:number):FormSide=>{
     const at=Date.parse(e.date??'')
     if(!Number.isFinite(at)||at>=kickoff)return []
     const eventId=String(e.id??'')
-    if(!/^\\d{1,20}$/u.test(eventId)||seenEvents.has(eventId))return []
+    if(!/^\d{1,20}$/u.test(eventId)||seenEvents.has(eventId))return []
     seenEvents.add(eventId)
     const {home,away}=sides(e)
     const mine=pid(home)===id?home:pid(away)===id?away:undefined
