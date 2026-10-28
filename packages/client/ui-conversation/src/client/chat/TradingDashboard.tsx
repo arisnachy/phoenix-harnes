@@ -320,7 +320,7 @@ export function TradingDashboard({ initial }: Props) {
           disabled={running || controlBusy}
           onChange={event => { setAutoDiscoverDraft(event.currentTarget.checked) }} />
         <span>Al iniciar: descubrir hasta 120 pares Spot USDT líquidos y rotar 12 en cada análisis.
-          Mantener los tres primeros pares prioritarios. Solo PAPER.</span>
+          Mantener todos tus pares prioritarios; los huecos restantes rotan automáticamente. Solo PAPER.</span>
       </label>
       {running && !settings.autoDiscover && <p className={css.tradingNotice}>
         El radar está limitado a una lista fija. Detén e inicia PAPER con descubrimiento automático para ampliar la búsqueda.
