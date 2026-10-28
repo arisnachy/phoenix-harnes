@@ -31,4 +31,32 @@ describe('FreeSearchProvider', () => {
     await expect(provider.search({ query: 'a secret' })).rejects.toThrow(/no free search engine returned results/)
     expect(fetcher).toHaveBeenCalledWith('https://www.bing.com/search?q=a+secret', expect.objectContaining({ headers: { accept: 'text/html' } }))
   })
+  it('parses Bing entries without snippets and with extra anchor attributes', async () => {
+    const html = '<li class="b_algo"><h2><a data-id="one" href="https://university.edu/thesis">Thesis &amp; guidelines</a></h2></li>'
+    const fetcher = vi.fn(async () => new Response(html, { status: 200 }))
+    const result = await new FreeSearchProvider({ fetcher, engines: ['bing'] }).search({ query: 'thesis' })
+    expect(result.sources).toEqual([{ url: 'https://university.edu/thesis', title: 'Thesis & guidelines' }])
+  })
+
+  it('unwraps DuckDuckGo redirect links and tolerates href before class', async () => {
+    const html = '<a href="//duckduckgo.com/l/?uddg=https%3A%2F%2Funiversity.edu%2Fgraduate" class="result__a">Graduate guidelines</a><a class="result__snippet">University thesis instructions</a>'
+    const fetcher = vi.fn(async () => new Response(html, { status: 200 }))
+    const result = await new FreeSearchProvider({ fetcher, engines: ['duckduckgo'] }).search({ query: 'thesis' })
+    expect(result.sources).toEqual([{
+      url: 'https://university.edu/graduate', title: 'Graduate guidelines', snippet: 'University thesis instructions',
+    }])
+  })
+
+  it('does not attach a later result snippet to a preceding empty result', async () => {
+    const html = '<a class="result__a" href="https://one.edu">First</a>'
+      + '<a class="result__a" href="https://two.edu">Second</a>'
+      + '<a class="result__snippet">Second only</a>'
+    const fetcher = vi.fn(async () => new Response(html, { status: 200 }))
+    const result = await new FreeSearchProvider({ fetcher, engines: ['duckduckgo'] }).search({ query: 'university' })
+    expect(result.sources).toEqual([
+      { url: 'https://one.edu/', title: 'First' },
+      { url: 'https://two.edu/', title: 'Second', snippet: 'Second only' },
+    ])
+  })
+
 })
