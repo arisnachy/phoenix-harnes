@@ -111,7 +111,7 @@ export function registerHealthRoutes(ctx:Context):void {
         });return
       }
       if(operation==='logout'&&method==='POST'){
-        const s=store.session(cookie(req),String(req.headers['x-phoenix-csrf']??''),true)
+        store.session(cookie(req),String(req.headers['x-phoenix-csrf']??''),true)
         store.logout(cookie(req));reply(res,200,{ok:true},{'set-cookie':'phoenix_health=; HttpOnly; SameSite=Strict; Path=/health; Max-Age=0'});return
       }
       const valid=store.session(cookie(req),typeof req.headers['x-phoenix-csrf']==='string'?req.headers['x-phoenix-csrf']:undefined,method!=='GET')
@@ -122,7 +122,7 @@ export function registerHealthRoutes(ctx:Context):void {
         if(method==='POST'){store.createStaff(actor,await readBody(req));reply(res,201,{ok:true});return}
       }
       if(operation==='audit'&&method==='GET'){reply(res,200,{items:store.audits(actor)});return}
-      if(healthKinds.includes(operation)){
+      if(typeof operation==='string'&&healthKinds.some(x=>x===operation)){
         const kind=urlKind(operation)
         if(method==='GET'&&id===undefined){reply(res,200,{items:store.list(actor,kind)});return}
         if(method==='POST'&&id===undefined){

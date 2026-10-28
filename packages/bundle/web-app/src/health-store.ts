@@ -59,7 +59,6 @@ function eq(a:string,b:string):boolean {
 }
 function date(x:unknown):string {const s=str(x,'Fecha',48);if(!/^\d{4}-\d\d-\d\dT/u.test(s)||!Number.isFinite(Date.parse(s)))fail('Fecha ISO requerida');return new Date(s).toISOString()}
 function withLimit(value:unknown):RecordData {const x=obj(value);if(JSON.stringify(x).length>MAX)fail('Registro excede el límite');return x}
-const visible=(x:RecordData):RecordData=>({...x})
 export class HealthClinicStore {
   private readonly db:DatabaseSync
   private key:Buffer|undefined
