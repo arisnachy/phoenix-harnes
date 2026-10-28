@@ -74,6 +74,7 @@ async function load(){
 function actionFor(o){
  let actions=[];
  if(tab==="assignments")actions=[["revokePatient","Revocar acceso"]];
+ if(tab==="patients"&&["admin","clinician","reception"].includes(actor.role))actions=[["contactEvidence","Consentimiento"]];
  if(tab==="encounters"&&o.status!=="signed"&&o.practitioner===actor.username)actions=[["document","Documentar"],["review","Revisar"],["sign","Firmar"]];
  if(tab==="prescriptions"&&actor.role==="pharmacy"&&o.status==="prescribed")actions=[["dispense","Dispensar"]];
  if(tab==="orders")actions=o.status==="ordered"&&((actor.role==="lab"&&o.modality==="laboratory")||(actor.role==="radiology"&&o.modality==="imaging"))?[["result","Resultado"]]:
@@ -89,8 +90,7 @@ function render(){
  const p=pick("patientId","Paciente",patients,x=>x.name+" · "+x.dateOfBirth);
  let form="";
  if(tab==="patients"&&["admin","clinician","reception"].includes(actor.role))form=field("name","Nombre completo")+field("dateOfBirth","Nacimiento","date")+field("email","Correo","email",false)+field("phone","Teléfono","tel",false)+
- '<label><input type="checkbox" id="consent" style="width:auto;display:inline"> Paciente autorizó comunicaciones electrónicas</label>'+
- '<label><input type="checkbox" id="verified" style="width:auto;display:inline"> Correo electrónico verificado con el paciente</label>'+button("create","Registrar paciente");
+ '<p class="muted">El consentimiento se registra después de verificarlo, con responsable y referencia de evidencia.</p>'+button("create","Registrar paciente");
  if(tab==="encounters"&&["clinician","psychologist"].includes(actor.role))form=p+field("specialty","Especialidad", "text", true,"Medicina familiar")+
  field("complaint","Motivo de consulta")+
  '<label>Modalidad Kira</label><select id="mode"><option value="kira">Kira interroga</option><option value="mixed">Mixto</option><option value="manual">Profesional</option></select>'+button("create","Abrir consulta")+
@@ -108,7 +108,7 @@ function render(){
  const titles=Object.fromEntries(modules.map(x=>[x[0],x[1]]));
  const genericRows=(d,columns)=>rows(d,columns);
  let cols=[["ID","id"],["Estado","status"]];
- if(tab==="patients")cols=[["Nombre","name"],["Nacimiento","dateOfBirth"],["Email","email"]];
+ if(tab==="patients")cols=[["Nombre","name"],["Nacimiento","dateOfBirth"],["Email","email"],["Consentimiento","emailConsent"]];
  if(tab==="encounters")cols=[["Motivo","complaint"],["Especialidad","specialty"],["Profesional","practitioner"],["Estado","status"]];
  if(tab==="appointments")cols=[["Profesional","practitioner"],["Inicio","startsAt"],["Estado","status"]];
  if(tab==="orders")cols=[["Tipo","modality"],["Estudio","description"],["Estado","status"]];
@@ -126,6 +126,18 @@ async function execute(action,id){
  if(action==="logout"){await api("logout","POST",{});actor=null;csrf="";return splash()}
  if(action==="setup"){await api("setup","POST",{username:val("user"),password:val("pass"),organization:val("org")});notice("Clínica configurada. Inicia sesión.");return splash()}
  if(action==="login"){const x=await api("login","POST",{username:val("user"),password:val("pass")});csrf=x.csrf;actor=x.actor;return load()}
+ if(action==="contactEvidence"){
+  const patient=data.patients?.find(x=>x.id===id);if(!patient)throw Error("Paciente no encontrado");
+  const choice=prompt("¿Autoriza o revoca correo? Escriba GRANTED o REVOKED","REVOKED");if(choice===null)return;
+  const consent=choice.toUpperCase()==="GRANTED"?"granted":choice.toUpperCase()==="REVOKED"?"revoked":null;
+  if(!consent)throw Error("Indique GRANTED o REVOKED");
+  const method=prompt("Método: in-person, signed-document o verified-call","in-person");if(method===null)return;
+  const evidenceRef=prompt("Referencia de evidencia verificable:");if(evidenceRef===null)return;
+  if(!confirm("¿Certifica que verificó el contacto y documentó el consentimiento o su revocación?"))return;
+  await api("patients/"+id,"PATCH",{version:patient.version,action:"contact",consent,method,
+    evidenceRef,emailVerified:consent==="granted"});
+  notice("Consentimiento y responsable auditados.");return load();
+ }
  if(action==="grantPatient"){
   await api("assignments","POST",{action:"grant",patientId:val("patientId"),staffId:val("staffId"),purpose:val("purpose")});
   notice("Relación asistencial autorizada y auditada.");return load();
@@ -138,7 +150,7 @@ async function execute(action,id){
  }
  if(action==="create"){
   const v={
-   patients:{name:val("name"),dateOfBirth:val("dateOfBirth"),email:val("email"),phone:val("phone"),emailConsent:!!document.getElementById("consent")?.checked,emailVerified:!!document.getElementById("verified")?.checked},
+   patients:{name:val("name"),dateOfBirth:val("dateOfBirth"),email:val("email"),phone:val("phone")},
    encounters:{patientId:val("patientId"),specialty:val("specialty"),complaint:val("complaint"),mode:val("mode")},
    appointments:{patientId:val("patientId"),practitioner:val("practitioner"),startsAt:val("startsAt"),reason:val("reason")},
    orders:{encounterId:val("encounterId"),modality:val("modality"),description:val("description")},
