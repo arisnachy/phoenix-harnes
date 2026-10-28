@@ -133,8 +133,8 @@ export function planAcademicResearch(input: unknown) {
     : inferredType === 'systematic_review' ? 'PRISMA 2020 cuando la búsqueda y selección estén documentadas'
       : inferredType === 'original_research' ? 'STROBE/CONSORT/COREQ/SRQR según el diseño realmente ejecutado'
         : 'estructura, citas y requisitos de institución o revista'
-  const referenceTarget = inferredType === 'thesis'
-    ? THESIS_REFERENCE_TARGETS[level as keyof typeof THESIS_REFERENCE_TARGETS] : undefined
+  const referenceTarget = inferredType === 'thesis' && args.level !== undefined
+    ? THESIS_REFERENCE_TARGETS[args.level as keyof typeof THESIS_REFERENCE_TARGETS] : undefined
   const citationGuidance = citationStyle === 'vancouver'
     ? ['citas numéricas por orden de primera aparición', 'bibliografía numerada correlativamente',
       'abreviaturas de revistas según índice aplicable y comprobación de DOI/PMID']
