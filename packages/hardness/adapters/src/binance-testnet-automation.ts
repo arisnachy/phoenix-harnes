@@ -310,12 +310,10 @@ export class BinanceTestnetAutomation {
         this.state.day=today;this.state.dailyOrders=0;this.state.dayRealizedLoss=0
         this.state.dayStartEquity=cash
       }
-      if(this.state.dayStartEquity>0 && this.state.dayRealizedLoss>=this.state.dayStartEquity*.03){
-        await this.halt('testnet-daily-loss-limit');return
-      }
-      if(this.state.dailyOrders>=MAX_DAILY_ORDERS){
-        this.state.lastDecision='testnet-daily-order-limit';await this.save();return
-      }
+      // Risk caps stop NEW entries, not protective exits for existing TESTNET
+      // positions. Keep watching TP/SL even after the daily entry cap is hit.
+      const entryLocked=this.state.dailyOrders>=MAX_DAILY_ORDERS
+        || (this.state.dayStartEquity>0 && this.state.dayRealizedLoss>=this.state.dayStartEquity*.03)
       // Always service existing software stops/TPs before considering a new BUY.
       for(const position of Object.values(this.state.positions)){
         const price=await this.testnet.quote(position.symbol)
@@ -335,6 +333,13 @@ export class BinanceTestnetAutomation {
           quantity,requestedAt:new Date(now).toISOString(),signalBar:now,
           clientOrderId:orderId(position.symbol,'SELL',reason,now),
         })
+        return
+      }
+      if(entryLocked){
+        this.state.lastDecision=this.state.dailyOrders>=MAX_DAILY_ORDERS
+          ? 'testnet-daily-entry-limit-exit-monitoring'
+          : 'testnet-daily-loss-limit-exit-monitoring'
+        await this.save()
         return
       }
       const signals:BinanceAdaptiveSignal[]=[]
