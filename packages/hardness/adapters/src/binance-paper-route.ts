@@ -273,6 +273,18 @@ export function mountBinancePaperDashboardRoute(
           res.writeHead(400).end(JSON.stringify({ error: 'Invalid Binance Spot Testnet credential format' }))
           return
         }
+        // Never rotate HMAC credentials while the autonomous executor may
+        // still own pending orders or positions from the previous account.
+        // Otherwise a restored journal could operate against the wrong wallet.
+        const execution = options.testnetAuto?.snapshot()
+        if (execution?.enabled === true || execution?.pending !== undefined
+          || execution !== undefined && Object.keys(execution.positions).length > 0) {
+          res.writeHead(409).end(JSON.stringify({
+            error: 'testnet-automation-account-change-blocked',
+            nextAction: 'Detén la automatización Testnet, concilia las órdenes pendientes y cierra las posiciones de prueba antes de cambiar sus credenciales.',
+          }))
+          return
+        }
         // Separate durable storage from network readiness. Binance Testnet
         // can be offline, rate limited or reject an account temporarily; the
         // owner should not need to enter the HMAC keys again after a restart.
