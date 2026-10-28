@@ -12,15 +12,17 @@ The independent `ClinicSandbox` domain remains in the package for deterministic 
 
 ## Model Experience
 
-### What the model sees
+### Clinical interview planning
+
+#### What the model sees
 
 The model sees only a generic complaint, specialty, mode and **question keys** supplied to `health_interview_plan`. No patient names, identifiers, clinical narratives, imaging, diagnoses or medical records are automatically transmitted to the model. It also sees the list of required email checks through `health_kira_mail_requirements`, not the results of authorization checks or actual emails. The clinician opens protected records separately within the Health workspace.
 
-### Token effect
+#### Token effect
 
 The system-prompt guidance is only attached when medical intent is detected. Database reads and deterministic clinic workflows do not require an LLM invocation.
 
-### KV Cache effect
+#### KV Cache effect
 
 Stable tool schemas and bounded conditional guidance avoid injecting session-specific patient data into global model instructions, preserving the reusable system prompt.
 
