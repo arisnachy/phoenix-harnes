@@ -62,10 +62,12 @@ describe('native sports chat presentation fallback',()=>{
     expect(parseGenerativeUiBlock(six)).not.toBeNull()
     const cards=sportsCardsFromToolResult(tool('sports_chat_ticket_evidence_priced_auto',{uiBlock:six}))
     expect(cards).toEqual([six])
-    expect(cards[0]?.props.legs).toHaveLength(6)
-    expect(cards[0]?.props.legs[0].homeLogo).toBe(six.props.legs[0].homeLogo)
-    expect(cards[0]?.props.legs[1].selection).toContain('X2')
-    expect(cards[0]?.props.legs[5].rationale).toContain('encuentro 5')
+    const card=cards[0]
+    if(!card||card.component!=='sports_ticket_card')throw Error('Native ticket missing')
+    expect(card.props.legs).toHaveLength(6)
+    expect(card.props.legs[0]?.homeLogo).toBe(six.props.legs[0]?.homeLogo)
+    expect(card.props.legs[1]?.selection).toContain('X2')
+    expect(card.props.legs[5]?.rationale).toContain('encuentro 5')
   })
   it('handles Code Mode nested sports calls (not arbitrary source text)',()=>{
     const code={kind:'tool-result',call:{name:'Code'},isError:false,content:[],subCalls:[
