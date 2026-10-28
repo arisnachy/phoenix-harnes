@@ -6,6 +6,8 @@ import {
   deriveAge,
   inferAssistantGenderFromUserMessage,
   mergeUserProfile,
+  projectConsentedProfile,
+  renderConsentedProfile,
   renderAssistantIdentity,
   validateDateOfBirth,
   validateUserProfile,
@@ -48,6 +50,31 @@ describe('user profile validation and projection helpers', () => {
     expect(next.consent.preferredName).toBe(true)
     expect(current.preferredName).toBe('Ari')
     expect(current.consent.preferredName).toBe(false)
+  })
+
+  it('uses professional addressing only for fields with explicit consent', () => {
+    const configured = mergeUserProfile(profile(), {
+      preferredName: 'Aris', profession: 'Médico', professionalTitle: 'Doctor',
+      addressingMode: 'title', consent: { preferredName: true, profession: true, professionalTitle: true },
+    })
+    const allowed = projectConsentedProfile(configured)
+    expect(allowed).toMatchObject({ preferredName: 'Aris', profession: 'Médico', professionalTitle: 'Doctor', addressingMode: 'title' })
+    expect(renderConsentedProfile(allowed)).toContain('use the professional title occasionally')
+
+    const withdrawn = projectConsentedProfile({
+      ...configured, consent: { ...configured.consent, profession: false, professionalTitle: false },
+    })
+    const context = renderConsentedProfile(withdrawn)
+    expect(context).not.toContain('Médico')
+    expect(context).not.toContain('Doctor')
+    expect(context).toContain('not authorized; use neutral wording')
+  })
+
+  it('respects no address and rejects unrecognized addressing modes', () => {
+    const noAddress = mergeUserProfile(profile(), { addressingMode: 'none' })
+    expect(renderConsentedProfile(projectConsentedProfile(noAddress))).toContain('never use a personal name or title')
+    expect(() => { validateUserProfileUpdate({ addressingMode: 'nickname' }) }).toThrow('addressingMode')
+    expect(mergeUserProfile(noAddress, { addressingMode: null }).addressingMode).toBeUndefined()
   })
 
   it('clears optional values through null updates', () => {

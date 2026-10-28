@@ -7,12 +7,17 @@ const persisted: UserProfileSettings = {
   assistantName: 'KIRA',
   assistantGender: 'feminine',
   preferredName: 'Arisnachy',
+  profession: 'Médico',
+  professionalTitle: 'Dr.',
+  addressingMode: 'title',
   dateOfBirth: '1982-02-20',
   gender: 'masculino',
   pronouns: 'él',
   tone: 'directo y cálido',
   consent: {
     preferredName: true,
+    profession: true,
+    professionalTitle: true,
     dateOfBirth: false,
     gender: true,
     pronouns: false,
@@ -69,6 +74,9 @@ describe('UserProfileForm hydration', () => {
     expect(state.available).toBe(true)
     expect(state.dirty).toBe(false)
     expect(state.preferredName.text).toBe('Arisnachy')
+    expect(state.profession.text).toBe('Médico')
+    expect(state.professionalTitle.text).toBe('Dr.')
+    expect(state.addressingMode).toBe('title')
     expect(state.dateOfBirth.text).toBe('1982-02-20')
     expect(state.gender.text).toBe('masculino')
     expect(state.tone.text).toBe('directo y cálido')
@@ -91,6 +99,7 @@ describe('UserProfileForm hydration', () => {
     })
 
     form.inject().edit('preferredName', 'Ari local')
+    form.inject().setAddressingMode('name')
     harness.publish({
       status: 'ready',
       value: { ...persisted, preferredName: 'Ari remoto' },
@@ -102,6 +111,7 @@ describe('UserProfileForm hydration', () => {
     })
 
     expect(form.store.getSnapshot().preferredName.text).toBe('Ari local')
+    expect(form.store.getSnapshot().addressingMode).toBe('name')
     expect(form.store.getSnapshot().dirty).toBe(true)
 
     form.dispose()

@@ -3,6 +3,8 @@
 /* jscpd:ignore-start */
 export interface UserProfileConsent {
   preferredName: boolean
+  profession: boolean
+  professionalTitle: boolean
   dateOfBirth: boolean
   gender: boolean
   pronouns: boolean
@@ -20,6 +22,8 @@ export interface UserProfileFamilyMember {
 export type AssistantGender = 'masculine' | 'feminine' | 'neutral'
 /** Provenance for the assistant gender presentation preference. */
 export type AssistantGenderSource = 'inferred' | 'manual'
+/** User-chosen form of address. */
+export type UserAddressMode = 'automatic' | 'name' | 'title' | 'none'
 /** Whether assistant gender follows inference automatically or a fixed provenance choice. */
 export type AssistantGenderMode = 'auto' | AssistantGenderSource
 
@@ -30,6 +34,9 @@ export interface UserProfileSettings {
   assistantGenderSource?: AssistantGenderSource
   modelProviderOrder?: string[]
   preferredName?: string
+  profession?: string
+  professionalTitle?: string
+  addressingMode?: UserAddressMode
   dateOfBirth?: string
   gender?: string
   pronouns?: string
@@ -54,6 +61,9 @@ export interface UserProfileRowState {
   saving: boolean
   failed: boolean
   saved: boolean
+  addressingMode: UserAddressMode
+  profession: UserProfileFieldState
+  professionalTitle: UserProfileFieldState
   preferredName: UserProfileFieldState
   dateOfBirth: UserProfileFieldState
   gender: UserProfileFieldState
