@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-Proveedor de búsqueda sin claves para PHOENIX. Consulta Bing HTML y DuckDuckGo HTML en orden, normaliza fuentes y respeta `maxResults`. Está pensado como fallback explícito cuando el proveedor principal falla por cuota, créditos, límite, autenticación, timeout o indisponibilidad.
+Proveedor de búsqueda sin claves para PHOENIX. Consulta Bing HTML con respaldo escalonado de DuckDuckGo HTML (350 ms), normaliza fuentes y respeta `maxResults`. Está pensado como fallback explícito cuando el proveedor principal falla por cuota, créditos, límite, autenticación, timeout o indisponibilidad.
 
 No almacena credenciales ni convierte una respuesta anti-bot en una cita. La navegación con Chrome dedicado puede montarse como proveedor independiente sobre el mismo seam `ctx.web`.
 
@@ -27,3 +27,7 @@ El resultado añade un sufijo al contexto; el prefijo sin cambios sigue siendo e
 - Los buscadores HTML públicos pueden devolver CAPTCHA, resultados regionales o cambios de marcado; el proveedor tolera atributos reordenados, enlaces de redirección DuckDuckGo y resultados sin resumen, prueba el siguiente motor y falla de forma acotada.
 - No sustituye una API con garantías de disponibilidad ni ofrece navegación JavaScript; un proveedor Chrome separado puede cubrir esa necesidad.
 - Las páginas devueltas deben verificarse antes de usarse como evidencia.
+
+## Resiliencia y latencia
+
+La búsqueda inicia en Bing y habilita DuckDuckGo tras 350 ms si el primer motor sigue pendiente. El primer resultado válido se devuelve inmediatamente; se cancela el motor perdedor y la descarga del HTML comparte el plazo de cada intento. No se garantiza disponibilidad de buscadores HTML públicos, ni se presentan páginas CAPTCHA como evidencia.
