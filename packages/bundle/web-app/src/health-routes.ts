@@ -159,6 +159,13 @@ export function registerHealthRoutes(ctx:Context):void {
         if(method==='GET'){reply(res,200,{items:store.staff(actor)});return}
         if(method==='POST'){store.createStaff(actor,await readBody(req));reply(res,201,{ok:true});return}
       }
+      if(operation==='backups'){
+        if(method==='GET'){reply(res,200,{items:store.backups(actor)});return}
+        if(method==='POST'&&id===undefined){
+          const receipt=await store.backup(actor)
+          reply(res,201,{backup:receipt});return
+        }
+      }
       if(operation==='assignments'){
         if(method==='GET'){reply(res,200,{items:store.assignments(actor)});return}
         if(method==='POST'){
