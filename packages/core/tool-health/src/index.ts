@@ -38,16 +38,16 @@ export function apply(ctx: Context): void {
       const response=await ctx.userQuestions.ask({
         questions:[{
           id:step.question.id,header:step.question.header,question:step.question.question,
-          sensitive:true,options:step.question.options.map(o=>({...o})),
+          sensitive:true,options:step.question.options.map(o=>({ ...o })),
         }],
-        ...(exec.agent===undefined?{}:{agent:exec.agent}),
+        ...(exec.agent===undefined?{}:{ agent:exec.agent }),
         signal:exec.signal,
       })
       const answer=response.answers.find(item=>item.id===step.question?.id)
       const selected=answer?.selected.length===1?answer.selected[0]:undefined
       return JSON.stringify(interpretClinicalAsk(step,selected,response.automatic===true))
     },
-    presentCall:()=>({card:'generic',title:'Kira Clínica · ASK',kind:'read' as const}),
+    presentCall:()=>({ card:'generic',title:'Kira Clínica · ASK',kind:'read' as const}),
   }))
   ctx.tools.register(defineTool({
     name: 'health_interview_plan',

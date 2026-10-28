@@ -71,11 +71,11 @@ export class HealthClinicStore {
   constructor(dbPath:string) {
     if(typeof dbPath!=='string'||dbPath===':memory:')fail('La clínica requiere una ruta persistente privada')
     this.dbPath=dbPath
-    mkdirSync(dirname(dbPath),{recursive:true,mode:0o700})
+    mkdirSync(dirname(dbPath),{ recursive:true,mode:0o700 })
     // Load experimental SQLite only when an operator actually enables the clinical module.
     // A static import emitted SQLite warnings in every ordinary PHOENIX CLI session on Node 22.
     const sqlite = createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite')
-    this.db=new sqlite.DatabaseSync(dbPath,{timeout:5000})
+    this.db=new sqlite.DatabaseSync(dbPath,{ timeout:5000 })
     try {chmodSync(dbPath,0o600)}catch {/* Windows uses directory ACLs */ }
     this.db.exec("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON;")
     this.db.exec(
@@ -93,7 +93,7 @@ export class HealthClinicStore {
    */
   close():void {this.sessions.clear();this.key?.fill(0);this.key=undefined;this.db.close()}
   private meta(name:string):string|undefined {
-    return (this.db.prepare('SELECT value FROM health_meta WHERE name=?').get(name) as {value:string}|undefined)?.value
+    return (this.db.prepare('SELECT value FROM health_meta WHERE name=?').get(name) as { value:string }|undefined)?.value
   }
   /**
    * Perform initialized within the isolated clinical workflow.
@@ -129,7 +129,7 @@ export class HealthClinicStore {
    * @param password - Validated password input for this clinical operation.
    * @returns The operation result, restricted to this authorized clinical context.
    */
-  login(username:unknown,password:unknown):{cookie:string;csrf:string;actor:Actor} {
+  login(username:unknown,password:unknown):{ cookie:string;csrf:string;actor:Actor } {
     const user=str(username,'Usuario',80),pass=str(password,'Contraseña',256)
     const s=this.db.prepare('SELECT * FROM health_staff WHERE username=?').get(user) as Staff|undefined
     // Same KDF work on bad usernames to avoid trivial timing enumeration.
@@ -147,8 +147,8 @@ export class HealthClinicStore {
     const cookie=randomBytes(32).toString('hex'),csrf=randomBytes(24).toString('hex')
     for(const [id,entry] of this.sessions){if(entry.expires<Date.now())this.sessions.delete(id)}
     if(this.sessions.size>=128)fail('Demasiadas sesiones clínicas activas')
-    this.sessions.set(cookie,{actor:{username:s.username,org:s.org,role:s.role},csrf,expires:Date.now()+8*3600_000})
-    return {cookie,csrf,actor:{username:s.username,org:s.org,role:s.role}}
+    this.sessions.set(cookie,{ actor:{ username:s.username,org:s.org,role:s.role },csrf,expires:Date.now()+8*3600_000 })
+    return { cookie,csrf,actor:{ username:s.username,org:s.org,role:s.role } }
   }
   /**
    * Perform session within the isolated clinical workflow.
@@ -157,11 +157,11 @@ export class HealthClinicStore {
    * @param mutation - Validated mutation input for this clinical operation.
    * @returns The operation result, restricted to this authorized clinical context.
    */
-  session(cookie:string|undefined,csrf?:string,mutation=false):{actor:Actor;csrf:string} {
+  session(cookie:string|undefined,csrf?:string,mutation=false):{ actor:Actor;csrf:string } {
     const s=cookie?this.sessions.get(cookie):undefined
     if(!s||Date.now()>s.expires||!this.key)fail('Sesión clínica caducada')
     if(mutation&&(!csrf||csrf!==s.csrf))fail('Protección CSRF: solicitud rechazada')
-    return {actor:{...s.actor},csrf:s.csrf}
+    return { actor:{ ...s.actor },csrf:s.csrf }
   }
   /**
    * Perform logout within the isolated clinical workflow.
@@ -173,10 +173,10 @@ export class HealthClinicStore {
    * @param actor - Validated actor input for this clinical operation.
    * @returns The operation result, restricted to this authorized clinical context.
    */
-  staff(actor:Actor):readonly {username:string;role:Role;org:string}[]{
+  staff(actor:Actor):readonly { username:string;role:Role;org:string }[]{
     if(actor.role!=='admin')fail('Acceso administrativo requerido')
     return (this.db.prepare('SELECT username,role,org FROM health_staff WHERE org=? ORDER BY username').all(actor.org) as Staff[])
-      .map(x=>({username:x.username,role:x.role,org:x.org}))
+      .map(x=>({ username:x.username,role:x.role,org:x.org }))
   }
   /**
    * Perform createStaff within the isolated clinical workflow.
@@ -197,12 +197,12 @@ export class HealthClinicStore {
     }catch(error){this.db.exec('ROLLBACK');throw error}
   }
   private encryptionKey():Buffer {if(!this.key)fail('Expediente clínico bloqueado');return this.key}
-  private seal(id:string,org:string,kind:Kind,version:number,data:RecordData):{iv:string;tag:string;payload:string} {
+  private seal(id:string,org:string,kind:Kind,version:number,data:RecordData):{ iv:string;tag:string;payload:string } {
     const iv=randomBytes(12),key=this.encryptionKey(),cipher=createCipheriv('aes-256-gcm',key,iv)
     cipher.setAAD(Buffer.from([id,org,kind,String(version)].join(':')))
     const raw=Buffer.from(JSON.stringify(data),'utf8')
     const encrypted=Buffer.concat([cipher.update(raw),cipher.final()])
-    return {iv:iv.toString('hex'),tag:cipher.getAuthTag().toString('hex'),payload:encrypted.toString('base64')}
+    return { iv:iv.toString('hex'),tag:cipher.getAuthTag().toString('hex'),payload:encrypted.toString('base64') }
   }
   private open(row:Row):RecordData {
     const decipher=createDecipheriv('aes-256-gcm',this.encryptionKey(),Buffer.from(row.iv,'hex'))
@@ -217,26 +217,26 @@ export class HealthClinicStore {
    * @param actor - Validated actor input for this clinical operation.
    * @returns The operation result, restricted to this authorized clinical context.
    */
-  async backup(actor:Actor):Promise<{name:string;records:number}> {
+  async backup(actor:Actor):Promise<{ name:string;records:number }> {
     if(actor.role!=='admin')fail('Acceso administrativo requerido')
     this.encryptionKey()
     const directory=join(dirname(this.dbPath),'backups')
-    mkdirSync(directory,{recursive:true,mode:0o700})
+    mkdirSync(directory,{ recursive:true,mode:0o700 })
     const name='clinic-'+Date.now().toString(36)+'-'+randomBytes(6).toString('hex')+'.sqlite'
     const path=join(directory,name)
     const sqlite=createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite')
     await sqlite.backup(this.db,path)
     chmodSync(path,0o600)
-    const check=new sqlite.DatabaseSync(path,{readOnly:true})
+    const check=new sqlite.DatabaseSync(path,{ readOnly:true })
     let records=0
     try{
-      const status=check.prepare('PRAGMA integrity_check').get() as {integrity_check:string}
+      const status=check.prepare('PRAGMA integrity_check').get() as { integrity_check:string }
       if(status.integrity_check!=='ok')fail('Integridad de la copia no confirmada')
-      const count=check.prepare('SELECT COUNT(*) AS records FROM health_records').get() as {records:number}
+      const count=check.prepare('SELECT COUNT(*) AS records FROM health_records').get() as { records:number }
       records=count.records
     }finally{check.close()}
     this.audit(actor,'backup.create',name)
-    return {name,records}
+    return { name,records }
   }
   /**
    * Perform backups within the isolated clinical workflow.
@@ -269,7 +269,7 @@ export class HealthClinicStore {
     if(actor.role!=='admin'&&actor.role!=='reception')fail('Solo admisión o administración puede asignar pacientes')
     const patient=this.db.prepare("SELECT id FROM health_records WHERE id=? AND org=? AND kind='patients'").get(patientId,actor.org)
     if(!patient)fail('Paciente inexistente en esta institución')
-    const staff=this.db.prepare('SELECT org,role FROM health_staff WHERE username=?').get(username) as {org:string;role:Role}|undefined
+    const staff=this.db.prepare('SELECT org,role FROM health_staff WHERE username=?').get(username) as { org:string;role:Role }|undefined
     if(!staff||staff.org!==actor.org||!['clinician','psychologist','nurse'].includes(staff.role))fail('Profesional no autorizado en la institución')
     const reason=str(purpose,'Motivo asistencial',160)
     this.db.exec('BEGIN IMMEDIATE')
@@ -316,7 +316,7 @@ export class HealthClinicStore {
     if(restricted)return (actor.role==='psychologist'||actor.role==='clinician')&&data.practitioner===actor.username
     return actor.role==='admin'||actor.role==='nurse'||data.practitioner===actor.username
   }
-  private find(actor:Actor,kind:Kind,id:string):{row:Row;data:RecordData} {
+  private find(actor:Actor,kind:Kind,id:string):{ row:Row;data:RecordData } {
     const row=this.db.prepare('SELECT * FROM health_records WHERE id=? AND org=? AND kind=?').get(id,actor.org,kind) as Row|undefined
     if(!row)fail('Registro inexistente o fuera de institución')
     const data=this.open(row)
@@ -325,7 +325,7 @@ export class HealthClinicStore {
     if(kind==='encounters'&&!this.mayReadEncounter(actor,data))fail('Acceso al episodio no autorizado')
     if(kind==='orders'&&actor.role==='lab'&&data.modality!=='laboratory')fail('Orden no autorizada')
     if(kind==='orders'&&actor.role==='radiology'&&data.modality!=='imaging')fail('Orden no autorizada')
-    return {row,data}
+    return { row,data }
   }
   /** Billing may locate a patient for an invoice but never receives demographics or clinical notes. */
   /**
@@ -333,11 +333,11 @@ export class HealthClinicStore {
    * @param actor - Validated actor input for this clinical operation.
    * @returns The operation result, restricted to this authorized clinical context.
    */
-  patientOptions(actor:Actor):readonly {id:string;name:string}[] {
+  patientOptions(actor:Actor):readonly { id:string;name:string }[] {
     if(!['billing','admin','reception'].includes(actor.role))fail('Acceso al directorio restringido')
     const rows=this.db.prepare("SELECT * FROM health_records WHERE org=? AND kind='patients' ORDER BY created_at DESC LIMIT 500")
       .all(actor.org) as Row[]
-    return rows.map(row=>({id:row.id,name:str(this.open(row).name,'Nombre',160)}))
+    return rows.map(row=>({ id:row.id,name:str(this.open(row).name,'Nombre',160) }))
   }
   /**
    * Perform list within the isolated clinical workflow.
@@ -348,7 +348,7 @@ export class HealthClinicStore {
   list(actor:Actor,kind:Kind):readonly RecordData[] {
     this.access(actor,kind)
     const rows=this.db.prepare('SELECT * FROM health_records WHERE org=? AND kind=? ORDER BY created_at DESC LIMIT 500').all(actor.org,kind) as Row[]
-    return rows.map((row):RecordData=>({id:row.id,version:row.version,createdAt:row.created_at,updatedAt:row.updated_at,...this.open(row)}))
+    return rows.map((row):RecordData=>({ id:row.id,version:row.version,createdAt:row.created_at,updatedAt:row.updated_at,...this.open(row) }))
       .filter(item=>this.hasPatient(actor,kind==='patients'?String(item.id):String(item.patientId??'')))
       .filter(item=>kind!=='orders'||actor.role!=='lab'&&actor.role!=='radiology'||
         item.modality===(actor.role==='lab'?'laboratory':'imaging'))
@@ -376,7 +376,7 @@ export class HealthClinicStore {
   /** Fail closed if the HMAC-linked clinical audit journal has been altered. */
   private verifyAudit():void {
     const history=this.db.prepare('SELECT org,actor,action,record_id,happened,prior_hash,hash FROM health_audit ORDER BY id ASC').all() as
-      {org:string;actor:string;action:string;record_id:string;happened:string;prior_hash:string;hash:string}[]
+      { org:string;actor:string;action:string;record_id:string;happened:string;prior_hash:string;hash:string }[]
     const previous=new Map<string,string>()
     for(const event of history){
       const expectedPrior=previous.get(event.org)??'genesis'
@@ -389,7 +389,7 @@ export class HealthClinicStore {
   }
 
   private audit(actor:Actor,action:string,id:string):void {
-    const prev=(this.db.prepare('SELECT hash FROM health_audit WHERE org=? ORDER BY id DESC LIMIT 1').get(actor.org) as {hash:string}|undefined)?.hash??'genesis'
+    const prev=(this.db.prepare('SELECT hash FROM health_audit WHERE org=? ORDER BY id DESC LIMIT 1').get(actor.org) as { hash:string }|undefined)?.hash??'genesis'
     const happened=new Date().toISOString()
     const content=JSON.stringify([actor.org,actor.username,action,id,happened,prev])
     const digest=createHmac('sha256',this.encryptionKey()).update(content).digest('hex')
@@ -412,12 +412,12 @@ export class HealthClinicStore {
       this.db.prepare('INSERT INTO health_records VALUES (?,?,?,?,?,?,?,?,?)').run(id,actor.org,kind,1,sealed.iv,sealed.tag,sealed.payload,now,now)
       this.audit(actor,kind+'.create',id);this.db.exec('COMMIT')
     }catch(e){this.db.exec('ROLLBACK');throw e}
-    return {id,version:1,createdAt:now,updatedAt:now,...data}
+    return { id,version:1,createdAt:now,updatedAt:now,...data }
   }
   private modify(actor:Actor,kind:Kind,id:string,expectedVersion:number,apply:(data:RecordData)=>RecordData):RecordData {
     this.db.exec('BEGIN IMMEDIATE')
     try {
-      const {row,data}=this.find(actor,kind,id)
+      const { row,data }=this.find(actor,kind,id)
       if(row.version!==expectedVersion)fail('Conflicto de edición: recarga el registro')
       const next=withLimit(apply(data))
       const version=row.version+1,now=new Date().toISOString(),sealed=this.seal(id,actor.org,kind,version,next)
@@ -425,7 +425,7 @@ export class HealthClinicStore {
         .run(version,sealed.iv,sealed.tag,sealed.payload,now,id,actor.org,kind,expectedVersion)
       if(Number(result.changes)!==1)fail('Conflicto de concurrencia')
       this.audit(actor,kind+'.update',id);this.db.exec('COMMIT')
-      return {id,version,createdAt:row.created_at,updatedAt:now,...next}
+      return { id,version,createdAt:row.created_at,updatedAt:now,...next }
     }catch(e){this.db.exec('ROLLBACK');throw e}
   }
   /**
@@ -443,10 +443,10 @@ export class HealthClinicStore {
       if(!/^\d{4}-\d{2}-\d{2}$/u.test(dob)||!Number.isFinite(Date.parse(dob))||Date.parse(dob)>Date.now())fail('Fecha de nacimiento inválida')
       const email=typeof x.email==='string'?x.email.trim():''
       if(email&&!/^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/u.test(email))fail('Correo de paciente inválido')
-      const patient=this.insert(actor,kind,{name:str(x.name,'Nombre',160),dateOfBirth:dob,
+      const patient=this.insert(actor,kind,{ name:str(x.name,'Nombre',160),dateOfBirth:dob,
       email:email.slice(0,254),phone:typeof x.phone==='string'?x.phone.trim().slice(0,35):'',
       notes:typeof x.notes==='string'?x.notes.slice(0,4000):'',emailConsent:false,
-      emailVerified:false,contactEvidence:null,allergyReview:null})
+      emailVerified:false,contactEvidence:null,allergyReview:null })
       if(actor.role==='clinician'){
         // Registering a patient is an explicit treatment relationship for this clinician.
         const newPatientId=str(patient.id,'Paciente creado',80)
@@ -462,18 +462,18 @@ export class HealthClinicStore {
     }
     if(kind==='encounters'){
       const patientId=str(x.patientId,'Paciente',80);this.find(actor,'patients',patientId)
-      return this.insert(actor,kind,{patientId,practitioner:actor.username,specialty:str(x.specialty,'Especialidad',120),
+      return this.insert(actor,kind,{ patientId,practitioner:actor.username,specialty:str(x.specialty,'Especialidad',120),
         complaint:text(x.complaint,'Motivo de consulta',2000),mode:['kira','manual','mixed'].includes(String(x.mode))?x.mode:'mixed',
         confidentialPsychotherapy:actor.role==='psychologist'||/(?:psic[oó]log|psycholog|psicoterapi|psychiatr|psiquiatr)/iu.test(String(x.specialty)),
         history:'',exam:'',assessment:'',plan:'',interviewAnswers:{},status:'draft',
-        reviewedVersion:null,signedBy:null,signedAt:null})
+        reviewedVersion:null,signedBy:null,signedAt:null })
     }
     if(kind==='appointments') {
       const patientId=str(x.patientId,'Paciente',80),startsAt=date(x.startsAt),practitioner=str(x.practitioner,'Profesional',80)
       this.find(actor,'patients',patientId)
       const clash=this.list(actor,'appointments').some(a=>a.startsAt===startsAt&&a.practitioner===practitioner&&a.status==='scheduled')
       if(clash)fail('El profesional ya tiene una cita en ese horario')
-      return this.insert(actor,kind,{patientId,practitioner,startsAt,status:'scheduled',reason:str(x.reason,'Motivo',300)})
+      return this.insert(actor,kind,{ patientId,practitioner,startsAt,status:'scheduled',reason:str(x.reason,'Motivo',300) })
     }
     if(kind==='orders'||kind==='prescriptions'){
       if(actor.role!=='clinician')fail('Órdenes y recetas requieren profesional prescriptor')
@@ -481,8 +481,8 @@ export class HealthClinicStore {
       if(enc.status!=='signed'||enc.practitioner!==actor.username)fail('Debe firmar una consulta propia antes de emitir la orden')
       if(kind==='orders'){
         const modality=str(x.modality,'Tipo',20);if(!['laboratory','imaging'].includes(modality))fail('Tipo de orden no permitido')
-        return this.insert(actor,kind,{encounterId,patientId:enc.patientId,modality,description:text(x.description,'Estudio',600),
-          status:'ordered',result:'',reviewedBy:null})
+        return this.insert(actor,kind,{ encounterId,patientId:enc.patientId,modality,description:text(x.description,'Estudio',600),
+          status:'ordered',result:'',reviewedBy:null })
       }
       const patient=this.find(actor,'patients',str(enc.patientId,'Paciente',80)).data
       const allergy=patient.allergyReview
@@ -491,21 +491,21 @@ export class HealthClinicStore {
       if(reviewed.reviewedBy!==actor.username||!['none-known','documented'].includes(String(reviewed.status)))
         fail('El prescriptor debe verificar y documentar alergias antes de recetar')
       if(x.safetyAcknowledged!==true)fail('Debe confirmar revisión de alergias, interacciones y dosis')
-      return this.insert(actor,kind,{encounterId,patientId:enc.patientId,medication:text(x.medication,'Medicamento',240),
+      return this.insert(actor,kind,{ encounterId,patientId:enc.patientId,medication:text(x.medication,'Medicamento',240),
         directions:text(x.directions,'Indicaciones',1400),signedBy:actor.username,status:'prescribed',
-        safetyReview:{attestedBy:actor.username,at:new Date().toISOString(),allergyStatus:reviewed.status,
-          allergyReviewAt:reviewed.reviewedAt,drugInteractionCatalogChecked:false}})
+        safetyReview:{ attestedBy:actor.username,at:new Date().toISOString(),allergyStatus:reviewed.status,
+          allergyReviewAt:reviewed.reviewedAt,drugInteractionCatalogChecked:false } })
     }
-    if(kind==='inventory')return this.insert(actor,kind,{item:str(x.item,'Producto',200),units:0})
+    if(kind==='inventory')return this.insert(actor,kind,{ item:str(x.item,'Producto',200),units:0 })
     if(kind==='invoices') {
       const patientId=str(x.patientId,'Paciente',80);this.find(actor,'patients',patientId)
       const cents=Number(x.amountCents);if(!Number.isSafeInteger(cents)||cents<1)fail('Monto en centavos inválido')
-      return this.insert(actor,kind,{patientId,concept:str(x.concept,'Concepto',300),amountCents:cents,paidCents:0})
+      return this.insert(actor,kind,{ patientId,concept:str(x.concept,'Concepto',300),amountCents:cents,paidCents:0 })
     }
     if(kind==='followups') {
       const patientId=str(x.patientId,'Paciente',80);this.find(actor,'patients',patientId)
-      return this.insert(actor,kind,{patientId,assignedTo:str(x.assignedTo,'Responsable',80),dueAt:date(x.dueAt),
-        description:text(x.description,'Tarea',500),status:'pending'})
+      return this.insert(actor,kind,{ patientId,assignedTo:str(x.assignedTo,'Responsable',80),dueAt:date(x.dueAt),
+        description:text(x.description,'Tarea',500),status:'pending' })
     }
     return fail('Operación no admitida')
   }
@@ -519,7 +519,7 @@ export class HealthClinicStore {
    * @param inventoryId - Validated inventoryId input for this clinical operation.
    * @returns The operation result, restricted to this authorized clinical context.
    */
-  dispense(actor:Actor,prescriptionId:string,inventoryId:string):{prescription:RecordData;inventory:RecordData}{
+  dispense(actor:Actor,prescriptionId:string,inventoryId:string):{ prescription:RecordData;inventory:RecordData }{
     if(actor.role!=='pharmacy')fail('Solo personal farmacéutico autorizado puede dispensar')
     this.db.exec('BEGIN IMMEDIATE')
     try {
@@ -534,12 +534,12 @@ export class HealthClinicStore {
         const result=this.db.prepare('UPDATE health_records SET version=?,iv=?,tag=?,payload=?,updated_at=? WHERE id=? AND org=? AND kind=? AND version=?')
           .run(nextVersion,sealed.iv,sealed.tag,sealed.payload,now,row.id,actor.org,kind,row.version)
         if(Number(result.changes)!==1)fail('Conflicto de concurrencia de dispensación')
-        return {...data,id:row.id,version:nextVersion,createdAt:row.created_at,updatedAt:now}
+        return { ...data,id:row.id,version:nextVersion,createdAt:row.created_at,updatedAt:now }
       }
-      const changedRx=update('prescriptions',prescription.row,{...prescription.data,status:'dispensed',dispensedBy:actor.username,dispensedAt:now})
-      const changedStock=update('inventory',inventory.row,{...inventory.data,units:Number(inventory.data.units)-1})
+      const changedRx=update('prescriptions',prescription.row,{ ...prescription.data,status:'dispensed',dispensedBy:actor.username,dispensedAt:now })
+      const changedStock=update('inventory',inventory.row,{ ...inventory.data,units:Number(inventory.data.units)-1 })
       this.audit(actor,'prescription.dispense',prescription.row.id)
-      this.db.exec('COMMIT');return {prescription:changedRx,inventory:changedStock}
+      this.db.exec('COMMIT');return { prescription:changedRx,inventory:changedStock }
     }catch(error){this.db.exec('ROLLBACK');throw error}
   }
 
@@ -551,7 +551,7 @@ export class HealthClinicStore {
    * @param sender - Validated sender input for this clinical operation.
    * @returns The operation result, restricted to this authorized clinical context.
    */
-  beginReminder(actor:Actor,appointmentId:string,sender:string):{recipient:string;subject:string;body:string;appointmentId:string}{
+  beginReminder(actor:Actor,appointmentId:string,sender:string):{ recipient:string;subject:string;body:string;appointmentId:string }{
     if(actor.role!=='clinician')fail('El recordatorio requiere confirmación de profesional clínico')
     const appointment=this.find(actor,'appointments',str(appointmentId,'Cita',80)).data
     if(appointment.practitioner!==actor.username||appointment.status!=='scheduled')
@@ -573,7 +573,7 @@ export class HealthClinicStore {
       this.audit(actor,'reminder.queued',appointmentId)
       this.db.exec('COMMIT')
     }catch(error){this.db.exec('ROLLBACK');throw new Error('Este recordatorio ya fue reservado; no se reenviará automáticamente')}
-    return {recipient,appointmentId,subject:'Recordatorio de cita',body:
+    return { recipient,appointmentId,subject:'Recordatorio de cita',body:
       'Este es un recordatorio de su cita programada. Para cualquier cambio, contacte directamente al consultorio. No responda con información clínica por correo.\n\nPHOENIX Health'}
   }
   /** Record Gmail provider confirmation, or uncertainty without an automatic duplicate retry. */
@@ -627,8 +627,8 @@ export class HealthClinicStore {
           if(!['none-known','documented'].includes(status))fail('Estado de alergias no confirmado')
           const details=typeof x.details==='string'?x.details.trim():''
           if(status==='documented'&&(!details||details.length>2500))fail('Documente los alérgenos y reacciones')
-          return {...current,allergyReview:{status,details:status==='documented'?details:'',
-            reviewedBy:actor.username,reviewedAt:new Date().toISOString()}}
+          return { ...current,allergyReview:{ status,details:status==='documented'?details:'',
+            reviewedBy:actor.username,reviewedAt:new Date().toISOString() } }
         })
       }
       if(x.action!=='contact')fail('Acción de contacto inválida')
@@ -642,9 +642,9 @@ export class HealthClinicStore {
         const consent=x.consent==='granted',verified=consent&&x.emailVerified===true
         const recipient=typeof current.email==='string'?current.email:''
         if(consent&&(!verified||!recipient))fail('Debe verificarse el correo antes de autorizar comunicaciones')
-        const contactEvidence={consent:x.consent,method,evidenceRef,recipient,
-          verified,recordedBy:actor.username,recordedAt:new Date().toISOString()}
-        return {...current,emailConsent:consent,emailVerified:verified,contactEvidence}
+        const contactEvidence={ consent:x.consent,method,evidenceRef,recipient,
+          verified,recordedBy:actor.username,recordedAt:new Date().toISOString() }
+        return { ...current,emailConsent:consent,emailVerified:verified,contactEvidence }
       })
     }
     if(kind==='encounters'){
@@ -663,21 +663,21 @@ export class HealthClinicStore {
           String(current.specialty).slice(0,100),mode,Object.keys(previous))
         if(!next.nextQuestions.some(question=>question.key===field))
           fail('Pregunta fuera del interrogatorio propuesto')
-        return {...current,interviewAnswers:{...previous,[field]:answer},status:'draft',reviewedVersion:null}
+        return { ...current,interviewAnswers:{ ...previous,[field]:answer },status:'draft',reviewedVersion:null }
       })
       if(action==='document')return this.modify(actor,kind,id,version,current=>{
         if(current.status==='signed')fail('Historia firmada: requiere adenda independiente')
-        return {...current,history:text(x.history,'Historia'),exam:typeof x.exam==='string'?x.exam.slice(0,4000):'',
+        return { ...current,history:text(x.history,'Historia'),exam:typeof x.exam==='string'?x.exam.slice(0,4000):'',
           assessment:typeof x.assessment==='string'?x.assessment.slice(0,4000):'',
-          plan:typeof x.plan==='string'?x.plan.slice(0,4000):'',status:'draft',reviewedVersion:null}
+          plan:typeof x.plan==='string'?x.plan.slice(0,4000):'',status:'draft',reviewedVersion:null }
       })
       if(action==='review')return this.modify(actor,kind,id,version,current=>{
         if(current.status!=='draft'||!current.history)fail('Se requiere historia en borrador')
-        return {...current,status:'reviewed',reviewedVersion:version+1}
+        return { ...current,status:'reviewed',reviewedVersion:version+1 }
       })
       if(action==='sign')return this.modify(actor,kind,id,version,current=>{
         if(current.status!=='reviewed'||current.reviewedVersion!==version)fail('La versión revisada debe coincidir para firmar')
-        return {...current,status:'signed',signedBy:actor.username,signedAt:new Date().toISOString()}
+        return { ...current,status:'signed',signedBy:actor.username,signedAt:new Date().toISOString() }
       })
       fail('Acción clínica no permitida')
     }
@@ -686,28 +686,28 @@ export class HealthClinicStore {
       if(action==='result'){
         if(current.status!=='ordered'||!(current.modality==='laboratory'&&actor.role==='lab'||current.modality==='imaging'&&actor.role==='radiology'))
           fail('Solo personal autorizado puede registrar el resultado')
-        return {...current,result:text(x.result,'Resultado',5000),status:'resulted'}
+        return { ...current,result:text(x.result,'Resultado',5000),status:'resulted' }
       }
       if(action==='review'&&actor.role==='clinician'&&current.status==='resulted')
-        return {...current,status:'reviewed',reviewedBy:actor.username}
+        return { ...current,status:'reviewed',reviewedBy:actor.username }
       fail('Transición de orden no permitida')
     })
     if(kind==='inventory')return this.modify(actor,kind,id,version,current=>{
       if(actor.role!=='pharmacy'&&actor.role!=='admin')fail('Acceso a farmacia requerido')
       const delta=Number(x.delta);if(!Number.isSafeInteger(delta)||delta===0||Math.abs(delta)>100000)fail('Movimiento inválido')
       const total=Number(current.units)+delta;if(total<0)fail('Inventario insuficiente')
-      return {...current,units:total}
+      return { ...current,units:total }
     })
     if(kind==='invoices')return this.modify(actor,kind,id,version,current=>{
       const payment=Number(x.paymentCents)
       if(!Number.isSafeInteger(payment)||payment<=0||Number(current.paidCents)+payment>Number(current.amountCents))fail('Pago fuera de saldo')
-      return {...current,paidCents:Number(current.paidCents)+payment}
+      return { ...current,paidCents:Number(current.paidCents)+payment }
     })
     if(kind==='appointments'||kind==='followups')return this.modify(actor,kind,id,version,current=>{
       const status=str(x.status,'Estado',24)
       if(kind==='appointments'&&!['scheduled','completed','cancelled'].includes(status))fail('Estado inválido')
       if(kind==='followups'&&!['pending','done','cancelled'].includes(status))fail('Estado inválido')
-      return {...current,status}
+      return { ...current,status }
     })
     fail('Actualización no habilitada')
   }

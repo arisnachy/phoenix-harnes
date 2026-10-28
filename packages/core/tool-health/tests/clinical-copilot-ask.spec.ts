@@ -24,18 +24,18 @@ describe('Kira Clinical Copilot through existing ASK', () => {
     ctx.userQuestions.registerProvider({
       async ask(request) {
         seen.push(request)
-        return {answers:[{id:'health-ask-mode',selected:['Modo mixto']}]}
+        return { answers:[{ id:'health-ask-mode',selected:['Modo mixto'] }] }
       },
     })
     const result=await ctx.tools.execute({
       callId:callId('health-ask-mode-1'),signal:new AbortController().signal,
-      name:'health_copilot_ask',arguments:{action:'choose_mode',pathway:'general'},
+      name:'health_copilot_ask',arguments:{ action:'choose_mode',pathway:'general' },
     })
     expect(result.isError).toBe(false)
     expect(ctx.tools.schemas().some(t=>t.name==='health_copilot_ask')).toBe(true)
     expect(seen).toHaveLength(1)
-    expect(seen[0]?.questions[0]).toMatchObject({id:'health-ask-mode',sensitive:true})
-    expect(JSON.parse(String(result.value))).toMatchObject({
+    expect(seen[0]?.questions[0]).toMatchObject({ id:'health-ask-mode',sensitive:true })
+    expect(JSON.parse(typeof result.value === 'string' ? result.value : JSON.stringify(result.value))).toMatchObject({
       status:'MODE_SELECTED',mode:'mixed',acceptedClinicalFact:false,savedToRecord:false,
     })
   })
@@ -43,14 +43,14 @@ describe('Kira Clinical Copilot through existing ASK', () => {
   it('does not turn timed-out sensitive ASK into a patient fact or consent',async()=>{
     const ctx=await clinic()
     ctx.userQuestions.registerProvider({
-      async ask(){return {automatic:true,answers:[{id:'health-ask-onset',selected:[]}]}}
+      async ask(){return { automatic:true,answers:[{ id:'health-ask-onset',selected:[] }] }}
     })
     const result=await ctx.tools.execute({
       callId:callId('health-ask-expire-1'),signal:new AbortController().signal,
-      name:'health_copilot_ask',arguments:{action:'next_question',pathway:'general'},
+      name:'health_copilot_ask',arguments:{ action:'next_question',pathway:'general' },
     })
     expect(result.isError).toBe(false)
-    expect(JSON.parse(String(result.value))).toMatchObject({
+    expect(JSON.parse(typeof result.value === 'string' ? result.value : JSON.stringify(result.value))).toMatchObject({
       status:'UNANSWERED',acceptedClinicalFact:false,savedToRecord:false,
     })
   })
@@ -58,11 +58,11 @@ describe('Kira Clinical Copilot through existing ASK', () => {
   it('rejects identifiable pathway arguments rather than forwarding them to ASK',async()=>{
     const ctx=await clinic()
     const seen:AskUserQuestionRequest[]=[]
-    ctx.userQuestions.registerProvider({async ask(request){seen.push(request);return {answers:[]}}})
+    ctx.userQuestions.registerProvider({ async ask(request){seen.push(request);return { answers:[] }} })
     const result=await ctx.tools.execute({
       callId:callId('health-ask-invalid-1'),signal:new AbortController().signal,
       name:'health_copilot_ask',
-      arguments:{action:'next_question',pathway:'Paciente Juan 809-555-2222'},
+      arguments:{ action:'next_question',pathway:'Paciente Juan 809-555-2222' },
     })
     expect(result.isError).toBe(true)
     expect(seen).toHaveLength(0)

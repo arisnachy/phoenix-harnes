@@ -1,4 +1,8 @@
-/** Built-in real clinical workspace (same-origin HTTP, no PHI in Kira's prompt). */
+/**
+ * Render the local clinical workspace without exposing clinical data to Kira's prompt.
+ * @param nonce - Fresh per-response CSP nonce injected into the inline script.
+ * @returns HTML for the authenticated local workspace.
+ */
 export function renderHealthPage(nonce:string):string {
   const html=String.raw`<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>PHOENIX Health · Clínica</title>
 <style>

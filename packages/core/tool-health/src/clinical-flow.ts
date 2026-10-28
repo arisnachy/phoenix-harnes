@@ -34,7 +34,7 @@ const TRANSITIONS: Readonly<Record<EncounterStage, Partial<Record<EncounterActio
 }
 function required(value: string, field: string, max = 500): string {
   if (typeof value !== 'string' || !value.trim() || value.length > max) {
-    throw new TypeError(field + ' debe contener entre 1 y ' + max + ' caracteres.')
+    throw new TypeError(`${field} debe contener entre 1 y ${max} caracteres.`)
   }
   return value.trim()
 }
@@ -53,10 +53,13 @@ export function openEncounter(encounterRef: string): WorkflowSnapshot {
  * @returns The derived clinical workflow state or planning result.
  */
 export function advanceEncounter(state: WorkflowSnapshot, event: WorkflowEvent): WorkflowSnapshot {
-  if (!state || !event) throw new TypeError('Faltan el estado y el evento.')
+  if ([state, event].some((value: unknown) => value === null || value === undefined)) {
+    throw new TypeError('Faltan el estado y el evento.')
+  }
   required(state.encounterRef, 'Referencia', 128)
   required(event.actorRef, 'Profesional', 128)
-  const next = TRANSITIONS[state.stage]?.[event.action]
+  if (!Object.hasOwn(TRANSITIONS, state.stage)) throw new Error('Estado clínico no reconocido.')
+  const next = TRANSITIONS[state.stage][event.action]
   if (!next) throw new Error('Transición clínica no permitida.')
   if (event.action === 'review-history' || event.action === 'sign-history') {
     if (event.actorRole !== 'clinician') throw new Error('La revisión y firma requieren un profesional habilitado.')
@@ -170,7 +173,8 @@ export interface KiraMailPlan {
  * @returns The derived clinical workflow state or planning result.
  */
 export function planKiraMail(input: KiraMailPreflight): KiraMailPlan {
-  if (!input || typeof input !== 'object') throw new TypeError('Preflight inválido.')
+  const preflight: unknown = input
+  if (preflight === null || typeof preflight !== 'object') throw new TypeError('Preflight inválido.')
   const rules: readonly [keyof KiraMailPreflight, string][] = [
     ['senderConnected', 'La cuenta institucional de Kira no está conectada.'],
     ['senderVerified', 'La identidad remitente de Kira no está verificada.'],
@@ -181,7 +185,7 @@ export function planKiraMail(input: KiraMailPreflight): KiraMailPlan {
     ['securePortalReady', 'No existe acceso seguro al documento.'],
     ['idempotencyKeyPresent', 'Falta la clave de idempotencia para evitar duplicados.'],
   ]
-  const blockers = rules.filter(([key]) => input[key] !== true).map(([,msg]) => msg)
+  const blockers = rules.filter(([key]) => !input[key]).map(([,msg]) => msg)
   return { approvedForQueue: blockers.length === 0, blockers,
     subject: 'Información de su atención médica',
     delivery: 'secure-portal-notification', sendsNow: false,

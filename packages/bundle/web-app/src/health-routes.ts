@@ -16,7 +16,7 @@ const jsonHeaders:Record<string,string> = {
   'x-frame-options':'DENY','cross-origin-resource-policy':'same-origin',
 }
 function reply(res:ServerResponse,status:number,data:unknown,extra:Record<string,string>={}):void {
-  res.writeHead(status,{...jsonHeaders,...extra});res.end(JSON.stringify(data))
+  res.writeHead(status,{ ...jsonHeaders,...extra });res.end(JSON.stringify(data))
 }
 function peer(req:IncomingMessage):boolean {
   const addr=req.socket.remoteAddress??''
@@ -26,12 +26,12 @@ function peer(req:IncomingMessage):boolean {
 }
 function origin(req:IncomingMessage):boolean {
   // Strict Origin for all state changes. No CORS and no cross-site POSTs.
-  return req.headers.origin==='http://'+req.headers.host &&
+  return req.headers.origin===`http://${req.headers.host ?? ''}` &&
     req.headers['content-type']?.split(';',1)[0]?.trim()==='application/json' &&
     req.headers['x-phoenix-health']==='1'
 }
 async function readBody(req:IncomingMessage):Promise<Record<string,unknown>>{
-  let length=0;const parts:Buffer[]=[]
+  let length=0;const parts:Uint8Array[]=[]
   for await(const part of req) {
     const chunk=Buffer.isBuffer(part)?part:Buffer.from(part)
     length+=chunk.length;if(length>65536)throw new Error('Solicitud demasiado grande')
@@ -59,8 +59,8 @@ function statusError(error:unknown):number{
   return 400
 }
 
-type GoogleMailClient = { request(input:{service:'gmail';path:string;method?:string;headers?:Record<string,string>;body?:string}):
-  Promise<{ok:boolean;body:string;status:number}> }
+type GoogleMailClient = { request(input:{ service:'gmail';path:string;method?:string;headers?:Record<string,string>;body?:string }):
+  Promise<{ ok:boolean;body:string;status:number }> }
 function mailClient(ctx:Context):GoogleMailClient|undefined {
   return (ctx.get as (key:string)=>unknown)('googleApi') as GoogleMailClient|undefined
 }
@@ -80,23 +80,26 @@ function makeGmailMessage(sender:string,to:string,subject:string,body:string):st
 async function sendReminderWithVerifiedGmail(ctx:Context,sender:string,to:string,subject:string,body:string):Promise<string>{
   const gmail=mailClient(ctx)
   if(!gmail)throw new Error('La cuenta Gmail de Kira no está conectada al Host')
-  const profile=await gmail.request({service:'gmail',path:'users/me/profile'})
+  const profile=await gmail.request({ service:'gmail',path:'users/me/profile' })
   if(!profile.ok)throw new Error('El proveedor no pudo verificar la identidad remitente')
   let verified:unknown
-  try {verified=(JSON.parse(profile.body) as {emailAddress?:unknown}).emailAddress}catch{throw new Error('Perfil Gmail inválido')}
+  try {verified=(JSON.parse(profile.body) as { emailAddress?:unknown }).emailAddress}catch{throw new Error('Perfil Gmail inválido')}
   if(typeof verified!=='string'||verified.trim().toLowerCase()!==sender)
     throw new Error('La cuenta Gmail conectada no corresponde al remitente institucional de Kira')
   const raw=makeGmailMessage(sender,to,subject,body)
-  const response=await gmail.request({service:'gmail',path:'users/me/messages/send',method:'POST',
-    headers:{'content-type':'application/json'},body:JSON.stringify({raw})})
+  const response=await gmail.request({ service:'gmail',path:'users/me/messages/send',method:'POST',
+    headers:{ 'content-type':'application/json' },body:JSON.stringify({ raw }) })
   if(!response.ok)throw new Error('Gmail rechazó el recordatorio')
   let id:unknown
-  try{id=(JSON.parse(response.body) as {id?:unknown}).id}catch{throw new Error('Respuesta Gmail no verificable')}
+  try{id=(JSON.parse(response.body) as { id?:unknown }).id}catch{throw new Error('Respuesta Gmail no verificable')}
   if(typeof id!=='string'||!id.trim())throw new Error('Gmail no devolvió identificador confirmado')
   return id
 }
 
-/** Register an opt-in, real encrypted clinical pilot only for locally bound PHOENIX. */
+/**
+ * Register an opt-in encrypted clinical pilot on the local PHOENIX host.
+ * @param ctx - Authenticated host context exposing the local HTTP service.
+ */
 export function registerHealthRoutes(ctx:Context):void {
   if(process.env.PHOENIX_HEALTH_ENABLED!=='1')return
   if(ctx.webServer.host!=='127.0.0.1'){
@@ -104,9 +107,9 @@ export function registerHealthRoutes(ctx:Context):void {
     return
   }
   const store=new HealthClinicStore(dshHomePath('health','clinic.sqlite'))
-  const failures=new Map<string,{count:number;until:number}>()
-  const route=ctx.webServer.register({kind:'prefix',path:'/health',handler:async(req,res)=>{
-    if(!peer(req)){reply(res,403,{error:'Acceso local requerido'});return}
+  const failures=new Map<string,{ count:number;until:number }>()
+  const route=ctx.webServer.register({ kind:'prefix',path:'/health',handler:async(req,res)=>{
+    if(!peer(req)){reply(res,403,{ error:'Acceso local requerido' });return}
     const path=new URL(req.url??'/','http://127.0.0.1').pathname
     const method=req.method??'GET'
     if(path==='/health'&&method==='GET'){
@@ -119,61 +122,61 @@ export function registerHealthRoutes(ctx:Context):void {
       })
       res.end(content);return
     }
-    if(!path.startsWith('/health/api/')){reply(res,404,{error:'Ruta desconocida'});return}
-    if(method!=='GET'&&method!=='POST'&&method!=='PATCH'){reply(res,405,{error:'Método no permitido'});return}
-    if(method!=='GET'&&!origin(req)){reply(res,403,{error:'Origen no autorizado'});return}
+    if(!path.startsWith('/health/api/')){reply(res,404,{ error:'Ruta desconocida' });return}
+    if(method!=='GET'&&method!=='POST'&&method!=='PATCH'){reply(res,405,{ error:'Método no permitido'});return}
+    if(method!=='GET'&&!origin(req)){reply(res,403,{ error:'Origen no autorizado' });return}
     const suffix=path.slice('/health/api/'.length).split('/').filter(Boolean)
-    if(suffix.length<1||suffix.length>2){reply(res,404,{error:'Ruta desconocida'});return}
+    if(suffix.length<1||suffix.length>2){reply(res,404,{ error:'Ruta desconocida' });return}
     try {
       const operation=suffix[0],id=suffix[1]
       if(operation==='status'&&method==='GET'){
-        reply(res,200,{initialized:store.initialized(),enabled:true});return
+        reply(res,200,{ initialized:store.initialized(),enabled:true });return
       }
       if(operation==='setup'&&method==='POST'&&id===undefined){
         if(store.initialized())throw new Error('Ya configurado')
         const value=await readBody(req)
         store.initialize(value.username,value.password,value.organization)
-        reply(res,201,{initialized:true});return
+        reply(res,201,{ initialized:true });return
       }
       if(operation==='login'&&method==='POST'){
         const ip=req.socket.remoteAddress??''
         const f=failures.get(ip)
-        if(f&&f.count>=5&&f.until>Date.now()){reply(res,429,{error:'Demasiados intentos. Reintente después.'});return}
+        if(f&&f.count>=5&&f.until>Date.now()){reply(res,429,{ error:'Demasiados intentos. Reintente después.'});return}
         const body=await readBody(req)
         let session:ReturnType<HealthClinicStore['login']>
         try{session=store.login(body.username,body.password)}
-        catch { failures.set(ip,{count:(f?.count??0)+1,until:Date.now()+15*60_000});throw new Error('Credenciales incorrectas') }
+        catch { failures.set(ip,{ count:(f?.count??0)+1,until:Date.now()+15*60_000 });throw new Error('Credenciales incorrectas') }
         failures.delete(ip)
-        reply(res,200,{actor:session.actor,csrf:session.csrf},{
+        reply(res,200,{ actor:session.actor,csrf:session.csrf },{
           'set-cookie':'phoenix_health='+session.cookie+'; HttpOnly; SameSite=Strict; Path=/health; Max-Age=28800',
         });return
       }
       if(operation==='logout'&&method==='POST'){
         store.session(cookie(req),String(req.headers['x-phoenix-csrf']??''),true)
-        store.logout(cookie(req));reply(res,200,{ok:true},{'set-cookie':'phoenix_health=; HttpOnly; SameSite=Strict; Path=/health; Max-Age=0'});return
+        store.logout(cookie(req));reply(res,200,{ ok:true },{ 'set-cookie':'phoenix_health=; HttpOnly; SameSite=Strict; Path=/health; Max-Age=0' });return
       }
       const valid=store.session(cookie(req),typeof req.headers['x-phoenix-csrf']==='string'?req.headers['x-phoenix-csrf']:undefined,method!=='GET')
       const actor:ClinicActor=valid.actor
-      if(operation==='session'&&method==='GET'){reply(res,200,{actor,csrf:valid.csrf});return}
+      if(operation==='session'&&method==='GET'){reply(res,200,{ actor,csrf:valid.csrf });return}
       if(operation==='staff'){
-        if(method==='GET'){reply(res,200,{items:store.staff(actor)});return}
-        if(method==='POST'){store.createStaff(actor,await readBody(req));reply(res,201,{ok:true});return}
+        if(method==='GET'){reply(res,200,{ items:store.staff(actor) });return}
+        if(method==='POST'){store.createStaff(actor,await readBody(req));reply(res,201,{ ok:true });return}
       }
       if(operation==='backups'){
-        if(method==='GET'){reply(res,200,{items:store.backups(actor)});return}
+        if(method==='GET'){reply(res,200,{ items:store.backups(actor) });return}
         if(method==='POST'&&id===undefined){
           const receipt=await store.backup(actor)
-          reply(res,201,{backup:receipt});return
+          reply(res,201,{ backup:receipt });return
         }
       }
       if(operation==='interview'&&method==='GET'&&id!==undefined){
-        reply(res,200,{guide:store.interviewGuide(actor,id)});return
+        reply(res,200,{ guide:store.interviewGuide(actor,id) });return
       }
       if(operation==='patient-options'&&method==='GET'){
-        reply(res,200,{items:store.patientOptions(actor)});return
+        reply(res,200,{ items:store.patientOptions(actor) });return
       }
       if(operation==='assignments'){
-        if(method==='GET'){reply(res,200,{items:store.assignments(actor)});return}
+        if(method==='GET'){reply(res,200,{ items:store.assignments(actor) });return}
         if(method==='POST'){
           const body=await readBody(req)
           if(typeof body.patientId!=='string'||typeof body.staffId!=='string')throw new Error('Datos de asignación inválidos')
@@ -181,27 +184,27 @@ export function registerHealthRoutes(ctx:Context):void {
           else if(body.action==='grant'&&typeof body.purpose==='string')
             store.assignPatient(actor,body.patientId,body.staffId,body.purpose)
           else throw new Error('Acción de asignación inválida')
-          reply(res,200,{ok:true});return
+          reply(res,200,{ ok:true });return
         }
       }
-      if(operation==='audit'&&method==='GET'){reply(res,200,{items:store.audits(actor)});return}
+      if(operation==='audit'&&method==='GET'){reply(res,200,{ items:store.audits(actor) });return}
       if(operation==='dispense'&&method==='POST'&&id!==undefined){
         const body=await readBody(req)
         if(typeof body.inventoryId!=='string')throw new Error('Producto no válido')
         const receipt=store.dispense(actor,id,body.inventoryId)
-        reply(res,200,{dispensed:true,prescriptionId:receipt.prescription.id,remainingUnits:receipt.inventory.units});return
+        reply(res,200,{ dispensed:true,prescriptionId:receipt.prescription.id,remainingUnits:receipt.inventory.units });return
       }
       if(operation==='reminders'&&method==='GET'){
-        reply(res,200,{items:store.reminders(actor),senderConfigured:!!process.env.PHOENIX_HEALTH_KIRA_SENDER});return
+        reply(res,200,{ items:store.reminders(actor),senderConfigured:!!process.env.PHOENIX_HEALTH_KIRA_SENDER });return
       }
       if(operation==='reminders'&&method==='POST'&&id!==undefined){
         const sender=verifiedSender()
         // Verify the authenticated Gmail identity *before* reserving this immutable delivery.
         const gmail=mailClient(ctx)
         if(!gmail)throw new Error('La cuenta de Kira aún no está conectada')
-        const profile=await gmail.request({service:'gmail',path:'users/me/profile'})
+        const profile=await gmail.request({ service:'gmail',path:'users/me/profile' })
         let email:unknown
-        try {email=(JSON.parse(profile.body) as {emailAddress?:unknown}).emailAddress}
+        try {email=(JSON.parse(profile.body) as { emailAddress?:unknown }).emailAddress}
         catch {throw new Error('Perfil Gmail no verificable')}
         if(!profile.ok||typeof email!=='string'||email.trim().toLowerCase()!==sender)
           throw new Error('El correo conectado no coincide con la identidad Kira autorizada')
@@ -209,7 +212,7 @@ export function registerHealthRoutes(ctx:Context):void {
         try {
           const providerId=await sendReminderWithVerifiedGmail(ctx,sender,planned.recipient,planned.subject,planned.body)
           store.finishReminder(actor,id,providerId)
-          reply(res,200,{status:'sent',providerConfirmed:true});return
+          reply(res,200,{ status:'sent',providerConfirmed:true });return
         }catch{
           // Delivery may have succeeded despite a timeout: never resend automatically.
           store.finishReminder(actor,id,undefined)
@@ -219,24 +222,24 @@ export function registerHealthRoutes(ctx:Context):void {
 
       if(typeof operation==='string'&&healthKinds.some(x=>x===operation)){
         const kind=urlKind(operation)
-        if(method==='GET'&&id===undefined){reply(res,200,{items:store.list(actor,kind)});return}
+        if(method==='GET'&&id===undefined){reply(res,200,{ items:store.list(actor,kind) });return}
         if(method==='POST'&&id===undefined){
           const created=store.create(actor,kind,await readBody(req))
-          reply(res,201,{record:created});return
+          reply(res,201,{ record:created });return
         }
         if(method==='PATCH'&&id&&/^[0-9a-f-]{36}$/u.test(id)){
           const body=await readBody(req)
           const next=store.update(actor,kind,id,Number(body.version),body)
-          reply(res,200,{record:next});return
+          reply(res,200,{ record:next });return
         }
       }
-      reply(res,404,{error:'Operación no disponible'})
+      reply(res,404,{ error:'Operación no disponible'})
     }catch(error){
       // Never log PHI, password, raw request or stack traces.
       const msg=error instanceof Error?error.message:'Solicitud inválida'
-      reply(res,statusError(error),{error:msg})
+      reply(res,statusError(error),{ error:msg })
     }
-  }})
+  } })
   ctx.effect(()=>()=>{
     route();store.close();failures.clear()
   },'PHOENIX Health: local encrypted clinic and session cleanup')
