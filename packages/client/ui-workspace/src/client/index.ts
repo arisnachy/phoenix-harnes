@@ -13,7 +13,7 @@ import type { WorkspaceBrowserInjected, WorkspacePickerInjected } from './contra
 import { createWorkspaceViewStore } from './stores.ts'
 import { WorkspaceBrowser } from './WorkspaceBrowser.tsx'
 import { WorkspacePicker } from './WorkspacePicker.tsx'
-import { HealthDemoTrigger, renderHealthDemoHtml } from './HealthDemo.tsx'
+import { HealthClinicTrigger } from './HealthClinicTrigger.tsx'
 import {
   CordisVisualWorkspace,
   CordisVisualWorkspaceController,
@@ -79,13 +79,7 @@ export function apply(ctx: ClientContext): void {
   ctx.slots.inject('sidebar.footer.action', () => ctx.slots.register({
     name: 'sidebar.footer.action', id: 'phoenix-health-demo',
     order: 55,
-    inject: () => ({
-      openHealth: () => visualWorkspace.show({
-        kind: 'html', title: 'PHOENIX Health · Demostración',
-        html: renderHealthDemoHtml(), executable: true, dock: 'right',
-      }),
-    }),
-  }, HealthDemoTrigger))
+  }, HealthClinicTrigger))
 
   const searchSessions: WorkspaceBrowserInjected['searchSessions'] = async (query, signal) => {
     const result = await ctx.sessions.search(query, signal)
