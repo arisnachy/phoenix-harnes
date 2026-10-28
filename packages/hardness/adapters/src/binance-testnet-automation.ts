@@ -216,7 +216,12 @@ export class BinanceTestnetAutomation {
       this.state.dayRealizedLoss+=Math.max(0,-pnl)
       position.quantity=Math.max(0,position.quantity-quantity)
       position.basisUsdt=Math.max(0,position.basisUsdt-basis)
-      if(position.quantity<1e-10)delete this.state.positions[intent.symbol]
+      // Exchange LOT_SIZE rounding can leave non-tradable fractional dust.
+      // Keep the real provider balance authoritative, but do not carry a
+      // phantom strategy position once a protective full exit is confirmed.
+      if(position.quantity<1e-10
+        || (intent.reason!=='tp1' && position.quantity<1e-6))
+        delete this.state.positions[intent.symbol]
       else if(intent.reason==='tp1')position.tp1Done=true
     }
     this.state.journal.push({
