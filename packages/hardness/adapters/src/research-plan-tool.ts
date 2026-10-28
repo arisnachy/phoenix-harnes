@@ -12,6 +12,7 @@ type Intake = {
   citation_style?: 'apa7' | 'vancouver'
   document_type?: StudyType
   level?: Level
+  visual_preference?: 'standard' | 'premium'
   title?: string
   target_pages?: number
   page_scope?: 'all' | 'body' | 'unknown'
@@ -57,6 +58,9 @@ function parse(input: unknown): Intake {
   const args = input as Intake
   if (args.entry !== undefined && !ENTRIES.some(e => e.id === args.entry)) throw new ToolArgsError(['Entrada inválida.'])
   if (args.level !== undefined && !Object.hasOwn(RANGES, args.level)) throw new ToolArgsError(['Nivel académico inválido.'])
+  if (args.visual_preference !== undefined && !['standard', 'premium'].includes(args.visual_preference)) {
+    throw new ToolArgsError(['Preferencia visual inválida.'])
+  }
   const types: StudyType[] = ['brief', 'monograph', 'thesis', 'research_protocol', 'narrative_review',
     'systematic_review', 'original_research', 'journal_manuscript', 'policy_report']
   if (args.document_type !== undefined && !types.includes(args.document_type)) throw new ToolArgsError(['Tipo de estudio inválido.'])
@@ -74,7 +78,7 @@ function chooseEntry(args: Intake): Entry | null {
   const intent = (args.intent ?? '').normalize('NFD').replace(/[\u0300-\u036f]/gu, '').toLowerCase()
   if (/articulo cientifico|journal (article|manuscript)|manuscrito cientifico/u.test(intent)) return 'scientific_article'
   if (/vancouver/u.test(intent)) return 'vancouver'
-  if (/apa\s*7|apa\s*septima|normas?\s*apa/u.test(intent)) return 'apa7'
+  if (/apa\s*7|apa\s*septima|normas?\s*apa|\bapa\b/u.test(intent)) return 'apa7'
   return null
 }
 function allocate(input: ReadonlyArray<readonly [string, string, number]>, target: number) {
@@ -87,6 +91,21 @@ function allocate(input: ReadonlyArray<readonly [string, string, number]>, targe
   for (const row of ranking.slice(0, remaining)) base[row.index]! += 1
   return input.map(([kind, label], index) => ({ kind, label, pages: base[index]! }))
 }
+/** Recommended bibliography coverage; never a universal university requirement. */
+const THESIS_REFERENCE_GUIDANCE = {
+  bachelors: { minimum: 20, suggested_maximum: 40 },
+  masters: { minimum: 40, suggested_maximum: 80 },
+  doctorate: { minimum: 100, suggested_maximum: null },
+} as const
+
+function inferThesisLevel(intent: string): Level | undefined {
+  const text = intent.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/gu, '')
+  if (/doctorad|doctorat|ph\.?d|doctoral/u.test(text)) return 'doctorate'
+  if (/maestria|master|magister/u.test(text)) return 'masters'
+  if (/pregrado|licenciatura|grado|bachelor/u.test(text)) return 'bachelors'
+  return undefined
+}
+
 /**
  * Construct a source-neutral academic intake and bounded page distribution.
  * @param input - user intent and optional research/cover/page constraints.
@@ -95,9 +114,13 @@ function allocate(input: ReadonlyArray<readonly [string, string, number]>, targe
 export function planAcademicResearch(input: unknown) {
   const args = parse(input)
   const entry = chooseEntry(args)
+  const intent = args.intent ?? ''
+  const inferredLevel = args.level ?? inferThesisLevel(intent)
+  const isThesis = /tesis|disertaci[oó]n|thesis|dissertation/iu.test(intent)
   const inferredType: StudyType = args.document_type ?? (entry === 'scientific_article'
-    ? 'journal_manuscript' : args.level === 'masters' || args.level === 'doctorate' ? 'thesis' : 'monograph')
-  const level = args.level ?? (inferredType === 'thesis' ? 'masters'
+    ? 'journal_manuscript' : isThesis || ['bachelors', 'masters', 'doctorate'].includes(inferredLevel ?? '')
+      ? 'thesis' : 'monograph')
+  const level = inferredLevel ?? (inferredType === 'thesis' ? 'masters'
     : inferredType === 'monograph' ? 'monograph' : 'short')
   const defaultRange: readonly [number, number] = inferredType === 'journal_manuscript'
     ? [8, 20] : inferredType === 'systematic_review' ? [20, 50] : RANGES[level]
@@ -118,6 +141,9 @@ export function planAcademicResearch(input: unknown) {
   if (args.target_pages !== undefined && (args.page_scope === undefined || args.page_scope === 'unknown')) {
     missing.add('si las páginas incluyen portada, bibliografía y anexos')
   }
+  const sourceTarget = inferredType === 'thesis' && Object.hasOwn(THESIS_REFERENCE_GUIDANCE, level)
+    ? THESIS_REFERENCE_GUIDANCE[level as keyof typeof THESIS_REFERENCE_GUIDANCE] : null
+  const premium = args.visual_preference === 'premium' || /hermos[oa]|premium|elegante|bonit[oa]/iu.test(intent)
   const checklist = inferredType === 'research_protocol' ? 'protocolo: resultados esperados, no hallazgos inventados'
     : inferredType === 'systematic_review' ? 'PRISMA 2020 cuando la búsqueda y selección estén documentadas'
       : inferredType === 'original_research' ? 'STROBE/CONSORT/COREQ/SRQR según el diseño realmente ejecutado'
@@ -128,6 +154,25 @@ export function planAcademicResearch(input: unknown) {
     entry, citation_style: citationStyle, document_type: inferredType,
     presentation: entry === 'scientific_article' ? 'hybrid' : 'academic',
     level, title: args.title ?? null,
+    reference_guidance: sourceTarget === null ? null : {
+      ...sourceTarget, policy: 'advisory', precedence: 'reviewed_institutional_manual',
+      counted_as: 'distinct verified and cited sources',
+      note: 'Rango orientativo, no mínimo universal. La norma institucional revisada prevalece.',
+    },
+    citation_requirements: citationStyle === 'apa7'
+      ? { style: 'apa7', citations: 'author-date', bibliography: 'alphabetical', edition: 7 }
+      : citationStyle === 'vancouver'
+        ? { style: 'vancouver', citations: 'numeric', bibliography: 'first-appearance', guide: 'ICMJE/NLM' }
+        : null,
+    visual_plan: {
+      preference: premium ? 'premium' : 'standard',
+      layout: academic ? 'formal-academic' : 'professional-editorial',
+      design_preset: academic ? 'academic_classic' : 'auto',
+      evidence_required: true,
+      recommended_charts: ['bar', 'line', 'scatter', 'forest'],
+      table_and_figure_rules: 'Numeración, títulos, fuente, unidades y notas; sin datos inventados.',
+      note: 'Gráficos elegantes solo con datos verificables y respetando la plantilla institucional.',
+    },
     pages: { target: suggestedPages, explicitly_requested: args.target_pages !== undefined,
       suggested_range: [...defaultRange], scope: args.page_scope ?? 'unknown',
       page_plan: allocate(outline, suggestedPages), planned_total: suggestedPages,
@@ -138,7 +183,7 @@ export function planAcademicResearch(input: unknown) {
       'institutional_manual_path', 'dedication', 'acknowledgements'],
     reporting_standard_hint: checklist,
     evidence_status: 'not_verified',
-    guidance: 'Recopila juntos los campos ausentes. Si hay manual o plantilla institucional, extrae primero sus reglas. Verifica cada DOI/PMID y la existencia de los estudios; no inventes resultados, permisos éticos ni bibliografía.',
+    guidance: 'Recopila juntos los campos ausentes. Si hay manual o plantilla institucional, extrae primero sus reglas. Para tesis usa la orientación de referencias solo como advertencia, prioriza calidad y citas reales. Respeta APA 7/Vancouver y diseña figuras elegantes únicamente con datos auténticos. Verifica DOI/PMID; no inventes resultados, permisos ni bibliografía.',
   }
 }
 /**
@@ -148,14 +193,16 @@ export function planAcademicResearch(input: unknown) {
 export function createResearchPlanTool(): ToolDefinition {
   return defineTool({
     name: 'phoenix_research_plan',
-    description: 'PLANIFICA ANTES DE REDACTAR una investigación APA 7, Vancouver o Artículo científico. Detecta la intención y devuelve una SOLA agrupación de datos faltantes, capítulos, presupuesto de páginas (10-250+ según nivel), recomendación académica, advertencias de métodos y alcance de páginas. Artículo científico es un tipo de documento distinto de APA/Vancouver, que son estilos bibliográficos. Si hay guía institucional, léela antes de cerrar el plan; no presumas requisitos universales. Úsalo antes de phoenix_research_publish para tesis, monografías, protocolos, artículos, revisiones y trabajos de 60-120 páginas.',
+    description: 'PLANIFICA ANTES DE REDACTAR una investigación APA 7, Vancouver o Artículo científico. Detecta la intención y devuelve una SOLA agrupación de datos faltantes, capítulos, metas orientativas 20-40/40-80/100+ referencias para licenciatura/maestría/doctorado, APA7/Vancouver, gráficos con fuente y diseño académico elegante, presupuesto de páginas (10-250+ según nivel), recomendación académica, advertencias de métodos y alcance de páginas. Artículo científico es un tipo de documento distinto de APA/Vancouver, que son estilos bibliográficos. Si hay guía institucional, léela antes de cerrar el plan; no presumas requisitos universales. Úsalo antes de phoenix_research_publish para tesis, monografías, protocolos, artículos, revisiones y trabajos de 60-120 páginas.',
     parameters: { input: { type: 'object', required: true, additionalProperties: true,
-      description: 'intent, entry (apa7/vancouver/scientific_article), citation_style, document_type, level, title, target_pages, page_scope, cover con datos ya conocidos.' } },
+      description: 'intent, entry, citation_style (apa7/vancouver), document_type, level (bachelors/masters/doctorate), visual_preference (premium/standard), title, target_pages, page_scope, cover.' } },
     output: {
       schema: { type: 'object', additionalProperties: true },
       render: (_args, value) => [{ type: 'text',
         text: 'Plan académico: ' + String(value.document_type)
           + '; estilo: ' + String(value.citation_style ?? 'por definir')
+          + '; referencia orientativa: ' + JSON.stringify(value.reference_guidance)
+          + '; diseño: ' + JSON.stringify(value.visual_plan)
           + '; estado: ' + String(value.state)
           + '. Extensión estimada, NO páginas escritas: '
           + String((value.pages as Record<string, unknown>).target)
