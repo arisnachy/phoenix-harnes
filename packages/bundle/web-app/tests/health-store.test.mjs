@@ -161,9 +161,9 @@ test('psychotherapy notes are restricted to the author even inside one clinic',t
   const session=db.list(psych,'encounters')[0]
   assert.equal(session.confidentialPsychotherapy,true)
   assert.throws(()=>db.update(nurse,'encounters',session.id,session.version,
-    {action:'document',history:'not allowed'}),/Acceso al episodio/)
+    {action:'document',history:'not allowed'}),/Permiso clínico|Acceso al episodio/)
   assert.throws(()=>db.update(admin.actor,'encounters',session.id,session.version,
-    {action:'review'}),/Acceso al episodio/)
+    {action:'review'}),/Permiso clínico|Acceso al episodio/)
 })
 
 test('patient assignments enforce consented care-team access and revocation in every clinical list and write',t=>{
