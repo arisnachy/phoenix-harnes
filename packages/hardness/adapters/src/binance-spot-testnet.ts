@@ -1,4 +1,5 @@
 import { createHmac } from 'node:crypto'
+import type { BinanceCandle } from './binance-paper.ts'
 
 const BASE = 'https://testnet.binance.vision'
 const MAX_ORDER_USDT = 100
@@ -194,6 +195,46 @@ export class BinanceSpotTestnet {
     const price=Number(record.price)
     if(record.symbol!==symbol || !Number.isFinite(price)||price<=0)throw new TestnetVerificationError('invalid-response')
     return price
+  }
+
+  /**
+   * Read confirmed OHLCV data from SPOT TESTNET, not production Binance.
+   * Testnet's market prices and order books are independent of production.
+   * Do not attach API credentials to public candles.
+   */
+  async candles(rawSymbol: string, interval: '15m', limit = 80): Promise<BinanceCandle[]> {
+    const symbol = pair(rawSymbol)
+    if (interval !== '15m' || !Number.isInteger(limit) || limit < 60 || limit > 100) {
+      throw new Error('Unsupported Spot Testnet candle interval or limit')
+    }
+    const response = await this.request(BASE + '/api/v3/klines?symbol=' + symbol
+      + '&interval=' + interval + '&limit=' + limit, {
+      method: 'GET', redirect: 'error', signal: AbortSignal.timeout(TIMEOUT_MS),
+    })
+    if (!response.ok) throw new TestnetVerificationError('provider-unavailable')
+    const payload: unknown = await response.json().catch(() => undefined)
+    if (!Array.isArray(payload) || payload.length < 60 || payload.length > limit) {
+      throw new TestnetVerificationError('invalid-response')
+    }
+    return payload.map((item: unknown): BinanceCandle => {
+      if (!Array.isArray(item) || item.length < 9) {
+        throw new TestnetVerificationError('invalid-response')
+      }
+      const bar: BinanceCandle = {
+        openTime: Number(item[0]), open: Number(item[1]), high: Number(item[2]),
+        low: Number(item[3]), close: Number(item[4]), volume: Number(item[5]),
+        closeTime: Number(item[6]), quoteVolume: Number(item[7]), trades: Number(item[8]),
+      }
+      if (!Number.isFinite(bar.openTime) || !Number.isFinite(bar.closeTime)
+        || bar.open <= 0 || bar.high <= 0 || bar.low <= 0 || bar.close <= 0
+        || bar.low > Math.min(bar.open,bar.close) || bar.high < Math.max(bar.open,bar.close)
+        || !Number.isFinite(bar.volume) || bar.volume < 0
+        || !Number.isFinite(bar.quoteVolume) || bar.quoteVolume < 0
+        || !Number.isFinite(bar.trades) || bar.trades < 0) {
+        throw new TestnetVerificationError('invalid-response')
+      }
+      return bar
+    })
   }
 
   /** Read exchange LOT_SIZE rules before every autonomous partial/full SELL. */
