@@ -136,6 +136,10 @@ describe('Cloud worker auth and scheduling',()=>{
       assert.equal(restart.status,409);
       const events=await (await route(request('/events'),env)).json();
       assert.ok(events.events.some(x=>x.kind==='risk-halt'));
+      assert.ok(events.nextCursor > 0);
+      const replay=await (await route(request('/events?after='+events.nextCursor),env)).json();
+      assert.deepEqual(replay.events,[]);
+      assert.equal(replay.nextCursor,events.nextCursor);
     }finally{globalThis.fetch=original;}
   });
 });
