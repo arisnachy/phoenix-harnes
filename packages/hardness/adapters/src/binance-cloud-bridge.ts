@@ -99,8 +99,6 @@ export class BinanceCloudPaperClient {
   }
 }
 
-interface SeenLedger { readonly schema: 1; readonly ids: readonly string[]; readonly cursor?: number }
-
 /**
  * Poll persistent Cloud PAPER events while Host is online, then replay them
  * through Phoenix's existing durable Kira Wake Bus. No LLM calls per tick.
