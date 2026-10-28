@@ -299,3 +299,77 @@ test('Kira interview reads only the assigned encounter and saves adaptive answer
    {action:'answer',field,answer:'Replay'}),/ya fue registrada/)
  assert(db.audits(admin.actor).some(x=>x.action==='encounters.update'))
 })
+
+test('longitudinal clinical history stays encrypted, versioned and restricted to assigned physician',t=>{
+  const {db,admin,root}=fixture(t)
+  db.createStaff(admin.actor,{username:'doctor1',password:'another-secure-password-2026',role:'clinician'})
+  db.createStaff(admin.actor,{username:'doctor2',password:'another-secure-password-2026',role:'clinician'})
+  const doctor=db.login('doctor1','another-secure-password-2026').actor
+  const other=db.login('doctor2','another-secure-password-2026').actor
+  const patient=db.create(admin.actor,'patients',{name:'Synthetic longitudinal history',dateOfBirth:'1980-01-01'})
+  db.assignPatient(admin.actor,patient.id,'doctor1','Longitudinal follow-up')
+  assert.throws(()=>db.update(other,'patients',patient.id,patient.version,{
+    action:'history',record:{pastMedical:'Should not save'},
+  }),/no asignado/)
+  assert.throws(()=>db.update(admin.actor,'patients',patient.id,patient.version,{
+    action:'history',record:{pastMedical:'Admin cannot create medical findings'},
+  }),/profesional/)
+  const history=db.update(doctor,'patients',patient.id,patient.version,{
+    action:'history',
+    record:{pastMedical:'EncryptedSyntheticCondition8675309',pastSurgical:'',familyHistory:'',
+      currentMedications:'',vaccinations:'',habits:'',problems:''},
+  })
+  assert.equal(history.medicalHistory.pastMedical,'EncryptedSyntheticCondition8675309')
+  assert.equal(history.medicalHistoryReview.reviewedBy,'doctor1')
+  assert.throws(()=>db.update(doctor,'patients',patient.id,patient.version,{
+    action:'history',record:{pastMedical:'Stale edit'},
+  }),/Conflicto/)
+  assert(!readFileSync(join(root,'clinic.sqlite')).includes(Buffer.from('EncryptedSyntheticCondition8675309')))
+  assert(db.audits(admin.actor).some(x=>x.action==='patients.update'))
+})
+
+test('physician drafts a subjective note only from protected recorded answers, never invents assessment',t=>{
+  const {db,admin}=fixture(t)
+  db.createStaff(admin.actor,{username:'doctor1',password:'another-secure-password-2026',role:'clinician'})
+  const doctor=db.login('doctor1','another-secure-password-2026').actor
+  const patient=db.create(admin.actor,'patients',{name:'Synthetic SOAP patient',dateOfBirth:'1985-01-01'})
+  db.assignPatient(admin.actor,patient.id,'doctor1','SOAP review')
+  let e=db.create(doctor,'encounters',{patientId:patient.id,complaint:'cefalea',specialty:'Medicina familiar',mode:'mixed'})
+  assert.throws(()=>db.update(doctor,'encounters',e.id,e.version,{action:'draft-from-interview'}),/al menos una/)
+  const first=db.interviewGuide(doctor,e.id).nextQuestions[0].key
+  e=db.update(doctor,'encounters',e.id,e.version,{action:'answer',field:first,answer:'Respuesta sintética del profesional'})
+  e=db.update(doctor,'encounters',e.id,e.version,{action:'draft-from-interview'})
+  assert.match(e.history,/Respuesta sintética del profesional/)
+  assert.equal(e.assessment,'')
+  assert.equal(e.exam,'')
+  assert.equal(e.reviewedVersion,null)
+  assert.throws(()=>db.update(doctor,'encounters',e.id,e.version,{action:'draft-from-interview'}),/no sobrescribir/)
+})
+
+test('critical results need documented acknowledgment by the responsible physician only',t=>{
+  const {db,admin}=fixture(t)
+  db.createStaff(admin.actor,{username:'doctor1',password:'another-secure-password-2026',role:'clinician'})
+  db.createStaff(admin.actor,{username:'doctor2',password:'another-secure-password-2026',role:'clinician'})
+  db.createStaff(admin.actor,{username:'labuser',password:'another-secure-password-2026',role:'lab'})
+  const doctor=db.login('doctor1','another-secure-password-2026').actor
+  const other=db.login('doctor2','another-secure-password-2026').actor
+  const lab=db.login('labuser','another-secure-password-2026').actor
+  const patient=db.create(admin.actor,'patients',{name:'Synthetic critical lab',dateOfBirth:'1990-01-01'})
+  db.assignPatient(admin.actor,patient.id,'doctor1','Critical follow-up')
+  db.assignPatient(admin.actor,patient.id,'doctor2','Collaborative care')
+  let e=db.create(doctor,'encounters',{patientId:patient.id,specialty:'General',complaint:'Prueba clínica',mode:'manual'})
+  e=db.update(doctor,'encounters',e.id,e.version,{action:'document',history:'Historia registrada'})
+  e=db.update(doctor,'encounters',e.id,e.version,{action:'review'})
+  e=db.update(doctor,'encounters',e.id,e.version,{action:'sign'})
+  let order=db.create(doctor,'orders',{encounterId:e.id,modality:'laboratory',description:'Prueba simulada'})
+  order=db.update(lab,'orders',order.id,order.version,{action:'result',
+    result:'Resultado marcado crítico por laboratorio (dato sintético)',critical:true})
+  assert.equal(order.status,'critical-pending-review')
+  assert.throws(()=>db.update(other,'orders',order.id,order.version,{
+    action:'review',criticalAcknowledged:true}),/médico responsable|otro profesional/)
+  assert.throws(()=>db.update(doctor,'orders',order.id,order.version,{action:'review'}),/confirmación explícita/)
+  order=db.update(doctor,'orders',order.id,order.version,{action:'review',criticalAcknowledged:true})
+  assert.equal(order.status,'reviewed')
+  assert.equal(order.criticalAcknowledged,true)
+  assert.equal(order.reviewedBy,'doctor1')
+})

@@ -445,7 +445,9 @@ export class HealthClinicStore {
       if(email&&!/^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/u.test(email))fail('Correo de paciente inválido')
       const patient=this.insert(actor,kind,{ name:str(x.name,'Nombre',160),dateOfBirth:dob,
       email:email.slice(0,254),phone:typeof x.phone==='string'?x.phone.trim().slice(0,35):'',
-      notes:typeof x.notes==='string'?x.notes.slice(0,4000):'',emailConsent:false,
+      notes:typeof x.notes==='string'?x.notes.slice(0,4000):'',
+       medicalHistory:{pastMedical:'',pastSurgical:'',familyHistory:'',currentMedications:'',vaccinations:'',habits:'',problems:''},
+       medicalHistoryReview:null,emailConsent:false,
       emailVerified:false,contactEvidence:null,allergyReview:null })
       if(actor.role==='clinician'){
         // Registering a patient is an explicit treatment relationship for this clinician.
@@ -620,6 +622,26 @@ export class HealthClinicStore {
     if(!Number.isSafeInteger(version)||version<1)fail('Versión inválida')
     const x=withLimit(value)
     if(kind==='patients'){
+      if(x.action==='history'){
+        // Longitudinal chart remains an authenticated, encrypted patient document.
+        if(actor.role!=='clinician')fail('Historia longitudinal requiere profesional médico')
+        const details=obj(x.record)
+        const fields=['pastMedical','pastSurgical','familyHistory','currentMedications','vaccinations','habits','problems'] as const
+        if(Object.keys(details).some(key=>!fields.includes(key as typeof fields[number])))
+          fail('Campo de historia longitudinal no autorizado')
+        const medicalHistory:RecordData={}
+        for(const field of fields){
+          const value=details[field]
+          if(typeof value!=='string'||value.length>4000||/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/u.test(value))
+            fail('Dato de historia longitudinal inválido')
+          // An empty value means 'unrecorded', never a negative clinical finding.
+          medicalHistory[field]=value.trim()
+        }
+        return this.modify(actor,kind,id,version,current=>({
+          ...current,medicalHistory,
+          medicalHistoryReview:{reviewedBy:actor.username,reviewedAt:new Date().toISOString(),source:'clinician-entered'},
+        }))
+      }
       if(x.action==='allergy-review'){
         if(actor.role!=='clinician')fail('Solo el médico responsable puede verificar alergias')
         return this.modify(actor,kind,id,version,current=>{
@@ -665,6 +687,27 @@ export class HealthClinicStore {
           fail('Pregunta fuera del interrogatorio propuesto')
         return { ...current,interviewAnswers:{ ...previous,[field]:answer },status:'draft',reviewedVersion:null }
       })
+      if(action==='draft-from-interview')return this.modify(actor,kind,id,version,current=>{
+        if(current.status==='signed')fail('La historia firmada no admite un nuevo borrador')
+        if(typeof current.history==='string'&&current.history.trim())
+          fail('La historia contiene texto; revísela manualmente para no sobrescribir información')
+        const recorded=obj(current.interviewAnswers)
+        const answers=Object.entries(recorded)
+        if(answers.length===0)fail('Registre primero al menos una respuesta de entrevista')
+        const lines=answers.map(([field,value])=>{
+          if(!/^[a-z_]{1,40}$/u.test(field)||typeof value!=='string'||!value.trim())
+            fail('Entrevista inválida; se requiere revisión profesional')
+          return `- ${field}: ${value}`
+        })
+        const history=[
+          `Motivo registrado: ${String(current.complaint)}`,
+          'Respuestas documentadas por el profesional (sin inferir negativos):',
+          ...lines,
+          'Borrador sin validación: completar antecedentes, exploración y valoración clínica.',
+        ].join('\n')
+        return { ...current,history,exam:'',assessment:'',plan:'',status:'draft',
+          reviewedVersion:null,draftSource:'professional-recorded-interview' }
+      })
       if(action==='document')return this.modify(actor,kind,id,version,current=>{
         if(current.status==='signed')fail('Historia firmada: requiere adenda independiente')
         return { ...current,history:text(x.history,'Historia'),exam:typeof x.exam==='string'?x.exam.slice(0,4000):'',
@@ -686,10 +729,23 @@ export class HealthClinicStore {
       if(action==='result'){
         if(current.status!=='ordered'||!(current.modality==='laboratory'&&actor.role==='lab'||current.modality==='imaging'&&actor.role==='radiology'))
           fail('Solo personal autorizado puede registrar el resultado')
-        return { ...current,result:text(x.result,'Resultado',5000),status:'resulted' }
+        // The performing department flags criticality; no automated threshold is assumed.
+        const critical=x.critical===true
+        return { ...current,result:text(x.result,'Resultado',5000),
+          status:critical?'critical-pending-review':'resulted',critical,
+          reportedBy:actor.username,reportedAt:new Date().toISOString(),
+          criticalEscalationRequired:critical }
       }
-      if(action==='review'&&actor.role==='clinician'&&current.status==='resulted')
-        return { ...current,status:'reviewed',reviewedBy:actor.username }
+      if(action==='review'&&actor.role==='clinician'&&
+        (current.status==='resulted'||current.status==='critical-pending-review')){
+        const linked=this.find(actor,'encounters',str(current.encounterId,'Consulta de la orden',80)).data
+        if(linked.practitioner!==actor.username)
+          fail('Solo el médico responsable de esta consulta puede revisar el resultado')
+        if(current.status==='critical-pending-review'&&x.criticalAcknowledged!==true)
+          fail('El resultado crítico exige confirmación explícita y gestión asistencial inmediata')
+        return { ...current,status:'reviewed',reviewedBy:actor.username,
+          reviewedAt:new Date().toISOString(),criticalAcknowledged:current.critical===true }
+      }
       fail('Transición de orden no permitida')
     })
     if(kind==='inventory')return this.modify(actor,kind,id,version,current=>{
