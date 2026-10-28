@@ -95,7 +95,11 @@ export function unrenderedSportsCards(
     }
   }
   const added=new Set<string>(),output:GenerativeUiBlock[]=[]
-  for(const card of cards){
+  // The requested ticket must never disappear behind six earlier fixtures
+  // from the same research round. Preserve original order inside each tier.
+  const prioritized=[...cards].sort((a,b)=>
+    Number(b.component==='sports_ticket_card')-Number(a.component==='sports_ticket_card'))
+  for(const card of prioritized){
     if(output.length>=MAX_SPORTS_CARDS)break
     const signature=JSON.stringify(card)
     if(present.has(signature)||added.has(signature))continue
