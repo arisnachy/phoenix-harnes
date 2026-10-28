@@ -152,7 +152,7 @@ export class BinanceTestnetAutomation {
     if(!ready.connected||ready.canTrade!==true)throw new Error('Spot Testnet account is not authenticated for TESTING orders')
     this.state.symbols=validSymbols(symbols)
     this.state.enabled=true
-    this.state.lastError=undefined
+    delete this.state.lastError
     this.state.failureCount=0
     await this.save()
     this.schedule()
@@ -188,7 +188,7 @@ export class BinanceTestnetAutomation {
       // Partial cancelled orders need manual review to avoid phantom balances.
       if(Number(receipt.executedQty)>0)throw new Error('partial-testnet-order-needs-review')
       if(['CANCELED','EXPIRED','REJECTED'].includes(receipt.status)){
-        this.state.pending=undefined;this.state.lastDecision='provider-order-not-filled'
+        delete this.state.pending;this.state.lastDecision='provider-order-not-filled'
         await this.save();return
       }
       throw new Error('unknown-testnet-order-state')
@@ -226,7 +226,7 @@ export class BinanceTestnetAutomation {
     })
     this.state.journal=this.state.journal.slice(-100)
     this.state.dailyOrders++
-    this.state.pending=undefined
+    delete this.state.pending
     this.state.lastDecision=receipt.side==='BUY'?'testnet-buy-filled':'testnet-sell-filled'
     await this.save()
     this.notify('fill',receipt.side+' Spot Testnet confirmado por Binance ('+intent.reason+')',intent.symbol)
@@ -292,9 +292,12 @@ export class BinanceTestnetAutomation {
         return
       }
       const signals:BinanceAdaptiveSignal[]=[]
+      const barsBySymbol=new Map<string,number>()
       for(const symbol of this.state.symbols){
         try{
           const candles=await this.market.candles(symbol,'15m',80)
+          const closed=candles.filter(bar=>bar.closeTime<=now).at(-1)
+          if(closed)barsBySymbol.set(symbol,closed.closeTime)
           signals.push(evaluateBinanceAdaptiveSignal(symbol,candles,900_000,now))
         }catch{
           signals.push({symbol,regime:'range',strategy:'none',action:'hold',score:0,
@@ -310,7 +313,7 @@ export class BinanceTestnetAutomation {
       this.state.lastScanAt=new Date(now).toISOString()
       const candidate=[...signals].sort((a,b)=>b.score-a.score).find(s=>s.action==='buy'
         && s.score>=ENTRY_SCORE && !this.state.positions[s.symbol]
-        && this.state.lastEntryBar[s.symbol]!==Math.floor(now/900_000))
+        && this.state.lastEntryBar[s.symbol]!==barsBySymbol.get(s.symbol))
       if(!candidate){this.state.lastDecision='no-qualified-entry';await this.save();return}
       if(Object.keys(this.state.positions).length>=MAX_POSITIONS) {
         this.state.lastDecision='max-testnet-positions';await this.save();return
@@ -327,9 +330,9 @@ export class BinanceTestnetAutomation {
       }
       await this.submit({
         symbol:candidate.symbol,side:'BUY',quoteUsdt:budget,strategy:candidate.strategy,
-        reason:candidate.reason,signalBar:Math.floor(now/900_000),
+        reason:candidate.reason,signalBar:barsBySymbol.get(candidate.symbol)??0,
         requestedAt:new Date(now).toISOString(),
-        clientOrderId:orderId(candidate.symbol,'BUY',candidate.strategy,Math.floor(now/900_000)),
+        clientOrderId:orderId(candidate.symbol,'BUY',candidate.strategy,barsBySymbol.get(candidate.symbol)??0),
       })
       this.state.lastError=undefined;this.state.failureCount=0
     }catch{
