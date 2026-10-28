@@ -2,6 +2,7 @@ import type { ApprovalService } from '@phoenix-ai/dsh-user-approval'
 import { defineTool, type JsonValue, type ToolDefinition } from '@phoenix-ai/dsh-tools'
 import { runBinanceAdaptiveCycle } from './binance-adaptive.ts'
 import { BinanceSpotTestnet } from './binance-spot-testnet.ts'
+import type { BinanceTestnetAutomation } from './binance-testnet-automation.ts'
 import type { BinanceCloudPaperClient } from './binance-cloud-bridge.ts'
 import type { WakeEngine } from './wake-engine.ts'
 import type { BinancePaperAutomation, BinancePaperAutomationView } from './binance-paper-automation.ts'
@@ -40,6 +41,7 @@ export interface BinanceTradingToolDependencies {
   approval: Pick<ApprovalService, 'request'>
   agentOs?: Partial<BinanceAgentOsHostService>
   testnet?: BinanceSpotTestnet
+  testnetAuto?: BinanceTestnetAutomation
   cloud?: BinanceCloudPaperClient
 }
 
@@ -336,6 +338,44 @@ function testnetAccountTool(deps: BinanceTradingToolDependencies): ToolDefinitio
       render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }] },
     async execute() { return testnetStatusJson(await (deps.testnet ?? new BinanceSpotTestnet()).status()) },
     presentCall() { return { card: 'generic', title: 'Binance Spot Testnet', kind: 'read' } },
+  })
+}
+
+/** An explicit Testnet-only automation grant, never a REAL Binance permission. */
+function testnetAutoTool(deps: BinanceTradingToolDependencies): ToolDefinition {
+  return defineTool({
+    name: 'binance_testnet_auto',
+    description: 'Start, stop or inspect unattended Spot TESTNET fake-funds orders. START needs explicit owner request and one-shot Phoenix high-risk approval for a bounded persistent testing run. Trades use HMAC testnet-only keys, fixed testnet endpoint and deterministic risk/ledger checks; never REAL MCP. Orders/positions remain Testnet-only. When no valid signal or no budget, it HOLDs with the exact reason.',
+    parameters: {
+      action: { type: 'string', required: true, enum: ['status', 'start', 'stop'] },
+      requestedByUser: { type: 'boolean', description: 'True only for an explicit owner request to start or stop.' },
+      symbols: { type: 'array', items: { type: 'string' }, description: '1-12 USDT pairs; default BTCUSDT ETHUSDT SOLUSDT.' },
+    },
+    output: {schema:{type:'object',additionalProperties:true},
+      render: (_args,result)=>[{type:'text',text:JSON.stringify(result)}]},
+    async execute(args, exec) {
+      const auto=deps.testnetAuto
+      if(auto===undefined)return {mode:'testnet',configured:false,status:'host-service-unavailable'}
+      if(args.action==='status')return auto.snapshot() as unknown as Record<string, JsonValue>
+      if(args.requestedByUser!==true)throw new Error('Testnet automation control requires the owner request')
+      if(args.action==='stop')return await auto.stop() as unknown as Record<string, JsonValue>
+      if(args.action!=='start'||exec.agent===undefined)throw new Error('Testnet automation requires an active owner session')
+      const readiness=await (deps.testnet??new BinanceSpotTestnet()).status()
+      if(!readiness.connected||readiness.canTrade!==true)
+        return {mode:'testnet',enabled:false,status:'not-authenticated',issue:readiness.issue??'missing-testnet-keys'}
+      const approval=await deps.approval.request({
+        agent:exec.agent,toolName:'binance_testnet_auto',callId:exec.callId,
+        reason:'Authorize recurring autonomous Binance SPOT TESTNET market orders using FAKE testing assets only, bounded to 5% per entry, 100 TESTNET USDT max, two positions, 10 orders/day and stops/targets checked each minute until stopped.',
+        risk:'high',reversible:false,signal:exec.signal,
+      })
+      if(approval!=='allowed-once')return {mode:'testnet',enabled:false,status:'denied',approvalOutcome:approval}
+      return await auto.start(args.symbols??['BTCUSDT','ETHUSDT','SOLUSDT']) as unknown as Record<string, JsonValue>
+    },
+    presentCall(args) {
+      return {card:'generic',title:args.action==='start'?'Autorizar trading automático TESTNET'
+        :args.action==='stop'?'Detener trading automático TESTNET':'Diagnóstico trading TESTNET',
+        kind:args.action==='status'?'read':'execute',rawInput:args.action}
+    },
   })
 }
 
@@ -769,6 +809,7 @@ export function createBinanceTradingTools(deps: BinanceTradingToolDependencies):
     statusTool(deps),
     agentOsHealthTool(deps),
     testnetAccountTool(deps),
+    testnetAutoTool(deps),
     testnetOrderTool(deps),
     candlesTool(deps),
     paperOrderTool(deps),
