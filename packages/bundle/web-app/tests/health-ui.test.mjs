@@ -9,6 +9,8 @@ test('PHOENIX clinic page renders a real clinical workbench with valid inline Ja
  assert.match(html, /script nonce="test-nonce-opaque"/)
  assert.match(html, /patients/)
  assert.match(html, /prescriptions/)
+ assert.match(html, /patient-options/)
+ assert.match(html, /resources\[0\]\?\.\[0\]/)
  assert.match(html, /dispense/)
  assert.match(html, /emailVerified/)
  assert.match(html, /api\("reminders\/"\+id,"POST"/)

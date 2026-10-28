@@ -227,3 +227,16 @@ test('tampering with the authenticated clinical audit journal prevents reopening
   try{assert.throws(()=>reopened.login('clinicaladmin',PASSWORD),/Integridad del historial/)}
   finally{reopened.close()}
 })
+
+test('billing sees only minimum patient locator and cannot read clinical demographics',t=>{
+ const {db,admin}=fixture(t)
+ db.createStaff(admin.actor,{username:'billing1',password:'another-secure-password-2026',role:'billing'})
+ const billing=db.login('billing1','another-secure-password-2026').actor
+ const patient=db.create(admin.actor,'patients',{name:'Recepción factura',dateOfBirth:'1987-01-02',
+   email:'private@example.org',phone:'809-555-0000'})
+ const options=db.patientOptions(billing)
+ assert.deepEqual(options,[{id:patient.id,name:'Recepción factura'}])
+ assert.throws(()=>db.list(billing,'patients'),/Permiso/)
+ const invoice=db.create(billing,'invoices',{patientId:patient.id,concept:'Consulta',amountCents:40000})
+ assert.equal(invoice.patientId,patient.id)
+})
