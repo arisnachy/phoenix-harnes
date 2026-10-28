@@ -168,6 +168,44 @@ export class BinanceTestnetAutomation {
     await this.save()
     return this.snapshot()
   }
+  /** User-visible, READ-only recovery of uncertain Testnet order receipts. */
+  async reconcilePending(): Promise<BinanceTestnetAutomationState> {
+    await this.restore()
+    const intent=this.state.pending
+    if(!intent)return this.snapshot()
+    try{
+      const receipt=await this.testnet.orderStatus({
+        symbol:intent.symbol,clientOrderId:intent.clientOrderId,
+      })
+      await this.settle(receipt)
+      if(!this.state.pending){
+        this.state.lastDecision='provider-order-reconciled'
+        await this.save()
+      }
+    }catch{
+      this.state.enabled=false
+      this.state.halted=true
+      this.state.lastError='testnet-order-needs-reconciliation'
+      await this.save()
+    }
+    return this.snapshot()
+  }
+
+  /** A separate deliberate owner review can clear a Testnet-only safety halt. */
+  async clearReviewedHalt(): Promise<BinanceTestnetAutomationState> {
+    await this.restore()
+    if(this.state.pending)throw new Error('Cannot clear Testnet halt with an unresolved exchange order')
+    if(this.state.dayStartEquity>0
+      && this.state.dayRealizedLoss>=this.state.dayStartEquity*.03)
+      throw new Error('Daily Testnet loss cap remains active')
+    if(this.state.enabled)throw new Error('Stop Testnet before clearing a safety halt')
+    this.state.halted=false
+    this.state.failureCount=0
+    delete this.state.lastError
+    await this.save()
+    return this.snapshot()
+  }
+
   snapshot(): BinanceTestnetAutomationState {return structuredClone(this.state)}
   private async halt(reason: string, symbol='BTCUSDT'): Promise<void> {
     this.state.enabled=false;this.state.halted=true;this.state.lastError=reason
