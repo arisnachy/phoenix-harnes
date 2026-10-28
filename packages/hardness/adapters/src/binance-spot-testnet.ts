@@ -116,7 +116,8 @@ export class BinanceSpotTestnet {
           if (!timeResponse.ok) throw new Error('time-unavailable')
           const timeValue: unknown = await timeResponse.json()
           if (typeof timeValue !== 'object' || timeValue === null || Array.isArray(timeValue)
-            || !Number.isSafeInteger((timeValue as Record<string, unknown>).serverTime)) {
+            || typeof (timeValue as Record<string, unknown>).serverTime !== 'number'
+            || !Number.isSafeInteger((timeValue as Record<string, number>).serverTime)) {
             throw new Error('time-invalid')
           }
           const delta = Number((timeValue as Record<string, unknown>).serverTime) - this.clock()
