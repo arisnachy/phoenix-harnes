@@ -10,7 +10,7 @@ const board=(url)=>{
   if(!['20261028','20261027','20261026','20261025'].includes(day))return{events:[]}
   const pre=day==='20261028'
   return{events:Array.from({length:5},(_,i)=>({
-    id:String(500+i),date:pre?kick:day==='20261027'?'2026-10-27T21:00:00Z':day==='20261026'?'2026-10-26T21:00:00Z':'2026-10-25T21:00:00Z',
+    id:String(500+i+(pre?0:Number(day.slice(-2))*1000)),date:pre?kick:day==='20261027'?'2026-10-27T21:00:00Z':day==='20261026'?'2026-10-26T21:00:00Z':'2026-10-25T21:00:00Z',
     status:{type:{state:pre?'pre':'post'}},competitions:[{competitors:[
       {homeAway:'home',team:{id:String(i)+'1',displayName:'Home '+i,logo:'https://a.espncdn.com/home-'+i+'.png'},...(!pre?{score:'3'}:{})},
       {homeAway:'away',team:{id:String(i)+'2',displayName:'Away '+i},...(!pre?{score:'0'}:{})},
