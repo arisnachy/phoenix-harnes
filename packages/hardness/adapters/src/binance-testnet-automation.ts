@@ -350,10 +350,13 @@ export class BinanceTestnetAutomation {
       this.state.lastSignals=signals.map(s=>({
         symbol:s.symbol,score:s.score,strategy:s.strategy,action:s.action,reason:s.reason,
       }))
-      if(signals.every(s=>s.reason==='Market candles unavailable')){
-        throw new Error('all-testnet-strategy-scans-failed')
-      }
+      const verified=signals.filter(s=>!['Market candles unavailable',
+        'Stale market data','No sufficient closed candles','Invalid or out-of-order market candles',
+      ].includes(s.reason))
+      if(verified.length===0)throw new Error('all-testnet-strategy-scans-failed')
       this.state.lastScanAt=new Date(now).toISOString()
+      this.state.failureCount=0
+      delete this.state.lastError
       const candidate=[...signals].sort((a,b)=>b.score-a.score).find(s=>s.action==='buy'
         && s.score>=ENTRY_SCORE && !this.state.positions[s.symbol]
         && this.state.lastEntryBar[s.symbol]!==barsBySymbol.get(s.symbol))
