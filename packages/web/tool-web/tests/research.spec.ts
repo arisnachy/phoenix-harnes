@@ -79,6 +79,37 @@ describe('Phoenix universal research routing', () => {
     expect(plan.queries[1]).not.toContain('¿Qué exigen')
   })
 
+  it('offers opt-in deep multi-region academic discovery without slowing the default plan', () => {
+    const question = 'Requisitos de referencias bibliográficas para tesis de doctorado'
+    const quick = planResearch(question)
+    const deep = planResearch(question, undefined, 'deep')
+    expect(quick.queries).toHaveLength(3)
+    expect(deep.queries).toHaveLength(5)
+    expect(deep.queries[3]).toContain('site:edu.do')
+    expect(deep.queries[4]).toContain('site:edu.mx')
+    expect(() => planResearch(question, undefined, 'unbounded')).toThrow('depth must be quick or deep')
+  })
+
+  it('keeps deep research useful when some institutional domains are unavailable', async () => {
+    const search = vi.fn(async ({ query }: { query: string }) => {
+      if (query.includes('site:edu.mx')) throw new Error('regional provider offline')
+      return {
+        sources: [{
+          url: 'https://university.edu.do/doctorado/referencias',
+          title: 'Doctorado — reglas de referencias',
+        }],
+        truncated: false,
+      }
+    })
+    const ctx = { web: { search } } as unknown as Pick<Context, 'web'>
+    const plan = planResearch('Normas de referencias de tesis de doctorado', 'academic', 'deep')
+    const result = await executeResearch(ctx, plan, 8, signal)
+    expect(search).toHaveBeenCalledTimes(5)
+    expect(result.status).toBe('partial')
+    expect(result.sources).toHaveLength(1)
+    expect(result.failedQueries).toEqual([plan.queries[4]])
+  })
+
   it('rejects irrelevant academic search hits without inventing sources', async () => {
     const ctx = { web: { search: async () => ({
       truncated: false,
