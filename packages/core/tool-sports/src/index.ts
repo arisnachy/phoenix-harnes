@@ -6,12 +6,14 @@ import { sportsCatalog, discoverEspnLeagues, chatGames, marketOdds, pricedTicket
 import { getMlbPitcherReport } from './mlb.ts'
 import { researchTicket, autoResearchTicket, type ResearchTicketLeg } from './research-ticket.ts'
 import { sportsPromptNeeded } from './sports-prompt.ts'
+import { keylessOdds, keylessSports } from './keyless-odds.ts'
 
 export const name = 'tool-sports'
 export const inject = ['tools','systemPrompt']
 const GUIDANCE = [
   'Solo cuando el usuario pida deportes, juegos del día, jugadores, cuotas o tickets, consulta las herramientas sports_chat_catalog, sports_chat_discover, sports_chat_games, sports_chat_mlb_pitchers, sports_chat_odds, sports_chat_ticket, sports_chat_ticket_research o sports_chat_ticket_research_auto.',
   'NO abras pantallas independientes ni crees entradas de menú. Antes de redactar una cartelera o boleto, llama sports_chat_games y, cuando corresponda, sports_chat_mlb_pitchers / sports_chat_odds / sports_chat_ticket. Phoenix dibuja de manera nativa las tarjetas verificadas de los resultados. NO copies el JSON de los resultados en la respuesta, NO escribas fences generative-ui ni bloques de código, aunque una herramienta los incluya en sus datos. No dibujes tickets con caracteres ASCII, bordes de texto ni bloques de código etiquetados text: para eventos y selecciones reales usa exclusivamente los contratos nativos, conservando la presentación original de Phoenix. Si el usuario quiere solo una demostración, descríbela explícitamente como ficticia y no introduzcas cuotas o equipos inventados como hechos. Explica los hallazgos y las fuentes con un texto humano breve.',
+  'Para cuotas gratuitas por scraping (sin API key) consulta sports_chat_odds_keyless si el host habilitó OddsHarvester. No prometas consultas ilimitadas ni uses cuotas históricas como cotizaciones vigentes. El motor debe investigar todas las disciplinas disponibles, no solo NBA, y contrastar historial, lesionados, alineaciones, rendimiento, localía, cuota y fuentes externas cuando existan. Las votaciones y picks de otras personas son una referencia secundaria, no estimaciones propias ni garantía.',
   'Para muchos partidos muestra como máximo seis tarjetas relevantes y ofrece ampliar; nunca inventes eventos, cuotas, lanzadores, lesiones ni resultados ausentes.',
   'CONTRATO DE PATAS: cuando el usuario pide 5 patas, el resultado DEBE contener exactamente cinco selecciones verificadas; jamás presentes 1 de 5 como ticket completo. Si faltan datos, muestra explícitamente el número conseguido y el número pendiente como borrador incompleto. Respeta igualmente cualquier otro número de 1 a 6. No afirmes que una combinada ganará.',
   'Si piden un ticket y sports_chat_odds no devuelve cuotas, NO termines con NO BET. Usa sports_chat_ticket_research_auto con count igual al número solicitado cuando no dispongas de IDs: esta herramienta investiga carteleras y registros de los equipos en varias ligas y propone hasta esa cantidad de eventos reales, sin cuotas. Si la investigación especializada ya confirmó tus eventId y fundamentos, llama sports_chat_ticket_research con requestedLegs igual al número solicitado y todas las patas. El resultado con menos patas debe identificarse como borrador incompleto. No afirmes que los registros tempranos sean probabilidades calibradas. Si no hay partidos futuros verificados, explica la limitación.',
@@ -123,6 +125,44 @@ export function apply(ctx: Context): void {
         note:quotes.length?'Cuotas verificadas, no probabilidades propias. Actualizar antes de componer tickets.':'ESPN no publicó moneylines accesibles para ese día y mercado; no hace falta una clave para ver partidos. Las cuotas faltantes no se inventan.' })
     },
     presentCall:()=>({ card:'generic',title:'Comparar cuotas',kind:'read' as const }),
+  }))
+  ctx.tools.register(defineTool({
+    name:'sports_chat_odds_keyless',
+    description:'Cuotas multideporte sin API key desde OddsHarvester local autorizado: 11 deportes, mercados de prepartido, precios por casa con fuente y antigüedad. No promete acceso ilimitado.',
+    parameters:{
+      sport:{type:'string',required:true,description:'football, basketball, baseball, american-football, tennis, ice-hockey, rugby-league, rugby-union, handball, volleyball o cricket.'},
+      market:{type:'string',required:true,description:'Mercado del deporte: 1x2, double_chance, btts, moneyline, home_away, match_winner u over_under.'},
+      date:{type:'string',description:'Día AAAA-MM-DD en Santo Domingo; predeterminado hoy.'},
+    },
+    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    isConcurrencySafe:()=>true,
+    async execute(args){
+      const quotes=await keylessOdds(args.sport,args.market,args.date)
+      const grouped=new Map<string,typeof quotes>()
+      for(const quote of quotes.slice(0,96)){
+        const rows=grouped.get(quote.eventId)??[]
+        if(rows.length<12)rows.push(quote)
+        grouped.set(quote.eventId,rows)
+      }
+      const uiBlocks=[...grouped.values()].slice(0,5).flatMap(rows=>{
+        const first=rows[0]
+        if(!first)return []
+        return [{component:'sports_odds_card',version:1,props:{
+          title:first.away+' vs '+first.home,
+          subtitle:'Mercado '+first.market+' · precios observados, no una predicción',
+          source:first.source+' · '+first.updatedAt,
+          rows:rows.map(q=>({event:q.away+' vs '+q.home,market:q.market,
+            selection:q.selection,bookmaker:q.bookmaker,price:q.price.toFixed(2),
+            ...(q.point===null?{}:{point:String(q.point)})})),
+          note:'Scraping autorizado, sujeto a disponibilidad y condiciones del sitio. No se ejecutó apuesta.',
+        }}]
+      })
+      return JSON.stringify({source:'OddsHarvester/OddsPortal (sin API key)',supported:keylessSports,
+        sport:args.sport,market:args.market,observedAt:new Date().toISOString(),total:quotes.length,
+        uiBlocks,outcomes:quotes.slice(0,80),remaining:Math.max(0,quotes.length-80),
+        instruction:'PHOENIX renderiza tarjetas nativas. No confundir IDs del scraper con IDs ESPN sin reconciliar nombres/fecha/liga. La cuota refleja un precio observado, no una probabilidad propia ni garantía.'})
+    },
+    presentCall:()=>({card:'generic',title:'Investigar cuotas multideporte sin API key',kind:'read' as const}),
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_ticket_research_auto',
