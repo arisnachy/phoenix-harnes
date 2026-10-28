@@ -174,6 +174,25 @@ describe('Binance chat viewer HTTP integration', () => {
     expect((await fetch(url)).status).toBe(405)
   })
 
+  it('blocks replacing Testnet account keys when automation still owns positions or pending orders', async () => {
+    const { origin } = await serverWithTrading({
+      testnet: new BinanceSpotTestnet(),
+      credentials: {} as never,
+      testnetAuto: {snapshot() {
+        return { enabled: false, pending: {clientOrderId: 'px-pending'},
+          positions: {BTCUSDT:{quantity:0.4}} }
+      }} as never,
+    })
+    const result = await fetch(origin + '/phoenix-trading/paper/testnet-connect', {
+      method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ apiKey: 'TESTNET_KEY_1234567890', secret: 'TESTNET_SECRET_1234567890' }),
+    })
+    expect(result.status).toBe(409)
+    const body = await result.text()
+    expect(body).toContain('testnet-automation-account-change-blocked')
+    expect(body).not.toContain('TESTNET_SECRET_1234567890')
+  })
+
   it('validates keys only against Spot Testnet and never echoes or logs secrets', async () => {
     const secretValues = new Map<string, string>()
     const credentials = {
