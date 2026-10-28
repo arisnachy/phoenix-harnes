@@ -35,8 +35,8 @@ const safe=x=>String(x??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"
 const val=id=>document.getElementById(id)?.value??"";
 const box=(title,content)=>'<article class="card"><h2>'+safe(title)+'</h2>'+content+'</article>';
 const field=(id,label,type="text",required=true,place="")=>'<label for="'+id+'">'+safe(label)+'</label><input id="'+id+'" type="'+type+'" placeholder="'+safe(place)+'" '+(required?'required':'')+'>';
-const area=(id,label)=>'<label for="'+id+'">'+safe(label)+'</label><textarea id="'+id+'></textarea>';
-const pick=(id,label,items,selector)=>'<label for="'+id+'">'+safe(label)+'</label><select id="'+id+'>'+items.map(x=>'<option value="'+safe(x.id)+'">'+safe(selector(x))+'</option>').join('')+'</select>';
+const area=(id,label)=>'<label for="'+id+'">'+safe(label)+'</label><textarea id="'+id+'"></textarea>';
+const pick=(id,label,items,selector)=>'<label for="'+id+'">'+safe(label)+'</label><select id="'+id+'">'+items.map(x=>'<option value="'+safe(x.id)+'">'+safe(selector(x))+'</option>').join('')+'</select>';
 const button=(action,title,cls="primary")=>'<button type="button" class="'+cls+'" data-act="'+action+'">'+safe(title)+'</button>';
 const rows=(items,cols)=>items.length?'<div style="overflow:auto"><table><thead><tr>'+cols.map(c=>'<th>'+safe(c[0])+'</th>').join('')+'<th>Acciones</th></tr></thead><tbody>'+items.map(o=>'<tr>'+cols.map(c=>'<td>'+safe(o[c[1]])+'</td>').join('')+'<td>'+actionFor(o)+'</td></tr>').join('')+'</tbody></table></div>':'<p class="muted">No hay registros.</p>';
 let columnAction=null;
