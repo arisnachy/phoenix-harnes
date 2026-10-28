@@ -32,21 +32,18 @@ export function apply(ctx: Context): void {
     presentCall: () => ({ card: 'generic', title: 'Preparar interrogatorio clínico', kind: 'read' as const }),
   }))
   ctx.tools.register(defineTool({
-    name: 'health_kira_mail_preflight',
-    description: 'Solo comprueba si una notificación clínica sería elegible para cola segura. No lee correos, no envía, no reserva citas.',
-    parameters: {
-      senderConnected: { type: 'boolean', required: true },
-      senderVerified: { type: 'boolean', required: true },
-      recipientVerified: { type: 'boolean', required: true },
-      patientConsent: { type: 'boolean', required: true },
-      clinicianSigned: { type: 'boolean', required: true },
-      clinicianAuthorizedSend: { type: 'boolean', required: true },
-      securePortalReady: { type: 'boolean', required: true },
-      idempotencyKeyPresent: { type: 'boolean', required: true },
-    },
+    name: 'health_kira_mail_requirements',
+    description: 'Lista las verificaciones necesarias para configurar notificaciones clínicas seguras; no ejecuta ningún envío.',
+    parameters: {},
     output: { schema: { type: 'string' }, render: (_args,value) => [{ type: 'text' as const,text:value }] },
     isConcurrencySafe: () => true,
-    execute(args) { return Promise.resolve(JSON.stringify(planKiraMail(args))) },
-    presentCall: () => ({ card: 'generic', title: 'Comprobar envío seguro de Kira', kind: 'read' as const }),
+    execute() {
+      return Promise.resolve(JSON.stringify(planKiraMail({
+        senderConnected:false, senderVerified:false, recipientVerified:false,
+        patientConsent:false, clinicianSigned:false, clinicianAuthorizedSend:false,
+        securePortalReady:false, idempotencyKeyPresent:false,
+      })))
+    },
+    presentCall: () => ({ card: 'generic', title: 'Requisitos de comunicación clínica', kind: 'read' as const }),
   }))
 }
