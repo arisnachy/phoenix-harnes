@@ -3,12 +3,15 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { BinancePaperBroker } from './binance-paper.ts'
 import { runBinanceAdaptiveCycle, type BinanceAdaptiveCycle } from './binance-adaptive.ts'
+import { discoverBinanceSpotMarkets } from './binance-market-discovery.ts'
 
 const POLL_MIN_MS = 60_000
 const POLL_MAX_MS = 3_600_000
 const DEFAULT_POLL_MS = 60_000
 const DEFAULT_SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT']
 const MAX_RECENT_TRADES = 12
+const MAX_SCAN_SYMBOLS = 12
+const UNIVERSE_REFRESH_MS = 3_600_000
 
 /** Rare, meaningful events only; normal minute-by-minute monitoring costs no tokens. */
 export interface BinancePaperAttention {
@@ -24,6 +27,7 @@ export interface BinancePaperAutomationConfig {
   readonly symbols: readonly string[]
   readonly interval: '15m' | '1h' | '4h' | '1d'
   readonly pollMs: number
+  readonly autoDiscover: boolean
 }
 
 /** Host-side activity used by the read-only in-chat trading viewer. */
@@ -36,6 +40,13 @@ export interface BinancePaperAutomationView {
   readonly nextCheckAt?: string
   readonly lastError?: string
   readonly lastCycle?: BinanceAdaptiveCycle
+  readonly successfulCycles: number
+  readonly filledCycles: number
+  readonly signalsQualified: number
+  readonly universeSize: number
+  readonly lastScannedSymbols: readonly string[]
+  readonly lastDiscoveryAt?: string
+  readonly lastDiscoveryIssue?: string
   readonly settings: BinancePaperAutomationConfig
   readonly account: Awaited<ReturnType<BinancePaperBroker['account']>>
   readonly markedAt: string
@@ -52,6 +63,7 @@ export function binancePaperAutomationConfig(input: {
   symbols: readonly string[]
   interval?: BinancePaperAutomationConfig['interval']
   pollMs?: number
+  autoDiscover?: boolean
 }, enabled = true): BinancePaperAutomationConfig {
   const symbols = input.symbols.map(item => item.trim().toUpperCase())
   if (symbols.length < 1 || symbols.length > 12 || new Set(symbols).size !== symbols.length
@@ -64,7 +76,10 @@ export function binancePaperAutomationConfig(input: {
   if (!Number.isInteger(pollMs) || pollMs < POLL_MIN_MS || pollMs > POLL_MAX_MS) {
     throw new Error('Paper trading poll interval must be 60,000 to 3,600,000 milliseconds')
   }
-  return { schema: 1, enabled, symbols, interval, pollMs }
+  if (input.autoDiscover !== undefined && typeof input.autoDiscover !== 'boolean') {
+    throw new Error('Invalid auto discovery setting')
+  }
+  return { schema: 1, enabled, symbols, interval, pollMs, autoDiscover: input.autoDiscover ?? false }
 }
 
 /** Token-free Host runner: one virtual cycle at a time; no real Binance credential route. */
@@ -79,12 +94,60 @@ export class BinancePaperAutomation {
   private nextCheckAt: string | undefined
   private loaded = false
   private failures = 0
+  private successfulCycles = 0
+  private filledCycles = 0
+  private signalsQualified = 0
+  private universe: readonly string[] = []
+  private universeCursor = 0
+  private lastDiscoveryAt: string | undefined
+  private lastDiscoveryIssue: string | undefined
+  private lastScannedSymbols: readonly string[] = []
+  private readonly discover: () => Promise<readonly string[]>
   private attentionSink: ((event: BinancePaperAttention) => void) | undefined
   private lastReviewKey: string | undefined
   private lastReviewAt = 0
   private change: Promise<void> = Promise.resolve()
 
-  constructor(readonly broker: BinancePaperBroker, private readonly settingsPath: string) {}
+  constructor(
+    readonly broker: BinancePaperBroker,
+    private readonly settingsPath: string,
+    discover: () => Promise<readonly string[]> = discoverBinanceSpotMarkets,
+  ) { this.discover = discover }
+
+  /** Keep explicitly chosen pairs and rotate the remainder through liquid markets. */
+  private async scanSymbols(): Promise<readonly string[]> {
+    if (!this.config.autoDiscover) {
+      this.lastDiscoveryIssue = undefined
+      return this.config.symbols
+    }
+    const refresh = this.lastDiscoveryAt === undefined
+      || Date.now() - Date.parse(this.lastDiscoveryAt) >= UNIVERSE_REFRESH_MS
+    if (refresh) {
+      try {
+        const fresh = await this.discover()
+        const candidates = [...new Set(fresh)]
+          .filter(symbol => /^[A-Z0-9]{3,16}USDT$/u.test(symbol))
+          .slice(0, 120)
+        if (!candidates.length) throw new Error('No verified active Spot USDT markets')
+        this.universe = candidates
+        this.universeCursor = 0
+        this.lastDiscoveryAt = new Date().toISOString()
+        this.lastDiscoveryIssue = undefined
+      } catch {
+        this.lastDiscoveryIssue = 'El proveedor no entregó un universo verificable; se usó únicamente la lista fija'
+        if (this.universe.length === 0) return this.config.symbols
+      }
+    }
+    const pinned = this.config.symbols.slice(0, 3)
+    const choices = this.universe.filter(symbol => !pinned.includes(symbol))
+    const available = Math.max(0, MAX_SCAN_SYMBOLS - pinned.length)
+    const rotating = choices.length === 0 ? [] : Array.from(
+      { length: Math.min(available, choices.length) },
+      (_, i) => choices[(this.universeCursor + i) % choices.length]!,
+    )
+    this.universeCursor = choices.length ? (this.universeCursor + rotating.length) % choices.length : 0
+    return [...pinned, ...rotating]
+  }
 
   /**
    * Attach a Host-owned event sink; event delivery never changes trade execution.
@@ -138,6 +201,7 @@ export class BinancePaperAutomation {
         symbols: record.symbols,
         interval: record.interval as BinancePaperAutomationConfig['interval'],
         pollMs: record.pollMs,
+        autoDiscover: record.autoDiscover === true,
       }, record.enabled)
       if (this.config.enabled) {
         this.schedule()
@@ -159,6 +223,7 @@ export class BinancePaperAutomation {
     symbols: readonly string[]
     interval?: BinancePaperAutomationConfig['interval']
     pollMs?: number
+    autoDiscover?: boolean
   }): Promise<void> {
     const next = binancePaperAutomationConfig(input)
     await this.control(async () => {
@@ -166,6 +231,7 @@ export class BinancePaperAutomation {
       this.config = next
       this.failures = 0
       this.lastError = undefined
+      this.universeCursor = 0
       this.schedule()
     })
     // Do not acknowledge a newly started worker before its first scan settles.
@@ -208,14 +274,19 @@ export class BinancePaperAutomation {
       this.lastAttemptAt = new Date().toISOString()
       try {
         // Snapshot only the latest explicitly approved PAPER configuration.
-        const { symbols, interval } = this.config
+        const { interval } = this.config
+        const symbols = await this.scanSymbols()
+        this.lastScannedSymbols = symbols
         const cycle = await runBinanceAdaptiveCycle(this.broker, { symbols, interval, mode: 'paper-step' })
         result = cycle
         this.lastCycle = cycle
         this.lastSuccessAt = new Date().toISOString()
         this.lastError = undefined
         this.failures = 0
+        this.successfulCycles++
+        this.signalsQualified += cycle.signals.filter(signal => signal.action === 'buy' && signal.score >= 75).length
         if (cycle.trade !== undefined) {
+          this.filledCycles++
           this.reportAttention({
             kind: 'paper-trade', symbol: cycle.trade.symbol,
             detail: `${cycle.trade.side} virtual confirmado por ledger; ${cycle.rationale}`,
@@ -274,6 +345,13 @@ export class BinancePaperAutomation {
       ...(this.nextCheckAt === undefined ? {} : { nextCheckAt: this.nextCheckAt }),
       ...(this.lastError === undefined ? {} : { lastError: this.lastError }),
       ...(this.lastCycle === undefined ? {} : { lastCycle: this.lastCycle }),
+      successfulCycles: this.successfulCycles,
+      filledCycles: this.filledCycles,
+      signalsQualified: this.signalsQualified,
+      universeSize: this.universe.length,
+      lastScannedSymbols: this.lastScannedSymbols,
+      ...(this.lastDiscoveryAt === undefined ? {} : { lastDiscoveryAt: this.lastDiscoveryAt }),
+      ...(this.lastDiscoveryIssue === undefined ? {} : { lastDiscoveryIssue: this.lastDiscoveryIssue }),
       settings: this.config,
       account,
       markedAt: new Date().toISOString(),
