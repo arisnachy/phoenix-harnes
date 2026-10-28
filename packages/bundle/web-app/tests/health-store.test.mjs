@@ -108,3 +108,37 @@ test('real Kira reminder reservation requires clinician ownership, verified emai
   assert.equal(db.reminders(admin.actor)[0].status,'sent')
   assert.equal(db.reminders(admin.actor)[0].sender,'kira@institution.org')
 })
+
+test('real pharmacy dispensing is atomic, signed, single-use, and decrements stock',t=>{
+  const {db,admin}=fixture(t)
+  db.createStaff(admin.actor,{username:'doctor1',password:'another-secure-password-2026',role:'clinician'})
+  db.createStaff(admin.actor,{username:'pharmacy1',password:'another-secure-password-2026',role:'pharmacy'})
+  const doctor=db.login('doctor1','another-secure-password-2026').actor
+  const pharmacist=db.login('pharmacy1','another-secure-password-2026').actor
+  const patient=db.create(admin.actor,'patients',{name:'Consulta farmacéutica',dateOfBirth:'1986-01-02'})
+  let encounter=db.create(doctor,'encounters',{patientId:patient.id,specialty:'Medicina',complaint:'Control',mode:'manual'})
+  encounter=db.update(doctor,'encounters',encounter.id,encounter.version,{action:'document',history:'Historia profesional'})
+  encounter=db.update(doctor,'encounters',encounter.id,encounter.version,{action:'review'})
+  encounter=db.update(doctor,'encounters',encounter.id,encounter.version,{action:'sign'})
+  const rx=db.create(doctor,'prescriptions',{encounterId:encounter.id,medication:'Producto autorizado',directions:'Instrucciones clínicas redactadas por profesional'})
+  let stock=db.create(pharmacist,'inventory',{item:'Producto autorizado'})
+  stock=db.update(pharmacist,'inventory',stock.id,stock.version,{delta:2})
+  const result=db.dispense(pharmacist,rx.id,stock.id)
+  assert.equal(result.prescription.status,'dispensed')
+  assert.equal(result.inventory.units,1)
+  assert.throws(()=>db.dispense(pharmacist,rx.id,stock.id),/ya fue/)
+  assert.equal(db.list(pharmacist,'inventory')[0].units,1)
+  assert.throws(()=>db.dispense(doctor,rx.id,stock.id),/farmacéutico/)
+})
+test('psychotherapy notes are restricted to the author even inside one clinic',t=>{
+  const {db,admin}=fixture(t)
+  db.createStaff(admin.actor,{username:'psychologist1',password:'another-secure-password-2026',role:'psychologist'})
+  db.createStaff(admin.actor,{username:'doctor1',password:'another-secure-password-2026',role:'clinician'})
+  const psych=db.login('psychologist1','another-secure-password-2026').actor
+  const doctor=db.login('doctor1','another-secure-password-2026').actor
+  const patient=db.create(admin.actor,'patients',{name:'Paciente privado',dateOfBirth:'1990-01-01'})
+  db.create(psych,'encounters',{patientId:patient.id,specialty:'Psicología',complaint:'Sesión confidencial',mode:'manual'})
+  assert.equal(db.list(psych,'encounters').length,1)
+  assert.equal(db.list(doctor,'encounters').length,0)
+  assert.equal(db.list(admin.actor,'encounters').length,0)
+})
