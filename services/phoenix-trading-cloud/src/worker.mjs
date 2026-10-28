@@ -91,6 +91,7 @@ async function cycle(env,now=Date.now()){
   try{
     const day=new Date(now).toISOString().slice(0,10);
     if(day!==state.day){state.day=day;state.dayLoss=0;state.dayStartEquity=state.equity;}
+    state.lastAttempt=now;
     await discover(state,now);
     const names=Object.keys(state.positions);
     const selected=select(state);
@@ -99,7 +100,7 @@ async function cycle(env,now=Date.now()){
     const quotes=Object.fromEntries(quotesRaw.map(q=>[q.symbol,Number(q.price)]));
     mark(state,quotes);
     let decision='hold';
-    state.lastAttempt=now;
+    let verifiedScans=0;
     state.lastScannedSymbols=[];
     state.evaluations=[];
     state.lastDecisionReason='No verified entry meets the strategy and risk gates';
@@ -125,12 +126,14 @@ async function cycle(env,now=Date.now()){
       const scanned=await Promise.allSettled(selected.map(symbol=>market(
         '/api/v3/klines?symbol='+symbol+'&interval=15m&limit=80').then(raw=>
           analyze(symbol,parseKlines(raw,now,900_000)))));
+      verifiedScans=scanned.filter(result=>result.status==='fulfilled').length;
       const signals=scanned.map((res,i)=>res.status==='fulfilled'?res.value:
         {symbol:selected[i],action:'hold',score:0,strategy:'market-error',
           reason:'Market evidence unavailable'});
       signals.sort((a,b)=>b.score-a.score);
       state.signals=signals;
       state.lastScannedSymbols=selected;
+      state.lastVerifiedScanCount=verifiedScans;
       state.evaluations=signals.map(signal=>({
         symbol:signal.symbol,strategy:signal.strategy,action:signal.action,score:signal.score,
         outcome:signal.strategy==='market-error'?'market-unavailable'
@@ -138,7 +141,7 @@ async function cycle(env,now=Date.now()){
         reason:signal.reason,
       }));
       // A total provider outage is an error, never a successful scan.
-      if(scanned.every(result=>result.status==='rejected'))throw new Error('all-market-scans-failed');
+      if(verifiedScans===0)throw new Error('all-market-scans-failed');
       const candidate=signals.find(s=>s.action==='buy' && s.score>=70);
       if(candidate){
         const budget=riskBudget(state,candidate,quotes);
@@ -194,12 +197,12 @@ async function cycle(env,now=Date.now()){
        state.dayLoss>=state.dayStartEquity*.03){
       state.enabled=false;state.halted=true;emit(state,'risk-halt','Drawdown/daily-loss circuit breaker',now);
     }
-    if(state.lastScannedSymbols.length)state.lastScan=now;
+    if(verifiedScans>0)state.lastScan=now;
     state.lastCycleAt=now;state.lastDecision=decision;
     state.lastError=null;state.failureCount=0;
     await write(env.DB,state);
     await flushEvents(env.DB,state);
-    return {status:state.halted?'halted':'ok',slot,decision,scanned:selected.length,
+    return {status:state.halted?'halted':'ok',slot,decision,scanned:verifiedScans,
       universe:state.universe.length,positions:Object.keys(state.positions).length};
   }catch(error){
     // Do not persist or surface arbitrary provider/DB exception messages.
@@ -243,7 +246,8 @@ async function route(req,env){
       lastCycleAt:state.lastCycleAt??0,lastDecision:state.lastDecision??'not-run',
       lastDecisionReason:state.lastDecisionReason??'No completed cycle',
       lastScannedSymbols:state.lastScannedSymbols??[],
-      evaluations:state.evaluations??[],failureCount:state.failureCount,
+      evaluations:state.evaluations??[],verifiedScans:state.lastVerifiedScanCount??0,
+      failureCount:state.failureCount,
       lastError:state.lastError,universeCount:state.universe.length,
       positions:state.positions,signals:state.signals,journal:state.journal.slice(-50),
       warning:'Virtual trading only; software stops execute at the next Cron, not at Binance.'});
