@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto'
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { evaluateBinanceAdaptiveSignal, type BinanceAdaptiveSignal } from './binance-adaptive.ts'
-import { BinancePublicMarketClient, type BinancePublicMarket } from './binance-paper.ts'
+import type { BinancePublicMarket } from './binance-paper.ts'
 import { BinanceSpotTestnet, type BinanceTestnetOrderReceipt } from './binance-spot-testnet.ts'
 
 const POLL_MS = 60_000
@@ -105,7 +105,8 @@ export class BinanceTestnetAutomation {
   constructor(
     private readonly file: string,
     private readonly testnet: BinanceSpotTestnet,
-    private readonly market: BinancePublicMarket = new BinancePublicMarketClient(),
+    // Optional deterministic fixture for tests; production reads only TESTNET candles.
+    private readonly market?: Pick<BinancePublicMarket, 'candles'>,
   ) {}
 
   setAttentionSink(sink: typeof this.sink): void { this.sink=sink }
@@ -346,7 +347,8 @@ export class BinanceTestnetAutomation {
       const barsBySymbol=new Map<string,number>()
       for(const symbol of this.state.symbols){
         try{
-          const candles=await this.market.candles(symbol,'15m',80)
+          const candles=await (this.market?.candles(symbol,'15m',80)
+            ?? this.testnet.candles(symbol,'15m',80))
           const closed=candles.filter(bar=>bar.closeTime<=now).at(-1)
           if(closed)barsBySymbol.set(symbol,closed.closeTime)
           signals.push(evaluateBinanceAdaptiveSignal(symbol,candles,900_000,now))
