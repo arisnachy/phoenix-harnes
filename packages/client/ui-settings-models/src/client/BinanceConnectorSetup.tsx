@@ -38,6 +38,7 @@ async function readHostJson<T>(path: string, payload?: Record<string, string>): 
     // Never show raw provider errors or request payloads, which may contain keys.
     const error = result && typeof result === 'object' && !Array.isArray(result)
       ? (result as Record<string, unknown>).error : undefined
+    if (error === 'testnet-automation-account-change-blocked') throw new Error('Detén Testnet y concilia o cierra sus operaciones pendientes antes de cambiar las claves.')
     if (error === 'vault-read-only') throw new Error('La bóveda es de solo lectura; revisa las variables del Host.')
     if (error === 'vault-write-failed') throw new Error('No se pudieron guardar y verificar ambas claves en la bóveda.')
     if (response.status === 404) throw new Error('Actualiza o reinicia el Host de Phoenix para habilitar la conexión Binance.')
