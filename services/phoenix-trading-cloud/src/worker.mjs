@@ -127,14 +127,23 @@ async function cycle(env,now=Date.now()){
       if(candidate){
         const budget=riskBudget(state,candidate,quotes);
         if(budget>=10){
-          const price=candidate.price*(1+SIMULATED_SLIPPAGE);
-          const quantity=budget/(price*(1+FEE_RATE));
-          const next=paperFill(state,{id:'virtual:'+slot+':'+candidate.symbol+':buy',at:now,
-            symbol:candidate.symbol,side:'buy',price,quantity,
-            strategy:candidate.strategy,reason:candidate.reason,
-            plan:exitPlan(price,candidate.atr,candidate.strategy)});
-          Object.assign(state,next);decision='buy';
-          emit(state,'paper-entry','Entry virtual '+candidate.symbol,now,candidate.symbol);
+          // A closed-candle signal is NOT an executable quote. Price the
+          // virtual entry from a separately fetched current public ticker.
+          const ticker=await market('/api/v3/ticker/price?symbol='+candidate.symbol);
+          const last=Number(ticker.price);
+          if(!(last>0) || Math.abs(last/candidate.price-1)>.02){
+            emit(state,'risk-review','Quote drift >2% since closed candle; entry withheld',
+              now,candidate.symbol);
+          }else{
+            const price=last*(1+SIMULATED_SLIPPAGE);
+            const quantity=budget/(price*(1+FEE_RATE));
+            const next=paperFill(state,{id:'virtual:'+slot+':'+candidate.symbol+':buy',at:now,
+              symbol:candidate.symbol,side:'buy',price,quantity,
+              strategy:candidate.strategy,reason:candidate.reason,
+              plan:exitPlan(price,candidate.atr,candidate.strategy)});
+            Object.assign(state,next);decision='buy';
+            emit(state,'paper-entry','Entry virtual '+candidate.symbol,now,candidate.symbol);
+          }
         }else emit(state,'risk-review','Entry blocked by deterministic risk gate',
           now,candidate.symbol);
       }
