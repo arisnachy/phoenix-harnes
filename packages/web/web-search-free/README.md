@@ -24,6 +24,6 @@ El resultado añade un sufijo al contexto; el prefijo sin cambios sigue siendo e
 
 ## Known Limitations and Deferred Work
 
-- Los buscadores HTML públicos pueden devolver CAPTCHA, resultados regionales o cambios de marcado; el proveedor prueba el siguiente motor y falla de forma acotada.
+- Los buscadores HTML públicos pueden devolver CAPTCHA, resultados regionales o cambios de marcado; el proveedor tolera atributos reordenados, enlaces de redirección DuckDuckGo y resultados sin resumen, prueba el siguiente motor y falla de forma acotada.
 - No sustituye una API con garantías de disponibilidad ni ofrece navegación JavaScript; un proveedor Chrome separado puede cubrir esa necesidad.
 - Las páginas devueltas deben verificarse antes de usarse como evidencia.
