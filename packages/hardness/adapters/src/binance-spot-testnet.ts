@@ -191,8 +191,12 @@ export class BinanceSpotTestnet {
     readonly side: 'BUY' | 'SELL'
     readonly quoteUsdt?: number
     readonly quantity?: number
+    readonly clientOrderId?: string
   }): Promise<BinanceTestnetOrderReceipt> {
     const symbol = pair(input.symbol)
+    if(input.clientOrderId !== undefined && !/^[A-Za-z0-9_-]{12,36}$/u.test(input.clientOrderId)) {
+      throw new Error('Invalid Spot Testnet client order id')
+    }
     const side: unknown = input.side
     if (side !== 'BUY' && side !== 'SELL') throw new Error('Invalid Testnet side')
     const buy = input.side === 'BUY'
@@ -207,6 +211,7 @@ export class BinanceSpotTestnet {
     const value = await this.signed('/api/v3/order', 'POST', {
       symbol, side: input.side, type: 'MARKET',
       ...(buy ? { quoteOrderQty: String(input.quoteUsdt) } : { quantity: String(input.quantity) }),
+      ...(input.clientOrderId === undefined ? {} : { newClientOrderId: input.clientOrderId }),
     })
     if (value.symbol !== symbol || value.side !== input.side
       || typeof value.orderId !== 'number' || !Number.isSafeInteger(value.orderId)
@@ -218,5 +223,30 @@ export class BinanceSpotTestnet {
       mode: 'testnet', symbol, side: input.side, orderId: value.orderId,
       status: value.status, executedQty: value.executedQty, cummulativeQuoteQty: value.cummulativeQuoteQty,
     }
+  }
+
+  /**
+   * Reconcile a possibly accepted but unacknowledged TESTNET order by its
+   * previously persisted client ID. Never retries by submitting another order.
+   */
+  async orderStatus(input: { readonly symbol: string; readonly clientOrderId: string }): Promise<BinanceTestnetOrderReceipt> {
+    const symbol = pair(input.symbol)
+    if(!/^[A-Za-z0-9_-]{12,36}$/u.test(input.clientOrderId)) {
+      throw new Error('Invalid Spot Testnet client order id')
+    }
+    const value = await this.signed('/api/v3/order', 'GET', {
+      symbol, origClientOrderId: input.clientOrderId,
+    })
+    if (value.symbol !== symbol
+      || (value.side !== 'BUY' && value.side !== 'SELL')
+      || typeof value.orderId !== 'number' || !Number.isSafeInteger(value.orderId)
+      || typeof value.status !== 'string'
+      || typeof value.executedQty !== 'string'
+      || typeof value.cummulativeQuoteQty !== 'string') {
+      throw new Error('Incomplete Testnet order reconciliation receipt')
+    }
+    return { mode: 'testnet', symbol, side: value.side, orderId: value.orderId,
+      status: value.status, executedQty: value.executedQty,
+      cummulativeQuoteQty: value.cummulativeQuoteQty }
   }
 }
