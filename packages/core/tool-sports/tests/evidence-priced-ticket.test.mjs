@@ -112,3 +112,54 @@ test('non-finite bookmaker prices are never used for a quoted ticket',async()=>{
   assert.equal(result.priced,false)
   assert.equal(result.quotedLegs,0)
 })
+
+test('six priced legs are six independently verified fixtures at one bookmaker',async()=>{
+  const sixFeed=async url=>{
+    const data=board(url)
+    if(data.events.length){
+      const added=structuredClone(data.events[4])
+      added.id=String(Number(added.id)+1)
+      added.competitions[0].competitors[0].team={id:'51',displayName:'Home 5',
+        logo:'https://a.espncdn.com/home-5.png'}
+      added.competitions[0].competitors[1].team={id:'52',displayName:'Away 5'}
+      data.events.push(added)
+    }
+    return new Response(JSON.stringify(data),{status:200})
+  }
+  const quotes=async()=>Array.from({length:6},(_,i)=>({
+    eventId:'oddsportal-'+i,bookmaker:'Book A',market:'1x2',
+    selection:'Home '+i,point:null,price:1.91,home:'Home '+i,away:'Away '+i,
+    time:kick,updatedAt:'2026-10-28T14:30:00Z',
+    sportKey:'football',source:'OddsHarvester/OddsPortal (sin API key)',
+  }))
+  const result=await evidencePricedTicket(6,date,'soccer',100,now,enabled,sixFeed,quotes)
+  assert.equal(result.complete,true)
+  assert.equal(result.priced,true)
+  assert.equal(result.verifiedEvents,6)
+  assert.equal(result.card.props.legs.length,6)
+  assert.equal(new Set(result.card.props.legs.map(x=>x.event)).size,6)
+  assert.equal(result.card.props.requestedLegs,6)
+})
+test('X2 quotes are accepted only when three-game form favors the away team',async()=>{
+  const awayFeed=async url=>{
+    const data=board(url)
+    if(!String(url).includes('dates=20261028')){
+      for(const event of data.events){
+        event.competitions[0].competitors[0].score='0'
+        event.competitions[0].competitors[1].score='3'
+      }
+    }
+    return new Response(JSON.stringify(data),{status:200})
+  }
+  const quotes=async()=>Array.from({length:5},(_,i)=>({
+    eventId:'oddsportal-'+i,bookmaker:'Book A',market:'double_chance',
+    selection:'X2',point:null,price:1.36,home:'Home '+i,away:'Away '+i,
+    time:kick,updatedAt:'2026-10-28T14:30:00Z',
+    sportKey:'football',source:'OddsHarvester/OddsPortal (sin API key)',
+  }))
+  const result=await evidencePricedTicket(5,date,'soccer',100,now,enabled,awayFeed,quotes,'double_chance')
+  assert.equal(result.priced,true)
+  assert.equal(result.card.props.legs.length,5)
+  assert.equal(result.card.props.legs[0].selection,'X2 · Visita o empate')
+  assert.equal(result.card.props.legs[0].price,'1.36')
+})
