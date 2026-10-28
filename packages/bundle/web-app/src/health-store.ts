@@ -424,6 +424,30 @@ export class HealthClinicStore {
       const result=this.db.prepare('UPDATE health_records SET version=?, iv=?,tag=?,payload=?,updated_at=? WHERE id=? AND org=? AND kind=? AND version=?')
         .run(version,sealed.iv,sealed.tag,sealed.payload,now,id,actor.org,kind,expectedVersion)
       if(Number(result.changes)!==1)fail('Conflicto de concurrencia')
+      // A critical lab/imaging result creates an urgent follow-up in the SAME
+      // transaction: the order cannot be critical without a durable work item.
+      if(kind==='orders'&&data.status==='ordered'&&next.status==='critical-pending-review'){
+        const encounterId=str(next.encounterId,'Consulta de resultado crítico',80)
+        const clinicalRow=this.db.prepare(
+          "SELECT * FROM health_records WHERE id=? AND org=? AND kind='encounters'"
+        ).get(encounterId,actor.org) as Row|undefined
+        if(!clinicalRow)fail('Consulta de resultado crítico inexistente')
+        const encounter=this.open(clinicalRow)
+        const assignedTo=str(encounter.practitioner,'Profesional responsable',80)
+        const patientId=str(next.patientId,'Paciente',80)
+        if(encounter.patientId!==patientId)fail('Resultado crítico no corresponde al paciente')
+        const urgentId=randomUUID()
+        const followup:RecordData={
+          patientId,assignedTo,dueAt:now,status:'pending',priority:'urgent',
+          sourceOrderId:id,origin:'critical-result',
+          description:'Resultado crítico pendiente de contacto y gestión asistencial directa.',
+        }
+        const sealedTask=this.seal(urgentId,actor.org,'followups',1,followup)
+        this.db.prepare('INSERT INTO health_records VALUES (?,?,?,?,?,?,?,?,?)')
+          .run(urgentId,actor.org,'followups',1,
+            sealedTask.iv,sealedTask.tag,sealedTask.payload,now,now)
+        this.audit(actor,'critical.followup.created',urgentId)
+      }
       this.audit(actor,kind+'.update',id);this.db.exec('COMMIT')
       return { id,version,createdAt:row.created_at,updatedAt:now,...next }
     }catch(e){this.db.exec('ROLLBACK');throw e}

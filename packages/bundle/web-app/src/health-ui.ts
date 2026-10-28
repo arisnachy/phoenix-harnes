@@ -72,6 +72,8 @@ async function load(){
  root.innerHTML='<main><aside>'+resources.map(x=>'<button data-tab="'+x[0]+'" class="'+(x[0]===tab?'active':'')+'">'+x[1]+'</button>').join('')+
  '</aside><section><div id="view"><div class="card">Cargando…</div></div></section></main>';
  const ids=tab==="assignments"?["assignments","patients"]:tab==="orders"?["orders","encounters"]:tab==="prescriptions"?["prescriptions","encounters","inventory"]:tab==="encounters"?["encounters","patients"]:tab==="appointments"?["appointments","patients"]:tab==="invoices"?["invoices","patient-options"]:tab==="followups"?["followups","patients"]:["patients",tab];
+ if((actor.role==="clinician"||actor.role==="admin")&&!ids.includes("followups"))
+  ids.push("followups");
  for(const id of new Set(ids)){try{data[id]=(await api(id)).items}catch{data[id]=[]}}
  render()
 }
@@ -127,15 +129,27 @@ function render(){
  if(tab==="prescriptions")cols=[["Medicamento","medication"],["Firmado por","signedBy"],["Estado","status"]];
  if(tab==="inventory")cols=[["Producto","item"],["Unidades","units"]];
  if(tab==="invoices")cols=[["Concepto","concept"],["Total (centavos)","amountCents"],["Pagado","paidCents"]];
- if(tab==="followups")cols=[["Tarea","description"],["Vence","dueAt"],["Estado","status"]];
+ if(tab==="followups")cols=[["Tarea","description"],["Prioridad","priority"],
+   ["Asignado a","assignedTo"],["Vence","dueAt"],["Estado","status"]];
  if(tab==="backups")cols=[["Archivo verificado","fileName"]];
  if(tab==="assignments")cols=[["Paciente","patientId"],["Profesional","staffId"],["Finalidad","purpose"],["Autorizó","grantedBy"]];
  if(tab==="staff")cols=[["Usuario","username"],["Rol","role"],["Centro","org"]];
  if(tab==="audit")cols=[["Acción","action"],["Actor","actor"],["Registro","recordId"],["Hora","happened"]];
- document.getElementById("view").innerHTML=box(titles[tab],'<div class="muted">Datos de la institución autenticada · Registro persistente cifrado</div>'+form)+
+ const criticalFollowupCount=(data.followups||[]).filter(x=>
+  x.status==="pending"&&x.priority==="urgent"&&
+  (actor.role==="admin"||x.assignedTo===actor.username)).length;
+ const criticalBanner=criticalFollowupCount?
+  '<div role="alert" class="notice warning"><strong>Atención clínica urgente: '+
+  criticalFollowupCount+' seguimiento(s) pendientes.</strong> '+
+  'Contacte directamente al equipo responsable según el protocolo institucional. '+
+  'PHOENIX no envía avisos externos automáticos. '+
+  button("openCriticalFollowups","Abrir seguimiento urgente","secondary")+'</div>':'';
+ document.getElementById("view").innerHTML=criticalBanner+
+ box(titles[tab],'<div class="muted">Datos de la institución autenticada · Registro persistente cifrado</div>'+form)+
  box("Registros",genericRows(d,cols))+(tab==="prescriptions"?'<p class="notice warning">Las recetas no se envían por correo desde esta versión. La firma clínica exige revisión profesional.</p>':'');
 }
 async function execute(action,id){
+ if(action==="openCriticalFollowups"){tab="followups";return load()}
  if(action==="logout"){await api("logout","POST",{});actor=null;csrf="";data={};tab="patients";return splash()}
  if(action==="setup"){await api("setup","POST",{username:val("user"),password:val("pass"),organization:val("org")});notice("Clínica configurada. Inicia sesión.");return splash()}
  if(action==="login"){const x=await api("login","POST",{username:val("user"),password:val("pass")});csrf=x.csrf;actor=x.actor;data={};tab="patients";return load()}

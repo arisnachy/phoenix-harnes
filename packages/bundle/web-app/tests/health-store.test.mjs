@@ -426,3 +426,36 @@ test('Kira blocks a queued reminder when clinician access is revoked or appointm
   assert.throws(()=>db.confirmReminderDelivery(
     doctor,appointment.id,'kira@example.org',queued.recipient),/no asignado/)
 })
+
+test('critical laboratory report atomically creates exactly one urgent encrypted clinician follow-up',t=>{
+  const {db,admin,root}=fixture(t)
+  db.createStaff(admin.actor,{username:'doctor1',password:'another-secure-password-2026',role:'clinician'})
+  db.createStaff(admin.actor,{username:'labuser',password:'another-secure-password-2026',role:'lab'})
+  const doctor=db.login('doctor1','another-secure-password-2026').actor
+  const lab=db.login('labuser','another-secure-password-2026').actor
+  const patient=db.create(admin.actor,'patients',{name:'Synthetic critical task',dateOfBirth:'1977-06-01'})
+  db.assignPatient(admin.actor,patient.id,'doctor1','Results review')
+  let e=db.create(doctor,'encounters',{patientId:patient.id,specialty:'General',complaint:'Control',mode:'manual'})
+  e=db.update(doctor,'encounters',e.id,e.version,{action:'document',history:'Anamnesis sintética'})
+  e=db.update(doctor,'encounters',e.id,e.version,{action:'review'})
+  e=db.update(doctor,'encounters',e.id,e.version,{action:'sign'})
+  let o=db.create(doctor,'orders',{encounterId:e.id,modality:'laboratory',description:'Simulated test'})
+  assert.throws(()=>db.update(lab,'orders',o.id,o.version,{
+    action:'result',result:'',critical:true}),/Resultado/)
+  assert.equal(db.list(doctor,'followups').filter(x=>x.priority==='urgent').length,0)
+  o=db.update(lab,'orders',o.id,o.version,{
+    action:'result',result:'Synthetic critical value 5566778899',critical:true})
+  assert.equal(o.status,'critical-pending-review')
+  const tasks=db.list(doctor,'followups').filter(x=>x.priority==='urgent')
+  assert.equal(tasks.length,1)
+  assert.equal(tasks[0].sourceOrderId,o.id)
+  assert.equal(tasks[0].patientId,patient.id)
+  assert.equal(tasks[0].assignedTo,'doctor1')
+  assert.equal(tasks[0].status,'pending')
+  assert(!readFileSync(join(root,'clinic.sqlite')).includes(Buffer.from('Resultado crítico pendiente')))
+  assert.throws(()=>db.list(lab,'followups'),/Permiso/)
+  assert.throws(()=>db.update(lab,'orders',o.id,o.version,{
+    action:'result',result:'Duplicate',critical:true}),/Transición/)
+  assert.equal(db.list(doctor,'followups').filter(x=>x.priority==='urgent').length,1)
+  assert(db.audits(admin.actor).some(x=>x.action==='critical.followup.created'))
+})
