@@ -355,7 +355,7 @@ export function TradingDashboard({ initial }: Props) {
                   </span>
                   <small className={css.radarScore}>{signal.score}/100</small>
                 </div>
-              } )}
+              })}
             </div>}
           <p className={css.footnote}>{state.rationale}</p>
         </section>
