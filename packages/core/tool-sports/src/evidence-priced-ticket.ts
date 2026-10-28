@@ -105,7 +105,7 @@ export async function evidencePricedTicket(
       ...Object.fromEntries(['homeTeam','awayTeam','homeLogo','awayLogo','sport',
         'league','country','rationale','when'].filter(k=>typeof prior[k]==='string')
         .map(k=>[k,prior[k]])),
-      ...(quote?{price:quote.price.toFixed(2),bookmaker:quote.bookmaker,
+      ...(quote?{price:String(quote.price),bookmaker:quote.bookmaker,
         ...(quote.market==='double_chance'?{selection:quote.selection==='1X'
           ?'1X · Local o empate':'X2 · Visita o empate',
           market:'Doble oportunidad (1X/X2)',
