@@ -86,6 +86,12 @@ export const RESEARCH_SOURCES: Record<string, readonly ResearchSource[]> = {
     { name: 'Open Library', host: 'openlibrary.org', access: 'public' },
     { name: 'Library of Congress', host: 'loc.gov', access: 'public' },
   ],
+  academic: [
+    { name: 'University graduate schools (.edu)', host: 'edu', access: 'public' },
+    { name: 'United Kingdom university guidance (.ac.uk)', host: 'ac.uk', access: 'public' },
+    { name: 'Dominican university guidance (.edu.do)', host: 'edu.do', access: 'public' },
+    { name: 'Mexican university guidance (.edu.mx)', host: 'edu.mx', access: 'public' },
+  ],
   education: [
     { name: 'ERIC', host: 'eric.ed.gov', access: 'public' },
     { name: 'UNESCO', host: 'unesco.org', access: 'public' },
@@ -139,6 +145,7 @@ const DOMAIN_PATTERNS: readonly (readonly [string, RegExp])[] = [
   ['travel', /\b(vuelo|aeropuerto|hotel|viaje|turismo|flight|airline)\b/iu],
   ['news', /\b(noticias|actualidad|breaking|noticia|acontecimiento)\b/iu],
   ['cybersecurity', /\b(cve|vulnerabilidad|ciberseguridad|malware|exploit|seguridad inform[aá]tica)\b/iu],
+  ['academic', /\b(tesis|tesina|thesis|dissertation|disertaci[oó]n|maestr[ií]a|doctorad[oa]|posgrado|postgrado|referencias bibliogr[aá]ficas|bibliograf[ií]a)\b/iu],
   ['education', /\b(educaci[oó]n|pedagog|curso|universidad|ense[nñ]anza|aprendizaje)\b/iu],
   ['science', /\b(ciencia|investigaci[oó]n|art[ií]culos cient[ií]ficos|papers|estudio cient[ií]fico|arxiv)\b/iu],
   ['geography', /\b(mapa|geograf[ií]a|coordenada|cartograf[ií]a)\b/iu],
@@ -165,20 +172,28 @@ export interface ResearchPlan {
  * Infer a research domain and create a bounded source-aware search plan.
  * @param question - user's research question, from 3 to 500 characters.
  * @param requestedDomain - optional explicit catalogue domain.
+ * @param depth - quick (default) or deep for up to four authority-scoped hosts.
  * @returns broad and authority-scoped queries plus candidate metadata.
  */
-export function planResearch(question: string, requestedDomain?: string): ResearchPlan {
+export function planResearch(question: string, requestedDomain?: string, depth = 'quick'): ResearchPlan {
   const q = question.trim()
   if (q.length < 3 || q.length > 500) throw new ToolArgsError(['question must contain 3–500 characters'])
+  if (depth !== 'quick' && depth !== 'deep') throw new ToolArgsError(['depth must be quick or deep'])
   const domain = requestedDomain === undefined || requestedDomain.trim() === ''
     ? (DOMAIN_PATTERNS.find(([, pattern]) => pattern.test(q))?.[0] ?? 'general')
     : requestedDomain.trim().toLowerCase()
   if (!Object.hasOwn(RESEARCH_SOURCES, domain)) {
     throw new ToolArgsError([`unknown domain: ${domain}; use research_sources to inspect supported domains`])
   }
-  const candidates = (RESEARCH_SOURCES[domain] ?? []).slice(0, 2)
-  // One broad query preserves recall; two authority-scoped queries improve precision.
-  return { domain, candidates, queries: [q, ...candidates.map(source => `${q} site:${source.host}`)] }
+  const candidates = (RESEARCH_SOURCES[domain] ?? []).slice(0, depth === 'deep' ? 4 : 2)
+  // Preserve the full question for recall, shorten institution-scoped searches.
+  const academicStopwords = /^(las?|los?|del?|por|para|que|qu[eé]|con|una?|unos?|hay|son|exigen|existe|existen|cu[aá]nt[oa]s?)$/iu
+  const keywords = domain === 'academic'
+    ? q.replace(/[¿?¡!.,;:()[\]]/gu, ' ').split(/\s+/u).filter(word =>
+      word.length > 2 && !academicStopwords.test(word))
+      .slice(0, 14).join(' ')
+    : q
+  return { domain, candidates, queries: [q, ...candidates.map(source => `${keywords || q} site:${source.host}`)] }
 }
 
 function canonicalUrl(raw: string): string | undefined {
@@ -228,7 +243,13 @@ export async function executeResearch(
     if (outcome?.status === 'fulfilled') successful.push(outcome.value)
     else failedQueries.push(plan.queries[index] as string)
   }
-  if (successful.length === 0) throw new Error('No search provider succeeded; check provider credentials or availability.')
+  if (successful.length === 0) {
+    return {
+      domain: plan.domain, queries: plan.queries, candidates: plan.candidates,
+      sources: [], failedQueries, truncated: false, status: 'empty',
+      note: 'All search requests failed. Search providers may be blocked or unavailable. Do not repeat equivalent queries; try a directly known primary source or stop with a clearly disclosed evidence gap.',
+    }
+  }
   const seen = new Set<string>()
   const sources: WebSearchSource[] = []
   let dropped = false
@@ -239,6 +260,8 @@ export async function executeResearch(
       if (source === undefined) continue
       const url = canonicalUrl(source.url)
       if (url === undefined || seen.has(url)) continue
+      if (plan.domain === 'academic' && !/tesis|tesina|thesis|dissert|doctor|maestr|master|graduate|universid|universit|bibliograf|referenc|research|academic|posgrado|postgrado|reglamento/iu
+        .test([source.title ?? '', source.snippet ?? '', new URL(url).pathname].join(' '))) continue
       seen.add(url)
       if (sources.length >= maxResults) { dropped = true; break outer }
       sources.push(source)
@@ -251,8 +274,10 @@ export async function executeResearch(
     sources,
     failedQueries,
     truncated: dropped || successful.some(result => result.truncated),
-    status: failedQueries.length > 0 ? 'partial' : sources.length > 0 ? 'ok' : 'empty',
-    note: 'Web-discovered links are leads, not verified API results. Open primary documents before making consequential claims; include source and as-of time for live data. No candidate API has been installed or authorized.',
+    status: sources.length === 0 ? 'empty' : failedQueries.length > 0 ? 'partial' : 'ok',
+    note: sources.length === 0
+      ? 'No on-topic source was recovered. Do not loop through equivalent searches or interpret a blocked page as evidence; report the limitation and request an institutional document if essential.'
+      : 'Web-discovered links are leads, not verified API results. Open primary documents before making consequential claims; include source and as-of time for live data. No candidate API has been installed or authorized.',
   }
 }
 
@@ -276,7 +301,7 @@ export function applyResearchTools(ctx: Context, maxResults: number, timeoutMs: 
   ctx.systemPrompt.section({
     name: 'tool:research_search',
     order: 112,
-    text: 'For evidence-intensive multidisciplinary questions, use research_search to consult a broad search and at most two authority-scoped searches through the existing web provider. Research candidate sources are discovery hints, not connected APIs or proof. Inspect primary URLs using web_fetch when available; show publication/as-of date and disagreements. For a quick factual search use web_search instead. Never claim real-time or exhaustive coverage from snippets.',
+    text: 'For evidence-intensive questions, use research_search for broad and authority-scoped leads; for thesis and dissertation regulations, seek original university guidelines and distinguish local requirements from general advice. A search result is not verified evidence: open primary sources using web_fetch. Use quick search by default; use depth=deep for comprehensive multi-institution coverage. If search returns empty or blocked sources, change method once (direct university domain/document or another available provider), then finish with explicit limitations instead of repeating queries. Do not invent citations, assume universal numeric minima, or claim coverage from snippets.',
   })
   ctx.tools.register(defineTool({
     name: 'research_sources',
@@ -294,24 +319,25 @@ export function applyResearchTools(ctx: Context, maxResults: number, timeoutMs: 
       render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
     },
     isConcurrencySafe: () => true,
-    execute: async args => {
+    execute: (args) => {
       const domain = args.domain?.trim().toLowerCase()
       if (domain !== undefined && domain !== '' && !Object.hasOwn(RESEARCH_SOURCES, domain)) {
         throw new ToolArgsError(['unknown domain; use research_sources without a domain to list domains'])
       }
-      return {
+      return Promise.resolve({
         domains: Object.keys(RESEARCH_SOURCES),
         sources: domain === undefined || domain === '' ? [] : [...(RESEARCH_SOURCES[domain] ?? [])],
         note: 'Candidates require independent checks for API capability, freshness, credentials, rate limits, license and coverage.',
-      }
+      })
     },
   }))
   ctx.tools.register(defineTool({
     name: 'research_search',
-    description: 'Run bounded multidisciplinary live web research with domain-aware source-scoped queries, deduplication and partial failure recovery. Returns source leads and provenance, not directly verified API data.',
+    description: 'Run bounded multidisciplinary research; quick mode searches broad plus two trusted hosts, deep searches up to four hosts in parallel. Includes relevance filtering and partial-failure diagnostics. Returns leads, not verified claims.',
     parameters: {
       question: { type: 'string', required: true },
       domain: { type: 'string', description: 'Optional source domain. Call research_sources to list valid values.' },
+      depth: { type: 'string', description: 'quick (default) or deep for wider parallel primary-source discovery.' },
     },
     output: {
       schema: {
@@ -340,7 +366,7 @@ export function applyResearchTools(ctx: Context, maxResults: number, timeoutMs: 
     timeoutMs,
     isConcurrencySafe: () => true,
     async execute(args, exec) {
-      const plan = planResearch(args.question, args.domain)
+      const plan = planResearch(args.question, args.domain, args.depth)
       return executeResearch(ctx, plan, maxResults, exec.signal)
     },
   }))

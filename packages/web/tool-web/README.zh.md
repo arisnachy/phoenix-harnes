@@ -152,3 +152,7 @@ schema 校验会在执行前拒绝缺失或非数组的 `queries` 字段以及�
 - **HTML→markdown 转换会在 GFM 无法安全表示的输入上降级**：[turndown](https://github.com/mixmark-io/turndown)（带 GFM 表格／删除线）通过真实 DOM 转换至多 `fetchMaxOutputChars` 个源字符。保守的 512 层词法守卫会将深层或嵌套有歧义的主体作为原始 HTML 直接透传，转换异常也会如此处理；表格的 `colspan` 会被忽略，因为 GFM 无法表示跨列单元格。这些限制可避免阻塞事件循环，也避免不受信任的数值属性使输出膨胀（[已归档的依赖决策](../../../.agents/notes/archived/simplification/2026-07-26-turndown-for-tool-web-html-markdown.md)）。
 - **面向模型的接口有意保持精简，后续扩展暂缓**：`max_results` 保持为配置上限（不是模型参数），`web_fetch` 只接受 `url`（没有 `format`／`prompt`／LLM（大语言模型）摘要模式）；两项都列为 [seam Agent Note](../../../.agents/notes/implemented/architecture/2026-06-24-web-capability-seam.zh.md) 中的后续步骤。
 - **没有 web 专用权限策略**：两个工具都不会请求 `ctx.approval` 就直接执行；需要确认的部署必须添加 `tools/pre-execute` 策略，该包不定义持久化的 URL／域名授权。
+
+## 有界研究模式
+
+`research_search` 通过受治理的 `ctx.web` 能力边界发现线索，不把搜索结果当成已核实的事实。`depth` 默认为 `quick`（原问题加最多两个并发的权威网站限定查询）；`deep` 可扩展为最多四个权威网站限定查询，扩大机构覆盖范围。学术检索包含 `.edu`、`.ac.uk`、`.edu.do` 和 `.edu.mx`。部分提供方失败时保留成功结果并列出失败查询；完全无结果时明确返回 `empty`，避免反复进行等效搜索。引用机构规定前应通过 `web_fetch` 核验原始文档。`research_sources` 只列出候选网站，并不代表已获准访问第三方 API。
