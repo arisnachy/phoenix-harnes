@@ -248,6 +248,12 @@ def validate(data):
         raise ValueError("report.references must contain 1 to 500 supplied sources")
     if data.get("style", "apa") not in ("apa", "apa7", "vancouver", "ama"):
         raise ValueError("style must be apa, apa7, vancouver or ama")
+    if data.get("document_type") == "thesis":
+        if data.get("style") not in ("apa", "apa7", "vancouver"):
+            raise ValueError("Thesis requires an explicit APA7 or Vancouver style")
+        if data.get("thesis_level") is not None and data["thesis_level"] not in (
+                "bachelors", "masters", "doctorate"):
+            raise ValueError("thesis_level must be bachelors, masters or doctorate")
     resolved_presentation = data.get("presentation", "journal" if (data.get("document_type") == "journal_manuscript" or data.get("journal_requirements", {}).get("journal")) else ("hybrid" if data.get("quality_profile", "professional") == "professional" else "academic"))
     if resolved_presentation not in PRESENTATIONS:
         raise ValueError("presentation must be academic, journal, editorial or hybrid")
@@ -773,7 +779,7 @@ def main():
     report = json.loads(raw.decode("utf-8"))
     refs, cited = validate(report)
     style = "apa" if report.get("style", "apa") == "apa7" else report.get("style", "apa")
-    presentation = report.get("presentation", "journal" if (report.get("document_type") == "journal_manuscript" or report.get("journal_requirements", {}).get("journal")) else ("hybrid" if report.get("quality_profile", "professional") == "professional" else "academic"))
+    presentation = report.get("presentation", "journal" if (report.get("document_type") == "journal_manuscript" or report.get("journal_requirements", {}).get("journal")) else ("academic" if report.get("document_type") == "thesis" else ("hybrid" if report.get("quality_profile", "professional") == "professional" else "academic")))
     journal = report.get("journal_requirements", {})
     institutional = report.get("institutional_rules", {})
     editorial = presentation in ("editorial", "hybrid")
@@ -1322,10 +1328,11 @@ def main():
         for note_line in visual_notes(chart, refs, style, numbers):
             chunks.append("<p class='ref'>"+html.escape(note_line)+"</p>")
         chunks.append("</figure>")
-    chunks.append("<h2>Referencias</h2><ol>")
+    chunks.append("<h2>Referencias</h2><section aria-label='Referencias bibliográficas'>")
     for src in ordered_refs:
-        chunks.append("<li class='ref'>"+html.escape(bibliography(src,style,numbers[src["key"]]))+"</li>")
-    chunks.append("</ol>")
+        chunks.append("<p class='ref bibliography'>"+
+                      html.escape(bibliography(src,style,numbers[src["key"]]))+"</p>")
+    chunks.append("</section>")
     if report.get("declarations"):
         chunks.append("<section><h2>Declaraciones de investigación</h2>")
         for key, label in (("ethics", "Ética"), ("funding", "Financiación"),
@@ -1361,6 +1368,22 @@ def main():
     elif target_pages is not None and not page_match:
         warnings.append("La extensión solicitada no se alcanzó: PDF real " + str(rendered_pages[0]) +
                         ", objetivo " + str(target_pages) + ". No se añade contenido ficticio.")
+    thesis_targets = {"bachelors": (20, 40), "masters": (40, 80),
+                      "doctorate": (100, None)}
+    thesis_level = report.get("thesis_level") if report.get("document_type") == "thesis" else None
+    target = thesis_targets.get(thesis_level)
+    reference_review = None
+    advisories = []
+    if report.get("document_type") == "thesis" and thesis_level is None:
+        advisories.append("Indica thesis_level para orientar la cobertura bibliográfica.")
+    if target:
+        reference_review = {"level": thesis_level, "advisory_min": target[0],
+                            "advisory_max": target[1], "cited_count": len(cited),
+                            "institutional_rule_verified": False,
+                            "meets_advisory": len(cited) >= target[0]}
+        if len(cited) < target[0]:
+            advisories.append("Cobertura orientativa por debajo de " + str(target[0]) +
+                              " fuentes citadas. La norma institucional verificada prevalece; no inventar bibliografía.")
     final_state = "REPORT_NEEDS_REVISION" if warnings else "REPORT_READY"
     result={"state":final_state,"report_id":digest,"title":title,"style":style,
             "design_preset":design_preset,
@@ -1374,7 +1397,8 @@ def main():
                         "manuscript_word_count": sum(len(re.findall(r"\b\w+\b", sec["text"], re.UNICODE)) for sec in report["sections"])},
             "pagination": {"pdf_pages": rendered_pages[0], "requested_pages": target_pages,
                            "scope": scope, "target_met": page_match if scope == "all" else None},
-            "warnings": warnings,
+            "warnings": warnings, "advisories": advisories,
+            "reference_review": reference_review,
             "source_count":len(cited),"source_verification":"metadata_user_supplied_not_network_verified","files":{"docx":str(docx_file),"pdf":str(pdf_file),"html":str(html_file)},"output_dir":str(output_root)}
     # Preserve the exact structured project so model handoffs and revisions do not
     # need to re-run every source lookup or reconstruct the manuscript from PDF.
