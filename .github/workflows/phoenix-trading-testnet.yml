@@ -1,0 +1,49 @@
+name: PHOENIX Trading Spot Testnet
+
+on:
+  pull_request:
+    paths:
+      - "packages/hardness/adapters/src/binance-*"
+      - "packages/hardness/adapters/tests/binance-*"
+      - "packages/client/ui-conversation/src/client/chat/TradingDashboard.tsx"
+      - ".github/workflows/phoenix-trading-testnet.yml"
+  push:
+    branches: [main, stable]
+    paths:
+      - "packages/hardness/adapters/src/binance-*"
+      - "packages/hardness/adapters/tests/binance-*"
+      - "packages/client/ui-conversation/src/client/chat/TradingDashboard.tsx"
+      - ".github/workflows/phoenix-trading-testnet.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  testnet-fake-funds:
+    name: Spot Testnet / deterministic safety and TypeScript
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CI: "true"
+      DSH_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: "11.7.0"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      - name: Spot Testnet adapter regression (no API keys)
+        run: |
+          pnpm exec vitest run \
+            packages/hardness/adapters/tests/binance-spot-testnet.spec.ts \
+            packages/hardness/adapters/tests/binance-testnet-automation.spec.ts \
+            packages/hardness/adapters/tests/binance-paper-route.spec.ts \
+            packages/hardness/adapters/tests/binance-paper-automation.spec.ts
+      - name: TypeScript Host contracts
+        run: pnpm exec tsc -b tsconfig.host.json
