@@ -20,7 +20,8 @@ export async function evidenceTicket(
   count:number,date=dayNow(),sportFilter?:string,fetcher:typeof fetch=fetch,
   now=Date.now(),env:NodeJS.ProcessEnv=process.env,
 ):Promise<{card:ChatBlock;complete:boolean;verifiedEvents:number;
-  candidatesEvaluated:number;researchLeagues:number;modelProbabilities:false;priced:false;placed:false}>{
+  candidatesEvaluated:number;researchLeagues:number;modelProbabilities:false;priced:false;placed:false;
+  selections:ResearchTicketLeg[];events:Array<{eventId:string;home:string;away:string;kickoff:string;sport:string;league:string;pick:'home'|'away'}>}>{
   if(!Number.isInteger(count)||count<1||count>6)throw Error('El ticket requiere entre 1 y 6 patas')
   if(!validDate(date))throw Error('Fecha de ticket inválida')
   if(!hasSportsPermission('espn',env))throw Error('ESPN deshabilitado por el operador')
@@ -45,7 +46,7 @@ export async function evidenceTicket(
   const shortlist=eligible.slice(0,3)
   const reports=await Promise.allSettled(shortlist.map(({sport,league})=>
     researchSport(sport,league,date,fetcher,now,env,14)))
-  const candidateLegs:Array<{pick:ResearchTicketLeg;rank:number}>=[]
+  const candidateLegs:Array<{pick:ResearchTicketLeg;rank:number;home:string;away:string;kickoff:string}>=[]
   let evaluated=0
   for(const report of reports){
     if(report.status!=='fulfilled')continue
@@ -66,17 +67,20 @@ export async function evidenceTicket(
         'D frente a '+opponent.name+' '+opponent.wins+'V-'+opponent.losses+
         'D; margen reciente '+favorite.averageMargin+' vs '+opponent.averageMargin+
         '. Lesiones y cuotas pendientes; índice relativo NO probabilidad.').slice(0,240)
-      candidateLegs.push({rank:Math.abs(rank),pick:{
+      candidateLegs.push({rank:Math.abs(rank),home:home.name,away:away.name,kickoff:match.date,pick:{
         sport:match.sport,league:match.league,eventId:match.eventId,
         pick:rank>0?'home':'away',rationale,
       }})
     }
   }
   candidateLegs.sort((a,b)=>b.rank-a.rank||a.pick.eventId.localeCompare(b.pick.eventId))
-  const chosen=candidateLegs.slice(0,count).map(x=>x.pick)
+  const selected=candidateLegs.slice(0,count)
+  const chosen=selected.map(x=>x.pick)
   if(!chosen.length)throw Error('No hay encuentros con suficiente evidencia reciente para un ticket responsable')
   const ticket=await researchTicket(chosen,date,fetcher,now,env,count,true)
   return{card:ticket.card,complete:ticket.complete,verifiedEvents:ticket.verifiedEvents,
     candidatesEvaluated:evaluated,researchLeagues:reports.filter(r=>r.status==='fulfilled').length,
-    modelProbabilities:false,priced:false,placed:false}
+    modelProbabilities:false,priced:false,placed:false,selections:chosen,
+    events:selected.map(x=>({eventId:x.pick.eventId,home:x.home,away:x.away,kickoff:x.kickoff,
+      sport:x.pick.sport,league:x.pick.league,pick:x.pick.pick==='home'?'home' as const:'away' as const}))}
 }
