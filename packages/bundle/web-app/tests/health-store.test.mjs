@@ -9,7 +9,7 @@ const PASSWORD = 'a-long-operator-only-master-password-2026'
 function fixture(t) {
   const root=mkdtempSync(join(tmpdir(),'phoenix-health-test-'))
   let db=new HealthClinicStore(join(root,'clinic.sqlite'))
-  t.after(()=>{db.close();rmSync(root,{recursive:true,force:true})})
+  t.after(()=>{try{db.close()}catch {/* already closed */} rmSync(root,{recursive:true,force:true})})
   db.initialize('clinicaladmin',PASSWORD,'Hospital de pruebas')
   const admin=db.login('clinicaladmin',PASSWORD)
   return {db,admin,root}
@@ -29,6 +29,7 @@ test('real SQLite encrypted record persists across restart and plaintext is abse
   const restored=f.db.login('clinicaladmin',PASSWORD)
   assert.equal(f.db.list(restored.actor,'patients')[0].id,patient.id)
   assert.equal(f.db.list(restored.actor,'patients')[0].name,'NombreReservadoUnicoFicticioXYZ')
+  f.db.close()
 })
 test('staff permissions isolate clinical operations and require signed encounters',t=>{
   const {db,admin}=fixture(t)
@@ -44,7 +45,7 @@ test('staff permissions isolate clinical operations and require signed encounter
   const visit=db.create(doctor,'encounters',{patientId:patient.id,complaint:'Molestia simulada',specialty:'Medicina familiar',mode:'mixed'})
   assert.throws(()=>db.create(doctor,'orders',{encounterId:visit.id,description:'Hemograma',modality:'laboratory'}),/firmar/)
   assert.throws(()=>db.create(reception,'prescriptions',{encounterId:visit.id,medication:'Medicamento',directions:'Dosis'}),/Permiso/)
-  assert.equal(db.list(lab,'patients').length,0)
+  assert.throws(()=>db.list(lab,'patients'),/Permiso/)
 })
 test('clinical revision and signing enforce concurrency and professional ownership',t=>{
   const {db,admin}=fixture(t)
