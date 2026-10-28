@@ -128,6 +128,15 @@ describe('native sports chat presentation fallback',()=>{
     expect(sportsCardsFromToolResult({kind:'tool-result',call:{name:'sports_chat_games'},isError:true,
       content:[{type:'text',text:JSON.stringify({uiBlocks:[sportsGame]})}]})).toEqual([])
   })
+  it('does not drop the requested ticket after six earlier game cards',()=>{
+    const sixGames=Array.from({length:6},(_,i)=>({
+      ...sportsGame,props:{...sportsGame.props,title:'Game '+i},
+    }))
+    const observed=unrenderedSportsCards([...sixGames,ticket],['Ticket disponible en la tarjeta.'])
+    expect(observed).toHaveLength(6)
+    expect(observed[0]).toEqual(ticket)
+    expect(observed.filter(c=>c.component==='sports_ticket_card')).toHaveLength(1)
+  })
   it('deduplicates validated assistant-rendered cards and repeated tool results',()=>{
     const fence=String.fromCharCode(96).repeat(3)
     const answer=fence+'generative-ui\n'+JSON.stringify(sportsGame)+'\n'+fence
