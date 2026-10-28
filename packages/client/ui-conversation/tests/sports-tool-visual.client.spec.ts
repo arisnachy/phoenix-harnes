@@ -47,6 +47,26 @@ describe('native sports chat presentation fallback',()=>{
     expect(sportsCardsFromToolResult(tool('sports_chat_odds_keyless',{uiBlocks:[market]}))).toEqual([market])
     expect(sportsCardsFromToolResult(tool('bash',{uiBlock:ticket}))).toEqual([])
   })
+  it('keeps all six 1X/X2 legs, ESPN logos and independent explanations in native ticket card',()=>{
+    const six={component:'sports_ticket_card',version:1,props:{
+      title:'PHOENIX · Ticket de análisis',source:'OddsHarvester/OddsPortal',
+      requestedLegs:6,combinedOdds:'5.25',note:'Simulación, no apuesta real.',
+      legs:Array.from({length:6},(_,i)=>({
+        event:'Away '+i+' vs Home '+i,selection:i%2?'X2 · Visita o empate':'1X · Local o empate',
+        market:'Doble oportunidad (1X/X2)',price:'1.32',bookmaker:'Book A',
+        homeTeam:'Home '+i,awayTeam:'Away '+i,
+        homeLogo:'https://a.espncdn.com/home-'+i+'.png',
+        rationale:'ESPN últimos 3 juegos: encuentro '+i+'; riesgo de lesiones y once pendiente.',
+      })),
+    }}
+    expect(parseGenerativeUiBlock(six)).not.toBeNull()
+    const cards=sportsCardsFromToolResult(tool('sports_chat_ticket_evidence_priced_auto',{uiBlock:six}))
+    expect(cards).toEqual([six])
+    expect(cards[0]?.props.legs).toHaveLength(6)
+    expect(cards[0]?.props.legs[0].homeLogo).toBe(six.props.legs[0].homeLogo)
+    expect(cards[0]?.props.legs[1].selection).toContain('X2')
+    expect(cards[0]?.props.legs[5].rationale).toContain('encuentro 5')
+  })
   it('handles Code Mode nested sports calls (not arbitrary source text)',()=>{
     const code={kind:'tool-result',call:{name:'Code'},isError:false,content:[],subCalls:[
       tool('sports_chat_games',{uiBlocks:[sportsGame]}),
