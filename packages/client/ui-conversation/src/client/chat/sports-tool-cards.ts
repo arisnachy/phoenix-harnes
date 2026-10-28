@@ -18,6 +18,8 @@ type ResultBlock = {
 const ALLOWED_NAMES = new Set([
   'sports_chat_games','sports_chat_odds','sports_chat_ticket','sports_chat_ticket_research',
   'sports_chat_mlb_pitchers',
+  'sports_chat_ticket_evidence_auto','sports_chat_ticket_evidence_priced_auto',
+  'sports_chat_odds_keyless',
 ])
 const ALLOWED_COMPONENTS = new Set([
   'sports_game_card','sports_schedule_card','sports_ticket_card','sports_odds_card','comparison','smart_card',
