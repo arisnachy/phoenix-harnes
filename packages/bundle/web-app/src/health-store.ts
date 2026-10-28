@@ -5,7 +5,7 @@
  */
 import type { DatabaseSync } from 'node:sqlite'
 import { createRequire } from 'node:module'
-import { planInterview, type InterviewPlan } from '@phoenix-ai/dsh-tool-health/src/clinical-flow.ts'
+import { localInterviewPlan, type ClinicalInterviewGuide } from './health-interview.ts'
 import { createCipheriv, createDecipheriv, createHmac, randomBytes, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto'
 import { mkdirSync, chmodSync, readdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -361,7 +361,7 @@ export class HealthClinicStore {
    * @param id - Validated id input for this clinical operation.
    * @returns The operation result, restricted to this authorized clinical context.
    */
-  interviewGuide(actor:Actor,id:string):InterviewPlan {
+  interviewGuide(actor:Actor,id:string):ClinicalInterviewGuide {
     if(!['clinician','psychologist'].includes(actor.role))fail('Solo profesional responsable puede orientar la entrevista')
     const encounter=this.find(actor,'encounters',str(id,'Consulta',80)).data
     if(encounter.practitioner!==actor.username)fail('Consulta de otro profesional')
@@ -370,7 +370,7 @@ export class HealthClinicStore {
     const answered=answers&&typeof answers==='object'&&!Array.isArray(answers)
       ? Object.keys(answers):[]
     const mode=encounter.mode==='manual'?'professional':encounter.mode==='kira'?'kira':'mixed'
-    return planInterview(String(encounter.complaint).slice(0,500),String(encounter.specialty).slice(0,100),
+    return localInterviewPlan(String(encounter.complaint).slice(0,500),String(encounter.specialty).slice(0,100),
       mode,answered.filter(key=>/^[a-z_]{1,40}$/u.test(key)).slice(0,50))
   }
   /** Fail closed if the HMAC-linked clinical audit journal has been altered. */
@@ -659,7 +659,7 @@ export class HealthClinicStore {
           ? answered as RecordData:{}
         if(Object.hasOwn(previous,field))fail('La respuesta ya fue registrada; requiere corrección clínica formal')
         const mode=current.mode==='manual'?'professional':current.mode==='kira'?'kira':'mixed'
-        const next=planInterview(String(current.complaint).slice(0,500),
+        const next=localInterviewPlan(String(current.complaint).slice(0,500),
           String(current.specialty).slice(0,100),mode,Object.keys(previous))
         if(!next.nextQuestions.some(question=>question.key===field))
           fail('Pregunta fuera del interrogatorio propuesto')

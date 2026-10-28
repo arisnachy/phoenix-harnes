@@ -1273,9 +1273,6 @@ importers:
       '@phoenix-ai/dsh-tool-sports':
         specifier: workspace:^
         version: link:../../core/tool-sports
-      '@phoenix-ai/dsh-tool-health':
-        specifier: workspace:^
-        version: link:../../core/tool-health
       '@phoenix-ai/dsh-tool-jobs':
         specifier: workspace:^
         version: link:../../jobs/tool-jobs
