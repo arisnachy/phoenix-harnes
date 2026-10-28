@@ -42,6 +42,7 @@ test('staff permissions isolate clinical operations and require signed encounter
   const radiology=db.login('radiouser','another-secure-password-2026').actor
   const reception=db.login('reception1','another-secure-password-2026').actor
   const patient=db.create(reception,'patients',{name:'Paciente de prueba',dateOfBirth:'1985-01-01'})
+  db.assignPatient(reception,patient.id,'doctor1','Consulta programada')
   const visit=db.create(doctor,'encounters',{patientId:patient.id,complaint:'Molestia simulada',specialty:'Medicina familiar',mode:'mixed'})
   assert.throws(()=>db.create(doctor,'orders',{encounterId:visit.id,description:'Hemograma',modality:'laboratory'}),/firmar/)
   assert.throws(()=>db.create(reception,'prescriptions',{encounterId:visit.id,medication:'Medicamento',directions:'Dosis'}),/Permiso/)
@@ -54,6 +55,7 @@ test('clinical revision and signing enforce concurrency and professional ownersh
   const d=db.login('doctor1','another-secure-password-2026').actor
   const other=db.login('doctor2','another-secure-password-2026').actor
   const p=db.create(admin.actor,'patients',{name:'Paciente',dateOfBirth:'1980-01-01'})
+  db.assignPatient(admin.actor,p.id,'doctor1','Valoración médica')
   let e=db.create(d,'encounters',{patientId:p.id,specialty:'General',complaint:'Control',mode:'manual'})
   assert.throws(()=>db.update(d,'encounters',e.id,e.version,{action:'sign'}),/revisada/)
   e=db.update(d,'encounters',e.id,e.version,{action:'document',history:'Anamnesis registrada',exam:'Sin datos ficticios'})
@@ -94,12 +96,14 @@ test('real Kira reminder reservation requires clinician ownership, verified emai
   const clinician=db.login('doctor1','another-secure-password-2026').actor
   const other=db.login('doctor2','another-secure-password-2026').actor
   const patientNoConsent=db.create(admin.actor,'patients',{name:'Sin consentimiento',dateOfBirth:'1974-04-01',email:'not-consented@example.org'})
+  db.assignPatient(admin.actor,patientNoConsent.id,'doctor1','Control médico')
   const apptNo=db.create(admin.actor,'appointments',{patientId:patientNoConsent.id,practitioner:'doctor1',startsAt:'2026-12-20T13:00:00Z',reason:'Control'})
   assert.throws(()=>db.beginReminder(clinician,apptNo.id,'kira@institution.org'),/consentimiento/)
   const patient=db.create(admin.actor,'patients',{name:'Con consentimiento',dateOfBirth:'1975-04-02',
     email:'verified@example.org',emailConsent:true,emailVerified:true})
+  db.assignPatient(admin.actor,patient.id,'doctor1','Control médico')
   const appt=db.create(admin.actor,'appointments',{patientId:patient.id,practitioner:'doctor1',startsAt:'2026-12-21T13:00:00Z',reason:'Control'})
-  assert.throws(()=>db.beginReminder(other,appt.id,'kira@institution.org'),/no corresponde/)
+  assert.throws(()=>db.beginReminder(other,appt.id,'kira@institution.org'),/no asignado/)
   const plan=db.beginReminder(clinician,appt.id,'kira@institution.org')
   assert.equal(plan.recipient,'verified@example.org')
   assert(!plan.body.includes('Con consentimiento'))
@@ -116,6 +120,7 @@ test('real pharmacy dispensing is atomic, signed, single-use, and decrements sto
   const doctor=db.login('doctor1','another-secure-password-2026').actor
   const pharmacist=db.login('pharmacy1','another-secure-password-2026').actor
   const patient=db.create(admin.actor,'patients',{name:'Consulta farmacéutica',dateOfBirth:'1986-01-02'})
+  db.assignPatient(admin.actor,patient.id,'doctor1','Prescripción médica')
   let encounter=db.create(doctor,'encounters',{patientId:patient.id,specialty:'Medicina',complaint:'Control',mode:'manual'})
   encounter=db.update(doctor,'encounters',encounter.id,encounter.version,{action:'document',history:'Historia profesional'})
   encounter=db.update(doctor,'encounters',encounter.id,encounter.version,{action:'review'})
@@ -137,8 +142,34 @@ test('psychotherapy notes are restricted to the author even inside one clinic',t
   const psych=db.login('psychologist1','another-secure-password-2026').actor
   const doctor=db.login('doctor1','another-secure-password-2026').actor
   const patient=db.create(admin.actor,'patients',{name:'Paciente privado',dateOfBirth:'1990-01-01'})
+  db.assignPatient(admin.actor,patient.id,'psychologist1','Psicoterapia autorizada')
   db.create(psych,'encounters',{patientId:patient.id,specialty:'Psicología',complaint:'Sesión confidencial',mode:'manual'})
   assert.equal(db.list(psych,'encounters').length,1)
   assert.equal(db.list(doctor,'encounters').length,0)
   assert.equal(db.list(admin.actor,'encounters').length,0)
+})
+
+test('patient assignments enforce consented care-team access and revocation in every clinical list and write',t=>{
+  const {db,admin}=fixture(t)
+  db.createStaff(admin.actor,{username:'doctor1',password:'another-secure-password-2026',role:'clinician'})
+  db.createStaff(admin.actor,{username:'doctor2',password:'another-secure-password-2026',role:'clinician'})
+  const clinician=db.login('doctor1','another-secure-password-2026').actor
+  const other=db.login('doctor2','another-secure-password-2026').actor
+  const patient=db.create(admin.actor,'patients',{name:'Paciente confidencial',dateOfBirth:'1982-05-04'})
+  assert.deepEqual(db.list(clinician,'patients'),[])
+  assert.throws(()=>db.create(clinician,'encounters',{patientId:patient.id,complaint:'Control',specialty:'Medicina'}),/no asignado/)
+  db.assignPatient(admin.actor,patient.id,'doctor1','Atención primaria autorizada')
+  assert.equal(db.list(clinician,'patients').length,1)
+  assert.deepEqual(db.list(other,'patients'),[])
+  assert.throws(()=>db.assignPatient(clinician,patient.id,'doctor2','Acceso sin autorización'),/Solo admisión/)
+  assert.equal(db.assignments(admin.actor).length,1)
+  const encounter=db.create(clinician,'encounters',{patientId:patient.id,complaint:'Revisión',specialty:'General'})
+  assert.equal(db.list(clinician,'encounters').length,1)
+  assert.deepEqual(db.list(other,'encounters'),[])
+  db.revokePatient(admin.actor,patient.id,'doctor1')
+  assert.deepEqual(db.list(clinician,'patients'),[])
+  assert.deepEqual(db.list(clinician,'encounters'),[])
+  assert.throws(()=>db.update(clinician,'encounters',encounter.id,encounter.version,{action:'document',history:'No autorizado'}),/no asignado/)
+  assert.equal(db.assignments(admin.actor).length,0)
+  assert(db.audits(admin.actor).some(x=>x.action==='patient.revoke'))
 })

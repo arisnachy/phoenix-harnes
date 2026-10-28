@@ -274,8 +274,13 @@ export class HealthClinicStore {
       emailVerified:x.emailVerified===true})
       if(actor.role==='clinician'){
         // Registering a patient is an explicit treatment relationship for this clinician.
-        this.db.prepare('INSERT INTO health_patient_access VALUES (?,?,?,?,?,?)')
-          .run(actor.org,patient.id,actor.username,'initial-registration',actor.username,new Date().toISOString())
+        this.db.exec('BEGIN IMMEDIATE')
+        try {
+          this.db.prepare('INSERT INTO health_patient_access VALUES (?,?,?,?,?,?)')
+            .run(actor.org,patient.id,actor.username,'initial-registration',actor.username,new Date().toISOString())
+          this.audit(actor,'patient.self-assign',patient.id)
+          this.db.exec('COMMIT')
+        }catch(error){this.db.exec('ROLLBACK');throw error}
       }
       return patient
     }
