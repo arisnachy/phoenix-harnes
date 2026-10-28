@@ -57,7 +57,13 @@ async function splash(){
 }
 async function load(){
  account.innerHTML='<span class="tag">'+safe(actor.username)+" · "+safe(actor.role)+'</span> '+button("logout","Salir","secondary");
- const resources=modules.filter(m=>actor.role==="admin"||!["staff","audit"].includes(m[0]));
+ const menu={admin:["patients","appointments","inventory","invoices","followups","staff","audit"],
+ clinician:["patients","encounters","appointments","orders","prescriptions","followups"],
+ psychologist:["patients","encounters","appointments","followups"],
+ nurse:["patients","encounters","appointments","orders","followups"],
+ reception:["patients","appointments","followups"],lab:["orders"],radiology:["orders"],
+ pharmacy:["prescriptions","inventory"],billing:["invoices"]};
+ const resources=modules.filter(m=>(menu[actor.role]||[]).includes(m[0]));
  if(!resources.some(x=>x[0]===tab))tab="patients";
  root.innerHTML='<main><aside>'+resources.map(x=>'<button data-tab="'+x[0]+'" class="'+(x[0]===tab?'active':'')+'">'+x[1]+'</button>').join('')+
  '</aside><section><div id="view"><div class="card">Cargando…</div></div></section></main>';
@@ -69,7 +75,8 @@ function actionFor(o){
  let actions=[];
  if(tab==="encounters"&&o.status!=="signed"&&o.practitioner===actor.username)actions=[["document","Documentar"],["review","Revisar"],["sign","Firmar"]];
  if(tab==="prescriptions"&&actor.role==="pharmacy"&&o.status==="prescribed")actions=[["dispense","Dispensar"]];
- if(tab==="orders")actions=o.status==="ordered"?[["result","Resultado"]]:o.status==="resulted"?[["reviewOrder","Revisar"]]:[];
+ if(tab==="orders")actions=o.status==="ordered"&&((actor.role==="lab"&&o.modality==="laboratory")||(actor.role==="radiology"&&o.modality==="imaging"))?[["result","Resultado"]]:
+ o.status==="resulted"&&actor.role==="clinician"?[["reviewOrder","Revisar"]]:[];
  if(tab==="inventory")actions=[["receive","Movimiento"]];
  if(tab==="invoices")actions=[["pay","Cobrar"]];
  if(tab==="appointments"&&o.status==="scheduled")actions=[["completeAppointment","Completar"],...(actor.role==="clinician"&&o.practitioner===actor.username?[["sendReminder","Kira: enviar recordatorio"]]:[])];
@@ -80,17 +87,17 @@ function render(){
  const d=data[tab]||[],patients=data.patients||[];
  const p=pick("patientId","Paciente",patients,x=>x.name+" · "+x.dateOfBirth);
  let form="";
- if(tab==="patients")form=field("name","Nombre completo")+field("dateOfBirth","Nacimiento","date")+field("email","Correo","email",false)+field("phone","Teléfono","tel",false)+
+ if(tab==="patients"&&["admin","clinician","reception"].includes(actor.role))form=field("name","Nombre completo")+field("dateOfBirth","Nacimiento","date")+field("email","Correo","email",false)+field("phone","Teléfono","tel",false)+
  '<label><input type="checkbox" id="consent" style="width:auto;display:inline"> Paciente autorizó comunicaciones electrónicas</label>'+
  '<label><input type="checkbox" id="verified" style="width:auto;display:inline"> Correo electrónico verificado con el paciente</label>'+button("create","Registrar paciente");
- if(tab==="encounters")form=p+field("specialty","Especialidad", "text", true,"Medicina familiar")+
+ if(tab==="encounters"&&["clinician","psychologist"].includes(actor.role))form=p+field("specialty","Especialidad", "text", true,"Medicina familiar")+
  field("complaint","Motivo de consulta")+
  '<label>Modalidad Kira</label><select id="mode"><option value="kira">Kira interroga</option><option value="mixed">Mixto</option><option value="manual">Profesional</option></select>'+button("create","Abrir consulta")+
  '<p class="notice">El profesional decide y firma. Kira puede guiar preguntas desde el chat, pero el contenido identificable del expediente no se envía al modelo.</p>';
  if(tab==="appointments")form=p+field("practitioner","Profesional")+field("startsAt","Fecha y hora","datetime-local")+field("reason","Motivo")+button("create","Programar cita");
- if(tab==="orders")form=pick("encounterId","Consulta firmada",data.encounters.filter(x=>x.status==="signed"),x=>x.complaint+" · "+x.practitioner)+
+ if(tab==="orders"&&actor.role==="clinician")form=pick("encounterId","Consulta firmada",data.encounters.filter(x=>x.status==="signed"),x=>x.complaint+" · "+x.practitioner)+
  '<label>Tipo</label><select id="modality"><option value="laboratory">Laboratorio</option><option value="imaging">Imagen</option></select>'+area("description","Descripción y estudio indicado")+button("create","Emitir orden");
- if(tab==="prescriptions")form=pick("encounterId","Consulta firmada",data.encounters.filter(x=>x.status==="signed"),x=>x.complaint)+field("medication","Medicamento")+area("directions","Indicaciones autorizadas")+button("create","Registrar prescripción");
+ if(tab==="prescriptions"&&actor.role==="clinician")form=pick("encounterId","Consulta firmada",data.encounters.filter(x=>x.status==="signed"),x=>x.complaint)+field("medication","Medicamento")+area("directions","Indicaciones autorizadas")+button("create","Registrar prescripción");
  if(tab==="inventory")form=field("item","Producto")+button("create","Agregar producto");
  if(tab==="invoices")form=p+field("concept","Concepto")+field("amountCents","Monto en centavos","number")+button("create","Emitir factura");
  if(tab==="followups")form=p+field("assignedTo","Asignado a")+field("dueAt","Fecha y hora","datetime-local")+area("description","Tarea de seguimiento")+button("create","Crear seguimiento");
