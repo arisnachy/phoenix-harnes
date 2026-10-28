@@ -245,7 +245,15 @@ export function mountBinancePaperDashboardRoute(
         // Read the stored pair back via the Host-owned credential resolver,
         // not the transient browser payload. Never report CONNECTED unless
         // Binance responds with a successful authenticated account result.
-        const probe = await options.testnet.status()
+        let probe: Awaited<ReturnType<BinanceSpotTestnet['status']>>
+        try {
+          probe = await options.testnet.status()
+        } catch {
+          // A transient provider read or network exception AFTER confirmed
+          // durable storage must not turn a successful save into a UI failure.
+          probe = { mode: 'testnet', configured: true, connected: false,
+            nextAction: 'Claves guardadas en la bóveda; la verificación de Binance sigue pendiente.' }
+        }
         res.statusCode = 200
         res.end(JSON.stringify({
           mode: 'testnet', configured: true, saved: true,
