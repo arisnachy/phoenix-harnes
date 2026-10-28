@@ -79,7 +79,7 @@ export async function evidencePricedTicket(
     source:q.source,sportKey:leagueSportKey[research.events[index]?.league??'']??routing[research.events[index]?.sport??'']?.oddsSportKey??'sports_keyless',
   }))
   const selections:MarketSelection[]=marketQuotes.map(q=>({
-    eventId:q.eventId,bookmaker:q.bookmaker,market:q.market,selection:q.selection,point:q.point,
+    eventId:q.eventId,bookmaker:q.bookmaker,market:q.market,selection:q.selection,point:q.point??null,
   }))
   const priced=pricedTicket(selections,marketQuotes,stake)
   return{card:priced.card,priced:true,placed:false,complete:true,verifiedEvents:research.verifiedEvents,
