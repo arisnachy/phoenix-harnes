@@ -170,7 +170,8 @@ export class BinanceSpotTestnet {
           ? [{ asset: row.asset, free: row.free, locked: row.locked }] : []
       })
       return { mode: 'testnet', configured: true, connected: true,
-        canTrade: value.canTrade === true, balances: balances.slice(0, 100),
+        canTrade: value.canTrade === true, balances: balances.filter(row => row.asset === 'USDT'
+          || Number(row.free) > 0 || Number(row.locked) > 0).slice(0, 100),
         nextAction: 'Testing account connected; each test order still requires explicit user request' }
     } catch (error) {
       const issue: BinanceTestnetIssue = error instanceof TestnetVerificationError
