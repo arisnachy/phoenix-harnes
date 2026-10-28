@@ -74,7 +74,8 @@ export class HealthClinicStore {
       "CREATE TABLE IF NOT EXISTS health_staff (username TEXT PRIMARY KEY, org TEXT NOT NULL, role TEXT NOT NULL, salt TEXT NOT NULL, digest TEXT NOT NULL);"+
       "CREATE TABLE IF NOT EXISTS health_records (id TEXT PRIMARY KEY, org TEXT NOT NULL, kind TEXT NOT NULL, version INTEGER NOT NULL, iv TEXT NOT NULL, tag TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);"+
       "CREATE INDEX IF NOT EXISTS health_records_org_kind ON health_records(org,kind);"+
-      "CREATE TABLE IF NOT EXISTS health_audit (id INTEGER PRIMARY KEY AUTOINCREMENT, org TEXT NOT NULL, actor TEXT NOT NULL, action TEXT NOT NULL, record_id TEXT NOT NULL, happened TEXT NOT NULL, prior_hash TEXT NOT NULL, hash TEXT NOT NULL);"
+      "CREATE TABLE IF NOT EXISTS health_audit (id INTEGER PRIMARY KEY AUTOINCREMENT, org TEXT NOT NULL, actor TEXT NOT NULL, action TEXT NOT NULL, record_id TEXT NOT NULL, happened TEXT NOT NULL, prior_hash TEXT NOT NULL, hash TEXT NOT NULL);"+
+      "CREATE TABLE IF NOT EXISTS health_reminders (appointment_id TEXT PRIMARY KEY, org TEXT NOT NULL, status TEXT NOT NULL, sender TEXT NOT NULL, provider_id TEXT, started TEXT NOT NULL);"
     )
   }
   close():void {this.sessions.clear();this.key?.fill(0);this.key=undefined;this.db.close()}
@@ -217,7 +218,8 @@ export class HealthClinicStore {
       if(email&&!/^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/u.test(email))fail('Correo de paciente inválido')
       return this.insert(actor,kind,{name:str(x.name,'Nombre',160),dateOfBirth:dob,
       email:email.slice(0,254),phone:typeof x.phone==='string'?x.phone.trim().slice(0,35):'',
-      notes:typeof x.notes==='string'?x.notes.slice(0,4000):'',emailConsent:x.emailConsent===true})
+      notes:typeof x.notes==='string'?x.notes.slice(0,4000):'',emailConsent:x.emailConsent===true,
+      emailVerified:x.emailVerified===true})
     }
     if(kind==='encounters'){
       const patientId=str(x.patientId,'Paciente',80);this.find(actor,'patients',patientId)
@@ -257,6 +259,45 @@ export class HealthClinicStore {
     }
     return fail('Operación no admitida')
   }
+
+  /** Reserve exactly one verified, clinician-authorized reminder. Never expose clinical details. */
+  beginReminder(actor:Actor,appointmentId:string,sender:string):{recipient:string;subject:string;body:string;appointmentId:string}{
+    if(actor.role!=='clinician')fail('El recordatorio requiere confirmación de profesional clínico')
+    const appointment=this.find(actor,'appointments',str(appointmentId,'Cita',80)).data
+    if(appointment.practitioner!==actor.username||appointment.status!=='scheduled')
+      fail('Esta cita no corresponde al profesional o ya no está programada')
+    const patient=this.find(actor,'patients',str(appointment.patientId,'Paciente',80)).data
+    if(patient.emailConsent!==true||patient.emailVerified!==true)fail('Correo no verificado o consentimiento no registrado')
+    const recipient=str(patient.email,'Correo electrónico',254)
+    if(!/^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/u.test(recipient))fail('Correo electrónico inválido')
+    const now=new Date().toISOString()
+    this.db.exec('BEGIN IMMEDIATE')
+    try {
+      this.db.prepare('INSERT INTO health_reminders VALUES (?,?,?,?,?,?)').run(appointmentId,actor.org,'pending',sender,null,now)
+      this.audit(actor,'reminder.queued',appointmentId)
+      this.db.exec('COMMIT')
+    }catch(error){this.db.exec('ROLLBACK');throw new Error('Este recordatorio ya fue reservado; no se reenviará automáticamente')}
+    return {recipient,appointmentId,subject:'Recordatorio de cita',body:
+      'Este es un recordatorio de su cita programada. Para cualquier cambio, contacte directamente al consultorio. No responda con información clínica por correo.\n\nPHOENIX Health'}
+  }
+  /** Record Gmail provider confirmation, or uncertainty without an automatic duplicate retry. */
+  finishReminder(actor:Actor,appointmentId:string,providerId:string|undefined):void {
+    if(actor.role!=='clinician')fail('Personal no autorizado')
+    this.db.exec('BEGIN IMMEDIATE')
+    try {
+      const result=this.db.prepare("UPDATE health_reminders SET status=?,provider_id=? WHERE appointment_id=? AND org=? AND status='pending'")
+        .run(providerId?'sent':'uncertain',providerId??null,appointmentId,actor.org)
+      if(Number(result.changes)!==1)fail('Recordatorio desconocido o ya completado')
+      this.audit(actor,providerId?'reminder.sent':'reminder.uncertain',appointmentId)
+      this.db.exec('COMMIT')
+    }catch(error){this.db.exec('ROLLBACK');throw error}
+  }
+  /** Disclose delivery states to admin only, never recipient addresses. */
+  reminders(actor:Actor):readonly RecordData[] {
+    if(actor.role!=='admin')fail('Acceso administrativo requerido')
+    return this.db.prepare('SELECT appointment_id AS appointmentId,status,sender,started FROM health_reminders WHERE org=? ORDER BY started DESC LIMIT 300').all(actor.org) as RecordData[]
+  }
+
   update(actor:Actor,kind:Kind,id:string,version:number,value:unknown):RecordData {
     if(kind==='orders') this.access(actor,kind)
     else this.access(actor,kind,true)
