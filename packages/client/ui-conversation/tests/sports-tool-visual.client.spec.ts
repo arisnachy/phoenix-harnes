@@ -129,12 +129,14 @@ describe('native sports chat presentation fallback',()=>{
       content:[{type:'text',text:JSON.stringify({uiBlocks:[sportsGame]})}]})).toEqual([])
   })
   it('does not drop the requested ticket after six earlier game cards',()=>{
-    const sixGames=Array.from({length:6},(_,i)=>({
-      ...sportsGame,props:{...sportsGame.props,title:'Game '+i},
-    }))
-    const observed=unrenderedSportsCards([...sixGames,ticket],['Ticket disponible en la tarjeta.'])
+    const sixGames=Array.from({length:6},(_,i)=>
+      parseGenerativeUiBlock({...sportsGame,props:{...sportsGame.props,title:'Game '+i}}))
+    const parsedTicket=parseGenerativeUiBlock(ticket)
+    if(sixGames.some(card=>card===null)||parsedTicket===null)throw Error('Invalid fixture')
+    const validatedGames=sixGames.filter((card):card is NonNullable<typeof card>=>card!==null)
+    const observed=unrenderedSportsCards([...validatedGames,parsedTicket],['Ticket disponible en la tarjeta.'])
     expect(observed).toHaveLength(6)
-    expect(observed[0]).toEqual(ticket)
+    expect(observed[0]).toEqual(parsedTicket)
     expect(observed.filter(c=>c.component==='sports_ticket_card')).toHaveLength(1)
   })
   it('deduplicates validated assistant-rendered cards and repeated tool results',()=>{
