@@ -146,11 +146,11 @@ function normalizeDuckDuckGoUrl(raw: string): string {
 function parseDuckDuckGo(html: string): WebSearchSource[] {
   const sources: WebSearchSource[] = []
   const anchors = [...html.matchAll(/<a\b[^>]*>[\s\S]*?<\/a>/giu)]
+    .filter(entry => /\bresult__a\b/iu.test(attribute(entry[0], 'class') ?? ''))
   for (let index = 0; index < anchors.length; index++) {
     const entry = anchors[index]
     if (!entry) continue
     const tag = entry[0]
-    if (!/\bresult__a\b/iu.test(attribute(tag, 'class') ?? '')) continue
     const href = attribute(tag, 'href')
     if (!href) continue
     const url = normalizeDuckDuckGoUrl(decodeHtml(href))
@@ -159,7 +159,7 @@ function parseDuckDuckGo(html: string): WebSearchSource[] {
     if (!title) continue
     let snippet = ''
     // Only inspect markup before the next result title to prevent cross-result snippets.
-    const nextTitle = anchors.slice(index + 1).find(next => /\bresult__a\b/iu.test(attribute(next[0], 'class') ?? ''))
+    const nextTitle = anchors[index + 1]
     const start = entry.index + tag.length
     const end = nextTitle?.index ?? html.length
     const between = html.slice(start, Math.min(end, start + 3000))
