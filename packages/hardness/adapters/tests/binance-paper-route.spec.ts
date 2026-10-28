@@ -213,6 +213,22 @@ describe('Binance chat viewer HTTP integration', () => {
     const reconnect = await fetch(origin + '/phoenix-trading/paper/testnet-status')
     expect(await reconnect.json()).toMatchObject({ configured: true, connected: true, canTrade: true })
     expect(saved.get('PHOENIX_BINANCE_TESTNET_API_SECRET')).toBe('TESTNET_SECRET_1234567890')
+    // A later Host session can use the same saved pair for an actual Testnet
+    // request; no API secret is copied through the dashboard JSON or chat.
+    const restarted = new BinanceSpotTestnet(async () => {
+      const apiKey = saved.get('PHOENIX_BINANCE_TESTNET_API_KEY')
+      const secret = saved.get('PHOENIX_BINANCE_TESTNET_API_SECRET')
+      return apiKey && secret ? { apiKey, secret } : undefined
+    }, async (input, init) => {
+      expect(String(input)).toContain('https://testnet.binance.vision/api/v3/order')
+      expect(init?.headers).toEqual({ 'X-MBX-APIKEY': 'TESTNET_KEY_1234567890' })
+      return new Response(JSON.stringify({
+        symbol: 'BTCUSDT', side: 'BUY', orderId: 4711, status: 'NEW',
+        executedQty: '0', cummulativeQuoteQty: '0',
+      }), { status: 200 })
+    })
+    expect(await restarted.order({ symbol: 'BTCUSDT', side: 'BUY', quoteUsdt: 10 }))
+      .toMatchObject({ mode: 'testnet', orderId: 4711, status: 'NEW' })
   })
 
   it('rolls back both credentials if the second vault write fails', async () => {
