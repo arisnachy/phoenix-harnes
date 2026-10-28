@@ -371,6 +371,21 @@ function testnetAutoTool(deps: BinanceTradingToolDependencies): ToolDefinition {
         risk:'high',reversible:false,signal:exec.signal,
       })
       if(approval!=='allowed-once')return {mode:'testnet',enabled:false,status:'denied',approvalOutcome:approval}
+      // Kira's bounded review subscription is only created by an authenticated
+      // Testnet user-granted start, never by a passive status check.
+      if(deps.wake!==undefined && exec.agent.id!==undefined){
+        const target=exec.agent.id
+        const current=await deps.wake.list()
+        const subscribed=current.some(item=>item.source==='phoenix-trading'
+          && item.eventType==='testnet.attention'&&item.targetAgentId===target
+          && item.status==='active')
+        if(!subscribed)await deps.wake.create({
+          title:'Kira · Binance Spot Testnet',
+          source:'phoenix-trading',eventType:'testnet.attention',
+          instruction:'Review only actual TESTNET exchange-confirmed fills, unresolved order receipts, risk halts, and safety controls; never infer REAL funded orders. Report without pasting API keys.',
+          mode:'act',once:false,createdBy:'user',targetAgentId:target,
+        })
+      }
       return await auto.start(args.symbols??['BTCUSDT','ETHUSDT','SOLUSDT']) as unknown as Record<string, JsonValue>
     },
     presentCall(args) {
