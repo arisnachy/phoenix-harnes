@@ -96,6 +96,18 @@ type SportsGameCard = {
     note?: string; askPrompt?: string
   }
 }
+/** Compact, chat-only scoreboards. Individual matches keep sports_game_card unchanged. */
+type SportsScheduleEvent = {
+  eventId?:string;when:string;status?:string;venue?:string
+  away:SportsSide;home:SportsSide;featured?:string;favorite?:string;askPrompt?:string
+}
+type SportsScheduleCard = {
+  component:'sports_schedule_card';version:1
+  props:{
+    title:string;date:string;sport?:string;league?:string;source:string;total:number
+    events:SportsScheduleEvent[];note?:string
+  }
+}
 type SportsOddsCard = {
   component: 'sports_odds_card'; version: 1
   props: { title:string;source:string;subtitle?:string;note:string
@@ -130,7 +142,7 @@ const supportedIcons: readonly PhoenixUiIconName[] = [
 ]
 const supportedTones: readonly PhoenixStatusTone[] = ['positive', 'warning', 'negative', 'info', 'neutral']
 
-export type GenerativeUiBlock = EventCard | MetricCard | ComparisonCard | TimelineCard | SmartCard | SportsGameCard | SportsTicketCard | SportsOddsCard
+export type GenerativeUiBlock = EventCard | MetricCard | ComparisonCard | TimelineCard | SmartCard | SportsGameCard | SportsScheduleCard | SportsTicketCard | SportsOddsCard
   | CanvasSpec | ScaleFormSpec | SpreadsheetSpec | GeoMapSpec | SceneMapSpec | DiagramSpec | StatusPillBlock | AgentLineBlock
 
 export type GenerativeUiSegment =
@@ -300,6 +312,21 @@ const sportsGame = (value: Record<string, unknown>): value is SportsGameCard => 
       && p.highlights.every(x => isRecord(x) && hasOnlyKeys(x,['label','value','image','detail'])
         && isText(x.label,70) && isText(x.value,180) && trustedPortrait(x.image) && optionalText(x.detail,240)))
 }
+const sportsSchedule = (value:Record<string,unknown>):value is SportsScheduleCard => {
+  if(!isRecord(value.props)||!hasOnlyKeys(value.props,
+    ['title','date','sport','league','source','total','events','note']))return false
+  const p=value.props
+  return isText(p.title) && isText(p.date,45) && isText(p.source,320)
+    && optionalText(p.sport,60) && optionalText(p.league,100) && optionalText(p.note,MAX_TEXT)
+    && typeof p.total==='number' && Number.isInteger(p.total) && p.total>=1 && p.total<=500
+    && Array.isArray(p.events) && p.events.length>=2 && p.events.length<=25 && p.events.length<=p.total
+    && p.events.every(x=>isRecord(x) && hasOnlyKeys(x,
+      ['eventId','when','status','venue','away','home','featured','favorite','askPrompt'])
+      && optionalText(x.eventId,50) && isText(x.when,80) && optionalText(x.status,60)
+      && optionalText(x.venue,180) && sportsSide(x.away) && sportsSide(x.home)
+      && optionalText(x.featured,150) && optionalText(x.favorite,170)
+      && optionalText(x.askPrompt,400))
+}
 const sportsTicket = (value: Record<string, unknown>): value is SportsTicketCard => {
   if (!isRecord(value.props) || !hasOnlyKeys(value.props,
     ['title','subtitle','source','legs','requestedLegs','combinedOdds','stake','grossReturn','note','askPrompt'])) return false
@@ -328,6 +355,7 @@ export function parseGenerativeUiBlock(value: unknown): GenerativeUiBlock | null
 
   switch (value.component) {
     case 'sports_game_card': return sportsGame(value) ? value : null
+    case 'sports_schedule_card': return sportsSchedule(value) ? value : null
     case 'sports_ticket_card': return sportsTicket(value) ? value : null
     case 'sports_odds_card': return sportsOdds(value) ? value : null
     case 'event_card': return validateEventCard(value) ? value : null
@@ -396,7 +424,7 @@ export function splitGenerativeUiText(
       }
     }
     if (parsed === null) {
-      if (/"component"\s*:\s*"(?:sports_game_card|sports_ticket_card)"/.test(body ?? ''))
+      if (/"component"\s*:\s*"(?:sports_game_card|sports_schedule_card|sports_ticket_card)"/.test(body ?? ''))
         segments.push({ kind: 'notice', text: 'La tarjeta deportiva no pudo validarse. Kira debe consultar de nuevo el evento y entregar los datos verificados.' })
       else if (/"component"\s*:\s*"(?:ui_canvas|scale_form|spreadsheet|geo_map|scene_map|diagram|status_pill|agent_line)"/.test(body ?? ''))
         segments.push({ kind: 'notice', text: 'Esta interfaz no pudo mostrarse. Pide a Kira que la actualice.' })
@@ -563,6 +591,40 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
     case 'diagram': return <DiagramSurface key={(conversationId ?? 'ephemeral') + ':' + block.props.id} spec={block} onAction={onAction} />
     case 'status_pill': return <PhoenixStatusPill label={block.props.label} {...block.props.tone === undefined ? {} : { tone: block.props.tone }} />
     case 'agent_line': return <PhoenixAgentLine {...block.props} />
+    case 'sports_schedule_card': {
+      const p=block.props
+      return <section className={css.sportsSlate} data-generative-ui="sports_schedule_card"
+        aria-label={p.title}>
+        <header className={css.sportsSlateHeader}>
+          <div><span className={css.sportsKicker}>PHOENIX / CARTELERA EN EL CHAT</span>
+            <h3>{p.title}</h3><small>{[p.league,p.date].filter(Boolean).join(' · ')}</small></div>
+          <span className={css.sportsSlateCount}>{p.events.length} {p.events.length===1?'juego':'juegos'}</span>
+        </header>
+        <div className={css.sportsSlateGrid}>{p.events.map((e,i)=>
+          <article key={e.eventId??i} className={css.sportsSlateEvent}>
+            <div className={css.sportsSlateMeta}>
+              <strong>{e.when}</strong>{e.status&&<span>{e.status}</span>}
+            </div>
+            <div className={css.sportsSlateMatch}>
+              <div><SportsPortrait label={e.away.label} logo={e.away.logo}/>
+                <span><strong>{e.away.label}</strong>{e.away.meta&&<small>{e.away.meta}</small>}</span>
+                {e.away.score!==undefined&&<b>{e.away.score}</b>}</div>
+              <div><SportsPortrait label={e.home.label} logo={e.home.logo}/>
+                <span><strong>{e.home.label}</strong>{e.home.meta&&<small>{e.home.meta}</small>}</span>
+                {e.home.score!==undefined&&<b>{e.home.score}</b>}</div>
+            </div>
+            {e.venue&&<small className={css.sportsSlateVenue}>⌖ {e.venue}</small>}
+            {e.featured&&<small className={css.sportsSlateFeatured}>{e.featured}</small>}
+            {e.favorite&&<small className={css.sportsSlateFavorite}>Tendencia fundamentada · {e.favorite}</small>}
+            {e.askPrompt&&onAction&&<button className={css.sportsSlateAction}
+              type="button" onClick={()=>{if(e.askPrompt)onAction(e.askPrompt,'draft')}}>
+              Ver análisis del encuentro ›
+            </button>}
+          </article>)}</div>
+        <footer className={css.sportsSourceBar}><span>Datos · {p.source}</span>
+          <small>{p.note??'Solo encuentros verificados; datos sujetos a actualización.'}</small></footer>
+      </section>
+    }
     case 'sports_game_card': {
       const p=block.props
       return <section className={css.sportsCard} data-generative-ui="sports_game_card">
