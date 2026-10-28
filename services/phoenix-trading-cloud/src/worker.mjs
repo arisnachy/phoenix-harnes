@@ -7,7 +7,11 @@ const json=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:
   'content-type':'application/json','cache-control':'no-store','x-content-type-options':'nosniff'}});
 const emit=(state,kind,summary,now,symbol='')=>{
   const id=kind+':'+now+':'+symbol;
-  if(!state.events.some(e=>e.id===id))state.events.push({id,kind,summary,at:now,symbol});
+  if(!state.events.some(e=>e.id===id)){
+    const event={id,kind,summary,at:now,symbol};
+    state.events.push(event);
+    state.pendingEvents=[...(state.pendingEvents||[]),event];
+  }
   state.events=state.events.slice(-300);
 };
 async function market(path){
@@ -37,6 +41,16 @@ async function write(db,state){
   if(result.meta?.changes!==1)throw new Error('optimistic-lock-conflict');
   return next;
 }
+async function flushEvents(db,state){
+  if(!state.pendingEvents?.length)return;
+  for(const event of state.pendingEvents){
+    await db.prepare('INSERT OR IGNORE INTO event_log(id,at,payload) VALUES(?,?,?)')
+      .bind(event.id,event.at,JSON.stringify(event)).run();
+  }
+  // This clear becomes durable on the next state update; replays before then
+  // are harmless because event_log.id has a UNIQUE constraint.
+  state.pendingEvents=[];
+}
 async function discover(state,now){
   if(state.universe.length && now-state.universeUpdated<86_400_000)return;
   const [exchange,tickers]=await Promise.all([
@@ -60,7 +74,15 @@ function mark(state,quotes){
 async function cycle(env,now=Date.now()){
   if(!env.DB)throw new Error('D1_NOT_CONFIGURED');
   const state=await read(env.DB);
-  if(!state.enabled||state.halted)return {status:'disabled'};
+  if(!state.enabled||state.halted){
+    if(state.pendingEvents?.length){
+      await flushEvents(env.DB,state);
+      await write(env.DB,state);
+    }
+    return {status:'disabled'};
+  }
+  // Complete any interrupted event publication before processing new signals.
+  await flushEvents(env.DB,state);
   const slot=Math.floor(now/60_000);
   // Unique fence makes overlapping or retried Cron events no-ops.
   const fence=await env.DB.prepare('INSERT OR IGNORE INTO run_fence(slot,at) VALUES(?,?)')
@@ -126,6 +148,7 @@ async function cycle(env,now=Date.now()){
     }
     state.lastScan=now;state.lastError=null;state.failureCount=0;
     await write(env.DB,state);
+    await flushEvents(env.DB,state);
     return {status:state.halted?'halted':'ok',slot,decision,scanned:selected.length,
       universe:state.universe.length,positions:Object.keys(state.positions).length};
   }catch(error){
@@ -135,7 +158,10 @@ async function cycle(env,now=Date.now()){
       state.halted=true;state.enabled=false;
       emit(state,'risk-halt','3 consecutive provider/execution failures',now);
     }
-    try{await write(env.DB,state)}catch{ /* never conceal error as a confirmed fill */ }
+    try{
+      await write(env.DB,state);
+      await flushEvents(env.DB,state);
+    }catch{ /* never conceal error as a confirmed fill */ }
     return {status:'error',reason:state.lastError,halted:state.halted};
   }
 }
@@ -161,8 +187,15 @@ async function route(req,env){
       lastScan:state.lastScan,lastError:state.lastError,universeCount:state.universe.length,
       positions:state.positions,signals:state.signals,journal:state.journal.slice(-50),
       warning:'Virtual trading only; software stops execute at the next Cron, not at Binance.'});
-  if(url.pathname==='/events'&&req.method==='GET')
-    return json({events:state.events.slice(-100),revision:state.revision});
+  if(url.pathname==='/events'&&req.method==='GET'){
+    const cursor=Number(url.searchParams.get('after')||0);
+    if(!Number.isSafeInteger(cursor)||cursor<0)return json({error:'invalid-cursor'},400);
+    const rows=await env.DB.prepare(
+      'SELECT seq,payload FROM event_log WHERE seq>? ORDER BY seq ASC LIMIT 100'
+    ).bind(cursor).all();
+    const events=(rows.results||[]).map(row=>({...JSON.parse(row.payload),seq:row.seq}));
+    return json({events,nextCursor:events.at(-1)?.seq??cursor,revision:state.revision});
+  }
   if(url.pathname==='/admin/control'&&req.method==='POST'){
     if(!req.headers.get('content-type')?.startsWith('application/json'))return json({error:'json-only'},400);
     if(Number(req.headers.get('content-length')||0)>2048)return json({error:'too-large'},413);
