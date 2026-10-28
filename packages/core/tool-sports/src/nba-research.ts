@@ -53,7 +53,7 @@ const numberScore = (value: string | number | undefined): number | null => {
   const result = Number(raw)
   return Number.isInteger(result) ? result : null
 }
-const sides = (e: EspnEvent): { home?: EspnTeam; away?: EspnTeam } => {
+const sides = (e: EspnEvent): { home: EspnTeam | undefined; away: EspnTeam | undefined } => {
   const rows=e.competitions?.[0]?.competitors ?? []
   return { home:rows.find(x=>x.homeAway==='home'),away:rows.find(x=>x.homeAway==='away') }
 }
