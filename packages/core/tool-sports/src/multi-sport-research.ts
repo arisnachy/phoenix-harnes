@@ -42,10 +42,14 @@ const cleanScore=(s:unknown):number|null=>{
 }
 const form=(current:Competitor,all:Game[],kickoff:number):FormSide=>{
   const id=pid(current)
+  const seenEvents=new Set<string>()
   const records=all.flatMap(e=>{
     if(e.status?.type?.state!=='post')return []
     const at=Date.parse(e.date??'')
     if(!Number.isFinite(at)||at>=kickoff)return []
+    const eventId=String(e.id??'')
+    if(!/^\\d{1,20}$/u.test(eventId)||seenEvents.has(eventId))return []
+    seenEvents.add(eventId)
     const {home,away}=sides(e)
     const mine=pid(home)===id?home:pid(away)===id?away:undefined
     const rival=mine===home?away:home
@@ -117,12 +121,16 @@ export async function researchSport(
     if(!home||!away||!pid(home)||!pid(away)||!pname(home)||!pname(away))return []
     const kickoff=Date.parse(event.date??'')
     const homeForm=form(home,archived,kickoff),awayForm=form(away,archived,kickoff)
-    const sufficient=successfulDays===lookbackDays&&homeForm.completedGames>=2&&awayForm.completedGames>=2
+    // A two-game streak is not enough to label a matchup evidence-backed.
+    // NFL uses a 28-day window elsewhere so three observations are feasible.
+    const requiredGames=3
+    const sufficient=successfulDays===lookbackDays&&
+      homeForm.completedGames>=requiredGames&&awayForm.completedGames>=requiredGames
     const result:ResearchMatch={eventId:String(event.id??''),date:event.date??'',sport,league,
       home:homeForm,away:awayForm,source:'ESPN Site API',evidence:sufficient?'descriptive':'insufficient',
       coverageDays:lookbackDays,successfulDays,
       limitations:[
-        ...(!sufficient?['Historial incompleto o muestra de partidos insuficiente']:[]),
+        ...(!sufficient?['Historial incompleto o muestra inferior a tres partidos por equipo']:[]),
         'Lesiones/ausencias y alineaciones pendientes de verificación',
         'Rendimiento ajustado por rival y métricas específicas pendientes',
         'Mercados y probabilidad calibrada no verificados',
