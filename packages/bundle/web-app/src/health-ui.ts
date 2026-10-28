@@ -26,7 +26,7 @@ table{width:100%;border-collapse:collapse;font-size:12px}td,th{border-bottom:1px
 "use strict";
 const root=document.getElementById("app"),account=document.getElementById("account"),flash=document.getElementById("flash");
 let actor=null,csrf="",tab="patients",data={},current=null;
-const modules=[["patients","Pacientes"],["encounters","Consultas"],["appointments","Agenda"],["orders","Laboratorio e imágenes"],["prescriptions","Recetas"],["inventory","Farmacia"],["invoices","Administración"],["followups","Seguimiento"],["staff","Personal"],["assignments","Equipo asistencial"],["audit","Auditoría"]];
+const modules=[["patients","Pacientes"],["encounters","Consultas"],["appointments","Agenda"],["orders","Laboratorio e imágenes"],["prescriptions","Recetas"],["inventory","Farmacia"],["invoices","Administración"],["followups","Seguimiento"],["staff","Personal"],["assignments","Equipo asistencial"],["backups","Respaldos"],["audit","Auditoría"]];
 const safe=x=>String(x??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const val=id=>document.getElementById(id)?.value??"";
 const box=(title,content)=>'<article class="card"><h2>'+safe(title)+'</h2>'+content+'</article>';
@@ -57,7 +57,7 @@ async function splash(){
 }
 async function load(){
  account.innerHTML='<span class="tag">'+safe(actor.username)+" · "+safe(actor.role)+'</span> '+button("logout","Salir","secondary");
- const menu={admin:["patients","appointments","inventory","invoices","followups","assignments","staff","audit"],
+ const menu={admin:["patients","appointments","inventory","invoices","followups","assignments","staff","backups","audit"],
  clinician:["patients","encounters","appointments","orders","prescriptions","followups"],
  psychologist:["patients","encounters","appointments","followups"],
  nurse:["patients","encounters","appointments","orders","followups"],
@@ -86,7 +86,7 @@ function actionFor(o){
  return actions.map(a=>'<button class="secondary" data-act="'+a[0]+'" data-id="'+safe(tab==="assignments"?o.patientId+"|"+o.staffId:o.id)+'">'+a[1]+'</button>').join("");
 }
 function render(){
- const d=data[tab]||[],patients=data.patients||[];
+ const d=tab==="backups"?(data.backups||[]).map(fileName=>({fileName})):data[tab]||[],patients=data.patients||[];
  const p=pick("patientId","Paciente",patients,x=>x.name+" · "+x.dateOfBirth);
  let form="";
  if(tab==="patients"&&["admin","clinician","reception"].includes(actor.role))form=field("name","Nombre completo")+field("dateOfBirth","Nacimiento","date")+field("email","Correo","email",false)+field("phone","Teléfono","tel",false)+
@@ -102,6 +102,7 @@ function render(){
  if(tab==="inventory")form=field("item","Producto")+button("create","Agregar producto");
  if(tab==="invoices")form=p+field("concept","Concepto")+field("amountCents","Monto en centavos","number")+button("create","Emitir factura");
  if(tab==="followups")form=p+field("assignedTo","Asignado a")+field("dueAt","Fecha y hora","datetime-local")+area("description","Tarea de seguimiento")+button("create","Crear seguimiento");
+ if(tab==="backups")form='<p class="notice warning">Copia SQLite consistente y verificada. Resguárdela mediante un procedimiento institucional y pruebe restauración fuera del Host.</p>'+button("backup","Crear respaldo verificado");
  if(tab==="assignments")form=pick("patientId","Paciente",patients,x=>x.name)+field("staffId","Usuario profesional")+field("purpose","Motivo de atención")+button("grantPatient","Autorizar atención");
  if(tab==="staff")form=field("username","Usuario")+field("password","Contraseña inicial (16+)","password")+
  '<label>Rol</label><select id="role">'+["clinician","psychologist","nurse","reception","lab","radiology","pharmacy","billing"].map(x=>'<option>'+x+'</option>').join('')+'</select>'+button("create","Crear personal");
@@ -116,6 +117,7 @@ function render(){
  if(tab==="inventory")cols=[["Producto","item"],["Unidades","units"]];
  if(tab==="invoices")cols=[["Concepto","concept"],["Total (centavos)","amountCents"],["Pagado","paidCents"]];
  if(tab==="followups")cols=[["Tarea","description"],["Vence","dueAt"],["Estado","status"]];
+ if(tab==="backups")cols=[["Archivo verificado","fileName"]];
  if(tab==="assignments")cols=[["Paciente","patientId"],["Profesional","staffId"],["Finalidad","purpose"],["Autorizó","grantedBy"]];
  if(tab==="staff")cols=[["Usuario","username"],["Rol","role"],["Centro","org"]];
  if(tab==="audit")cols=[["Acción","action"],["Actor","actor"],["Registro","recordId"],["Hora","happened"]];
@@ -126,6 +128,11 @@ async function execute(action,id){
  if(action==="logout"){await api("logout","POST",{});actor=null;csrf="";return splash()}
  if(action==="setup"){await api("setup","POST",{username:val("user"),password:val("pass"),organization:val("org")});notice("Clínica configurada. Inicia sesión.");return splash()}
  if(action==="login"){const x=await api("login","POST",{username:val("user"),password:val("pass")});csrf=x.csrf;actor=x.actor;return load()}
+ if(action==="backup"){
+  if(!confirm("¿Crear una copia consistente del expediente cifrado?"))return;
+  const result=await api("backups","POST",{});
+  notice("Respaldo verificado: "+result.backup.name+" · "+result.backup.records+" registros");return load();
+ }
  if(action==="contactEvidence"){
   const patient=data.patients?.find(x=>x.id===id);if(!patient)throw Error("Paciente no encontrado");
   const choice=prompt("¿Autoriza o revoca correo? Escriba GRANTED o REVOKED","REVOKED");if(choice===null)return;
