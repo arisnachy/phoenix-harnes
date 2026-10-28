@@ -196,3 +196,20 @@ test('clinical email consent is not a boolean from the form; only auditable proo
   assert.equal(revoked.contactEvidence.consent,'revoked')
   assert(db.audits(admin.actor).some(x=>x.action==='patients.update'))
 })
+
+test('an online SQLite backup can be restored and retains encrypted clinical content',async t=>{
+  const {db,admin,root}=fixture(t)
+  const p=db.create(admin.actor,'patients',{name:'UnusualEncryptedBackupOnlyName77',dateOfBirth:'1988-06-01'})
+  const report=await db.backup(admin.actor)
+  assert.equal(report.records,1)
+  assert.equal(db.backups(admin.actor).length,1)
+  const filename=join(root,'backups',report.name)
+  assert(!readFileSync(filename).includes(Buffer.from('UnusualEncryptedBackupOnlyName77')))
+  const restored=new HealthClinicStore(filename)
+  try {
+    const login=restored.login('clinicaladmin',PASSWORD)
+    assert.equal(restored.list(login.actor,'patients')[0].id,p.id)
+    assert.equal(restored.list(login.actor,'patients')[0].name,'UnusualEncryptedBackupOnlyName77')
+  }finally{restored.close()}
+  assert(db.audits(admin.actor).some(x=>x.action==='backup.create'))
+})
