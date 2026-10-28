@@ -574,6 +574,9 @@ export function dashboardJson(view: BinancePaperAutomationView): Record<string, 
       symbol: signal.symbol, regime: signal.regime, strategy: signal.strategy,
       action: signal.action, score: signal.score, reason: signal.reason,
     })) ?? [],
+    execution: view.lastCycle?.execution.map(row => ({
+      symbol: row.symbol, status: row.status, explanation: row.explanation,
+    })) ?? [],
     lastDecision: view.lastCycle?.decision ?? 'none',
     rationale: view.lastCycle?.rationale ?? 'No analysis executed in the current Host session',
   }

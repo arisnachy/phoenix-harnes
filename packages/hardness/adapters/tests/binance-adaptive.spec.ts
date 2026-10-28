@@ -111,6 +111,48 @@ describe('adaptive Binance paper cycle', () => {
     expect(result.account.tradeCount).toBe(1)
   })
 
+  it('does not confuse a weak BUY indicator with an autonomous PAPER fill', async () => {
+    const paper = broker({ ETHUSDT: 'pullback' })
+    const result = await runBinanceAdaptiveCycle(paper, {
+      mode: 'paper-step', symbols: ['ETHUSDT'],
+    }, NOW)
+    expect(result.signals[0]).toMatchObject({ action: 'buy', score: 65 })
+    expect(result.execution[0]).toMatchObject({
+      symbol: 'ETHUSDT', status: 'watch',
+    })
+    expect(result.execution[0]?.explanation).toContain('75/100')
+    expect(result.decision).toBe('hold')
+    expect(result.trade).toBeUndefined()
+    expect(result.account.tradeCount).toBe(0)
+  })
+
+  it('automatically buys the qualifying signal and returns a real PAPER fill receipt', async () => {
+    const paper = broker({ LTCUSDT: 'breakout', DOTUSDT: 'pullback' })
+    const cycle = await runBinanceAdaptiveCycle(paper, {
+      mode: 'paper-step', symbols: ['DOTUSDT', 'LTCUSDT'],
+    }, NOW)
+    expect(cycle.decision).toBe('buy')
+    expect(cycle.execution.find(row => row.symbol === 'LTCUSDT')).toMatchObject({
+      status: 'executed', explanation: 'Compra virtual confirmada en el ledger',
+    })
+    expect(cycle.execution.find(row => row.symbol === 'DOTUSDT')).toMatchObject({ status: 'watch' })
+    expect(cycle.trade).toMatchObject({ symbol: 'LTCUSDT', side: 'buy' })
+    expect((await paper.journal()).at(-1)?.id).toBe(cycle.trade?.id)
+  })
+
+  it('explains a blocked entry when portfolio slots are already occupied', async () => {
+    const paper = broker({ BTCUSDT: 'breakout', ETHUSDT: 'breakout', SOLUSDT: 'breakout' })
+    await paper.order({ symbol: 'BTCUSDT', side: 'buy', quoteAmountUsdt: 100 })
+    await paper.order({ symbol: 'ETHUSDT', side: 'buy', quoteAmountUsdt: 100 })
+    const result = await runBinanceAdaptiveCycle(paper, {
+      mode: 'paper-step', symbols: ['SOLUSDT'],
+    }, NOW)
+    expect(result.execution[0]).toMatchObject({ status: 'blocked' })
+    expect(result.execution[0]?.explanation).toContain('posiciones simultáneas')
+    expect(result.rationale).toContain('posiciones abiertas')
+    expect(result.trade).toBeUndefined()
+  })
+
   it('holds after both virtual portfolio slots are occupied', async () => {
     const paper = broker({ BTCUSDT: 'breakout', ETHUSDT: 'breakout', SOLUSDT: 'breakout' })
     await paper.order({ symbol: 'BTCUSDT', side: 'buy', quoteAmountUsdt: 100 })

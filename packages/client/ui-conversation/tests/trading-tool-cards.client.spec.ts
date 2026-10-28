@@ -35,6 +35,21 @@ describe('first-party trading viewer', () => {
     })).toBeUndefined()
   })
 
+  it('validates explicit executed vs watched versus blocked signal evidence', () => {
+    const withDecision = {
+      ...dashboard,
+      execution: [{ symbol: 'BTCUSDT', status: 'executed',
+        explanation: 'Compra virtual confirmada en el ledger' }],
+    }
+    expect(parseTradingDashboard(withDecision)?.execution).toMatchObject([{ status: 'executed' }])
+    expect(parseTradingDashboard({ ...withDecision, execution: [
+      { symbol: 'BTCUSDT', status: 'unverified-real-fill', explanation: 'fake' },
+    ] })).toBeUndefined()
+    expect(parseTradingDashboard({ ...withDecision, execution: [
+      { symbol: 'BTCUSDT', status: 'blocked', explanation: 'Capital insuficiente' },
+    ] })?.execution).toMatchObject([{ status: 'blocked' }])
+  })
+
   it('fails closed for forged real-mode dashboards and invalid financial data', () => {
     expect(parseTradingDashboard({ ...dashboard, mode: 'real' })).toBeUndefined()
     expect(parseTradingDashboard({ ...dashboard, account: { ...dashboard.account, equityUsdt: Infinity } })).toBeUndefined()
