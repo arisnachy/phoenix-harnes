@@ -76,7 +76,10 @@ function mockedMarket(now) {
     const data=u.pathname.endsWith('/exchangeInfo')?exchange
       :u.pathname.endsWith('/ticker/24hr')?tickers
       :u.pathname.endsWith('/klines')?rows
-      :u.pathname.endsWith('/ticker/price')?[]:null;
+      :u.pathname.endsWith('/ticker/price')?
+        u.searchParams.has('symbol')
+          ? {symbol:u.searchParams.get('symbol'),price:'108.5'}
+          :[]:null;
     if(data===null)return new Response('not-found',{status:404});
     return new Response(JSON.stringify(data),{status:200});
   };
