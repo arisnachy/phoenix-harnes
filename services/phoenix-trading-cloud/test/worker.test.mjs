@@ -153,6 +153,52 @@ describe('Cloud worker auth and scheduling',()=>{
       assert.ok(snapshot.evaluations.every(x=>x.outcome==='market-unavailable'));
     }finally{globalThis.fetch=original;}
   });
+  it('records a real virtual BUY and subsequent TP2 SELL in the durable ledger',async()=>{
+    const env={DB:new D1Fake(),ADMIN_TOKEN:TOKEN};
+    await route(request('/admin/control',TOKEN,'POST',{action:'start'}),env);
+    const original=globalThis.fetch;
+    const base=mockedMarket(NOW);
+    const rows=Array.from({length:80},(_,index)=>{
+      const time=NOW-(80-index)*900000;
+      const close=100+index*.12+Math.sin(index*1.7)*.7+(index===79?2:0);
+      return [time,String(close),String(close+.8),String(close-.8),
+        String(close),index===79?'25':'10',time+899999];
+    });
+    globalThis.fetch=async input=>{
+      const url=new URL(input);
+      if(url.pathname==='/api/v3/klines')return new Response(JSON.stringify(rows),{status:200});
+      if(url.pathname==='/api/v3/ticker/price'){
+        if(url.searchParams.has('symbol'))return new Response(JSON.stringify({
+          symbol:url.searchParams.get('symbol'),price:'111.98',
+        }),{status:200});
+        return new Response(JSON.stringify([{symbol:'BTCUSDT',price:'150'}]),{status:200});
+      }
+      return base(input);
+    };
+    try{
+      const first=await cycle(env,NOW);
+      assert.equal(first.status,'ok');
+      assert.equal(first.decision,'buy');
+      let snapshot=await (await route(request('/snapshot'),env)).json();
+      assert.equal(snapshot.journal.length,1);
+      assert.equal(snapshot.journal[0].side,'buy');
+      assert.equal(snapshot.evaluations.filter(row=>row.outcome==='executed').length,1);
+      assert.ok(Object.keys(snapshot.positions).includes(snapshot.journal[0].symbol));
+      assert.ok(snapshot.positions[snapshot.journal[0].symbol].plan.tp1>0);
+      assert.ok(snapshot.positions[snapshot.journal[0].symbol].plan.tp2>0);
+      assert.ok(snapshot.positions[snapshot.journal[0].symbol].plan.stop>0);
+      const second=await cycle(env,NOW+60_000);
+      assert.equal(second.status,'ok');
+      assert.equal(second.decision,'tp2');
+      snapshot=await (await route(request('/snapshot'),env)).json();
+      assert.equal(snapshot.journal.length,2);
+      assert.equal(snapshot.journal[1].side,'sell');
+      assert.equal(snapshot.journal[1].reason,'tp2');
+      assert.equal(Object.keys(snapshot.positions).length,0);
+      assert.ok(snapshot.realizedPnl>0);
+      assert.equal(snapshot.lastDecisionReason,'Virtual exit confirmed in ledger: tp2');
+    }finally{globalThis.fetch=original;}
+  });
   it('halts after three consecutive provider failures and refuses auto-restart',async()=>{
     const env={DB:new D1Fake(),ADMIN_TOKEN:TOKEN};
     await route(request('/admin/control',TOKEN,'POST',{action:'start'}),env);
