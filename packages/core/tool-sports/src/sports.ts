@@ -199,7 +199,9 @@ export async function chatGames(sport:string,league:string,requestedDate?:string
           away:String(v.displayValue??v.value??'—'),home:String(homePeriods[i]?.displayValue??homePeriods[i]?.value??'—') })):[]
       const sportNames:Record<string,string>={ soccer:'Fútbol',basketball:'Baloncesto',football:'Fútbol americano',hockey:'Hockey',
         tennis:'Tenis',mma:'MMA',racing:'Automovilismo',golf:'Golf',baseball:'Béisbol' }; const sportLabel=sportNames[sport]||sport
-      const highlights = (comp?.competitors ?? []).flatMap(team =>
+      // NBA competitor.leaders is not a verified CURRENT roster: do not misattribute athletes.
+      // A roster-validated player surface will restore these cards separately.
+      const highlights = (sport==='basketball'&&league==='nba')?[]:(comp?.competitors ?? []).flatMap(team =>
         (team.leaders ?? []).slice(0, 2).flatMap(group =>
           (group.leaders ?? []).slice(0, 1).map((leader) => {
             const headshot = leader.athlete?.headshot?.href
@@ -224,6 +226,7 @@ export async function chatGames(sport:string,league:string,requestedDate?:string
         sport,
         ...(e.id !== undefined && String(e.id).trim() !== '' ? { eventId: String(e.id) } : {}),
         periods, highlights,
+        ...(sport==='basketball'&&league==='nba'?{ note:'Jugadores destacados omitidos hasta verificar su pertenencia a las plantillas vigentes.' }:{}),
         ...(comp?.broadcasts?.length?{ broadcast:comp.broadcasts.flatMap(x=>x.names??[]).slice(0,3).join(', ') }:{}),
         askPrompt:'Kira, amplía el análisis verificado del evento '+title(e.id,50)+' de '+league+'. Incluye métricas específicas de '+sport+' con sus fuentes.',
       } })
