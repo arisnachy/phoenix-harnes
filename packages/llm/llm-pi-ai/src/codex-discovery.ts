@@ -517,7 +517,8 @@ export async function listCodexModels(signal?: AbortSignal): Promise<readonly Ll
 }
 
 let sharedDiscovery: Promise<readonly LlmDiscoveredModel[]> | undefined
-let lastDiscoveryFailure: { readonly at: number; readonly error: unknown } | undefined
+let sharedDiscoveryRuntime: string | undefined
+let lastDiscoveryFailure: { readonly at: number; readonly error: unknown; readonly runtime: string } | undefined
 
 function waitForSharedDiscovery(
   pending: Promise<readonly LlmDiscoveredModel[]>,
@@ -546,6 +547,12 @@ function waitForSharedDiscovery(
  */
 async function listSharedCodexModels(signal?: AbortSignal): Promise<readonly LlmDiscoveredModel[]> {
   const now = Date.now()
+  const runtime = codexRuntimeSignature()
+  // A replaced managed CLI is a genuinely different discovery transport:
+  // neither the old failure cooldown nor its in-flight app-server may block it.
+  if (lastDiscoveryFailure !== undefined && lastDiscoveryFailure.runtime !== runtime) {
+    lastDiscoveryFailure = undefined
+  }
   if (lastDiscoveryFailure !== undefined
     && now - lastDiscoveryFailure.at < DISCOVERY_FAILURE_COOLDOWN_MS) {
     const error = lastDiscoveryFailure.error
@@ -554,21 +561,27 @@ async function listSharedCodexModels(signal?: AbortSignal): Promise<readonly Llm
       : new LlmError('Codex model discovery is temporarily unavailable', 'DISCOVERY_FAILED')
   }
 
-  if (sharedDiscovery === undefined) {
+  if (sharedDiscovery === undefined || sharedDiscoveryRuntime !== runtime) {
     const job = listCodexModels().then(
       (models) => {
-        lastDiscoveryFailure = undefined
+        if (codexRuntimeSignature() === runtime) lastDiscoveryFailure = undefined
         return models
       },
       (error: unknown) => {
-        lastDiscoveryFailure = { at: Date.now(), error }
+        if (codexRuntimeSignature() === runtime) {
+          lastDiscoveryFailure = { at: Date.now(), error, runtime }
+        }
         throw error
       },
     )
     const tracked = job.finally(() => {
-      if (sharedDiscovery === tracked) sharedDiscovery = undefined
+      if (sharedDiscovery === tracked) {
+        sharedDiscovery = undefined
+        sharedDiscoveryRuntime = undefined
+      }
     })
     sharedDiscovery = tracked
+    sharedDiscoveryRuntime = runtime
   }
   return await waitForSharedDiscovery(sharedDiscovery, signal)
 }
