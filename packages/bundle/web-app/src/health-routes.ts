@@ -58,6 +58,44 @@ function statusError(error:unknown):number{
   if(/(?:Conflicto|ya tiene una cita)/iu.test(m))return 409
   return 400
 }
+
+type GoogleMailClient = { request(input:{service:'gmail';path:string;method?:string;headers?:Record<string,string>;body?:string}):
+  Promise<{ok:boolean;body:string;status:number}> }
+function mailClient(ctx:Context):GoogleMailClient|undefined {
+  return (ctx.get as (key:string)=>unknown)('googleApi') as GoogleMailClient|undefined
+}
+function verifiedSender():string {
+  const sender=process.env.PHOENIX_HEALTH_KIRA_SENDER?.trim().toLowerCase()
+  if(!sender||! /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/u.test(sender))
+    throw new Error('Configure PHOENIX_HEALTH_KIRA_SENDER con la cuenta institucional verificada de Kira')
+  return sender
+}
+function makeGmailMessage(sender:string,to:string,subject:string,body:string):string {
+  const encoded='=?UTF-8?B?'+Buffer.from(subject,'utf8').toString('base64')+'?='
+  const raw=['From: '+sender,'To: '+to,'Subject: '+encoded,'MIME-Version: 1.0',
+    'Content-Type: text/plain; charset=UTF-8','Content-Transfer-Encoding: 8bit'].join('\r\n')+'\r\n\r\n'+body
+  return Buffer.from(raw,'utf8').toString('base64url')
+}
+/** Provider response must confirm a real message identifier; never infer delivery from HTTP alone. */
+async function sendReminderWithVerifiedGmail(ctx:Context,sender:string,to:string,subject:string,body:string):Promise<string>{
+  const gmail=mailClient(ctx)
+  if(!gmail)throw new Error('La cuenta Gmail de Kira no está conectada al Host')
+  const profile=await gmail.request({service:'gmail',path:'users/me/profile'})
+  if(!profile.ok)throw new Error('El proveedor no pudo verificar la identidad remitente')
+  let verified:unknown
+  try {verified=(JSON.parse(profile.body) as {emailAddress?:unknown}).emailAddress}catch{throw new Error('Perfil Gmail inválido')}
+  if(typeof verified!=='string'||verified.trim().toLowerCase()!==sender)
+    throw new Error('La cuenta Gmail conectada no corresponde al remitente institucional de Kira')
+  const raw=makeGmailMessage(sender,to,subject,body)
+  const response=await gmail.request({service:'gmail',path:'users/me/messages/send',method:'POST',
+    headers:{'content-type':'application/json'},body:JSON.stringify({raw})})
+  if(!response.ok)throw new Error('Gmail rechazó el recordatorio')
+  let id:unknown
+  try{id=(JSON.parse(response.body) as {id?:unknown}).id}catch{throw new Error('Respuesta Gmail no verificable')}
+  if(typeof id!=='string'||!id.trim())throw new Error('Gmail no devolvió identificador confirmado')
+  return id
+}
+
 /** Register an opt-in, real encrypted clinical pilot only for locally bound PHOENIX. */
 export function registerHealthRoutes(ctx:Context):void {
   if(process.env.PHOENIX_HEALTH_ENABLED!=='1')return
@@ -122,6 +160,32 @@ export function registerHealthRoutes(ctx:Context):void {
         if(method==='POST'){store.createStaff(actor,await readBody(req));reply(res,201,{ok:true});return}
       }
       if(operation==='audit'&&method==='GET'){reply(res,200,{items:store.audits(actor)});return}
+      if(operation==='reminders'&&method==='GET'){
+        reply(res,200,{items:store.reminders(actor),senderConfigured:!!process.env.PHOENIX_HEALTH_KIRA_SENDER});return
+      }
+      if(operation==='reminders'&&method==='POST'&&id!==undefined){
+        const sender=verifiedSender()
+        // Verify the authenticated Gmail identity *before* reserving this immutable delivery.
+        const gmail=mailClient(ctx)
+        if(!gmail)throw new Error('La cuenta de Kira aún no está conectada')
+        const profile=await gmail.request({service:'gmail',path:'users/me/profile'})
+        let email:unknown
+        try {email=(JSON.parse(profile.body) as {emailAddress?:unknown}).emailAddress}
+        catch {throw new Error('Perfil Gmail no verificable')}
+        if(!profile.ok||typeof email!=='string'||email.trim().toLowerCase()!==sender)
+          throw new Error('El correo conectado no coincide con la identidad Kira autorizada')
+        const planned=store.beginReminder(actor,id,sender)
+        try {
+          const providerId=await sendReminderWithVerifiedGmail(ctx,sender,planned.recipient,planned.subject,planned.body)
+          store.finishReminder(actor,id,providerId)
+          reply(res,200,{status:'sent',providerConfirmed:true});return
+        }catch{
+          // Delivery may have succeeded despite a timeout: never resend automatically.
+          store.finishReminder(actor,id,undefined)
+          throw new Error('Entrega no confirmada. Verifique Gmail antes de solicitar otro intento.')
+        }
+      }
+
       if(typeof operation==='string'&&healthKinds.some(x=>x===operation)){
         const kind=urlKind(operation)
         if(method==='GET'&&id===undefined){reply(res,200,{items:store.list(actor,kind)});return}
