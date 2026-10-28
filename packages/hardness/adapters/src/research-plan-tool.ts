@@ -27,6 +27,13 @@ const RANGES: Record<Level, readonly [number, number]> = {
   short: [10, 20], monograph: [20, 40], bachelors: [40, 80],
   masters: [60, 120], doctorate: [120, 250],
 }
+/** Editorial evidence targets are guidance, never universal university requirements. */
+export const THESIS_REFERENCE_TARGETS = {
+  bachelors: { min: 20, max: 40, emphasis: 'artículos científicos y libros fundamentales' },
+  masters: { min: 40, max: 80, emphasis: 'artículos indexados, relevantes y recientes' },
+  doctorate: { min: 100, max: null, emphasis: 'literatura internacional amplia y síntesis crítica verificable' },
+} as const
+
 const THESIS_BUDGET = [
   ['preliminaries', 'Portada y preliminares', 9],
   ['introduction', 'Introducción', 4],
@@ -74,7 +81,8 @@ function chooseEntry(args: Intake): Entry | null {
   const intent = (args.intent ?? '').normalize('NFD').replace(/[\u0300-\u036f]/gu, '').toLowerCase()
   if (/articulo cientifico|journal (article|manuscript)|manuscrito cientifico/u.test(intent)) return 'scientific_article'
   if (/vancouver/u.test(intent)) return 'vancouver'
-  if (/apa\s*7|apa\s*septima|normas?\s*apa/u.test(intent)) return 'apa7'
+  if (/apa(?:\s*7|\s*septima)?|normas?\s*apa/u.test(intent)) return 'apa7'
+  if (args.citation_style !== undefined) return args.citation_style
   return null
 }
 function allocate(input: ReadonlyArray<readonly [string, string, number]>, target: number) {
@@ -95,8 +103,10 @@ function allocate(input: ReadonlyArray<readonly [string, string, number]>, targe
 export function planAcademicResearch(input: unknown) {
   const args = parse(input)
   const entry = chooseEntry(args)
+  const intent = (args.intent ?? '').normalize('NFD').replace(/[\u0300-\u036f]/gu, '').toLowerCase()
   const inferredType: StudyType = args.document_type ?? (entry === 'scientific_article'
-    ? 'journal_manuscript' : args.level === 'masters' || args.level === 'doctorate' ? 'thesis' : 'monograph')
+    ? 'journal_manuscript' : /\b(tesis|thesis|disertacion|dissertation)\b/u.test(intent)
+      || args.level === 'masters' || args.level === 'doctorate' ? 'thesis' : 'monograph')
   const level = args.level ?? (inferredType === 'thesis' ? 'masters'
     : inferredType === 'monograph' ? 'monograph' : 'short')
   const defaultRange: readonly [number, number] = inferredType === 'journal_manuscript'
@@ -111,6 +121,7 @@ export function planAcademicResearch(input: unknown) {
   if (citationStyle === null) missing.add('estilo de citas del artículo: APA 7 o Vancouver')
   const academic = entry !== 'scientific_article' && inferredType !== 'journal_manuscript'
   const cover = args.cover
+  if (inferredType === 'thesis' && args.level === undefined) missing.add('nivel de tesis: licenciatura, maestría o doctorado')
   if (academic) {
     if (!cover?.institution) missing.add('institución')
     if (!cover?.author && !cover?.authors?.some(a => a.name?.trim())) missing.add('participantes')
@@ -122,6 +133,13 @@ export function planAcademicResearch(input: unknown) {
     : inferredType === 'systematic_review' ? 'PRISMA 2020 cuando la búsqueda y selección estén documentadas'
       : inferredType === 'original_research' ? 'STROBE/CONSORT/COREQ/SRQR según el diseño realmente ejecutado'
         : 'estructura, citas y requisitos de institución o revista'
+  const referenceTarget = inferredType === 'thesis'
+    ? THESIS_REFERENCE_TARGETS[level as keyof typeof THESIS_REFERENCE_TARGETS] : undefined
+  const citationGuidance = citationStyle === 'vancouver'
+    ? ['citas numéricas por orden de primera aparición', 'bibliografía numerada correlativamente',
+      'abreviaturas de revistas según índice aplicable y comprobación de DOI/PMID']
+    : ['APA 7: citas autor-fecha', 'referencias en orden alfabético',
+      'DOI, volumen, número, páginas y cursivas según el tipo de fuente']
   return {
     state: missing.size ? 'INTAKE_INCOMPLETE' : 'PLAN_READY',
     entries: ENTRIES.map(row => ({ ...row })),
@@ -137,6 +155,25 @@ export function planAcademicResearch(input: unknown) {
       'lecturer', 'advisor', 'city', 'country', 'date', 'logo_path', 'authors[{name, student_id, affiliation, orcid}]',
       'institutional_manual_path', 'dedication', 'acknowledgements'],
     reporting_standard_hint: checklist,
+    reference_guidance: referenceTarget ? {
+      min: referenceTarget.min, max: referenceTarget.max, emphasis: referenceTarget.emphasis,
+      advisory_only: true, verified_count: 0, status: 'not_assessed',
+      priority: 'manual institucional verificado > instrucciones expresas > guía orientativa',
+      note: 'Rangos orientativos, NO mínimos universales. La cantidad no sustituye pertinencia, rigor ni calidad de las fuentes.',
+    } : null,
+    citation_guidance: {
+      style: citationStyle, requirements: citationStyle === null ? [] : citationGuidance,
+      verify_in_text_and_bibliography: true,
+      note: 'El publicador recibe style=apa7 o style=vancouver y transforma [@key] según el formato; verificar reglas institucionales.',
+    },
+    visual_guidance: {
+      presentation: 'academic', design_preset: 'academic_classic',
+      intent: 'diseño académico elegante, legible y coherente, subordinado al manual institucional',
+      figures: ['barras para comparaciones', 'líneas para tendencias', 'dispersión para relaciones',
+        'forest para metaanálisis con intervalos reales', 'diagrama de flujo para métodos documentados'],
+      safeguards: ['solo datos reales con fuentes', 'títulos, ejes, unidades, leyenda y texto alternativo',
+        'tablas y figuras numeradas, accesibles y sin ornamentos que contradigan APA o Vancouver'],
+    },
     evidence_status: 'not_verified',
     guidance: 'Recopila juntos los campos ausentes. Si hay manual o plantilla institucional, extrae primero sus reglas. Verifica cada DOI/PMID y la existencia de los estudios; no inventes resultados, permisos éticos ni bibliografía.',
   }
@@ -148,7 +185,7 @@ export function planAcademicResearch(input: unknown) {
 export function createResearchPlanTool(): ToolDefinition {
   return defineTool({
     name: 'phoenix_research_plan',
-    description: 'PLANIFICA ANTES DE REDACTAR una investigación APA 7, Vancouver o Artículo científico. Detecta la intención y devuelve una SOLA agrupación de datos faltantes, capítulos, presupuesto de páginas (10-250+ según nivel), recomendación académica, advertencias de métodos y alcance de páginas. Artículo científico es un tipo de documento distinto de APA/Vancouver, que son estilos bibliográficos. Si hay guía institucional, léela antes de cerrar el plan; no presumas requisitos universales. Úsalo antes de phoenix_research_publish para tesis, monografías, protocolos, artículos, revisiones y trabajos de 60-120 páginas.',
+    description: 'PLANIFICA ANTES DE REDACTAR una investigación APA 7, Vancouver o Artículo científico. Para tesis usa guías orientativas de 20-40 referencias (licenciatura), 40-80 (maestría) y 100+ (doctorado), sin afirmar mínimos universales; prevalece el manual institucional confirmado. Incluye reglas de citas y diseño académico clásico con tablas y gráficos respaldados por datos reales.  Detecta la intención y devuelve una SOLA agrupación de datos faltantes, capítulos, presupuesto de páginas (10-250+ según nivel), recomendación académica, advertencias de métodos y alcance de páginas. Artículo científico es un tipo de documento distinto de APA/Vancouver, que son estilos bibliográficos. Si hay guía institucional, léela antes de cerrar el plan; no presumas requisitos universales. Úsalo antes de phoenix_research_publish para tesis, monografías, protocolos, artículos, revisiones y trabajos de 60-120 páginas.',
     parameters: { input: { type: 'object', required: true, additionalProperties: true,
       description: 'intent, entry (apa7/vancouver/scientific_article), citation_style, document_type, level, title, target_pages, page_scope, cover con datos ya conocidos.' } },
     output: {
