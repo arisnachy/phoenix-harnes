@@ -373,3 +373,56 @@ test('critical results need documented acknowledgment by the responsible physici
   assert.equal(order.criticalAcknowledged,true)
   assert.equal(order.reviewedBy,'doctor1')
 })
+
+test('Kira rechecks consent, clinician assignment and appointment state just before dispatch',t=>{
+  const {db,admin}=fixture(t)
+  db.createStaff(admin.actor,{username:'doctor1',password:'another-secure-password-2026',role:'clinician'})
+  const clinician=db.login('doctor1','another-secure-password-2026').actor
+  const p=db.create(admin.actor,'patients',{name:'Synthetic consent race',dateOfBirth:'1980-02-03',
+    email:'synthetic@example.org'})
+  db.assignPatient(admin.actor,p.id,'doctor1','Continuity of care')
+  const accepted=db.update(admin.actor,'patients',p.id,p.version,{
+    action:'contact',consent:'granted',emailVerified:true,method:'signed-document',evidenceRef:'FORM-9876',
+  })
+  const appointment=db.create(admin.actor,'appointments',{
+    patientId:p.id,practitioner:'doctor1',startsAt:'2026-12-22T13:00:00Z',reason:'Synthetic follow-up',
+  })
+  const planned=db.beginReminder(clinician,appointment.id,'kira@example.org')
+  assert.doesNotThrow(()=>db.confirmReminderDelivery(
+    clinician,appointment.id,'kira@example.org',planned.recipient))
+  assert.throws(()=>db.confirmReminderDelivery(
+    clinician,appointment.id,'wrong@example.org',planned.recipient),/no autorizado/)
+  const revoked=db.update(admin.actor,'patients',p.id,accepted.version,{
+    action:'contact',consent:'revoked',emailVerified:false,method:'signed-document',evidenceRef:'REV-9876',
+  })
+  assert.equal(revoked.emailConsent,false)
+  assert.throws(()=>db.confirmReminderDelivery(
+    clinician,appointment.id,'kira@example.org',planned.recipient),/Consentimiento/)
+  db.finishReminder(clinician,appointment.id,undefined,true)
+  assert.equal(db.reminders(admin.actor)[0].status,'cancelled')
+  assert.throws(()=>db.confirmReminderDelivery(
+    clinician,appointment.id,'kira@example.org',planned.recipient),/no pendiente/)
+  assert.throws(()=>db.beginReminder(clinician,appointment.id,'kira@example.org'),/consentimiento|reservado/)
+})
+
+test('Kira blocks a queued reminder when clinician access is revoked or appointment cancelled',t=>{
+  const {db,admin}=fixture(t)
+  db.createStaff(admin.actor,{username:'doctor1',password:'another-secure-password-2026',role:'clinician'})
+  const doctor=db.login('doctor1','another-secure-password-2026').actor
+  const p=db.create(admin.actor,'patients',{name:'Synthetic appointment cancellation',dateOfBirth:'1984-01-01',
+    email:'patient@example.org'})
+  db.assignPatient(admin.actor,p.id,'doctor1','Clinic follow-up')
+  db.update(admin.actor,'patients',p.id,p.version,{
+    action:'contact',consent:'granted',emailVerified:true,method:'in-person',evidenceRef:'FORM-2222',
+  })
+  let appointment=db.create(admin.actor,'appointments',{
+    patientId:p.id,practitioner:'doctor1',startsAt:'2026-12-24T13:00:00Z',reason:'Control',
+  })
+  const queued=db.beginReminder(doctor,appointment.id,'kira@example.org')
+  appointment=db.update(admin.actor,'appointments',appointment.id,appointment.version,{status:'cancelled'})
+  assert.throws(()=>db.confirmReminderDelivery(
+    doctor,appointment.id,'kira@example.org',queued.recipient),/cancelada|cancelada, completada/)
+  db.revokePatient(admin.actor,p.id,'doctor1')
+  assert.throws(()=>db.confirmReminderDelivery(
+    doctor,appointment.id,'kira@example.org',queued.recipient),/no asignado/)
+})

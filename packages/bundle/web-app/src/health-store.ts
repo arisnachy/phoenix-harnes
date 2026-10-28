@@ -578,21 +578,52 @@ export class HealthClinicStore {
     return { recipient,appointmentId,subject:'Recordatorio de cita',body:
       'Este es un recordatorio de su cita programada. Para cualquier cambio, contacte directamente al consultorio. No responda con información clínica por correo.\n\nPHOENIX Health'}
   }
+  /**
+   * Reauthorize immediately before the Gmail send request. This is a second
+   * check, not an alternative to the consent and access checks at reservation.
+   * @param actor - The still-authenticated prescribing clinician.
+   * @param appointmentId - The already-reserved appointment.
+   * @param sender - The verified configured institutional mailbox.
+   * @param recipient - The original verified recipient for this delivery.
+   */
+  confirmReminderDelivery(actor:Actor,appointmentId:string,sender:string,recipient:string):void {
+    if(actor.role!=='clinician')fail('El recordatorio requiere profesional clínico')
+    const pending=this.db.prepare(
+      "SELECT sender,status FROM health_reminders WHERE appointment_id=? AND org=?"
+    ).get(appointmentId,actor.org) as {sender:string;status:string}|undefined
+    if(!pending||pending.status!=='pending'||pending.sender!==sender)
+      fail('Recordatorio no autorizado o no pendiente')
+    const appointment=this.find(actor,'appointments',str(appointmentId,'Cita',80)).data
+    if(appointment.practitioner!==actor.username||appointment.status!=='scheduled')
+      fail('La cita fue cancelada, completada o reasignada')
+    const patient=this.find(actor,'patients',str(appointment.patientId,'Paciente',80)).data
+    const proof=patient.contactEvidence
+    if(!proof||typeof proof!=='object'||Array.isArray(proof))
+      fail('Consentimiento de comunicaciones revocado o ausente')
+    const evidence=proof as RecordData
+    if(evidence.consent!=='granted'||evidence.verified!==true||
+       typeof evidence.recordedBy!=='string'||typeof evidence.evidenceRef!=='string'||
+       typeof patient.email!=='string'||evidence.recipient!==patient.email||
+       patient.email!==recipient||patient.emailConsent!==true||patient.emailVerified!==true)
+      fail('Consentimiento o correo modificado: no se enviará el recordatorio')
+  }
   /** Record Gmail provider confirmation, or uncertainty without an automatic duplicate retry. */
   /**
    * Perform finishReminder within the isolated clinical workflow.
    * @param actor - Validated actor input for this clinical operation.
    * @param appointmentId - Validated appointmentId input for this clinical operation.
-   * @param providerId - Validated providerId input for this clinical operation.
+   * @param providerId - Confirmed Gmail message ID, or undefined when delivery failed.
+   * @param cancelledBeforeSend - Whether no request was submitted to Gmail.
    */
-  finishReminder(actor:Actor,appointmentId:string,providerId:string|undefined):void {
+  finishReminder(actor:Actor,appointmentId:string,providerId:string|undefined,cancelledBeforeSend=false):void {
     if(actor.role!=='clinician')fail('Personal no autorizado')
     this.db.exec('BEGIN IMMEDIATE')
     try {
       const result=this.db.prepare("UPDATE health_reminders SET status=?,provider_id=? WHERE appointment_id=? AND org=? AND status='pending'")
-        .run(providerId?'sent':'uncertain',providerId??null,appointmentId,actor.org)
+        .run(providerId?'sent':cancelledBeforeSend?'cancelled':'uncertain',
+          providerId??null,appointmentId,actor.org)
       if(Number(result.changes)!==1)fail('Recordatorio desconocido o ya completado')
-      this.audit(actor,providerId?'reminder.sent':'reminder.uncertain',appointmentId)
+      this.audit(actor,providerId?'reminder.sent':cancelledBeforeSend?'reminder.cancelled':'reminder.uncertain',appointmentId)
       this.db.exec('COMMIT')
     }catch(error){this.db.exec('ROLLBACK');throw error}
   }

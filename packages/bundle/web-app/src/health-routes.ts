@@ -77,7 +77,9 @@ function makeGmailMessage(sender:string,to:string,subject:string,body:string):st
   return Buffer.from(raw,'utf8').toString('base64url')
 }
 /** Provider response must confirm a real message identifier; never infer delivery from HTTP alone. */
-async function sendReminderWithVerifiedGmail(ctx:Context,sender:string,to:string,subject:string,body:string):Promise<string>{
+async function sendReminderWithVerifiedGmail(
+  ctx:Context,sender:string,to:string,subject:string,body:string,beforeSend:()=>void,
+):Promise<string>{
   const gmail=mailClient(ctx)
   if(!gmail)throw new Error('La cuenta Gmail de Kira no está conectada al Host')
   const profile=await gmail.request({ service:'gmail',path:'users/me/profile' })
@@ -87,6 +89,9 @@ async function sendReminderWithVerifiedGmail(ctx:Context,sender:string,to:string
   if(typeof verified!=='string'||verified.trim().toLowerCase()!==sender)
     throw new Error('La cuenta Gmail conectada no corresponde al remitente institucional de Kira')
   const raw=makeGmailMessage(sender,to,subject,body)
+  // Revalidate protected state after the last external await and immediately
+  // before dispatch. A later cancellation cannot recall an in-flight email.
+  beforeSend()
   const response=await gmail.request({ service:'gmail',path:'users/me/messages/send',method:'POST',
     headers:{ 'content-type':'application/json' },body:JSON.stringify({ raw }) })
   if(!response.ok)throw new Error('Gmail rechazó el recordatorio')
@@ -209,14 +214,24 @@ export function registerHealthRoutes(ctx:Context):void {
         if(!profile.ok||typeof email!=='string'||email.trim().toLowerCase()!==sender)
           throw new Error('El correo conectado no coincide con la identidad Kira autorizada')
         const planned=store.beginReminder(actor,id,sender)
+        let sendAttempted=false
         try {
-          const providerId=await sendReminderWithVerifiedGmail(ctx,sender,planned.recipient,planned.subject,planned.body)
+          const providerId=await sendReminderWithVerifiedGmail(
+            ctx,sender,planned.recipient,planned.subject,planned.body,
+            ()=>{
+              store.confirmReminderDelivery(actor,id,sender,planned.recipient)
+              sendAttempted=true
+            },
+          )
           store.finishReminder(actor,id,providerId)
           reply(res,200,{ status:'sent',providerConfirmed:true });return
         }catch{
-          // Delivery may have succeeded despite a timeout: never resend automatically.
-          store.finishReminder(actor,id,undefined)
-          throw new Error('Entrega no confirmada. Verifique Gmail antes de solicitar otro intento.')
+          // An undelivered preflight is cancelled; a submitted request may
+          // have succeeded despite timeout, so its outcome remains uncertain.
+          store.finishReminder(actor,id,undefined,!sendAttempted)
+          throw new Error(sendAttempted
+            ? 'Entrega no confirmada. Verifique Gmail antes de solicitar otro intento.'
+            : 'Envío cancelado: se debe verificar de nuevo el consentimiento, la cita y la autorización.')
         }
       }
 
