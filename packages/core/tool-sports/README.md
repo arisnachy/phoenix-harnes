@@ -42,6 +42,8 @@ The optional CLI has a bounded timeout, fixed arguments (never a user URL), requ
 - `sports_chat_odds_keyless`: current public market observations with bookmaker, period, outcome, capture time and price. The scraper CLI and website must work.
 - `sports_chat_historical_odds`: imports both independently collected SportsBookReview historic datasets (MLB gets two); **backtesting only**.
 - `sports_chat_community_opinions`: top publicly voted picks from OddsPortal Community, separately labeled **crowd opinion, not a calibrated probability**.
+- `sports_chat_ticket_evidence_auto`: preselects exactly 5 or 6 verified upcoming independent matches (or an explicit incomplete draft) using completed historical games across available leagues and a **descriptive score only**, never a fabricated win probability.
+- `sports_chat_ticket_evidence_priced_auto`: same research, then quote fresh pregame markets after exact event/date/team matching; computes combined decimal price **only when the same bookmaker offers every leg**. Missing, stale, withdrawn or mismatched prices make the ticket unpriced. No real wager is placed.
 
 For MLB retain `sports_chat_mlb_pitchers` and official MLB Stats API. For football/soccer use 1X2, BTTS, double chance, team form and lineups; tennis needs surface and match fatigue; NBA requires injury and matchup analysis; NFL requires quarterback/roster; NHL requires confirmed goalkeeper. Missing advanced data is explicitly unresolved; this integration **does not implement a validated betting model or guarantee a winning 5/6-leg ticket**.
 
