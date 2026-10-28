@@ -48,14 +48,16 @@ describe('Phoenix universal research routing', () => {
     expect(search).toHaveBeenCalledTimes(3)
   })
 
-  it('never invents sources for empty results and throws when every provider call fails', async () => {
+  it('never invents sources for empty results and reports when every provider call fails', async () => {
     const empty = { web: { search: async () => ({ sources: [], truncated: false }) } } as unknown as Pick<Context, 'web'>
     const result = await executeResearch(empty, planResearch('ordinary unanswered question'), 8, signal)
     expect(result.status).toBe('empty')
     expect(result.sources).toEqual([])
     const broken = { web: { search: async () => { throw new Error('offline') } } } as unknown as Pick<Context, 'web'>
-    await expect(executeResearch(broken, planResearch('ordinary unanswered question'), 8, signal))
-      .rejects.toThrow('No search provider succeeded')
+    const unavailable = await executeResearch(broken, planResearch('ordinary unanswered question'), 8, signal)
+    expect(unavailable.status).toBe('empty')
+    expect(unavailable.failedQueries).toHaveLength(1)
+    expect(unavailable.note).toContain('Do not repeat equivalent queries')
   })
 
   it('caps merged sources and reports truncation', async () => {
@@ -66,5 +68,27 @@ describe('Phoenix universal research routing', () => {
     const outcome = await executeResearch(ctx, planResearch('general topic', 'general'), 2, signal)
     expect(outcome.sources).toHaveLength(2)
     expect(outcome.truncated).toBe(true)
+  })
+  it('routes thesis rules to institutional domains and shortens only scoped queries', () => {
+    const plan = planResearch('¿Qué exigen las universidades para tesis de licenciatura maestría y doctorado sobre referencias bibliográficas?')
+    expect(plan.domain).toBe('academic')
+    expect(plan.queries).toHaveLength(3)
+    expect(plan.queries[1]).toContain('site:edu')
+    expect(plan.queries[2]).toContain('site:ac.uk')
+    expect(plan.queries[0]).toContain('¿Qué exigen')
+    expect(plan.queries[1]).not.toContain('¿Qué exigen')
+  })
+
+  it('rejects irrelevant academic search hits without inventing sources', async () => {
+    const ctx = { web: { search: async () => ({
+      truncated: false,
+      sources: [
+        { url: 'https://example.net/sports', title: 'Tonight sports score' },
+        { url: 'https://grad.university.edu/thesis-guidelines', title: 'Thesis preparation guide' },
+      ],
+    }) } } as unknown as Pick<Context, 'web'>
+    const result = await executeResearch(ctx, planResearch('tesis maestría doctorado'), 8, signal)
+    expect(result.status).toBe('ok')
+    expect(result.sources.map(source => source.title)).toEqual(['Thesis preparation guide'])
   })
 })
