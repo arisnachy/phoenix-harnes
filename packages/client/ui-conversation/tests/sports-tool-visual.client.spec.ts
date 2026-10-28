@@ -36,6 +36,17 @@ describe('native sports chat presentation fallback',()=>{
     expect(sportsCardsFromToolResult(tool('sports_chat_mlb_pitchers',{uiBlock:mlbComparison}))).toEqual([mlbComparison])
     expect(sportsCardsFromToolResult(tool('sports_chat_ticket',{uiBlock:ticket}))).toEqual([ticket])
   })
+  it('renders investigated and quoted 5/6-leg tickets and keyless markets directly in chat',()=>{
+    const market={component:'sports_odds_card',version:1,props:{
+      title:'Home vs Away',source:'OddsHarvester/OddsPortal',
+      rows:[{event:'Away vs Home',market:'1x2',selection:'Home',bookmaker:'Book A',price:'1.90'}],
+      note:'Fuente observada, no garantía.',
+    }}
+    expect(sportsCardsFromToolResult(tool('sports_chat_ticket_evidence_auto',{uiBlock:ticket}))).toEqual([ticket])
+    expect(sportsCardsFromToolResult(tool('sports_chat_ticket_evidence_priced_auto',{uiBlock:ticket}))).toEqual([ticket])
+    expect(sportsCardsFromToolResult(tool('sports_chat_odds_keyless',{uiBlocks:[market]}))).toEqual([market])
+    expect(sportsCardsFromToolResult(tool('bash',{uiBlock:ticket}))).toEqual([])
+  })
   it('handles Code Mode nested sports calls (not arbitrary source text)',()=>{
     const code={kind:'tool-result',call:{name:'Code'},isError:false,content:[],subCalls:[
       tool('sports_chat_games',{uiBlocks:[sportsGame]}),
