@@ -9,6 +9,7 @@ type Event = {
   readonly kind: string
   readonly summary: string
   readonly at: number
+  readonly seq: number
   readonly symbol?: string
 }
 
@@ -30,7 +31,7 @@ export class BinanceCloudPaperClient {
     this.authToken = authToken
   }
 
-  private async request(path: '/snapshot' | '/events' | '/admin/control', action?: 'start' | 'stop'): Promise<unknown> {
+  private async request(path: '/snapshot' | '/admin/control' | string, action?: 'start' | 'stop'): Promise<unknown> {
     const token = await this.authToken()
     if (token === undefined || token.length < 32) {
       throw new Error('Cloud trading ADMIN_TOKEN is not connected to the Host credential vault')
@@ -65,11 +66,16 @@ export class BinanceCloudPaperClient {
    * Fetch bounded persisted cloud attention events.
    * @returns Event objects already verified by the remote bearer-protected API.
    */
-  async events(): Promise<readonly Event[]> {
-    const result = await this.request('/events')
+  async events(after = 0): Promise<{ readonly events: readonly Event[]; readonly nextCursor: number }> {
+    if (!Number.isSafeInteger(after) || after < 0) throw new Error('Invalid Cloud PAPER cursor')
+    const result = await this.request('/events?after=' + after)
     if (!result || typeof result !== 'object' || !('events' in result)
       || !Array.isArray(result.events) || result.events.length > 100) {
       throw new Error('Unexpected Cloud PAPER event response')
+    }
+    const cursor = 'nextCursor' in result ? result.nextCursor : undefined
+    if (typeof cursor !== 'number' || !Number.isSafeInteger(cursor) || cursor < after) {
+      throw new Error('Invalid cloud event cursor')
     }
     const events: Event[] = []
     for (const value of result.events) {
@@ -79,17 +85,19 @@ export class BinanceCloudPaperClient {
         || typeof row.kind !== 'string' || row.kind.length > 80
         || typeof row.summary !== 'string' || row.summary.length > 500
         || typeof row.at !== 'number' || !Number.isFinite(row.at)
+        || typeof row.seq !== 'number' || !Number.isSafeInteger(row.seq)
+        || row.seq <= after || row.seq > cursor
         || row.symbol !== undefined && typeof row.symbol !== 'string') continue
       events.push({
-        id: row.id, kind: row.kind, summary: row.summary, at: row.at,
+        id: row.id, kind: row.kind, summary: row.summary, at: row.at, seq: row.seq,
         ...(typeof row.symbol === 'string' ? { symbol: row.symbol } : {}),
       })
     }
-    return events
+    return { events, nextCursor: cursor }
   }
 }
 
-interface SeenLedger { readonly schema: 1; readonly ids: readonly string[] }
+interface SeenLedger { readonly schema: 1; readonly ids: readonly string[]; readonly cursor?: number }
 
 /**
  * Poll persistent Cloud PAPER events while Host is online, then replay them
@@ -110,46 +118,55 @@ export function installBinanceCloudWakeBridge(
   let pending = false
   let timer: ReturnType<typeof setInterval> | undefined
   const seen = new Set<string>()
+  let cursor = 0
   const hydrate = async (): Promise<void> => {
     try {
       const stored: SeenLedger = JSON.parse(await readFile(ledgerPath, 'utf8')) as SeenLedger
       if (stored.schema === 1 && Array.isArray(stored.ids)) {
         for (const id of stored.ids.filter(x => typeof x === 'string').slice(-500)) seen.add(id)
+        if (typeof stored.cursor === 'number' && Number.isSafeInteger(stored.cursor) && stored.cursor >= 0) {
+          cursor = stored.cursor
+        }
       }
     } catch { /* First startup or corrupt local dedupe ledger: Wake IDs remain stable. */ }
   }
   const persist = async (): Promise<void> => {
     await mkdir(dirname(ledgerPath), { recursive: true, mode: 0o700 })
     const temp = ledgerPath + '.' + randomUUID() + '.tmp'
-    await writeFile(temp, JSON.stringify({ schema: 1, ids: [...seen].slice(-500) }), { mode: 0o600 })
+    await writeFile(temp, JSON.stringify({ schema: 1, cursor, ids: [...seen].slice(-500) }), { mode: 0o600 })
     await rename(temp, ledgerPath)
   }
   const poll = async (): Promise<void> => {
     if (disposed || pending) return
     pending = true
     try {
-      const events = await client.events()
-      for (const event of events) {
-        if (disposed || seen.has(event.id)) continue
-        if (!['paper-entry', 'paper-exit', 'risk-review', 'risk-halt'].includes(event.kind)) continue
-        const at = new Date(event.at)
-        if (!Number.isFinite(at.getTime())) continue
-        ctx.emit('phoenix/wake-event', wakeEvent({
-          id: 'binance-cloud:' + event.id,
-          source: 'phoenix-trading',
-          eventType: 'paper.attention',
-          occurredAt: at.toISOString(),
-          summary: event.summary,
-          attributes: {
-            kind: event.kind,
-            mode: 'paper',
-            origin: 'cloud',
-            ...(event.symbol === undefined ? {} : { symbol: event.symbol }),
-          },
-        }))
-        seen.add(event.id)
-        if (seen.size > 500) seen.delete(seen.values().next().value!)
-        await persist()
+      // Each sync fetches at most 5 pages; large offline backlogs continue on
+      // the next tick without starving the Host or the provider free tier.
+      for (let page = 0; page < 5; page++) {
+        const remote = await client.events(cursor)
+        for (const event of remote.events) {
+          if (disposed) return
+          if (!seen.has(event.id)
+            && ['paper-entry', 'paper-exit', 'risk-review', 'risk-halt'].includes(event.kind)) {
+            const at = new Date(event.at)
+            if (Number.isFinite(at.getTime())) {
+              ctx.emit('phoenix/wake-event', wakeEvent({
+                id: 'binance-cloud:' + event.id,
+                source: 'phoenix-trading', eventType: 'paper.attention',
+                occurredAt: at.toISOString(), summary: event.summary,
+                attributes: {
+                  kind: event.kind, mode: 'paper', origin: 'cloud',
+                  ...(event.symbol === undefined ? {} : { symbol: event.symbol }),
+                },
+              }))
+            }
+          }
+          seen.add(event.id)
+          if (seen.size > 500) seen.delete(seen.values().next().value!)
+          cursor = Math.max(cursor, event.seq)
+          await persist()
+        }
+        if (remote.events.length < 100) break
       }
     } catch (error) {
       // Never log an HTTP bearer token, credentials or raw provider response.
