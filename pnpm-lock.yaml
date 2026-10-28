@@ -4076,6 +4076,9 @@ importers:
 
   packages/core/tool-health:
     devDependencies:
+      '@phoenix-ai/dsh-llm':
+        specifier: workspace:^
+        version: link:../llm
       '@phoenix-ai/dsh-user-questions':
         specifier: workspace:^
         version: link:../../interaction/user-questions
