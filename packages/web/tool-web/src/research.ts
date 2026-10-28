@@ -269,7 +269,7 @@ export async function executeResearch(
     sources,
     failedQueries,
     truncated: dropped || successful.some(result => result.truncated),
-    status: failedQueries.length > 0 ? 'partial' : sources.length > 0 ? 'ok' : 'empty',
+    status: sources.length === 0 ? 'empty' : failedQueries.length > 0 ? 'partial' : 'ok',
     note: sources.length === 0
       ? 'No on-topic source was recovered. Do not loop through equivalent searches or interpret a blocked page as evidence; report the limitation and request an institutional document if essential.'
       : 'Web-discovered links are leads, not verified API results. Open primary documents before making consequential claims; include source and as-of time for live data. No candidate API has been installed or authorized.',
