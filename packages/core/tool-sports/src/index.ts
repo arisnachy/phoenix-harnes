@@ -11,16 +11,17 @@ import { loadHistoricalOdds } from './sports-archive.ts'
 import { researchSport } from './multi-sport-research.ts'
 import { communityOpinions } from './sports-community.ts'
 import { evidenceTicket } from './evidence-ticket.ts'
+import { evidencePricedTicket } from './evidence-priced-ticket.ts'
 
 export const name = 'tool-sports'
 export const inject = ['tools','systemPrompt']
 const GUIDANCE = [
-  'Solo cuando el usuario pida deportes, juegos del día, jugadores, cuotas o tickets, consulta las herramientas sports_chat_catalog, sports_chat_discover, sports_chat_games, sports_chat_mlb_pitchers, sports_chat_odds, sports_chat_ticket, sports_chat_ticket_research, sports_chat_ticket_research_auto, sports_chat_ticket_evidence_auto, sports_chat_odds_keyless, sports_chat_historical_odds, sports_chat_community_opinions o sports_chat_research.',
+  'Solo cuando el usuario pida deportes, juegos del día, jugadores, cuotas o tickets, consulta las herramientas sports_chat_catalog, sports_chat_discover, sports_chat_games, sports_chat_mlb_pitchers, sports_chat_odds, sports_chat_ticket, sports_chat_ticket_research, sports_chat_ticket_research_auto, sports_chat_ticket_evidence_auto, sports_chat_odds_keyless, sports_chat_historical_odds, sports_chat_community_opinions, sports_chat_ticket_evidence_priced_auto o sports_chat_research.',
   'NO abras pantallas independientes ni crees entradas de menú. Antes de redactar una cartelera o boleto, llama sports_chat_games y, cuando corresponda, sports_chat_mlb_pitchers / sports_chat_odds / sports_chat_ticket. Phoenix dibuja de manera nativa las tarjetas verificadas de los resultados. NO copies el JSON de los resultados en la respuesta, NO escribas fences generative-ui ni bloques de código, aunque una herramienta los incluya en sus datos. No dibujes tickets con caracteres ASCII, bordes de texto ni bloques de código etiquetados text: para eventos y selecciones reales usa exclusivamente los contratos nativos, conservando la presentación original de Phoenix. Si el usuario quiere solo una demostración, descríbela explícitamente como ficticia y no introduzcas cuotas o equipos inventados como hechos. Explica los hallazgos y las fuentes con un texto humano breve.',
   'INVESTIGAR TODOS LOS DEPORTES: llama sports_chat_research para estudiar los marcadores finales recientes del deporte y liga que el usuario pidió. Para MLB complementa con pitchers y bullpen; fútbol exige revisar goles, localía, bajas, forma y opciones 1X2/doble oportunidad; tenis requiere superficie, historial y fatiga; hockey necesita portero y estadísticas defensivas; en otros deportes usa métricas propias. Si el informe indica insuficiente, no proclames favorito respaldado. sports_chat_historical_odds agrega históricos de ambos repositorios SportsbookReview para entrenamiento/backtest, jamás cuotas actuales; y sports_chat_community_opinions observa pronósticos públicos solo como opinión separada.',
   'Para cuotas gratuitas por scraping (sin API key) consulta sports_chat_odds_keyless si el host habilitó OddsHarvester. No prometas consultas ilimitadas ni uses cuotas históricas como cotizaciones vigentes. El motor debe investigar todas las disciplinas disponibles, no solo NBA, y contrastar historial, lesionados, alineaciones, rendimiento, localía, cuota y fuentes externas cuando existan. Las votaciones y picks de otras personas son una referencia secundaria, no estimaciones propias ni garantía.',
   'Para muchos partidos muestra como máximo seis tarjetas relevantes y ofrece ampliar; nunca inventes eventos, cuotas, lanzadores, lesiones ni resultados ausentes.',
-  'Para tickets automáticos de 5 o 6 patas, usa PRIMERO sports_chat_ticket_evidence_auto y no sports_chat_ticket_research_auto, que emplea solamente récords simplificados. El modo evidence_auto investiga enfrentamientos entre deportes y no debe anunciar probabilidades ni alto porcentaje de acierto sin modelos calibrados. Si no hay datos suficientes, muestra explícitamente un borrador incompleto. Para cuotas usa sports_chat_odds_keyless y solo compón un ticket cotizado tras reconciliar correctamente IDs de proveedores.',
+  'Para tickets automáticos de 5 o 6 patas, usa PRIMERO sports_chat_ticket_evidence_priced_auto si hay fuente sin clave habilitada; en su defecto usa sports_chat_ticket_evidence_auto y no sports_chat_ticket_research_auto, que emplea solamente récords simplificados. El modo evidence_auto investiga enfrentamientos entre deportes y no debe anunciar probabilidades ni alto porcentaje de acierto sin modelos calibrados. Si no hay datos suficientes, muestra explícitamente un borrador incompleto. Para cuotas usa sports_chat_odds_keyless y solo compón un ticket cotizado tras reconciliar correctamente IDs de proveedores.',
   'CONTRATO DE PATAS: cuando el usuario pide 5 patas, el resultado DEBE contener exactamente cinco selecciones verificadas; jamás presentes 1 de 5 como ticket completo. Si faltan datos, muestra explícitamente el número conseguido y el número pendiente como borrador incompleto. Respeta igualmente cualquier otro número de 1 a 6. No afirmes que una combinada ganará.',
   'Si se pide un ticket y no hay cuotas, no finjas precio ni retorno. Prefiere sports_chat_ticket_evidence_auto para calcular una preselección con marcadores históricos verificables. sports_chat_ticket_research_auto es solo un respaldo antiguo por récord y NO cumple investigación deportiva profunda. Si ya tienes IDs y fundamentos por partido usa sports_chat_ticket_research. Un borrador de menos patas debe mostrarse INCOMPLETO. Si no hay partidos verificables, dilo y busca otras ligas y fechas sin inventar mercados.',
   'Usa ESPN Site/Core como proveedor gratuito para marcadores y, cuando ESPN los publique, moneylines sin claves; usa The Odds API solo como opción ampliada si existe THE_ODDS_API_KEY. Si ESPN no presenta cuotas, no inventes precios: sports_chat_ticket_research ofrece un ticket de pronósticos sin cotización basado en encuentros futuros verificados. sports_chat_ticket es un ticket COTIZADO y solo puede usar precios del proveedor consultados en ese momento. Ambos son simulaciones; no hay garantía de acierto. Identifica correlaciones y ausencia de predicción calibrada.',
@@ -213,6 +214,27 @@ export function apply(ctx: Context): void {
         instruction:'PHOENIX renderiza tarjetas nativas. No confundir IDs del scraper con IDs ESPN sin reconciliar nombres/fecha/liga. La cuota refleja un precio observado, no una probabilidad propia ni garantía.'})
     },
     presentCall:()=>({card:'generic',title:'Investigar cuotas multideporte sin API key',kind:'read' as const}),
+  }))
+  ctx.tools.register(defineTool({
+    name:'sports_chat_ticket_evidence_priced_auto',
+    description:'Busca 5 o 6 picks desde resultados investigados; verifica cuotas actuales sin API key y las combina SOLO si una misma casa ofrece todos los eventos. No inventa probabilidades ni combinadas multioperador.',
+    parameters:{
+      count:{type:'integer',required:true,description:'Patas deseadas: 5 o 6 (admite 1 a 6).'},
+      date:{type:'string',description:'Fecha AAAA-MM-DD; por defecto hoy.'},
+      sport:{type:'string',description:'Limita a soccer, baseball, basketball, football, hockey o tennis; omite para varios deportes.'},
+      stake:{type:'number',description:'Monto de simulación; 0 por defecto. No compra apuestas.'},
+    },
+    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    isConcurrencySafe:()=>true,
+    async execute(args){
+      const result=await evidencePricedTicket(args.count,args.date,args.sport,args.stake??0)
+      return JSON.stringify({uiBlock:result.card,requestedLegs:args.count,
+        complete:result.complete,priced:result.priced,placed:false,
+        verifiedEvents:result.verifiedEvents,quotedLegs:result.quotedLegs,
+        missingQuotes:result.missingQuotes,explanation:result.explanation,
+        instruction:'PHOENIX dibuja el ticket nativo. No llames alta probabilidad a un indicador histórico sin calibración. Cuotas en una única casa, si se verificaron, pueden cambiar y no hay garantía de ganar.'})
+    },
+    presentCall:()=>({card:'generic',title:'Investigar ticket cotizado de 5 o 6 patas',kind:'read' as const}),
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_ticket_evidence_auto',
