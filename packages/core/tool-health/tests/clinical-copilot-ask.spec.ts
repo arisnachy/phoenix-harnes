@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { Context } from '@phoenix-ai/cordis'
-import { CallId } from '@phoenix-ai/dsh-llm'
 import ToolRuntime from '@phoenix-ai/dsh-tools'
 import SystemPrompt from '@phoenix-ai/dsh-system-prompt'
 import UserQuestionService, { type AskUserQuestionRequest } from '@phoenix-ai/dsh-user-questions'
 import * as HealthTool from '../src/index.ts'
+
+type TestCallId = Parameters<Context['tools']['execute']>[0]['callId']
+const callId = (value: string): TestCallId => value as TestCallId
 
 async function clinic() {
   const ctx = new Context()
@@ -26,7 +28,7 @@ describe('Kira Clinical Copilot through existing ASK', () => {
       },
     })
     const result=await ctx.tools.execute({
-      callId:CallId('health-ask-mode-1'),signal:new AbortController().signal,
+      callId:callId('health-ask-mode-1'),signal:new AbortController().signal,
       name:'health_copilot_ask',arguments:{action:'choose_mode',pathway:'general'},
     })
     expect(result.isError).toBe(false)
@@ -44,7 +46,7 @@ describe('Kira Clinical Copilot through existing ASK', () => {
       async ask(){return {automatic:true,answers:[{id:'health-ask-onset',selected:[]}]}}
     })
     const result=await ctx.tools.execute({
-      callId:CallId('health-ask-expire-1'),signal:new AbortController().signal,
+      callId:callId('health-ask-expire-1'),signal:new AbortController().signal,
       name:'health_copilot_ask',arguments:{action:'next_question',pathway:'general'},
     })
     expect(result.isError).toBe(false)
@@ -58,7 +60,7 @@ describe('Kira Clinical Copilot through existing ASK', () => {
     const seen:AskUserQuestionRequest[]=[]
     ctx.userQuestions.registerProvider({async ask(request){seen.push(request);return {answers:[]}}})
     const result=await ctx.tools.execute({
-      callId:CallId('health-ask-invalid-1'),signal:new AbortController().signal,
+      callId:callId('health-ask-invalid-1'),signal:new AbortController().signal,
       name:'health_copilot_ask',
       arguments:{action:'next_question',pathway:'Paciente Juan 809-555-2222'},
     })
