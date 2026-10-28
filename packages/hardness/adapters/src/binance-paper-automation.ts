@@ -293,15 +293,19 @@ export class BinancePaperAutomation {
             detail: `${cycle.trade.side} virtual confirmado por ledger; ${cycle.rationale}`,
           })
         } else {
-          const review = cycle.signals.find(signal => signal.action === 'buy' && signal.score >= 80)
+          // A held position is not a risk rejection. Do not repeatedly wake
+          // Kira when a valid BUY signal is already represented by that asset.
+          const review = cycle.execution.find(outcome => outcome.status === 'blocked'
+            && cycle.signals.some(signal => signal.symbol === outcome.symbol
+              && signal.action === 'buy' && signal.score >= 80))
           if (review !== undefined) {
-            const key = `${review.symbol}:${review.strategy}`
+            const key = `${review.symbol}:${review.explanation}`
             if (key !== this.lastReviewKey || Date.now() - this.lastReviewAt > 1_800_000) {
               this.lastReviewKey = key
               this.lastReviewAt = Date.now()
               this.reportAttention({
                 kind: 'paper-risk-review', symbol: review.symbol,
-                detail: 'Entrada potencial bloqueada o no ejecutada; revisar límites y exposición virtual',
+                detail: 'Entrada PAPER bloqueada: ' + review.explanation,
               })
             }
           }

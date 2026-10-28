@@ -52,11 +52,14 @@ describe('Binance Host PAPER automation', () => {
     expect(account.tradeCount).toBe(1)
     expect(account.positions).toHaveLength(1)
     const dashboard = await worker.dashboard()
+    // A second cycle may correctly HOLD after the first confirmed BUY.
+    // Persisted journal evidence, not the latest signal, proves execution.
     expect(dashboard).toMatchObject({
       mode: 'paper', phase: 'running', enabled: true,
-      lastCycle: { decision: 'buy', trade: { symbol: 'BTCUSDT', side: 'buy' } },
+      filledCycles: 1,
     })
     expect(dashboard.recentTrades).toHaveLength(1)
+    expect(dashboard.recentTrades[0]).toMatchObject({ symbol: 'BTCUSDT', side: 'buy' })
     await worker.stop()
     expect((await worker.dashboard()).enabled).toBe(false)
   })

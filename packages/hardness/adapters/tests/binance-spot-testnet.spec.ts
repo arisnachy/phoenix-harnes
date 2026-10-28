@@ -15,6 +15,42 @@ describe('Official Binance Spot Testnet isolation', () => {
       .rejects.toThrow('Testnet API credentials')
   })
 
+  it('reads independently priced Testnet OHLCV without credentials or production endpoints', async () => {
+    const rows = Array.from({ length: 80 }, (_, i) => [
+      i * 900000, '120', '121', '119', '120', '10',
+      (i + 1) * 900000 - 1, '1200', 5,
+    ])
+    const transport = vi.fn(async (input: string, init: RequestInit) => {
+      const url = new URL(input)
+      expect(url.origin).toBe('https://testnet.binance.vision')
+      expect(url.pathname).toBe('/api/v3/klines')
+      expect(url.searchParams.get('interval')).toBe('15m')
+      expect(init.headers).toBeUndefined()
+      expect(init.redirect).toBe('error')
+      return new Response(JSON.stringify(rows), {status:200})
+    })
+    const client = new BinanceSpotTestnet(() => undefined, transport as never)
+    const bars = await client.candles('BTCUSDT', '15m', 80)
+    expect(bars).toHaveLength(80)
+    expect(bars[0]).toMatchObject({ open:120, close:120, quoteVolume:1200 })
+    expect(transport).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps funded Testnet assets when the account contains more than 100 zero balances', async () => {
+    const balances = Array.from({length: 130}, (_, index) => ({
+      asset: 'EMPTY' + index, free:'0.000', locked:'0.000',
+    }))
+    balances.push({asset:'USDT',free:'1000.000',locked:'0.000'})
+    balances.push({asset:'BTC',free:'0.500',locked:'0.000'})
+    const client = new BinanceSpotTestnet(credentials, async () => new Response(
+      JSON.stringify({canTrade:true,balances}), {status:200}))
+    const status = await client.status()
+    expect(status.balances).toEqual([
+      {asset:'USDT',free:'1000.000',locked:'0.000'},
+      {asset:'BTC',free:'0.500',locked:'0.000'},
+    ])
+  })
+
   it('signs the official testnet account path with HMAC and returns test balances only', async () => {
     const fetcher = vi.fn(async (url: string, init: RequestInit) => {
       const target = new URL(url)

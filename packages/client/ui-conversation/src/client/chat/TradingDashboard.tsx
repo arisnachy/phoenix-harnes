@@ -17,6 +17,19 @@ type TestnetState = {
   issue?: string
   nextAction: string
 }
+type TestnetAutoState = {
+  mode: 'testnet'
+  enabled: boolean
+  halted: boolean
+  lastAttemptAt?: string
+  lastScanAt?: string
+  lastDecision: string
+  lastError?: string
+  realizedPnlUsdt: number
+  journal: Array<{clientOrderId:string;side:'BUY'|'SELL';symbol:string;quantity:number;reason:string;at:string}>
+  positions: Record<string,{symbol:string;quantity:number;entryPrice:number;stop:number;tp1:number;tp2:number;strategy:string}>
+  pending?: {symbol:string;side:'BUY'|'SELL'}
+}
 type McpState = {
   configured: boolean
   connected: boolean
@@ -70,6 +83,7 @@ export function TradingDashboard({ initial }: Props) {
   const [watchlistDraft, setWatchlistDraft] = useState<string | undefined>()
   const [autoDiscoverDraft, setAutoDiscoverDraft] = useState(true)
   const [testnetState, setTestnetState] = useState<TestnetState | undefined>()
+  const [testnetAutoState,setTestnetAutoState]=useState<TestnetAutoState|undefined>()
   const [mcpState, setMcpState] = useState<McpState | undefined>()
   const [connectionIssue, setConnectionIssue] = useState<string | undefined>()
   const [credentialOpen, setCredentialOpen] = useState(false)
@@ -103,6 +117,31 @@ export function TradingDashboard({ initial }: Props) {
     const timer = setInterval(() => { void refresh() }, REFRESH_MS)
     return () => { mounted = false; controller?.abort(); clearInterval(timer) }
   }, [refreshKey])
+
+  // Testnet order evidence is fetched from its dedicated Host ledger,
+  // never inferred from PAPER signals or a separate real-money account.
+  useEffect(()=>{
+    let mounted=true
+    let inFlight=false
+    async function refreshTestnetAuto():Promise<void>{
+      if(document.hidden||inFlight)return
+      inFlight=true
+      try{
+        const response=await fetch('/phoenix-trading/paper/testnet-auto-status',{
+          method:'GET',cache:'no-store',credentials:'same-origin',
+        })
+        if(!response.ok)return
+        const value=await response.json() as TestnetAutoState
+        if(mounted&&value.mode==='testnet'&&Array.isArray(value.journal)
+          &&value.positions!==null&&typeof value.positions==='object'
+          &&typeof value.lastDecision==='string')setTestnetAutoState(value)
+      }catch{/* unavailable Host does not fabricate a fill */}
+      finally{inFlight=false}
+    }
+    void refreshTestnetAuto()
+    const timer=setInterval(()=>{void refreshTestnetAuto()},REFRESH_MS)
+    return ()=>{mounted=false;clearInterval(timer)}
+  },[])
 
   // A previously stored Host key must be recognized after reopening Phoenix
   // without showing or requesting the private value in this browser view.
@@ -353,6 +392,28 @@ export function TradingDashboard({ initial }: Props) {
               {credentialOpen ? 'Cerrar configuración'
                 : testnetState?.configured ? 'Actualizar claves Testnet' : 'Configurar Testnet'}
             </button>
+          </div>
+          <div className={css.connectionItem}>
+            <strong>Spot Testnet · órdenes automáticas</strong>
+            <span>{testnetAutoState===undefined?'Sin evidencia del ejecutor Testnet'
+              :testnetAutoState.halted?'Pausado por seguridad'
+                :testnetAutoState.enabled?'Motor Testnet activado':'Motor Testnet detenido'}</span>
+            <small>{testnetAutoState===undefined?'Requiere autorización inicial de Kira y verificación del Host.'
+              :'Último intento: '+clock(testnetAutoState.lastAttemptAt)+' · Último escaneo: '+clock(testnetAutoState.lastScanAt)}</small>
+            {testnetAutoState&&<>
+              <small>Decisión: {testnetAutoState.lastDecision}</small>
+              <small>Órdenes verificadas por Binance Testnet: {testnetAutoState.journal.length} ·
+                PnL realizado estimado (sin comisiones): {amount(testnetAutoState.realizedPnlUsdt)} USDT ficticios</small>
+              {testnetAutoState.pending&&<small>Orden {testnetAutoState.pending.side} pendiente de conciliar: {testnetAutoState.pending.symbol}</small>}
+              {Object.values(testnetAutoState.positions).slice(0,2).map(position=>
+                <small key={position.symbol}>{position.symbol} · {strategyLabel(position.strategy)}
+                  {' · '}TP1 {quote(position.tp1)} · TP2 {quote(position.tp2)} · SL {quote(position.stop)}</small>)}
+              {testnetAutoState.journal.slice(-2).reverse().map(trade=>
+                <small key={trade.clientOrderId}>{trade.side==='BUY'?'Compra':'Venta'} TESTNET confirmada:
+                  {' '}{trade.symbol} · {amount(trade.quantity,8)} · {trade.reason} · {clock(trade.at)}</small>)}
+              {testnetAutoState.lastError&&<small role="alert">Bloqueo: {testnetAutoState.lastError}</small>}
+            </>}
+            <small>Operaciones solo con fondos de prueba; un indicador no cuenta como orden confirmada.</small>
           </div>
           <div className={css.connectionItem}>
             <strong>Agentic MCP · subcuenta REAL</strong>

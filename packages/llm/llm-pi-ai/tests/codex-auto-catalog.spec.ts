@@ -344,6 +344,25 @@ describe('Codex automatic live catalog policy', () => {
     expect(warn).not.toHaveBeenCalled()
   })
 
+  it('invalidates Codex cache immediately when the managed CLI is upgraded', async () => {
+    let activeRuntime = 'managed:0.1.0'
+    let rows = [{ id: 'before-upgrade' }]
+    const list = vi.fn(async () => rows)
+    const catalog = new CodexLiveCatalog({
+      transport: { list },
+      now: () => 100,
+      refreshIntervalMs: 60_000,
+      runtimeSignature: () => activeRuntime,
+      installedModelIds: () => [],
+    })
+    expect(await catalog.refresh(CODEX_PROVIDER, {})).toEqual(['before-upgrade'])
+    rows = [{ id: 'after-upgrade' }]
+    expect(await catalog.refresh(CODEX_PROVIDER, {})).toEqual(['before-upgrade'])
+    activeRuntime = 'managed:0.2.0'
+    expect(await catalog.refresh(CODEX_PROVIDER, {})).toEqual(['after-upgrade'])
+    expect(list).toHaveBeenCalledTimes(2)
+  })
+
   it('coalesces concurrent refreshes', async () => {
     let release: ((models: readonly CodexDiscoveredModel[]) => void) | undefined
     const list = vi.fn(() => new Promise<readonly CodexDiscoveredModel[]>((resolve) => {

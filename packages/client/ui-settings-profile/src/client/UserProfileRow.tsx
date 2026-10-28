@@ -2,7 +2,7 @@
 
 import type { InjectFace, PropsLocale, PropsRuntime } from '@phoenix-ai/dsh-client-ui-slots'
 import type { UserProfileRowFace } from './profile-controller.ts'
-import type { AssistantGender } from './types.ts'
+import type { AssistantGender, UserAddressMode } from './types.ts'
 import css from './UserProfileRow.module.css'
 import type {} from '@phoenix-ai/dsh-client-ui-settings/client'
 
@@ -14,6 +14,8 @@ export type UserProfileRowProps =
 
 const CONSENT_FIELDS = [
   ['preferredName', 'consentName'],
+  ['profession', 'consentProfession'],
+  ['professionalTitle', 'consentProfessionalTitle'],
   ['dateOfBirth', 'consentAge'],
   ['gender', 'consentGender'],
   ['pronouns', 'consentPronouns'],
@@ -71,6 +73,16 @@ export function UserProfileRow(props: UserProfileRowProps) {
       <div className={css.group}>
         <h3 className={css.groupTitle}>{t('aboutYouSection')}</h3>
         <ProfileInput id="profile-preferred-name" label={t('preferredName')} hint={t('preferredNameHint')} value={field('preferredName').text} invalid={field('preferredName').invalid} disabled={disabled} onChange={(value) => { props.edit('preferredName', value) }} />
+        <ProfileInput id="profile-profession" label={t('profession')} hint={t('professionHint')} value={field('profession').text} invalid={field('profession').invalid} disabled={disabled} onChange={(value) => { props.edit('profession', value) }} />
+        <ProfileInput id="profile-professional-title" label={t('professionalTitle')} hint={t('professionalTitleHint')} value={field('professionalTitle').text} invalid={field('professionalTitle').invalid} disabled={disabled} onChange={(value) => { props.edit('professionalTitle', value) }} />
+        <label className={css.label} htmlFor="profile-addressing-mode">{t('addressingMode')}</label>
+        <select id="profile-addressing-mode" className={css.input} value={state.addressingMode} disabled={disabled} onChange={(event) => { props.setAddressingMode(event.target.value as UserAddressMode) }}>
+          <option value="automatic">{t('addressingModeAutomatic')}</option>
+          <option value="name">{t('addressingModeName')}</option>
+          <option value="title">{t('addressingModeTitle')}</option>
+          <option value="none">{t('addressingModeNone')}</option>
+        </select>
+        <p className={css.hint}>{t('addressingModeHint')}</p>
         <ProfileInput id="profile-date-of-birth" label={t('dateOfBirth')} hint={t('dateOfBirthHint')} value={field('dateOfBirth').text} invalid={field('dateOfBirth').invalid} disabled={disabled} type="date" onChange={(value) => { props.edit('dateOfBirth', value) }} />
         <ProfileInput id="profile-gender" label={t('gender')} hint={t('genderHint')} value={field('gender').text} invalid={field('gender').invalid} disabled={disabled} onChange={(value) => { props.edit('gender', value) }} />
         <ProfileInput id="profile-pronouns" label={t('pronouns')} hint={t('pronounsHint')} value={field('pronouns').text} invalid={field('pronouns').invalid} disabled={disabled} onChange={(value) => { props.edit('pronouns', value) }} />

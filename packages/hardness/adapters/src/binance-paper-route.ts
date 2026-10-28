@@ -3,6 +3,7 @@ import type { GameWebRouteHost } from './godot-web-bundle.ts'
 import type { BinancePaperAutomation } from './binance-paper-automation.ts'
 import { dashboardJson, type BinanceAgentOsHostService } from './binance-trading-tools.ts'
 import type { BinanceSpotTestnet } from './binance-spot-testnet.ts'
+import type { BinanceTestnetAutomation } from './binance-testnet-automation.ts'
 import { credentialRef, type CredentialProvider } from '@phoenix-ai/dsh-credentials'
 
 const ROUTE = '/phoenix-trading/paper'
@@ -10,6 +11,7 @@ const ENDPOINT = ROUTE + '/dashboard'
 const CONTROL = ROUTE + '/control'
 const CANDLES = ROUTE + '/candles'
 const TESTNET_STATUS = ROUTE + '/testnet-status'
+const TESTNET_AUTO_STATUS = ROUTE + '/testnet-auto-status'
 const TESTNET_CONNECT = ROUTE + '/testnet-connect'
 const MCP_STATUS = ROUTE + '/mcp-status'
 const MCP_RECONNECT = ROUTE + '/mcp-reconnect'
@@ -135,7 +137,7 @@ async function storeTestnetPair(vault: TestnetVault, apiKey: string, secret: str
 export function mountBinancePaperDashboardRoute(
   host: GameWebRouteHost,
   engine: BinancePaperAutomation,
-  options: { testnet?: BinanceSpotTestnet; credentials?: TestnetVault; agentOs?: Partial<BinanceAgentOsHostService> } = {},
+  options: { testnet?: BinanceSpotTestnet; testnetAuto?: BinanceTestnetAutomation; credentials?: TestnetVault; agentOs?: Partial<BinanceAgentOsHostService> } = {},
 ): () => void {
   // Never cache virtual fills: a background paper-step can settle between
   // two browser polls without going through this HTTP route.
@@ -149,15 +151,16 @@ export function mountBinancePaperDashboardRoute(
     const write = url.pathname === CONTROL
     const market = url.pathname === CANDLES
     const testing = url.pathname === TESTNET_STATUS
+    const testnetAutomation = url.pathname === TESTNET_AUTO_STATUS
     const connect = url.pathname === TESTNET_CONNECT
     const mcpStatus = url.pathname === MCP_STATUS
     const reconnect = url.pathname === MCP_RECONNECT
-    if (!read && !write && !market && !testing && !connect && !mcpStatus && !reconnect) { res.writeHead(404).end(); return }
+    if (!read && !write && !market && !testing && !testnetAutomation && !connect && !mcpStatus && !reconnect) { res.writeHead(404).end(); return }
     res.setHeader('Cache-Control', 'no-store')
     res.setHeader('Content-Type', 'application/json; charset=utf-8')
     res.setHeader('X-Content-Type-Options', 'nosniff')
     res.setHeader('Referrer-Policy', 'no-referrer')
-    if ((read || market || testing || mcpStatus) && req.method !== 'GET' && req.method !== 'HEAD'
+    if ((read || market || testing || testnetAutomation || mcpStatus) && req.method !== 'GET' && req.method !== 'HEAD'
       || (write || connect || reconnect) && req.method !== 'POST') { res.writeHead(405).end(); return }
     if ((write || connect || reconnect) && !localUserAction(req)) {
       res.writeHead(403).end(JSON.stringify({ error: 'Same-origin user action required' }))
@@ -190,6 +193,14 @@ export function mountBinancePaperDashboardRoute(
             : state?.status === 'auth-required' ? 'Authorize Binance Agentic OAuth in Phoenix Settings > Connectors'
               : 'Install or reconnect the official Binance Agentic MCP in Phoenix Settings',
         }))
+        return
+      }
+      if (testnetAutomation) {
+        if(options.testnetAuto===undefined){res.writeHead(503).end(JSON.stringify({error:'Testnet automation unavailable'}));return}
+        const snapshot=options.testnetAuto.snapshot()
+        res.statusCode=200
+        if(req.method==='HEAD')res.end()
+        else res.end(JSON.stringify(snapshot))
         return
       }
       if (testing) {

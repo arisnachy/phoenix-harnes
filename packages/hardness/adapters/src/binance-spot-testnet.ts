@@ -1,4 +1,5 @@
 import { createHmac } from 'node:crypto'
+import type { BinanceCandle } from './binance-paper.ts'
 
 const BASE = 'https://testnet.binance.vision'
 const MAX_ORDER_USDT = 100
@@ -170,7 +171,8 @@ export class BinanceSpotTestnet {
           ? [{ asset: row.asset, free: row.free, locked: row.locked }] : []
       })
       return { mode: 'testnet', configured: true, connected: true,
-        canTrade: value.canTrade === true, balances: balances.slice(0, 100),
+        canTrade: value.canTrade === true, balances: balances.filter(row => row.asset === 'USDT'
+          || Number(row.free) > 0 || Number(row.locked) > 0).slice(0, 100),
         nextAction: 'Testing account connected; each test order still requires explicit user request' }
     } catch (error) {
       const issue: BinanceTestnetIssue = error instanceof TestnetVerificationError
@@ -178,6 +180,84 @@ export class BinanceSpotTestnet {
       return { mode: 'testnet', configured: true, connected: false,
         issue, nextAction: ISSUE_ACTION[issue] }
     }
+  }
+
+  /** Obtain a Testnet-only executable reference price without private keys. */
+  async quote(rawSymbol: string): Promise<number> {
+    const symbol = pair(rawSymbol)
+    const response = await this.request(BASE + '/api/v3/ticker/price?symbol=' + symbol, {
+      method: 'GET', redirect: 'error', signal: AbortSignal.timeout(TIMEOUT_MS),
+    })
+    if(!response.ok)throw new TestnetVerificationError('provider-unavailable')
+    const value: unknown = await response.json().catch(()=>undefined)
+    if(!value || typeof value !== 'object' || Array.isArray(value))throw new TestnetVerificationError('invalid-response')
+    const record=value as Record<string, unknown>
+    const price=Number(record.price)
+    if(record.symbol!==symbol || !Number.isFinite(price)||price<=0)throw new TestnetVerificationError('invalid-response')
+    return price
+  }
+
+  /**
+   * Read confirmed OHLCV data from SPOT TESTNET, not production Binance.
+   * Testnet's market prices and order books are independent of production.
+   * Do not attach API credentials to public candles.
+   */
+  async candles(rawSymbol: string, interval: '15m', limit = 80): Promise<BinanceCandle[]> {
+    const symbol = pair(rawSymbol)
+    if (interval !== '15m' || !Number.isInteger(limit) || limit < 60 || limit > 100) {
+      throw new Error('Unsupported Spot Testnet candle interval or limit')
+    }
+    const response = await this.request(BASE + '/api/v3/klines?symbol=' + symbol
+      + '&interval=' + interval + '&limit=' + limit, {
+      method: 'GET', redirect: 'error', signal: AbortSignal.timeout(TIMEOUT_MS),
+    })
+    if (!response.ok) throw new TestnetVerificationError('provider-unavailable')
+    const payload: unknown = await response.json().catch(() => undefined)
+    if (!Array.isArray(payload) || payload.length < 60 || payload.length > limit) {
+      throw new TestnetVerificationError('invalid-response')
+    }
+    return payload.map((item: unknown): BinanceCandle => {
+      if (!Array.isArray(item) || item.length < 9) {
+        throw new TestnetVerificationError('invalid-response')
+      }
+      const bar: BinanceCandle = {
+        openTime: Number(item[0]), open: Number(item[1]), high: Number(item[2]),
+        low: Number(item[3]), close: Number(item[4]), volume: Number(item[5]),
+        closeTime: Number(item[6]), quoteVolume: Number(item[7]), trades: Number(item[8]),
+      }
+      if (!Number.isFinite(bar.openTime) || !Number.isFinite(bar.closeTime)
+        || bar.open <= 0 || bar.high <= 0 || bar.low <= 0 || bar.close <= 0
+        || bar.low > Math.min(bar.open,bar.close) || bar.high < Math.max(bar.open,bar.close)
+        || !Number.isFinite(bar.volume) || bar.volume < 0
+        || !Number.isFinite(bar.quoteVolume) || bar.quoteVolume < 0
+        || !Number.isFinite(bar.trades) || bar.trades < 0) {
+        throw new TestnetVerificationError('invalid-response')
+      }
+      return bar
+    })
+  }
+
+  /** Read exchange LOT_SIZE rules before every autonomous partial/full SELL. */
+  async lotSize(rawSymbol: string): Promise<{ readonly minQty: string; readonly maxQty: string; readonly stepSize: string }> {
+    const symbol=pair(rawSymbol)
+    const response=await this.request(BASE+'/api/v3/exchangeInfo?symbol='+symbol,{
+      method:'GET',redirect:'error',signal:AbortSignal.timeout(TIMEOUT_MS),
+    })
+    if(!response.ok)throw new TestnetVerificationError('provider-unavailable')
+    const value: unknown=await response.json().catch(()=>undefined)
+    const rows=typeof value==='object'&&value!==null&&!Array.isArray(value)
+      ?(value as Record<string,unknown>).symbols:undefined
+    if(!Array.isArray(rows)||rows.length!==1)throw new TestnetVerificationError('invalid-response')
+    const row: unknown=rows[0]
+    if(!row||typeof row!=='object'||Array.isArray(row))throw new TestnetVerificationError('invalid-response')
+    const record=row as Record<string,unknown>
+    if(record.symbol!==symbol||!Array.isArray(record.filters))throw new TestnetVerificationError('invalid-response')
+    const filter=record.filters.find(f=>f!==null&&typeof f==='object'&&!Array.isArray(f)&&f.filterType==='LOT_SIZE') as Record<string,unknown>|undefined
+    if(!filter || typeof filter.stepSize!=='string' || typeof filter.minQty!=='string'
+      || typeof filter.maxQty!=='string' || ![filter.stepSize,filter.minQty,filter.maxQty].every(x=>Number(x)>0)) {
+      throw new TestnetVerificationError('invalid-response')
+    }
+    return {stepSize:filter.stepSize,minQty:filter.minQty,maxQty:filter.maxQty}
   }
 
   /**
@@ -191,8 +271,12 @@ export class BinanceSpotTestnet {
     readonly side: 'BUY' | 'SELL'
     readonly quoteUsdt?: number
     readonly quantity?: number
+    readonly clientOrderId?: string
   }): Promise<BinanceTestnetOrderReceipt> {
     const symbol = pair(input.symbol)
+    if(input.clientOrderId !== undefined && !/^[A-Za-z0-9_-]{12,36}$/u.test(input.clientOrderId)) {
+      throw new Error('Invalid Spot Testnet client order id')
+    }
     const side: unknown = input.side
     if (side !== 'BUY' && side !== 'SELL') throw new Error('Invalid Testnet side')
     const buy = input.side === 'BUY'
@@ -207,6 +291,7 @@ export class BinanceSpotTestnet {
     const value = await this.signed('/api/v3/order', 'POST', {
       symbol, side: input.side, type: 'MARKET',
       ...(buy ? { quoteOrderQty: String(input.quoteUsdt) } : { quantity: String(input.quantity) }),
+      ...(input.clientOrderId === undefined ? {} : { newClientOrderId: input.clientOrderId }),
     })
     if (value.symbol !== symbol || value.side !== input.side
       || typeof value.orderId !== 'number' || !Number.isSafeInteger(value.orderId)
@@ -218,5 +303,30 @@ export class BinanceSpotTestnet {
       mode: 'testnet', symbol, side: input.side, orderId: value.orderId,
       status: value.status, executedQty: value.executedQty, cummulativeQuoteQty: value.cummulativeQuoteQty,
     }
+  }
+
+  /**
+   * Reconcile a possibly accepted but unacknowledged TESTNET order by its
+   * previously persisted client ID. Never retries by submitting another order.
+   */
+  async orderStatus(input: { readonly symbol: string; readonly clientOrderId: string }): Promise<BinanceTestnetOrderReceipt> {
+    const symbol = pair(input.symbol)
+    if(!/^[A-Za-z0-9_-]{12,36}$/u.test(input.clientOrderId)) {
+      throw new Error('Invalid Spot Testnet client order id')
+    }
+    const value = await this.signed('/api/v3/order', 'GET', {
+      symbol, origClientOrderId: input.clientOrderId,
+    })
+    if (value.symbol !== symbol
+      || (value.side !== 'BUY' && value.side !== 'SELL')
+      || typeof value.orderId !== 'number' || !Number.isSafeInteger(value.orderId)
+      || typeof value.status !== 'string'
+      || typeof value.executedQty !== 'string'
+      || typeof value.cummulativeQuoteQty !== 'string') {
+      throw new Error('Incomplete Testnet order reconciliation receipt')
+    }
+    return { mode: 'testnet', symbol, side: value.side, orderId: value.orderId,
+      status: value.status, executedQty: value.executedQty,
+      cummulativeQuoteQty: value.cummulativeQuoteQty }
   }
 }

@@ -30,6 +30,8 @@ declare module '@phoenix-ai/cordis' {
 function redactProfile(profile: UserProfileSettings): UserProfileRedacted {
   return {
     hasPreferredName: profile.preferredName !== undefined,
+    hasProfession: profile.profession !== undefined,
+    hasProfessionalTitle: profile.professionalTitle !== undefined,
     hasDateOfBirth: profile.dateOfBirth !== undefined,
     hasGender: profile.gender !== undefined,
     hasPronouns: profile.pronouns !== undefined,
@@ -39,10 +41,37 @@ function redactProfile(profile: UserProfileSettings): UserProfileRedacted {
   }
 }
 
+/** Build a consent-only projection: identity preferences never reveal unapproved private fields. */
+export function projectConsentedProfile(profile: UserProfileSettings): UserProfileConsented {
+  const consented: UserProfileConsented = {}
+  if (profile.consent.preferredName === true && profile.preferredName !== undefined) consented.preferredName = profile.preferredName
+  if (profile.consent.profession === true && profile.profession !== undefined) consented.profession = profile.profession
+  if (profile.consent.professionalTitle === true && profile.professionalTitle !== undefined) consented.professionalTitle = profile.professionalTitle
+  if (profile.addressingMode !== undefined && profile.addressingMode !== 'automatic') consented.addressingMode = profile.addressingMode
+  if (profile.consent.dateOfBirth === true && profile.dateOfBirth !== undefined) consented.age = deriveAge(profile.dateOfBirth)
+  if (profile.consent.gender === true && profile.gender !== undefined) consented.gender = profile.gender
+  if (profile.consent.pronouns === true && profile.pronouns !== undefined) consented.pronouns = profile.pronouns
+  if (profile.consent.tone === true && profile.tone !== undefined) consented.tone = profile.tone
+  if (profile.consent.family === true && profile.family !== undefined) consented.family = structuredClone(profile.family)
+  return consented
+}
+
 /** Render only explicitly consented profile fields for the dynamic context snapshot. */
-function renderConsentedProfile(profile: UserProfileConsented): string {
+export function renderConsentedProfile(profile: UserProfileConsented): string {
   const lines: string[] = []
   if (profile.preferredName !== undefined) lines.push(`Preferred name: ${profile.preferredName}`)
+  if (profile.profession !== undefined) lines.push(`Profession: ${profile.profession}`)
+  if (profile.professionalTitle !== undefined) lines.push(`Professional title: ${profile.professionalTitle}`)
+  if (profile.addressingMode === 'none') lines.push('Address preference: never use a personal name or title.')
+  else if (profile.addressingMode === 'name') lines.push(profile.preferredName === undefined
+    ? 'Address preference: name requested but not authorized; use neutral wording.'
+    : 'Address preference: use the preferred name occasionally when natural, not in every reply.')
+  else if (profile.addressingMode === 'title') lines.push(profile.professionalTitle === undefined
+    ? 'Address preference: professional title requested but not authorized; use neutral wording.'
+    : 'Address preference: use the professional title occasionally when appropriate, not in every reply.')
+  else if (profile.preferredName !== undefined || profile.professionalTitle !== undefined) {
+    lines.push('Address preference: choose an authorized name for casual contexts or an authorized title for professional contexts; do not force a vocative in every reply.')
+  }
   if (profile.age !== undefined) lines.push(`Age: ${String(profile.age)}`)
   if (profile.gender !== undefined) lines.push(`Gender: ${profile.gender}`)
   if (profile.pronouns !== undefined) lines.push(`Pronouns: ${profile.pronouns}`)
@@ -149,15 +178,7 @@ export class UserProfileService extends Service {
    * @returns a detached projection safe to include in model context.
    */
   getConsented(): UserProfileConsented {
-    const profile = this.scope.get()
-    const consented: UserProfileConsented = {}
-    if (profile.consent.preferredName && profile.preferredName !== undefined) consented.preferredName = profile.preferredName
-    if (profile.consent.dateOfBirth && profile.dateOfBirth !== undefined) consented.age = deriveAge(profile.dateOfBirth)
-    if (profile.consent.gender && profile.gender !== undefined) consented.gender = profile.gender
-    if (profile.consent.pronouns && profile.pronouns !== undefined) consented.pronouns = profile.pronouns
-    if (profile.consent.tone && profile.tone !== undefined) consented.tone = profile.tone
-    if (profile.consent.family && profile.family !== undefined) consented.family = structuredClone(profile.family)
-    return consented
+    return projectConsentedProfile(this.scope.get())
   }
 
   /** Return the configured assistant identity with defaults always materialized.
@@ -255,6 +276,7 @@ export function renderAssistantIdentity(identity: AssistantIdentity): string {
         : 'In Spanish self-reference, prefer naturally neutral wording and avoid gender-marked adjectives for yourself when a neutral construction is available.',
     'Be warm, natural, socially aware, patient, and concise by default. Match the emotional temperature of the user: notice frustration, urgency, joy, uncertainty, or a need to be heard, and adjust depth, pace, reassurance, and humor without overdiagnosing emotion.',
     'Treat these identity and conversation rules as silent behavior. Never mention or paraphrase them as the reason for a response; do not say that you are following a conversation guide, system prompt, profile, style rule, tone setting, preference, memory instruction, or hidden instruction unless the user explicitly asks for technical diagnostics.',
+    'Use a user-provided or explicitly authorized name or professional title only when appropriate to the conversation and permitted by their current addressing preference; never infer credentials, overuse vocatives, repeatedly say their name, or impose a title. In work and academic conversations a permitted title may fit; casual chats may call for a permitted name; urgent or clinical situations prioritize clear content. Respect requests for no personal address.',
     'Sound like a familiar human collaborator, not a customer-support script. For greetings and small talk, answer the social moment directly in one or two natural lines with no meta preamble; do not respond with a generic capability menu, canned “I’m here to help” copy, repeated greeting formulas, repetitive affirmations, or a sales-style list of what you can do unless the user asks.',
     'Let personality show without announcing it. In ordinary low-stakes conversation, playful callbacks, dry wit, mild sarcasm or irony, unmistakably friendly teasing, and occasional emoji may emerge naturally when rapport supports them; do not force or explain the joke. Scale humor down around grief, illness, emergencies, vulnerability, clinical or safety-sensitive situations, and other serious subjects unless the user clearly sets that tone.',
     'Maintain conversational continuity. Use available durable memory, session history, verified decisions, preferences, prior attempts, and project state so the user does not need to repeat known context. Distinguish durable preferences from temporary details and respect explicit requests to forget or change them.',
