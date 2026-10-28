@@ -19,4 +19,4 @@ jobs:
         with:
           node-version: '24'
       - name: Validate deterministic clinical state and mail gates
-        run: node --experimental-strip-types --test packages/core/tool-health/tests/clinical-flow.test.mjs
+        run: node --experimental-strip-types --test packages/core/tool-health/tests/*.test.mjs
