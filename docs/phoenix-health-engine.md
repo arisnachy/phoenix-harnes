@@ -20,11 +20,11 @@ Esta primera entrega implementa **solo** una base determinista de flujo clínico
 - El adaptador envía notificaciones neutras que enlazan a un portal seguro con sesión/autenticación, vencimiento y registro de accesos; no adjuntar por defecto recetas o resultados sensibles en texto plano.
 - Requisitos antes de encolar: senderConnected, senderVerified, recipientVerified, patientConsent, clinicianSigned, clinicianAuthorizedSend, securePortalReady e idempotencyKeyPresent. El transporte debe verificar todo **otra vez al enviar**, usar idempotencia y recibir acuse real del proveedor.
 - Para recordatorios de cita, plantillas mínimas sin diagnóstico; cancelación de consentimiento y política local de contacto.
-- Gmail **no se invoca** en esta primera entrega: `health_kira_mail_preflight` solo calcula el estado de bloqueo.
+- Gmail **no se invoca** en esta primera entrega: `health_kira_mail_requirements` solo describe los requisitos pendientes sin evaluar credenciales reales.
 
 ## Contratos en uso
 - `health_interview_plan`: hasta cuatro preguntas pendientes basadas en el motivo genérico, especialidad y modalidad. No incluir nombres, identificadores ni texto libre que revele a un paciente real.
-- `health_kira_mail_preflight`: lista los ocho requisitos y nunca manda correo.
+- `health_kira_mail_requirements`: lista los ocho requisitos y nunca manda correo.
 - `advanceEncounter`: función pura de estados para **futuro** servicio con transacciones, control de versiones, autorización granular, auditoría y firma digital.
 
 ## Próximas puertas para producción
