@@ -159,6 +159,18 @@ export function registerHealthRoutes(ctx:Context):void {
         if(method==='GET'){reply(res,200,{items:store.staff(actor)});return}
         if(method==='POST'){store.createStaff(actor,await readBody(req));reply(res,201,{ok:true});return}
       }
+      if(operation==='assignments'){
+        if(method==='GET'){reply(res,200,{items:store.assignments(actor)});return}
+        if(method==='POST'){
+          const body=await readBody(req)
+          if(typeof body.patientId!=='string'||typeof body.staffId!=='string')throw new Error('Datos de asignación inválidos')
+          if(body.action==='revoke')store.revokePatient(actor,body.patientId,body.staffId)
+          else if(body.action==='grant'&&typeof body.purpose==='string')
+            store.assignPatient(actor,body.patientId,body.staffId,body.purpose)
+          else throw new Error('Acción de asignación inválida')
+          reply(res,200,{ok:true});return
+        }
+      }
       if(operation==='audit'&&method==='GET'){reply(res,200,{items:store.audits(actor)});return}
       if(operation==='dispense'&&method==='POST'&&id!==undefined){
         const body=await readBody(req)

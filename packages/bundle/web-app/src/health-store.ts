@@ -75,7 +75,8 @@ export class HealthClinicStore {
       "CREATE TABLE IF NOT EXISTS health_records (id TEXT PRIMARY KEY, org TEXT NOT NULL, kind TEXT NOT NULL, version INTEGER NOT NULL, iv TEXT NOT NULL, tag TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);"+
       "CREATE INDEX IF NOT EXISTS health_records_org_kind ON health_records(org,kind);"+
       "CREATE TABLE IF NOT EXISTS health_audit (id INTEGER PRIMARY KEY AUTOINCREMENT, org TEXT NOT NULL, actor TEXT NOT NULL, action TEXT NOT NULL, record_id TEXT NOT NULL, happened TEXT NOT NULL, prior_hash TEXT NOT NULL, hash TEXT NOT NULL);"+
-      "CREATE TABLE IF NOT EXISTS health_reminders (appointment_id TEXT PRIMARY KEY, org TEXT NOT NULL, status TEXT NOT NULL, sender TEXT NOT NULL, provider_id TEXT, started TEXT NOT NULL);"
+      "CREATE TABLE IF NOT EXISTS health_reminders (appointment_id TEXT PRIMARY KEY, org TEXT NOT NULL, status TEXT NOT NULL, sender TEXT NOT NULL, provider_id TEXT, started TEXT NOT NULL);"+
+      "CREATE TABLE IF NOT EXISTS health_patient_access (org TEXT NOT NULL, patient_id TEXT NOT NULL, staff_id TEXT NOT NULL, purpose TEXT NOT NULL, granted_by TEXT NOT NULL, granted_at TEXT NOT NULL, PRIMARY KEY(org,patient_id,staff_id));"
     )
   }
   close():void {this.sessions.clear();this.key?.fill(0);this.key=undefined;this.db.close()}
@@ -159,20 +160,69 @@ export class HealthClinicStore {
     const payload=Buffer.concat([decipher.update(Buffer.from(row.payload,'base64')),decipher.final()]).toString('utf8')
     return obj(JSON.parse(payload) as unknown)
   }
+  /** Staff-patient care links are mandatory for clinical roles; membership alone never grants access. */
+  private hasPatient(actor:Actor,patientId:string):boolean {
+    if(!['clinician','psychologist','nurse'].includes(actor.role))return true
+    return this.db.prepare('SELECT 1 FROM health_patient_access WHERE org=? AND patient_id=? AND staff_id=?')
+      .get(actor.org,patientId,actor.username)!==undefined
+  }
+  private requirePatient(actor:Actor,patientId:string):void {
+    if(!this.hasPatient(actor,patientId))fail('Paciente no asignado a este profesional')
+  }
+  /** An authorized reception/admin explicitly assigns an existing patient to a professional. */
+  assignPatient(actor:Actor,patientId:string,username:string,purpose:string):void {
+    if(actor.role!=='admin'&&actor.role!=='reception')fail('Solo admisión o administración puede asignar pacientes')
+    const patient=this.db.prepare("SELECT id FROM health_records WHERE id=? AND org=? AND kind='patients'").get(patientId,actor.org)
+    if(!patient)fail('Paciente inexistente en esta institución')
+    const staff=this.db.prepare('SELECT org,role FROM health_staff WHERE username=?').get(username) as {org:string;role:Role}|undefined
+    if(!staff||staff.org!==actor.org||!['clinician','psychologist','nurse'].includes(staff.role))fail('Profesional no autorizado en la institución')
+    const reason=str(purpose,'Motivo asistencial',160)
+    this.db.exec('BEGIN IMMEDIATE')
+    try {
+      this.db.prepare('INSERT OR REPLACE INTO health_patient_access VALUES (?,?,?,?,?,?)')
+        .run(actor.org,patientId,username,reason,actor.username,new Date().toISOString())
+      this.audit(actor,'patient.assign',patientId)
+      this.db.exec('COMMIT')
+    }catch(error){this.db.exec('ROLLBACK');throw error}
+  }
+  revokePatient(actor:Actor,patientId:string,username:string):void {
+    if(actor.role!=='admin'&&actor.role!=='reception')fail('Acceso denegado')
+    this.db.exec('BEGIN IMMEDIATE')
+    try {
+      const result=this.db.prepare('DELETE FROM health_patient_access WHERE org=? AND patient_id=? AND staff_id=?')
+        .run(actor.org,patientId,username)
+      if(Number(result.changes)!==1)fail('Asignación inexistente')
+      this.audit(actor,'patient.revoke',patientId)
+      this.db.exec('COMMIT')
+    }catch(error){this.db.exec('ROLLBACK');throw error}
+  }
+  assignments(actor:Actor):readonly RecordData[] {
+    if(actor.role!=='admin'&&actor.role!=='reception')fail('Acceso denegado')
+    return this.db.prepare('SELECT patient_id AS patientId,staff_id AS staffId,purpose,granted_by AS grantedBy,granted_at AS grantedAt FROM health_patient_access WHERE org=? ORDER BY granted_at DESC LIMIT 500').all(actor.org) as RecordData[]
+  }
   private access(actor:Actor,kind:Kind,write=false):void {
     if(!TYPES.has(kind)||(write?WRITE:READ)[kind].includes(actor.role)===false)fail('Permiso clínico insuficiente')
   }
   private find(actor:Actor,kind:Kind,id:string):{row:Row;data:RecordData} {
     const row=this.db.prepare('SELECT * FROM health_records WHERE id=? AND org=? AND kind=?').get(id,actor.org,kind) as Row|undefined
     if(!row)fail('Registro inexistente o fuera de institución')
-    return {row,data:this.open(row)}
+    const data=this.open(row)
+    if(kind==='patients')this.requirePatient(actor,id)
+    else if(typeof data.patientId==='string')this.requirePatient(actor,data.patientId)
+    if(kind==='encounters'&&data.practitioner!==actor.username&&actor.role!=='admin'&&actor.role!=='nurse')
+      fail('Acceso al episodio no autorizado')
+    if(kind==='orders'&&actor.role==='lab'&&data.modality!=='laboratory')fail('Orden no autorizada')
+    if(kind==='orders'&&actor.role==='radiology'&&data.modality!=='imaging')fail('Orden no autorizada')
+    return {row,data}
   }
   list(actor:Actor,kind:Kind):readonly RecordData[] {
     this.access(actor,kind)
     const rows=this.db.prepare('SELECT * FROM health_records WHERE org=? AND kind=? ORDER BY created_at DESC LIMIT 500').all(actor.org,kind) as Row[]
     return rows.map((row):RecordData=>({id:row.id,version:row.version,createdAt:row.created_at,updatedAt:row.updated_at,...this.open(row)}))
+      .filter(item=>this.hasPatient(actor,kind==='patients'?String(item.id):String(item.patientId??'')))
       .filter(item=>kind!=='orders'||actor.role!=='lab'&&actor.role!=='radiology'||
         item.modality===(actor.role==='lab'?'laboratory':'imaging'))
+      .filter(item=>kind!=='encounters'||actor.role==='nurse'||item.practitioner===actor.username)
       .filter(item=>kind!=='encounters'||!/(?:psic[oó]log|psycholog|psicoterapi)/iu.test(String(item.specialty))||
         actor.role==='psychologist'&&item.practitioner===actor.username)
   }
@@ -218,10 +268,16 @@ export class HealthClinicStore {
       if(!/^\d{4}-\d{2}-\d{2}$/u.test(dob)||!Number.isFinite(Date.parse(dob))||Date.parse(dob)>Date.now())fail('Fecha de nacimiento inválida')
       const email=typeof x.email==='string'?x.email.trim():''
       if(email&&!/^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/u.test(email))fail('Correo de paciente inválido')
-      return this.insert(actor,kind,{name:str(x.name,'Nombre',160),dateOfBirth:dob,
+      const patient=this.insert(actor,kind,{name:str(x.name,'Nombre',160),dateOfBirth:dob,
       email:email.slice(0,254),phone:typeof x.phone==='string'?x.phone.trim().slice(0,35):'',
       notes:typeof x.notes==='string'?x.notes.slice(0,4000):'',emailConsent:x.emailConsent===true,
       emailVerified:x.emailVerified===true})
+      if(actor.role==='clinician'){
+        // Registering a patient is an explicit treatment relationship for this clinician.
+        this.db.prepare('INSERT INTO health_patient_access VALUES (?,?,?,?,?,?)')
+          .run(actor.org,patient.id,actor.username,'initial-registration',actor.username,new Date().toISOString())
+      }
+      return patient
     }
     if(kind==='encounters'){
       const patientId=str(x.patientId,'Paciente',80);this.find(actor,'patients',patientId)

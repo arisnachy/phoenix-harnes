@@ -26,7 +26,7 @@ table{width:100%;border-collapse:collapse;font-size:12px}td,th{border-bottom:1px
 "use strict";
 const root=document.getElementById("app"),account=document.getElementById("account"),flash=document.getElementById("flash");
 let actor=null,csrf="",tab="patients",data={},current=null;
-const modules=[["patients","Pacientes"],["encounters","Consultas"],["appointments","Agenda"],["orders","Laboratorio e imágenes"],["prescriptions","Recetas"],["inventory","Farmacia"],["invoices","Administración"],["followups","Seguimiento"],["staff","Personal"],["audit","Auditoría"]];
+const modules=[["patients","Pacientes"],["encounters","Consultas"],["appointments","Agenda"],["orders","Laboratorio e imágenes"],["prescriptions","Recetas"],["inventory","Farmacia"],["invoices","Administración"],["followups","Seguimiento"],["staff","Personal"],["assignments","Equipo asistencial"],["audit","Auditoría"]];
 const safe=x=>String(x??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const val=id=>document.getElementById(id)?.value??"";
 const box=(title,content)=>'<article class="card"><h2>'+safe(title)+'</h2>'+content+'</article>';
@@ -57,22 +57,23 @@ async function splash(){
 }
 async function load(){
  account.innerHTML='<span class="tag">'+safe(actor.username)+" · "+safe(actor.role)+'</span> '+button("logout","Salir","secondary");
- const menu={admin:["patients","appointments","inventory","invoices","followups","staff","audit"],
+ const menu={admin:["patients","appointments","inventory","invoices","followups","assignments","staff","audit"],
  clinician:["patients","encounters","appointments","orders","prescriptions","followups"],
  psychologist:["patients","encounters","appointments","followups"],
  nurse:["patients","encounters","appointments","orders","followups"],
- reception:["patients","appointments","followups"],lab:["orders"],radiology:["orders"],
+ reception:["patients","appointments","followups","assignments"],lab:["orders"],radiology:["orders"],
  pharmacy:["prescriptions","inventory"],billing:["invoices"]};
  const resources=modules.filter(m=>(menu[actor.role]||[]).includes(m[0]));
  if(!resources.some(x=>x[0]===tab))tab="patients";
  root.innerHTML='<main><aside>'+resources.map(x=>'<button data-tab="'+x[0]+'" class="'+(x[0]===tab?'active':'')+'">'+x[1]+'</button>').join('')+
  '</aside><section><div id="view"><div class="card">Cargando…</div></div></section></main>';
- const ids=tab==="orders"?["orders","encounters"]:tab==="prescriptions"?["prescriptions","encounters","inventory"]:tab==="encounters"?["encounters","patients"]:tab==="appointments"?["appointments","patients"]:tab==="invoices"?["invoices","patients"]:tab==="followups"?["followups","patients"]:["patients",tab];
+ const ids=tab==="assignments"?["assignments","patients"]:tab==="orders"?["orders","encounters"]:tab==="prescriptions"?["prescriptions","encounters","inventory"]:tab==="encounters"?["encounters","patients"]:tab==="appointments"?["appointments","patients"]:tab==="invoices"?["invoices","patients"]:tab==="followups"?["followups","patients"]:["patients",tab];
  for(const id of new Set(ids)){try{data[id]=(await api(id)).items}catch{data[id]=[]}}
  render()
 }
 function actionFor(o){
  let actions=[];
+ if(tab==="assignments")actions=[["revokePatient","Revocar acceso"]];
  if(tab==="encounters"&&o.status!=="signed"&&o.practitioner===actor.username)actions=[["document","Documentar"],["review","Revisar"],["sign","Firmar"]];
  if(tab==="prescriptions"&&actor.role==="pharmacy"&&o.status==="prescribed")actions=[["dispense","Dispensar"]];
  if(tab==="orders")actions=o.status==="ordered"&&((actor.role==="lab"&&o.modality==="laboratory")||(actor.role==="radiology"&&o.modality==="imaging"))?[["result","Resultado"]]:
@@ -81,7 +82,7 @@ function actionFor(o){
  if(tab==="invoices")actions=[["pay","Cobrar"]];
  if(tab==="appointments"&&o.status==="scheduled")actions=[["completeAppointment","Completar"],...(actor.role==="clinician"&&o.practitioner===actor.username?[["sendReminder","Kira: enviar recordatorio"]]:[])];
  if(tab==="followups"&&o.status==="pending")actions=[["finishFollowup","Completar"]];
- return actions.map(a=>'<button class="secondary" data-act="'+a[0]+'" data-id="'+safe(o.id)+'">'+a[1]+'</button>').join("");
+ return actions.map(a=>'<button class="secondary" data-act="'+a[0]+'" data-id="'+safe(tab==="assignments"?o.patientId+"|"+o.staffId:o.id)+'">'+a[1]+'</button>').join("");
 }
 function render(){
  const d=data[tab]||[],patients=data.patients||[];
@@ -101,6 +102,7 @@ function render(){
  if(tab==="inventory")form=field("item","Producto")+button("create","Agregar producto");
  if(tab==="invoices")form=p+field("concept","Concepto")+field("amountCents","Monto en centavos","number")+button("create","Emitir factura");
  if(tab==="followups")form=p+field("assignedTo","Asignado a")+field("dueAt","Fecha y hora","datetime-local")+area("description","Tarea de seguimiento")+button("create","Crear seguimiento");
+ if(tab==="assignments")form=pick("patientId","Paciente",patients,x=>x.name)+field("staffId","Usuario profesional")+field("purpose","Motivo de atención")+button("grantPatient","Autorizar atención");
  if(tab==="staff")form=field("username","Usuario")+field("password","Contraseña inicial (16+)","password")+
  '<label>Rol</label><select id="role">'+["clinician","psychologist","nurse","reception","lab","radiology","pharmacy","billing"].map(x=>'<option>'+x+'</option>').join('')+'</select>'+button("create","Crear personal");
  const titles=Object.fromEntries(modules.map(x=>[x[0],x[1]]));
@@ -114,6 +116,7 @@ function render(){
  if(tab==="inventory")cols=[["Producto","item"],["Unidades","units"]];
  if(tab==="invoices")cols=[["Concepto","concept"],["Total (centavos)","amountCents"],["Pagado","paidCents"]];
  if(tab==="followups")cols=[["Tarea","description"],["Vence","dueAt"],["Estado","status"]];
+ if(tab==="assignments")cols=[["Paciente","patientId"],["Profesional","staffId"],["Finalidad","purpose"],["Autorizó","grantedBy"]];
  if(tab==="staff")cols=[["Usuario","username"],["Rol","role"],["Centro","org"]];
  if(tab==="audit")cols=[["Acción","action"],["Actor","actor"],["Registro","recordId"],["Hora","happened"]];
  document.getElementById("view").innerHTML=box(titles[tab],'<div class="muted">Datos de la institución autenticada · Registro persistente cifrado</div>'+form)+
@@ -123,6 +126,16 @@ async function execute(action,id){
  if(action==="logout"){await api("logout","POST",{});actor=null;csrf="";return splash()}
  if(action==="setup"){await api("setup","POST",{username:val("user"),password:val("pass"),organization:val("org")});notice("Clínica configurada. Inicia sesión.");return splash()}
  if(action==="login"){const x=await api("login","POST",{username:val("user"),password:val("pass")});csrf=x.csrf;actor=x.actor;return load()}
+ if(action==="grantPatient"){
+  await api("assignments","POST",{action:"grant",patientId:val("patientId"),staffId:val("staffId"),purpose:val("purpose")});
+  notice("Relación asistencial autorizada y auditada.");return load();
+ }
+ if(action==="revokePatient"){
+  const row=data.assignments?.find(x=>x.patientId+"|"+x.staffId===id);
+  if(!row)throw Error("Asignación no encontrada");
+  if(!confirm("¿Revocar acceso asistencial de este profesional al paciente?"))return;
+  await api("assignments","POST",{action:"revoke",patientId:row.patientId,staffId:row.staffId});return load();
+ }
  if(action==="create"){
   const v={
    patients:{name:val("name"),dateOfBirth:val("dateOfBirth"),email:val("email"),phone:val("phone"),emailConsent:!!document.getElementById("consent")?.checked,emailVerified:!!document.getElementById("verified")?.checked},
