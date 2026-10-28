@@ -305,7 +305,12 @@ export function TradingDashboard({ initial }: Props) {
         <strong>{running ? 'Radar encendido' : 'Radar detenido'}</strong>
         <span>Último análisis: {clock(state.lastSuccessAt)}</span>
         <span>Resultado: {state.lastDecision === 'buy' ? 'Compra PAPER' : state.lastDecision === 'sell' ? 'Venta PAPER' : 'Esperar / sin señal'}</span>
-        <span>{state.signals.length} de {settings.symbols.length} pares evaluados</span>
+        <span>{state.signals.length} pares evaluados en el último ciclo</span>
+        <span>Motivo de la última decisión: {state.rationale}</span>
+        {state.lastError && <span role="alert">Error del Host: {state.lastError}</span>}
+        {running && state.lastSuccessAt
+          && Date.now() - Date.parse(state.lastSuccessAt) > Math.max(180_000, settings.pollMs * 3)
+          && <span role="alert">Escáner sin ciclo válido reciente. Revisa el Host y la conectividad.</span>}
       </div>
       <label className={css.watchlist}>
         <span>Pares prioritarios (1–12, se mantienen al explorar)</span>
