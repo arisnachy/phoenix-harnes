@@ -21,6 +21,33 @@ describe('native sports chat presentation fallback',()=>{
   it('renders a game from a real structured sports tool without assistant UI fences',()=>{
     expect(sportsCardsFromToolResult(tool('sports_chat_games',{uiBlocks:[sportsGame],count:1}))).toEqual([sportsGame])
   })
+  it('shows researched automatic tickets with 5 or 6 real selections without relying on model markdown',()=>{
+    for(const count of [5,6]){
+      const legs=Array.from({length:count},(_,i)=>({
+        event:'Away '+i+' vs Home '+i,selection:'Home '+i,
+        price:'Por verificar',bookmaker:'Sin casa confirmada',
+        homeTeam:'Home '+i,awayTeam:'Away '+i,
+        homeLogo:'https://a.espncdn.com/home-'+i+'.png',
+        awayLogo:'https://a.espncdn.com/away-'+i+'.png',
+        rationale:'Tres partidos anteriores diferentes corroborados para el equipo '+i,
+      }))
+      const native={component:'sports_ticket_card',version:1,props:{
+        title:'PHOENIX · Ticket de pronósticos',source:'ESPN Site API',
+        requestedLegs:count,legs,combinedOdds:'No disponible',
+        note:'Análisis deportivo, no apuesta real.',
+      }}
+      const direct=sportsCardsFromToolResult(tool('sports_chat_ticket_research_auto',{uiBlock:native}))
+      expect(direct).toHaveLength(1)
+      expect(direct[0]).toEqual(native)
+      const mcp=tool('mcp__tool_sports__sports_chat_ticket_research_auto',{uiBlock:native})
+      expect(sportsCardsFromToolResult({kind:'tool-result',call:{name:'Code'},content:[],subCalls:[mcp]})).toEqual([native])
+      expect(unrenderedSportsCards(direct,['Ya está listo el ticket en la tarjeta.'])).toEqual([native])
+    }
+  })
+  it('accepts a bounded verbose research payload with an intact native ticket',()=>{
+    const result={uiBlock:ticket,explanations:'x'.repeat(130_000)}
+    expect(sportsCardsFromToolResult(tool('sports_chat_ticket_research_auto',result))).toEqual([ticket])
+  })
   it('renders a compact multi-game slate while keeping single game cards',()=>{
     const schedule={component:'sports_schedule_card',version:1,props:{
       title:'Cartelera deportiva',date:'2026-10-28',source:'ESPN Site API',total:2,
@@ -95,7 +122,7 @@ describe('native sports chat presentation fallback',()=>{
     expect(sportsCardsFromToolResult(tool('bash',{uiBlocks:[sportsGame]}))).toEqual([])
     expect(sportsCardsFromToolResult(tool('sports_chat_games',{uiBlocks:[{component:'sports_game_card',version:1,props:{
       ...sportsGame.props,source:'x',onclick:'evil()'}}]}))).toEqual([])
-    const huge='x'.repeat(125_010)
+    const huge='x'.repeat(1_000_010)
     expect(sportsCardsFromToolResult({kind:'tool-result',call:{name:'sports_chat_games'},isError:false,
       content:[{type:'text',text:huge}]})).toEqual([])
     expect(sportsCardsFromToolResult({kind:'tool-result',call:{name:'sports_chat_games'},isError:true,
