@@ -238,14 +238,20 @@ export class HealthClinicStore {
   private access(actor:Actor,kind:Kind,write=false):void {
     if(!TYPES.has(kind)||(write?WRITE:READ)[kind].includes(actor.role)===false)fail('Permiso clínico insuficiente')
   }
+  /** Psychotherapy disclosures require exact note authorship even for administrators and nurses. */
+  private mayReadEncounter(actor:Actor,data:RecordData):boolean {
+    const restricted=data.confidentialPsychotherapy===true ||
+      /(?:psic[oó]log|psycholog|psicoterapi|psychiatr|psiquiatr)/iu.test(String(data.specialty??''))
+    if(restricted)return actor.role==='psychologist'&&data.practitioner===actor.username
+    return actor.role==='admin'||actor.role==='nurse'||data.practitioner===actor.username
+  }
   private find(actor:Actor,kind:Kind,id:string):{row:Row;data:RecordData} {
     const row=this.db.prepare('SELECT * FROM health_records WHERE id=? AND org=? AND kind=?').get(id,actor.org,kind) as Row|undefined
     if(!row)fail('Registro inexistente o fuera de institución')
     const data=this.open(row)
     if(kind==='patients')this.requirePatient(actor,id)
     else if(typeof data.patientId==='string')this.requirePatient(actor,data.patientId)
-    if(kind==='encounters'&&data.practitioner!==actor.username&&actor.role!=='admin'&&actor.role!=='nurse')
-      fail('Acceso al episodio no autorizado')
+    if(kind==='encounters'&&!this.mayReadEncounter(actor,data))fail('Acceso al episodio no autorizado')
     if(kind==='orders'&&actor.role==='lab'&&data.modality!=='laboratory')fail('Orden no autorizada')
     if(kind==='orders'&&actor.role==='radiology'&&data.modality!=='imaging')fail('Orden no autorizada')
     return {row,data}
@@ -264,9 +270,7 @@ export class HealthClinicStore {
       .filter(item=>this.hasPatient(actor,kind==='patients'?String(item.id):String(item.patientId??'')))
       .filter(item=>kind!=='orders'||actor.role!=='lab'&&actor.role!=='radiology'||
         item.modality===(actor.role==='lab'?'laboratory':'imaging'))
-      .filter(item=>kind!=='encounters'||actor.role==='nurse'||item.practitioner===actor.username)
-      .filter(item=>kind!=='encounters'||!/(?:psic[oó]log|psycholog|psicoterapi)/iu.test(String(item.specialty))||
-        actor.role==='psychologist'&&item.practitioner===actor.username)
+      .filter(item=>kind!=='encounters'||this.mayReadEncounter(actor,item))
   }
   /** Fail closed if the HMAC-linked clinical audit journal has been altered. */
   private verifyAudit():void {
@@ -347,6 +351,7 @@ export class HealthClinicStore {
       const patientId=str(x.patientId,'Paciente',80);this.find(actor,'patients',patientId)
       return this.insert(actor,kind,{patientId,practitioner:actor.username,specialty:str(x.specialty,'Especialidad',120),
         complaint:text(x.complaint,'Motivo de consulta',2000),mode:['kira','manual','mixed'].includes(String(x.mode))?x.mode:'mixed',
+        confidentialPsychotherapy:actor.role==='psychologist'||/(?:psic[oó]log|psycholog|psicoterapi|psychiatr|psiquiatr)/iu.test(String(x.specialty)),
         history:'',exam:'',assessment:'',plan:'',status:'draft',reviewedVersion:null,signedBy:null,signedAt:null})
     }
     if(kind==='appointments') {
