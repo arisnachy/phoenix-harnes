@@ -15,6 +15,11 @@ test('PHOENIX clinic page renders a real clinical workbench with valid inline Ja
  assert.match(html, /No copies identificadores/)
 
  assert.match(html, /patient-options/)
+ assert.match(html, /openMedicalHistory/)
+ assert.match(html, /saveMedicalHistory/)
+ assert.match(html, /draftInterview/)
+ assert.match(html, /criticalAcknowledged/)
+ assert.match(html, /Este registro no envía avisos automáticos/)
  assert.match(html, /resources\[0\]\?\.\[0\]/)
  assert.match(html, /dispense/)
  assert.match(html, /emailVerified/)

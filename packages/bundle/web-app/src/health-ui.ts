@@ -79,12 +79,14 @@ function actionFor(o){
  let actions=[];
  if(tab==="assignments")actions=[["revokePatient","Revocar acceso"]];
  if(tab==="patients"&&["admin","clinician","reception"].includes(actor.role))actions=[["contactEvidence","Consentimiento"],
-   ...(actor.role==="clinician"?[["allergyReview","Revisar alergias"]]:[])];
+   ...(actor.role==="clinician"?[["allergyReview","Revisar alergias"],["openMedicalHistory","Historia longitudinal"]]:[])];
  if(tab==="encounters"&&o.status!=="signed"&&o.practitioner===actor.username)
-   actions=[["interview","Entrevista Kira"],["document","Documentar"],["review","Revisar"],["sign","Firmar"]];
+   actions=[["interview","Entrevista Kira"],["draftInterview","Preparar SOAP desde entrevista"],
+     ["document","Documentar"],["review","Revisar"],["sign","Firmar"]];
  if(tab==="prescriptions"&&actor.role==="pharmacy"&&o.status==="prescribed")actions=[["dispense","Dispensar"]];
  if(tab==="orders")actions=o.status==="ordered"&&((actor.role==="lab"&&o.modality==="laboratory")||(actor.role==="radiology"&&o.modality==="imaging"))?[["result","Resultado"]]:
- o.status==="resulted"&&actor.role==="clinician"?[["reviewOrder","Revisar"]]:[];
+ (o.status==="resulted"||o.status==="critical-pending-review")&&actor.role==="clinician"?
+ [["reviewOrder",o.status==="critical-pending-review"?"Reconocer resultado crítico":"Revisar"]]:[];
  if(tab==="inventory")actions=[["receive","Movimiento"]];
  if(tab==="invoices")actions=[["pay","Cobrar"]];
  if(tab==="appointments"&&o.status==="scheduled")actions=[["completeAppointment","Completar"],...(actor.role==="clinician"&&o.practitioner===actor.username?[["sendReminder","Kira: enviar recordatorio"]]:[])];
@@ -120,7 +122,8 @@ function render(){
  if(tab==="patients")cols=[["Nombre","name"],["Nacimiento","dateOfBirth"],["Email","email"],["Consentimiento","emailConsent"]];
  if(tab==="encounters")cols=[["Motivo","complaint"],["Especialidad","specialty"],["Profesional","practitioner"],["Estado","status"]];
  if(tab==="appointments")cols=[["Profesional","practitioner"],["Inicio","startsAt"],["Estado","status"]];
- if(tab==="orders")cols=[["Tipo","modality"],["Estudio","description"],["Estado","status"]];
+ if(tab==="orders")cols=[["Tipo","modality"],["Estudio","description"],["Estado","status"],
+   ["Crítico indicado por laboratorio","critical"]];
  if(tab==="prescriptions")cols=[["Medicamento","medication"],["Firmado por","signedBy"],["Estado","status"]];
  if(tab==="inventory")cols=[["Producto","item"],["Unidades","units"]];
  if(tab==="invoices")cols=[["Concepto","concept"],["Total (centavos)","amountCents"],["Pagado","paidCents"]];
@@ -190,6 +193,47 @@ async function execute(action,id){
   if(!confirm("¿Crear una copia consistente del expediente cifrado?"))return;
   const result=await api("backups","POST",{});
   notice("Respaldo verificado: "+result.backup.name+" · "+result.backup.records+" registros");return load();
+ }
+ if(action==="openMedicalHistory"){
+  const patient=data.patients?.find(x=>x.id===id);
+  if(!patient||actor.role!=="clinician")throw Error("Historia longitudinal no autorizada");
+  current={kind:"medicalHistory",patientId:id};
+  const sections=[
+    ["pastMedical","Antecedentes personales patológicos"],
+    ["pastSurgical","Antecedentes quirúrgicos"],
+    ["familyHistory","Antecedentes familiares"],
+    ["currentMedications","Medicación habitual"],
+    ["vaccinations","Vacunación documentada"],
+    ["habits","Hábitos y contexto"],
+    ["problems","Problemas activos confirmados"],
+  ];
+  const fields=sections.map(([key,label])=>
+    '<label for="history-'+key+'">'+label+'</label>'+
+    '<textarea id="history-'+key+'">'+safe(patient.medicalHistory?.[key]||"")+'</textarea>').join("");
+  document.getElementById("view").insertAdjacentHTML("beforeend",
+    box("Historia longitudinal · "+safe(patient.name),
+      '<p class="notice">Solo el médico asignado puede revisar y actualizar estos antecedentes. Un campo vacío significa no documentado, nunca ausencia de patología.</p>'+
+      fields+button("saveMedicalHistory","Guardar antecedentes revisados")));
+  return;
+ }
+ if(action==="saveMedicalHistory"){
+  if(actor.role!=="clinician"||current?.kind!=="medicalHistory")throw Error("Editor no autorizado");
+  const patient=data.patients?.find(x=>x.id===current.patientId);
+  if(!patient)throw Error("Paciente no disponible");
+  const keys=["pastMedical","pastSurgical","familyHistory","currentMedications","vaccinations","habits","problems"];
+  const record=Object.fromEntries(keys.map(key=>[key,val("history-"+key)]));
+  if(!confirm("¿Confirma que verificó estos antecedentes con las fuentes disponibles?"))return;
+  await api("patients/"+patient.id,"PATCH",{version:patient.version,action:"history",record});
+  current=null;notice("Historia longitudinal cifrada y auditada.");return load();
+ }
+ if(action==="draftInterview"){
+  const encounter=data.encounters?.find(x=>x.id===id);
+  if(!encounter||encounter.practitioner!==actor.username)throw Error("Consulta ajena o inexistente");
+  if(!confirm("¿Preparar un borrador subjetivo solo con respuestas documentadas, sin diagnóstico inferido?"))return;
+  await api("encounters/"+id,"PATCH",{version:encounter.version,action:"draft-from-interview"});
+  await load();await execute("document",id);
+  notice("Borrador preparado. Complete y valide el SOAP antes de revisarlo o firmarlo.");
+  return;
  }
  if(action==="allergyReview"){
   const patient=data.patients?.find(x=>x.id===id);if(!patient)throw Error("Paciente no encontrado");
@@ -282,8 +326,16 @@ async function execute(action,id){
  if(action==="sign"){if(!confirm("¿Confirmas tu firma profesional sobre la versión revisada?"))return;patch.action="sign"}
  if(action==="result"){
   patch.action="result";patch.result=prompt("Informe verificado del estudio:");if(patch.result===null)return;
+  patch.critical=confirm("¿El laboratorio o imagenología clasificó el resultado como CRÍTICO? Aceptar = sí; Cancelar = no.");
+  if(patch.critical)alert("RESULTADO CRÍTICO: es necesaria una comunicación asistencial directa urgente. Este registro no envía avisos automáticos.");
  }
- if(action==="reviewOrder"){patch.action="review"}
+ if(action==="reviewOrder"){
+  patch.action="review";
+  if(resource.critical===true){
+   if(!confirm("Resultado crítico: ¿revisó el informe y realizó la gestión asistencial urgente correspondiente?"))return;
+   patch.criticalAcknowledged=true;
+  }
+ }
  if(action==="receive"){patch.delta=Number(prompt("Movimiento de existencias (+/-):"));if(!patch.delta)return}
  if(action==="pay"){patch.paymentCents=Number(prompt("Pago recibido (centavos):"));if(!patch.paymentCents)return}
  if(action==="completeAppointment"){patch.status="completed"}
