@@ -58,9 +58,10 @@ export function replayStrategy(symbol,bars,strategy,start=60,end=bars.length) {
         const gross=exitPrice/position.entry;
         const net=(gross*(1-FEE_RATE)-1)*fraction*position.allocation;
         equity+=net;
+        position.realizedReturn+=net/position.initialAllocation;
         position.allocation-=position.allocation*fraction;
         if(fraction===1){
-          returns.push((exitPrice/position.entry)*(1-FEE_RATE)*(1-FEE_RATE)-1);
+          returns.push(position.realizedReturn-FEE_RATE);
           position=null;
         }
       }
@@ -74,7 +75,7 @@ export function replayStrategy(symbol,bars,strategy,start=60,end=bars.length) {
         if(entry>0&&signal.atr>0){
           const allocation=.05;
           equity-=allocation*FEE_RATE;
-          position={entry,allocation,plan:exitPlan(entry,signal.atr,strategy)};
+          position={entry,allocation,initialAllocation:allocation,realizedReturn:0,plan:exitPlan(entry,signal.atr,strategy)};
           trades++;
         }
       }
