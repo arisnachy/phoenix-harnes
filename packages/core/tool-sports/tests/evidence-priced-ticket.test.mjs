@@ -7,12 +7,12 @@ const kick='2026-10-28T23:00:00Z'
 const board=(url)=>{
   const day=String(url).match(/dates=([0-9]{8})/u)?.[1]
   if(!String(url).includes('/soccer/eng.1/'))return{events:[]}
-  if(!['20261028','20261027','20261026'].includes(day))return{events:[]}
+  if(!['20261028','20261027','20261026','20261025'].includes(day))return{events:[]}
   const pre=day==='20261028'
   return{events:Array.from({length:5},(_,i)=>({
-    id:String(500+i),date:pre?kick:day==='20261027'?'2026-10-27T21:00:00Z':'2026-10-26T21:00:00Z',
+    id:String(500+i),date:pre?kick:day==='20261027'?'2026-10-27T21:00:00Z':day==='20261026'?'2026-10-26T21:00:00Z':'2026-10-25T21:00:00Z',
     status:{type:{state:pre?'pre':'post'}},competitions:[{competitors:[
-      {homeAway:'home',team:{id:String(i)+'1',displayName:'Home '+i},...(!pre?{score:'3'}:{})},
+      {homeAway:'home',team:{id:String(i)+'1',displayName:'Home '+i,logo:'https://a.espncdn.com/home-'+i+'.png'},...(!pre?{score:'3'}:{})},
       {homeAway:'away',team:{id:String(i)+'2',displayName:'Away '+i},...(!pre?{score:'0'}:{})},
     ]}],
   }))}}
@@ -40,6 +40,10 @@ test('six-legged evidence path quotes only same bookmaker and preserves the requ
   assert.equal(complete.priced,true)
   assert.equal(complete.card.props.legs.length,5)
   assert.equal(complete.card.props.stake,'100.00')
+  assert.equal(complete.card.props.requestedLegs,5)
+  assert.match(complete.card.props.legs[0].homeLogo,/a\\.espncdn\\.com/)
+  assert.match(complete.card.props.legs[0].rationale,/ESPN últimos 3 juegos/)
+  assert.match(complete.card.props.note,/NO son probabilidades calibradas/)
   assert.equal(complete.placed,false)
   assert.equal(complete.missingQuotes,0)
 })
