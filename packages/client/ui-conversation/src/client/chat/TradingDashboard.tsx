@@ -330,16 +330,32 @@ export function TradingDashboard({ initial }: Props) {
           <h4>Radar de estrategias</h4>
           {state.signals.length === 0 ? <p className={css.empty}>Todavía no hay un análisis confirmado en esta sesión.</p>
             : <div className={css.rows}>
-              {state.signals.map(signal => (
-                <div key={signal.symbol} className={css.row}>
-                  <div><strong>{signal.symbol}</strong><small>{signal.strategy} · {signal.regime}</small>
-                    <span className={css.tradingReason}>{signal.reason}</span></div>
-                  <span data-signal={signal.action}>
-                    {signal.action === 'buy' ? 'COMPRAR' : signal.action === 'sell' ? 'VENDER' : 'ESPERAR'}
+              {state.signals.map(signal => {
+                const evidence = state.execution?.find(item => item.symbol === signal.symbol)
+                // A technical BUY is NOT an exchange order or a PAPER fill.
+                const status = !running ? 'paused' : evidence?.status ?? 'scan-only'
+                const label = status === 'paused' ? 'PAUSADO'
+                  : status === 'executed' ? 'OPERACIÓN PAPER'
+                    : status === 'blocked' ? 'BLOQUEADA'
+                      : status === 'position-open' ? 'POSICIÓN ABIERTA'
+                        : status === 'deferred' ? 'EN RADAR'
+                          : status === 'watch' ? 'OBSERVAR'
+                            : status === 'scan-only' ? 'SEÑAL'
+                              : signal.action === 'sell' ? 'SALIDA DEFENSIVA' : 'ESPERAR'
+                return <div key={signal.symbol} className={css.row}>
+                  <div><strong>{signal.symbol}</strong><small>{strategyLabel(signal.strategy)} · {signal.regime}</small>
+                    <span className={css.tradingReason}>{signal.reason}</span>
+                    <span className={css.tradingReason}>
+                      {status === 'paused'
+                        ? 'Motor detenido: no se envían órdenes automáticas'
+                        : evidence?.explanation ?? 'Señal técnica sin recibo de ejecución'}
+                    </span></div>
+                  <span data-signal={status === 'executed' ? 'buy' : status === 'blocked' ? 'sell' : 'hold'}>
+                    {label}
                   </span>
-                  <small>{signal.score}/100</small>
+                  <small className={css.radarScore}>{signal.score}/100</small>
                 </div>
-              ))}
+              } )}
             </div>}
           <p className={css.footnote}>{state.rationale}</p>
         </section>
