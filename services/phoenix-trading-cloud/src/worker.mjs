@@ -71,6 +71,12 @@ function mark(state,quotes){
     p.unrealizedPct=100*p.unrealizedPnl/p.cost;
   }
 }
+function marketFailureReason(reason){
+  // Per-symbol diagnostics may be persisted, so only allow documented codes.
+  const code=reason instanceof Error?reason.message:'';
+  return /^(market-rate-limited|market-http-[0-9]{3}|insufficient-bars|malformed-bars|invalid-bars|no-confirmed-candles|stale-bars|bad-analysis-input)$/.test(code)
+    ? code:'unverified-market-data';
+}
 async function cycle(env,now=Date.now()){
   if(!env.DB)throw new Error('D1_NOT_CONFIGURED');
   const state=await read(env.DB);
@@ -129,7 +135,7 @@ async function cycle(env,now=Date.now()){
       verifiedScans=scanned.filter(result=>result.status==='fulfilled').length;
       const signals=scanned.map((res,i)=>res.status==='fulfilled'?res.value:
         {symbol:selected[i],action:'hold',score:0,strategy:'market-error',
-          reason:'Market evidence unavailable'});
+          reason:marketFailureReason(res.reason)});
       signals.sort((a,b)=>b.score-a.score);
       state.signals=signals;
       state.lastScannedSymbols=selected;
