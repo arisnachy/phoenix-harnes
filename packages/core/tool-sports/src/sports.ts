@@ -249,7 +249,8 @@ export type MarketOutcome = MarketSelection & { price:number;home:string;away:st
 export async function marketOdds(sportKey:string,markets='h2h',env:NodeJS.ProcessEnv=process.env,fetcher:typeof fetch=fetch):Promise<MarketOutcome[]> {
   if(!/^[a-z0-9_]{3,80}$/u.test(sportKey)||!/^(h2h|totals|spreads)(,(h2h|totals|spreads))*$/u.test(markets))throw Error('Mercado inválido')
   if(!hasSportsPermission('odds',env)){
-    if(env.THEODDSAPI_API_KEY?.trim())return fetchTheOddsApi(sportKey,markets,env.THEODDSAPI_API_KEY,fetcher)
+    const alternateKey=env.THEODDSAPI_API_KEY
+    if(alternateKey?.trim())return fetchTheOddsApi(sportKey,markets,alternateKey,fetcher)
     if(!hasSportsPermission('espn',env))throw Error('No hay proveedor de cuotas: ESPN deshabilitado, THE_ODDS_API_KEY y THEODDSAPI_API_KEY ausentes.')
     const fromEspn=await fetchPublicEspnOdds(sportKey,markets,<T>(url:string)=>getFeed<T>(url,fetcher))
     return fromEspn.map(quote=>({ ...quote,sportKey,source:'ESPN Site/Core (sin clave)' }))
