@@ -67,7 +67,7 @@ export function apply(ctx: Context): void {
     isConcurrencySafe:()=>true,
     async execute(args){
       const result=await chatGames(args.sport,args.league,args.date)
-      const normalize=(name:string)=>name.normalize('NFD').replace(/[\\u0300-\\u036f]/gu,'').toLowerCase().trim()
+      const normalize=(name:string)=>name.normalize('NFD').replace(/[\u0300-\u036f]/gu,'').toLowerCase().trim()
       const matches=(name:unknown,wanted:string)=>typeof name==='string'&&normalize(name).includes(normalize(wanted))
       const selected=result.items.filter(game=>{
         const props=game.props
