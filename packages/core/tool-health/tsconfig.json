@@ -22,6 +22,9 @@
     },
     {
       "path": "../tools"
+    },
+    {
+      "path": "../../interaction/user-questions"
     }
   ]
 }

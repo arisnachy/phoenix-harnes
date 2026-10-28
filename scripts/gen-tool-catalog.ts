@@ -466,12 +466,12 @@ const TOOL_PACKAGES: ToolPackage[] = [
     pkg: '@phoenix-ai/dsh-tool-health',
     dir: 'tool-health',
     source: 'packages/core/tool-health/src/index.ts',
-    requires: ['ctx.tools', 'ctx.systemPrompt'],
+    requires: ['ctx.tools', 'ctx.systemPrompt', 'ctx.userQuestions'],
     writes: ['tool/call', 'tool/result'],
     async mount(ctx) {
       await ctx.plugin(ToolHealth)
     },
-    note: 'Synthetic-only clinical interview planning and mail requirements; no records, decisions or deliveries.',
+    note: 'Clinician-driven sensitive ASK prompts and de-identified planning; no patient data, signing, or clinical record writes.',
   },
   {
     pkg: '@phoenix-ai/dsh-tool-sports',
