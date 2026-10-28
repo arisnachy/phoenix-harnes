@@ -1,41 +1,41 @@
-# PHOENIX Health Engine / Clinical Flow (piloto)
+# PHOENIX Health Engine / Clinical Flow (pilot)
 
 English | [中文](phoenix-health-engine.zh.md)
 
-PHOENIX Health es un módulo **opcional** del Host. No sustituye a Kira, Eclipse ni a los demás motores. Su interfaz clínica local está deshabilitada por defecto y **no está aprobada para atender pacientes reales**.
+PHOENIX Health is an **optional** Host module. It does not replace Kira, Eclipse, or other engines. Its local clinical workspace is disabled by default and is **not approved for real-patient care**.
 
-## Estado implementado
+## Implemented state
 
-- `PHOENIX_HEALTH_ENABLED=1` habilita `/health` únicamente cuando el Host escucha en `127.0.0.1`.
-- El expediente usa SQLite persistente con contenidos clínicos cifrados mediante AES-256-GCM, versiones y auditoría encadenada por HMAC. El archivo SQLite y los metadatos no están cifrados por completo.
-- La clínica exige autenticación local de personal, roles, CSRF, permisos por organización y asignación explícita de equipo asistencial por paciente.
-- Admite episodios, documentación SOAP, revisión y firma registrada, recetas, solicitudes y resultados, inventario transaccional, agenda, caja y seguimiento.
-- El consentimiento de comunicaciones requiere evidencia y puede revocarse; una marca de verificación aislada no equivale a consentimiento.
-- Las copias locales usan backup consistente de SQLite y verificación de integridad; no reemplazan respaldos cifrados externos ni recuperación formal de claves.
-- Gmail permite únicamente recordatorios neutros y autorizados, después de verificar el perfil real de la cuenta remitente; no adjunta datos clínicos.
+- `PHOENIX_HEALTH_ENABLED=1` enables `/health` only when the Host binds to `127.0.0.1`.
+- Longitudinal records use persistent SQLite with AES-256-GCM-encrypted clinical payloads, version guards, and HMAC-linked audit events. The entire SQLite file and metadata are **not** encrypted.
+- The clinic requires local staff authentication, roles, CSRF, organization boundaries, and explicit patient care-team assignment.
+- Encounters support interview answers, clinician-entered longitudinal history, SOAP drafts based solely on recorded answers, review and recorded signing; orders, results, prescriptions, stock, appointments, billing, and follow-ups remain governed by server permissions.
+- Communication consent requires evidence and supports revocation. A checkbox alone is insufficient.
+- Local backup uses consistent SQLite snapshots and integrity checks; it does not replace encrypted off-site backups and formal key recovery.
+- Gmail sends only authorized neutral reminders after confirming the connected sender profile; it does not attach clinical records.
 
-## Flujo profesional y ASK
+## Professional and ASK workflow
 
-1. El profesional accede al portal clínico y a un paciente asignado bajo una sesión autenticada.
-2. Kira propone preguntas genéricas con `health_interview_plan` y `health_copilot_ask`; el ASK existente pregunta si guía Kira, el profesional o ambos.
-3. ASK marca las preguntas como sensibles y no confirma respuestas automáticas, caducadas o ausentes; los datos clínicos reales se introducen en el expediente protegido.
-4. El profesional documenta el episodio en SOAP y verifica antecedentes, alergias, urgencias, exploración y resultados. La IA no puede inventar negativos.
-5. Las órdenes, recetas y notas requieren los controles y revisiones del servidor; la firma queda ligada a la versión revisada.
-6. La agenda y los recordatorios se ejecutan solo cuando se cumplen permisos, evidencias de consentimiento e identidad del remitente.
+1. An authenticated clinician opens the clinic workspace and a patient assigned to their care team.
+2. Kira uses `health_interview_plan` and `health_copilot_ask` for generic questions. The existing ASK provider selects Kira-led, professional-led, or mixed guidance.
+3. ASK uses sensitive prompts and does not accept automatic, expired, or absent answers as facts. Identifiable clinical answers stay inside the protected record.
+4. The professional reviews medical history, allergies, urgency, examination, and results. A subjective SOAP draft may use recorded interview answers, but it must not invent negative findings.
+5. Orders, prescriptions, and clinical notes require server-side checks. Signing binds to the reviewed version. A manually flagged critical result requires explicit acknowledgment by the responsible clinician and direct clinical escalation; the module **does not notify clinicians automatically**.
+6. Appointment reminders require verified permissions, auditable consent, and sender identity.
 
-## Límites de seguridad y producción
+## Security and production limitations
 
-- `health_copilot_ask` no lee ni envía datos identificables del expediente a modelos; falta un broker seguro de contexto clínico con permisos y consentimiento.
-- La revisión de alergias, dosis e interacciones exige atestación humana; no existe aún un catálogo farmacológico de República Dominicana validado automáticamente.
-- Faltan verificación de licencia e identidad profesional, firma electrónica legal, pruebas E2E reales de navegador, auditoría independiente y validación clínica y jurídica.
-- Faltan conexiones FHIR/HL7, LIS, PACS/DICOMweb, ARS, portal paciente seguro, redundancia y recuperación formal fuera del equipo.
-- La activación para uso real exige seguridad, privacidad, pruebas y autorizaciones normativas adicionales; **el PR #1192 no constituye certificación de producción**.
+- `health_copilot_ask` cannot read or send identifiable clinical record content to models. A consent- and role-aware clinical context broker remains to be designed and validated.
+- Allergy, dosing, and interaction review requires clinician attestation; there is no automatically validated Dominican Republic drug catalog.
+- Professional-license checks, legally valid e-signatures, real browser E2E tests, independent audit, and clinical/legal validation are still missing.
+- FHIR/HL7, LIS, PACS/DICOMweb, health-insurer integration, a secure patient portal, external redundancy, and formal recovery remain unimplemented.
+- Actual clinical use requires further privacy, security, testing, and regulatory authorization. **PR #1192 does not constitute production certification.**
 
-## Activación para ensayos sintéticos
+## Run with synthetic test data
 
 ```powershell
 $env:PHOENIX_HEALTH_ENABLED = "1"
 pnpm phoenix
 ```
 
-Consulte `packages/bundle/web-app/HEALTH-OPERATOR.md` para los controles del piloto. No use información real de pacientes hasta completar la validación.
+Read `packages/bundle/web-app/HEALTH-OPERATOR.md` for pilot controls. Do not use real patient information until validation is complete.
