@@ -130,7 +130,7 @@ function parseDuckDuckGo(html: string): WebSearchSource[] {
     let snippet = ''
     // Only inspect markup before the next result title to prevent cross-result snippets.
     const nextTitle = anchors.slice(index + 1).find(next => /\bresult__a\b/iu.test(attribute(next[0], 'class') ?? ''))
-    const start = (entry.index ?? 0) + tag.length
+    const start = entry.index + tag.length
     const end = nextTitle?.index ?? html.length
     const between = html.slice(start, Math.min(end, start + 3000))
     const match = between.match(/<(?:a|div)\b[^>]*class=["'][^"']*\bresult__snippet\b[^"']*["'][^>]*>[\s\S]*?<\/(?:a|div)>/iu)
