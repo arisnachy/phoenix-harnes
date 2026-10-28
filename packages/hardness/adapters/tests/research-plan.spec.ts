@@ -25,6 +25,7 @@ describe('Phoenix academic research intake and length planning', () => {
   it('only asks for truly missing fields, in one intake bundle', () => {
     const result = planAcademicResearch({ entry: 'vancouver', document_type: 'thesis', target_pages: 100 })
     expect(result.missing_fields).toEqual([
+      'nivel de tesis: licenciatura, maestría o doctorado',
       'institución', 'participantes', 'si las páginas incluyen portada, bibliografía y anexos',
     ])
   })
@@ -33,6 +34,30 @@ describe('Phoenix academic research intake and length planning', () => {
       cover: { institution: 'Universidad', author: 'Autor' } })
     expect(result.pages.page_plan.some(x => x.kind === 'results')).toBe(false)
     expect(result.reporting_standard_hint).toContain('resultados esperados')
+  })
+  it('provides advisory reference targets by thesis level without asserting university rules', () => {
+    for (const [level, min, max] of [
+      ['bachelors', 20, 40], ['masters', 40, 80], ['doctorate', 100, null],
+    ] as const) {
+      const result = planAcademicResearch({ intent: 'Tesis APA', level, document_type: 'thesis' })
+      expect(result.reference_guidance).toMatchObject({ min, max, advisory_only: true, verified_count: 0 })
+      expect(result.citation_guidance.style).toBe('apa7')
+      expect(result.citation_guidance.requirements).toContain('APA 7: citas autor-fecha')
+      expect(result.visual_guidance.design_preset).toBe('academic_classic')
+      expect(result.visual_guidance.safeguards.join(' ')).toContain('datos reales')
+    }
+    const unknown = planAcademicResearch({ intent: 'Tesis Vancouver', document_type: 'thesis' })
+    expect(unknown.reference_guidance).toBeNull()
+    expect(unknown.missing_fields).toContain('nivel de tesis: licenciatura, maestría o doctorado')
+    expect(unknown.citation_guidance.requirements).toContain('citas numéricas por orden de primera aparición')
+  })
+  it('infers an explicitly requested thesis and uses a requested bibliographic format', () => {
+    const thesis = planAcademicResearch({ intent: 'Preparar tesis sobre políticas públicas', level: 'bachelors',
+      citation_style: 'vancouver' })
+    expect(thesis.document_type).toBe('thesis')
+    expect(thesis.citation_style).toBe('vancouver')
+    expect(thesis.reference_guidance?.min).toBe(20)
+    expect(thesis.missing_fields).not.toContain('entrada: APA 7, Vancouver o Artículo científico')
   })
   it('rejects unsafe or impossible page budgets', () => {
     expect(() => planAcademicResearch({ entry: 'apa7', target_pages: -1 })).toThrow()
