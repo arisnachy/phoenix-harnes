@@ -16,6 +16,20 @@ export interface FreeSearchProviderOptions {
 const DEFAULT_ENGINES: readonly FreeSearchEngine[] = ['bing', 'duckduckgo']
 const DEFAULT_TIMEOUT_MS = 8_000
 
+/** Cancellable hedge timer so the backup never starts after a successful primary search. */
+function hedgeDelay(ms: number, signal: AbortSignal): Promise<void> {
+  if (signal.aborted) return Promise.resolve()
+  return new Promise(resolve => {
+    const finish = () => {
+      clearTimeout(timer)
+      signal.removeEventListener('abort', finish)
+      resolve()
+    }
+    const timer = setTimeout(finish, ms)
+    signal.addEventListener('abort', finish, { once: true })
+  })
+}
+
 /** Stable provider id used by `ctx.web`. */
 export const FREE_SEARCH_PROVIDER_ID = 'free-html'
 
@@ -40,31 +54,47 @@ export class FreeSearchProvider implements WebSearchProvider {
     if (!this.available()) throw new WebError('no free search engine is configured', 'WEB_PROVIDER_UNAVAILABLE')
     if (signal?.aborted === true) throw signal.reason ?? new WebError('web search was aborted', 'WEB_SEARCH_ABORTED')
 
-    for (const engine of this.engines) {
-      const response = await this.fetchEngine(engine, request.query, signal)
-      if (!response.ok) continue
-      const sources = engine === 'bing' ? parseBing(await response.text()) : parseDuckDuckGo(await response.text())
-      if (sources.length > 0) {
+    // Give the primary a short head start; a stalled engine cannot serialize the fallback.
+    const controller = new AbortController()
+    const combined = signal === undefined ? controller.signal : AbortSignal.any([signal, controller.signal])
+    try {
+      const attempts = this.engines.map(async (engine, index): Promise<WebSearchResult> => {
+        if (index > 0) await hedgeDelay(Math.min(index, 2) * 350, combined)
+        if (combined.aborted) throw combined.reason
+        const sources = await this.fetchEngine(engine, request.query, combined)
+        if (sources.length === 0) throw new WebError('search engine returned no results', 'WEB_PROVIDER_TRANSIENT')
         return {
           sources: capSources(sources, request.maxResults),
           truncated: request.maxResults !== undefined && sources.length > request.maxResults,
         }
-      }
+      })
+      const result = await Promise.any(attempts)
+      if (signal?.aborted === true) throw signal.reason
+      return result
+    } catch {
+      if (signal?.aborted === true) throw signal.reason ?? new WebError('web search was aborted', 'WEB_SEARCH_ABORTED')
+      throw new WebError('no free search engine returned results', 'WEB_PROVIDER_TRANSIENT')
+    } finally {
+      controller.abort()
     }
-    throw new WebError('no free search engine returned results', 'WEB_PROVIDER_TRANSIENT')
   }
 
-  private async fetchEngine(engine: FreeSearchEngine, query: string, signal?: AbortSignal): Promise<Response> {
+  private async fetchEngine(engine: FreeSearchEngine, query: string, signal: AbortSignal): Promise<WebSearchSource[]> {
     const endpoint = engine === 'bing' ? 'https://www.bing.com/search' : 'https://html.duckduckgo.com/html/'
     const url = `${endpoint}?q=${encodeURIComponent(query).replace(/%20/g, '+')}`
     const controller = new AbortController()
-    const timer = setTimeout(() =>{  controller.abort(new Error('free search timeout')) }, this.timeoutMs)
-    const combined = signal === undefined ? controller.signal : AbortSignal.any([signal, controller.signal])
+    const timer = setTimeout(() => { controller.abort(new Error('free search timeout')) }, this.timeoutMs)
+    const combined = AbortSignal.any([signal, controller.signal])
     try {
-      return await this.fetcher(url, { signal: combined, headers: { accept: 'text/html' } })
+      const response = await this.fetcher(url, { signal: combined, headers: { accept: 'text/html' } })
+      if (!response.ok) return []
+      // Keep the deadline active through body consumption, not only the initial headers.
+      const html = await response.text()
+      if (combined.aborted) return []
+      return engine === 'bing' ? parseBing(html) : parseDuckDuckGo(html)
     } catch (error) {
-      if (signal?.aborted === true) throw signal.reason ?? error
-      return new Response('', { status: 599 })
+      if (signal.aborted) throw signal.reason ?? error
+      return []
     } finally {
       clearTimeout(timer)
     }
