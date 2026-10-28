@@ -2,7 +2,7 @@
 import type { Context } from '@phoenix-ai/cordis'
 import { defineTool } from '@phoenix-ai/dsh-tools'
 import type {} from '@phoenix-ai/dsh-system-prompt'
-import { sportsCatalog, discoverEspnLeagues, chatGames, marketOdds, pricedTicket, type MarketSelection } from './sports.ts'
+import { sportsCatalog, discoverEspnLeagues, chatGames, compactSportsSchedule, marketOdds, pricedTicket, type MarketSelection } from './sports.ts'
 import { getMlbPitcherReport } from './mlb.ts'
 import { researchTicket, autoResearchTicket, type ResearchTicketLeg } from './research-ticket.ts'
 import { sportsPromptNeeded } from './sports-prompt.ts'
@@ -12,7 +12,7 @@ export const inject = ['tools','systemPrompt']
 const GUIDANCE = [
   'Solo cuando el usuario pida deportes, juegos del día, jugadores, cuotas o tickets, consulta las herramientas sports_chat_catalog, sports_chat_discover, sports_chat_games, sports_chat_mlb_pitchers, sports_chat_odds, sports_chat_ticket, sports_chat_ticket_research o sports_chat_ticket_research_auto.',
   'NO abras pantallas independientes ni crees entradas de menú. Antes de redactar una cartelera o boleto, llama sports_chat_games y, cuando corresponda, sports_chat_mlb_pitchers / sports_chat_odds / sports_chat_ticket. Phoenix dibuja de manera nativa las tarjetas verificadas de los resultados. NO copies el JSON de los resultados en la respuesta, NO escribas fences generative-ui ni bloques de código, aunque una herramienta los incluya en sus datos. No dibujes tickets con caracteres ASCII, bordes de texto ni bloques de código etiquetados text: para eventos y selecciones reales usa exclusivamente los contratos nativos, conservando la presentación original de Phoenix. Si el usuario quiere solo una demostración, descríbela explícitamente como ficticia y no introduzcas cuotas o equipos inventados como hechos. Explica los hallazgos y las fuentes con un texto humano breve.',
-  'Para muchos partidos muestra como máximo seis tarjetas relevantes y ofrece ampliar; nunca inventes eventos, cuotas, lanzadores, lesiones ni resultados ausentes.',
+  'Cuando el usuario pida una cartelera, deja que sports_chat_games entregue una sola cartelera compacta en el chat con hasta 25 encuentros reales. Para un partido, cruce o equipo concreto, pasa team, opponent o eventId a sports_chat_games: así se mantiene la sports_game_card detallada existente. No cambies el menú, la página ni la caja del chat. Nunca inventes eventos, cuotas, lanzadores, lesiones ni resultados ausentes.',
   'CONTRATO DE PATAS: cuando el usuario pide 5 patas, el resultado DEBE contener exactamente cinco selecciones verificadas; jamás presentes 1 de 5 como ticket completo. Si faltan datos, muestra explícitamente el número conseguido y el número pendiente como borrador incompleto. Respeta igualmente cualquier otro número de 1 a 6. No afirmes que una combinada ganará.',
   'Si piden un ticket y sports_chat_odds no devuelve cuotas, NO termines con NO BET. Usa sports_chat_ticket_research_auto con count igual al número solicitado cuando no dispongas de IDs: esta herramienta investiga carteleras y registros de los equipos en varias ligas y propone hasta esa cantidad de eventos reales, sin cuotas. Si la investigación especializada ya confirmó tus eventId y fundamentos, llama sports_chat_ticket_research con requestedLegs igual al número solicitado y todas las patas. El resultado con menos patas debe identificarse como borrador incompleto. No afirmes que los registros tempranos sean probabilidades calibradas. Si no hay partidos futuros verificados, explica la limitación.',
   'Usa ESPN Site/Core como proveedor gratuito para marcadores y, cuando ESPN los publique, moneylines sin claves; usa The Odds API solo como opción ampliada si existe THE_ODDS_API_KEY. Si ESPN no presenta cuotas, no inventes precios: sports_chat_ticket_research ofrece un ticket de pronósticos sin cotización basado en encuentros futuros verificados. sports_chat_ticket es un ticket COTIZADO y solo puede usar precios del proveedor consultados en ese momento. Ambos son simulaciones; no hay garantía de acierto. Identifica correlaciones y ausencia de predicción calibrada.',
@@ -54,19 +54,35 @@ export function apply(ctx: Context): void {
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_games',
-    description:'Eventos reales en el chat: liga, horario, estadio, equipos y estadísticas verificables. Devuelve tarjetas renderizables.',
+    description:'Cartelera compacta para múltiples eventos, y tarjetas originales detalladas cuando se filtra un partido, equipo o cruce.',
     parameters:{
       sport:{ type:'string',required:true,description:'Deporte: soccer, baseball, basketball, etc.' },
       league:{ type:'string',required:true,description:'Liga: mlb, nba, mex.1, eng.1, etc.' },
       date:{ type:'string',description:'Fecha AAAA-MM-DD, opcional: hoy en Santo Domingo.' },
+      team:{ type:'string',description:'Nombre del equipo buscado; opcional para consulta individual.' },
+      opponent:{ type:'string',description:'Segundo equipo si se busca un cruce concreto.' },
+      eventId:{ type:'string',description:'ID de evento exacto obtenido de ESPN o MLB; opcional.' },
     },
     output:{ schema:{ type:'string' },render:(_a,v)=>[{ type:'text' as const,text:v }] },
     isConcurrencySafe:()=>true,
     async execute(args){
       const result=await chatGames(args.sport,args.league,args.date)
-      return JSON.stringify({ summary:result.summary,date:result.date,source:result.source,count:result.count,
-        uiBlocks:result.items.slice(0,6),remaining:Math.max(0,result.items.length-6),
-        instruction:'Phoenix renderiza uiBlocks automáticamente en el chat. No vuelvas a imprimirlos como JSON o código; comenta datos y fuentes en prosa.' })
+      const normalize=(name:string)=>name.normalize('NFD').replace(/[\\u0300-\\u036f]/gu,'').toLowerCase().trim()
+      const matches=(name:unknown,wanted:string)=>typeof name==='string'&&normalize(name).includes(normalize(wanted))
+      const selected=result.items.filter(game=>{
+        const props=game.props
+        if(args.eventId&&props.eventId!==args.eventId)return false
+        const home=props.home as {label?:string},away=props.away as {label?:string}
+        if(args.team&&!matches(home?.label,args.team)&&!matches(away?.label,args.team))return false
+        if(args.opponent&&!matches(home?.label,args.opponent)&&!matches(away?.label,args.opponent))return false
+        return true
+      })
+      const slate=compactSportsSchedule(selected,result.date,result.source)
+      const uiBlocks=slate?[slate]:selected.slice(0,1)
+      return JSON.stringify({summary:selected.length?result.summary:'Ningún encuentro coincide con esos filtros.',
+        date:result.date,source:result.source,count:selected.length,uiBlocks,
+        remaining:Math.max(0,selected.length-25),
+        instruction:'Phoenix presenta varios partidos en una sola cartelera dentro del chat; un encuentro individual conserva su sports_game_card original. No imprimas JSON ni repliques las tarjetas en prosa.' })
     },
     presentCall:()=>({ card:'generic',title:'Buscar partidos y sus datos',kind:'read' as const }),
   }))
