@@ -10,7 +10,13 @@ class D1Fake {
   revision=0;
   fences=new Set();
   prepare(sql) {
-    return {bind:(...params)=>({
+    return {
+      first:async()=>{
+        if(sql.startsWith('SELECT revision,document FROM engine_state'))
+          return this.state?{revision:this.revision,document:JSON.stringify(this.state)}:null;
+        throw new Error('unhandled-select');
+      },
+      bind:(...params)=>({
       run:async()=>{
         if(sql.startsWith('INSERT OR IGNORE INTO engine_state')){
           if(!this.state)this.state=JSON.parse(params[0]);
