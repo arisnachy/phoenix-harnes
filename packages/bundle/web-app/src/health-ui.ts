@@ -76,7 +76,8 @@ function actionFor(o){
  if(tab==="assignments")actions=[["revokePatient","Revocar acceso"]];
  if(tab==="patients"&&["admin","clinician","reception"].includes(actor.role))actions=[["contactEvidence","Consentimiento"],
    ...(actor.role==="clinician"?[["allergyReview","Revisar alergias"]]:[])];
- if(tab==="encounters"&&o.status!=="signed"&&o.practitioner===actor.username)actions=[["document","Documentar"],["review","Revisar"],["sign","Firmar"]];
+ if(tab==="encounters"&&o.status!=="signed"&&o.practitioner===actor.username)
+   actions=[["interview","Entrevista Kira"],["document","Documentar"],["review","Revisar"],["sign","Firmar"]];
  if(tab==="prescriptions"&&actor.role==="pharmacy"&&o.status==="prescribed")actions=[["dispense","Dispensar"]];
  if(tab==="orders")actions=o.status==="ordered"&&((actor.role==="lab"&&o.modality==="laboratory")||(actor.role==="radiology"&&o.modality==="imaging"))?[["result","Resultado"]]:
  o.status==="resulted"&&actor.role==="clinician"?[["reviewOrder","Revisar"]]:[];
@@ -130,6 +131,36 @@ async function execute(action,id){
  if(action==="logout"){await api("logout","POST",{});actor=null;csrf="";data={};tab="patients";return splash()}
  if(action==="setup"){await api("setup","POST",{username:val("user"),password:val("pass"),organization:val("org")});notice("Clínica configurada. Inicia sesión.");return splash()}
  if(action==="login"){const x=await api("login","POST",{username:val("user"),password:val("pass")});csrf=x.csrf;actor=x.actor;data={};tab="patients";return load()}
+ if(action==="interview"){
+  const encounter=data.encounters?.find(x=>x.id===id);if(!encounter)throw Error("Consulta no disponible");
+  const reply=await api("interview/"+id);
+  const guide=reply.guide;
+  current={encounterId:id,field:guide.nextQuestions[0]?.key||null};
+  const questions=guide.nextQuestions.map(q=>'<li>'+safe(q.question)+'</li>').join('');
+  const controls=current.field?
+    '<label for="interview-answer">Respuesta a la primera pregunta pendiente</label>'+
+    '<textarea id="interview-answer" placeholder="Registrar respuesta obtenida por el profesional; no asumir respuestas negativas"></textarea>'+
+    '<p>'+button("saveInterview","Guardar respuesta y continuar")+'</p>':
+    '<p class="notice">Todas las preguntas de esta guía fueron registradas. El profesional debe completar la valoración clínica.</p>';
+  document.getElementById("view").insertAdjacentHTML("beforeend",
+    box("Kira · Interrogatorio dirigido",'<p class="notice">Guía determinista local. No es diagnóstico, ni se envía el expediente al modelo. Los signos de alarma requieren valoración inmediata.</p>'+
+    '<p class="muted">Ruta: '+safe(guide.pathway)+' · Modalidad: '+safe(guide.mode)+'</p><ol>'+questions+'</ol>'+controls));
+  return;
+ }
+ if(action==="saveInterview"){
+  if(!current?.encounterId||!current.field)throw Error("No hay pregunta activa");
+  const answer=val("interview-answer").trim();
+  if(!answer)throw Error("Registre la respuesta real antes de avanzar");
+  const encounter=data.encounters?.find(x=>x.id===current.encounterId);
+  if(!encounter)throw Error("Consulta no disponible");
+  const encounterId=current.encounterId,field=current.field;
+  await api("encounters/"+encounterId,"PATCH",{version:encounter.version,action:"answer",field,answer});
+  current=null;
+  await load();
+  await execute("interview",encounterId);
+  notice("Respuesta guardada en el expediente cifrado");
+  return;
+ }
  if(action==="backup"){
   if(!confirm("¿Crear una copia consistente del expediente cifrado?"))return;
   const result=await api("backups","POST",{});

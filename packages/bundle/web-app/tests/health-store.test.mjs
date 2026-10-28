@@ -275,3 +275,27 @@ test('prescription cannot bypass explicit professional allergy and pharmacology 
   assert.equal(result.safetyReview.attestedBy,'doctor1')
   assert.equal(result.safetyReview.drugInteractionCatalogChecked,false)
 })
+
+test('Kira interview reads only the assigned encounter and saves adaptive answers encrypted',t=>{
+ const {db,admin,root}=fixture(t)
+ db.createStaff(admin.actor,{username:'doctor1',password:'another-secure-password-2026',role:'clinician'})
+ db.createStaff(admin.actor,{username:'doctor2',password:'another-secure-password-2026',role:'clinician'})
+ const doctor=db.login('doctor1','another-secure-password-2026').actor
+ const other=db.login('doctor2','another-secure-password-2026').actor
+ const patient=db.create(admin.actor,'patients',{name:'Consulta dolor abdominal',dateOfBirth:'1980-01-02'})
+ db.assignPatient(admin.actor,patient.id,'doctor1','Atención clínica')
+ let encounter=db.create(doctor,'encounters',{patientId:patient.id,specialty:'Medicina familiar',complaint:'dolor abdominal',mode:'kira'})
+ assert.throws(()=>db.interviewGuide(other,encounter.id),/no asignado/)
+ const guide=db.interviewGuide(doctor,encounter.id)
+ assert.equal(guide.pathway,'abdominal')
+ assert.equal(guide.patientDataPersisted,false)
+ const field=guide.nextQuestions[0].key
+ encounter=db.update(doctor,'encounters',encounter.id,encounter.version,
+   {action:'answer',field,answer:'RespuestaClinicaCifradaUnica9876543'})
+ assert.equal(encounter.interviewAnswers[field],'RespuestaClinicaCifradaUnica9876543')
+ assert(!db.interviewGuide(doctor,encounter.id).nextQuestions.some(x=>x.key===field))
+ assert(!readFileSync(join(root,'clinic.sqlite')).includes(Buffer.from('RespuestaClinicaCifradaUnica9876543')))
+ assert.throws(()=>db.update(doctor,'encounters',encounter.id,encounter.version,
+   {action:'answer',field,answer:'Replay'}),/ya fue registrada/)
+ assert(db.audits(admin.actor).some(x=>x.action==='encounters.update'))
+})
