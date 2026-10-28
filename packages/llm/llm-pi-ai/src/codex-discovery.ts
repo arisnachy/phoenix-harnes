@@ -255,7 +255,8 @@ export function codexDiscoveryArgs(): string[] {
   ]
 }
 
-function managedCodexBin(): string | undefined {
+/** Inspect the single PHOENIX-managed Codex CLI activation marker. */
+function managedCodexRuntime(): { bin: string; signature: string } | undefined {
   const configured = process.env.DSH_HOME?.trim()
   const dshHome = configured && configured.length > 0 ? resolve(configured) : join(homedir(), '.dsh')
   const runtimeRoot = join(dshHome, 'codex-cli')
@@ -266,30 +267,40 @@ function managedCodexBin(): string | undefined {
       schema?: unknown
       version?: unknown
       bin?: unknown
+      activatedAt?: unknown
     }
     if (marker.schema !== 1 || typeof marker.version !== 'string'
       || !/^\d+\.\d+\.\d+$/u.test(marker.version) || typeof marker.bin !== 'string') return undefined
     const candidate = resolve(runtimeRoot, marker.bin)
     const boundary = runtimeRoot.endsWith(sep) ? runtimeRoot : `${runtimeRoot}${sep}`
     if (candidate !== runtimeRoot && !candidate.startsWith(boundary)) return undefined
-    return existsSync(candidate) ? candidate : undefined
+    return existsSync(candidate) ? {
+      bin: candidate,
+      signature: JSON.stringify([marker.version, marker.bin, marker.activatedAt ?? null]),
+    } : undefined
   } catch {
     return undefined
   }
 }
 
-function codexProcess(signal?: AbortSignal): ChildProcessWithoutNullStreams {
+/** Stable runtime identity used to invalidate model caches after managed CLI activation. */
+export function codexRuntimeSignature(): string {
+  return managedCodexRuntime()?.signature ?? 'system-path'
+}
+
+/** Start the same official Codex installation for model discovery and native auth. */
+export function codexProcess(signal?: AbortSignal): ChildProcessWithoutNullStreams {
   const common = {
     cwd: process.cwd(),
     env: codexEnvironment(),
     windowsHide: true,
     signal,
   }
-  const managed = managedCodexBin()
+  const managed = managedCodexRuntime()
   if (managed !== undefined) {
     return finishProcessSetup(spawn(
       process.execPath,
-      [managed, ...codexDiscoveryArgs()],
+      [managed.bin, ...codexDiscoveryArgs()],
       common,
     ))
   }
