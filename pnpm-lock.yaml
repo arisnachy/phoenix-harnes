@@ -1401,6 +1401,9 @@ importers:
 
   packages/bundle/web-app:
     dependencies:
+      '@phoenix-ai/dsh-home-paths':
+        specifier: workspace:^
+        version: link:../../util/home-paths
       '@phoenix-ai/dsh-agent-presets':
         specifier: workspace:^
         version: link:../../preset/agent-presets

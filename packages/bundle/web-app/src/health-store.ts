@@ -245,7 +245,8 @@ export class HealthClinicStore {
     return fail('Operación no admitida')
   }
   update(actor:Actor,kind:Kind,id:string,version:number,value:unknown):RecordData {
-    this.access(actor,kind,true)
+    if(kind==='orders') this.access(actor,kind)
+    else this.access(actor,kind,true)
     if(!Number.isSafeInteger(version)||version<1)fail('Versión inválida')
     const x=withLimit(value)
     if(kind==='encounters'){
