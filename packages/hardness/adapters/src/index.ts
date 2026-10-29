@@ -38,6 +38,7 @@ import { mountBinancePaperDashboardRoute } from './binance-paper-route.ts'
 import { installBinanceTradingProtocol } from './binance-trading-protocol.ts'
 import { createBinanceTradingTools } from './binance-trading-tools.ts'
 import { BinanceSpotTestnet, binanceTestnetCredentials } from './binance-spot-testnet.ts'
+import { BinanceSpotRealReadOnly } from './binance-spot-real-auth.ts'
 import { acquireBinanceTestnetAutomation } from './binance-testnet-automation.ts'
 import { BinanceCloudPaperClient, installBinanceCloudWakeBridge } from './binance-cloud-bridge.ts'
 import type { BinanceAgentOsHostService } from './binance-trading-tools.ts'
@@ -400,6 +401,15 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
       ? { apiKey: key.value, secret: secret.value }
       : undefined
   })
+  const realBinance = new BinanceSpotRealReadOnly(async () => {
+    if (secretProvider === undefined) return undefined
+    const [key, secret] = await Promise.all([
+      secretProvider.resolve(credentialRef('PHOENIX_BINANCE_REAL_API_KEY')),
+      secretProvider.resolve(credentialRef('PHOENIX_BINANCE_REAL_API_SECRET')),
+    ])
+    return key?.value && secret?.value
+      ? { apiKey: key.value, secret: secret.value } : undefined
+  })
   disposers.push(() => { binance.release() })
   const testnetAuto = acquireBinanceTestnetAutomation(
     join(dirname(binancePaperLedgerPath()), 'phoenix-binance-testnet-auto.json'), testnet,
@@ -437,7 +447,7 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
     const mountTradingRoute = (): void => {
       if (removeTradingRoute !== undefined) return
       const server = (ctx.get as unknown as (name: string) => unknown)('webServer') as GameWebRouteHost | undefined
-      if (server?.register !== undefined) removeTradingRoute = mountBinancePaperDashboardRoute(server, binance.engine, { testnet, testnetAuto: testnetAuto.engine, ...(secretProvider === undefined ? {} : { credentials: secretProvider }), ...(pluginInventory === undefined ? {} : { agentOs: pluginInventory }) })
+      if (server?.register !== undefined) removeTradingRoute = mountBinancePaperDashboardRoute(server, binance.engine, { testnet, real: realBinance, testnetAuto: testnetAuto.engine, ...(secretProvider === undefined ? {} : { credentials: secretProvider }), ...(pluginInventory === undefined ? {} : { agentOs: pluginInventory }) })
     }
     mountTradingRoute()
     disposers.push(ctx.on('internal/service', name => {
