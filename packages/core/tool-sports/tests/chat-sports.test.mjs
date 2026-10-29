@@ -49,15 +49,15 @@ test('MLB game cards show pitchers only if provided upstream',async()=>{
   assert.equal(out.items[0].props.highlights.length,1)
   assert.equal(out.items[0].props.lineups[0].confirmed,false)
 })
-test('only real bookmaker lines match a ticket; correlation is flagged',()=>{
+test('only one bookmaker may price an independently verifiable ticket; same-game products are rejected',()=>{
   const odds=[{eventId:'evt1',bookmaker:'Book1',market:'h2h',selection:'Home',point:null,price:1.8,home:'Home',away:'Away',time:'today',updatedAt:'now'},
               {eventId:'evt1',bookmaker:'Book1',market:'totals',selection:'Over',point:7.5,price:2.1,home:'Home',away:'Away',time:'today',updatedAt:'now'}]
   const selected=odds.map(({eventId,bookmaker,market,selection,point})=>({eventId,bookmaker,market,selection,point}))
-  const result=pricedTicket(selected,odds,100)
+  assert.throws(()=>pricedTicket(selected,odds,100),/mismo encuentro/)
+  const result=pricedTicket([selected[0]],odds,100)
   assert.equal(result.card.component,'sports_ticket_card')
-  assert.equal(result.card.props.combinedOdds,'3.780')
-  assert.equal(result.card.props.grossReturn,'378.00')
-  assert.match(result.warning,/mismo encuentro/)
+  assert.equal(result.card.props.combinedOdds,'1.800')
+  assert.equal(result.card.props.grossReturn,'180.00')
   assert.match(result.card.props.note,/PENDIENTE DE ACEPTACIÓN EN LA CASA/)
   assert.throws(()=>pricedTicket([{...selected[0],selection:'No existe'}],odds),/no verificable/)
   assert.throws(()=>pricedTicket([selected[0],selected[0]],odds),/duplicada/)
