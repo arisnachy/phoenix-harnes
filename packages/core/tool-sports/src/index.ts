@@ -512,7 +512,7 @@ export function apply(ctx: Context): void {
     async execute(args){
       const env=sportsEnv()
       const limit=Math.min(500,Math.max(1,args.limit??100))
-      if(args.date&&!/^\\d{4}-\\d{2}-\\d{2}$/u.test(args.date))throw Error('Fecha histórica inválida')
+      if(args.date&&!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/u.test(args.date))throw Error('Fecha histórica inválida')
       let archived:Awaited<ReturnType<typeof loadHistoricalOdds>>|null=null
       let archiveError:string|null=null
       if(args.sport&&['nba','mlb','nfl','nhl'].includes(args.sport)){
