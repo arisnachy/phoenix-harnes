@@ -96,7 +96,7 @@ function extractGame(raw:unknown):Game|null{
 }
 const compare=(value:number,threshold:number):'won'|'lost'|'push'=>
   value>threshold?'won':value<threshold?'lost':'push'
-function gradeLeg(leg:SportsBetLeg,game:Game|undefined):SportsLegGrade{
+function gradeLeg(leg:SportsBetLeg,game:Game|undefined,isBaseballSport:boolean):SportsLegGrade{
   const common={
     eventId:leg.eventId,market:leg.market,selection:leg.selection,
     bookmaker:leg.bookmaker,source:'ESPN Site API' as const,
@@ -114,18 +114,25 @@ function gradeLeg(leg:SportsBetLeg,game:Game|undefined):SportsLegGrade{
   // A provider may mark an interrupted baseball game final. House rules
   // impose different inning thresholds for moneyline and full-game totals.
   // A scoreboard-only final without enough completed inning data is not settled.
-  const isBaseball=['run_line','total','team_total','first_3_total','first_5_total',
+  const needsBaseballInnings=isBaseballSport&&['run_line','total','team_total','first_3_total','first_5_total',
     'first_3_spread','first_5_spread'].includes(leg.market)
   const completeInnings=(side:'home'|'away',required:number)=>{
     const values=side==='home'?game.homeInnings:game.awayInnings
     return values.length>=required&&values.slice(0,required).every(v=>v!==null)
   }
-  if(isBaseball&&['total','team_total'].includes(leg.market)){
+  if(needsBaseballInnings&&['total','team_total'].includes(leg.market)){
     const loser=game.home<game.away?'home':game.away<game.home?'away':null
     const valid=loser?completeInnings(loser,9):
       completeInnings('home',9)&&completeInnings('away',9)
     if(!valid)return unknown('unverifiable',
       'La casa puede exigir novena entrada agotada por equipo perdedor; marcador final sin 9 innings verificables')
+  }
+  if(isBaseballSport&&['moneyline','h2h','run_line'].includes(leg.market)){
+    const loser=game.home<game.away?'home':game.away<game.home?'away':null
+    const valid=loser?completeInnings(loser,5):
+      completeInnings('home',5)&&completeInnings('away',5)
+    if(!valid)return unknown('unverifiable',
+      'La casa puede exigir quinta entrada agotada por equipo perdedor; evidencia de inning no suficiente')
   }
   const period=leg.market.startsWith('first_3')?3:leg.market.startsWith('first_5')?5:null
   let home=game.home,away=game.away
@@ -170,7 +177,7 @@ export async function checkSportsTicket(
   const data=await getFeed<{events?:unknown[]}>(url,fetcher)
   if(!Array.isArray(data.events))throw Error('ESPN no devolvió una cartelera verificable')
   const games=new Map(data.events.map(extractGame).filter((g):g is Game=>g!==null).map(g=>[g.id,g]))
-  const grades=input.legs.map(leg=>gradeLeg(leg,games.get(leg.eventId)))
+  const grades=input.legs.map(leg=>gradeLeg(leg,games.get(leg.eventId),input.sport==='baseball'))
   const losing=grades.some(x=>x.result==='lost')
   const unresolved=grades.some(x=>x.result==='pending'||x.result==='unverifiable')
   const allVoid=grades.every(x=>x.result==='push')
