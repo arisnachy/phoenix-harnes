@@ -21,7 +21,11 @@ export interface ScholarlyRecord {
   isOpenAccess?: boolean
 }
 
-/** Safely project provider metadata to bounded real source citations. */
+/**
+ * Safely project provider metadata to bounded real source citations.
+ * @param input - untrusted Europe PMC response payload.
+ * @returns citation records that include provider-supplied identifiers.
+ */
 export function projectEuropePmcRecords(input: unknown): ScholarlyRecord[] {
   if (typeof input !== 'object' || input === null) return []
   const root = input as { resultList?: { result?: unknown } }
@@ -38,11 +42,11 @@ export function projectEuropePmcRecords(input: unknown): ScholarlyRecord[] {
     const pmid = typeof item.pmid === 'string' && /^\d{5,10}$/u.test(item.pmid) ? item.pmid : undefined
     const pmcid = typeof item.pmcid === 'string' && /^PMC\d+$/u.test(item.pmcid) ? item.pmcid : undefined
     if (!title || !authors || !/^(19|20)\d{2}$/u.test(year) || !(doi || pmid || pmcid)) continue
-    const identity = doi ? 'doi:' + doi.toLowerCase() : pmid ? 'pmid:' + pmid : 'pmcid:' + pmcid
+    const identity = doi ? 'doi:' + doi.toLowerCase() : pmid ? 'pmid:' + pmid : 'pmcid:' + (pmcid ?? '')
     if (seen.has(identity)) continue
     seen.add(identity)
     // Research publisher accepts only citation-safe [@key] identifiers.
-    const key = pmid ? 'pmid' + pmid : pmcid ? pmcid.toLowerCase() : 'doi' + doi!.replace(/[^A-Za-z0-9]/gu, '_').slice(0, 61)
+    const key = pmid ? 'pmid' + pmid : pmcid ? pmcid.toLowerCase() : 'doi' + (doi ?? '').replace(/[^A-Za-z0-9]/gu, '_').slice(0, 61)
     out.push({
       key,
       title,
@@ -51,7 +55,7 @@ export function projectEuropePmcRecords(input: unknown): ScholarlyRecord[] {
       journal: typeof item.journalTitle === 'string' ? item.journalTitle.slice(0, 220) : '',
       url: doi ? 'https://doi.org/' + encodeURI(doi) : pmid
         ? 'https://pubmed.ncbi.nlm.nih.gov/' + pmid + '/'
-        : 'https://europepmc.org/articles/' + pmcid,
+        : 'https://europepmc.org/articles/' + (pmcid ?? ''),
       ...(doi ? { doi } : {}),
       ...(pmid ? { pmid } : {}),
       ...(pmcid ? { pmcid } : {}),
@@ -68,6 +72,12 @@ export function projectEuropePmcRecords(input: unknown): ScholarlyRecord[] {
 /**
  * Retrieve official Europe PMC metadata without API keys. This does not imply
  * full text or clinical reliability; article type and study quality are assessed separately.
+ * @param query - search terms sent to Europe PMC.
+ * @param limit - maximum records per page.
+ * @param signal - optional cancellation signal.
+ * @param request - injectable HTTP client for deterministic tests.
+ * @param cursorMark - opaque continuation token from the previous response.
+ * @returns provider metadata, pagination and explicit unavailable state.
  */
 export async function searchEuropePmc(
   query: string, limit = 5, signal?: AbortSignal, request: typeof fetch = fetch,
@@ -84,7 +94,7 @@ export async function searchEuropePmc(
   if (typeof query !== 'string' || query.trim().length < 3 || query.length > 400
     || !Number.isInteger(limit) || limit < 1 || limit > 30
     || (cursorMark !== undefined && (cursorMark.length < 1 || cursorMark.length > 500
-      || /[\s\x00-\x1f]/u.test(cursorMark)))) {
+      || /[\x00-\x20]/u.test(cursorMark)))) {
     throw new ToolArgsError(['La búsqueda requiere 3 a 400 caracteres, 1 a 30 resultados y cursor válido.'])
   }
   const url = new URL('https://www.ebi.ac.uk/europepmc/webservices/rest/search')
@@ -100,7 +110,7 @@ export async function searchEuropePmc(
       signal: signal === undefined ? AbortSignal.timeout(20000)
         : AbortSignal.any([signal, AbortSignal.timeout(20000)]),
     })
-    if (!response.ok) throw new Error('provider HTTP ' + response.status)
+    if (!response.ok) throw new Error('provider HTTP ' + String(response.status))
     const body = await response.text()
     if (body.length > 1800000) throw new Error('provider response exceeded safe length')
     const parsed = JSON.parse(body) as {
@@ -124,7 +134,10 @@ export async function searchEuropePmc(
   }
 }
 
-/** Public academic search with provider-authenticated bibliographic metadata. */
+/**
+ * Public academic search with provider-authenticated bibliographic metadata.
+ * @returns registered academic search tool.
+ */
 export function createScholarlySearchTool(): ToolDefinition {
   return defineTool({
     name: 'research_scholar',
@@ -142,7 +155,7 @@ export function createScholarlySearchTool(): ToolDefinition {
       return result as unknown as Record<string, JsonValue>
     },
     presentCall(args) {
-      return { card: 'generic', title: 'Literatura científica · ' + String(args.query).slice(0, 80), kind: 'search' }
+      return { card: 'generic', title: 'Literatura científica · ' + args.query.slice(0, 80), kind: 'search' }
     },
   })
 }
