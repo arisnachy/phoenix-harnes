@@ -14,10 +14,11 @@ import { researchSport } from './multi-sport-research.ts'
 import { communityOpinions } from './sports-community.ts'
 import { evidenceTicket } from './evidence-ticket.ts'
 import { evidencePricedTicket } from './evidence-priced-ticket.ts'
-import { sportsSourcesHealth } from './sports-source-health.ts'
+import { hydrateSportsSources,sportsSourcesHealth } from './sports-source-health.ts'
 
 export const name = 'tool-sports'
 export const inject = ['tools','systemPrompt']
+const sportsEnv=():NodeJS.ProcessEnv=>hydrateSportsSources(process.env)
 const GUIDANCE = [
   'Solo cuando el usuario pida deportes, juegos del día, jugadores, cuotas o tickets, consulta las herramientas sports_chat_catalog, sports_chat_discover, sports_chat_games, sports_chat_mlb_pitchers, sports_chat_odds, sports_chat_ticket, sports_chat_ticket_research, sports_chat_ticket_research_auto, sports_chat_nba_research, sports_chat_research, sports_chat_historical_odds, sports_chat_community_opinions, sports_chat_odds_keyless, sports_chat_sources_health, sports_chat_ticket_evidence_auto o sports_chat_ticket_evidence_priced_auto.',
   'NO abras pantallas independientes ni crees entradas de menú. Antes de redactar una cartelera o boleto, llama sports_chat_games y, cuando corresponda, sports_chat_mlb_pitchers / sports_chat_odds / sports_chat_ticket. Phoenix dibuja de manera nativa las tarjetas verificadas de los resultados. NO copies el JSON de los resultados en la respuesta, NO escribas fences generative-ui ni bloques de código, aunque una herramienta los incluya en sus datos. No dibujes tickets con caracteres ASCII, bordes de texto ni bloques de código etiquetados text: para eventos y selecciones reales usa exclusivamente los contratos nativos, conservando la presentación original de Phoenix. Si el usuario quiere solo una demostración, descríbela explícitamente como ficticia y no introduzcas cuotas o equipos inventados como hechos. Explica los hallazgos y las fuentes con un texto humano breve.',
@@ -53,7 +54,7 @@ export function apply(ctx: Context): void {
     output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
     isConcurrencySafe:()=>true,
     async execute(){
-      const sources=await sportsSourcesHealth(process.env)
+      const sources=await sportsSourcesHealth(sportsEnv())
       return JSON.stringify({sources,checkedAt:new Date().toISOString(),
         warning:'Configuración o CLI disponible NO equivale a cuotas actuales. Para comprobar precios requiere consulta de mercado con marca de tiempo y casa. Los archivos de SportsbookReview y MLB no son cuotas vivas.'})
     },
@@ -167,7 +168,7 @@ export function apply(ctx: Context): void {
     output:{ schema:{ type:'string' },render:(_a,v)=>[{ type:'text' as const,text:v }] },
     isConcurrencySafe:()=>true,
     async execute(args){
-      const quotes=await marketOdds(args.sportKey,args.markets)
+      const quotes=await marketOdds(args.sportKey,args.markets,sportsEnv())
       const events=new Map<string,typeof quotes>()
       for(const quote of quotes.slice(0,96)){
         const rows=events.get(quote.eventId)??[]
@@ -219,7 +220,7 @@ export function apply(ctx: Context): void {
     output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
     isConcurrencySafe:()=>true,
     async execute(args){
-      const report=await loadHistoricalOdds(args.sport)
+      const report=await loadHistoricalOdds(args.sport,sportsEnv())
       return JSON.stringify({sport:args.sport,sources:report.sources,liveQuotes:false,
         count:report.historical.length,samples:report.historical.slice(-20),
         instruction:'Archivo histórico: NUNCA usar sus precios en tickets actuales. Solo calcular antecedentes y backtesting out-of-sample.'})
@@ -250,7 +251,7 @@ export function apply(ctx: Context): void {
     output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
     isConcurrencySafe:()=>true,
     async execute(args){
-      const quotes=await keylessOdds(args.sport,args.market,args.date)
+      const quotes=await keylessOdds(args.sport,args.market,args.date,sportsEnv())
       const grouped=new Map<string,typeof quotes>()
       for(const quote of quotes.slice(0,96)){
         const rows=grouped.get(quote.eventId)??[]
@@ -293,7 +294,7 @@ export function apply(ctx: Context): void {
       const preference=args.marketPreference??'winner'
       if(preference!=='winner'&&preference!=='double_chance')throw Error('Mercado de ticket inválido')
       const result=await evidencePricedTicket(args.count,args.date,args.sport,args.stake??0,
-        Date.now(),process.env,fetch,undefined,preference)
+        Date.now(),sportsEnv(),fetch,undefined,preference)
       return JSON.stringify({uiBlock:result.card,requestedLegs:args.count,
         complete:result.complete,priced:result.priced,placed:false,
         verifiedEvents:result.verifiedEvents,quotedLegs:result.quotedLegs,
@@ -315,7 +316,7 @@ export function apply(ctx: Context): void {
     output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
     isConcurrencySafe:()=>true,
     async execute(args){
-      const result=await evidenceTicket(args.count,args.date,args.sport)
+      const result=await evidenceTicket(args.count,args.date,args.sport,fetch,Date.now(),sportsEnv())
       return JSON.stringify({uiBlock:result.card,requestedLegs:args.count,verifiedEvents:result.verifiedEvents,
         complete:result.complete,candidatesEvaluated:result.candidatesEvaluated,
         researchLeagues:result.researchLeagues,insufficientEvidence:result.insufficientEvidence,
