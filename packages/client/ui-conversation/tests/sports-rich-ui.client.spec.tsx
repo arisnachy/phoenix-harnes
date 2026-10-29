@@ -115,6 +115,26 @@ describe('Phoenix Sports ticket hierarchy and theme compatibility',()=>{
   })
 })
 
+describe('No fake tickets when strict research finds zero eligible matches',()=>{
+  const draft={component:'sports_ticket_card',version:1,props:{
+    title:'PHOENIX · Investigación insuficiente',source:'ESPN',
+    requestedLegs:5,legs:[],combinedOdds:'No disponible',
+    note:'TICKET INCOMPLETO: faltan 5 eventos; no inventar favoritos.',
+  }}
+  it('renders an explicit 0/5 draft instead of blank chat or made-up odds',()=>{
+    const card=parseGenerativeUiBlock(draft)
+    expect(card).not.toBeNull()
+    if(!card)throw Error('Incomplete draft rejected')
+    render(<GenerativeUi block={card}/>)
+    expect(screen.getByRole('progressbar',{name:'Patas verificadas'}).getAttribute('aria-valuenow')).toBe('0')
+    expect(screen.getByText(/Faltan 5 selecciones por verificar/)).toBeTruthy()
+    expect(screen.queryByText('CUOTA')).toBeNull()
+  })
+  it('does not accept empty finished tickets without explicit incomplete evidence',()=>{
+    expect(parseGenerativeUiBlock({...draft,props:{...draft.props,
+      note:'Este es un ticket completo',combinedOdds:'7.50'}})).toBeNull()
+  })
+})
 describe('Five-leg Phoenix ticket completion and compact progress',()=>{
   const makeLeg=(i:number)=>({
     event:'Away '+i+' vs Home '+i,
