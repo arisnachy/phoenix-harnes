@@ -158,7 +158,8 @@ export function apply(ctx: Context): void {
     async execute(args){
       const result=await auditUniversalMatchup({
         sport:args.sport,league:args.league,eventId:args.eventId,date:args.date,
-        lookbackDays:args.lookbackDays,includeOdds:args.includeOdds,
+        ...(args.lookbackDays===undefined?{}:{lookbackDays:args.lookbackDays}),
+        ...(args.includeOdds===undefined?{}:{includeOdds:args.includeOdds}),
       },fetch,Date.now(),sportsEnv())
       return JSON.stringify({...result,
         instruction:'PHOENIX dibuja automáticamente el panel sports_espn_dashboard. Distingue evidencia histórica, condición de titulares, disponibilidad actual, precios de casas y datos faltantes. Los tramos 3/5/9 innings son medias exploratorias si existe muestra; solo compáralos con cuotas que tengan EXACTAMENTE el mismo período, reglas y fuente. No atribuyas ventajas numéricas ni probabilidades de victoria calibradas a estos promedios. Si existen señales contradictorias, explícalas y deja la conclusión como incierta.'})
