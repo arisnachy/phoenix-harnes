@@ -44,6 +44,11 @@ export class BinanceSpotRealReadOnly {
     private readonly clock: () => number = Date.now,
   ) {}
 
+  /** Verify an already stored candidate entirely inside the Host, without exposing it in UI. */
+  forCredentials(value: BinanceRealReadOnlyCredentials): BinanceSpotRealReadOnly {
+    return new BinanceSpotRealReadOnly(() => value, this.request, this.clock)
+  }
+
   private async account(apiKey: string, secret: string, offset = 0, retried = false): Promise<void> {
     const query = new URLSearchParams({
       recvWindow: '5000', timestamp: String(Math.round(this.clock() + offset)),
