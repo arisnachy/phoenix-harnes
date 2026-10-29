@@ -18,7 +18,7 @@ test('team explorer produces responsive cards with only actual roster, news, log
     ]}
     if(u.includes('/teams/456/schedule'))return{events:[{name:'City A vs City B',date:'2026-11-02'}]}
     if(u.includes('/teams/456/news'))return{articles:[{headline:'City A injury update',
-      published:'2026-10-29',description:'Roster update'}]}
+      published:'2026-10-29',description:'Roster update',links:{web:{href:'https://www.espn.com/nhl/story/_/id/123/team-news'}}}]}
     if(u.includes('/teams/456'))return{team:{displayName:'City A',abbreviation:'A',
       logos:[{href:'https://a.espncdn.com/i/teamlogos/nba/500/a.png'}]}}
     return{}
@@ -30,6 +30,7 @@ test('team explorer produces responsive cards with only actual roster, news, log
   assert.equal(data.uiBlock.component,'sports_espn_dashboard')
   assert.ok(data.sections.some(s=>s.heading==='Plantilla verificada'&&s.items[0].label==='Verified Player A'))
   assert.ok(data.sections.some(s=>s.heading==='Noticias del equipo'&&s.items[0].label==='City A injury update'))
+  assert.ok(data.sections.some(s=>s.heading==='Noticias del equipo'&&s.items[0].href?.startsWith('https://www.espn.com/')))
   assert.equal(urls.length,7)
   assert.equal(data.sources.filter(s=>s.status==='available').length,4)
   assert.ok(data.sections.some(s=>s.heading.includes('Disponibilidad')&&s.items[0].value==='Day-to-day'))
