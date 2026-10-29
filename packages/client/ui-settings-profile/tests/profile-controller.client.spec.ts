@@ -85,6 +85,30 @@ describe('UserProfileForm hydration', () => {
     form.dispose()
   })
 
+  it('makes name and title authorization explicit and preserves no-personal-address preference', () => {
+    const harness = scopeHarness()
+    const form = new UserProfileForm(harness.scope)
+    harness.publish({
+      status: 'ready', value: { ...persisted, addressingMode: 'none', consent: {
+        ...persisted.consent, preferredName: false, profession: false, professionalTitle: false,
+      } },
+      base: {}, user: persisted, revision: 4, writable: true, mode: 'host',
+    })
+    expect(form.store.getSnapshot().addressingMode).toBe('none')
+    expect(form.store.getSnapshot().consent.preferredName).toBe(false)
+    form.inject().setAddressingMode('name')
+    form.inject().setConsent('preferredName', true)
+    const draft = form.store.getSnapshot()
+    expect(draft.addressingMode).toBe('name')
+    expect(draft.consent.preferredName).toBe(true)
+    expect(draft.consent.professionalTitle).toBe(false)
+    expect(draft.dirty).toBe(true)
+    form.inject().discard()
+    expect(form.store.getSnapshot().addressingMode).toBe('none')
+    expect(form.store.getSnapshot().consent.preferredName).toBe(false)
+    form.dispose()
+  })
+
   it('keeps a real local draft when a later Host snapshot arrives', () => {
     const harness = scopeHarness()
     const form = new UserProfileForm(harness.scope)
