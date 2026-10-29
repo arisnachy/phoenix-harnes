@@ -112,6 +112,8 @@ export function planAcademicResearch(input: unknown) {
   const args = parse(input)
   const entry = chooseEntry(args)
   const intent = (args.intent ?? '').normalize('NFD').replace(/[\u0300-\u036f]/gu, '').toLowerCase()
+  const visualMode = args.visual_mode ?? (/hermos|bonit|elegant|premium|atractiv|modern/u.test(intent)
+    ? 'enhanced' : 'formal')
   const inferredType: StudyType = args.document_type ?? (entry === 'scientific_article'
     ? 'journal_manuscript' : /\b(tesis|thesis|disertacion|dissertation)\b/u.test(intent)
       || args.level === 'masters' || args.level === 'doctorate' ? 'thesis' : 'monograph')
@@ -152,7 +154,7 @@ export function planAcademicResearch(input: unknown) {
     state: missing.size ? 'INTAKE_INCOMPLETE' : 'PLAN_READY',
     entries: ENTRIES.map(row => ({ ...row })),
     entry, citation_style: citationStyle, document_type: inferredType,
-    presentation: entry === 'scientific_article' || args.visual_mode === 'enhanced' ? 'hybrid' : 'academic',
+    presentation: entry === 'scientific_article' || visualMode === 'enhanced' ? 'hybrid' : 'academic',
     level, title: args.title ?? null,
     pages: { target: suggestedPages, explicitly_requested: args.target_pages !== undefined,
       suggested_range: [...defaultRange], scope: args.page_scope ?? 'unknown',
@@ -175,8 +177,8 @@ export function planAcademicResearch(input: unknown) {
       note: 'El publicador recibe style=apa7 o style=vancouver y transforma [@key] según el formato; verificar reglas institucionales.',
     },
     visual_guidance: {
-      presentation: args.visual_mode === 'enhanced' ? 'hybrid' : 'academic',
-      design_preset: args.visual_mode === 'enhanced' ? 'minimal_graphite' : 'academic_classic',
+      presentation: visualMode === 'enhanced' ? 'hybrid' : 'academic',
+      design_preset: visualMode === 'enhanced' ? 'minimal_graphite' : 'academic_classic',
       intent: 'diseño académico elegante, legible y coherente, subordinado al manual institucional',
       figures: ['barras para comparaciones', 'líneas para tendencias', 'dispersión para relaciones',
         'forest para metaanálisis con intervalos reales', 'diagrama de flujo para métodos documentados'],
