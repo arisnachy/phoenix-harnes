@@ -158,9 +158,9 @@ export function validateResearchPublication(input: unknown): Report {
       const count = (report.sections as Array<{ text: string }>).reduce(
         (total, section) => total + (section.text.match(/[\p{L}\p{N}_]+/gu) ?? []).length, 0)
       if (count < thresholds[0] || citedKeys.size < thresholds[1]) {
-        throw new ToolArgsError(['Investigación insuficiente: ' + count + ' palabras y '
-          + citedKeys.size + ' referencias citadas. Estándar editorial interno para '
-          + type + ': ' + thresholds[0] + ' palabras y ' + thresholds[1]
+        throw new ToolArgsError(['Investigación insuficiente: ' + String(count) + ' palabras y '
+          + String(citedKeys.size) + ' referencias citadas. Estándar editorial interno para '
+          + type + ': ' + String(thresholds[0]) + ' palabras y ' + String(thresholds[1])
           + ' fuentes. Amplía la evidencia; no rellenes con texto artificial.'])
       }
     }
@@ -305,7 +305,8 @@ async function runAttempt(bin: string, args: string[], payload: string, signal: 
       }
       try {
         const value = JSON.parse(output.trim()) as PublisherOutcome
-        if (!/^[0-9a-f]{16}$/u.test(value.report_id) || typeof value.files !== 'object') {
+        if ((value.state !== 'REPORT_READY' && value.state !== 'REPORT_NEEDS_REVISION')
+          || !/^[0-9a-f]{16}$/u.test(value.report_id) || typeof value.files !== 'object') {
           throw new Error('La respuesta del publicador no confirmó un documento listo.')
         }
         resolveOutcome(value)
@@ -386,7 +387,7 @@ export function createResearchPublishTool(): ToolDefinition {
               ? String((value.pagination as { pdf_pages: number }).pdf_pages) : 'sin verificar')
             + '; observaciones: ' + (Array.isArray(value.warnings) ? value.warnings.map(String).join('; ') : 'ninguna')
             + '; orientación de referencias: ' + (Array.isArray(value.advisory_warnings)
-            ? value.advisory_warnings.map(String).join('; ') : 'sin advertencias')
+          ? value.advisory_warnings.map(String).join('; ') : 'sin advertencias')
             + '. Estas son rutas locales de archivos, NO enlaces web. Ábrelos desde los archivos generados al pie del turno en Phoenix, no como una URL del navegador. No se ha certificado la veracidad de las fuentes ni el cumplimiento específico de una revista.'
           : 'El informe no alcanzó estado REPORT_READY.',
       }],
