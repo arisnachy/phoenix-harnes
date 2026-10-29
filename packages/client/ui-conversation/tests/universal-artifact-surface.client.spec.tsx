@@ -142,7 +142,7 @@ describe('universal artifact surface', () => {
       expect(opener.getAttribute('target')).toBe('_blank')
       expect(opener.getAttribute('rel')).toContain('noopener')
       expect(screen.getByRole('link', { name: 'Guardar HTML' }).getAttribute('download'))
-        .toMatch(/\\.html$/u)
+        .toMatch(/\.html$/u)
       expect(createUrl).toHaveBeenCalled()
     } finally {
       cleanup()
