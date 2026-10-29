@@ -20,6 +20,7 @@ import { credentialKey, credentialRef } from '@phoenix-ai/dsh-credentials'
 import { RECONNECT_DEFAULTS, resolveReconnectPolicy, startConnection } from './connection.ts'
 import type { ReconnectConfig } from './connection.ts'
 import { McpOAuthController } from './oauth.ts'
+import { binanceAgenticCimdClientId } from './binance-agentic-cimd.ts'
 import { checkPlatformCompatibility } from './platform.ts'
 import type { SupportedPlatform } from './platform.ts'
 import type { TransportOptions } from './transport.ts'
@@ -279,18 +280,12 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   const oauthClientSecretRef = config.transport === 'streamable-http' && config.oauthClientSecretRef !== undefined
     ? credentialRef(config.oauthClientSecretRef)
     : undefined
-  // Binance Agent OS advertises Client ID Metadata Documents (CIMD), not DCR.
-  // This public identity belongs to PHOENIX and is limited to the exact
-  // pinned official MCP URL. Never impersonate Codex/Claude with their IDs.
-  const binanceAgenticCimd = config.transport === 'streamable-http'
-    && config.serverName === 'binance-agent-os'
-    && config.url === 'https://agent.binance.com/mcp/agentic'
-    && config.oauth !== false
-    && oauthClientIdRef === undefined && oauthClientSecretRef === undefined
-  const resolveFixedOAuthClientInformation = binanceAgenticCimd
-    ? async () => ({
-        client_id: 'https://cdn.jsdelivr.net/gh/arisnachy/phoenix-harnes@main/website/public/oauth/binance-agentic-client.json',
-      })
+  // The official Agentic server supports CIMD rather than DCR. Supplying
+  // PHOENIX's own public client id skips unsupported dynamic registration.
+  const binanceCimdId = config.transport === 'streamable-http'
+    ? binanceAgenticCimdClientId(config) : undefined
+  const resolveFixedOAuthClientInformation = binanceCimdId !== undefined
+    ? async () => ({ client_id: binanceCimdId })
     : oauthClientIdRef === undefined
       ? undefined
       : async () => {
