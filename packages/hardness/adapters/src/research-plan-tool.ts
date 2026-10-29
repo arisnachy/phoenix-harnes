@@ -16,8 +16,15 @@ type Intake = {
   title?: string
   target_pages?: number
   page_scope?: 'all' | 'body' | 'unknown'
-  cover?: { institution?: string; author?: string; authors?: Array<{ name?: string; student_id?: string }>;
-    logo_path?: string; advisor?: string; course?: string; institutional_manual_path?: string }
+  cover?: {
+    institution?: string
+    author?: string
+    authors?: Array<{ name?: string, student_id?: string }>
+    logo_path?: string
+    advisor?: string
+    course?: string
+    institutional_manual_path?: string
+  }
 }
 const ENTRIES = [
   { id: 'apa7', label: 'Investigación APA 7', default_citation_style: 'apa7' },
@@ -64,7 +71,9 @@ function parse(input: unknown): Intake {
   const types: StudyType[] = ['brief', 'monograph', 'thesis', 'research_protocol', 'narrative_review',
     'systematic_review', 'original_research', 'journal_manuscript', 'policy_report']
   if (args.document_type !== undefined && !types.includes(args.document_type)) throw new ToolArgsError(['Tipo de estudio inválido.'])
-  if (args.citation_style !== undefined && args.citation_style !== 'apa7' && args.citation_style !== 'vancouver') throw new ToolArgsError(['Estilo bibliográfico inválido.'])
+  if (args.citation_style !== undefined && !['apa7', 'vancouver'].includes(args.citation_style)) {
+    throw new ToolArgsError(['Estilo bibliográfico inválido.'])
+  }
   if (args.target_pages !== undefined && (!Number.isInteger(args.target_pages) || args.target_pages < 1 || args.target_pages > 350)) {
     throw new ToolArgsError(['El objetivo debe estar entre 1 y 350 páginas.'])
   }
@@ -86,10 +95,10 @@ function allocate(input: ReadonlyArray<readonly [string, string, number]>, targe
   const raw = input.map(row => row[2] * target / sum)
   const base = raw.map(Math.floor)
   const remaining = target - base.reduce((a, b) => a + b, 0)
-  const ranking = raw.map((value, index) => ({ index, fraction: value - base[index]! }))
+  const ranking = raw.map((value, index) => ({ index, fraction: value - (base[index] ?? 0) }))
     .sort((a, b) => b.fraction - a.fraction || a.index - b.index)
-  for (const row of ranking.slice(0, remaining)) base[row.index]! += 1
-  return input.map(([kind, label], index) => ({ kind, label, pages: base[index]! }))
+  for (const row of ranking.slice(0, remaining)) base[row.index] = (base[row.index] ?? 0) + 1
+  return input.map(([kind, label], index) => ({ kind, label, pages: base[index] ?? 0 }))
 }
 /** Recommended bibliography coverage; never a universal university requirement. */
 const THESIS_REFERENCE_GUIDANCE = {
@@ -111,7 +120,7 @@ function inferThesisLevel(intent: string): Level | undefined {
  * @param input - user intent and optional research/cover/page constraints.
  * @returns structured intake, chapter plan, missing fields and unverified evidence status.
  */
-export function planAcademicResearch(input: unknown) {
+function buildAcademicPlan(input: unknown) {
   const args = parse(input)
   const entry = chooseEntry(args)
   const intent = args.intent ?? ''
@@ -187,6 +196,15 @@ export function planAcademicResearch(input: unknown) {
   }
 }
 /**
+ * Plan a thesis with typed chapters, citations, guidance, and source provenance checks.
+ * @param input - the user's academic research request.
+ * @returns a level-aware plan with nonbinding source recommendations.
+ */
+export function planAcademicResearch(input: unknown): ReturnType<typeof buildAcademicPlan> {
+  return buildAcademicPlan(input)
+}
+
+/**
  * Expose the deterministic planner through Phoenix's governed tool registry.
  * @returns the model-facing academic planning tool.
  */
@@ -199,18 +217,18 @@ export function createResearchPlanTool(): ToolDefinition {
     output: {
       schema: { type: 'object', additionalProperties: true },
       render: (_args, value) => [{ type: 'text',
-        text: 'Plan académico: ' + String(value.document_type)
-          + '; estilo: ' + String(value.citation_style ?? 'por definir')
+        text: 'Plan académico: ' + (typeof value.document_type === 'string' ? value.document_type : 'monograph')
+          + '; estilo: ' + (typeof value.citation_style === 'string' ? value.citation_style : 'por definir')
           + '; referencia orientativa: ' + JSON.stringify(value.reference_guidance)
           + '; diseño: ' + JSON.stringify(value.visual_plan)
-          + '; estado: ' + String(value.state)
+          + '; estado: ' + (typeof value.state === 'string' ? value.state : 'INTAKE_INCOMPLETE')
           + '. Extensión estimada, NO páginas escritas: '
           + String((value.pages as Record<string, unknown>).target)
           + '. Campos pendientes: ' + (Array.isArray(value.missing_fields)
             ? value.missing_fields.map(String).join(', ') : 'ninguno'),
       }],
     },
-    async execute(args) { return planAcademicResearch(args.input) },
+    execute(args) { return Promise.resolve(planAcademicResearch(args.input)) },
     presentCall() { return { card: 'generic', title: 'Plan académico y extensión verificable', kind: 'execute' } },
   })
 }
