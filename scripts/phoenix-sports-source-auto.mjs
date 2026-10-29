@@ -147,5 +147,8 @@ if(process.argv[1]&&resolve(process.argv[1])===filename){
       unlink(p.lock)
       process.exitCode=1
     })
-  else start()
+  else {
+    const result=start()
+    if(process.argv.includes('--json'))console.log(JSON.stringify(result))
+  }
 }
