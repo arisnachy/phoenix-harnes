@@ -41,6 +41,18 @@ try {
   Pop-Location
 }
 
+# Optional sports sources install after a successful stable update; do not block
+# PHOENIX because GitHub/OddsPortal/Python may be unavailable temporarily.
+$sportsAuto = Join-Path $root 'scripts\phoenix-sports-source-auto.mjs'
+if (($null -eq $code -or $code -eq 0) -and (Test-Path -LiteralPath $sportsAuto)) {
+  try {
+    & node $sportsAuto
+    if ($LASTEXITCODE -ne 0) { Write-Warning 'Sports sources auto-install was deferred; PHOENIX core remains available.' }
+  } catch {
+    Write-Warning "Sports sources auto-install unavailable: $($_.Exception.Message)"
+  }
+}
+
 if (($null -eq $code -or $code -eq 0) -and (Test-Path -LiteralPath $shortcutRepair)) {
   try {
     & node $shortcutRepair --install
