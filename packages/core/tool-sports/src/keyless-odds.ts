@@ -140,15 +140,27 @@ const localDay=()=>new Intl.DateTimeFormat('en-CA',{
 const validDate=(day:string)=>/^\d{4}-\d{2}-\d{2}$/u.test(day)
   &&Number.isFinite(Date.parse(day+'T00:00:00Z'))
   &&new Date(day+'T00:00:00Z').toISOString().slice(0,10)===day
+/** OddsPortal has distinct period tabs: NHL full-including-OT winner is NOT the
+ * 3-way regulation 1X2 market. Request exactly the published period rather than
+ * silently treating missing odds as a missing provider.
+ */
+export function oddsHarvesterArgs(sport:KeylessSport,market:string,day:string,file:string):string[]{
+  if(!sportOK(sport)||!marketOK(sport,market)||!validDate(day))throw Error('Petición no permitida')
+  const period=(sport==='ice-hockey'&&market==='home_away')?'full_including_ot':
+    ((sport==='basketball'||sport==='american-football')&&market==='1x2')?'full_time':null
+  return ['upcoming','--sport',sport,'--date',day.replaceAll('-',''),
+    '--market',market,...(period?['--period',period]:[]),
+    '--headless','--format','json','--output',file]
+}
 /** Run a fixed local executable with fixed command shape, no shell, no user URLs. */
 async function runScraper(sport:KeylessSport,market:string,day:string,env:NodeJS.ProcessEnv):Promise<unknown>{
   const folder=await mkdtemp(join(tmpdir(),'phoenix-odds-'))
   const file=join(folder,'odds.json')
   try{
     const executable=env.PHOENIX_SPORTS_ODDSHARVESTER_BIN||'oddsharvester'
-    await runFile(executable,['upcoming','--sport',sport,'--date',day.replaceAll('-',''),
-      '--market',market,'--headless','--format','json','--output',file],
-    {shell:false,windowsHide:true,timeout:120_000,maxBuffer:256_000,env:process.env})
+    await runFile(executable,oddsHarvesterArgs(sport,market,day,file),
+    {shell:false,windowsHide:true,timeout:180_000,maxBuffer:256_000,
+      env:{...process.env,...env}})
     const metadata=await stat(file)
     if(metadata.size>4_000_000)throw Error('Archivo de cuotas supera 4 MB')
     return JSON.parse(await readFile(file,'utf8')) as unknown
