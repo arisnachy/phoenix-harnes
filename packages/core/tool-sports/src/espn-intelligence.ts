@@ -85,7 +85,7 @@ async function read(url:string,fetcher:typeof fetch,ttlMs:number):Promise<unknow
     if(!nonempty(response))throw Error('ESPN devolvió datos vacíos')
     saveCache(url,response,ttlMs)
     return response
-  }catch{
+  }catch(error){
     saveCache(url,null,30_000)
     throw error
   }
