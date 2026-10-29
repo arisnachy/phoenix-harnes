@@ -49,11 +49,12 @@ describe('web e2e: multi-agent chat history recovery', () => {
       const sidebar = page.getByRole('tree', { name: 'Sessions' })
       await sidebar.getByRole('treeitem', { name: /Use the read tool twice/ }).click()
       await requested
-      const root = page.locator('div[data-phase="settling"]')
+      const root = page.locator('div[data-phase="active"]')
       await root.waitFor({ timeout: 15_000 })
       expect(await root.locator('[data-composer-seat]').isVisible()).toBe(true)
       expect(await root.locator('textarea').first().isVisible()).toBe(true)
       await root.getByRole('status').waitFor({ timeout: 15_000 })
+      expect(await root.locator('[data-chat-flow]').isVisible()).toBe(true)
     } finally {
       releaseHistory()
     }
