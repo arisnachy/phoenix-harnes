@@ -13,9 +13,6 @@ export type UserProfileRowProps =
   & InjectFace<UserProfileRowFace>
 
 const CONSENT_FIELDS = [
-  ['preferredName', 'consentName'],
-  ['profession', 'consentProfession'],
-  ['professionalTitle', 'consentProfessionalTitle'],
   ['dateOfBirth', 'consentAge'],
   ['gender', 'consentGender'],
   ['pronouns', 'consentPronouns'],
@@ -33,6 +30,15 @@ export function UserProfileRow(props: UserProfileRowProps) {
     ? undefined
     : (window as Window & { phoenixDesktop?: { app?: { logout?: () => void } } }).phoenixDesktop?.app
   const field = (key: keyof typeof state) => state[key] as { text: string; invalid: boolean }
+  const nameAuthorized = state.consent.preferredName && state.preferredName.text.trim() !== ''
+  const titleAuthorized = state.consent.professionalTitle && state.professionalTitle.text.trim() !== ''
+  const addressStatus = state.addressingMode === 'none'
+    ? t('addressStatusDisabled')
+    : state.addressingMode === 'name'
+      ? t(nameAuthorized ? 'addressStatusNameReady' : 'addressStatusNameMissing')
+      : state.addressingMode === 'title'
+        ? t(titleAuthorized ? 'addressStatusTitleReady' : 'addressStatusTitleMissing')
+        : nameAuthorized || titleAuthorized ? t('addressStatusAutoReady') : t('addressStatusAutoMissing')
   const sourceKey = state.assistantGenderSource === 'manual'
     ? 'assistantGenderManual'
     : state.assistantGenderSource === 'inferred'
@@ -73,8 +79,20 @@ export function UserProfileRow(props: UserProfileRowProps) {
       <div className={css.group}>
         <h3 className={css.groupTitle}>{t('aboutYouSection')}</h3>
         <ProfileInput id="profile-preferred-name" label={t('preferredName')} hint={t('preferredNameHint')} value={field('preferredName').text} invalid={field('preferredName').invalid} disabled={disabled} onChange={(value) => { props.edit('preferredName', value) }} />
+        <label className={css.check}>
+          <input type="checkbox" checked={state.consent.preferredName} disabled={disabled} onChange={(event) => { props.setConsent('preferredName', event.target.checked) }} />
+          {t('consentName')}
+        </label>
         <ProfileInput id="profile-profession" label={t('profession')} hint={t('professionHint')} value={field('profession').text} invalid={field('profession').invalid} disabled={disabled} onChange={(value) => { props.edit('profession', value) }} />
+        <label className={css.check}>
+          <input type="checkbox" checked={state.consent.profession} disabled={disabled} onChange={(event) => { props.setConsent('profession', event.target.checked) }} />
+          {t('consentProfession')}
+        </label>
         <ProfileInput id="profile-professional-title" label={t('professionalTitle')} hint={t('professionalTitleHint')} value={field('professionalTitle').text} invalid={field('professionalTitle').invalid} disabled={disabled} onChange={(value) => { props.edit('professionalTitle', value) }} />
+        <label className={css.check}>
+          <input type="checkbox" checked={state.consent.professionalTitle} disabled={disabled} onChange={(event) => { props.setConsent('professionalTitle', event.target.checked) }} />
+          {t('consentProfessionalTitle')}
+        </label>
         <label className={css.label} htmlFor="profile-addressing-mode">{t('addressingMode')}</label>
         <select id="profile-addressing-mode" className={css.input} value={state.addressingMode} disabled={disabled} onChange={(event) => { props.setAddressingMode(event.target.value as UserAddressMode) }}>
           <option value="automatic">{t('addressingModeAutomatic')}</option>
@@ -83,6 +101,7 @@ export function UserProfileRow(props: UserProfileRowProps) {
           <option value="none">{t('addressingModeNone')}</option>
         </select>
         <p className={css.hint}>{t('addressingModeHint')}</p>
+        <p className={css.hint} role="status">{addressStatus}</p>
         <ProfileInput id="profile-date-of-birth" label={t('dateOfBirth')} hint={t('dateOfBirthHint')} value={field('dateOfBirth').text} invalid={field('dateOfBirth').invalid} disabled={disabled} type="date" onChange={(value) => { props.edit('dateOfBirth', value) }} />
         <ProfileInput id="profile-gender" label={t('gender')} hint={t('genderHint')} value={field('gender').text} invalid={field('gender').invalid} disabled={disabled} onChange={(value) => { props.edit('gender', value) }} />
         <ProfileInput id="profile-pronouns" label={t('pronouns')} hint={t('pronounsHint')} value={field('pronouns').text} invalid={field('pronouns').invalid} disabled={disabled} onChange={(value) => { props.edit('pronouns', value) }} />

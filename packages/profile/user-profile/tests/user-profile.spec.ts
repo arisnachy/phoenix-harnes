@@ -9,6 +9,7 @@ import {
   projectConsentedProfile,
   renderConsentedProfile,
   renderAssistantIdentity,
+  renderHumanConnection,
   validateDateOfBirth,
   validateUserProfile,
   validateUserProfileUpdate,
@@ -155,6 +156,46 @@ describe('user profile validation and projection helpers', () => {
       name: before.assistantName,
       gender: before.assistantGender,
     }))
+  })
+
+  it('places consent-filtered address in the durable system section, including fast turns', () => {
+    const configured = mergeUserProfile(profile(), {
+      preferredName: 'Aris', professionalTitle: 'Dr.', profession: 'Médico',
+      addressingMode: 'automatic', tone: 'cercano, directo',
+      consent: { preferredName: true, professionalTitle: true, tone: true },
+    })
+    const permitted = projectConsentedProfile(configured)
+    const system = renderAssistantIdentity({ name: 'KIRA', gender: 'feminine' }, permitted)
+    expect(system).toContain('Authorized preferred name: Aris')
+    expect(system).toContain('Authorized professional title: Dr.')
+    expect(system).toContain('Authorized conversational style: cercano, directo')
+    expect(system).not.toContain('Médico')
+
+    const revoked = projectConsentedProfile({ ...configured, consent: {
+      ...configured.consent, preferredName: false, professionalTitle: false, tone: false,
+    } })
+    const privateSystem = renderAssistantIdentity({ name: 'KIRA', gender: 'feminine' }, revoked)
+    expect(privateSystem).not.toContain('Aris')
+    expect(privateSystem).not.toContain('Authorized professional title:')
+    expect(privateSystem).not.toContain('cercano, directo')
+
+    expect(renderHumanConnection(projectConsentedProfile(mergeUserProfile(configured, {
+      addressingMode: 'none',
+    })))).toContain('Do not address the user')
+    const noConsent = projectConsentedProfile(mergeUserProfile(profile(), {
+      preferredName: 'Aris', addressingMode: 'name',
+    }))
+    expect(renderHumanConnection(noConsent)).toContain('not authorized')
+    expect(renderAssistantIdentity({ name: 'KIRA', gender: 'feminine' }, noConsent))
+      .not.toContain('Authorized preferred name: Aris')
+  })
+
+  it('asks Kira to offer an actual idea rather than deflect during personal small talk', () => {
+    const presence = renderAssistantIdentity({ name: 'KIRA', gender: 'feminine' })
+    expect(presence).toContain('When the user asks “¿qué tienes en mente?”')
+    expect(presence).toContain('answer with one concrete idea of your own')
+    expect(presence).toContain('Do not deflect with “¿qué te gustaría hacer?”')
+    expect(presence).toContain('rather than three consecutive acknowledgments')
   })
 
   it('renders a stable human-presence contract without exposing orchestration', () => {
