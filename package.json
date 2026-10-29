@@ -164,6 +164,7 @@
     "release:publish": "tsx scripts/release/publish.ts",
     "phoenix": "node scripts/phoenix-web-freshness.mjs && node scripts/phoenix-web-entry.mjs",
     "sports:odds:setup": "node scripts/setup-phoenix-sports-odds.mjs",
+    "sports:history:setup": "node scripts/setup-phoenix-sports-history.mjs",
     "codex:voice:doctor": "node scripts/phoenix-codex-live-doctor.mjs",
     "test:codex:voice:doctor": "node --test scripts/phoenix-codex-live-doctor.node-test.mjs",
     "windows:capabilities": "node scripts/phoenix-windows-free-capabilities.mjs",
