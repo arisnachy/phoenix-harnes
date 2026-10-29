@@ -51,9 +51,11 @@ export function compareBettingMarkets(
     // no-vig normalization. Double-chance legs overlap: never normalize them.
     const isThreeWay=market==='1x2'||(market==='h2h'&&
       (initial.sportKey??'').startsWith('soccer_'))
+    const [first,second]=rows
     const complementarySpreads=market==='spreads'&&rows.length===2&&
-      typeof rows[0]?.point==='number'&&typeof rows[1]?.point==='number'&&
-      rows[0].point===-rows[1].point&&rows[0].selection!==rows[1].selection
+      first!==undefined&&second!==undefined&&
+      typeof first.point==='number'&&typeof second.point==='number'&&
+      first.point===-second.point&&first.selection!==second.selection
     const complementaryTotals=market==='totals'&&rows.length===2&&
       rows[0]?.point===rows[1]?.point&&
       labels.has('over')&&labels.has('under')
