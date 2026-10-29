@@ -194,6 +194,46 @@ describe('Binance chat viewer HTTP integration', () => {
     expect(body).not.toContain('TESTNET_SECRET_1234567890')
   })
 
+  it('reuses REAL HMAC keys mistakenly saved as Testnet only after authenticating the production account',async()=>{
+    const vaultValues=new Map<string,string>([
+      ['PHOENIX_BINANCE_TESTNET_API_KEY','REAL_HMAC_KEY_1234567890'],
+      ['PHOENIX_BINANCE_TESTNET_API_SECRET','REAL_HMAC_SECRET_1234567890'],
+    ])
+    const vault={
+      async set(ref:string,value:string){vaultValues.set(ref,value)},
+      async unset(ref:string){vaultValues.delete(ref)},
+      async resolve(ref:string){const value=vaultValues.get(ref);return value?{value,source:'file'}:undefined},
+      async describe(){return {writable:true,configured:true}},
+    }
+    let accessible=false
+    const real=new BinanceSpotRealReadOnly(()=>undefined,async(input,init)=>{
+      expect(String(input)).toContain('https://api.binance.com/api/v3/account')
+      expect(init?.method).toBe('GET')
+      expect(init?.headers).toMatchObject({'X-MBX-APIKEY':'REAL_HMAC_KEY_1234567890'})
+      return accessible
+        ? new Response(JSON.stringify({balances:[]}),{status:200})
+        : new Response(JSON.stringify({code:-2015}),{status:401})
+    })
+    const {origin}=await serverWithTrading({real,credentials:vault as never})
+    const url=origin+'/phoenix-trading/paper/real-migrate'
+    const wrongOrigin=await fetch(url,{method:'POST',
+      headers:{Origin:'https://attacker.example','Content-Type':'application/json'},body:'{}'})
+    expect(wrongOrigin.status).toBe(403)
+    const failed=await fetch(url,{method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},body:'{}'})
+    expect(await failed.json()).toMatchObject({migrated:false,connected:false,issue:'ip-or-permission'})
+    expect(vaultValues.has('PHOENIX_BINANCE_REAL_API_SECRET')).toBe(false)
+    accessible=true
+    const success=await fetch(url,{method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},body:'{}'})
+    const body=await success.text()
+    expect(JSON.parse(body)).toMatchObject({migrated:true,connected:true,tradingAuthorized:false})
+    expect(body).not.toContain('REAL_HMAC_SECRET_1234567890')
+    expect(vaultValues.get('PHOENIX_BINANCE_REAL_API_SECRET')).toBe('REAL_HMAC_SECRET_1234567890')
+    expect(vaultValues.get('PHOENIX_BINANCE_TESTNET_API_SECRET')).toBe('REAL_HMAC_SECRET_1234567890')
+    const forbidden=await fetch(url,{method:'POST',
+      headers:{Origin:origin,'Content-Type':'application/json'},body:JSON.stringify({trade:true})})
+    expect(forbidden.status).toBe(400)
+  })
+
   it('authenticates Binance REAL HMAC in read-only mode without using Testnet or writing orders', async () => {
     const saved=new Map<string,string>()
     const vault={
