@@ -1,6 +1,7 @@
 import {test} from 'node:test'
 import assert from 'node:assert/strict'
 import {espnCoreUrl,queryEspnCore,espnCoreModes} from '../src/espn-core-intelligence.ts'
+import {normalizeEspnMarkets} from '../src/espn-odds.ts'
 
 const base={sport:'football',league:'nfl'}
 const game={...base,eventId:'401220181',competitionId:'401220181',providerId:'41'}
@@ -80,4 +81,27 @@ test('empty futures collection reports empty with source and endpoint',async()=>
   const r=await queryEspnCore({...team,mode:'futures'},async()=>({count:0,items:[]}))
   assert.equal(r.state,'empty')
   assert.equal(r.source,'ESPN Core API (pública, sin clave)')
+})
+
+test('normalizes actual ESPN moneyline, point spread and totals without guessing missing sides',()=>{
+ const start=new Date(Date.now()+86_400_000).toISOString()
+ const game={id:'401999999',date:start,competitions:[{competitors:[
+   {homeAway:'home',team:{displayName:'Boston Celtics'}},
+   {homeAway:'away',team:{displayName:'Miami Heat'}},
+ ]}]}
+ const odds=[{provider:{id:41,name:'DraftKings'},lastUpdated:new Date(Date.now()-60_000).toISOString(),
+   homeTeamOdds:{moneyLine:-135,spreadOdds:-110,spreadValue:-3.5},
+   awayTeamOdds:{moneyLine:115,spreadOdds:-110,spreadValue:3.5},
+   overUnder:220.5,overOdds:-110,underOdds:-110}]
+ const result=normalizeEspnMarkets(game,odds)
+ assert.equal(result.length,6)
+ assert.equal(result.filter(x=>x.market==='h2h').length,2)
+ assert.equal(result.filter(x=>x.market==='spreads').length,2)
+ assert.equal(result.filter(x=>x.market==='totals').length,2)
+ assert.ok(result.every(x=>x.bookmaker==='DraftKings'&&x.timeIso===start))
+ assert.equal(result.find(x=>x.market==='h2h'&&x.selection==='Boston Celtics').price,1.74074)
+ assert.equal(result.find(x=>x.market==='spreads'&&x.selection==='Miami Heat').point,3.5)
+ assert.equal(result.find(x=>x.market==='totals'&&x.selection==='Over').point,220.5)
+ const bad=normalizeEspnMarkets(game,[{provider:{name:'Book X'},homeTeamOdds:{spreadOdds:-105}}])
+ assert.deepEqual(bad,[])
 })
