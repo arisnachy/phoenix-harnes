@@ -146,7 +146,7 @@ describe('Binance authenticated connector in Phoenix Settings', () => {
     expect(screen.getByRole('link',{name:'Agentes oficialmente compatibles y guía de Binance'})).toBeTruthy()
     fireEvent.click(screen.getByRole('button',{name:'Opciones avanzadas (solo si Binance aprueba PHOENIX)'}))
     fireEvent.click(screen.getByRole('button',{name:'Preparar OAuth REAL'}))
-    await screen.findByText(/MCP oficial preparado. Pulsa Autorizar/)
+    await screen.findByText(/MCP instalado localmente. Binance debe aprobar el cliente PHOENIX/)
     expect(onChanged).toHaveBeenCalledOnce()
     const installation = calls.filter(call => call.url.endsWith('/mcp-activate'))
     expect(installation).toHaveLength(1)
