@@ -50,7 +50,7 @@ test('Kira automatically reads verified update manifest without manual environme
     await writeFile(bin,'dummy CLI')
     await writeFile(join(history,'sportsbookreview-nhl.json'),'[{"test":true}]')
     await writeFile(join(home,'manifest.json'),JSON.stringify({
-      schema:2,paths:{executable:bin,history},
+      schema:3,paths:{executable:bin,history},
       components:{
         'OddsHarvester + Playwright':{status:'installed'},
         'SportsbookReview NFL/NBA/NHL/MLB archive':{status:'installed'},
@@ -71,7 +71,7 @@ test('failed Python install is exposed to Kira rather than merely labeled disabl
   const root=await mkdtemp(join(tmpdir(),'phoenix-sports-health-'))
   try{
     await writeFile(join(root,'manifest.json'),JSON.stringify({
-      schema:2,updatedAt:'2026-10-29T13:00:00Z',
+      schema:3,updatedAt:'2026-10-29T13:00:00Z',
       components:{
         'OddsHarvester + Playwright':{
           status:'error',message:'OddsHarvester requires Python >=3.12',
