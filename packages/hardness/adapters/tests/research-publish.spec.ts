@@ -52,6 +52,22 @@ describe('Phoenix research report publisher', () => {
       design_preset: 'academic_classic' })).toThrow(/academic_classic/u)
     expect(() => validateResearchPublication({ ...report, design_preset: 'unknown' })).toThrow(/Diseño desconocido/u)
   })
+  it('requires a declared thesis citation style and validates reviewed institutional minima', () => {
+    const thesis = { ...report, document_type: 'thesis', thesis_level: 'masters' }
+    expect(() => validateResearchPublication({ ...thesis, style: undefined })).toThrow(/APA 7 o Vancouver/u)
+    expect(() => validateResearchPublication({ ...thesis, thesis_level: 'other' })).toThrow(/thesis_level/u)
+    const institution = { reviewed_by_user: true, min_references: 20 }
+    expect(() => validateResearchPublication({
+      ...thesis, institutional_rules: institution,
+    })).toThrow(/institución exige 20 referencias/u)
+    expect(() => validateResearchPublication({
+      ...thesis, institutional_rules: { reviewed_by_user: true, min_references: 0 },
+    })).toThrow(/min_references/u)
+    expect(() => validateResearchPublication({
+      ...report, institutional_rules: { reviewed_by_user: false, min_references: 1 },
+    })).toThrow()
+  })
+
   it('derives the same stable and isolated publication paths for identical content', () => {
     const a = researchOutputPaths(report)
     const b = researchOutputPaths({ ...report })
