@@ -3,6 +3,7 @@ import { fetchPublicEspnOdds } from './espn-odds.ts'
 import { fetchTheOddsApi } from './free-odds.ts'
 import { keylessEnabled, keylessOdds, type KeylessSport } from './keyless-odds.ts'
 import { saveOddsSnapshot } from './odds-snapshots.ts'
+import { belongsToLeague } from './sports-odds-coverage.ts'
 import { enrichMlbMatch } from './mlb-matchup.ts'
 import { researchMlbTrend } from './mlb-research.ts'
 export const sportsCatalog: Readonly<Record<string, readonly string[]>> = {
@@ -362,15 +363,26 @@ export async function marketOddsDetailed(
       cricket:'cricket',rugbyleague:'rugby-league',rugbyunion:'rugby-union',
     }
     const sport=sportByPrefix[prefix??'']
-    const market=markets==='h2h'?sport==='football'||sport==='handball'?'1x2':
-      sport==='tennis'?'match_winner':sport==='ice-hockey'||sport==='volleyball'
-        ||sport==='rugby-league'||sport==='rugby-union'||sport==='cricket'?'home_away':'moneyline':
-      markets==='totals'?'over_under':null
-    if(sport&&market){
-      configured.add(names[2]!)
-      requests.push({name:names[2]!,run:async()=>
-        (await keylessOdds(sport,market,undefined,env,now))
-          .map(q=>({...q,sportKey,time:localTime(q.time),timeIso:q.time}))})
+    if(sport){
+      const chosen:string[]=[]
+      const wants=markets.split(',')
+      if(wants.includes('h2h')){
+        const market=sport==='football'||sport==='handball'?'1x2':
+          sport==='tennis'?'match_winner':
+            ['ice-hockey','volleyball','rugby-league','rugby-union','cricket'].includes(sport)?
+              'home_away':'moneyline'
+        chosen.push(market)
+      }
+      if(wants.includes('totals')&&sport!=='cricket'&&chosen.length<2)
+        chosen.push('over_under')
+      if(chosen.length)configured.add(names[2]!)
+      for(const market of chosen){
+        requests.push({name:names[2]!,run:async()=>{
+          const rows=await keylessOdds(sport,market,undefined,env,now)
+          return rows.filter(q=>sportKey===sport||belongsToLeague(sportKey,q))
+            .map(q=>({...q,sportKey,time:localTime(q.time),timeIso:q.time}))
+        }})
+      }
     }
   }
   if(hasSportsPermission('espn',env)){
