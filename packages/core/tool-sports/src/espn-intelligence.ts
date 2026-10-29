@@ -32,6 +32,7 @@ const cover=(x:unknown):string|undefined=>{
     u.hostname==='a.espncdn.com'?value:undefined}catch{return undefined}
 }
 const img=(x:unknown):string|undefined=>{
+  if(Array.isArray(x))return img(x[0])
   const a=row(x)
   return cover(x)||cover(a.href)||cover(a.url)||cover(a.logo)
     ||cover(row(array(a.images)[0]).url)||cover(row(array(a.logos)[0]).href)
@@ -110,8 +111,9 @@ function metrics(data:unknown,max=18):Item[]{
     if(next.depth>=4)continue
     for(const k of ['categories','statistics','stats','splits','records','items','seasonTypes']){
       const field=v[k]
-      if(Array.isArray(field))for(const child of field.slice(0,15))if(typeof child==='object')queue.push({node:child,depth:next.depth+1})
-      else if(field!==null&&typeof field==='object')queue.push({node:field,depth:next.depth+1})
+      if(Array.isArray(field)){
+        for(const child of field.slice(0,15))if(child!==null&&typeof child==='object')queue.push({node:child,depth:next.depth+1})
+      }else if(field!==null&&typeof field==='object')queue.push({node:field,depth:next.depth+1})
     }
   }
   return values.slice(0,max)
@@ -187,7 +189,7 @@ function summaryFacts(data:unknown):{heading:string;items:Item[];image?:string}{
   const facts=[item('Estado',row(row(h.status).type).description??row(h.status).displayClock),
     item('Sede',venue.fullName),item('Fecha',comp.date??h.date),
     ...teams].filter((x):x is Item=>x!==null)
-  return {heading:txt(h.shortName??h.name??h.competitions?'Partido y participantes':'Resumen del evento'),items:facts}
+  return {heading:'Partido y participantes',items:facts}
 }
 function eventLeaders(data:unknown):Item[]{
   const d=row(data),bs=row(d.boxscore)
