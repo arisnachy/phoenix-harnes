@@ -5,6 +5,7 @@
 import { getFeed,hasSportsPermission, type ChatBlock } from './sports.ts'
 import { researchSport } from './multi-sport-research.ts'
 import { researchTicket, type ResearchTicketLeg } from './research-ticket.ts'
+import { investigatePregame } from './pregame-investigation.ts'
 const defaultLeagues = [
   ['basketball','nba'],['hockey','nhl'],['baseball','mlb'],['football','nfl'],
   ['soccer','eng.1'],['soccer','esp.1'],['soccer','usa.1'],['soccer','uefa.champions'],
@@ -22,6 +23,7 @@ export async function evidenceTicket(
 ):Promise<{card:ChatBlock;complete:boolean;verifiedEvents:number;
   candidatesEvaluated:number;researchLeagues:number;modelProbabilities:false;priced:false;placed:false;
   insufficientEvidence:number;researchStandard:string;
+  pregameSummariesVerified:number;injuryFeedsVerified:number;
   selections:ResearchTicketLeg[];events:Array<{eventId:string;home:string;away:string;kickoff:string;sport:string;league:string;pick:'home'|'away'}>}>{
   if(!Number.isInteger(count)||count<1||count>6)throw Error('El ticket requiere entre 1 y 6 patas')
   if(!validDate(date))throw Error('Fecha de ticket inválida')
@@ -114,12 +116,35 @@ export async function evidenceTicket(
   const selected=candidateLegs.slice(0,count)
   const chosen=selected.map(x=>x.pick)
   if(!chosen.length)throw Error('No hay encuentros con suficiente evidencia reciente para un ticket responsable')
-  const ticket=await researchTicket(chosen,date,fetcher,now,env,count,true)
-  return{card:ticket.card,complete:ticket.complete,verifiedEvents:ticket.verifiedEvents,
+  const checks=await investigatePregame(selected.map(x=>({
+    sport:x.pick.sport,league:x.pick.league,eventId:x.pick.eventId,
+  })),fetcher)
+  let pregameSummariesVerified=0,injuryFeedsVerified=0
+  const documented=chosen.map(pick=>{
+    const state=checks.get(pick.sport+'|'+pick.league+'|'+pick.eventId)
+    if(state?.summaryVerified)pregameSummariesVerified++
+    if(state?.injuryReportVerified)injuryFeedsVerified++
+    const audit='Resumen ESPN '+(state?.summaryVerified?'consultado':'no verificado')+
+      '; parte médico '+(state?.injuryReportVerified?'publicado':'no verificable')+
+      '; titulares pendientes'
+    return {...pick,rationale:(String(pick.rationale??'').slice(0,Math.max(0,237-audit.length))+
+      ' · '+audit).slice(0,240)}
+  })
+  const ticket=await researchTicket(documented,date,fetcher,now,env,count,true)
+  const note=String(ticket.card.props.note??'')+
+    ' Investigación contextual: '+pregameSummariesVerified+'/'+documented.length+
+    ' resúmenes de evento ESPN; '+injuryFeedsVerified+'/'+documented.length+
+    ' informes de lesiones de liga accesibles. Accesible NO equivale a bajas o titulares verificados.'+
+    ' Los archivos GitHub de SportsbookReview y MLB son históricos, nunca cuotas actuales.'
+  const card:ChatBlock={...ticket.card,props:{...ticket.card.props,
+    subtitle:'Preselección: cinco partidos históricos por equipo (NFL tres) · contexto pendiente',
+    note:note.slice(0,1000),
+  }}
+  return{card,complete:ticket.complete,verifiedEvents:ticket.verifiedEvents,
     candidatesEvaluated:evaluated,researchLeagues:reports.filter(r=>r.status==='fulfilled').length,
-    insufficientEvidence,
+    insufficientEvidence,pregameSummariesVerified,injuryFeedsVerified,
     researchStandard:'Preselección exigente con 5 eventos históricos por equipo (NFL: 3), resultados ESPN únicos, margen y descanso. Lesiones, titulares y cuotas siguen sin verificarse; no es una predicción calibrada.',
-    modelProbabilities:false,priced:false,placed:false,selections:chosen,
+    modelProbabilities:false,priced:false,placed:false,selections:documented,
     events:selected.map(x=>({eventId:x.pick.eventId,home:x.home,away:x.away,kickoff:x.kickoff,
       sport:x.pick.sport,league:x.pick.league,pick:x.pick.pick==='home'?'home' as const:'away' as const}))}
 }
