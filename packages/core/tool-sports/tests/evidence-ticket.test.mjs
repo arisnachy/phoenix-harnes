@@ -60,3 +60,36 @@ test('completed matches must have five different ESPN IDs for each non-NFL team'
   await assert.rejects(()=>evidenceTicket(5,day,'soccer',repeated,now),
     /No hay encuentros con suficiente evidencia/)
 })
+
+test('five-leg automatic scout verifies ESPN summaries and injury coverage without fabricating lineups',async()=>{
+  let summaryCalls=0,injuryCalls=0
+  const reviewed=async url=>{
+    const u=String(url)
+    if(u.includes('/summary?event=')){
+      summaryCalls++
+      return new Response(JSON.stringify({header:{competitions:[{competitors:[]} ]}}))
+    }
+    if(u.endsWith('/injuries')){
+      injuryCalls++
+      return new Response(JSON.stringify({injuries:[]}))
+    }
+    return mock()(url)
+  }
+  const result=await evidenceTicket(5,day,'soccer',reviewed,now)
+  assert.equal(summaryCalls,5)
+  assert.ok(injuryCalls>=1)
+  assert.equal(result.pregameSummariesVerified,5)
+  assert.equal(result.injuryFeedsVerified,5)
+  assert.equal(result.verifiedEvents,5)
+  assert.match(result.card.props.note,/Accesible NO equivale a bajas o titulares verificados/)
+  assert.match(result.card.props.legs[0].rationale,/titulares pendientes/)
+})
+test('three different scoreboards per team remain insufficient for a stronger auto ticket',async()=>{
+  const threeOnly=async url=>{
+    const key=String(url).match(/dates=([0-9]{8})/u)?.[1]
+    return new Response(JSON.stringify(fixture(url,
+      ['20261028','20261027','20261026','20261025'].includes(key))))
+  }
+  await assert.rejects(()=>evidenceTicket(5,day,'soccer',threeOnly,now),
+    /No hay encuentros con suficiente evidencia/)
+})
