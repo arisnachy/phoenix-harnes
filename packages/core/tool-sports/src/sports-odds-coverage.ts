@@ -34,20 +34,20 @@ export function belongsToLeague(
   const path=(quote.matchLink??'').toLowerCase()
   const is=(pattern:RegExp)=>pattern.test(league)
   switch(sportKey){
-    case 'basketball_nba':return /\\bnba\\b/u.test(league)&&!/\\bwnba\\b/u.test(league)
-    case 'basketball_wnba':return /\\bwnba\\b/u.test(league)
-    case 'baseball_mlb':return /\\bmlb\\b|major league baseball/u.test(league)
-    case 'americanfootball_nfl':return /\\bnfl\\b|national football league/u.test(league)
-    case 'icehockey_nhl':return /\\bnhl\\b|national hockey league/u.test(league)
+    case 'basketball_nba':return /\bnba\b/u.test(league)&&!/\bwnba\b/u.test(league)
+    case 'basketball_wnba':return /\bwnba\b/u.test(league)
+    case 'baseball_mlb':return /\bmlb\b|major league baseball/u.test(league)
+    case 'americanfootball_nfl':return /\bnfl\b|national football league/u.test(league)
+    case 'icehockey_nhl':return /\bnhl\b|national hockey league/u.test(league)
     case 'tennis_atp':return /\batp\b/u.test(league)
     case 'tennis_wta':return /\bwta\b/u.test(league)
     case 'soccer_epl':return is(/premier league/u)&&
-      (/\\bengland\\b/u.test(league)||path.includes('/england/'))
+      (/\bengland\b/u.test(league)||path.includes('/england/'))
     case 'soccer_spain_la_liga':return is(/la ?liga|primera divisi[oó]n/u)&&
       (/spain|españa/u.test(league)||path.includes('/spain/'))
     case 'soccer_mexico_ligamx':return is(/liga mx/u)&&
       (/mexico|méxico/u.test(league)||path.includes('/mexico/'))
-    case 'soccer_usa_mls':return is(/\\bmls\\b|major league soccer/u)
+    case 'soccer_usa_mls':return is(/\bmls\b|major league soccer/u)
     case 'soccer_uefa_champs_league':return is(/champions league/u)&&
       (is(/uefa|europe/u)||path.includes('/europe/'))
     default:return false
