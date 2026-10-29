@@ -83,6 +83,11 @@ try:
                     assert -1 <= y0 < y1 <= page.rect.height + 1
         html_contents = paths["html"].read_text(encoding="utf-8")
         assert "Referencias" in html_contents
+        if style == "vancouver":
+            assert "<h2>Referencias</h2><ol>" in html_contents
+        else:
+            assert "<h2>Referencias</h2><div class='apa-references'>" in html_contents
+            assert "text-indent:-1.27cm" in html_contents
         assert "[@" not in html_contents
         assert "<table>" in html_contents and "Comparación de prueba" in html_contents
         assert "<strong>Implicaciones para investigación.</strong>" in html_contents
@@ -211,6 +216,19 @@ try:
                               input=json.dumps(unapproved).encode("utf-8"),
                               capture_output=True, timeout=30)
     assert rejected.returncode != 0
+    # Thesis format and reviewed institutional rules must be enforced in the real renderer.
+    invalid_thesis = dict(report)
+    invalid_thesis.update({"document_type": "thesis", "thesis_level": "doctorate", "style": None})
+    rejected = subprocess.run([sys.executable, str(script)],
+                              input=json.dumps(invalid_thesis).encode("utf-8"),
+                              capture_output=True, timeout=30)
+    assert rejected.returncode != 0 and b"thesis citation style" in rejected.stderr
+    invalid_institution = dict(report)
+    invalid_institution["institutional_rules"] = {"reviewed_by_user": True, "min_references": 20}
+    rejected = subprocess.run([sys.executable, str(script)],
+                              input=json.dumps(invalid_institution).encode("utf-8"),
+                              capture_output=True, timeout=30)
+    assert rejected.returncode != 0 and b"distinct cited references" in rejected.stderr
     shallow = dict(report)
     shallow["quality_profile"] = "professional"
     shallow["document_type"] = "narrative_review"
