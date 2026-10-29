@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createWorldBankHealthSeriesTool, fetchWorldBankHealthSeries } from '../src/health-series.ts'
+import { createWorldBankHealthSeriesTool, fetchWorldBankHealthSeries, HEALTH_INDICATORS } from '../src/health-series.ts'
 
 describe('Official World Bank health indicator series', () => {
   it('keeps missing years explicit, returns original units, and reports source URI', async () => {
@@ -50,4 +50,13 @@ describe('Official World Bank health indicator series', () => {
     await expect(fetchWorldBankHealthSeries('SH_UHC_SCI', 'DOM', 2025, 2015)).rejects.toThrow()
     expect(createWorldBankHealthSeriesTool().name).toBe('research_health_series')
   })
+  it('covers six independently identified primary-health indicators without guessing unavailable values', () => {
+    expect(Object.keys(HEALTH_INDICATORS)).toEqual([
+      'SP.DYN.IMRT.IN', 'SH_UHC_SCI', 'SH.DYN.MORT',
+      'SH.XPD.CHEX.GD.ZS', 'SH.XPD.OOPC.CH.ZS', 'SH.MED.PHYS.ZS',
+    ])
+    expect(HEALTH_INDICATORS['SH.XPD.CHEX.GD.ZS'].unit).toBe('porcentaje del PIB')
+    expect(HEALTH_INDICATORS['SH.XPD.OOPC.CH.ZS'].unit).toContain('gasto corriente')
+  })
+
 })
