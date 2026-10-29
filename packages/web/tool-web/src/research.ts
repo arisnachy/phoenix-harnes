@@ -189,8 +189,14 @@ function scopeQuery(question: string, host: string, domain: string): string {
     : /cobertura/iu.test(question) ? 'cobertura sanitaria'
       : /primer nivel|atenci[oó]n primaria|\bAPS\b/iu.test(question) ? 'atención primaria salud'
         : 'sistema de salud'
-  const location = host === 'worldbank.org' || host === 'who.int' ? 'Dominican Republic' : 'República Dominicana'
-  return [location, focus, years, 'site:' + host].filter(Boolean).join(' ')
+  const english = host === 'worldbank.org' || host === 'who.int'
+  const isAps = /primer nivel|atenci[oó]n primaria|\bAPS\b/iu.test(question)
+  const targeted = isAps && (host === 'paho.org' || host === 'msp.gob.do' || host === 'sns.gob.do')
+    ? 'atención primaria primer nivel' : host === 'sisalril.gob.do' ? 'afiliación cobertura salud'
+      : isAps && english ? 'primary health care mortality coverage'
+        : english ? 'health mortality coverage' : focus
+  const location = english ? 'Dominican Republic' : 'República Dominicana'
+  return [location, targeted, years, 'site:' + host].filter(Boolean).join(' ')
 }
 
 /**
@@ -281,7 +287,7 @@ export async function executeResearch(
   const isRelevant = (source: WebSearchSource, url: string): boolean => {
     if (plan.domain !== 'public_health') return true
     const evidence = (source.title ?? '') + ' ' + (source.snippet ?? '') + ' ' + url
-    const topic = /salud|health|primary care|atenci[oó]n primaria|primer nivel|cobertura|mortalidad|\buhc\b|aseguramiento|afiliaci[oó]n|sanitari|healthcare/iu.test(evidence)
+    const topic = /salud|health|primary care|atenci[oó]n primaria|primer nivel|cobertura|coverage|mortalidad|mortality|maternal|infant|\buhc\b|aseguramiento|afiliaci[oó]n|sanitari|healthcare/iu.test(evidence)
     const country = !countryFocus || /rep[uú]blica dominicana|dominican republic|\bDOM\b|\.gob\.do/iu.test(evidence)
     return topic && country
   }
