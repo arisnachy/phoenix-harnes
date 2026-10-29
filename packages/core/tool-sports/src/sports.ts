@@ -374,7 +374,8 @@ export async function marketOddsDetailed(
         chosen.push(market)
       }
       if(wants.includes('totals')&&sport!=='cricket'&&chosen.length<2)
-        chosen.push('over_under')
+        chosen.push(sport==='tennis'?'total_games_over_under':
+          sport==='volleyball'?'total_points_over_under':'over_under')
       if(chosen.length)configured.add(names[2]!)
       for(const market of chosen){
         requests.push({name:names[2]!,run:async()=>{
