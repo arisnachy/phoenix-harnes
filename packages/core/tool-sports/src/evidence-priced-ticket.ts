@@ -171,7 +171,7 @@ export async function evidencePricedTicket(
     ' selecciones; proveedores: '+sourceAudit.map(x=>x.source+' '+x.status+
     ' ('+x.offers+' observaciones)').join('; ')+'.'
   const auditCard:ChatBlock={...researchCard,props:{...researchCard.props,
-    note:(String(researchCard.props.note??'')+auditSummary).slice(0,1000),
+    note:(auditSummary+' '+String(researchCard.props.note??'')).slice(0,1000),
   }}
   const checked={...base,card:auditCard,sourceAudit,quotedLegs,
     missingQuotes:count-quotedLegs}
