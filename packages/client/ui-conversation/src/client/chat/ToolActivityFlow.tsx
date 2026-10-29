@@ -333,11 +333,27 @@ export function isTradingPanelPrompt(text: string): boolean {
     && /\b(?:visor|panel|dashboard|opera|operar|operaciones|inicia|iniciar|comienza|empezar|automat|muestra|mostrar|abre|abrir|hace|hacer|haz|deten|detener)\b/u.test(normalized)
 }
 
+/** Native market charts require a user request too, not merely a background tool result. */
+export function isTradingMarketPrompt(text: string): boolean {
+  const normalized = text.normalize('NFD').replace(/[\u0300-\u036f]/gu, '').toLowerCase()
+  return /\b(?:grafico|graficar|chart|velas|cotizacion|cotizaciones|ohlcv|precio|precios)\b/u.test(normalized)
+    && /\b(?:binance|trading|cripto|criptomonedas|[a-z0-9]{3,16}usdt)\b/u.test(normalized)
+}
+
 function userRequestsTrading(node: OrderedChatNode): boolean {
   if (node.kind !== 'user' && node.kind !== 'steering') return false
   const content = (node.data as { content?: unknown }).content
   if (!Array.isArray(content)) return false
   return isTradingPanelPrompt(content.map((block: unknown) =>
+    block !== null && typeof block === 'object' && 'text' in block
+      && typeof block.text === 'string' ? block.text : '').join(' '))
+}
+
+function userRequestsTradingMarket(node: OrderedChatNode): boolean {
+  if (node.kind !== 'user' && node.kind !== 'steering') return false
+  const content = (node.data as { content?: unknown }).content
+  if (!Array.isArray(content)) return false
+  return isTradingMarketPrompt(content.map((block: unknown) =>
     block !== null && typeof block === 'object' && 'text' in block
       && typeof block.text === 'string' ? block.text : '').join(' '))
 }
@@ -348,6 +364,9 @@ function buildFlow(nodes: readonly OrderedChatNode[]): FlowItem[] {
   let pendingAnchorKey: string | undefined
   let sportsCards: GenerativeUiBlock[] = []
   let tradingVisible = false
+  // A tool result alone is never permission to inject a live trading surface.
+  let tradingRequested = false
+  let marketRequested = false
 
   const flush = (avoidAnchorKey?: string): void => {
     const first = pending[0]
@@ -379,14 +398,14 @@ function buildFlow(nodes: readonly OrderedChatNode[]): FlowItem[] {
         sportsCards = sportsCards.slice(-12)
         // A settled Binance result owns its native dashboard immediately.
         // Do not depend on the assistant generating JSON or a special fence.
-        const trading = tradingDashboardFromToolResult(result)
+        const trading = tradingRequested ? tradingDashboardFromToolResult(result) : undefined
         if (trading !== undefined && !tradingVisible) {
           flush()
           flow.push({ kind: 'trading', key: 'trading:' + node.key, snapshot: trading })
           tradingVisible = true
         }
         if (!tradingVisible) {
-          const selection = tradingMarketFromToolResult(result)
+          const selection = (tradingRequested || marketRequested) ? tradingMarketFromToolResult(result) : undefined
           if (selection !== undefined) {
             flush()
             flow.push({ kind: 'trading-market', key: 'market:' + node.key, selection })
@@ -432,7 +451,9 @@ function buildFlow(nodes: readonly OrderedChatNode[]): FlowItem[] {
     if (node.kind === 'user' || node.kind === 'steering') {
       sportsCards = []
       tradingVisible = false
-      if (userRequestsTrading(node)) {
+      tradingRequested = userRequestsTrading(node)
+      marketRequested = userRequestsTradingMarket(node)
+      if (tradingRequested) {
         flow.push({ kind: 'trading', key: 'trading:user:' + node.key })
         tradingVisible = true
       }
