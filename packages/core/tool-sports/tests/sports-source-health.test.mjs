@@ -1,6 +1,9 @@
 import {test} from 'node:test'
 import assert from 'node:assert/strict'
-import {sportsSourcesHealth} from '../src/sports-source-health.ts'
+import {hydrateSportsSources,sportsSourcesHealth} from '../src/sports-source-health.ts'
+import {mkdtemp,mkdir,writeFile,rm} from 'node:fs/promises'
+import {tmpdir} from 'node:os'
+import {join} from 'node:path'
 
 const find=(rows,name)=>rows.find(row=>row.provider===name)
 test('source-health never claims configured scraper is collecting prices without a local binary',async()=>{
@@ -35,4 +38,31 @@ test('disabled scraper is not probed or described as a live odds provider',async
   const rows=await sportsSourcesHealth({},async()=>{throw Error('should not run')},async()=>false)
   assert.equal(find(rows,'jordantete/OddsHarvester').status,'disabled')
   assert.match(find(rows,'jordantete/OddsHarvester').note,/NO se ejecutó/)
+})
+
+test('Kira automatically reads verified update manifest without manual environment copying',async()=>{
+  const home=await mkdtemp(join(tmpdir(),'phoenix-sources-test-'))
+  const bin=join(home,'.venv','bin','oddsharvester')
+  const history=join(home,'history')
+  try{
+    await mkdir(join(home,'.venv','bin'),{recursive:true})
+    await mkdir(history,{recursive:true})
+    await writeFile(bin,'dummy CLI')
+    await writeFile(join(history,'sportsbookreview-nhl.json'),'[{"test":true}]')
+    await writeFile(join(home,'manifest.json'),JSON.stringify({
+      schema:2,paths:{executable:bin,history},
+      components:{
+        'OddsHarvester + Playwright':{status:'installed'},
+        'SportsbookReview NFL/NBA/NHL/MLB archive':{status:'installed'},
+      },
+    }))
+    const env=hydrateSportsSources({PHOENIX_SPORTS_SOURCE_HOME:home})
+    assert.equal(env.PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED,'1')
+    assert.equal(env.PHOENIX_SPORTS_ODDSHARVESTER_BIN,bin)
+    assert.equal(env.PHOENIX_SPORTS_HISTORY_DIR,history)
+    const disabled=hydrateSportsSources({
+      PHOENIX_SPORTS_SOURCE_HOME:home,PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED:'0',
+    })
+    assert.equal(disabled.PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED,'0')
+  }finally{await rm(home,{recursive:true,force:true})}
 })
