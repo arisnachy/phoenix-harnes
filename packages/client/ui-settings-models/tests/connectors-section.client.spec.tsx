@@ -45,7 +45,7 @@ describe('connectors settings section', () => {
     expect(card?.textContent).toContain('PAPER ready')
     await waitFor(() => { expect(mcpRegistry.state).toHaveBeenCalled() })
     // Keyless PAPER readiness must not satisfy the Connected-account filter.
-    fireEvent.click(screen.getByRole('button', { name: connectorEn.connected, exact: true }))
+    fireEvent.click(screen.getByRole('button', { name: connectorEn.connected }))
     expect(document.querySelector('[data-connector-id="binance"]')).toBeNull()
   })
 
