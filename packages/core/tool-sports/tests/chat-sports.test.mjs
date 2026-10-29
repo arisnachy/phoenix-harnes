@@ -58,7 +58,7 @@ test('only real bookmaker lines match a ticket; correlation is flagged',()=>{
   assert.equal(result.card.props.combinedOdds,'3.780')
   assert.equal(result.card.props.grossReturn,'378.00')
   assert.match(result.warning,/mismo encuentro/)
-  assert.match(result.card.props.note,/SIN APUESTA REAL/)
+  assert.match(result.card.props.note,/PENDIENTE DE ACEPTACIÓN EN LA CASA/)
   assert.throws(()=>pricedTicket([{...selected[0],selection:'No existe'}],odds),/no verificable/)
   assert.throws(()=>pricedTicket([selected[0],selected[0]],odds),/duplicada/)
 })
