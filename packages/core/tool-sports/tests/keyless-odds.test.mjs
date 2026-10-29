@@ -1,6 +1,6 @@
 import {test} from 'node:test'
 import assert from 'node:assert/strict'
-import {keylessOdds,normalizeOddsHarvester} from '../src/keyless-odds.ts'
+import {keylessOdds,normalizeOddsHarvester,oddsHarvesterArgs} from '../src/keyless-odds.ts'
 const now=Date.parse('2026-10-28T18:05:00Z')
 const fixture=[{
   scraped_date:'2026-10-28 18:00:00 UTC',match_date:'2026-10-28 23:00:00 UTC',
@@ -40,4 +40,30 @@ test('keyless command enforces opt-in and is testable without API key or network
   assert.equal(out.length,7)
   await assert.rejects(()=>keylessOdds('football','not-existing','2026-10-28',
     {PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED:'1'},now,fakeRunner),/sin soporte/)
+})
+
+test('OddsHarvester requests the correct period for NHL winner including overtime',()=>{
+  const args=oddsHarvesterArgs('ice-hockey','home_away','2026-10-29','odds.json')
+  assert.ok(args.includes('--period'))
+  assert.equal(args[args.indexOf('--period')+1],'full_including_ot')
+  const nba=oddsHarvesterArgs('basketball','1x2','2026-10-29','odds.json')
+  assert.equal(nba[nba.indexOf('--period')+1],'full_time')
+  const soccer=oddsHarvesterArgs('football','double_chance','2026-10-29','odds.json')
+  assert.ok(!soccer.includes('--period'))
+  assert.deepEqual(soccer.slice(-6),['--headless','--format','json','--output','odds.json'].slice(-6))
+})
+test('NHL per-bookmaker home/away FullIncludingOT fixture yields genuinely distinct priced selections',()=>{
+  const hockey=[{
+    scraped_date:'2026-10-29 13:00:00 UTC',match_date:'2026-10-29 23:00:00 UTC',
+    match_link:'https://www.oddsportal.com/ice-hockey/h2h/jets-x/lightning-y/#fixture',
+    home_team:'Winnipeg Jets',away_team:'Tampa Bay Lightning',
+    home_away_market:[{
+      bookmaker_name:'Bookmaker A',period:'FullIncludingOT',
+      '1':'1.92','2':'1.97',
+    }],
+  }]
+  const result=normalizeOddsHarvester(hockey,'ice-hockey',Date.parse('2026-10-29T13:05:00Z'))
+  assert.equal(result.length,2)
+  assert.deepEqual(new Set(result.map(x=>x.selection)),new Set(['Winnipeg Jets','Tampa Bay Lightning']))
+  assert.ok(result.every(x=>x.bookmaker==='Bookmaker A'&&x.market==='h2h'))
 })
