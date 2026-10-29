@@ -1,6 +1,6 @@
 import {test} from 'node:test'
 import assert from 'node:assert/strict'
-import {hydrateSportsSources,sportsSourcesHealth} from '../src/sports-source-health.ts'
+import {hydrateSportsSources,managedSportsInstallStatus,sportsSourcesHealth} from '../src/sports-source-health.ts'
 import {mkdtemp,mkdir,writeFile,rm} from 'node:fs/promises'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
@@ -65,4 +65,31 @@ test('Kira automatically reads verified update manifest without manual environme
     })
     assert.equal(disabled.PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED,'0')
   }finally{await rm(home,{recursive:true,force:true})}
+})
+
+test('failed Python install is exposed to Kira rather than merely labeled disabled',async()=>{
+  const root=await mkdtemp(join(tmpdir(),'phoenix-sports-health-'))
+  try{
+    await writeFile(join(root,'manifest.json'),JSON.stringify({
+      schema:2,updatedAt:'2026-10-29T13:00:00Z',
+      components:{
+        'OddsHarvester + Playwright':{
+          status:'error',message:'OddsHarvester requires Python >=3.12',
+        },
+        'SportsbookReview NFL/NBA/NHL/MLB archive':{status:'installed'},
+        'MLB historic dataset and scraper sources':{status:'installing'},
+      },
+    }))
+    const env={PHOENIX_SPORTS_SOURCE_HOME:root}
+    const report=managedSportsInstallStatus(env)
+    assert.equal(report.state,'partial')
+    assert.equal(report.playwrightVerifiedAtInstall,false)
+    assert.equal(report.components.find(x=>x.name.startsWith('OddsHarvester')).lastError,
+      'OddsHarvester requires Python >=3.12')
+    const rows=await sportsSourcesHealth(env,async()=>{throw Error('should not run')},async()=>false)
+    assert.equal(find(rows,'jordantete/OddsHarvester').status,'install-error')
+    assert.match(find(rows,'jordantete/OddsHarvester').note,/Python >=3.12/)
+    assert.equal(find(rows,'ArnavSaraogi/mlb-odds-scraper').status,'installing')
+    assert.ok(!JSON.stringify(rows).includes('THE_ODDS_API_KEY'))
+  }finally{await rm(root,{recursive:true,force:true})}
 })
