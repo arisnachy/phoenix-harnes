@@ -263,8 +263,11 @@ export function mountBinancePaperDashboardRoute(
           toolCount: state?.toolNames?.length ?? 0,
           tradeScopeVerified: false, accountVerified: false,
           nextAction: connected ? 'Verify live MCP ticker, Agentic balance and granted Trade scope'
-            : state?.status === 'auth-required' ? 'Authorize Binance Agentic OAuth in Phoenix Settings > Connectors'
-              : 'Install or reconnect the official Binance Agentic MCP in Phoenix Settings',
+            : state?.status === 'auth-required'
+              ? 'Autoriza Binance Agentic OAuth desde la tarjeta de PHOENIX (CIMD; no requiere registro DCR).'
+              : state?.status === 'failed' && state.configured
+                ? 'El transporte MCP falló. Comprueba conexión y metadatos CIMD públicos; usa Autorizar Binance OAuth. Reparar por sí solo no autoriza la cuenta.'
+                : 'Instala el MCP oficial de Binance y selecciona Autorizar Binance OAuth',
         }))
         return
       }

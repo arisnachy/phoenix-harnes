@@ -303,8 +303,9 @@ export function BinanceConnectorSetup({ onChanged, onAuthorizeMcp }: {
                       : 'MCP oficial pendiente de instalar'}
             </p>
             <p className={styles['advancedHint']}>
-              Instala el MCP fijado por Phoenix, autoriza en el navegador con tu cuenta Binance
-              y confirma allí los permisos de la subcuenta Agentic. Instalar no habilita órdenes reales.
+              PHOENIX utiliza OAuth CIMD con la identidad pública del propio proyecto
+              (sin registro dinámico DCR). Pulsa Autorizar Binance OAuth para abrir el consentimiento
+              oficial de Binance. Reconectar o reparar el MCP no concede permisos por sí solo.
             </p>
             <div className={styles['editorActions']}>
               <button type="button" className={connectorStyles['connectorPrimaryButton']}

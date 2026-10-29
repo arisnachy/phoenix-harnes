@@ -20,6 +20,7 @@ import { credentialKey, credentialRef } from '@phoenix-ai/dsh-credentials'
 import { RECONNECT_DEFAULTS, resolveReconnectPolicy, startConnection } from './connection.ts'
 import type { ReconnectConfig } from './connection.ts'
 import { McpOAuthController } from './oauth.ts'
+import { binanceAgenticCimdClientId } from './binance-agentic-cimd.ts'
 import { checkPlatformCompatibility } from './platform.ts'
 import type { SupportedPlatform } from './platform.ts'
 import type { TransportOptions } from './transport.ts'
@@ -279,9 +280,15 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   const oauthClientSecretRef = config.transport === 'streamable-http' && config.oauthClientSecretRef !== undefined
     ? credentialRef(config.oauthClientSecretRef)
     : undefined
-  const resolveFixedOAuthClientInformation = oauthClientIdRef === undefined
-    ? undefined
-    : async () => {
+  // The official Agentic server supports CIMD rather than DCR. Supplying
+  // PHOENIX's own public client id skips unsupported dynamic registration.
+  const binanceCimdId = config.transport === 'streamable-http'
+    ? binanceAgenticCimdClientId(config) : undefined
+  const resolveFixedOAuthClientInformation = binanceCimdId !== undefined
+    ? async () => ({ client_id: binanceCimdId })
+    : oauthClientIdRef === undefined
+      ? undefined
+      : async () => {
       if (credentials === undefined) {
         throw Object.assign(new Error(`mcp-client(${config.serverName}): credential service unavailable`), { status: 401 })
       }
