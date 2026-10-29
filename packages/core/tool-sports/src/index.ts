@@ -585,7 +585,27 @@ export function apply(ctx: Context): void {
           observedPrices:0,bookmaker:null,
           instruction:'OddsHarvester todavía no está listo. PHOENIX solicitó la instalación/recuperación sin bloquear el chat; NO significa que se hayan obtenido cuotas. Ejecutar sports_chat_sources_health para ver progreso y errores, y consultar el mercado después de que el componente marque installed. Si falta el script o WinGet falló, mostrar la ruta del log y solo comandos PowerShell en la consola.'})
       }
-      const quotes=await keylessOdds(args.sport,args.market,args.date,env)
+      let quotes:Awaited<ReturnType<typeof keylessOdds>>=[]
+      let scrapeError:string|null=null
+      try{quotes=await keylessOdds(args.sport,args.market,args.date,env)}
+      catch(error){scrapeError=error instanceof Error?error.message.slice(0,240):'Error del scraper'}
+      // The targeted scraping tool must not strand Kira after a blocked page.
+      // Query other independently authorized sources, without re-running OddsHarvester.
+      const knownSportKeys:Record<string,string[]>={
+        basketball:['basketball_nba'],baseball:['baseball_mlb'],
+        'american-football':['americanfootball_nfl'],'ice-hockey':['icehockey_nhl'],
+        football:['soccer_epl','soccer_spain_la_liga','soccer_usa_mls','soccer_mexico_ligamx'],
+      }
+      const otherSources:Awaited<ReturnType<typeof marketOddsDetailed>>[]=[]
+      if(scrapeError||!quotes.length){
+        const alternativeEnv={...env,PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED:'0'}
+        const candidate=knownSportKeys[args.sport]??[]
+        for(const key of candidate.slice(0,4)){
+          try{otherSources.push(await marketOddsDetailed(key,
+            args.market==='over_under'?'totals':'h2h',alternativeEnv))}
+          catch{/* keep the original scraper failure and explicit provider statuses */}
+        }
+      }
       const grouped=new Map<string,typeof quotes>()
       for(const quote of quotes.slice(0,96)){
         const rows=grouped.get(quote.eventId)??[]
@@ -606,6 +626,14 @@ export function apply(ctx: Context): void {
         }}]
       })
       return JSON.stringify({source:'OddsHarvester/OddsPortal (sin API key)',supported:keylessSports,
+        status:quotes.length?'observed':scrapeError?'scraper-error':'no-observed-offers',
+        scrapeError,alternativeSources:otherSources.map(r=>r.sources),
+        alternativeQuotes:otherSources.flatMap(r=>r.quotes).filter(q=>{
+          const updated=Date.parse(q.updatedAt),kickoff=Date.parse(q.timeIso??q.time),now=Date.now()
+          return Number.isFinite(updated)&&updated<=now&&now-updated<=3_600_000&&
+            Number.isFinite(kickoff)&&kickoff>now
+        }).slice(0,90),
+        instructionOnFailure:'Si hay alternativeQuotes, preséntalas por bookmaker (NO las atribuyas a OddsHarvester ni a Juancito). Si ninguna fuente entrega precios, informa errores exactos, ausencia de claves y el estado instalación; no marques installed como live verified.',
         sport:args.sport,market:args.market,observedAt:new Date().toISOString(),total:quotes.length,
         uiBlocks,outcomes:quotes.slice(0,80),remaining:Math.max(0,quotes.length-80),
         instruction:'PHOENIX renderiza tarjetas nativas. No confundir IDs del scraper con IDs ESPN sin reconciliar nombres/fecha/liga. La cuota refleja un precio observado, no una probabilidad propia ni garantía.'})
