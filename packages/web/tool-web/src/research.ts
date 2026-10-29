@@ -315,7 +315,9 @@ export async function executeResearch(
     failedQueries,
     truncated: dropped || successful.some(result => result.truncated),
     status: failedQueries.length > 0 ? 'partial' : sources.length > 0 ? 'ok' : 'empty',
-    note: 'Search hits are leads, not verified evidence. Inspect filtered titles against original documents, continue remaining source batches and topic-specific searches. Report missing years and blocked providers explicitly; no official API is silently installed.',
+    note: 'Search hits are leads, not verified evidence. Inspect filtered titles against original documents, '
+      + 'continue remaining source batches and topic-specific searches. Report missing years and blocked '
+      + 'providers explicitly; no official API is silently installed.',
   }
 }
 
@@ -357,7 +359,7 @@ export function applyResearchTools(ctx: Context, maxResults: number, timeoutMs: 
       render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
     },
     isConcurrencySafe: () => true,
-    execute: async args => {
+    execute(args) {
       const domain = args.domain?.trim().toLowerCase()
       if (domain !== undefined && domain !== '' && !Object.hasOwn(RESEARCH_SOURCES, domain)) {
         throw new ToolArgsError(['unknown domain; use research_sources without a domain to list domains'])
