@@ -141,7 +141,7 @@ const DOMAIN_PATTERNS: readonly (readonly [string, RegExp])[] = [
   ['crypto', /\b(bitcoin|ethereum|criptomoneda|crypto|blockchain|token|btc)\b/iu],
   ['sports', /\b(partido|f[uú]tbol|football|soccer|nba|mlb|b[eé]isbol|tenis|liga|marcador|resultado deportivo|champions|real madrid)\b/iu],
   ['neuroscience', /\b(neurociencia|neuropsicolog|neuroplasticidad|neuroimagen|cognitiv|alzheimer|alzh[eé]imer)\b/iu],
-  ['public_health', /\\b(aps|atenci[oó]n primaria|primer nivel|cobertura sanitaria|cobertura efectiva|salud p[uú]blica|sistema sanitario|sistema de salud|servicios de salud|mortalidad materna|mortalidad infantil|sisalril|servicio nacional de salud|ministerio de salud p[uú]blica)\\b/iu],
+  ['public_health', /\b(aps|atenci[oó]n primaria|primer nivel|cobertura sanitaria|cobertura efectiva|salud p[uú]blica|sistema sanitario|sistema de salud|servicios de salud|mortalidad materna|mortalidad infantil|sisalril|servicio nacional de salud|ministerio de salud p[uú]blica)\b/iu],
   ['medicine', /\b(medicina|clinical|cl[ií]nic|ensayo|tratamiento|paciente|salud|f[aá]rmaco|epidemiolog)\b/iu],
   ['finance', /\b(acciones|bolsa|stock|bonos|inversiones|nasdaq|s&p|sec edgar)\b/iu],
   ['economics', /\b(inflaci[oó]n|pib|gdp|desempleo|econom[ií]a|banco mundial|pol[ií]ticas p[uú]blicas)\b/iu],
@@ -181,13 +181,13 @@ export interface ResearchPlan {
  * @returns broad and authority-scoped queries plus candidate metadata.
  */
 function scopeQuery(question: string, host: string, domain: string): string {
-  if (domain !== 'public_health' || !/rep[uú]blica dominicana|dominican republic|\\bRD\\b/iu.test(question)) {
+  if (domain !== 'public_health' || !/rep[uú]blica dominicana|dominican republic|\bRD\b/iu.test(question)) {
     return question + ' site:' + host
   }
-  const years = [...question.matchAll(/\\b(?:19|20)\\d{2}\\b/gu)].map(match => match[0]).slice(0, 2).join(' ')
+  const years = [...question.matchAll(/\b(?:19|20)\d{2}\b/gu)].map(match => match[0]).slice(0, 2).join(' ')
   const focus = /mortalidad|resultados sanitarios|indicadores/iu.test(question) ? 'mortalidad indicadores'
     : /cobertura/iu.test(question) ? 'cobertura sanitaria'
-      : /primer nivel|atenci[oó]n primaria|\\bAPS\\b/iu.test(question) ? 'atención primaria salud'
+      : /primer nivel|atenci[oó]n primaria|\bAPS\b/iu.test(question) ? 'atención primaria salud'
         : 'sistema de salud'
   const location = host === 'worldbank.org' || host === 'who.int' ? 'Dominican Republic' : 'República Dominicana'
   return [location, focus, years, 'site:' + host].filter(Boolean).join(' ')
@@ -277,12 +277,12 @@ export async function executeResearch(
   let dropped = false
   let offTopicDropped = 0
   const countryFocus = plan.domain === 'public_health'
-    && plan.queries.some(query => /rep[uú]blica dominicana|dominican republic|\\bRD\\b/iu.test(query))
+    && plan.queries.some(query => /rep[uú]blica dominicana|dominican republic|\bRD\b/iu.test(query))
   const isRelevant = (source: WebSearchSource, url: string): boolean => {
     if (plan.domain !== 'public_health') return true
     const evidence = (source.title ?? '') + ' ' + (source.snippet ?? '') + ' ' + url
-    const topic = /salud|health|primary care|atenci[oó]n primaria|primer nivel|cobertura|mortalidad|\\buhc\\b|aseguramiento|afiliaci[oó]n|sanitari|healthcare/iu.test(evidence)
-    const country = !countryFocus || /rep[uú]blica dominicana|dominican republic|\\bDOM\\b|\\.gob\\.do/iu.test(evidence)
+    const topic = /salud|health|primary care|atenci[oó]n primaria|primer nivel|cobertura|mortalidad|\buhc\b|aseguramiento|afiliaci[oó]n|sanitari|healthcare/iu.test(evidence)
+    const country = !countryFocus || /rep[uú]blica dominicana|dominican republic|\bDOM\b|\.gob\.do/iu.test(evidence)
     return topic && country
   }
   const maxRanks = Math.max(0, ...successful.map(result => result.sources.length))
