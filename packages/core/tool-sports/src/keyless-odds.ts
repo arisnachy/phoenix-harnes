@@ -3,7 +3,8 @@
  * https://github.com/jordantete/OddsHarvester (MIT)
  * A local browser scraper is NOT an unlimited odds API. Site access, market licensing,
  * geoblocks and rate limits remain subject to the data publisher's policies.
- * Disabled by default; the host opts in after reviewing those conditions.
+ * Enabled when the user requests free odds, with an explicit host opt-out.
+ * Provider availability is always checked independently of this feature flag.
  */
 import { createHash } from 'node:crypto'
 import { execFile } from 'node:child_process'
@@ -129,10 +130,18 @@ export function normalizeOddsHarvester(
   return result
 }
 
+/** Free, read-only odds need no API key. Operators may explicitly opt out. */
 export const keylessEnabled=(env:NodeJS.ProcessEnv=process.env):boolean=>
-  env.PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED==='1'
+  env.PHOENIX_SPORTS_KEYLESS_ODDS_DISABLED!=='1'
+    &&env.PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED!=='0'
 
 const cache=new Map<string,{at:number;rows:KeylessQuote[]}>()
+const failures=new Map<string,{at:number;message:string}>()
+let lastStatus:{checkedAt:string;status:'quotes'|'no-quotes'|'unavailable';count:number;error?:string}|undefined
+/** Observable provider state, not a claim that a future quote will be available. */
+export function lastKeylessStatus(){
+  return lastStatus&&Date.now()-Date.parse(lastStatus.checkedAt)<3_600_000?lastStatus:undefined
+}
 const inFlight=new Map<string,Promise<KeylessQuote[]>>()
 const localDay=()=>new Intl.DateTimeFormat('en-CA',{
   timeZone:'America/Santo_Domingo',year:'numeric',month:'2-digit',day:'2-digit',
@@ -146,9 +155,29 @@ async function runScraper(sport:KeylessSport,market:string,day:string,env:NodeJS
   const file=join(folder,'odds.json')
   try{
     const executable=env.PHOENIX_SPORTS_ODDSHARVESTER_BIN||'oddsharvester'
-    await runFile(executable,['upcoming','--sport',sport,'--date',day.replaceAll('-',''),
-      '--market',market,'--headless','--format','json','--output',file],
-    {shell:false,windowsHide:true,timeout:120_000,maxBuffer:256_000,env:process.env})
+    const argv=['upcoming','--sport',sport,'--date',day.replaceAll('-',''),
+      '--market',market,'--headless','--format','json','--output',file,
+      '--timezone','America/Santo_Domingo','--concurrency','1',
+      '--request-delay','2']
+    // No shell or arbitrary URLs; uvx is an optional self-contained runner, pinned to a tested package.
+    // It may provision the package, but a browser binary must still be present on the host.
+    // Child process needs basic OS/browser variables, never the host's API keys or vault secrets.
+    const allow=/^(PATH|HOME|USERPROFILE|APPDATA|LOCALAPPDATA|TEMP|TMP|TMPDIR|SYSTEMROOT|WINDIR|PLAYWRIGHT_BROWSERS_PATH|UV_CACHE_DIR|UV_PYTHON_INSTALL_DIR|XDG_CACHE_HOME|LANG|LC_ALL)$/iu
+    const safeEnv=Object.fromEntries(Object.entries(process.env).filter(([name])=>allow.test(name)))
+    try{
+      await runFile(executable,argv,{shell:false,windowsHide:true,timeout:120_000,maxBuffer:256_000,env:safeEnv})
+    }catch(error){
+      const missing=(error as NodeJS.ErrnoException).code==='ENOENT'
+      if(!missing||env.PHOENIX_SPORTS_ODDSHARVESTER_BIN||env.PHOENIX_SPORTS_ODDSHARVESTER_UVX_DISABLED==='1')throw error
+      try{
+        await runFile('uvx',['--from','oddsharvester==0.13.0','oddsharvester',...argv],
+          {shell:false,windowsHide:true,timeout:120_000,maxBuffer:256_000,env:safeEnv})
+      }catch(fallback){
+        if((fallback as NodeJS.ErrnoException).code==='ENOENT')throw Error(
+          'OddsHarvester no está instalado y uvx no está disponible; instala con pnpm sports:odds:setup')
+        throw fallback
+      }
+    }
     const metadata=await stat(file)
     if(metadata.size>4_000_000)throw Error('Archivo de cuotas supera 4 MB')
     return JSON.parse(await readFile(file,'utf8')) as unknown
@@ -166,20 +195,34 @@ export async function keylessOdds(
 ):Promise<KeylessQuote[]>{
   if(!sportOK(sport)||!marketOK(sport,market))throw Error('Deporte o mercado sin soporte verificado en OddsHarvester')
   if(!validDate(date))throw Error('Fecha de cuotas inválida')
-  if(!keylessEnabled(env))throw Error('Scraping sin API key desactivado por el operador')
+  if(!keylessEnabled(env))throw Error('OddsHarvester deshabilitado expresamente en PHOENIX_SPORTS_KEYLESS_ODDS_DISABLED=1 o KEYLESS_ODDS_ENABLED=0')
   const key=[sport,market,date].join('|')
+  const previousError=runner===runScraper?failures.get(key):undefined
+  if(previousError&&now>=previousError.at&&now-previousError.at<90_000)throw Error(previousError.message)
   const cached=runner===runScraper?cache.get(key):undefined
   if(cached&&now>=cached.at&&now-cached.at<300_000)return cached.rows
   const running=runner===runScraper?inFlight.get(key):undefined
   if(running)return running
   const task=(async()=>{
-    const raw=await runner(sport,market,date,env)
-    const rows=normalizeOddsHarvester(raw,sport,now,3_600_000)
-    if(runner===runScraper){
-      if(cache.size>=64)cache.clear()
-      cache.set(key,{at:now,rows})
+    try{
+      const raw=await runner(sport,market,date,env)
+      const rows=normalizeOddsHarvester(raw,sport,now,3_600_000)
+      if(runner===runScraper){
+        if(cache.size>=64)cache.clear()
+        cache.set(key,{at:now,rows})
+        failures.delete(key)
+        lastStatus={checkedAt:new Date(now).toISOString(),status:rows.length?'quotes':'no-quotes',count:rows.length}
+      }
+      return rows
+    }catch(error){
+      if(runner===runScraper){
+        const message=error instanceof Error?error.message.slice(0,180):'Error del proveedor'
+        failures.set(key,{at:now,message})
+        if(failures.size>64)failures.clear()
+        lastStatus={checkedAt:new Date(now).toISOString(),status:'unavailable',count:0,error:message}
+      }
+      throw error
     }
-    return rows
   })()
   if(runner===runScraper)inFlight.set(key,task)
   try{return await task}
