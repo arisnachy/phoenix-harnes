@@ -134,7 +134,9 @@ export class BinancePaperAutomation {
           .slice(0, 1000)
         if (!candidates.length) throw new Error('No verified active Spot USDT markets')
         this.universe = candidates
-        this.universeCursor = 0
+        // Never restart the scanner at the first asset on hourly refresh.
+        // A 1,000-market rotation takes >1h at 12 pairs/minute.
+        this.universeCursor = this.universeCursor % candidates.length
         this.lastDiscoveryAt = new Date().toISOString()
         this.lastDiscoveryIssue = undefined
       } catch {
