@@ -31,7 +31,10 @@ function ready(){
   try {
     const data=JSON.parse(readFileSync(state,'utf8'))
     if(shouldBootstrap(data))return false
-    return required.every(name=>data.components[name]?.status==='installed')
+    const exe=data.paths?.executable,archive=data.paths?.history
+    return Boolean(exe&&archive&&existsSync(exe)&&
+      ['nba','mlb','nfl','nhl'].every(s=>existsSync(join(archive,'sportsbookreview-'+s+'.json')))&&
+      existsSync(join(archive,'mlb-odds.json')))
   }catch{return false}
 }
 function unlink(){try{unlinkSync(lock)}catch{ /* no-op */ }}
@@ -69,7 +72,6 @@ function start(){
       cwd:sourceRoot,env:process.env,
       detached:true,windowsHide:true,shell:false,stdio:'ignore',
     })
-    // Correct launcher: execute this module in its own worker role.
     child.unref()
   }catch(error){
     unlink()
