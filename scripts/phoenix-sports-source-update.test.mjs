@@ -116,3 +116,25 @@ test('Windows updater falls back to source checkout when prepared runtime has no
     assert.match(readFileSync(join(store,'install.log'),'utf8'),/Launching background installer/)
   }finally{rmSync(home,{recursive:true,force:true})}
 })
+
+test('explicit repair bypasses backoff but keeps the single installer lock',async()=>{
+  const {mkdtempSync,mkdirSync,writeFileSync,existsSync,rmSync}=await import('node:fs')
+  const {tmpdir}=await import('node:os')
+  const dir=mkdtempSync(join(tmpdir(),'phoenix-sports-retry-'))
+  const checkout=join(dir,'checkout'),store=join(dir,'data')
+  try{
+    mkdirSync(join(checkout,'scripts'),{recursive:true})
+    mkdirSync(store,{recursive:true})
+    writeFileSync(join(checkout,'scripts','phoenix-sports-source-bootstrap.mjs'),'// fixture')
+    writeFileSync(join(store,'manifest.json'),JSON.stringify({
+      schema:3,updatedAt:new Date().toISOString(),
+      components:{'OddsHarvester + Playwright':{status:'error'}},
+    }))
+    const env={PHOENIX_INSTALL_ROOT:checkout,PHOENIX_SPORTS_SOURCE_HOME:store}
+    const launch=(_bin,_args,_options)=>({unref(){}})
+    assert.equal(start(launch,env).status,'retry-cooldown')
+    assert.equal(start(launch,env,{force:true}).status,'started')
+    assert.equal(start(launch,env,{force:true}).status,'running')
+    assert.equal(existsSync(join(store,'install.log')),true)
+  }finally{rmSync(dir,{recursive:true,force:true})}
+})
