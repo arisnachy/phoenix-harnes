@@ -79,7 +79,8 @@ export async function videoMediaInput(path?: string): Promise<{ path: string; so
 type CommandResult = { output: Buffer; stderr: string; code: number }
 async function execute(command: string, args: string[], timeout = 30_000, maxOutput = 5_000_000): Promise<CommandResult> {
   return await new Promise((resolvePromise, reject) => {
-    let output: Buffer[] = [], size = 0, stderr = '', finished = false
+    const output: Buffer[] = []
+    let size = 0, stderr = '', finished = false
     const child = spawn(command, args, {stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true, shell: false})
     const finish = (error?: Error, code = -1) => {
       if (finished) return
