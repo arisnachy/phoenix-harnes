@@ -1,6 +1,6 @@
 import {test} from 'node:test'
 import assert from 'node:assert/strict'
-import {keylessOdds,normalizeOddsHarvester,oddsHarvesterArgs} from '../src/keyless-odds.ts'
+import {keylessOdds,normalizeOddsHarvester,recoverScraperRows,oddsHarvesterArgs,oddsHarvesterHistoricArgs,keylessHistoricOdds} from '../src/keyless-odds.ts'
 const now=Date.parse('2026-10-28T18:05:00Z')
 const fixture=[{
   scraped_date:'2026-10-28 18:00:00 UTC',match_date:'2026-10-28 23:00:00 UTC',
@@ -52,7 +52,7 @@ test('OddsHarvester requests the correct period for NHL winner including overtim
   assert.equal(nba[nba.indexOf('--period')+1],'full_time')
   const soccer=oddsHarvesterArgs('football','double_chance','2026-10-29','odds.json')
   assert.ok(!soccer.includes('--period'))
-  assert.deepEqual(soccer.slice(-5),['--headless','--format','json','--output','odds.json'])
+  assert.deepEqual(soccer.slice(-5),['--format','json','--stream-ndjson','--output','odds.json'])
 })
 test('NHL per-bookmaker home/away FullIncludingOT fixture yields genuinely distinct priced selections',()=>{
   const hockey=[{
@@ -68,4 +68,31 @@ test('NHL per-bookmaker home/away FullIncludingOT fixture yields genuinely disti
   assert.equal(result.length,2)
   assert.deepEqual(new Set(result.map(x=>x.selection)),new Set(['Winnipeg Jets','Tampa Bay Lightning']))
   assert.ok(result.every(x=>x.bookmaker==='Bookmaker A'&&x.market==='h2h'))
+})
+
+test('recovers genuine completed OddsHarvester events from NDJSON even if later scraping fails',()=>{
+  const first=fixture[0]
+  const output=recoverScraperRows(JSON.stringify(first)+'\n'+'{invalid-partial-json'+
+    '\n'+JSON.stringify(first)+'\n',[])
+  assert.equal(output.length,1)
+  assert.equal(normalizeOddsHarvester(output,'football',now).length,7)
+  assert.deepEqual(recoverScraperRows('ERROR processed 8 games\\n{broken',null),[])
+  assert.deepEqual(recoverScraperRows('{"match_link":"https://evil.example/test","home_team":"A","away_team":"B"}',[]),[])
+})
+
+test('keyless historic query preserves past lines rather than mislabeling as live',async()=>{
+  const old=[{...fixture[0],match_date:'2024-08-30 23:00:00 UTC',
+    scraped_date:'2024-08-29 20:00:00 UTC'}]
+  const report=await keylessHistoricOdds('football','england-premier-league',
+    '2024-2025','1x2',{PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED:'1'},now,async()=>old)
+  assert.equal(report.historical,true)
+  assert.equal(report.rows.length,7)
+  assert.ok(report.rows.every(q=>q.source.includes('histórico')))
+  const args=oddsHarvesterHistoricArgs('football','england-premier-league',
+    '2024-2025','1x2','C:\\\\Users\\\\Test User\\\\AppData\\\\Local\\\\Temp\\\\history.json')
+  assert.equal(args[0],'historic')
+  assert.ok(args.includes('--max-pages'))
+  assert.ok(args.includes('--stream-ndjson'))
+  await assert.rejects(()=>keylessHistoricOdds('football','../../unsafe',
+    '2024-2025','1x2',{PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED:'1'},now,async()=>old),/inválida/)
 })
