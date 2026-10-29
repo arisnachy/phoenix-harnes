@@ -96,13 +96,13 @@ describe('SidebarRoot shell', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Home' }))
       expect(b.startSession).toHaveBeenCalledOnce()
       fireEvent.click(screen.getByRole('button', { name: 'Scheduled tasks' }))
+      expect(screen.getByRole('dialog', { name: 'Tareas programadas' })).toBeTruthy()
+      fireEvent.click(screen.getByRole('button', { name: 'Cerrar tareas programadas' }))
+      expect(screen.queryByRole('dialog', { name: 'Tareas programadas' })).toBeNull()
       fireEvent.click(screen.getByRole('button', { name: 'Connectors' }))
       fireEvent.click(screen.getByRole('button', { name: 'Team' }))
       fireEvent.click(screen.getByRole('button', { name: 'Library' }))
-      expect(features).toEqual([
-        { destination: 'connectors', label: 'Connectors' },
-        { destination: 'team', label: 'Team' },
-      ])
+      expect(features).toEqual([{ destination: 'connectors', label: 'Connectors' }])
       expect(libraries).toBe(1)
     } finally {
       window.removeEventListener('phoenix:open-feature', onFeature)
