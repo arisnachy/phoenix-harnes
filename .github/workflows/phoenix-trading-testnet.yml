@@ -6,6 +6,11 @@ on:
       - "packages/hardness/adapters/src/binance-*"
       - "packages/hardness/adapters/tests/binance-*"
       - "packages/client/ui-conversation/src/client/chat/TradingDashboard.tsx"
+      - "packages/mcp/mcp-client/src/binance-agentic-cimd.ts"
+      - "packages/mcp/mcp-client/src/index.ts"
+      - "packages/mcp/mcp-client/tests/binance-agentic-cimd.spec.ts"
+      - "packages/mcp/mcp-client/tests/oauth.spec.ts"
+      - "website/public/oauth/binance-agentic-client.json"
       - "packages/client/ui-settings-models/src/client/BinanceConnectorSetup.tsx"
       - "packages/client/ui-settings-models/src/client/AuthorizationPanel.tsx"
       - "packages/client/ui-settings-models/src/client/connector-catalog.ts"
@@ -19,6 +24,11 @@ on:
       - "packages/hardness/adapters/src/binance-*"
       - "packages/hardness/adapters/tests/binance-*"
       - "packages/client/ui-conversation/src/client/chat/TradingDashboard.tsx"
+      - "packages/mcp/mcp-client/src/binance-agentic-cimd.ts"
+      - "packages/mcp/mcp-client/src/index.ts"
+      - "packages/mcp/mcp-client/tests/binance-agentic-cimd.spec.ts"
+      - "packages/mcp/mcp-client/tests/oauth.spec.ts"
+      - "website/public/oauth/binance-agentic-client.json"
       - "packages/client/ui-settings-models/src/client/BinanceConnectorSetup.tsx"
       - "packages/client/ui-settings-models/src/client/AuthorizationPanel.tsx"
       - "packages/client/ui-settings-models/src/client/connector-catalog.ts"
@@ -57,6 +67,8 @@ jobs:
             packages/hardness/adapters/tests/binance-testnet-automation.spec.ts \
             packages/hardness/adapters/tests/binance-paper-route.spec.ts \
             packages/hardness/adapters/tests/binance-paper-automation.spec.ts
+      - name: Binance Agentic OAuth CIMD compatibility and callback regressions
+        run: pnpm exec vitest run packages/mcp/mcp-client/tests/binance-agentic-cimd.spec.ts packages/mcp/mcp-client/tests/oauth.spec.ts
       - name: Binance settings authentication UI regression
         run: pnpm exec vitest run packages/client/ui-settings-models/tests/binance-connector-setup.client.spec.tsx packages/client/ui-settings-models/tests/connectors-section.client.spec.tsx -t Binance
       - name: TypeScript Host and connector UI contracts (dependency-ready)
