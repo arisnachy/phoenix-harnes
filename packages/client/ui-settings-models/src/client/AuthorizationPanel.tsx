@@ -1929,7 +1929,11 @@ export function ConnectorsSettingsSection({ api,
               const lines = telemetryLines(entry.telemetry)
               const presentation = accountPresentation(entry)
               const runtime = runtimeForEntry(entry, mcpHub.runtime)
-              const status = accountStatus(entry, runtime, connectorT)
+              const status = entry.key === 'mcp-client/binance-agent-os'
+                && runtime?.status !== 'ready'
+                ? { text: 'Cliente no admitido por Binance (3346001)',
+                  className: connectorStyles['connectorStatusWarn'] ?? '' }
+                : accountStatus(entry, runtime, connectorT)
               const actionLabel = entry.key === NATIVE_CODEX_ACCOUNT_KEY && entry.stored !== undefined
                 ? connectorT('reauthorize')
                 : runtime?.status === 'auth-required' && entry.stored !== undefined
