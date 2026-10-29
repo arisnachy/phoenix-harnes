@@ -287,7 +287,8 @@ export async function executeResearch(
   const isRelevant = (source: WebSearchSource, url: string): boolean => {
     if (plan.domain !== 'public_health') return true
     const evidence = (source.title ?? '') + ' ' + (source.snippet ?? '') + ' ' + url
-    const topic = /salud|health|primary care|atenci[oó]n primaria|primer nivel|cobertura|coverage|mortalidad|mortality|maternal|infant|\buhc\b|aseguramiento|afiliaci[oó]n|sanitari|healthcare/iu.test(evidence)
+    const topic = /salud|health|primary care|atenci[oó]n primaria|primer nivel|cobertura|coverage|mortalidad/iu.test(evidence)
+      || /mortality|maternal|infant|\buhc\b|aseguramiento|afiliaci[oó]n|sanitari|healthcare/iu.test(evidence)
     const country = !countryFocus || /rep[uú]blica dominicana|dominican republic|\bDOM\b|\.gob\.do/iu.test(evidence)
     return topic && country
   }
