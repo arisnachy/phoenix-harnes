@@ -1,0 +1,75 @@
+/** A discoverable market ontology, not a claim that any sportsbook currently quotes an offer.
+ * Settlement is governed by the selected bookmaker's CURRENT house rules.
+ */
+export type BettingMarket={sport:string;family:string;examples:string[];
+  period:string;requires:string[];risk:string}
+export const realMarketCatalog:readonly BettingMarket[]=[
+{sport:'baseball',family:'moneyline',examples:['Ganador del juego','Ganador primeras 5 entradas','Ganador primeras 3 entradas'],
+ period:'Final incluido extrainnings, o primeras N entradas según mercado',
+ requires:['juego y período oficiales','regla pitcher listado vs acción'],risk:'Partidos suspendidos, 4.5/5 innings y empate según reglas de la casa'},
+{sport:'baseball',family:'run_line',examples:['Favorito -1.5','Underdog +1.5','Línea alternativa -2.5 / +2.5','Primeras 5 entradas -0.5'],
+ period:'Juego completo o período exacto ofrecido',requires:['handicap firmado','marcador del período','duración mínima de juego'],risk:'Ganar el partido no equivale a cubrir el run line'},
+{sport:'baseball',family:'totals',examples:['Total de carreras +8.5','Total de carreras -8.5','Totales 1ras 3/5 entradas','Total de cada equipo','Carreras primer inning sí/no'],
+ period:'Full game, 1/3/5 innings o primera mitad, según título',
+ requires:['línea','secuencia de innings válida','reglas de suspensión'],risk:'Un empate exacto con línea entera puede ser push; medio inning y extra innings dependen del contrato'},
+{sport:'baseball',family:'player_props',examples:['Ponches del abridor O/U','Hits','Total bases','RBI','Home run sí/no','Bases robadas','Bases por bolas'],
+ period:'Juego completo o actuación del jugador',requires:['jugador confirmado','reglas de participación','estadística oficial'],
+ risk:'Cambio de abridor, salida temprana o jugador no participante: void/pérdida según casa y modalidad'},
+{sport:'basketball',family:'spread_totals',examples:['Handicap -5.5/+5.5','Total puntos O/U','Primer cuarto','Primera mitad','Total del equipo','Margen de victoria'],
+ period:'Partido con OT o período reglamentario especificado',requires:['línea y signo','períodos completos','regla overtime'],
+ risk:'Hándicap no es moneyline; pueden existir reglas distintas para prolongación'},
+{sport:'basketball',family:'player_props',examples:['Puntos','Rebotes','Asistencias','Triples','Puntos+rebotes+asistencias','Doble-doble','Robos'],
+ period:'Partido o segmento expresamente ofertado',requires:['boxscore oficial','participación','mercado exacto'],
+ risk:'No jugar, sustitución y revisiones estadísticas pueden cambiar liquidación'},
+{sport:'americanfootball',family:'spreads_totals',examples:['Moneyline','Handicap','Total puntos','Total por mitad/cuarto','Total touchdowns'],
+ period:'Reglamentario, tiempo extra o cuartos según mercado',requires:['QB verificado','tipo de juego','duración mínima'],
+ risk:'Condiciones de OT y abandono varían por operador'},
+{sport:'americanfootball',family:'player_props',examples:['Yardas de pase','Touchdowns','Yardas terrestres','Recepciones','Yardas recibidas','Sacks'],
+ period:'Partido o intervalo publicado',requires:['participación','estadísticas oficiales'],risk:'Jugadores inactivos y cambios de titular'},
+{sport:'soccer',family:'three_way',examples:['1X2','Doble oportunidad 1X/X2/12','Empate no apuesta','Handicap asiático','Resultado al descanso','Descanso/final'],
+ period:'Normalmente 90 minutos + añadido, no prórroga, salvo título explícito',requires:['tres resultados para 1X2','alcance de tiempo extra'],
+ risk:'Fútbol de eliminatoria puede tener ganador de clasificación diferente a 1X2'},
+{sport:'soccer',family:'goals',examples:['Over/Under 2.5 goles','BTTS ambos marcan','Total por equipo','Córners','Tarjetas','Goles por mitad'],
+ period:'Tiempo regular salvo regla específica',requires:['fuente de estadísticas oficial','definición corners y tarjetas'],
+ risk:'Goles en propia puerta, tarjetas de banquillo y prórroga tienen condiciones diferentes'},
+{sport:'soccer',family:'player_props',examples:['Goleador en cualquier momento','Disparos a puerta','Asistencias','Faltas','Entradas','Tarjetas'],
+ period:'90 minutos o mercado individual',requires:['participación','alineación','datos OPTA u oficial'],
+ risk:'No titular/no juega puede anular; primer goleador tiene reglas especiales'},
+{sport:'hockey',family:'puck_line_totals',examples:['Ganador incluido OT','Ganador 60 minutos','Puck line -1.5','Goles O/U','Primer período'],
+ period:'60 minutos vs incluido tiempo extra/tanda',requires:['criterio OT','portero y marcador'],
+ risk:'Ganador en tiempo regular y ganador final no son el mismo mercado'},
+{sport:'hockey',family:'player_props',examples:['Tiros a puerta','Goles','Asistencias','Paradas de portero','Puntos'],
+ period:'Partido o períodos',requires:['participación','estadísticas NHL oficiales'],risk:'Portero suplente, cambios y minutos efectivos'},
+{sport:'tennis',family:'match_sets_games',examples:['Ganador','Handicap de juegos','Total juegos','Ganador primer set','Sets exactos','Tie-break sí/no','Aces'],
+ period:'Match, set o game',requires:['sets oficiales','regla retiro/abandono','superficie'],
+ risk:'Retiro del jugador puede anular o liquidar según mercado y casa'},
+{sport:'mma',family:'rounds_method',examples:['Ganador','Método KO/TKO','Decisión','Sumisión','O/U rounds','Victoria en ronda X'],
+ period:'Rondas programadas',requires:['resultado oficial','tipo de detención'],
+ risk:'No contest, descalificación, cambios de rounds o peso'},
+{sport:'cricket',family:'innings',examples:['Match winner','Total runs','Powerplay','Wickets','Jugador total runs'],
+ period:'Innings, overs y match completo',requires:['formato T20/ODI/Test','DLS','overs válidos'],
+ risk:'Reducción de overs y reglas Duckworth-Lewis-Stern'},
+{sport:'golf',family:'tournament',examples:['Ganador torneo','Top 5/10/20','Matchup','Ronda exacta','Cut sí/no'],
+ period:'Ronda o torneo',requires:['reglas dead heat','cut','participación'],
+ risk:'Empates y reducción de campo pueden aplicar dead-heat'},
+]
+export const sportsbookRuleSources=[
+ {operator:'Appuesta (República Dominicana)',url:'https://www.appuesta.do/rules',
+   scope:'Explicación extensa de mercados de fútbol, baloncesto y otros; aplica solo a ese operador'},
+ {operator:'FacilitoBet (República Dominicana)',url:'https://www.facilitobet.com/regla/beisbol',
+   scope:'MLB: 5 entradas, run line, totales, extrainnings, pitcher listado y parlay; exclusivo de su reglamento'},
+ {operator:'Juancito Sport (información de oferta)',url:'https://juancitosports.com/',
+   scope:'Describe deportes y mercados; NO se comprobó un reglamento contractual de liquidación completo'},
+ {operator:'DraftKings Sportsbook',url:'https://sportsbook.draftkings.com/help/sport-rules/baseball',
+   scope:'Participación de jugadores, inning markets, pitchers listados y suspensión; no copiar a bancas RD'},
+ {operator:'FanDuel Sportsbook (New Jersey, 2026)',url:'https://policies.fanduel.com/SB/NJ/2026-10-15T12-42-58.html',
+   scope:'Parlays, void/push, apuestas correlacionadas, restricciones; jurisdicción específica'},
+ {operator:'Dirección de Casinos y Juegos de Azar RD',url:'https://www.casinos.gob.do/juegos-autorizados/banca-de-apuestas-deportivas/',
+   scope:'Marco regulatorio; NO sustituye reglamentos de mercado del operador'},
+]
+export function describeBettingMarkets(sport?:string,family?:string){
+  const catalog=realMarketCatalog.filter(x=>(!sport||x.sport===sport)&&
+    (!family||x.family===family))
+  return {catalog,numberOfFamilies:catalog.length,sources:sportsbookRuleSources,
+    warning:'La existencia de un mercado en el catálogo no implica que una casa lo ofrezca hoy. Se requiere cotización, período, cuota, casa y fecha verificadas, con reglas de liquidación de esa casa.'}
+}
