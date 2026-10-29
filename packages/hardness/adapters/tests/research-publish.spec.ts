@@ -60,7 +60,10 @@ describe('Phoenix research report publisher', () => {
     const thesis = {
       ...report, document_type: 'thesis', quality_profile: 'professional',
       thesis_level: 'masters', style: 'apa7', user_requested_brief: false,
-      sections: [{ heading: 'Investigación', text: 'evidencia '.repeat(8100) + cited }],
+      sections: [
+        { heading: 'Marco teórico', text: 'evidencia '.repeat(4050) },
+        { heading: 'Investigación', text: 'evidencia '.repeat(4050) + cited },
+      ],
       references, tables: [{ title: 'Matriz de evidencia', columns: ['Fuente'],
         rows: [['estudio']], source_key: 'study0' }],
     }
