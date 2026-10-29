@@ -113,19 +113,25 @@ async function installPython(){
     }
     if(failure)throw Error('Python 3 missing or venv creation failed: '+failure.message)
   }
-  // If a previous update installed the correct CLI, avoid every-run network.
+  // The executable alone does not prove the pinned distribution version.
+  // OddsHarvester documents --help, not necessarily --version.
+  const verifyPinned=()=>run(py,['-c',
+    'import importlib.metadata as m, sys; sys.exit(m.version("oddsharvester") != "'+
+      ODDSHARVESTER_VERSION+'")'],{timeout:15000})
   if(await exists(cli)){
     try {
-      await run(cli,['--version'],{timeout:15000})
+      await verifyPinned()
+      await run(cli,['--help'],{timeout:15000})
       await run(py,['-m','playwright','install','chromium'],{timeout:240_000})
       return
     }
-    catch{ /* repair below */ }
+    catch{ /* repair missing or wrong-version installation */ }
   }
   await run(py,['-m','pip','install','--disable-pip-version-check','oddsharvester=='+ODDSHARVESTER_VERSION],
     {timeout:240_000})
+  await verifyPinned()
   await run(py,['-m','playwright','install','chromium'],{timeout:240_000})
-  await run(cli,['--version'],{timeout:15_000})
+  await run(cli,['--help'],{timeout:15_000})
 }
 async function installHistory(){
   const sbr=await cloneOnce('sportsbookreview-scraper',upstream['sportsbookreview-scraper'])
