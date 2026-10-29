@@ -33,6 +33,8 @@ export type KeylessQuote = {
   price:number;home:string;away:string;time:string;updatedAt:string
   source:string
   sportKey:string
+  league?:string
+  matchLink?:string
 }
 type ScrapedGame = {
   match_date?:unknown;scraped_date?:unknown;match_link?:unknown
@@ -121,6 +123,7 @@ export function normalizeOddsHarvester(
           dedupe.add(identity)
           result.push({eventId,bookmaker,market,selection,point,price:decimal,home,away,
             time:new Date(kickoff).toISOString(),updatedAt:new Date(observed).toISOString(),
+            league:str(game.league_name,120),matchLink:link,
             source:historical?'OddsHarvester/OddsPortal (histórico, no vigente)':'OddsHarvester/OddsPortal (sin API key)',sportKey})
           if(result.length>=2500)return result
         }
