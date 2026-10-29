@@ -162,3 +162,17 @@ node scripts/phoenix-sports-historical-collect.mjs --run=1 --source=mlb --startD
 Los archivos se escriben bajo `history/collected`, solo para análisis y
 backtesting. El scraping histórico es voluntario y puede fallar por cambios
 en el sitio o restricciones de acceso. No hay servicio ilimitado garantizado.
+
+### Instalación de Python sin intervención en Windows
+
+Si no se detecta Python >=3.12, la reparación de fuentes intenta
+`winget install --id Python.Python.3.13 --exact --source winget
+--scope user --silent --accept-package-agreements --accept-source-agreements
+--disable-interactivity --no-upgrade`.
+WinGet comprueba la procedencia y firma del paquete y la instalación es
+de ámbito de usuario, sin elevar privilegios. Si Windows App Installer o
+las políticas de empresa lo bloquean, el error queda en `install.log`.
+Se puede deshabilitar solo este paso automático con
+`PHOENIX_SPORTS_AUTO_PYTHON_INSTALL=0`.
+Una instalación correcta de Python todavía necesita instalar Playwright
+y comprobar el ejecutable real de Chromium antes de habilitar scraping.
