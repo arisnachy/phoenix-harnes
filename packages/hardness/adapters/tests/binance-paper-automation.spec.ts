@@ -85,7 +85,7 @@ describe('Binance Host PAPER automation', () => {
       async prices(symbols) { return Object.fromEntries(symbols.map(symbol => [symbol, 100])) },
       async candles() { return breakoutHistory() },
     }
-    const { worker, paper } = setup(feed)
+    const { worker } = setup(feed)
     await worker.start({ symbols: ['ETHUSDT'] })
     failSell = true
     await expect(worker.stopAndLiquidate()).rejects.toThrow('incomplete')
