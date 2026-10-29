@@ -14,7 +14,7 @@ import { Readable, Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import { pathToFileURL } from 'node:url'
 
-export const SPORTS_INSTALL_VERSION=2
+export const SPORTS_INSTALL_VERSION=3
 export const ODDSHARVESTER_VERSION='0.20.0'
 const upstream={
   'sportsbookreview-scraper':'https://github.com/flancast90/sportsbookreview-scraper.git',
