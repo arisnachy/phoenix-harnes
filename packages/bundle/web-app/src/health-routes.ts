@@ -60,7 +60,7 @@ function statusError(error:unknown):number{
 }
 
 type GoogleMailClient = { request(input:{ service:'gmail';path:string;method?:string;headers?:Record<string,string>;body?:string }):
-  Promise<{ ok:boolean;body:string;status:number }> }
+Promise<{ ok:boolean;body:string;status:number }> }
 function mailClient(ctx:Context):GoogleMailClient|undefined {
   return (ctx.get as (key:string)=>unknown)('googleApi') as GoogleMailClient|undefined
 }
@@ -128,7 +128,7 @@ export function registerHealthRoutes(ctx:Context):void {
       res.end(content);return
     }
     if(!path.startsWith('/health/api/')){reply(res,404,{ error:'Ruta desconocida' });return}
-    if(method!=='GET'&&method!=='POST'&&method!=='PATCH'){reply(res,405,{ error:'Método no permitido'});return}
+    if(method!=='GET'&&method!=='POST'&&method!=='PATCH'){reply(res,405,{ error:'Método no permitido' });return}
     if(method!=='GET'&&!origin(req)){reply(res,403,{ error:'Origen no autorizado' });return}
     const suffix=path.slice('/health/api/'.length).split('/').filter(Boolean)
     if(suffix.length<1||suffix.length>2){reply(res,404,{ error:'Ruta desconocida' });return}
@@ -146,7 +146,7 @@ export function registerHealthRoutes(ctx:Context):void {
       if(operation==='login'&&method==='POST'){
         const ip=req.socket.remoteAddress??''
         const f=failures.get(ip)
-        if(f&&f.count>=5&&f.until>Date.now()){reply(res,429,{ error:'Demasiados intentos. Reintente después.'});return}
+        if(f&&f.count>=5&&f.until>Date.now()){reply(res,429,{ error:'Demasiados intentos. Reintente después.' });return}
         const body=await readBody(req)
         let session:ReturnType<HealthClinicStore['login']>
         try{session=store.login(body.username,body.password)}
@@ -248,7 +248,7 @@ export function registerHealthRoutes(ctx:Context):void {
           reply(res,200,{ record:next });return
         }
       }
-      reply(res,404,{ error:'Operación no disponible'})
+      reply(res,404,{ error:'Operación no disponible' })
     }catch(error){
       // Never log PHI, password, raw request or stack traces.
       const msg=error instanceof Error?error.message:'Solicitud inválida'
