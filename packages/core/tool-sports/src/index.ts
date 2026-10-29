@@ -104,7 +104,7 @@ export function apply(ctx: Context): void {
               basketball:{sport:'basketball',markets:['moneyline','over_under']},
               baseball:{sport:'baseball',markets:['moneyline','over_under']},
               americanfootball:{sport:'american-football',markets:['moneyline','over_under']},
-              icehockey:{sport:'ice-hockey',markets:['home_away','over_under']},
+              icehockey:{sport:'ice-hockey',markets:['home_away','double_chance','over_under']},
               tennis:{sport:'tennis',markets:['match_winner','over_under']},
             }
             const route=routes[args.sportKey.split('_')[0]??'']
