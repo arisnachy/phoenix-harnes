@@ -52,7 +52,7 @@ def report(presentation, preset="auto", title="Informe editorial verificable sob
 
 def publish(data, home, success=True):
     run = subprocess.run([sys.executable, str(PUBLISHER)],
-                         input=json.dumps(data, ensure_ascii=False), text=True,
+                         input=json.dumps(data, ensure_ascii=False), text=True, encoding="utf-8",
                          stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=120,
                          env={**os.environ, "HOME": home, "USERPROFILE": home})
     if not success:
