@@ -98,6 +98,26 @@ describe('Phoenix Sports ticket hierarchy and theme compatibility',()=>{
     expect(screen.getByText('6.350')).toBeTruthy()
     expect(screen.getByText('Ticket investigado · Aceptación de la casa sin verificar')).toBeTruthy()
   })
+  it('recalculates real-quote potential gross and net return as the RD$ stake changes',()=>{
+    const card=parseGenerativeUiBlock({...ticket,props:{...ticket.props,stake:'100'}})
+    if(!card)throw Error('Invalid quoted ticket')
+    const {container}=render(<GenerativeUi block={card}/>)
+    expect(screen.getByLabelText('Importe de apuesta (RD$)')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Importe de apuesta (RD$)'),{target:{value:'200'}})
+    expect(container.textContent).toMatch(/1[,.]270[,.]00/)
+    expect(container.textContent).toMatch(/1[,.]070[,.]00/)
+    expect(screen.getByText(/COTIZACIÓN REAL · SIN ACEPTACIÓN CONFIRMADA/)).toBeTruthy()
+  })
+  it('provides a deliberate follow-up action, never fabricates a paid wager',()=>{
+    let prompt=''
+    const card=parseGenerativeUiBlock(ticket)
+    if(!card)throw Error('Invalid quoted ticket')
+    render(<GenerativeUi block={card} onAction={value=>{prompt=value}}/>)
+    fireEvent.click(screen.getByRole('button',{name:'Verificar si ganó o perdió'}))
+    expect(prompt).toContain('sports_chat_ticket_track')
+    expect(prompt).toContain('Casa A')
+    expect(screen.getByText(/Aceptación de la casa sin verificar/)).toBeTruthy()
+  })
   it('preserves detailed sourced research while rejecting excessive model prose',()=>{
     const detailed={...ticket,props:{...ticket.props,legs:[
       {...ticket.props.legs[0],rationale:'ESPN · 5 partidos diferentes · '.padEnd(470,'x')},
