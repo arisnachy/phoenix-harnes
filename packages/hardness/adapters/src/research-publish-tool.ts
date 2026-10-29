@@ -104,10 +104,10 @@ export function validateResearchPublication(input: unknown): Report {
   if (citedKeys.size === 0) throw new ToolArgsError(['El texto debe vincular afirmaciones y referencias mediante [@clave].'])
   if (report.document_type === 'thesis') {
     const level = report.thesis_level ?? report.level
-    if (level !== undefined && !['bachelors', 'masters', 'doctorate'].includes(String(level))) {
+    if (level !== undefined && (typeof level !== 'string' || !['bachelors', 'masters', 'doctorate'].includes(level))) {
       throw new ToolArgsError(['thesis_level debe ser bachelors, masters o doctorate.'])
     }
-    if (report.style === undefined || !['apa', 'apa7', 'vancouver'].includes(String(report.style))) {
+    if (typeof report.style !== 'string' || !['apa', 'apa7', 'vancouver'].includes(report.style)) {
       throw new ToolArgsError(['Indica el estilo de la tesis: APA 7 o Vancouver; no adivines la norma.'])
     }
   }
@@ -165,7 +165,8 @@ export function validateResearchPublication(input: unknown): Report {
       throw new ToolArgsError(['Informe profesional sin tabla de evidencia ni figura documentada.'])
     }
   }
-  if (report.visual_preference !== undefined && !['standard', 'premium'].includes(String(report.visual_preference))) {
+  if (report.visual_preference !== undefined && (typeof report.visual_preference !== 'string'
+    || !['standard', 'premium'].includes(report.visual_preference))) {
     throw new ToolArgsError(['visual_preference debe ser standard o premium.'])
   }
   if (report.style !== undefined && !['apa', 'apa7', 'vancouver', 'ama'].includes(String(report.style))) {
@@ -254,8 +255,8 @@ type PublisherOutcome = {
   pagination?: { pdf_pages: number; requested_pages: number | null; scope: string; target_met: boolean | null }
   warnings?: string[]
   advisory_warnings?: string[]
-  reference_guidance?: { level: string; minimum: number; suggested_maximum: number | null;
-    actual_distinct_cited: number; policy: string; below_guidance: boolean }
+  reference_guidance?: { level: string, minimum: number, suggested_maximum: number | null,
+    actual_distinct_cited: number, policy: string, below_guidance: boolean }
   presentation?: string
   design_preset?: string
   document_type?: string
@@ -350,7 +351,7 @@ export function createResearchPublishTool(): ToolDefinition {
             + '; PDF: ' + String((value.files as Record<string, unknown>).pdf)
             + '; vista HTML: ' + String((value.files as Record<string, unknown>).html)
             + '. Edición: ' + String(value.presentation ?? 'academic')
-             + '; diseño: ' + String(value.design_preset ?? 'academic_classic')
+            + '; diseño: ' + String(value.design_preset ?? 'academic_classic')
             + '; páginas PDF: ' + String((value.pagination as Record<string, unknown> | undefined)?.pdf_pages ?? 'sin verificar')
             + '; observaciones: ' + (Array.isArray(value.warnings) ? value.warnings.map(String).join('; ') : 'ninguna')
             + '; orientación de referencias: ' + (Array.isArray(value.advisory_warnings)
