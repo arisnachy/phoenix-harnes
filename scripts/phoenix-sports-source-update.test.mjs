@@ -10,7 +10,7 @@ const prefix=resolve(process.env.PHOENIX_SPORTS_SOURCE_HOME||join(homedir(),'.ph
 const cli=process.platform==='win32'
   ?join(prefix,'.venv','Scripts','oddsharvester.exe')
   :join(prefix,'.venv','bin','oddsharvester')
-const full={schema:2,updatedAt:new Date().toISOString(),paths:{
+const full={schema:3,updatedAt:new Date().toISOString(),paths:{
   executable:cli,history:join(prefix,'history'),
 },components:{
   'OddsHarvester + Playwright':{status:'installed'},
@@ -18,7 +18,7 @@ const full={schema:2,updatedAt:new Date().toISOString(),paths:{
   'MLB historic dataset and scraper sources':{status:'installed'},
 }}
 test('managed three-source manifest has pinned schema, wheel and paths',()=>{
-  assert.equal(SPORTS_INSTALL_VERSION,2)
+  assert.equal(SPORTS_INSTALL_VERSION,3)
   assert.equal(ODDSHARVESTER_VERSION,'0.20.0')
   assert.equal(verifyManifestShape(full),true)
   assert.equal(verifyManifestShape({...full,paths:{...full.paths,executable:'/tmp/evil'}}),false)
@@ -33,6 +33,7 @@ test('idempotent update skips a healthy manifest and throttles transient failure
   assert.equal(shouldBootstrap(broken,t+500),false)
   assert.equal(shouldBootstrap(broken,t+3600001),true)
   assert.equal(shouldBootstrap(null,t),true)
+  assert.equal(shouldBootstrap({...full,schema:2},t),true)
 })
 test('status probe does not perform network installs or leak credentials',async()=>{
   const report=await installerStatus()
