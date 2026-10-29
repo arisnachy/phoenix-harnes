@@ -262,3 +262,60 @@ describe('Universal chat: compact sports schedules do not replace single-game ca
     expect(parseGenerativeUiBlock({...slate,props:{...slate.props,events:Array.from({length:26},()=>events[0])}})).toBeNull()
   })
 })
+
+
+describe('ESPN universal adaptive panels',()=>{
+  const template={component:'sports_espn_dashboard',version:1,props:{
+    view:'player',title:'Jugador real',subtitle:'Estadísticas de temporada',
+    source:'ESPN Common v3',checkedAt:'2026-10-29T13:00:00.000Z',
+    image:'https://a.espncdn.com/i/headshots/nba/players/full/1.png',
+    sections:[
+      {heading:'Perfil',kind:'metrics',items:[{label:'Posición',value:'Guard'}]},
+      {heading:'Últimos partidos',kind:'list',items:[{label:'Match 1',value:'PTS: 28'}]},
+      {heading:'Noticias',kind:'articles',items:[{label:'Headline',value:'Oct 29',href:'https://www.espn.com/nhl/story/_/id/99/article'}]},
+    ],
+    note:'3 de 3 fuentes con datos',
+  }} as const
+  it('renders dynamically composed metrics, match logs, news and ESPN portrait',()=>{
+    const card=parseGenerativeUiBlock(template)
+    expect(card).not.toBeNull()
+    if(!card)throw Error('ESPN template rejected')
+    render(<GenerativeUi block={card}/>)
+    expect(screen.getByRole('region',{name:'Perfil'})).toBeTruthy()
+    expect(screen.getByRole('region',{name:'Últimos partidos'})).toBeTruthy()
+    expect(screen.getByText('PTS: 28')).toBeTruthy()
+    expect(screen.getByText('Headline')).toBeTruthy()
+    expect(screen.getByRole('link',{name:'Leer noticia en ESPN'}).getAttribute('href')).toContain('espn.com')
+    expect(screen.getByAltText('Jugador real')).toBeTruthy()
+  })
+  it('rejects hostile photos, scripts, excessive sections and undeclared data',()=>{
+    const base=template.props
+    expect(parseGenerativeUiBlock({...template,props:{...base,
+      image:'https://untrusted.example/portrait.png'}})).toBeNull()
+    expect(parseGenerativeUiBlock({...template,props:{...base,
+      sections:[{heading:'X',kind:'articles',items:[{label:'Fake',href:'https://tracker.example.com/x'}]}]}})).toBeNull()
+    expect(parseGenerativeUiBlock({...template,props:{...base,
+      sections:[{heading:'X',kind:'list',items:[{label:'A',html:'<img onerror=evil />'}]}]}})).toBeNull()
+    expect(parseGenerativeUiBlock({...template,props:{...base,
+      sections:Array.from({length:9},()=>base.sections[0])}})).toBeNull()
+  })
+})
+
+describe('ESPN contextual navigation',()=>{
+  it('routes an ESPN verified player drill-down back into the same conversation',()=>{
+    const value={component:'sports_espn_dashboard',version:1,props:{
+      view:'team',title:'Team confirmed',subtitle:'NBA',source:'ESPN',checkedAt:'2026-10-29T13:00:00Z',
+      note:'verified',sections:[{heading:'Plantilla',kind:'list',items:[{
+        label:'Jugador',image:'https://a.espncdn.com/i/p.png',
+        action:{label:'Estadísticas del jugador',
+          prompt:'Kira, consulta sports_chat_espn_explore con view=player, sport=basketball, league=nba, athleteId=991.'},
+      }]}],
+    }}
+    const card=parseGenerativeUiBlock(value)
+    if(!card)throw Error('Invalid contextual fixture')
+    let prompt=''
+    render(<GenerativeUi block={card} onAction={(text)=>{prompt=text}}/>)
+    fireEvent.click(screen.getByRole('button',{name:'Estadísticas del jugador'}))
+    expect(prompt).toContain('athleteId=991')
+  })
+})
