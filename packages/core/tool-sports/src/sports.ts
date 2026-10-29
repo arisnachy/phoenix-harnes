@@ -362,8 +362,8 @@ export function pricedTicket(selections:MarketSelection[],quotes:MarketOutcome[]
       bookmaker:match.bookmaker,price:match.price.toFixed(2),when:match.time,market:match.market,...taxonomy }
   })
   if(new Set(legs.map(leg=>leg.bookmaker)).size!==1)throw Error('Una combinada necesita cotización aceptada de una misma casa; no mezclar bancas')
-  const correlated=events.size!==legs.length
-  const warning=correlated?'Incluye selecciones del mismo encuentro; no asumas independencia ni que todas pueden combinarse.':'No se ha estimado probabilidad conjunta ni ventaja estadística calibrada.'
+  if(events.size!==legs.length)throw Error('No se admite combinar por producto cuotas correlacionadas del mismo encuentro; requiere precio SGP ofrecido por la casa')
+  const warning='No se ha estimado probabilidad conjunta ni ventaja estadística calibrada.'
   return { warning,card:{ component:'sports_ticket_card',version:1,props:{
     title:'PHOENIX · Ticket de análisis',subtitle:'Cuotas consultadas en proveedor real · '+new Date().toISOString(),
     legs,combinedOdds:combined.toFixed(3),stake:stake?stake.toFixed(2):undefined,grossReturn:stake?(stake*combined).toFixed(2):undefined,
