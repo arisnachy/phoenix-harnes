@@ -132,6 +132,7 @@ export function compactSportsSchedule(games:readonly ChatBlock[],day:string,sour
   const first=cards[0]?.props??{}
   const league=text(first.league,100)
   const sport=text(first.sport,60)
+  const providerLeague=text(first.providerLeague,80)
   const sameLeague=cards.every(card=>card.props.league===first.league)
   const sameSport=cards.every(card=>card.props.sport===first.sport)
   const events=cards.map(card=>{
@@ -146,6 +147,7 @@ export function compactSportsSchedule(games:readonly ChatBlock[],day:string,sour
       ...(text(p.eventId,50)?{eventId:text(p.eventId,50)}:{}),
       when:text(p.when,80)??'Hora no confirmada',
       ...(text(p.status,60)?{status:text(p.status,60)}:{}),
+      ...(p.phase==='in'||p.phase==='pre'||p.phase==='post'?{phase:p.phase}:{}),
       ...(text(p.venue,180)?{venue:text(p.venue,180)}:{}),
       away:p.away,home:p.home,
       ...(featured?{featured:featured+(detail?' · '+detail:'')}:{}),
@@ -158,6 +160,7 @@ export function compactSportsSchedule(games:readonly ChatBlock[],day:string,sour
     date:day,
     ...(sameSport&&sport?{sport}:{}),
     ...(sameLeague&&league?{league}:{}),
+    ...(providerLeague?{providerLeague}:{}),
     source,total:games.length,events,
     note:'La cartelera muestra solo datos públicos verificados. Para profundizar, consulta un encuentro individual.',
   }}
@@ -178,7 +181,7 @@ function logosEnabled(env:NodeJS.ProcessEnv):boolean{return env.PHOENIX_SPORTS_I
  * @param fetcher - Injectable HTTP client for tests.
  * @returns Attributed game cards, result count and date.
  */
-export async function chatGames(sport:string,league:string,requestedDate?:string,env:NodeJS.ProcessEnv=process.env,fetcher:typeof fetch=fetch):Promise<{ summary:string;items:ChatBlock[];source:string;count:number;date:string }> {
+export async function chatGames(sport:string,league:string,requestedDate?:string,env:NodeJS.ProcessEnv=process.env,fetcher:typeof fetch=fetch,compactLive=false):Promise<{ summary:string;items:ChatBlock[];source:string;count:number;date:string }> {
   if(!Object.hasOwn(sportsCatalog,sport)||!leagueValid(league))throw Error('Disciplina o liga inválida')
   if(!sportsCatalog[sport]?.includes(league)&&!(await discoverEspnLeagues(sport,env,fetcher)).includes(league))throw Error('Liga no encontrada en el catálogo público de ESPN')
   const day=date(requestedDate),rows:ChatBlock[]=[]
@@ -200,11 +203,11 @@ export async function chatGames(sport:string,league:string,requestedDate?:string
           ...(p?.team?.id&&logosEnabled(env)?{ logo:`https://www.mlbstatic.com/team-logos/${p.team.id}.svg` }:{}),
         })
         // Limit deep MLB requests on large game days; the user can drill down any remaining matchup.
-        const details=index<3?await enrichMlbMatch(
+        const details=!compactLive&&index<3?await enrichMlbMatch(
           g.gamePk,home?.team?.id??0,away?.team?.id??0,homeName,awayName,
           { ...(home?.probablePitcher?{ home:home.probablePitcher }:{}),...(away?.probablePitcher?{ away:away.probablePitcher }:{}) },Number(day.slice(0,4)),env,fetcher,
         ):null
-        const research=index<3?await researchMlbTrend(
+        const research=!compactLive&&index<3?await researchMlbTrend(
           home?.team?.id??0,away?.team?.id??0,Number(day.slice(0,4)),homeName,awayName,fetcher,
         ):undefined
         const highlights=details?.pitchers.length
@@ -217,7 +220,9 @@ export async function chatGames(sport:string,league:string,requestedDate?:string
           status:title(g.status?.detailedState,55),when:localTime(g.gameDate),venue:title(g.venue?.name),
           home:side(home),away:side(away),source:'MLB Stats API · '+new Date().toISOString(),
           highlights,pitchers:details?.pitchers??[],lineups:details?.lineups??[],
-          bullpen:details?.bullpen??[],sport:'baseball',league:'MLB',eventId:String(g.gamePk),...(research?{ research }:{}) ,
+          bullpen:details?.bullpen??[],sport:'baseball',league:'MLB',providerLeague:'mlb',eventDate:day,
+          phase:g.status?.abstractGameState==='Live'?'in':g.status?.abstractGameState==='Final'?'post':'pre',
+          eventId:String(g.gamePk),...(research?{ research }:{}) ,
           note:details?.notes.join(' · ')||'Los abridores y las alineaciones están sujetos a confirmación.',
           askPrompt:`Kira, investiga el partido MLB ${g.gamePk} con pitchers probables, bullpen, alineaciones y cuotas verificables. Si hay estimaciones de favoritos, distingue tus cálculos de ESPN.`,
         } }
@@ -272,7 +277,8 @@ export async function chatGames(sport:string,league:string,requestedDate?:string
         status:title(e.status?.type?.description,55),when:localTime(e.date),
         venue:title(comp?.venue?.fullName),home:side(home),away:side(away),
         source:'ESPN Site API · '+new Date().toISOString(),
-        sport,
+        sport,providerLeague:league,eventDate:day,
+        phase:e.status?.type?.state==='in'?'in':e.status?.type?.state==='post'?'post':'pre',
         ...(e.id !== undefined && String(e.id).trim() !== '' ? { eventId: String(e.id) } : {}),
         periods, highlights,
         ...(sport==='basketball'&&league==='nba'?{ note:'Jugadores destacados omitidos hasta verificar su pertenencia a las plantillas vigentes.' }:{}),
