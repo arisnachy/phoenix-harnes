@@ -8,6 +8,10 @@ import { defineTool, ToolArgsError, type JsonValue, type ToolDefinition } from '
 export const HEALTH_INDICATORS = {
   'SP.DYN.IMRT.IN': { label: 'Mortalidad infantil', unit: 'muertes por 1.000 nacidos vivos' },
   'SH_UHC_SCI': { label: 'Índice de cobertura de servicios de salud esenciales (UHC)', unit: 'índice de 0 a 100' },
+  'SH.DYN.MORT': { label: 'Mortalidad de menores de cinco años', unit: 'muertes por 1.000 nacidos vivos' },
+  'SH.XPD.CHEX.GD.ZS': { label: 'Gasto corriente en salud', unit: 'porcentaje del PIB' },
+  'SH.XPD.OOPC.CH.ZS': { label: 'Gasto de bolsillo en salud', unit: 'porcentaje del gasto corriente en salud' },
+  'SH.MED.PHYS.ZS': { label: 'Médicos disponibles', unit: 'médicos por 1.000 habitantes' },
 } as const
 
 type HealthIndicator = keyof typeof HEALTH_INDICATORS
@@ -147,10 +151,10 @@ export async function fetchWorldBankHealthSeries(
 export function createWorldBankHealthSeriesTool(): ToolDefinition {
   return defineTool({
     name: 'research_health_series',
-    description: 'Recupera series REALES del Banco Mundial API v2, sin API key, con años sin dato, fuente, unidad, estatus y notas. País por defecto DOM (República Dominicana); permite SP.DYN.IMRT.IN (mortalidad infantil) o SH_UHC_SCI (índice UHC). Consulta 2015–2025 por defecto o define rango. No interpolar 2025 si aún no está disponible. Cada indicador debe interpretarse con límites de comparabilidad; no prueba relación causal con APS.',
+    description: 'Obtiene series OFICIALES del Banco Mundial API v2 sin clave, con años null, unidades, procedencia y advertencias. Indicadores permitidos: mortalidad infantil SP.DYN.IMRT.IN, menores de 5 SH.DYN.MORT, cobertura UHC SH_UHC_SCI, gasto en salud PIB SH.XPD.CHEX.GD.ZS, gasto de bolsillo SH.XPD.OOPC.CH.ZS y médicos por 1000 SH.MED.PHYS.ZS. País DOM y años 2015–2025 por defecto. Comparar años y metodologías; no interpolar 2025 ni inferir causalidad sobre APS.',
     timeoutMs: 25000,
     parameters: {
-      indicator: { type: 'string', required: true, description: 'SP.DYN.IMRT.IN o SH_UHC_SCI' },
+      indicator: { type: 'string', required: true, description: 'Uno de HEALTH_INDICATORS; códigos World Bank autorizados.' },
       country: { type: 'string', description: 'ISO2 o ISO3, por defecto DOM' },
       start_year: { type: 'integer', description: 'Primer año; por defecto 2015' },
       end_year: { type: 'integer', description: 'Último año; por defecto 2025' },
