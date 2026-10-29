@@ -119,7 +119,7 @@ describe('Binance chat viewer HTTP integration', () => {
     const status=await response.json() as Record<string,unknown>
     expect(status).toMatchObject({
       configured:true,connected:false,status:'failed',reasonCode:'connection-failed',
-      authorizationAvailability:'provider-approval-required',providerErrorCode:'3346001',
+      authorizationAvailability:'provider-approval-required',knownProviderRejection:'3346001',
       accountVerified:false,tradeScopeVerified:false,
     })
     expect(String(status.nextAction)).toContain('3346001')
@@ -137,7 +137,7 @@ describe('Binance chat viewer HTTP integration', () => {
     expect(reply.status).toBe(200)
     expect(await reply.json()).toMatchObject({
       configured: true, connected: true, toolCount: 1,
-      authorizationAvailability: 'connected', providerErrorCode: null,
+      authorizationAvailability: 'connected', knownProviderRejection: null,
       tradeScopeVerified: false, accountVerified: false,
     })
     const rejected = await fetch(origin + '/phoenix-trading/paper/mcp-reconnect', {
@@ -187,7 +187,7 @@ describe('Binance chat viewer HTTP integration', () => {
     const status = await fetch(origin + '/phoenix-trading/paper/mcp-status')
     expect(await status.json()).toMatchObject({
       configured: true, connected: false, accountVerified: false,
-      authorizationAvailability: 'provider-approval-required', providerErrorCode: '3346001',
+      authorizationAvailability: 'provider-approval-required', knownProviderRejection: '3346001',
       tradeScopeVerified: false,
     })
     expect((await fetch(url)).status).toBe(405)
@@ -312,7 +312,7 @@ describe('Binance chat viewer HTTP integration', () => {
     const status=await fetch(origin+'/phoenix-trading/paper/mcp-status')
     expect(await status.json()).toMatchObject({
       status:'auth-required',reasonCode:'authorization-required',connected:false,
-      authorizationAvailability:'provider-approval-required', providerErrorCode:'3346001',
+      authorizationAvailability:'provider-approval-required', knownProviderRejection:'3346001',
     })
   })
 
