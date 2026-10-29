@@ -15,6 +15,7 @@ const TESTNET_AUTO_STATUS = ROUTE + '/testnet-auto-status'
 const TESTNET_CONNECT = ROUTE + '/testnet-connect'
 const MCP_STATUS = ROUTE + '/mcp-status'
 const MCP_RECONNECT = ROUTE + '/mcp-reconnect'
+const MCP_ACTIVATE = ROUTE + '/mcp-activate'
 const CHART_INTERVALS = new Set(['15m', '1h', '4h', '1d'])
 const MAX_BODY_BYTES = 2048
 
@@ -155,18 +156,49 @@ export function mountBinancePaperDashboardRoute(
     const connect = url.pathname === TESTNET_CONNECT
     const mcpStatus = url.pathname === MCP_STATUS
     const reconnect = url.pathname === MCP_RECONNECT
-    if (!read && !write && !market && !testing && !testnetAutomation && !connect && !mcpStatus && !reconnect) { res.writeHead(404).end(); return }
+    const activate = url.pathname === MCP_ACTIVATE
+    if (!read && !write && !market && !testing && !testnetAutomation && !connect && !mcpStatus && !reconnect && !activate) { res.writeHead(404).end(); return }
     res.setHeader('Cache-Control', 'no-store')
     res.setHeader('Content-Type', 'application/json; charset=utf-8')
     res.setHeader('X-Content-Type-Options', 'nosniff')
     res.setHeader('Referrer-Policy', 'no-referrer')
     if ((read || market || testing || testnetAutomation || mcpStatus) && req.method !== 'GET' && req.method !== 'HEAD'
-      || (write || connect || reconnect) && req.method !== 'POST') { res.writeHead(405).end(); return }
-    if ((write || connect || reconnect) && !localUserAction(req)) {
+      || (write || connect || reconnect || activate) && req.method !== 'POST') { res.writeHead(405).end(); return }
+    if ((write || connect || reconnect || activate) && !localUserAction(req)) {
       res.writeHead(403).end(JSON.stringify({ error: 'Same-origin user action required' }))
       return
     }
     try {
+      if (activate) {
+        // Explicit same-origin browser action installs only the pinned OAuth
+        // MCP. No Binance token, authorization grant or REAL order is issued.
+        const request = await readRequestObject(req)
+        if (Object.keys(request).length !== 0) {
+          res.writeHead(400).end(JSON.stringify({ error: 'No order, scopes or credentials accepted' }))
+          return
+        }
+        if (options.agentOs?.enableBinanceAgentOs === undefined) {
+          res.writeHead(503).end(JSON.stringify({
+            error: 'Binance Agent OS installer unavailable in this Host',
+          }))
+          return
+        }
+        const installation = await options.agentOs.enableBinanceAgentOs()
+        if (installation.connector.serverName !== 'binance-agent-os'
+          || installation.connector.url !== 'https://agent.binance.com/mcp/agentic') {
+          res.writeHead(502).end(JSON.stringify({ error: 'Unexpected Binance connector identity' }))
+          return
+        }
+        const state = await options.agentOs.binanceAgentOsState?.()
+        res.statusCode = 200
+        res.end(JSON.stringify({
+          installed: true, status: installation.status,
+          configured: state?.configured === true, mcpStatus: state?.status ?? 'starting',
+          accountVerified: false, tradeScopeVerified: false,
+          nextAction: 'Instalado: completa el OAuth oficial de Binance desde Autorizar en esta tarjeta. Instalar el MCP no verifica la cuenta REAL.',
+        }))
+        return
+      }
       if (reconnect) {
         const receipt = await options.agentOs?.reconnectBinanceAgentOs?.()
         res.statusCode = receipt?.accepted === true ? 200 : 409
@@ -239,6 +271,18 @@ export function mountBinancePaperDashboardRoute(
           secret = body.secret
         } catch {
           res.writeHead(400).end(JSON.stringify({ error: 'Invalid Binance Spot Testnet credential format' }))
+          return
+        }
+        // Never rotate HMAC credentials while the autonomous executor may
+        // still own pending orders or positions from the previous account.
+        // Otherwise a restored journal could operate against the wrong wallet.
+        const execution = options.testnetAuto?.snapshot()
+        if (execution?.enabled === true || execution?.pending !== undefined
+          || execution !== undefined && Object.keys(execution.positions).length > 0) {
+          res.writeHead(409).end(JSON.stringify({
+            error: 'testnet-automation-account-change-blocked',
+            nextAction: 'Detén la automatización Testnet, concilia las órdenes pendientes y cierra las posiciones de prueba antes de cambiar sus credenciales.',
+          }))
           return
         }
         // Separate durable storage from network readiness. Binance Testnet

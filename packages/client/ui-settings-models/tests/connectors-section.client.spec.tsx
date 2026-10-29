@@ -27,6 +27,25 @@ function renderHub(api: IApiClient['authorization'], extra: Partial<ConnectorsSe
 }
 
 describe('connectors settings section', () => {
+  it('shows explicit Binance authentication controls instead of generic MCP registry discovery', async () => {
+    const api = {
+      list: vi.fn(async () => ok({entries:[]})),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const mcpRegistry = {
+      state: vi.fn(async () => ({runtime:[],managed:[]})),
+      install: vi.fn(), search: vi.fn(),
+    }
+    renderHub(api, { mcpRegistry: mcpRegistry as unknown as NonNullable<ConnectorsSettingsSectionProps['mcpRegistry']> })
+    const card = document.querySelector('[data-connector-id="binance"]')
+    expect(card).toBeTruthy()
+    expect(card?.textContent).toContain('Conectar / autenticar Binance')
+    expect(Array.from(card?.querySelectorAll('button') ?? [])
+      .some(button => button.textContent === connectorEn.findConnector)).toBe(false)
+    expect(card?.textContent).toContain('PAPER ready')
+    await waitFor(() => { expect(mcpRegistry.state).toHaveBeenCalled() })
+  })
+
   it('keeps Codex reconnect visible with an expired native account marker', async () => {
     const begin = vi.fn(async () => ok({ attemptId: 'codex-reauth' }))
     const api = {

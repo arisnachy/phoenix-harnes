@@ -6,6 +6,12 @@ on:
       - "packages/hardness/adapters/src/binance-*"
       - "packages/hardness/adapters/tests/binance-*"
       - "packages/client/ui-conversation/src/client/chat/TradingDashboard.tsx"
+      - "packages/client/ui-settings-models/src/client/BinanceConnectorSetup.tsx"
+      - "packages/client/ui-settings-models/src/client/AuthorizationPanel.tsx"
+      - "packages/client/ui-settings-models/src/client/connector-catalog.ts"
+      - "packages/client/ui-settings-models/src/client/connectors-locales.ts"
+      - "packages/client/ui-settings-models/tests/binance-connector-setup.client.spec.tsx"
+      - "packages/client/ui-settings-models/tests/connectors-section.client.spec.tsx"
       - ".github/workflows/phoenix-trading-testnet.yml"
   push:
     branches: [main, stable]
@@ -13,6 +19,11 @@ on:
       - "packages/hardness/adapters/src/binance-*"
       - "packages/hardness/adapters/tests/binance-*"
       - "packages/client/ui-conversation/src/client/chat/TradingDashboard.tsx"
+      - "packages/client/ui-settings-models/src/client/BinanceConnectorSetup.tsx"
+      - "packages/client/ui-settings-models/src/client/AuthorizationPanel.tsx"
+      - "packages/client/ui-settings-models/src/client/connector-catalog.ts"
+      - "packages/client/ui-settings-models/src/client/connectors-locales.ts"
+      - "packages/client/ui-settings-models/tests/binance-connector-setup.client.spec.tsx"
       - ".github/workflows/phoenix-trading-testnet.yml"
 
 permissions:
@@ -22,7 +33,7 @@ jobs:
   testnet-fake-funds:
     name: Spot Testnet / deterministic safety and TypeScript
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     env:
       CI: "true"
       DSH_TELEMETRY_DISABLED: "1"
@@ -45,5 +56,7 @@ jobs:
             packages/hardness/adapters/tests/binance-testnet-automation.spec.ts \
             packages/hardness/adapters/tests/binance-paper-route.spec.ts \
             packages/hardness/adapters/tests/binance-paper-automation.spec.ts
-      - name: TypeScript Host contracts
-        run: pnpm exec tsc -b tsconfig.host.json
+      - name: Binance settings authentication UI regression
+        run: pnpm exec vitest run packages/client/ui-settings-models/tests/binance-connector-setup.client.spec.tsx packages/client/ui-settings-models/tests/connectors-section.client.spec.tsx -t Binance
+      - name: TypeScript Host and connector UI contracts
+        run: pnpm exec tsc -b tsconfig.host.json packages/client/ui-settings-models/tsconfig.json
