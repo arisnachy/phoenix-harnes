@@ -82,6 +82,8 @@ async function downloadBounded(url,dest,maxBytes=100_000_000) {
       }}),
       createWriteStream(temp,{flags:'wx'}))
     if(received!==datasetBytes)throw Error('Dataset file truncated or changed: '+received+' expected '+datasetBytes)
+    // Windows rename cannot reliably replace an existing corrupted target.
+    await rm(dest,{force:true})
     await rename(temp,dest)
   } catch(error){await rm(temp,{force:true});throw error}
 }
