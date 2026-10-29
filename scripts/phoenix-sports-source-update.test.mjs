@@ -138,3 +138,23 @@ test('explicit repair bypasses backoff but keeps the single installer lock',asyn
     assert.equal(existsSync(join(store,'install.log')),true)
   }finally{rmSync(dir,{recursive:true,force:true})}
 })
+
+test('asynchronous Windows worker launch failure is logged and does not strand the lock',async()=>{
+  const {mkdtempSync,mkdirSync,readFileSync,existsSync,rmSync}=await import('node:fs')
+  const {tmpdir}=await import('node:os')
+  const {EventEmitter}=await import('node:events')
+  const root=mkdtempSync(join(tmpdir(),'phoenix-sports-launch-error-'))
+  const store=join(root,'sources')
+  try{
+    mkdirSync(store,{recursive:true})
+    const env={PHOENIX_INSTALL_ROOT:resolve('.'),
+      PHOENIX_SPORTS_SOURCE_HOME:store}
+    const child=new EventEmitter()
+    child.unref=()=>{}
+    const result=start(()=>child,env)
+    assert.equal(result.status,'started')
+    child.emit('error',Error('spawn EPERM'))
+    assert.equal(existsSync(join(store,'install.lock')),false)
+    assert.match(readFileSync(join(store,'install.log'),'utf8'),/spawn EPERM/)
+  }finally{rmSync(root,{recursive:true,force:true})}
+})
