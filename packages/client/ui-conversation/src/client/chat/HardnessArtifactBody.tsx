@@ -254,7 +254,7 @@ function sandboxDocument(html: string, executable: boolean, gameDiagnostics = fa
   // A generated image filename alone is not an embedded image: when no
   // companion bytes were supplied, surface the missing asset instead of
   // silently reporting a fully rendered page.
-  const unresolvedImage = /<img\\b[^>]*\\bsrc\\s*=\\s*[\"'](?!data:|blob:|https?:\\/\\/|\\/\\/|\\/)[^\"']+/iu.test(html)
+  const unresolvedImage = /<img\b[^>]*\bsrc\s*=\s*["'](?!data:|blob:|https?:\/\/|\/\/|\/)[^"']+/iu.test(html)
   const missingImageNotice = unresolvedImage
     ? '<p role="alert" data-phoenix-missing-image="true" style="padding:10px;border:1px solid #d9b886;border-radius:8px;background:#fff8eb;color:#543e24">'
       + 'Esta página contiene imágenes locales sin empaquetar. Adjunta sus bytes en files o usa una URL HTTPS accesible; una ruta exec-*.png no es una imagen publicada.</p>'
