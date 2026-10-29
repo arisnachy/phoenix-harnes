@@ -95,12 +95,11 @@ describe('SidebarRoot shell', () => {
     try {
       fireEvent.click(screen.getByRole('button', { name: 'Home' }))
       expect(b.startSession).toHaveBeenCalledOnce()
-      fireEvent.click(screen.getByRole('button', { name: 'Discover' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Scheduled tasks' }))
       fireEvent.click(screen.getByRole('button', { name: 'Connectors' }))
       fireEvent.click(screen.getByRole('button', { name: 'Team' }))
       fireEvent.click(screen.getByRole('button', { name: 'Library' }))
       expect(features).toEqual([
-        { destination: 'discover', label: 'Discover' },
         { destination: 'connectors', label: 'Connectors' },
         { destination: 'team', label: 'Team' },
       ])
@@ -193,8 +192,8 @@ describe('SidebarRoot shell', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Team' }))
       fireEvent.click(screen.getByRole('button', { name: 'Library' }))
       expect(b.startSession).toHaveBeenCalledOnce()
-      expect(received).toEqual(['discover', 'connectors', 'team', 'library'])
-      expect(screen.queryByText('Discover')).toBeNull()
+      expect(received).toEqual(['connectors', 'team', 'library'])
+      expect(screen.queryByText('Scheduled tasks')).toBeNull()
     } finally {
       window.removeEventListener('phoenix:open-feature', onFeature)
       window.removeEventListener('phoenix:open-workspace-library', onLibrary)
