@@ -98,6 +98,15 @@ describe('Phoenix Sports ticket hierarchy and theme compatibility',()=>{
     expect(screen.getByText('6.350')).toBeTruthy()
     expect(screen.getByText('Solo análisis · No se ha realizado ninguna apuesta')).toBeTruthy()
   })
+  it('preserves detailed sourced research while rejecting excessive model prose',()=>{
+    const detailed={...ticket,props:{...ticket.props,legs:[
+      {...ticket.props.legs[0],rationale:'ESPN · 5 partidos diferentes · '.padEnd(470,'x')},
+    ]}}
+    expect(parseGenerativeUiBlock(detailed)).not.toBeNull()
+    expect(parseGenerativeUiBlock({...detailed,props:{...detailed.props,legs:[
+      {...detailed.props.legs[0],rationale:'x'.repeat(481)},
+    ]}})).toBeNull()
+  })
   it('rejects arbitrary fields and external images from tickets',()=>{
     expect(parseGenerativeUiBlock({...ticket,props:{...ticket.props,legs:[
       {...ticket.props.legs[0],html:'<iframe />'}]}})).toBeNull()
