@@ -252,6 +252,8 @@ def validate(data):
         raise ValueError("report.sections must contain 1 to 140 entries")
     if not isinstance(refs, list) or not (1 <= len(refs) <= 500):
         raise ValueError("report.references must contain 1 to 500 supplied sources")
+    if data.get("document_type") == "thesis" and data.get("style") not in ("apa", "apa7", "vancouver"):
+        raise ValueError("thesis citation style must be explicitly APA 7 or Vancouver")
     if data.get("style", "apa") not in ("apa", "apa7", "vancouver", "ama"):
         raise ValueError("style must be apa, apa7, vancouver or ama")
     resolved_presentation = data.get("presentation", "journal" if (data.get("document_type") == "journal_manuscript" or data.get("journal_requirements", {}).get("journal")) else ("hybrid" if data.get("quality_profile", "professional") == "professional" else "academic"))
@@ -272,8 +274,6 @@ def validate(data):
         degree = data.get("thesis_level", data.get("level"))
         if degree is not None and degree not in ("bachelors", "masters", "doctorate"):
             raise ValueError("thesis_level must be bachelors, masters or doctorate")
-        if data.get("style") not in ("apa", "apa7", "vancouver"):
-            raise ValueError("thesis citation style must be explicitly APA 7 or Vancouver")
     if data.get("paper", "A4") not in ("A4", "Letter"):
         raise ValueError("paper must be A4 or Letter")
     if data.get("submission_ready") is True:
