@@ -48,6 +48,8 @@ export function validateSportsSettlement(input:SportsSettlementInput):void{
   const operators=new Set(input.legs.map(leg=>leg.bookmaker.trim()))
   if(operators.size!==1||operators.has(''))
     throw Error('Se requiere la misma casa para todas las selecciones')
+  if(/^juancito sport$/iu.test(input.legs[0]!.bookmaker.trim())&&input.stake<100)
+    throw Error('Juancito Sport publica mínimo RD$100 por apuesta (términos 7.10)')
   for(const leg of input.legs){
     if(!id(leg.eventId)||!supported.has(leg.market)||!Number.isFinite(leg.price)
        ||leg.price<=1||leg.price>1000)
@@ -66,6 +68,10 @@ export function validateSportsSettlement(input:SportsSettlementInput):void{
        (typeof leg.line!=='number'||!Number.isFinite(leg.line)||
         Math.abs(leg.line)>10000))
       throw Error('Línea de mercado ausente o inválida')
+    if(typeof leg.line==='number'&&['run_line','spread','total','team_total',
+      'first_3_total','first_5_total','first_3_spread','first_5_spread'].includes(leg.market)
+      &&Math.abs(leg.line*2-Math.round(leg.line*2))>1e-8)
+      throw Error('Línea asiática de cuarto de punto requiere semivictorias/semipérdidas y reglas propias; no se liquida como línea simple')
     if(leg.market==='team_total'&&!['home','away'].includes(leg.team??''))
       throw Error('Total de equipo sin identificar local o visitante')
   }
@@ -105,6 +111,22 @@ function gradeLeg(leg:SportsBetLeg,game:Game|undefined):SportsLegGrade{
     'Prop de jugador requiere boxscore oficial, elegibilidad y reglas propias de la casa')
   if(game.home===null||game.away===null)return unknown('unverifiable',
     'No hay un marcador final completo con ambos equipos')
+  // A provider may mark an interrupted baseball game final. House rules
+  // impose different inning thresholds for moneyline and full-game totals.
+  // A scoreboard-only final without enough completed inning data is not settled.
+  const isBaseball=['run_line','total','team_total','first_3_total','first_5_total',
+    'first_3_spread','first_5_spread'].includes(leg.market)
+  const completeInnings=(side:'home'|'away',required:number)=>{
+    const values=side==='home'?game.homeInnings:game.awayInnings
+    return values.length>=required&&values.slice(0,required).every(v=>v!==null)
+  }
+  if(isBaseball&&['total','team_total'].includes(leg.market)){
+    const loser=game.home<game.away?'home':game.away<game.home?'away':null
+    const valid=loser?completeInnings(loser,9):
+      completeInnings('home',9)&&completeInnings('away',9)
+    if(!valid)return unknown('unverifiable',
+      'La casa puede exigir novena entrada agotada por equipo perdedor; marcador final sin 9 innings verificables')
+  }
   const period=leg.market.startsWith('first_3')?3:leg.market.startsWith('first_5')?5:null
   let home=game.home,away=game.away
   if(period){
