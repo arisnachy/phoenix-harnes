@@ -8,7 +8,7 @@ import { researchTicket, autoResearchTicket, type ResearchTicketLeg } from './re
 import { sportsPromptNeeded } from './sports-prompt.ts'
 import { researchNbaSlate } from './nba-research.ts'
 
-import { keylessOdds, keylessSports } from './keyless-odds.ts'
+import { keylessOdds, keylessSports, keylessHistoricOdds } from './keyless-odds.ts'
 import { loadHistoricalOdds } from './sports-archive.ts'
 import { loadOddsSnapshots } from './odds-snapshots.ts'
 import { researchSport } from './multi-sport-research.ts'
@@ -506,6 +506,9 @@ export function apply(ctx: Context): void {
       sportKey:{type:'string',description:'Clave de mercado para snapshots: basketball_nba, baseball_mlb, americanfootball_nfl, soccer_epl, etc.'},
       date:{type:'string',description:'Fecha histórica AAAA-MM-DD. Para snapshots es la fecha UTC de OBSERVACIÓN, no fecha del encuentro.'},
       limit:{type:'integer',description:'Límite de filas (máximo 500), por defecto 100'},
+      leagueSlug:{type:'string',description:'Liga OddsHarvester histórica (ej. england-premier-league), opcional.'},
+      season:{type:'string',description:'Temporada de OddsHarvester, por ejemplo 2024-2025 o 2025.'},
+      market:{type:'string',description:'Mercado histórico, ej. 1x2, moneyline u over_under.'},
     },
     output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
     isConcurrencySafe:()=>true,
@@ -524,13 +527,22 @@ export function apply(ctx: Context): void {
         nfl:'americanfootball_nfl',nhl:'icehockey_nhl'} as Record<string,string>)[args.sport??'']
       const local= sportKey&&args.date?await loadOddsSnapshots(sportKey,args.date,env,limit):
         {snapshots:[],rows:0,coverage:'Para observaciones locales especificar date (día UTC de consulta) y sportKey.',errors:[]}
-      const autoRepair=archiveError?await ensureSportsSourcesStarted(process.env):null
+      const autoRepair=archiveError||archived?.sources.some(x=>!x.available)?await ensureSportsSourcesStarted(process.env):null
+      const kind=({soccer:'football',basketball:'basketball',baseball:'baseball',
+        americanfootball:'american-football',icehockey:'ice-hockey',tennis:'tennis'} as Record<string,string>)[sportKey?.split('_')[0]??'']
+      let scraped:null|Awaited<ReturnType<typeof keylessHistoricOdds>>=null
+      let scrapingError:string|null=null
+      if(args.leagueSlug&&args.season&&args.market&&kind){
+        try{scraped=await keylessHistoricOdds(kind,args.leagueSlug,args.season,args.market,env)}
+        catch(error){scrapingError=error instanceof Error?error.message.slice(0,180):'Histórico del scraper no accesible'}
+      }
       return JSON.stringify({sport:args.sport??null,sportKey:sportKey??null,date:args.date??null,
         sources:archived?.sources??[],archiveError,autoRepair,liveQuotes:false,
-        count:historical.length+local.rows,archiveCount:historical.length,
+        count:historical.length+local.rows+(scraped?.rows.length??0),archiveCount:historical.length,
+        scraperHistoricalCount:scraped?.rows.length??0,scraperHistoricalRows:scraped?.rows??[],scrapingError,
         observedSnapshotCount:local.rows,observationCoverage:local.coverage,
         samples:historical,snapshots:local.snapshots,readErrors:local.errors,
-        instruction:'HISTÓRICO (NO COTIZACIÓN VIGENTE). SBR y MLB cubren los años disponibles en archivos instalados; observaciones PHOENIX solo desde que se guardaron. Nunca usar cuotas antiguas como precio apostable hoy. Si no hay archivo reportar error/estado de instalación y fecha sin cobertura.'})
+        instruction:'HISTÓRICO (NO COTIZACIÓN VIGENTE). El modo historic de OddsHarvester v0.20 está sujeto a disponibilidad del sitio, liga y temporada. SBR y MLB cubren los años disponibles en archivos instalados; observaciones PHOENIX solo desde que se guardaron. Nunca usar cuotas antiguas como precio apostable hoy. Si no hay archivo reportar error/estado de instalación y fecha sin cobertura.'})
     },
     presentCall:()=>({card:'generic',title:'Investigar históricos de casas',kind:'read' as const}),
   }))
