@@ -29,6 +29,9 @@ interface AgenticConnection {
   connected: boolean
   status: string
   reasonCode?: string
+  authorizationAvailability?: 'connected' | 'provider-approval-required'
+  providerErrorCode?: string | null
+  supportedClientGuide?: string
   toolCount: number
   accountVerified: boolean
   tradeScopeVerified: boolean
@@ -83,6 +86,10 @@ export function BinanceConnectorSetup({ onChanged, onAuthorizeMcp }: {
   const [busy, setBusy] = useState<'status' | 'testnet' | 'real' | 'agentic' | 'reconnect' | 'repair'>()
   const [error, setError] = useState<string>()
   const [notice, setNotice] = useState<string>()
+  // Installing/retrying an unsupported OAuth client is not a fix for Binance
+  // 3346001. Keep those controls accessible only when the owner knows Binance
+  // has since approved PHOENIX.
+  const [showAgenticAdvanced, setShowAgenticAdvanced] = useState(false)
 
   const refresh = async (): Promise<void> => {
     const [testnetStatus, realStatus, agenticStatus] = await Promise.all([
@@ -177,7 +184,7 @@ export function BinanceConnectorSetup({ onChanged, onAuthorizeMcp }: {
     try {
       await readHostJson<{ repaired: boolean }>('/mcp-repair', {})
       await refresh()
-      setNotice('MCP reparado. Utiliza Reautorizar en la tarjeta y completa el permiso OAuth en Binance.')
+      setNotice('Transporte MCP reparado. Esto no modifica la lista de clientes autorizados por Binance; PHOENIX sigue necesitando aprobación del proveedor.')
       onChanged()
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'No se pudo reparar Binance Agentic.')
@@ -197,7 +204,7 @@ export function BinanceConnectorSetup({ onChanged, onAuthorizeMcp }: {
         await readHostJson<{ installed: boolean }>('/mcp-activate', {})
       }
       await refresh()
-      setNotice('MCP oficial preparado. Pulsa Autorizar en la tarjeta de Binance y completa el consentimiento de Binance; no hay acceso REAL hasta hacerlo.')
+      setNotice('MCP instalado localmente. Binance debe aprobar el cliente PHOENIX para conceder OAuth; instalar o reconectar no elimina el error 3346001.')
       onChanged()
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'No se pudo iniciar el MCP de Binance.')
@@ -296,18 +303,44 @@ export function BinanceConnectorSetup({ onChanged, onAuthorizeMcp }: {
           <fieldset disabled={busy !== undefined} className={styles['field']}>
             <legend><strong>Binance REAL · Agentic OAuth</strong></legend>
             <p role="status" className={styles['advancedHint']}>
-              {agentic?.connected ? 'MCP conectado · cuenta y permisos de trading todavía sin verificar'
-                : agentic?.status === 'failed' ? 'MCP roto · reparar el transporte y reautorizar'
-                  : agentic?.status === 'auth-required' ? 'MCP pendiente de consentimiento OAuth'
-                    : agentic?.configured ? 'MCP instalado · OAuth o conexión pendiente'
-                      : 'MCP oficial pendiente de instalar'}
+              {agentic?.connected ? 'MCP conectado; verificar permisos y subcuenta Agentic'
+                : agentic?.authorizationAvailability === 'provider-approval-required'
+                  ? 'Autorización PHOENIX no admitida por Binance · código 3346001'
+                  : 'Comprobando elegibilidad del cliente MCP…'}
             </p>
-            <p className={styles['advancedHint']}>
-              PHOENIX utiliza OAuth CIMD con la identidad pública del propio proyecto
-              (sin registro dinámico DCR). Pulsa Autorizar Binance OAuth para abrir el consentimiento
-              oficial de Binance. Reconectar o reparar el MCP no concede permisos por sí solo.
-            </p>
-            <div className={styles['editorActions']}>
+            {agentic?.connected ? (
+              <p className={styles['advancedHint']}>
+                El transporte está conectado. Verifica los permisos efectivos; conexión MCP
+                no significa permiso de trading ni autoriza transferencias.
+              </p>
+            ) : (
+              <>
+                <p className={styles['advancedHint']}>
+                  Binance solo acepta determinados clientes de IA para su OAuth Agentic.
+                  Actualmente PHOENIX no figura entre ellos y Binance puede mostrar
+                  el código 3346001. No es un fallo de tus claves API ni se soluciona
+                  con reinstalar el MCP.
+                </p>
+                <p className={styles['advancedHint']}>
+                  <strong>Alternativa operativa:</strong> utiliza las claves Binance REAL HMAC
+                  de la sección anterior para consultar tu cuenta en solo lectura.
+                  Para ejecutar y evaluar órdenes sin dinero real, utiliza Spot Testnet.
+                  La conexión OAuth Agentic de PHOENIX requerirá aprobación de Binance.
+                </p>
+                <p className={styles['advancedHint']}>
+                  <a href="https://developers.binance.com/en/docs/agent-native/mcp-server/agentic"
+                    target="_blank" rel="noreferrer">Agentes oficialmente compatibles y guía de Binance</a>
+                </p>
+                <button type="button" className={connectorStyles['connectorSecondaryButton']}
+                  aria-expanded={showAgenticAdvanced}
+                  onClick={() => { setShowAgenticAdvanced(value => !value) }}>
+                  {showAgenticAdvanced ? 'Ocultar herramientas avanzadas Agentic' : 'Opciones avanzadas (solo si Binance aprueba PHOENIX)'}
+                </button>
+              </>
+            )}
+            {agentic?.connected || showAgenticAdvanced ? (
+              <>
+          <div className={styles['editorActions']}>
               <button type="button" className={connectorStyles['connectorPrimaryButton']}
                 onClick={() => { void activateAgentic(false) }}>
                 {busy === 'agentic' ? 'Instalando…' : agentic?.configured ? 'Revisar / instalar MCP REAL' : 'Preparar OAuth REAL'}
@@ -337,6 +370,8 @@ export function BinanceConnectorSetup({ onChanged, onAuthorizeMcp }: {
               <p role="status" className={styles['advancedHint']}>Diagnóstico MCP: {agentic.reasonCode}</p>
             )}
             {agentic?.nextAction === undefined ? null : <p className={styles['advancedHint']}>{agentic.nextAction}</p>}
+              </>
+            ) : null}
           </fieldset>
           <div className={styles['editorActions']}>
             <button type="button" disabled={busy !== undefined} className={connectorStyles['connectorSecondaryButton']}
