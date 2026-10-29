@@ -1,54 +1,107 @@
-# PHOENIX — verificación honesta de fuentes deportivas
+# PHOENIX Sports Intelligence — fuentes, mercados e instalador de actualización
 
-La investigación de partidos de ESPN, la disponibilidad del **comando** de una fuente, la presencia de un **archivo histórico** y la obtención de **cuotas recientes de una casa** son cuatro cosas diferentes. La herramienta de chat `sports_chat_sources_health` informa de la configuración sin exponer secretos; no inventa precios.
+## Instalación automática con las actualizaciones
 
-## Tres repositorios acordados
+Tras actualizar PHOENIX stable (o al arrancar el supervisor de Windows), la tarea
+`scripts/phoenix-sports-source-auto.mjs` comprueba si faltan componentes y
+ejecuta de forma **independiente, no bloqueante e idempotente**:
 
-| Repositorio | Función | Estado mínimo para usarlo |
-| --- | --- | --- |
-| [jordantete/OddsHarvester](https://github.com/jordantete/OddsHarvester) | Consulta previa de cuotas de OddsPortal y mercados específicos | Instalar CLI y Playwright Chromium, habilitar explícitamente y comprobar que devuelve filas con casa, fecha y precio |
-| [flancast90/sportsbookreview-scraper](https://github.com/flancast90/sportsbookreview-scraper) | Historical odds backtesting NFL/NBA/NHL/MLB | Exportar `sportsbookreview-<sport>.json` y definir `PHOENIX_SPORTS_HISTORY_DIR`; nunca cotizar hoy |
-| [ArnavSaraogi/mlb-odds-scraper](https://github.com/ArnavSaraogi/mlb-odds-scraper) | Datos históricos MLB de SportsbookReview | Exportar `mlb-odds.json` a la misma ruta; nunca cotizar hoy |
+- `jordantete/OddsHarvester` **0.20.0** en Python virtual + Playwright Chromium.
+  Es el único de los tres que puede consultar precios futuros. Su acceso depende
+  de OddsPortal, país, restricciones y condiciones de uso. No existen cuotas ilimitadas garantizadas.
+- `flancast90/sportsbookreview-scraper`: código fuente clonado y archivos
+  `sportsbookreview-{nba,mlb,nfl,nhl}.json` de historial 2011–2021, destinados a análisis y backtesting.
+- `ArnavSaraogi/mlb-odds-scraper`: código clonado y dataset histórico MLB
+  2021–2025 descargado del asset público oficial (aprox. 80 MB).
+  Este proyecto expone moneyline, run line y totales **históricos**.
 
-Los dos archivos históricos **no** son un feed de precios de hoy. PHOENIX no descarga silenciosamente los datos ni omite límites de acceso al sitio. El usuario conserva la decisión de instalar/habilitar scraping.
+Los archivos viven bajo `~/.phoenix/sports-sources/`, no en la carpeta Git
+que actualiza PHOENIX ni en su almacén de credenciales. El instalador **no**
+ejecuta los scrapers históricos automáticamente contra páginas externas.
+La instalación puede requerir Python 3, git, espacio en disco y acceso a
+Playwright/GitHub; un error deja la aplicación principal funcionando.
 
-## Windows: instalar la CLI opcional en un entorno aislado
-
-En la carpeta local del proyecto PHOENIX:
-
-```powershell
-py -m venv .phoenix-odds
-.\.phoenix-odds\Scripts\python.exe -m pip install --upgrade pip
-.\.phoenix-odds\Scripts\python.exe -m pip install oddsharvester
-.\.phoenix-odds\Scripts\python.exe -m playwright install chromium
-.\.phoenix-odds\Scripts\oddsharvester.exe --help
-```
-
-Una vez comprobadas las condiciones del proveedor y su acceso, lanzar PHOENIX **desde la misma consola**:
+Logs: `~/.phoenix/sports-sources/install.log`.
+Estado: `~/.phoenix/sports-sources/manifest.json`.
 
 ```powershell
-$env:PHOENIX_SPORTS_ODDSHARVESTER_BIN = (Resolve-Path '.\.phoenix-odds\Scripts\oddsharvester.exe').Path
-$env:PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED = '1'
-pnpm phoenix
+# Comprobar sin descargar:
+node scripts/phoenix-sports-source-bootstrap.mjs --status
+
+# Forzar reparación a petición del usuario:
+node scripts/phoenix-sports-source-bootstrap.mjs --install
+
+# Desactivar temporalmente la instalación automática:
+$env:PHOENIX_SPORTS_SOURCES_AUTO_INSTALL='0'
+
+# Desactivar SOLO scraping real manteniendo los ficheros instalados:
+$env:PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED='0'
 ```
 
-**Primera verificación real, antes de confiar en un ticket:**
+La herramienta `sports_chat_sources_health` vuelve a leer el manifiesto,
+reconoce las fuentes realmente presentes sin imprimir tokens y mantiene
+diferenciados `configured`, `missing-binary`, `missing-files`, `disabled`.
+`configured` **NO** significa que una casa haya publicado cuotas recientes.
 
-```powershell
-.\.phoenix-odds\Scripts\oddsharvester.exe upcoming -s football -d 20261029 -m 1x2 --headless -f json -o .\sports-odds-test.json
-```
+## Contexto público enriquecido: consultas reales y límites
 
-Cambiar `-d` a la fecha futura deseada (formato AAAAMMDD). Ese comando contacta OddsPortal: puede no devolver precios por región, mercado, anti-bot, ausencia de encuentros o restricciones del proveedor. Los datos del archivo **solo** son válidos si registran casa, mercado, precio y timestamp actualizado. Nunca usar `--preview-only` para cotizar un ticket de una misma casa, ya que no da necesariamente precios por operador.
+- ESPN Site API v2: `scoreboard`, `summary?event=<id>`, `news`,
+  `injuries`, `teams/<id>/roster`. Se contrastan por ID y por mención
+  de los equipos, con totales de registros. Algunos endpoints son no
+  oficiales, responden estructuras diferentes o no tienen datos.
+- NHL: `https://api-web.nhle.com/v1/score/YYYY-MM-DD`,
+  cotejo del encuentro por abreviaturas y fecha; no confirma por sí solo
+  porteros titulares.
+- MLB StatsAPI: `https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=YYYY-MM-DD&hydrate=probablePitcher`
+  para cotejo de cartelera. Los lanzadores `probablePitcher`, cuando se
+  publican, son **probables**, no confirmados.
+- The Odds API v4 (`THE_ODDS_API_KEY`) y TheOddsAPI
+  (`THEODDSAPI_API_KEY`) son servicios opcionales distintos con
+  cupos. No hay proveedor gratuito ilimitado garantizado.
 
-## Cómo comprobarlo en el chat
+Toda respuesta respeta una lista fija de HTTPS hosts y un límite de tamaño,
+con fechas y estados pendientes. Un `feed` de lesiones accesible no equivale
+a comprobar que cada jugador está sano ni a confirmar un titular.
 
-1. Pedir a Kira: «Ejecuta `sports_chat_sources_health` y enséñame el estado de todos los proveedores».
-2. Pedir `sports_chat_odds_keyless` con deporte y mercado específicos para comprobar **cuotas reales** (si está habilitado).
-3. Ejecutar `sports_chat_ticket_evidence_priced_auto` con `count=5`. Inspeccionar `sourceAudit`, `quotedLegs`, `approvedLegs`, `multisportSatisfied`. Si `approvedLegs=0`, la tarjeta es una hipótesis/agenda sin apuesta cotizada completa, incluso si muestra cuatro partidos.
-4. Para 1X/X2: aceptar solo filas del mercado **double_chance** verificadas de la misma casa; no convertir precios 1X2 en doble oportunidad.
+## Mercados alternativos
 
-No confundir la respuesta disponible de un feed médico ESPN con lesión/portero confirmado. Rendimiento histórico, muestra de cinco y margen son **evidencia descriptiva**, no modelo calibrado ni garantía de rentabilidad. Las cuotas cambian, y los mercados pueden cerrarse.
+Kira puede consultar `sports_chat_market_intelligence` por `sportKey`
+y `sports_chat_deep_research` por ID ESPN. El catálogo cubre familias
+según la disponibilidad REAL del proveedor:
 
-## Diagnóstico práctico para compartir
+| Deporte | Mercados posibles |
+| --- | --- |
+| Fútbol | 1X2, doble oportunidad 1X/X2, BTTS, over/under, hándicap |
+| NBA/WNBA | ganador, spread, totales, mercados de jugador si publicados |
+| NHL | moneyline, puck line, goles totales y mercados de portero si publicados |
+| MLB | moneyline, run line, carreras totales y abridor si verificado |
+| NFL | ganador, spread, totales y props de jugadores si publicados |
+| Tenis | ganador, total y hándicap de juegos/sets |
 
-Enviar la salida de Kira de `sports_chat_sources_health`, el bloque `sourceAudit` (sin secretos), los fundamentos del ticket y la tarjeta visible. Ninguna clave de API debe compartirse.
+**No todos los mercados están implementados como picks automáticos, ni todas
+las fuentes ofrecen todas las familias**. El motor compara cotizaciones
+con bookmaker, event ID, timestamp y tipo de mercado. Puede calcular
+`1/cuota` y, solo en mercados exhaustivos y mutuamente excluyentes,
+la cuota sin margen de la casa; ambos son **atributos del precio**,
+no un modelo de probabilidad deportiva. No calcula expectativa positiva sin
+probabilidades calibradas y pruebas fuera de muestra. No puede garantizar tickets ganadores.
+
+Para confirmar 1X/X2, nunca transformar un moneyline o 1X2 en ese mercado
+sin una cotización explícita de `double_chance`.
+Para combinadas, cuotas y apuestas de una casa deben corresponder
+a eventos y tiempos reales; opciones del mismo encuentro pueden estar correlacionadas.
+
+## Prueba en PHOENIX
+
+Pedir a Kira que ejecute `sports_chat_sources_health`; después
+`sports_chat_market_intelligence` para `icehockey_nhl` o
+`basketball_nba`, mostrando ofertas rechazadas por antigüedad o
+mercados ausentes. Para un encuentro específico, ejecutar
+`sports_chat_deep_research` con `eventId` ESPN y mostrar fuentes,
+noticias, plantilla y datos faltantes. Finalmente probar
+`sports_chat_ticket_evidence_priced_auto` con `count=5` o `6`;
+revisar `sourceAudit`, `quotedLegs`, `approvedLegs` y diversidad deportiva.
+Un ticket 4/5 sin cuota sigue siendo **borrador, no apuesta**.
+
+Revisar el log del instalador si no hay CLI o si una descarga falla; nunca
+compartir API keys ni resultados que incluyan datos privados.
