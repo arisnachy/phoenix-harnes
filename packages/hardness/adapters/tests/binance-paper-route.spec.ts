@@ -93,6 +93,18 @@ describe('Binance chat viewer HTTP integration', () => {
     })
     expect(stop.status).toBe(200)
     expect(await stop.json()).toMatchObject({ enabled: false })
+    const liquidate = await fetch(endpoint + 'control', {
+      method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'stop-liquidate' }),
+    })
+    expect(liquidate.status).toBe(200)
+    expect(await liquidate.json()).toMatchObject({
+      enabled: false, account: { positions: [], tradeCount: 2 },
+      recentTrades: [
+        { symbol: 'BTCUSDT', side: 'buy' },
+        { symbol: 'BTCUSDT', side: 'sell', reason: 'user-stop-liquidate-paper' },
+      ],
+    })
   })
 
   it('serves real-source market candles without exposing an account or accepting unsafe queries', async () => {

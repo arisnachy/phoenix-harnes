@@ -1,6 +1,7 @@
 import {MAX_PER_TICK, MAX_UNIVERSE, SIMULATED_SLIPPAGE, FEE_RATE,
   analyze, exitPlan, freshState, marketValue, paperFill, parseKlines,
   pickUniverse, riskBudget} from './strategy.mjs';
+import {knownAssetRisk,spotAssetRisk,RISK_COVERAGE,RISK_SNAPSHOT_DATE} from './asset-risk.mjs';
 
 const BASE='https://data-api.binance.vision';
 const json=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:{
@@ -52,12 +53,15 @@ async function flushEvents(db,state){
   state.pendingEvents=[];
 }
 async function discover(state,now){
-  if(state.universe.length && now-state.universeUpdated<86_400_000)return;
+  if(state.universe.length && now-state.universeUpdated<3_600_000)return;
   const [exchange,tickers]=await Promise.all([
     market('/api/v3/exchangeInfo'),market('/api/v3/ticker/24hr')]);
   const symbols=pickUniverse(exchange,tickers,MAX_UNIVERSE);
   if(symbols.length<3)throw new Error('insufficient-market-universe');
-  state.universe=symbols;state.universeUpdated=now;state.cursor=0;
+  state.universe=symbols;state.universeUpdated=now;
+  // Keep the round-robin cursor across hourly refreshes: 1000 assets
+  // require ~250 one-minute cron ticks, not just one hour.
+  state.cursor=state.cursor % symbols.length;
 }
 function select(state){
   const n=Math.min(MAX_PER_TICK,state.universe.length), out=[];
@@ -80,7 +84,7 @@ function marketFailureReason(reason){
 async function cycle(env,now=Date.now()){
   if(!env.DB)throw new Error('D1_NOT_CONFIGURED');
   const state=await read(env.DB);
-  if(!state.enabled||state.halted){
+  if(!state.enabled||state.halted||state.liquidationPending){
     if(state.pendingEvents?.length){
       await flushEvents(env.DB,state);
       await write(env.DB,state);
@@ -113,7 +117,8 @@ async function cycle(env,now=Date.now()){
     for(const p of Object.values(state.positions)){
       const current=quotes[p.symbol];
       if(!(current>0))throw new Error('missing-position-mark');
-      const reason=current<=p.plan.stop?'stop-loss':
+      const reason=knownAssetRisk(p.symbol)?'binance-asset-risk':
+        current<=p.plan.stop?'stop-loss':
         current>=p.plan.tp2?'tp2':
           current>=p.plan.tp1&&!p.plan.tp1Done?'tp1':null;
       if(!reason)continue;
@@ -150,6 +155,16 @@ async function cycle(env,now=Date.now()){
       if(verifiedScans===0)throw new Error('all-market-scans-failed');
       const candidate=signals.find(s=>s.action==='buy' && s.score>=70);
       if(candidate){
+        // A previously discovered asset may have halted since the hourly
+        // scan. Verify current Spot status immediately before EVERY entry.
+        const currentPair=await market('/api/v3/exchangeInfo?symbol='+candidate.symbol);
+        const liveRisk=spotAssetRisk(currentPair?.symbols?.find(s=>s.symbol===candidate.symbol));
+        if(liveRisk){
+          state.lastDecisionReason='Spot order risk gate: '+liveRisk;
+          const entry=state.evaluations.find(row=>row.symbol===candidate.symbol);
+          if(entry){entry.outcome='blocked';entry.reason=state.lastDecisionReason;}
+          emit(state,'risk-review','Spot trading risk gate rejected entry',now,candidate.symbol);
+        }else{
         const budget=riskBudget(state,candidate,quotes);
         if(budget>=10){
           // A closed-candle signal is NOT an executable quote. Price the
@@ -188,6 +203,7 @@ async function cycle(env,now=Date.now()){
           if(entry){entry.outcome='blocked';entry.reason=state.lastDecisionReason;}
           emit(state,'risk-review','Entry blocked by deterministic risk gate: '+state.lastDecisionReason,
             now,candidate.symbol);
+        }
         }
       }else if(signals.some(signal=>signal.action==='buy')){
         state.lastDecisionReason='All entry signals below the minimum confidence score of 70';
@@ -255,6 +271,8 @@ async function route(req,env){
       evaluations:state.evaluations??[],verifiedScans:state.lastVerifiedScanCount??0,
       failureCount:state.failureCount,
       lastError:state.lastError,universeCount:state.universe.length,
+      riskCoverage:RISK_COVERAGE,riskSnapshotDate:RISK_SNAPSHOT_DATE,
+      liquidationPending:state.liquidationPending===true,
       positions:state.positions,signals:state.signals,journal:state.journal.slice(-50),
       warning:'Virtual trading only; software stops execute at the next Cron, not at Binance.'});
   if(url.pathname==='/events'&&req.method==='GET'){
@@ -271,8 +289,49 @@ async function route(req,env){
     if(Number(req.headers.get('content-length')||0)>2048)return json({error:'too-large'},413);
     let body;try{body=await req.json()}catch{return json({error:'invalid-json'},400)}
     if(!body||typeof body!=='object'||Object.keys(body).some(k=>k!=='action')||
-       !['start','stop'].includes(body.action))return json({error:'invalid-command'},400);
-    if(body.action==='start'&&state.halted)return json({error:'risk-halt-needs-review'},409);
+       !['start','stop','stop-liquidate'].includes(body.action))return json({error:'invalid-command'},400);
+    if(body.action==='start'&&(state.halted||state.liquidationPending))
+      return json({error:'risk-halt-or-pending-liquidation'},409);
+    if(body.action==='stop-liquidate'){
+      // Stop must be durable BEFORE any network call; a quote outage must not
+      // leave the strategy opening new positions or fake successful sells.
+      state.enabled=false;state.liquidationPending=true;
+      await write(env.DB,state);
+      try{
+        let safeState=await read(env.DB);
+        const names=Object.keys(safeState.positions);
+        if(names.length){
+          const quotesRaw=await market('/api/v3/ticker/price?symbols='+
+            encodeURIComponent(JSON.stringify(names)));
+          if(!Array.isArray(quotesRaw))throw new Error('invalid-liquidation-quotes');
+          const quotes=Object.fromEntries(quotesRaw.map(row=>[row.symbol,Number(row.price)]));
+          for(const symbol of names)if(!(quotes[symbol]>0))
+            throw new Error('missing-liquidation-quote');
+          for(const symbol of names){
+            const p=safeState.positions[symbol];
+            const fill=paperFill(safeState,{
+              id:'user-liquidate:'+Date.now()+':'+symbol,at:Date.now(),symbol,
+              side:'sell',price:quotes[symbol]*(1-SIMULATED_SLIPPAGE),
+              quantity:p.quantity,strategy:p.strategy,reason:'user-stop-liquidate-paper',
+            });
+            Object.assign(safeState,fill);
+            emit(safeState,'paper-exit','User-triggered virtual liquidation '+symbol,Date.now(),symbol);
+          }
+        }
+        safeState.liquidationPending=false;
+        safeState.equity=safeState.cash;
+        safeState.lastDecision='sell';safeState.lastDecisionReason='User-verified PAPER liquidation receipts';
+        await write(env.DB,safeState);
+        await flushEvents(env.DB,safeState);
+        return json({mode:'paper',enabled:false,liquidated:true,
+          positionsRemaining:Object.keys(safeState.positions).length,sold:names.length});
+      }catch{
+        const current=await read(env.DB);
+        return json({mode:'paper',enabled:false,liquidated:false,
+          positionsRemaining:Object.keys(current.positions).length,
+          reason:'virtual-liquidation-incomplete-check-live-prices'},409);
+      }
+    }
     state.enabled=body.action==='start';
     await write(env.DB,state);
     return json({mode:'paper',enabled:state.enabled,halted:state.halted});

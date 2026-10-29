@@ -2,7 +2,9 @@
  * PHOENIX cloud trading research core. Pure, deterministic, no secrets, no LLM.
  * Deliberately PAPER-only. These heuristics are candidates, not proven alpha.
  */
-export const MAX_UNIVERSE = 300;
+import {spotAssetRisk} from './asset-risk.mjs';
+
+export const MAX_UNIVERSE = 1000;
 export const MAX_PER_TICK = 4;
 export const MAX_POSITIONS = 2;
 export const FEE_RATE = 0.001;
@@ -113,9 +115,9 @@ export function analyze(symbol, bars) {
 export function pickUniverse(exchangeInfo, tickers, cap = MAX_UNIVERSE) {
   if (!Array.isArray(exchangeInfo?.symbols) || !Array.isArray(tickers)) throw new Error('bad-market-universe');
   const available = new Set(exchangeInfo.symbols
-    .filter(s => s.status === 'TRADING' && s.quoteAsset === 'USDT' && s.isSpotTradingAllowed !== false)
+    .filter(s => spotAssetRisk(s)===null)
     .map(s => s.symbol)
-    .filter(s => /^[A-Z0-9]{3,16}USDT$/.test(s) && !/(UP|DOWN|BULL|BEAR)USDT$/.test(s)));
+    .filter(s => /^[A-Z0-9]{3,16}USDT$/.test(s)));
   return tickers.filter(t => available.has(t.symbol) && Number(t.quoteVolume) >= 5_000_000
       && Number(t.lastPrice) > 0 && Number.isFinite(Number(t.quoteVolume)))
     .sort((a,b) => Number(b.quoteVolume) - Number(a.quoteVolume))
@@ -181,7 +183,7 @@ export function paperFill(state, fill) {
   return next;
 }
 export function freshState() {
-  return { schema:1, enabled:false, halted:false, cash:10_000, equity:10_000,
+  return { schema:1, enabled:false, halted:false, liquidationPending:false, cash:10_000, equity:10_000,
     realized:0, dayLoss:0, dayStartEquity:10_000, day:'', maxEquity:10_000,
     positions:{}, journal:[], signals:[], events:[], universe:[], cursor:0,
     universeUpdated:0, lastScan:0, lastError:null, failureCount:0, revision:0 };

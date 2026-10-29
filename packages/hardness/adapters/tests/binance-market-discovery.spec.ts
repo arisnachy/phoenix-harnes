@@ -20,10 +20,37 @@ describe('Binance public Spot universe', () => {
   it('ranks verified liquid Spot pairs without leveraged or suspended markets', () => {
     expect(selectBinanceSpotUniverse(exchange, ticker, 120)).toEqual(['BTCUSDT', 'ETHUSDT'])
   })
+  it('excludes known Monitoring Tag and announced spot-delisted assets even with high volume', () => {
+    const risky = { symbols: [
+      ...exchange.symbols,
+      { symbol: 'BICOUSDT', status: 'TRADING', quoteAsset: 'USDT' },
+      { symbol: 'CVCUSDT', status: 'TRADING', quoteAsset: 'USDT' },
+      { symbol: 'EPICUSDT', status: 'TRADING', quoteAsset: 'USDT' },
+      { symbol: 'QUICKUSDT', status: 'TRADING', quoteAsset: 'USDT' },
+      { symbol: 'FUTUREUSDT', status: 'TRADING', quoteAsset: 'USDT', tags: ['MONITORING'] },
+    ] }
+    const quotes = [...ticker, ...['BICOUSDT', 'CVCUSDT', 'EPICUSDT', 'QUICKUSDT', 'FUTUREUSDT']
+      .map(symbol => ({ symbol, lastPrice: '10', quoteVolume: '1000000000' }))]
+    expect(selectBinanceSpotUniverse(risky, quotes, 1000)).toEqual(['BTCUSDT', 'ETHUSDT'])
+  })
+
+  it('respects exchange permissionSets and never treats a delisted pair as active', () => {
+    const permissioned = { symbols: [
+      { symbol: 'ABCUSDT', status: 'TRADING', quoteAsset: 'USDT', permissionSets: [['MARGIN']] },
+      { symbol: 'DEFUSDT', status: 'TRADING', quoteAsset: 'USDT', permissionSets: [['SPOT', 'MARGIN']] },
+      { symbol: 'GHIUSDT', status: 'HALT', quoteAsset: 'USDT', permissionSets: [['SPOT']] },
+    ] }
+    expect(selectBinanceSpotUniverse(permissioned, [
+      { symbol: 'ABCUSDT', quoteVolume: '10000000', lastPrice: '10' },
+      { symbol: 'DEFUSDT', quoteVolume: '10000000', lastPrice: '10' },
+      { symbol: 'GHIUSDT', quoteVolume: '10000000', lastPrice: '10' },
+    ])).toEqual(['DEFUSDT'])
+  })
+
   it('rejects provider truncation and invalid inputs rather than inventing pairs', () => {
     expect(() => selectBinanceSpotUniverse({}, ticker)).toThrow('Invalid')
     expect(() => selectBinanceSpotUniverse(exchange, [], 12)).toThrow('No eligible')
-    expect(() => selectBinanceSpotUniverse(exchange, ticker, 500)).toThrow('Invalid')
+    expect(() => selectBinanceSpotUniverse(exchange, ticker, 1001)).toThrow('Invalid')
     expect(() => selectBinanceSpotUniverse(exchange, ticker, 1)).toEqual(['BTCUSDT'])
   })
 })

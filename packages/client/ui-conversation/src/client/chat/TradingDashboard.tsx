@@ -255,8 +255,10 @@ export function TradingDashboard({ initial }: Props) {
       </section>
     )
   }
-  async function control(action: 'start' | 'stop' | 'check-now'): Promise<void> {
+  async function control(action: 'start' | 'stop' | 'stop-liquidate' | 'check-now'): Promise<void> {
     if (state === undefined || controlBusy) return
+    if (action === 'stop-liquidate' && !window.confirm(
+      '¿Detener PAPER y vender todas las posiciones VIRTUALES? Se utilizarán precios públicos actuales; ninguna orden irá a Binance REAL.')) return
     setControlBusy(true)
     setControlError(undefined)
     try {
@@ -332,13 +334,19 @@ export function TradingDashboard({ initial }: Props) {
             ? <button type="button" className={css.danger} disabled={controlBusy} onClick={() => { void control('stop') }}>Detener</button>
             : <button type="button" className={css.primary} disabled={controlBusy}
                 onClick={() => { void control('start') }}>Iniciar PAPER</button>}
+          {(running || account.positions.length > 0) && (
+            <button type="button" className={css.danger} disabled={controlBusy}
+              onClick={() => { void control('stop-liquidate') }}>
+              Detener y vender todo (PAPER)
+            </button>
+          )}
         </div>
       </div>
       <div className={css.tradingRadarMeta} aria-live="polite">
         <span>Ciclos válidos: {state.successfulCycles ?? 'sin telemetría'}</span>
         <span>Oportunidades de 75/100+: {state.signalsQualified ?? 'sin telemetría'}</span>
         <span>Ciclos con ejecución: {state.filledCycles ?? 'sin telemetría'}</span>
-        <span>Universo: {state.universeSize ?? 0} pares líquidos</span>
+        <span>Universo: {state.universeSize ?? 0} pares Spot USDT elegibles</span>
         <span>Próximo análisis: {clock(state.nextCheckAt)}</span>
         {state.lastDiscoveryIssue && <span role="status">{state.lastDiscoveryIssue}</span>}
         <strong>{running ? 'Radar encendido' : 'Radar detenido'}</strong>
@@ -363,9 +371,15 @@ export function TradingDashboard({ initial }: Props) {
         <input type="checkbox" checked={running ? settings.autoDiscover : autoDiscoverDraft}
           disabled={running || controlBusy}
           onChange={event => { setAutoDiscoverDraft(event.currentTarget.checked) }} />
-        <span>Al iniciar: descubrir hasta 120 pares Spot USDT líquidos y rotar 12 en cada análisis.
-          Mantener todos tus pares prioritarios; los huecos restantes rotan automáticamente. Solo PAPER.</span>
+        <span>Al iniciar: revisar hasta 1.000 pares Spot USDT líquidos y rotar 12 por ciclo.
+          Se excluyen activos conocidos con etiqueta Monitoring o retiro anunciado, pares suspendidos y tokens apalancados.
+          La cobertura de anuncios de riesgo no es exhaustiva. Solo PAPER.</span>
       </label>
+      <p className={css.tradingNotice}>
+        Seguridad Binance: se comprueba el estado Spot en el escaneo y una lista conservadora
+        de avisos oficiales. Las etiquetas Monitoring/Seed y deslistados futuros no tienen un
+        campo oficial completo en exchangeInfo; no interpretes ausencia de bloqueo como garantía.
+      </p>
       {running && !settings.autoDiscover && <p className={css.tradingNotice}>
         El radar está limitado a una lista fija. Detén e inicia PAPER con descubrimiento automático para ampliar la búsqueda.
       </p>}
