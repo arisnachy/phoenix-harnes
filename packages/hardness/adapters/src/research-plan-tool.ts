@@ -19,7 +19,7 @@ type Intake = {
   cover?: {
     institution?: string
     author?: string
-    authors?: Array<{ name?: string, student_id?: string }>
+    authors?: Array<{ name?: string; student_id?: string }>
     logo_path?: string
     advisor?: string
     course?: string
@@ -225,7 +225,7 @@ export function createResearchPlanTool(): ToolDefinition {
           + '. Extensión estimada, NO páginas escritas: '
           + String((value.pages as Record<string, unknown>).target)
           + '. Campos pendientes: ' + (Array.isArray(value.missing_fields)
-            ? value.missing_fields.map(String).join(', ') : 'ninguno'),
+          ? value.missing_fields.map(String).join(', ') : 'ninguno'),
       }],
     },
     execute(args) { return Promise.resolve(planAcademicResearch(args.input)) },
