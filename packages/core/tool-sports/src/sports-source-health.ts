@@ -113,6 +113,7 @@ export function locateSportsAutoLauncher(
  */
 export async function ensureSportsSourcesStarted(
   env:NodeJS.ProcessEnv=process.env,
+  force=false,
 ):Promise<SportsRepairLaunch>{
   const current=managedSportsInstallStatus(env)
   if(env.PHOENIX_SPORTS_SOURCES_AUTO_INSTALL==='0'||env.CI==='true'
@@ -122,7 +123,7 @@ export async function ensureSportsSourcesStarted(
   if(!candidate)return{status:'missing-installer',logPath:current.logPath,
     detail:'El runtime no expone el script de instalación. Comprueba que PHOENIX_INSTALL_ROOT apunte al repositorio actualizado.'}
   try{
-    const {stdout}=await run(process.execPath,[candidate.script,'--json'],{
+    const {stdout}=await run(process.execPath,[candidate.script,'--json',...(force?['--force']:[])],{
       cwd:candidate.root,
       env:{...process.env,...env,PHOENIX_INSTALL_ROOT:env.PHOENIX_INSTALL_ROOT??candidate.root},
       shell:false,windowsHide:true,timeout:8_000,maxBuffer:16_000,
