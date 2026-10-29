@@ -55,7 +55,7 @@ const section=(heading:string,kind:Section['kind'],values:Array<Item|null>,max=1
 }
 /** Ref-only lists, page metadata and 200 {} are not source evidence. */
 const nonempty=(v:unknown,depth=0):boolean=>{
-  if(v===null||v===undefined||depth>5)return false
+  if(v===null||v===undefined||depth>10)return false
   if(Array.isArray(v))return v.slice(0,24).some(x=>nonempty(x,depth+1))
   if(typeof v==='object')return Object.entries(row(v))
     .filter(([k])=>!['$ref','count','pageIndex','pageCount','pageSize','timestamp'].includes(k))
