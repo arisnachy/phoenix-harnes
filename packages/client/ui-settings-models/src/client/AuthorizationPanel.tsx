@@ -615,7 +615,7 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
     : undefined
   // MCP state is authoritative whenever installed: a gh CLI session cannot
   // hide a failed or unauthenticated GitHub MCP.
-  const status = (definition.id === 'binance' && mcpRuntime?.status !== 'ready'
+  const status = (definition.id === 'binance' && mcpRuntime !== undefined && mcpRuntime.status !== 'ready'
     ? { text: 'Agentic OAuth: aprobación de Binance pendiente', className: connectorStyles['connectorStatusWarn'] ?? '' }
     : undefined)
     ?? (reauthorizeCodex ? { text: t('reconnectRequiredStatus'), className: connectorStyles['connectorStatusWarn'] ?? '' } : undefined)
