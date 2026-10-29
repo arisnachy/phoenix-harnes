@@ -602,7 +602,7 @@ export function apply(ctx: Context): void {
     description:'Cuotas multideporte sin API key desde OddsHarvester local autorizado: 11 deportes, mercados de prepartido, precios por casa con fuente y antigüedad. No promete acceso ilimitado.',
     parameters:{
       sport:{type:'string',required:true,description:'football, basketball, baseball, american-football, tennis, ice-hockey, rugby-league, rugby-union, handball, volleyball o cricket.'},
-      market:{type:'string',required:true,description:'Mercado del deporte: 1x2, double_chance, btts, moneyline, home_away, match_winner u over_under.'},
+      market:{type:'string',required:true,description:'Mercado compatible con deporte: 1x2, double_chance, btts, moneyline, home_away, match_winner, over_under, total_games_over_under, total_sets_over_under o total_points_over_under.'},
       date:{type:'string',description:'Día AAAA-MM-DD en Santo Domingo; predeterminado hoy.'},
     },
     output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
@@ -620,7 +620,7 @@ export function apply(ctx: Context): void {
       let quotes:Awaited<ReturnType<typeof keylessOdds>>=[]
       let scrapeError:string|null=null
       try{quotes=await keylessOdds(args.sport,args.market,args.date,env)}
-      catch(error){scrapeError=error instanceof Error?error.message.slice(0,240):'Error del scraper'}
+      catch(error){scrapeError=error instanceof Error?error.message.slice(0,1200):'Error del scraper'}
       // The targeted scraping tool must not strand Kira after a blocked page.
       // Query other independently authorized sources, without re-running OddsHarvester.
       const knownSportKeys=coveredSportKeys
@@ -628,7 +628,7 @@ export function apply(ctx: Context): void {
       if(scrapeError||!quotes.length){
         const alternativeEnv={...env,PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED:'0'}
         const candidate=knownSportKeys[args.sport]??[]
-        for(const key of candidate.slice(0,4)){
+        for(const key of candidate.slice(0,5)){
           try{otherSources.push(await marketOddsDetailed(key,
             args.market==='over_under'?'totals':'h2h',alternativeEnv))}
           catch{/* keep the original scraper failure and explicit provider statuses */}
