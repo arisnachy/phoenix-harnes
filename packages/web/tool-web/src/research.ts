@@ -35,6 +35,16 @@ export const RESEARCH_SOURCES: Record<string, readonly ResearchSource[]> = {
     { name: 'SEC EDGAR', host: 'sec.gov', access: 'public' },
     { name: 'FRED', host: 'fred.stlouisfed.org', access: 'public' },
   ],
+  public_health: [
+    { name: 'Pan American Health Organization', host: 'paho.org', access: 'public' },
+    { name: 'World Bank', host: 'worldbank.org', access: 'public' },
+    { name: 'National Statistics Office RD', host: 'one.gob.do', access: 'public' },
+    { name: 'Ministry of Public Health RD', host: 'msp.gob.do', access: 'public' },
+    { name: 'National Health Service RD', host: 'sns.gob.do', access: 'public' },
+    { name: 'Health Insurance Superintendent RD', host: 'sisalril.gob.do', access: 'public' },
+    { name: 'World Health Organization', host: 'who.int', access: 'public' },
+    { name: 'World Bank Data', host: 'datos.bancomundial.org', access: 'public' },
+  ],
   medicine: [
     { name: 'PubMed', host: 'pubmed.ncbi.nlm.nih.gov', access: 'public' },
     { name: 'ClinicalTrials.gov', host: 'clinicaltrials.gov', access: 'public' },
@@ -131,6 +141,7 @@ const DOMAIN_PATTERNS: readonly (readonly [string, RegExp])[] = [
   ['crypto', /\b(bitcoin|ethereum|criptomoneda|crypto|blockchain|token|btc)\b/iu],
   ['sports', /\b(partido|f[uú]tbol|football|soccer|nba|mlb|b[eé]isbol|tenis|liga|marcador|resultado deportivo|champions|real madrid)\b/iu],
   ['neuroscience', /\b(neurociencia|neuropsicolog|neuroplasticidad|neuroimagen|cognitiv|alzheimer|alzh[eé]imer)\b/iu],
+  ['public_health', /\b(aps|atenci[oó]n primaria|primer nivel|cobertura sanitaria|cobertura efectiva|salud p[uú]blica|sistema sanitario|sistema de salud|servicios de salud|mortalidad materna|mortalidad infantil|sisalril|servicio nacional de salud|ministerio de salud p[uú]blica)\b/iu],
   ['medicine', /\b(medicina|clinical|cl[ií]nic|ensayo|tratamiento|paciente|salud|f[aá]rmaco|epidemiolog)\b/iu],
   ['finance', /\b(acciones|bolsa|stock|bonos|inversiones|nasdaq|s&p|sec edgar)\b/iu],
   ['economics', /\b(inflaci[oó]n|pib|gdp|desempleo|econom[ií]a|banco mundial|pol[ií]ticas p[uú]blicas)\b/iu],
@@ -159,6 +170,8 @@ export interface ResearchPlan {
   readonly domain: string
   readonly queries: string[]
   readonly candidates: ResearchSource[]
+  readonly batch: number
+  readonly totalBatches: number
 }
 
 /**
@@ -167,7 +180,33 @@ export interface ResearchPlan {
  * @param requestedDomain - optional explicit catalogue domain.
  * @returns broad and authority-scoped queries plus candidate metadata.
  */
-export function planResearch(question: string, requestedDomain?: string): ResearchPlan {
+function scopeQuery(question: string, host: string, domain: string): string {
+  if (domain !== 'public_health' || !/rep[uú]blica dominicana|dominican republic|\bRD\b/iu.test(question)) {
+    return question + ' site:' + host
+  }
+  const years = [...question.matchAll(/\b(?:19|20)\d{2}\b/gu)].map(match => match[0]).slice(0, 2).join(' ')
+  const focus = /mortalidad|resultados sanitarios|indicadores/iu.test(question) ? 'mortalidad indicadores'
+    : /cobertura/iu.test(question) ? 'cobertura sanitaria'
+      : /primer nivel|atenci[oó]n primaria|\bAPS\b/iu.test(question) ? 'atención primaria salud'
+        : 'sistema de salud'
+  const english = host === 'worldbank.org' || host === 'who.int'
+  const isAps = /primer nivel|atenci[oó]n primaria|\bAPS\b/iu.test(question)
+  const targeted = isAps && (host === 'paho.org' || host === 'msp.gob.do' || host === 'sns.gob.do')
+    ? 'atención primaria primer nivel' : host === 'sisalril.gob.do' ? 'afiliación cobertura salud'
+      : isAps && english ? 'primary health care mortality coverage'
+        : english ? 'health mortality coverage' : focus
+  const location = english ? 'Dominican Republic' : 'República Dominicana'
+  return [location, targeted, years, 'site:' + host].filter(Boolean).join(' ')
+}
+
+/**
+ * Plan consecutive authority batches instead of silently stopping after two institutions.
+ * @param question - user topic and geographic or temporal constraints.
+ * @param requestedDomain - optional explicit source domain.
+ * @param batch - zero-based source batch; 0 includes broad recall.
+ * @returns bounded provider searches and total batches required for institutional coverage.
+ */
+export function planResearch(question: string, requestedDomain?: string, batch = 0): ResearchPlan {
   const q = question.trim()
   if (q.length < 3 || q.length > 500) throw new ToolArgsError(['question must contain 3–500 characters'])
   const domain = requestedDomain === undefined || requestedDomain.trim() === ''
@@ -176,9 +215,16 @@ export function planResearch(question: string, requestedDomain?: string): Resear
   if (!Object.hasOwn(RESEARCH_SOURCES, domain)) {
     throw new ToolArgsError([`unknown domain: ${domain}; use research_sources to inspect supported domains`])
   }
-  const candidates = (RESEARCH_SOURCES[domain] ?? []).slice(0, 2)
-  // One broad query preserves recall; two authority-scoped queries improve precision.
-  return { domain, candidates, queries: [q, ...candidates.map(source => `${q} site:${source.host}`)] }
+  const hosts = RESEARCH_SOURCES[domain] ?? []
+  const totalBatches = Math.max(1, Math.ceil(hosts.length / 2))
+  if (!Number.isInteger(batch) || batch < 0 || batch >= totalBatches) {
+    throw new ToolArgsError(['batch must be an integer from 0 to ' + String(totalBatches - 1)])
+  }
+  const candidates = hosts.slice(batch * 2, batch * 2 + 2)
+  return {
+    domain, batch, totalBatches, candidates,
+    queries: [...(batch === 0 ? [q] : []), ...candidates.map(source => scopeQuery(q, source.host, domain))],
+  }
 }
 
 function canonicalUrl(raw: string): string | undefined {
@@ -200,6 +246,9 @@ export interface ResearchOutcome {
   readonly candidates: ResearchSource[]
   readonly sources: WebSearchSource[]
   readonly failedQueries: string[]
+  readonly batch: number
+  readonly totalBatches: number
+  readonly offTopicDropped: number
   readonly truncated: boolean
   readonly status: 'ok' | 'partial' | 'empty'
   readonly note: string
@@ -232,6 +281,17 @@ export async function executeResearch(
   const seen = new Set<string>()
   const sources: WebSearchSource[] = []
   let dropped = false
+  let offTopicDropped = 0
+  const countryFocus = plan.domain === 'public_health'
+    && plan.queries.some(query => /rep[uú]blica dominicana|dominican republic|\bRD\b/iu.test(query))
+  const isRelevant = (source: WebSearchSource, url: string): boolean => {
+    if (plan.domain !== 'public_health') return true
+    const evidence = (source.title ?? '') + ' ' + (source.snippet ?? '') + ' ' + url
+    const topic = /salud|health|primary care|atenci[oó]n primaria|primer nivel|cobertura|coverage|mortalidad/iu.test(evidence)
+      || /mortality|maternal|infant|\buhc\b|aseguramiento|afiliaci[oó]n|sanitari|healthcare/iu.test(evidence)
+    const country = !countryFocus || /rep[uú]blica dominicana|dominican republic|\bDOM\b|\.gob\.do/iu.test(evidence)
+    return topic && country
+  }
   const maxRanks = Math.max(0, ...successful.map(result => result.sources.length))
   outer: for (let rank = 0; rank < maxRanks; rank++) {
     for (const result of successful) {
@@ -240,19 +300,25 @@ export async function executeResearch(
       const url = canonicalUrl(source.url)
       if (url === undefined || seen.has(url)) continue
       seen.add(url)
+      if (!isRelevant(source, url)) { offTopicDropped++; continue }
       if (sources.length >= maxResults) { dropped = true; break outer }
-      sources.push(source)
+      sources.push({ ...source, url })
     }
   }
   return {
     domain: plan.domain,
     queries: plan.queries,
     candidates: plan.candidates,
+    batch: plan.batch,
+    totalBatches: plan.totalBatches,
+    offTopicDropped,
     sources,
     failedQueries,
     truncated: dropped || successful.some(result => result.truncated),
     status: failedQueries.length > 0 ? 'partial' : sources.length > 0 ? 'ok' : 'empty',
-    note: 'Web-discovered links are leads, not verified API results. Open primary documents before making consequential claims; include source and as-of time for live data. No candidate API has been installed or authorized.',
+    note: 'Search hits are leads, not verified evidence. Inspect filtered titles against original documents, '
+      + 'continue remaining source batches and topic-specific searches. Report missing years and blocked '
+      + 'providers explicitly; no official API is silently installed.',
   }
 }
 
@@ -276,7 +342,7 @@ export function applyResearchTools(ctx: Context, maxResults: number, timeoutMs: 
   ctx.systemPrompt.section({
     name: 'tool:research_search',
     order: 112,
-    text: 'For evidence-intensive multidisciplinary questions, use research_search to consult a broad search and at most two authority-scoped searches through the existing web provider. Research candidate sources are discovery hints, not connected APIs or proof. Inspect primary URLs using web_fetch when available; show publication/as-of date and disagreements. For a quick factual search use web_search instead. Never claim real-time or exhaustive coverage from snippets.',
+    text: 'RESEARCH PROTOCOL: for theses and evidence-intensive reports, plan subtopics and institutional source batches. Use research_search with domain=public_health for health systems/APS; repeat batch=0,1,... until totalBatches is covered. Use research_scholar in several thematic queries for scientific literature. A subagent cap such as 15 references is PER BATCH, never a limit for the thesis. Accumulate and deduplicate by DOI/PMID/URL, inspect primary documents using web_fetch where available, use research_health_series for official World Bank annual data and preserve null years; cross-check official datasets and units/years, keep evidence gaps and inaccessible providers explicit. If results are off topic, shorten queries and switch primary host. Call phoenix_research_plan with input:{intent,level,citation_style,document_type,target_pages} and retry with minimum valid fields if cover validation fails. Do not claim real-time or exhaustive coverage from snippets or fill gaps with invented data.',
   })
   ctx.tools.register(defineTool({
     name: 'research_sources',
@@ -294,24 +360,25 @@ export function applyResearchTools(ctx: Context, maxResults: number, timeoutMs: 
       render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
     },
     isConcurrencySafe: () => true,
-    execute: async args => {
+    execute(args) {
       const domain = args.domain?.trim().toLowerCase()
       if (domain !== undefined && domain !== '' && !Object.hasOwn(RESEARCH_SOURCES, domain)) {
         throw new ToolArgsError(['unknown domain; use research_sources without a domain to list domains'])
       }
-      return {
+      return Promise.resolve({
         domains: Object.keys(RESEARCH_SOURCES),
         sources: domain === undefined || domain === '' ? [] : [...(RESEARCH_SOURCES[domain] ?? [])],
         note: 'Candidates require independent checks for API capability, freshness, credentials, rate limits, license and coverage.',
-      }
+      })
     },
   }))
   ctx.tools.register(defineTool({
     name: 'research_search',
-    description: 'Run bounded multidisciplinary live web research with domain-aware source-scoped queries, deduplication and partial failure recovery. Returns source leads and provenance, not directly verified API data.',
+    description: 'Búsqueda interdisciplinaria de evidencia por lotes de dos instituciones. Para APS/salud pública RD utiliza domain=public_health y batch=0,1,2,3 hasta cubrir OPS, Banco Mundial, ONE, MSP, SNS, SISALRIL y OMS. Filtra indicios irrelevantes y muestra los lotes restantes; no certifica fuentes. Para tesis complementa con research_scholar paginado y phoenix_research_verify_sources; nunca tomes 15 registros como tope global.',
     parameters: {
       question: { type: 'string', required: true },
-      domain: { type: 'string', description: 'Optional source domain. Call research_sources to list valid values.' },
+      domain: { type: 'string', description: 'Optional research domain; APS and health systems use public_health.' },
+      batch: { type: 'integer', description: 'Zero-based source batch; continue 0,1,... totalBatches-1.' },
     },
     output: {
       schema: {
@@ -330,6 +397,9 @@ export function applyResearchTools(ctx: Context, maxResults: number, timeoutMs: 
             },
           } },
           failedQueries: { type: 'array', required: true, items: { type: 'string' } },
+          batch: { type: 'integer', required: true },
+          totalBatches: { type: 'integer', required: true },
+          offTopicDropped: { type: 'integer', required: true },
           truncated: { type: 'boolean', required: true },
           status: { type: 'string', required: true, enum: ['ok', 'partial', 'empty'] },
           note: { type: 'string', required: true },
@@ -340,7 +410,7 @@ export function applyResearchTools(ctx: Context, maxResults: number, timeoutMs: 
     timeoutMs,
     isConcurrencySafe: () => true,
     async execute(args, exec) {
-      const plan = planResearch(args.question, args.domain)
+      const plan = planResearch(args.question, args.domain, args.batch ?? 0)
       return executeResearch(ctx, plan, maxResults, exec.signal)
     },
   }))

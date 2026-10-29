@@ -21,14 +21,18 @@ export interface ScholarlyRecord {
   isOpenAccess?: boolean
 }
 
-/** Safely project provider metadata to bounded real source citations. */
+/**
+ * Safely project provider metadata to bounded real source citations.
+ * @param input - untrusted Europe PMC response payload.
+ * @returns citation records that include provider-supplied identifiers.
+ */
 export function projectEuropePmcRecords(input: unknown): ScholarlyRecord[] {
   if (typeof input !== 'object' || input === null) return []
   const root = input as { resultList?: { result?: unknown } }
   if (!Array.isArray(root.resultList?.result)) return []
   const out: ScholarlyRecord[] = []
   const seen = new Set<string>()
-  for (const raw of root.resultList.result.slice(0, 20)) {
+  for (const raw of root.resultList.result.slice(0, 30)) {
     if (typeof raw !== 'object' || raw === null) continue
     const item = raw as Record<string, unknown>
     const title = typeof item.title === 'string' ? item.title.replace(/<[^>]*>/gu, '').trim().slice(0, 350) : ''
@@ -38,20 +42,26 @@ export function projectEuropePmcRecords(input: unknown): ScholarlyRecord[] {
     const pmid = typeof item.pmid === 'string' && /^\d{5,10}$/u.test(item.pmid) ? item.pmid : undefined
     const pmcid = typeof item.pmcid === 'string' && /^PMC\d+$/u.test(item.pmcid) ? item.pmcid : undefined
     if (!title || !authors || !/^(19|20)\d{2}$/u.test(year) || !(doi || pmid || pmcid)) continue
-    const identity = doi ? 'doi:' + doi.toLowerCase() : pmid ? 'pmid:' + pmid : 'pmcid:' + pmcid
+    const identity = doi ? 'doi:' + doi.toLowerCase() : pmid ? 'pmid:' + pmid : 'pmcid:' + (pmcid ?? '')
     if (seen.has(identity)) continue
     seen.add(identity)
     // Research publisher accepts only citation-safe [@key] identifiers.
-    const key = pmid ? 'pmid' + pmid : pmcid ? pmcid.toLowerCase() : 'doi' + doi!.replace(/[^A-Za-z0-9]/gu, '_').slice(0, 61)
+    const key = pmid ? 'pmid' + pmid : pmcid ? pmcid.toLowerCase() : 'doi' + (doi ?? '').replace(/[^A-Za-z0-9]/gu, '_').slice(0, 61)
+    const journalInfo = item.journalInfo
+    const journal = typeof journalInfo === 'object' && journalInfo !== null
+      ? (journalInfo as Record<string, unknown>).journal : undefined
+    const nestedTitle = typeof journal === 'object' && journal !== null
+      ? (journal as Record<string, unknown>).title : undefined
     out.push({
       key,
       title,
       authors,
       year,
-      journal: typeof item.journalTitle === 'string' ? item.journalTitle.slice(0, 220) : '',
+      journal: typeof item.journalTitle === 'string' ? item.journalTitle.slice(0, 220)
+        : typeof nestedTitle === 'string' ? nestedTitle.slice(0, 220) : '',
       url: doi ? 'https://doi.org/' + encodeURI(doi) : pmid
         ? 'https://pubmed.ncbi.nlm.nih.gov/' + pmid + '/'
-        : 'https://europepmc.org/articles/' + pmcid,
+        : 'https://europepmc.org/articles/' + (pmcid ?? ''),
       ...(doi ? { doi } : {}),
       ...(pmid ? { pmid } : {}),
       ...(pmcid ? { pmcid } : {}),
@@ -68,19 +78,37 @@ export function projectEuropePmcRecords(input: unknown): ScholarlyRecord[] {
 /**
  * Retrieve official Europe PMC metadata without API keys. This does not imply
  * full text or clinical reliability; article type and study quality are assessed separately.
+ * @param query - search terms sent to Europe PMC.
+ * @param limit - maximum records per page.
+ * @param signal - optional cancellation signal.
+ * @param request - injectable HTTP client for deterministic tests.
+ * @param cursorMark - opaque continuation token from the previous response.
+ * @returns provider metadata, pagination and explicit unavailable state.
  */
 export async function searchEuropePmc(
   query: string, limit = 5, signal?: AbortSignal, request: typeof fetch = fetch,
-): Promise<{ state: 'ok' | 'empty' | 'unavailable'; source: string; retrievedAt: string; records: ScholarlyRecord[]; error?: string }> {
+  cursorMark?: string,
+): Promise<{
+  state: 'ok' | 'empty' | 'unavailable'
+  source: string
+  retrievedAt: string
+  records: ScholarlyRecord[]
+  nextCursorMark?: string
+  hitCount?: number
+  error?: string
+}> {
   if (typeof query !== 'string' || query.trim().length < 3 || query.length > 400
-    || !Number.isInteger(limit) || limit < 1 || limit > 10) {
-    throw new ToolArgsError(['La búsqueda requiere 3 a 400 caracteres y de 1 a 10 resultados.'])
+    || !Number.isInteger(limit) || limit < 1 || limit > 30
+    || (cursorMark !== undefined && (cursorMark.length < 1 || cursorMark.length > 500
+      || /[\x00-\x20]/u.test(cursorMark)))) {
+    throw new ToolArgsError(['La búsqueda requiere 3 a 400 caracteres, 1 a 30 resultados y cursor válido.'])
   }
   const url = new URL('https://www.ebi.ac.uk/europepmc/webservices/rest/search')
   url.searchParams.set('query', query.trim())
   url.searchParams.set('format', 'json')
   url.searchParams.set('resultType', 'core')
   url.searchParams.set('pageSize', String(limit))
+  url.searchParams.set('cursorMark', cursorMark ?? '*')
   const retrievedAt = new Date().toISOString()
   try {
     const response = await request(url.href, {
@@ -88,11 +116,24 @@ export async function searchEuropePmc(
       signal: signal === undefined ? AbortSignal.timeout(20000)
         : AbortSignal.any([signal, AbortSignal.timeout(20000)]),
     })
-    if (!response.ok) throw new Error('provider HTTP ' + response.status)
+    if (!response.ok) throw new Error('provider HTTP ' + String(response.status))
     const body = await response.text()
     if (body.length > 1800000) throw new Error('provider response exceeded safe length')
-    const records = projectEuropePmcRecords(JSON.parse(body) as unknown).slice(0, limit)
-    return { state: records.length ? 'ok' : 'empty', source: url.origin, retrievedAt, records }
+    const parsed = JSON.parse(body) as {
+      resultList?: { result?: unknown[] }
+      nextCursorMark?: unknown
+      hitCount?: unknown
+    }
+    const records = projectEuropePmcRecords(parsed).slice(0, limit)
+    const nextCursorMark = typeof parsed.nextCursorMark === 'string'
+      && parsed.nextCursorMark !== (cursorMark ?? '*')
+      && (parsed.resultList?.result?.length ?? 0) > 0
+      ? parsed.nextCursorMark : undefined
+    const hitCount = typeof parsed.hitCount === 'number' ? parsed.hitCount
+      : typeof parsed.hitCount === 'string' && /^\d+$/u.test(parsed.hitCount)
+        ? Number(parsed.hitCount) : undefined
+    return { state: records.length ? 'ok' : 'empty', source: url.origin, retrievedAt, records,
+      ...(nextCursorMark ? { nextCursorMark } : {}), ...(hitCount !== undefined ? { hitCount } : {}) }
   } catch (error) {
     if (signal?.aborted) throw error
     return { state: 'unavailable', source: url.origin, retrievedAt, records: [],
@@ -100,24 +141,28 @@ export async function searchEuropePmc(
   }
 }
 
-/** Public academic search with provider-authenticated bibliographic metadata. */
+/**
+ * Public academic search with provider-authenticated bibliographic metadata.
+ * @returns registered academic search tool.
+ */
 export function createScholarlySearchTool(): ToolDefinition {
   return defineTool({
     name: 'research_scholar',
-    description: 'Busca metadatos científicos REALES mediante la API pública oficial Europe PMC: PubMed, PubMed Central, artículos, preprints y otras fuentes indexadas. Devuelve autor, título, año, revista, DOI/PMID/PMCID, URL original, resumen cuando exista y fecha de consulta. Úsala antes de redactar informes biomédicos o al verificar referencias; NO implica que el artículo tenga revisión por pares, texto completo disponible o evidencia clínica sólida. Búsqueda de máximo 10 registros, sin claves API inventadas. La herramienta devuelve estado unavailable si el proveedor falla.',
+    description: 'Consulta metadatos REALES de Europe PMC (PubMed/PMC y otros índices). Devuelve DOI/PMID, autores, título, revista, fecha y URL. Busca por SUBTEMA, diseño y período; recupera hasta 30 por lote y usa cursor_mark=nextCursorMark de la respuesta para continuar hasta alcanzar cobertura bibliográfica suficiente de tesis. Deduplica globalmente entre lotes por DOI/PMID. NO confundir metadatos con evidencia clínica verificada o texto completo. Sin API key; unavailable si el proveedor falla.',
     timeoutMs: 25000,
     parameters: {
       query: { type: 'string', required: true, description: 'Consulta académica, 3 a 400 caracteres.' },
-      limit: { type: 'integer', description: 'Resultados 1 a 10, por defecto 5.' },
+      limit: { type: 'integer', description: 'Resultados 1 a 30 por lote, por defecto 5.' },
+      cursor_mark: { type: 'string', description: 'Cursor devuelto como nextCursorMark por el lote anterior; permite paginar sin perder fuentes.' },
     },
     output: { schema: { type: 'object', additionalProperties: true },
       render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }] },
     async execute(args, exec) {
-      const result = await searchEuropePmc(args.query, args.limit ?? 5, exec.signal)
+      const result = await searchEuropePmc(args.query, args.limit ?? 5, exec.signal, fetch, args.cursor_mark)
       return result as unknown as Record<string, JsonValue>
     },
     presentCall(args) {
-      return { card: 'generic', title: 'Literatura científica · ' + String(args.query).slice(0, 80), kind: 'search' }
+      return { card: 'generic', title: 'Literatura científica · ' + args.query.slice(0, 80), kind: 'search' }
     },
   })
 }

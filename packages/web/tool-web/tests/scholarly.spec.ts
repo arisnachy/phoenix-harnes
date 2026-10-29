@@ -29,6 +29,7 @@ describe('Europe PMC official scholarly metadata', () => {
       expect(parsed.pathname).toBe('/europepmc/webservices/rest/search')
       expect(parsed.searchParams.get('format')).toBe('json')
       expect(parsed.searchParams.get('pageSize')).toBe('3')
+      expect(parsed.searchParams.get('cursorMark')).toBe('*')
       return new Response(JSON.stringify(provider), { status: 200 })
     }) as unknown as typeof fetch
     const response = await searchEuropePmc('Alzheimer 2026', 3, undefined, fetcher)
@@ -48,4 +49,32 @@ describe('Europe PMC official scholarly metadata', () => {
     expect(tool.name).toBe('research_scholar')
     expect(tool.timeoutMs).toBeGreaterThan(10000)
   })
+  it('paginates real provider metadata instead of treating ten records as a thesis limit', async () => {
+    const fetcher = vi.fn(async (url: string | URL) => {
+      const parsed = new URL(String(url))
+      expect(parsed.searchParams.get('pageSize')).toBe('25')
+      expect(parsed.searchParams.get('cursorMark')).toBe('next123')
+      return new Response(JSON.stringify({
+        ...provider, nextCursorMark: 'next456', hitCount: 72,
+      }), { status: 200 })
+    }) as unknown as typeof fetch
+    const batch = await searchEuropePmc('primary health care', 25, undefined, fetcher, 'next123')
+    expect(batch.state).toBe('ok')
+    expect(batch.nextCursorMark).toBe('next456')
+    expect(batch.hitCount).toBe(72)
+    expect(batch.records).toHaveLength(1)
+    await expect(searchEuropePmc('primary health care', 31, undefined, fetcher)).rejects.toThrow()
+    await expect(searchEuropePmc('primary health care', 5, undefined, fetcher, 'unsafe cursor')).rejects.toThrow()
+  })
+
+  it('reads authoritative journal metadata from Europe PMC core results', () => {
+    const records = projectEuropePmcRecords({ resultList: { result: [{
+      pmid: '99887766', title: 'Assessment of primary health care',
+      authorString: 'Scholar A', pubYear: '2023', journalInfo: { journal: { title: 'Health Systems Research' } },
+    }] } })
+    expect(records).toHaveLength(1)
+    expect(records[0]?.journal).toBe('Health Systems Research')
+  })
+
+
 })
