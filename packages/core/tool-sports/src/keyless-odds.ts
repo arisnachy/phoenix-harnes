@@ -156,12 +156,13 @@ async function runScraper(sport:KeylessSport,market:string,day:string,env:NodeJS
   try{
     const executable=env.PHOENIX_SPORTS_ODDSHARVESTER_BIN||'oddsharvester'
     const argv=['upcoming','--sport',sport,'--date',day.replaceAll('-',''),
-      '--market',market,'--headless','--format','json','--output',file,'--concurrency','1',
+      '--market',market,'--headless','--format','json','--output',file,
+      '--timezone','America/Santo_Domingo','--concurrency','1',
       '--request-delay','2']
     // No shell or arbitrary URLs; uvx is an optional self-contained runner, pinned to a tested package.
     // It may provision the package, but a browser binary must still be present on the host.
     // Child process needs basic OS/browser variables, never the host's API keys or vault secrets.
-    const allow=/^(PATH|HOME|USERPROFILE|APPDATA|LOCALAPPDATA|TEMP|TMP|TMPDIR|SYSTEMROOT|WINDIR|PLAYWRIGHT_BROWSERS_PATH|UV_CACHE_DIR|UV_PYTHON_INSTALL_DIR|XDG_CACHE_HOME|LANG|LC_ALL)$/u
+    const allow=/^(PATH|HOME|USERPROFILE|APPDATA|LOCALAPPDATA|TEMP|TMP|TMPDIR|SYSTEMROOT|WINDIR|PLAYWRIGHT_BROWSERS_PATH|UV_CACHE_DIR|UV_PYTHON_INSTALL_DIR|XDG_CACHE_HOME|LANG|LC_ALL)$/iu
     const safeEnv=Object.fromEntries(Object.entries(process.env).filter(([name])=>allow.test(name)))
     try{
       await runFile(executable,argv,{shell:false,windowsHide:true,timeout:120_000,maxBuffer:256_000,env:safeEnv})
