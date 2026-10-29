@@ -46,6 +46,7 @@ jobs:
           node --experimental-strip-types --test packages/core/tool-sports/tests/sports-source-health.test.mjs
           node --experimental-strip-types --test packages/core/tool-sports/tests/sports-market-intelligence.test.mjs
           node --experimental-strip-types --test packages/core/tool-sports/tests/sports-deep-context.test.mjs
+           node --experimental-strip-types --test packages/core/tool-sports/tests/espn-intelligence.test.mjs
           node --test scripts/phoenix-sports-source-update.test.mjs
           node --test scripts/phoenix-sports-historical-collect.test.mjs
           node --experimental-strip-types --test packages/core/tool-sports/tests/keyless-odds.test.mjs
