@@ -53,8 +53,15 @@ const section=(heading:string,kind:Section['kind'],values:Array<Item|null>,max=1
   }
   return items.length?{heading,kind,items}:null
 }
-const nonempty=(v:unknown)=>v!==null&&v!==undefined&&
-  (Array.isArray(v)?v.length>0:typeof v==='object'?Object.keys(row(v)).some(k=>k!=='$ref'):true)
+/** Ref-only lists, page metadata and 200 {} are not source evidence. */
+const nonempty=(v:unknown,depth=0):boolean=>{
+  if(v===null||v===undefined||depth>5)return false
+  if(Array.isArray(v))return v.slice(0,24).some(x=>nonempty(x,depth+1))
+  if(typeof v==='object')return Object.entries(row(v))
+    .filter(([k])=>!['$ref','count','pageIndex','pageCount','pageSize','timestamp'].includes(k))
+    .some(([,x])=>nonempty(x,depth+1))
+  return typeof v==='string'?v.trim().length>0:true
+}
 const cache=new Map<string,{until:number;value:unknown}>()
 /** Cache successes and negative results; never cache indefinitely and bound total memory. */
 async function read(url:string,fetcher:typeof fetch,ttlMs:number):Promise<unknown>{
@@ -66,7 +73,7 @@ async function read(url:string,fetcher:typeof fetch,ttlMs:number):Promise<unknow
     if(cache.size>160)cache.delete(cache.keys().next().value??'')
     cache.set(url,{until:Date.now()+ttlMs,value:response})
     return response
-  }catch(error){
+  }catch{
     cache.set(url,{until:Date.now()+30_000,value:null})
     throw error
   }
