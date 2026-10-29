@@ -96,7 +96,7 @@ describe('Phoenix Sports ticket hierarchy and theme compatibility',()=>{
     expect(screen.getByText('⚾')).toBeTruthy()
     expect(screen.getAllByText(/Casa A/).length).toBe(2)
     expect(screen.getByText('6.350')).toBeTruthy()
-    expect(screen.getByText('Solo análisis · No se ha realizado ninguna apuesta')).toBeTruthy()
+    expect(screen.getByText('Ticket investigado · Aceptación de la casa sin verificar')).toBeTruthy()
   })
   it('preserves detailed sourced research while rejecting excessive model prose',()=>{
     const detailed={...ticket,props:{...ticket.props,legs:[
