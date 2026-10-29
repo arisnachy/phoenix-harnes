@@ -254,7 +254,15 @@ def validate(data):
         if data.get("thesis_level") is not None and data["thesis_level"] not in (
                 "bachelors", "masters", "doctorate"):
             raise ValueError("thesis_level must be bachelors, masters or doctorate")
-    resolved_presentation = data.get("presentation", "journal" if (data.get("document_type") == "journal_manuscript" or data.get("journal_requirements", {}).get("journal")) else ("hybrid" if data.get("quality_profile", "professional") == "professional" else "academic"))
+    if data.get("document_type") == "journal_manuscript" or data.get("journal_requirements", {}).get("journal"):
+        default_presentation = "journal"
+    elif data.get("document_type") == "thesis":
+        default_presentation = "academic"
+    elif data.get("quality_profile", "professional") == "professional":
+        default_presentation = "hybrid"
+    else:
+        default_presentation = "academic"
+    resolved_presentation = data.get("presentation", default_presentation)
     if resolved_presentation not in PRESENTATIONS:
         raise ValueError("presentation must be academic, journal, editorial or hybrid")
     selected_design = data.get("design_preset", "auto")
