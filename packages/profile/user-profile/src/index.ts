@@ -255,14 +255,10 @@ function userMessageText(value: unknown): string | undefined {
   return text === '' ? undefined : text
 }
 
-/**
- * Render the durable assistant identity and human-presence contract.
- * User-selected identity survives provider/model changes because this system
- * section is assembled from persisted profile settings on every request.
- * @param identity - persisted assistant name and presentation mode.
- * @returns model-facing identity and conversation guidance.
+/** Small authorized addressing payload for every prompt path, including low-latency turns.
+ * @param profile - consent-filtered fields; no private data without opt-in.
+ * @returns short model-facing directions with only authorized attributes.
  */
-/** Small authorized addressing payload for every prompt path, including low-latency turns. */
 export function renderHumanConnection(profile: UserProfileConsented): string {
   const lines: string[] = []
   const mode = profile.addressingMode ?? 'automatic'
@@ -291,7 +287,13 @@ export function renderHumanConnection(profile: UserProfileConsented): string {
   return lines.join('\n')
 }
 
-/** Stable assistant identity and optional, consent-filtered personal address. */
+/** Stable assistant identity and optional, consent-filtered personal address.
+ * User-selected identity survives provider/model changes because this system
+ * section is assembled from persisted profile settings on every request.
+ * @param identity - persisted assistant name and presentation mode.
+ * @param profile - explicitly permitted user preferences.
+ * @returns model-facing identity and conversational guidance.
+ */
 export function renderAssistantIdentity(identity: AssistantIdentity, profile: UserProfileConsented = {}): string {
   return [
     '<phoenix_human_presence>',
