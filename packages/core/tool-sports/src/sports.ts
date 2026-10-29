@@ -2,6 +2,7 @@
 import { fetchPublicEspnOdds } from './espn-odds.ts'
 import { fetchTheOddsApi } from './free-odds.ts'
 import { keylessEnabled, keylessOdds, type KeylessSport } from './keyless-odds.ts'
+import { saveOddsSnapshot } from './odds-snapshots.ts'
 import { enrichMlbMatch } from './mlb-matchup.ts'
 import { researchMlbTrend } from './mlb-research.ts'
 export const sportsCatalog: Readonly<Record<string, readonly string[]>> = {
@@ -300,44 +301,126 @@ export type MarketOutcome = MarketSelection & { price:number;home:string;away:st
  * @param fetcher - HTTP adapter for isolated tests.
  * @returns Normalized quotes with bookmaker names and update times.
  */
-export async function marketOdds(sportKey:string,markets='h2h',env:NodeJS.ProcessEnv=process.env,fetcher:typeof fetch=fetch):Promise<MarketOutcome[]> {
-  if(!/^[a-z0-9_]{3,80}$/u.test(sportKey)||!/^(h2h|totals|spreads)(,(h2h|totals|spreads))*$/u.test(markets))throw Error('Mercado inválido')
-  if(!hasSportsPermission('odds',env)){
-    // Keyless browser source is opt-in and never suppresses ESPN on failure.
-    if(keylessEnabled(env)){
-      const prefix=sportKey.split('_')[0]
-      const sportByPrefix:Record<string,KeylessSport>={
-        soccer:'football',basketball:'basketball',baseball:'baseball',
-        americanfootball:'american-football',icehockey:'ice-hockey',
-        tennis:'tennis',handball:'handball',volleyball:'volleyball',
-        cricket:'cricket',rugbyleague:'rugby-league',rugbyunion:'rugby-union',
-      }
-      const sport=sportByPrefix[prefix??'']
-      const market=markets==='h2h'?sport==='football'||sport==='handball'?'1x2':
-        sport==='tennis'?'match_winner':sport==='ice-hockey'||sport==='volleyball'
-          ||sport==='rugby-league'||sport==='rugby-union'||sport==='cricket'?'home_away':'moneyline':
-        markets==='totals'?'over_under':null
-      if(sport&&market){
-        try{
-          const verified=await keylessOdds(sport,market,undefined,env)
-          if(verified.length)return verified.map(q=>({...q,sportKey,time:localTime(q.time)}))
-        }catch{/* Fallback is a provider failure, never permission to synthesize odds. */}
-      }
-    }
-    const alternateKey=env.THEODDSAPI_API_KEY
-    if(alternateKey?.trim())return fetchTheOddsApi(sportKey,markets,alternateKey,fetcher)
-    if(!hasSportsPermission('espn',env))throw Error('No hay proveedor de cuotas: ESPN deshabilitado, THE_ODDS_API_KEY y THEODDSAPI_API_KEY ausentes.')
-    const fromEspn=await fetchPublicEspnOdds(sportKey,markets,<T>(url:string)=>getFeed<T>(url,fetcher))
-    return fromEspn.map(quote=>({ ...quote,sportKey,source:'ESPN Site/Core (sin clave)' }))
+export type OddsSourceAttempt={provider:string;status:'observed'|'empty'|'unconfigured'|'error';
+  count:number;detail:string}
+/** Query independent providers without allowing an empty/failed preferred provider
+ * to suppress a healthy fallback. Preserve bookmaker identity and source times.
+ */
+export async function marketOddsDetailed(
+  sportKey:string,markets='h2h',env:NodeJS.ProcessEnv=process.env,
+  fetcher:typeof fetch=fetch,now=Date.now(),
+):Promise<{quotes:MarketOutcome[];sources:OddsSourceAttempt[]}>{
+  if(!/^[a-z0-9_]{3,80}$/u.test(sportKey)||
+    !/^(h2h|totals|spreads)(,(h2h|totals|spreads))*$/u.test(markets))
+    throw Error('Mercado inválido')
+  const requests:Array<{name:string;run:()=>Promise<MarketOutcome[]>}>=[]
+  const sources:OddsSourceAttempt[]=[]
+  const names=['The Odds API v4','TheOddsAPI','OddsHarvester','ESPN Site/Core']
+  const configured=new Set<string>()
+  if(hasSportsPermission('odds',env)){
+    configured.add(names[0]!)
+    requests.push({name:names[0]!,run:async()=>{
+      const u=new URL('https://api.the-odds-api.com/v4/sports/'+sportKey+'/odds')
+      for(const [k,v] of Object.entries({apiKey:env.THE_ODDS_API_KEY??'',regions:'us',
+        markets,oddsFormat:'decimal'}))u.searchParams.set(k,v)
+      const feed=await getFeed<Array<{id:string;home_team:string;away_team:string;
+        commence_time:string;bookmakers?:Array<{key:string;title:string;
+        last_update?:string;markets?:Array<{key:string;last_update?:string;
+          outcomes?:Array<{name:string;price:number;point?:number}>}>}>}>>(
+        u.toString(),fetcher)
+      if(!Array.isArray(feed))throw Error('Respuesta de cuotas inválida')
+      return feed.flatMap(event=>(event.bookmakers??[]).flatMap(book=>
+        (book.markets??[]).flatMap(market=>(market.outcomes??[])
+          .filter(o=>o.price>1&&Number.isFinite(o.price)).map(o=>({
+            eventId:title(event.id,100),bookmaker:title(book.title||book.key,120),
+            market:title(market.key,60),selection:title(o.name,120),point:o.point??null,
+            sportKey,price:o.price,home:title(event.home_team),away:title(event.away_team),
+            time:localTime(event.commence_time),timeIso:event.commence_time,
+            updatedAt:title(market.last_update??book.last_update),
+            source:'The Odds API',
+          }))))).slice(0,500)
+    }})
   }
-  const u=new URL('https://api.the-odds-api.com/v4/sports/'+sportKey+'/odds')
-  for(const [k,v] of Object.entries({ apiKey:env.THE_ODDS_API_KEY??'',regions:'us',markets,oddsFormat:'decimal' }))u.searchParams.set(k,v)
-  const feed=await getFeed<Array<{ id:string;home_team:string;away_team:string;commence_time:string;bookmakers?:Array<{ key:string;title:string;last_update?:string;markets?:Array<{ key:string;last_update?:string;outcomes?:Array<{ name:string;price:number;point?:number }> }> }> }>>(u.toString(),fetcher)
-  if(!Array.isArray(feed))throw Error('Respuesta de cuotas inválida')
-  return feed.flatMap(event=>(event.bookmakers??[]).flatMap(book=>(book.markets??[]).flatMap(market=>(market.outcomes??[]).filter(o=>o.price>1&&Number.isFinite(o.price)).map(o=>({
-    eventId:title(event.id,100),bookmaker:title(book.title||book.key,120),market:title(market.key,60),selection:title(o.name,120),point:o.point??null,sportKey,
-    price:o.price,home:title(event.home_team),away:title(event.away_team),time:localTime(event.commence_time),timeIso:event.commence_time,updatedAt:title(market.last_update??book.last_update),source:'The Odds API',
-  }))))).slice(0,500)
+  if(env.THEODDSAPI_API_KEY?.trim()){
+    configured.add(names[1]!)
+    requests.push({name:names[1]!,run:async()=>{
+      try{return await fetchTheOddsApi(sportKey,markets,env.THEODDSAPI_API_KEY!,fetcher,now)}
+      catch(error){
+        // This provider's Free tier exposes NFL/NBA/MLB h2h, not spreads/totals.
+        // Retain authentic available moneylines when premium markets are denied.
+        if(markets==='h2h'||!markets.split(',').includes('h2h'))throw error
+        return fetchTheOddsApi(sportKey,'h2h',env.THEODDSAPI_API_KEY!,fetcher,now)
+      }
+    }})
+  }
+  if(keylessEnabled(env)){
+    const prefix=sportKey.split('_')[0]
+    const sportByPrefix:Record<string,KeylessSport>={
+      soccer:'football',basketball:'basketball',baseball:'baseball',
+      americanfootball:'american-football',icehockey:'ice-hockey',
+      tennis:'tennis',handball:'handball',volleyball:'volleyball',
+      cricket:'cricket',rugbyleague:'rugby-league',rugbyunion:'rugby-union',
+    }
+    const sport=sportByPrefix[prefix??'']
+    const market=markets==='h2h'?sport==='football'||sport==='handball'?'1x2':
+      sport==='tennis'?'match_winner':sport==='ice-hockey'||sport==='volleyball'
+        ||sport==='rugby-league'||sport==='rugby-union'||sport==='cricket'?'home_away':'moneyline':
+      markets==='totals'?'over_under':null
+    if(sport&&market){
+      configured.add(names[2]!)
+      requests.push({name:names[2]!,run:async()=>
+        (await keylessOdds(sport,market,undefined,env,now))
+          .map(q=>({...q,sportKey,time:localTime(q.time),timeIso:q.time}))})
+    }
+  }
+  if(hasSportsPermission('espn',env)){
+    configured.add(names[3]!)
+    requests.push({name:names[3]!,run:async()=>
+      (await fetchPublicEspnOdds(sportKey,markets,
+        <T>(url:string)=>getFeed<T>(url,fetcher)))
+        .map(quote=>({...quote,sportKey,source:'ESPN Site/Core (sin clave)'}))})
+  }
+  const done=await Promise.allSettled(requests.map(x=>x.run()))
+  const merged:MarketOutcome[]=[]
+  const identity=new Set<string>()
+  for(const [i,result] of done.entries()){
+    const provider=requests[i]!.name
+    if(result.status==='rejected'){
+      const error=result.reason instanceof Error?result.reason.message:'Error del proveedor'
+      sources.push({provider,status:'error',count:0,
+        detail:error.replace(/apiKey=[^&\s]+/giu,'apiKey=[redactado]').slice(0,170)})
+      continue
+    }
+    let count=0
+    for(const q of result.value){
+      if(!q||!Number.isFinite(q.price)||q.price<=1||q.price>=1000||
+        !q.bookmaker||!q.eventId||!q.market||!q.selection||!q.home||!q.away)continue
+      const key=[q.sportKey??sportKey,q.eventId,q.bookmaker,q.market,q.selection,q.point??''].join('|')
+      if(identity.has(key))continue
+      identity.add(key)
+      merged.push(q);count++
+      if(merged.length>=1500)break
+    }
+    sources.push({provider,status:count?'observed':'empty',count,
+      detail:count?'Cuotas del proveedor con casa y mercado':
+        'Sin ofertas en la consulta (no implica que todos los mercados estén cerrados)'})
+  }
+  for(const name of names)if(!configured.has(name)){
+    sources.push({provider:name,status:'unconfigured',count:0,
+      detail:name==='OddsHarvester'?'Instalación/configuración o permiso pendiente':
+        name==='ESPN Site/Core'?'ESPN deshabilitado':'Clave no configurada'})
+  }
+  if(merged.length&&fetcher===fetch){
+    try{await saveOddsSnapshot(sportKey,merged,env,now)}
+    catch{/* disk write failure cannot remove real live quotes */}
+  }
+  return{quotes:merged,sources}
+}
+/** Compatibility facade for all existing betting tools. */
+export async function marketOdds(
+  sportKey:string,markets='h2h',env:NodeJS.ProcessEnv=process.env,fetcher:typeof fetch=fetch,
+):Promise<MarketOutcome[]>{
+  return(await marketOddsDetailed(sportKey,markets,env,fetcher)).quotes
 }
 /** Prepare an unplaced real-quote ticket only when each leg matches a retrieved bookmaker quote.
  * @param selections - Requested legs to match exactly.
