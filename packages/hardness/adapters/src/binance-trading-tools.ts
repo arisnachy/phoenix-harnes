@@ -347,7 +347,7 @@ function testnetAutoTool(deps: BinanceTradingToolDependencies): ToolDefinition {
     name: 'binance_testnet_auto',
     description: 'Start, stop or inspect unattended Spot TESTNET fake-funds orders. START needs explicit owner request and one-shot Phoenix high-risk approval for a bounded persistent testing run. Trades use HMAC testnet-only keys, fixed testnet endpoint and deterministic risk/ledger checks; never REAL MCP. Orders/positions remain Testnet-only. When no valid signal or no budget, it HOLDs with the exact reason.',
     parameters: {
-      action: { type: 'string', required: true, enum: ['status', 'start', 'stop', 'reconcile', 'review-reset'] },
+      action: { type: 'string', required: true, enum: ['status', 'start', 'stop', 'stop-liquidate', 'reconcile', 'review-reset'] },
       requestedByUser: { type: 'boolean', description: 'True only for an explicit owner request to start or stop.' },
       symbols: { type: 'array', items: { type: 'string' }, description: '1-12 USDT pairs; default BTCUSDT ETHUSDT SOLUSDT.' },
     },
@@ -360,6 +360,16 @@ function testnetAutoTool(deps: BinanceTradingToolDependencies): ToolDefinition {
       if(args.action==='reconcile')return await auto.reconcilePending() as unknown as Record<string, JsonValue>
       if(args.requestedByUser!==true)throw new Error('Testnet automation control requires the owner request')
       if(args.action==='stop')return await auto.stop() as unknown as Record<string, JsonValue>
+      if(args.action==='stop-liquidate') {
+        if(exec.agent===undefined)throw new Error('Testnet liquidation requires an active owner session')
+        const approval=await deps.approval.request({
+          agent:exec.agent,toolName:'binance_testnet_auto',callId:exec.callId,
+          reason:'Stop the Testnet-only automated bot and submit SELL orders for all tracked TESTNET positions using fake testing funds. Verify every exchange receipt; do not affect REAL Binance funds.',
+          risk:'high',reversible:false,signal:exec.signal,
+        })
+        if(approval!=='allowed-once')return {mode:'testnet',status:'denied',approvalOutcome:approval}
+        return await auto.stopAndLiquidate() as unknown as Record<string, JsonValue>
+      }
       if(args.action==='review-reset')return await auto.clearReviewedHalt() as unknown as Record<string, JsonValue>
       if(args.action!=='start'||exec.agent===undefined)throw new Error('Testnet automation requires an active owner session')
       const readiness=await (deps.testnet??new BinanceSpotTestnet()).status()
@@ -391,6 +401,7 @@ function testnetAutoTool(deps: BinanceTradingToolDependencies): ToolDefinition {
     presentCall(args) {
       return {card:'generic',title:args.action==='start'?'Autorizar trading automático TESTNET'
         :args.action==='stop'?'Detener trading automático TESTNET'
+          :args.action==='stop-liquidate'?'Detener y vender todo en TESTNET'
           :args.action==='reconcile'?'Conciliar órdenes TESTNET'
             :args.action==='review-reset'?'Revisar bloqueo TESTNET':'Diagnóstico trading TESTNET',
         kind:['status','reconcile'].includes(args.action)?'read':'execute',rawInput:args.action}
