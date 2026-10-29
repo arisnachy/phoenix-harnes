@@ -683,7 +683,9 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
         </div>
       </div>
       <p className={connectorStyles['connectorDescription']}>{definition.description}</p>
-      {definition.id === 'binance' ? <BinanceConnectorSetup onChanged={onChanged} /> : null}
+      {definition.id === 'binance' ? <BinanceConnectorSetup onChanged={onChanged}
+        {...authorizationAccount?.methods.some(method => method.id === 'oauth')
+          ? { onAuthorizeMcp: () => { onAuthorize(authorizationAccount) } } : {}} /> : null}
       {definition.id === 'telegram' ? <TelegramConnectorSetup client={telegram} /> : null}
       {definition.id === 'github' ? (
         <div className={styles['advancedHint']}>
@@ -868,7 +870,7 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
           ) : installUrl !== undefined ? (
             <a className={connectorStyles['connectorLink']} href={installUrl} target="_blank" rel="noreferrer">{t('configure')}</a>
           ) : null}
-          {shouldShowAuthorization ? (
+          {shouldShowAuthorization && definition.id !== 'binance' ? (
             <button className={hubStyles['compactButton']} type="button" disabled={pending || authorizationAccount.inFlight} onClick={() => { onAuthorize(authorizationAccount) }}>
               {definition.id === 'github' && authorizationAccount.methods.some(method => method.id === 'credentials')
                 ? 'Configurar token GitHub'
