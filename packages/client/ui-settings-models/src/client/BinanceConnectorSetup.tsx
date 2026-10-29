@@ -67,7 +67,10 @@ async function readHostJson<T>(path: string, payload?: Record<string, string>): 
  * gesture to the Host vault, never to the model, MCP configuration or chat.
  * PAPER remains keyless. Agentic OAuth requires a separate Binance consent.
  */
-export function BinanceConnectorSetup({ onChanged }: { onChanged: () => void }): ReactNode {
+export function BinanceConnectorSetup({ onChanged, onAuthorizeMcp }: {
+  onChanged: () => void
+  onAuthorizeMcp?: () => void
+}): ReactNode {
   const [expanded, setExpanded] = useState(false)
   const [testnet, setTestnet] = useState<TestnetConnection>()
   const [real, setReal] = useState<RealConnection>()
@@ -288,6 +291,10 @@ export function BinanceConnectorSetup({ onChanged }: { onChanged: () => void }):
                 <button type="button" className={connectorStyles['connectorSecondaryButton']}
                   onClick={() => { void activateAgentic(true) }}>Reconectar MCP</button>
               ) : null}
+              {agentic?.configured && onAuthorizeMcp !== undefined ? (
+                <button type="button" className={connectorStyles['connectorPrimaryButton']}
+                  onClick={onAuthorizeMcp}>Autorizar Binance OAuth</button>
+              ) : null}
               {agentic?.configured && agentic.status !== 'ready' ? (
                 <button type="button" className={connectorStyles['connectorSecondaryButton']}
                   onClick={() => { void repairAgentic() }}>
@@ -295,6 +302,12 @@ export function BinanceConnectorSetup({ onChanged }: { onChanged: () => void }):
                 </button>
               ) : null}
             </div>
+            {agentic?.configured && onAuthorizeMcp === undefined ? (
+              <p role="alert" className={styles['advancedHint']}>
+                El Host todavía no registró un flujo OAuth autorizable. Usa Reparar MCP;
+                si continúa igual, revisa la versión del cliente MCP y sus logs de autorización.
+              </p>
+            ) : null}
             {agentic?.reasonCode === undefined ? null : (
               <p role="status" className={styles['advancedHint']}>Diagnóstico MCP: {agentic.reasonCode}</p>
             )}
