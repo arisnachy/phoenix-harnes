@@ -52,8 +52,8 @@ export function compareBettingMarkets(
         .includes(market)&&rows.length===2)
     const shares=rows.map((q,i)=>({
       name:q.selection,price:q.price,point:q.point??null,
-      impliedFromQuote:Number(inverse[i].toFixed(5)),
-      noVigShare:complete?Number((inverse[i]/sum).toFixed(5)):null,
+      impliedFromQuote:Number((inverse[i]??0).toFixed(5)),
+      noVigShare:complete?Number(((inverse[i]??0)/sum).toFixed(5)):null,
     }))
     comparisons.push({
       event:initial.away+' vs '+initial.home,market:initial.market,
