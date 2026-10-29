@@ -72,5 +72,71 @@ Live fixtures and odds can change between requests, so dynamic tool results may 
 - ESPN's public endpoints are unofficial and can change or stop responding. Provider terms and image redistribution rights require independent review.
 - Favorites are descriptive standings trends, not calibrated win probabilities or promised winners; missing evidence does not justify a pick.
 - A bookmaker price can be displayed only when its source supplies it. No bet is placed, and no direct bookmaker transaction is supported.
-- The assistant must emit a valid declarative UI block in its message; receiving a tool response alone does not guarantee that a visual card renders.
+- First-party sports tools expose validated UI cards automatically; unsupported data and malformed schemas cannot render a card.
 - Some disciplines lack player-by-player comparisons, confirmed lineups, or bullpen details. An unavailable value must be shown as unavailable.
+
+
+## ESPN Universal Intelligence — adaptive native chat
+
+The read-only tool **sports_chat_espn_explore** complements, without replacing,
+sports_chat_games for scoreboards and sports_chat_odds for verified bookmaker prices.
+
+| View | Required input | ESPN sources | UI |
+| --- | --- | --- | --- |
+| search | query | ESPN Search v2 | Entities by name with verified ID navigation |
+| team | teamId | Site v2 team, roster, schedule, news, stats, record, transactions | Crest, roster with photos, player status, results, headlines |
+| player | athleteId | Core v2 profile; Common v3 overview, stats, gamelog, splits | Portrait, KPIs, match logs and situational stats |
+| event | eventId | Site v2 summary; Core v2 odds, probabilities and plays | Fixture, final winner flag, leaders, plays and sourced market metadata |
+| standings | none | Site standings via /apis/v2 | Team rankings and performance |
+| news | none | Site v2 league news | Headline cards with source imagery |
+| leaders | none | Common v3 byathlete and Site statistics | Metric and leader sections |
+
+Kira can search by name to discover the real ESPN ID before showing an
+individual team/player view. The new **sports_espn_dashboard** has dynamic
+metric/list/article sections. Extensibility comes from *data-driven composition*,
+not literally infinitely many components. It respects Phoenix's theme and chat width.
+
+Important guards: validated sport, catalogued league and numeric IDs; fixed
+allowlisted endpoints and no raw external $ref following; bounded parallel
+queries, 4 MB JSON cap, timeout, success/negative TTL cache and capped memory.
+Only a final result with an ESPN winner flag can be labelled winner.
+An empty HTTP 200, a Core reference to an odds item, a roster entry or
+a news headline cannot stand in for verified betting prices, future winners,
+confirmed starters or updated injury status. ESPN is unofficial and does
+not guarantee coverage, usage limits or redistribution rights.
+
+Run tests:
+- node --experimental-strip-types --test packages/core/tool-sports/tests/espn-intelligence.test.mjs
+- pnpm exec vitest run packages/client/ui-conversation/tests/sports-rich-ui.client.spec.tsx
+
+Adding a future sport-specific resource should create new validated sections
+rather than a separate page or an unbounded set of model-visible tool schemas.
+
+## Universal matchup factors (evidence-first)
+
+Use `sports_chat_matchup_factors` with the **verified ESPN** `sport`, `league`,
+`eventId` and `date` (YYYY-MM-DD). No separate screen: the result includes a
+`sports_espn_dashboard` chat component plus an auditable JSON factor report.
+
+- Bounded 3–28-day ESPN scoreboard history: last 10 completed games per team,
+  wins/losses, scoring for/against, rest, up to five head-to-head results and
+  same-stadium samples **only where ESPN identifies the venue**.
+- MLB: independently sourced probable pitchers and recent verified pitching
+  starts when MLB StatsAPI provides them. First 3, first 5 and first 9 inning
+  totals are **simple descriptive scenario baselines**, requiring at least
+  three valid team samples per period; not calibrated predictions.
+- Existing ESPN context is reused for rosters, news and injury reports.
+  Current weather is optionally sourced from Open-Meteo (CC BY 4.0; check\n  commercial API licensing) **only when venue coordinates occur in ESPN**.\n  It remains a forecast, not a quantified causal scoring adjustment.\n  Rotations, current starters, wind/sun causal impact, roof configuration, bullpen fatigue,
+  opponent-adjusted metrics and sport-specific advanced factors are explicitly
+  marked unverified unless separately supplied by a verified source.
+- Bookmaker outcomes must match both teams AND game time and remain current
+  before reporting them. Their no-vig shares are pricing context, NOT model
+  win probabilities. Never compare a 3- or 5-inning baseline to a full-game
+  sportsbook total; period, extra-innings rules and source must agree.
+- Never report an expected betting edge, win percentage or guaranteed
+  favorite without a separately trained, calibrated and backtested model.
+  Missing sources stay missing, rather than becoming zero or a favorable
+  indicator. Data and UI are bounded and source-attributed.
+
+Run:
+`node --experimental-strip-types --test packages/core/tool-sports/tests/universal-matchup-factors.test.mjs`

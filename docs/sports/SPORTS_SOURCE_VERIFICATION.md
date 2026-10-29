@@ -105,3 +105,109 @@ Un ticket 4/5 sin cuota sigue siendo **borrador, no apuesta**.
 
 Revisar el log del instalador si no hay CLI o si una descarga falla; nunca
 compartir API keys ni resultados que incluyan datos privados.
+
+## Verificación real de los tres scrapers (actualización 29-oct-2026)
+
+OddsHarvester 0.20.0 requiere **Python >=3.12**. El instalador debe localizar un
+intérprete compatible, instalar el paquete y comprobar el ejecutable real de
+Playwright Chromium. Kira obtiene el estado con `sports_chat_sources_health`,
+incluidos los errores concretos de cada componente y la ruta `installation.logPath`.
+Instalar no equivale a que OddsPortal permita leer cuotas.
+
+En PowerShell, dentro de PHOENIX:
+
+```powershell
+node scripts/phoenix-sports-source-bootstrap.mjs --status
+Get-Content "$HOME\.phoenix\sports-sources\install.log" -Tail 50
+node scripts/phoenix-sports-source-bootstrap.mjs --install
+```
+
+### Cuotas actuales — OddsHarvester + Playwright
+
+El scraper abre OddsPortal por deporte, fecha, mercado y período. Ejemplo NHL:
+
+```powershell
+& "$HOME\.phoenix\sports-sources\.venv\Scripts\oddsharvester.exe" upcoming -s ice-hockey -d 20261029 -m home_away --period full_including_ot --headless -f json -o hockey-odds.json
+```
+
+Para fútbol: `-m 1x2,double_chance,btts,over_under`. No usar `--preview-only`
+para precios por casa. El JSON devuelto tiene `scraped_date`, `match_date`,
+`match_link` y mercados `*_market` con `bookmaker_name`, `period` y cuotas.
+Los mercados FullTime y FullIncludingOT NO son intercambiables.
+PHOENIX descarta cuotas bloqueadas, anteriores al límite de frescura o sin
+casa y fecha comprobables. En NHL, `home_away` con prórroga usa
+`--period full_including_ot`; NBA 1X2 reglamentario usa `--period full_time`.
+
+### Históricos — flancast90/sportsbookreview-scraper
+
+Ejecuta `python cli.py --sport nhl --start 2020 --end 2021
+--filename nhl_2020_2021 --format json` desde la carpeta clonada.
+El scraper original usa `requests`, `pandas` y `lxml` y produce
+`data/nhl_2020_2021.json`. Su fuente está limitada a temporadas antiguas.
+
+### Históricos — ArnavSaraogi/mlb-odds-scraper
+
+Ejecuta `python scraper.py 2025-08-01 2025-08-02 -t moneyline
+pointspread totals -c 2 -o mlb-historico.json` desde su repo clonado.
+Utiliza `aiohttp`, `requests`, `tqdm` y las tablas de SportsBookReview.
+No convierte archivos históricos en precios actuales.
+
+Para recolectar de forma acotada, sin ejecutar scripts externos por accidente:
+
+```powershell
+node scripts/phoenix-sports-historical-collect.mjs --run=1 --source=sportsbookreview --sport=nhl --startYear=2020 --endYear=2021
+node scripts/phoenix-sports-historical-collect.mjs --run=1 --source=mlb --startDate=2025-08-01 --endDate=2025-08-02
+```
+
+Los archivos se escriben bajo `history/collected`, solo para análisis y
+backtesting. El scraping histórico es voluntario y puede fallar por cambios
+en el sitio o restricciones de acceso. No hay servicio ilimitado garantizado.
+
+### Instalación de Python sin intervención en Windows
+
+Si no se detecta Python >=3.12, la reparación de fuentes intenta
+`winget install --id Python.Python.3.13 --exact --source winget
+--scope user --silent --accept-package-agreements --accept-source-agreements
+--disable-interactivity --no-upgrade`.
+WinGet comprueba la procedencia y firma del paquete y la instalación es
+de ámbito de usuario, sin elevar privilegios. Si Windows App Installer o
+las políticas de empresa lo bloquean, el error queda en `install.log`.
+Se puede deshabilitar solo este paso automático con
+`PHOENIX_SPORTS_AUTO_PYTHON_INSTALL=0`.
+Una instalación correcta de Python todavía necesita instalar Playwright
+y comprobar el ejecutable real de Chromium antes de habilitar scraping.
+
+## Autorreparación desde el chat y runtime preparado
+
+El supervisor Windows puede ejecutar una carpeta `phoenix-runtime-*` que
+no contiene scripts. El lanzador busca primero el repositorio original
+`PHOENIX_INSTALL_ROOT`, y luego el runtime. Si falta la instalación
+el comando `sports_chat_sources_health` inicia el instalador en segundo
+plano y devuelve `autoRepair.status` (`started`, `running`, `installed`,
+`retry-cooldown`, `missing-installer`, `launch-error`).
+El comando `sports_chat_sources_repair` permite reintentar a petición
+del usuario si hay un error reciente, respetando el bloqueo de instancia.
+La reparación deja un registro desde el primer lanzamiento en
+`~/.phoenix/sports-sources/install.log`, incluso antes de crear
+`manifest.json`. Los componentes no se muestran como instalados hasta
+que sus verificaciones terminen.
+
+**No pegar instrucciones destinadas a Kira en PowerShell.**
+En la consola de Windows únicamente ejecutar comandos verdaderos:
+
+```powershell
+cd "C:\Users\arisn\OneDrive\Documentos\ChatGPT\Phoenix"
+node scripts/phoenix-sports-source-bootstrap.mjs --status
+Get-Content "$HOME\.phoenix\sports-sources\install.log" -Tail 50
+```
+
+En el **chat de Kira** escribir en español:
+
+> Revisa mis proveedores deportivos con sports_chat_sources_health;
+> si faltan, llama sports_chat_sources_repair y comprueba después
+> el avance del instalador. Cuando OddsHarvester esté disponible,
+> busca cuotas NHL con casa, mercado, período y actualización reales.
+
+La instalación de Python/Chromium o la conexión a OddsPortal puede
+fallar por Internet, políticas del dispositivo y cambios externos;
+las pruebas de código no equivalen a un scrapeo en el Windows del usuario.

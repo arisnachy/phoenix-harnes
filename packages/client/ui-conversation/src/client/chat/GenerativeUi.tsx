@@ -109,6 +109,21 @@ type SportsScheduleCard = {
     events:SportsScheduleEvent[];note?:string
   }
 }
+
+/** Data-driven ESPN surface: templates expand with sections rather than one card per sport. */
+type SportsEspnItem = {label:string;value?:string;detail?:string;image?:string;href?:string;action?:{label:string;prompt:string}}
+type SportsEspnSection = {
+  heading:string;kind:'metrics'|'list'|'articles';items:SportsEspnItem[]
+}
+type SportsEspnDashboard = {
+  component:'sports_espn_dashboard';version:1
+  props:{
+    view:'team'|'player'|'event'|'standings'|'news'|'leaders'|'search'
+    title:string;subtitle:string;source:string;checkedAt:string
+    image?:string;sections:SportsEspnSection[];note:string
+  }
+}
+
 type SportsOddsCard = {
   component: 'sports_odds_card'; version: 1
   props: { title:string;source:string;subtitle?:string;note:string
@@ -143,7 +158,7 @@ const supportedIcons: readonly PhoenixUiIconName[] = [
 ]
 const supportedTones: readonly PhoenixStatusTone[] = ['positive', 'warning', 'negative', 'info', 'neutral']
 
-export type GenerativeUiBlock = EventCard | MetricCard | ComparisonCard | TimelineCard | SmartCard | SportsGameCard | SportsScheduleCard | SportsTicketCard | SportsOddsCard
+export type GenerativeUiBlock = EventCard | MetricCard | ComparisonCard | TimelineCard | SmartCard | SportsGameCard | SportsScheduleCard | SportsTicketCard | SportsOddsCard | SportsEspnDashboard
   | CanvasSpec | ScaleFormSpec | SpreadsheetSpec | GeoMapSpec | SceneMapSpec | DiagramSpec | StatusPillBlock | AgentLineBlock
 
 export type GenerativeUiSegment =
@@ -285,6 +300,33 @@ const sportsResearch = (v:unknown):v is SportsResearch => isRecord(v)
   && hasOnlyKeys(v,['favorite','method','source','evidence'])
   && isText(v.favorite) && isText(v.method,450) && isText(v.source,250)
   && Array.isArray(v.evidence) && v.evidence.length<=5 && v.evidence.every(x=>isText(x,250))
+
+/** Validate every field of an ESPN template, including portrait origin and limits. */
+const espnArticleLink=(value:unknown):value is string|undefined=>{
+  if(value===undefined)return true
+  if(!isText(value,500))return false
+  try{const u=new URL(value);return u.protocol==='https:'&&!u.username&&!u.password&&
+    ['www.espn.com','espn.com'].includes(u.hostname)&&u.pathname.length>1
+  }catch{return false}
+}
+const sportsEspnDashboard=(v:Record<string,unknown>):v is SportsEspnDashboard=>{
+  if(!isRecord(v.props)||!hasOnlyKeys(v.props,
+    ['view','title','subtitle','source','checkedAt','image','sections','note']))return false
+  const p=v.props
+  return ['team','player','event','standings','news','leaders','search'].includes(String(p.view))
+    && isText(p.title) && isText(p.subtitle,220) && isText(p.source,320)
+    && isText(p.checkedAt,50) && trustedPortrait(p.image) && isText(p.note,400)
+    && Array.isArray(p.sections) && p.sections.length>=1 && p.sections.length<=8
+    && p.sections.every(s=>isRecord(s) && hasOnlyKeys(s,['heading','kind','items'])
+      && isText(s.heading) && ['metrics','list','articles'].includes(String(s.kind))
+      && Array.isArray(s.items) && s.items.length>=1 && s.items.length<=30
+      && s.items.every(x=>isRecord(x)&&hasOnlyKeys(x,['label','value','detail','image','href','action'])
+        && isText(x.label) && optionalText(x.value) && optionalText(x.detail,240)
+        && trustedPortrait(x.image) && espnArticleLink(x.href)
+        && (x.action===undefined||(isRecord(x.action)&&hasOnlyKeys(x.action,['label','prompt'])
+          && isText(x.action.label,80)&&isText(x.action.prompt,400)))))
+}
+
 const sportsOdds = (v:Record<string,unknown>):v is SportsOddsCard => {
   if(!isRecord(v.props)||!hasOnlyKeys(v.props,['title','source','subtitle','rows','note']))return false
   const p=v.props
@@ -360,6 +402,7 @@ export function parseGenerativeUiBlock(value: unknown): GenerativeUiBlock | null
     || typeof value.component !== 'string') return null
 
   switch (value.component) {
+    case 'sports_espn_dashboard': return sportsEspnDashboard(value) ? value : null
     case 'sports_game_card': return sportsGame(value) ? value : null
     case 'sports_schedule_card': return sportsSchedule(value) ? value : null
     case 'sports_ticket_card': return sportsTicket(value) ? value : null
@@ -608,6 +651,45 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
     case 'diagram': return <DiagramSurface key={(conversationId ?? 'ephemeral') + ':' + block.props.id} spec={block} onAction={onAction} />
     case 'status_pill': return <PhoenixStatusPill label={block.props.label} {...block.props.tone === undefined ? {} : { tone: block.props.tone }} />
     case 'agent_line': return <PhoenixAgentLine {...block.props} />
+    case 'sports_espn_dashboard': {
+      const p=block.props
+      return <section className={css.sportsCard} data-generative-ui="sports_espn_dashboard"
+        aria-label={p.title}>
+        <header className={css.sportsHeadline}>
+          <div><span className={css.sportsKicker}>PHOENIX / ESPN INTELLIGENCE · {p.view.toUpperCase()}</span>
+            <h3>{p.title}</h3><p>{p.subtitle}</p></div>
+          {p.image&&<SportsPortrait label={p.title} logo={p.image}/>}
+        </header>
+        <div className={css.sportsEspnSections}>
+          {p.sections.map((s,i)=><section key={i} className={css.sportsEspnSection}
+            aria-label={s.heading}>
+            <h4>{s.heading}</h4>
+            {s.kind==='metrics'?<dl className={css.sportsEspnMetrics}>
+              {s.items.map((x,n)=><div key={n}>
+                <dt>{x.label}</dt><dd>{x.value??'—'}</dd>
+                {x.detail&&<small>{x.detail}</small>}
+              </div>)}
+            </dl>:<div className={s.kind==='articles'?css.sportsEspnArticles:css.sportsEspnList}>
+              {s.items.map((x,n)=><article key={n} className={css.sportsEspnRow}>
+                {x.image&&<SportsPortrait label={x.label} logo={x.image}/>}
+                <div><strong>{x.label}</strong>
+                  {x.value&&<span>{x.value}</span>}
+                  {x.detail&&<small>{x.detail}</small>}
+                  {x.href&&<a href={x.href} target="_blank" rel="noopener noreferrer" className={css.sportsEspnNewsLink}>Leer noticia en ESPN</a>}
+                  {x.action&&onAction&&<button type="button" className={css.sportsSlateAction}
+                    onClick={()=>{if(x.action)onAction(x.action.prompt,'draft')}}>{x.action.label}</button>}
+                </div>
+              </article>)}
+            </div>}
+          </section>)}
+        </div>
+        <footer className={css.sportsSourceBar}>
+          <span>Datos · {p.source}</span>
+          <small>Consulta · {new Date(p.checkedAt).toLocaleString('es-DO')}</small>
+          <small>{p.note}</small>
+        </footer>
+      </section>
+    }
     case 'sports_schedule_card': {
       const p=block.props
       return <SportsLiveProvider sport={p.sport} league={p.providerLeague??p.league} date={p.date}>

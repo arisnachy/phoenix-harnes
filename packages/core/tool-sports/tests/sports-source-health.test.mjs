@@ -1,6 +1,6 @@
 import {test} from 'node:test'
 import assert from 'node:assert/strict'
-import {hydrateSportsSources,sportsSourcesHealth} from '../src/sports-source-health.ts'
+import {ensureSportsSourcesStarted,hydrateSportsSources,locateSportsAutoLauncher,managedSportsInstallStatus,sportsSourcesHealth} from '../src/sports-source-health.ts'
 import {mkdtemp,mkdir,writeFile,rm} from 'node:fs/promises'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
@@ -26,7 +26,7 @@ test('configured source, historical archive and different odds API keys are dist
     PHOENIX_SPORTS_HISTORY_DIR:'/archive',
   },async()=>true,async filename=>{files.push(filename);return filename.endsWith('sportsbookreview-nhl.json')})
   assert.equal(find(rows,'jordantete/OddsHarvester').status,'configured')
-  assert.equal(find(rows,'flancast90/sportsbookreview-scraper').status,'configured')
+  assert.equal(find(rows,'flancast90/sportsbookreview-scraper').status,'missing-files')
   assert.equal(find(rows,'ArnavSaraogi/mlb-odds-scraper').status,'missing-files')
   assert.equal(find(rows,'The Odds API v4').status,'configured')
   assert.equal(find(rows,'TheOddsAPI').status,'configured')
@@ -50,7 +50,7 @@ test('Kira automatically reads verified update manifest without manual environme
     await writeFile(bin,'dummy CLI')
     await writeFile(join(history,'sportsbookreview-nhl.json'),'[{"test":true}]')
     await writeFile(join(home,'manifest.json'),JSON.stringify({
-      schema:2,paths:{executable:bin,history},
+      schema:3,paths:{executable:bin,history},
       components:{
         'OddsHarvester + Playwright':{status:'installed'},
         'SportsbookReview NFL/NBA/NHL/MLB archive':{status:'installed'},
@@ -65,4 +65,80 @@ test('Kira automatically reads verified update manifest without manual environme
     })
     assert.equal(disabled.PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED,'0')
   }finally{await rm(home,{recursive:true,force:true})}
+})
+
+test('failed Python install is exposed to Kira rather than merely labeled disabled',async()=>{
+  const root=await mkdtemp(join(tmpdir(),'phoenix-sports-health-'))
+  try{
+    await writeFile(join(root,'manifest.json'),JSON.stringify({
+      schema:3,updatedAt:'2026-10-29T13:00:00Z',
+      components:{
+        'OddsHarvester + Playwright':{
+          status:'error',message:'OddsHarvester requires Python >=3.12',
+        },
+        'SportsbookReview NFL/NBA/NHL/MLB archive':{status:'installed'},
+        'MLB historic dataset and scraper sources':{status:'installing'},
+      },
+    }))
+    const env={PHOENIX_SPORTS_SOURCE_HOME:root}
+    const report=managedSportsInstallStatus(env)
+    assert.equal(report.state,'installing')
+    assert.equal(report.playwrightVerifiedAtInstall,false)
+    assert.equal(report.components.find(x=>x.name.startsWith('OddsHarvester')).lastError,
+      'OddsHarvester requires Python >=3.12')
+    const rows=await sportsSourcesHealth(env,async()=>{throw Error('should not run')},async()=>false)
+    assert.equal(find(rows,'jordantete/OddsHarvester').status,'install-error')
+    assert.match(find(rows,'jordantete/OddsHarvester').note,/Python >=3.12/)
+    assert.equal(find(rows,'ArnavSaraogi/mlb-odds-scraper').status,'installing')
+    assert.ok(!JSON.stringify(rows).includes('THE_ODDS_API_KEY'))
+  }finally{await rm(root,{recursive:true,force:true})}
+})
+
+test('a correctly imported MLB archive stays usable if the older SBR clone failed',async()=>{
+  const root=await mkdtemp(join(tmpdir(),'phoenix-mlb-source-'))
+  const history=join(root,'history')
+  try{
+    await mkdir(history,{recursive:true})
+    await writeFile(join(history,'mlb-odds.json'),'{"2025-01-01":[]}')
+    await writeFile(join(root,'manifest.json'),JSON.stringify({
+      schema:3,paths:{executable:join(root,'none'),history},
+      components:{
+        'SportsbookReview NFL/NBA/NHL/MLB archive':{status:'error'},
+        'MLB historic dataset and scraper sources':{status:'installed'},
+      },
+    }))
+    const env=hydrateSportsSources({PHOENIX_SPORTS_SOURCE_HOME:root})
+    assert.equal(env.PHOENIX_SPORTS_HISTORY_DIR,history)
+    const rows=await sportsSourcesHealth(env,async()=>false)
+    assert.equal(find(rows,'ArnavSaraogi/mlb-odds-scraper').status,'configured')
+    assert.equal(find(rows,'flancast90/sportsbookreview-scraper').status,'missing-files')
+  }finally{await rm(root,{recursive:true,force:true})}
+})
+
+test('an absent installer manifest is repaired from the source checkout when runtime has no scripts',async()=>{
+  const root=await mkdtemp(join(tmpdir(),'phoenix-health-self-heal-'))
+  const checkout=join(root,'checkout'),runtime=join(root,'prepared-runtime')
+  const sportsHome=join(root,'sports')
+  try{
+    await mkdir(join(checkout,'scripts'),{recursive:true})
+    await mkdir(runtime,{recursive:true})
+    await writeFile(join(checkout,'scripts','phoenix-sports-source-auto.mjs'),
+      'console.log(JSON.stringify({status:"started"}))')
+    const env={PHOENIX_INSTALL_ROOT:checkout,PHOENIX_RUNTIME_ROOT:runtime,
+      PHOENIX_SPORTS_SOURCE_HOME:sportsHome}
+    const match=locateSportsAutoLauncher(env)
+    assert.equal(match.root,checkout)
+    const report=await ensureSportsSourcesStarted(env)
+    assert.equal(report.status,'started')
+    assert.equal(report.logPath,join(sportsHome,'install.log'))
+    assert.equal(managedSportsInstallStatus(env).state,'not-started')
+  }finally{await rm(root,{recursive:true,force:true})}
+})
+test('explicit operator or CI disable never starts a sports installer from Kira',async()=>{
+  const rows=[
+    {PHOENIX_SPORTS_SOURCES_AUTO_INSTALL:'0'},
+    {CI:'true'},
+    {NODE_ENV:'test'},
+  ]
+  for(const env of rows)assert.equal((await ensureSportsSourcesStarted(env)).status,'disabled')
 })

@@ -316,3 +316,29 @@
   .sportsSlateHeader{padding:13px}.sportsSlateHeader h3{font-size:16px}
   .sportsSlateGrid{padding:8px;gap:8px}
 }
+
+
+/* ESPN intelligent panels share PHOENIX's theme and remain entirely inside chat. */
+.sportsEspnSections{display:grid;gap:16px;margin-top:18px}
+.sportsEspnSection{min-width:0;border-top:1px solid var(--dsw-alias-border-subtle,rgba(120,120,120,.2));padding-top:14px}
+.sportsEspnSection h4{font-size:14px;font-weight:800;margin:0 0 12px;letter-spacing:.01em}
+.sportsEspnMetrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,145px),1fr));gap:9px;margin:0}
+.sportsEspnMetrics>div{min-width:0;padding:12px;border:1px solid var(--dsw-alias-border-subtle,rgba(125,125,125,.16));
+  border-radius:12px;background:var(--dsw-alias-interactive-bg-hover,rgba(120,120,120,.03))}
+.sportsEspnMetrics dt{font-size:11px;color:var(--dsw-alias-label-secondary,#777);overflow-wrap:anywhere}
+.sportsEspnMetrics dd{font-size:clamp(14px,2vw,18px);font-weight:800;margin:4px 0;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+.sportsEspnMetrics small{font-size:11px;color:var(--dsw-alias-label-secondary,#777)}
+.sportsEspnList,.sportsEspnArticles{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,255px),1fr));gap:9px}
+.sportsEspnArticles{grid-template-columns:repeat(auto-fit,minmax(min(100%,310px),1fr))}
+.sportsEspnRow{min-width:0;display:flex;align-items:flex-start;gap:10px;padding:11px;
+  border:1px solid var(--dsw-alias-border-subtle,rgba(125,125,125,.16));border-radius:12px}
+.sportsEspnRow .sportsPortrait{width:43px;height:43px}
+.sportsEspnRow>div{display:grid;gap:4px;min-width:0}
+.sportsEspnRow strong{font-size:13px;line-height:1.4;overflow-wrap:anywhere}
+.sportsEspnRow span,.sportsEspnRow small{font-size:11px;color:var(--dsw-alias-label-secondary,#777);
+  line-height:1.4;overflow-wrap:anywhere}
+.sportsEspnArticles .sportsEspnRow{background:var(--dsw-alias-interactive-bg-hover,rgba(120,120,120,.025))}
+@media(max-width:560px){.sportsEspnMetrics{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .sportsEspnSections{gap:13px}.sportsEspnSection{padding-top:12px}}
+
+.sportsEspnNewsLink{font-size:11px;font-weight:700;text-decoration:underline;text-underline-offset:2px;color:var(--dsw-alias-accent-primary,#bb5a27)}

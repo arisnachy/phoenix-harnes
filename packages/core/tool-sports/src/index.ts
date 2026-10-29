@@ -2,7 +2,7 @@
 import type { Context } from '@phoenix-ai/cordis'
 import { defineTool } from '@phoenix-ai/dsh-tools'
 import type {} from '@phoenix-ai/dsh-system-prompt'
-import { sportsCatalog, discoverEspnLeagues, chatGames, compactSportsSchedule, marketOdds, pricedTicket, type MarketSelection } from './sports.ts'
+import { sportsCatalog, discoverEspnLeagues, chatGames, compactSportsSchedule, marketOdds, pricedTicket, getFeed, type MarketSelection } from './sports.ts'
 import { getMlbPitcherReport } from './mlb.ts'
 import { researchTicket, autoResearchTicket, type ResearchTicketLeg } from './research-ticket.ts'
 import { sportsPromptNeeded } from './sports-prompt.ts'
@@ -14,18 +14,27 @@ import { researchSport } from './multi-sport-research.ts'
 import { communityOpinions } from './sports-community.ts'
 import { evidenceTicket } from './evidence-ticket.ts'
 import { evidencePricedTicket } from './evidence-priced-ticket.ts'
-import { hydrateSportsSources,sportsSourcesHealth } from './sports-source-health.ts'
+import { ensureSportsSourcesStarted,hydrateSportsSources,managedSportsInstallStatus,sportsSourcesHealth } from './sports-source-health.ts'
 import { investigateEventDeep } from './sports-deep-context.ts'
+import { auditUniversalMatchup } from './universal-matchup-factors.ts'
+import { exploreEspn, type EspnExplorerInput } from './espn-intelligence.ts'
 import { compareBettingMarkets,supportedMarketFamilies } from './sports-market-intelligence.ts'
+import { espnCoreModes,queryEspnCore,type EspnCoreMode } from './espn-core-intelligence.ts'
 
 export const name = 'tool-sports'
 export const inject = ['tools','systemPrompt']
 const sportsEnv=():NodeJS.ProcessEnv=>hydrateSportsSources(process.env)
 const GUIDANCE = [
-  'Solo cuando el usuario pida deportes, juegos del día, jugadores, cuotas o tickets, consulta las herramientas sports_chat_catalog, sports_chat_discover, sports_chat_games, sports_chat_mlb_pitchers, sports_chat_odds, sports_chat_ticket, sports_chat_ticket_research, sports_chat_ticket_research_auto, sports_chat_nba_research, sports_chat_research, sports_chat_historical_odds, sports_chat_community_opinions, sports_chat_odds_keyless, sports_chat_sources_health, sports_chat_deep_research, sports_chat_market_intelligence, sports_chat_ticket_evidence_auto o sports_chat_ticket_evidence_priced_auto.',
+  'MATCHUP FACTORS UNIVERSAL: si el usuario pide favorito bien investigado, ventaja o desventaja, cruces, rendimiento en estadio, H2H, abridores MLB o carreras en 3/5/9 innings, llama sports_chat_matchup_factors con ID real y fecha ESPN. Combina forma reciente, descansos, enfrentamientos, sede, MLB tramos de entradas, abridores probables y últimas salidas, partes médicos, noticias y cuotas reconciliadas. Una media histórica de carreras no es predicción calibrada: no declares ganador cierto, porcentaje propio, ventaja de EV, o impacto causal del clima sin modelo validado. Si clima, bullpen, rotación, alineación, xG o condiciones del estadio carecen de fuentes, marca PENDIENTE y explica qué dato falta. Usa el panel adaptativo dentro del chat, no menús. ',
+  'ESPN INTELLIGENCE: cuando el usuario pida un equipo específico, un jugador, su historia, splits, gamelog, tabla, líderes, noticias o búsqueda, consulta sports_chat_espn_explore con la vista apropiada y un ID real comprobado. Esa herramienta devuelve una superficie adaptable de estadísticas, noticias, plantillas, fotos y fuentes; Phoenix dibuja sports_espn_dashboard automáticamente. Para carteleras utiliza sports_chat_games y para cuotas comercializables sports_chat_odds; evita convertir probabilidades ESPN o referencias Core en cuotas actuales. Las plantillas se construyen dinámicamente a partir de secciones verificadas, sin nuevas pantallas.',
+  'Solo cuando el usuario pida deportes, juegos del día, jugadores, cuotas o tickets, consulta las herramientas sports_chat_catalog, sports_chat_discover, sports_chat_games, sports_chat_mlb_pitchers, sports_chat_odds, sports_chat_ticket, sports_chat_ticket_research, sports_chat_ticket_research_auto, sports_chat_nba_research, sports_chat_research, sports_chat_historical_odds, sports_chat_community_opinions, sports_chat_odds_keyless, sports_chat_sources_health, sports_chat_sources_repair, sports_chat_deep_research, sports_chat_matchup_factors, sports_chat_market_intelligence, sports_chat_espn_core, sports_chat_espn_core_catalog, sports_chat_ticket_evidence_auto o sports_chat_ticket_evidence_priced_auto.',
   'NO abras pantallas independientes ni crees entradas de menú. Antes de redactar una cartelera o boleto, llama sports_chat_games y, cuando corresponda, sports_chat_mlb_pitchers / sports_chat_odds / sports_chat_ticket. Phoenix dibuja de manera nativa las tarjetas verificadas de los resultados. NO copies el JSON de los resultados en la respuesta, NO escribas fences generative-ui ni bloques de código, aunque una herramienta los incluya en sus datos. No dibujes tickets con caracteres ASCII, bordes de texto ni bloques de código etiquetados text: para eventos y selecciones reales usa exclusivamente los contratos nativos, conservando la presentación original de Phoenix. Si el usuario quiere solo una demostración, descríbela explícitamente como ficticia y no introduzcas cuotas o equipos inventados como hechos. Explica los hallazgos y las fuentes con un texto humano breve.',
   'INVESTIGACIÓN NBA: antes de defender cualquier favorito o selección NBA, consulta sports_chat_nba_research (y sports_chat_odds cuando existan cuotas). Contrasta forma en marcadores finales, márgenes, descanso y muestra; revisa además informe oficial de lesiones, rotaciones, estadísticas avanzadas, rival, localía y movimiento de precios desde fuentes autorizadas. Lo no consultado debe permanecer explícitamente SIN VERIFICAR. No transformes la forma descriptiva en porcentajes de victoria ni cites atletas que no tengan plantilla actual confirmada. Un ticket automático se considera SOLO una preselección, nunca una investigación completa.',
   'INVESTIGAR TODOS LOS DEPORTES: llama sports_chat_research para estudiar los marcadores finales recientes del deporte y liga que el usuario pidió. Para MLB complementa con pitchers y bullpen; fútbol exige revisar goles, localía, bajas, forma y opciones 1X2/doble oportunidad; tenis requiere superficie, historial y fatiga; hockey necesita portero y estadísticas defensivas; en otros deportes usa métricas propias. Si el informe indica insuficiente, no proclames favorito respaldado. sports_chat_historical_odds agrega históricos de ambos repositorios SportsbookReview para entrenamiento/backtest, jamás cuotas actuales; y sports_chat_community_opinions observa pronósticos públicos solo como opinión separada.',
+  'Si la primera auto-instalación falla o se queda en retry-cooldown, llama sports_chat_sources_repair a petición del usuario; nunca solicites claves para OddsHarvester. Avisa cuando esté instalando y vuelve a verificar el manifest antes de buscar cuotas. ',
+  'AUTOREPARACIÓN: sports_chat_sources_health inicia automáticamente el instalador en segundo plano cuando falta (autoRepair.status=started/running); no digas que el scraper está bloqueado definitivamente mientras se esté instalando. Si autoRepair.status=missing-installer, informa que faltan los scripts en el runtime y da la ruta de checkout; si retry-cooldown o error, indica el log y pide diagnóstico sin inventar. Nunca pegues instrucciones en lenguaje natural en PowerShell: solamente comandos PowerShell copiados literalmente, distintos del mensaje de chat para Kira. ',
+  'INSTALACIÓN AUTOMÁTICA: OddsHarvester 0.20.0 requiere Python 3.12+ y Playwright Chromium. El manifest del actualizador guarda el estado separado de los resultados de mercado. Cuando la fuente marque desactivado o sin datos, consulta sports_chat_sources_health e informa installation.state, error, logPath y cómo reparar sin claves; no digas que está instalada si no hay prueba. El protocolo OddsHarvester es oddsharvester upcoming -s <deporte> -d YYYYMMDD -m <mercado> --headless -f json -o archivo; fútbol 1x2, btts, double_chance y totales; NHL home_away usa período full_including_ot; baloncesto 1x2 reglamentario usa full_time. La salida JSON tiene match_date, scraped_date, match_link, bookmaker_name y *_market. Debes exigir partido futuro, cuota decimal válida, hora reciente y mercado completo de una misma casa. SportsbookReview flancast90 usa python cli.py --sport nhl --start 2011 --end 2021 --filename archivo.json; MLB ArnavSaraogi usa python scraper.py AAAA-MM-DD AAAA-MM-DD -t moneyline pointspread totals -o archivo.json; ambos son HISTÓRICOS y solo se usan para backtesting, nunca como cuota de hoy. ',
+  'ESPN CORE EXTENDIDO SIN CLAVES: cuando el usuario pida ATS, futuros, rendimiento según cuotas, movimiento de precios, histórico de casas, probabilidad ESPN o predictor usa sports_chat_espn_core_catalog y sports_chat_espn_core con los IDs ESPN verificados. Modos odds, provider, movement, head_to_heads, ats, futures, past_performances, odds_records, probabilities, predictor y providers. No conviertas predicciones, ATS, históricos o futuros en moneylines para apostar hoy; odds sin proveedor y fecha actual no implica cotización vigente. Core lista $ref que se resuelven solo si son del dominio ESPN permitido, con límite de peticiones. Ante HTTP 404/403 o lista vacía, dilo claramente sin declarar que el endpoint universalmente funciona. ',
   'Antes de declarar sin cuotas, llama sports_chat_sources_health para distinguir proveedor deshabilitado, CLI no instalado, histórico no cargado y precio no disponible. No confundas fuente configurada con consulta efectiva ni marcador con titular confirmado. Los 3 proyectos GitHub acordados NO son 3 feeds vivos: solo OddsHarvester puede consultar cuotas actuales cuando está activo y accesible; SportsbookReview y MLB son históricos. ',
   'Para cuotas gratuitas por scraping (sin API key) consulta sports_chat_odds_keyless si el host habilitó OddsHarvester. No prometas consultas ilimitadas ni uses cuotas históricas como cotizaciones vigentes. El motor debe investigar todas las disciplinas disponibles, no solo NBA, y contrastar historial, lesionados, alineaciones, rendimiento, localía, cuota y fuentes externas cuando existan. Las votaciones y picks de otras personas son una referencia secundaria, no estimaciones propias ni garantía.',
   'PROCEDIMIENTO DE INVESTIGACIÓN: nunca digas que un ticket está profundamente investigado solo por salir en 2 segundos o por cinco marcadores. Para 5/6 patas emplea sports_chat_ticket_evidence_priced_auto cuando haya proveedor de cuotas habilitado; si no, sports_chat_ticket_evidence_auto. Exige historial con al menos cinco partidos terminados DIFERENTES por equipo (NFL tres), coherencia entre forma y margen, y comprobación separada de resumen ESPN y disponibilidad de parte médico. Las ausencias, el portero NHL, rotaciones NBA, pitchers MLB, once y xG en fútbol, superficie en tenis y mercados actuales que no se hayan confirmado deben quedar marcados PENDIENTES, sin atribuir jugadores, estatus ni probabilidad inventados. Si hay menos de cinco/seis selecciones justificables, muestra borrador INCOMPLETO. La opción antigua sports_chat_ticket_research_auto solo vale para exploración, nunca como análisis profundo.',
@@ -52,16 +61,70 @@ export function apply(ctx: Context): void {
   })
   ctx.tools.register(defineTool({
     name:'sports_chat_sources_health',
-    description:'Audita de forma segura los proveedores deportivos de Kira: OddsHarvester instalado/habilitado, claves opcionales presentes sin exponer secretos, históricos GitHub montados. No promete precios disponibles.',
+    description:'Audita los proveedores deportivos. Si faltan, inicia su instalación administrada opcional sin bloquear el chat; retorna estado y logs, sin exponer credenciales ni prometer cuotas.',
     parameters:{},
     output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
-    isConcurrencySafe:()=>true,
+    isConcurrencySafe:()=>false,
     async execute(){
-      const sources=await sportsSourcesHealth(sportsEnv())
-      return JSON.stringify({sources,checkedAt:new Date().toISOString(),
-        warning:'Configuración o CLI disponible NO equivale a cuotas actuales. Para comprobar precios requiere consulta de mercado con marca de tiempo y casa. Los archivos de SportsbookReview y MLB no son cuotas vivas.'})
+      // Recover missing source installs even when the prepared Windows runtime
+      // did not ship the updater script. Launch remains nonblocking.
+      const autoRepair=await ensureSportsSourcesStarted(process.env)
+      const env=sportsEnv()
+      const installation=managedSportsInstallStatus(env)
+      const sources=await sportsSourcesHealth(env)
+      return JSON.stringify({sources,installation,autoRepair,checkedAt:new Date().toISOString(),
+        repair:'Si la instalación falla: ejecutar node scripts/phoenix-sports-source-bootstrap.mjs --status y revisar installation.logPath. Para reparar, node scripts/phoenix-sports-source-bootstrap.mjs --install desde la carpeta de PHOENIX. OddsHarvester requiere Python >=3.12 y Playwright Chromium. No copiar claves al chat.',
+        warning:'Instalado no equivale a cuota real. OddsHarvester usa Playwright sobre OddsPortal; comprueba bookmaker, mercado, período y timestamp. SportsbookReview y MLB solo contienen históricos; para extraer datos nuevos se ejecutan sus propios scripts en tareas explícitas, no funcionan como fuentes vivas.'})
     },
-    presentCall:()=>({card:'generic',title:'Comprobar proveedores deportivos y datos históricos',kind:'read' as const}),
+    presentCall:()=>({card:'generic',title:'Verificar y autorreparar fuentes deportivas',kind:'read' as const}),
+  }))
+  ctx.tools.register(defineTool({
+    name:'sports_chat_sources_repair',
+    description:'Reparar de forma autónoma y sin bloquear el chat los tres proveedores deportivos opcionales: OddsHarvester/Chromium y dos repositorios históricos. Devuelve el estado del lanzador y archivo de errores. No promete cuotas.',
+    parameters:{},
+    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    isConcurrencySafe:()=>false,
+    async execute(){
+      const autoRepair=await ensureSportsSourcesStarted(process.env,true)
+      const installation=managedSportsInstallStatus(process.env)
+      return JSON.stringify({autoRepair,installation,checkedAt:new Date().toISOString(),
+        instruction:'Se ha solicitado la reparación en segundo plano; no se han verificado cuotas ni operaciones. Consulta sports_chat_sources_health para ver progreso, logs y los proveedores listos. Si falta el instalador en el runtime o checkout, informa el bloqueo concreto.'})
+    },
+    presentCall:()=>({card:'generic',title:'Reparar fuentes deportivas automáticamente',kind:'read' as const}),
+  }))
+  ctx.tools.register(defineTool({
+    name:'sports_chat_espn_explore',
+    description:'ESPN universal: perfiles de equipos/jugadores, estadísticas por temporada, registros partido a partido, splits, clasificaciones, noticias, líderes, encuentros y búsqueda. Devuelve un panel dinámico seguro con logos, fotos y fuentes, dentro del chat. IDs deben provenir de ESPN.',
+    parameters:{
+      sport:{type:'string',required:true,description:'Disciplina ESPN, como basketball, soccer, hockey, baseball o football.'},
+      league:{type:'string',required:true,description:'Slug ESPN real: nba, nhl, eng.1, mlb, nfl, etc.'},
+      view:{type:'string',required:true,description:'team | player | event | standings | news | leaders | search'},
+      teamId:{type:'string',description:'ID numérico confirmado de equipo para view=team.'},
+      athleteId:{type:'string',description:'ID numérico confirmado de deportista para view=player.'},
+      eventId:{type:'string',description:'ID numérico confirmado de partido para view=event.'},
+      season:{type:'integer',description:'Año de temporada, cuando se solicita uno.'},
+      query:{type:'string',description:'Texto a buscar en ESPN, solo para view=search.'},
+    },
+    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    isConcurrencySafe:()=>true,
+    async execute(args){
+      const report=await exploreEspn({
+        sport:args.sport,league:args.league,view:args.view as EspnExplorerInput['view'],
+        ...(args.teamId?{teamId:args.teamId}:{}),
+        ...(args.athleteId?{athleteId:args.athleteId}:{}),
+        ...(args.eventId?{eventId:args.eventId}:{}),
+        ...(args.season?{season:args.season}:{}),
+        ...(args.query?{query:args.query}:{}),
+      },fetch,sportsEnv())
+      return JSON.stringify({
+        summary:report.title+' · '+report.subtitle,
+        sources:report.sources,
+        limitations:report.limitations,
+        uiBlock:report.uiBlock,
+        instruction:'El panel ESPN ya se muestra en el chat. No repitas su JSON ni inventes secciones que la fuente no confirmó. Si falta una estadística, explícalo; partido, plantillas y cuotas se verifican por separado.',
+      })
+    },
+    presentCall:()=>({card:'generic',title:'Explorar estadísticas, jugadores, equipos y noticias ESPN',kind:'read' as const}),
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_deep_research',
@@ -80,6 +143,30 @@ export function apply(ctx: Context): void {
     presentCall:()=>({card:'generic',title:'Investigar noticias, estadísticas y bajas de un evento',kind:'read' as const}),
   }))
   ctx.tools.register(defineTool({
+    name:'sports_chat_matchup_factors',
+    description:'Investigación universal de ventaja deportiva por evento ESPN confirmado: forma de ambos equipos, H2H, descansos, localía/estadio, contexto de noticias/lesiones y cuotas reconciliadas. En MLB desglosa referencias de carreras en 3, 5, 9 innings y consulta abridores probables y sus últimas salidas. Ninguna cifra es probabilidad calibrada; clima no verificado permanece pendiente.',
+    parameters:{
+      sport:{type:'string',required:true,description:'Disciplina ESPN: baseball, basketball, soccer, football, hockey, tennis, etc.'},
+      league:{type:'string',required:true,description:'Slug real de liga del catálogo ESPN.'},
+      eventId:{type:'string',required:true,description:'ID real ESPN obtenido de sports_chat_games.'},
+      date:{type:'string',required:true,description:'Día de cartelera del evento, AAAA-MM-DD.'},
+      lookbackDays:{type:'integer',description:'Ventana histórica de 3 a 28 días, por defecto 14.'},
+      includeOdds:{type:'boolean',description:'Consulta mercados actuales por proveedor si existe; por defecto true.'},
+    },
+    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    isConcurrencySafe:()=>true,
+    async execute(args){
+      const result=await auditUniversalMatchup({
+        sport:args.sport,league:args.league,eventId:args.eventId,date:args.date,
+        ...(args.lookbackDays===undefined?{}:{lookbackDays:args.lookbackDays}),
+        ...(args.includeOdds===undefined?{}:{includeOdds:args.includeOdds}),
+      },fetch,Date.now(),sportsEnv())
+      return JSON.stringify({...result,
+        instruction:'PHOENIX dibuja automáticamente el panel sports_espn_dashboard. Distingue evidencia histórica, condición de titulares, disponibilidad actual, precios de casas y datos faltantes. Los tramos 3/5/9 innings son medias exploratorias si existe muestra; solo compáralos con cuotas que tengan EXACTAMENTE el mismo período, reglas y fuente. No atribuyas ventajas numéricas ni probabilidades de victoria calibradas a estos promedios. Si existen señales contradictorias, explícalas y deja la conclusión como incierta.'})
+    },
+    presentCall:()=>({card:'generic',title:'Investigar factores y ventajas reales del encuentro',kind:'read' as const}),
+  }))
+  ctx.tools.register(defineTool({
     name:'sports_chat_market_intelligence',
     description:'Compara mercados reales vigentes por bookmaker: ganador, doble oportunidad, totales, ambos marcan y handicap cuando la fuente los publicó. Solo calcula probabilidad IMPLÍCITA del precio, nunca probabilidad de acierto propia.',
     parameters:{
@@ -90,6 +177,8 @@ export function apply(ctx: Context): void {
     isConcurrencySafe:()=>true,
     async execute(args){
       const env=sportsEnv()
+      const autoRepair=env.PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED==='1'?
+        null:await ensureSportsSourcesStarted(process.env)
       const sources=await sportsSourcesHealth(env)
       const odds=await Promise.allSettled([
         marketOdds(args.sportKey,'h2h,totals,spreads',env,fetch),
@@ -100,7 +189,7 @@ export function apply(ctx: Context): void {
               basketball:{sport:'basketball',markets:['moneyline','over_under']},
               baseball:{sport:'baseball',markets:['moneyline','over_under']},
               americanfootball:{sport:'american-football',markets:['moneyline','over_under']},
-              icehockey:{sport:'ice-hockey',markets:['home_away','over_under']},
+              icehockey:{sport:'ice-hockey',markets:['home_away','double_chance','over_under']},
               tennis:{sport:'tennis',markets:['match_winner','over_under']},
             }
             const route=routes[args.sportKey.split('_')[0]??'']
@@ -116,7 +205,7 @@ export function apply(ctx: Context): void {
       const combined=odds.flatMap(x=>x.status==='fulfilled'?x.value:[])
       const comparison=compareBettingMarkets(combined)
       return JSON.stringify({sportKey:args.sportKey,availableMarkets:supportedMarketFamilies,
-        ...comparison,sourceReadiness:sources,
+        ...comparison,sourceReadiness:sources,autoRepair,
         sourcesAttempted:odds.length,quotesObserved:combined.length,
         instruction:'Los precios implícitos NO son probabilidades predictivas. Mercados superpuestos no deben normalizarse ni combinarse como independientes. Si no existen cuotas, noticia o lesión verificables, indica explícitamente que falta evidencia. No fabriques un ticket de mayor probabilidad.'})
     },
@@ -221,6 +310,56 @@ export function apply(ctx: Context): void {
     presentCall:()=>({ card:'generic',title:'Analizar abridores y bullpen MLB',kind:'read' as const }),
   }))
   ctx.tools.register(defineTool({
+    name:'sports_chat_espn_core_catalog',
+    description:'Lista las 11 familias de endpoints Core ESPN para cuotas, historial, ATS, futuros, movimientos de mercado, pronósticos y proveedores. No se realiza red ni se gasta cuota.',
+    parameters:{},
+    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    isConcurrencySafe:()=>true,
+    async execute(){
+      return JSON.stringify({source:'ESPN Core API /v2 pública (no oficial)',modes:espnCoreModes,
+        guide:'Primero usa sports_chat_games para identificar eventId/competitionId y sports_chat_catalog para league; para ATS e históricos usa teamId y season o providerId genuinos. Consulta un modo por vez mediante sports_chat_espn_core. Providers informa los IDs de las casas en ESPN; su presencia no prueba que haya cuotas publicadas.',
+        warning:'Rutas documentadas pero disponibilidad y autorización no garantizadas. No hacer consultas ilimitadas ni tratar resultados de ATS/predictor/históricos como cuotas vigentes.'})
+    },
+    presentCall:()=>({card:'generic',title:'Catálogo de datos ESPN Core',kind:'read' as const}),
+  }))
+  ctx.tools.register(defineTool({
+    name:'sports_chat_espn_core',
+    description:'Lee de ESPN Core público SIN API key: odds por partido/proveedor, movimiento, enfrentamientos, ATS, futures, past-performances, odds-records, probabilities, predictor y providers. Resuelve pocas referencias y devuelve el JSON relevante limitado, con estado real de acceso.',
+    parameters:{
+      mode:{type:'string',required:true,description:'odds | provider | movement | head_to_heads | ats | futures | past_performances | odds_records | probabilities | predictor | providers'},
+      sport:{type:'string',required:true,description:'Slug de deporte ESPN: football, basketball, baseball, hockey, soccer...'},
+      league:{type:'string',required:true,description:'Liga ESPN: nfl, nba, mlb, nhl, usa.1, eng.1...'},
+      eventId:{type:'string',description:'ID real de partido ESPN para odds, provider, movement, head_to_heads, probabilities, predictor'},
+      competitionId:{type:'string',description:'ID competition real, por defecto eventId (ESPN a menudo usa ambos iguales)'},
+      teamId:{type:'string',description:'ID ESPN de equipo para ats, odds_records y past_performances'},
+      providerId:{type:'string',description:'ID ESPN de proveedor (obtener con mode=providers), obligatorio para provider/movement/head_to_heads/past_performances'},
+      season:{type:'integer',description:'Temporada 1900..2100, requerida para ats, odds_records y futures'},
+      seasonType:{type:'integer',description:'0..4; ATS por defecto 2 (regular), odds_records por defecto 0'},
+      limit:{type:'integer',description:'1..100, por defecto 25. Hasta 12 muestras y 6 referencias resueltas'},
+      page:{type:'integer',description:'Página ESPN 1..1000, por defecto 1'},
+      resolveRefs:{type:'boolean',description:'Resolver hasta 6 referencias Core del mismo deporte y liga, por defecto true'},
+    },
+    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    isConcurrencySafe:()=>true,
+    async execute(args){
+      if(!Object.hasOwn(espnCoreModes,args.mode))throw Error('Modo ESPN Core no reconocido: consulta sports_chat_espn_core_catalog')
+      if(sportsEnv().PHOENIX_SPORTS_ESPN_DISABLED==='1')return JSON.stringify({
+        state:'unavailable',provider:'ESPN Core',error:'ESPN deshabilitado expresamente por configuración del host'})
+      const input={
+        mode:args.mode as EspnCoreMode,sport:args.sport,league:args.league,
+        eventId:args.eventId,competitionId:args.competitionId,
+        teamId:args.teamId,providerId:args.providerId,season:args.season,
+        seasonType:args.seasonType,limit:args.limit,page:args.page,
+      }
+      const report=await queryEspnCore(input,<T>(url:string)=>getFeed<T>(url),{
+        resolveRefs:args.resolveRefs!==false,
+      })
+      return JSON.stringify({...report,
+        instruction:'Muestra solo datos realmente devueltos por ESPN con sus fechas, source y endpoint. Para acceder a la página siguiente incrementa page; no digas que todos los datos históricos están cargados. Solo las líneas de casa identificada, mercado, partido futuro y precio actualizado pueden cotizar tickets; ATS, predictor, probabilidades, futures e históricos son inteligencia complementaria. Si unavailable, indica el error exacto.'})
+    },
+    presentCall:()=>({card:'generic',title:'Consultar mercados y estadísticas ESPN Core',kind:'read' as const}),
+  }))
+  ctx.tools.register(defineTool({
     name:'sports_chat_odds',
     description:'Busca cuotas públicas ESPN sin clave, el proveedor de nivel gratuito TheOddsAPI con THEODDSAPI_API_KEY o The Odds API v4 con THE_ODDS_API_KEY; mercados y cuota dependen de cada proveedor.',
     parameters:{
@@ -313,7 +452,16 @@ export function apply(ctx: Context): void {
     output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
     isConcurrencySafe:()=>true,
     async execute(args){
-      const quotes=await keylessOdds(args.sport,args.market,args.date,sportsEnv())
+      const env=sportsEnv()
+      if(env.PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED!=='1'
+        &&process.env.PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED!=='0'){
+        const autoRepair=await ensureSportsSourcesStarted(process.env)
+        return JSON.stringify({source:'OddsHarvester',status:'not-ready',
+          autoRepair,installation:managedSportsInstallStatus(process.env),
+          observedPrices:0,bookmaker:null,
+          instruction:'OddsHarvester todavía no está listo. PHOENIX solicitó la instalación/recuperación sin bloquear el chat; NO significa que se hayan obtenido cuotas. Ejecutar sports_chat_sources_health para ver progreso y errores, y consultar el mercado después de que el componente marque installed. Si falta el script o WinGet falló, mostrar la ruta del log y solo comandos PowerShell en la consola.'})
+      }
+      const quotes=await keylessOdds(args.sport,args.market,args.date,env)
       const grouped=new Map<string,typeof quotes>()
       for(const quote of quotes.slice(0,96)){
         const rows=grouped.get(quote.eventId)??[]
