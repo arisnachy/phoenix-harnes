@@ -17,6 +17,7 @@ import {
   type McpOAuthStateStore,
 } from '@phoenix-ai/dsh-mcp-client/src/oauth.ts'
 import { credentialKey, type CredentialProvider } from '@phoenix-ai/dsh-credentials'
+import { PHOENIX_BINANCE_AGENTIC_CIMD_ID } from '@phoenix-ai/dsh-mcp-client/src/binance-agentic-cimd.ts'
 
 function store(initial?: Record<string, unknown>): McpOAuthStateStore & { state: Record<string, unknown> | undefined } {
   let state = initial
@@ -235,6 +236,45 @@ describe('createMcpOAuthProvider', () => {
     } finally {
       await controller.close()
     }
+  })
+
+  it('starts Binance Agentic OAuth using PHOENIX CIMD without dynamic client registration',async()=>{
+    const records=new Map<string,unknown>()
+    const credentials={
+      readRecord:vi.fn(async(key:unknown)=>records.get(String(key))),
+      modifyRecord:vi.fn(async(key:unknown,change:(current:unknown)=>Promise<unknown>)=>{
+        const updated=await change(records.get(String(key)))
+        if(updated===undefined) records.delete(String(key))
+        else records.set(String(key),updated)
+        return updated
+      }),
+      deleteRecord:vi.fn(async(key:unknown)=>{records.delete(String(key))}),
+    } as unknown as CredentialProvider
+    const controller=new McpOAuthController(
+      credentials,'binance-agent-os','https://agent.binance.com/mcp/agentic',{
+        resolveClientInformation:async()=>({client_id:PHOENIX_BINANCE_AGENTIC_CIMD_ID}),
+      })
+    const notify=vi.fn()
+    try{
+      await controller.ready
+      expect(await controller.provider().clientInformation()).toEqual({
+        client_id:PHOENIX_BINANCE_AGENTIC_CIMD_ID,
+      })
+      vi.mocked(auth).mockImplementationOnce(async(provider,opts)=>{
+        expect(await provider.clientInformation()).toEqual({
+          client_id:PHOENIX_BINANCE_AGENTIC_CIMD_ID,
+        })
+        expect(provider.clientMetadata.redirect_uris).toEqual([controller.callbackServer.redirectUri])
+        expect(opts.serverUrl.toString()).toBe('https://agent.binance.com/mcp/agentic')
+        await provider.saveTokens({access_token:'fake-access',token_type:'Bearer'})
+        return 'AUTHORIZED'
+      })
+      await controller.authorize({
+        method:'oauth',signal:new AbortController().signal,notify,prompt:vi.fn(),
+      })
+      expect(await controller.isAuthorized()).toBe(true)
+      expect(notify.mock.calls.some(args=>JSON.stringify(args).includes('registrando el cliente OAuth'))).toBe(false)
+    }finally{await controller.close()}
   })
 
   it('drops a stale dynamic client registration before reauthorization on a new loopback redirect', async () => {

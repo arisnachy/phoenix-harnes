@@ -1,0 +1,15 @@
+{
+  "client_id": "https://cdn.jsdelivr.net/gh/arisnachy/phoenix-harnes@main/website/public/oauth/binance-agentic-client.json",
+  "client_name": "PHOENIX AI — Binance Agentic Connector",
+  "client_uri": "https://github.com/arisnachy/phoenix-harnes",
+  "redirect_uris": [
+    "http://127.0.0.1/mcp/oauth/binance-agent-os"
+  ],
+  "grant_types": [
+    "authorization_code"
+  ],
+  "response_types": [
+    "code"
+  ],
+  "token_endpoint_auth_method": "none"
+}
