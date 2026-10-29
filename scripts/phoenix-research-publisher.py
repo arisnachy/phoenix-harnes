@@ -260,6 +260,12 @@ def validate(data):
         raise ValueError("academic_classic requires academic or journal presentation")
     if data.get("document_type", "brief") not in DOCUMENT_TYPES:
         raise ValueError("unsupported document_type")
+    if data.get("document_type") == "thesis":
+        degree = data.get("thesis_level", data.get("level"))
+        if degree is not None and degree not in ("bachelors", "masters", "doctorate"):
+            raise ValueError("thesis_level must be bachelors, masters or doctorate")
+        if data.get("style") not in ("apa", "apa7", "vancouver"):
+            raise ValueError("thesis citation style must be explicitly APA 7 or Vancouver")
     if data.get("paper", "A4") not in ("A4", "Letter"):
         raise ValueError("paper must be A4 or Letter")
     if data.get("submission_ready") is True:
@@ -310,6 +316,10 @@ def validate(data):
         if margin is not None and (not isinstance(margin, (int, float)) or isinstance(margin, bool)
                                    or not math.isfinite(margin) or not 1.5 <= margin <= 4):
             raise ValueError("institutional margin_cm must be 1.5 to 4")
+        minimum_references = institutional.get("min_references")
+        if minimum_references is not None and (isinstance(minimum_references, bool)
+            or not isinstance(minimum_references, int) or not 1 <= minimum_references <= 500):
+            raise ValueError("institutional min_references must be between 1 and 500")
         spacing = institutional.get("line_spacing")
         if spacing is not None and (spacing not in (1, 1.15, 1.5, 2)):
             raise ValueError("institutional line_spacing unsupported")
@@ -380,6 +390,10 @@ def validate(data):
         cited.update(citation_keys(appendix["text"]))
     if cited - keys:
         raise ValueError("appendix contains unknown source keys " + str(sorted(cited-keys)))
+    institution_min = data.get("institutional_rules", {}).get("min_references")
+    if institution_min is not None and len(cited) < institution_min:
+        raise ValueError("reviewed institution requires " + str(institution_min) +
+                         " distinct cited references, found " + str(len(cited)))
     declarations = data.get("declarations", {})
     if not isinstance(declarations, dict):
         raise ValueError("declarations must be an object")
@@ -1361,6 +1375,25 @@ def main():
     elif target_pages is not None and not page_match:
         warnings.append("La extensión solicitada no se alcanzó: PDF real " + str(rendered_pages[0]) +
                         ", objetivo " + str(target_pages) + ". No se añade contenido ficticio.")
+    # Advisory source-coverage guidance never silently becomes a university requirement.
+    thesis_levels = {"bachelors": (20, 40), "masters": (40, 80), "doctorate": (100, None)}
+    degree = report.get("thesis_level", report.get("level"))
+    reference_guidance = None
+    if report.get("document_type") == "thesis" and degree in thesis_levels:
+        minimum, suggested_maximum = thesis_levels[degree]
+        reference_guidance = {
+            "level": degree, "minimum": minimum, "suggested_maximum": suggested_maximum,
+            "actual_distinct_cited": len(cited), "policy": "advisory",
+            "institutional_rules_override": bool(institutional.get("min_references")),
+            "below_guidance": len(cited) < minimum,
+        }
+    advisory_warnings = []
+    if reference_guidance and reference_guidance["below_guidance"]:
+        advisory_warnings.append(
+            "Orientación bibliográfica para " + degree + ": " + str(minimum) +
+            "+ fuentes distintas citadas; hay " + str(len(cited)) +
+            ". No es un mínimo universal; prevalece la norma institucional."
+        )
     final_state = "REPORT_NEEDS_REVISION" if warnings else "REPORT_READY"
     result={"state":final_state,"report_id":digest,"title":title,"style":style,
             "design_preset":design_preset,
@@ -1375,6 +1408,8 @@ def main():
             "pagination": {"pdf_pages": rendered_pages[0], "requested_pages": target_pages,
                            "scope": scope, "target_met": page_match if scope == "all" else None},
             "warnings": warnings,
+            "advisory_warnings": advisory_warnings,
+            "reference_guidance": reference_guidance,
             "source_count":len(cited),"source_verification":"metadata_user_supplied_not_network_verified","files":{"docx":str(docx_file),"pdf":str(pdf_file),"html":str(html_file)},"output_dir":str(output_root)}
     # Preserve the exact structured project so model handoffs and revisions do not
     # need to re-run every source lookup or reconstruct the manuscript from PDF.
