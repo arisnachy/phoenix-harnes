@@ -13,6 +13,7 @@ export interface EspnMarketQuote {
   home: string
   away: string
   time: string
+  timeIso: string
   updatedAt: string
 }
 type OddsSide = { moneyLine?: number | string; moneyline?: number | string; spreadOdds?: number|string }
@@ -75,7 +76,7 @@ export function normalizeEspnMoneylines(event:EEvent,oddEntries:EspnOdds[]):Espn
     const updatedAt=odd.lastUpdated||odd.lastUpdate||odd.updatedAt||'No indicada por ESPN'
     for(const [selection,value] of [[homeName,odd.homeTeamOdds?.moneyLine??odd.homeTeamOdds?.moneyline],[awayName,odd.awayTeamOdds?.moneyLine??odd.awayTeamOdds?.moneyline]] as const){
       const price=americanToDecimal(value)
-      if(price!==null)result.push({ eventId:id,bookmaker:str(provider),market:'h2h',selection:str(selection),point:null,price,home:str(homeName),away:str(awayName),time:localTime(event.date||''),updatedAt:str(updatedAt) })
+      if(price!==null)result.push({ eventId:id,bookmaker:str(provider),market:'h2h',selection:str(selection),point:null,price,home:str(homeName),away:str(awayName),time:localTime(event.date||''),timeIso:kickoff.toISOString(),updatedAt:str(updatedAt) })
     }
   }
   return result

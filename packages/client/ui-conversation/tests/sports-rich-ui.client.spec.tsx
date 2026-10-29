@@ -32,7 +32,7 @@ describe('Phoenix Sports rich native cards',()=>{
     expect(parsed).toEqual(rich)
     if(!parsed)throw Error('Rich card rejected')
     const rendered=GenerativeUi({block:parsed}) as {props:Record<string,unknown>}
-    expect(rendered.props['data-generative-ui']).toBe('sports_game_card')
+    expect(rendered.props.sport).toBe('baseball')
   })
   it('shows ESPN-style team images, pitcher stats, lineup tabs and bullpen modules inside the Phoenix chat',()=>{
     const card=parseGenerativeUiBlock(rich)
@@ -92,9 +92,20 @@ describe('Phoenix Sports ticket hierarchy and theme compatibility',()=>{
     render(<GenerativeUi block={block}/>)
     expect(screen.getByRole('region',{name:'Fútbol · Inglaterra · Premier League'})).toBeTruthy()
     expect(screen.getByRole('region',{name:'Béisbol · MLB'})).toBeTruthy()
+    expect(screen.getByText('⚽')).toBeTruthy()
+    expect(screen.getByText('⚾')).toBeTruthy()
     expect(screen.getAllByText(/Casa A/).length).toBe(2)
     expect(screen.getByText('6.350')).toBeTruthy()
     expect(screen.getByText('Solo análisis · No se ha realizado ninguna apuesta')).toBeTruthy()
+  })
+  it('preserves detailed sourced research while rejecting excessive model prose',()=>{
+    const detailed={...ticket,props:{...ticket.props,legs:[
+      {...ticket.props.legs[0],rationale:'ESPN · 5 partidos diferentes · '.padEnd(470,'x')},
+    ]}}
+    expect(parseGenerativeUiBlock(detailed)).not.toBeNull()
+    expect(parseGenerativeUiBlock({...detailed,props:{...detailed.props,legs:[
+      {...detailed.props.legs[0],rationale:'x'.repeat(481)},
+    ]}})).toBeNull()
   })
   it('rejects arbitrary fields and external images from tickets',()=>{
     expect(parseGenerativeUiBlock({...ticket,props:{...ticket.props,legs:[
@@ -104,6 +115,27 @@ describe('Phoenix Sports ticket hierarchy and theme compatibility',()=>{
   })
 })
 
+describe('No fake tickets when strict research finds zero eligible matches',()=>{
+  const draft={component:'sports_ticket_card',version:1,props:{
+    title:'PHOENIX · Investigación insuficiente',source:'ESPN',
+    requestedLegs:5,legs:[],combinedOdds:'No disponible',
+    note:'TICKET INCOMPLETO: faltan 5 eventos; no inventar favoritos.',
+  }}
+  it('renders an explicit 0/5 draft instead of blank chat or made-up odds',()=>{
+    const card=parseGenerativeUiBlock(draft)
+    expect(card).not.toBeNull()
+    if(!card)throw Error('Incomplete draft rejected')
+    render(<GenerativeUi block={card}/>)
+    expect(screen.getByRole('progressbar',{name:'Patas verificadas'}).getAttribute('aria-valuenow')).toBe('0')
+    expect(screen.getByText(/Faltan 5 selecciones por verificar/)).toBeTruthy()
+    expect(screen.getByText(/0 \/ 5 selecciones con cuotas de una misma casa confirmadas/)).toBeTruthy()
+    expect(screen.queryByText('CUOTA')).toBeNull()
+  })
+  it('does not accept empty finished tickets without explicit incomplete evidence',()=>{
+    expect(parseGenerativeUiBlock({...draft,props:{...draft.props,
+      note:'Este es un ticket completo',combinedOdds:'7.50'}})).toBeNull()
+  })
+})
 describe('Five-leg Phoenix ticket completion and compact progress',()=>{
   const makeLeg=(i:number)=>({
     event:'Away '+i+' vs Home '+i,

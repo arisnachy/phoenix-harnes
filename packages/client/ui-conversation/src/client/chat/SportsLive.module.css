@@ -1,0 +1,26 @@
+/* Live ESPN detail, contained inside Phoenix chat cards, never a new screen. */
+.liveFacts{display:grid;gap:9px;border:1px solid var(--dsw-alias-border-subtle,rgba(125,125,125,.23));
+ border-radius:12px;padding:10px 12px;background:var(--dsw-alias-interactive-bg-hover,rgba(120,120,120,.035));
+ min-width:0;font-size:12px}
+.liveHeading{display:flex;align-items:center;flex-wrap:wrap;gap:7px;color:var(--dsw-alias-label-primary,inherit);
+ font-weight:800;font-size:11px}
+.liveHeading small{margin-left:auto;color:var(--dsw-alias-label-secondary,#757575);font-weight:500;font-size:10px}
+.liveDot{display:inline-block;width:7px;height:7px;border-radius:50%;background:#df3737;
+ box-shadow:0 0 0 3px rgba(223,55,55,.12)}
+.liveBaseball{display:flex;align-items:center;justify-content:center;gap:25px}
+.liveDiamond{width:68px;height:56px;position:relative;display:block}
+.liveDiamond i{position:absolute;width:18px;height:18px;background:var(--dsw-alias-border-subtle,#bbb);
+ border:1px solid var(--dsw-alias-label-secondary,#999);transform:rotate(45deg);border-radius:2px}
+.liveDiamond i:nth-child(1){left:25px;top:3px}
+.liveDiamond i:nth-child(2){left:4px;top:24px}
+.liveDiamond i:nth-child(3){left:46px;top:24px}
+.liveDiamond i.occupied{background:#dda52e;border-color:#b98715}
+.liveCounts{display:grid;gap:3px;font-variant-numeric:tabular-nums}
+.liveCounts span,.liveStamp{color:var(--dsw-alias-label-secondary,#757575);font-size:10px}
+.livePlay{margin:0;line-height:1.5;overflow-wrap:anywhere}
+.liveLeaders{display:flex;gap:5px;flex-wrap:wrap}
+.liveLeaders span{font-size:10px;padding:4px 7px;border:1px solid var(--dsw-alias-border-subtle,#ddd);border-radius:9px}
+.liveDetail{font-size:12px}
+.livePeriods summary{cursor:pointer;color:var(--dsw-alias-label-secondary,#666);font-size:10px}
+.livePeriods div{display:flex;gap:9px;flex-wrap:wrap;padding-top:6px;font-size:11px}
+.liveStamp{white-space:nowrap}

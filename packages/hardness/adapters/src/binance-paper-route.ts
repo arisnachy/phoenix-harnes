@@ -3,6 +3,7 @@ import type { GameWebRouteHost } from './godot-web-bundle.ts'
 import type { BinancePaperAutomation } from './binance-paper-automation.ts'
 import { dashboardJson, type BinanceAgentOsHostService } from './binance-trading-tools.ts'
 import type { BinanceSpotTestnet } from './binance-spot-testnet.ts'
+import type { BinanceSpotRealReadOnly } from './binance-spot-real-auth.ts'
 import type { BinanceTestnetAutomation } from './binance-testnet-automation.ts'
 import { credentialRef, type CredentialProvider } from '@phoenix-ai/dsh-credentials'
 
@@ -13,8 +14,13 @@ const CANDLES = ROUTE + '/candles'
 const TESTNET_STATUS = ROUTE + '/testnet-status'
 const TESTNET_AUTO_STATUS = ROUTE + '/testnet-auto-status'
 const TESTNET_CONNECT = ROUTE + '/testnet-connect'
+const REAL_STATUS = ROUTE + '/real-status'
+const REAL_CONNECT = ROUTE + '/real-connect'
+const REAL_MIGRATE = ROUTE + '/real-migrate'
 const MCP_STATUS = ROUTE + '/mcp-status'
 const MCP_RECONNECT = ROUTE + '/mcp-reconnect'
+const MCP_ACTIVATE = ROUTE + '/mcp-activate'
+const MCP_REPAIR = ROUTE + '/mcp-repair'
 const CHART_INTERVALS = new Set(['15m', '1h', '4h', '1d'])
 const MAX_BODY_BYTES = 2048
 
@@ -99,9 +105,11 @@ type TestnetVault = Pick<CredentialProvider, 'set' | 'resolve' | 'unset' | 'desc
  * Verify read-back so a false UI success is impossible, and restore the previous
  * pair if one of the two writes fails. No values are returned or logged.
  */
-async function storeTestnetPair(vault: TestnetVault, apiKey: string, secret: string): Promise<void> {
-  const keyRef = credentialRef('PHOENIX_BINANCE_TESTNET_API_KEY')
-  const secretRef = credentialRef('PHOENIX_BINANCE_TESTNET_API_SECRET')
+async function storeTestnetPair(vault: TestnetVault, apiKey: string, secret: string,
+  environment: 'testnet' | 'real' = 'testnet'): Promise<void> {
+  const prefix = environment === 'real' ? 'PHOENIX_BINANCE_REAL_' : 'PHOENIX_BINANCE_TESTNET_'
+  const keyRef = credentialRef(prefix + 'API_KEY')
+  const secretRef = credentialRef(prefix + 'API_SECRET')
   const before = await Promise.all([vault.resolve(keyRef), vault.resolve(secretRef)])
   const writable = await Promise.all([vault.describe(keyRef), vault.describe(secretRef)])
   if (writable.some(info => !info.writable)) throw new Error('vault-read-only')
@@ -137,7 +145,7 @@ async function storeTestnetPair(vault: TestnetVault, apiKey: string, secret: str
 export function mountBinancePaperDashboardRoute(
   host: GameWebRouteHost,
   engine: BinancePaperAutomation,
-  options: { testnet?: BinanceSpotTestnet; testnetAuto?: BinanceTestnetAutomation; credentials?: TestnetVault; agentOs?: Partial<BinanceAgentOsHostService> } = {},
+  options: { testnet?: BinanceSpotTestnet; real?: BinanceSpotRealReadOnly; testnetAuto?: BinanceTestnetAutomation; credentials?: TestnetVault; agentOs?: Partial<BinanceAgentOsHostService> } = {},
 ): () => void {
   // Never cache virtual fills: a background paper-step can settle between
   // two browser polls without going through this HTTP route.
@@ -153,20 +161,84 @@ export function mountBinancePaperDashboardRoute(
     const testing = url.pathname === TESTNET_STATUS
     const testnetAutomation = url.pathname === TESTNET_AUTO_STATUS
     const connect = url.pathname === TESTNET_CONNECT
+    const realStatus = url.pathname === REAL_STATUS
+    const realConnect = url.pathname === REAL_CONNECT
+    const realMigrate = url.pathname === REAL_MIGRATE
     const mcpStatus = url.pathname === MCP_STATUS
     const reconnect = url.pathname === MCP_RECONNECT
-    if (!read && !write && !market && !testing && !testnetAutomation && !connect && !mcpStatus && !reconnect) { res.writeHead(404).end(); return }
+    const activate = url.pathname === MCP_ACTIVATE
+    const repair = url.pathname === MCP_REPAIR
+    if (!read && !write && !market && !testing && !testnetAutomation && !connect && !realStatus && !realConnect && !realMigrate && !mcpStatus && !reconnect && !activate && !repair) { res.writeHead(404).end(); return }
     res.setHeader('Cache-Control', 'no-store')
     res.setHeader('Content-Type', 'application/json; charset=utf-8')
     res.setHeader('X-Content-Type-Options', 'nosniff')
     res.setHeader('Referrer-Policy', 'no-referrer')
-    if ((read || market || testing || testnetAutomation || mcpStatus) && req.method !== 'GET' && req.method !== 'HEAD'
-      || (write || connect || reconnect) && req.method !== 'POST') { res.writeHead(405).end(); return }
-    if ((write || connect || reconnect) && !localUserAction(req)) {
+    if ((read || market || testing || realStatus || testnetAutomation || mcpStatus) && req.method !== 'GET' && req.method !== 'HEAD'
+      || (write || connect || realConnect || realMigrate || reconnect || activate || repair) && req.method !== 'POST') { res.writeHead(405).end(); return }
+    if ((write || connect || realConnect || realMigrate || reconnect || activate || repair) && !localUserAction(req)) {
       res.writeHead(403).end(JSON.stringify({ error: 'Same-origin user action required' }))
       return
     }
     try {
+      if (activate) {
+        // Explicit same-origin browser action installs only the pinned OAuth
+        // MCP. No Binance token, authorization grant or REAL order is issued.
+        const request = await readRequestObject(req)
+        if (Object.keys(request).length !== 0) {
+          res.writeHead(400).end(JSON.stringify({ error: 'No order, scopes or credentials accepted' }))
+          return
+        }
+        if (options.agentOs?.enableBinanceAgentOs === undefined) {
+          res.writeHead(503).end(JSON.stringify({
+            error: 'Binance Agent OS installer unavailable in this Host',
+          }))
+          return
+        }
+        const installation = await options.agentOs.enableBinanceAgentOs()
+        if (installation.connector.serverName !== 'binance-agent-os'
+          || installation.connector.url !== 'https://agent.binance.com/mcp/agentic') {
+          res.writeHead(502).end(JSON.stringify({ error: 'Unexpected Binance connector identity' }))
+          return
+        }
+        const state = await options.agentOs.binanceAgentOsState?.()
+        res.statusCode = 200
+        res.end(JSON.stringify({
+          installed: true, status: installation.status,
+          configured: state?.configured === true, mcpStatus: state?.status ?? 'starting',
+          accountVerified: false, tradeScopeVerified: false,
+          nextAction: 'Instalado: completa el OAuth oficial de Binance desde Autorizar en esta tarjeta. Instalar el MCP no verifica la cuenta REAL.',
+        }))
+        return
+      }
+      if (repair) {
+        const request = await readRequestObject(req)
+        if (Object.keys(request).length !== 0) {
+          res.writeHead(400).end(JSON.stringify({ error: 'Repair accepts no order, credential or grant' }))
+          return
+        }
+        if (options.agentOs?.repairBinanceAgentOs === undefined) {
+          res.writeHead(503).end(JSON.stringify({ error: 'Binance MCP repair unavailable' }))
+          return
+        }
+        let result: Awaited<ReturnType<NonNullable<BinanceAgentOsHostService['repairBinanceAgentOs']>>>
+        try {
+          result = await options.agentOs.repairBinanceAgentOs()
+        } catch {
+          res.writeHead(409).end(JSON.stringify({
+            error: 'mcp-repair-failed',
+            nextAction: 'El Host no pudo descargar o reparar el MCP de forma segura. Reinicia Phoenix y utiliza Reparar; la autorización previa no se borró.',
+          }))
+          return
+        }
+        const state = await options.agentOs.binanceAgentOsState?.()
+        res.end(JSON.stringify({
+          repaired: true, status: result.status,
+          mcpStatus: state?.status ?? 'starting',
+          accountVerified: false, tradeScopeVerified: false,
+          nextAction: 'MCP reparado. Inicia Autorizar y completa el OAuth oficial. Si sigue fallando, consulta el diagnóstico.',
+        }))
+        return
+      }
       if (reconnect) {
         const receipt = await options.agentOs?.reconnectBinanceAgentOs?.()
         res.statusCode = receipt?.accepted === true ? 200 : 409
@@ -187,6 +259,7 @@ export function mountBinancePaperDashboardRoute(
         else res.end(JSON.stringify({
           configured: state?.configured === true, connected,
           status: state?.status ?? 'disconnected',
+          ...(state?.reasonCode === undefined ? {} : { reasonCode: state.reasonCode }),
           toolCount: state?.toolNames?.length ?? 0,
           tradeScopeVerified: false, accountVerified: false,
           nextAction: connected ? 'Verify live MCP ticker, Agentic balance and granted Trade scope'
@@ -201,6 +274,99 @@ export function mountBinancePaperDashboardRoute(
         res.statusCode=200
         if(req.method==='HEAD')res.end()
         else res.end(JSON.stringify(snapshot))
+        return
+      }
+      if (realStatus) {
+        if (!options.real) { res.writeHead(503).end(JSON.stringify({error:'Binance REAL read-only Host unavailable'})); return }
+        const status = await options.real.status()
+        res.statusCode = 200
+        if (req.method === 'HEAD') res.end()
+        else res.end(JSON.stringify(status))
+        return
+      }
+      if (realMigrate) {
+        if (!privateCredentialAction(req) || !options.credentials || !options.real) {
+          res.writeHead(403).end(JSON.stringify({error:'Secure credential migration unavailable'}))
+          return
+        }
+        const data = await readRequestObject(req)
+        if (Object.keys(data).length !== 0) {
+          res.writeHead(400).end(JSON.stringify({error:'Migration accepts no credentials or orders'}))
+          return
+        }
+        // A Testnet trading journal must never be moved silently between wallets.
+        const state = options.testnetAuto?.snapshot()
+        if (state?.enabled === true || state?.pending !== undefined
+          || state && Object.keys(state.positions).length > 0) {
+          res.writeHead(409).end(JSON.stringify({error:'testnet-automation-account-change-blocked'}))
+          return
+        }
+        const [key, secret] = await Promise.all([
+          options.credentials.resolve(credentialRef('PHOENIX_BINANCE_TESTNET_API_KEY')),
+          options.credentials.resolve(credentialRef('PHOENIX_BINANCE_TESTNET_API_SECRET')),
+        ])
+        if (!key?.value || !secret?.value) {
+          res.writeHead(409).end(JSON.stringify({error:'No stored Testnet candidate to verify'}))
+          return
+        }
+        // Verify on Binance production BEFORE copying secrets into the REAL vault.
+        const result = await options.real.forCredentials({apiKey:key.value,secret:secret.value}).status()
+        if (!result.connected) {
+          res.statusCode = 200
+          res.end(JSON.stringify({
+            migrated:false, connected:false, tradingAuthorized:false,
+            ...(result.issue === undefined ? {} : {issue:result.issue}),
+            nextAction:result.nextAction,
+          }))
+          return
+        }
+        try { await storeTestnetPair(options.credentials,key.value,secret.value,'real') }
+        catch (error) {
+          res.writeHead(error instanceof Error && error.message==='vault-read-only' ? 409 : 503)
+            .end(JSON.stringify({error:'REAL credential vault is unavailable for migration'}))
+          return
+        }
+        // Keep the previous Testnet refs intact: the vault's existing values
+        // must not be deleted without a separate, explicit revocation gesture.
+        res.end(JSON.stringify({
+          migrated:true,configured:true,connected:true,canRead:true,
+          tradingAuthorized:false,
+          nextAction:'Claves verificadas con Binance REAL y copiadas a la bóveda REAL. TESTNET no se ha modificado. No se han autorizado órdenes.',
+        }))
+        return
+      }
+      if (realConnect) {
+        if (!privateCredentialAction(req) || !options.credentials || !options.real) {
+          res.writeHead(403).end(JSON.stringify({error:'Secure REAL credential setup unavailable'}))
+          return
+        }
+        let key: string
+        let secret: string
+        try {
+          const data = await readRequestObject(req)
+          if (Object.keys(data).some(item => item !== 'apiKey' && item !== 'secret')
+            || typeof data.apiKey !== 'string' || typeof data.secret !== 'string'
+            || !/^[A-Za-z0-9_-]{12,256}$/u.test(data.apiKey)
+            || data.secret.length < 12 || data.secret.length > 256 || /\s/u.test(data.secret)) {
+            throw new Error('invalid')
+          }
+          key = data.apiKey
+          secret = data.secret
+        } catch {
+          res.writeHead(400).end(JSON.stringify({error:'Invalid Binance REAL HMAC credential format'}))
+          return
+        }
+        try { await storeTestnetPair(options.credentials,key,secret,'real') }
+        catch (error) {
+          const locked = error instanceof Error && error.message === 'vault-read-only'
+          res.writeHead(locked ? 409 : 503).end(JSON.stringify({
+            error: locked ? 'vault-read-only' : 'vault-write-failed',
+          }))
+          return
+        }
+        const probe = await options.real.status()
+        res.statusCode = 200
+        res.end(JSON.stringify({...probe, saved:true, tradingAuthorized:false}))
         return
       }
       if (testing) {
@@ -239,6 +405,18 @@ export function mountBinancePaperDashboardRoute(
           secret = body.secret
         } catch {
           res.writeHead(400).end(JSON.stringify({ error: 'Invalid Binance Spot Testnet credential format' }))
+          return
+        }
+        // Never rotate HMAC credentials while the autonomous executor may
+        // still own pending orders or positions from the previous account.
+        // Otherwise a restored journal could operate against the wrong wallet.
+        const execution = options.testnetAuto?.snapshot()
+        if (execution?.enabled === true || execution?.pending !== undefined
+          || execution !== undefined && Object.keys(execution.positions).length > 0) {
+          res.writeHead(409).end(JSON.stringify({
+            error: 'testnet-automation-account-change-blocked',
+            nextAction: 'Detén la automatización Testnet, concilia las órdenes pendientes y cierra las posiciones de prueba antes de cambiar sus credenciales.',
+          }))
           return
         }
         // Separate durable storage from network readiness. Binance Testnet

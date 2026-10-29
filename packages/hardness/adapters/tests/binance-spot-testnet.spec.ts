@@ -81,7 +81,7 @@ describe('Official Binance Spot Testnet isolation', () => {
       new Response(JSON.stringify({ code: -2015, msg: 'Secret value: TEST_SECRET' }), { status: 401 }))
     const status = await client.status()
     expect(status).toMatchObject({
-      mode: 'testnet', configured: true, connected: false, issue: 'invalid-credentials',
+      mode: 'testnet', configured: true, connected: false, issue: 'ip-or-permission',
     })
     expect(JSON.stringify(status)).not.toContain('TEST_SECRET')
   })

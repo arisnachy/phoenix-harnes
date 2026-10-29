@@ -7,16 +7,15 @@ const kick='2026-10-28T23:00:00Z'
 const board=(url)=>{
   const day=String(url).match(/dates=([0-9]{8})/u)?.[1]
   if(!String(url).includes('/soccer/eng.1/'))return{events:[]}
-  if(!['20261028','20261027','20261026','20261025'].includes(day))return{events:[]}
+  if(!['20261028','20261027','20261026','20261025','20261024','20261023'].includes(day))return{events:[]}
   const pre=day==='20261028'
   return{events:Array.from({length:5},(_,i)=>({
-    id:String(500+i+(pre?0:Number(day.slice(-2))*1000)),date:pre?kick:day==='20261027'?'2026-10-27T21:00:00Z':day==='20261026'?'2026-10-26T21:00:00Z':'2026-10-25T21:00:00Z',
+    id:String(500+i+(pre?0:Number(day.slice(-2))*1000)),date:pre?kick:'2026-'+day.slice(4,6)+'-'+day.slice(6,8)+'T21:00:00Z',
     status:{type:{state:pre?'pre':'post'}},competitions:[{competitors:[
       {homeAway:'home',team:{id:String(i)+'1',displayName:'Home '+i,logo:'https://a.espncdn.com/home-'+i+'.png'},...(!pre?{score:'3'}:{})},
       {homeAway:'away',team:{id:String(i)+'2',displayName:'Away '+i},...(!pre?{score:'0'}:{})},
     ]}],
   }))}}
-}
 const feed=async url=>new Response(JSON.stringify(board(url)),{status:200})
 const mkQuotes=(alternating=false)=>async()=>{
   const out=[]
@@ -42,7 +41,7 @@ test('six-legged evidence path quotes only same bookmaker and preserves the requ
   assert.equal(complete.card.props.stake,'100.00')
   assert.equal(complete.card.props.requestedLegs,5)
   assert.match(complete.card.props.legs[0].homeLogo,/a\.espncdn\.com/)
-  assert.match(complete.card.props.legs[0].rationale,/ESPN últimos 3 juegos/)
+  assert.match(complete.card.props.legs[0].rationale,/ESPN 5 partidos distintos/)
   assert.match(complete.card.props.note,/NO son probabilidades calibradas/)
   assert.equal(complete.placed,false)
   assert.equal(complete.missingQuotes,0)
@@ -76,7 +75,7 @@ test('1X double chance uses real matching bookmaker market, keeps branding and r
   assert.equal(result.card.props.legs[0].price,'1.34')
   assert.equal(result.card.props.legs[0].bookmaker,'Book A')
   assert.match(result.card.props.legs[0].homeLogo,/^https:\/\/a\.espncdn\.com\//)
-  assert.match(result.card.props.legs[0].rationale,/ESPN últimos 3 juegos/)
+  assert.match(result.card.props.legs[0].rationale,/ESPN 5 partidos distintos/)
   assert.match(result.card.props.note,/NO asegura ganar/)
   assert.equal(result.placed,false)
 })
@@ -140,7 +139,7 @@ test('six priced legs are six independently verified fixtures at one bookmaker',
   assert.equal(new Set(result.card.props.legs.map(x=>x.event)).size,6)
   assert.equal(result.card.props.requestedLegs,6)
 })
-test('X2 quotes are accepted only when three-game form favors the away team',async()=>{
+test('X2 quotes are accepted only when five-game form favors the away team',async()=>{
   const awayFeed=async url=>{
     const data=board(url)
     if(!String(url).includes('dates=20261028')){
@@ -162,4 +161,104 @@ test('X2 quotes are accepted only when three-game form favors the away team',asy
   assert.equal(result.card.props.legs.length,5)
   assert.equal(result.card.props.legs[0].selection,'X2 · Visita o empate')
   assert.equal(result.card.props.legs[0].price,'1.36')
+})
+
+test('automatic odds ticket uses the existing The Odds API adapter if keyless scraper is not enabled',async()=>{
+  let apiCalls=0
+  const withApi=async url=>{
+    if(String(url).includes('api.the-odds-api.com')){
+      apiCalls++
+      return new Response(JSON.stringify(Array.from({length:5},(_,i)=>({
+        id:'book-'+i,home_team:'Home '+i,away_team:'Away '+i,commence_time:kick,
+        bookmakers:[{key:'a',title:'Book A',last_update:'2026-10-28T14:45:00Z',markets:[{
+          key:'h2h',last_update:'2026-10-28T14:45:00Z',
+          outcomes:[
+            {name:'Home '+i,price:1.70},{name:'Away '+i,price:2.45},
+            {name:'Draw',price:3.2},
+          ],
+        }]}],
+      }))),{status:200})
+    }
+    return feed(url)
+  }
+  const result=await evidencePricedTicket(5,date,'soccer',100,now,
+    {THE_ODDS_API_KEY:'mock-secret'},withApi)
+  assert.equal(apiCalls,1)
+  assert.equal(result.priced,true)
+  assert.equal(result.card.props.legs.length,5)
+  assert.equal(result.card.props.legs[0].price,'1.7')
+  assert.match(result.card.props.legs[0].rationale,/Resumen ESPN/)
+  assert.equal(result.card.props.legs[0].bookmaker,'Book A')
+})
+test('soccer two-outcome API prices cannot be mislabeled 1X2 without a draw outcome',async()=>{
+  const incomplete=async url=>{
+    if(String(url).includes('api.the-odds-api.com'))return new Response(JSON.stringify(
+      Array.from({length:5},(_,i)=>({
+        id:'b-'+i,home_team:'Home '+i,away_team:'Away '+i,commence_time:kick,
+        bookmakers:[{key:'a',title:'Book A',last_update:'2026-10-28T14:45:00Z',
+          markets:[{key:'h2h',outcomes:[{name:'Home '+i,price:1.7}]}]}],
+      }))))
+    return feed(url)
+  }
+  const result=await evidencePricedTicket(5,date,'soccer',100,now,
+    {THE_ODDS_API_KEY:'mock-secret'},incomplete)
+  assert.equal(result.priced,false)
+  assert.equal(result.quotedLegs,0)
+})
+test('stale bookmaker quotes do not receive a fresh ticket label',async()=>{
+  const stale=async url=>{
+    if(String(url).includes('api.the-odds-api.com'))return new Response(JSON.stringify(
+      Array.from({length:5},(_,i)=>({
+        id:'b-'+i,home_team:'Home '+i,away_team:'Away '+i,commence_time:kick,
+        bookmakers:[{key:'a',title:'Book A',last_update:'2026-10-27T10:00:00Z',
+          markets:[{key:'h2h',outcomes:[{name:'Home '+i,price:1.7},{name:'Draw',price:3.2}]}]}],
+      }))))
+    return feed(url)
+  }
+  const result=await evidencePricedTicket(5,date,'soccer',100,now,
+    {THE_ODDS_API_KEY:'mock-secret'},stale)
+  assert.equal(result.priced,false)
+  assert.equal(result.missingQuotes,5)
+})
+
+test('a four-of-five slate still audits real provider prices and cannot be called a priced parlay',async()=>{
+  const partialFeed=async url=>{
+    const data=board(url)
+    data.events=data.events.filter(e=>!String(e.id).endsWith('4'))
+    return new Response(JSON.stringify(data),{status:200})
+  }
+  let quoteCalls=0
+  const source=async()=>{
+    quoteCalls++
+    return Array.from({length:4},(_,i)=>({
+      eventId:'scraper-'+i,bookmaker:'Book A',market:'1x2',
+      selection:'Home '+i,point:null,price:1.91,
+      home:'Home '+i,away:'Away '+i,time:kick,
+      updatedAt:'2026-10-28T14:30:00Z',sportKey:'football',
+      source:'OddsHarvester/OddsPortal (sin API key)',
+    }))
+  }
+  const result=await evidencePricedTicket(5,date,'soccer',100,now,enabled,partialFeed,source)
+  assert.equal(result.complete,false)
+  assert.equal(result.priced,false)
+  assert.equal(result.approvedLegs,0)
+  assert.equal(result.verifiedEvents,4)
+  assert.equal(result.quotedLegs,4)
+  assert.equal(result.missingQuotes,1)
+  assert.equal(quoteCalls,1,'partial ticket must still query its candidate bookmaker markets')
+  const harvester=result.sourceAudit.find(row=>row.source==='OddsHarvester')
+  assert.equal(harvester.status,'observed')
+  assert.equal(harvester.offers,4)
+  assert.equal(result.card.props.combinedOdds,'No disponible')
+  assert.match(result.card.props.note,/Cuotas cotejadas: 4\/5/)
+  assert.match(result.explanation,/INCOMPLETO/)
+})
+test('disabled OddsHarvester is never described as queried with live prices',async()=>{
+  const result=await evidencePricedTicket(5,date,'soccer',100,now,{},feed)
+  const source=result.sourceAudit.find(row=>row.source==='OddsHarvester')
+  assert.equal(source.status,'disabled')
+  assert.equal(source.offers,0)
+  assert.equal(result.approvedLegs,0)
+  assert.ok(!result.priced)
+  assert.equal(result.card.props.combinedOdds,'No disponible')
 })
