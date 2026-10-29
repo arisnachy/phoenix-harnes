@@ -45,6 +45,7 @@ type FilledOrder = {
   reason: string
   at: string
 }
+/** Durable fake-funded Spot TESTNET scheduler and order reconciliation state. */
 export type BinanceTestnetAutomationState = {
   schema: 1
   mode: 'testnet'
@@ -110,6 +111,7 @@ export class BinanceTestnetAutomation {
     private readonly market?: Pick<BinancePublicMarket, 'candles'>,
   ) {}
 
+  /** @param sink - Host callback for confirmed testnet fills and safety halts. */
   setAttentionSink(sink: typeof this.sink): void { this.sink=sink }
   private notify(kind: 'fill'|'risk-halt', detail: string, symbol: string): void {
     try{this.sink?.({kind,detail,symbol})}catch{/* notifications never affect trading */}
@@ -120,6 +122,7 @@ export class BinanceTestnetAutomation {
     await writeFile(temp,JSON.stringify(this.state)+'\n',{mode:0o600,encoding:'utf8'})
     await rename(temp,this.file)
   }
+  /** Restore persisted TESTNET permission and ledger, failing closed on corruption. */
   async restore(): Promise<void> {
     if(this.loaded)return
     this.loaded=true
@@ -147,6 +150,11 @@ export class BinanceTestnetAutomation {
     this.timer=setInterval(()=>{void this.step()},POLL_MS)
     this.timer.unref()
   }
+  /**
+   * Enable a user-approved fake-funded Spot TESTNET scheduler.
+   * @param symbols - Bounded unique USDT pairs.
+   * @returns Current persisted and reconciled TESTNET state.
+   */
   async start(symbols: readonly string[]): Promise<BinanceTestnetAutomationState> {
     await this.restore()
     if(this.state.halted||this.state.pending)throw new Error('Testnet has a pending order or risk halt; manual reconciliation required')
@@ -164,6 +172,7 @@ export class BinanceTestnetAutomation {
     await this.step()
     return this.snapshot()
   }
+  /** @returns Saved TESTNET state after halting future scheduled entries. */
   async stop(): Promise<BinanceTestnetAutomationState> {
     await this.restore()
     this.state.enabled=false
@@ -178,6 +187,7 @@ export class BinanceTestnetAutomation {
    * fixed Binance Spot Testnet endpoint. Each signed exchange receipt is
    * reconciled before the next sell. An unfilled or untradeable remainder is
    * left on the ledger and a safety halt is persisted, never called "sold".
+   * @returns Confirmed TESTNET state only after all tracked positions close.
    */
   async stopAndLiquidate(): Promise<BinanceTestnetAutomationState> {
     await this.stop() // stop is persisted before contacting Binance.
@@ -226,7 +236,10 @@ export class BinanceTestnetAutomation {
     }
   }
 
-  /** User-visible, READ-only recovery of uncertain Testnet order receipts. */
+  /**
+   * Reconcile any uncertain provider order without submitting a new order.
+   * @returns Updated fake-funded TESTNET ledger state.
+   */
   async reconcilePending(): Promise<BinanceTestnetAutomationState> {
     await this.restore()
     const intent=this.state.pending
@@ -249,7 +262,10 @@ export class BinanceTestnetAutomation {
     return this.snapshot()
   }
 
-  /** A separate deliberate owner review can clear a Testnet-only safety halt. */
+  /**
+   * Clear a reviewed safety halt only when no orders remain uncertain.
+   * @returns Updated stopped testnet scheduler state.
+   */
   async clearReviewedHalt(): Promise<BinanceTestnetAutomationState> {
     await this.restore()
     if(this.state.pending)throw new Error('Cannot clear Testnet halt with an unresolved exchange order')
@@ -264,6 +280,7 @@ export class BinanceTestnetAutomation {
     return this.snapshot()
   }
 
+  /** @returns A defensive read-only copy of recorded TESTNET state. */
   snapshot(): BinanceTestnetAutomationState {return structuredClone(this.state)}
   private async halt(reason: string, symbol='BTCUSDT'): Promise<void> {
     this.state.enabled=false;this.state.halted=true;this.state.lastError=reason
@@ -464,6 +481,10 @@ export class BinanceTestnetAutomation {
       else await this.save()
     }
   }
+  /**
+   * Evaluate one verified TESTNET market cycle when explicitly armed.
+   * @param now - Cycle timestamp in Unix milliseconds.
+   */
   async step(now=Date.now()): Promise<void> {
     await this.restore()
     if(this.active)return this.active
@@ -471,6 +492,7 @@ export class BinanceTestnetAutomation {
     this.active=job
     try{await job}finally{if(this.active===job)this.active=undefined}
   }
+  /** Drain active work and release process timers. */
   async dispose(): Promise<void> {
     if(this.timer!==undefined)clearInterval(this.timer)
     this.timer=undefined
@@ -479,6 +501,12 @@ export class BinanceTestnetAutomation {
 }
 
 const byPath=new Map<string,{engine:BinanceTestnetAutomation;refs:number}>()
+/**
+ * Obtain a reference-counted TESTNET worker bound to a durable ledger path.
+ * @param file - Filesystem path used to persist virtual strategy state.
+ * @param testnet - Separate Spot TESTNET API client (never production credentials).
+ * @returns Worker handle and release callback.
+ */
 export function acquireBinanceTestnetAutomation(file:string,testnet:BinanceSpotTestnet):{
   readonly engine:BinanceTestnetAutomation
   release():void
