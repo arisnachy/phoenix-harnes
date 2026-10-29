@@ -337,7 +337,7 @@ export function createResearchPublishTool(): ToolDefinition {
             + '; PDF: ' + String((value.files as Record<string, unknown>).pdf)
             + '; vista HTML: ' + String((value.files as Record<string, unknown>).html)
             + '. Edición: ' + String(value.presentation ?? 'academic')
-            + '; diseño: ' + String(value.design_preset ?? 'academic_classic')
+            + '; diseño: ' + (typeof value.design_preset === 'string' ? value.design_preset : 'academic_classic')
             + '; páginas PDF: ' + String((value.pagination as Record<string, unknown> | undefined)?.pdf_pages ?? 'sin verificar')
             + '; observaciones: ' + (Array.isArray(value.warnings) ? value.warnings.map(String).join('; ') : 'ninguna')
             + '; orientación bibliográfica: ' + (Array.isArray(value.advisories)
