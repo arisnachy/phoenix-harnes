@@ -84,7 +84,7 @@ export async function searchEuropePmc(
   if (typeof query !== 'string' || query.trim().length < 3 || query.length > 400
     || !Number.isInteger(limit) || limit < 1 || limit > 30
     || (cursorMark !== undefined && (cursorMark.length < 1 || cursorMark.length > 500
-      || /[\\s\\x00-\\x1f]/u.test(cursorMark)))) {
+      || /[\s\x00-\x1f]/u.test(cursorMark)))) {
     throw new ToolArgsError(['La búsqueda requiere 3 a 400 caracteres, 1 a 30 resultados y cursor válido.'])
   }
   const url = new URL('https://www.ebi.ac.uk/europepmc/webservices/rest/search')
@@ -113,7 +113,7 @@ export async function searchEuropePmc(
       && parsed.nextCursorMark !== cursorMark && records.length > 0
       ? parsed.nextCursorMark : undefined
     const hitCount = typeof parsed.hitCount === 'number' ? parsed.hitCount
-      : typeof parsed.hitCount === 'string' && /^\\d+$/u.test(parsed.hitCount)
+      : typeof parsed.hitCount === 'string' && /^\d+$/u.test(parsed.hitCount)
         ? Number(parsed.hitCount) : undefined
     return { state: records.length ? 'ok' : 'empty', source: url.origin, retrievedAt, records,
       ...(nextCursorMark ? { nextCursorMark } : {}), ...(hitCount !== undefined ? { hitCount } : {}) }
