@@ -115,7 +115,8 @@ export async function ensureSportsSourcesStarted(
   env:NodeJS.ProcessEnv=process.env,
 ):Promise<SportsRepairLaunch>{
   const current=managedSportsInstallStatus(env)
-  if(env.PHOENIX_SPORTS_SOURCES_AUTO_INSTALL==='0')
+  if(env.PHOENIX_SPORTS_SOURCES_AUTO_INSTALL==='0'||env.CI==='true'
+    ||env.NODE_ENV==='test')
     return{status:'disabled',logPath:current.logPath}
   const candidate=locateSportsAutoLauncher(env)
   if(!candidate)return{status:'missing-installer',logPath:current.logPath,
