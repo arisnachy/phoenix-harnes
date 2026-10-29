@@ -58,7 +58,10 @@ async function discover(state,now){
     market('/api/v3/exchangeInfo'),market('/api/v3/ticker/24hr')]);
   const symbols=pickUniverse(exchange,tickers,MAX_UNIVERSE);
   if(symbols.length<3)throw new Error('insufficient-market-universe');
-  state.universe=symbols;state.universeUpdated=now;state.cursor=0;
+  state.universe=symbols;state.universeUpdated=now;
+  // Keep the round-robin cursor across hourly refreshes: 1000 assets
+  // require ~250 one-minute cron ticks, not just one hour.
+  state.cursor=state.cursor % symbols.length;
 }
 function select(state){
   const n=Math.min(MAX_PER_TICK,state.universe.length), out=[];
