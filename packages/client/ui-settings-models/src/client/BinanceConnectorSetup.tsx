@@ -29,7 +29,7 @@ interface AgenticConnection {
   connected: boolean
   status: string
   reasonCode?: string
-  authorizationAvailability?: 'connected' | 'provider-approval-required'
+  authorizationAvailability?: 'oauth-unverified' | 'provider-approval-required'
   knownProviderRejection?: string | null
   supportedClientGuide?: string
   toolCount: number
@@ -303,12 +303,15 @@ export function BinanceConnectorSetup({ onChanged, onAuthorizeMcp }: {
           <fieldset disabled={busy !== undefined} className={styles['field']}>
             <legend><strong>Binance REAL · Agentic OAuth</strong></legend>
             <p role="status" className={styles['advancedHint']}>
-              {agentic?.connected ? 'MCP conectado; verificar permisos y subcuenta Agentic'
-                : agentic?.authorizationAvailability === 'provider-approval-required'
-                  ? 'Autorización PHOENIX no admitida por Binance · código 3346001'
-                  : 'Comprobando elegibilidad del cliente MCP…'}
+              {agentic?.connected && agentic?.accountVerified
+                ? 'MCP conectado; comprobar alcance de permisos Agentic'
+                : agentic?.connected
+                  ? 'Herramientas MCP públicas disponibles; OAuth Agentic no verificado'
+                  : agentic?.authorizationAvailability === 'provider-approval-required'
+                    ? 'Autorización PHOENIX no admitida por Binance · código 3346001'
+                    : 'Comprobando elegibilidad del cliente MCP…'}
             </p>
-            {agentic?.connected ? (
+            {agentic?.connected && agentic?.accountVerified ? (
               <p className={styles['advancedHint']}>
                 El transporte está conectado. Verifica los permisos efectivos; conexión MCP
                 no significa permiso de trading ni autoriza transferencias.
@@ -350,7 +353,7 @@ export function BinanceConnectorSetup({ onChanged, onAuthorizeMcp }: {
                 </button>
               </>
             )}
-            {agentic?.connected || showAgenticAdvanced ? (
+            {agentic?.connected && agentic?.accountVerified || showAgenticAdvanced ? (
               <>
           <div className={styles['editorActions']}>
               <button type="button" className={connectorStyles['connectorPrimaryButton']}
