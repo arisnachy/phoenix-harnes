@@ -114,3 +114,17 @@ test('source diagnostics include Core/summary failures, never claim all markets 
   assert.match(state.detail,/días consultados/)
   assert.match(state.detail,/líneas scoreboard/)
 })
+
+test('still reads embedded prices beyond the eight per-day Core fallback probes',async()=>{
+  const events=Array.from({length:12},(_,index)=>event([priced()],String(401111111+index)))
+  const called=[]
+  const get=async url=>{
+    called.push(url)
+    if(url.includes('/scoreboard?'))return scoreboard(events)
+    throw Error('Core not needed')
+  }
+  const result=await fetchPublicEspnOddsDetailed('basketball_nba','h2h',get,{now,days:1})
+  assert.equal(result.quotes.length,24)
+  assert.equal(result.diagnostics.games,12)
+  assert.equal(called.length,1)
+})
