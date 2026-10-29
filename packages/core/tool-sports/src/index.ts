@@ -55,10 +55,10 @@ export function apply(ctx: Context): void {
   })
   ctx.tools.register(defineTool({
     name:'sports_chat_sources_health',
-    description:'Audita de forma segura los proveedores deportivos de Kira: OddsHarvester instalado/habilitado, claves opcionales presentes sin exponer secretos, históricos GitHub montados. No promete precios disponibles.',
+    description:'Audita los proveedores deportivos. Si faltan, inicia su instalación administrada opcional sin bloquear el chat; retorna estado y logs, sin exponer credenciales ni prometer cuotas.',
     parameters:{},
     output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
-    isConcurrencySafe:()=>true,
+    isConcurrencySafe:()=>false,
     async execute(){
       // Recover missing source installs even when the prepared Windows runtime
       // did not ship the updater script. Launch remains nonblocking.
@@ -70,7 +70,7 @@ export function apply(ctx: Context): void {
         repair:'Si la instalación falla: ejecutar node scripts/phoenix-sports-source-bootstrap.mjs --status y revisar installation.logPath. Para reparar, node scripts/phoenix-sports-source-bootstrap.mjs --install desde la carpeta de PHOENIX. OddsHarvester requiere Python >=3.12 y Playwright Chromium. No copiar claves al chat.',
         warning:'Instalado no equivale a cuota real. OddsHarvester usa Playwright sobre OddsPortal; comprueba bookmaker, mercado, período y timestamp. SportsbookReview y MLB solo contienen históricos; para extraer datos nuevos se ejecutan sus propios scripts en tareas explícitas, no funcionan como fuentes vivas.'})
     },
-    presentCall:()=>({card:'generic',title:'Comprobar proveedores deportivos y datos históricos',kind:'read' as const}),
+    presentCall:()=>({card:'generic',title:'Verificar y autorreparar fuentes deportivas',kind:'write' as const}),
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_sources_repair',
