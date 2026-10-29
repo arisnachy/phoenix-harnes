@@ -31,16 +31,17 @@ test('independent free-tier odds provider requires its own header, never leaks k
   assert.equal(log[0].options.redirect,'error')
   assert.match(log[0].url,/oddsFormat=decimal/)
 })
-test('the separate free odds provider integrates with native priced ticket simulation',async()=>{
+test('the separate free odds provider creates a real quoted ticket only with one sportsbook',async()=>{
   const quotes=await marketOdds('basketball_nba','h2h',{THEODDSAPI_API_KEY:'test-secret'},mock([]))
   assert.equal(quotes.length,4)
   const selected=[quotes[0],quotes[3]].map(({eventId,bookmaker,market,selection,point})=>({
     eventId,bookmaker,market,selection,point,
   }))
-  const {card,warning}=pricedTicket(selected,quotes,100)
+  assert.throws(()=>pricedTicket(selected,quotes,100),/misma casa/)
+  const {card}=pricedTicket([selected[0]],quotes,100)
   assert.equal(card.props.source,'TheOddsAPI · cuotas de casas identificadas')
-  assert.equal(card.props.combinedOdds,'3.674')
-  assert.match(warning,/mismo encuentro/)
+  assert.equal(card.props.combinedOdds,'1.810')
+  assert.match(card.props.note,/PENDIENTE DE ACEPTACIÓN EN LA CASA/)
 })
 test('free source rejects invalid filters, missing key, malformed feed and already-started events',async()=>{
   await assert.rejects(()=>fetchTheOddsApi('../unsafe','h2h','secret',mock([])),/Filtros/)

@@ -117,7 +117,9 @@ export function start(launch=spawn,env=process.env,{force=false}={}){
   mkdirSync(paths.home,{recursive:true})
   try{
     const age=Date.now()-statSync(paths.lock).mtimeMs
-    if(age>=0&&age<35*60*1000)return{status:'running',logPath:paths.log}
+    // Filesystems can round a newly created lock mtime a few ms into the future.
+    // Treat modest negative age as an active lock instead of launching twice.
+    if(age>-60_000&&age<35*60*1000)return{status:'running',logPath:paths.log}
     unlink(paths.lock)
   }catch{/* no lock */}
   let fd

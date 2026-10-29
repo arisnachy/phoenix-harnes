@@ -111,6 +111,22 @@ describe('Binance chat viewer HTTP integration', () => {
     expect((await fetch(path + '?symbol=BTCUSDT&interval=1h', { method: 'POST' })).status).toBe(405)
   })
 
+  it('surfaces Binance agent allowlist rejection 3346001 separately from transport errors',async()=>{
+    const {origin}=await serverWithTrading({agentOs:{async binanceAgentOsState(){
+      return {configured:true,status:'failed' as const,reasonCode:'connection-failed' as const,toolNames:[]}
+    }}})
+    const response=await fetch(origin+'/phoenix-trading/paper/mcp-status')
+    const status=await response.json() as Record<string,unknown>
+    expect(status).toMatchObject({
+      configured:true,connected:false,status:'failed',reasonCode:'connection-failed',
+      authorizationAvailability:'provider-approval-required',knownProviderRejection:'3346001',
+      accountVerified:false,tradeScopeVerified:false,
+    })
+    expect(String(status.nextAction)).toContain('3346001')
+    expect(String(status.nextAction)).not.toContain('Reparar')
+    expect(JSON.stringify(status)).not.toContain('access_token')
+  })
+
   it('checks real MCP lifecycle without claiming account or Trade scopes', async () => {
     const { origin } = await serverWithTrading({
       agentOs: { async binanceAgentOsState() {
@@ -121,6 +137,7 @@ describe('Binance chat viewer HTTP integration', () => {
     expect(reply.status).toBe(200)
     expect(await reply.json()).toMatchObject({
       configured: true, connected: true, toolCount: 1,
+      authorizationAvailability: 'oauth-unverified', knownProviderRejection: '3346001',
       tradeScopeVerified: false, accountVerified: false,
     })
     const rejected = await fetch(origin + '/phoenix-trading/paper/mcp-reconnect', {
@@ -170,6 +187,7 @@ describe('Binance chat viewer HTTP integration', () => {
     const status = await fetch(origin + '/phoenix-trading/paper/mcp-status')
     expect(await status.json()).toMatchObject({
       configured: true, connected: false, accountVerified: false,
+      authorizationAvailability: 'provider-approval-required', knownProviderRejection: '3346001',
       tradeScopeVerified: false,
     })
     expect((await fetch(url)).status).toBe(405)
@@ -292,7 +310,10 @@ describe('Binance chat viewer HTTP integration', () => {
     expect(done.status).toBe(200)
     expect(await done.json()).toMatchObject({repaired:true,accountVerified:false,tradeScopeVerified:false})
     const status=await fetch(origin+'/phoenix-trading/paper/mcp-status')
-    expect(await status.json()).toMatchObject({status:'auth-required',reasonCode:'authorization-required',connected:false})
+    expect(await status.json()).toMatchObject({
+      status:'auth-required',reasonCode:'authorization-required',connected:false,
+      authorizationAvailability:'provider-approval-required', knownProviderRejection:'3346001',
+    })
   })
 
   it('validates keys only against Spot Testnet and never echoes or logs secrets', async () => {

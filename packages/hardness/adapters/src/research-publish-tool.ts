@@ -13,7 +13,11 @@ import { defineTool, ToolArgsError, type ToolDefinition } from '@phoenix-ai/dsh-
 
 type Report = Record<string, unknown>
 
-/** Stable report location; identical contents reuse one local output directory. */
+/**
+ * Derive an isolated output path from report content.
+ * @param report - source-linked manuscript.
+ * @returns deterministic paths for each exported file format.
+ */
 export function researchOutputPaths(report: Report): { docx: string; pdf: string; html: string } {
   const signature = createHash('sha256').update(JSON.stringify(report)).digest('hex').slice(0, 16)
   const root = join(homedir(), '.dsh', 'research-reports', signature)
@@ -23,6 +27,8 @@ export function researchOutputPaths(report: Report): { docx: string; pdf: string
 /**
  * Fail closed before any Python process or file write. Does not pretend that
  * unverified model-provided references are independently verified.
+ * @param input - manuscript input to validate.
+ * @returns a validated source-linked report.
  */
 export function validateResearchPublication(input: unknown): Report {
   if (typeof input !== 'object' || input === null || Array.isArray(input)) {
@@ -51,7 +57,7 @@ export function validateResearchPublication(input: unknown): Report {
       throw new ToolArgsError(['Las claves bibliográficas deben ser únicas y válidas.'])
     }
     for (const field of ['authors', 'year', 'title', 'url']) {
-      if (typeof item[field] !== 'string' || (item[field] as string).trim() === '') {
+      if (typeof item[field] !== 'string' || item[field].trim() === '') {
         throw new ToolArgsError(['La fuente ' + item.key + ' necesita ' + field + '.'])
       }
     }
@@ -68,7 +74,7 @@ export function validateResearchPublication(input: unknown): Report {
       if (!/^\[@[A-Za-z0-9_-]{1,64}(?:\s*[,;]\s*@?[A-Za-z0-9_-]{1,64})*\]$/u.test(match[0])) {
         throw new ToolArgsError(['Grupo de citas inválido: ' + match[0].slice(0, 120)])
       }
-      tokens.push(...match[1]!.split(/[,;]/u).map(key => key.trim().replace(/^@/u, '')))
+      tokens.push(...(match[1] ?? '').split(/[,;]/u).map(key => key.trim().replace(/^@/u, '')))
     }
     if ((value.match(/\[@/gu) ?? []).length !== (value.match(all) ?? []).length) {
       throw new ToolArgsError(['Existe una cita [@clave] incompleta.'])
@@ -102,6 +108,31 @@ export function validateResearchPublication(input: unknown): Report {
     }
   }
   if (citedKeys.size === 0) throw new ToolArgsError(['El texto debe vincular afirmaciones y referencias mediante [@clave].'])
+  if (report.document_type === 'thesis') {
+    const level = report.thesis_level ?? report.level
+    if (level !== undefined && (typeof level !== 'string' || !['bachelors', 'masters', 'doctorate'].includes(level))) {
+      throw new ToolArgsError(['thesis_level debe ser bachelors, masters o doctorate.'])
+    }
+    if (typeof report.style !== 'string' || !['apa', 'apa7', 'vancouver'].includes(report.style)) {
+      throw new ToolArgsError(['Indica el estilo de la tesis: APA 7 o Vancouver; no adivines la norma.'])
+    }
+  }
+  const institutionalMin = typeof report.institutional_rules === 'object' && report.institutional_rules !== null
+    && !Array.isArray(report.institutional_rules)
+    ? (report.institutional_rules as Record<string, unknown>).min_references : undefined
+  if (institutionalMin !== undefined) {
+    if (typeof institutionalMin !== 'number' || !Number.isInteger(institutionalMin)
+      || institutionalMin < 1 || institutionalMin > 500) {
+      throw new ToolArgsError(['institutional_rules.min_references debe estar entre 1 y 500.'])
+    }
+    if ((report.institutional_rules as Record<string, unknown>).reviewed_by_user !== true) {
+      throw new ToolArgsError(['La norma institucional requiere revisión del usuario.'])
+    }
+    if (citedKeys.size < institutionalMin) {
+      throw new ToolArgsError(['La institución exige ' + String(institutionalMin)
+        + ' referencias distintas citadas; hay ' + String(citedKeys.size) + '. No inventes fuentes.'])
+    }
+  }
   const quality = report.quality_profile ?? 'professional'
   if (quality !== 'professional' && quality !== 'educational_brief') {
     throw new ToolArgsError(['quality_profile debe ser professional o educational_brief.'])
@@ -112,37 +143,44 @@ export function validateResearchPublication(input: unknown): Report {
     }
   } else {
     const type = report.document_type
-    if (type === undefined || type === 'brief') {
+    if (typeof type !== 'string' || type === 'brief') {
       throw new ToolArgsError(['No publiques una investigación profesional como brief. Identifica el tipo de estudio y desarrolla un manuscrito completo.'])
     }
+    // The 15-source editorial floor remains distinct from nonbinding degree-specific guidance.
     const minima: Record<string, readonly [number, number]> = {
       narrative_review: [2400, 8], systematic_review: [3000, 10],
       original_research: [1500, 8], journal_manuscript: [1500, 8],
       thesis: [8000, 15], monograph: [4000, 12],
       research_protocol: [1800, 8], policy_report: [1800, 8],
     }
-    const thresholds = minima[String(type)]
+    const thresholds = minima[type]
     if (thresholds) {
       const count = (report.sections as Array<{ text: string }>).reduce(
         (total, section) => total + (section.text.match(/[\p{L}\p{N}_]+/gu) ?? []).length, 0)
       if (count < thresholds[0] || citedKeys.size < thresholds[1]) {
-        throw new ToolArgsError(['Investigación insuficiente: ' + count + ' palabras y '
-          + citedKeys.size + ' referencias citadas. Estándar editorial interno para '
-          + type + ': ' + thresholds[0] + ' palabras y ' + thresholds[1]
+        throw new ToolArgsError(['Investigación insuficiente: ' + String(count) + ' palabras y '
+          + String(citedKeys.size) + ' referencias citadas. Estándar editorial interno para '
+          + type + ': ' + String(thresholds[0]) + ' palabras y ' + String(thresholds[1])
           + ' fuentes. Amplía la evidencia; no rellenes con texto artificial.'])
       }
     }
     if (['narrative_review', 'systematic_review', 'original_research',
-      'journal_manuscript', 'thesis', 'monograph'].includes(String(type))
+      'journal_manuscript', 'thesis', 'monograph'].includes(type)
       && !(Array.isArray(report.tables) && report.tables.length > 0)
       && !(Array.isArray(report.charts) && report.charts.length > 0)) {
       throw new ToolArgsError(['Informe profesional sin tabla de evidencia ni figura documentada.'])
     }
   }
-  if (report.style !== undefined && !['apa', 'apa7', 'vancouver', 'ama'].includes(String(report.style))) {
+  if (report.visual_preference !== undefined && (typeof report.visual_preference !== 'string'
+    || !['standard', 'premium'].includes(report.visual_preference))) {
+    throw new ToolArgsError(['visual_preference debe ser standard o premium.'])
+  }
+  if (report.style !== undefined && (typeof report.style !== 'string'
+    || !['apa', 'apa7', 'vancouver', 'ama'].includes(report.style))) {
     throw new ToolArgsError(['Estilo de citas inválido: APA 7, Vancouver o AMA preliminar.'])
   }
-  if (report.presentation !== undefined && !['academic', 'journal', 'editorial', 'hybrid'].includes(String(report.presentation))) {
+  if (report.presentation !== undefined && (typeof report.presentation !== 'string'
+    || !['academic', 'journal', 'editorial', 'hybrid'].includes(report.presentation))) {
     throw new ToolArgsError(['Presentación inválida: academic, journal, editorial o hybrid.'])
   }
   const designPresets = ['auto', 'academic_classic', 'editorial_navy', 'clinical_teal',
@@ -157,17 +195,18 @@ export function validateResearchPublication(input: unknown): Report {
     || (typeof report.journal_requirements === 'object' && report.journal_requirements !== null
       && !Array.isArray(report.journal_requirements)
       && typeof (report.journal_requirements as Record<string, unknown>).journal === 'string')
-  const presentation = report.presentation ?? (journalMode ? 'journal' : quality === 'professional' ? 'hybrid' : 'academic')
-  if (['academic', 'journal'].includes(String(presentation)) && report.design_preset !== undefined
+  const presentation = typeof report.presentation === 'string'
+    ? report.presentation : journalMode ? 'journal' : quality === 'professional' ? 'hybrid' : 'academic'
+  if (['academic', 'journal'].includes(presentation) && report.design_preset !== undefined
     && report.design_preset !== 'auto' && report.design_preset !== 'academic_classic') {
     throw new ToolArgsError(['Los modos academic y journal no admiten una portada decorativa.'])
   }
-  if (!['academic', 'journal'].includes(String(presentation)) && report.design_preset === 'academic_classic') {
+  if (!['academic', 'journal'].includes(presentation) && report.design_preset === 'academic_classic') {
     throw new ToolArgsError(['academic_classic requiere presentación academic o journal.'])
   }
   if (report.document_type !== undefined && !['brief', 'monograph', 'research_protocol',
     'narrative_review', 'systematic_review', 'original_research', 'thesis',
-    'journal_manuscript', 'policy_report'].includes(String(report.document_type))) {
+    'journal_manuscript', 'policy_report'].includes(typeof report.document_type === 'string' ? report.document_type : '')) {
     throw new ToolArgsError(['Tipo de investigación no reconocido.'])
   }
   if (report.page_plan !== undefined) {
@@ -208,7 +247,7 @@ function findPublisher(): string {
   const candidates = [
     ...(override ? [resolve(override)] : []),
     join(process.cwd(), 'scripts', file),
-    ...[1, 2, 3, 4, 5, 6].map(level => resolve(root, ...Array(level).fill('..'), 'scripts', file)),
+    ...[1, 2, 3, 4, 5, 6].map(level => resolve(root, ...Array.from({ length: level }, () => '..'), 'scripts', file)),
   ]
   const script = candidates.find(path => existsSync(path) && statSync(path).isFile())
   if (script === undefined) throw new Error('No se encontró scripts/phoenix-research-publisher.py en el runtime de Phoenix.')
@@ -222,13 +261,31 @@ type PublisherOutcome = {
   files: { docx: string; pdf: string; html: string }
   source_count: number
   source_verification: string
-  pagination?: { pdf_pages: number; requested_pages: number | null; scope: string; target_met: boolean | null }
+  pagination?: {
+    pdf_pages: number
+    requested_pages: number | null
+    scope: string
+    target_met: boolean | null
+  }
   warnings?: string[]
+  advisory_warnings?: string[]
+  reference_guidance?: {
+    level: string
+    minimum: number
+    suggested_maximum: number | null
+    actual_distinct_cited: number
+    policy: string
+    below_guidance: boolean
+  }
   presentation?: string
   design_preset?: string
   document_type?: string
-  quality?: { required_sections_checked: boolean; submission_certified: boolean;
-    bibliographic_metadata_network_verified: boolean; visual_page_review: string }
+  quality?: {
+    required_sections_checked: boolean
+    submission_certified: boolean
+    bibliographic_metadata_network_verified: boolean
+    visual_page_review: string
+  }
 }
 
 async function runAttempt(bin: string, args: string[], payload: string, signal: AbortSignal): Promise<PublisherOutcome> {
@@ -241,19 +298,20 @@ async function runAttempt(bin: string, args: string[], payload: string, signal: 
     child.stdout.on('data', (chunk: string) => { output = (output + chunk).slice(-16000) })
     child.stderr.on('data', (chunk: string) => { errors = (errors + chunk).slice(-12000) })
     child.on('error', rejectOutcome)
-    child.on('close', code => {
+    child.on('close', (code) => {
       if (code !== 0) {
         rejectOutcome(new Error((errors.trim() || 'RESEARCH_PUBLISH_FAILED') + ' (exit ' + String(code) + ')'))
         return
       }
       try {
         const value = JSON.parse(output.trim()) as PublisherOutcome
-        if ((value.state !== 'REPORT_READY' && value.state !== 'REPORT_NEEDS_REVISION') || !/^[0-9a-f]{16}$/u.test(value.report_id) || typeof value.files !== 'object') {
+        if ((value.state !== 'REPORT_READY' && value.state !== 'REPORT_NEEDS_REVISION')
+          || !/^[0-9a-f]{16}$/u.test(value.report_id) || typeof value.files !== 'object') {
           throw new Error('La respuesta del publicador no confirmó un documento listo.')
         }
         resolveOutcome(value)
       } catch (error) {
-        rejectOutcome(error)
+        rejectOutcome(error instanceof Error ? error : new Error(String(error)))
       }
     })
     child.stdin.on('error', () => { /* Child may have exited after a failed import. */ })
@@ -265,6 +323,9 @@ async function runAttempt(bin: string, args: string[], payload: string, signal: 
  * Generate real DOCX, PDF, and readable HTML using the pinned local Python
  * publisher. Prefer installed Python packages; allow uv dependency bootstrap
  * only when the current environment lacks them.
+ * @param report - validated manuscript and sourced visuals.
+ * @param signal - cancellation signal for the publisher.
+ * @returns verified output paths and publication status.
  */
 export async function publishResearchReport(report: Report, signal: AbortSignal): Promise<PublisherOutcome> {
   validateResearchPublication(report)
@@ -297,11 +358,14 @@ export async function publishResearchReport(report: Report, signal: AbortSignal)
   throw new Error('No fue posible publicar el documento. ' + problems.join('; '))
 }
 
-/** Model-facing academic report publication with actual file evidence. */
+/**
+ * Register a model-facing tool producing real research artifacts.
+ * @returns governed publication tool with file receipts.
+ */
 export function createResearchPublishTool(): ToolDefinition {
   return defineTool({
     name: 'phoenix_research_publish',
-    description: 'PRECONDICIÓN: NO llames esta herramienta sin report.references con fuentes reales HTTPS y metadatos {key,authors,year,title,url}; cada fuente usada debe citarse como [@key] en sections[].text. Si faltan fuentes, INVESTIGA primero mediante research_search/web_search, comprueba las URL y usa phoenix_research_verify_sources para verificar metadatos disponibles. Nunca inventes referencias para pasar la validación. RECHAZA automáticamente textos cortos como informes científicos completos; sigue investigando hasta subsanar todas las deficiencias. El perfil professional predeterminado exige contenido profundo, referencias citadas y visuales sustentados; para un resumen corto debe existir petición explícita de brief y quality_profile=educational_brief. Convierte todos los grupos [@a; @b] a citas finales sin marcadores. PUBLICA el manuscrito COMPLETO de una investigación en DOCX editable, PDF real y HTML. PARA TESIS, MONOGRAFÍAS, ANTEPROYECTOS O ARTÍCULOS primero ejecuta phoenix_research_plan, recopila una sola vez los datos institucionales faltantes, revisa manual/plantilla si fue suministrado, verifica fuentes y después redacta secciones completas: NO generes 5 páginas cuando se pidieron 80. DISEÑO: usa design_preset="auto" (recomendado) o cualquiera de los once estilos: editorial_navy, clinical_teal, executive_amber, minimal_graphite, creative_coral, journal_ink, research_violet, biotech_green, ocean_blue, terracotta_report, clinical_white. Los documentos para lectores NO muestran etiquetas Phoenix Research Studio ni Edición profesional. academic_classic solo con presentation=academic y respetando las normas académicas, sin adorno. Nunca inventes logos, fotografías, números ni citas para mejorar la apariencia. report={title,design_preset?:"auto"|"editorial_navy"|"clinical_teal"|"executive_amber"|"minimal_graphite"|"creative_coral"|"journal_ink"|"research_violet"|"biotech_green"|"ocean_blue"|"terracotta_report"|"clinical_white"|"academic_classic",document_type:"thesis"|"monograph"|"research_protocol"|"journal_manuscript"|"original_research"|"narrative_review"|"systematic_review"|"brief"|"policy_report",style:"apa7"|"vancouver"|"ama",presentation:"academic"|"journal"|"hybrid"|"editorial",paper:"A4"|"Letter",cover:{institution,faculty,department,degree,course,course_code,lecturer,advisor,city,country,date,authors:[{name,student_id?,affiliation?,orcid?}],logo_path?},front_matter:{approval?,originality?,dedication?,acknowledgements?,abstract_en?,key_points?:string[]},table_of_contents?:boolean,page_plan?:{target_pages:number,scope:"all"|"body"},institutional_rules?:{reviewed_by_user:true,margin_cm?,font_family?,line_spacing?},journal_requirements?:{journal,max_words?,max_abstract_words?,max_references?,max_tables_figures?,require_key_points?},keywords?:string[],sections:[{kind,heading,text:"Texto científico profundo con [@fuente1]"}],references:[{key,authors,year,title,journal,url,doi?}],tables?:[{title,columns,rows,source_key,note?,units?,sample_size?,method?,statistical_note?,abbreviations?}],charts?:[{type:"bar"|"horizontal_bar"|"line"|"scatter"|"forest",title,labels,values,x_values?,ci_low?,ci_high?,interval_label?,x_label?,y_label?,units?,sample_size?,method?,statistical_note?,abbreviations?,alt_text?,source_key}]}. Entrega capítulos académicos ordenados: problema, objetivos, marco teórico, metodología, resultados y discusión si hubo datos reales, conclusiones, recomendaciones y referencias. Un protocolo usa ética y RESULTADOS ESPERADOS, nunca resultados inventados. Incluir solo originales, aprobaciones o dedicatorias facilitados por el usuario. El índice Word es un campo TOC que Word actualiza al abrir; PDF tiene índice paginado. Verifica la paginación REAL después de maquetar; receipt.pagination.pdf_pages compara contra target_pages y warnings informa si falta extensión: NO falsifiques ni rellenes páginas. Los estilos bibliográficos completos de cada revista y la autenticidad de metadatos no están certificados, revisar antes de entregar o enviar. Artículo científico es TIPO de documento, independiente de APA7/Vancouver. Antes de reclamar fuentes verificadas usa phoenix_research_verify_sources (Crossref/Europe PMC); lee guías con phoenix_research_institution_rules y consulta límites iniciales de revista con phoenix_research_journal_profile. Todas las tablas y figuras deben llevar títulos numerados, fuente verificable, unidades, tamaño muestral, métodos y notas estadísticas/intervalos cuando se conozcan, sin fabricar datos. presentation=journal crea manuscrito austero sin ornamentos, distinto del PDF de lectura hybrid. El editor no certifica AMA completo ni una revista; distribución por correo y Telegram sigue siendo una operación distinta y autorizada.',
+    description: 'PRECONDICIÓN: NO llames esta herramienta sin report.references con fuentes reales HTTPS y metadatos {key,authors,year,title,url}; cada fuente usada debe citarse como [@key] en sections[].text. Si faltan fuentes, INVESTIGA primero mediante research_search/web_search, comprueba las URL y usa phoenix_research_verify_sources para verificar metadatos disponibles. Nunca inventes referencias para pasar la validación. RECHAZA automáticamente textos cortos como informes científicos completos; sigue investigando hasta subsanar todas las deficiencias. El perfil professional predeterminado exige contenido profundo, referencias citadas y visuales sustentados; para un resumen corto debe existir petición explícita de brief y quality_profile=educational_brief. Convierte todos los grupos [@a; @b] a citas finales sin marcadores. PUBLICA el manuscrito COMPLETO de una investigación en DOCX editable, PDF real y HTML. PARA TESIS: indica thesis_level=bachelors|masters|doctorate y estilo APA 7/Vancouver. Orientación no universal de fuentes distintas citadas: 20-40 licenciatura, 40-80 maestría y 100+ doctorado; reportar insuficiencia como aviso, nunca inventar fuentes. Manual institucional revisado prevalece (institutional_rules.min_references validado). Mantén gráficos elegantes con títulos, unidades y fuentes verificables; respetar requisitos formales, sin fabricar visuales. PARA TESIS, MONOGRAFÍAS, ANTEPROYECTOS O ARTÍCULOS primero ejecuta phoenix_research_plan, recopila una sola vez los datos institucionales faltantes, revisa manual/plantilla si fue suministrado, verifica fuentes y después redacta secciones completas: NO generes 5 páginas cuando se pidieron 80. DISEÑO: usa design_preset="auto" (recomendado) o cualquiera de los once estilos: editorial_navy, clinical_teal, executive_amber, minimal_graphite, creative_coral, journal_ink, research_violet, biotech_green, ocean_blue, terracotta_report, clinical_white. Los documentos para lectores NO muestran etiquetas Phoenix Research Studio ni Edición profesional. academic_classic solo con presentation=academic y respetando las normas académicas, sin adorno. Nunca inventes logos, fotografías, números ni citas para mejorar la apariencia. report={title,visual_preference?:"standard"|"premium",design_preset?:"auto"|"editorial_navy"|"clinical_teal"|"executive_amber"|"minimal_graphite"|"creative_coral"|"journal_ink"|"research_violet"|"biotech_green"|"ocean_blue"|"terracotta_report"|"clinical_white"|"academic_classic",thesis_level?:"bachelors"|"masters"|"doctorate",document_type:"thesis"|"monograph"|"research_protocol"|"journal_manuscript"|"original_research"|"narrative_review"|"systematic_review"|"brief"|"policy_report",style:"apa7"|"vancouver"|"ama",presentation:"academic"|"journal"|"hybrid"|"editorial",paper:"A4"|"Letter",cover:{institution,faculty,department,degree,course,course_code,lecturer,advisor,city,country,date,authors:[{name,student_id?,affiliation?,orcid?}],logo_path?},front_matter:{approval?,originality?,dedication?,acknowledgements?,abstract_en?,key_points?:string[]},table_of_contents?:boolean,page_plan?:{target_pages:number,scope:"all"|"body"},institutional_rules?:{reviewed_by_user:true,min_references?,margin_cm?,font_family?,line_spacing?},journal_requirements?:{journal,max_words?,max_abstract_words?,max_references?,max_tables_figures?,require_key_points?},keywords?:string[],sections:[{kind,heading,text:"Texto científico profundo con [@fuente1]"}],references:[{key,authors,year,title,journal,url,doi?}],tables?:[{title,columns,rows,source_key,note?,units?,sample_size?,method?,statistical_note?,abbreviations?}],charts?:[{type:"bar"|"horizontal_bar"|"line"|"scatter"|"forest",title,labels,values,x_values?,ci_low?,ci_high?,interval_label?,x_label?,y_label?,units?,sample_size?,method?,statistical_note?,abbreviations?,alt_text?,source_key}]}. Entrega capítulos académicos ordenados: problema, objetivos, marco teórico, metodología, resultados y discusión si hubo datos reales, conclusiones, recomendaciones y referencias. Un protocolo usa ética y RESULTADOS ESPERADOS, nunca resultados inventados. Incluir solo originales, aprobaciones o dedicatorias facilitados por el usuario. El índice Word es un campo TOC que Word actualiza al abrir; PDF tiene índice paginado. Verifica la paginación REAL después de maquetar; receipt.pagination.pdf_pages compara contra target_pages y warnings informa si falta extensión: NO falsifiques ni rellenes páginas. Los estilos bibliográficos completos de cada revista y la autenticidad de metadatos no están certificados, revisar antes de entregar o enviar. Artículo científico es TIPO de documento, independiente de APA7/Vancouver. Antes de reclamar fuentes verificadas usa phoenix_research_verify_sources (Crossref/Europe PMC); lee guías con phoenix_research_institution_rules y consulta límites iniciales de revista con phoenix_research_journal_profile. Todas las tablas y figuras deben llevar títulos numerados, fuente verificable, unidades, tamaño muestral, métodos y notas estadísticas/intervalos cuando se conozcan, sin fabricar datos. presentation=journal crea manuscrito austero sin ornamentos, distinto del PDF de lectura hybrid. El editor no certifica AMA completo ni una revista; distribución por correo y Telegram sigue siendo una operación distinta y autorizada.',
     timeoutMs: 240000,
     parameters: {
       report: {
@@ -317,10 +381,13 @@ export function createResearchPublishTool(): ToolDefinition {
           ? (value.state === 'REPORT_READY' ? 'Informe completo para revisión académica. Word: ' : 'Informe generado, PERO AÚN NO COMPLETO: la paginación requiere ampliación o revisión. Word: ') + String((value.files as Record<string, unknown>).docx)
             + '; PDF: ' + String((value.files as Record<string, unknown>).pdf)
             + '; vista HTML: ' + String((value.files as Record<string, unknown>).html)
-            + '. Edición: ' + String(value.presentation ?? 'academic')
-             + '; diseño: ' + String(value.design_preset ?? 'academic_classic')
-            + '; páginas PDF: ' + String((value.pagination as Record<string, unknown> | undefined)?.pdf_pages ?? 'sin verificar')
+            + '. Edición: ' + (typeof value.presentation === 'string' ? value.presentation : 'academic')
+            + '; diseño: ' + (typeof value.design_preset === 'string' ? value.design_preset : 'academic_classic')
+            + '; páginas PDF: ' + (typeof (value.pagination as Record<string, unknown> | undefined)?.pdf_pages === 'number'
+              ? String((value.pagination as { pdf_pages: number }).pdf_pages) : 'sin verificar')
             + '; observaciones: ' + (Array.isArray(value.warnings) ? value.warnings.map(String).join('; ') : 'ninguna')
+            + '; orientación de referencias: ' + (Array.isArray(value.advisory_warnings)
+          ? value.advisory_warnings.map(String).join('; ') : 'sin advertencias')
             + '. Estas son rutas locales de archivos, NO enlaces web. Ábrelos desde los archivos generados al pie del turno en Phoenix, no como una URL del navegador. No se ha certificado la veracidad de las fuentes ni el cumplimiento específico de una revista.'
           : 'El informe no alcanzó estado REPORT_READY.',
       }],
