@@ -146,7 +146,8 @@ export function validateResearchPublication(input: unknown): Report {
     if (report.style !== 'apa' && report.style !== 'apa7' && report.style !== 'vancouver') {
       throw new ToolArgsError(['Una tesis debe indicar explícitamente style=apa7 o style=vancouver.'])
     }
-    if (report.thesis_level !== undefined && !['bachelors', 'masters', 'doctorate'].includes(String(report.thesis_level))) {
+    if (report.thesis_level !== undefined && (typeof report.thesis_level !== 'string'
+      || !['bachelors', 'masters', 'doctorate'].includes(report.thesis_level))) {
       throw new ToolArgsError(['thesis_level debe ser bachelors, masters o doctorate.'])
     }
   }
@@ -234,8 +235,14 @@ type PublisherOutcome = {
   pagination?: { pdf_pages: number; requested_pages: number | null; scope: string; target_met: boolean | null }
   warnings?: string[]
   advisories?: string[]
-  reference_review?: { level: string; advisory_min: number; advisory_max: number | null;
-    cited_count: number; institutional_rule_verified: boolean; meets_advisory: boolean } | null
+  reference_review?: {
+    level: string
+    advisory_min: number
+    advisory_max: number | null
+    cited_count: number
+    institutional_rule_verified: boolean
+    meets_advisory: boolean
+  } | null
   presentation?: string
   design_preset?: string
   document_type?: string
@@ -330,7 +337,7 @@ export function createResearchPublishTool(): ToolDefinition {
             + '; PDF: ' + String((value.files as Record<string, unknown>).pdf)
             + '; vista HTML: ' + String((value.files as Record<string, unknown>).html)
             + '. Edición: ' + String(value.presentation ?? 'academic')
-             + '; diseño: ' + String(value.design_preset ?? 'academic_classic')
+            + '; diseño: ' + String(value.design_preset ?? 'academic_classic')
             + '; páginas PDF: ' + String((value.pagination as Record<string, unknown> | undefined)?.pdf_pages ?? 'sin verificar')
             + '; observaciones: ' + (Array.isArray(value.warnings) ? value.warnings.map(String).join('; ') : 'ninguna')
             + '; orientación bibliográfica: ' + (Array.isArray(value.advisories)
