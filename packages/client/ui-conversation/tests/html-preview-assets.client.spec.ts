@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { hasExecutableHtmlBehavior, hasExternalImageReferences, inlineBundledImages } from '../src/client/chat/html-preview-assets.ts'
+import { hasExecutableHtmlBehavior, hasExternalImageReferences, inlineBundledImages, isolatedHtmlPreviewWindow } from '../src/client/chat/html-preview-assets.ts'
 
 describe('HARDNESS packaged HTML image assets', () => {
   const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4//8/AwAI/AL+e6I6JwAAAABJRU5ErkJggg=='
@@ -64,4 +64,25 @@ describe('HARDNESS packaged HTML image assets', () => {
     expect(hasExecutableHtmlBehavior('<button onclick="run()">Abrir</button>')).toBe(true)
     expect(hasExecutableHtmlBehavior('<a href="javascript:run()">Abrir</a>')).toBe(true)
   })
+  it('inlines a standalone CSS file even when no raster image is present', () => {
+    const page = '<link rel="stylesheet" href="theme.css"><p class="title">Kira</p>'
+    const rendered = inlineBundledImages('index.html', page, {
+      'theme.css': '.title { color: #a64c2e }',
+    })
+    expect(rendered).toContain('<style data-phoenix-bundled-css="true">')
+    expect(rendered).toContain('color: #a64c2e')
+  })
+
+  it('opens untrusted HTML only inside an opaque-origin iframe in the standalone URL', () => {
+    const payload = '<h1>Kira</h1><script>window.parent.alert(1)</script>'
+    const windowHtml = isolatedHtmlPreviewWindow(payload, 'Sitio Kira', true)
+    expect(windowHtml).toContain('srcdoc="&lt;h1&gt;Kira&lt;/h1&gt;')
+    expect(windowHtml).toContain('sandbox="allow-scripts"')
+    expect(windowHtml).not.toContain('allow-same-origin')
+    expect(windowHtml).toContain('connect-src \\'none\\'')
+    expect(isolatedHtmlPreviewWindow(payload, 'Sitio Kira', false)).toContain('sandbox=""')
+    expect(isolatedHtmlPreviewWindow('<iframe src="x"></iframe>', 'A "B"', true))
+      .toContain('title="A &quot;B&quot;"')
+  })
+
 })
