@@ -1,4 +1,5 @@
 import type { BinanceCandle, BinancePaperAccount, BinancePaperBroker, BinancePaperTrade } from './binance-paper.ts'
+import { binanceKnownAssetRisk } from './binance-asset-risk.ts'
 
 /** Supported closed-candle market regimes for adaptive paper trading. */
 export type BinanceMarketRegime = 'uptrend' | 'downtrend' | 'range'
@@ -209,6 +210,10 @@ export async function runBinanceAdaptiveCycle(
     const signals: BinanceAdaptiveSignal[] = []
     let failedSymbols = 0
     for (const symbol of symbols) {
+      if (binanceKnownAssetRisk(symbol)) {
+        signals.push(hold(symbol, 'Activo excluido por riesgo Binance conocido'))
+        continue
+      }
       try {
         const bars = await broker.candles(symbol, interval, 80)
         signals.push(evaluateBinanceAdaptiveSignal(symbol, bars, intervalMs, now))
@@ -229,7 +234,8 @@ export async function runBinanceAdaptiveCycle(
       const plan = position.exitPlan
       const mark = position.marketPriceUsdt
       if (plan === undefined) return []
-      const crossed = mark <= plan.stopLossPrice ? 'paper-stop-loss'
+      const crossed = binanceKnownAssetRisk(position.symbol) ? 'binance-asset-risk'
+        : mark <= plan.stopLossPrice ? 'paper-stop-loss'
         : mark >= plan.tp2Price ? 'paper-tp2'
           : !plan.tp1Taken && mark >= plan.tp1Price ? 'paper-tp1'
             : undefined
@@ -242,6 +248,7 @@ export async function runBinanceAdaptiveCycle(
       (a.reason === 'paper-stop-loss' ? -1 : 0) - (b.reason === 'paper-stop-loss' ? -1 : 0))[0]
     const exposure = account.positions.reduce((sum, position) => sum + position.marketValueUsdt, 0)
     const candidate = sorted.find(signal => signal.action === 'buy'
+      && !binanceKnownAssetRisk(signal.symbol)
       && signal.score >= MIN_AUTONOMOUS_SCORE
       && !account.positions.some(position => position.symbol === signal.symbol))
     const budget = Math.min(account.equityUsdt * MAX_POSITION_FRACTION,
