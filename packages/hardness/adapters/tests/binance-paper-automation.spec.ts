@@ -64,6 +64,47 @@ describe('Binance Host PAPER automation', () => {
     expect((await worker.dashboard()).enabled).toBe(false)
   })
 
+  it('panic stop sells every open PAPER position and disables future cycles', async () => {
+    const { worker, paper } = setup()
+    await worker.start({ symbols: ['BTCUSDT'], pollMs: 60_000 })
+    expect((await paper.account()).positions).toHaveLength(1)
+    await worker.stopAndLiquidate()
+    const snapshot = await worker.dashboard()
+    expect(snapshot.enabled).toBe(false)
+    expect(snapshot.account.positions).toHaveLength(0)
+    expect(snapshot.recentTrades.map(item => item.side)).toEqual(['buy', 'sell'])
+    expect(snapshot.recentTrades[1]?.reason).toBe('user-stop-liquidate-paper')
+    await worker.step()
+    expect((await paper.account()).tradeCount).toBe(2)
+  })
+
+  it('panic stop never reports liquidation success when public sell quotes fail', async () => {
+    let failSell = false
+    const feed: BinancePublicMarket = {
+      async price() { if (failSell) throw new Error('price feed down'); return 100 },
+      async prices(symbols) { return Object.fromEntries(symbols.map(symbol => [symbol, 100])) },
+      async candles() { return breakoutHistory() },
+    }
+    const { worker, paper } = setup(feed)
+    await worker.start({ symbols: ['ETHUSDT'] })
+    failSell = true
+    await expect(worker.stopAndLiquidate()).rejects.toThrow('incomplete')
+    const snapshot = await worker.dashboard()
+    expect(snapshot.enabled).toBe(false)
+    expect(snapshot.account.positions).toHaveLength(1)
+    expect(snapshot.lastError).toContain('siguen abiertas')
+    expect(snapshot.recentTrades).toHaveLength(1)
+  })
+
+  it('risk-blocks monitored pinned pairs, including in fixed-list mode', async () => {
+    const { worker, paper } = setup()
+    await worker.start({ symbols: ['BICOUSDT', 'BTCUSDT'], autoDiscover: false })
+    const snapshot = await worker.dashboard()
+    expect(snapshot.lastScannedSymbols).toEqual(['BTCUSDT'])
+    expect(snapshot.lastDiscoveryIssue).toContain('riesgo')
+    expect((await paper.account()).positions.every(p => p.symbol !== 'BICOUSDT')).toBe(true)
+  })
+
   it('prevents duplicate concurrent virtual entries', async () => {
     const { worker, paper } = setup()
     await worker.start({ symbols: ['BTCUSDT'] })
