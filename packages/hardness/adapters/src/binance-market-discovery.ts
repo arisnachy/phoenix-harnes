@@ -1,3 +1,5 @@
+import { assessBinanceSpotSymbol } from './binance-asset-risk.ts'
+
 /** Public-only Binance Spot universe discovery: no API keys, wallets or orders. */
 export interface BinanceMarketCandidate {
   readonly symbol: string
@@ -6,9 +8,9 @@ export interface BinanceMarketCandidate {
 
 /** Strictly filter active, liquid Spot USDT pairs. No fabricated prices. */
 export function selectBinanceSpotUniverse(
-  exchangeInfo: unknown, ticker24h: unknown, limit = 120,
+  exchangeInfo: unknown, ticker24h: unknown, limit = 1000,
 ): readonly string[] {
-  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 200
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 1000
     || typeof exchangeInfo !== 'object' || exchangeInfo === null
     || !('symbols' in exchangeInfo) || !Array.isArray(exchangeInfo.symbols)
     || !Array.isArray(ticker24h)) throw new Error('Invalid Binance universe response')
@@ -16,9 +18,7 @@ export function selectBinanceSpotUniverse(
   for (const raw of exchangeInfo.symbols) {
     if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) continue
     const row = raw as Record<string, unknown>
-    if (typeof row.symbol !== 'string' || !/^[A-Z0-9]{3,16}USDT$/u.test(row.symbol)
-      || row.status !== 'TRADING' || row.quoteAsset !== 'USDT'
-      || row.isSpotTradingAllowed === false || /(?:UP|DOWN|BULL|BEAR)USDT$/u.test(row.symbol)) continue
+    if (assessBinanceSpotSymbol(row) !== undefined) continue
     allowed.add(row.symbol)
   }
   const candidates: BinanceMarketCandidate[] = []
