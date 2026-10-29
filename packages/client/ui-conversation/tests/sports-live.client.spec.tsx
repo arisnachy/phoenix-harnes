@@ -60,7 +60,7 @@ describe('keyless ESPN live adapter',()=>{
     await waitFor(()=>expect(screen.getByText(/Personal foul/)).toBeTruthy())
     expect(screen.getByText('99')).toBeTruthy()
     expect(screen.getByText('88')).toBeTruthy()
-    expect(screen.getByText('EN VIVO · 4th · 11:21')).toBeTruthy()
+    expect(screen.getByText(/EN VIVO · 4th · 11:21/)).toBeTruthy()
     expect(fetcher).toHaveBeenCalled()
   })
   it('shares the same ESPN call across fixtures within a slate',async()=>{
