@@ -536,7 +536,7 @@ describe('HARDNESS inline artifact renderer', () => {
     expect(frame.getAttribute('sandbox')).toContain('allow-scripts')
     expect(frame.getAttribute('sandbox')).toContain('allow-forms')
     expect(frame.getAttribute('sandbox')).not.toContain('allow-same-origin')
-    expect(screen.getByRole('link', { name: 'Open page' }).getAttribute('href')).toBe('https://example.test/app')
+    expect(screen.getByRole('link', { name: 'Abrir página en otra pestaña' }).getAttribute('href')).toBe('https://example.test/app')
   })
 
   it('renders HTML with only the filename and content, without preview chrome', () => {
