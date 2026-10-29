@@ -838,7 +838,7 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
           para el proceso de PHOENIX; si continúa roto, revisa el error de arranque del Host.
         </p>
       ) : null}
-      {missingOAuthFlow ? (
+      {missingOAuthFlow && definition.id !== 'binance' ? (
         <p role="alert" className={styles['advancedHint']}>
           El Host solicita autorización, pero el plugin MCP no registró su método OAuth.
           Usa Reparar para reconstruir el conector desde su origen oficial, sin eliminar las credenciales existentes.
