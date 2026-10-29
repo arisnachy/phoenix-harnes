@@ -279,9 +279,21 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   const oauthClientSecretRef = config.transport === 'streamable-http' && config.oauthClientSecretRef !== undefined
     ? credentialRef(config.oauthClientSecretRef)
     : undefined
-  const resolveFixedOAuthClientInformation = oauthClientIdRef === undefined
-    ? undefined
-    : async () => {
+  // Binance Agent OS advertises Client ID Metadata Documents (CIMD), not DCR.
+  // This public identity belongs to PHOENIX and is limited to the exact
+  // pinned official MCP URL. Never impersonate Codex/Claude with their IDs.
+  const binanceAgenticCimd = config.transport === 'streamable-http'
+    && config.serverName === 'binance-agent-os'
+    && config.url === 'https://agent.binance.com/mcp/agentic'
+    && config.oauth !== false
+    && oauthClientIdRef === undefined && oauthClientSecretRef === undefined
+  const resolveFixedOAuthClientInformation = binanceAgenticCimd
+    ? async () => ({
+        client_id: 'https://cdn.jsdelivr.net/gh/arisnachy/phoenix-harnes@main/website/public/oauth/binance-agentic-client.json',
+      })
+    : oauthClientIdRef === undefined
+      ? undefined
+      : async () => {
       if (credentials === undefined) {
         throw Object.assign(new Error(`mcp-client(${config.serverName}): credential service unavailable`), { status: 401 })
       }
