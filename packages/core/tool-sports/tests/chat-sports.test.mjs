@@ -123,7 +123,9 @@ test('ESPN Core odds references are followed only for trusted https sports.core.
   }
   const odds=await marketOdds('baseball_mlb','h2h',{},fetcher)
   assert.equal(odds.length,2)
-  assert.equal(queries.length,3)
+  assert.ok(queries.length>=3)
+  assert.ok(queries.some(url=>url.includes('/odds/1')))
+  assert.ok(queries.every(url=>!url.includes('evil.example')))
 })
 test('MLB unavailable falls back to ESPN free scoreboard instead of failing the chat',async()=>{
   const urls=[]
