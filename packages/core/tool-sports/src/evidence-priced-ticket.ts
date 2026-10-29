@@ -230,7 +230,7 @@ export async function evidencePricedTicket(
   const card:ChatBlock={...priced.card,props:{
     ...priced.card.props,legs,requestedLegs:count,
     subtitle:'Cuotas verificadas · '+best.book+' · análisis de forma con datos ESPN',
-    note:'SIMULACIÓN, NO APUESTA REAL. '+(marketPreference==='double_chance'
+    note:'COTIZACIÓN VERIFICADA, NO APUESTA ACEPTADA POR LA CASA. '+(marketPreference==='double_chance'
       ?'Fútbol: la doble oportunidad cubre empate (1X/X2), NO asegura ganar. ':'')+
       'Formas y descanso históricos NO son probabilidades calibradas. Lesiones, alineaciones y disponibilidad exacta en la banca pendientes; cuotas variables. '+priced.warning,
     askPrompt:'Kira, comprueba lesiones, titulares, estadísticas específicas, correlación y vigencia de las '+count+' cuotas antes de recomendar este ticket.',
