@@ -16,13 +16,14 @@ export interface EspnMarketQuote {
   timeIso: string
   updatedAt: string
 }
-type OddsSide = { moneyLine?: number | string; moneyline?: number | string; spreadOdds?: number|string }
+type OddsSide = { moneyLine?: number | string; moneyline?: number | string; spreadOdds?: number|string;
+  spread?:number|string;spreadValue?:number|string;pointSpread?:number|string }
 type EspnOdds = {
   provider?: { name?: string;displayName?: string;id?: string|number }
   details?: string
   homeTeamOdds?: OddsSide;awayTeamOdds?: OddsSide
   overOdds?: number|string;underOdds?: number|string
-  overUnder?: number|string
+  overUnder?: number|string;drawOdds?:number|string
   spread?: number|string
   lastUpdated?: string;lastUpdate?: string;updatedAt?: string
 }
@@ -81,7 +82,52 @@ export function normalizeEspnMoneylines(event:EEvent,oddEntries:EspnOdds[]):Espn
   }
   return result
 }
-/** Retrieve available, public ESPN pregame moneylines without a paid API key.
+/** Normalize only markets with explicit price, bookmaker and selection; never infer a spread side. */
+export function normalizeEspnMarkets(event:EEvent,odds:EspnOdds[]):EspnMarketQuote[]{
+  const money=normalizeEspnMoneylines(event,odds)
+  const comp=event.competitions?.[0]
+  const eventId=safeId(event.id)
+  const kickoff=Date.parse(event.date||'')
+  if(!comp||!eventId||!Number.isFinite(kickoff)||kickoff<=Date.now())return money
+  const home=comp.competitors?.find(x=>x.homeAway==='home')?.team
+  const away=comp.competitors?.find(x=>x.homeAway==='away')?.team
+  const homeName=home?.displayName||home?.name
+  const awayName=away?.displayName||away?.name
+  if(!homeName||!awayName)return money
+  const lines:EspnMarketQuote[]=[...money]
+  const number=(v:unknown):number|null=>{
+    if(v===null||v===undefined||v==='')return null
+    const n=Number(v)
+    return Number.isFinite(n)&&Math.abs(n)<=1000?n:null
+  }
+  for(const odd of odds.slice(0,5)){
+    const provider=odd.provider?.name||odd.provider?.displayName
+    if(!provider)continue
+    const name=str(provider)
+    const updatedAt=str(odd.lastUpdated||odd.lastUpdate||odd.updatedAt||'No indicada por ESPN')
+    const common={eventId,bookmaker:name,home:str(homeName),away:str(awayName),
+      time:localTime(event.date||''),timeIso:new Date(kickoff).toISOString(),updatedAt}
+    const total=number(odd.overUnder)
+    if(total!==null){
+      for(const [selection,oddsValue] of [['Over',odd.overOdds],['Under',odd.underOdds]] as const){
+        const price=americanToDecimal(oddsValue)
+        if(price!==null)lines.push({...common,market:'totals',selection,
+          point:total,price})
+      }
+    }
+    for(const [selection,side] of [[homeName,odd.homeTeamOdds],[awayName,odd.awayTeamOdds]] as const){
+      if(!side)continue
+      const point=number(side.spreadValue??side.pointSpread??side.spread)
+      const price=americanToDecimal(side.spreadOdds)
+      if(point!==null&&price!==null)lines.push({...common,market:'spreads',
+        selection:str(selection),point,price})
+    }
+    const draw=americanToDecimal(odd.drawOdds)
+    if(draw!==null)lines.push({...common,market:'h2h',selection:'Draw',point:null,price:draw})
+  }
+  return lines.slice(0,120)
+}
+/** Retrieve available, public ESPN pregame markets without a paid API key.
  * @param sportKey - ESPN-compatible sport key, mapped to a known league.
  * @param requestedMarkets - Requested market selection, limited to h2h until priced markets are validated.
  * @param getJSON - Validated fixed-host JSON fetcher provided by sports.ts.
@@ -92,13 +138,13 @@ export async function fetchPublicEspnOdds(
 ):Promise<EspnMarketQuote[]>{
   const route=slugs[sportKey]
   if(!route)return []
-  if(!requestedMarkets.split(',').includes('h2h'))return []
+  if(!requestedMarkets.split(',').some(m=>['h2h','totals','spreads'].includes(m)))return []
   const localDate=new Intl.DateTimeFormat('en-CA',{ timeZone:'America/Santo_Domingo',year:'numeric',month:'2-digit',day:'2-digit' }).format(new Date()).replaceAll('-','')
   const root='https://site.api.espn.com/apis/site/v2/sports/'+route[0]+'/'+route[1]+'/scoreboard?dates='+localDate
   const board=await getJSON<ESPNBoard>(root)
   if(!Array.isArray(board.events))throw new Error('ESPN devolvió un scoreboard sin eventos válidos')
   const quotes:EspnMarketQuote[]=[]
-  for(const event of board.events.slice(0,8)){
+  for(const event of board.events.slice(0,14)){
     const competition=event.competitions?.[0]
     if(!competition)continue
     let odds=list(competition.odds)
@@ -108,7 +154,7 @@ export async function fetchPublicEspnOdds(
       const url='https://sports.core.api.espn.com/v2/sports/'+route[0]+'/leagues/'+route[1]+'/events/'+eventId+'/competitions/'+competitionId+'/odds?limit=5'
       try{
         const data=await getJSON<unknown>(url)
-        odds=(Array.isArray(data)?list(data):isRecord(data)?list(data.items):[]).filter(x=>x.homeTeamOdds||x.awayTeamOdds)
+        odds=(Array.isArray(data)?list(data):isRecord(data)?list(data.items):[]).filter(x=>x.homeTeamOdds||x.awayTeamOdds||x.overOdds||x.underOdds||x.drawOdds)
         if(!odds.length&&isRecord(data)){
           const refs=Array.isArray(data.items)?data.items.filter(isRecord).slice(0,2):[]
           for(const ref of refs){
@@ -121,7 +167,7 @@ export async function fetchPublicEspnOdds(
         }
       }catch{ /* Missing Core odds must not hide the games or invent lines. */ }
     }
-    quotes.push(...normalizeEspnMoneylines(event,odds))
+    quotes.push(...normalizeEspnMarkets(event,odds).filter(q=>requestedMarkets.split(',').includes(q.market)))
   }
   return quotes.slice(0,100)
 }
