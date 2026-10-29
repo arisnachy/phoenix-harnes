@@ -138,8 +138,8 @@ export async function evidencePricedTicket(
         ...(quote.market==='double_chance'?{selection:quote.selection==='1X'
           ?'1X · Local o empate':'X2 · Visita o empate',
           market:'Doble oportunidad (1X/X2)',
-          rationale:(String(prior.rationale??'').slice(0,175)+
-            ' · Cobertura del empate; cuota verificada, riesgo vigente.').slice(0,240)}:{})}:{})}
+          rationale:(String(prior.rationale??'').slice(0,420)+
+            ' · Cobertura del empate; cuota verificada, riesgo vigente.').slice(0,480)}:{})}:{})}
   })
   const card:ChatBlock={...priced.card,props:{
     ...priced.card.props,legs,requestedLegs:count,
