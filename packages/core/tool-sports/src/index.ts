@@ -98,6 +98,8 @@ export function apply(ctx: Context): void {
     isConcurrencySafe:()=>true,
     async execute(args){
       const env=sportsEnv()
+      const autoRepair=env.PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED==='1'?
+        null:await ensureSportsSourcesStarted(process.env)
       const sources=await sportsSourcesHealth(env)
       const odds=await Promise.allSettled([
         marketOdds(args.sportKey,'h2h,totals,spreads',env,fetch),
@@ -124,7 +126,7 @@ export function apply(ctx: Context): void {
       const combined=odds.flatMap(x=>x.status==='fulfilled'?x.value:[])
       const comparison=compareBettingMarkets(combined)
       return JSON.stringify({sportKey:args.sportKey,availableMarkets:supportedMarketFamilies,
-        ...comparison,sourceReadiness:sources,
+        ...comparison,sourceReadiness:sources,autoRepair,
         sourcesAttempted:odds.length,quotesObserved:combined.length,
         instruction:'Los precios implícitos NO son probabilidades predictivas. Mercados superpuestos no deben normalizarse ni combinarse como independientes. Si no existen cuotas, noticia o lesión verificables, indica explícitamente que falta evidencia. No fabriques un ticket de mayor probabilidad.'})
     },
@@ -321,7 +323,16 @@ export function apply(ctx: Context): void {
     output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
     isConcurrencySafe:()=>true,
     async execute(args){
-      const quotes=await keylessOdds(args.sport,args.market,args.date,sportsEnv())
+      const env=sportsEnv()
+      if(env.PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED!=='1'
+        &&process.env.PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED!=='0'){
+        const autoRepair=await ensureSportsSourcesStarted(process.env)
+        return JSON.stringify({source:'OddsHarvester',status:'not-ready',
+          autoRepair,installation:managedSportsInstallStatus(process.env),
+          observedPrices:0,bookmaker:null,
+          instruction:'OddsHarvester todavía no está listo. PHOENIX solicitó la instalación/recuperación sin bloquear el chat; NO significa que se hayan obtenido cuotas. Ejecutar sports_chat_sources_health para ver progreso y errores, y consultar el mercado después de que el componente marque installed. Si falta el script o WinGet falló, mostrar la ruta del log y solo comandos PowerShell en la consola.'})
+      }
+      const quotes=await keylessOdds(args.sport,args.market,args.date,env)
       const grouped=new Map<string,typeof quotes>()
       for(const quote of quotes.slice(0,96)){
         const rows=grouped.get(quote.eventId)??[]
