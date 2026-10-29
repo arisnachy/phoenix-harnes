@@ -7,6 +7,7 @@ import { SceneMap, parseSceneMapSpec, type SceneMapSpec } from './SceneMap.tsx'
 import { DiagramSurface, parseDiagramSpec, type DiagramSpec } from './DiagramSurface.tsx'
 import { GenerativeCanvas, parseCanvasSpec, type CanvasAction, type CanvasSpec } from './GenerativeCanvas.tsx'
 import css from './GenerativeUi.module.css'
+import {SportsLiveProvider,SportsLiveFacts,SportsLiveStamp} from './SportsLive.tsx'
 
 const MAX_UI_BLOCKS = 6
 const MAX_TEXT = 1200
@@ -91,20 +92,20 @@ type SportsGameCard = {
     home: SportsSide; away: SportsSide; source: string
     highlights?: Array<{ label: string; value: string; image?: string; detail?: string }>
     pitchers?: SportsPitcher[]; lineups?: SportsLineup[]; bullpen?: SportsBullpen[]
-    sport?: string; league?: string; country?: string; eventId?: string; broadcast?: string; research?: SportsResearch
+    sport?: string; league?: string; providerLeague?:string; eventDate?:string; phase?:'pre'|'in'|'post'; country?: string; eventId?: string; broadcast?: string; research?: SportsResearch
     periods?: Array<{ label:string;away:string;home:string }>
     note?: string; askPrompt?: string
   }
 }
 /** Compact, chat-only scoreboards. Individual matches keep sports_game_card unchanged. */
 type SportsScheduleEvent = {
-  eventId?:string;when:string;status?:string;venue?:string
+  eventId?:string;when:string;status?:string;phase?:'pre'|'in'|'post';venue?:string
   away:SportsSide;home:SportsSide;featured?:string;favorite?:string;askPrompt?:string
 }
 type SportsScheduleCard = {
   component:'sports_schedule_card';version:1
   props:{
-    title:string;date:string;sport?:string;league?:string;source:string;total:number
+    title:string;date:string;sport?:string;league?:string;providerLeague?:string;source:string;total:number
     events:SportsScheduleEvent[];note?:string
   }
 }
@@ -295,12 +296,14 @@ const sportsOdds = (v:Record<string,unknown>):v is SportsOddsCard => {
 }
 const sportsGame = (value: Record<string, unknown>): value is SportsGameCard => {
   if (!isRecord(value.props) || !hasOnlyKeys(value.props,
-    ['title','subtitle','status','when','venue','home','away','source','highlights','note','askPrompt','pitchers','lineups','bullpen','sport','league','country','eventId','broadcast','research','periods'])) return false
+    ['title','subtitle','status','when','venue','home','away','source','highlights','note','askPrompt','pitchers','lineups','bullpen','sport','league','providerLeague','eventDate','phase','country','eventId','broadcast','research','periods'])) return false
   const p = value.props
   return isText(p.title) && optionalText(p.subtitle) && optionalText(p.status,60)
     && isText(p.when) && optionalText(p.venue) && sportsSide(p.home) && sportsSide(p.away)
     && isText(p.source,320) && optionalText(p.note,MAX_TEXT) && optionalText(p.askPrompt,400)
-    && optionalText(p.sport,60) && optionalText(p.league,100) && optionalText(p.country,100)
+    && optionalText(p.sport,60) && optionalText(p.league,100) && optionalText(p.providerLeague,80)
+    && optionalText(p.eventDate,12) && (p.phase===undefined || ['pre','in','post'].includes(String(p.phase)))
+    && optionalText(p.country,100)
     && optionalText(p.eventId,50) && optionalText(p.broadcast,150)
     && (p.research===undefined || sportsResearch(p.research))
     && (p.periods===undefined || Array.isArray(p.periods) && p.periods.length<=12 && p.periods.every(x=>isRecord(x)
@@ -314,15 +317,16 @@ const sportsGame = (value: Record<string, unknown>): value is SportsGameCard => 
 }
 const sportsSchedule = (value:Record<string,unknown>):value is SportsScheduleCard => {
   if(!isRecord(value.props)||!hasOnlyKeys(value.props,
-    ['title','date','sport','league','source','total','events','note']))return false
+    ['title','date','sport','league','providerLeague','source','total','events','note']))return false
   const p=value.props
   return isText(p.title) && isText(p.date,45) && isText(p.source,320)
-    && optionalText(p.sport,60) && optionalText(p.league,100) && optionalText(p.note,MAX_TEXT)
+    && optionalText(p.sport,60) && optionalText(p.league,100) && optionalText(p.providerLeague,80) && optionalText(p.note,MAX_TEXT)
     && typeof p.total==='number' && Number.isInteger(p.total) && p.total>=1 && p.total<=500
     && Array.isArray(p.events) && p.events.length>=2 && p.events.length<=25 && p.events.length<=p.total
     && p.events.every(x=>isRecord(x) && hasOnlyKeys(x,
-      ['eventId','when','status','venue','away','home','featured','favorite','askPrompt'])
+      ['eventId','when','status','phase','venue','away','home','featured','favorite','askPrompt'])
       && optionalText(x.eventId,50) && isText(x.when,80) && optionalText(x.status,60)
+      && (x.phase===undefined || ['pre','in','post'].includes(String(x.phase)))
       && optionalText(x.venue,180) && sportsSide(x.away) && sportsSide(x.home)
       && optionalText(x.featured,150) && optionalText(x.favorite,170)
       && optionalText(x.askPrompt,400))
@@ -593,26 +597,31 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
     case 'agent_line': return <PhoenixAgentLine {...block.props} />
     case 'sports_schedule_card': {
       const p=block.props
-      return <section className={css.sportsSlate} data-generative-ui="sports_schedule_card"
+      return <SportsLiveProvider sport={p.sport} league={p.providerLeague??p.league} date={p.date}>
+        {(get,meta)=><section className={css.sportsSlate} data-generative-ui="sports_schedule_card"
         aria-label={p.title}>
         <header className={css.sportsSlateHeader}>
           <div><span className={css.sportsKicker}>PHOENIX / CARTELERA EN EL CHAT</span>
             <h3>{p.title}</h3><small>{[p.league,p.date].filter(Boolean).join(' · ')}</small></div>
           <span className={css.sportsSlateCount}>{p.events.length} {p.events.length===1?'juego':'juegos'}</span>
         </header>
-        <div className={css.sportsSlateGrid}>{p.events.map((e,i)=>
-          <article key={e.eventId??i} className={css.sportsSlateEvent}>
+        <div className={css.sportsSlateGrid}>{p.events.map((e,i)=>{
+          const live=get(e)
+          const away={...e.away,...(live?.awayScore===undefined?{}:{score:live.awayScore})}
+          const home={...e.home,...(live?.homeScore===undefined?{}:{score:live.homeScore})}
+          return <article key={e.eventId??i} className={css.sportsSlateEvent}>
             <div className={css.sportsSlateMeta}>
-              <strong>{e.when}</strong>{e.status&&<span>{e.status}</span>}
+              <strong>{e.when}</strong>{(live?.status??e.status)&&<span>{live?.status??e.status}</span>}
             </div>
             <div className={css.sportsSlateMatch}>
-              <div><SportsPortrait label={e.away.label} logo={e.away.logo}/>
-                <span><strong>{e.away.label}</strong>{e.away.meta&&<small>{e.away.meta}</small>}</span>
-                {e.away.score!==undefined&&<b>{e.away.score}</b>}</div>
-              <div><SportsPortrait label={e.home.label} logo={e.home.logo}/>
-                <span><strong>{e.home.label}</strong>{e.home.meta&&<small>{e.home.meta}</small>}</span>
-                {e.home.score!==undefined&&<b>{e.home.score}</b>}</div>
+              <div><SportsPortrait label={away.label} logo={away.logo}/>
+                <span><strong>{away.label}</strong>{away.meta&&<small>{away.meta}</small>}</span>
+                {away.score!==undefined&&<b>{away.score}</b>}</div>
+              <div><SportsPortrait label={home.label} logo={home.logo}/>
+                <span><strong>{home.label}</strong>{home.meta&&<small>{home.meta}</small>}</span>
+                {home.score!==undefined&&<b>{home.score}</b>}</div>
             </div>
+            <SportsLiveFacts game={live} meta={meta} sport={p.sport}/>
             {e.venue&&<small className={css.sportsSlateVenue}>⌖ {e.venue}</small>}
             {e.featured&&<small className={css.sportsSlateFeatured}>{e.featured}</small>}
             {e.favorite&&<small className={css.sportsSlateFavorite}>Tendencia fundamentada · {e.favorite}</small>}
@@ -620,19 +629,23 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
               type="button" onClick={()=>{if(e.askPrompt)onAction(e.askPrompt,'draft')}}>
               Ver análisis del encuentro ›
             </button>}
-          </article>)}</div>
-        <footer className={css.sportsSourceBar}><span>Datos · {p.source}</span>
+          </article>})}</div>
+        <footer className={css.sportsSourceBar}><span>Datos · {p.source}</span><SportsLiveStamp meta={meta}/>
           <small>{p.note??'Solo encuentros verificados; datos sujetos a actualización.'}</small></footer>
-      </section>
+      </section>}
+      </SportsLiveProvider>
     }
     case 'sports_game_card': {
       const p=block.props
-      return <section className={css.sportsCard} data-generative-ui="sports_game_card">
+      return <SportsLiveProvider sport={p.sport} league={p.providerLeague??p.league} date={p.eventDate}>
+        {(get,meta)=>{
+          const live=get(p)
+          return <section className={css.sportsCard} data-generative-ui="sports_game_card">
         <header className={css.sportsHeadline}>
           <div><span className={css.sportsKicker}>PHOENIX / {p.sport?.toUpperCase()??'DEPORTES'}</span>
             {(p.country||p.league)&&<div className={css.sportsCompetition}>{[p.country,p.league].filter(Boolean).join(' · ')}</div>}
             <h3>{p.title}</h3>{p.subtitle&&<p>{p.subtitle}</p>}</div>
-          {p.status&&<span className={css.sportsStatus}>{p.status}</span>}
+          {(live?.status??p.status)&&<span className={css.sportsStatus}>{live?.status??p.status}</span>}
         </header>
         <div className={css.sportsVenue}><span>◷ {p.when}</span>
           <span>⌖ {p.venue||'Sede sin confirmar'}</span>
@@ -640,13 +653,14 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
         <div className={css.sportsVersus}>
           <div className={css.sportsTeam}><SportsPortrait label={p.away.label} logo={p.away.logo}/>
             <strong>{p.away.label}</strong>{p.away.meta&&<small>{p.away.meta}</small>}
-            {p.away.score!==undefined&&<b>{p.away.score}</b>}</div>
-          <span className={css.sportsVs}>{p.away.score!==undefined||p.home.score!==undefined?'—':'VS'}</span>
+            {(live?.awayScore??p.away.score)!==undefined&&<b>{live?.awayScore??p.away.score}</b>}</div>
+          <span className={css.sportsVs}>{live?.awayScore!==undefined||live?.homeScore!==undefined||p.away.score!==undefined||p.home.score!==undefined?'—':'VS'}</span>
           <div className={css.sportsTeam}><SportsPortrait label={p.home.label} logo={p.home.logo}/>
             <strong>{p.home.label}</strong>{p.home.meta&&<small>{p.home.meta}</small>}
-            {p.home.score!==undefined&&<b>{p.home.score}</b>}</div>
+            {(live?.homeScore??p.home.score)!==undefined&&<b>{live?.homeScore??p.home.score}</b>}</div>
         </div>
-        {p.periods?.length?<section className={css.sportsDetailSection} aria-label="Parciales del partido">
+        <SportsLiveFacts game={live} meta={meta} sport={p.sport}/>
+        {!(live?.periods?.length)&&p.periods?.length?<section className={css.sportsDetailSection} aria-label="Parciales del partido">
           <h4>Marcador por período</h4><div className={css.sportsTableScroll}><table className={css.sportsTable}>
             <thead><tr><th>Equipo</th>{p.periods.map((period,i)=><th key={i}>{period.label}</th>)}</tr></thead>
             <tbody><tr><th>{p.away.label}</th>{p.periods.map((period,i)=><td key={i}>{period.away}</td>)}</tr>
@@ -675,12 +689,13 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
         {p.lineups?.length?<SportsLineups lineups={p.lineups}/>:null}
         {p.bullpen?.length?<SportsBullpen bullpen={p.bullpen}/>:null}
         <footer className={css.sportsSourceBar}>
-          <span>Datos · {p.source}</span>
+          <span>Datos · {p.source}</span><SportsLiveStamp meta={meta}/>
           {p.note&&<small>{p.note}</small>}
           {p.askPrompt&&onAction&&<button type="button" onClick={() => { if (p.askPrompt) onAction(p.askPrompt, 'draft') }}>
             Investigar análisis y mercados</button>}
         </footer>
-      </section>
+      </section>}}
+      </SportsLiveProvider>
     }
     case 'sports_odds_card': {
       const p=block.props
