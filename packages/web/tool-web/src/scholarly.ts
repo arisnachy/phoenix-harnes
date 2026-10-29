@@ -47,12 +47,18 @@ export function projectEuropePmcRecords(input: unknown): ScholarlyRecord[] {
     seen.add(identity)
     // Research publisher accepts only citation-safe [@key] identifiers.
     const key = pmid ? 'pmid' + pmid : pmcid ? pmcid.toLowerCase() : 'doi' + (doi ?? '').replace(/[^A-Za-z0-9]/gu, '_').slice(0, 61)
+    const journalInfo = item.journalInfo
+    const journal = typeof journalInfo === 'object' && journalInfo !== null
+      ? (journalInfo as Record<string, unknown>).journal : undefined
+    const nestedTitle = typeof journal === 'object' && journal !== null
+      ? (journal as Record<string, unknown>).title : undefined
     out.push({
       key,
       title,
       authors,
       year,
-      journal: typeof item.journalTitle === 'string' ? item.journalTitle.slice(0, 220) : '',
+      journal: typeof item.journalTitle === 'string' ? item.journalTitle.slice(0, 220)
+        : typeof nestedTitle === 'string' ? nestedTitle.slice(0, 220) : '',
       url: doi ? 'https://doi.org/' + encodeURI(doi) : pmid
         ? 'https://pubmed.ncbi.nlm.nih.gov/' + pmid + '/'
         : 'https://europepmc.org/articles/' + (pmcid ?? ''),
@@ -102,7 +108,7 @@ export async function searchEuropePmc(
   url.searchParams.set('format', 'json')
   url.searchParams.set('resultType', 'core')
   url.searchParams.set('pageSize', String(limit))
-  if (cursorMark !== undefined) url.searchParams.set('cursorMark', cursorMark)
+  url.searchParams.set('cursorMark', cursorMark ?? '*')
   const retrievedAt = new Date().toISOString()
   try {
     const response = await request(url.href, {
@@ -120,7 +126,8 @@ export async function searchEuropePmc(
     }
     const records = projectEuropePmcRecords(parsed).slice(0, limit)
     const nextCursorMark = typeof parsed.nextCursorMark === 'string'
-      && parsed.nextCursorMark !== cursorMark && records.length > 0
+      && parsed.nextCursorMark !== (cursorMark ?? '*')
+      && (parsed.resultList?.result?.length ?? 0) > 0
       ? parsed.nextCursorMark : undefined
     const hitCount = typeof parsed.hitCount === 'number' ? parsed.hitCount
       : typeof parsed.hitCount === 'string' && /^\d+$/u.test(parsed.hitCount)
