@@ -111,3 +111,32 @@ Run tests:
 
 Adding a future sport-specific resource should create new validated sections
 rather than a separate page or an unbounded set of model-visible tool schemas.
+
+## Universal matchup factors (evidence-first)
+
+Use `sports_chat_matchup_factors` with the **verified ESPN** `sport`, `league`,
+`eventId` and `date` (YYYY-MM-DD). No separate screen: the result includes a
+`sports_espn_dashboard` chat component plus an auditable JSON factor report.
+
+- Bounded 3–28-day ESPN scoreboard history: last 10 completed games per team,
+  wins/losses, scoring for/against, rest, up to five head-to-head results and
+  same-stadium samples **only where ESPN identifies the venue**.
+- MLB: independently sourced probable pitchers and recent verified pitching
+  starts when MLB StatsAPI provides them. First 3, first 5 and first 9 inning
+  totals are **simple descriptive scenario baselines**, requiring at least
+  three valid team samples per period; not calibrated predictions.
+- Existing ESPN context is reused for rosters, news and injury reports.
+  Rotations, current starters, wind/sun, roof configuration, bullpen fatigue,
+  opponent-adjusted metrics and sport-specific advanced factors are explicitly
+  marked unverified unless separately supplied by a verified source.
+- Bookmaker outcomes must match both teams AND game time and remain current
+  before reporting them. Their no-vig shares are pricing context, NOT model
+  win probabilities. Never compare a 3- or 5-inning baseline to a full-game
+  sportsbook total; period, extra-innings rules and source must agree.
+- Never report an expected betting edge, win percentage or guaranteed
+  favorite without a separately trained, calibrated and backtested model.
+  Missing sources stay missing, rather than becoming zero or a favorable
+  indicator. Data and UI are bounded and source-attributed.
+
+Run:
+`node --experimental-strip-types --test packages/core/tool-sports/tests/universal-matchup-factors.test.mjs`
