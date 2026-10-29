@@ -38,3 +38,30 @@ test('does not compare stale, started, missing source or nonsensical priced mark
   assert.equal(result.rejected,4)
   assert.ok(supportedMarketFamilies.some(s=>s.sport==='NHL'))
 })
+
+test('pairs opposite spread handicaps without combining unrelated lines',()=>{
+  const offers=[
+    {...base,market:'spreads',selection:'Home',point:-5.5,price:1.91},
+    {...base,market:'spreads',selection:'Away',point:5.5,price:1.93},
+    {...base,market:'spreads',selection:'Home',point:-7.5,price:2.10},
+  ]
+  const result=compareBettingMarkets(offers,now)
+  assert.equal(result.markets.length,1)
+  assert.equal(result.markets[0].selections.length,2)
+  assert.deepEqual(result.markets[0].selections.map(x=>x.point),[-5.5,5.5])
+  assert.ok(result.markets[0].selections.every(x=>x.noVigShare!==null))
+})
+test('does not remove vig from a partial soccer three-way or two same-side totals',()=>{
+  const soccer={...base,sportKey:'soccer_usa_mls',market:'h2h',point:null}
+  const missingDraw=compareBettingMarkets([
+    {...soccer,selection:'Home',price:2.2},
+    {...soccer,selection:'Away',price:3.1},
+  ],now)
+  assert.equal(missingDraw.markets.length,0)
+  const duplicateTotals=compareBettingMarkets([
+    {...base,selection:'Over',point:220.5,price:1.8},
+    {...base,selection:'Over 220.5',point:220.5,price:1.9},
+  ],now)
+  assert.equal(duplicateTotals.markets.length,1)
+  assert.equal(duplicateTotals.markets[0].totalBookOverround,null)
+})
