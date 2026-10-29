@@ -22,6 +22,7 @@ export const coveredSportKeys:Readonly<Record<string,readonly string[]>>={
   baseball:['baseball_mlb'],
   'american-football':['americanfootball_nfl'],
   'ice-hockey':['icehockey_nhl'],
+  tennis:['tennis_atp','tennis_wta'],
 }
 /** A sport-wide scrape is NOT proof that its matches belong to NBA, WNBA etc.
  * Fail closed on missing league evidence. The match URL is the fixed OddsPortal
