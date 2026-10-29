@@ -259,15 +259,20 @@ export function mountBinancePaperDashboardRoute(
         else res.end(JSON.stringify({
           configured: state?.configured === true, connected,
           status: state?.status ?? 'disconnected',
+          // Binance's Agentic OAuth allowlist currently does not include
+          // PHOENIX as an independent client (consent page error 3346001).
+          // Transport health and provider client eligibility are distinct:
+          // reconnecting cannot grant agent authorization. Don't advertise
+          // the HMAC REAL read-only route as Agentic OAuth/Trade access.
+          authorizationAvailability: connected ? 'oauth-unverified' : 'provider-approval-required',
+          // Known from Binance's consent UI, not an observed transport response.
+          knownProviderRejection: '3346001',
+          supportedClientGuide: 'https://developers.binance.com/en/docs/agent-native/mcp-server/agentic',
           ...(state?.reasonCode === undefined ? {} : { reasonCode: state.reasonCode }),
           toolCount: state?.toolNames?.length ?? 0,
           tradeScopeVerified: false, accountVerified: false,
-          nextAction: connected ? 'Verify live MCP ticker, Agentic balance and granted Trade scope'
-            : state?.status === 'auth-required'
-              ? 'Autoriza Binance Agentic OAuth desde la tarjeta de PHOENIX (CIMD; no requiere registro DCR).'
-              : state?.status === 'failed' && state.configured
-                ? 'El transporte MCP falló. Comprueba conexión y metadatos CIMD públicos; usa Autorizar Binance OAuth. Reparar por sí solo no autoriza la cuenta.'
-                : 'Instala el MCP oficial de Binance y selecciona Autorizar Binance OAuth',
+          nextAction: connected ? 'Verifica las herramientas MCP y el alcance Trade antes de operar.'
+            : 'Binance no incluye a PHOENIX en la lista oficial de clientes Agentic OAuth (3346001). Reinstalar o reconectar no lo autoriza. Usa Binance REAL con API HMAC para verificar tu cuenta en solo lectura, Spot Testnet para probar operaciones, o solicita a Binance la admisión de PHOENIX.',
         }))
         return
       }

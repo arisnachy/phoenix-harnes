@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { BinanceConnectorSetup } from '../src/client/BinanceConnectorSetup.tsx'
 
@@ -9,6 +9,30 @@ const response = (value: object, status = 200): Response =>
   new Response(JSON.stringify(value), {status, headers: {'Content-Type':'application/json'}})
 
 describe('Binance authenticated connector in Phoenix Settings', () => {
+  it('avoids futile Binance OAuth loops on a confirmed 3346001 unsupported agent response',async()=>{
+    const calls:string[]=[]
+    vi.stubGlobal('fetch',vi.fn(async(input:RequestInfo|URL)=>{
+      const url=String(input)
+      calls.push(url)
+      if(url.endsWith('/testnet-status'))return response({configured:true,connected:true,canTrade:true})
+      if(url.endsWith('/real-status'))return response({configured:true,connected:true,canRead:true,tradingAuthorized:false})
+      if(url.endsWith('/mcp-status'))return response({
+        configured:true,connected:false,status:'failed',reasonCode:'connection-failed',toolCount:0,
+        authorizationAvailability:'provider-approval-required',knownProviderRejection:'3346001',
+        accountVerified:false,tradeScopeVerified:false,
+      })
+      throw new Error('Unexpected OAuth activation')
+    }))
+    render(<BinanceConnectorSetup onChanged={vi.fn()} onAuthorizeMcp={vi.fn()}/>)
+    fireEvent.click(screen.getByRole('button',{name:'Conectar / autenticar Binance'}))
+    await screen.findByText('Autorización PHOENIX no admitida por Binance · código 3346001')
+    expect(screen.getByText('Cuenta REAL verificada · lectura habilitada · operaciones desactivadas')).toBeTruthy()
+    expect(screen.getByText('Testnet autenticado · trading habilitado')).toBeTruthy()
+    expect(screen.queryByRole('button',{name:'Autorizar Binance OAuth'})).toBeNull()
+    expect(screen.queryByRole('button',{name:'Reparar MCP'})).toBeNull()
+    expect(calls).not.toContain('/phoenix-trading/paper/mcp-activate')
+  })
+
   it('validates production keys in REAL read-only mode without calling the Testnet credential route', async () => {
     const key='PROD_HMAC_KEY_9876543210'
     const secret='PROD_HMAC_SECRET_9876543210'
@@ -102,6 +126,7 @@ describe('Binance authenticated connector in Phoenix Settings', () => {
       if (url.endsWith('/mcp-status')) return response({
         configured:installed, connected:false, status:installed?'auth-required':'disconnected',
         toolCount:0, accountVerified:false, tradeScopeVerified:false,
+        authorizationAvailability:'provider-approval-required',knownProviderRejection:'3346001',
       })
       if (url.endsWith('/mcp-activate')) {
         installed = true
@@ -114,14 +139,22 @@ describe('Binance authenticated connector in Phoenix Settings', () => {
     const onChanged=vi.fn()
     render(<BinanceConnectorSetup onChanged={onChanged}/>)
     fireEvent.click(screen.getByRole('button',{name:'Conectar / autenticar Binance'}))
-    await screen.findByText('MCP oficial pendiente de instalar')
+    await screen.findByText('Autorización PHOENIX no admitida por Binance · código 3346001')
+    expect(screen.queryByRole('button',{name:'Preparar OAuth REAL'})).toBeNull()
+    expect(screen.queryByRole('button',{name:'Autorizar Binance OAuth'})).toBeNull()
+    expect(screen.getByText(/Alternativa operativa:/)).toBeTruthy()
+    expect(screen.getByRole('link',{name:'Agentes oficialmente compatibles y guía de Binance'})).toBeTruthy()
+    await waitFor(()=>expect(
+      (screen.getByRole('button',{name:'Opciones avanzadas (solo si Binance aprueba PHOENIX)'}) as HTMLButtonElement).disabled,
+    ).toBe(false))
+    fireEvent.click(screen.getByRole('button',{name:'Opciones avanzadas (solo si Binance aprueba PHOENIX)'}))
     fireEvent.click(screen.getByRole('button',{name:'Preparar OAuth REAL'}))
-    await screen.findByText(/MCP oficial preparado. Pulsa Autorizar/)
+    await screen.findByText(/MCP instalado localmente. Binance debe aprobar el cliente PHOENIX/)
     expect(onChanged).toHaveBeenCalledOnce()
     const installation = calls.filter(call => call.url.endsWith('/mcp-activate'))
     expect(installation).toHaveLength(1)
     expect(installation[0]?.body).toBe('{}')
-    expect(screen.getByText('MCP pendiente de consentimiento OAuth')).toBeTruthy()
+    expect(screen.getByText('Autorización PHOENIX no admitida por Binance · código 3346001')).toBeTruthy()
     expect(document.body.textContent).not.toContain('cuenta REAL autenticada')
   })
 })
