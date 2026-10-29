@@ -250,6 +250,7 @@ test('a four-of-five slate still audits real provider prices and cannot be calle
   assert.equal(harvester.status,'observed')
   assert.equal(harvester.offers,4)
   assert.equal(result.card.props.combinedOdds,'No disponible')
+  assert.match(result.card.props.note,/Cuotas cotejadas: 4\/5/)
   assert.match(result.explanation,/INCOMPLETO/)
 })
 test('disabled OddsHarvester is never described as queried with live prices',async()=>{
