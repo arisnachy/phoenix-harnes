@@ -19,7 +19,7 @@ export const keylessSports = {
   baseball:['moneyline','over_under'],
   'american-football':['moneyline','over_under'],
   tennis:['match_winner','over_under'],
-  'ice-hockey':['home_away','over_under'],
+  'ice-hockey':['home_away','1x2','double_chance','btts','over_under'],
   'rugby-league':['home_away','over_under'],
   'rugby-union':['home_away','over_under'],
   handball:['1x2','over_under'],
