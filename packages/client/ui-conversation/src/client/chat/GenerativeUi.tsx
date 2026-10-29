@@ -753,6 +753,7 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
             <span style={{width:`${100*p.legs.length/requested}%`}}/>
           </div>
           {incomplete&&<p className={css.sportsTicketMissing}>Faltan {requested-p.legs.length} selecciones por verificar. Esto no es un ticket completo.</p>}
+          {unpriced&&<p className={css.sportsTicketMissing}>0 / {requested} selecciones con cuotas de una misma casa confirmadas. Los partidos visibles son hipótesis de investigación, no apuestas aprobadas.</p>}
         </header>
         <div className={css.sportsTicketGroups}>{[...groups].map(([heading,legs])=>
           <section key={heading} className={css.sportsTicketGroup} aria-label={heading}>
