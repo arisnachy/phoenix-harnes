@@ -57,6 +57,7 @@ describe('connectors settings section', () => {
       if(path.endsWith('/mcp-status'))return new Response(JSON.stringify({
         configured:true,connected:false,status:'auth-required',toolCount:0,
         accountVerified:false,tradeScopeVerified:false,
+        authorizationAvailability:'provider-approval-required',providerErrorCode:'3346001',
       }))
       throw new Error('Unexpected connector route')
     })
@@ -83,6 +84,10 @@ describe('connectors settings section', () => {
     renderHub(api,{mcpRegistry:mcpRegistry as unknown as NonNullable<ConnectorsSettingsSectionProps['mcpRegistry']>})
     await waitFor(()=>expect(document.querySelector('[data-connector-id="binance"]')).toBeTruthy())
     fireEvent.click(screen.getByRole('button',{name:'Conectar / autenticar Binance'}))
+    await screen.findByText('Autorización PHOENIX no admitida por Binance · código 3346001')
+    expect(screen.queryByRole('button',{name:'Autorizar Binance OAuth'})).toBeNull()
+    // Only owners who have separately obtained Binance approval may retry.
+    fireEvent.click(screen.getByRole('button',{name:'Opciones avanzadas (solo si Binance aprueba PHOENIX)'}))
     const button=await screen.findByRole('button',{name:'Autorizar Binance OAuth'})
     fireEvent.click(button)
     await waitFor(()=>expect(begin).toHaveBeenCalledWith({
