@@ -297,3 +297,22 @@ describe('ESPN universal adaptive panels',()=>{
       sections:Array.from({length:9},()=>base.sections[0])]}})).toBeNull()
   })
 })
+
+describe('ESPN contextual navigation',()=>{
+  it('routes an ESPN verified player drill-down back into the same conversation',()=>{
+    const value={component:'sports_espn_dashboard',version:1,props:{
+      view:'team',title:'Team confirmed',subtitle:'NBA',source:'ESPN',checkedAt:'2026-10-29T13:00:00Z',
+      note:'verified',sections:[{heading:'Plantilla',kind:'list',items:[{
+        label:'Jugador',image:'https://a.espncdn.com/i/p.png',
+        action:{label:'Estadísticas del jugador',
+          prompt:'Kira, consulta sports_chat_espn_explore con view=player, sport=basketball, league=nba, athleteId=991.'},
+      }]}],
+    }}
+    const card=parseGenerativeUiBlock(value)
+    if(!card)throw Error('Invalid contextual fixture')
+    let prompt=''
+    render(<GenerativeUi block={card} onAction={(text)=>{prompt=text}}/>)
+    fireEvent.click(screen.getByRole('button',{name:'Estadísticas del jugador'}))
+    expect(prompt).toContain('athleteId=991')
+  })
+})
