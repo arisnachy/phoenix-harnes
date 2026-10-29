@@ -46,6 +46,8 @@ test('OddsHarvester requests the correct period for NHL winner including overtim
   const args=oddsHarvesterArgs('ice-hockey','home_away','2026-10-29','odds.json')
   assert.ok(args.includes('--period'))
   assert.equal(args[args.indexOf('--period')+1],'full_including_ot')
+  const doubleChance=oddsHarvesterArgs('ice-hockey','double_chance','2026-10-29','odds.json')
+  assert.ok(!doubleChance.includes('--period'))
   const nba=oddsHarvesterArgs('basketball','1x2','2026-10-29','odds.json')
   assert.equal(nba[nba.indexOf('--period')+1],'full_time')
   const soccer=oddsHarvesterArgs('football','double_chance','2026-10-29','odds.json')
