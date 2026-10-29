@@ -516,6 +516,17 @@ function expandRawCanvases(segments: GenerativeUiSegment[], streaming: boolean):
   return result
 }
 
+/** Inline sport emblem, not a team/league logo or an external image. */
+const ticketSportEmblem=(groupHeading:string):string=>{
+  const sport=groupHeading.split(' · ')[0]?.toLocaleLowerCase('es')??''
+  if(sport.includes('americano'))return '🏈'
+  if(sport.includes('fútbol')||sport.includes('futbol')||sport.includes('soccer'))return '⚽'
+  if(sport.includes('baloncesto')||sport.includes('basketball'))return '🏀'
+  if(sport.includes('béisbol')||sport.includes('beisbol')||sport.includes('baseball'))return '⚾'
+  if(sport.includes('hockey'))return '🏒'
+  if(sport.includes('tenis')||sport.includes('tennis'))return '🎾'
+  return '🏆'
+}
 const SportsPortrait = ({ label,logo }:{ label:string;logo?:string|undefined }) => (
   <span className={css.sportsPortrait}>
     <span>{label.slice(0,2).toUpperCase()}</span>
@@ -724,7 +735,10 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
         </header>
         <div className={css.sportsTicketGroups}>{[...groups].map(([heading,legs])=>
           <section key={heading} className={css.sportsTicketGroup} aria-label={heading}>
-            <h4>{heading}<small>{legs.length} {legs.length===1?'pata':'patas'}</small></h4>
+            <h4><span className={css.sportsTicketGroupTitle}>
+              <span className={css.sportsTicketSportEmblem} aria-hidden="true">{ticketSportEmblem(heading)}</span>
+              <span>{heading}</span>
+            </span><small>{legs.length} {legs.length===1?'pata':'patas'}</small></h4>
             <div className={css.sportsLegs}>{legs.map(leg=><article key={p.legs.indexOf(leg)} className={css.sportsLeg}>
               <span className={css.sportsTicketLegNumber}>{String(p.legs.indexOf(leg)+1).padStart(2,'0')}</span>
               <div className={css.sportsTicketLegMain}>
