@@ -35,7 +35,8 @@ export function belongsToLeague(
   const path=(quote.matchLink??'').toLowerCase()
   const is=(pattern:RegExp)=>pattern.test(league)
   switch(sportKey){
-    case 'basketball_nba':return /\bnba\b/u.test(league)&&!/\bwnba\b/u.test(league)
+    case 'basketball_nba':return /\bnba\b/u.test(league)&&
+      !/\b(?:wnba|nba\s+(?:g\s+league|2k\s+league|summer\s+league|africa\s+league))\b/u.test(league)
     case 'basketball_wnba':return /\bwnba\b/u.test(league)
     case 'baseball_mlb':return /\bmlb\b|major league baseball/u.test(league)
     case 'americanfootball_nfl':return /\bnfl\b|national football league/u.test(league)
