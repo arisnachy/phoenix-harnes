@@ -58,8 +58,10 @@ export const sportsbookRuleSources=[
    scope:'Explicación extensa de mercados de fútbol, baloncesto y otros; aplica solo a ese operador'},
  {operator:'FacilitoBet (República Dominicana)',url:'https://www.facilitobet.com/regla/beisbol',
    scope:'MLB: 5 entradas, run line, totales, extrainnings, pitcher listado y parlay; exclusivo de su reglamento'},
- {operator:'Juancito Sport (información de oferta)',url:'https://juancitosports.com/',
-   scope:'Describe deportes y mercados; NO se comprobó un reglamento contractual de liquidación completo'},
+ {operator:'Juancito Sport (casa oficial)',url:'https://www.juancitosport.com.do/reglas/',
+   scope:'Reglas propias de béisbol (3/5/9 entradas, run line, bases y ponches), NBA, NFL, NHL, fútbol, tenis, golf y props; las reglas del producto pueden ser adicionales'},
+ {operator:'Juancito Sport (términos oficiales)',url:'https://www.juancitosport.com.do/banca/terminos/',
+   scope:'Apuesta Confirmada, mínimo RD$100, cambios de cuota, anulaciones, pagos máximos, prohibición de bots para colocar apuestas, KYC y reglas por mercado'},
  {operator:'DraftKings Sportsbook',url:'https://sportsbook.draftkings.com/help/sport-rules/baseball',
    scope:'Participación de jugadores, inning markets, pitchers listados y suspensión; no copiar a bancas RD'},
  {operator:'FanDuel Sportsbook (New Jersey, 2026)',url:'https://policies.fanduel.com/SB/NJ/2026-10-15T12-42-58.html',
@@ -67,9 +69,29 @@ export const sportsbookRuleSources=[
  {operator:'Dirección de Casinos y Juegos de Azar RD',url:'https://www.casinos.gob.do/juegos-autorizados/banca-de-apuestas-deportivas/',
    scope:'Marco regulatorio; NO sustituye reglamentos de mercado del operador'},
 ]
+export const juancitoHouseRules={
+  officialDomain:'www.juancitosport.com.do',
+  publication:'https://www.juancitosport.com.do/reglas/',
+  terms:'https://www.juancitosport.com.do/banca/terminos/',
+  acceptedOnlyOnSystemConfirmation:'Apuesta Confirmada',
+  minimumBetDOP:100,
+  maximumParlayWinDOP:15_000_000,
+  prohibitedAutomation:'Términos sección 6.6: no se permiten bots/scripts para colocar apuestas ni manipular el sistema',
+  baseball:{
+    fullGameTotals:'Requiere que el equipo que pierde agote la novena entrada; empate: nueve entradas completas',
+    moneylineRunline:'Válidos si equipo que pierde ha bateado quinta entrada; empate: cinco entradas completas',
+    firstThree:'Ganador y O/U válidos tras tres entradas completas',
+    firstFive:'O/U tras cinco entradas completas; ganador si equipo que pierde bateó su quinta entrada',
+    playerProps:'Bases recorridas: hit 1, doble 2, triple 3, jonrón 4; el jugador debe iniciar y agotar al menos un turno según reglas de proposiciones',
+  },
+  basketball:'Partido debe completar los tiempos regulares; total individual partido incluye tiempo extra y cuarto 4 no lo incluye',
+  hockey:'Tres períodos regulares para ML/RL y totales; totales completos incluyen goles extra',
+  soccer:'90 minutos más descuento, sin prórroga ni penales para 1X2 y totales salvo modalidad expresa',
+  asianQuarterLines:'Cuartos 0.25/0.75 se dividen en medias apuestas; NO liquidar como hándicap simple',
+} as const
 export function describeBettingMarkets(sport?:string,family?:string){
   const catalog=realMarketCatalog.filter(x=>(!sport||x.sport===sport)&&
     (!family||x.family===family))
-  return {catalog,numberOfFamilies:catalog.length,sources:sportsbookRuleSources,
+  return {catalog,numberOfFamilies:catalog.length,sources:sportsbookRuleSources,juancitoHouseRules,
     warning:'La existencia de un mercado en el catálogo no implica que una casa lo ofrezca hoy. Se requiere cotización, período, cuota, casa y fecha verificadas, con reglas de liquidación de esa casa.'}
 }
