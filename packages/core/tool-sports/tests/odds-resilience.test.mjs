@@ -51,3 +51,21 @@ test('historical snapshots store original prices and timestamps without making p
   await assert.rejects(()=>loadOddsSnapshots('../x','2026-10-29',env),/inválidos/)
  }finally{await rm(root,{recursive:true,force:true})}
 })
+
+test('free-tier NBA h2h recovers genuine moneylines after a combined-market rejection',async()=>{
+ const seen=[]
+ const fallback=async url=>{
+   const u=new URL(String(url));seen.push(u)
+   const market=u.searchParams.get('markets')
+   return new Response(market==='h2h'?JSON.stringify(alternate):JSON.stringify({error:'markets not in tier'}),{
+     status:market==='h2h'?200:403,
+   })
+ }
+ const result=await marketOddsDetailed('basketball_nba','h2h,totals,spreads',
+   {PHOENIX_SPORTS_ESPN_DISABLED:'1',THEODDSAPI_API_KEY:'limited-free'},fallback,timestamp)
+ assert.equal(seen.length,2)
+ assert.equal(seen[1].searchParams.get('markets'),'h2h')
+ assert.equal(result.quotes.length,2)
+ assert.equal(result.sources.find(s=>s.provider==='TheOddsAPI').status,'observed')
+ assert.ok(result.quotes.every(q=>q.market==='h2h'))
+})
