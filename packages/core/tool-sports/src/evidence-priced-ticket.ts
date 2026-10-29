@@ -30,8 +30,8 @@ export async function evidencePricedTicket(
   explanation:string}>{
   const research=await evidenceTicket(count,date,sport,fetcher,now,env)
   const quoteAccess=[
-    keylessEnabled(env)?'OddsHarvester habilitado (sujeto al acceso del sitio)':
-      'OddsHarvester inactivo: requiere instalación y habilitación por el operador',
+    keylessEnabled(env)?'OddsHarvester permitido; falta comprobar ejecutable, acceso y cotizaciones':
+      'OddsHarvester deshabilitado explícitamente por el operador',
     env.THE_ODDS_API_KEY?.trim()?'The Odds API v4 configurada':'The Odds API v4 sin clave',
     env.THEODDSAPI_API_KEY?.trim()?'TheOddsAPI configurada':'TheOddsAPI sin clave',
     'ESPN: cuotas solo cuando el proveedor publique mercados con fecha',
@@ -54,8 +54,11 @@ export async function evidencePricedTicket(
     if(!route)return {category,quotes:[] as KeylessQuote[]}
     const market=category==='soccer'&&marketPreference==='double_chance'
       ?'double_chance':route.market
+    // An explicitly configured authenticated provider takes precedence in the ticket
+    // (its own requests follow below), avoiding redundant slow browser scans.
+    const commercial=Boolean(env.THE_ODDS_API_KEY?.trim()||env.THEODDSAPI_API_KEY?.trim())
     const quotes=quotesProvider?await quotesProvider(route.sport,market,day,env,now):
-      keylessEnabled(env)?await keylessOdds(route.sport,market,day,env,now):[]
+      keylessEnabled(env)&&!commercial?await keylessOdds(route.sport,market,day,env,now):[]
     return {category,quotes}
   }))
   const keyless=sources.flatMap(s=>s.status==='fulfilled'?s.value.quotes:[])
