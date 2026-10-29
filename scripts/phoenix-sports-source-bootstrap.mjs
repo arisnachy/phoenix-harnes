@@ -21,6 +21,8 @@ const upstream={
   'mlb-odds-scraper':'https://github.com/ArnavSaraogi/mlb-odds-scraper.git',
 }
 const dataset='https://github.com/ArnavSaraogi/mlb-odds-scraper/releases/download/dataset/mlb_odds_dataset.json'
+const datasetBytes=80120813
+const archiveSizes={nba:7148928,mlb:18257944,nfl:1487435,nhl:7322138}
 const home=resolve(process.env.PHOENIX_SPORTS_SOURCE_HOME||join(homedir(),'.phoenix','sports-sources'))
 const archive=join(home,'history')
 const vendor=join(home,'vendor')
@@ -31,6 +33,14 @@ const cli=join(exe,process.platform==='win32'?'oddsharvester.exe':'oddsharvester
 const state=join(home,'manifest.json')
 const exists=async path=>access(path).then(()=>true,()=>false)
 const flags=new Set(process.argv.slice(2))
+export const MIN_PYTHON=[3,12]
+export const pythonCompatible=version=>Array.isArray(version)&&Number(version[0])===3&&Number(version[1])>=12
+export function pythonCandidates(platform=process.platform){
+  const base=platform==='win32'?
+    [['py',['-3.13']],['py',['-3.12']],['py',['-3.14']],['py',['-3']]]:
+    [['python3.13',[]],['python3.12',[]],['python3.14',[]]]
+  return [...base,['python3',[]],['python',[]]]
+}
 export const manifestPath=state
 
 function run(bin,args,{cwd=home,timeout=300_000}={}) {
@@ -56,7 +66,7 @@ async function cloneOnce(name,url) {
 async function downloadBounded(url,dest,maxBytes=100_000_000) {
   if(await exists(dest)){
     const size=(await stat(dest)).size
-    if(size>1_000_000&&size<=maxBytes)return
+    if(size===datasetBytes)return
   }
   const response=await fetch(url,{redirect:'follow',signal:AbortSignal.timeout(180_000)})
   if(!response.ok||!response.body)throw Error('Historic dataset HTTP '+response.status)
@@ -71,7 +81,7 @@ async function downloadBounded(url,dest,maxBytes=100_000_000) {
         else done(null,chunk)
       }}),
       createWriteStream(temp,{flags:'wx'}))
-    if(received<1_000_000)throw Error('Dataset unexpectedly small')
+    if(received!==datasetBytes)throw Error('Dataset file truncated or changed: '+received+' expected '+datasetBytes)
     await rename(temp,dest)
   } catch(error){await rm(temp,{force:true});throw error}
 }
@@ -102,36 +112,54 @@ async function save(components){
   return value
 }
 async function installPython(){
-  if(!await exists(py)){
-    const choices=process.platform==='win32'?
-      [['py',['-3','-m','venv',venv]],['python',['-m','venv',venv]]]:
-      [['python3',['-m','venv',venv]],['python',['-m','venv',venv]]]
-    let failure
-    for(const [program,args] of choices){
-      try{await run(program,args,{timeout:120_000});failure=undefined;break}
-      catch(e){failure=e}
+  let compatible=false
+  if(await exists(py)){
+    try{
+      await run(py,['-c','import sys; assert sys.version_info >= (3,12)'],{timeout:10000})
+      compatible=true
+    }catch{
+      // Only remove PHOENIX's own isolated venv; never touch system Python.
+      await rm(venv,{recursive:true,force:true})
     }
-    if(failure)throw Error('Python 3 missing or venv creation failed: '+failure.message)
   }
-  // The executable alone does not prove the pinned distribution version.
-  // OddsHarvester documents --help, not necessarily --version.
+  if(!compatible){
+    let selected=null
+    for(const [bin,prefix] of pythonCandidates()){
+      try{
+        await run(bin,[...prefix,'-c','import sys; assert sys.version_info >= (3,12)'],
+          {timeout:10000})
+        selected=[bin,prefix];break
+      }catch{/* try a different compatible interpreter */}
+    }
+    if(!selected)throw Error(
+      'OddsHarvester 0.20.0 requires Python >=3.12. Install Python 3.12/3.13 (Windows py launcher) and retry. Existing Python 3.11 is unsupported.')
+    await run(selected[0],[...selected[1],'-m','venv',venv],{timeout:120000})
+  }
+  // Verify the installed distribution and actual browser executable, not
+  // merely a CLI command on PATH or an importable Playwright package.
   const verifyPinned=()=>run(py,['-c',
     'import importlib.metadata as m, sys; sys.exit(m.version("oddsharvester") != "'+
       ODDSHARVESTER_VERSION+'")'],{timeout:15000})
-  if(await exists(cli)){
-    try {
-      await verifyPinned()
-      await run(cli,['--help'],{timeout:15000})
-      await run(py,['-m','playwright','install','chromium'],{timeout:240_000})
-      return
-    }
-    catch{ /* repair missing or wrong-version installation */ }
+  const verifyBrowser=()=>run(py,['-c',
+    'from pathlib import Path; from playwright.sync_api import sync_playwright; '+
+    'p=sync_playwright().start(); x=p.chromium.executable_path; p.stop(); '+
+    'assert Path(x).is_file(), "Playwright Chromium missing"'],{timeout:15000})
+  let installed=await exists(cli)
+  if(installed){
+    try{await verifyPinned();await run(cli,['--help'],{timeout:15000})}
+    catch{installed=false}
   }
-  await run(py,['-m','pip','install','--disable-pip-version-check','oddsharvester=='+ODDSHARVESTER_VERSION],
-    {timeout:240_000})
-  await verifyPinned()
-  await run(py,['-m','playwright','install','chromium'],{timeout:240_000})
-  await run(cli,['--help'],{timeout:15_000})
+  if(!installed){
+    await run(py,['-m','pip','install','--disable-pip-version-check',
+      'oddsharvester=='+ODDSHARVESTER_VERSION],{timeout:240000})
+    await verifyPinned()
+    await run(cli,['--help'],{timeout:15000})
+  }
+  try{await verifyBrowser()}
+  catch{
+    await run(py,['-m','playwright','install','chromium'],{timeout:240000})
+    await verifyBrowser()
+  }
 }
 async function installHistory(){
   const sbr=await cloneOnce('sportsbookreview-scraper',upstream['sportsbookreview-scraper'])
@@ -142,7 +170,10 @@ async function installHistory(){
     const to=join(archive,'sportsbookreview-'+sport+'.json')
     if(!await exists(to))await copyFile(from,to)
     const size=(await stat(to)).size
-    if(size<1000||size>100_000_000)throw Error('Invalid SBR archive '+sport)
+    if(size!==archiveSizes[sport]){
+      await copyFile(from,to)
+      if((await stat(to)).size!==archiveSizes[sport])throw Error('Invalid SBR archive '+sport)
+    }
   }
   return sports
 }
@@ -160,6 +191,8 @@ export async function install(){
     ['MLB historic dataset and scraper sources',installMlb],
   ]
   for(const [name,action] of steps){
+    components[name]={status:'installing',at:new Date().toISOString()}
+    await save(components)
     try{
       await action()
       components[name]={status:'installed',at:new Date().toISOString()}
@@ -177,8 +210,14 @@ export async function install(){
 }
 export async function status(){
   const value=await loadState()
+  const sports=await Promise.all(['nba','mlb','nfl','nhl'].map(async sport=>({
+    sport,available:await exists(join(archive,'sportsbookreview-'+sport+'.json')),
+  })))
+  const mlbAvailable=await exists(join(archive,'mlb-odds.json'))
   return {home,configured:value!==null,components:value?.components??{},
-    executable:await exists(cli),history:await exists(archive)}
+    executable:await exists(cli),history:await exists(archive),sports,
+    mlbAvailable,log:join(home,'install.log'),updatedAt:value?.updatedAt??null,
+    note:'La CLI instalada no demuestra Chromium ni acceso real a OddsPortal.'}
 }
 if(process.argv[1]&&pathToFileURL(resolve(process.argv[1])).href===import.meta.url){
   if(flags.has('--status')){
