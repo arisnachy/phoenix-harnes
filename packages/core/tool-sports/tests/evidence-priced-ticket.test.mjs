@@ -177,7 +177,7 @@ test('automatic odds ticket uses the existing The Odds API adapter if keyless sc
             {name:'Draw',price:3.2},
           ],
         }]}],
-      })),{status:200})
+      }))),{status:200})
     }
     return feed(url)
   }
