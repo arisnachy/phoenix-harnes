@@ -19,7 +19,7 @@ test('team explorer produces responsive cards with only actual roster, news, log
     if(u.includes('/teams/456/schedule'))return{events:[{name:'City A vs City B',date:'2026-11-02'}]}
     if(u.includes('/teams/456/news'))return{articles:[{headline:'City A injury update',
       published:'2026-10-29',description:'Roster update',links:{web:{href:'https://www.espn.com/nhl/story/_/id/123/team-news'}}}]}
-    if(u.includes('/teams/456'))return{team:{displayName:'City A',abbreviation:'A',
+    if(u.endsWith('/teams/456'))return{team:{displayName:'City A',abbreviation:'A',
       logos:[{href:'https://a.espncdn.com/i/teamlogos/nba/500/a.png'}]}}
     return{}
   })
