@@ -36,6 +36,9 @@ const slugs:Readonly<Record<string,readonly [string,string]>>={
   icehockey_nhl:['hockey','nhl'],soccer_epl:['soccer','eng.1'],
   soccer_spain_la_liga:['soccer','esp.1'],soccer_usa_mls:['soccer','usa.1'],
   soccer_mexico_ligamx:['soccer','mex.1'],soccer_uefa_champs_league:['soccer','uefa.champions'],
+  basketball_ncaab:['basketball','mens-college-basketball'],
+  americanfootball_ncaaf:['football','college-football'],
+  soccer_world_cup:['soccer','fifa.world'],
 }
 const americanToDecimal=(value:unknown):number|null=>{
   if(typeof value!=='string'&&typeof value!=='number')return null
@@ -127,50 +130,199 @@ export function normalizeEspnMarkets(event:EEvent,odds:EspnOdds[]):EspnMarketQuo
   }
   return lines.slice(0,120)
 }
-/** Retrieve available, public ESPN pregame markets without a paid API key.
- * @param sportKey - ESPN-compatible sport key, mapped to a known league.
- * @param requestedMarkets - Requested market selection, limited to h2h until priced markets are validated.
- * @param getJSON - Validated fixed-host JSON fetcher provided by sports.ts.
- * @returns Actual ESPN odds or an empty list when unavailable.
+/**
+ * ESPN public endpoints are undocumented and may be blocked or changed at any time.
+ * Preserve provenance: probabilities, predictors, ATS and historical movements
+ * are intelligence inputs, not live bookmaker quotes.
  */
+export type EspnOddsDiagnostics = {
+  scoreboards:number
+  games:number
+  embedded:number
+  core:number
+  summary:number
+  resolvedRefs:number
+  failures:number
+  notes:string[]
+}
+export type EspnOddsResult={quotes:EspnMarketQuote[];diagnostics:EspnOddsDiagnostics}
+const MAX_QUOTE_AGE_MS=24*60*60*1000
+const MAX_REQUESTS=28
+const MAX_GAMES_PER_DAY=8
+const MAX_REFS_PER_GAME=3
+const oddsCache=new Map<string,{until:number;value:unknown}>()
+const oddsInflight=new Map<string,Promise<unknown>>()
+const dayInDR=(value:number)=>new Intl.DateTimeFormat('en-CA',{
+  timeZone:'America/Santo_Domingo',year:'numeric',month:'2-digit',day:'2-digit',
+}).format(new Date(value)).replaceAll('-','')
+const plusUtcDay=(date:string,offset:number):string=>{
+  const y=Number(date.slice(0,4)),m=Number(date.slice(4,6)),d=Number(date.slice(6,8))
+  const next=new Date(Date.UTC(y,m-1,d+offset))
+  return next.toISOString().slice(0,10).replaceAll('-','')
+}
+const safeCoreRef=(value:unknown,route:readonly [string,string],
+  eventId:string,competitionId:string):string|null=>{
+  if(typeof value!=='string'||value.length>600)return null
+  try{
+    const u=new URL(value)
+    if(u.protocol!=='https:'||u.username||u.password||u.port||
+      !['sports.core.api.espn.com','sports.core.api.espn.pvt'].includes(u.hostname))return null
+    const prefix='/v2/sports/'+route[0]+'/leagues/'+route[1]+'/events/'+eventId+
+      '/competitions/'+competitionId+'/odds/'
+    if(!u.pathname.startsWith(prefix)||!/^\/\d{1,16}$/u.test(u.pathname.slice(prefix.length-1)))return null
+    // ESPN occasionally emits internal .pvt links in public Core collections.
+    if(u.hostname==='sports.core.api.espn.pvt')u.hostname='sports.core.api.espn.com'
+    if(u.searchParams.has('apiKey'))return null
+    return u.toString()
+  }catch{return null}
+}
+const quotationEntries=(value:unknown):EspnOdds[]=>{
+  if(Array.isArray(value))return list(value)
+  if(!isRecord(value))return []
+  const items=[...list(value.odds),...list(value.pickcenter),...list(value.items)]
+  return items.length?items:('provider'in value||'sportsbook'in value||'homeTeamOdds'in value)?
+    [value as EspnOdds]:[]
+}
+const availableQuote=(quote:EspnMarketQuote,now:number):boolean=>{
+  const updated=Date.parse(quote.updatedAt)
+  return Number.isFinite(updated)&&updated<=now+5*60_000&&now-updated<=MAX_QUOTE_AGE_MS
+}
+/** Request-scoped budget plus in-process short cache only for trusted, live transport.
+ * The injected test transport never shares global cache data between fixtures.
+ */
+async function readOddsJSON(
+  url:string,getJSON:<T>(url:string)=>Promise<T>,
+  budget:{used:number},cached:boolean,
+):Promise<unknown>{
+  const prior=cached?oddsCache.get(url):undefined
+  if(prior&&prior.until>Date.now())return prior.value
+  const pending=cached?oddsInflight.get(url):undefined
+  if(pending)return pending
+  if(budget.used>=MAX_REQUESTS)throw Error('Límite prudente de consultas ESPN alcanzado')
+  budget.used++
+  const request=(async()=>{
+    const value=await getJSON<unknown>(url)
+    if(cached){
+      if(oddsCache.size>=160)oddsCache.clear()
+      const ttl=url.includes('/scoreboard?')?45_000:90_000
+      oddsCache.set(url,{until:Date.now()+ttl,value})
+    }
+    return value
+  })()
+  if(cached)oddsInflight.set(url,request)
+  try{return await request}
+  finally{if(cached&&oddsInflight.get(url)===request)oddsInflight.delete(url)}
+}
+/**
+ * Multi-route keyless ESPN collector: daily scoreboard → Core odds ($ref) →
+ * site summary/pickcenter. Never assume a successful HTTP response contains prices.
+ * Stops on a bounded request budget and caches only actual network reads.
+ */
+export async function fetchPublicEspnOddsDetailed(
+  sportKey:string,requestedMarkets:string,getJSON:<T>(url:string)=>Promise<T>,
+  options:{now?:number;cache?:boolean;days?:number}={},
+):Promise<EspnOddsResult>{
+  const route=slugs[sportKey]
+  const diagnostics:EspnOddsDiagnostics={
+    scoreboards:0,games:0,embedded:0,core:0,summary:0,resolvedRefs:0,failures:0,notes:[],
+  }
+  if(!route)return {quotes:[],diagnostics:{...diagnostics,notes:['Liga sin ruta ESPN de cuotas confirmada']}}
+  const markets=[...new Set(requestedMarkets.split(',').filter(x=>['h2h','totals','spreads'].includes(x)))]
+  if(!markets.length)return {quotes:[],diagnostics}
+  const now=options.now??Date.now()
+  const start=dayInDR(now)
+  const days=Number.isInteger(options.days)&&options.days!==undefined
+    ?Math.min(3,Math.max(1,options.days)):3
+  const budget={used:0}
+  const quoteMap=new Map<string,EspnMarketQuote>()
+  let firstError:string|null=null
+  const read=(url:string)=>readOddsJSON(url,getJSON,budget,options.cache===true)
+  const remember=(event:EEvent,odds:EspnOdds[],origin:'embedded'|'core'|'summary')=>{
+    const found=normalizeEspnMarkets(event,odds)
+      .filter(q=>markets.includes(q.market)&&availableQuote(q,now))
+    if(found.length){
+      diagnostics[origin]+=found.length
+      for(const quote of found){
+        const key=[quote.eventId,quote.bookmaker,quote.market,quote.selection,quote.point??''].join('|')
+        const previous=quoteMap.get(key)
+        if(previous===undefined||Date.parse(previous.updatedAt)<Date.parse(quote.updatedAt))
+          quoteMap.set(key,quote)
+      }
+    }
+  }
+  const reportFailure=(context:string,error:unknown)=>{
+    diagnostics.failures++
+    const message=error instanceof Error?error.message:String(error)
+    if(firstError===null)firstError=message
+    if(diagnostics.notes.length<7)diagnostics.notes.push(context+': '+message.slice(0,110))
+  }
+  const coreBase='https://sports.core.api.espn.com/v2/sports/'+route[0]+'/leagues/'+route[1]+'/events/'
+  const siteBase='https://site.api.espn.com/apis/site/v2/sports/'+route[0]+'/'+route[1]+'/'
+  const seenEvents=new Set<string>()
+  for(let offset=0;offset<days&&budget.used<MAX_REQUESTS;offset++){
+    const date=plusUtcDay(start,offset)
+    let board:ESPNBoard
+    try{
+      board=await read(siteBase+'scoreboard?dates='+date) as ESPNBoard
+      diagnostics.scoreboards++
+      if(!Array.isArray(board.events))throw Error('Scoreboard ESPN sin lista events')
+    }catch(error){reportFailure('Scoreboard '+date,error);continue}
+    const candidates=(board.events??[]).filter(event=>
+      safeId(event.id)!==null&&Date.parse(event.date??'')>now)
+      .sort((a,b)=>Date.parse(a.date??'')-Date.parse(b.date??''))
+      .slice(0,MAX_GAMES_PER_DAY)
+    for(const event of candidates){
+      const eventId=safeId(event.id),competition=event.competitions?.[0]
+      const competitionId=safeId(competition?.id)
+      if(!eventId||!competition||seenEvents.has(eventId))continue
+      seenEvents.add(eventId)
+      diagnostics.games++
+      remember(event,list(competition.odds),'embedded')
+      // Do not request additional routes when the scoreboard already provides
+      // every requested market, saving ESPN calls and avoiding duplicate prices.
+      const observedMarkets=()=>new Set([...quoteMap.values()]
+        .filter(q=>q.eventId===eventId).map(q=>q.market))
+      if(markets.every(m=>observedMarkets().has(m)))continue
+      if(!competitionId)continue
+      const corePath=coreBase+eventId+'/competitions/'+competitionId+'/odds'
+      try{
+        const raw=await read(corePath+'?limit=5')
+        const collection=quotationEntries(raw)
+        remember(event,collection.filter(x=>!('$ref'in x)),'core')
+        const references=isRecord(raw)&&Array.isArray(raw.items)
+          ?raw.items.filter(isRecord).map(x=>safeCoreRef(x.$ref,route,eventId,competitionId))
+            .filter((x):x is string=>x!==null).slice(0,MAX_REFS_PER_GAME):[]
+        for(const link of references){
+          if(budget.used>=MAX_REQUESTS)break
+          try{
+            const resolved=quotationEntries(await read(link))
+            remember(event,resolved,'core')
+            diagnostics.resolvedRefs++
+          }catch(error){reportFailure('Core referencia de '+eventId,error)}
+        }
+      }catch(error){reportFailure('Core odds de '+eventId,error)}
+      if(markets.every(m=>observedMarkets().has(m)))continue
+      if(budget.used>=MAX_REQUESTS)break
+      try{
+        const summary=await read(siteBase+'summary?event='+eventId)
+        const entries=quotationEntries(summary)
+        remember(event,entries,'summary')
+      }catch(error){reportFailure('Summary/pickcenter de '+eventId,error)}
+    }
+    if(quoteMap.size>=80)break
+  }
+  if(diagnostics.scoreboards===0&&diagnostics.failures>0)
+    throw Error('ESPN Scoreboard no disponible: '+(firstError??'respuesta inválida'))
+  if(quoteMap.size===0&&diagnostics.notes.length===0){
+    diagnostics.notes.push(diagnostics.games
+      ?'Se encontraron próximos partidos, pero ESPN no publicó líneas con casa y fecha verificables'
+      :'No se localizaron próximos encuentros en el período consultado')
+  }
+  return {quotes:[...quoteMap.values()].slice(0,160),diagnostics}
+}
+/** Compatibility facade: preserves the original two-stage API for callers. */
 export async function fetchPublicEspnOdds(
   sportKey:string,requestedMarkets:string,getJSON:<T>(url:string)=>Promise<T>,
 ):Promise<EspnMarketQuote[]>{
-  const route=slugs[sportKey]
-  if(!route)return []
-  if(!requestedMarkets.split(',').some(m=>['h2h','totals','spreads'].includes(m)))return []
-  const localDate=new Intl.DateTimeFormat('en-CA',{ timeZone:'America/Santo_Domingo',year:'numeric',month:'2-digit',day:'2-digit' }).format(new Date()).replaceAll('-','')
-  const root='https://site.api.espn.com/apis/site/v2/sports/'+route[0]+'/'+route[1]+'/scoreboard?dates='+localDate
-  const board=await getJSON<ESPNBoard>(root)
-  if(!Array.isArray(board.events))throw new Error('ESPN devolvió un scoreboard sin eventos válidos')
-  const quotes:EspnMarketQuote[]=[]
-  for(const event of board.events.slice(0,14)){
-    const competition=event.competitions?.[0]
-    if(!competition)continue
-    let odds=list(competition.odds)
-    if(!odds.length){
-      const eventId=safeId(event.id),competitionId=safeId(competition.id)
-      if(!eventId||!competitionId)continue
-      const url='https://sports.core.api.espn.com/v2/sports/'+route[0]+'/leagues/'+route[1]+'/events/'+eventId+'/competitions/'+competitionId+'/odds?limit=5'
-      try{
-        const data=await getJSON<unknown>(url)
-        odds=(Array.isArray(data)?list(data):isRecord(data)?list(data.items):[]).filter(x=>x.homeTeamOdds||x.awayTeamOdds||x.overOdds||x.underOdds||x.drawOdds)
-        if(!odds.length&&isRecord(data)){
-          const refs=Array.isArray(data.items)?data.items.filter(isRecord).slice(0,4):[]
-          for(const ref of refs){
-            const link=ref.$ref
-            if(typeof link!=='string')continue
-            const parsed=new URL(link)
-            if(parsed.protocol!=='https:'||!['sports.core.api.espn.com','sports.core.api.espn.pvt'].includes(parsed.hostname)
-              ||parsed.username||parsed.password||parsed.port)continue
-            if(parsed.hostname==='sports.core.api.espn.pvt')parsed.hostname='sports.core.api.espn.com'
-            if(!parsed.pathname.startsWith('/v2/sports/'+route[0]+'/leagues/'+route[1]+'/events/'+eventId+'/competitions/'+competitionId+'/odds/'))continue
-            try{odds.push(...list(await getJSON<EspnOdds>(parsed.toString())))}catch{ /* A listed market may be inaccessible. */ }
-          }
-        }
-      }catch{ /* Missing Core odds must not hide the games or invent lines. */ }
-    }
-    quotes.push(...normalizeEspnMarkets(event,odds).filter(q=>requestedMarkets.split(',').includes(q.market)))
-  }
-  return quotes.slice(0,100)
+  return (await fetchPublicEspnOddsDetailed(sportKey,requestedMarkets,getJSON)).quotes
 }
