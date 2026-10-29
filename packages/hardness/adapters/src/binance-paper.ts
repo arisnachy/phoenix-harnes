@@ -196,14 +196,18 @@ function parsePrice(value: unknown, symbol: string): number {
 
 /** Public, credential-free Binance Spot market reader used by paper trading. */
 export class BinancePublicMarketClient implements BinancePublicMarket {
-  /** Verify live Spot trading status and conservative risk markers. */
+  /**
+   * Verify live Spot trading status and conservative risk markers.
+   * @param rawSymbol - Spot symbol to verify before submitting a virtual buy.
+   * @returns True only if current metadata passes the fail-closed checks.
+   */
   async eligible(rawSymbol: string): Promise<boolean> {
     const symbol = normalizeSymbol(rawSymbol)
     const url = new URL('/api/v3/exchangeInfo', BINANCE_PUBLIC_API)
     url.searchParams.set('symbol', symbol)
     const raw = await fetchJson(url)
     if (!isRecord(raw) || !Array.isArray(raw.symbols)) throw new Error('Binance Spot status unavailable')
-    const row = raw.symbols.find(item => isRecord(item) && item.symbol === symbol)
+    const row: unknown = raw.symbols.find(item => isRecord(item) && item.symbol === symbol)
     return assessBinanceSpotSymbol(row) === undefined
   }
 
