@@ -5,9 +5,11 @@
  */
 import { getFeed } from './sports.ts'
 
+/** Provider-verified future event identity for source cross-checks. */
 export type PregameEvent = {
   sport:string;league:string;eventId:string
 }
+/** Verified source presence and explicit unresolved clinical/sport context. */
 export type PregameAssessment = {
   summaryVerified:boolean
   injuryReportVerified:boolean
@@ -41,9 +43,10 @@ export async function investigatePregame(
     // rejection, or an unknown response structure is NOT a clean bill of health.
     return record(data)&&(list(data.injuries)||list(data.items)||list(data.teams))
   }))
-  const available=new Map(leagues.map((e,i)=>[
-    leagueKey(e),injuryReports[i]?.status==='fulfilled'&&injuryReports[i].value===true,
-  ]))
+  const available=new Map<string,boolean>(leagues.map((e,i)=>{
+    const check=injuryReports[i]
+    return [leagueKey(e),check?.status==='fulfilled'&&check.value===true] as const
+  }))
   const summaries=await Promise.allSettled(limited.map(async e=>{
     const data=await getFeed<unknown>(
       'https://site.api.espn.com/apis/site/v2/sports/'+e.sport+'/'+e.league+
@@ -54,8 +57,9 @@ export async function investigatePregame(
     return (record(data.header)&&list(data.header.competitions)&&data.header.competitions.length>0)
       ||(record(data.boxscore)&&list(data.boxscore.teams)&&data.boxscore.teams.length>0)
   }))
-  return new Map(limited.map((e,i)=>{
-    const summaryVerified=summaries[i]?.status==='fulfilled'&&summaries[i].value===true
+  return new Map<string,PregameAssessment>(limited.map((e,i)=>{
+    const check=summaries[i]
+    const summaryVerified=check?.status==='fulfilled'&&check.value===true
     const injuryReportVerified=available.get(leagueKey(e))===true
     return [leagueKey(e)+'|'+e.eventId,{
       summaryVerified,injuryReportVerified,
@@ -64,6 +68,6 @@ export async function investigatePregame(
         ...(!injuryReportVerified?['Parte médico actual no verificable en ESPN']:[]),
         'Titulares y disponibilidad individual pendientes de confirmar',
       ],
-    }]
+    }] as const
   }))
 }
