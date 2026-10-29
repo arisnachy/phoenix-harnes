@@ -89,7 +89,7 @@ function chooseEntry(args: Intake): Entry | null {
   const intent = (args.intent ?? '').normalize('NFD').replace(/[\u0300-\u036f]/gu, '').toLowerCase()
   if (/articulo cientifico|journal (article|manuscript)|manuscrito cientifico/u.test(intent)) return 'scientific_article'
   if (/vancouver/u.test(intent)) return 'vancouver'
-  if (/apa(?:\s*7|\s*septima)?|normas?\s*apa/u.test(intent)) return 'apa7'
+  if (/\bapa(?:\s*7|\s*septima)?\b|\bnormas?\s*apa\b/u.test(intent)) return 'apa7'
   if (args.citation_style !== undefined) return args.citation_style
   return null
 }
