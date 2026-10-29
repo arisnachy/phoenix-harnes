@@ -33,8 +33,11 @@ export function hydrateSportsSources(env:NodeJS.ProcessEnv=process.env):NodeJS.P
         next.PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED='1'
     }
     const history=value.paths.history
-    if(history&&inside(history)&&existsSync(join(history,'sportsbookreview-nhl.json'))
-      &&value.components['SportsbookReview NFL/NBA/NHL/MLB archive']?.status==='installed'){
+    const historicSbr=value.components['SportsbookReview NFL/NBA/NHL/MLB archive']?.status==='installed'
+      &&existsSync(join(history??'', 'sportsbookreview-nhl.json'))
+    const historicMlb=value.components['MLB historic dataset and scraper sources']?.status==='installed'
+      &&existsSync(join(history??'', 'mlb-odds.json'))
+    if(history&&inside(history)&&(historicSbr||historicMlb)){
       if(next.PHOENIX_SPORTS_HISTORY_DIR===undefined)next.PHOENIX_SPORTS_HISTORY_DIR=history
     }
   }catch{/* installation not yet complete: old Phoenix runtime stays safe */}
