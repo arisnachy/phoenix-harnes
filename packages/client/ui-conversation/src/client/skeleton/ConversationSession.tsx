@@ -198,7 +198,7 @@ function DraftMirrorBridge({
  * @returns the active view area, or null while the Session remains blank.
  */
 export function ConversationSession({
-  sessionId, useSession, useInput, inputActions, useStore, actions,
+  sessionId, useSession, useSessions, useInput, inputActions, useStore, actions,
   renderSlot, views, bindDraftMirror, releaseSessionImages,
 }: ConversationSessionProps) {
   useSyncExternalStore(views.subscribe, views.version)
@@ -207,6 +207,9 @@ export function ConversationSession({
   const active = resolveActiveView(tabs, selectedId)
   const composerPhase = useSession(s => s.composerPhase)
   const blank = useSession(s => s.blank)
+  // A host-listed nonblank session is real even before its history tail arrives.
+  // Do not hide the entire view behind the transient pre-replay blank bit.
+  const summaryBlank = useSessions(s => s.byId[sessionId]?.blank)
   // `?? null`: persisted snapshots from before the inspect field rehydrate without it.
   const inspect = useStore(s => s.inspect ?? null)
 
@@ -223,7 +226,7 @@ export function ConversationSession({
         actions={actions}
         bindDraftMirror={bindDraftMirror}
       />
-      {blank && composerPhase === 'blank'
+      {blank && composerPhase === 'blank' && summaryBlank !== false
         ? null
         : (
           <div className={css.viewArea}>

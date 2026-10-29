@@ -229,12 +229,12 @@
   scrollbar-gutter: stable;
 }
 
-.root[data-phase='active'] .viewArea {
+.root:is([data-phase='active'], [data-phase='settling']) .viewArea {
   flex: 1 0 auto;
   min-height: auto;
 }
 
-.root[data-phase='active'] .composerSeat {
+.root:is([data-phase='active'], [data-phase='settling']) .composerSeat {
   position: sticky;
   bottom: 0;
   z-index: 7;
@@ -318,8 +318,14 @@
   overflow-y: auto;
 }
 
-.root[data-phase='settling'] .composerSeat {
-  visibility: hidden;
+/* A history round-trip must never erase the composer. A suspended session
+   remains navigable and the loading indicator stays visible until replay lands. */
+.recoveryStatus {
+  flex: none;
+  align-self: center;
+  padding: 12px 20px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
 }
 
 @media (max-width: 720px) {
