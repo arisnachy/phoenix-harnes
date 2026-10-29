@@ -14,6 +14,7 @@ export const DEFAULT_ASSISTANT_GENDER = 'feminine' as const
 export const ASSISTANT_GENDERS: readonly AssistantGender[] = ['masculine', 'feminine', 'neutral']
 /** Persisted provenance values; an absent source means inference is still open. */
 export const ASSISTANT_GENDER_SOURCES: readonly AssistantGenderSource[] = ['inferred', 'manual']
+/** Modes controlling whether and how the assistant addresses the user. */
 export const USER_ADDRESS_MODES: readonly UserAddressMode[] = ['automatic', 'name', 'title', 'none']
 
 /** Default policy: no profile field is model-visible without an explicit opt-in. */

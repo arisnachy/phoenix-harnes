@@ -41,22 +41,30 @@ function redactProfile(profile: UserProfileSettings): UserProfileRedacted {
   }
 }
 
-/** Build a consent-only projection: identity preferences never reveal unapproved private fields. */
+/** Build a consent-only projection: identity preferences never reveal unapproved private fields.
+ * @param profile - persisted private profile.
+ * @returns the only values that may enter the model prompt.
+ */
 export function projectConsentedProfile(profile: UserProfileSettings): UserProfileConsented {
   const consented: UserProfileConsented = {}
-  if (profile.consent.preferredName === true && profile.preferredName !== undefined) consented.preferredName = profile.preferredName
-  if (profile.consent.profession === true && profile.profession !== undefined) consented.profession = profile.profession
-  if (profile.consent.professionalTitle === true && profile.professionalTitle !== undefined) consented.professionalTitle = profile.professionalTitle
+  if (profile.consent.preferredName && profile.preferredName !== undefined) consented.preferredName = profile.preferredName
+  if (profile.consent.profession && profile.profession !== undefined) consented.profession = profile.profession
+  if (profile.consent.professionalTitle && profile.professionalTitle !== undefined) {
+    consented.professionalTitle = profile.professionalTitle
+  }
   if (profile.addressingMode !== undefined && profile.addressingMode !== 'automatic') consented.addressingMode = profile.addressingMode
-  if (profile.consent.dateOfBirth === true && profile.dateOfBirth !== undefined) consented.age = deriveAge(profile.dateOfBirth)
-  if (profile.consent.gender === true && profile.gender !== undefined) consented.gender = profile.gender
-  if (profile.consent.pronouns === true && profile.pronouns !== undefined) consented.pronouns = profile.pronouns
-  if (profile.consent.tone === true && profile.tone !== undefined) consented.tone = profile.tone
-  if (profile.consent.family === true && profile.family !== undefined) consented.family = structuredClone(profile.family)
+  if (profile.consent.dateOfBirth && profile.dateOfBirth !== undefined) consented.age = deriveAge(profile.dateOfBirth)
+  if (profile.consent.gender && profile.gender !== undefined) consented.gender = profile.gender
+  if (profile.consent.pronouns && profile.pronouns !== undefined) consented.pronouns = profile.pronouns
+  if (profile.consent.tone && profile.tone !== undefined) consented.tone = profile.tone
+  if (profile.consent.family && profile.family !== undefined) consented.family = structuredClone(profile.family)
   return consented
 }
 
-/** Render only explicitly consented profile fields for the dynamic context snapshot. */
+/** Render only explicitly consented profile fields for the dynamic context snapshot.
+ * @param profile - the consent-filtered profile.
+ * @returns text for the model's dynamic runtime context.
+ */
 export function renderConsentedProfile(profile: UserProfileConsented): string {
   const lines: string[] = []
   if (profile.preferredName !== undefined) lines.push(`Preferred name: ${profile.preferredName}`)
