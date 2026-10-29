@@ -91,7 +91,7 @@ export function UniversalArtifactSurface({ artifact, renderMessageImages, loadIm
     : Reflect.get(navigator, 'clipboard') as { writeText?: (value: string) => Promise<void> } | undefined
   const canCopy = typeof clipboard?.writeText === 'function'
   const copy = (): void => {
-    if (!canCopy || typeof clipboard?.writeText !== 'function') return
+    if (clipboard === undefined || typeof clipboard.writeText !== 'function') return
     void clipboard.writeText(serialized).then(() => { setCopied(true) }).catch(() => { setCopied(false) })
   }
   const attachment = imageAttachment(typeof artifact.data === 'string' ? undefined : artifact.data.attachment)
