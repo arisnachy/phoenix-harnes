@@ -1467,7 +1467,6 @@ export function ConnectorsSettingsSection({ api,
           && !(['microsoft-personal','outlook-mail','outlook-calendar','microsoft-contacts',
             'onedrive','microsoft-teams','sharepoint','x'].includes(definition.id))
         : live?.callable === true || accountConnected)
-      || definition.id === 'binance'
     return { definition, live, account, mcpRuntime, managed, openClaw: openClawRoute, connected }
   }), [catalogDefinitions, entries, liveConnectors, mcpHub, openClaw])
 
