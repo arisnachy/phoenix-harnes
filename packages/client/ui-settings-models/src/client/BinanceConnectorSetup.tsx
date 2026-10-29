@@ -328,6 +328,18 @@ export function BinanceConnectorSetup({ onChanged, onAuthorizeMcp }: {
                   La conexión OAuth Agentic de PHOENIX requerirá aprobación de Binance.
                 </p>
                 <p className={styles['advancedHint']}>
+                  <strong>Acceso Agentic a través de Codex CLI (cliente admitido):</strong>
+                  ejecuta estos comandos en PowerShell, dentro de Codex,
+                  y autoriza desde la página oficial de Binance.
+                </p>
+                <pre><code>{'codex mcp add binance-agentic --url https://agent.binance.com/mcp/agentic\\n'
+                  + 'codex mcp login binance-agentic'}</code></pre>
+                <p className={styles['advancedHint']}>
+                  Este inicio de sesión pertenece a Codex CLI y no otorga tokens ni
+                  permiso Trade al cliente OAuth propio de PHOENIX.
+                  Las operaciones reales seguirán sujetas a tu consentimiento y permisos.
+                </p>
+                <p className={styles['advancedHint']}>
                   <a href="https://developers.binance.com/en/docs/agent-native/mcp-server/agentic"
                     target="_blank" rel="noreferrer">Agentes oficialmente compatibles y guía de Binance</a>
                 </p>
