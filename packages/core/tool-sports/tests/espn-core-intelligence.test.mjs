@@ -108,7 +108,7 @@ test('normalizes actual ESPN moneyline, point spread and totals without guessing
 
 test('rewrites only the exact ESPN private hostname to the public Core host',async()=>{
  const calls=[]
- const ref='https://sports.core.api.espn.pvt/v2/sports/football/leagues/nfl/events/401220181/competitions/401220181/odds/41'
+ const ref='https://sports.core.api.espn.pvt/v2/sports/football/leagues/nfl/events/401220181/competitions/401220181/odds/2000'
  const result=await queryEspnCore({...game,mode:'odds',page:10},async url=>{
    calls.push(url)
    return url.includes('/odds?')?{count:1,items:[{$ref:ref}]}:{provider:{name:'DraftKings'}}
