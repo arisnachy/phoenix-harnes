@@ -44,6 +44,10 @@ function playsFrom(value:Obj):string|undefined{
   const play=object(value.lastPlay)
   return fieldText(play,'text','description')||fieldText(value,'lastPlayText')||undefined
 }
+function stat(team:Obj,names:string[]):string|undefined{
+  const result=arr(team.statistics).find(v=>names.includes(str(v.name))||names.includes(str(v.abbreviation)))
+  return result?str(result.displayValue??result.value,25)||undefined:undefined
+}
 function leadersFrom(comp:Obj):string[]{
   const categories=arr(comp.leaders)
   return categories.slice(0,3).flatMap(c=>arr(c.leaders).slice(0,1).map(v=>{
@@ -67,6 +71,7 @@ export function parseEspnLiveScoreboard(payload:unknown):PhoenixLiveGame[]{
     const first=Object.hasOwn(situation,'onFirst')?Boolean(situation.onFirst):false
     const second=Object.hasOwn(situation,'onSecond')?Boolean(situation.onSecond):false
     const third=Object.hasOwn(situation,'onThird')?Boolean(situation.onThird):false
+    const awayShots=stat(away,['shotsOnGoal','shots','SOG']),homeShots=stat(home,['shotsOnGoal','shots','SOG'])
     const awayPeriods=arr(away.linescores),homePeriods=arr(home.linescores)
     const periods=awayPeriods.length>0&&awayPeriods.length===homePeriods.length
       ?awayPeriods.slice(0,12).map((v,i)=>({label:String(i+1),away:str(v.displayValue??v.value,25)||'—',
@@ -85,6 +90,7 @@ export function parseEspnLiveScoreboard(payload:unknown):PhoenixLiveGame[]{
         ?{bases:[first,second,third] as [boolean,boolean,boolean]}:{}),
       ...(fieldText(situation,'downDistanceText','shortDownDistanceText')?{down:fieldText(situation,'downDistanceText','shortDownDistanceText')}:{}),
       ...(str(situation.possession)?{possession:str(situation.possession,80)}:{}),
+      ...(awayShots&&homeShots?{shots:awayShots+' - '+homeShots}:{}),
       ...(leadersFrom(comp).length?{leaders:leadersFrom(comp)}:{}),
       ...(periods.length?{periods}:{}),
     } satisfies PhoenixLiveGame]
@@ -161,7 +167,11 @@ export function SportsLiveProvider({sport,league,date,children}:{
     const update=async()=>{
       if(!active||busy||typeof document!=='undefined'&&document.visibilityState==='hidden')return
       if(typeof navigator!=='undefined'&&navigator.onLine===false)return
-      const running=memo.get(url)?.value.some(g=>g.phase==='in')??false
+      const cached=memo.get(url)?.value??[]
+      const running=cached.some(g=>g.phase==='in')
+      const today=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santo_Domingo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date())
+      // One archival lookup is enough; completed scoreboards must not poll indefinitely.
+      if(lastAttempt>0&&!running&&(date!==undefined&&date<today||cached.length>0&&cached.every(g=>g.phase==='post')))return
       const interval=running?20_000:60_000
       if(Date.now()-lastAttempt<interval)return
       lastAttempt=Date.now();busy=true
@@ -199,6 +209,9 @@ export function SportsLiveFacts({game,meta,sport}:{game?:PhoenixLiveGame;meta:Ph
         <span>B {game.balls===undefined?'—':game.balls} · S {game.strikes===undefined?'—':game.strikes}</span></div>
     </div>}
     {sport==='football'&&game.down&&<strong className={css.liveDetail}>{game.down}</strong>}
+    {sport==='hockey'&&game.shots&&<strong className={css.liveDetail}>Tiros a puerta · visita {game.shots.split(' - ')[0]} / local {game.shots.split(' - ')[1]}</strong>}
+    {sport==='basketball'&&game.clock&&<span className={css.liveDetail}>Período {game.period??'—'} · {game.clock} restantes</span>}
+    {sport==='soccer'&&game.clock&&<span className={css.liveDetail}>Reloj · {game.clock}</span>}
     {game.lastPlay&&<p className={css.livePlay}><strong>Última jugada: </strong>{game.lastPlay}</p>}
     {game.leaders?.length?<div className={css.liveLeaders}>{game.leaders.map((leader,i)=><span key={i}>{leader}</span>)}</div>:null}
     {game.periods?.length?<details className={css.livePeriods}><summary>Marcador por período</summary>
