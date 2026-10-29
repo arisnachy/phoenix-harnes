@@ -115,7 +115,23 @@ export async function evidenceTicket(
   candidateLegs.sort((a,b)=>b.rank-a.rank||a.pick.eventId.localeCompare(b.pick.eventId))
   const selected=candidateLegs.slice(0,count)
   const chosen=selected.map(x=>x.pick)
-  if(!chosen.length)throw Error('No hay encuentros con suficiente evidencia reciente para un ticket responsable')
+  if(!chosen.length){
+    // A zero-leg draft is useful and honest: Kira must not say that a 5-leg
+    // wager was prepared when every candidate failed evidence requirements.
+    const card:ChatBlock={component:'sports_ticket_card',version:1,props:{
+      title:'PHOENIX · Investigación insuficiente',
+      subtitle:'No hay selecciones respaldadas para completar el ticket',
+      requestedLegs:count,legs:[],combinedOdds:'No disponible',
+      source:'ESPN Site API · resultados comprobados '+new Date(now).toISOString(),
+      note:'TICKET INCOMPLETO: 0 de '+count+' eventos superaron la auditoría de muestra, coherencia y disponibilidad. No se inventan favoritos, precios ni probabilidades. Verificar otra fecha o ampliar ligas antes de apostar.',
+    }}
+    return{card,complete:false,verifiedEvents:0,candidatesEvaluated:evaluated,
+      researchLeagues:reports.filter(r=>r.status==='fulfilled').length,
+      insufficientEvidence,pregameSummariesVerified:0,injuryFeedsVerified:0,
+      researchStandard:'Sin candidatos con cinco partidos distintos por equipo (NFL tres) y tendencia contrastable.',
+      modelProbabilities:false,priced:false,placed:false,selections:[],
+      events:[]}
+  }
   const checks=await investigatePregame(selected.map(x=>({
     sport:x.pick.sport,league:x.pick.league,eventId:x.pick.eventId,
   })),fetcher)
