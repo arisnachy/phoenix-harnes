@@ -406,7 +406,7 @@ export class BinanceTestnetAutomation {
       const barsBySymbol=new Map<string,number>()
       for(const symbol of this.state.symbols){
         if (binanceKnownAssetRisk(symbol)) {
-          signals.push({symbol,regime:'range',strategy:'risk-filter',action:'hold',score:0,
+          signals.push({symbol,regime:'range',strategy:'none',action:'hold',score:0,
             lastClose:0,reason:'Binance risk-tag or delisting guard'})
           continue
         }
