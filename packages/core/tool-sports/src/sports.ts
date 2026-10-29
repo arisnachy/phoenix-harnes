@@ -1,5 +1,5 @@
 /** Read-only sports information adapters for Kira's conversation tools. */
-import { fetchPublicEspnOdds } from './espn-odds.ts'
+import { fetchPublicEspnOddsDetailed } from './espn-odds.ts'
 import { fetchTheOddsApi } from './free-odds.ts'
 import { keylessEnabled, keylessOdds, type KeylessSport } from './keyless-odds.ts'
 import { saveOddsSnapshot } from './odds-snapshots.ts'
@@ -315,6 +315,7 @@ export async function marketOddsDetailed(
     throw Error('Mercado inválido')
   const requests:Array<{name:string;run:()=>Promise<MarketOutcome[]>}>=[]
   const sources:OddsSourceAttempt[]=[]
+  let espnDetail=''
   const names=['The Odds API v4','TheOddsAPI','OddsHarvester','ESPN Site/Core']
   const configured=new Set<string>()
   if(hasSportsPermission('odds',env)){
@@ -375,10 +376,16 @@ export async function marketOddsDetailed(
   }
   if(hasSportsPermission('espn',env)){
     configured.add(names[3]!)
-    requests.push({name:names[3]!,run:async()=>
-      (await fetchPublicEspnOdds(sportKey,markets,
-        <T>(url:string)=>getFeed<T>(url,fetcher)))
-        .map(quote=>({...quote,sportKey,source:'ESPN Site/Core (sin clave)'}))})
+    requests.push({name:names[3]!,run:async()=>{
+      const {quotes,diagnostics}=await fetchPublicEspnOddsDetailed(sportKey,markets,
+        <T>(url:string)=>getFeed<T>(url,fetcher),{now,cache:fetcher===fetch})
+      espnDetail=[diagnostics.scoreboards+' días consultados',
+        diagnostics.games+' eventos futuros',diagnostics.resolvedRefs+' referencias resueltas',
+        diagnostics.embedded+' líneas scoreboard',diagnostics.core+' líneas Core',
+        diagnostics.summary+' líneas summary',diagnostics.failures+' fallos parciales',
+        ...diagnostics.notes.slice(0,2)].join(' · ')
+      return quotes.map(quote=>({...quote,sportKey,source:'ESPN Site/Core (sin clave)'}))
+    }})
   }
   const done=await Promise.allSettled(requests.map(x=>x.run()))
   const merged:MarketOutcome[]=[]
@@ -402,8 +409,9 @@ export async function marketOddsDetailed(
       if(merged.length>=1500)break
     }
     sources.push({provider,status:count?'observed':'empty',count,
-      detail:count?'Cuotas del proveedor con casa y mercado':
-        'Sin ofertas en la consulta (no implica que todos los mercados estén cerrados)'})
+      detail:(provider==='ESPN Site/Core'&&espnDetail?espnDetail:
+        count?'Cuotas del proveedor con casa y mercado':
+        'Sin ofertas en la consulta (no implica que todos los mercados estén cerrados)').slice(0,340)})
   }
   for(const name of names)if(!configured.has(name)){
     sources.push({provider:name,status:'unconfigured',count:0,

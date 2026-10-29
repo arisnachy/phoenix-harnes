@@ -97,7 +97,7 @@ test('ESPN Site odds provide decimal moneyline only from sourced positive and ne
   const future=new Date(Date.now()+86_400_000).toISOString()
   const event={id:'456',date:future,competitions:[{id:'456',competitors:[
     {homeAway:'home',team:{displayName:'Local'}},{homeAway:'away',team:{displayName:'Visitante'}},
-  ],odds:[{provider:{name:'ESPN Bet'},homeTeamOdds:{moneyLine:-125},awayTeamOdds:{moneyLine:+105}}]}]}
+  ],odds:[{provider:{name:'ESPN Bet'},lastUpdated:new Date(Date.now()-60_000).toISOString(),homeTeamOdds:{moneyLine:-125},awayTeamOdds:{moneyLine:+105}}]}]}
   const mock=await response({events:[event]})
   const quotes=await marketOdds('baseball_mlb','h2h',{},mock)
   assert.equal(quotes.length,2)
@@ -118,12 +118,14 @@ test('ESPN Core odds references are followed only for trusted https sports.core.
     queries.push(url)
     const data=url.includes('scoreboard?')?events:
       url.includes('odds?')?{items:[{$ref:'https://sports.core.api.espn.com/v2/sports/baseball/leagues/mlb/events/789/competitions/789/odds/1'}]}:
-      {provider:{name:'Casa ESPN'},homeTeamOdds:{moneyLine:-110},awayTeamOdds:{moneyLine:+110}}
+      {provider:{name:'Casa ESPN'},lastUpdated:new Date(Date.now()-60_000).toISOString(),homeTeamOdds:{moneyLine:-110},awayTeamOdds:{moneyLine:+110}}
     return new Response(JSON.stringify(data),{status:200})
   }
   const odds=await marketOdds('baseball_mlb','h2h',{},fetcher)
   assert.equal(odds.length,2)
-  assert.equal(queries.length,3)
+  assert.ok(queries.length>=3)
+  assert.ok(queries.some(url=>url.includes('/odds/1')))
+  assert.ok(queries.every(url=>!url.includes('evil.example')))
 })
 test('MLB unavailable falls back to ESPN free scoreboard instead of failing the chat',async()=>{
   const urls=[]

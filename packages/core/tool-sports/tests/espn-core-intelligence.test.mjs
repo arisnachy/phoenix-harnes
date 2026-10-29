@@ -140,6 +140,6 @@ test('keyless ESPN public market fallback resolves safe game odds to actual pric
  assert.equal(output.length,4)
  assert.deepEqual([...new Set(output.map(x=>x.market))].sort(),['h2h','totals'])
  assert.ok(output.every(x=>x.bookmaker==='DraftKings'))
- assert.equal(sources.length,3)
+ assert.ok(sources.length>=3)
  assert.equal(sources.some(x=>x.includes('espn.pvt')),false)
 })
