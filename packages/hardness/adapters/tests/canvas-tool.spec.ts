@@ -110,4 +110,13 @@ describe('phoenix_canvas tool', () => {
     expect(tool.description).toContain('exec-*.png')
   })
 
+  it('does not publish a website that refers to a detached generated image filename', async () => {
+    const conclude = vi.fn()
+    await expect(createPhoenixCanvasTool().execute({
+      title: 'Kira',
+      html: '<img src="exec-image.png" alt="Portada">',
+    }, execution(conclude))).rejects.toThrow('imágenes locales sin datos')
+    expect(conclude).not.toHaveBeenCalled()
+  })
+
 })
