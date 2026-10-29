@@ -56,7 +56,11 @@ function start(){
   if(process.env.PHOENIX_SPORTS_SOURCES_AUTO_INSTALL==='0'||!existsSync(installer))return
   if(ready())return
   try{
-    if(existsSync(state)&&!shouldBootstrap(JSON.parse(readFileSync(state,'utf8'))))return
+    if(existsSync(state)){
+      const prior=JSON.parse(readFileSync(state,'utf8'))
+      const complete=required.every(name=>prior.components?.[name]?.status==='installed')
+      if(!complete&&!shouldBootstrap(prior))return
+    }
   }catch{ /* missing state */ }
   mkdirSync(home,{recursive:true})
   try{
