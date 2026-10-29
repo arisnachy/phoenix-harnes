@@ -567,7 +567,7 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
   t: ConnectorsSettingsSectionProps['connectorT']
   authorizationProgress?: ReactNode
   onChanged: () => void
-  onAuthorize: (entry: Entry) => void
+  onAuthorize: (entry: Entry, preferredMethod?: string) => void
   onDisconnect?: ((entry: Entry) => void) | undefined
   onConfigure?: (() => void) | undefined
   onInstallCurated?: (() => void) | undefined
@@ -685,7 +685,7 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
       <p className={connectorStyles['connectorDescription']}>{definition.description}</p>
       {definition.id === 'binance' ? <BinanceConnectorSetup onChanged={onChanged}
         {...authorizationAccount?.methods.some(method => method.id === 'oauth')
-          ? { onAuthorizeMcp: () => { onAuthorize(authorizationAccount) } } : {}} /> : null}
+          ? { onAuthorizeMcp: () => { onAuthorize(authorizationAccount, 'oauth') } } : {}} /> : null}
       {definition.id === 'telegram' ? <TelegramConnectorSetup client={telegram} /> : null}
       {definition.id === 'github' ? (
         <div className={styles['advancedHint']}>
@@ -2078,8 +2078,8 @@ export function ConnectorsSettingsSection({ api,
                   repairing={row.managed !== undefined && repairingEntryId === row.managed.entryId}
                   removing={row.managed !== undefined && removingEntryId === row.managed.entryId}
                   onChanged={() => { setRefresh(current => current + 1) }}
-                  onAuthorize={(entry) => {
-                    const method = entry.methods[0]
+                  onAuthorize={(entry, preferredMethod) => {
+                    const method = entry.methods.find(candidate => candidate.id === preferredMethod) ?? entry.methods[0]
                     if (method !== undefined) begin(entry.key, method.id)
                   }}
                   onDisconnect={(entry) => { disconnect(entry.key) }}
