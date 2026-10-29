@@ -297,7 +297,7 @@ describe('ESPN universal adaptive panels',()=>{
     expect(parseGenerativeUiBlock({...template,props:{...base,
       sections:[{heading:'X',kind:'list',items:[{label:'A',html:'<img onerror=evil />'}]}]}})).toBeNull()
     expect(parseGenerativeUiBlock({...template,props:{...base,
-      sections:Array.from({length:9},()=>base.sections[0])]}})).toBeNull()
+      sections:Array.from({length:9},()=>base.sections[0])}})).toBeNull()
   })
 })
 
