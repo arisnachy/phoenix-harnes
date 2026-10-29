@@ -1,7 +1,7 @@
 import {test} from 'node:test'
 import assert from 'node:assert/strict'
 import {espnCoreUrl,queryEspnCore,espnCoreModes} from '../src/espn-core-intelligence.ts'
-import {normalizeEspnMarkets} from '../src/espn-odds.ts'
+import {normalizeEspnMarkets,fetchPublicEspnOdds} from '../src/espn-odds.ts'
 
 const base={sport:'football',league:'nfl'}
 const game={...base,eventId:'401220181',competitionId:'401220181',providerId:'41'}
@@ -116,4 +116,30 @@ test('rewrites only the exact ESPN private hostname to the public Core host',asy
  assert.equal(result.resolvedRefs,1)
  assert.equal(calls.length,2)
  assert.match(calls[1],/^https:\/\/sports\.core\.api\.espn\.com\//u)
+})
+
+test('keyless ESPN public market fallback resolves safe game odds to actual priced selections',async()=>{
+ const start=new Date(Date.now()+3*86_400_000).toISOString()
+ const head='https://sports.core.api.espn.com/v2/sports/basketball/leagues/nba/events/401999999/competitions/401999999/odds'
+ const ref=head.replace('.com','.pvt')+'/41'
+ const sources=[]
+ const output=await fetchPublicEspnOdds('basketball_nba','h2h,totals,spreads',async url=>{
+   sources.push(url)
+   if(url.includes('/scoreboard?'))return {events:[{id:'401999999',date:start,competitions:[{
+     id:'401999999',competitors:[
+       {homeAway:'home',team:{displayName:'Atlanta Hawks'}},
+       {homeAway:'away',team:{displayName:'Miami Heat'}}],
+   }]}]}
+   if(url.endsWith('/odds?limit=5'))return {count:1,items:[{$ref:ref}]}
+   if(url.includes('/odds/41'))return {provider:{name:'DraftKings'},
+     lastUpdated:new Date(Date.now()-40_000).toISOString(),
+     homeTeamOdds:{moneyLine:-120},awayTeamOdds:{moneyLine:105},
+     overUnder:211.5,overOdds:-110,underOdds:-110}
+   throw Error('Unexpected url '+url)
+ })
+ assert.equal(output.length,4)
+ assert.deepEqual([...new Set(output.map(x=>x.market))].sort(),['h2h','totals'])
+ assert.ok(output.every(x=>x.bookmaker==='DraftKings'))
+ assert.equal(sources.length,3)
+ assert.equal(sources.some(x=>x.includes('espn.pvt')),false)
 })
