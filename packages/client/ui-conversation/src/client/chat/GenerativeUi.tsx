@@ -897,7 +897,7 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
           </section>)}</div>
         {unpriced?<div className={css.sportsTicketTotal}>
           <div><small>Estado de las cuotas</small><strong>Pendientes de confirmar</strong></div>
-        </div>:<SportsTicketCalculator combinedOdds={p.combinedOdds} initialStake={p.stake}/>}
+        </div>:<SportsTicketCalculator combinedOdds={p.combinedOdds} {...(p.stake===undefined?{}:{initialStake:p.stake})}/>}
 
         <footer className={css.sportsFoot}>
           <strong>Ticket investigado · Aceptación de la casa sin verificar</strong>
