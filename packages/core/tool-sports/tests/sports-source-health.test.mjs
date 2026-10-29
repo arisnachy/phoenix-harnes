@@ -26,7 +26,7 @@ test('configured source, historical archive and different odds API keys are dist
     PHOENIX_SPORTS_HISTORY_DIR:'/archive',
   },async()=>true,async filename=>{files.push(filename);return filename.endsWith('sportsbookreview-nhl.json')})
   assert.equal(find(rows,'jordantete/OddsHarvester').status,'configured')
-  assert.equal(find(rows,'flancast90/sportsbookreview-scraper').status,'configured')
+  assert.equal(find(rows,'flancast90/sportsbookreview-scraper').status,'missing-files')
   assert.equal(find(rows,'ArnavSaraogi/mlb-odds-scraper').status,'missing-files')
   assert.equal(find(rows,'The Odds API v4').status,'configured')
   assert.equal(find(rows,'TheOddsAPI').status,'configured')
@@ -82,7 +82,7 @@ test('failed Python install is exposed to Kira rather than merely labeled disabl
     }))
     const env={PHOENIX_SPORTS_SOURCE_HOME:root}
     const report=managedSportsInstallStatus(env)
-    assert.equal(report.state,'partial')
+    assert.equal(report.state,'installing')
     assert.equal(report.playwrightVerifiedAtInstall,false)
     assert.equal(report.components.find(x=>x.name.startsWith('OddsHarvester')).lastError,
       'OddsHarvester requires Python >=3.12')
