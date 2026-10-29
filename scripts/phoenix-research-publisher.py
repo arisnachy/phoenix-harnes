@@ -155,6 +155,12 @@ def resolve_design_preset(data, presentation):
                     "journal_manuscript", "research_protocol"):
         return "clinical_teal"
     if doc_type == "thesis":
+        if data.get("visual_preference") == "premium":
+            title = unicodedata.normalize("NFKD", data.get("title", "")).lower()
+            title = "".join(ch for ch in title if not unicodedata.combining(ch))
+            if any(term in title for term in ("salud", "medicina", "clinica", "hospital", "neuro")):
+                return "clinical_teal"
+            return "research_violet"
         return "minimal_graphite"
     if doc_type == "monograph":
         return "editorial_navy"
@@ -254,6 +260,8 @@ def validate(data):
     selected_design = data.get("design_preset", "auto")
     if selected_design not in DESIGN_PRESET_NAMES:
         raise ValueError("design_preset must be one of the registered modern design names")
+    if data.get("visual_preference", "standard") not in ("standard", "premium"):
+        raise ValueError("visual_preference must be standard or premium")
     if resolved_presentation in ("academic", "journal") and selected_design not in ("auto", "academic_classic"):
         raise ValueError("academic and journal modes cannot use decorative covers")
     if resolved_presentation not in ("academic", "journal") and selected_design == "academic_classic":
@@ -1305,7 +1313,7 @@ def main():
 
     chunks = []
     chunks.append("<!doctype html><html lang='es'><meta charset='utf-8'><title>"+html.escape(title)+"</title>")
-    chunks.append("<style>:root{--ink:"+tokens["title"]+";--accent:"+accent+";--paper:"+tokens["paper"]+"}body{font:17px/1.65 system-ui,Georgia,serif;max-width:880px;margin:44px auto;padding:0 22px;color:var(--ink);background:var(--paper)}h1,h2{line-height:1.3}h2{color:var(--accent);border-bottom:1px solid #d9e3e6;padding-bottom:.45em}a{color:var(--accent)}nav{padding:20px 0}.ref{font-size:.88em;margin:9px 0}figure img{width:100%}table{border-collapse:collapse;width:100%;font-size:.88em;display:block;overflow-x:auto}td,th{border-bottom:1px solid #dce5ea;padding:9px;text-align:left}th{background:#e9f3f4}</style>")
+    chunks.append("<style>:root{--ink:"+tokens["title"]+";--accent:"+accent+";--paper:"+tokens["paper"]+"}body{font:17px/1.65 system-ui,Georgia,serif;max-width:880px;margin:44px auto;padding:0 22px;color:var(--ink);background:var(--paper)}h1,h2{line-height:1.3}h2{color:var(--accent);border-bottom:1px solid #d9e3e6;padding-bottom:.45em}a{color:var(--accent)}nav{padding:20px 0}.ref{font-size:.88em;margin:9px 0}figure img{width:100%}table{border-collapse:collapse;width:100%;font-size:.88em;display:block;overflow-x:auto}td,th{border-bottom:1px solid #dce5ea;padding:9px;text-align:left}th{background:#e9f3f4}.apa-references .ref{padding-left:1.27cm;text-indent:-1.27cm;margin:.7em 0}@media print{body{max-width:none;margin:0;background:white}figure,table{break-inside:avoid}}</style>")
     chunks.append("<h1>"+html.escape(title)+"</h1>")
     chunks.append("<p>"+html.escape(" · ".join(str(cover.get(k,"")) for k in ("institution","faculty","degree","date") if cover.get(k)))+"</p>")
     for author in authors: chunks.append("<p class='ref'>"+html.escape(author)+"</p>")
@@ -1336,10 +1344,12 @@ def main():
         for note_line in visual_notes(chart, refs, style, numbers):
             chunks.append("<p class='ref'>"+html.escape(note_line)+"</p>")
         chunks.append("</figure>")
-    chunks.append("<h2>Referencias</h2><ol>")
+    chunks.append("<h2>Referencias</h2>" + ("<ol>" if style in ("vancouver", "ama") else "<div class='apa-references'>"))
     for src in ordered_refs:
-        chunks.append("<li class='ref'>"+html.escape(bibliography(src,style,numbers[src["key"]]))+"</li>")
-    chunks.append("</ol>")
+        item = html.escape(bibliography(src,style,numbers[src["key"]]))
+        chunks.append("<li class='ref'>"+item+"</li>" if style in ("vancouver", "ama")
+                      else "<p class='ref'>"+item+"</p>")
+    chunks.append("</ol>" if style in ("vancouver", "ama") else "</div>")
     if report.get("declarations"):
         chunks.append("<section><h2>Declaraciones de investigación</h2>")
         for key, label in (("ethics", "Ética"), ("funding", "Financiación"),
