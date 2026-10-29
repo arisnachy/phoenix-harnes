@@ -37,8 +37,10 @@ export const MIN_PYTHON=[3,12]
 export const pythonCompatible=version=>Array.isArray(version)&&Number(version[0])===3&&Number(version[1])>=12
 export function pythonCandidates(platform=process.platform){
   const base=platform==='win32'?
-    [['py',['-3.13']],['py',['-3.12']],['py',['-3.14']],['py',['-3']]]:
-    [['python3.13',[]],['python3.12',[]],['python3.14',[]]]
+    [['py',['-3.13']],['py',['-3.12']],['py',['-3.14']],['py',['-3']],
+      ...(process.env.LOCALAPPDATA?[[
+        join(process.env.LOCALAPPDATA,'Programs','Python','Python313','python.exe'),[],
+      ]]:[])]:[['python3.13',[]],['python3.12',[]],['python3.14',[]]]
   return [...base,['python3',[]],['python',[]]]
 }
 export const manifestPath=state
@@ -125,16 +127,36 @@ async function installPython(){
     }
   }
   if(!compatible){
-    let selected=null
-    for(const [bin,prefix] of pythonCandidates()){
+    const findPython=async()=>{
+      for(const [bin,prefix] of pythonCandidates()){
+        try{
+          await run(bin,[...prefix,'-c','import sys; assert sys.version_info >= (3,12)'],
+            {timeout:10000})
+          return [bin,prefix]
+        }catch{/* test next supported runtime */}
+      }
+      return null
+    }
+    let selected=await findPython()
+    if(!selected&&process.platform==='win32'
+      &&process.env.PHOENIX_SPORTS_AUTO_PYTHON_INSTALL!=='0'){
+      // No admin elevation: only the user-scoped, officially packaged Python.
+      // WinGet validates the publisher's signed installer. If the package
+      // manager is unavailable or corporate policy blocks it, fail visibly.
+      process.stdout.write('[PHOENIX SPORTS] Installing Python 3.13 in user scope with WinGet\\n')
       try{
-        await run(bin,[...prefix,'-c','import sys; assert sys.version_info >= (3,12)'],
-          {timeout:10000})
-        selected=[bin,prefix];break
-      }catch{/* try a different compatible interpreter */}
+        await run('winget',['install','--id','Python.Python.3.13','--exact',
+          '--source','winget','--scope','user','--silent',
+          '--accept-package-agreements','--accept-source-agreements',
+          '--disable-interactivity','--no-upgrade'],{timeout:300000})
+        selected=await findPython()
+      }catch(error){
+        process.stderr.write('[PHOENIX SPORTS] WinGet Python install unavailable: '+
+          String(error instanceof Error?error.message:error)+'\\n')
+      }
     }
     if(!selected)throw Error(
-      'OddsHarvester 0.20.0 requires Python >=3.12. Install Python 3.12/3.13 (Windows py launcher) and retry. Existing Python 3.11 is unsupported.')
+      'OddsHarvester 0.20.0 requires Python >=3.12. Auto-install through WinGet failed or was disabled; check Windows App Installer or install Python 3.13 for current user.')
     await run(selected[0],[...selected[1],'-m','venv',venv],{timeout:120000})
   }
   // Verify the installed distribution and actual browser executable, not
