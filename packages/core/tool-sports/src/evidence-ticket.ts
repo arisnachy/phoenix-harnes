@@ -21,6 +21,7 @@ export async function evidenceTicket(
   now=Date.now(),env:NodeJS.ProcessEnv=process.env,
 ):Promise<{card:ChatBlock;complete:boolean;verifiedEvents:number;
   candidatesEvaluated:number;researchLeagues:number;modelProbabilities:false;priced:false;placed:false;
+  insufficientEvidence:number;researchStandard:string;
   selections:ResearchTicketLeg[];events:Array<{eventId:string;home:string;away:string;kickoff:string;sport:string;league:string;pick:'home'|'away'}>}>{
   if(!Number.isInteger(count)||count<1||count>6)throw Error('El ticket requiere entre 1 y 6 patas')
   if(!validDate(date))throw Error('Fecha de ticket inválida')
@@ -49,16 +50,25 @@ export async function evidenceTicket(
   for(let offset=0;offset<shortlist.length;offset+=3){
     const batch=await Promise.allSettled(shortlist.slice(offset,offset+3).map(({sport,league})=>
       researchSport(sport,league,date,fetcher,now,env,
-        sport==='football'?28:sport==='soccer'?21:14)))
+        sport==='football'?28:sport==='soccer'?28:sport==='tennis'?28:21)))
     reports.push(...batch)
   }
   const candidateLegs:Array<{pick:ResearchTicketLeg;rank:number;home:string;away:string;kickoff:string}>=[]
   let evaluated=0
+  let insufficientEvidence=0
   for(const report of reports){
     if(report.status!=='fulfilled')continue
     for(const match of report.value.matches){
       evaluated++
-      if(match.evidence!=='descriptive'||match.home.completedGames<3||match.away.completedGames<3)continue
+      // Three different fixtures are a lower bound for descriptive research,
+      // NOT enough to sell a high-confidence 5/6-leg multi-sport parlay.
+      // Only NFL retains 3 because a league schedule has one match per week.
+      const minGames=match.sport==='football'?3:5
+      if(match.evidence!=='descriptive'
+        ||match.home.completedGames<minGames||match.away.completedGames<minGames){
+        insufficientEvidence++
+        continue
+      }
       const home=match.home,away=match.away
       if(home.averageMargin===null||away.averageMargin===null||home.averageScored===null||away.averageScored===null)continue
       const winDiff=percent(home.wins,home.completedGames)-percent(away.wins,away.completedGames)
@@ -66,20 +76,34 @@ export async function evidenceTicket(
       const scale=Math.max(1,(home.averageScored+away.averageScored)/2)
       const marginDiff=Math.max(-1,Math.min(1,(home.averageMargin-away.averageMargin)/(2*scale)))
       const restDiff=Math.max(-1,Math.min(1,((home.restHours??0)-(away.restHours??0))/72))
-      const rank=0.65*winDiff+0.30*marginDiff+0.05*restDiff
-      if(Math.abs(rank)<0.14)continue
+      // Conservative descriptive ranking, not a probability model. At least
+      // five distinct, scored games on EACH side for all non-NFL disciplines.
+      // Avoid a spurious lean when the margin and win-rate contradict.
+      if(Math.abs(winDiff)<0.08||Math.sign(winDiff)!==Math.sign(marginDiff)){
+        insufficientEvidence++
+        continue
+      }
+      const rank=0.55*winDiff+0.40*marginDiff+0.05*restDiff
+      if(Math.abs(rank)<0.16){
+        insufficientEvidence++
+        continue
+      }
       const favorite=rank>0?home:away,opponent=rank>0?away:home
       const sportRisks:Record<string,string>={
         soccer:'once/lesiones y xG',basketball:'lesiones y rotaciones',
         baseball:'abridores y bullpen',football:'QB y bajas',
         hockey:'portero titular',tennis:'superficie y molestias físicas',
       }
-      const rationale=('ESPN últimos '+favorite.completedGames+' juegos: '+favorite.name+' '+
-        favorite.wins+'V-'+favorite.losses+'D; rival '+opponent.name+' '+
-        opponent.wins+'V-'+opponent.losses+'D. Márgenes '+favorite.averageMargin+
-        ' vs '+opponent.averageMargin+'; descanso '+(favorite.restHours??'?')+
-        'h. Pendiente: '+(sportRisks[match.sport]??'alineación')+
-        ' y cuotas. Tendencia, NO probabilidad.').slice(0,240)
+      const observed=(side:typeof favorite)=>side.lastResults.slice(0,3).map(g=>
+        g.date.slice(5,10)+' '+g.scored+'-'+g.allowed+' '+g.opponent.slice(0,14)).join('; ')
+      const rationale=('ESPN '+favorite.completedGames+' partidos distintos: '+
+        favorite.name+' '+favorite.wins+'V-'+favorite.draws+'E-'+favorite.losses+'D; '+
+        opponent.name+' '+opponent.wins+'V-'+opponent.draws+'E-'+opponent.losses+'D. '+
+        'Últimos: '+observed(favorite)+'. '+
+        'Márgenes '+favorite.averageMargin+'/'+opponent.averageMargin+
+        '; descanso '+(favorite.restHours??'?')+'h. '+
+        'POR VERIFICAR: '+(sportRisks[match.sport]??'titulares')+
+        ' y cuota; sin probabilidad validada.').slice(0,240)
       candidateLegs.push({rank:Math.abs(rank),home:home.name,away:away.name,kickoff:match.date,pick:{
         sport:match.sport,league:match.league,eventId:match.eventId,
         pick:rank>0?'home':'away',rationale,
@@ -93,6 +117,8 @@ export async function evidenceTicket(
   const ticket=await researchTicket(chosen,date,fetcher,now,env,count,true)
   return{card:ticket.card,complete:ticket.complete,verifiedEvents:ticket.verifiedEvents,
     candidatesEvaluated:evaluated,researchLeagues:reports.filter(r=>r.status==='fulfilled').length,
+    insufficientEvidence,
+    researchStandard:'Preselección exigente con 5 eventos históricos por equipo (NFL: 3), resultados ESPN únicos, margen y descanso. Lesiones, titulares y cuotas siguen sin verificarse; no es una predicción calibrada.',
     modelProbabilities:false,priced:false,placed:false,selections:chosen,
     events:selected.map(x=>({eventId:x.pick.eventId,home:x.home,away:x.away,kickoff:x.kickoff,
       sport:x.pick.sport,league:x.pick.league,pick:x.pick.pick==='home'?'home' as const:'away' as const}))}
