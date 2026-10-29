@@ -57,7 +57,7 @@ describe('keyless ESPN live adapter',()=>{
     }})
     if(!block)throw Error('Invalid game card')
     render(<GenerativeUi block={block}/>)
-    await waitFor(()=>expect(screen.getByText('Personal foul')).toBeTruthy())
+    await waitFor(()=>expect(screen.getByText(/Personal foul/)).toBeTruthy())
     expect(screen.getByText('99')).toBeTruthy()
     expect(screen.getByText('88')).toBeTruthy()
     expect(screen.getByText('EN VIVO · 4th · 11:21')).toBeTruthy()
