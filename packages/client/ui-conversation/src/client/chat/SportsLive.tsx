@@ -20,11 +20,11 @@ const normalized=(name:string)=>name.normalize('NFD').replace(/[\u0300-\u036f]/g
 const score=(v:Obj)=>str(v.score,15)||undefined
 const fullTeam=(v:Obj)=>str(object(v.team).displayName)||str(object(v.team).name)
 export type PhoenixLiveGame={
-  id:string;home:string;away:string;homeScore?:string;awayScore?:string;
-  phase:'pre'|'in'|'post';status:string;clock?:string;period?:number;
-  lastPlay?:string;outs?:number;balls?:number;strikes?:number;
-  bases?:[boolean,boolean,boolean];down?:string;possession?:string;
-  shots?:string;leaders?:string[];periods?:Array<{label:string;away:string;home:string}>;
+  id:string;home:string;away:string;homeScore?:string|undefined;awayScore?:string|undefined;
+  phase:'pre'|'in'|'post';status:string;clock?:string|undefined;period?:number|undefined;
+  lastPlay?:string|undefined;outs?:number|undefined;balls?:number|undefined;strikes?:number|undefined;
+  bases?:[boolean,boolean,boolean]|undefined;down?:string|undefined;possession?:string|undefined;
+  shots?:string|undefined;leaders?:string[]|undefined;periods?:Array<{label:string;away:string;home:string}>|undefined;
 }
 export type PhoenixLiveLookup={eventId?:string;home:{label:string};away:{label:string}}
 export type PhoenixLiveMeta={updatedAt:number;stale:boolean;error:boolean;enabled:boolean}
@@ -156,7 +156,7 @@ async function liveFeed(url:string):Promise<PhoenixLiveGame[]>{
 }
 /** Shared scoped polling for the entire slate, never once per row. */
 export function SportsLiveProvider({sport,league,date,children}:{
-  sport?:string;league?:string;date?:string;
+  sport?:string|undefined;league?:string|undefined;date?:string|undefined;
   children:(get:(match:PhoenixLiveLookup)=>PhoenixLiveGame|undefined,meta:PhoenixLiveMeta)=>ReactNode
 }):ReactNode{
   const url=espnLiveUrl(sport,league,date)
@@ -193,7 +193,7 @@ export function SportsLiveProvider({sport,league,date,children}:{
   return children(get,{updatedAt:state.url===url?state.at:0,error:state.url===url&&state.error,
     enabled:Boolean(url),stale:state.url!==url||!state.at||Date.now()-state.at>95_000})
 }
-export function SportsLiveFacts({game,meta,sport}:{game?:PhoenixLiveGame;meta:PhoenixLiveMeta;sport?:string}):ReactNode{
+export function SportsLiveFacts({game,meta,sport}:{game?:PhoenixLiveGame|undefined;meta:PhoenixLiveMeta;sport?:string|undefined}):ReactNode{
   if(!game||game.phase!=='in')return null
   const baseball=sport==='baseball'
   return <div className={css.liveFacts} aria-label="Situación del partido en vivo">
