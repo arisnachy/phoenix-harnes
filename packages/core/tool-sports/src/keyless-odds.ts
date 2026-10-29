@@ -136,9 +136,12 @@ export const keylessEnabled=(env:NodeJS.ProcessEnv=process.env):boolean=>
     &&env.PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED!=='0'
 
 const cache=new Map<string,{at:number;rows:KeylessQuote[]}>()
+const failures=new Map<string,{at:number;message:string}>()
 let lastStatus:{checkedAt:string;status:'quotes'|'no-quotes'|'unavailable';count:number;error?:string}|undefined
 /** Observable provider state, not a claim that a future quote will be available. */
-export function lastKeylessStatus(){return lastStatus}
+export function lastKeylessStatus(){
+  return lastStatus&&Date.now()-Date.parse(lastStatus.checkedAt)<3_600_000?lastStatus:undefined
+}
 const inFlight=new Map<string,Promise<KeylessQuote[]>>()
 const localDay=()=>new Intl.DateTimeFormat('en-CA',{
   timeZone:'America/Santo_Domingo',year:'numeric',month:'2-digit',day:'2-digit',
@@ -157,9 +160,9 @@ async function runScraper(sport:KeylessSport,market:string,day:string,env:NodeJS
       '--request-delay','2']
     // No shell or arbitrary URLs; uvx is an optional self-contained runner, pinned to a tested package.
     // It may provision the package, but a browser binary must still be present on the host.
-    const safeEnv={...process.env,
-      THE_ODDS_API_KEY:undefined,THEODDSAPI_API_KEY:undefined,
-      OPENAI_API_KEY:undefined,ANTHROPIC_API_KEY:undefined,DEEPSEEK_API_KEY:undefined}
+    // Child process needs basic OS/browser variables, never the host's API keys or vault secrets.
+    const allow=/^(PATH|HOME|USERPROFILE|APPDATA|LOCALAPPDATA|TEMP|TMP|TMPDIR|SYSTEMROOT|WINDIR|PLAYWRIGHT_BROWSERS_PATH|UV_CACHE_DIR|UV_PYTHON_INSTALL_DIR|XDG_CACHE_HOME|LANG|LC_ALL)$/u
+    const safeEnv=Object.fromEntries(Object.entries(process.env).filter(([name])=>allow.test(name)))
     try{
       await runFile(executable,argv,{shell:false,windowsHide:true,timeout:120_000,maxBuffer:256_000,env:safeEnv})
     }catch(error){
@@ -193,6 +196,8 @@ export async function keylessOdds(
   if(!validDate(date))throw Error('Fecha de cuotas inválida')
   if(!keylessEnabled(env))throw Error('OddsHarvester deshabilitado expresamente en PHOENIX_SPORTS_KEYLESS_ODDS_DISABLED=1 o KEYLESS_ODDS_ENABLED=0')
   const key=[sport,market,date].join('|')
+  const previousError=runner===runScraper?failures.get(key):undefined
+  if(previousError&&now>=previousError.at&&now-previousError.at<90_000)throw Error(previousError.message)
   const cached=runner===runScraper?cache.get(key):undefined
   if(cached&&now>=cached.at&&now-cached.at<300_000)return cached.rows
   const running=runner===runScraper?inFlight.get(key):undefined
@@ -204,12 +209,17 @@ export async function keylessOdds(
       if(runner===runScraper){
         if(cache.size>=64)cache.clear()
         cache.set(key,{at:now,rows})
+        failures.delete(key)
         lastStatus={checkedAt:new Date(now).toISOString(),status:rows.length?'quotes':'no-quotes',count:rows.length}
       }
       return rows
     }catch(error){
-      if(runner===runScraper)lastStatus={checkedAt:new Date(now).toISOString(),status:'unavailable',count:0,
-        error:error instanceof Error?error.message.slice(0,180):'Error del proveedor'}
+      if(runner===runScraper){
+        const message=error instanceof Error?error.message.slice(0,180):'Error del proveedor'
+        failures.set(key,{at:now,message})
+        if(failures.size>64)failures.clear()
+        lastStatus={checkedAt:new Date(now).toISOString(),status:'unavailable',count:0,error:message}
+      }
       throw error
     }
   })()
