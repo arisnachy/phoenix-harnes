@@ -147,7 +147,9 @@ export class ClinicSandbox {
     this.clock = clock
   }
   #authorize(actor: ClinicActor, module: ClinicModule): void {
-    if (actor?.organization !== this.organization || !actor?.staffId ||
+    const actorInput: unknown = actor
+    if (typeof actorInput !== 'object' || actorInput === null ||
+        actor.organization !== this.organization || !actor.staffId ||
         !ROLE_ACCESS[module].includes(actor.role)) throw new Error('Acceso clínico denegado.')
   }
   #id(prefix: string): string { this.#next++; return prefix+'-'+String(this.#next).padStart(4,'0') }
@@ -264,7 +266,8 @@ export class ClinicSandbox {
     const e=this.#encounter(encounterId);this.#clinician(actor,e)
     if(actor.role!=='clinician')throw new Error('Las órdenes médicas requieren un prescriptor habilitado.')
     if(e.stage!=='signed'||e.signedBy===null)throw new Error('Las órdenes requieren una consulta firmada.')
-    if(kind!=='laboratory'&&kind!=='imaging')throw new TypeError('Tipo de estudio inválido.')
+    const requestedKind: unknown = kind
+    if(requestedKind!=='laboratory'&&requestedKind!=='imaging')throw new TypeError('Tipo de estudio inválido.')
     const order: OrderRecord={ id:this.#id('order'),organization:this.organization,encounterId,kind,
       description:checked(description,'Estudio',300),status:'ordered',report:null,reviewedBy:null }
     this.#orders.set(order.id,order);this.#event(actor,'order.create',order.id);return { ...order }
@@ -380,7 +383,10 @@ export class ClinicSandbox {
    * @returns The operation result, restricted to this authorized clinical context.
    */
   snapshot(actor:ClinicActor):ClinicSnapshot {
-    if(actor?.organization!==this.organization||!actor.staffId||!Object.values(ROLE_ACCESS).some(roles=>roles.includes(actor.role)))throw new Error('Acceso denegado.')
+    const actorInput: unknown = actor
+    if(typeof actorInput!=='object'||actorInput===null)throw new Error('Acceso denegado.')
+    if(actor.organization!==this.organization||!actor.staffId||
+      !Object.values(ROLE_ACCESS).some(roles=>roles.includes(actor.role)))throw new Error('Acceso denegado.')
     const publicPatient=ROLE_ACCESS.patients.includes(actor.role)
     const clinical=ROLE_ACCESS.consultations.includes(actor.role)
     const laboratory=actor.role==='laboratory'||clinical

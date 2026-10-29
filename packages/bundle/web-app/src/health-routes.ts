@@ -214,13 +214,13 @@ export function registerHealthRoutes(ctx:Context):void {
         if(!profile.ok||typeof email!=='string'||email.trim().toLowerCase()!==sender)
           throw new Error('El correo conectado no coincide con la identidad Kira autorizada')
         const planned=store.beginReminder(actor,id,sender)
-        let sendAttempted=false
+        const deliveryState={attempted:false}
         try {
           const providerId=await sendReminderWithVerifiedGmail(
             ctx,sender,planned.recipient,planned.subject,planned.body,
             ()=>{
               store.confirmReminderDelivery(actor,id,sender,planned.recipient)
-              sendAttempted=true
+              deliveryState.attempted=true
             },
           )
           store.finishReminder(actor,id,providerId)
@@ -228,8 +228,8 @@ export function registerHealthRoutes(ctx:Context):void {
         }catch{
           // An undelivered preflight is cancelled; a submitted request may
           // have succeeded despite timeout, so its outcome remains uncertain.
-          store.finishReminder(actor,id,undefined,!sendAttempted)
-          throw new Error(sendAttempted
+          store.finishReminder(actor,id,undefined,!deliveryState.attempted)
+          throw new Error(deliveryState.attempted
             ? 'Entrega no confirmada. Verifique Gmail antes de solicitar otro intento.'
             : 'Envío cancelado: se debe verificar de nuevo el consentimiento, la cita y la autorización.')
         }
