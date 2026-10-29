@@ -80,7 +80,7 @@ export function normalizeOddsHarvester(
     const link=safeLink(game.match_link),home=str(game.home_team),away=str(game.away_team)
     const kickoff=when(game.match_date),observed=when(game.scraped_date)
     if(!link||!home||!away||!Number.isFinite(kickoff)||(!historical&&kickoff<=now)
-      ||!Number.isFinite(observed)||observed>now+120_000||now-observed>maxAgeMs)continue
+      ||!Number.isFinite(observed)||observed>now+120_000||(!historical&&now-observed>maxAgeMs))continue
     const eventId=eventKey(link)
     for(const [field,value] of Object.entries(game)){
       if(!field.endsWith('_market')||!Array.isArray(value))continue
@@ -139,7 +139,7 @@ export function oddsHarvesterHistoricArgs(
   if(!sportOK(sport)||!marketOK(sport,market)||
     !/^[a-z0-9][a-z0-9-]{2,80}$/u.test(league)||
     !/^(?:20[0-9]{2})(?:-20[0-9]{2})?$/u.test(season)||
-    !/^[/a-zA-Z0-9._-]+$/u.test(file))throw Error('Consulta histórica inválida')
+    !file||file.length>512)throw Error('Consulta histórica inválida')
   return ['historic','--sport',sport,'--league',league,'--season',season,
     '--market',market,'--max-pages','2','--headless','--format','json',
     '--stream-ndjson','--output',file]
