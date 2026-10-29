@@ -148,6 +148,20 @@ function roster(data:unknown):Item[]{
       x.headshot)
   }).filter((x):x is Item=>x!==null)
 }
+
+/** Injury status appears on some roster rows; it is not a starter confirmation. */
+function rosterInjuries(data:unknown):Item[]{
+  return array(row(data).athletes).flatMap(group=>{
+    const g=row(group);return array(g.items).length?array(g.items):[group]
+  }).flatMap(value=>{
+    const athlete=row(value),injuries=array(athlete.injuries)
+    return injuries.slice(0,2).map(v=>{
+      const i=row(v),status=txt(i.status??row(i.type).description,100)
+      return status?item(athlete.displayName??athlete.fullName,status,i.date):null
+    })
+  }).filter((x):x is Item=>x!==null).slice(0,20)
+}
+
 function standings(data:unknown):Item[]{
   const nodes:unknown[]=[data],out:Item[]=[]
   while(nodes.length&&out.length<35){
@@ -189,7 +203,10 @@ function summaryFacts(data:unknown):{heading:string;items:Item[];image?:string}{
   const competitors=array(comp.competitors)
   const teams=competitors.slice(0,4).map(x=>{
     const c=row(x),t=row(c.team)
-    return item(t.displayName??t.name,c.score!==undefined?('Marcador: '+txt(c.score,25)):c.homeAway,
+    const final=row(row(h.status).type).state==='post'
+    const markedWinner=final&&c.winner===true
+    return item(t.displayName??t.name,c.score!==undefined?
+      ((markedWinner?'Ganador · ':'Marcador: ')+txt(c.score,25)):c.homeAway,
       array(c.records).map(r=>txt(row(r).summary,45)).filter(Boolean).join(' · '),t.logo??t.logos)
   }).filter((x):x is Item=>x!==null)
   const venue=row(comp.venue)
@@ -243,6 +260,9 @@ export async function exploreEspn(
     add('Plantilla',site+'teams/'+input.teamId+'/roster',900_000)
     add('Calendario del equipo',site+'teams/'+input.teamId+'/schedule',600_000)
     add('Noticias del equipo',site+'teams/'+input.teamId+'/news',300_000)
+    add('Estadísticas del equipo',site+'teams/'+input.teamId+'/statistics',1_800_000)
+    add('Récord del equipo',site+'teams/'+input.teamId+'/record',900_000)
+    add('Movimientos del equipo',site+'teams/'+input.teamId+'/transactions',1_800_000)
   }else if(view==='player'){
     add('Perfil del jugador',core+'athletes/'+input.athleteId,86_400_000)
     add('Resumen del jugador',web+'athletes/'+input.athleteId+'/overview')
@@ -282,12 +302,21 @@ export async function exploreEspn(
     title=label(v)||title; image=img(v.logos??v.logo)
     put(section('Perfil','metrics',[item('Abreviatura',v.abbreviation),item('Ciudad',v.location),
       item('Nombre',v.name),item('Color oficial',v.color)]))
+    put(section('Rendimiento de temporada','metrics',[
+      ...metrics(data.get('Estadísticas del equipo'),10),
+      ...metrics(data.get('Récord del equipo'),8),
+    ]))
     put(section('Plantilla verificada','list',roster(data.get('Plantilla')),24))
+    put(section('Disponibilidad reportada en plantilla','list',rosterInjuries(data.get('Plantilla'))))
     const schedule=row(data.get('Calendario del equipo'))
     put(section('Próximos encuentros y resultados','list',
       array(schedule.events).slice(0,16).map(g=>{const e=row(g)
         return item(e.shortName??e.name,e.date,row(row(e.status).type).description)})))
     put(section('Noticias del equipo','articles',stories(data.get('Noticias del equipo'))))
+    const tx=data.get('Movimientos del equipo')
+    put(section('Movimientos oficiales','list',array(row(tx).transactions).slice(0,12).map(m=>{
+      const e=row(m);return item(e.description??e.type,e.date)
+    })))
   }else if(view==='player'){
     const p=row(data.get('Perfil del jugador')),ov=row(data.get('Resumen del jugador'))
     const bio=Object.keys(p).length?p:row(ov.athlete)
@@ -298,6 +327,8 @@ export async function exploreEspn(
     put(section('Estadísticas de temporada','metrics',metrics(data.get('Estadísticas de temporada'))))
     put(section('Registro partido por partido','list',gamelog(data.get('Partido a partido'))))
     put(section('Splits y rendimiento situacional','metrics',metrics(data.get('Estadísticas situacionales'))))
+    const playerOverview=row(data.get('Resumen del jugador'))
+    put(section('Noticias del deportista','articles',stories(playerOverview.news??playerOverview)))
   }else if(view==='event'){
     const overview=data.get('Resumen del evento'),match=summaryFacts(overview)
     title=txt(row(row(overview).header).shortName)||title
