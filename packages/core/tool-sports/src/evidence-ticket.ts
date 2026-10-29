@@ -141,11 +141,22 @@ export async function evidenceTicket(
       modelProbabilities:false,priced:false,placed:false,selections:[],
       events:[]}
   }
+  // One bounded memoized HTTP request for a repeated ESPN event summary
+  // or league injury feed, even across the two complementary research passes.
+  const networkCache=new Map<string,Promise<Response>>()
+  const cachedFetcher:typeof fetch=(input,init)=>{
+    const url=typeof input==='string'?input:input instanceof URL?input.href:input.url
+    const reused=url.includes('/summary?event=')||url.endsWith('/injuries')
+    if(!reused)return fetcher(input,init)
+    let request=networkCache.get(url)
+    if(!request){request=fetcher(input,init);networkCache.set(url,request)}
+    return request.then(response=>response.clone())
+  }
   const checks=await investigatePregame(selected.map(x=>({
     sport:x.pick.sport,league:x.pick.league,eventId:x.pick.eventId,
-  })),fetcher)
+  })),cachedFetcher)
   const contextual=await Promise.allSettled(selected.map(x=>investigateEventDeep(
-    x.pick.sport,x.pick.league,x.pick.eventId,fetcher,now,env)))
+    x.pick.sport,x.pick.league,x.pick.eventId,cachedFetcher,now,env)))
   let deepContextChecked=0,newsMatched=0,playerStatsChecked=0
   for(const result of contextual)if(result.status==='fulfilled'){
     deepContextChecked++
