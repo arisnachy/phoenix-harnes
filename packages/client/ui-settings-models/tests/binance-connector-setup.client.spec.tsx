@@ -121,7 +121,7 @@ describe('Binance authenticated connector in Phoenix Settings', () => {
     const installation = calls.filter(call => call.url.endsWith('/mcp-activate'))
     expect(installation).toHaveLength(1)
     expect(installation[0]?.body).toBe('{}')
-    expect(screen.getByText('MCP instalado · OAuth o conexión pendiente')).toBeTruthy()
+    expect(screen.getByText('MCP pendiente de consentimiento OAuth')).toBeTruthy()
     expect(document.body.textContent).not.toContain('cuenta REAL autenticada')
   })
 })
