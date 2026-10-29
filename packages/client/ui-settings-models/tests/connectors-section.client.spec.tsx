@@ -65,7 +65,7 @@ describe('connectors settings section', () => {
     const api={
       list:vi.fn(async()=>ok({entries:[{
         key:'mcp-client/binance-agent-os',label:'MCP binance-agent-os',
-        methods:[{id:'oauth',label:'Authorize Binance'}],inFlight:false,
+        methods:[{id:'credentials',label:'Configure API'},{id:'oauth',label:'Authorize Binance'}],inFlight:false,
       }]})),
       begin,status:vi.fn(async()=>ok({attemptId:'binance-oauth-auth',status:'pending',
         nextSeq:0,notices:[]})),answer:vi.fn(),cancel:vi.fn(),
