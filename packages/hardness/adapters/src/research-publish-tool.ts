@@ -123,8 +123,8 @@ export function validateResearchPublication(input: unknown): Report {
       throw new ToolArgsError(['La norma institucional requiere revisión del usuario.'])
     }
     if (citedKeys.size < institutionalMin) {
-      throw new ToolArgsError(['La institución exige ' + institutionalMin
-        + ' referencias distintas citadas; hay ' + citedKeys.size + '. No inventes fuentes.'])
+      throw new ToolArgsError(['La institución exige ' + String(institutionalMin)
+        + ' referencias distintas citadas; hay ' + String(citedKeys.size) + '. No inventes fuentes.'])
     }
   }
   const quality = report.quality_profile ?? 'professional'
