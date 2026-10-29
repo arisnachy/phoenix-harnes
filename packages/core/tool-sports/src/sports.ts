@@ -286,7 +286,7 @@ export async function chatGames(sport:string,league:string,requestedDate?:string
 /** Unique sportsbook selection identity without an assumed price. */
 export type MarketSelection = { eventId:string;bookmaker:string;market:string;selection:string;point?:number|null }
 /** Time-stamped sportsbook quote tied to a provider event and market. */
-export type MarketOutcome = MarketSelection & { price:number;home:string;away:string;time:string;updatedAt:string;source?:string;sportKey?:string }
+export type MarketOutcome = MarketSelection & { price:number;home:string;away:string;time:string;timeIso?:string;updatedAt:string;source?:string;sportKey?:string }
 /** Read attributed bookmaker quotes, without purchasing or placing any bet.
  * @param sportKey - Provider sports key.
  * @param markets - Approved market categories.
@@ -330,7 +330,7 @@ export async function marketOdds(sportKey:string,markets='h2h',env:NodeJS.Proces
   if(!Array.isArray(feed))throw Error('Respuesta de cuotas inválida')
   return feed.flatMap(event=>(event.bookmakers??[]).flatMap(book=>(book.markets??[]).flatMap(market=>(market.outcomes??[]).filter(o=>o.price>1&&Number.isFinite(o.price)).map(o=>({
     eventId:title(event.id,100),bookmaker:title(book.title||book.key,120),market:title(market.key,60),selection:title(o.name,120),point:o.point??null,sportKey,
-    price:o.price,home:title(event.home_team),away:title(event.away_team),time:localTime(event.commence_time),updatedAt:title(market.last_update??book.last_update),source:'The Odds API',
+    price:o.price,home:title(event.home_team),away:title(event.away_team),time:localTime(event.commence_time),timeIso:event.commence_time,updatedAt:title(market.last_update??book.last_update),source:'The Odds API',
   }))))).slice(0,500)
 }
 /** Simulate a ticket only when every leg matches a freshly retrieved quote.
