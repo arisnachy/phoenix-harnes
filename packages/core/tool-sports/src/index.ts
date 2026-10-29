@@ -16,6 +16,7 @@ import { evidenceTicket } from './evidence-ticket.ts'
 import { evidencePricedTicket } from './evidence-priced-ticket.ts'
 import { ensureSportsSourcesStarted,hydrateSportsSources,managedSportsInstallStatus,sportsSourcesHealth } from './sports-source-health.ts'
 import { investigateEventDeep } from './sports-deep-context.ts'
+import { exploreEspn, type EspnExplorerInput } from './espn-intelligence.ts'
 import { compareBettingMarkets,supportedMarketFamilies } from './sports-market-intelligence.ts'
 import { espnCoreModes,queryEspnCore,type EspnCoreMode } from './espn-core-intelligence.ts'
 
@@ -23,6 +24,7 @@ export const name = 'tool-sports'
 export const inject = ['tools','systemPrompt']
 const sportsEnv=():NodeJS.ProcessEnv=>hydrateSportsSources(process.env)
 const GUIDANCE = [
+  'ESPN INTELLIGENCE: cuando el usuario pida un equipo específico, un jugador, su historia, splits, gamelog, tabla, líderes, noticias o búsqueda, consulta sports_chat_espn_explore con la vista apropiada y un ID real comprobado. Esa herramienta devuelve una superficie adaptable de estadísticas, noticias, plantillas, fotos y fuentes; Phoenix dibuja sports_espn_dashboard automáticamente. Para carteleras utiliza sports_chat_games y para cuotas comercializables sports_chat_odds; evita convertir probabilidades ESPN o referencias Core en cuotas actuales. Las plantillas se construyen dinámicamente a partir de secciones verificadas, sin nuevas pantallas.',
   'Solo cuando el usuario pida deportes, juegos del día, jugadores, cuotas o tickets, consulta las herramientas sports_chat_catalog, sports_chat_discover, sports_chat_games, sports_chat_mlb_pitchers, sports_chat_odds, sports_chat_ticket, sports_chat_ticket_research, sports_chat_ticket_research_auto, sports_chat_nba_research, sports_chat_research, sports_chat_historical_odds, sports_chat_community_opinions, sports_chat_odds_keyless, sports_chat_sources_health, sports_chat_sources_repair, sports_chat_deep_research, sports_chat_market_intelligence, sports_chat_espn_core, sports_chat_espn_core_catalog, sports_chat_ticket_evidence_auto o sports_chat_ticket_evidence_priced_auto.',
   'NO abras pantallas independientes ni crees entradas de menú. Antes de redactar una cartelera o boleto, llama sports_chat_games y, cuando corresponda, sports_chat_mlb_pitchers / sports_chat_odds / sports_chat_ticket. Phoenix dibuja de manera nativa las tarjetas verificadas de los resultados. NO copies el JSON de los resultados en la respuesta, NO escribas fences generative-ui ni bloques de código, aunque una herramienta los incluya en sus datos. No dibujes tickets con caracteres ASCII, bordes de texto ni bloques de código etiquetados text: para eventos y selecciones reales usa exclusivamente los contratos nativos, conservando la presentación original de Phoenix. Si el usuario quiere solo una demostración, descríbela explícitamente como ficticia y no introduzcas cuotas o equipos inventados como hechos. Explica los hallazgos y las fuentes con un texto humano breve.',
   'INVESTIGACIÓN NBA: antes de defender cualquier favorito o selección NBA, consulta sports_chat_nba_research (y sports_chat_odds cuando existan cuotas). Contrasta forma en marcadores finales, márgenes, descanso y muestra; revisa además informe oficial de lesiones, rotaciones, estadísticas avanzadas, rival, localía y movimiento de precios desde fuentes autorizadas. Lo no consultado debe permanecer explícitamente SIN VERIFICAR. No transformes la forma descriptiva en porcentajes de victoria ni cites atletas que no tengan plantilla actual confirmada. Un ticket automático se considera SOLO una preselección, nunca una investigación completa.',
@@ -87,6 +89,40 @@ export function apply(ctx: Context): void {
         instruction:'Se ha solicitado la reparación en segundo plano; no se han verificado cuotas ni operaciones. Consulta sports_chat_sources_health para ver progreso, logs y los proveedores listos. Si falta el instalador en el runtime o checkout, informa el bloqueo concreto.'})
     },
     presentCall:()=>({card:'generic',title:'Reparar fuentes deportivas automáticamente',kind:'read' as const}),
+  }))
+  ctx.tools.register(defineTool({
+    name:'sports_chat_espn_explore',
+    description:'ESPN universal: perfiles de equipos/jugadores, estadísticas por temporada, registros partido a partido, splits, clasificaciones, noticias, líderes, encuentros y búsqueda. Devuelve un panel dinámico seguro con logos, fotos y fuentes, dentro del chat. IDs deben provenir de ESPN.',
+    parameters:{
+      sport:{type:'string',required:true,description:'Disciplina ESPN, como basketball, soccer, hockey, baseball o football.'},
+      league:{type:'string',required:true,description:'Slug ESPN real: nba, nhl, eng.1, mlb, nfl, etc.'},
+      view:{type:'string',required:true,description:'team | player | event | standings | news | leaders | search'},
+      teamId:{type:'string',description:'ID numérico confirmado de equipo para view=team.'},
+      athleteId:{type:'string',description:'ID numérico confirmado de deportista para view=player.'},
+      eventId:{type:'string',description:'ID numérico confirmado de partido para view=event.'},
+      season:{type:'integer',description:'Año de temporada, cuando se solicita uno.'},
+      query:{type:'string',description:'Texto a buscar en ESPN, solo para view=search.'},
+    },
+    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    isConcurrencySafe:()=>true,
+    async execute(args){
+      const report=await exploreEspn({
+        sport:args.sport,league:args.league,view:args.view as EspnExplorerInput['view'],
+        ...(args.teamId?{teamId:args.teamId}:{}),
+        ...(args.athleteId?{athleteId:args.athleteId}:{}),
+        ...(args.eventId?{eventId:args.eventId}:{}),
+        ...(args.season?{season:args.season}:{}),
+        ...(args.query?{query:args.query}:{}),
+      },fetch,sportsEnv())
+      return JSON.stringify({
+        summary:report.title+' · '+report.subtitle,
+        sources:report.sources,
+        limitations:report.limitations,
+        uiBlock:report.uiBlock,
+        instruction:'El panel ESPN ya se muestra en el chat. No repitas su JSON ni inventes secciones que la fuente no confirmó. Si falta una estadística, explícalo; partido, plantillas y cuotas se verifican por separado.',
+      })
+    },
+    presentCall:()=>({card:'generic',title:'Explorar estadísticas, jugadores, equipos y noticias ESPN',kind:'read' as const}),
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_deep_research',
