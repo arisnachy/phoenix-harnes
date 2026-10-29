@@ -29,10 +29,22 @@ export async function evidencePricedTicket(
   verifiedEvents:number;quotedLegs:number;missingQuotes:number;
   explanation:string}>{
   const research=await evidenceTicket(count,date,sport,fetcher,now,env)
-  const base={card:research.card,priced:false as boolean,placed:false as const,
+  const quoteAccess=[
+    keylessEnabled(env)?'OddsHarvester habilitado (sujeto al acceso del sitio)':
+      'OddsHarvester inactivo: requiere instalación y habilitación por el operador',
+    env.THE_ODDS_API_KEY?.trim()?'The Odds API v4 configurada':'The Odds API v4 sin clave',
+    env.THEODDSAPI_API_KEY?.trim()?'TheOddsAPI configurada':'TheOddsAPI sin clave',
+    'ESPN: cuotas solo cuando el proveedor publique mercados con fecha',
+  ].join(' · ')
+  const researchCard:ChatBlock={...research.card,props:{...research.card.props,
+    note:(String(research.card.props.note??'')+' Estado de fuentes de cuotas: '+quoteAccess+
+      '. Los repositorios GitHub SportsbookReview/MLB son solo históricos.').slice(0,1000),
+  }}
+  const base={card:researchCard,priced:false as boolean,placed:false as const,
     complete:research.complete,verifiedEvents:research.verifiedEvents,
     quotedLegs:0,missingQuotes:research.verifiedEvents,
-    explanation:'Preselección respaldada por marcadores ESPN. Cuotas en vivo: OddsHarvester requiere instalación y habilitación local; ESPN puede no publicar precios, las APIs opcionales requieren sus credenciales y los otros dos GitHub son históricos.'}
+    explanation:'Preselección ESPN, cuotas todavía NO verificadas: '+quoteAccess+
+      '. Los archivos históricos no ofrecen precios para apostar hoy.'}
   if(!research.complete)return base
   const day=date??new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santo_Domingo',
     year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(now))
