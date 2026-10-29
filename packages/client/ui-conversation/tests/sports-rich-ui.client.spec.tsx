@@ -32,7 +32,7 @@ describe('Phoenix Sports rich native cards',()=>{
     expect(parsed).toEqual(rich)
     if(!parsed)throw Error('Rich card rejected')
     const rendered=GenerativeUi({block:parsed}) as {props:Record<string,unknown>}
-    expect(rendered.props['data-generative-ui']).toBe('sports_game_card')
+    expect(rendered.props.sport).toBe('baseball')
   })
   it('shows ESPN-style team images, pitcher stats, lineup tabs and bullpen modules inside the Phoenix chat',()=>{
     const card=parseGenerativeUiBlock(rich)
