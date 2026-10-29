@@ -332,7 +332,7 @@ export function BinanceConnectorSetup({ onChanged, onAuthorizeMcp }: {
                   ejecuta estos comandos en PowerShell, dentro de Codex,
                   y autoriza desde la página oficial de Binance.
                 </p>
-                <pre><code>{'codex mcp add binance-agentic --url https://agent.binance.com/mcp/agentic\\n'
+                <pre><code>{'codex mcp add binance-agentic --url https://agent.binance.com/mcp/agentic\n'
                   + 'codex mcp login binance-agentic'}</code></pre>
                 <p className={styles['advancedHint']}>
                   Este inicio de sesión pertenece a Codex CLI y no otorga tokens ni
