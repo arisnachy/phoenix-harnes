@@ -22,7 +22,7 @@ const required=[
   'MLB historic dataset and scraper sources',
 ]
 export function shouldBootstrap(manifest,now=Date.now()){
-  if(!manifest||manifest.schema!==2||!manifest.components)return true
+  if(!manifest||manifest.schema!==3||!manifest.components)return true
   if(required.every(name=>manifest.components[name]?.status==='installed'))return false
   const updated=Date.parse(manifest.updatedAt??'')
   return !Number.isFinite(updated)||now-updated>=60*60*1000
