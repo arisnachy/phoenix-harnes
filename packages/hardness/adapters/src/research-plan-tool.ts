@@ -145,10 +145,10 @@ function buildAcademicPlan(input: unknown) {
   const cover = args.cover !== null && typeof args.cover === 'object' && !Array.isArray(args.cover)
     ? args.cover : undefined
   if (academic) {
-    if (!cover?.institution?.trim()) missing.add('institución')
+    if (typeof cover?.institution !== 'string' || !cover.institution.trim()) missing.add('institución')
     const namedAuthors = Array.isArray(cover?.authors) && cover.authors.some(author =>
       typeof author === 'object' && author !== null && typeof author.name === 'string' && author.name.trim() !== '')
-    if (!cover?.author?.trim() && !namedAuthors) missing.add('participantes')
+    if ((typeof cover?.author !== 'string' || !cover.author.trim()) && !namedAuthors) missing.add('participantes')
   }
   if (args.target_pages !== undefined && (args.page_scope === undefined || args.page_scope === 'unknown')) {
     missing.add('si las páginas incluyen portada, bibliografía y anexos')
