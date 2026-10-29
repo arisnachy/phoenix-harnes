@@ -245,10 +245,10 @@ export function recoverScraperRows(stdout:unknown,output:unknown):unknown[]{
 export function describeScraperError(error:unknown):string{
   const record=error&&typeof error==='object'?error as Record<string,unknown>:{}
   const raw=typeof record.stderr==='string'?record.stderr:''
-  const scrub=(v:string)=>v.replace(/\\u001b\\[[0-9;]*m/gu,'')
-    .replace(/(?:api[_-]?key|token|authorization|password|secret)\\s*[:=]\\s*[^\\s,;]+/giu,'[credencial oculta]')
-    .replace(/(?:https?:\\/\\/)[^\\s]*?(?:apiKey|token|key)=[^&\\s]+/giu,'[URL con credencial oculta]')
-    .replace(/[\\r\\n]+/gu,' ').trim()
+  const scrub=(v:string)=>v.replace(/\u001b\[[0-9;]*m/gu,'')
+    .replace(/(?:api[_-]?key|token|authorization|password|secret)\s*[:=]\s*[^\s,;]+/giu,'[credencial oculta]')
+    .replace(/(?:https?:\/\/)[^\s]*?(?:apiKey|token|key)=[^&\s]+/giu,'[URL con credencial oculta]')
+    .replace(/[\r\n]+/gu,' ').trim()
   const diagnostic=scrub(raw).slice(-900)
   const code=typeof record.code==='number'||typeof record.code==='string'?
     String(record.code).slice(0,40):'desconocido'
