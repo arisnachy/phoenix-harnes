@@ -11,7 +11,7 @@ import { researchNbaSlate } from './nba-research.ts'
 import { keylessOdds, keylessSports, keylessHistoricOdds } from './keyless-odds.ts'
 import { loadHistoricalOdds } from './sports-archive.ts'
 import { loadOddsSnapshots } from './odds-snapshots.ts'
-import { oddsDisciplines,coveredSportKeys,scanOddsDisciplines } from './sports-odds-coverage.ts'
+import { oddsDisciplines,coveredSportKeys,scanOddsDisciplines,belongsToLeague } from './sports-odds-coverage.ts'
 import { researchSport } from './multi-sport-research.ts'
 import { communityOpinions } from './sports-community.ts'
 import { evidenceTicket } from './evidence-ticket.ts'
@@ -274,15 +274,15 @@ export function apply(ctx: Context): void {
               baseball:{sport:'baseball',markets:['moneyline','over_under']},
               americanfootball:{sport:'american-football',markets:['moneyline','over_under']},
               icehockey:{sport:'ice-hockey',markets:['home_away','double_chance','over_under']},
-              tennis:{sport:'tennis',markets:['match_winner','over_under']},
+              tennis:{sport:'tennis',markets:['match_winner','total_games_over_under']},
             }
             const route=routes[args.sportKey.split('_')[0]??'']
             if(!route)return []
             const quotes=await Promise.allSettled(route.markets.map(m=>
               keylessOdds(route.sport,m,args.date,env)))
-            return quotes.flatMap(x=>x.status==='fulfilled'?x.value.map(q=>({
-              ...q,timeIso:q.time,
-            })):[])
+            return quotes.flatMap(x=>x.status==='fulfilled'?x.value
+              .filter(q=>belongsToLeague(args.sportKey,q))
+              .map(q=>({...q,timeIso:q.time,sportKey:args.sportKey})):[])
           })(),
         ]:[]),
       ])
