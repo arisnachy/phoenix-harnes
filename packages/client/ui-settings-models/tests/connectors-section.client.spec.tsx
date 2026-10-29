@@ -44,6 +44,9 @@ describe('connectors settings section', () => {
       .some(button => button.textContent === connectorEn.findConnector)).toBe(false)
     expect(card?.textContent).toContain('PAPER ready')
     await waitFor(() => { expect(mcpRegistry.state).toHaveBeenCalled() })
+    // Keyless PAPER readiness must not satisfy the Connected-account filter.
+    fireEvent.click(screen.getByRole('button', { name: connectorEn.connected, exact: true }))
+    expect(document.querySelector('[data-connector-id="binance"]')).toBeNull()
   })
 
   it('keeps Codex reconnect visible with an expired native account marker', async () => {
