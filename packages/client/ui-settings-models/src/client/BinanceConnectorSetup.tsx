@@ -30,7 +30,7 @@ interface AgenticConnection {
   status: string
   reasonCode?: string
   authorizationAvailability?: 'connected' | 'provider-approval-required'
-  providerErrorCode?: string | null
+  knownProviderRejection?: string | null
   supportedClientGuide?: string
   toolCount: number
   accountVerified: boolean
