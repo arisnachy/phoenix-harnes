@@ -104,7 +104,7 @@ export const hasSportsPermission=(provider:'espn'|'mlb'|'odds',env:NodeJS.Proces
  */
 export async function getFeed<T>(url:string, fetcher:typeof fetch=fetch):Promise<T> {
   const u=new URL(url)
-  if(u.protocol!=='https:'||u.username||u.password||!['site.api.espn.com','site.web.api.espn.com','sports.core.api.espn.com','statsapi.mlb.com','api.the-odds-api.com'].includes(u.hostname))throw Error('Host no permitido')
+  if(u.protocol!=='https:'||u.username||u.password||!['site.api.espn.com','site.web.api.espn.com','sports.core.api.espn.com','statsapi.mlb.com','api-web.nhle.com','api.the-odds-api.com'].includes(u.hostname))throw Error('Host no permitido')
   const response=await fetcher(u.toString(),{ headers:{ accept:'application/json' },redirect:'error',signal:AbortSignal.timeout(9000) })
   if(!response.ok)throw Error(`Proveedor HTTP ${response.status}`)
   if(Number(response.headers.get('content-length')||0)>4_000_000)throw Error('Respuesta supera 4 MB')
