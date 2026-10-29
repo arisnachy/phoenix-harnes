@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import {homedir} from 'node:os'
 import {join,resolve} from 'node:path'
 import {SPORTS_INSTALL_VERSION,ODDSHARVESTER_VERSION,verifyManifestShape,
+  pythonCompatible,pythonCandidates,
   status as installerStatus} from './phoenix-sports-source-bootstrap.mjs'
 import {shouldBootstrap} from './phoenix-sports-source-auto.mjs'
 const prefix=resolve(process.env.PHOENIX_SPORTS_SOURCE_HOME||join(homedir(),'.phoenix','sports-sources'))
@@ -68,4 +69,22 @@ test('startup dispatches a detached worker without running installer inline',asy
     else process.env.PHOENIX_SPORTS_SOURCES_AUTO_INSTALL=priorOptOut
     rmSync(home,{recursive:true,force:true})
   }
+})
+
+test('OddsHarvester requires Python >=3.12 and probes compatible Windows launchers',()=>{
+  assert.equal(pythonCompatible([3,11,10]),false)
+  assert.equal(pythonCompatible([3,12,1]),true)
+  assert.equal(pythonCompatible([3,13,2]),true)
+  assert.equal(pythonCompatible([2,99]),false)
+  const candidates=pythonCandidates('win32')
+  assert.ok(candidates.some(([bin,args])=>bin==='py'&&args[0]==='-3.12'))
+  assert.ok(candidates.some(([bin,args])=>bin==='py'&&args[0]==='-3.13'))
+  assert.ok(!candidates.some(([bin,args])=>bin==='py'&&args[0]==='-3.11'))
+})
+test('bootstrap CLI status reports archive coverage and log location for diagnosis',async()=>{
+  const state=await installerStatus()
+  assert.equal(Array.isArray(state.sports),true)
+  assert.equal(state.sports.length,4)
+  assert.equal(typeof state.mlbAvailable,'boolean')
+  assert.ok(state.log.endsWith('install.log'))
 })
