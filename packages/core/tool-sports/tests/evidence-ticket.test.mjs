@@ -33,8 +33,14 @@ test('evidence-first automatic ticket returns exactly five sourced legs, no inve
   assert.equal(result.modelProbabilities,false)
   assert.equal(result.card.props.combinedOdds,'No disponible')
 })
-test('auto ticket blocks unsupported predictions when historic games are unavailable',async()=>{
-  await assert.rejects(()=>evidenceTicket(5,day,'soccer',mock(false),now),/No hay encuentros con suficiente evidencia/)
+test('auto ticket shows an honest 0/5 draft when historic games are unavailable',async()=>{
+  const result=await evidenceTicket(5,day,'soccer',mock(false),now)
+  assert.equal(result.complete,false)
+  assert.equal(result.verifiedEvents,0)
+  assert.deepEqual(result.card.props.legs,[])
+  assert.equal(result.card.props.requestedLegs,5)
+  assert.equal(result.card.props.combinedOdds,'No disponible')
+  assert.match(result.card.props.note,/TICKET INCOMPLETO/)
 })
 test('auto ticket rejects unsupported sports or leg counts',async()=>{
   await assert.rejects(()=>evidenceTicket(7,day,'soccer',mock(),now),/1 y 6/)
@@ -57,8 +63,9 @@ test('completed matches must have five different ESPN IDs for each non-NFL team'
     }
     return new Response(JSON.stringify(body),{status:200})
   }
-  await assert.rejects(()=>evidenceTicket(5,day,'soccer',repeated,now),
-    /No hay encuentros con suficiente evidencia/)
+  const result=await evidenceTicket(5,day,'soccer',repeated,now)
+  assert.equal(result.complete,false)
+  assert.equal(result.verifiedEvents,0)
 })
 
 test('five-leg automatic scout verifies ESPN summaries and injury coverage without fabricating lineups',async()=>{
@@ -90,6 +97,7 @@ test('three different scoreboards per team remain insufficient for a stronger au
     return new Response(JSON.stringify(fixture(url,
       ['20261028','20261027','20261026','20261025'].includes(key))))
   }
-  await assert.rejects(()=>evidenceTicket(5,day,'soccer',threeOnly,now),
-    /No hay encuentros con suficiente evidencia/)
+  const result=await evidenceTicket(5,day,'soccer',threeOnly,now)
+  assert.equal(result.complete,false)
+  assert.equal(result.verifiedEvents,0)
 })
