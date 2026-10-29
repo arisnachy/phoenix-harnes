@@ -8,8 +8,8 @@ const TIMEOUT_MS = 10_000
 
 /** Sanitized Testnet verification outcome. Never includes API keys or Binance raw error messages. */
 export type BinanceTestnetIssue =
-  | 'invalid-credentials' | 'invalid-signature' | 'clock-skew' | 'rate-limited'
-  | 'network-unavailable' | 'provider-unavailable' | 'invalid-response'
+  | 'invalid-credentials' | 'invalid-signature' | 'ip-or-permission' | 'access-restricted'
+  | 'clock-skew' | 'rate-limited' | 'network-unavailable' | 'provider-unavailable' | 'invalid-response'
 
 class TestnetVerificationError extends Error {
   constructor(readonly issue: BinanceTestnetIssue) {
@@ -19,7 +19,9 @@ class TestnetVerificationError extends Error {
 }
 
 const ISSUE_ACTION: Record<BinanceTestnetIssue, string> = {
-  'invalid-credentials': 'Claves guardadas, pero Binance no las acepta. Comprueba que sean HMAC de Spot Testnet, no de Binance REAL.',
+  'invalid-credentials': 'Spot Testnet no reconoce la clave. Comprueba que la hayas creado en testnet.binance.vision y que sea HMAC; las claves REAL son independientes.',
+  'ip-or-permission': 'Spot Testnet rechazó el acceso por clave, permisos o IP. Revisa la lista blanca y los permisos; no demuestra que tus claves sean falsas.',
+  'access-restricted': 'Spot Testnet respondió HTTP 403 (acceso restringido, región o red). Revisa la conexión y la disponibilidad de Binance.',
   'invalid-signature': 'Claves guardadas, pero Binance rechazó la firma. Verifica el secreto HMAC de Spot Testnet.',
   'clock-skew': 'Claves guardadas; no se pudo sincronizar el reloj con Spot Testnet. Revisa la hora del Host.',
   'rate-limited': 'Claves guardadas. Binance limitó las solicitudes; se podrán verificar más adelante.',
@@ -132,8 +134,9 @@ export class BinanceSpotTestnet {
       }
       if (code === -1021) throw new TestnetVerificationError('clock-skew')
       if (code === -1022) throw new TestnetVerificationError('invalid-signature')
-      if (code === -2014 || code === -2015 || code === -1002 || response.status === 401
-        || response.status === 403) throw new TestnetVerificationError('invalid-credentials')
+      if (code === -2015) throw new TestnetVerificationError('ip-or-permission')
+      if (code === -2014 || code === -1002 || response.status === 401) throw new TestnetVerificationError('invalid-credentials')
+      if (response.status === 403) throw new TestnetVerificationError('access-restricted')
       if (response.status === 429 || code === -1003) throw new TestnetVerificationError('rate-limited')
       throw new TestnetVerificationError('provider-unavailable')
     }

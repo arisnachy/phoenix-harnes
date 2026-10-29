@@ -53,10 +53,11 @@ jobs:
         run: |
           pnpm exec vitest run \
             packages/hardness/adapters/tests/binance-spot-testnet.spec.ts \
+            packages/hardness/adapters/tests/binance-spot-real-auth.spec.ts \
             packages/hardness/adapters/tests/binance-testnet-automation.spec.ts \
             packages/hardness/adapters/tests/binance-paper-route.spec.ts \
             packages/hardness/adapters/tests/binance-paper-automation.spec.ts
       - name: Binance settings authentication UI regression
         run: pnpm exec vitest run packages/client/ui-settings-models/tests/binance-connector-setup.client.spec.tsx packages/client/ui-settings-models/tests/connectors-section.client.spec.tsx -t Binance
-      - name: TypeScript Host and connector UI contracts
-        run: pnpm exec tsc -b tsconfig.host.json packages/client/ui-settings-models/tsconfig.json
+      - name: TypeScript Host and connector UI contracts (dependency-ready)
+        run: pnpm run typecheck
