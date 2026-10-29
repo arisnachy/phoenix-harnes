@@ -187,10 +187,10 @@ async function runScraper(sport:KeylessSport,market:string,day:string,env:NodeJS
     const executable=env.PHOENIX_SPORTS_ODDSHARVESTER_BIN||'oddsharvester'
     let stdout='',failure:unknown=null
     try{
-      const process=await runFile(executable,oddsHarvesterArgs(sport,market,day,file),
+      const execution=await runFile(executable,oddsHarvesterArgs(sport,market,day,file),
         {shell:false,windowsHide:true,timeout:180_000,maxBuffer:4_000_000,
           env:{...process.env,...env}})
-      stdout=process.stdout
+      stdout=execution.stdout
     }catch(error){
       failure=error
       const captured=error as {stdout?:unknown}
