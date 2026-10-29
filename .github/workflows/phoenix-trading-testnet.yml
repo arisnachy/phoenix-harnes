@@ -53,6 +53,7 @@ jobs:
         run: |
           pnpm exec vitest run \
             packages/hardness/adapters/tests/binance-spot-testnet.spec.ts \
+            packages/hardness/adapters/tests/binance-spot-real-auth.spec.ts \
             packages/hardness/adapters/tests/binance-testnet-automation.spec.ts \
             packages/hardness/adapters/tests/binance-paper-route.spec.ts \
             packages/hardness/adapters/tests/binance-paper-automation.spec.ts
