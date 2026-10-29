@@ -14,7 +14,7 @@ import { researchSport } from './multi-sport-research.ts'
 import { communityOpinions } from './sports-community.ts'
 import { evidenceTicket } from './evidence-ticket.ts'
 import { evidencePricedTicket } from './evidence-priced-ticket.ts'
-import { hydrateSportsSources,managedSportsInstallStatus,sportsSourcesHealth } from './sports-source-health.ts'
+import { ensureSportsSourcesStarted,hydrateSportsSources,managedSportsInstallStatus,sportsSourcesHealth } from './sports-source-health.ts'
 import { investigateEventDeep } from './sports-deep-context.ts'
 import { compareBettingMarkets,supportedMarketFamilies } from './sports-market-intelligence.ts'
 
@@ -22,10 +22,12 @@ export const name = 'tool-sports'
 export const inject = ['tools','systemPrompt']
 const sportsEnv=():NodeJS.ProcessEnv=>hydrateSportsSources(process.env)
 const GUIDANCE = [
-  'Solo cuando el usuario pida deportes, juegos del día, jugadores, cuotas o tickets, consulta las herramientas sports_chat_catalog, sports_chat_discover, sports_chat_games, sports_chat_mlb_pitchers, sports_chat_odds, sports_chat_ticket, sports_chat_ticket_research, sports_chat_ticket_research_auto, sports_chat_nba_research, sports_chat_research, sports_chat_historical_odds, sports_chat_community_opinions, sports_chat_odds_keyless, sports_chat_sources_health, sports_chat_deep_research, sports_chat_market_intelligence, sports_chat_ticket_evidence_auto o sports_chat_ticket_evidence_priced_auto.',
+  'Solo cuando el usuario pida deportes, juegos del día, jugadores, cuotas o tickets, consulta las herramientas sports_chat_catalog, sports_chat_discover, sports_chat_games, sports_chat_mlb_pitchers, sports_chat_odds, sports_chat_ticket, sports_chat_ticket_research, sports_chat_ticket_research_auto, sports_chat_nba_research, sports_chat_research, sports_chat_historical_odds, sports_chat_community_opinions, sports_chat_odds_keyless, sports_chat_sources_health, sports_chat_sources_repair, sports_chat_deep_research, sports_chat_market_intelligence, sports_chat_ticket_evidence_auto o sports_chat_ticket_evidence_priced_auto.',
   'NO abras pantallas independientes ni crees entradas de menú. Antes de redactar una cartelera o boleto, llama sports_chat_games y, cuando corresponda, sports_chat_mlb_pitchers / sports_chat_odds / sports_chat_ticket. Phoenix dibuja de manera nativa las tarjetas verificadas de los resultados. NO copies el JSON de los resultados en la respuesta, NO escribas fences generative-ui ni bloques de código, aunque una herramienta los incluya en sus datos. No dibujes tickets con caracteres ASCII, bordes de texto ni bloques de código etiquetados text: para eventos y selecciones reales usa exclusivamente los contratos nativos, conservando la presentación original de Phoenix. Si el usuario quiere solo una demostración, descríbela explícitamente como ficticia y no introduzcas cuotas o equipos inventados como hechos. Explica los hallazgos y las fuentes con un texto humano breve.',
   'INVESTIGACIÓN NBA: antes de defender cualquier favorito o selección NBA, consulta sports_chat_nba_research (y sports_chat_odds cuando existan cuotas). Contrasta forma en marcadores finales, márgenes, descanso y muestra; revisa además informe oficial de lesiones, rotaciones, estadísticas avanzadas, rival, localía y movimiento de precios desde fuentes autorizadas. Lo no consultado debe permanecer explícitamente SIN VERIFICAR. No transformes la forma descriptiva en porcentajes de victoria ni cites atletas que no tengan plantilla actual confirmada. Un ticket automático se considera SOLO una preselección, nunca una investigación completa.',
   'INVESTIGAR TODOS LOS DEPORTES: llama sports_chat_research para estudiar los marcadores finales recientes del deporte y liga que el usuario pidió. Para MLB complementa con pitchers y bullpen; fútbol exige revisar goles, localía, bajas, forma y opciones 1X2/doble oportunidad; tenis requiere superficie, historial y fatiga; hockey necesita portero y estadísticas defensivas; en otros deportes usa métricas propias. Si el informe indica insuficiente, no proclames favorito respaldado. sports_chat_historical_odds agrega históricos de ambos repositorios SportsbookReview para entrenamiento/backtest, jamás cuotas actuales; y sports_chat_community_opinions observa pronósticos públicos solo como opinión separada.',
+  'Si la primera auto-instalación falla o se queda en retry-cooldown, llama sports_chat_sources_repair a petición del usuario; nunca solicites claves para OddsHarvester. Avisa cuando esté instalando y vuelve a verificar el manifest antes de buscar cuotas. ',
+  'AUTOREPARACIÓN: sports_chat_sources_health inicia automáticamente el instalador en segundo plano cuando falta (autoRepair.status=started/running); no digas que el scraper está bloqueado definitivamente mientras se esté instalando. Si autoRepair.status=missing-installer, informa que faltan los scripts en el runtime y da la ruta de checkout; si retry-cooldown o error, indica el log y pide diagnóstico sin inventar. Nunca pegues instrucciones en lenguaje natural en PowerShell: solamente comandos PowerShell copiados literalmente, distintos del mensaje de chat para Kira. ',
   'INSTALACIÓN AUTOMÁTICA: OddsHarvester 0.20.0 requiere Python 3.12+ y Playwright Chromium. El manifest del actualizador guarda el estado separado de los resultados de mercado. Cuando la fuente marque desactivado o sin datos, consulta sports_chat_sources_health e informa installation.state, error, logPath y cómo reparar sin claves; no digas que está instalada si no hay prueba. El protocolo OddsHarvester es oddsharvester upcoming -s <deporte> -d YYYYMMDD -m <mercado> --headless -f json -o archivo; fútbol 1x2, btts, double_chance y totales; NHL home_away usa período full_including_ot; baloncesto 1x2 reglamentario usa full_time. La salida JSON tiene match_date, scraped_date, match_link, bookmaker_name y *_market. Debes exigir partido futuro, cuota decimal válida, hora reciente y mercado completo de una misma casa. SportsbookReview flancast90 usa python cli.py --sport nhl --start 2011 --end 2021 --filename archivo.json; MLB ArnavSaraogi usa python scraper.py AAAA-MM-DD AAAA-MM-DD -t moneyline pointspread totals -o archivo.json; ambos son HISTÓRICOS y solo se usan para backtesting, nunca como cuota de hoy. ',
   'Antes de declarar sin cuotas, llama sports_chat_sources_health para distinguir proveedor deshabilitado, CLI no instalado, histórico no cargado y precio no disponible. No confundas fuente configurada con consulta efectiva ni marcador con titular confirmado. Los 3 proyectos GitHub acordados NO son 3 feeds vivos: solo OddsHarvester puede consultar cuotas actuales cuando está activo y accesible; SportsbookReview y MLB son históricos. ',
   'Para cuotas gratuitas por scraping (sin API key) consulta sports_chat_odds_keyless si el host habilitó OddsHarvester. No prometas consultas ilimitadas ni uses cuotas históricas como cotizaciones vigentes. El motor debe investigar todas las disciplinas disponibles, no solo NBA, y contrastar historial, lesionados, alineaciones, rendimiento, localía, cuota y fuentes externas cuando existan. Las votaciones y picks de otras personas son una referencia secundaria, no estimaciones propias ni garantía.',
@@ -53,19 +55,36 @@ export function apply(ctx: Context): void {
   })
   ctx.tools.register(defineTool({
     name:'sports_chat_sources_health',
-    description:'Audita de forma segura los proveedores deportivos de Kira: OddsHarvester instalado/habilitado, claves opcionales presentes sin exponer secretos, históricos GitHub montados. No promete precios disponibles.',
+    description:'Audita los proveedores deportivos. Si faltan, inicia su instalación administrada opcional sin bloquear el chat; retorna estado y logs, sin exponer credenciales ni prometer cuotas.',
     parameters:{},
     output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
-    isConcurrencySafe:()=>true,
+    isConcurrencySafe:()=>false,
     async execute(){
+      // Recover missing source installs even when the prepared Windows runtime
+      // did not ship the updater script. Launch remains nonblocking.
+      const autoRepair=await ensureSportsSourcesStarted(process.env)
       const env=sportsEnv()
       const installation=managedSportsInstallStatus(env)
       const sources=await sportsSourcesHealth(env)
-      return JSON.stringify({sources,installation,checkedAt:new Date().toISOString(),
+      return JSON.stringify({sources,installation,autoRepair,checkedAt:new Date().toISOString(),
         repair:'Si la instalación falla: ejecutar node scripts/phoenix-sports-source-bootstrap.mjs --status y revisar installation.logPath. Para reparar, node scripts/phoenix-sports-source-bootstrap.mjs --install desde la carpeta de PHOENIX. OddsHarvester requiere Python >=3.12 y Playwright Chromium. No copiar claves al chat.',
         warning:'Instalado no equivale a cuota real. OddsHarvester usa Playwright sobre OddsPortal; comprueba bookmaker, mercado, período y timestamp. SportsbookReview y MLB solo contienen históricos; para extraer datos nuevos se ejecutan sus propios scripts en tareas explícitas, no funcionan como fuentes vivas.'})
     },
-    presentCall:()=>({card:'generic',title:'Comprobar proveedores deportivos y datos históricos',kind:'read' as const}),
+    presentCall:()=>({card:'generic',title:'Verificar y autorreparar fuentes deportivas',kind:'read' as const}),
+  }))
+  ctx.tools.register(defineTool({
+    name:'sports_chat_sources_repair',
+    description:'Reparar de forma autónoma y sin bloquear el chat los tres proveedores deportivos opcionales: OddsHarvester/Chromium y dos repositorios históricos. Devuelve el estado del lanzador y archivo de errores. No promete cuotas.',
+    parameters:{},
+    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    isConcurrencySafe:()=>false,
+    async execute(){
+      const autoRepair=await ensureSportsSourcesStarted(process.env,true)
+      const installation=managedSportsInstallStatus(process.env)
+      return JSON.stringify({autoRepair,installation,checkedAt:new Date().toISOString(),
+        instruction:'Se ha solicitado la reparación en segundo plano; no se han verificado cuotas ni operaciones. Consulta sports_chat_sources_health para ver progreso, logs y los proveedores listos. Si falta el instalador en el runtime o checkout, informa el bloqueo concreto.'})
+    },
+    presentCall:()=>({card:'generic',title:'Reparar fuentes deportivas automáticamente',kind:'read' as const}),
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_deep_research',
@@ -94,6 +113,8 @@ export function apply(ctx: Context): void {
     isConcurrencySafe:()=>true,
     async execute(args){
       const env=sportsEnv()
+      const autoRepair=env.PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED==='1'?
+        null:await ensureSportsSourcesStarted(process.env)
       const sources=await sportsSourcesHealth(env)
       const odds=await Promise.allSettled([
         marketOdds(args.sportKey,'h2h,totals,spreads',env,fetch),
@@ -120,7 +141,7 @@ export function apply(ctx: Context): void {
       const combined=odds.flatMap(x=>x.status==='fulfilled'?x.value:[])
       const comparison=compareBettingMarkets(combined)
       return JSON.stringify({sportKey:args.sportKey,availableMarkets:supportedMarketFamilies,
-        ...comparison,sourceReadiness:sources,
+        ...comparison,sourceReadiness:sources,autoRepair,
         sourcesAttempted:odds.length,quotesObserved:combined.length,
         instruction:'Los precios implícitos NO son probabilidades predictivas. Mercados superpuestos no deben normalizarse ni combinarse como independientes. Si no existen cuotas, noticia o lesión verificables, indica explícitamente que falta evidencia. No fabriques un ticket de mayor probabilidad.'})
     },
@@ -317,7 +338,16 @@ export function apply(ctx: Context): void {
     output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
     isConcurrencySafe:()=>true,
     async execute(args){
-      const quotes=await keylessOdds(args.sport,args.market,args.date,sportsEnv())
+      const env=sportsEnv()
+      if(env.PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED!=='1'
+        &&process.env.PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED!=='0'){
+        const autoRepair=await ensureSportsSourcesStarted(process.env)
+        return JSON.stringify({source:'OddsHarvester',status:'not-ready',
+          autoRepair,installation:managedSportsInstallStatus(process.env),
+          observedPrices:0,bookmaker:null,
+          instruction:'OddsHarvester todavía no está listo. PHOENIX solicitó la instalación/recuperación sin bloquear el chat; NO significa que se hayan obtenido cuotas. Ejecutar sports_chat_sources_health para ver progreso y errores, y consultar el mercado después de que el componente marque installed. Si falta el script o WinGet falló, mostrar la ruta del log y solo comandos PowerShell en la consola.'})
+      }
+      const quotes=await keylessOdds(args.sport,args.market,args.date,env)
       const grouped=new Map<string,typeof quotes>()
       for(const quote of quotes.slice(0,96)){
         const rows=grouped.get(quote.eventId)??[]

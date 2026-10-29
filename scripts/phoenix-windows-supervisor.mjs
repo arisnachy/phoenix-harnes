@@ -1636,13 +1636,22 @@ async function waitForHostPortRelease(port, timeoutMs = HOST_PORT_RELEASE_WAIT_M
 function startHost() {
   // The installed stable runtime can outlive its update source checkout.
   // Start the optional Sports sources installer without blocking model startup.
-  const sourceInstaller=join(runtimeRoot,'scripts','phoenix-sports-source-auto.mjs')
-  if(existsSync(sourceInstaller)&&process.env.PHOENIX_SPORTS_SOURCES_AUTO_INSTALL!=='0'){
+  // Prepared runtime directories contain only the built app on some
+  // installations. Fall back to the source checkout for managed scripts.
+  const sportsRoots=[root,runtimeRoot]
+  const sourceRoot=sportsRoots.find(path=>existsSync(join(
+    path,'scripts','phoenix-sports-source-auto.mjs')))
+  if(sourceRoot&&process.env.PHOENIX_SPORTS_SOURCES_AUTO_INSTALL!=='0'){
+    const sourceInstaller=join(sourceRoot,'scripts','phoenix-sports-source-auto.mjs')
     const started=spawnSync(process.execPath,[sourceInstaller],{
-      cwd:runtimeRoot,env:process.env,timeout:10_000,windowsHide:true,
-      stdio:['ignore','ignore','ignore'],
+      cwd:sourceRoot,
+      env:{...process.env,PHOENIX_INSTALL_ROOT:root,PHOENIX_RUNTIME_ROOT:runtimeRoot},
+      timeout:10_000,windowsHide:true,
+      stdio:['ignore','ignore','pipe'],encoding:'utf8',
     })
-    if(started.error)console.error('[PHOENIX SPORTS] optional installer launcher: '+started.error.message)
+    if(started.error||started.status!==0)
+      console.error('[PHOENIX SPORTS] source bootstrap launcher: '+
+        (started.error?.message??started.stderr?.trim()??'no details'))
   }
   return spawn(process.execPath, runtimeNodeArgs(runtimeRoot, [
     'web', '--',
