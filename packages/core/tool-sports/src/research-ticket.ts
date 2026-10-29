@@ -95,7 +95,7 @@ export async function researchTicket(
       || !['home','away','draw'].includes(pick) || (pick==='draw' && sport!=='soccer')){
       throw Error('Selecciona un evento real, liga admitida y mercado ganador/empate válido')
     }
-    if(selection.rationale!==undefined&&(typeof selection.rationale!=='string'||selection.rationale.length>240)){
+    if(selection.rationale!==undefined&&(typeof selection.rationale!=='string'||selection.rationale.length>480)){
       throw Error('Fundamento del pronóstico inválido')
     }
     const identity=sport+'|'+league+'|'+eventId
@@ -123,7 +123,7 @@ export async function researchTicket(
     if(!homeName||!awayName)throw Error('ESPN no publicó los nombres de ambos equipos')
     const info=leagueInfo[league]
     const label=pick==='draw'?'Empate':pick==='home'?homeName:awayName
-    const reason=clean(selection.rationale??'',240)
+    const reason=clean(selection.rationale??'',480)
     const trustedLogo=(url?:string):string|undefined=>
       env.PHOENIX_SPORTS_IMAGES_DISABLED!=='1'&&url&&/^https:\/\/a\.espncdn\.com\//u.test(url)?url:undefined
     const homeLogo=trustedLogo(home?.logo??home?.logos?.[0]?.href)

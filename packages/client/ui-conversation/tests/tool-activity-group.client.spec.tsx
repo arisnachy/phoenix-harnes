@@ -357,6 +357,32 @@ describe('chat tool activity grouping', () => {
     expect(sports.textContent).toContain('Rays @ Brewers')
     expect(screen.getAllByRole('button',{name:'Tools'})).toHaveLength(1)
   })
+  it.each([5,6])('shows the actual %i-leg researched ticket even when Kira only says it is in a card',count=>{
+    const ticket={component:'sports_ticket_card',version:1,props:{
+      title:'PHOENIX · Ticket deportivo',source:'ESPN Site API',
+      requestedLegs:count,combinedOdds:'No disponible',
+      legs:Array.from({length:count},(_,i)=>({
+        event:'Visitante '+i+' vs Local '+i,selection:'Local '+i,
+        bookmaker:'Sin casa confirmada',price:'Por verificar',
+        homeTeam:'Local '+i,awayTeam:'Visitante '+i,
+        homeLogo:'https://a.espncdn.com/home'+i+'.png',
+        rationale:'Tres enfrentamientos históricos distintos verificados '+i,
+      })),
+      note:'No hay cuotas reales verificadas ni garantías de resultados.',
+    }}
+    const node={...settledTool('ticket-auto-'+count),seq:3,time:3000,
+      call:{name:'sports_chat_ticket_research_auto',argsRaw:JSON.stringify({count})},
+      content:[{type:'text' as const,text:JSON.stringify({uiBlock:ticket})}]}
+    renderChat([user(1,'Dame un ticket de '+count+' pronósticos'),node,assistantWithReasoning(4)])
+    const sports=screen.getByRole('region',{name:'Panel deportivo de Kira'})
+    expect(sports.querySelector('[data-generative-ui="sports_ticket_card"]')).toBeTruthy()
+    expect(sports.textContent).toContain(count+' / '+count)
+    expect(sports.textContent).toContain('Visitante '+(count-1))
+    expect(sports.querySelectorAll('article')).toHaveLength(count)
+    expect(sports.querySelectorAll('img').length).toBeGreaterThanOrEqual(count)
+    expect(screen.getAllByText('Ver fundamento')).toHaveLength(count)
+    expect(screen.getByRole('button',{name:'Tools'}).getAttribute('aria-expanded')).toBe('false')
+  })
   it('does not replace a requested research ticket with automatic NO BET when bookmaker prices are missing',()=>{
     const tool={...settledTool('odds-1'),seq:3,time:3000,
       call:{name:'sports_chat_odds',argsRaw:'{"sportKey":"baseball_mlb"}'},

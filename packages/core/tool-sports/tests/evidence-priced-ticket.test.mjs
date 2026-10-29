@@ -7,16 +7,15 @@ const kick='2026-10-28T23:00:00Z'
 const board=(url)=>{
   const day=String(url).match(/dates=([0-9]{8})/u)?.[1]
   if(!String(url).includes('/soccer/eng.1/'))return{events:[]}
-  if(!['20261028','20261027','20261026'].includes(day))return{events:[]}
+  if(!['20261028','20261027','20261026','20261025','20261024','20261023'].includes(day))return{events:[]}
   const pre=day==='20261028'
   return{events:Array.from({length:5},(_,i)=>({
-    id:String(500+i),date:pre?kick:day==='20261027'?'2026-10-27T21:00:00Z':'2026-10-26T21:00:00Z',
+    id:String(500+i+(pre?0:Number(day.slice(-2))*1000)),date:pre?kick:'2026-'+day.slice(4,6)+'-'+day.slice(6,8)+'T21:00:00Z',
     status:{type:{state:pre?'pre':'post'}},competitions:[{competitors:[
-      {homeAway:'home',team:{id:String(i)+'1',displayName:'Home '+i},...(!pre?{score:'3'}:{})},
+      {homeAway:'home',team:{id:String(i)+'1',displayName:'Home '+i,logo:'https://a.espncdn.com/home-'+i+'.png'},...(!pre?{score:'3'}:{})},
       {homeAway:'away',team:{id:String(i)+'2',displayName:'Away '+i},...(!pre?{score:'0'}:{})},
     ]}],
   }))}}
-}
 const feed=async url=>new Response(JSON.stringify(board(url)),{status:200})
 const mkQuotes=(alternating=false)=>async()=>{
   const out=[]
@@ -40,6 +39,10 @@ test('six-legged evidence path quotes only same bookmaker and preserves the requ
   assert.equal(complete.priced,true)
   assert.equal(complete.card.props.legs.length,5)
   assert.equal(complete.card.props.stake,'100.00')
+  assert.equal(complete.card.props.requestedLegs,5)
+  assert.match(complete.card.props.legs[0].homeLogo,/a\.espncdn\.com/)
+  assert.match(complete.card.props.legs[0].rationale,/ESPN 5 partidos distintos/)
+  assert.match(complete.card.props.note,/NO son probabilidades calibradas/)
   assert.equal(complete.placed,false)
   assert.equal(complete.missingQuotes,0)
 })
@@ -49,4 +52,171 @@ test('does not combine prices from different bookmakers even when each leg was q
   assert.equal(result.quotedLegs,5)
   assert.equal(result.missingQuotes,0)
   assert.match(result.explanation,/distintas casas/)
+})
+
+test('1X double chance uses real matching bookmaker market, keeps branding and rationale',async()=>{
+  const markets=[]
+  const quotes=async(sport,market)=>{
+    markets.push([sport,market])
+    return Array.from({length:5},(_,i)=>({
+      eventId:'oddsportal-'+i,bookmaker:'Book A',market:'double_chance',
+      selection:'1X',point:null,price:1.34,home:'Home '+i,away:'Away '+i,
+      time:kick,updatedAt:'2026-10-28T14:30:00Z',
+      sportKey:'football',source:'OddsHarvester/OddsPortal (sin API key)',
+    }))
+  }
+  const result=await evidencePricedTicket(5,date,'soccer',100,now,enabled,feed,quotes,'double_chance')
+  assert.deepEqual(markets,[['football','double_chance']])
+  assert.equal(result.complete,true)
+  assert.equal(result.priced,true)
+  assert.equal(result.card.props.legs.length,5)
+  assert.equal(result.card.props.legs[0].selection,'1X · Local o empate')
+  assert.equal(result.card.props.legs[0].market,'Doble oportunidad (1X/X2)')
+  assert.equal(result.card.props.legs[0].price,'1.34')
+  assert.equal(result.card.props.legs[0].bookmaker,'Book A')
+  assert.match(result.card.props.legs[0].homeLogo,/^https:\/\/a\.espncdn\.com\//)
+  assert.match(result.card.props.legs[0].rationale,/ESPN 5 partidos distintos/)
+  assert.match(result.card.props.note,/NO asegura ganar/)
+  assert.equal(result.placed,false)
+})
+test('1X/X2 never silently falls back to a direct winner or the wrong double chance',async()=>{
+  const quotes=async(_sport,_market)=>Array.from({length:5},(_,i)=>({
+    eventId:'oddsportal-'+i,bookmaker:'Book A',market:'1x2',selection:'Home '+i,
+    point:null,price:1.91,home:'Home '+i,away:'Away '+i,
+    time:kick,updatedAt:'2026-10-28T14:30:00Z',
+    sportKey:'football',source:'OddsHarvester/OddsPortal (sin API key)',
+  }))
+  const wrongMarket=await evidencePricedTicket(5,date,'soccer',100,now,enabled,feed,quotes,'double_chance')
+  assert.equal(wrongMarket.priced,false)
+  assert.equal(wrongMarket.quotedLegs,0)
+  assert.equal(wrongMarket.card.props.combinedOdds,'No disponible')
+  const wrongSide=await evidencePricedTicket(5,date,'soccer',100,now,enabled,feed,
+    async()=>Array.from({length:5},(_,i)=>({...{
+      eventId:'oddsportal-'+i,bookmaker:'Book A',market:'double_chance',
+      selection:'X2',point:null,price:1.4,home:'Home '+i,away:'Away '+i,
+      time:kick,updatedAt:'2026-10-28T14:30:00Z',
+      sportKey:'football',source:'OddsHarvester/OddsPortal (sin API key)',
+    }})),'double_chance')
+  assert.equal(wrongSide.priced,false)
+  assert.equal(wrongSide.quotedLegs,0)
+})
+test('non-finite bookmaker prices are never used for a quoted ticket',async()=>{
+  const bad=async()=>Array.from({length:5},(_,i)=>({
+    eventId:'oddsportal-'+i,bookmaker:'Book A',market:'1x2',
+    selection:'Home '+i,point:null,price:Number.NaN,home:'Home '+i,away:'Away '+i,
+    time:kick,updatedAt:'2026-10-28T14:30:00Z',
+    sportKey:'football',source:'OddsHarvester/OddsPortal (sin API key)',
+  }))
+  const result=await evidencePricedTicket(5,date,'soccer',100,now,enabled,feed,bad)
+  assert.equal(result.priced,false)
+  assert.equal(result.quotedLegs,0)
+})
+
+test('six priced legs are six independently verified fixtures at one bookmaker',async()=>{
+  const sixFeed=async url=>{
+    const data=board(url)
+    if(data.events.length){
+      const added=structuredClone(data.events[4])
+      added.id=String(Number(added.id)+1)
+      added.competitions[0].competitors[0].team={id:'51',displayName:'Home 5',
+        logo:'https://a.espncdn.com/home-5.png'}
+      added.competitions[0].competitors[1].team={id:'52',displayName:'Away 5'}
+      data.events.push(added)
+    }
+    return new Response(JSON.stringify(data),{status:200})
+  }
+  const quotes=async()=>Array.from({length:6},(_,i)=>({
+    eventId:'oddsportal-'+i,bookmaker:'Book A',market:'1x2',
+    selection:'Home '+i,point:null,price:1.91,home:'Home '+i,away:'Away '+i,
+    time:kick,updatedAt:'2026-10-28T14:30:00Z',
+    sportKey:'football',source:'OddsHarvester/OddsPortal (sin API key)',
+  }))
+  const result=await evidencePricedTicket(6,date,'soccer',100,now,enabled,sixFeed,quotes)
+  assert.equal(result.complete,true)
+  assert.equal(result.priced,true)
+  assert.equal(result.verifiedEvents,6)
+  assert.equal(result.card.props.legs.length,6)
+  assert.equal(new Set(result.card.props.legs.map(x=>x.event)).size,6)
+  assert.equal(result.card.props.requestedLegs,6)
+})
+test('X2 quotes are accepted only when five-game form favors the away team',async()=>{
+  const awayFeed=async url=>{
+    const data=board(url)
+    if(!String(url).includes('dates=20261028')){
+      for(const event of data.events){
+        event.competitions[0].competitors[0].score='0'
+        event.competitions[0].competitors[1].score='3'
+      }
+    }
+    return new Response(JSON.stringify(data),{status:200})
+  }
+  const quotes=async()=>Array.from({length:5},(_,i)=>({
+    eventId:'oddsportal-'+i,bookmaker:'Book A',market:'double_chance',
+    selection:'X2',point:null,price:1.36,home:'Home '+i,away:'Away '+i,
+    time:kick,updatedAt:'2026-10-28T14:30:00Z',
+    sportKey:'football',source:'OddsHarvester/OddsPortal (sin API key)',
+  }))
+  const result=await evidencePricedTicket(5,date,'soccer',100,now,enabled,awayFeed,quotes,'double_chance')
+  assert.equal(result.priced,true)
+  assert.equal(result.card.props.legs.length,5)
+  assert.equal(result.card.props.legs[0].selection,'X2 · Visita o empate')
+  assert.equal(result.card.props.legs[0].price,'1.36')
+})
+
+test('automatic odds ticket uses the existing The Odds API adapter if keyless scraper is not enabled',async()=>{
+  let apiCalls=0
+  const withApi=async url=>{
+    if(String(url).includes('api.the-odds-api.com')){
+      apiCalls++
+      return new Response(JSON.stringify(Array.from({length:5},(_,i)=>({
+        id:'book-'+i,home_team:'Home '+i,away_team:'Away '+i,commence_time:kick,
+        bookmakers:[{key:'a',title:'Book A',last_update:'2026-10-28T14:45:00Z',markets:[{
+          key:'h2h',last_update:'2026-10-28T14:45:00Z',
+          outcomes:[
+            {name:'Home '+i,price:1.70},{name:'Away '+i,price:2.45},
+            {name:'Draw',price:3.2},
+          ],
+        }]}],
+      }))),{status:200})
+    }
+    return feed(url)
+  }
+  const result=await evidencePricedTicket(5,date,'soccer',100,now,
+    {THE_ODDS_API_KEY:'mock-secret'},withApi)
+  assert.equal(apiCalls,1)
+  assert.equal(result.priced,true)
+  assert.equal(result.card.props.legs.length,5)
+  assert.equal(result.card.props.legs[0].price,'1.7')
+  assert.match(result.card.props.legs[0].rationale,/Resumen ESPN/)
+  assert.equal(result.card.props.legs[0].bookmaker,'Book A')
+})
+test('soccer two-outcome API prices cannot be mislabeled 1X2 without a draw outcome',async()=>{
+  const incomplete=async url=>{
+    if(String(url).includes('api.the-odds-api.com'))return new Response(JSON.stringify(
+      Array.from({length:5},(_,i)=>({
+        id:'b-'+i,home_team:'Home '+i,away_team:'Away '+i,commence_time:kick,
+        bookmakers:[{key:'a',title:'Book A',last_update:'2026-10-28T14:45:00Z',
+          markets:[{key:'h2h',outcomes:[{name:'Home '+i,price:1.7}]}]}],
+      }))))
+    return feed(url)
+  }
+  const result=await evidencePricedTicket(5,date,'soccer',100,now,
+    {THE_ODDS_API_KEY:'mock-secret'},incomplete)
+  assert.equal(result.priced,false)
+  assert.equal(result.quotedLegs,0)
+})
+test('stale bookmaker quotes do not receive a fresh ticket label',async()=>{
+  const stale=async url=>{
+    if(String(url).includes('api.the-odds-api.com'))return new Response(JSON.stringify(
+      Array.from({length:5},(_,i)=>({
+        id:'b-'+i,home_team:'Home '+i,away_team:'Away '+i,commence_time:kick,
+        bookmakers:[{key:'a',title:'Book A',last_update:'2026-10-27T10:00:00Z',
+          markets:[{key:'h2h',outcomes:[{name:'Home '+i,price:1.7},{name:'Draw',price:3.2}]}]}],
+      }))))
+    return feed(url)
+  }
+  const result=await evidencePricedTicket(5,date,'soccer',100,now,
+    {THE_ODDS_API_KEY:'mock-secret'},stale)
+  assert.equal(result.priced,false)
+  assert.equal(result.missingQuotes,5)
 })

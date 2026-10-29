@@ -1,5 +1,6 @@
 import { AssistantMailPanel, type AssistantMailClient } from './AssistantMailPanel.tsx'
 import { TelegramConnectorSetup, type TelegramBotClient } from './TelegramConnectorSetup.tsx'
+import { BinanceConnectorSetup } from './BinanceConnectorSetup.tsx'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { ChatGptWebSnapshot, IApiClient } from '@phoenix-ai/dsh-api-remotes/client'
@@ -551,7 +552,7 @@ function accountGrantConnectsCatalogEntry(account: Entry | undefined): boolean {
 }
 
 function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw, telegram, connected, reauthorizeCodex, t, authorizationProgress,
-  onAuthorize, onDisconnect, onConfigure, onInstallCurated, onFindOfficial, onFindRegistry, onReconnect, onRepair, onRemove,
+  onAuthorize, onDisconnect, onConfigure, onInstallCurated, onFindOfficial, onFindRegistry, onReconnect, onRepair, onRemove, onChanged,
   pending, installingCurated, reconnecting,
   repairing, removing }: {
   definition: ConnectorDefinition
@@ -565,6 +566,7 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
   reauthorizeCodex?: boolean
   t: ConnectorsSettingsSectionProps['connectorT']
   authorizationProgress?: ReactNode
+  onChanged: () => void
   onAuthorize: (entry: Entry) => void
   onDisconnect?: ((entry: Entry) => void) | undefined
   onConfigure?: (() => void) | undefined
@@ -618,7 +620,7 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
     ?? openClawStatus ?? mcpStatus ?? liveStatus ?? (connectedByAccount
     ? { text: t('connectedStatus'), className: connectorStyles['connectorStatusReady'] ?? '' }
     : definition.id === 'binance'
-      ? { text: t('binancePaperReadyStatus'), className: connectorStyles['connectorStatusReady'] ?? '' }
+      ? { text: t('binancePaperReadyStatus'), className: connectorStyles['connectorStatusWarn'] ?? '' }
       : definition.provenance === 'private-owner'
         ? { text: t('privateOwnerStatus'), className: connectorStyles['connectorStatusInfo'] ?? '' }
         : definition.mode === 'native'
@@ -681,6 +683,7 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
         </div>
       </div>
       <p className={connectorStyles['connectorDescription']}>{definition.description}</p>
+      {definition.id === 'binance' ? <BinanceConnectorSetup onChanged={onChanged} /> : null}
       {definition.id === 'telegram' ? <TelegramConnectorSetup client={telegram} /> : null}
       {definition.id === 'github' ? (
         <div className={styles['advancedHint']}>
@@ -2073,6 +2076,7 @@ export function ConnectorsSettingsSection({ api,
                   reconnecting={row.mcpRuntime !== undefined && reconnectingServerName === row.mcpRuntime.serverName}
                   repairing={row.managed !== undefined && repairingEntryId === row.managed.entryId}
                   removing={row.managed !== undefined && removingEntryId === row.managed.entryId}
+                  onChanged={() => { setRefresh(current => current + 1) }}
                   onAuthorize={(entry) => {
                     const method = entry.methods[0]
                     if (method !== undefined) begin(entry.key, method.id)
@@ -2082,6 +2086,7 @@ export function ConnectorsSettingsSection({ api,
                     ? undefined
                     : () => { installCuratedConnector(row.definition) }}
                   onFindOfficial={mcpRegistry?.search === undefined
+                    || row.definition.id === 'binance'
                     || row.definition.mode === 'native'
                     || (row.definition.curatedMcp === true && mcpRegistry.installCurated !== undefined)
                     ? undefined

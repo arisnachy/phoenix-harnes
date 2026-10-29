@@ -42,16 +42,20 @@ const cleanScore=(s:unknown):number|null=>{
 }
 const form=(current:Competitor,all:Game[],kickoff:number):FormSide=>{
   const id=pid(current)
+  const seenEvents=new Set<string>()
   const records=all.flatMap(e=>{
     if(e.status?.type?.state!=='post')return []
     const at=Date.parse(e.date??'')
     if(!Number.isFinite(at)||at>=kickoff)return []
+    const eventId=String(e.id??'')
+    if(!/^\d{1,20}$/u.test(eventId)||seenEvents.has(eventId))return []
     const {home,away}=sides(e)
     const mine=pid(home)===id?home:pid(away)===id?away:undefined
     const rival=mine===home?away:home
     if(!mine||!rival)return []
     const scored=cleanScore(mine.score),allowed=cleanScore(rival.score)
     if(scored===null||allowed===null)return []
+    seenEvents.add(eventId)
     return[{eventId:String(e.id??''),date:e.date??'',opponent:pname(rival),scored,allowed}]
   }).sort((a,b)=>Date.parse(b.date)-Date.parse(a.date)).slice(0,10)
   const wins=records.filter(r=>r.scored>r.allowed).length
@@ -117,12 +121,16 @@ export async function researchSport(
     if(!home||!away||!pid(home)||!pid(away)||!pname(home)||!pname(away))return []
     const kickoff=Date.parse(event.date??'')
     const homeForm=form(home,archived,kickoff),awayForm=form(away,archived,kickoff)
-    const sufficient=successfulDays===lookbackDays&&homeForm.completedGames>=2&&awayForm.completedGames>=2
+    // Research reports a preliminary minimum, while the automatic-ticket
+    // promotion layer requires five distinct games per team (NFL: three).
+    const requiredGames=sport==='football'?3:5
+    const sufficient=successfulDays===lookbackDays&&
+      homeForm.completedGames>=requiredGames&&awayForm.completedGames>=requiredGames
     const result:ResearchMatch={eventId:String(event.id??''),date:event.date??'',sport,league,
       home:homeForm,away:awayForm,source:'ESPN Site API',evidence:sufficient?'descriptive':'insufficient',
       coverageDays:lookbackDays,successfulDays,
       limitations:[
-        ...(!sufficient?['Historial incompleto o muestra de partidos insuficiente']:[]),
+        ...(!sufficient?['Historial incompleto o muestra inferior a '+requiredGames+' partidos distintos por equipo']:[]),
         'Lesiones/ausencias y alineaciones pendientes de verificación',
         'Rendimiento ajustado por rival y métricas específicas pendientes',
         'Mercados y probabilidad calibrada no verificados',
