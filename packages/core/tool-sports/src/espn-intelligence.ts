@@ -3,7 +3,7 @@ import { getFeed, hasSportsPermission, sportsCatalog, discoverEspnLeagues } from
 
 type Row = Record<string, unknown>
 type View = 'team'|'player'|'event'|'standings'|'news'|'leaders'|'search'
-type Item = { label:string; value?:string; detail?:string; image?:string; action?:{label:string;prompt:string} }
+type Item = { label:string; value?:string; detail?:string; image?:string; href?:string; action?:{label:string;prompt:string} }
 type Section = { heading:string; kind:'metrics'|'list'|'articles'; items:Item[] }
 type Source = { name:string; status:'available'|'unavailable'; records:number }
 export type EspnExplorerInput = {
@@ -30,6 +30,14 @@ const cover=(x:unknown):string|undefined=>{
   if(!value)return undefined
   try{const u=new URL(value);return u.protocol==='https:'&&!u.username&&!u.password&&
     u.hostname==='a.espncdn.com'?value:undefined}catch{return undefined}
+}
+const newsLink=(x:unknown):string|undefined=>{
+  const href=txt(x,500)
+  try{
+    const u=new URL(href)
+    return u.protocol==='https:'&&!u.username&&!u.password&&
+      ['www.espn.com','espn.com'].includes(u.hostname)&&u.pathname.length>1?href:undefined
+  }catch{return undefined}
 }
 const img=(x:unknown):string|undefined=>{
   if(Array.isArray(x))return img(x[0])
@@ -133,11 +141,12 @@ function stories(data:unknown):Item[]{
   const d=row(data),articles=array(d.articles).length?array(d.articles):
     array(d.items)
   return articles.slice(0,20).map(article=>{
-    const a=row(article)
-    return item(a.headline??a.title,
+    const a=row(article),base=item(a.headline??a.title,
       a.published??a.lastModified??a.publishedAt,
       a.description??a.story,
       array(a.images)[0])
+    const url=newsLink(row(row(a.links).web).href??a.link)
+    return base&&url?{...base,href:url}:base
   }).filter((x):x is Item=>x!==null)
 }
 function roster(data:unknown,sport:string,league:string):Item[]{
