@@ -1,6 +1,6 @@
 import {test} from 'node:test'
 import assert from 'node:assert/strict'
-import {hydrateSportsSources,managedSportsInstallStatus,sportsSourcesHealth} from '../src/sports-source-health.ts'
+import {ensureSportsSourcesStarted,hydrateSportsSources,locateSportsAutoLauncher,managedSportsInstallStatus,sportsSourcesHealth} from '../src/sports-source-health.ts'
 import {mkdtemp,mkdir,writeFile,rm} from 'node:fs/promises'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
@@ -113,4 +113,32 @@ test('a correctly imported MLB archive stays usable if the older SBR clone faile
     assert.equal(find(rows,'ArnavSaraogi/mlb-odds-scraper').status,'configured')
     assert.equal(find(rows,'flancast90/sportsbookreview-scraper').status,'missing-files')
   }finally{await rm(root,{recursive:true,force:true})}
+})
+
+test('an absent installer manifest is repaired from the source checkout when runtime has no scripts',async()=>{
+  const root=await mkdtemp(join(tmpdir(),'phoenix-health-self-heal-'))
+  const checkout=join(root,'checkout'),runtime=join(root,'prepared-runtime')
+  const sportsHome=join(root,'sports')
+  try{
+    await mkdir(join(checkout,'scripts'),{recursive:true})
+    await mkdir(runtime,{recursive:true})
+    await writeFile(join(checkout,'scripts','phoenix-sports-source-auto.mjs'),
+      'console.log(JSON.stringify({status:"started"}))')
+    const env={PHOENIX_INSTALL_ROOT:checkout,PHOENIX_RUNTIME_ROOT:runtime,
+      PHOENIX_SPORTS_SOURCE_HOME:sportsHome}
+    const match=locateSportsAutoLauncher(env)
+    assert.equal(match.root,checkout)
+    const report=await ensureSportsSourcesStarted(env)
+    assert.equal(report.status,'started')
+    assert.equal(report.logPath,join(sportsHome,'install.log'))
+    assert.equal(managedSportsInstallStatus(env).state,'not-started')
+  }finally{await rm(root,{recursive:true,force:true})}
+})
+test('explicit operator or CI disable never starts a sports installer from Kira',async()=>{
+  const rows=[
+    {PHOENIX_SPORTS_SOURCES_AUTO_INSTALL:'0'},
+    {CI:'true'},
+    {NODE_ENV:'test'},
+  ]
+  for(const env of rows)assert.equal((await ensureSportsSourcesStarted(env)).status,'disabled')
 })
