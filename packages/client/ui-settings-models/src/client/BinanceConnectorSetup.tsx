@@ -153,6 +153,23 @@ export function BinanceConnectorSetup({ onChanged, onAuthorizeMcp }: {
     }
   }
 
+  const migrateStoredKeys = async (): Promise<void> => {
+    if (busy !== undefined || testnet?.configured !== true) return
+    setBusy('real'); setError(undefined); setNotice(undefined)
+    try {
+      const result = await readHostJson<RealConnection & { migrated: boolean }>('/real-migrate', {})
+      if (result.migrated === true && result.connected === true) {
+        setReal(result)
+        setNotice('Claves previamente guardadas verificadas con Binance REAL. Acceso solo lectura; ninguna orden autorizada.')
+        onChanged()
+      } else {
+        setNotice(result.nextAction ?? 'Las claves guardadas no se pudieron verificar con Binance REAL.')
+      }
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'No se pudo reutilizar la clave guardada.')
+    } finally { setBusy(undefined) }
+  }
+
   const repairAgentic = async (): Promise<void> => {
     if (busy !== undefined) return
     setBusy('repair'); setError(undefined); setNotice(undefined)
@@ -264,6 +281,12 @@ export function BinanceConnectorSetup({ onChanged, onAuthorizeMcp }: {
                 onClick={() => { void saveReal() }}>
                 {busy === 'real' ? 'Verificando…' : 'Guardar y verificar REAL (lectura)'}
               </button>
+              {testnet?.configured === true ? (
+                <button type="button" className={connectorStyles['connectorSecondaryButton']}
+                  onClick={() => { void migrateStoredKeys() }}>
+                  Comprobar claves guardadas como REAL
+                </button>
+              ) : null}
               <a href="https://www.binance.com/en/my/settings/api-management" target="_blank"
                 rel="noreferrer">Administrar API de Binance</a>
             </div>
