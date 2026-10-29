@@ -15,6 +15,7 @@ type Intake = {
   title?: string
   target_pages?: number
   page_scope?: 'all' | 'body' | 'unknown'
+  visual_mode?: 'formal' | 'enhanced'
   cover?: { institution?: string; author?: string; authors?: Array<{ name?: string; student_id?: string }>;
     logo_path?: string; advisor?: string; course?: string; institutional_manual_path?: string }
 }
@@ -73,6 +74,13 @@ function parse(input: unknown): Intake {
   }
   if (args.page_scope !== undefined && !['all', 'body', 'unknown'].includes(args.page_scope)) {
     throw new ToolArgsError(['Alcance de paginación inválido.'])
+  }
+  if (args.visual_mode !== undefined && !['formal', 'enhanced'].includes(args.visual_mode)) {
+    throw new ToolArgsError(['visual_mode debe ser formal o enhanced.'])
+  }
+  if (args.document_type === 'thesis' && args.level !== undefined
+    && args.level !== 'bachelors' && args.level !== 'masters' && args.level !== 'doctorate') {
+    throw new ToolArgsError(['La tesis requiere nivel bachelors, masters o doctorate.'])
   }
   return args
 }
@@ -144,7 +152,7 @@ export function planAcademicResearch(input: unknown) {
     state: missing.size ? 'INTAKE_INCOMPLETE' : 'PLAN_READY',
     entries: ENTRIES.map(row => ({ ...row })),
     entry, citation_style: citationStyle, document_type: inferredType,
-    presentation: entry === 'scientific_article' ? 'hybrid' : 'academic',
+    presentation: entry === 'scientific_article' || args.visual_mode === 'enhanced' ? 'hybrid' : 'academic',
     level, title: args.title ?? null,
     pages: { target: suggestedPages, explicitly_requested: args.target_pages !== undefined,
       suggested_range: [...defaultRange], scope: args.page_scope ?? 'unknown',
@@ -167,7 +175,8 @@ export function planAcademicResearch(input: unknown) {
       note: 'El publicador recibe style=apa7 o style=vancouver y transforma [@key] según el formato; verificar reglas institucionales.',
     },
     visual_guidance: {
-      presentation: 'academic', design_preset: 'academic_classic',
+      presentation: args.visual_mode === 'enhanced' ? 'hybrid' : 'academic',
+      design_preset: args.visual_mode === 'enhanced' ? 'minimal_graphite' : 'academic_classic',
       intent: 'diseño académico elegante, legible y coherente, subordinado al manual institucional',
       figures: ['barras para comparaciones', 'líneas para tendencias', 'dispersión para relaciones',
         'forest para metaanálisis con intervalos reales', 'diagrama de flujo para métodos documentados'],
@@ -187,7 +196,7 @@ export function createResearchPlanTool(): ToolDefinition {
     name: 'phoenix_research_plan',
     description: 'PLANIFICA ANTES DE REDACTAR una investigación APA 7, Vancouver o Artículo científico. Para tesis usa guías orientativas de 20-40 referencias (licenciatura), 40-80 (maestría) y 100+ (doctorado), sin afirmar mínimos universales; prevalece el manual institucional confirmado. Incluye reglas de citas y diseño académico clásico con tablas y gráficos respaldados por datos reales.  Detecta la intención y devuelve una SOLA agrupación de datos faltantes, capítulos, presupuesto de páginas (10-250+ según nivel), recomendación académica, advertencias de métodos y alcance de páginas. Artículo científico es un tipo de documento distinto de APA/Vancouver, que son estilos bibliográficos. Si hay guía institucional, léela antes de cerrar el plan; no presumas requisitos universales. Úsalo antes de phoenix_research_publish para tesis, monografías, protocolos, artículos, revisiones y trabajos de 60-120 páginas.',
     parameters: { input: { type: 'object', required: true, additionalProperties: true,
-      description: 'intent, entry (apa7/vancouver/scientific_article), citation_style, document_type, level, title, target_pages, page_scope, cover con datos ya conocidos.' } },
+      description: 'intent, entry (apa7/vancouver/scientific_article), citation_style, document_type, level (bachelors/masters/doctorate para tesis), title, target_pages, page_scope, visual_mode (formal/enhanced), cover con datos ya conocidos.' } },
     output: {
       schema: { type: 'object', additionalProperties: true },
       render: (_args, value) => [{ type: 'text',
