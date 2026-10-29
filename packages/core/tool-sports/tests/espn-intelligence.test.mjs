@@ -13,7 +13,7 @@ const mock=(handler)=>{
 test('team explorer produces responsive cards with only actual roster, news, logo and schedule',async()=>{
   const {urls,fetcher}=mock(u=>{
     if(u.includes('/teams/456/roster'))return{athletes:[
-      {items:[{displayName:'Verified Player A',position:{displayName:'Guard'},
+      {items:[{id:'991',displayName:'Verified Player A',position:{displayName:'Guard'},
         headshot:{href:'https://a.espncdn.com/i/headshots/nba/players/full/1.png'},injuries:[{status:'Day-to-day',date:'2026-10-29'}]}]},
     ]}
     if(u.includes('/teams/456/schedule'))return{events:[{name:'City A vs City B',date:'2026-11-02'}]}
@@ -26,6 +26,7 @@ test('team explorer produces responsive cards with only actual roster, news, log
   const data=await exploreEspn({sport:'basketball',league:'nba',view:'team',teamId:'456'},fetcher,{},Date.parse('2026-10-29'))
   assert.equal(data.title,'City A')
   assert.ok(data.uiBlock.props.image?.includes('espncdn'))
+  assert.ok(data.sections.some(s=>s.heading==='Plantilla verificada'&&s.items[0].action?.prompt.includes('athleteId=991')))
   assert.equal(data.uiBlock.component,'sports_espn_dashboard')
   assert.ok(data.sections.some(s=>s.heading==='Plantilla verificada'&&s.items[0].label==='Verified Player A'))
   assert.ok(data.sections.some(s=>s.heading==='Noticias del equipo'&&s.items[0].label==='City A injury update'))
