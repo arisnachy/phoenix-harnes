@@ -105,3 +105,60 @@ Un ticket 4/5 sin cuota sigue siendo **borrador, no apuesta**.
 
 Revisar el log del instalador si no hay CLI o si una descarga falla; nunca
 compartir API keys ni resultados que incluyan datos privados.
+
+## Verificación real de los tres scrapers (actualización 29-oct-2026)
+
+OddsHarvester 0.20.0 requiere **Python >=3.12**. El instalador debe localizar un
+intérprete compatible, instalar el paquete y comprobar el ejecutable real de
+Playwright Chromium. Kira obtiene el estado con `sports_chat_sources_health`,
+incluidos los errores concretos de cada componente y la ruta `installation.logPath`.
+Instalar no equivale a que OddsPortal permita leer cuotas.
+
+En PowerShell, dentro de PHOENIX:
+
+```powershell
+node scripts/phoenix-sports-source-bootstrap.mjs --status
+Get-Content "$HOME\.phoenix\sports-sources\install.log" -Tail 50
+node scripts/phoenix-sports-source-bootstrap.mjs --install
+```
+
+### Cuotas actuales — OddsHarvester + Playwright
+
+El scraper abre OddsPortal por deporte, fecha, mercado y período. Ejemplo NHL:
+
+```powershell
+& "$HOME\.phoenix\sports-sources\.venv\Scripts\oddsharvester.exe" upcoming -s ice-hockey -d 20261029 -m home_away --period full_including_ot --headless -f json -o hockey-odds.json
+```
+
+Para fútbol: `-m 1x2,double_chance,btts,over_under`. No usar `--preview-only`
+para precios por casa. El JSON devuelto tiene `scraped_date`, `match_date`,
+`match_link` y mercados `*_market` con `bookmaker_name`, `period` y cuotas.
+Los mercados FullTime y FullIncludingOT NO son intercambiables.
+PHOENIX descarta cuotas bloqueadas, anteriores al límite de frescura o sin
+casa y fecha comprobables. En NHL, `home_away` con prórroga usa
+`--period full_including_ot`; NBA 1X2 reglamentario usa `--period full_time`.
+
+### Históricos — flancast90/sportsbookreview-scraper
+
+Ejecuta `python cli.py --sport nhl --start 2020 --end 2021
+--filename nhl_2020_2021 --format json` desde la carpeta clonada.
+El scraper original usa `requests`, `pandas` y `lxml` y produce
+`data/nhl_2020_2021.json`. Su fuente está limitada a temporadas antiguas.
+
+### Históricos — ArnavSaraogi/mlb-odds-scraper
+
+Ejecuta `python scraper.py 2025-08-01 2025-08-02 -t moneyline
+pointspread totals -c 2 -o mlb-historico.json` desde su repo clonado.
+Utiliza `aiohttp`, `requests`, `tqdm` y las tablas de SportsBookReview.
+No convierte archivos históricos en precios actuales.
+
+Para recolectar de forma acotada, sin ejecutar scripts externos por accidente:
+
+```powershell
+node scripts/phoenix-sports-historical-collect.mjs --run=1 --source=sportsbookreview --sport=nhl --startYear=2020 --endYear=2021
+node scripts/phoenix-sports-historical-collect.mjs --run=1 --source=mlb --startDate=2025-08-01 --endDate=2025-08-02
+```
+
+Los archivos se escriben bajo `history/collected`, solo para análisis y
+backtesting. El scraping histórico es voluntario y puede fallar por cambios
+en el sitio o restricciones de acceso. No hay servicio ilimitado garantizado.
