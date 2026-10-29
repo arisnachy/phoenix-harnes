@@ -70,6 +70,10 @@ describe('Phoenix academic research intake and length planning', () => {
       presentation: 'hybrid', design_preset: 'minimal_graphite',
     })
     expect(enhanced.visual_guidance.safeguards.join(' ')).toContain('datos reales')
+    const natural = planAcademicResearch({ intent: 'Tesis hermosa y elegante con gráficos', level: 'masters' })
+    expect(natural.visual_guidance.presentation).toBe('hybrid')
+    const override = planAcademicResearch({ intent: 'Tesis hermosa', level: 'masters', visual_mode: 'formal' })
+    expect(override.visual_guidance.presentation).toBe('academic')
   })
   it('rejects unsafe or impossible page budgets', () => {
     expect(() => planAcademicResearch({ entry: 'apa7', target_pages: -1 })).toThrow()
