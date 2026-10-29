@@ -111,7 +111,7 @@ type SportsScheduleCard = {
 }
 
 /** Data-driven ESPN surface: templates expand with sections rather than one card per sport. */
-type SportsEspnItem = {label:string;value?:string;detail?:string;image?:string}
+type SportsEspnItem = {label:string;value?:string;detail?:string;image?:string;action?:{label:string;prompt:string}}
 type SportsEspnSection = {
   heading:string;kind:'metrics'|'list'|'articles';items:SportsEspnItem[]
 }
@@ -313,9 +313,11 @@ const sportsEspnDashboard=(v:Record<string,unknown>):v is SportsEspnDashboard=>{
     && p.sections.every(s=>isRecord(s) && hasOnlyKeys(s,['heading','kind','items'])
       && isText(s.heading) && ['metrics','list','articles'].includes(String(s.kind))
       && Array.isArray(s.items) && s.items.length>=1 && s.items.length<=30
-      && s.items.every(x=>isRecord(x)&&hasOnlyKeys(x,['label','value','detail','image'])
+      && s.items.every(x=>isRecord(x)&&hasOnlyKeys(x,['label','value','detail','image','action'])
         && isText(x.label) && optionalText(x.value) && optionalText(x.detail,240)
-        && trustedPortrait(x.image)))
+        && trustedPortrait(x.image)
+        && (x.action===undefined||(isRecord(x.action)&&hasOnlyKeys(x.action,['label','prompt'])
+          && isText(x.action.label,80)&&isText(x.action.prompt,400)))))
 }
 
 const sportsOdds = (v:Record<string,unknown>):v is SportsOddsCard => {
@@ -666,6 +668,8 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
                 <div><strong>{x.label}</strong>
                   {x.value&&<span>{x.value}</span>}
                   {x.detail&&<small>{x.detail}</small>}
+                  {x.action&&onAction&&<button type="button" className={css.sportsSlateAction}
+                    onClick={()=>{if(x.action)onAction(x.action.prompt,'draft')}}>{x.action.label}</button>}
                 </div>
               </article>)}
             </div>}
