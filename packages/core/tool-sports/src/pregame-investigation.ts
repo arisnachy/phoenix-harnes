@@ -51,7 +51,8 @@ export async function investigatePregame(
     if(!record(data))return false
     // A populated summary is a second event-specific endpoint; no extra
     // claims are made about unverified injuries or starting players.
-    return record(data.header)||record(data.boxscore)
+    return (record(data.header)&&list(data.header.competitions)&&data.header.competitions.length>0)
+      ||(record(data.boxscore)&&list(data.boxscore.teams)&&data.boxscore.teams.length>0)
   }))
   return new Map(limited.map((e,i)=>{
     const summaryVerified=summaries[i]?.status==='fulfilled'&&summaries[i].value===true
