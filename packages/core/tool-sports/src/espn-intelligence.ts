@@ -3,7 +3,7 @@ import { getFeed, hasSportsPermission, sportsCatalog, discoverEspnLeagues } from
 
 type Row = Record<string, unknown>
 type View = 'team'|'player'|'event'|'standings'|'news'|'leaders'|'search'
-type Item = { label:string; value?:string; detail?:string; image?:string }
+type Item = { label:string; value?:string; detail?:string; image?:string; action?:{label:string;prompt:string} }
 type Section = { heading:string; kind:'metrics'|'list'|'articles'; items:Item[] }
 type Source = { name:string; status:'available'|'unavailable'; records:number }
 export type EspnExplorerInput = {
@@ -136,16 +136,20 @@ function stories(data:unknown):Item[]{
       array(a.images)[0])
   }).filter((x):x is Item=>x!==null)
 }
-function roster(data:unknown):Item[]{
+function roster(data:unknown,sport:string,league:string):Item[]{
   const groups=array(row(data).athletes),individuals=groups.flatMap(g=>{
     const r=row(g);return array(r.items).length?array(r.items):[g]
   })
   return individuals.slice(0,65).map(a=>{
     const p=row(a),person=row(p.athlete),x=Object.keys(person).length?person:p
-    return item(x.displayName??x.fullName??x.name,
+    const base=item(x.displayName??x.fullName??x.name,
       row(x.position).displayName??row(x.position).abbreviation,
       x.jersey?('#'+txt(x.jersey,8)):'',
       x.headshot)
+    const athleteId=id(x.id)
+    return base&&athleteId?{...base,action:{label:'Estadísticas del jugador',
+      prompt:'Kira, consulta sports_chat_espn_explore con view=player, sport='+sport+
+        ', league='+league+', athleteId='+athleteId+'. Muestra su ficha, estadísticas, gamelog y splits.'}}:base
   }).filter((x):x is Item=>x!==null)
 }
 
@@ -306,12 +310,16 @@ export async function exploreEspn(
       ...metrics(data.get('Estadísticas del equipo'),10),
       ...metrics(data.get('Récord del equipo'),8),
     ]))
-    put(section('Plantilla verificada','list',roster(data.get('Plantilla')),24))
+    put(section('Plantilla verificada','list',roster(data.get('Plantilla'),sport,league),24))
     put(section('Disponibilidad reportada en plantilla','list',rosterInjuries(data.get('Plantilla'))))
     const schedule=row(data.get('Calendario del equipo'))
     put(section('Próximos encuentros y resultados','list',
       array(schedule.events).slice(0,16).map(g=>{const e=row(g)
-        return item(e.shortName??e.name,e.date,row(row(e.status).type).description)})))
+        const base=item(e.shortName??e.name,e.date,row(row(e.status).type).description)
+        const eventId=id(e.id)
+        return base&&eventId?{...base,action:{label:'Detalle del encuentro',
+          prompt:'Kira, consulta sports_chat_espn_explore con view=event, sport='+sport+
+            ', league='+league+', eventId='+eventId+'. Muestra estadísticas y hechos comprobados.'}}:base})))
     put(section('Noticias del equipo','articles',stories(data.get('Noticias del equipo'))))
     const tx=data.get('Movimientos del equipo')
     put(section('Movimientos oficiales','list',array(row(tx).transactions).slice(0,12).map(m=>{
