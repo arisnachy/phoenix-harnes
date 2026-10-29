@@ -13,8 +13,9 @@ export type MarketComparison={
 }
 const MARKET_SET=new Set(['h2h','1x2','double_chance','totals','spreads','btts','moneyline',
   'home_away','match_winner'])
-const key=(row:MarketOutcome)=>[row.sportKey??'',row.eventId,row.bookmaker,row.market,
-  row.point??''].join('|')
+const key=(row:MarketOutcome)=>[row.sportKey??'',row.eventId,row.bookmaker,
+  row.market.toLowerCase(),row.market.toLowerCase()==='spreads'&&typeof row.point==='number'
+    ?Math.abs(row.point):row.point??''].join('|')
 export function compareBettingMarkets(
   source:readonly MarketOutcome[],now=Date.now(),maxAgeMs=60*60*1000,
 ):{markets:MarketComparison[];rejected:number;warning:string}{
@@ -42,14 +43,24 @@ export function compareBettingMarkets(
     // Most 2-way and totals require both sides; soccer 3-way requires DRAW.
     const needsDraw=market==='1x2'
     const hasDraw=[...labels].some(x=>/^(draw|empate|tie|x)$/u.test(x))
-    if(rows.length<2||(needsDraw&&(!hasDraw||rows.length<3)))continue
+    if(rows.length<2||((needsDraw||(market==='h2h'&&
+      (initial.sportKey??'').startsWith('soccer_')))&&(!hasDraw||rows.length<3)))continue
     const inverse=rows.map(row=>1/row.price)
     const sum=inverse.reduce((a,b)=>a+b,0)
     // Only the full, mutually exclusive 2-way or 3-way menu permits
     // no-vig normalization. Double-chance legs overlap: never normalize them.
-    const complete=(market==='1x2'&&rows.length===3&&hasDraw)
-      ||(['h2h','moneyline','home_away','match_winner','btts','totals','spreads']
+    const isThreeWay=market==='1x2'||(market==='h2h'&&
+      (initial.sportKey??'').startsWith('soccer_'))
+    const complementarySpreads=market==='spreads'&&rows.length===2&&
+      typeof rows[0]?.point==='number'&&typeof rows[1]?.point==='number'&&
+      rows[0].point===-rows[1].point&&rows[0].selection!==rows[1].selection
+    const complementaryTotals=market==='totals'&&rows.length===2&&
+      rows[0]?.point===rows[1]?.point&&
+      labels.has('over')&&labels.has('under')
+    const complete=(isThreeWay&&rows.length===3&&hasDraw)
+      ||(!isThreeWay&&['h2h','moneyline','home_away','match_winner','btts']
         .includes(market)&&rows.length===2)
+      ||complementarySpreads||complementaryTotals
     const shares=rows.map((q,i)=>({
       name:q.selection,price:q.price,point:q.point??null,
       impliedFromQuote:Number((inverse[i]??0).toFixed(5)),
