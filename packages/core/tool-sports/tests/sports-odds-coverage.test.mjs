@@ -71,4 +71,10 @@ test('scraper errors explain missing browser, timeout or block without exposing 
   const c=describeScraperError({code:1,stderr:'HTTP 403 Cloudflare challenge'})
   assert.match(c,/site-blocked-or-limited/)
   assert.match(describeScraperError({code:'ENOENT'}),/missing-executable/)
+  const secret='sk-test-secret-123456789012345'
+  const bearer=describeScraperError({code:1,stderr:
+    'Authorization: Bearer '+secret+'; URL https://example.org/?access_token='+secret+
+    '; --api-key '+secret})
+  assert.doesNotMatch(bearer,/sk-test-secret|123456789012345|Bearer /i)
+  assert.match(bearer,/credencial oculta/)
 })
