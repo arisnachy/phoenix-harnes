@@ -766,7 +766,7 @@ function BundledWebsitePreview({ entry, files, title, executable, loadImage }: {
         try {
           const source = await loadImage(attachment)
           let dataUri: string
-          if (/^data:image\\/(?:png|jpeg|webp|gif);base64,/iu.test(source)) {
+          if (/^data:image\/(?:png|jpeg|webp|gif);base64,/iu.test(source)) {
             dataUri = source
           } else if (source.startsWith('blob:')) {
             const response = await fetch(source)
