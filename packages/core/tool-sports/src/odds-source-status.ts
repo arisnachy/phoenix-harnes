@@ -56,7 +56,7 @@ export async function describeOddsSources(
   }
   sources.push({name:'ESPN Site/Core API',kind:'current',state:env.PHOENIX_SPORTS_ESPN_DISABLED==='1'?'disabled':'public-unverified',
     keyRequired:false,detail:'Marcadores públicos; solo ofrece cuotas si aparecen mercados verificables en el feed.'})
-  const folder=env.PHOENIX_SPORTS_HISTORY_DIR
+  const folder=env.PHOENIX_SPORTS_HISTORY_DIR??join(homedir(),'.phoenix','sports-history')
   const historical=[
     {name:'flancast90/sportsbookreview-scraper',file:'sportsbookreview-'+sport+'.json',supported:['nba','nfl','nhl','mlb'].includes(sport)},
     {name:'ArnavSaraogi/mlb-odds-scraper',file:'mlb-odds.json',supported:sport==='mlb'},
@@ -65,7 +65,7 @@ export async function describeOddsSources(
     const exists=h.supported&&Boolean(folder&&isAbsolute(folder))&&await fileExists(join(folder??'',h.file))
     sources.push({name:h.name,kind:'historical',state:!h.supported?'not-applicable':exists?'local-archive-present':'archive-not-installed',
       keyRequired:false,detail:exists?'Archivo presente; solo datos históricos, no cuotas actuales.':
-        'Datos históricos de GitHub; instala archivos en PHOENIX_SPORTS_HISTORY_DIR para analizarlos. Nunca cotizar tickets con estos archivos.'})
+        'Datos históricos de GitHub; pnpm sports:history:setup descarga archivos al caché de Phoenix. Nunca cotizar tickets actuales con estos archivos.'})
   }
   return {sources,currentQuotesVerified:sources.some(x=>x.kind==='current'&&x.state==='observed-quotes'),
     note:'Estado de instalación ≠ prueba de cotizaciones vigentes. La fuente puede no cubrir una liga, un bookmaker o un país. Sin cuotas recientes, no se inventan precios.'}
