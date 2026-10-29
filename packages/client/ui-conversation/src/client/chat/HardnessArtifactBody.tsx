@@ -9,7 +9,7 @@ import { GeoMap, parseGeoMapSpec } from './GeoMap.tsx'
 import { SceneMap, parseSceneMapSpec } from './SceneMap.tsx'
 import { DiagramSurface, parseDiagramSpec } from './DiagramSurface.tsx'
 import { auditGameHtml, readGameManifest } from './game-studio-quality.ts'
-import { hasExecutableHtmlBehavior, hasExternalImageReferences, inlineBundledImages } from './html-preview-assets.ts'
+import { hasExecutableHtmlBehavior, hasExternalImageReferences, inlineBundledImages, isolatedHtmlPreviewWindow } from './html-preview-assets.ts'
 import {
   libraryGameId, listLibraryGames, openGameInWindow, removeLibraryGame, saveLibraryGame,
   type LibraryGame,
@@ -251,6 +251,14 @@ function sandboxDocument(html: string, executable: boolean, gameDiagnostics = fa
   // resource; a blank canvas otherwise looks like an apparently successful job.
   const remoteChartDependency = /<script\b[^>]*\bsrc\s*=/iu.test(html)
     && /<canvas\b|chart(?:\.js)?|plotly|echarts|apexcharts|gr[aá]fica/iu.test(html)
+  // A generated image filename alone is not an embedded image: when no
+  // companion bytes were supplied, surface the missing asset instead of
+  // silently reporting a fully rendered page.
+  const unresolvedImage = /<img\\b[^>]*\\bsrc\\s*=\\s*[\"'](?!data:|blob:|https?:\\/\\/|\\/\\/|\\/)[^\"']+/iu.test(html)
+  const missingImageNotice = unresolvedImage
+    ? '<p role="alert" data-phoenix-missing-image="true" style="padding:10px;border:1px solid #d9b886;border-radius:8px;background:#fff8eb;color:#543e24">'
+      + 'Esta página contiene imágenes locales sin empaquetar. Adjunta sus bytes en files o usa una URL HTTPS accesible; una ruta exec-*.png no es una imagen publicada.</p>'
+    : ''
   const dependencyNotice = remoteChartDependency
     ? '<p role="alert" style="margin:0 0 12px;padding:12px 14px;border:1px solid #dfba7e;'
       + 'border-radius:10px;background:#fff8eb;color:#533e22;line-height:1.45">'
@@ -314,7 +322,7 @@ function sandboxDocument(html: string, executable: boolean, gameDiagnostics = fa
     ? '<script>(function(){function alertGame(reason){if(!document.body)return;var p=document.createElement("p");p.setAttribute("role","alert");p.setAttribute("data-phoenix-game-error","true");p.style.cssText="padding:12px;background:#461e26;color:#fff;border:2px solid #eb7688;border-radius:8px";p.textContent="Game Studio: error al ejecutar el juego ("+String(reason).slice(0,180)+"). Revisa el script, los recursos y la consola. El manifiesto JSON no causa por sí solo este error.";document.body.insertBefore(p,document.body.firstChild)}window.addEventListener("error",function(e){alertGame(e.message||"JavaScript error")});window.addEventListener("unhandledrejection",function(e){alertGame(e.reason&&e.reason.message||"unhandled rejection")})})()<\/script>'
     : ''
   const heightReporter = '<script>(function(){function height(){var root=document.documentElement,body=document.body;return Math.max(root?root.scrollHeight:0,root?root.offsetHeight:0,body?body.scrollHeight:0,body?body.offsetHeight:0,1)}function report(){parent.postMessage({type:\'phoenix-artifact-height\',height:height()},\'*\')}if(window.ResizeObserver){var ro=new ResizeObserver(report);ro.observe(document.documentElement);if(document.body)ro.observe(document.body)}new MutationObserver(report).observe(document.documentElement,{subtree:true,childList:true,attributes:true,characterData:true});window.addEventListener(\'load\',report);window.addEventListener(\'resize\',report);report()})()<\/script>'
-  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="${csp}">${head}<style>html,body{margin:0;padding:0;min-height:0;height:auto;font-family:system-ui,sans-serif}body{padding:16px;box-sizing:border-box}</style>${themeStyle}</head><body>${dependencyNotice}${runtimeErrors}${body}${themeBridge}${heightReporter}</body></html>`
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="${csp}">${head}<style>html,body{margin:0;padding:0;min-height:0;height:auto;font-family:system-ui,sans-serif}body{padding:16px;box-sizing:border-box}</style>${themeStyle}</head><body>${dependencyNotice}${missingImageNotice}${runtimeErrors}${body}${themeBridge}${heightReporter}</body></html>`
 }
 
 interface MiniAppProps {
@@ -336,6 +344,16 @@ function MiniApp({ html, title, executable = false, minimumHeight = 1, gameDiagn
   const frameRef = useRef<HTMLIFrameElement>(null)
   const srcDoc = useMemo(() => sandboxDocument(html, runScripts, gameDiagnostics, allowExternalImages),
     [html, runScripts, gameDiagnostics, allowExternalImages])
+  const [standaloneUrl, setStandaloneUrl] = useState<string>()
+  useEffect(() => {
+    if (typeof URL.createObjectURL !== 'function') return
+    // This URL opens a shell, not the authored HTML at Phoenix's origin.
+    // The document executes (if enabled) only in an opaque-origin iframe.
+    const url = URL.createObjectURL(new Blob([isolatedHtmlPreviewWindow(srcDoc, title, runScripts)],
+      { type: 'text/html;charset=utf-8' }))
+    setStandaloneUrl(url)
+    return () => { URL.revokeObjectURL(url) }
+  }, [srcDoc, title, runScripts])
 
   useEffect(() => {
     const onMessage = (event: MessageEvent<unknown>): void => {
@@ -414,6 +432,15 @@ function MiniApp({ html, title, executable = false, minimumHeight = 1, gameDiagn
 
   return (
     <div className={styles.miniAppWrap}>
+      {!gameDiagnostics && <div className={styles.pageAddress} data-phoenix-website-url="true">
+        <label>URL de la vista completa
+          <input type="text" readOnly aria-label="URL temporal de la página"
+            value={standaloneUrl ?? ''} onFocus={(event) => { event.currentTarget.select() }} />
+        </label>
+        {standaloneUrl !== undefined && <a className={styles.link} href={standaloneUrl}
+          target="_blank" rel="noopener noreferrer">Abrir página en otra pestaña</a>}
+        <small>URL temporal del navegador, no publicación pública. Descarga el HTML para conservarlo.</small>
+      </div>}
       {externalImagesAvailable && <button type="button" className={styles.remoteImageToggle}
         aria-pressed={allowExternalImages}
         onClick={() => { setApprovedExternalImagesFor(value => value === html ? undefined : html) }}>
@@ -445,7 +472,13 @@ function WebPagePreview({ url, title }: { readonly url: string; readonly title: 
         loading="lazy"
         style={{ minHeight: 420, height: 'min(70vh, 720px)' }}
       />
-      <a className={styles.link} href={url} target="_blank" rel="noreferrer">Open page</a>
+      <div className={styles.pageAddress} data-phoenix-website-url="true">
+        <label>URL de la página
+          <input type="text" readOnly aria-label="URL de la página" value={url}
+            onFocus={(event) => { event.currentTarget.select() }} />
+        </label>
+        <a className={styles.link} href={url} target="_blank" rel="noopener noreferrer">Abrir página en otra pestaña</a>
+      </div>
     </div>
   )
 }
@@ -698,11 +731,12 @@ function GameStudioPreview({ html, title }: { readonly html: string; readonly ti
   )
 }
 
-function RecordPreview({ record, mime, expanded, title, renderMessageImages }: {
+function RecordPreview({ record, mime, expanded, title, executable = true, renderMessageImages }: {
   readonly record: JsonRecord
   readonly mime: string
   readonly expanded: boolean
   readonly title: string
+  readonly executable?: boolean
   readonly renderMessageImages?: RenderMessageImages
 }) {
   const attachment = imageAttachment(record.attachment)
@@ -755,7 +789,7 @@ function RecordPreview({ record, mime, expanded, title, renderMessageImages }: {
     || visual !== undefined) return <PhoenixVisualizer spec={visual ?? record} />
   if (typeof record.entry === 'string' && isRecord(record.files)) {
     const html = typeof record.files[record.entry] === 'string' ? record.files[record.entry] as string : undefined
-    if (html !== undefined) return <MiniApp html={inlineBundledImages(record.entry, html, record.files)} title={title} executable />
+    if (html !== undefined) return <MiniApp html={inlineBundledImages(record.entry, html, record.files)} title={title} executable={executable} />
   }
   return <pre className={styles.code}>{JSON.stringify(record, null, 2)}</pre>
 }
@@ -798,6 +832,7 @@ export function HardnessArtifactBody({ mime, data, expanded, title, executable =
           mime={mime}
           expanded={expanded}
           title={title}
+          executable={executable}
           {...renderMessageImages === undefined ? {} : { renderMessageImages }}
         />
       }
@@ -810,6 +845,7 @@ export function HardnessArtifactBody({ mime, data, expanded, title, executable =
     mime={mime}
     expanded={expanded}
     title={title}
+    executable={executable}
     {...renderMessageImages === undefined ? {} : { renderMessageImages }}
   />
 }
