@@ -18,7 +18,7 @@ export function selectBinanceSpotUniverse(
   for (const raw of exchangeInfo.symbols) {
     if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) continue
     const row = raw as Record<string, unknown>
-    if (assessBinanceSpotSymbol(row) !== undefined) continue
+    if (typeof row.symbol !== 'string' || assessBinanceSpotSymbol(row) !== undefined) continue
     allowed.add(row.symbol)
   }
   const candidates: BinanceMarketCandidate[] = []
