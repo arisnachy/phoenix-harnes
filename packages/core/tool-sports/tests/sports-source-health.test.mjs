@@ -93,3 +93,24 @@ test('failed Python install is exposed to Kira rather than merely labeled disabl
     assert.ok(!JSON.stringify(rows).includes('THE_ODDS_API_KEY'))
   }finally{await rm(root,{recursive:true,force:true})}
 })
+
+test('a correctly imported MLB archive stays usable if the older SBR clone failed',async()=>{
+  const root=await mkdtemp(join(tmpdir(),'phoenix-mlb-source-'))
+  const history=join(root,'history')
+  try{
+    await mkdir(history,{recursive:true})
+    await writeFile(join(history,'mlb-odds.json'),'{"2025-01-01":[]}')
+    await writeFile(join(root,'manifest.json'),JSON.stringify({
+      schema:3,paths:{executable:join(root,'none'),history},
+      components:{
+        'SportsbookReview NFL/NBA/NHL/MLB archive':{status:'error'},
+        'MLB historic dataset and scraper sources':{status:'installed'},
+      },
+    }))
+    const env=hydrateSportsSources({PHOENIX_SPORTS_SOURCE_HOME:root})
+    assert.equal(env.PHOENIX_SPORTS_HISTORY_DIR,history)
+    const rows=await sportsSourcesHealth(env,async()=>false)
+    assert.equal(find(rows,'ArnavSaraogi/mlb-odds-scraper').status,'configured')
+    assert.equal(find(rows,'flancast90/sportsbookreview-scraper').status,'missing-files')
+  }finally{await rm(root,{recursive:true,force:true})}
+})
