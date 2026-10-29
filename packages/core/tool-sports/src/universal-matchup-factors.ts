@@ -41,9 +41,10 @@ type Fact={label:string;value?:string;detail?:string}
 type Section={heading:string;kind:'metrics'|'list'|'articles';items:Fact[]}
 type Coverage={source:string;status:'verified'|'unavailable';records:number}
 const side=(x:unknown):Side=>{
-  const c=obj(x),team=obj(c.team)
+  const c=obj(x),team=obj(c.team),athlete=obj(c.athlete)
+  const person=Object.keys(team).length?team:athlete
   const innings=list(c.linescores).map(z=>num(obj(z).value??obj(z).displayValue))
-  return {id:id(team.id??c.id),name:str(team.displayName??team.name,120),
+  return {id:id(person.id??c.id),name:str(person.displayName??person.name,120),
     homeAway:str(c.homeAway,10),score:num(c.score),
     lines:innings.length&&innings.every(n=>n!==null)?innings as number[]:null}
 }
@@ -176,6 +177,33 @@ export async function auditUniversalMatchup(
   const h2h=all.filter(g=>g.home.id===current.home.id&&g.away.id===current.away.id||
     g.home.id===current.away.id&&g.away.id===current.home.id)
     .sort((a,b)=>Date.parse(b.date)-Date.parse(a.date)).slice(0,5)
+  const marginDifference=homeForm.games>=5&&awayForm.games>=5&&
+    homeForm.margin!==null&&awayForm.margin!==null?
+    round(homeForm.margin-awayForm.margin):null
+  const homeH2H=h2h.filter(g=>{
+    const mine=g.home.id===current.home.id?g.home:g.away
+    const other=mine===g.home?g.away:g.home
+    return mine.score!==null&&other.score!==null&&mine.score>other.score
+  }).length
+  const awayH2H=h2h.filter(g=>{
+    const mine=g.home.id===current.away.id?g.home:g.away
+    const other=mine===g.home?g.away:g.home
+    return mine.score!==null&&other.score!==null&&mine.score>other.score
+  }).length
+  const descriptiveAdvantages=[
+    ...(marginDifference!==null&&marginDifference!==0?[{
+      factor:'Margen promedio en los últimos partidos',
+      favors:marginDifference>0?current.home.name:current.away.name,
+      difference:Math.abs(marginDifference),
+      caution:'Señal descriptiva sin ajuste por la fortaleza de rivales; no es probabilidad',
+    }]:[]),
+    ...(h2h.length>=3&&homeH2H!==awayH2H?[{
+      factor:'Victorias cara a cara en la ventana',
+      favors:homeH2H>awayH2H?current.home.name:current.away.name,
+      difference:Math.abs(homeH2H-awayH2H),
+      caution:'Muestra dependiente de encuentros pasados; alineaciones pueden ser diferentes',
+    }]:[]),
+  ]
   const venueGames=current.venueId?
     {home:home.filter(r=>r.venueId===current.venueId),
       away:away.filter(r=>r.venueId===current.venueId)}:null
@@ -256,6 +284,8 @@ export async function auditUniversalMatchup(
     stat('Descanso local (horas)',home[0]?round((kickoff-Date.parse(home[0].date))/3_600_000):null),
     stat('Descanso visitante (horas)',away[0]?round((kickoff-Date.parse(away[0].date))/3_600_000):null),
   ])
+  if(descriptiveAdvantages.length)put('Señales descriptivas de ventaja','metrics',
+    descriptiveAdvantages.map(a=>stat(a.factor,a.favors+' · diferencia '+a.difference,a.caution)))
   put('Últimos resultados','list',[
     ...home.slice(0,4).map(r=>stat(current.home.name+' vs '+r.opponent,
       r.scored+'-'+r.allowed,r.date.slice(0,10))),
@@ -319,6 +349,7 @@ export async function auditUniversalMatchup(
     sport:input.sport,league:input.league,
     home:{id:current.home.id,name:current.home.name,form:homeForm,lastGames:home},
     away:{id:current.away.id,name:current.away.name,form:awayForm,lastGames:away},
+    descriptiveAdvantages,
     headToHead:h2h.map(g=>({eventId:g.id,date:g.date,home:g.home.name,away:g.away.name,
       homeScore:g.home.score,awayScore:g.away.score})),
     stadium:{id:current.venueId,name:current.venueName,roof:current.roof,
