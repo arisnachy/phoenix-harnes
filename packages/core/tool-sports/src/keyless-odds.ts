@@ -31,7 +31,7 @@ export type KeylessSport = keyof typeof keylessSports
 export type KeylessQuote = {
   eventId:string;bookmaker:string;market:string;selection:string;point:number|null
   price:number;home:string;away:string;time:string;updatedAt:string
-  source:'OddsHarvester/OddsPortal (sin API key)'
+  source:string
   sportKey:string
 }
 type ScrapedGame = {

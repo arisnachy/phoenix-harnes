@@ -3,7 +3,7 @@
  */
 import { evidenceTicket } from './evidence-ticket.ts'
 import { keylessEnabled,keylessOdds,type KeylessQuote } from './keyless-odds.ts'
-import { pricedTicket,type ChatBlock,type MarketSelection,type MarketOutcome } from './sports.ts'
+import { marketOdds,pricedTicket,type ChatBlock,type MarketSelection,type MarketOutcome } from './sports.ts'
 
 const normalize=(name:string)=>name.normalize('NFD').replace(/[\u0300-\u036f]/gu,'')
   .toLowerCase().replace(/[^a-z0-9]/gu,'')
@@ -29,11 +29,23 @@ export async function evidencePricedTicket(
   verifiedEvents:number;quotedLegs:number;missingQuotes:number;
   explanation:string}>{
   const research=await evidenceTicket(count,date,sport,fetcher,now,env)
-  const base={card:research.card,priced:false as boolean,placed:false as const,
+  const quoteAccess=[
+    keylessEnabled(env)?'OddsHarvester habilitado (sujeto al acceso del sitio)':
+      'OddsHarvester inactivo: requiere instalación y habilitación por el operador',
+    env.THE_ODDS_API_KEY?.trim()?'The Odds API v4 configurada':'The Odds API v4 sin clave',
+    env.THEODDSAPI_API_KEY?.trim()?'TheOddsAPI configurada':'TheOddsAPI sin clave',
+    'ESPN: cuotas solo cuando el proveedor publique mercados con fecha',
+  ].join(' · ')
+  const researchCard:ChatBlock={...research.card,props:{...research.card.props,
+    note:(String(research.card.props.note??'')+' Estado de fuentes de cuotas: '+quoteAccess+
+      '. Los repositorios GitHub SportsbookReview/MLB son solo históricos.').slice(0,1000),
+  }}
+  const base={card:researchCard,priced:false as boolean,placed:false as const,
     complete:research.complete,verifiedEvents:research.verifiedEvents,
     quotedLegs:0,missingQuotes:research.verifiedEvents,
-    explanation:'Informe de investigación con eventos verificables, SIN cuotas actuales respaldadas por una misma casa.'}
-  if(!research.complete||!keylessEnabled(env))return base
+    explanation:'Preselección ESPN, cuotas todavía NO verificadas: '+quoteAccess+
+      '. Los archivos históricos no ofrecen precios para apostar hoy.'}
+  if(!research.complete)return base
   const day=date??new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santo_Domingo',
     year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(now))
   const categories=[...new Set(research.events.map(e=>e.sport))]
@@ -43,10 +55,39 @@ export async function evidencePricedTicket(
     const market=category==='soccer'&&marketPreference==='double_chance'
       ?'double_chance':route.market
     const quotes=quotesProvider?await quotesProvider(route.sport,market,day,env,now):
-      await keylessOdds(route.sport,market,day,env,now)
+      keylessEnabled(env)?await keylessOdds(route.sport,market,day,env,now):[]
     return {category,quotes}
   }))
-  const all=sources.flatMap(s=>s.status==='fulfilled'?s.value.quotes:[])
+  const keyless=sources.flatMap(s=>s.status==='fulfilled'?s.value.quotes:[])
+  // Use the existing public ESPN and optional authenticated Odds API adapters
+  // as a real second LIVE source, never the two historical GitHub archives.
+  // Explicit double-chance selections are only supplied by a verified 1X/X2
+  // market; do not relabel a winner moneyline as double chance.
+  const leagues=[...new Map(research.events.map(e=>[e.league,e])).values()]
+  const additional=quotesProvider?[]:await Promise.allSettled(leagues.map(async event=>{
+    if(event.sport==='soccer'&&marketPreference==='double_chance')return [] as KeylessQuote[]
+    const sportKey=leagueSportKey[event.league]??routing[event.sport]?.oddsSportKey
+    if(!sportKey)return [] as KeylessQuote[]
+    const lines=await marketOdds(sportKey,'h2h',env,fetcher)
+    return lines.flatMap(q=>{
+      const time=q.timeIso??''
+      const updated=Date.parse(q.updatedAt)
+      if(!Number.isFinite(Date.parse(time))||!Number.isFinite(updated)
+        ||updated>now||now-updated>3_600_000)return []
+      // Soccer 3-way victory must demonstrably include DRAW at this book.
+      if(event.sport==='soccer'&&!lines.some(draw=>
+        draw.eventId===q.eventId&&draw.bookmaker===q.bookmaker
+        &&draw.market===q.market&&/^(?:draw|empate|tie)$/iu.test(draw.selection)))return []
+      return [{
+        eventId:q.eventId,bookmaker:q.bookmaker,
+        market:event.sport==='soccer'?'1x2':'h2h',
+        selection:q.selection,point:q.point??null,price:q.price,
+        home:q.home,away:q.away,time,updatedAt:q.updatedAt,
+        source:q.source??'Proveedor de cuotas público',sportKey,
+      }] satisfies KeylessQuote[]
+    })
+  }))
+  const all=[...keyless,...additional.flatMap(s=>s.status==='fulfilled'?s.value:[])]
   const groups:KeylessQuote[][]=research.events.map(event=>{
     const kickoff=Date.parse(event.kickoff)
     const doubleChance=event.sport==='soccer'&&marketPreference==='double_chance'
@@ -68,7 +109,7 @@ export async function evidencePricedTicket(
   })
   const quotedLegs=groups.filter(g=>g.length>0).length
   if(quotedLegs!==count)return{...base,quotedLegs,missingQuotes:count-quotedLegs,
-    explanation:'Las cuotas disponibles no se corresponden de forma verificable con todos los partidos seleccionados; no se construye una combinada cotizada con precios faltantes.'}
+    explanation:'Tras consultar OddsHarvester cuando está habilitado y las fuentes ESPN/API opcionales para mercados compatibles, faltan cuotas recientes verificables para todos los partidos; no se fabrica una combinada.'}
   // A realistic combined price requires the SAME bookmaker to offer all legs.
   const common=groups.reduce<Set<string>>((set,rows,index)=>{
     const names=new Set(rows.map(q=>q.bookmaker))
@@ -109,8 +150,8 @@ export async function evidencePricedTicket(
         ...(quote.market==='double_chance'?{selection:quote.selection==='1X'
           ?'1X · Local o empate':'X2 · Visita o empate',
           market:'Doble oportunidad (1X/X2)',
-          rationale:(String(prior.rationale??'').slice(0,175)+
-            ' · Cobertura del empate; cuota verificada, riesgo vigente.').slice(0,240)}:{})}:{})}
+          rationale:(String(prior.rationale??'').slice(0,420)+
+            ' · Cobertura del empate; cuota verificada, riesgo vigente.').slice(0,480)}:{})}:{})}
   })
   const card:ChatBlock={...priced.card,props:{
     ...priced.card.props,legs,requestedLegs:count,

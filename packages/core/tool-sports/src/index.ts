@@ -23,7 +23,8 @@ const GUIDANCE = [
   'INVESTIGACIÓN NBA: antes de defender cualquier favorito o selección NBA, consulta sports_chat_nba_research (y sports_chat_odds cuando existan cuotas). Contrasta forma en marcadores finales, márgenes, descanso y muestra; revisa además informe oficial de lesiones, rotaciones, estadísticas avanzadas, rival, localía y movimiento de precios desde fuentes autorizadas. Lo no consultado debe permanecer explícitamente SIN VERIFICAR. No transformes la forma descriptiva en porcentajes de victoria ni cites atletas que no tengan plantilla actual confirmada. Un ticket automático se considera SOLO una preselección, nunca una investigación completa.',
   'INVESTIGAR TODOS LOS DEPORTES: llama sports_chat_research para estudiar los marcadores finales recientes del deporte y liga que el usuario pidió. Para MLB complementa con pitchers y bullpen; fútbol exige revisar goles, localía, bajas, forma y opciones 1X2/doble oportunidad; tenis requiere superficie, historial y fatiga; hockey necesita portero y estadísticas defensivas; en otros deportes usa métricas propias. Si el informe indica insuficiente, no proclames favorito respaldado. sports_chat_historical_odds agrega históricos de ambos repositorios SportsbookReview para entrenamiento/backtest, jamás cuotas actuales; y sports_chat_community_opinions observa pronósticos públicos solo como opinión separada.',
   'Para cuotas gratuitas por scraping (sin API key) consulta sports_chat_odds_keyless si el host habilitó OddsHarvester. No prometas consultas ilimitadas ni uses cuotas históricas como cotizaciones vigentes. El motor debe investigar todas las disciplinas disponibles, no solo NBA, y contrastar historial, lesionados, alineaciones, rendimiento, localía, cuota y fuentes externas cuando existan. Las votaciones y picks de otras personas son una referencia secundaria, no estimaciones propias ni garantía.',
-  'Para tickets automáticos de 5 o 6 patas, usa PRIMERO sports_chat_ticket_evidence_priced_auto si hay fuente sin clave habilitada; en su defecto usa sports_chat_ticket_evidence_auto y no sports_chat_ticket_research_auto, que emplea solamente récords simplificados. El modo evidence_auto investiga enfrentamientos entre deportes y no debe anunciar probabilidades ni alto porcentaje de acierto sin modelos calibrados. Si no hay datos suficientes, muestra explícitamente un borrador incompleto. Para cuotas usa sports_chat_odds_keyless y solo compón un ticket cotizado tras reconciliar correctamente IDs de proveedores.',
+  'PROCEDIMIENTO DE INVESTIGACIÓN: nunca digas que un ticket está profundamente investigado solo por salir en 2 segundos o por cinco marcadores. Para 5/6 patas emplea sports_chat_ticket_evidence_priced_auto cuando haya proveedor de cuotas habilitado; si no, sports_chat_ticket_evidence_auto. Exige historial con al menos cinco partidos terminados DIFERENTES por equipo (NFL tres), coherencia entre forma y margen, y comprobación separada de resumen ESPN y disponibilidad de parte médico. Las ausencias, el portero NHL, rotaciones NBA, pitchers MLB, once y xG en fútbol, superficie en tenis y mercados actuales que no se hayan confirmado deben quedar marcados PENDIENTES, sin atribuir jugadores, estatus ni probabilidad inventados. Si hay menos de cinco/seis selecciones justificables, muestra borrador INCOMPLETO. La opción antigua sports_chat_ticket_research_auto solo vale para exploración, nunca como análisis profundo.',
+  'EN VIVO SIN TOKENS: cuando el usuario pida juegos en vivo, marcadores actuales o seguimiento de los partidos de su ticket, llama sports_chat_games con liveOnly=true por cada liga incluida (o team/eventId para un partido). Conserva los nombres y liga del ticket sin inventar equivalencias. La cartelera y las tarjetas consultan ESPN directamente desde el navegador de manera compartida y periódica mientras están visibles, sin llamadas adicionales al modelo. Las situaciones de MLB incluyen bases/outs/conteo cuando ESPN los publica; NBA ofrece período, reloj, parciales y última jugada; NFL, NHL, fútbol y otras disciplinas muestran sus datos disponibles. No afirmes transmisión de video ni tiempo real garantizado: informa si la fuente se retrasa o no publica detalles.',
   'Cuando el usuario pida una cartelera, deja que sports_chat_games entregue una sola cartelera compacta en el chat con hasta 25 encuentros reales. Para un partido, cruce o equipo concreto, pasa team, opponent o eventId a sports_chat_games: así se mantiene la sports_game_card detallada existente. No cambies el menú, la página ni la caja del chat. Nunca inventes eventos, cuotas, lanzadores, lesiones ni resultados ausentes.',
   'DOBLE OPORTUNIDAD: si el usuario quiere 1X/X2, indica marketPreference=double_chance en sports_chat_ticket_evidence_priced_auto para encuentros de fútbol; elige solo cuotas auténticas del mismo bookmaker. 1X cubre local o empate; X2, visita o empate. No transformes ganador directo en doble oportunidad sin consultar ese mercado. El usuario puede pedir 5 o 6 selecciones y debe ver razones y riesgos, no una promesa de acierto.',
   'CONTRATO DE PATAS: cuando el usuario pide 5 patas, el resultado DEBE contener exactamente cinco selecciones verificadas; jamás presentes 1 de 5 como ticket completo. Si faltan datos, muestra explícitamente el número conseguido y el número pendiente como borrador incompleto. Respeta igualmente cualquier otro número de 1 a 6. No afirmes que una combinada ganará.',
@@ -67,7 +68,7 @@ export function apply(ctx: Context): void {
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_games',
-    description:'Cartelera compacta para múltiples eventos, y tarjetas originales detalladas cuando se filtra un partido, equipo o cruce.',
+    description:'Cartelera compacta, tarjetas por partido y marcadores en vivo con actualizaciones automáticas sin tokens. Usa liveOnly=true para eventos que están jugando.',
     parameters:{
       sport:{ type:'string',required:true,description:'Deporte: soccer, baseball, basketball, etc.' },
       league:{ type:'string',required:true,description:'Liga: mlb, nba, mex.1, eng.1, etc.' },
@@ -75,15 +76,17 @@ export function apply(ctx: Context): void {
       team:{ type:'string',description:'Nombre del equipo buscado; opcional para consulta individual.' },
       opponent:{ type:'string',description:'Segundo equipo si se busca un cruce concreto.' },
       eventId:{ type:'string',description:'ID de evento exacto obtenido de ESPN o MLB; opcional.' },
+      liveOnly:{ type:'boolean',description:'Mostrar solamente partidos en juego ahora. La tarjeta seguirá actualizándose desde ESPN.' },
     },
     output:{ schema:{ type:'string' },render:(_a,v)=>[{ type:'text' as const,text:v }] },
     isConcurrencySafe:()=>true,
     async execute(args){
-      const result=await chatGames(args.sport,args.league,args.date)
+      const result=await chatGames(args.sport,args.league,args.date,process.env,fetch,args.liveOnly===true)
       const normalize=(name:string)=>name.normalize('NFD').replace(/[\u0300-\u036f]/gu,'').toLowerCase().trim()
       const matches=(name:unknown,wanted:string)=>typeof name==='string'&&normalize(name).includes(normalize(wanted))
       const selected=result.items.filter(game=>{
         const props=game.props
+        if(args.liveOnly===true&&props.phase!=='in')return false
         if(args.eventId&&props.eventId!==args.eventId)return false
         const home=props.home as {label?:string},away=props.away as {label?:string}
         if(args.team&&!matches(home?.label,args.team)&&!matches(away?.label,args.team))return false
@@ -93,10 +96,10 @@ export function apply(ctx: Context): void {
       const listMode=!args.team&&!args.opponent&&!args.eventId
       const slate=listMode?compactSportsSchedule(selected,result.date,result.source):null
       const uiBlocks=slate?[slate]:selected.slice(0,6)
-      return JSON.stringify({summary:selected.length?result.summary:'Ningún encuentro coincide con esos filtros.',
+      return JSON.stringify({summary:selected.length?result.summary:(args.liveOnly?'No hay partidos en vivo confirmados para esta liga y fecha.':'Ningún encuentro coincide con esos filtros.'),
         date:result.date,source:result.source,count:selected.length,uiBlocks,
         remaining:Math.max(0,selected.length-(slate?25:6)),
-        instruction:'Phoenix renderiza uiBlocks automáticamente en el chat. Presenta varios partidos en una sola cartelera; un encuentro individual conserva su sports_game_card original. No imprimas JSON ni repliques las tarjetas en prosa.' })
+        instruction:'Phoenix renderiza uiBlocks automáticamente en el chat y consulta marcadores ESPN sin consumir tokens. En juegos en vivo no repitas el marcador textual de la instantánea; la UI lo actualiza. Para partidos de un ticket, consulta las ligas/equipos de las patas pertinentes. No imprimas JSON ni repliques las tarjetas en prosa.' })
     },
     presentCall:()=>({ card:'generic',title:'Buscar partidos y sus datos',kind:'read' as const }),
   }))
@@ -261,7 +264,7 @@ export function apply(ctx: Context): void {
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_ticket_evidence_priced_auto',
-    description:'Busca 5 o 6 picks desde resultados investigados; verifica cuotas actuales sin API key y las combina SOLO si una misma casa ofrece todos los eventos. No inventa probabilidades ni combinadas multioperador.',
+    description:'Investiga 5 o 6 eventos con historial más amplio y contextualización prepartido, consulta OddsHarvester habilitado para precios reales; combina SOLO cuotas vigentes de una misma casa. No inventa cuotas, lesiones ni probabilidades.',
     parameters:{
       count:{type:'integer',required:true,description:'Patas deseadas: 5 o 6 (admite 1 a 6).'},
       date:{type:'string',description:'Fecha AAAA-MM-DD; por defecto hoy.'},
@@ -298,7 +301,9 @@ export function apply(ctx: Context): void {
       const result=await evidenceTicket(args.count,args.date,args.sport)
       return JSON.stringify({uiBlock:result.card,requestedLegs:args.count,verifiedEvents:result.verifiedEvents,
         complete:result.complete,candidatesEvaluated:result.candidatesEvaluated,
-        researchLeagues:result.researchLeagues,priced:false,placed:false,modelProbabilities:false,
+        researchLeagues:result.researchLeagues,insufficientEvidence:result.insufficientEvidence,
+        researchStandard:result.researchStandard,pregameSummariesVerified:result.pregameSummariesVerified,
+        injuryFeedsVerified:result.injuryFeedsVerified,priced:false,placed:false,modelProbabilities:false,
         instruction:result.complete?
           'Ticket con exactamente las patas pedidas y resultados históricos verificados, pero aún no cotizado ni calibrado; requiere lesiones, modelos específicos, noticias y precio del operador antes de defenderlo como apuestas de mayor probabilidad.':
           'Borrador incompleto. No sustituyas patas ni inventes cuotas. Indica cuántas selecciones se pudieron fundamentar.'})
