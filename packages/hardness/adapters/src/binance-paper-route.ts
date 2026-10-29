@@ -264,9 +264,9 @@ export function mountBinancePaperDashboardRoute(
           // Transport health and provider client eligibility are distinct:
           // reconnecting cannot grant agent authorization. Don't advertise
           // the HMAC REAL read-only route as Agentic OAuth/Trade access.
-          authorizationAvailability: connected ? 'connected' : 'provider-approval-required',
+          authorizationAvailability: connected ? 'oauth-unverified' : 'provider-approval-required',
           // Known from Binance's consent UI, not an observed transport response.
-          knownProviderRejection: connected ? null : '3346001',
+          knownProviderRejection: '3346001',
           supportedClientGuide: 'https://developers.binance.com/en/docs/agent-native/mcp-server/agentic',
           ...(state?.reasonCode === undefined ? {} : { reasonCode: state.reasonCode }),
           toolCount: state?.toolNames?.length ?? 0,
