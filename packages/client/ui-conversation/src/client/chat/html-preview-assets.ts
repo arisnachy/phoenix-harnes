@@ -130,6 +130,11 @@ export function hasExecutableHtmlBehavior(html: string): boolean {
  * Standalone browser-tab shell for an untrusted HTML artifact.  The opaque-origin
  * sandboxed iframe is essential: a blob: URL inherits Phoenix's origin and
  * MUST NOT run authored HTML directly in the top-level document.
+ *
+ * @param documentHtml - The untrusted document rendered inside the sandboxed iframe.
+ * @param title - User-visible title for the preview tab and iframe.
+ * @param executable - Whether authored scripts are permitted inside the isolated frame.
+ * @returns A standalone HTML shell containing the sandboxed document.
  */
 export function isolatedHtmlPreviewWindow(documentHtml: string, title: string, executable: boolean): string {
   const escapeAttribute = (value: string): string => value.replace(/&/gu, '&amp;')
