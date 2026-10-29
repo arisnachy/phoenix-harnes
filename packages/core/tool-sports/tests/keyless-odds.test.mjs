@@ -72,8 +72,8 @@ test('NHL per-bookmaker home/away FullIncludingOT fixture yields genuinely disti
 
 test('recovers genuine completed OddsHarvester events from NDJSON even if later scraping fails',()=>{
   const first=fixture[0]
-  const output=recoverScraperRows(JSON.stringify(first)+'\\n'+'{invalid-partial-json'+
-    '\\n'+JSON.stringify(first)+'\\n',[])
+  const output=recoverScraperRows(JSON.stringify(first)+'\n'+'{invalid-partial-json'+
+    '\n'+JSON.stringify(first)+'\n',[])
   assert.equal(output.length,1)
   assert.equal(normalizeOddsHarvester(output,'football',now).length,7)
   assert.deepEqual(recoverScraperRows('ERROR processed 8 games\\n{broken',null),[])
