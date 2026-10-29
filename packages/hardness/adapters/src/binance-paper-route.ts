@@ -285,7 +285,7 @@ export function mountBinancePaperDashboardRoute(
           if (Object.keys(data).some(item => item !== 'apiKey' && item !== 'secret')
             || typeof data.apiKey !== 'string' || typeof data.secret !== 'string'
             || !/^[A-Za-z0-9_-]{12,256}$/u.test(data.apiKey)
-            || data.secret.length < 12 || data.secret.length > 256 || /\\s/u.test(data.secret)) {
+            || data.secret.length < 12 || data.secret.length > 256 || /\s/u.test(data.secret)) {
             throw new Error('invalid')
           }
           key = data.apiKey
