@@ -134,8 +134,8 @@ describe('universal artifact surface', () => {
       expect(frame.getAttribute('srcdoc')).toContain('data-phoenix-bundled-css')
       expect(frame.getAttribute('srcdoc')).not.toContain('data-phoenix-missing-image')
       await waitFor(() => {
-        expect((screen.getByRole('textbox', { name: 'URL temporal de la página' }) as HTMLInputElement).value)
-          .toBe('blob:http://localhost/phoenix-website')
+        expect(screen.getByRole('textbox', { name: 'URL temporal de la página' }))
+          .toHaveProperty('value', 'blob:http://localhost/phoenix-website')
       })
       const opener = screen.getByRole('link', { name: 'Abrir página en otra pestaña' })
       expect(opener.getAttribute('href')).toContain('blob:')
