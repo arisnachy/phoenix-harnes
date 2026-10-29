@@ -14,7 +14,7 @@ test('team explorer produces responsive cards with only actual roster, news, log
   const {urls,fetcher}=mock(u=>{
     if(u.includes('/teams/456/roster'))return{athletes:[
       {items:[{displayName:'Verified Player A',position:{displayName:'Guard'},
-        headshot:{href:'https://a.espncdn.com/i/headshots/nba/players/full/1.png'}}]},
+        headshot:{href:'https://a.espncdn.com/i/headshots/nba/players/full/1.png'},injuries:[{status:'Day-to-day',date:'2026-10-29'}]}]},
     ]}
     if(u.includes('/teams/456/schedule'))return{events:[{name:'City A vs City B',date:'2026-11-02'}]}
     if(u.includes('/teams/456/news'))return{articles:[{headline:'City A injury update',
@@ -29,8 +29,9 @@ test('team explorer produces responsive cards with only actual roster, news, log
   assert.equal(data.uiBlock.component,'sports_espn_dashboard')
   assert.ok(data.sections.some(s=>s.heading==='Plantilla verificada'&&s.items[0].label==='Verified Player A'))
   assert.ok(data.sections.some(s=>s.heading==='Noticias del equipo'&&s.items[0].label==='City A injury update'))
-  assert.equal(urls.length,4)
+  assert.equal(urls.length,7)
   assert.equal(data.sources.filter(s=>s.status==='available').length,4)
+  assert.ok(data.sections.some(s=>s.heading.includes('Disponibilidad')&&s.items[0].value==='Day-to-day'))
 })
 test('player explorer handles statistics, gamelog and splits as distinct sections',async()=>{
   const {fetcher}=mock(u=>{
@@ -85,4 +86,19 @@ test('validation rejects injected segments and disables transport before HTTP',a
   await assert.rejects(()=>exploreEspn(
     {sport:'hockey',league:'nhl',view:'news'},fetcher,{PHOENIX_SPORTS_ESPN_DISABLED:'1'}))
   assert.equal(calls,0)
+})
+
+
+test('winner is only labelled after ESPN confirms finished state and winner flag',async()=>{
+  const {fetcher}=mock(u=>u.includes('/summary?')?{
+    header:{shortName:'A at B',status:{type:{state:'post',description:'Final'}},
+      competitions:[{competitors:[
+        {score:'3',winner:true,team:{displayName:'A'}},
+        {score:'1',winner:false,team:{displayName:'B'}},
+      ]}]},
+  }:{})
+  const d=await exploreEspn({sport:'hockey',league:'nhl',view:'event',eventId:'987'},fetcher)
+  const names=d.sections[0].items
+  assert.ok(names.some(x=>x.label==='A'&&x.value?.includes('Ganador')))
+  assert.ok(names.some(x=>x.label==='B'&&!x.value?.includes('Ganador')))
 })
