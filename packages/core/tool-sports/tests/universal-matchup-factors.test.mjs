@@ -13,7 +13,7 @@ const row=(home,away,scoreH,scoreA)=>[
 ]
 const fixture={
   id:'999',date:'2026-10-29T23:00:00Z',status:{type:{state:'pre'}},
-  competitions:[{venue:{id:'505',fullName:'Verified Stadium'},
+  competitions:[{venue:{id:'505',fullName:'Verified Stadium',location:{latitude:40.8,longitude:-73.9}},
     competitors:row('10','20',0,0)}],
 }
 const old=Array.from({length:4},(_,i)=>({
@@ -42,6 +42,10 @@ function factory(opts={}){
       teams:{home:{team:{name:'Home'},probablePitcher:{id:801,fullName:'Pitcher One'}},
         away:{team:{name:'Away'},probablePitcher:{id:802,fullName:'Pitcher Two'}}},
     }]}]}
+    else if(u.startsWith('https://api.open-meteo.com/'))
+      body={hourly:{time:['2026-10-29T23:00'],
+        temperature_2m:[18],wind_speed_10m:[14],wind_direction_10m:[270],
+        is_day:[0],precipitation_probability:[15]}}
     else if(u.includes('/people/801/stats')||u.includes('/people/802/stats'))
       body={stats:[{splits:[{date:'2026-10-26',
         stat:{gamesStarted:1,earnedRuns:1,inningsPitched:'6.0',strikeOuts:8}},
@@ -68,11 +72,13 @@ test('verifies H2H, stadium, 3/5/9 inning descriptive means and pitchers without
   assert.equal(report.mlb.probableStarters[0].outings.length,2)
   assert.equal(report.predictionCalibrated,false)
   assert.equal(report.marketComparisons.length,0)
+  assert.equal(report.weather?.windKmh,14)
+  assert.equal(report.weather?.dayNight,'Noche')
   assert.equal(report.uiBlock.component,'sports_espn_dashboard')
   assert.ok(report.uiBlock.props.sections.some(s=>s.heading.includes('innings')))
   assert.ok(report.limitations.some(s=>s.includes('calibrado')))
-  assert.ok(urls.every(url=>!url.includes('open-meteo')))
-  assert.ok(urls.every(url=>url.startsWith(root)||url.startsWith('https://statsapi.mlb.com/')))
+  assert.equal(urls.filter(url=>url.startsWith('https://api.open-meteo.com/')).length,1)
+  assert.ok(urls.every(url=>url.startsWith(root)||url.startsWith('https://statsapi.mlb.com/')||url.startsWith('https://api.open-meteo.com/')))
 })
 test('does not produce projections from scoreboard records without inning splits',async()=>{
   const report=await auditUniversalMatchup(input,factory({noInnings:true}).fetcher,now,{})
