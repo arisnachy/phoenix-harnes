@@ -4,6 +4,7 @@
  * Never substitute them for current sportsbook quotes.
  */
 import { readFile, stat } from 'node:fs/promises'
+import { homedir } from 'node:os'
 import { isAbsolute, join } from 'node:path'
 
 export type HistoricalMarket = {
@@ -75,8 +76,9 @@ export async function loadHistoricalOdds(
 ):Promise<{sources:Array<{name:string;available:boolean;count:number;error?:string}>;
   historical:HistoricalMarket[]; liveQuotes:false}>{
   if(!['nba','mlb','nfl','nhl'].includes(sport))throw Error('Archivo histórico disponible para NBA, MLB, NFL, NHL')
-  const directory=env.PHOENIX_SPORTS_HISTORY_DIR??''
-  if(!isAbsolute(directory))throw Error('Configura PHOENIX_SPORTS_HISTORY_DIR como ruta absoluta a los datos históricos')
+  // Standard Phoenix cache works without manually configured environment variables.
+  const directory=env.PHOENIX_SPORTS_HISTORY_DIR??join(homedir(),'.phoenix','sports-history')
+  if(!isAbsolute(directory))throw Error('PHOENIX_SPORTS_HISTORY_DIR debe ser una ruta absoluta')
   const filenames:Array<{name:string;file:string;parse:(x:unknown)=>HistoricalMarket[]}>= [
     {name:'flancast90/sportsbookreview-scraper',file:'sportsbookreview-'+sport+'.json',
       parse:x=>normalizeSportsbookReviewArchive(x,sport)},
@@ -95,7 +97,8 @@ export async function loadHistoricalOdds(
       sources.push({name:spec.name,available:true,count:normalized.length})
     }catch(error){
       sources.push({name:spec.name,available:false,count:0,
-        error:error instanceof Error?error.message.slice(0,160):'Fallo de lectura'})
+        error:(error instanceof Error?error.message.slice(0,115):'Fallo de lectura')+
+          ' · Para instalar históricos originales usa pnpm sports:history:setup'})
     }
   }
   return {sources,historical:historical.slice(-120000),liveQuotes:false}
