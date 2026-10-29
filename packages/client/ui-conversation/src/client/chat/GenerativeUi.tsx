@@ -337,7 +337,9 @@ const sportsTicket = (value: Record<string, unknown>): value is SportsTicketCard
     && optionalText(p.askPrompt,400) && (p.requestedLegs===undefined ||
       (typeof p.requestedLegs==='number'&&Number.isInteger(p.requestedLegs)&&p.requestedLegs>=1&&p.requestedLegs<=6))
     && Array.isArray(p.legs) && (p.requestedLegs===undefined||p.legs.length<=Number(p.requestedLegs))
-    && p.legs.length >= 1 && p.legs.length <= 12 && p.legs.every(x => isRecord(x)
+    && (p.legs.length >= 1 || (p.requestedLegs!==undefined
+      && p.combinedOdds==='No disponible' && /TICKET INCOMPLETO/u.test(String(p.note))))
+    && p.legs.length <= 12 && p.legs.every(x => isRecord(x)
       && hasOnlyKeys(x,['event','selection','price','bookmaker','when','image','sport','country','league','market','player','rationale','homeLogo','awayLogo','homeTeam','awayTeam'])
       && isText(x.event) && isText(x.selection) && isText(x.price,32)
       && isText(x.bookmaker) && optionalText(x.when) && trustedPortrait(x.image)
