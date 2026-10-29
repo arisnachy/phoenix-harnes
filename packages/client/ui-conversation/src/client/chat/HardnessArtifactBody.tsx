@@ -383,7 +383,7 @@ function MiniApp({ html, title, executable = false, minimumHeight = 1, gameDiagn
       secondary: token('--dsw-alias-label-secondary', '#746961'),
       border: token('--dsw-alias-border-subtle', '#dfd6ce'),
       accent: token('--dsw-alias-state-info-primary', '#ea5b22'),
-      scheme: (document.documentElement.getAttribute('data-theme') ?? document.body?.getAttribute('data-theme')
+      scheme: (document.documentElement.getAttribute('data-theme') ?? document.body.getAttribute('data-theme')
         ?? document.documentElement.getAttribute('data-appearance') ?? '').toLowerCase().includes('dark')
         || root.colorScheme.includes('dark') ? 'dark' : 'light',
     }
@@ -402,10 +402,10 @@ function MiniApp({ html, title, executable = false, minimumHeight = 1, gameDiagn
     observer.observe(document.documentElement, {
       attributes: true, attributeFilter: ['class', 'style', 'data-theme', 'data-appearance'],
     })
-    if (document.body) observer.observe(document.body, {
+    observer.observe(document.body, {
       attributes: true, attributeFilter: ['class', 'style', 'data-theme', 'data-appearance'],
     })
-    return () => observer.disconnect()
+    return () => { observer.disconnect() }
   }, [runScripts])
 
   const measureStaticDocument = (): void => {
@@ -413,7 +413,7 @@ function MiniApp({ html, title, executable = false, minimumHeight = 1, gameDiagn
     const frame = frameRef.current
     const documentElement = frame?.contentDocument?.documentElement
     const body = frame?.contentDocument?.body
-    if (documentElement === undefined || documentElement === null || body === undefined || body === null) return
+    if (documentElement == null || body == null) return
     const measure = (): void => {
       setFrameHeight(Math.max(
         1,
@@ -451,16 +451,16 @@ function MiniApp({ html, title, executable = false, minimumHeight = 1, gameDiagn
         onClick={() => { setApprovedExternalImagesFor(value => value === html ? undefined : html) }}>
         {allowExternalImages ? 'Bloquear imágenes externas' : 'Cargar imágenes externas'}
       </button>}
-    <iframe
-      ref={frameRef}
-      className={styles.frame}
-      title={title}
-      srcDoc={srcDoc}
-      sandbox={runScripts ? 'allow-scripts' : 'allow-same-origin'}
-      referrerPolicy="no-referrer"
-      style={{ height: Math.max(frameHeight, minimumHeight) }}
-      onLoad={() => { measureStaticDocument(); syncTheme() }}
-    />
+      <iframe
+        ref={frameRef}
+        className={styles.frame}
+        title={title}
+        srcDoc={srcDoc}
+        sandbox={runScripts ? 'allow-scripts' : 'allow-same-origin'}
+        referrerPolicy="no-referrer"
+        style={{ height: Math.max(frameHeight, minimumHeight) }}
+        onLoad={() => { measureStaticDocument(); syncTheme() }}
+      />
     </div>
   )
 }
@@ -613,7 +613,10 @@ function GodotWebGamePreview({ payload, title }: { readonly payload: HardnessArt
           style={{ width: '100%', minHeight: 480, height: 'min(70vh, 720px)', border: 0 }}
         />
       </div>
-      <p className={styles.note}>Proyecto Godot original: el paquete se ha comprobado, pero la experiencia de juego, los gráficos y el sonido requieren pruebas reales.</p>
+      <p className={styles.note}>
+        Proyecto Godot original: el paquete se ha comprobado, pero la experiencia de juego,
+        los gráficos y el sonido requieren pruebas reales.
+      </p>
     </section>
   )
 }
@@ -707,7 +710,7 @@ function GameStudioPreview({ html, title }: { readonly html: string; readonly ti
       </div>
       {libraryOpen && (
         <dialog ref={dialogRef} className={styles.gameLibraryDialog} aria-label="Biblioteca de juegos"
-          onCancel={event => { event.preventDefault(); closeLibrary() }}
+          onCancel={(event) => { event.preventDefault(); closeLibrary() }}
           onClose={() => { setLibraryOpen(false) }}>
           <div className={styles.gameLibraryHeading}>
             <h3>Biblioteca de juegos</h3>
@@ -775,9 +778,11 @@ function BundledWebsitePreview({ entry, files, title, executable, loadImage }: {
             if (blob.size > 8 * 1024 * 1024) throw new Error('Image exceeds preview limit')
             dataUri = await new Promise<string>((resolve, reject) => {
               const reader = new FileReader()
-              reader.onload = () => typeof reader.result === 'string'
-                ? resolve(reader.result) : reject(new Error('Invalid image data'))
-              reader.onerror = () => reject(new Error('Unable to read image'))
+              reader.onload = () => {
+                if (typeof reader.result === 'string') resolve(reader.result)
+                else reject(new Error('Invalid image data'))
+              }
+              reader.onerror = () => { reject(new Error('Unable to read image')) }
               reader.readAsDataURL(blob)
             })
           } else {
@@ -863,12 +868,15 @@ function RecordPreview({ record, mime, expanded, title, executable = true, rende
     || visual !== undefined) return <PhoenixVisualizer spec={visual ?? record} />
   if (typeof record.entry === 'string' && isRecord(record.files)) {
     const html = typeof record.files[record.entry] === 'string' ? record.files[record.entry] as string : undefined
-    if (html !== undefined) return <BundledWebsitePreview entry={record.entry} files={record.files} title={title} executable={executable} {...loadImage === undefined ? {} : { loadImage }} />
+    if (html !== undefined) return <BundledWebsitePreview entry={record.entry} files={record.files}
+      title={title} executable={executable} {...loadImage === undefined ? {} : { loadImage }} />
   }
   return <pre className={styles.code}>{JSON.stringify(record, null, 2)}</pre>
 }
 
-export function HardnessArtifactBody({ mime, data, expanded, title, executable = true, renderMessageImages, loadImage }: ArtifactBodyProps) {
+export function HardnessArtifactBody({
+  mime, data, expanded, title, executable = true, renderMessageImages, loadImage,
+}: ArtifactBodyProps) {
   if (mime === 'application/vnd.phoenix.game+godot-web') return <GodotWebGamePreview payload={data} title={title} />
   if (mime === 'application/vnd.phoenix.comic+html') return typeof data === 'string'
     ? <ComicStudioPreview html={data} title={title} />
