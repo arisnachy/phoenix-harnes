@@ -57,7 +57,7 @@ describe('connectors settings section', () => {
       if(path.endsWith('/mcp-status'))return new Response(JSON.stringify({
         configured:true,connected:false,status:'auth-required',toolCount:0,
         accountVerified:false,tradeScopeVerified:false,
-        authorizationAvailability:'provider-approval-required',providerErrorCode:'3346001',
+        authorizationAvailability:'provider-approval-required',knownProviderRejection:'3346001',
       }))
       throw new Error('Unexpected connector route')
     })
