@@ -68,6 +68,7 @@ const getLine=(key:string):number|null=>{
 /** Accept only bookmaker markets with an unambiguous score/selection interpretation. */
 export function normalizeOddsHarvester(
   input:unknown,sportKey:string,now=Date.now(),maxAgeMs=3_600_000,
+  historical=false,
 ):KeylessQuote[]{
   if(!Array.isArray(input))throw Error('OddsHarvester no devolvió un array JSON')
   if(!Number.isFinite(now)||!Number.isFinite(maxAgeMs)||maxAgeMs<0)throw Error('Reloj de cuotas inválido')
@@ -78,7 +79,7 @@ export function normalizeOddsHarvester(
     const game=raw as ScrapedGame
     const link=safeLink(game.match_link),home=str(game.home_team),away=str(game.away_team)
     const kickoff=when(game.match_date),observed=when(game.scraped_date)
-    if(!link||!home||!away||!Number.isFinite(kickoff)||kickoff<=now
+    if(!link||!home||!away||!Number.isFinite(kickoff)||(!historical&&kickoff<=now)
       ||!Number.isFinite(observed)||observed>now+120_000||now-observed>maxAgeMs)continue
     const eventId=eventKey(link)
     for(const [field,value] of Object.entries(game)){
@@ -120,7 +121,7 @@ export function normalizeOddsHarvester(
           dedupe.add(identity)
           result.push({eventId,bookmaker,market,selection,point,price:decimal,home,away,
             time:new Date(kickoff).toISOString(),updatedAt:new Date(observed).toISOString(),
-            source:'OddsHarvester/OddsPortal (sin API key)',sportKey})
+            source:historical?'OddsHarvester/OddsPortal (histórico, no vigente)':'OddsHarvester/OddsPortal (sin API key)',sportKey})
           if(result.length>=2500)return result
         }
       }
@@ -129,6 +130,61 @@ export function normalizeOddsHarvester(
   return result
 }
 
+/** Safe v0.20.0 historical query. Results are dated past-match observations,
+ * never usable as a live ticket price.
+ */
+export function oddsHarvesterHistoricArgs(
+  sport:KeylessSport,league:string,season:string,market:string,file:string,
+):string[]{
+  if(!sportOK(sport)||!marketOK(sport,market)||
+    !/^[a-z0-9][a-z0-9-]{2,80}$/u.test(league)||
+    !/^(?:20[0-9]{2})(?:-20[0-9]{2})?$/u.test(season)||
+    !/^[/a-zA-Z0-9._-]+$/u.test(file))throw Error('Consulta histórica inválida')
+  return ['historic','--sport',sport,'--league',league,'--season',season,
+    '--market',market,'--max-pages','2','--headless','--format','json',
+    '--stream-ndjson','--output',file]
+}
+export async function keylessHistoricOdds(
+  sport:string,league:string,season:string,market:string,
+  env:NodeJS.ProcessEnv=process.env,now=Date.now(),
+  runner?:()=>Promise<unknown>,
+):Promise<{historical:true;source:string;rows:KeylessQuote[]}>{
+  if(!sportOK(sport)||!marketOK(sport,market))throw Error('Deporte histórico no soportado')
+  // Validation before spawning; fixed CLI subcommands, no arbitrary site URLs.
+  oddsHarvesterHistoricArgs(sport,league,season,market,'odds.json')
+  if(!keylessEnabled(env))throw Error('OddsHarvester histórico desactivado por el operador')
+  const load=async()=>{
+    const folder=await mkdtemp(join(tmpdir(),'phoenix-history-'))
+    const file=join(folder,'historical.json')
+    try{
+      const executable=env.PHOENIX_SPORTS_ODDSHARVESTER_BIN||'oddsharvester'
+      let stdout='',failure:unknown=null
+      try{
+        const result=await runFile(executable,
+          oddsHarvesterHistoricArgs(sport,league,season,market,file),
+          {shell:false,windowsHide:true,timeout:180_000,maxBuffer:4_000_000,
+            env:{...process.env,...env}})
+        stdout=result.stdout
+      }catch(error){
+        failure=error;stdout=typeof (error as {stdout?:unknown}).stdout==='string'?
+          (error as {stdout:string}).stdout:''
+      }
+      let output:unknown=null
+      try{
+        if((await stat(file)).size<=4_000_000)
+          output=JSON.parse(await readFile(file,'utf8')) as unknown
+      }catch{/* NDJSON rows still recoverable */}
+      const rows=recoverScraperRows(stdout,output)
+      if(rows.length)return rows
+      if(failure)throw Error('OddsHarvester histórico sin resultados: '+
+        (failure instanceof Error?failure.message.slice(0,180):'Fallo del proceso'))
+      return Array.isArray(output)?output:[]
+    }finally{await rm(folder,{recursive:true,force:true})}
+  }
+  const raw=runner?await runner():await load()
+  const rows=normalizeOddsHarvester(raw,sport,now,3_600_000,true).slice(0,200)
+  return{historical:true,source:'OddsHarvester/OddsPortal: archivo por liga y temporada',rows}
+}
 export const keylessEnabled=(env:NodeJS.ProcessEnv=process.env):boolean=>
   env.PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED==='1'
 
