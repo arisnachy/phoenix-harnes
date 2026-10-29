@@ -61,6 +61,7 @@ async function downloadBounded(url,dest,maxBytes=100_000_000) {
   const response=await fetch(url,{redirect:'follow',signal:AbortSignal.timeout(180_000)})
   if(!response.ok||!response.body)throw Error('Historic dataset HTTP '+response.status)
   const temp=dest+'.partial'
+  await rm(temp,{force:true})
   let received=0
   try {
     await pipeline(Readable.fromWeb(response.body),
@@ -114,7 +115,11 @@ async function installPython(){
   }
   // If a previous update installed the correct CLI, avoid every-run network.
   if(await exists(cli)){
-    try {await run(cli,['--version'],{timeout:15000});return}
+    try {
+      await run(cli,['--version'],{timeout:15000})
+      await run(py,['-m','playwright','install','chromium'],{timeout:240_000})
+      return
+    }
     catch{ /* repair below */ }
   }
   await run(py,['-m','pip','install','--disable-pip-version-check','oddsharvester=='+ODDSHARVESTER_VERSION],
