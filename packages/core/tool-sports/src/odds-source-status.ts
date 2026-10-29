@@ -2,6 +2,7 @@
 import {execFile} from 'node:child_process'
 import {promisify} from 'node:util'
 import {stat} from 'node:fs/promises'
+import {homedir} from 'node:os'
 import {isAbsolute,join} from 'node:path'
 import {keylessEnabled,lastKeylessStatus} from './keyless-odds.ts'
 
