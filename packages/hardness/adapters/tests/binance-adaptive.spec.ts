@@ -201,6 +201,37 @@ describe('adaptive Binance paper cycle', () => {
     expect(result.trade).toBeUndefined()
   })
 
+  it('scans public candles concurrently without exceeding four Binance requests', async () => {
+    const symbols = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT',
+      'ADAUSDT', 'AVAXUSDT', 'DOTUSDT', 'LTCUSDT']
+    const underlying = market(Object.fromEntries(symbols.map(symbol => [symbol, 'flat' as const])))
+    let active = 0
+    let peak = 0
+    const feed: BinancePublicMarket = {
+      price: underlying.price.bind(underlying),
+      prices: underlying.prices.bind(underlying),
+      async candles(symbol, interval, limit) {
+        active += 1
+        peak = Math.max(peak, active)
+        try {
+          await Promise.resolve()
+          return await underlying.candles(symbol, interval, limit)
+        } finally {
+          active -= 1
+        }
+      },
+    }
+    const paper = new BinancePaperBroker(
+      join(mkdtempSync(join(tmpdir(), 'phoenix-bounded-scan-')), 'paper.json'),
+      feed,
+    )
+    const result = await runBinanceAdaptiveCycle(paper, { mode: 'scan', symbols }, NOW)
+    expect(peak).toBe(4)
+    expect(result.signals).toHaveLength(symbols.length)
+    expect(result.trade).toBeUndefined()
+    expect(result.account.tradeCount).toBe(0)
+  })
+
   it('persists TP1 partial execution exactly once and exits remaining units at TP2', async () => {
     const base = market({ BTCUSDT: 'flat' })
     let quote = 100
