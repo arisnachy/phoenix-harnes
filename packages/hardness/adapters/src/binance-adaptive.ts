@@ -209,20 +209,25 @@ export async function runBinanceAdaptiveCycle(
     const account = await broker.account()
     const signals: BinanceAdaptiveSignal[] = []
     let failedSymbols = 0
-    for (const symbol of symbols) {
-      if (binanceKnownAssetRisk(symbol)) {
-        signals.push(hold(symbol, 'Activo excluido por riesgo Binance conocido'))
-        continue
-      }
-      try {
-        const bars = await broker.candles(symbol, interval, 80)
-        signals.push(evaluateBinanceAdaptiveSignal(symbol, bars, intervalMs, now))
-      } catch {
-        // A temporarily unavailable pair must not stop the rest of the radar.
-        // Keep the failure visible and never turn missing data into a buy signal.
-        failedSymbols += 1
-        signals.push(hold(symbol, 'No verified public candles; retry in the next scan'))
-      }
+    // Independent public candle reads run in bounded batches: a slow pair must
+    // not serialize the entire 12-market radar or delay already-held stop checks.
+    // Keep results in watchlist order and cap Binance request concurrency at four.
+    const CANDLE_BATCH_SIZE = 4
+    for (let offset = 0; offset < symbols.length; offset += CANDLE_BATCH_SIZE) {
+      const batch = await Promise.all(symbols.slice(offset, offset + CANDLE_BATCH_SIZE).map(async symbol => {
+        if (binanceKnownAssetRisk(symbol)) {
+          return hold(symbol, 'Activo excluido por riesgo Binance conocido')
+        }
+        try {
+          const bars = await broker.candles(symbol, interval, 80)
+          return evaluateBinanceAdaptiveSignal(symbol, bars, intervalMs, now)
+        } catch {
+          // One failing provider cannot fabricate an entry or halt other pairs.
+          failedSymbols += 1
+          return hold(symbol, 'No verified public candles; retry in the next scan')
+        }
+      }))
+      signals.push(...batch)
     }
     // Existing PAPER stops must still be serviced from fresh authenticated
     // public prices even when the candle scanner for a watchlist is down.
