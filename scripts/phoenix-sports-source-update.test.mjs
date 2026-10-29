@@ -59,7 +59,7 @@ test('startup dispatches a detached worker without running installer inline',asy
       assert.equal(options.detached,true)
       assert.equal(options.stdio,'ignore')
       return {unref(){unrefCalled=true}}
-    })
+    },{PHOENIX_SPORTS_SOURCE_HOME:home})
     assert.equal(launched,1)
     assert.equal(unrefCalled,true)
     assert.equal(existsSync(join(home,'install.lock')),true)
