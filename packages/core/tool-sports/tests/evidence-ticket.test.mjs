@@ -16,8 +16,8 @@ const fixture=(url,withHistory=true)=>{
   const key=String(url).match(/dates=([0-9]{8})/u)?.[1]
   if(!String(url).includes('/soccer/eng.1/'))return{events:[]}
   if(key==='20261028')return{events:Array.from({length:6},(_,i)=>base(100+i,future,'pre',null,null))}
-  if(withHistory&&['20261027','20261026','20261025'].includes(key)){
-    const stamp=key==='20261027'?'2026-10-27T21:00:00Z':key==='20261026'?'2026-10-26T21:00:00Z':'2026-10-25T21:00:00Z'
+  if(withHistory&&['20261027','20261026','20261025','20261024','20261023'].includes(key)){
+    const stamp='2026-'+key.slice(4,6)+'-'+key.slice(6,8)+'T21:00:00Z'
     return{events:Array.from({length:6},(_,i)=>base(100+i,stamp,'post',3,0,100+i+Number(key.slice(-2))*1000))}
   }
   return{events:[]}
@@ -49,7 +49,7 @@ test('six-leg ticket has six distinct upcoming ESPN events and no invented price
   assert.equal(new Set(result.selections.map(x=>x.eventId)).size,6)
   assert.equal(result.card.props.combinedOdds,'No disponible')
 })
-test('three completed matches must have three different ESPN IDs for each team',async()=>{
+test('completed matches must have five different ESPN IDs for each non-NFL team',async()=>{
   const repeated=async url=>{
     const body=fixture(url,true)
     if(String(url).includes('/soccer/eng.1/') && !String(url).includes('dates=20261028')){
