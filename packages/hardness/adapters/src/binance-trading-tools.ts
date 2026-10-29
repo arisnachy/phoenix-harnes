@@ -683,12 +683,12 @@ function paperAutoTool(deps: BinanceTradingToolDependencies): ToolDefinition {
     name: 'binance_paper_auto',
     description: 'Start, stop, or request one immediate check of REAL background PAPER trading automation, independently of ChatGPT tokens. Start requires an explicitly user-requested virtual automation and a comma-separated 1-12 pair USDT watchlist; future checks run automatically while the Host runs, and resume after restart. It never connects to real funds or bypasses Binance order confirmation. Always report genuine tradeCount from the dashboard, not a fabricated fill.',
     parameters: {
-      action: { type: 'string', required: true, enum: ['start', 'stop', 'check-now'] },
+      action: { type: 'string', required: true, enum: ['start', 'stop', 'stop-liquidate', 'check-now'] },
       requestedByUser: { type: 'boolean', description: 'Required true to START and only when the user asked for automatic paper trading.' },
       watchlist: { type: 'string', description: 'Comma-separated 1-12 unique Spot USDT pairs; required on START.' },
       interval: { type: 'string', enum: ['15m', '1h', '4h', '1d'], description: 'Closed-candle strategy interval; default 15m.' },
       pollMinutes: { type: 'integer', description: 'How often the Host checks, 1–60 minutes; default 1.' },
-      autoDiscover: { type: 'boolean', description: 'On START, discover up to 120 liquid Spot pairs and rotate 12 per scan; requires explicit user-requested PAPER authorization.' },
+      autoDiscover: { type: 'boolean', description: 'On START, discover up to 1000 eligible liquid Spot pairs and rotate 12 per scan; requires explicit user-requested PAPER authorization.' },
     },
     output: {
       schema: { type: 'object', additionalProperties: true },
@@ -729,6 +729,9 @@ function paperAutoTool(deps: BinanceTradingToolDependencies): ToolDefinition {
         })
       } else if (args.action === 'stop') {
         await deps.automation.stop()
+      } else if (args.action === 'stop-liquidate') {
+        if (args.requestedByUser !== true) throw new Error('PAPER liquidation requires an explicit owner request')
+        await deps.automation.stopAndLiquidate()
       } else {
         await deps.automation.step()
       }
@@ -738,7 +741,8 @@ function paperAutoTool(deps: BinanceTradingToolDependencies): ToolDefinition {
       return {
         card: 'generic',
         title: args.action === 'start' ? 'Iniciar trading PAPER' : args.action === 'stop'
-          ? 'Detener trading PAPER' : 'Comprobar trading PAPER',
+          ? 'Detener trading PAPER' : args.action === 'stop-liquidate'
+            ? 'Detener y vender posiciones PAPER' : 'Comprobar trading PAPER',
         kind: args.action === 'check-now' ? 'read' : 'execute',
         rawInput: args.action,
       }
@@ -776,7 +780,7 @@ function cloudControlTool(
     name: 'binance_cloud_control',
     description: 'Start or stop only the independent CLOUD PAPER research runner. Requires explicitly requested user control. Never touches Binance real accounts, tests or API keys; a stopped or risk-halted worker does not auto-start.',
     parameters: {
-      action: { type: 'string', enum: ['start', 'stop'], required: true },
+      action: { type: 'string', enum: ['start', 'stop', 'stop-liquidate'], required: true },
       requestedByUser: { type: 'boolean', required: true },
     },
     output: {
@@ -810,7 +814,8 @@ function cloudControlTool(
     presentCall(args) {
       return {
         card: 'generic',
-        title: args.action === 'start' ? 'Iniciar PHOENIX Cloud PAPER' : 'Detener PHOENIX Cloud PAPER',
+        title: args.action === 'start' ? 'Iniciar PHOENIX Cloud PAPER' : args.action === 'stop-liquidate'
+          ? 'Detener y liquidar Cloud PAPER' : 'Detener PHOENIX Cloud PAPER',
         kind: 'execute', rawInput: args.action,
       }
     },
