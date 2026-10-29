@@ -367,6 +367,6 @@ document.addEventListener("click",async e=>{
  }
 });
 refresh();
-</script></body></html>`;
+</script></body></html>`
   return html.replace('__NONCE__',nonce)
 }
