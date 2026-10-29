@@ -3,13 +3,14 @@ import assert from 'node:assert/strict'
 import {homedir} from 'node:os'
 import {join,resolve} from 'node:path'
 import {SPORTS_INSTALL_VERSION,ODDSHARVESTER_VERSION,verifyManifestShape,
+  pythonCompatible,pythonCandidates,
   status as installerStatus} from './phoenix-sports-source-bootstrap.mjs'
 import {shouldBootstrap} from './phoenix-sports-source-auto.mjs'
 const prefix=resolve(process.env.PHOENIX_SPORTS_SOURCE_HOME||join(homedir(),'.phoenix','sports-sources'))
 const cli=process.platform==='win32'
   ?join(prefix,'.venv','Scripts','oddsharvester.exe')
   :join(prefix,'.venv','bin','oddsharvester')
-const full={schema:2,updatedAt:new Date().toISOString(),paths:{
+const full={schema:3,updatedAt:new Date().toISOString(),paths:{
   executable:cli,history:join(prefix,'history'),
 },components:{
   'OddsHarvester + Playwright':{status:'installed'},
@@ -17,7 +18,7 @@ const full={schema:2,updatedAt:new Date().toISOString(),paths:{
   'MLB historic dataset and scraper sources':{status:'installed'},
 }}
 test('managed three-source manifest has pinned schema, wheel and paths',()=>{
-  assert.equal(SPORTS_INSTALL_VERSION,2)
+  assert.equal(SPORTS_INSTALL_VERSION,3)
   assert.equal(ODDSHARVESTER_VERSION,'0.20.0')
   assert.equal(verifyManifestShape(full),true)
   assert.equal(verifyManifestShape({...full,paths:{...full.paths,executable:'/tmp/evil'}}),false)
@@ -32,6 +33,7 @@ test('idempotent update skips a healthy manifest and throttles transient failure
   assert.equal(shouldBootstrap(broken,t+500),false)
   assert.equal(shouldBootstrap(broken,t+3600001),true)
   assert.equal(shouldBootstrap(null,t),true)
+  assert.equal(shouldBootstrap({...full,schema:2},t),true)
 })
 test('status probe does not perform network installs or leak credentials',async()=>{
   const report=await installerStatus()
@@ -68,4 +70,22 @@ test('startup dispatches a detached worker without running installer inline',asy
     else process.env.PHOENIX_SPORTS_SOURCES_AUTO_INSTALL=priorOptOut
     rmSync(home,{recursive:true,force:true})
   }
+})
+
+test('OddsHarvester requires Python >=3.12 and probes compatible Windows launchers',()=>{
+  assert.equal(pythonCompatible([3,11,10]),false)
+  assert.equal(pythonCompatible([3,12,1]),true)
+  assert.equal(pythonCompatible([3,13,2]),true)
+  assert.equal(pythonCompatible([2,99]),false)
+  const candidates=pythonCandidates('win32')
+  assert.ok(candidates.some(([bin,args])=>bin==='py'&&args[0]==='-3.12'))
+  assert.ok(candidates.some(([bin,args])=>bin==='py'&&args[0]==='-3.13'))
+  assert.ok(!candidates.some(([bin,args])=>bin==='py'&&args[0]==='-3.11'))
+})
+test('bootstrap CLI status reports archive coverage and log location for diagnosis',async()=>{
+  const state=await installerStatus()
+  assert.equal(Array.isArray(state.sports),true)
+  assert.equal(state.sports.length,4)
+  assert.equal(typeof state.mlbAvailable,'boolean')
+  assert.ok(state.log.endsWith('install.log'))
 })
