@@ -131,6 +131,10 @@ export function start(launch=spawn,env=process.env,{force=false}={}){
       env:{...env,PHOENIX_SPORTS_BOOTSTRAP_ROOT:source.root},
       detached:true,windowsHide:true,shell:false,stdio:'ignore',
     })
+    if(typeof child.once==='function')child.once('error',error=>{
+      logEvent(paths.log,'ERROR detached worker: '+String(error))
+      unlink(paths.lock)
+    })
     child.unref()
     return{status:'started',logPath:paths.log}
   }catch(error){
