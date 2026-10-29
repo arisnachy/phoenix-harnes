@@ -302,8 +302,8 @@ export function TaskCenter({ connection, onClose }: Props) {
             {notice && <p className={css.notice} role="status">{notice}</p>}
             {loading ? <p className={css.empty}>Cargando tareas…</p>
               : ordered.length === 0 ? <p className={css.empty}>
-                  Aún no hay tareas. Puedes crear una aquí o pedirle a Kira que programe alguna por ti.
-                </p>
+                Aún no hay tareas. Puedes crear una aquí o pedirle a Kira que programe alguna por ti.
+              </p>
                 : <ul className={css.list}>
                   {ordered.map((task) => {
                     const latest = task.recentHistory[task.recentHistory.length - 1]
