@@ -530,7 +530,7 @@ export class HealthClinicStore {
       const cents=Number(x.amountCents);if(!Number.isSafeInteger(cents)||cents<1)fail('Monto en centavos inválido')
       return this.insert(actor,kind,{ patientId,concept:str(x.concept,'Concepto',300),amountCents:cents,paidCents:0 })
     }
-    if(kind==='followups') {
+    if(String(kind)==='followups') {
       const patientId=str(x.patientId,'Paciente',80);this.find(actor,'patients',patientId)
       return this.insert(actor,kind,{ patientId,assignedTo:str(x.assignedTo,'Responsable',80),dueAt:date(x.dueAt),
         description:text(x.description,'Tarea',500),status:'pending' })
