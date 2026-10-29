@@ -343,8 +343,15 @@ export async function marketOddsDetailed(
   }
   if(env.THEODDSAPI_API_KEY?.trim()){
     configured.add(names[1]!)
-    requests.push({name:names[1]!,run:()=>fetchTheOddsApi(
-      sportKey,markets,env.THEODDSAPI_API_KEY!,fetcher,now)})
+    requests.push({name:names[1]!,run:async()=>{
+      try{return await fetchTheOddsApi(sportKey,markets,env.THEODDSAPI_API_KEY!,fetcher,now)}
+      catch(error){
+        // This provider's Free tier exposes NFL/NBA/MLB h2h, not spreads/totals.
+        // Retain authentic available moneylines when premium markets are denied.
+        if(markets==='h2h'||!markets.split(',').includes('h2h'))throw error
+        return fetchTheOddsApi(sportKey,'h2h',env.THEODDSAPI_API_KEY!,fetcher,now)
+      }
+    }})
   }
   if(keylessEnabled(env)){
     const prefix=sportKey.split('_')[0]
