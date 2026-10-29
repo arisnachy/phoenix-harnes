@@ -79,7 +79,7 @@ describe('HARDNESS packaged HTML image assets', () => {
     expect(windowHtml).toContain('srcdoc="&lt;h1&gt;Kira&lt;/h1&gt;')
     expect(windowHtml).toContain('sandbox="allow-scripts"')
     expect(windowHtml).not.toContain('allow-same-origin')
-    expect(windowHtml).toContain('connect-src \\'none\\'')
+    expect(windowHtml).toContain("connect-src 'none'")
     expect(isolatedHtmlPreviewWindow(payload, 'Sitio Kira', false)).toContain('sandbox=""')
     expect(isolatedHtmlPreviewWindow('<iframe src="x"></iframe>', 'A "B"', true))
       .toContain('title="A &quot;B&quot;"')
