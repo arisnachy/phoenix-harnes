@@ -146,7 +146,7 @@ function buildAcademicPlan(input: unknown) {
   if (academic) {
     if (typeof cover?.institution !== 'string' || !cover.institution.trim()) missing.add('institución')
     const namedAuthors = Array.isArray(cover?.authors) && cover.authors.some(author =>
-      typeof author?.name === 'string' && author.name.trim() !== '')
+      typeof author.name === 'string' && author.name.trim() !== '')
     if ((typeof cover?.author !== 'string' || !cover.author.trim()) && !namedAuthors) missing.add('participantes')
   }
   if (args.target_pages !== undefined && (args.page_scope === undefined || args.page_scope === 'unknown')) {
