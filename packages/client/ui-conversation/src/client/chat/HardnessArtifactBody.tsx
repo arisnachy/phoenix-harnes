@@ -383,7 +383,7 @@ function MiniApp({ html, title, executable = false, minimumHeight = 1, gameDiagn
       secondary: token('--dsw-alias-label-secondary', '#746961'),
       border: token('--dsw-alias-border-subtle', '#dfd6ce'),
       accent: token('--dsw-alias-state-info-primary', '#ea5b22'),
-      scheme: (document.documentElement.getAttribute('data-theme') ?? document.body.getAttribute('data-theme')
+      scheme: (document.documentElement.getAttribute('data-theme') ?? document.querySelector('body')?.getAttribute('data-theme')
         ?? document.documentElement.getAttribute('data-appearance') ?? '').toLowerCase().includes('dark')
         || root.colorScheme.includes('dark') ? 'dark' : 'light',
     }
@@ -402,7 +402,8 @@ function MiniApp({ html, title, executable = false, minimumHeight = 1, gameDiagn
     observer.observe(document.documentElement, {
       attributes: true, attributeFilter: ['class', 'style', 'data-theme', 'data-appearance'],
     })
-    observer.observe(document.body, {
+    const documentBody = document.querySelector('body')
+    if (documentBody !== null) observer.observe(documentBody, {
       attributes: true, attributeFilter: ['class', 'style', 'data-theme', 'data-appearance'],
     })
     return () => { observer.disconnect() }
@@ -413,7 +414,7 @@ function MiniApp({ html, title, executable = false, minimumHeight = 1, gameDiagn
     const frame = frameRef.current
     const documentElement = frame?.contentDocument?.documentElement
     const body = frame?.contentDocument?.body
-    if (documentElement == null || body == null) return
+    if (!documentElement || !body) return
     const measure = (): void => {
       setFrameHeight(Math.max(
         1,
