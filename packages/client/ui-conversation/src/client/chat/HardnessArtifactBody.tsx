@@ -36,14 +36,19 @@ function text(value: unknown): string | undefined {
 }
 
 function display(value: unknown): string {
-  if (value === null) return 'null'
-  if (value === undefined) return ''
-  if (typeof value === 'string') return value
-  if (typeof value === 'number' || typeof value === 'boolean') return String(value)
-  try {
-    return JSON.stringify(value)
-  } catch {
-    return '[unprintable value]'
+  if (value === null || value === undefined) return value === null ? 'null' : ''
+  switch (typeof value) {
+    case 'string':
+      return value
+    case 'number':
+    case 'boolean':
+      return String(value)
+    default:
+      try {
+        return JSON.stringify(value)
+      } catch {
+        return '[unprintable value]'
+      }
   }
 }
 
