@@ -44,6 +44,51 @@ describe('connectors settings section', () => {
       .some(button => button.textContent === connectorEn.findConnector)).toBe(false)
     expect(card?.textContent).toContain('PAPER ready')
     await waitFor(() => { expect(mcpRegistry.state).toHaveBeenCalled() })
+    // Keyless PAPER readiness must not satisfy the Connected-account filter.
+    fireEvent.click(screen.getByRole('button', { name: connectorEn.connected }))
+    expect(document.querySelector('[data-connector-id="binance"]')).toBeNull()
+  })
+
+  it('starts the registered Binance Agentic OAuth authorization instead of merely reinstalling MCP',async()=>{
+    const fetcher=vi.fn(async(input: RequestInfo | URL)=>{
+      const path=String(input)
+      if(path.endsWith('/testnet-status'))return new Response(JSON.stringify({configured:false,connected:false}))
+      if(path.endsWith('/real-status'))return new Response(JSON.stringify({configured:false,connected:false,canRead:false,tradingAuthorized:false}))
+      if(path.endsWith('/mcp-status'))return new Response(JSON.stringify({
+        configured:true,connected:false,status:'auth-required',toolCount:0,
+        accountVerified:false,tradeScopeVerified:false,
+      }))
+      throw new Error('Unexpected connector route')
+    })
+    vi.stubGlobal('fetch',fetcher)
+    const begin=vi.fn(async()=>ok({attemptId:'binance-oauth-auth'}))
+    const api={
+      list:vi.fn(async()=>ok({entries:[{
+        key:'mcp-client/binance-agent-os',label:'MCP binance-agent-os',
+        methods:[{id:'credentials',label:'Configure API'},{id:'oauth',label:'Authorize Binance'}],inFlight:false,
+      }]})),
+      begin,status:vi.fn(async()=>ok({attemptId:'binance-oauth-auth',status:'pending',
+        nextSeq:0,notices:[]})),answer:vi.fn(),cancel:vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const mcpRegistry={
+      state:vi.fn(async()=>({runtime:[{
+        serverName:'binance-agent-os',transport:'streamable-http' as const,
+        status:'auth-required' as const,toolNames:[],
+      }],managed:[{
+        entryId:'managed-binance',serverName:'binance-agent-os',
+        url:'https://agent.binance.com/mcp/agentic',
+      }]})),
+      install:vi.fn(),search:vi.fn(),
+    }
+    renderHub(api,{mcpRegistry:mcpRegistry as unknown as NonNullable<ConnectorsSettingsSectionProps['mcpRegistry']>})
+    await waitFor(()=>expect(document.querySelector('[data-connector-id="binance"]')).toBeTruthy())
+    fireEvent.click(screen.getByRole('button',{name:'Conectar / autenticar Binance'}))
+    const button=await screen.findByRole('button',{name:'Autorizar Binance OAuth'})
+    fireEvent.click(button)
+    await waitFor(()=>expect(begin).toHaveBeenCalledWith({
+      key:'mcp-client/binance-agent-os',method:'oauth',
+    }))
+    vi.unstubAllGlobals()
   })
 
   it('keeps Codex reconnect visible with an expired native account marker', async () => {
