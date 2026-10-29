@@ -63,6 +63,11 @@ const nonempty=(v:unknown,depth=0):boolean=>{
   return typeof v==='string'?v.trim().length>0:true
 }
 const cache=new Map<string,{until:number;value:unknown}>()
+const saveCache=(url:string,value:unknown,ttl:number)=>{
+  cache.delete(url)
+  if(cache.size>=160)cache.delete(cache.keys().next().value??'')
+  cache.set(url,{until:Date.now()+ttl,value})
+}
 /** Cache successes and negative results; never cache indefinitely and bound total memory. */
 async function read(url:string,fetcher:typeof fetch,ttlMs:number):Promise<unknown>{
   const cached=cache.get(url)
@@ -70,11 +75,10 @@ async function read(url:string,fetcher:typeof fetch,ttlMs:number):Promise<unknow
   try{
     const response=await getFeed<unknown>(url,fetcher)
     if(!nonempty(response))throw Error('ESPN devolvió datos vacíos')
-    if(cache.size>160)cache.delete(cache.keys().next().value??'')
-    cache.set(url,{until:Date.now()+ttlMs,value:response})
+    saveCache(url,response,ttlMs)
     return response
   }catch{
-    cache.set(url,{until:Date.now()+30_000,value:null})
+    saveCache(url,null,30_000)
     throw error
   }
 }
@@ -207,7 +211,7 @@ function summaryFacts(data:unknown):{heading:string;items:Item[];image?:string}{
   const competitors=array(comp.competitors)
   const teams=competitors.slice(0,4).map(x=>{
     const c=row(x),t=row(c.team)
-    const final=row(row(h.status).type).state==='post'
+    const final=row(row(h.status).type).state==='post'||row(row(comp.status).type).state==='post'
     const markedWinner=final&&c.winner===true
     return item(t.displayName??t.name,c.score!==undefined?
       ((markedWinner?'Ganador · ':'Marcador: ')+txt(c.score,25)):c.homeAway,
