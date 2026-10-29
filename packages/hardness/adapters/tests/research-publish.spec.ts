@@ -52,6 +52,28 @@ describe('Phoenix research report publisher', () => {
       design_preset: 'academic_classic' })).toThrow(/academic_classic/u)
     expect(() => validateResearchPublication({ ...report, design_preset: 'unknown' })).toThrow(/Diseño desconocido/u)
   })
+  it('requires an explicit thesis citation style and validates the declared level', () => {
+    const references = Array.from({ length: 15 }, (_, index) => ({
+      ...report.references[0]!, key: 'study' + String(index),
+    }))
+    const cited = references.map(source => '[@' + source.key + ']').join(' ')
+    const thesis = {
+      ...report, document_type: 'thesis', quality_profile: 'professional',
+      thesis_level: 'masters', style: 'apa7', user_requested_brief: false,
+      sections: [{ heading: 'Investigación', text: 'evidencia '.repeat(8100) + cited }],
+      references, tables: [{ title: 'Matriz de evidencia', columns: ['Fuente'],
+        rows: [['estudio']], source_key: 'study0' }],
+    }
+    expect(validateResearchPublication(thesis)).toEqual(thesis)
+    expect(validateResearchPublication({ ...thesis, style: 'vancouver' })).toMatchObject({
+      style: 'vancouver',
+    })
+    expect(() => validateResearchPublication({ ...thesis, style: undefined }))
+      .toThrow('style=apa7 o style=vancouver')
+    expect(() => validateResearchPublication({ ...thesis, thesis_level: 'unknown' }))
+      .toThrow('thesis_level')
+    expect(createResearchPublishTool().description).toContain('20-40, 40-80 y 100+')
+  })
   it('derives the same stable and isolated publication paths for identical content', () => {
     const a = researchOutputPaths(report)
     const b = researchOutputPaths({ ...report })
