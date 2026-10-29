@@ -181,7 +181,7 @@ function logosEnabled(env:NodeJS.ProcessEnv):boolean{return env.PHOENIX_SPORTS_I
  * @param fetcher - Injectable HTTP client for tests.
  * @returns Attributed game cards, result count and date.
  */
-export async function chatGames(sport:string,league:string,requestedDate?:string,env:NodeJS.ProcessEnv=process.env,fetcher:typeof fetch=fetch):Promise<{ summary:string;items:ChatBlock[];source:string;count:number;date:string }> {
+export async function chatGames(sport:string,league:string,requestedDate?:string,env:NodeJS.ProcessEnv=process.env,fetcher:typeof fetch=fetch,compactLive=false):Promise<{ summary:string;items:ChatBlock[];source:string;count:number;date:string }> {
   if(!Object.hasOwn(sportsCatalog,sport)||!leagueValid(league))throw Error('Disciplina o liga inválida')
   if(!sportsCatalog[sport]?.includes(league)&&!(await discoverEspnLeagues(sport,env,fetcher)).includes(league))throw Error('Liga no encontrada en el catálogo público de ESPN')
   const day=date(requestedDate),rows:ChatBlock[]=[]
@@ -203,11 +203,11 @@ export async function chatGames(sport:string,league:string,requestedDate?:string
           ...(p?.team?.id&&logosEnabled(env)?{ logo:`https://www.mlbstatic.com/team-logos/${p.team.id}.svg` }:{}),
         })
         // Limit deep MLB requests on large game days; the user can drill down any remaining matchup.
-        const details=index<3?await enrichMlbMatch(
+        const details=!compactLive&&index<3?await enrichMlbMatch(
           g.gamePk,home?.team?.id??0,away?.team?.id??0,homeName,awayName,
           { ...(home?.probablePitcher?{ home:home.probablePitcher }:{}),...(away?.probablePitcher?{ away:away.probablePitcher }:{}) },Number(day.slice(0,4)),env,fetcher,
         ):null
-        const research=index<3?await researchMlbTrend(
+        const research=!compactLive&&index<3?await researchMlbTrend(
           home?.team?.id??0,away?.team?.id??0,Number(day.slice(0,4)),homeName,awayName,fetcher,
         ):undefined
         const highlights=details?.pitchers.length
