@@ -18,7 +18,7 @@ describe('Binance authenticated connector in Phoenix Settings', () => {
       if(url.endsWith('/real-status'))return response({configured:true,connected:true,canRead:true,tradingAuthorized:false})
       if(url.endsWith('/mcp-status'))return response({
         configured:true,connected:false,status:'failed',reasonCode:'connection-failed',toolCount:0,
-        authorizationAvailability:'provider-approval-required',providerErrorCode:'3346001',
+        authorizationAvailability:'provider-approval-required',knownProviderRejection:'3346001',
         accountVerified:false,tradeScopeVerified:false,
       })
       throw new Error('Unexpected OAuth activation')
@@ -126,7 +126,7 @@ describe('Binance authenticated connector in Phoenix Settings', () => {
       if (url.endsWith('/mcp-status')) return response({
         configured:installed, connected:false, status:installed?'auth-required':'disconnected',
         toolCount:0, accountVerified:false, tradeScopeVerified:false,
-        authorizationAvailability:'provider-approval-required',providerErrorCode:'3346001',
+        authorizationAvailability:'provider-approval-required',knownProviderRejection:'3346001',
       })
       if (url.endsWith('/mcp-activate')) {
         installed = true
