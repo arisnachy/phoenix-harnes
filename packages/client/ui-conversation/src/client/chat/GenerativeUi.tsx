@@ -625,6 +625,10 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
             {e.venue&&<small className={css.sportsSlateVenue}>⌖ {e.venue}</small>}
             {e.featured&&<small className={css.sportsSlateFeatured}>{e.featured}</small>}
             {e.favorite&&<small className={css.sportsSlateFavorite}>Tendencia fundamentada · {e.favorite}</small>}
+            {(live?.phase==='in'||e.phase==='in')&&onAction&&<button className={css.sportsSlateAction}
+              type="button" onClick={()=>onAction('Kira, muéstrame en vivo '+e.away.label+' vs '+e.home.label+' de '+(p.league??p.providerLeague??'esta liga')+' el '+p.date+'.','draft')}>
+              Seguir en vivo · Detalle ›
+            </button>}
             {e.askPrompt&&onAction&&<button className={css.sportsSlateAction}
               type="button" onClick={()=>{if(e.askPrompt)onAction(e.askPrompt,'draft')}}>
               Ver análisis del encuentro ›
@@ -773,6 +777,7 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
           <strong>Solo análisis · No se ha realizado ninguna apuesta</strong>
           <span>Fuente: {p.source}</span>
           <details className={css.sportsTicketDisclaimer}><summary>Fuentes, metodología y advertencias</summary><p>{p.note}</p></details>
+          {onAction&&<button type="button" onClick={()=>onAction('Kira, muestra los marcadores y jugadas en vivo de los partidos de este ticket, agrupados por deporte y liga. Para cada encuentro usa sports_chat_games y liveOnly si ya comenzó. No supongas resultados ni partidos activos. Encuentros: '+p.legs.map(l=>[l.sport,l.league,l.event].filter(Boolean).join(' / ')).join('; '),'draft')}>Ver juegos de mi ticket en vivo</button>}
           {p.askPrompt&&onAction&&<button type="button" onClick={() => {if(p.askPrompt)onAction(p.askPrompt,'draft')}}>Revisar selecciones</button>}
         </footer>
       </section>
