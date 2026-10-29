@@ -268,7 +268,8 @@ export function TaskCenter({ connection, onClose }: Props) {
               </label>
             </div>
             {frequency === 'minutes' && <label>Intervalo en minutos (mínimo 5)
-              <input type="number" min={5} max={525600} step={1} value={minutes} onChange={(event) => { setMinutes(Number(event.target.value)) }} />
+              <input type="number" min={5} max={525600} step={1} value={minutes}
+                onChange={(event) => { setMinutes(Number(event.target.value)) }} />
             </label>}
             <label>Entrega
               <select value={delivery} onChange={(event) => { setDelivery(event.target.value as 'chat' | 'work' | 'email') }}>
@@ -312,7 +313,8 @@ export function TaskCenter({ connection, onClose }: Props) {
                         <span className={css.status} data-status={task.status}>{LABELS[task.status]}</span>
                       </div>
                       <div className={css.meta}>
-                        <span>{task.createdBy === 'user' ? 'Creada por ti' : task.createdBy === 'harness' ? 'Creada por Kira' : 'Sistema'}</span>
+                        <span>{task.createdBy === 'user' ? 'Creada por ti'
+                          : task.createdBy === 'harness' ? 'Creada por Kira' : 'Sistema'}</span>
                         <span>{recurrenceLabel(task.recurrence)}</span>
                         <span>{task.delivery === 'work' ? 'Trabajo' : task.delivery === 'chat' ? 'Chat' : 'Correo'}</span>
                       </div>
@@ -322,11 +324,14 @@ export function TaskCenter({ connection, onClose }: Props) {
                       </p>}
                       <div className={css.actions}>
                         {(task.status === 'scheduled' || task.status === 'running')
-                          && <button type="button" disabled={actingId !== null} onClick={() => { void changeStatus(task.id, 'pause') }}>Pausar</button>}
+                          && <button type="button" disabled={actingId !== null}
+                            onClick={() => { void changeStatus(task.id, 'pause') }}>Pausar</button>}
                         {(task.status === 'paused' || task.status === 'failed')
-                          && <button type="button" disabled={actingId !== null} onClick={() => { void changeStatus(task.id, 'resume') }}>Reanudar</button>}
+                          && <button type="button" disabled={actingId !== null}
+                            onClick={() => { void changeStatus(task.id, 'resume') }}>Reanudar</button>}
                         {task.status !== 'cancelled' && task.status !== 'completed'
-                          && <button type="button" disabled={actingId !== null} onClick={() => { void changeStatus(task.id, 'cancel') }}>Cancelar</button>}
+                          && <button type="button" disabled={actingId !== null}
+                            onClick={() => { void changeStatus(task.id, 'cancel') }}>Cancelar</button>}
                       </div>
                     </li>
                   })}
