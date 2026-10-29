@@ -70,7 +70,7 @@ export function apply(ctx: Context): void {
         repair:'Si la instalación falla: ejecutar node scripts/phoenix-sports-source-bootstrap.mjs --status y revisar installation.logPath. Para reparar, node scripts/phoenix-sports-source-bootstrap.mjs --install desde la carpeta de PHOENIX. OddsHarvester requiere Python >=3.12 y Playwright Chromium. No copiar claves al chat.',
         warning:'Instalado no equivale a cuota real. OddsHarvester usa Playwright sobre OddsPortal; comprueba bookmaker, mercado, período y timestamp. SportsbookReview y MLB solo contienen históricos; para extraer datos nuevos se ejecutan sus propios scripts en tareas explícitas, no funcionan como fuentes vivas.'})
     },
-    presentCall:()=>({card:'generic',title:'Verificar y autorreparar fuentes deportivas',kind:'write' as const}),
+    presentCall:()=>({card:'generic',title:'Verificar y autorreparar fuentes deportivas',kind:'read' as const}),
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_sources_repair',
@@ -84,7 +84,7 @@ export function apply(ctx: Context): void {
       return JSON.stringify({autoRepair,installation,checkedAt:new Date().toISOString(),
         instruction:'Se ha solicitado la reparación en segundo plano; no se han verificado cuotas ni operaciones. Consulta sports_chat_sources_health para ver progreso, logs y los proveedores listos. Si falta el instalador en el runtime o checkout, informa el bloqueo concreto.'})
     },
-    presentCall:()=>({card:'generic',title:'Reparar fuentes deportivas automáticamente',kind:'write' as const}),
+    presentCall:()=>({card:'generic',title:'Reparar fuentes deportivas automáticamente',kind:'read' as const}),
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_deep_research',
