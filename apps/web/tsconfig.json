@@ -86,6 +86,7 @@
     "tests/schedule-after.e2e.ts",
     "tests/feedback-command.e2e.ts",
     "tests/startup-auto-selection.e2e.ts",
+    "tests/multiagent-chat-blank-recovery.e2e.ts",
     "tests/produced-files.e2e.ts",
     "tests/produced-file-mentions.e2e.ts",
     "tests/goal-bar.e2e.ts",

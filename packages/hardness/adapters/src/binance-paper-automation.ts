@@ -4,6 +4,7 @@ import { dirname, resolve } from 'node:path'
 import { BinancePaperBroker } from './binance-paper.ts'
 import { runBinanceAdaptiveCycle, type BinanceAdaptiveCycle } from './binance-adaptive.ts'
 import { discoverBinanceSpotMarkets } from './binance-market-discovery.ts'
+import { binanceKnownAssetRisk } from './binance-asset-risk.ts'
 
 const POLL_MIN_MS = 60_000
 const POLL_MAX_MS = 3_600_000
@@ -116,9 +117,12 @@ export class BinancePaperAutomation {
 
   /** Keep explicitly chosen pairs and rotate the remainder through liquid markets. */
   private async scanSymbols(): Promise<readonly string[]> {
+    const eligiblePinned = this.config.symbols.filter(symbol => binanceKnownAssetRisk(symbol) === undefined)
     if (!this.config.autoDiscover) {
-      this.lastDiscoveryIssue = undefined
-      return this.config.symbols
+      this.lastDiscoveryIssue = eligiblePinned.length < this.config.symbols.length
+        ? 'Pares prioritarios de riesgo excluidos; fuentes de etiquetas no exhaustivas' : undefined
+      if (!eligiblePinned.length) throw new Error('No eligible PAPER pairs after risk filtering')
+      return eligiblePinned
     }
     const refresh = this.lastDiscoveryAt === undefined
       || Date.now() - Date.parse(this.lastDiscoveryAt) >= UNIVERSE_REFRESH_MS
@@ -126,21 +130,26 @@ export class BinancePaperAutomation {
       try {
         const fresh = await this.discover()
         const candidates = [...new Set(fresh)]
-          .filter(symbol => /^[A-Z0-9]{3,16}USDT$/u.test(symbol))
-          .slice(0, 120)
+          .filter(symbol => binanceKnownAssetRisk(symbol) === undefined)
+          .slice(0, 1000)
         if (!candidates.length) throw new Error('No verified active Spot USDT markets')
         this.universe = candidates
-        this.universeCursor = 0
+        // Never restart the scanner at the first asset on hourly refresh.
+        // A 1,000-market rotation takes >1h at 12 pairs/minute.
+        this.universeCursor = this.universeCursor % candidates.length
         this.lastDiscoveryAt = new Date().toISOString()
         this.lastDiscoveryIssue = undefined
       } catch {
         this.lastDiscoveryIssue = 'El proveedor no entregó un universo verificable; se usó únicamente la lista fija'
-        if (this.universe.length === 0) return this.config.symbols
+        if (this.universe.length === 0) {
+          if (!eligiblePinned.length) throw new Error('No risk-eligible markets')
+          return eligiblePinned
+        }
       }
     }
     // Honor every user-selected priority; dynamic rotation uses remaining slots.
-    const pinned = [...this.config.symbols]
-    const choices = this.universe.filter(symbol => !pinned.includes(symbol))
+    const pinned = eligiblePinned
+    const choices = this.universe.filter(symbol => binanceKnownAssetRisk(symbol) === undefined && !pinned.includes(symbol))
     const available = Math.max(0, MAX_SCAN_SYMBOLS - pinned.length)
     const rotating = choices.length === 0 ? [] : Array.from(
       { length: Math.min(available, choices.length) },
@@ -251,6 +260,31 @@ export class BinancePaperAutomation {
       await this.pending?.catch(() => undefined)
       await this.persist(next)
     })
+  }
+
+  /**
+   * User-invoked panic stop for PAPER only. Persist the disabled state BEFORE
+   * trying virtual sells. Every sell must use a fresh public quote and generate
+   * an actual virtual ledger receipt; an unavailable quote leaves the position
+   * visibly open, never silently reports a successful liquidation.
+   */
+  async stopAndLiquidate(): Promise<void> {
+    await this.stop()
+    try {
+      const account = await this.broker.account()
+      for (const position of account.positions) {
+        await this.broker.order({
+          symbol: position.symbol, side: 'sell', quantity: position.quantity,
+          strategyId: 'manual-panic-stop', reason: 'user-stop-liquidate-paper',
+        })
+      }
+      const remaining = (await this.broker.account()).positions
+      if (remaining.length > 0) throw new Error('Positions remain after attempted PAPER liquidation')
+      this.lastError = undefined
+    } catch {
+      this.lastError = 'PAPER detenido; una o más posiciones siguen abiertas: revisa precios y libro virtual'
+      throw new Error('PAPER liquidation incomplete; verify persisted ledger')
+    }
   }
 
   private async control(operation: () => Promise<void>): Promise<void> {

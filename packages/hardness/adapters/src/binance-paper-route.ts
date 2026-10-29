@@ -65,7 +65,7 @@ async function readRequestObject(req: IncomingMessage): Promise<Record<string, u
 }
 
 async function readControl(req: IncomingMessage): Promise<{
-  action: 'start' | 'stop' | 'check-now'
+  action: 'start' | 'stop' | 'stop-liquidate' | 'check-now'
   symbols?: string[]
   interval?: '15m' | '1h' | '4h' | '1d'
   pollMinutes?: number
@@ -75,12 +75,13 @@ async function readControl(req: IncomingMessage): Promise<{
   if (Object.keys(payload).some(key => !['action', 'symbols', 'interval', 'pollMinutes', 'autoDiscover'].includes(key))) {
     throw new Error('Unsupported control field')
   }
-  if (payload.action !== 'start' && payload.action !== 'stop' && payload.action !== 'check-now') {
+  if (payload.action !== 'start' && payload.action !== 'stop'
+    && payload.action !== 'stop-liquidate' && payload.action !== 'check-now') {
     throw new Error('Unsupported paper action')
   }
   if (payload.action === 'start') {
-    if (!Array.isArray(payload.symbols) || !payload.symbols.every(symbol => typeof symbol === 'string'
-      || (payload.autoDiscover !== undefined && typeof payload.autoDiscover !== 'boolean'))
+    if (!Array.isArray(payload.symbols) || !payload.symbols.every(symbol => typeof symbol === 'string')
+      || (payload.autoDiscover !== undefined && typeof payload.autoDiscover !== 'boolean')
       || (payload.interval !== undefined && (typeof payload.interval !== 'string' || !['15m', '1h', '4h', '1d'].includes(payload.interval)))
       || (payload.pollMinutes !== undefined && (!Number.isInteger(payload.pollMinutes)
         || !Number.isFinite(payload.pollMinutes) || Number(payload.pollMinutes) < 1
@@ -94,7 +95,7 @@ async function readControl(req: IncomingMessage): Promise<{
       ...(payload.pollMinutes === undefined ? {} : { pollMinutes: payload.pollMinutes as number }),
     }
   }
-  if (Object.keys(payload).length !== 1) throw new Error('Stop and check-now accept only an action')
+  if (Object.keys(payload).length !== 1) throw new Error('Stop, liquidate and check-now accept only an action')
   return { action: payload.action }
 }
 
@@ -500,6 +501,8 @@ export function mountBinancePaperDashboardRoute(
         })
       } else if (action.action === 'stop') {
         await engine.stop()
+      } else if (action.action === 'stop-liquidate') {
+        await engine.stopAndLiquidate()
       } else {
         await engine.step()
       }

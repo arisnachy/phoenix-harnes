@@ -32,7 +32,7 @@ export class BinanceCloudPaperClient {
     this.authToken = authToken
   }
 
-  private async request(path: '/snapshot' | '/admin/control' | `/events?after=${number}`, action?: 'start' | 'stop'): Promise<unknown> {
+  private async request(path: '/snapshot' | '/admin/control' | `/events?after=${number}`, action?: 'start' | 'stop' | 'stop-liquidate'): Promise<unknown> {
     const token = await this.authToken()
     if (token === undefined || token.length < 32) {
       throw new Error('Cloud trading ADMIN_TOKEN is not connected to the Host credential vault')
@@ -61,7 +61,7 @@ export class BinanceCloudPaperClient {
    * @param action - Owner-requested PAPER mode.
    * @returns Provider-verified control response.
    */
-  async control(action: 'start' | 'stop'): Promise<unknown> { return this.request('/admin/control', action) }
+  async control(action: 'start' | 'stop' | 'stop-liquidate'): Promise<unknown> { return this.request('/admin/control', action) }
 
   /**
    * Fetch bounded persisted cloud attention events.
