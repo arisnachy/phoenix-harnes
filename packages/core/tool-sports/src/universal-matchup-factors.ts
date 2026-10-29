@@ -16,6 +16,11 @@ const num=(x:unknown):number|null=>{
   const s=String(x)
   return /^\d{1,4}(?:\.\d+)?$/u.test(s)&&Number.isFinite(Number(s))?Number(s):null
 }
+const geo=(value:unknown,max:number):number|null=>{
+  if(typeof value!=='number'&&typeof value!=='string')return null
+  const n=Number(value)
+  return String(value).trim()!==''&&Number.isFinite(n)&&Math.abs(n)<=max?n:null
+}
 const validDate=(date:string)=>/^\d{4}-\d{2}-\d{2}$/u.test(date)&&
   Number.isFinite(Date.parse(date+'T00:00:00Z'))&&
   new Date(date+'T00:00:00Z').toISOString().slice(0,10)===date
@@ -25,7 +30,8 @@ const mean=(vals:number[]):number|null=>vals.length?
   Number((vals.reduce((a,b)=>a+b,0)/vals.length).toFixed(2)):null
 const round=(x:number)=>Number(x.toFixed(2))
 type Side={id:string;name:string;homeAway:string;score:number|null;lines:number[]|null}
-type Game={id:string;date:string;state:string;venueId:string;venueName:string;home:Side;away:Side}
+type Game={id:string;date:string;state:string;venueId:string;venueName:string;
+  latitude:number|null;longitude:number|null;roof:string;home:Side;away:Side}
 type RecordGame={id:string;date:string;opponent:string;scored:number;allowed:number;
   homeAway:string;venueId:string;inningsFor:number[]|null;inningsAgainst:number[]|null}
 export type UniversalMatchupInput={
@@ -47,9 +53,12 @@ function game(x:unknown):Game|null{
   const away=side(competitors.find(c=>obj(c).homeAway==='away'))
   const key=id(r.id),date=str(r.date??comp.date,40)
   if(!key||!home.id||!away.id||home.id===away.id||!Number.isFinite(Date.parse(date)))return null
-  const venue=obj(comp.venue)
+  const venue=obj(comp.venue),coordinates=obj(venue.coordinates),location=obj(venue.location)
   return {id:key,date,state:str(obj(obj(r.status).type).state,15),
-    venueId:id(venue.id),venueName:str(venue.fullName,100),home,away}
+    venueId:id(venue.id),venueName:str(venue.fullName,100),
+    latitude:geo(coordinates.latitude??coordinates.lat??location.latitude??location.lat,90),
+    longitude:geo(coordinates.longitude??coordinates.long??location.longitude??location.lon,180),
+    roof:str(venue.roofType??venue.roof,60),home,away}
 }
 const recent=(games:Game[],teamId:string,start:number):RecordGame[]=>games.flatMap(g=>{
   if(g.state!=='post'||Date.parse(g.date)>=start)return []
@@ -119,7 +128,14 @@ export async function auditUniversalMatchup(
   const anchor=Date.parse(input.date+'T12:00:00Z')
   const historicalDays=Array.from({length:days},(_,i)=>
     new Date(anchor-(i+1)*86_400_000).toISOString().slice(0,10))
-  const [history,context,mlbSchedule,odds]=await Promise.all([
+  const forecastRequest=current.latitude!==null&&current.longitude!==null&&
+    current.state==='pre'&&kickoff>=now&&kickoff-now<15*86_400_000&&
+    env.PHOENIX_SPORTS_WEATHER_DISABLED!=='1'?
+    getFeed<unknown>('https://api.open-meteo.com/v1/forecast?latitude='+current.latitude+
+      '&longitude='+current.longitude+
+      '&hourly=temperature_2m,wind_speed_10m,wind_direction_10m,is_day,precipitation_probability'+
+      '&timezone=UTC&forecast_days=16',fetcher).catch(()=>null):Promise.resolve(null)
+  const [history,context,mlbSchedule,odds,weatherData]=await Promise.all([
     Promise.allSettled(historicalDays.map(scoreboard)),
     investigateEventDeep(input.sport,input.league,input.eventId,fetcher,now,env)
       .then(value=>value).catch(()=>null),
@@ -129,7 +145,22 @@ export async function auditUniversalMatchup(
     input.includeOdds!==false&&marketKey[input.sport+'|'+input.league]?
       marketOdds(marketKey[input.sport+'|'+input.league]!,
         'h2h,totals,spreads',env,fetcher).catch(()=>[]):Promise.resolve([]),
+    forecastRequest,
   ])
+  const hours=obj(obj(weatherData).hourly)
+  const times=list(hours.time)
+  const ix=times.findIndex(t=>typeof t==='string'&&
+    Math.abs(Date.parse(t.endsWith('Z')?t:t+'Z')-kickoff)<=1_800_000)
+  const weather=ix>=0?{
+    source:'Open-Meteo · modelo de pronóstico (CC BY 4.0)',
+    validAt:String(times[ix])+'Z',
+    temperatureC:geo(list(hours.temperature_2m)[ix],100),
+    windKmh:geo(list(hours.wind_speed_10m)[ix],300),
+    windDirectionDeg:geo(list(hours.wind_direction_10m)[ix],360),
+    precipitationProbability:geo(list(hours.precipitation_probability)[ix],100),
+    dayNight:list(hours.is_day)[ix]===1?'Día':list(hours.is_day)[ix]===0?'Noche':'Sin verificar',
+    note:'Pronóstico aproximado en coordenadas verificadas; no demuestra ventaja ofensiva ni dirección respecto del campo.',
+  }:null
   const stored=new Map<string,Game>()
   history.forEach(job=>{
     if(job.status!=='fulfilled')return
@@ -202,6 +233,8 @@ export async function auditUniversalMatchup(
       records:history.filter(h=>h.status==='fulfilled').length},
     {source:'ESPN: enfrentamientos directos',status:h2h.length?'verified':'unavailable',records:h2h.length},
     {source:'ESPN: sede identificada',status:current.venueId?'verified':'unavailable',records:current.venueId?1:0},
+    {source:'Open-Meteo: pronóstico próximo con coordenadas del estadio',
+      status:weather?'verified':'unavailable',records:weather?1:0},
     {source:'ESPN: contexto de lesiones, plantillas y noticias',
       status:context?'verified':'unavailable',records:context?.sources.filter(s=>s.status==='verified').length??0},
     {source:'MLB StatsAPI: abridores probables',status:starters.length?'verified':'unavailable',
@@ -233,6 +266,11 @@ export async function auditUniversalMatchup(
     g.home.name+' vs '+g.away.name,g.home.score+'-'+g.away.score,g.date.slice(0,10))))
   put('Localía y estadio','metrics',[
     stat('Estadio',current.venueName||null),
+    ...(current.roof?[stat('Techo',current.roof)]:[]),
+    ...(weather?[stat('Tiempo previsto',weather.dayNight+' · '+
+      String(weather.temperatureC??'?')+'°C · '+String(weather.windKmh??'?')+' km/h',
+      'Viento '+String(weather.windDirectionDeg??'?')+'° · lluvia '+
+      String(weather.precipitationProbability??'?')+'% · modelo Open-Meteo (no ventaja causal)')]:[]),
     stat('Partidos previos local en esta sede',venueGames?.home.length??null),
     stat('Partidos previos visitante en esta sede',venueGames?.away.length??null),
     ...(venueGames?.home.length?[stat('Balance local en sede',
@@ -267,7 +305,8 @@ export async function auditUniversalMatchup(
     ...(input.sport==='baseball'&&periods.some(x=>x.exploratoryTotal===null)?
       ['Tramos de 3/5/9 innings: datos por entrada insuficientes, no extrapolar']:[]),
     ...(!markets.length?['Mercado de apuestas actual no encontrado o sin correspondencia segura con ESPN']:[]),
-    'Viento, humedad, sol y temperatura no verificadas: no se extrapola efecto causal sin clima, coordenadas y modelo de estadio',
+    ...(!weather?['Pronóstico de viento, lluvia y temperatura no disponible: faltan coordenadas ESPN, fuente o cobertura temporal']:[]),
+    'Sin orientación de campo, techo confirmado y un modelo validado no se atribuyen efectos causales del viento, sol ni temperatura',
     ...(matchupTypes[input.sport]??['Métricas específicas del deporte y ritmo de juego']).map(x=>
       'A verificar con fuente especializada: '+x),
     'No hay modelo de probabilidades calibrado ni validación histórica fuera de muestra; no estimar EV o ventaja matemática',
@@ -282,8 +321,9 @@ export async function auditUniversalMatchup(
     away:{id:current.away.id,name:current.away.name,form:awayForm,lastGames:away},
     headToHead:h2h.map(g=>({eventId:g.id,date:g.date,home:g.home.name,away:g.away.name,
       homeScore:g.home.score,awayScore:g.away.score})),
-    stadium:{id:current.venueId,name:current.venueName,
+    stadium:{id:current.venueId,name:current.venueName,roof:current.roof,
       homeAtVenue:venueGames?.home.length??null,awayAtVenue:venueGames?.away.length??null},
+    weather,
     mlb:{innings:periods,probableStarters:starters},
     rosterNewsInjuries:context?{sources:context.sources,injuries:context.injuries,
       headlines:context.headlines,rosters:context.teams}:null,
