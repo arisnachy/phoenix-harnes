@@ -401,7 +401,7 @@ export async function marketOddsDetailed(
     if(result.status==='rejected'){
       const error=result.reason instanceof Error?result.reason.message:'Error del proveedor'
       sources.push({provider,status:'error',count:0,
-        detail:error.replace(/apiKey=[^&\s]+/giu,'apiKey=[redactado]').slice(0,170)})
+        detail:error.replace(/apiKey=[^&\s]+/giu,'apiKey=[redactado]').slice(0,700)})
       continue
     }
     let count=0
