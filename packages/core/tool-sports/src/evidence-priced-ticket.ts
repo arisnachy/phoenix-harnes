@@ -5,6 +5,14 @@ import { evidenceTicket } from './evidence-ticket.ts'
 import { keylessEnabled,keylessOdds,type KeylessQuote } from './keyless-odds.ts'
 import { marketOdds,pricedTicket,type ChatBlock,type MarketSelection,type MarketOutcome } from './sports.ts'
 
+export type OddsAuditRow={
+  source:string
+  status:'disabled'|'not-configured'|'attempted'|'empty'|'observed'|'error'|'not-applicable'
+  offers:number
+  note:string
+}
+const audited=(source:string,status:OddsAuditRow['status'],offers:number,note:string):OddsAuditRow=>
+  ({source,status,offers,note})
 const normalize=(name:string)=>name.normalize('NFD').replace(/[\u0300-\u036f]/gu,'')
   .toLowerCase().replace(/[^a-z0-9]/gu,'')
 const routing:Record<string,{sport:string;market:string;oddsSportKey:string}>={
@@ -27,6 +35,7 @@ export async function evidencePricedTicket(
   marketPreference:'winner'|'double_chance'='winner',
 ):Promise<{card:ChatBlock;priced:boolean;placed:false;complete:boolean;
   verifiedEvents:number;quotedLegs:number;missingQuotes:number;
+  sourceAudit:OddsAuditRow[];approvedLegs:number;multisportSatisfied:boolean;
   explanation:string}>{
   const research=await evidenceTicket(count,date,sport,fetcher,now,env)
   const quoteAccess=[
@@ -40,12 +49,27 @@ export async function evidencePricedTicket(
     note:(String(research.card.props.note??'')+' Estado de fuentes de cuotas: '+quoteAccess+
       '. Los repositorios GitHub SportsbookReview/MLB son solo históricos.').slice(0,1000),
   }}
+  const initialSources:OddsAuditRow[]=[
+    audited('OddsHarvester',keylessEnabled(env)?'attempted':'disabled',0,
+      keylessEnabled(env)?'El scraping local necesita CLI y acceso real al sitio.':
+        'Scraping desactivado: PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED no está habilitado.'),
+    audited('The Odds API v4',env.THE_ODDS_API_KEY?.trim()?'attempted':'not-configured',0,
+      'Clave opcional; configurar no demuestra disponibilidad de precios.'),
+    audited('TheOddsAPI',env.THEODDSAPI_API_KEY?.trim()?'attempted':'not-configured',0,
+      'Servicio de cuotas opcional independiente.'),
+    audited('ESPN Site/Core',env.PHOENIX_SPORTS_ESPN_DISABLED==='1'?'disabled':'attempted',0,
+      'Solo se acepta precio identificado y con actualización verificable.'),
+    audited('SportsbookReview/MLB GitHub históricos','not-applicable',0,
+      'NO se consultan como cuota en vivo ni permiten generar combinadas actuales.'),
+  ]
   const base={card:researchCard,priced:false as boolean,placed:false as const,
     complete:research.complete,verifiedEvents:research.verifiedEvents,
-    quotedLegs:0,missingQuotes:research.verifiedEvents,
+    quotedLegs:0,missingQuotes:count,sourceAudit:initialSources,
+    multisportSatisfied:research.multisportSatisfied,approvedLegs:0,
     explanation:'Preselección ESPN, cuotas todavía NO verificadas: '+quoteAccess+
       '. Los archivos históricos no ofrecen precios para apostar hoy.'}
-  if(!research.complete)return base
+  // Even an incomplete 4/5 slate must audit the four real events for quotes;
+  // otherwise 'no prices available' falsely implies the sources were checked.
   const day=date??new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santo_Domingo',
     year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(now))
   const categories=[...new Set(research.events.map(e=>e.sport))]
