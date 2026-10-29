@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useId, useState, type ReactNode } from 'react'
 import { PhoenixStatusPill, PhoenixAgentLine, type PhoenixUiIconName, type PhoenixStatusTone } from '@phoenix-ai/dsh-client-ui-primitives'
 import { ScaleForm, parseScaleForm, type ScaleFormSpec } from './ScaleForm.tsx'
 import { SpreadsheetSurface, parseSpreadsheet, type SpreadsheetSpec } from './SpreadsheetSurface.tsx'
@@ -566,6 +566,35 @@ function expandRawCanvases(segments: GenerativeUiSegment[], streaming: boolean):
 }
 
 /** Inline sport emblem, not a team/league logo or an external image. */
+/** Isolated stateful calculation: real observed quotes, not a posted wager.
+ * Handles partial typing without silently changing the stake.
+ */
+function SportsTicketCalculator({combinedOdds,initialStake}:{combinedOdds:string;initialStake?:string}){
+  const inputId=useId()
+  const [amount,setAmount]=useState(initialStake??'100')
+  const decimal=Number(combinedOdds)
+  const value=Number(amount.replace(',','.'))
+  const valid=amount.trim()!==''&&Number.isFinite(value)&&value>=0&&value<=1_000_000
+  const available=Number.isFinite(decimal)&&decimal>1&&decimal<=1e12
+  const money=(n:number)=>new Intl.NumberFormat('es-DO',{
+    style:'currency',currency:'DOP',minimumFractionDigits:2,maximumFractionDigits:2,
+  }).format(n)
+  const returnValue=valid&&available?Math.round(value*decimal*100)/100:null
+  const profit=returnValue===null?null:Math.round((returnValue-value)*100)/100
+  return <section className={css.sportsStakeCalculator} aria-label="Calculadora del ticket">
+    <label htmlFor={inputId}>Importe de apuesta (RD$)</label>
+    <input id={inputId} type="number" inputMode="decimal"
+      step="0.01" min="0" max="1000000" value={amount}
+      onChange={e=>setAmount(e.target.value)} aria-invalid={!valid}/>
+    <div className={css.sportsTicketTotal} aria-live="polite">
+      <div><small>Cuota combinada observada</small><strong>{available?combinedOdds:'Sin cotizar'}</strong></div>
+      <div><small>Retorno bruto potencial</small><strong>{returnValue===null?'No calculable':money(returnValue)}</strong></div>
+      <div><small>Ganancia neta potencial</small><strong>{profit===null?'No calculable':money(profit)}</strong></div>
+    </div>
+    <small>Recalcula al instante · incluye el importe apostado en el retorno bruto.
+      No confirma aceptación, pago ni disponibilidad actual de la cuota.</small>
+  </section>
+}
 const ticketSportEmblem=(groupHeading:string):string=>{
   const sport=groupHeading.split(' · ')[0]?.toLocaleLowerCase('es')??''
   if(sport.includes('americano'))return '🏈'
@@ -824,7 +853,7 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
         <header className={css.sportsTicketHeading}>
           <div className={css.sportsTicketRibbon}>
             <span className={css.sportsKicker}>PHOENIX / SPORTS INTELLIGENCE</span>
-            <span className={css.sportsStatus}>{incomplete?'BORRADOR INCOMPLETO':unpriced?'PRONÓSTICOS · SIN APUESTA':'SIMULACIÓN'}</span>
+            <span className={css.sportsStatus}>{incomplete?'BORRADOR INCOMPLETO':unpriced?'PRONÓSTICOS · SIN COTIZAR':'COTIZACIÓN REAL · SIN ACEPTACIÓN CONFIRMADA'}</span>
           </div>
           <div className={css.sportsTicketIntro}>
             <div><h3>{p.title}</h3>{p.subtitle&&<p>{p.subtitle}</p>}</div>
@@ -866,17 +895,16 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
                   </div>}
             </article>)}</div>
           </section>)}</div>
-        <div className={css.sportsTicketTotal}>
-          <div><small>{unpriced?'Estado de las cuotas':'Cuota combinada'}</small>
-            <strong>{unpriced?'Pendientes de confirmar':p.combinedOdds}</strong></div>
-          {p.stake&&<div><small>Importe simulado</small><strong>{p.stake}</strong></div>}
-          {p.grossReturn&&<div><small>Retorno bruto potencial</small><strong>{p.grossReturn}</strong></div>}
-        </div>
+        {unpriced?<div className={css.sportsTicketTotal}>
+          <div><small>Estado de las cuotas</small><strong>Pendientes de confirmar</strong></div>
+        </div>:<SportsTicketCalculator combinedOdds={p.combinedOdds} {...(p.stake===undefined?{}:{initialStake:p.stake})}/>}
+
         <footer className={css.sportsFoot}>
-          <strong>Solo análisis · No se ha realizado ninguna apuesta</strong>
+          <strong>Ticket investigado · Aceptación de la casa sin verificar</strong>
           <span>Fuente: {p.source}</span>
           <details className={css.sportsTicketDisclaimer}><summary>Fuentes, metodología y advertencias</summary><p>{p.note}</p></details>
           {onAction&&<button type="button" onClick={()=>onAction('Kira, muestra los marcadores y jugadas en vivo de los partidos de este ticket, agrupados por deporte y liga. Para cada encuentro usa sports_chat_games y liveOnly si ya comenzó. No supongas resultados ni partidos activos. Encuentros: '+p.legs.map(l=>[l.sport,l.league,l.event].filter(Boolean).join(' / ')).join('; '),'draft')}>Ver juegos de mi ticket en vivo</button>}
+          {onAction&&<button type="button" onClick={()=>onAction('Kira, haz seguimiento y liquidación preliminar de las selecciones reales de este ticket. Usa sports_chat_ticket_track con los IDs ESPN y mercados exactos SOLO si fueron capturados y verificados. Verifica reglas del operador y el recibo para diferenciar apuesta aceptada, resultado provisional, anulación y pago. Si faltan IDs/fecha, identifícalos antes de calcular. Selecciones: '+p.legs.map(l=>[l.event,l.selection,l.market,l.bookmaker,l.price].join(' / ')).join('; '),'draft')}>Verificar si ganó o perdió</button>}
           {p.askPrompt&&onAction&&<button type="button" onClick={() => {if(p.askPrompt)onAction(p.askPrompt,'draft')}}>Revisar selecciones</button>}
         </footer>
       </section>

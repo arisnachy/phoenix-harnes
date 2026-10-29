@@ -155,6 +155,12 @@ def resolve_design_preset(data, presentation):
                     "journal_manuscript", "research_protocol"):
         return "clinical_teal"
     if doc_type == "thesis":
+        if data.get("visual_preference") == "premium":
+            title = unicodedata.normalize("NFKD", data.get("title", "")).lower()
+            title = "".join(ch for ch in title if not unicodedata.combining(ch))
+            if any(term in title for term in ("salud", "medicina", "clinica", "hospital", "neuro")):
+                return "clinical_teal"
+            return "research_violet"
         return "minimal_graphite"
     if doc_type == "monograph":
         return "editorial_navy"
@@ -246,6 +252,8 @@ def validate(data):
         raise ValueError("report.sections must contain 1 to 140 entries")
     if not isinstance(refs, list) or not (1 <= len(refs) <= 500):
         raise ValueError("report.references must contain 1 to 500 supplied sources")
+    if data.get("document_type") == "thesis" and data.get("style") not in ("apa", "apa7", "vancouver"):
+        raise ValueError("thesis citation style must be explicitly APA 7 or Vancouver")
     if data.get("style", "apa") not in ("apa", "apa7", "vancouver", "ama"):
         raise ValueError("style must be apa, apa7, vancouver or ama")
     resolved_presentation = data.get("presentation", "journal" if (data.get("document_type") == "journal_manuscript" or data.get("journal_requirements", {}).get("journal")) else ("hybrid" if data.get("quality_profile", "professional") == "professional" else "academic"))
@@ -254,12 +262,18 @@ def validate(data):
     selected_design = data.get("design_preset", "auto")
     if selected_design not in DESIGN_PRESET_NAMES:
         raise ValueError("design_preset must be one of the registered modern design names")
+    if data.get("visual_preference", "standard") not in ("standard", "premium"):
+        raise ValueError("visual_preference must be standard or premium")
     if resolved_presentation in ("academic", "journal") and selected_design not in ("auto", "academic_classic"):
         raise ValueError("academic and journal modes cannot use decorative covers")
     if resolved_presentation not in ("academic", "journal") and selected_design == "academic_classic":
         raise ValueError("academic_classic requires academic or journal presentation")
     if data.get("document_type", "brief") not in DOCUMENT_TYPES:
         raise ValueError("unsupported document_type")
+    if data.get("document_type") == "thesis":
+        degree = data.get("thesis_level", data.get("level"))
+        if degree is not None and degree not in ("bachelors", "masters", "doctorate"):
+            raise ValueError("thesis_level must be bachelors, masters or doctorate")
     if data.get("paper", "A4") not in ("A4", "Letter"):
         raise ValueError("paper must be A4 or Letter")
     if data.get("submission_ready") is True:
@@ -310,6 +324,10 @@ def validate(data):
         if margin is not None and (not isinstance(margin, (int, float)) or isinstance(margin, bool)
                                    or not math.isfinite(margin) or not 1.5 <= margin <= 4):
             raise ValueError("institutional margin_cm must be 1.5 to 4")
+        minimum_references = institutional.get("min_references")
+        if minimum_references is not None and (isinstance(minimum_references, bool)
+            or not isinstance(minimum_references, int) or not 1 <= minimum_references <= 500):
+            raise ValueError("institutional min_references must be between 1 and 500")
         spacing = institutional.get("line_spacing")
         if spacing is not None and (spacing not in (1, 1.15, 1.5, 2)):
             raise ValueError("institutional line_spacing unsupported")
@@ -380,6 +398,10 @@ def validate(data):
         cited.update(citation_keys(appendix["text"]))
     if cited - keys:
         raise ValueError("appendix contains unknown source keys " + str(sorted(cited-keys)))
+    institution_min = data.get("institutional_rules", {}).get("min_references")
+    if institution_min is not None and len(cited) < institution_min:
+        raise ValueError("reviewed institution requires " + str(institution_min) +
+                         " distinct cited references, found " + str(len(cited)))
     declarations = data.get("declarations", {})
     if not isinstance(declarations, dict):
         raise ValueError("declarations must be an object")
@@ -1291,7 +1313,7 @@ def main():
 
     chunks = []
     chunks.append("<!doctype html><html lang='es'><meta charset='utf-8'><title>"+html.escape(title)+"</title>")
-    chunks.append("<style>:root{--ink:"+tokens["title"]+";--accent:"+accent+";--paper:"+tokens["paper"]+"}body{font:17px/1.65 system-ui,Georgia,serif;max-width:880px;margin:44px auto;padding:0 22px;color:var(--ink);background:var(--paper)}h1,h2{line-height:1.3}h2{color:var(--accent);border-bottom:1px solid #d9e3e6;padding-bottom:.45em}a{color:var(--accent)}nav{padding:20px 0}.ref{font-size:.88em;margin:9px 0}figure img{width:100%}table{border-collapse:collapse;width:100%;font-size:.88em;display:block;overflow-x:auto}td,th{border-bottom:1px solid #dce5ea;padding:9px;text-align:left}th{background:#e9f3f4}</style>")
+    chunks.append("<style>:root{--ink:"+tokens["title"]+";--accent:"+accent+";--paper:"+tokens["paper"]+"}body{font:17px/1.65 system-ui,Georgia,serif;max-width:880px;margin:44px auto;padding:0 22px;color:var(--ink);background:var(--paper)}h1,h2{line-height:1.3}h2{color:var(--accent);border-bottom:1px solid #d9e3e6;padding-bottom:.45em}a{color:var(--accent)}nav{padding:20px 0}.ref{font-size:.88em;margin:9px 0}figure img{width:100%}table{border-collapse:collapse;width:100%;font-size:.88em;display:block;overflow-x:auto}td,th{border-bottom:1px solid #dce5ea;padding:9px;text-align:left}th{background:#e9f3f4}.apa-references .ref{padding-left:1.27cm;text-indent:-1.27cm;margin:.7em 0}@media print{body{max-width:none;margin:0;background:white}figure,table{break-inside:avoid}}</style>")
     chunks.append("<h1>"+html.escape(title)+"</h1>")
     chunks.append("<p>"+html.escape(" · ".join(str(cover.get(k,"")) for k in ("institution","faculty","degree","date") if cover.get(k)))+"</p>")
     for author in authors: chunks.append("<p class='ref'>"+html.escape(author)+"</p>")
@@ -1322,10 +1344,12 @@ def main():
         for note_line in visual_notes(chart, refs, style, numbers):
             chunks.append("<p class='ref'>"+html.escape(note_line)+"</p>")
         chunks.append("</figure>")
-    chunks.append("<h2>Referencias</h2><ol>")
+    chunks.append("<h2>Referencias</h2>" + ("<ol>" if style in ("vancouver", "ama") else "<div class='apa-references'>"))
     for src in ordered_refs:
-        chunks.append("<li class='ref'>"+html.escape(bibliography(src,style,numbers[src["key"]]))+"</li>")
-    chunks.append("</ol>")
+        item = html.escape(bibliography(src,style,numbers[src["key"]]))
+        chunks.append("<li class='ref'>"+item+"</li>" if style in ("vancouver", "ama")
+                      else "<p class='ref'>"+item+"</p>")
+    chunks.append("</ol>" if style in ("vancouver", "ama") else "</div>")
     if report.get("declarations"):
         chunks.append("<section><h2>Declaraciones de investigación</h2>")
         for key, label in (("ethics", "Ética"), ("funding", "Financiación"),
@@ -1361,6 +1385,25 @@ def main():
     elif target_pages is not None and not page_match:
         warnings.append("La extensión solicitada no se alcanzó: PDF real " + str(rendered_pages[0]) +
                         ", objetivo " + str(target_pages) + ". No se añade contenido ficticio.")
+    # Advisory source-coverage guidance never silently becomes a university requirement.
+    thesis_levels = {"bachelors": (20, 40), "masters": (40, 80), "doctorate": (100, None)}
+    degree = report.get("thesis_level", report.get("level"))
+    reference_guidance = None
+    if report.get("document_type") == "thesis" and degree in thesis_levels:
+        minimum, suggested_maximum = thesis_levels[degree]
+        reference_guidance = {
+            "level": degree, "minimum": minimum, "suggested_maximum": suggested_maximum,
+            "actual_distinct_cited": len(cited), "policy": "advisory",
+            "institutional_rules_override": bool(institutional.get("min_references")),
+            "below_guidance": len(cited) < minimum,
+        }
+    advisory_warnings = []
+    if reference_guidance and reference_guidance["below_guidance"]:
+        advisory_warnings.append(
+            "Orientación bibliográfica para " + degree + ": " + str(minimum) +
+            "+ fuentes distintas citadas; hay " + str(len(cited)) +
+            ". No es un mínimo universal; prevalece la norma institucional."
+        )
     final_state = "REPORT_NEEDS_REVISION" if warnings else "REPORT_READY"
     result={"state":final_state,"report_id":digest,"title":title,"style":style,
             "design_preset":design_preset,
@@ -1375,6 +1418,8 @@ def main():
             "pagination": {"pdf_pages": rendered_pages[0], "requested_pages": target_pages,
                            "scope": scope, "target_met": page_match if scope == "all" else None},
             "warnings": warnings,
+            "advisory_warnings": advisory_warnings,
+            "reference_guidance": reference_guidance,
             "source_count":len(cited),"source_verification":"metadata_user_supplied_not_network_verified","files":{"docx":str(docx_file),"pdf":str(pdf_file),"html":str(html_file)},"output_dir":str(output_root)}
     # Preserve the exact structured project so model handoffs and revisions do not
     # need to re-run every source lookup or reconstruct the manuscript from PDF.
