@@ -14,6 +14,7 @@ export type FreeOddsQuote = {
   home:string
   away:string
   time:string
+  timeIso:string
   updatedAt:string
   source:'TheOddsAPI'
 }
@@ -77,7 +78,7 @@ export async function fetchTheOddsApi(
         const point=outcome.point==null?null:Number(outcome.point)
         if(!selection||!Number.isFinite(price)||price<=1||price>100000||point!==null&&!Number.isFinite(point))continue
         result.push({eventId,bookmaker,market,selection,point,price,home,away,
-          time:localTime(event.start_time??''),updatedAt:safeName(book.updated_at,80)||'Sin fecha del proveedor',
+          time:localTime(event.start_time??''),timeIso:new Date(start).toISOString(),updatedAt:safeName(book.updated_at,80)||'Sin fecha del proveedor',
           source:'TheOddsAPI'})
       }
     }
