@@ -16,6 +16,7 @@ const TESTNET_AUTO_STATUS = ROUTE + '/testnet-auto-status'
 const TESTNET_CONNECT = ROUTE + '/testnet-connect'
 const REAL_STATUS = ROUTE + '/real-status'
 const REAL_CONNECT = ROUTE + '/real-connect'
+const REAL_MIGRATE = ROUTE + '/real-migrate'
 const MCP_STATUS = ROUTE + '/mcp-status'
 const MCP_RECONNECT = ROUTE + '/mcp-reconnect'
 const MCP_ACTIVATE = ROUTE + '/mcp-activate'
@@ -162,18 +163,19 @@ export function mountBinancePaperDashboardRoute(
     const connect = url.pathname === TESTNET_CONNECT
     const realStatus = url.pathname === REAL_STATUS
     const realConnect = url.pathname === REAL_CONNECT
+    const realMigrate = url.pathname === REAL_MIGRATE
     const mcpStatus = url.pathname === MCP_STATUS
     const reconnect = url.pathname === MCP_RECONNECT
     const activate = url.pathname === MCP_ACTIVATE
     const repair = url.pathname === MCP_REPAIR
-    if (!read && !write && !market && !testing && !testnetAutomation && !connect && !realStatus && !realConnect && !mcpStatus && !reconnect && !activate && !repair) { res.writeHead(404).end(); return }
+    if (!read && !write && !market && !testing && !testnetAutomation && !connect && !realStatus && !realConnect && !realMigrate && !mcpStatus && !reconnect && !activate && !repair) { res.writeHead(404).end(); return }
     res.setHeader('Cache-Control', 'no-store')
     res.setHeader('Content-Type', 'application/json; charset=utf-8')
     res.setHeader('X-Content-Type-Options', 'nosniff')
     res.setHeader('Referrer-Policy', 'no-referrer')
     if ((read || market || testing || realStatus || testnetAutomation || mcpStatus) && req.method !== 'GET' && req.method !== 'HEAD'
-      || (write || connect || realConnect || reconnect || activate || repair) && req.method !== 'POST') { res.writeHead(405).end(); return }
-    if ((write || connect || realConnect || reconnect || activate || repair) && !localUserAction(req)) {
+      || (write || connect || realConnect || realMigrate || reconnect || activate || repair) && req.method !== 'POST') { res.writeHead(405).end(); return }
+    if ((write || connect || realConnect || realMigrate || reconnect || activate || repair) && !localUserAction(req)) {
       res.writeHead(403).end(JSON.stringify({ error: 'Same-origin user action required' }))
       return
     }
@@ -271,6 +273,57 @@ export function mountBinancePaperDashboardRoute(
         res.statusCode = 200
         if (req.method === 'HEAD') res.end()
         else res.end(JSON.stringify(status))
+        return
+      }
+      if (realMigrate) {
+        if (!privateCredentialAction(req) || !options.credentials || !options.real) {
+          res.writeHead(403).end(JSON.stringify({error:'Secure credential migration unavailable'}))
+          return
+        }
+        const data = await readRequestObject(req)
+        if (Object.keys(data).length !== 0) {
+          res.writeHead(400).end(JSON.stringify({error:'Migration accepts no credentials or orders'}))
+          return
+        }
+        // A Testnet trading journal must never be moved silently between wallets.
+        const state = options.testnetAuto?.snapshot()
+        if (state?.enabled === true || state?.pending !== undefined
+          || state && Object.keys(state.positions).length > 0) {
+          res.writeHead(409).end(JSON.stringify({error:'testnet-automation-account-change-blocked'}))
+          return
+        }
+        const [key, secret] = await Promise.all([
+          options.credentials.resolve(credentialRef('PHOENIX_BINANCE_TESTNET_API_KEY')),
+          options.credentials.resolve(credentialRef('PHOENIX_BINANCE_TESTNET_API_SECRET')),
+        ])
+        if (!key?.value || !secret?.value) {
+          res.writeHead(409).end(JSON.stringify({error:'No stored Testnet candidate to verify'}))
+          return
+        }
+        // Verify on Binance production BEFORE copying secrets into the REAL vault.
+        const result = await options.real.forCredentials({apiKey:key.value,secret:secret.value}).status()
+        if (!result.connected) {
+          res.statusCode = 200
+          res.end(JSON.stringify({
+            migrated:false, connected:false, tradingAuthorized:false,
+            ...(result.issue === undefined ? {} : {issue:result.issue}),
+            nextAction:result.nextAction,
+          }))
+          return
+        }
+        try { await storeTestnetPair(options.credentials,key.value,secret.value,'real') }
+        catch (error) {
+          res.writeHead(error instanceof Error && error.message==='vault-read-only' ? 409 : 503)
+            .end(JSON.stringify({error:'REAL credential vault is unavailable for migration'}))
+          return
+        }
+        // Keep the previous Testnet refs intact: the vault's existing values
+        // must not be deleted without a separate, explicit revocation gesture.
+        res.end(JSON.stringify({
+          migrated:true,configured:true,connected:true,canRead:true,
+          tradingAuthorized:false,
+          nextAction:'Claves verificadas con Binance REAL y copiadas a la bóveda REAL. TESTNET no se ha modificado. No se han autorizado órdenes.',
+        }))
         return
       }
       if (realConnect) {
