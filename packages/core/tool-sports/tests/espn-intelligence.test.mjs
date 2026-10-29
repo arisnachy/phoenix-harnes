@@ -103,3 +103,15 @@ test('winner is only labelled after ESPN confirms finished state and winner flag
   assert.ok(names.some(x=>x.label==='A'&&x.value?.includes('Ganador')))
   assert.ok(names.some(x=>x.label==='B'&&!x.value?.includes('Ganador')))
 })
+
+test('search discovers an ESPN player by name without inventing a numeric ID',async()=>{
+  const {fetcher,urls}=mock(()=>({results:[{type:'athlete',items:[
+    {id:'3945274',displayName:'Confirmed Athlete',subtitle:'NBA',
+      image:{href:'https://a.espncdn.com/i/headshot.png'}},
+  ]}]}))
+  const r=await exploreEspn({sport:'basketball',league:'nba',view:'search',query:'Confirmed Athlete'},fetcher)
+  assert.equal(urls.length,1)
+  assert.ok(urls[0].includes('Confirmed%20Athlete'))
+  assert.equal(r.sections[0].items[0].label,'Confirmed Athlete')
+  assert.ok(r.sections[0].items[0].action?.prompt.includes('athleteId=3945274'))
+})
