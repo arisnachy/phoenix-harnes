@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useId, useState, type ReactNode } from 'react'
 import { PhoenixStatusPill, PhoenixAgentLine, type PhoenixUiIconName, type PhoenixStatusTone } from '@phoenix-ai/dsh-client-ui-primitives'
 import { ScaleForm, parseScaleForm, type ScaleFormSpec } from './ScaleForm.tsx'
 import { SpreadsheetSurface, parseSpreadsheet, type SpreadsheetSpec } from './SpreadsheetSurface.tsx'
@@ -570,6 +570,7 @@ function expandRawCanvases(segments: GenerativeUiSegment[], streaming: boolean):
  * Handles partial typing without silently changing the stake.
  */
 function SportsTicketCalculator({combinedOdds,initialStake}:{combinedOdds:string;initialStake?:string}){
+  const inputId=useId()
   const [amount,setAmount]=useState(initialStake??'100')
   const decimal=Number(combinedOdds)
   const value=Number(amount.replace(',','.'))
@@ -581,8 +582,8 @@ function SportsTicketCalculator({combinedOdds,initialStake}:{combinedOdds:string
   const returnValue=valid&&available?Math.round(value*decimal*100)/100:null
   const profit=returnValue===null?null:Math.round((returnValue-value)*100)/100
   return <section className={css.sportsStakeCalculator} aria-label="Calculadora del ticket">
-    <label htmlFor="sports-ticket-stake">Importe de apuesta (RD$)</label>
-    <input id="sports-ticket-stake" type="number" inputMode="decimal"
+    <label htmlFor={inputId}>Importe de apuesta (RD$)</label>
+    <input id={inputId} type="number" inputMode="decimal"
       step="0.01" min="0" max="1000000" value={amount}
       onChange={e=>setAmount(e.target.value)} aria-invalid={!valid}/>
     <div className={css.sportsTicketTotal} aria-live="polite">
