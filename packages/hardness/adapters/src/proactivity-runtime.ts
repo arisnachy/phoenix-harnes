@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
 import { AttentionStore, parseAttentionReceipt } from './proactivity-attention-store.ts'
+import { parseScheduledTaskCreation, parseScheduledTaskId } from './proactivity-rpc-input.ts'
 import { scheduledMissionScopeActive } from './mission-scope.ts'
 import type { Context } from '@phoenix-ai/cordis'
 import type { Agent, AgentRegistry } from '@phoenix-ai/dsh-agent'
@@ -586,12 +587,28 @@ function installProactivityRpc(connection: HostConnectionHandle,
   engine: ProactivityEngine,
   attention?: AttentionStore,
   extraAttention?: () => Promise<readonly ProactivityAttentionItem[]>): () => Promise<void> {
-  return connection.rpc.handle('/phoenix-tasks', async (endpoint, input): Promise<RpcResult<readonly ProactivityTaskView[] | readonly ProactivityAttentionItem[] | null>> => {
+  return connection.rpc.handle('/phoenix-tasks', async (endpoint, input): Promise<RpcResult<readonly ProactivityTaskView[] | readonly ProactivityAttentionItem[] | ProactivityTaskView | null>> => {
     try {
       // `list()` intentionally omits surprises until reveal time. Hidden task
       // content therefore never crosses the browser transport ahead of time.
       const tasks = await engine.list()
       if (endpoint === 'list') return { ok: true, value: tasks.map(taskView) }
+      if (endpoint === 'create') {
+        const request = parseScheduledTaskCreation(input)
+        if (tasks.filter(task => task.createdBy === 'user'
+          && (task.status === 'scheduled' || task.status === 'paused' || task.status === 'running')).length >= 200) {
+          return rpcFailure('scheduled task limit reached; archive or cancel an existing task')
+        }
+        return { ok: true, value: taskView(await engine.create(request)) }
+      }
+      if (endpoint === 'pause' || endpoint === 'resume' || endpoint === 'cancel') {
+        const id = parseScheduledTaskId(input)
+        // IDs for concealed surprises are not actionable through the browser.
+        if (!tasks.some(task => task.id === id)) return rpcFailure('scheduled task not found')
+        const updated = endpoint === 'pause' ? await engine.pause(id)
+          : endpoint === 'resume' ? await engine.resume(id) : await engine.cancel(id)
+        return { ok: true, value: taskView(updated) }
+      }
       if (endpoint === 'attention') {
         const items = [...buildProactivityAttentionItems(tasks),
           ...await extraAttention?.() ?? []].sort((a,
