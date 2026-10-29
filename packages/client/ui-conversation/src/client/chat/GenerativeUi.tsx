@@ -344,7 +344,7 @@ const sportsTicket = (value: Record<string, unknown>): value is SportsTicketCard
       && trustedPortrait(x.homeLogo) && trustedPortrait(x.awayLogo)
       && optionalText(x.homeTeam,100) && optionalText(x.awayTeam,100)
       && optionalText(x.sport,60) && optionalText(x.country,100) && optionalText(x.league,100)
-      && optionalText(x.market,70) && optionalText(x.player,140) && optionalText(x.rationale,240))
+      && optionalText(x.market,70) && optionalText(x.player,140) && optionalText(x.rationale,480))
 }
 
 export function parseGenerativeUiBlock(value: unknown): GenerativeUiBlock | null {
