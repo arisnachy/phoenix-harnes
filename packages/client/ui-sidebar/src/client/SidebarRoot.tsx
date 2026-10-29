@@ -16,10 +16,11 @@
 import { useEffect, useRef, useState } from 'react'
 import clsx from 'clsx'
 import {
-  IconAgentPresetOutline16, IconFolderOpenOutline16, IconGlobeOutline14, IconNewChatOutline16,
+  IconAgentPresetOutline16, IconFolderOpenOutline16, IconNewChatOutline16,
   IconPanelLeftOutline16, IconPlugOutline16, PhoenixLogo, Tooltip,
 } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { SidebarRootComponentProps } from './contract/slots.ts'
+import { TaskCenter } from './TaskCenter.tsx'
 import css from './SidebarRoot.module.css'
 
 /**
@@ -41,12 +42,14 @@ export function SidebarRoot({
   toggleSidebar,
   t,
   renderSlot,
+  taskConnection,
 }: SidebarRootComponentProps) {
   // Match rendered controls to the actual sidebar width immediately.
   // The old 150ms settle timer blocked the rail and retained costly wide rows.
   const wide = !collapsed
+  const [tasksOpen, setTasksOpen] = useState(false)
   // Navigation destinations open an actionable, focused surface — never the Settings menu.
-  const openFeature = (destination: 'discover' | 'connectors' | 'team', label: string): void => {
+  const openFeature = (destination: 'connectors' | 'team', label: string): void => {
     window.dispatchEvent(new CustomEvent('phoenix:open-feature', { detail: { destination, label } }))
   }
   const openLibrary = (): void => {
@@ -194,8 +197,11 @@ export function SidebarRoot({
             <path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1Z" />
           </svg>{wide && <span>{t('nav.home')}</span>}
         </button>
-        <button type="button" className={css.navLink} aria-label={t('nav.discover')} title={wide ? undefined : t('nav.discover')} onClick={() => { openFeature('discover', t('nav.discover')) }}>
-          <IconGlobeOutline14 size={wide ? 19 : 18} />{wide && <span>{t('nav.discover')}</span>}
+        <button type="button" className={css.navLink} aria-label={t('nav.tasks')} title={wide ? undefined : t('nav.tasks')} onClick={() => { setTasksOpen(true) }}>
+          <svg viewBox="0 0 24 24" width={wide ? 19 : 18} height={wide ? 19 : 18}
+            fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="9" /><path d="M12 6v6l4 2" />
+          </svg>{wide && <span>{t('nav.tasks')}</span>}
         </button>
         <button type="button" className={css.navLink} aria-label={t('nav.connectors')} title={wide ? undefined : t('nav.connectors')} onClick={() => { openFeature('connectors', t('nav.connectors')) }}>
           <IconPlugOutline16 size={wide ? 19 : 18} />{wide && <span>{t('nav.connectors')}</span>}
@@ -226,6 +232,7 @@ export function SidebarRoot({
           {renderSlot('sidebar.settings', { wide })}
         </div>
       </div>
+      {tasksOpen && <TaskCenter connection={taskConnection} onClose={() => { setTasksOpen(false) }} />}
     </div>
   )
 }
