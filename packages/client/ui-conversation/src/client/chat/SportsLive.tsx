@@ -27,7 +27,7 @@ export type PhoenixLiveGame={
   shots?:string;leaders?:string[];periods?:Array<{label:string;away:string;home:string}>;
 }
 export type PhoenixLiveLookup={eventId?:string;home:{label:string};away:{label:string}}
-export type PhoenixLiveMeta={updatedAt:number;stale:boolean;error:boolean}
+export type PhoenixLiveMeta={updatedAt:number;stale:boolean;error:boolean;enabled:boolean}
 
 export function espnLiveUrl(sport?:string,league?:string,date?:string):string|null{
   if(!sport||!SPORTS.has(sport)||!league)return null
@@ -132,8 +132,10 @@ async function liveFeed(url:string):Promise<PhoenixLiveGame[]>{
   const promise=(async()=>{
     const scores=parseEspnLiveScoreboard(await fetchJson(url))
     // Enrich at most four running games for last play/leaders. All other games keep live scores.
-    const enriched=await Promise.all(scores.map(async(game,i)=>{
-      if(game.phase!=='in'||i>=4||game.lastPlay)return game
+    let detailed=0
+    const enriched=await Promise.all(scores.map(async game=>{
+      if(game.phase!=='in'||game.lastPlay||detailed>=4)return game
+      detailed++
       const endpoint=new URL(url),prefix=endpoint.pathname.replace('/scoreboard','')
       try{return enrichSummary(game,await fetchJson(endpoint.origin+prefix+'/summary?event='+encodeURIComponent(game.id)))}
       catch{return game}
@@ -159,8 +161,7 @@ export function SportsLiveProvider({sport,league,date,children}:{
     const update=async()=>{
       if(!active||busy||typeof document!=='undefined'&&document.visibilityState==='hidden')return
       if(typeof navigator!=='undefined'&&navigator.onLine===false)return
-      const games=state.url===url?state.games:[]
-      const running=games.some(g=>g.phase==='in')
+      const running=memo.get(url)?.value.some(g=>g.phase==='in')??false
       const interval=running?20_000:60_000
       if(Date.now()-lastAttempt<interval)return
       lastAttempt=Date.now();busy=true
@@ -180,7 +181,7 @@ export function SportsLiveProvider({sport,league,date,children}:{
   const games=state.url===url?state.games:[]
   const get=(lookup:PhoenixLiveLookup)=>matchEspnGame(games,lookup)
   return children(get,{updatedAt:state.url===url?state.at:0,error:state.url===url&&state.error,
-    stale:state.url!==url||!state.at||Date.now()-state.at>95_000})
+    enabled:Boolean(url),stale:state.url!==url||!state.at||Date.now()-state.at>95_000})
 }
 export function SportsLiveFacts({game,meta,sport}:{game?:PhoenixLiveGame;meta:PhoenixLiveMeta;sport?:string}):ReactNode{
   if(!game||game.phase!=='in')return null
@@ -189,11 +190,11 @@ export function SportsLiveFacts({game,meta,sport}:{game?:PhoenixLiveGame;meta:Ph
     <div className={css.liveHeading}><span className={css.liveDot} aria-hidden="true"/> EN VIVO · {game.status}
       <small>{meta.error||meta.stale?'Último dato recibido':'ESPN · actualización automática'}</small></div>
     {baseball&&<div className={css.liveBaseball}>
-      <div className={css.liveDiamond} aria-label="Corredores en las bases">
+      {game.bases?<div className={css.liveDiamond} aria-label="Corredores en las bases">
         <i className={game.bases?.[1]?css.occupied:''} title="Segunda base"/>
         <i className={game.bases?.[2]?css.occupied:''} title="Tercera base"/>
-        <i className={game.bases?.[0]?css.occupied:''} title="Primera base"/>
-      </div>
+        <i className={game.bases[0]?css.occupied:''} title="Primera base"/>
+      </div>:<span className={css.liveStamp}>Bases sin datos</span>}
       <div className={css.liveCounts}><strong>{game.outs===undefined?'—':game.outs} outs</strong>
         <span>B {game.balls===undefined?'—':game.balls} · S {game.strikes===undefined?'—':game.strikes}</span></div>
     </div>}
@@ -205,7 +206,8 @@ export function SportsLiveFacts({game,meta,sport}:{game?:PhoenixLiveGame;meta:Ph
   </div>
 }
 export function SportsLiveStamp({meta}:{meta:PhoenixLiveMeta}):ReactNode{
-  if(!meta.updatedAt)return null
+  if(!meta.enabled)return null
+  if(!meta.updatedAt)return <small className={css.liveStamp}>ESPN · {meta.error?'sin datos en vivo disponibles':'consultando marcadores…'}</small>
   return <small className={css.liveStamp}>ESPN · {meta.error||meta.stale?'sin conexión reciente · ':''}
     {new Date(meta.updatedAt).toLocaleTimeString('es-DO',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false})}
   </small>
