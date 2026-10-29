@@ -105,7 +105,7 @@ export async function evidenceTicket(
         'Márgenes '+favorite.averageMargin+'/'+opponent.averageMargin+
         '; descanso '+(favorite.restHours??'?')+'h. '+
         'POR VERIFICAR: '+(sportRisks[match.sport]??'titulares')+
-        ' y cuota; sin probabilidad validada.').slice(0,240)
+        ' y cuota; sin probabilidad validada.').slice(0,395)
       candidateLegs.push({rank:Math.abs(rank),home:home.name,away:away.name,kickoff:match.date,pick:{
         sport:match.sport,league:match.league,eventId:match.eventId,
         pick:rank>0?'home':'away',rationale,
@@ -125,10 +125,10 @@ export async function evidenceTicket(
     if(state?.summaryVerified)pregameSummariesVerified++
     if(state?.injuryReportVerified)injuryFeedsVerified++
     const audit='Resumen ESPN '+(state?.summaryVerified?'consultado':'no verificado')+
-      '; parte médico '+(state?.injuryReportVerified?'publicado':'no verificable')+
+      '; parte médico '+(state?.injuryReportVerified?'feed disponible':'no verificable')+
       '; titulares pendientes'
-    return {...pick,rationale:(String(pick.rationale??'').slice(0,Math.max(0,237-audit.length))+
-      ' · '+audit).slice(0,240)}
+    return {...pick,rationale:(String(pick.rationale??'').slice(0,Math.max(0,477-audit.length))+
+      ' · '+audit).slice(0,480)}
   })
   const ticket=await researchTicket(documented,date,fetcher,now,env,count,true)
   const note=String(ticket.card.props.note??'')+
