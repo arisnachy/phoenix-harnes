@@ -163,4 +163,28 @@ describe('universal artifact surface', () => {
       .toContain('data-phoenix-missing-image="true"')
   })
 
+  it('resolves generated-image attachments into self-contained HTML without model-supplied base64', async () => {
+    const picture = {
+      attachmentId: 'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+      mediaType: 'image/png', bytes: 68, width: 1, height: 1, name: 'hero.png',
+    }
+    const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4//8/AwAI/AL+e6I6JwAAAABJRU5ErkJggg=='
+    const loadImage = vi.fn().mockResolvedValue('data:image/png;base64,' + png)
+    render(<UniversalArtifactSurface artifact={normalizeHardnessArtifact({
+      id: 'attachment-page', title: 'Kira con imagen', mime: 'application/vnd.phoenix.canvas+html',
+      data: { entry: 'index.html', files: {
+        'index.html': '<h1>Kira</h1><img src="hero.png" alt="Portada">',
+        'hero.png': { attachment: picture },
+      } },
+      executable: false,
+    })} loadImage={loadImage} onStop={() => {}} />)
+    await waitFor(() => {
+      expect(screen.getByTitle('Kira con imagen').getAttribute('srcdoc'))
+        .toContain('src="data:image/png;base64,')
+    })
+    expect(loadImage).toHaveBeenCalledWith(picture)
+    expect(screen.getByTitle('Kira con imagen').getAttribute('srcdoc'))
+      .not.toContain('data-phoenix-missing-image')
+  })
+
 })
