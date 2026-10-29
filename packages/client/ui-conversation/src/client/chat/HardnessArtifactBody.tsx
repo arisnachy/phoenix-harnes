@@ -22,6 +22,7 @@ interface ArtifactBodyProps {
   readonly title: string
   readonly executable?: boolean
   readonly renderMessageImages?: RenderMessageImages
+  readonly loadImage?: (attachment: ImageAttachmentRef) => Promise<string>
 }
 
 type JsonRecord = Readonly<Record<string, unknown>>
@@ -735,13 +736,82 @@ function GameStudioPreview({ html, title }: { readonly html: string; readonly ti
   )
 }
 
-function RecordPreview({ record, mime, expanded, title, executable = true, renderMessageImages }: {
+/** Resolve image attachment references without making the model reproduce binary bytes. */
+function BundledWebsitePreview({ entry, files, title, executable, loadImage }: {
+  readonly entry: string
+  readonly files: Readonly<Record<string, unknown>>
+  readonly title: string
+  readonly executable: boolean
+  readonly loadImage?: (attachment: ImageAttachmentRef) => Promise<string>
+}) {
+  const [resolved, setResolved] = useState<Readonly<Record<string, unknown>>>(files)
+  const [error, setError] = useState<string>()
+  useEffect(() => {
+    setResolved(files)
+    setError(undefined)
+    const attachments = Object.entries(files).flatMap(([path, value]) => {
+      const attachment = imageAttachment(isRecord(value) ? value.attachment ?? value : undefined)
+      return attachment === undefined ? [] : [{ path, attachment }]
+    })
+    if (attachments.length === 0) return
+    if (loadImage === undefined) {
+      setError('Las imágenes adjuntas requieren el servicio de imágenes autorizado de PHOENIX.')
+      return
+    }
+    let cancelled = false
+    const embed = async (): Promise<void> => {
+      const next: Record<string, unknown> = { ...files }
+      const failures: string[] = []
+      await Promise.all(attachments.map(async ({ path, attachment }) => {
+        try {
+          const source = await loadImage(attachment)
+          let dataUri: string
+          if (/^data:image\\/(?:png|jpeg|webp|gif);base64,/iu.test(source)) {
+            dataUri = source
+          } else if (source.startsWith('blob:')) {
+            const response = await fetch(source)
+            if (!response.ok) throw new Error('Image bytes unavailable')
+            const blob = await response.blob()
+            if (blob.size > 8 * 1024 * 1024) throw new Error('Image exceeds preview limit')
+            dataUri = await new Promise<string>((resolve, reject) => {
+              const reader = new FileReader()
+              reader.onload = () => typeof reader.result === 'string'
+                ? resolve(reader.result) : reject(new Error('Invalid image data'))
+              reader.onerror = () => reject(new Error('Unable to read image'))
+              reader.readAsDataURL(blob)
+            })
+          } else {
+            throw new Error('Unsupported image source')
+          }
+          if (!dataUri.startsWith('data:' + attachment.mediaType + ';base64,')) throw new Error('MIME mismatch')
+          next[path] = { mime: attachment.mediaType, base64: dataUri }
+        } catch {
+          failures.push(path)
+        }
+      }))
+      if (!cancelled) {
+        setResolved(next)
+        if (failures.length > 0) setError('No se pudieron cargar imágenes: ' + failures.join(', '))
+      }
+    }
+    void embed()
+    return () => { cancelled = true }
+  }, [files, loadImage])
+  const html = useMemo(() => inlineBundledImages(entry, files[entry] as string, resolved), [entry, files, resolved])
+  return <div className={styles.stack}>
+    {error !== undefined && <p className={styles.note} role="alert">{error}</p>}
+    <MiniApp html={html} title={title} executable={executable} />
+  </div>
+}
+
+function RecordPreview({ record, mime, expanded, title, executable = true, renderMessageImages, loadImage }: {
   readonly record: JsonRecord
   readonly mime: string
   readonly expanded: boolean
   readonly title: string
   readonly executable?: boolean
   readonly renderMessageImages?: RenderMessageImages
+  readonly loadImage?: (attachment: ImageAttachmentRef) => Promise<string>
 }) {
   const attachment = imageAttachment(record.attachment)
   if (attachment !== undefined) {
@@ -793,12 +863,12 @@ function RecordPreview({ record, mime, expanded, title, executable = true, rende
     || visual !== undefined) return <PhoenixVisualizer spec={visual ?? record} />
   if (typeof record.entry === 'string' && isRecord(record.files)) {
     const html = typeof record.files[record.entry] === 'string' ? record.files[record.entry] as string : undefined
-    if (html !== undefined) return <MiniApp html={inlineBundledImages(record.entry, html, record.files)} title={title} executable={executable} />
+    if (html !== undefined) return <BundledWebsitePreview entry={record.entry} files={record.files} title={title} executable={executable} {...loadImage === undefined ? {} : { loadImage }} />
   }
   return <pre className={styles.code}>{JSON.stringify(record, null, 2)}</pre>
 }
 
-export function HardnessArtifactBody({ mime, data, expanded, title, executable = true, renderMessageImages }: ArtifactBodyProps) {
+export function HardnessArtifactBody({ mime, data, expanded, title, executable = true, renderMessageImages, loadImage }: ArtifactBodyProps) {
   if (mime === 'application/vnd.phoenix.game+godot-web') return <GodotWebGamePreview payload={data} title={title} />
   if (mime === 'application/vnd.phoenix.comic+html') return typeof data === 'string'
     ? <ComicStudioPreview html={data} title={title} />
@@ -838,6 +908,7 @@ export function HardnessArtifactBody({ mime, data, expanded, title, executable =
           title={title}
           executable={executable}
           {...renderMessageImages === undefined ? {} : { renderMessageImages }}
+          {...loadImage === undefined ? {} : { loadImage }}
         />
       }
       if (parsed !== undefined) return <pre className={styles.code}>{JSON.stringify(parsed, null, 2)}</pre>
@@ -851,5 +922,6 @@ export function HardnessArtifactBody({ mime, data, expanded, title, executable =
     title={title}
     executable={executable}
     {...renderMessageImages === undefined ? {} : { renderMessageImages }}
+    {...loadImage === undefined ? {} : { loadImage }}
   />
 }
