@@ -176,3 +176,38 @@ Se puede deshabilitar solo este paso automático con
 `PHOENIX_SPORTS_AUTO_PYTHON_INSTALL=0`.
 Una instalación correcta de Python todavía necesita instalar Playwright
 y comprobar el ejecutable real de Chromium antes de habilitar scraping.
+
+## Autorreparación desde el chat y runtime preparado
+
+El supervisor Windows puede ejecutar una carpeta `phoenix-runtime-*` que
+no contiene scripts. El lanzador busca primero el repositorio original
+`PHOENIX_INSTALL_ROOT`, y luego el runtime. Si falta la instalación
+el comando `sports_chat_sources_health` inicia el instalador en segundo
+plano y devuelve `autoRepair.status` (`started`, `running`, `installed`,
+`retry-cooldown`, `missing-installer`, `launch-error`).
+El comando `sports_chat_sources_repair` permite reintentar a petición
+del usuario si hay un error reciente, respetando el bloqueo de instancia.
+La reparación deja un registro desde el primer lanzamiento en
+`~/.phoenix/sports-sources/install.log`, incluso antes de crear
+`manifest.json`. Los componentes no se muestran como instalados hasta
+que sus verificaciones terminen.
+
+**No pegar instrucciones destinadas a Kira en PowerShell.**
+En la consola de Windows únicamente ejecutar comandos verdaderos:
+
+```powershell
+cd "C:\Users\arisn\OneDrive\Documentos\ChatGPT\Phoenix"
+node scripts/phoenix-sports-source-bootstrap.mjs --status
+Get-Content "$HOME\.phoenix\sports-sources\install.log" -Tail 50
+```
+
+En el **chat de Kira** escribir en español:
+
+> Revisa mis proveedores deportivos con sports_chat_sources_health;
+> si faltan, llama sports_chat_sources_repair y comprueba después
+> el avance del instalador. Cuando OddsHarvester esté disponible,
+> busca cuotas NHL con casa, mercado, período y actualización reales.
+
+La instalación de Python/Chromium o la conexión a OddsPortal puede
+fallar por Internet, políticas del dispositivo y cambios externos;
+las pruebas de código no equivalen a un scrapeo en el Windows del usuario.
