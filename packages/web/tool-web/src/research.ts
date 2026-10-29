@@ -364,11 +364,11 @@ export function applyResearchTools(ctx: Context, maxResults: number, timeoutMs: 
       if (domain !== undefined && domain !== '' && !Object.hasOwn(RESEARCH_SOURCES, domain)) {
         throw new ToolArgsError(['unknown domain; use research_sources without a domain to list domains'])
       }
-      return {
+      return Promise.resolve({
         domains: Object.keys(RESEARCH_SOURCES),
         sources: domain === undefined || domain === '' ? [] : [...(RESEARCH_SOURCES[domain] ?? [])],
         note: 'Candidates require independent checks for API capability, freshness, credentials, rate limits, license and coverage.',
-      }
+      })
     },
   }))
   ctx.tools.register(defineTool({
