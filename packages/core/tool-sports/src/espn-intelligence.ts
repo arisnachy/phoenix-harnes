@@ -218,8 +218,12 @@ function summaryFacts(data:unknown):{heading:string;items:Item[];image?:string}{
       array(c.records).map(r=>txt(row(r).summary,45)).filter(Boolean).join(' · '),t.logo??t.logos)
   }).filter((x):x is Item=>x!==null)
   const venue=row(comp.venue)
-  const facts=[item('Estado',row(row(h.status).type).description??row(h.status).displayClock),
-    item('Sede',venue.fullName),item('Fecha',comp.date??h.date),
+  const evidence=(field:string,value:unknown):Item|null=>{
+    const verified=txt(value,180)
+    return verified?item(field,verified):null
+  }
+  const facts=[evidence('Estado',row(row(h.status).type).description??row(h.status).displayClock),
+    evidence('Sede',venue.fullName),evidence('Fecha',comp.date??h.date),
     ...teams].filter((x):x is Item=>x!==null)
   return {heading:'Partido y participantes',items:facts}
 }
