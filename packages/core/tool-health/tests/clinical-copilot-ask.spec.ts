@@ -43,7 +43,7 @@ describe('Kira Clinical Copilot through existing ASK', () => {
   it('does not turn timed-out sensitive ASK into a patient fact or consent',async()=>{
     const ctx=await clinic()
     ctx.userQuestions.registerProvider({
-      async ask(){return { automatic:true,answers:[{ id:'health-ask-onset',selected:[] }] }}
+      async ask(){return { automatic:true,answers:[{ id:'health-ask-onset',selected:[] }] }},
     })
     const result=await ctx.tools.execute({
       callId:callId('health-ask-expire-1'),signal:new AbortController().signal,
