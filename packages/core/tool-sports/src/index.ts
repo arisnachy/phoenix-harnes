@@ -15,12 +15,14 @@ import { communityOpinions } from './sports-community.ts'
 import { evidenceTicket } from './evidence-ticket.ts'
 import { evidencePricedTicket } from './evidence-priced-ticket.ts'
 import { hydrateSportsSources,sportsSourcesHealth } from './sports-source-health.ts'
+import { investigateEventDeep } from './sports-deep-context.ts'
+import { compareBettingMarkets,supportedMarketFamilies } from './sports-market-intelligence.ts'
 
 export const name = 'tool-sports'
 export const inject = ['tools','systemPrompt']
 const sportsEnv=():NodeJS.ProcessEnv=>hydrateSportsSources(process.env)
 const GUIDANCE = [
-  'Solo cuando el usuario pida deportes, juegos del día, jugadores, cuotas o tickets, consulta las herramientas sports_chat_catalog, sports_chat_discover, sports_chat_games, sports_chat_mlb_pitchers, sports_chat_odds, sports_chat_ticket, sports_chat_ticket_research, sports_chat_ticket_research_auto, sports_chat_nba_research, sports_chat_research, sports_chat_historical_odds, sports_chat_community_opinions, sports_chat_odds_keyless, sports_chat_sources_health, sports_chat_ticket_evidence_auto o sports_chat_ticket_evidence_priced_auto.',
+  'Solo cuando el usuario pida deportes, juegos del día, jugadores, cuotas o tickets, consulta las herramientas sports_chat_catalog, sports_chat_discover, sports_chat_games, sports_chat_mlb_pitchers, sports_chat_odds, sports_chat_ticket, sports_chat_ticket_research, sports_chat_ticket_research_auto, sports_chat_nba_research, sports_chat_research, sports_chat_historical_odds, sports_chat_community_opinions, sports_chat_odds_keyless, sports_chat_sources_health, sports_chat_deep_research, sports_chat_market_intelligence, sports_chat_ticket_evidence_auto o sports_chat_ticket_evidence_priced_auto.',
   'NO abras pantallas independientes ni crees entradas de menú. Antes de redactar una cartelera o boleto, llama sports_chat_games y, cuando corresponda, sports_chat_mlb_pitchers / sports_chat_odds / sports_chat_ticket. Phoenix dibuja de manera nativa las tarjetas verificadas de los resultados. NO copies el JSON de los resultados en la respuesta, NO escribas fences generative-ui ni bloques de código, aunque una herramienta los incluya en sus datos. No dibujes tickets con caracteres ASCII, bordes de texto ni bloques de código etiquetados text: para eventos y selecciones reales usa exclusivamente los contratos nativos, conservando la presentación original de Phoenix. Si el usuario quiere solo una demostración, descríbela explícitamente como ficticia y no introduzcas cuotas o equipos inventados como hechos. Explica los hallazgos y las fuentes con un texto humano breve.',
   'INVESTIGACIÓN NBA: antes de defender cualquier favorito o selección NBA, consulta sports_chat_nba_research (y sports_chat_odds cuando existan cuotas). Contrasta forma en marcadores finales, márgenes, descanso y muestra; revisa además informe oficial de lesiones, rotaciones, estadísticas avanzadas, rival, localía y movimiento de precios desde fuentes autorizadas. Lo no consultado debe permanecer explícitamente SIN VERIFICAR. No transformes la forma descriptiva en porcentajes de victoria ni cites atletas que no tengan plantilla actual confirmada. Un ticket automático se considera SOLO una preselección, nunca una investigación completa.',
   'INVESTIGAR TODOS LOS DEPORTES: llama sports_chat_research para estudiar los marcadores finales recientes del deporte y liga que el usuario pidió. Para MLB complementa con pitchers y bullpen; fútbol exige revisar goles, localía, bajas, forma y opciones 1X2/doble oportunidad; tenis requiere superficie, historial y fatiga; hockey necesita portero y estadísticas defensivas; en otros deportes usa métricas propias. Si el informe indica insuficiente, no proclames favorito respaldado. sports_chat_historical_odds agrega históricos de ambos repositorios SportsbookReview para entrenamiento/backtest, jamás cuotas actuales; y sports_chat_community_opinions observa pronósticos públicos solo como opinión separada.',
@@ -29,6 +31,7 @@ const GUIDANCE = [
   'PROCEDIMIENTO DE INVESTIGACIÓN: nunca digas que un ticket está profundamente investigado solo por salir en 2 segundos o por cinco marcadores. Para 5/6 patas emplea sports_chat_ticket_evidence_priced_auto cuando haya proveedor de cuotas habilitado; si no, sports_chat_ticket_evidence_auto. Exige historial con al menos cinco partidos terminados DIFERENTES por equipo (NFL tres), coherencia entre forma y margen, y comprobación separada de resumen ESPN y disponibilidad de parte médico. Las ausencias, el portero NHL, rotaciones NBA, pitchers MLB, once y xG en fútbol, superficie en tenis y mercados actuales que no se hayan confirmado deben quedar marcados PENDIENTES, sin atribuir jugadores, estatus ni probabilidad inventados. Si hay menos de cinco/seis selecciones justificables, muestra borrador INCOMPLETO. La opción antigua sports_chat_ticket_research_auto solo vale para exploración, nunca como análisis profundo.',
   'EN VIVO SIN TOKENS: cuando el usuario pida juegos en vivo, marcadores actuales o seguimiento de los partidos de su ticket, llama sports_chat_games con liveOnly=true por cada liga incluida (o team/eventId para un partido). Conserva los nombres y liga del ticket sin inventar equivalencias. La cartelera y las tarjetas consultan ESPN directamente desde el navegador de manera compartida y periódica mientras están visibles, sin llamadas adicionales al modelo. Las situaciones de MLB incluyen bases/outs/conteo cuando ESPN los publica; NBA ofrece período, reloj, parciales y última jugada; NFL, NHL, fútbol y otras disciplinas muestran sus datos disponibles. No afirmes transmisión de video ni tiempo real garantizado: informa si la fuente se retrasa o no publica detalles.',
   'Cuando el usuario pida una cartelera, deja que sports_chat_games entregue una sola cartelera compacta en el chat con hasta 25 encuentros reales. Para un partido, cruce o equipo concreto, pasa team, opponent o eventId a sports_chat_games: así se mantiene la sports_game_card detallada existente. No cambies el menú, la página ni la caja del chat. Nunca inventes eventos, cuotas, lanzadores, lesiones ni resultados ausentes.',
+  'MERCADOS MÚLTIPLES: antes de elegir un ganador, consulta sports_chat_market_intelligence para evaluar 1X2, doble oportunidad 1X/X2, over/under, BTTS, spread o handicap según el deporte y mercados REALES presentes. 1/cuota representa expectativa del precio del bookmaker, NO tu probabilidad calibrada; no digas que una apuesta es la más probable basándote solo en su precio. Para investigar jugadores, lesiones, noticias, plantillas y métricas de cada evento usa sports_chat_deep_research con el ID ESPN confirmado. No trates titulares, porteros ni jugadores mencionados en noticias como confirmados si la fuente no lo dice. ',
   'DOBLE OPORTUNIDAD: si el usuario quiere 1X/X2, indica marketPreference=double_chance en sports_chat_ticket_evidence_priced_auto para encuentros de fútbol; elige solo cuotas auténticas del mismo bookmaker. 1X cubre local o empate; X2, visita o empate. No transformes ganador directo en doble oportunidad sin consultar ese mercado. El usuario puede pedir 5 o 6 selecciones y debe ver razones y riesgos, no una promesa de acierto.',
   'CONTRATO DE PATAS: cuando el usuario pide 5 patas, el resultado DEBE contener exactamente cinco selecciones verificadas; jamás presentes 1 de 5 como ticket completo. Si faltan datos, muestra explícitamente el número conseguido y el número pendiente como borrador incompleto. Respeta igualmente cualquier otro número de 1 a 6. No afirmes que una combinada ganará.',
   'Si se pide un ticket y no hay cuotas, no finjas precio ni retorno. Prefiere sports_chat_ticket_evidence_auto para calcular una preselección con marcadores históricos verificables. sports_chat_ticket_research_auto es solo un respaldo antiguo por récord y NO cumple investigación deportiva profunda. Si ya tienes IDs y fundamentos por partido usa sports_chat_ticket_research. Un borrador de menos patas debe mostrarse INCOMPLETO. Si no hay partidos verificables, dilo y busca otras ligas y fechas sin inventar mercados.',
@@ -59,6 +62,65 @@ export function apply(ctx: Context): void {
         warning:'Configuración o CLI disponible NO equivale a cuotas actuales. Para comprobar precios requiere consulta de mercado con marca de tiempo y casa. Los archivos de SportsbookReview y MLB no son cuotas vivas.'})
     },
     presentCall:()=>({card:'generic',title:'Comprobar proveedores deportivos y datos históricos',kind:'read' as const}),
+  }))
+  ctx.tools.register(defineTool({
+    name:'sports_chat_deep_research',
+    description:'Investiga un partido ESPN confirmado: noticias relacionadas, partes médicos, plantillas, estadísticas verificadas de jugadores y confirmación independiente MLB/NHL. Nunca inventa titulares ni probabilidades.',
+    parameters:{
+      sport:{type:'string',required:true,description:'Deporte ESPN, p. ej. hockey, basketball, soccer, football o baseball.'},
+      league:{type:'string',required:true,description:'Liga ESPN comprobada, p. ej. nhl, nba, eng.1 o mlb.'},
+      eventId:{type:'string',required:true,description:'ID exacto del evento obtenido de la cartelera ESPN.'},
+    },
+    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    isConcurrencySafe:()=>true,
+    async execute(args){
+      const result=await investigateEventDeep(args.sport,args.league,args.eventId,fetch,Date.now(),sportsEnv())
+      return JSON.stringify({...result,instruction:'Identifica qué noticias hablan realmente de los equipos. Los recuentos de lesiones y las plantillas NO confirman alineaciones. Si la fuente no aporta estadísticas individuales no atribuyas rendimiento ni pronósticos. Contrasta por separado mercados de cuotas reales.'})
+    },
+    presentCall:()=>({card:'generic',title:'Investigar noticias, estadísticas y bajas de un evento',kind:'read' as const}),
+  }))
+  ctx.tools.register(defineTool({
+    name:'sports_chat_market_intelligence',
+    description:'Compara mercados reales vigentes por bookmaker: ganador, doble oportunidad, totales, ambos marcan y handicap cuando la fuente los publicó. Solo calcula probabilidad IMPLÍCITA del precio, nunca probabilidad de acierto propia.',
+    parameters:{
+      sportKey:{type:'string',required:true,description:'Clave de mercado: soccer_epl, icehockey_nhl, basketball_nba, baseball_mlb, etc.'},
+      date:{type:'string',description:'Fecha YYYY-MM-DD en Santo Domingo para scraping local, por defecto hoy.'},
+    },
+    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    isConcurrencySafe:()=>true,
+    async execute(args){
+      const env=sportsEnv()
+      const sources=await sportsSourcesHealth(env)
+      const odds=await Promise.allSettled([
+        marketOdds(args.sportKey,'h2h,totals,spreads',env,fetch),
+        ...(env.PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED==='1'?[
+          (async()=>{
+            const routes:Record<string,{sport:string;markets:string[]}> = {
+              soccer:{sport:'football',markets:['1x2','double_chance','over_under']},
+              basketball:{sport:'basketball',markets:['moneyline','over_under']},
+              baseball:{sport:'baseball',markets:['moneyline','over_under']},
+              americanfootball:{sport:'american-football',markets:['moneyline','over_under']},
+              icehockey:{sport:'ice-hockey',markets:['home_away','over_under']},
+              tennis:{sport:'tennis',markets:['match_winner','over_under']},
+            }
+            const route=routes[args.sportKey.split('_')[0]??'']
+            if(!route)return []
+            const quotes=await Promise.allSettled(route.markets.map(m=>
+              keylessOdds(route.sport,m,args.date,env)))
+            return quotes.flatMap(x=>x.status==='fulfilled'?x.value.map(q=>({
+              ...q,timeIso:q.time,
+            })):[])
+          })(),
+        ]:[]),
+      ])
+      const combined=odds.flatMap(x=>x.status==='fulfilled'?x.value:[])
+      const comparison=compareBettingMarkets(combined)
+      return JSON.stringify({sportKey:args.sportKey,availableMarkets:supportedMarketFamilies,
+        ...comparison,sourceReadiness:sources,
+        sourcesAttempted:odds.length,quotesObserved:combined.length,
+        instruction:'Los precios implícitos NO son probabilidades predictivas. Mercados superpuestos no deben normalizarse ni combinarse como independientes. Si no existen cuotas, noticia o lesión verificables, indica explícitamente que falta evidencia. No fabriques un ticket de mayor probabilidad.'})
+    },
+    presentCall:()=>({card:'generic',title:'Comparar mercados y cuotas verificadas',kind:'read' as const}),
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_catalog',
@@ -323,7 +385,8 @@ export function apply(ctx: Context): void {
         researchStandard:result.researchStandard,scannedSports:result.scannedSports,
         selectedSports:result.selectedSports,multisportSatisfied:result.multisportSatisfied,
         pregameSummariesVerified:result.pregameSummariesVerified,
-        injuryFeedsVerified:result.injuryFeedsVerified,priced:false,placed:false,modelProbabilities:false,
+        injuryFeedsVerified:result.injuryFeedsVerified,deepContextChecked:result.deepContextChecked,
+        newsMatched:result.newsMatched,playerStatsChecked:result.playerStatsChecked,priced:false,placed:false,modelProbabilities:false,
         instruction:result.complete?
           'Ticket con exactamente las patas pedidas y resultados históricos verificados, pero aún no cotizado ni calibrado; requiere lesiones, modelos específicos, noticias y precio del operador antes de defenderlo como apuestas de mayor probabilidad.':
           'Borrador incompleto. No sustituyas patas ni inventes cuotas. Indica cuántas selecciones se pudieron fundamentar.'})
