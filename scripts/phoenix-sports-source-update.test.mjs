@@ -39,3 +39,33 @@ test('status probe does not perform network installs or leak credentials',async(
   assert.equal(typeof report.executable,'boolean')
   assert.ok(!JSON.stringify(report).includes('THE_ODDS_API_KEY'))
 })
+
+test('startup dispatches a detached worker without running installer inline',async()=>{
+  const {mkdtempSync,rmSync,existsSync}=await import('node:fs')
+  const {tmpdir}=await import('node:os')
+  const home=mkdtempSync(join(tmpdir(),'phoenix-sports-startup-'))
+  const priorHome=process.env.PHOENIX_SPORTS_SOURCE_HOME
+  const priorOptOut=process.env.PHOENIX_SPORTS_SOURCES_AUTO_INSTALL
+  try{
+    process.env.PHOENIX_SPORTS_SOURCE_HOME=home
+    delete process.env.PHOENIX_SPORTS_SOURCES_AUTO_INSTALL
+    const {start}=await import('./phoenix-sports-source-auto.mjs?test='+Date.now())
+    let launched=0,unrefCalled=false
+    start((_bin,args,options)=>{
+      launched++
+      assert.deepEqual(args.slice(-1),['--worker'])
+      assert.equal(options.detached,true)
+      assert.equal(options.stdio,'ignore')
+      return {unref(){unrefCalled=true}}
+    })
+    assert.equal(launched,1)
+    assert.equal(unrefCalled,true)
+    assert.equal(existsSync(join(home,'install.lock')),true)
+  }finally{
+    if(priorHome===undefined)delete process.env.PHOENIX_SPORTS_SOURCE_HOME
+    else process.env.PHOENIX_SPORTS_SOURCE_HOME=priorHome
+    if(priorOptOut===undefined)delete process.env.PHOENIX_SPORTS_SOURCES_AUTO_INSTALL
+    else process.env.PHOENIX_SPORTS_SOURCES_AUTO_INSTALL=priorOptOut
+    rmSync(home,{recursive:true,force:true})
+  }
+})
