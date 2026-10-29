@@ -41,11 +41,50 @@ export function hydrateSportsSources(env:NodeJS.ProcessEnv=process.env):NodeJS.P
   return next
 }
 
+export type ManagedSportsInstall = {
+  configured:boolean
+  updatedAt:string|null
+  logPath:string
+  components:Array<{name:string;status:string;lastError:string|null}>
+  state:'not-started'|'installing'|'partial'|'installed'|'failed'
+  playwrightVerifiedAtInstall:boolean
+}
+/** Read install progress without executing a scraper, network requests or
+ * exposing API credentials. The installer only marks Playwright installed
+ * after verifying an actual Chromium executable.
+ */
+export function managedSportsInstallStatus(env:NodeJS.ProcessEnv=process.env):ManagedSportsInstall {
+  const root=resolve(env.PHOENIX_SPORTS_SOURCE_HOME?.trim()||
+    join(homedir(),'.phoenix','sports-sources'))
+  const blank:ManagedSportsInstall={configured:false,updatedAt:null,
+    logPath:join(root,'install.log'),components:[],state:'not-started',
+    playwrightVerifiedAtInstall:false}
+  try{
+    const data=JSON.parse(readFileSync(join(root,'manifest.json'),'utf8')) as {
+      schema?:number;updatedAt?:string
+      components?:Record<string,{status?:string;message?:string}>
+    }
+    if(data.schema!==2||!data.components)return blank
+    const components=Object.entries(data.components).map(([name,row])=>({
+      name,status:row.status??'unknown',lastError:row.status==='error'?
+        String(row.message??'Error sin detalle').slice(0,180):null,
+    }))
+    const statuses=components.map(x=>x.status)
+    const state=components.length===0?'not-started':
+      statuses.some(x=>x==='installing')?'installing':
+      statuses.every(x=>x==='installed')?'installed':
+      statuses.some(x=>x==='installed')?'partial':'failed'
+    return{configured:true,updatedAt:data.updatedAt??null,
+      logPath:join(root,'install.log'),components,state,
+      playwrightVerifiedAtInstall:components.some(x=>
+        x.name==='OddsHarvester + Playwright'&&x.status==='installed')}
+  }catch{return blank}
+}
 const run = promisify(execFile)
 export type SportsSourceHealth = {
   provider:string
   purpose:'live-odds'|'historical-odds'|'event-data'
-  status:'configured'|'disabled'|'missing-binary'|'missing-files'|'not-configured'
+  status:'configured'|'disabled'|'missing-binary'|'missing-files'|'not-configured'|'installing'|'install-error'
   note:string
 }
 const exists = async(file:string):Promise<boolean>=>{
@@ -64,6 +103,10 @@ export async function sportsSourcesHealth(
   fileExists:(file:string)=>Promise<boolean>=exists,
 ):Promise<SportsSourceHealth[]>{
   const live:SportsSourceHealth[]=[]
+  const managed=managedSportsInstallStatus(env)
+  const oddsStep=managed.components.find(x=>x.name==='OddsHarvester + Playwright')
+  const sbrStep=managed.components.find(x=>x.name.startsWith('SportsbookReview NFL'))
+  const mlbStep=managed.components.find(x=>x.name.startsWith('MLB historic'))
   live.push({provider:'ESPN Site/Core',purpose:'event-data',
     status:env.PHOENIX_SPORTS_ESPN_DISABLED==='1'?'disabled':'configured',
     note:'Marcadores y, solo si ESPN publica líneas recientes, cuotas; no es una casa de apuestas.'})
@@ -74,8 +117,14 @@ export async function sportsSourcesHealth(
       status:found?'configured':'missing-binary',
       note:found?'CLI disponible; aún falta comprobar cuotas reales y acceso a OddsPortal.':
         'CLI no ejecutable. Instala oddsharvester y Playwright Chromium en el Windows que ejecuta PHOENIX.'})
-  }else live.push({provider:'jordantete/OddsHarvester',purpose:'live-odds',status:'disabled',
-    note:'PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED no está activado; NO se ejecutó scraping.'})
+  }else live.push({provider:'jordantete/OddsHarvester',purpose:'live-odds',
+    status:oddsStep?.status==='installing'?'installing':
+      oddsStep?.status==='error'?'install-error':'disabled',
+    note:(oddsStep?.status==='error'?'Error del instalador: '+oddsStep.lastError+'; ':
+      oddsStep?.status==='installing'?'Instalación en curso; ':
+        oddsStep?.status==='installed'?'CLI instalada; comprobación de acceso a OddsPortal pendiente; ':'')+
+      'PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED no está activado; NO se ejecutó scraping. '+
+      'Comprueba sports_chat_sources_health e install.log.'})
   live.push({provider:'The Odds API v4',purpose:'live-odds',
     status:env.THE_ODDS_API_KEY?.trim()?'configured':'not-configured',
     note:'La clave configurada no demuestra acceso, cuota vigente ni cobertura de ligas.'})
@@ -88,11 +137,15 @@ export async function sportsSourcesHealth(
     sport=>fileExists(join(folder,'sportsbookreview-'+sport+'.json')))):[]
   const mlb=configured&&await fileExists(join(folder,'mlb-odds.json'))
   live.push({provider:'flancast90/sportsbookreview-scraper',purpose:'historical-odds',
-    status:!configured?'not-configured':sbr.some(Boolean)?'configured':'missing-files',
+    status:!configured?(sbrStep?.status==='installing'?'installing':
+      sbrStep?.status==='error'?'install-error':'not-configured'):
+      sbr.every(Boolean)?'configured':'missing-files',
     note:!configured?'PHOENIX_SPORTS_HISTORY_DIR sin ruta absoluta; el motor no descargó su histórico.':
       'Archivos presentes: '+sbr.filter(Boolean).length+'/4; solo históricos, no cotizaciones actuales.'})
   live.push({provider:'ArnavSaraogi/mlb-odds-scraper',purpose:'historical-odds',
-    status:!configured?'not-configured':mlb?'configured':'missing-files',
+    status:!configured?(mlbStep?.status==='installing'?'installing':
+      mlbStep?.status==='error'?'install-error':'not-configured'):
+      mlb?'configured':'missing-files',
     note:!configured?'PHOENIX_SPORTS_HISTORY_DIR sin ruta absoluta; el motor no descargó su histórico.':
       mlb?'Archivo histórico MLB encontrado; contenido y actualidad no verificados.':
         'Falta mlb-odds.json; no hay histórico MLB importado.'})
