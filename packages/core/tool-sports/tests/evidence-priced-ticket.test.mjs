@@ -163,3 +163,61 @@ test('X2 quotes are accepted only when five-game form favors the away team',asyn
   assert.equal(result.card.props.legs[0].selection,'X2 · Visita o empate')
   assert.equal(result.card.props.legs[0].price,'1.36')
 })
+
+test('automatic odds ticket uses the existing The Odds API adapter if keyless scraper is not enabled',async()=>{
+  let apiCalls=0
+  const withApi=async url=>{
+    if(String(url).includes('api.the-odds-api.com')){
+      apiCalls++
+      return new Response(JSON.stringify(Array.from({length:5},(_,i)=>({
+        id:'book-'+i,home_team:'Home '+i,away_team:'Away '+i,commence_time:kick,
+        bookmakers:[{key:'a',title:'Book A',last_update:'2026-10-28T14:45:00Z',markets:[{
+          key:'h2h',last_update:'2026-10-28T14:45:00Z',
+          outcomes:[
+            {name:'Home '+i,price:1.70},{name:'Away '+i,price:2.45},
+            {name:'Draw',price:3.2},
+          ],
+        }]}],
+      })),{status:200})
+    }
+    return feed(url)
+  }
+  const result=await evidencePricedTicket(5,date,'soccer',100,now,
+    {THE_ODDS_API_KEY:'mock-secret'},withApi)
+  assert.equal(apiCalls,1)
+  assert.equal(result.priced,true)
+  assert.equal(result.card.props.legs.length,5)
+  assert.equal(result.card.props.legs[0].price,'1.7')
+  assert.match(result.card.props.legs[0].rationale,/Resumen ESPN/)
+  assert.equal(result.card.props.legs[0].bookmaker,'Book A')
+})
+test('soccer two-outcome API prices cannot be mislabeled 1X2 without a draw outcome',async()=>{
+  const incomplete=async url=>{
+    if(String(url).includes('api.the-odds-api.com'))return new Response(JSON.stringify(
+      Array.from({length:5},(_,i)=>({
+        id:'b-'+i,home_team:'Home '+i,away_team:'Away '+i,commence_time:kick,
+        bookmakers:[{key:'a',title:'Book A',last_update:'2026-10-28T14:45:00Z',
+          markets:[{key:'h2h',outcomes:[{name:'Home '+i,price:1.7}]}]}],
+      }))))
+    return feed(url)
+  }
+  const result=await evidencePricedTicket(5,date,'soccer',100,now,
+    {THE_ODDS_API_KEY:'mock-secret'},incomplete)
+  assert.equal(result.priced,false)
+  assert.equal(result.quotedLegs,0)
+})
+test('stale bookmaker quotes do not receive a fresh ticket label',async()=>{
+  const stale=async url=>{
+    if(String(url).includes('api.the-odds-api.com'))return new Response(JSON.stringify(
+      Array.from({length:5},(_,i)=>({
+        id:'b-'+i,home_team:'Home '+i,away_team:'Away '+i,commence_time:kick,
+        bookmakers:[{key:'a',title:'Book A',last_update:'2026-10-27T10:00:00Z',
+          markets:[{key:'h2h',outcomes:[{name:'Home '+i,price:1.7},{name:'Draw',price:3.2}]}]}],
+      }))))
+    return feed(url)
+  }
+  const result=await evidencePricedTicket(5,date,'soccer',100,now,
+    {THE_ODDS_API_KEY:'mock-secret'},stale)
+  assert.equal(result.priced,false)
+  assert.equal(result.missingQuotes,5)
+})
