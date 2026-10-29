@@ -81,7 +81,7 @@ export function apply(ctx: Context): void {
     output:{ schema:{ type:'string' },render:(_a,v)=>[{ type:'text' as const,text:v }] },
     isConcurrencySafe:()=>true,
     async execute(args){
-      const result=await chatGames(args.sport,args.league,args.date)
+      const result=await chatGames(args.sport,args.league,args.date,process.env,fetch,args.liveOnly===true)
       const normalize=(name:string)=>name.normalize('NFD').replace(/[\u0300-\u036f]/gu,'').toLowerCase().trim()
       const matches=(name:unknown,wanted:string)=>typeof name==='string'&&normalize(name).includes(normalize(wanted))
       const selected=result.items.filter(game=>{
