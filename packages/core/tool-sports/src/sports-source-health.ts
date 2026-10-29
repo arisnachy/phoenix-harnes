@@ -83,6 +83,64 @@ export function managedSportsInstallStatus(env:NodeJS.ProcessEnv=process.env):Ma
         x.name==='OddsHarvester + Playwright'&&x.status==='installed')}
   }catch{return blank}
 }
+export type SportsRepairLaunch = {
+  status:'started'|'running'|'installed'|'retry-cooldown'|'disabled'
+    |'missing-installer'|'launch-error'|'error'
+  logPath:string
+  detail?:string
+  error?:string
+}
+/** A prepared runtime can omit development scripts. Check the original
+ * install checkout before searching the runtime and finally cwd.
+ */
+export function locateSportsAutoLauncher(
+  env:NodeJS.ProcessEnv=process.env,
+  candidates?:readonly string[],
+  fileExists:(path:string)=>boolean=existsSync,
+):{root:string;script:string}|null{
+  const roots=candidates??[
+    env.PHOENIX_INSTALL_ROOT??'',env.PHOENIX_RUNTIME_ROOT??'',process.cwd(),
+  ]
+  for(const raw of roots){
+    if(!raw)continue
+    const root=resolve(raw),script=join(root,'scripts','phoenix-sports-source-auto.mjs')
+    if(fileExists(script))return{root,script}
+  }
+  return null
+}
+/** A source-health request must not report "disabled" forever when the
+ * supervisor did not install dependencies. Start the existing detached,
+ * bounded installer; never download inside a model-facing tool call.
+ */
+export async function ensureSportsSourcesStarted(
+  env:NodeJS.ProcessEnv=process.env,
+  force=false,
+):Promise<SportsRepairLaunch>{
+  const current=managedSportsInstallStatus(env)
+  if(env.PHOENIX_SPORTS_SOURCES_AUTO_INSTALL==='0'||env.CI==='true'
+    ||env.NODE_ENV==='test')
+    return{status:'disabled',logPath:current.logPath}
+  const candidate=locateSportsAutoLauncher(env)
+  if(!candidate)return{status:'missing-installer',logPath:current.logPath,
+    detail:'El runtime no expone el script de instalación. Comprueba que PHOENIX_INSTALL_ROOT apunte al repositorio actualizado.'}
+  try{
+    const {stdout}=await run(process.execPath,[candidate.script,'--json',...(force?['--force']:[])],{
+      cwd:candidate.root,
+      env:{...process.env,...env,PHOENIX_INSTALL_ROOT:env.PHOENIX_INSTALL_ROOT??candidate.root},
+      shell:false,windowsHide:true,timeout:8_000,maxBuffer:16_000,
+    })
+    const parsed=JSON.parse(stdout.trim()) as Partial<SportsRepairLaunch>
+    const allowed=new Set(['started','running','installed','retry-cooldown',
+      'disabled','missing-installer','launch-error'])
+    if(!parsed.status||!allowed.has(parsed.status))throw Error('Estado del lanzador inválido')
+    return{status:parsed.status as SportsRepairLaunch['status'],
+      logPath:current.logPath,
+      ...(parsed.error?{detail:String(parsed.error).slice(0,240)}:{})}
+  }catch(error){
+    return{status:'error',logPath:current.logPath,
+      detail:String(error instanceof Error?error.message:error).slice(0,240)}
+  }
+}
 const run = promisify(execFile)
 export type SportsSourceHealth = {
   provider:string
