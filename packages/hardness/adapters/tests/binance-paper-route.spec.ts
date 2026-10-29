@@ -137,7 +137,7 @@ describe('Binance chat viewer HTTP integration', () => {
     expect(reply.status).toBe(200)
     expect(await reply.json()).toMatchObject({
       configured: true, connected: true, toolCount: 1,
-      authorizationAvailability: 'connected', knownProviderRejection: null,
+      authorizationAvailability: 'oauth-unverified', knownProviderRejection: '3346001',
       tradeScopeVerified: false, accountVerified: false,
     })
     const rejected = await fetch(origin + '/phoenix-trading/paper/mcp-reconnect', {
