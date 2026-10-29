@@ -126,7 +126,7 @@ Use `sports_chat_matchup_factors` with the **verified ESPN** `sport`, `league`,
   totals are **simple descriptive scenario baselines**, requiring at least
   three valid team samples per period; not calibrated predictions.
 - Existing ESPN context is reused for rosters, news and injury reports.
-  Rotations, current starters, wind/sun, roof configuration, bullpen fatigue,
+  Current weather is optionally sourced from Open-Meteo (CC BY 4.0; check\n  commercial API licensing) **only when venue coordinates occur in ESPN**.\n  It remains a forecast, not a quantified causal scoring adjustment.\n  Rotations, current starters, wind/sun causal impact, roof configuration, bullpen fatigue,
   opponent-adjusted metrics and sport-specific advanced factors are explicitly
   marked unverified unless separately supplied by a verified source.
 - Bookmaker outcomes must match both teams AND game time and remain current
