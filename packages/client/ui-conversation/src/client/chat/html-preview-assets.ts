@@ -63,7 +63,6 @@ export function inlineBundledImages(entry: string, html: string, files: AssetMap
     const uri = assetUri(normalized, raw)
     if (uri !== undefined) resources.set(normalized, uri)
   }
-  if (resources.size === 0) return html
   const resolve = (reference: string): string | undefined => {
     if (/^(?:[a-z][a-z\d+.-]*:|\/\/|#)/iu.test(reference)) return undefined
     let decoded: string
@@ -124,4 +123,27 @@ export function hasExternalImageReferences(html: string): boolean {
  */
 export function hasExecutableHtmlBehavior(html: string): boolean {
   return /<script\b|\bon[a-z][a-z\d_-]*\s*=|\b(?:java|vb)script\s*:/iu.test(html)
+}
+
+/**
+ * Standalone browser-tab shell for an untrusted HTML artifact.  The opaque-origin
+ * sandboxed iframe is essential: a blob: URL inherits Phoenix's origin and
+ * MUST NOT run authored HTML directly in the top-level document.
+ */
+export function isolatedHtmlPreviewWindow(documentHtml: string, title: string, executable: boolean): string {
+  const escapeAttribute = (value: string): string => value.replace(/&/gu, '&amp;')
+    .replace(/</gu, '&lt;').replace(/>/gu, '&gt;').replace(/"/gu, '&quot;').replace(/'/gu, '&#39;')
+  const safeTitle = escapeAttribute(title)
+  const sandbox = executable ? 'allow-scripts' : ''
+  return '<!doctype html><html lang="es"><head><meta charset="utf-8">'
+    + '<meta name="viewport" content="width=device-width, initial-scale=1">'
+    + '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; '
+    + 'style-src \'unsafe-inline\'; script-src \'unsafe-inline\'; frame-src \'self\' blob: about:; '
+    + 'img-src data: blob:; connect-src \'none\'; object-src \'none\'; base-uri \'none\'; form-action \'none\'">'
+    + '<title>' + safeTitle + '</title>'
+    + '<style>html,body{height:100%;margin:0;background:#faf8f5}'
+    + 'iframe{display:block;box-sizing:border-box;width:100%;height:100%;border:0}'
+    + '</style></head><body><iframe title="' + safeTitle + '" sandbox="' + sandbox
+    + '" referrerpolicy="no-referrer" srcdoc="' + escapeAttribute(documentHtml)
+    + '"></iframe></body></html>'
 }
