@@ -220,7 +220,16 @@ export function mountBinancePaperDashboardRoute(
           res.writeHead(503).end(JSON.stringify({ error: 'Binance MCP repair unavailable' }))
           return
         }
-        const result = await options.agentOs.repairBinanceAgentOs()
+        let result: Awaited<ReturnType<NonNullable<BinanceAgentOsHostService['repairBinanceAgentOs']>>>
+        try {
+          result = await options.agentOs.repairBinanceAgentOs()
+        } catch {
+          res.writeHead(409).end(JSON.stringify({
+            error: 'mcp-repair-failed',
+            nextAction: 'El Host no pudo descargar o reparar el MCP de forma segura. Reinicia Phoenix y utiliza Reparar; la autorización previa no se borró.',
+          }))
+          return
+        }
         const state = await options.agentOs.binanceAgentOsState?.()
         res.end(JSON.stringify({
           repaired: true, status: result.status,
