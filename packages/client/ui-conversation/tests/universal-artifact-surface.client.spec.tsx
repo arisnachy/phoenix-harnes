@@ -129,7 +129,7 @@ describe('universal artifact surface', () => {
         },
         executable: false,
       })} onStop={() => {}} />)
-      const frame = screen.getByTitle('Sitio de Kira') as HTMLIFrameElement
+      const frame = screen.getByTitle('Sitio de Kira')
       expect(frame.getAttribute('srcdoc')).toContain('data:image/png;base64,')
       expect(frame.getAttribute('srcdoc')).toContain('data-phoenix-bundled-css')
       expect(frame.getAttribute('srcdoc')).not.toContain('data-phoenix-missing-image')
