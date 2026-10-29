@@ -63,7 +63,6 @@ export function inlineBundledImages(entry: string, html: string, files: AssetMap
     const uri = assetUri(normalized, raw)
     if (uri !== undefined) resources.set(normalized, uri)
   }
-  if (resources.size === 0) return html
   const resolve = (reference: string): string | undefined => {
     if (/^(?:[a-z][a-z\d+.-]*:|\/\/|#)/iu.test(reference)) return undefined
     let decoded: string
@@ -80,7 +79,7 @@ export function inlineBundledImages(entry: string, html: string, files: AssetMap
     return uri === undefined ? original : attribute + '=' + quote + uri + quote
   })
   output = output.replace(/\b(srcset)\s*=\s*(["'])(.*?)\2/giu, (_original: string, attribute: string, quote: string, raw: string) => {
-    const candidates = raw.split(',').map(candidate => {
+    const candidates = raw.split(',').map((candidate) => {
       const matched = /^(\s*)(\S+)(\s+.*)?$/u.exec(candidate)
       if (matched === null) return candidate
       const uri = resolve(matched[2] ?? '')
@@ -95,12 +94,13 @@ export function inlineBundledImages(entry: string, html: string, files: AssetMap
   if (!includeStylesheets) return output
   // Inline only actual CSS files shipped with this same artifact, preserving
   // their own relative image paths. Remote stylesheets remain blocked.
-  return output.replace(/<link\b[^>]*>/giu, original => {
+  return output.replace(/<link\b[^>]*>/giu, (original) => {
     if (!/\brel\s*=\s*(["'])stylesheet\1/iu.test(original)) return original
     const match = /\bhref\s*=\s*(["'])(.*?)\1/iu.exec(original)
     const reference = match?.[2]
     if (reference === undefined || /^(?:[a-z][a-z\d+.-]*:|\/\/|#)/iu.test(reference)) return original
-    const key = normalizedPath(reference.startsWith('/') ? reference : directory + reference.split(/[?#]/u, 1)[0])
+    const cssReference = reference.split(/[?#]/u, 1)[0] ?? ''
+    const key = normalizedPath(reference.startsWith('/') ? cssReference : directory + cssReference)
     if (key === undefined || !/\.css$/iu.test(key)) return original
     const css = files[key]
     if (typeof css !== 'string' || css.length > MAX_ASSET_CHARS) return original
@@ -124,4 +124,32 @@ export function hasExternalImageReferences(html: string): boolean {
  */
 export function hasExecutableHtmlBehavior(html: string): boolean {
   return /<script\b|\bon[a-z][a-z\d_-]*\s*=|\b(?:java|vb)script\s*:/iu.test(html)
+}
+
+/**
+ * Standalone browser-tab shell for an untrusted HTML artifact.  The opaque-origin
+ * sandboxed iframe is essential: a blob: URL inherits Phoenix's origin and
+ * MUST NOT run authored HTML directly in the top-level document.
+ *
+ * @param documentHtml - The untrusted document rendered inside the sandboxed iframe.
+ * @param title - User-visible title for the preview tab and iframe.
+ * @param executable - Whether authored scripts are permitted inside the isolated frame.
+ * @returns A standalone HTML shell containing the sandboxed document.
+ */
+export function isolatedHtmlPreviewWindow(documentHtml: string, title: string, executable: boolean): string {
+  const escapeAttribute = (value: string): string => value.replace(/&/gu, '&amp;')
+    .replace(/</gu, '&lt;').replace(/>/gu, '&gt;').replace(/"/gu, '&quot;').replace(/'/gu, '&#39;')
+  const safeTitle = escapeAttribute(title)
+  const sandbox = executable ? 'allow-scripts' : ''
+  return '<!doctype html><html lang="es"><head><meta charset="utf-8">'
+    + '<meta name="viewport" content="width=device-width, initial-scale=1">'
+    + '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; '
+    + 'style-src \'unsafe-inline\'; script-src \'unsafe-inline\'; frame-src \'self\' blob: about:; '
+    + 'img-src data: blob: https: http:; font-src data:; media-src data: blob:; connect-src \'none\'; object-src \'none\'; base-uri \'none\'; form-action \'none\'">'
+    + '<title>' + safeTitle + '</title>'
+    + '<style>html,body{height:100%;margin:0;background:#faf8f5}'
+    + 'iframe{display:block;box-sizing:border-box;width:100%;height:100%;border:0}'
+    + '</style></head><body><iframe title="' + safeTitle + '" sandbox="' + sandbox
+    + '" referrerpolicy="no-referrer" srcdoc="' + escapeAttribute(documentHtml)
+    + '"></iframe></body></html>'
 }

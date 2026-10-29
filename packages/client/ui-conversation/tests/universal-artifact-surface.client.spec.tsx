@@ -109,4 +109,82 @@ describe('universal artifact surface', () => {
     // A native Expand dialog is reserved for visual/3D artifacts.
     expect(screen.queryByRole('button', { name: 'Expand' })).toBeNull()
   })
+  it('shows a real temporary browser URL and packaged artwork for a website', async () => {
+    const previousCreate = Object.getOwnPropertyDescriptor(URL, 'createObjectURL')
+    const previousRevoke = Object.getOwnPropertyDescriptor(URL, 'revokeObjectURL')
+    const createUrl = vi.fn().mockReturnValue('blob:http://localhost/phoenix-website')
+    const revokeUrl = vi.fn()
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: createUrl })
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: revokeUrl })
+    try {
+      render(<UniversalArtifactSurface artifact={normalizeHardnessArtifact({
+        id: 'kira-site', title: 'Sitio de Kira', mime: 'application/vnd.phoenix.canvas+html',
+        data: {
+          entry: 'index.html',
+          files: {
+            'index.html': '<link rel="stylesheet" href="theme.css"><img src="hero.png" alt="Kira">',
+            'theme.css': '.hero{color:orange}',
+            'hero.png': 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4//8/AwAI/AL+e6I6JwAAAABJRU5ErkJggg==',
+          },
+        },
+        executable: false,
+      })} onStop={() => {}} />)
+      const frame = screen.getByTitle('Sitio de Kira')
+      expect(frame.getAttribute('srcdoc')).toContain('data:image/png;base64,')
+      expect(frame.getAttribute('srcdoc')).toContain('data-phoenix-bundled-css')
+      expect(frame.getAttribute('srcdoc')).not.toContain('data-phoenix-missing-image')
+      await waitFor(() => {
+        expect(screen.getByRole('textbox', { name: 'URL temporal de la página' }))
+          .toHaveProperty('value', 'blob:http://localhost/phoenix-website')
+      })
+      const opener = screen.getByRole('link', { name: 'Abrir página en otra pestaña' })
+      expect(opener.getAttribute('href')).toContain('blob:')
+      expect(opener.getAttribute('target')).toBe('_blank')
+      expect(opener.getAttribute('rel')).toContain('noopener')
+      expect(screen.getByRole('link', { name: 'Guardar HTML' }).getAttribute('download'))
+        .toMatch(/\.html$/u)
+      expect(createUrl).toHaveBeenCalled()
+    } finally {
+      cleanup()
+      expect(revokeUrl).toHaveBeenCalled()
+      if (previousCreate === undefined) Reflect.deleteProperty(URL, 'createObjectURL')
+      else Object.defineProperty(URL, 'createObjectURL', previousCreate)
+      if (previousRevoke === undefined) Reflect.deleteProperty(URL, 'revokeObjectURL')
+      else Object.defineProperty(URL, 'revokeObjectURL', previousRevoke)
+    }
+  })
+
+  it('does not claim that an unresolved generated image filename loaded', () => {
+    render(<UniversalArtifactSurface artifact={normalizeHardnessArtifact({
+      id: 'unbundled-site', title: 'Unbundled site', mime: 'text/html',
+      data: '<img src="exec-123.png" alt="missing">', executable: false,
+    })} onStop={() => {}} />)
+    expect(screen.getByTitle('Unbundled site').getAttribute('srcdoc'))
+      .toContain('data-phoenix-missing-image="true"')
+  })
+
+  it('resolves generated-image attachments into self-contained HTML without model-supplied base64', async () => {
+    const picture = {
+      attachmentId: 'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+      mediaType: 'image/png', bytes: 68, width: 1, height: 1, name: 'hero.png',
+    }
+    const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4//8/AwAI/AL+e6I6JwAAAABJRU5ErkJggg=='
+    const loadImage = vi.fn().mockResolvedValue('data:image/png;base64,' + png)
+    render(<UniversalArtifactSurface artifact={normalizeHardnessArtifact({
+      id: 'attachment-page', title: 'Kira con imagen', mime: 'application/vnd.phoenix.canvas+html',
+      data: { entry: 'index.html', files: {
+        'index.html': '<h1>Kira</h1><img src="hero.png" alt="Portada">',
+        'hero.png': { attachment: picture },
+      } },
+      executable: false,
+    })} loadImage={loadImage} onStop={() => {}} />)
+    await waitFor(() => {
+      expect(screen.getByTitle('Kira con imagen').getAttribute('srcdoc'))
+        .toContain('src="data:image/png;base64,')
+    })
+    expect(loadImage).toHaveBeenCalledWith(picture)
+    expect(screen.getByTitle('Kira con imagen').getAttribute('srcdoc'))
+      .not.toContain('data-phoenix-missing-image')
+  })
+
 })
