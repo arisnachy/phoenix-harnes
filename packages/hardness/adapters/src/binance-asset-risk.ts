@@ -13,6 +13,7 @@
  * A pair-level delisting, e.g. AAVE/BTC, does NOT delist AAVE/USDT.
  */
 export const BINANCE_RISK_SNAPSHOT_DATE = '2026-10-29'
+/** Signal that official Binance risk/delisting announcements are only partially indexed. */
 export const BINANCE_RISK_FEED_COMPLETENESS = 'partial-announcement-snapshot' as const
 
 const MONITORING_ASSETS = new Set([
@@ -22,12 +23,17 @@ const DELISTED_ASSETS = new Set(['EPIC', 'QUICK'])
 const UNSUPPORTED_TAGS = new Set(['MONITORING', 'MONITORING_TAG', 'SEED', 'SEED_TAG'])
 const LEVERAGED_ASSET = /(?:UP|DOWN|BULL|BEAR)$/u
 
+/** A deterministic reason for denying a Spot market new exposure. */
 export type BinanceAssetRiskReason =
   | 'symbol-invalid' | 'not-trading' | 'not-spot' | 'not-usdt'
   | 'untradeable-leveraged-token' | 'monitoring-tag' | 'delisted-asset'
   | 'risk-tag' | 'spot-permission-missing'
 
-/** Block known risky bases even when a user pins them or the ticker is liquid. */
+/**
+ * Block known risky bases even when a user pins them or the ticker is liquid.
+ * @param symbol - Binance Spot USDT pair under review.
+ * @returns Denial reason, or undefined when absent from this incomplete snapshot.
+ */
 export function binanceKnownAssetRisk(symbol: string): BinanceAssetRiskReason | undefined {
   if (!/^[A-Z0-9]{3,16}USDT$/u.test(symbol)) return 'symbol-invalid'
   const base = symbol.slice(0, -4)
@@ -39,6 +45,8 @@ export function binanceKnownAssetRisk(symbol: string): BinanceAssetRiskReason | 
 
 /** Dynamic exchange eligibility + known risk markers if the provider supplies them.
  * Nonstandard tag fields are defense in depth, never proof of a full tag feed.
+ * @param row - Exchange market metadata from Binance.
+ * @returns Risk reason, or undefined if this market passes known checks.
  */
 export function assessBinanceSpotSymbol(row: unknown): BinanceAssetRiskReason | undefined {
   if (typeof row !== 'object' || row === null || Array.isArray(row)) return 'symbol-invalid'
@@ -55,10 +63,8 @@ export function assessBinanceSpotSymbol(row: unknown): BinanceAssetRiskReason | 
     && !value.permissionSets.some(item => Array.isArray(item) && item.includes('SPOT'))) {
     return 'spot-permission-missing'
   }
-  const tags = [
-    ...(Array.isArray(value.tags) ? value.tags : []),
-    value.tag, value.riskTag,
-  ]
+  const tags: unknown[] = Array.isArray(value.tags) ? (value.tags as unknown[]).slice() : []
+  tags.push(value.tag, value.riskTag)
   if (tags.some(tag => typeof tag === 'string'
     && UNSUPPORTED_TAGS.has(tag.toUpperCase().replaceAll(' ', '_')))) return 'risk-tag'
   return undefined
