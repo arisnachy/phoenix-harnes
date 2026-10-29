@@ -19,7 +19,8 @@ export interface EspnMarketQuote {
 type OddsSide = { moneyLine?: number | string; moneyline?: number | string; spreadOdds?: number|string;
   spread?:number|string;spreadValue?:number|string;pointSpread?:number|string }
 type EspnOdds = {
-  provider?: { name?: string;displayName?: string;id?: string|number }
+  provider?: { name?: string;displayName?: string;id?: string|number } | string
+  sportsbook?:{ name?:string;displayName?:string }|string
   details?: string
   homeTeamOdds?: OddsSide;awayTeamOdds?: OddsSide
   overOdds?: number|string;underOdds?: number|string
@@ -49,6 +50,11 @@ const americanToDecimal=(value:unknown):number|null=>{
   return Number((n>0?1+n/100:1+100/Math.abs(n)).toFixed(5))
 }
 const str=(v:unknown)=>typeof v==='string'?v.slice(0,170):String(v??'').slice(0,170)
+const bookmakerName=(odds:EspnOdds):string=>{
+  const provider=odds.provider??odds.sportsbook
+  if(typeof provider==='string')return provider.trim().slice(0,100)
+  return provider?.name?.trim()||provider?.displayName?.trim()||''
+}
 const isRecord=(v:unknown):v is Record<string,unknown>=>!!v&&typeof v==='object'&&!Array.isArray(v)
 const list=(v:unknown):EspnOdds[]=>Array.isArray(v)?v.filter(isRecord):isRecord(v)?[v]:[]
 const safeId=(v:unknown)=>/^\d{1,16}$/u.test(String(v??''))?String(v):null
@@ -75,7 +81,7 @@ export function normalizeEspnMoneylines(event:EEvent,oddEntries:EspnOdds[]):Espn
   if(!Number.isFinite(kickoff.getTime())||kickoff.getTime()<=Date.now())return []
   const result:EspnMarketQuote[]=[]
   for(const odd of oddEntries.slice(0,5)){
-    const provider=odd.provider?.name||odd.provider?.displayName
+    const provider=bookmakerName(odd)
     if(!provider)continue
     const updatedAt=odd.lastUpdated||odd.lastUpdate||odd.updatedAt||'No indicada por ESPN'
     for(const [selection,value] of [[homeName,odd.homeTeamOdds?.moneyLine??odd.homeTeamOdds?.moneyline],[awayName,odd.awayTeamOdds?.moneyLine??odd.awayTeamOdds?.moneyline]] as const){
@@ -104,7 +110,7 @@ export function normalizeEspnMarkets(event:EEvent,odds:EspnOdds[]):EspnMarketQuo
     return Number.isFinite(n)&&Math.abs(n)<=1000?n:null
   }
   for(const odd of odds.slice(0,5)){
-    const provider=odd.provider?.name||odd.provider?.displayName
+    const provider=bookmakerName(odd)
     if(!provider)continue
     const name=str(provider)
     const updatedAt=str(odd.lastUpdated||odd.lastUpdate||odd.updatedAt||'No indicada por ESPN')
@@ -273,7 +279,7 @@ export async function fetchPublicEspnOddsDetailed(
       .slice(0,MAX_GAMES_PER_DAY)
     for(const event of candidates){
       const eventId=safeId(event.id),competition=event.competitions?.[0]
-      const competitionId=safeId(competition?.id)
+      const competitionId=safeId(competition?.id)??eventId
       if(!eventId||!competition||seenEvents.has(eventId))continue
       seenEvents.add(eventId)
       diagnostics.games++
