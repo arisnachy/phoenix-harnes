@@ -36,7 +36,8 @@ describe('keyless ESPN live adapter',()=>{
   it('reports NBA quarter, clock, score and quarter breakdown',()=>{
     expect(parseEspnLiveScoreboard(nba)[0]).toMatchObject({phase:'in',homeScore:'88',awayScore:'99',
       clock:'11:21',period:4,lastPlay:'Personal foul',
-      periods:[{label:'1',away:'34',home:'25'},{label:'2',away:'35',home:'31'}]})
+      periods:[{label:'1',away:'34',home:'25'},{label:'2',away:'35',home:'31'},
+        {label:'3',away:'28',home:'29'},{label:'4',away:'2',home:'3'}]})
   })
   it('keeps unsupported live stats absent rather than inventing zeros',()=>{
     const game=parseEspnLiveScoreboard({events:[{id:'10',status:{type:{state:'in',description:'1H'}},
