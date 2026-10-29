@@ -247,7 +247,9 @@ export function TaskCenter({ connection, onClose }: Props) {
           <form className={css.form} onSubmit={(event) => { void create(event) }}>
             <h3>Nueva tarea</h3>
             <label>Título
-              <input required maxLength={120} value={title} onChange={(event) => { setTitle(event.target.value) }} placeholder="Ej. Revisar avances de mi proyecto" />
+              <input required maxLength={120} value={title}
+                onChange={(event) => { setTitle(event.target.value) }}
+                placeholder="Ej. Revisar avances de mi proyecto" />
             </label>
             <label>Qué debe hacer Kira
               <textarea required maxLength={6000} rows={4} value={instruction} onChange={(event) => { setInstruction(event.target.value) }}
@@ -276,7 +278,9 @@ export function TaskCenter({ connection, onClose }: Props) {
               </select>
             </label>
             {delivery === 'email' && <label>Correo del destinatario
-              <input type="email" required maxLength={320} value={recipient} onChange={(event) => { setRecipient(event.target.value) }} placeholder="destinatario@ejemplo.com" />
+              <input type="email" required maxLength={320} value={recipient}
+                onChange={(event) => { setRecipient(event.target.value) }}
+                placeholder="destinatario@ejemplo.com" />
             </label>}
             <button type="submit" className={css.primary} disabled={busy || connection === undefined}>
               {busy ? 'Guardando…' : 'Crear tarea'}
