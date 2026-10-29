@@ -175,10 +175,21 @@ async function installHistory(){
       if((await stat(to)).size!==archiveSizes[sport])throw Error('Invalid SBR archive '+sport)
     }
   }
+  // This repository predates Python packaging and has no requirements.txt.
+  // These are the direct imports used by cli.py and sportsbookreview.py.
+  await run(py,['-m','pip','install','--disable-pip-version-check',
+    'requests>=2.31,<3','pandas>=2.2,<3','lxml>=5,<7'],{timeout:240000})
+  await run(py,['-c','import requests,pandas,lxml'],{timeout:10000})
   return sports
 }
 async function installMlb(){
-  await cloneOnce('mlb-odds-scraper',upstream['mlb-odds-scraper'])
+  const folder=await cloneOnce('mlb-odds-scraper',upstream['mlb-odds-scraper'])
+  // The upstream script actually uses aiohttp, requests and tqdm.
+  // Install the repository's declared dependencies to make its historic
+  // scraping executable, rather than only cloning its source code.
+  await run(py,['-m','pip','install','--disable-pip-version-check','-r',
+    join(folder,'requirements.txt')],{timeout:240000})
+  await run(py,['-c','import aiohttp,requests,tqdm'],{timeout:10000})
   await downloadBounded(dataset,join(archive,'mlb-odds.json'))
 }
 export async function install(){
