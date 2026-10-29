@@ -139,7 +139,7 @@ export function isolatedHtmlPreviewWindow(documentHtml: string, title: string, e
     + '<meta name="viewport" content="width=device-width, initial-scale=1">'
     + '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; '
     + 'style-src \'unsafe-inline\'; script-src \'unsafe-inline\'; frame-src \'self\' blob: about:; '
-    + 'img-src data: blob:; connect-src \'none\'; object-src \'none\'; base-uri \'none\'; form-action \'none\'">'
+    + 'img-src data: blob: https: http:; font-src data:; media-src data: blob:; connect-src \'none\'; object-src \'none\'; base-uri \'none\'; form-action \'none\'">'
     + '<title>' + safeTitle + '</title>'
     + '<style>html,body{height:100%;margin:0;background:#faf8f5}'
     + 'iframe{display:block;box-sizing:border-box;width:100%;height:100%;border:0}'
