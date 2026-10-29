@@ -276,7 +276,8 @@ export async function fetchPublicEspnOddsDetailed(
     const candidates=(board.events??[]).filter(event=>
       safeId(event.id)!==null&&Date.parse(event.date??'')>now)
       .sort((a,b)=>Date.parse(a.date??'')-Date.parse(b.date??''))
-      .slice(0,MAX_GAMES_PER_DAY)
+      .slice(0,30)
+    let fallbackEvents=0
     for(const event of candidates){
       const eventId=safeId(event.id),competition=event.competitions?.[0]
       const competitionId=safeId(competition?.id)??eventId
@@ -289,7 +290,10 @@ export async function fetchPublicEspnOddsDetailed(
       const observedMarkets=()=>new Set([...quoteMap.values()]
         .filter(q=>q.eventId===eventId).map(q=>q.market))
       if(markets.every(m=>observedMarkets().has(m)))continue
-      if(!competitionId)continue
+      // Embedded odds are checked for every scoreboard event; expensive Core
+      // and summary probes are capped separately to protect ESPN's rate limits.
+      if(fallbackEvents>=MAX_GAMES_PER_DAY||!competitionId)continue
+      fallbackEvents++
       const corePath=coreBase+eventId+'/competitions/'+competitionId+'/odds'
       try{
         const raw=await read(corePath+'?limit=5')
