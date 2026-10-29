@@ -82,9 +82,9 @@ export function createPhoenixCanvasTool(): ToolDefinition {
       const bundled = args.files === undefined ? {} : args.files as Record<string, unknown>
       const imageRefs = [...args.html.matchAll(/<img\b[^>]*\bsrc\s*=\s*(["'])(.*?)\1/giu)]
         .map(match => match[2] ?? '')
-      const missing = imageRefs.filter(reference => {
+      const missing = imageRefs.filter((reference) => {
         if (/^(?:data:image\/|blob:|https?:\/\/|\/\/)/iu.test(reference)) return false
-        const path = reference.split(/[?#]/u, 1)[0]!.replace(/^\/+/u, '').replace(/^\.\//u, '')
+        const path = (reference.split(/[?#]/u, 1)[0] ?? '').replace(/^\/+/u, '').replace(/^\.\//u, '')
         return path !== '' && bundled[path] === undefined && bundled['./' + path] === undefined
       })
       if (missing.length > 0) {
