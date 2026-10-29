@@ -32,6 +32,7 @@ jobs:
         run: |
           node --experimental-strip-types --test packages/core/tool-sports/tests/keyless-odds.test.mjs
           node --experimental-strip-types --test packages/core/tool-sports/tests/odds-source-status.test.mjs
+          node --experimental-strip-types --test packages/core/tool-sports/tests/sports-history-source.test.mjs
           node --experimental-strip-types --test packages/core/tool-sports/tests/evidence-priced-ticket.test.mjs
           node --experimental-strip-types --test packages/core/tool-sports/tests/sports-multisource.test.mjs
       - name: Strict host library build
