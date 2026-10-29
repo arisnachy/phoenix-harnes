@@ -3,6 +3,10 @@ on:
   pull_request:
     paths:
       - 'packages/core/tool-sports/**'
+      - 'scripts/phoenix-sports-source-*.mjs'
+      - 'scripts/phoenix-sports-source-*.test.mjs'
+      - 'update-phoenix.ps1'
+      - 'scripts/phoenix-windows-supervisor.mjs'
       - 'packages/client/ui-conversation/src/client/chat/GenerativeUi*'
       - 'packages/client/ui-conversation/src/client/chat/sports-tool-cards.ts'
       - 'packages/client/ui-conversation/tests/sports-rich-ui.client.spec.tsx'
@@ -40,6 +44,9 @@ jobs:
           node --experimental-strip-types --test packages/core/tool-sports/tests/pregame-investigation.test.mjs
           node --experimental-strip-types --test packages/core/tool-sports/tests/sports-diversity.test.mjs
           node --experimental-strip-types --test packages/core/tool-sports/tests/sports-source-health.test.mjs
+          node --experimental-strip-types --test packages/core/tool-sports/tests/sports-market-intelligence.test.mjs
+          node --experimental-strip-types --test packages/core/tool-sports/tests/sports-deep-context.test.mjs
+          node --test scripts/phoenix-sports-source-update.test.mjs
           node --experimental-strip-types --test packages/core/tool-sports/tests/keyless-odds.test.mjs
           node --experimental-strip-types --test packages/core/tool-sports/tests/free-odds.test.mjs
       - name: Verify chat schema, visuals and prior UI compatibility

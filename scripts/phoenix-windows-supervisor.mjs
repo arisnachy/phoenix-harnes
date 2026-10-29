@@ -1634,6 +1634,16 @@ async function waitForHostPortRelease(port, timeoutMs = HOST_PORT_RELEASE_WAIT_M
 }
 
 function startHost() {
+  // The installed stable runtime can outlive its update source checkout.
+  // Start the optional Sports sources installer without blocking model startup.
+  const sourceInstaller=join(runtimeRoot,'scripts','phoenix-sports-source-auto.mjs')
+  if(existsSync(sourceInstaller)&&process.env.PHOENIX_SPORTS_SOURCES_AUTO_INSTALL!=='0'){
+    const started=spawnSync(process.execPath,[sourceInstaller],{
+      cwd:runtimeRoot,env:process.env,timeout:10_000,windowsHide:true,
+      stdio:['ignore','ignore','ignore'],
+    })
+    if(started.error)console.error('[PHOENIX SPORTS] optional installer launcher: '+started.error.message)
+  }
   return spawn(process.execPath, runtimeNodeArgs(runtimeRoot, [
     'web', '--',
     ...hostArgs,

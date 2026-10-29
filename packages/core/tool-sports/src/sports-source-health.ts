@@ -5,8 +5,41 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { stat } from 'node:fs/promises'
-import { isAbsolute, join } from 'node:path'
+import { existsSync, readFileSync } from 'node:fs'
+import { homedir } from 'node:os'
+import { isAbsolute, join, resolve, sep } from 'node:path'
 import { keylessEnabled } from './keyless-odds.ts'
+
+/** Rehydrate only locally verified, nonsecret paths from the managed install. */
+export function hydrateSportsSources(env:NodeJS.ProcessEnv=process.env):NodeJS.ProcessEnv {
+  const next={...env}
+  const root=resolve(env.PHOENIX_SPORTS_SOURCE_HOME?.trim()||join(homedir(),'.phoenix','sports-sources'))
+  try{
+    const value=JSON.parse(readFileSync(join(root,'manifest.json'),'utf8')) as {
+      schema?:number; paths?:{executable?:string;history?:string};
+      components?:Record<string,{status?:string}>
+    }
+    if(value.schema!==2||!value.paths||!value.components)return next
+    const inside=(path:string):boolean=>{
+      const full=resolve(path),normalizedRoot=root.toLowerCase()
+      return full.toLowerCase().startsWith(normalizedRoot+sep.toLowerCase())
+    }
+    const binary=value.paths.executable
+    if(binary&&inside(binary)&&existsSync(binary)
+      &&value.components['OddsHarvester + Playwright']?.status==='installed'){
+      if(next.PHOENIX_SPORTS_ODDSHARVESTER_BIN===undefined)
+        next.PHOENIX_SPORTS_ODDSHARVESTER_BIN=binary
+      if(next.PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED===undefined)
+        next.PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED='1'
+    }
+    const history=value.paths.history
+    if(history&&inside(history)&&existsSync(join(history,'sportsbookreview-nhl.json'))
+      &&value.components['SportsbookReview NFL/NBA/NHL/MLB archive']?.status==='installed'){
+      if(next.PHOENIX_SPORTS_HISTORY_DIR===undefined)next.PHOENIX_SPORTS_HISTORY_DIR=history
+    }
+  }catch{/* installation not yet complete: old Phoenix runtime stays safe */}
+  return next
+}
 
 const run = promisify(execFile)
 export type SportsSourceHealth = {
