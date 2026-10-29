@@ -266,15 +266,22 @@ function userMessageText(value: unknown): string | undefined {
 export function renderHumanConnection(profile: UserProfileConsented): string {
   const lines: string[] = []
   const mode = profile.addressingMode ?? 'automatic'
-  if (mode === 'none') return 'User address: none. Do not address the user by any personal name or professional title.'
-  if (mode === 'name') {
-    if (profile.preferredName === undefined) return 'User address: preferred name not authorized; use a natural neutral greeting.'
-    lines.push(`Authorized preferred name: ${profile.preferredName}`)
-    lines.push('User address: prefer this name when it adds warmth; do not repeat it every turn.')
+  if (mode === 'none') {
+    lines.push('User address: none. Do not address the user by any personal name or professional title.')
+  } else if (mode === 'name') {
+    if (profile.preferredName === undefined) {
+      lines.push('User address: preferred name not authorized; use a natural neutral greeting.')
+    } else {
+      lines.push(`Authorized preferred name: ${profile.preferredName}`)
+      lines.push('User address: prefer this name when it adds warmth; do not repeat it every turn.')
+    }
   } else if (mode === 'title') {
-    if (profile.professionalTitle === undefined) return 'User address: professional title not authorized; use a natural neutral greeting.'
-    lines.push(`Authorized professional title: ${profile.professionalTitle}`)
-    lines.push('User address: prefer this title in professional conversation; vary wording naturally.')
+    if (profile.professionalTitle === undefined) {
+      lines.push('User address: professional title not authorized; use a natural neutral greeting.')
+    } else {
+      lines.push(`Authorized professional title: ${profile.professionalTitle}`)
+      lines.push('User address: prefer this title in professional conversation; vary wording naturally.')
+    }
   } else {
     if (profile.preferredName !== undefined) lines.push(`Authorized preferred name: ${profile.preferredName}`)
     if (profile.professionalTitle !== undefined) lines.push(`Authorized professional title: ${profile.professionalTitle}`)
