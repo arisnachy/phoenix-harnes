@@ -111,7 +111,7 @@ type SportsScheduleCard = {
 }
 
 /** Data-driven ESPN surface: templates expand with sections rather than one card per sport. */
-type SportsEspnItem = {label:string;value?:string;detail?:string;image?:string;action?:{label:string;prompt:string}}
+type SportsEspnItem = {label:string;value?:string;detail?:string;image?:string;href?:string;action?:{label:string;prompt:string}}
 type SportsEspnSection = {
   heading:string;kind:'metrics'|'list'|'articles';items:SportsEspnItem[]
 }
@@ -302,6 +302,13 @@ const sportsResearch = (v:unknown):v is SportsResearch => isRecord(v)
   && Array.isArray(v.evidence) && v.evidence.length<=5 && v.evidence.every(x=>isText(x,250))
 
 /** Validate every field of an ESPN template, including portrait origin and limits. */
+const espnArticleLink=(value:unknown):value is string|undefined=>{
+  if(value===undefined)return true
+  if(!isText(value,500))return false
+  try{const u=new URL(value);return u.protocol==='https:'&&!u.username&&!u.password&&
+    ['www.espn.com','espn.com'].includes(u.hostname)&&u.pathname.length>1
+  }catch{return false}
+}
 const sportsEspnDashboard=(v:Record<string,unknown>):v is SportsEspnDashboard=>{
   if(!isRecord(v.props)||!hasOnlyKeys(v.props,
     ['view','title','subtitle','source','checkedAt','image','sections','note']))return false
@@ -313,9 +320,9 @@ const sportsEspnDashboard=(v:Record<string,unknown>):v is SportsEspnDashboard=>{
     && p.sections.every(s=>isRecord(s) && hasOnlyKeys(s,['heading','kind','items'])
       && isText(s.heading) && ['metrics','list','articles'].includes(String(s.kind))
       && Array.isArray(s.items) && s.items.length>=1 && s.items.length<=30
-      && s.items.every(x=>isRecord(x)&&hasOnlyKeys(x,['label','value','detail','image','action'])
+      && s.items.every(x=>isRecord(x)&&hasOnlyKeys(x,['label','value','detail','image','href','action'])
         && isText(x.label) && optionalText(x.value) && optionalText(x.detail,240)
-        && trustedPortrait(x.image)
+        && trustedPortrait(x.image) && espnArticleLink(x.href)
         && (x.action===undefined||(isRecord(x.action)&&hasOnlyKeys(x.action,['label','prompt'])
           && isText(x.action.label,80)&&isText(x.action.prompt,400)))))
 }
@@ -668,6 +675,7 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
                 <div><strong>{x.label}</strong>
                   {x.value&&<span>{x.value}</span>}
                   {x.detail&&<small>{x.detail}</small>}
+                  {x.href&&<a href={x.href} target="_blank" rel="noopener noreferrer" className={css.sportsEspnNewsLink}>Leer noticia en ESPN</a>}
                   {x.action&&onAction&&<button type="button" className={css.sportsSlateAction}
                     onClick={()=>{if(x.action)onAction(x.action.prompt,'draft')}}>{x.action.label}</button>}
                 </div>
