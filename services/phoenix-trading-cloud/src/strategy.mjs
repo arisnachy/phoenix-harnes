@@ -183,7 +183,7 @@ export function paperFill(state, fill) {
   return next;
 }
 export function freshState() {
-  return { schema:1, enabled:false, halted:false, cash:10_000, equity:10_000,
+  return { schema:1, enabled:false, halted:false, liquidationPending:false, cash:10_000, equity:10_000,
     realized:0, dayLoss:0, dayStartEquity:10_000, day:'', maxEquity:10_000,
     positions:{}, journal:[], signals:[], events:[], universe:[], cursor:0,
     universeUpdated:0, lastScan:0, lastError:null, failureCount:0, revision:0 };
