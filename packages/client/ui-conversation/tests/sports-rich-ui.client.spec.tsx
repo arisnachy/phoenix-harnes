@@ -128,6 +128,7 @@ describe('No fake tickets when strict research finds zero eligible matches',()=>
     render(<GenerativeUi block={card}/>)
     expect(screen.getByRole('progressbar',{name:'Patas verificadas'}).getAttribute('aria-valuenow')).toBe('0')
     expect(screen.getByText(/Faltan 5 selecciones por verificar/)).toBeTruthy()
+    expect(screen.getByText(/0 \/ 5 selecciones con cuotas de una misma casa confirmadas/)).toBeTruthy()
     expect(screen.queryByText('CUOTA')).toBeNull()
   })
   it('does not accept empty finished tickets without explicit incomplete evidence',()=>{
