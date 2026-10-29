@@ -162,7 +162,7 @@ export async function keylessHistoricOdds(
       try{
         const result=await runFile(executable,
           oddsHarvesterHistoricArgs(sport,league,season,market,file),
-          {shell:false,windowsHide:true,timeout:180_000,maxBuffer:4_000_000,
+          {shell:false,windowsHide:true,timeout:90_000,maxBuffer:4_000_000,
             env:{...process.env,...env}})
         stdout=result.stdout
       }catch(error){
@@ -244,7 +244,7 @@ async function runScraper(sport:KeylessSport,market:string,day:string,env:NodeJS
     let stdout='',failure:unknown=null
     try{
       const execution=await runFile(executable,oddsHarvesterArgs(sport,market,day,file),
-        {shell:false,windowsHide:true,timeout:180_000,maxBuffer:4_000_000,
+        {shell:false,windowsHide:true,timeout:65_000,maxBuffer:4_000_000,
           env:{...process.env,...env}})
       stdout=execution.stdout
     }catch(error){
