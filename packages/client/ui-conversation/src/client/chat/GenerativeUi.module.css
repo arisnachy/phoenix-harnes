@@ -167,6 +167,11 @@
 .sportsTicketGroup h4{font-size:12px;margin:0;padding:11px 13px;font-weight:800;overflow-wrap:anywhere;
   border-bottom:1px solid var(--dsw-alias-border-subtle,rgba(125,125,125,.2));
   background:var(--dsw-alias-interactive-bg-hover,rgba(120,120,120,.035))}
+.sportsTicketGroupTitle{display:inline-flex;align-items:center;gap:9px;min-width:0}
+.sportsTicketGroupTitle>span:last-child{overflow-wrap:anywhere}
+.sportsTicketSportEmblem{display:inline-grid;place-items:center;flex:0 0 28px;width:28px;height:28px;
+  font-size:17px;border:1px solid var(--dsw-alias-border-subtle,rgba(125,125,125,.3));
+  border-radius:9px;background:var(--dsw-alias-interactive-bg-hover,rgba(125,125,125,.05))}
 .sportsTicketGroup .sportsLegs{margin-top:0;gap:0}
 .sportsTicketGroup .sportsLeg{min-width:0}
 .sportsTicketGroup .sportsLeg:last-child{border-bottom:0}
