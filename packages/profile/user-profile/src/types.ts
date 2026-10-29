@@ -23,6 +23,7 @@ export type AssistantGender = 'masculine' | 'feminine' | 'neutral'
 
 /** Provenance for a persisted assistant presentation; absence keeps inference open. */
 export type AssistantGenderSource = 'inferred' | 'manual'
+/** Persisted user preference for natural or suppressed direct address. */
 export type UserAddressMode = 'automatic' | 'name' | 'title' | 'none'
 
 /** Data persisted by the profile namespace. Age is intentionally absent. */
