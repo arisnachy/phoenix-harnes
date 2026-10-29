@@ -452,7 +452,13 @@ export function apply(ctx: Context): void {
     isConcurrencySafe:()=>true,
     async execute(args){
       const report=await marketOddsDetailed(args.sportKey,args.markets,sportsEnv())
-      const quotes=report.quotes
+      const observedAt=Date.now()
+      const quotes=report.quotes.filter(q=>{
+        const updated=Date.parse(q.updatedAt),kickoff=Date.parse(q.timeIso??q.time)
+        return Number.isFinite(updated)&&updated<=observedAt&&observedAt-updated<=3_600_000
+          &&Number.isFinite(kickoff)&&kickoff>observedAt
+      })
+      const excludedStaleOrStarted=report.quotes.length-quotes.length
       const events=new Map<string,typeof quotes>()
       for(const quote of quotes.slice(0,96)){
         const rows=events.get(quote.eventId)??[]
@@ -475,7 +481,7 @@ export function apply(ctx: Context): void {
         }]
       })
       return JSON.stringify({ uiBlocks,source:quotes[0]?.source||'Sin ofertas recuperadas',sources:report.sources,
-        observedAt:new Date().toISOString(),outcomes:quotes.slice(0,120),
+        observedAt:new Date(observedAt).toISOString(),excludedStaleOrStarted,outcomes:quotes.slice(0,120),
         total:quotes.length,remaining:Math.max(0,quotes.length-120),
         note:quotes.length?'Ofertas auténticas observadas; elegir la casa y el horario antes de cotizar. No son cuotas automáticamente atribuibles a Juancito.':'Sin precios para esa liga/mercado ahora. Revisar sources para conocer fallos, fuentes ausentes y mercados vacíos; ampliar búsqueda antes de declarar imposible. Nunca inventar.' })
     },
