@@ -582,7 +582,9 @@ export function apply(ctx: Context): void {
       const env=sportsEnv()
       const enabled=env.PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED==='1'
       const report=await scanOddsDisciplines(
-        {sport:args.sport,offset:args.offset,limit:args.limit},
+        {...(args.sport?{sport:args.sport}:{}),
+          ...(args.offset!==undefined?{offset:args.offset}:{}),
+          ...(args.limit!==undefined?{limit:args.limit}:{})},
         (sport,market)=>keylessOdds(sport,market,args.date,env),
         enabled,
       )
