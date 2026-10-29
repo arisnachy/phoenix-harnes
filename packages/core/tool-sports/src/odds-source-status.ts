@@ -36,7 +36,8 @@ export async function describeOddsSources(
     }
     sources.push({name:'jordantete/OddsHarvester · OddsPortal',kind:'current',
       state:runtime==='missing'?'needs-setup':observed?.status==='unavailable'?'provider-error':
-        observed?.status==='quotes'?'observed-quotes':'runtime-ready-unverified',
+        observed?.status==='quotes'?'observed-quotes':
+          observed?.status==='no-quotes'?'checked-no-quotes':'runtime-ready-unverified',
       keyRequired:false,
       ...(observed?{lastChecked:observed.checkedAt,quotesVerified:observed.count}:{}),
       detail:runtime==='local'?'CLI local detectada; Playwright, acceso al sitio y mercado se verifican al consultar.':
