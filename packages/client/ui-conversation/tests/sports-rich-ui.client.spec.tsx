@@ -272,7 +272,7 @@ describe('ESPN universal adaptive panels',()=>{
     sections:[
       {heading:'Perfil',kind:'metrics',items:[{label:'Posición',value:'Guard'}]},
       {heading:'Últimos partidos',kind:'list',items:[{label:'Match 1',value:'PTS: 28'}]},
-      {heading:'Noticias',kind:'articles',items:[{label:'Headline',value:'Oct 29'}]},
+      {heading:'Noticias',kind:'articles',items:[{label:'Headline',value:'Oct 29',href:'https://www.espn.com/nhl/story/_/id/99/article'}]},
     ],
     note:'3 de 3 fuentes con datos',
   }} as const
@@ -285,12 +285,15 @@ describe('ESPN universal adaptive panels',()=>{
     expect(screen.getByRole('region',{name:'Últimos partidos'})).toBeTruthy()
     expect(screen.getByText('PTS: 28')).toBeTruthy()
     expect(screen.getByText('Headline')).toBeTruthy()
+    expect(screen.getByRole('link',{name:'Leer noticia en ESPN'}).getAttribute('href')).toContain('espn.com')
     expect(screen.getByAltText('Jugador real')).toBeTruthy()
   })
   it('rejects hostile photos, scripts, excessive sections and undeclared data',()=>{
     const base=template.props
     expect(parseGenerativeUiBlock({...template,props:{...base,
       image:'https://untrusted.example/portrait.png'}})).toBeNull()
+    expect(parseGenerativeUiBlock({...template,props:{...base,
+      sections:[{heading:'X',kind:'articles',items:[{label:'Fake',href:'https://tracker.example.com/x'}]}]}})).toBeNull()
     expect(parseGenerativeUiBlock({...template,props:{...base,
       sections:[{heading:'X',kind:'list',items:[{label:'A',html:'<img onerror=evil />'}]}]}})).toBeNull()
     expect(parseGenerativeUiBlock({...template,props:{...base,
