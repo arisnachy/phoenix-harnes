@@ -19,7 +19,7 @@ export function hydrateSportsSources(env:NodeJS.ProcessEnv=process.env):NodeJS.P
       schema?:number; paths?:{executable?:string;history?:string};
       components?:Record<string,{status?:string}>
     }
-    if(value.schema!==2||!value.paths||!value.components)return next
+    if(value.schema!==3||!value.paths||!value.components)return next
     const inside=(path:string):boolean=>{
       const full=resolve(path),normalizedRoot=root.toLowerCase()
       return full.toLowerCase().startsWith(normalizedRoot+sep.toLowerCase())
@@ -64,7 +64,7 @@ export function managedSportsInstallStatus(env:NodeJS.ProcessEnv=process.env):Ma
       schema?:number;updatedAt?:string
       components?:Record<string,{status?:string;message?:string}>
     }
-    if(data.schema!==2||!data.components)return blank
+    if(data.schema!==3||!data.components)return blank
     const components=Object.entries(data.components).map(([name,row])=>({
       name,status:row.status??'unknown',lastError:row.status==='error'?
         String(row.message??'Error sin detalle').slice(0,180):null,
