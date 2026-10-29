@@ -98,7 +98,7 @@ async function worker(){
  * Returns a status, so health tools can tell Kira exactly whether a repair
  * was launched, already running or could not find the source checkout.
  */
-export function start(launch=spawn,env=process.env){
+export function start(launch=spawn,env=process.env,{force=false}={}){
   const paths=pathsFor(env)
   if(env.PHOENIX_SPORTS_SOURCES_AUTO_INSTALL==='0')
     return{status:'disabled',logPath:paths.log}
@@ -111,7 +111,7 @@ export function start(launch=spawn,env=process.env){
   if(manifest&&!shouldBootstrap(manifest)){
     const partial=required.some(name=>
       manifest.components[name]?.status!=='installed')
-    if(partial)return{status:'retry-cooldown',logPath:paths.log}
+    if(partial&&!force)return{status:'retry-cooldown',logPath:paths.log}
   }
   mkdirSync(paths.home,{recursive:true})
   try{
@@ -148,7 +148,7 @@ if(process.argv[1]&&resolve(process.argv[1])===filename){
       process.exitCode=1
     })
   else {
-    const result=start()
+    const result=start(spawn,process.env,{force:process.argv.includes('--force')})
     if(process.argv.includes('--json'))console.log(JSON.stringify(result))
   }
 }
