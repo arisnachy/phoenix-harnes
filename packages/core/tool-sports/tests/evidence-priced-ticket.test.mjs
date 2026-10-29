@@ -220,3 +220,45 @@ test('stale bookmaker quotes do not receive a fresh ticket label',async()=>{
   assert.equal(result.priced,false)
   assert.equal(result.missingQuotes,5)
 })
+
+test('a four-of-five slate still audits real provider prices and cannot be called a priced parlay',async()=>{
+  const partialFeed=async url=>{
+    const data=board(url)
+    data.events=data.events.filter(e=>!String(e.id).endsWith('4'))
+    return new Response(JSON.stringify(data),{status:200})
+  }
+  let quoteCalls=0
+  const source=async()=>{
+    quoteCalls++
+    return Array.from({length:4},(_,i)=>({
+      eventId:'scraper-'+i,bookmaker:'Book A',market:'1x2',
+      selection:'Home '+i,point:null,price:1.91,
+      home:'Home '+i,away:'Away '+i,time:kick,
+      updatedAt:'2026-10-28T14:30:00Z',sportKey:'football',
+      source:'OddsHarvester/OddsPortal (sin API key)',
+    }))
+  }
+  const result=await evidencePricedTicket(5,date,'soccer',100,now,enabled,partialFeed,source)
+  assert.equal(result.complete,false)
+  assert.equal(result.priced,false)
+  assert.equal(result.approvedLegs,0)
+  assert.equal(result.verifiedEvents,4)
+  assert.equal(result.quotedLegs,4)
+  assert.equal(result.missingQuotes,1)
+  assert.equal(quoteCalls,1,'partial ticket must still query its candidate bookmaker markets')
+  const harvester=result.sourceAudit.find(row=>row.source==='OddsHarvester')
+  assert.equal(harvester.status,'observed')
+  assert.equal(harvester.offers,4)
+  assert.equal(result.card.props.combinedOdds,'No disponible')
+  assert.match(result.card.props.note,/Cuotas cotejadas: 4\/5/)
+  assert.match(result.explanation,/INCOMPLETO/)
+})
+test('disabled OddsHarvester is never described as queried with live prices',async()=>{
+  const result=await evidencePricedTicket(5,date,'soccer',100,now,{},feed)
+  const source=result.sourceAudit.find(row=>row.source==='OddsHarvester')
+  assert.equal(source.status,'disabled')
+  assert.equal(source.offers,0)
+  assert.equal(result.approvedLegs,0)
+  assert.ok(!result.priced)
+  assert.equal(result.card.props.combinedOdds,'No disponible')
+})

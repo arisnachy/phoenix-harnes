@@ -6,6 +6,7 @@ import { getFeed,hasSportsPermission, type ChatBlock } from './sports.ts'
 import { researchSport } from './multi-sport-research.ts'
 import { researchTicket, type ResearchTicketLeg } from './research-ticket.ts'
 import { investigatePregame } from './pregame-investigation.ts'
+import { diversifiedSportsPicks,diversifiedSportsShortlist } from './sports-diversity.ts'
 const defaultLeagues = [
   ['basketball','nba'],['hockey','nhl'],['baseball','mlb'],['football','nfl'],
   ['soccer','eng.1'],['soccer','esp.1'],['soccer','usa.1'],['soccer','uefa.champions'],
@@ -24,6 +25,7 @@ export async function evidenceTicket(
   candidatesEvaluated:number;researchLeagues:number;modelProbabilities:false;priced:false;placed:false;
   insufficientEvidence:number;researchStandard:string;
   pregameSummariesVerified:number;injuryFeedsVerified:number;
+  multisportSatisfied:boolean;scannedSports:number;selectedSports:string[];
   selections:ResearchTicketLeg[];events:Array<{eventId:string;home:string;away:string;kickoff:string;sport:string;league:string;pick:'home'|'away'}>}>{
   if(!Number.isInteger(count)||count<1||count>6)throw Error('El ticket requiere entre 1 y 6 patas')
   if(!validDate(date))throw Error('Fecha de ticket inválida')
@@ -47,7 +49,7 @@ export async function evidenceTicket(
   // Scan a bounded slate of six leagues, in batches of three. NFL needs
   // several weeks to collect three real matches; soccer typically needs 21 days.
   // Only verified future event IDs can ever be promoted to ticket legs.
-  const shortlist=eligible.slice(0,6)
+  const shortlist=sportFilter?eligible.slice(0,6):diversifiedSportsShortlist(eligible,6)
   const reports:Array<PromiseSettledResult<Awaited<ReturnType<typeof researchSport>>>>=[]
   for(let offset=0;offset<shortlist.length;offset+=3){
     const batch=await Promise.allSettled(shortlist.slice(offset,offset+3).map(({sport,league})=>
@@ -113,8 +115,11 @@ export async function evidenceTicket(
     }
   }
   candidateLegs.sort((a,b)=>b.rank-a.rank||a.pick.eventId.localeCompare(b.pick.eventId))
-  const selected=candidateLegs.slice(0,count)
+  const {chosen:selected,diversitySatisfied:multisportSatisfied}=
+    diversifiedSportsPicks(candidateLegs,count,!sportFilter)
   const chosen=selected.map(x=>x.pick)
+  const scannedSports=new Set(shortlist.map(x=>x.sport)).size
+  const selectedSports=[...new Set(selected.map(x=>x.pick.sport))]
   if(!chosen.length){
     // A zero-leg draft is useful and honest: Kira must not say that a 5-leg
     // wager was prepared when every candidate failed evidence requirements.
@@ -128,7 +133,8 @@ export async function evidenceTicket(
     return{card,complete:false,verifiedEvents:0,candidatesEvaluated:evaluated,
       researchLeagues:reports.filter(r=>r.status==='fulfilled').length,
       insufficientEvidence,pregameSummariesVerified:0,injuryFeedsVerified:0,
-      researchStandard:'Sin candidatos con cinco partidos distintos por equipo (NFL tres) y tendencia contrastable.',
+      multisportSatisfied,scannedSports,selectedSports,
+      researchStandard:'Sin candidatos con cinco partidos distintos por equipo (NFL tres) y tendencia contrastable. Deportes evaluados: '+scannedSports+'.',
       modelProbabilities:false,priced:false,placed:false,selections:[],
       events:[]}
   }
@@ -148,6 +154,7 @@ export async function evidenceTicket(
   })
   const ticket=await researchTicket(documented,date,fetcher,now,env,count,true)
   const note=String(ticket.card.props.note??'')+
+    (!multisportSatisfied?' REQUISITO MULTIDEPORTE NO ALCANZADO: las selecciones fundamentadas son de una sola disciplina. ':'')+
     ' Investigación contextual: '+pregameSummariesVerified+'/'+documented.length+
     ' resúmenes de evento ESPN; '+injuryFeedsVerified+'/'+documented.length+
     ' informes de lesiones de liga accesibles. Accesible NO equivale a bajas o titulares verificados.'+
@@ -159,7 +166,8 @@ export async function evidenceTicket(
   return{card,complete:ticket.complete,verifiedEvents:ticket.verifiedEvents,
     candidatesEvaluated:evaluated,researchLeagues:reports.filter(r=>r.status==='fulfilled').length,
     insufficientEvidence,pregameSummariesVerified,injuryFeedsVerified,
-    researchStandard:'Preselección exigente con 5 eventos históricos por equipo (NFL: 3), resultados ESPN únicos, margen y descanso. Lesiones, titulares y cuotas siguen sin verificarse; no es una predicción calibrada.',
+    multisportSatisfied,scannedSports,selectedSports,
+    researchStandard:'Preselección basada en 5 eventos históricos por equipo (NFL: 3). Se exploraron '+scannedSports+' deportes; seleccionados: '+(selectedSports.join(', ')||'ninguno')+'. Diversidad '+(multisportSatisfied?'cumplida':'NO cumplida')+'. Lesiones, titulares y cuotas siguen sin verificación específica.',
     modelProbabilities:false,priced:false,placed:false,selections:documented,
     events:selected.map(x=>({eventId:x.pick.eventId,home:x.home,away:x.away,kickoff:x.kickoff,
       sport:x.pick.sport,league:x.pick.league,pick:x.pick.pick==='home'?'home' as const:'away' as const}))}
