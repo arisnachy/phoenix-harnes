@@ -246,8 +246,13 @@ export function describeScraperError(error:unknown):string{
   const record=error&&typeof error==='object'?error as Record<string,unknown>:{}
   const raw=typeof record.stderr==='string'?record.stderr:''
   const scrub=(v:string)=>v.replace(/\u001b\[[0-9;]*m/gu,'')
-    .replace(/(?:api[_-]?key|token|authorization|password|secret)\s*[:=]\s*[^\s,;]+/giu,'[credencial oculta]')
-    .replace(/(?:https?:\/\/)[^\s]*?(?:apiKey|token|key)=[^&\s]+/giu,'[URL con credencial oculta]')
+    // Redact the entire Authorization bearer value, not just the word "Bearer".
+    .replace(/\bauthorization\s*[:=]\s*bearer\s+[^\s,;]+/giu,'[credencial oculta]')
+    .replace(/\bbearer\s+[a-z0-9._~+\/-]{8,}/giu,'[credencial oculta]')
+    .replace(/(?:api[_-]?key|access[_-]?token|token|authorization|password|secret)\s*[:=]\s*(?:"[^"]+"|'[^']+'|[^\s,;]+)/giu,'[credencial oculta]')
+    .replace(/(?:--(?:api-key|token|password|secret)\s+)[^\s]+/giu,'[credencial oculta]')
+    .replace(/([?&](?:api[_-]?key|access_token|token|key|secret|password)=)[^&#\s]+/giu,'$1[oculto]')
+    .replace(/\b(?:sk-[a-z0-9_-]{12,}|gh[pousr]_[a-z0-9_]{20,})\b/giu,'[credencial oculta]')
     .replace(/[\r\n]+/gu,' ').trim()
   const diagnostic=scrub(raw).slice(-900)
   const code=typeof record.code==='number'||typeof record.code==='string'?
