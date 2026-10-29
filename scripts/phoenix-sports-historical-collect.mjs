@@ -39,7 +39,8 @@ export function historicalJob(opts,now=Date.now()){
     const start=opts.startDate,end=opts.endDate??start
     if(!validDate(start)||!validDate(end))throw Error('Fechas MLB inválidas (YYYY-MM-DD)')
     const first=Date.parse(start+'T00:00:00Z'),last=Date.parse(end+'T00:00:00Z')
-    if(first>last||last-first>6*86400000||last>=now)
+    const todayUtc=Date.parse(new Date(now).toISOString().slice(0,10)+'T00:00:00Z')
+    if(first>last||last-first>6*86400000||last>=todayUtc)
       throw Error('MLB histórico: máximo siete fechas pasadas por ejecución')
     const markets=(opts.markets??'moneyline,pointspread,totals').split(',')
     if(!markets.length||markets.length>3||
