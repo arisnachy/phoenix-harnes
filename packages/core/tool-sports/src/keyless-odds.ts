@@ -150,7 +150,34 @@ export function oddsHarvesterArgs(sport:KeylessSport,market:string,day:string,fi
     ((sport==='basketball'||sport==='american-football')&&market==='1x2')?'full_time':null
   return ['upcoming','--sport',sport,'--date',day.replaceAll('-',''),
     '--market',market,...(period?['--period',period]:[]),
-    '--headless','--format','json','--output',file]
+    '--headless','--format','json','--stream-ndjson','--output',file]
+}
+/** Run a fixed local executable with fixed command shape, no shell, no user URLs. */
+/**
+ * OddsHarvester v0.20 emits valid match records as NDJSON before batch completion.
+ * Keep those rows if the CLI fails after scraping some matches. If neither
+ * streaming stdout nor a finished batch file is valid, surface the real error.
+ */
+export function recoverScraperRows(stdout:unknown,output:unknown):unknown[]{
+  const rows:unknown[]=[]
+  const seen=new Set<string>()
+  const add=(value:unknown)=>{
+    if(!value||typeof value!=='object'||Array.isArray(value))return
+    const row=value as Record<string,unknown>
+    if(typeof row.match_link!=='string'||!row.match_link.startsWith('https://www.oddsportal.com/')
+      ||typeof row.home_team!=='string'||typeof row.away_team!=='string')return
+    const key=[row.match_link,row.scraped_date??'',row.match_date??''].join('|')
+    if(seen.has(key)||rows.length>=500)return
+    seen.add(key);rows.push(row)
+  }
+  if(Array.isArray(output))for(const row of output.slice(0,500))add(row)
+  if(typeof stdout==='string'){
+    for(const line of stdout.split(/\r?\n/u).slice(0,5000)){
+      if(line.length>35_000||!line.trim().startsWith('{'))continue
+      try{add(JSON.parse(line) as unknown)}catch{/* malformed/truncated NDJSON line */}
+    }
+  }
+  return rows
 }
 /** Run a fixed local executable with fixed command shape, no shell, no user URLs. */
 async function runScraper(sport:KeylessSport,market:string,day:string,env:NodeJS.ProcessEnv):Promise<unknown>{
@@ -158,12 +185,32 @@ async function runScraper(sport:KeylessSport,market:string,day:string,env:NodeJS
   const file=join(folder,'odds.json')
   try{
     const executable=env.PHOENIX_SPORTS_ODDSHARVESTER_BIN||'oddsharvester'
-    await runFile(executable,oddsHarvesterArgs(sport,market,day,file),
-    {shell:false,windowsHide:true,timeout:180_000,maxBuffer:256_000,
-      env:{...process.env,...env}})
-    const metadata=await stat(file)
-    if(metadata.size>4_000_000)throw Error('Archivo de cuotas supera 4 MB')
-    return JSON.parse(await readFile(file,'utf8')) as unknown
+    let stdout='',failure:unknown=null
+    try{
+      const process=await runFile(executable,oddsHarvesterArgs(sport,market,day,file),
+        {shell:false,windowsHide:true,timeout:180_000,maxBuffer:4_000_000,
+          env:{...process.env,...env}})
+      stdout=process.stdout
+    }catch(error){
+      failure=error
+      const captured=error as {stdout?:unknown}
+      stdout=typeof captured.stdout==='string'?captured.stdout:''
+    }
+    let output:unknown=null
+    try{
+      const metadata=await stat(file)
+      if(metadata.size>4_000_000)throw Error('Archivo de cuotas supera 4 MB')
+      output=JSON.parse(await readFile(file,'utf8')) as unknown
+    }catch(error){
+      if(!failure&&error instanceof Error&&error.message.includes('supera 4 MB'))throw error
+    }
+    const recovered=recoverScraperRows(stdout,output)
+    if(recovered.length)return recovered
+    if(failure){
+      const message=failure instanceof Error?failure.message:'Fallo desconocido'
+      throw Error('OddsHarvester falló y no dejó partidos cotizables: '+message.slice(0,240))
+    }
+    return Array.isArray(output)?output:[]
   }finally{
     await rm(folder,{recursive:true,force:true})
   }
