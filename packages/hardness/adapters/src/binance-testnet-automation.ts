@@ -173,6 +173,59 @@ export class BinanceTestnetAutomation {
     await this.save()
     return this.snapshot()
   }
+  /**
+   * User-directed fake-funds panic exit. TESTNET orders are sent only to the
+   * fixed Binance Spot Testnet endpoint. Each signed exchange receipt is
+   * reconciled before the next sell. An unfilled or untradeable remainder is
+   * left on the ledger and a safety halt is persisted, never called "sold".
+   */
+  async stopAndLiquidate(): Promise<BinanceTestnetAutomationState> {
+    await this.stop() // stop is persisted before contacting Binance.
+    try {
+      if (this.state.pending) {
+        await this.reconcilePending()
+        if (this.state.pending) throw new Error('unresolved-testnet-order')
+      }
+      let sequence = 0
+      for (const symbol of Object.keys(this.state.positions)) {
+        while (this.state.positions[symbol] !== undefined) {
+          if (++sequence > 200) throw new Error('too-many-testnet-liquidation-orders')
+          const position = this.state.positions[symbol]
+          if (position === undefined) break
+          const account = await this.testnet.status()
+          if (!account.connected || account.canTrade !== true)
+            throw new Error('testnet-wallet-unavailable')
+          const balance = Number(account.balances?.find(
+            row => row.asset === symbol.slice(0, -4))?.free ?? 0)
+          const limits = await this.testnet.lotSize(symbol)
+          const price = await this.testnet.quote(symbol)
+          const quantity = sellQuantity(
+            Math.min(position.quantity, balance, Number(limits.maxQty), 100), limits)
+          if (!finite(quantity) || !finite(price) || quantity * price < 10)
+            throw new Error('testnet-position-below-executable-lot-or-notional')
+          const now = Date.now()
+          await this.submit({
+            symbol, side: 'SELL', quantity, strategy: position.strategy,
+            reason: 'user-stop-liquidate-testnet', requestedAt: new Date(now).toISOString(),
+            signalBar: now, clientOrderId: orderId(symbol, 'SELL', 'user-stop-liquidate-testnet', now + sequence),
+          })
+          if (this.state.pending) {
+            await this.reconcilePending()
+            if (this.state.pending) throw new Error('unresolved-testnet-order')
+          }
+        }
+      }
+      if (Object.keys(this.state.positions).length > 0)
+        throw new Error('testnet-liquidation-remaining-positions')
+      this.state.lastDecision = 'testnet-positions-liquidated-by-user'
+      await this.save()
+      return this.snapshot()
+    } catch {
+      await this.halt('testnet-liquidation-incomplete-review-provider-ledger')
+      throw new Error('Testnet liquidation incomplete: remaining positions or pending receipts need review')
+    }
+  }
+
   /** User-visible, READ-only recovery of uncertain Testnet order receipts. */
   async reconcilePending(): Promise<BinanceTestnetAutomationState> {
     await this.restore()
