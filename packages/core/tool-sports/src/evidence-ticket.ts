@@ -6,6 +6,7 @@ import { getFeed,hasSportsPermission, type ChatBlock } from './sports.ts'
 import { researchSport } from './multi-sport-research.ts'
 import { researchTicket, type ResearchTicketLeg } from './research-ticket.ts'
 import { investigatePregame } from './pregame-investigation.ts'
+import { investigateEventDeep } from './sports-deep-context.ts'
 import { diversifiedSportsPicks,diversifiedSportsShortlist } from './sports-diversity.ts'
 const defaultLeagues = [
   ['basketball','nba'],['hockey','nhl'],['baseball','mlb'],['football','nfl'],
@@ -25,6 +26,7 @@ export async function evidenceTicket(
   candidatesEvaluated:number;researchLeagues:number;modelProbabilities:false;priced:false;placed:false;
   insufficientEvidence:number;researchStandard:string;
   pregameSummariesVerified:number;injuryFeedsVerified:number;
+  deepContextChecked:number;newsMatched:number;playerStatsChecked:number;
   multisportSatisfied:boolean;scannedSports:number;selectedSports:string[];
   selections:ResearchTicketLeg[];events:Array<{eventId:string;home:string;away:string;kickoff:string;sport:string;league:string;pick:'home'|'away'}>}>{
   if(!Number.isInteger(count)||count<1||count>6)throw Error('El ticket requiere entre 1 y 6 patas')
@@ -133,27 +135,55 @@ export async function evidenceTicket(
     return{card,complete:false,verifiedEvents:0,candidatesEvaluated:evaluated,
       researchLeagues:reports.filter(r=>r.status==='fulfilled').length,
       insufficientEvidence,pregameSummariesVerified:0,injuryFeedsVerified:0,
+      deepContextChecked:0,newsMatched:0,playerStatsChecked:0,
       multisportSatisfied,scannedSports,selectedSports,
       researchStandard:'Sin candidatos con cinco partidos distintos por equipo (NFL tres) y tendencia contrastable. Deportes evaluados: '+scannedSports+'.',
       modelProbabilities:false,priced:false,placed:false,selections:[],
       events:[]}
   }
+  // One bounded memoized HTTP request for a repeated ESPN event summary
+  // or league injury feed, even across the two complementary research passes.
+  const networkCache=new Map<string,Promise<Response>>()
+  const cachedFetcher:typeof fetch=(input,init)=>{
+    const url=typeof input==='string'?input:input instanceof URL?input.href:input.url
+    const reused=url.includes('/summary?event=')||url.endsWith('/injuries')
+    if(!reused)return fetcher(input,init)
+    let request=networkCache.get(url)
+    if(!request){request=fetcher(input,init);networkCache.set(url,request)}
+    return request.then(response=>response.clone())
+  }
   const checks=await investigatePregame(selected.map(x=>({
     sport:x.pick.sport,league:x.pick.league,eventId:x.pick.eventId,
-  })),fetcher)
+  })),cachedFetcher)
+  const contextual=await Promise.allSettled(selected.map(x=>investigateEventDeep(
+    x.pick.sport,x.pick.league,x.pick.eventId,cachedFetcher,now,env)))
+  let deepContextChecked=0,newsMatched=0,playerStatsChecked=0
+  for(const result of contextual)if(result.status==='fulfilled'){
+    deepContextChecked++
+    newsMatched+=result.value.headlines.length
+    playerStatsChecked+=result.value.playerStats.length
+  }
   let pregameSummariesVerified=0,injuryFeedsVerified=0
-  const documented=chosen.map(pick=>{
+  const documented=chosen.map((pick,index)=>{
     const state=checks.get(pick.sport+'|'+pick.league+'|'+pick.eventId)
     if(state?.summaryVerified)pregameSummariesVerified++
     if(state?.injuryReportVerified)injuryFeedsVerified++
+    const context=contextual[index]
+    const deep=context?.status==='fulfilled'?context.value:undefined
+    const sourceSummary=' noticias relacionadas '+(deep?.headlines.length??0)+
+      '; bajas individualizadas '+(deep?.injuries.length??0)+
+      '; estadísticas de jugadores '+(deep?.playerStats.length??0)+'; '
     const audit='Resumen ESPN '+(state?.summaryVerified?'consultado':'no verificado')+
       '; parte médico '+(state?.injuryReportVerified?'feed disponible':'no verificable')+
       '; titulares pendientes'
     return {...pick,rationale:(String(pick.rationale??'').slice(0,Math.max(0,477-audit.length))+
-      ' · '+audit).slice(0,480)}
+      ' · '+sourceSummary+audit).slice(0,480)}
   })
   const ticket=await researchTicket(documented,date,fetcher,now,env,count,true)
   const note=String(ticket.card.props.note??'')+
+    ' Investigación ampliada en '+deepContextChecked+'/'+documented.length+
+    ' eventos: '+newsMatched+' noticias relacionadas, '+playerStatsChecked+
+    ' estadísticas individuales reportadas. Estos recuentos NO prueban bajas ni titulares.'+
     (!multisportSatisfied?' REQUISITO MULTIDEPORTE NO ALCANZADO: las selecciones fundamentadas son de una sola disciplina. ':'')+
     ' Investigación contextual: '+pregameSummariesVerified+'/'+documented.length+
     ' resúmenes de evento ESPN; '+injuryFeedsVerified+'/'+documented.length+
@@ -166,6 +196,7 @@ export async function evidenceTicket(
   return{card,complete:ticket.complete,verifiedEvents:ticket.verifiedEvents,
     candidatesEvaluated:evaluated,researchLeagues:reports.filter(r=>r.status==='fulfilled').length,
     insufficientEvidence,pregameSummariesVerified,injuryFeedsVerified,
+    deepContextChecked,newsMatched,playerStatsChecked,
     multisportSatisfied,scannedSports,selectedSports,
     researchStandard:'Preselección basada en 5 eventos históricos por equipo (NFL: 3). Se exploraron '+scannedSports+' deportes; seleccionados: '+(selectedSports.join(', ')||'ninguno')+'. Diversidad '+(multisportSatisfied?'cumplida':'NO cumplida')+'. Lesiones, titulares y cuotas siguen sin verificación específica.',
     modelProbabilities:false,priced:false,placed:false,selections:documented,
