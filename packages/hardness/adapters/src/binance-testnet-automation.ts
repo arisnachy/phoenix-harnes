@@ -316,7 +316,8 @@ export class BinanceTestnetAutomation {
       // Keep the real provider balance authoritative, but do not carry a
       // phantom strategy position once a protective full exit is confirmed.
       if(position.quantity<1e-10
-        || (intent.reason!=='tp1' && position.quantity<1e-6))
+        || (intent.reason!=='tp1' && intent.reason!=='user-stop-liquidate-testnet'
+          && position.quantity<1e-6))
         delete this.state.positions[intent.symbol]
       else if(intent.reason==='tp1')position.tp1Done=true
     }
