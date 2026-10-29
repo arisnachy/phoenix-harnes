@@ -7,6 +7,7 @@ import { BinancePaperBroker, type BinancePublicMarket, type BinanceCandle } from
 import { BinancePaperAutomation } from '../src/binance-paper-automation.ts'
 import { mountBinancePaperDashboardRoute } from '../src/binance-paper-route.ts'
 import { BinanceSpotTestnet } from '../src/binance-spot-testnet.ts'
+import { BinanceSpotRealReadOnly } from '../src/binance-spot-real-auth.ts'
 
 const roots: string[] = []
 const disposers: Array<() => Promise<void>> = []
@@ -191,6 +192,67 @@ describe('Binance chat viewer HTTP integration', () => {
     const body = await result.text()
     expect(body).toContain('testnet-automation-account-change-blocked')
     expect(body).not.toContain('TESTNET_SECRET_1234567890')
+  })
+
+  it('authenticates Binance REAL HMAC in read-only mode without using Testnet or writing orders', async () => {
+    const saved=new Map<string,string>()
+    const vault={
+      async set(ref:string,value:string){saved.set(ref,value)},
+      async unset(ref:string){saved.delete(ref)},
+      async resolve(ref:string){const value=saved.get(ref);return value?{value,source:'file'}:undefined},
+      async describe(){return {writable:true,configured:false}},
+    }
+    const requests:string[]=[]
+    const real=new BinanceSpotRealReadOnly(async()=>{
+      const apiKey=saved.get('PHOENIX_BINANCE_REAL_API_KEY')
+      const secret=saved.get('PHOENIX_BINANCE_REAL_API_SECRET')
+      return apiKey&&secret?{apiKey,secret}:undefined
+    },async(input,init)=>{
+      requests.push(String(input))
+      expect(init?.method).toBe('GET')
+      expect(String(input)).toContain('https://api.binance.com/api/v3/account')
+      expect(String(input)).not.toContain('testnet.binance.vision')
+      return new Response(JSON.stringify({canTrade:true,balances:[]}),{status:200})
+    })
+    const {origin}=await serverWithTrading({real,credentials:vault as never})
+    const url=origin+'/phoenix-trading/paper/real-connect'
+    const blocked=await fetch(url,{method:'POST',headers:{Origin:'https://evil.example','Content-Type':'application/json'},
+      body:JSON.stringify({apiKey:'REAL_HMAC_KEY_1234567890',secret:'REAL_HMAC_SECRET_1234567890'})})
+    expect(blocked.status).toBe(403)
+    const good=await fetch(url,{method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},
+      body:JSON.stringify({apiKey:'REAL_HMAC_KEY_1234567890',secret:'REAL_HMAC_SECRET_1234567890'})})
+    expect(good.status).toBe(200)
+    const result=await good.text()
+    expect(JSON.parse(result)).toMatchObject({
+      saved:true,configured:true,connected:true,canRead:true,tradingAuthorized:false,
+    })
+    expect(result).not.toContain('REAL_HMAC_SECRET_1234567890')
+    expect(saved.get('PHOENIX_BINANCE_REAL_API_KEY')).toBe('REAL_HMAC_KEY_1234567890')
+    expect(saved.has('PHOENIX_BINANCE_TESTNET_API_KEY')).toBe(false)
+    const check=await fetch(origin+'/phoenix-trading/paper/real-status')
+    expect(await check.json()).toMatchObject({connected:true,tradingAuthorized:false})
+    expect(requests).toHaveLength(2)
+    expect((await fetch(url)).status).toBe(405)
+  })
+
+  it('repairs a broken official Agentic MCP using the Host without granting Trade scope',async()=>{
+    let repaired=false
+    const {origin}=await serverWithTrading({agentOs:{
+      async repairBinanceAgentOs(){repaired=true;return {status:'installed',connector:{
+        entryId:'binance-agent-os',serverName:'binance-agent-os',url:'https://agent.binance.com/mcp/agentic',
+      }}},
+      async binanceAgentOsState(){return {configured:true,status:repaired?'auth-required' as const:'failed' as const,
+        reasonCode:repaired?'authorization-required' as const:'connection-failed' as const,toolNames:[]}},
+    }})
+    const url=origin+'/phoenix-trading/paper/mcp-repair'
+    const refused=await fetch(url,{method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},
+      body:JSON.stringify({trade:true})})
+    expect(refused.status).toBe(400)
+    const done=await fetch(url,{method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},body:'{}'})
+    expect(done.status).toBe(200)
+    expect(await done.json()).toMatchObject({repaired:true,accountVerified:false,tradeScopeVerified:false})
+    const status=await fetch(origin+'/phoenix-trading/paper/mcp-status')
+    expect(await status.json()).toMatchObject({status:'auth-required',reasonCode:'authorization-required',connected:false})
   })
 
   it('validates keys only against Spot Testnet and never echoes or logs secrets', async () => {
