@@ -27,7 +27,12 @@ interface Task {
   readonly createdBy: 'user' | 'harness' | 'system'
   readonly delivery: 'chat' | 'work' | 'email'
   readonly recurrence: Recurrence
-  readonly recentHistory: readonly { readonly status: string; readonly summary?: string; readonly error?: string; readonly finishedAt: string }[]
+  readonly recentHistory: readonly {
+    readonly status: string
+    readonly summary?: string
+    readonly error?: string
+    readonly finishedAt: string
+  }[]
 }
 
 interface Props {
@@ -228,7 +233,7 @@ export function TaskCenter({ connection, onClose }: Props) {
   const activeCount = tasks.filter(task => task.status === 'scheduled' || task.status === 'running').length
 
   return (
-    <div className={css.overlay} onMouseDown={event => { if (event.target === event.currentTarget) onClose() }}>
+    <div className={css.overlay} onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
       <section className={css.dialog} role="dialog" aria-modal="true" aria-labelledby="phoenix-tasks-title">
         <header className={css.header}>
           <div>
@@ -239,21 +244,21 @@ export function TaskCenter({ connection, onClose }: Props) {
           <button type="button" aria-label="Cerrar tareas programadas" className={css.close} onClick={onClose}>×</button>
         </header>
         <div className={css.body}>
-          <form className={css.form} onSubmit={event => { void create(event) }}>
+          <form className={css.form} onSubmit={(event) => { void create(event) }}>
             <h3>Nueva tarea</h3>
             <label>Título
-              <input required maxLength={120} value={title} onChange={event => { setTitle(event.target.value) }} placeholder="Ej. Revisar avances de mi proyecto" />
+              <input required maxLength={120} value={title} onChange={(event) => { setTitle(event.target.value) }} placeholder="Ej. Revisar avances de mi proyecto" />
             </label>
             <label>Qué debe hacer Kira
-              <textarea required maxLength={6000} rows={4} value={instruction} onChange={event => { setInstruction(event.target.value) }}
+              <textarea required maxLength={6000} rows={4} value={instruction} onChange={(event) => { setInstruction(event.target.value) }}
                 placeholder="Describe el trabajo, sus fuentes y qué resultado esperas." />
             </label>
             <div className={css.twoColumns}>
               <label>Primera ejecución
-                <input type="datetime-local" required value={runAt} onChange={event => { setRunAt(event.target.value) }} />
+                <input type="datetime-local" required value={runAt} onChange={(event) => { setRunAt(event.target.value) }} />
               </label>
               <label>Repetición
-                <select value={frequency} onChange={event => { setFrequency(event.target.value) }}>
+                <select value={frequency} onChange={(event) => { setFrequency(event.target.value) }}>
                   <option value="once">Una sola vez</option><option value="daily">Diaria</option>
                   <option value="weekly">Semanal</option><option value="monthly">Mensual</option>
                   <option value="yearly">Anual</option><option value="minutes">Intervalo personalizado</option>
@@ -261,22 +266,26 @@ export function TaskCenter({ connection, onClose }: Props) {
               </label>
             </div>
             {frequency === 'minutes' && <label>Intervalo en minutos (mínimo 5)
-              <input type="number" min={5} max={525600} step={1} value={minutes} onChange={event => { setMinutes(Number(event.target.value)) }} />
+              <input type="number" min={5} max={525600} step={1} value={minutes} onChange={(event) => { setMinutes(Number(event.target.value)) }} />
             </label>}
             <label>Entrega
-              <select value={delivery} onChange={event => { setDelivery(event.target.value as 'chat' | 'work' | 'email') }}>
+              <select value={delivery} onChange={(event) => { setDelivery(event.target.value as 'chat' | 'work' | 'email') }}>
                 <option value="work">Trabajo autónomo · resultados en Inicio</option>
                 <option value="chat">Responder en una conversación de Kira</option>
                 <option value="email">Enviar por correo (requiere conexión autorizada)</option>
               </select>
             </label>
             {delivery === 'email' && <label>Correo del destinatario
-              <input type="email" required maxLength={320} value={recipient} onChange={event => { setRecipient(event.target.value) }} placeholder="destinatario@ejemplo.com" />
+              <input type="email" required maxLength={320} value={recipient} onChange={(event) => { setRecipient(event.target.value) }} placeholder="destinatario@ejemplo.com" />
             </label>}
             <button type="submit" className={css.primary} disabled={busy || connection === undefined}>
               {busy ? 'Guardando…' : 'Crear tarea'}
             </button>
-            <p className={css.hint}>Las tareas se guardan de forma persistente. Si PHOENIX está cerrado, recuperará las pendientes al reiniciarse; para ejecutarlas puntualmente debe permanecer activo o contar con un servicio externo.</p>
+            <p className={css.hint}>
+              Las tareas se guardan de forma persistente. Si PHOENIX está cerrado, recuperará
+              las pendientes al reiniciarse; para ejecutarlas puntualmente debe permanecer
+              activo o contar con un servicio externo.
+            </p>
           </form>
 
           <div className={css.tasks}>
@@ -287,9 +296,11 @@ export function TaskCenter({ connection, onClose }: Props) {
             {error && <p className={css.error} role="alert">{error}</p>}
             {notice && <p className={css.notice} role="status">{notice}</p>}
             {loading ? <p className={css.empty}>Cargando tareas…</p>
-              : ordered.length === 0 ? <p className={css.empty}>Aún no hay tareas. Puedes crear una aquí o pedirle a Kira que programe alguna por ti.</p>
+              : ordered.length === 0 ? <p className={css.empty}>
+                  Aún no hay tareas. Puedes crear una aquí o pedirle a Kira que programe alguna por ti.
+                </p>
                 : <ul className={css.list}>
-                  {ordered.map(task => {
+                  {ordered.map((task) => {
                     const latest = task.recentHistory[task.recentHistory.length - 1]
                     return <li key={task.id} className={css.task}>
                       <div className={css.taskTop}>
