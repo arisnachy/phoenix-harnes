@@ -88,6 +88,7 @@ export type SportsRepairLaunch = {
     |'missing-installer'|'launch-error'|'error'
   logPath:string
   detail?:string
+  error?:string
 }
 /** A prepared runtime can omit development scripts. Check the original
  * install checkout before searching the runtime and finally cwd.
