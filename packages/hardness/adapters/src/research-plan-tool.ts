@@ -88,7 +88,7 @@ function chooseEntry(args: Intake): Entry | null {
   if (/articulo cientifico|journal (article|manuscript)|manuscrito cientifico/u.test(intent)) return 'scientific_article'
   if (/vancouver/u.test(intent)) return 'vancouver'
   if (/apa\s*7|apa\s*septima|normas?\s*apa|\bapa\b/u.test(intent)) return 'apa7'
-  return null
+  return args.citation_style ?? null
 }
 function allocate(input: ReadonlyArray<readonly [string, string, number]>, target: number) {
   const sum = input.reduce((total, item) => total + item[2], 0)
@@ -142,10 +142,13 @@ function buildAcademicPlan(input: unknown) {
   if (entry === null) missing.add('entrada: APA 7, Vancouver o Artículo científico')
   if (citationStyle === null) missing.add('estilo de citas del artículo: APA 7 o Vancouver')
   const academic = entry !== 'scientific_article' && inferredType !== 'journal_manuscript'
-  const cover = args.cover
+  const cover = args.cover !== null && typeof args.cover === 'object' && !Array.isArray(args.cover)
+    ? args.cover : undefined
   if (academic) {
-    if (!cover?.institution) missing.add('institución')
-    if (!cover?.author && !cover?.authors?.some(a => a.name?.trim())) missing.add('participantes')
+    if (!cover?.institution?.trim()) missing.add('institución')
+    const namedAuthors = Array.isArray(cover?.authors) && cover.authors.some(author =>
+      typeof author === 'object' && author !== null && typeof author.name === 'string' && author.name.trim() !== '')
+    if (!cover?.author?.trim() && !namedAuthors) missing.add('participantes')
   }
   if (args.target_pages !== undefined && (args.page_scope === undefined || args.page_scope === 'unknown')) {
     missing.add('si las páginas incluyen portada, bibliografía y anexos')
@@ -192,6 +195,14 @@ function buildAcademicPlan(input: unknown) {
       'institutional_manual_path', 'dedication', 'acknowledgements'],
     reporting_standard_hint: checklist,
     evidence_status: 'not_verified',
+    research_workflow: {
+      minimum_distinct_cited_sources: sourceTarget?.minimum ?? null,
+      evidence_collection: ['scope and questions', 'official institutions by source batches',
+        'scientific literature by subtopic and pagination', 'DOI/PMID and primary document verification',
+        'deduplicate and assess study quality', 'gap analysis and focused searches', 'write and audit'],
+      note: 'Source counts are advisory, not global caps or evidence-quality certification. Never treat a subagent limit of 15 as the thesis reference limit.',
+      blocked_sources: 'Report institution, dataset, required years, status and replacement without inventing values.',
+    },
     guidance: 'Recopila juntos los campos ausentes. Si hay manual o plantilla institucional, extrae primero sus reglas. Para tesis usa la orientación de referencias solo como advertencia, prioriza calidad y citas reales. Respeta APA 7/Vancouver y diseña figuras elegantes únicamente con datos auténticos. Verifica DOI/PMID; no inventes resultados, permisos ni bibliografía.',
   }
 }
@@ -211,9 +222,20 @@ export function planAcademicResearch(input: unknown): ReturnType<typeof buildAca
 export function createResearchPlanTool(): ToolDefinition {
   return defineTool({
     name: 'phoenix_research_plan',
-    description: 'PLANIFICA ANTES DE REDACTAR una investigación APA 7, Vancouver o Artículo científico. Detecta la intención y devuelve una SOLA agrupación de datos faltantes, capítulos, metas orientativas 20-40/40-80/100+ referencias para licenciatura/maestría/doctorado, APA7/Vancouver, gráficos con fuente y diseño académico elegante, presupuesto de páginas (10-250+ según nivel), recomendación académica, advertencias de métodos y alcance de páginas. Artículo científico es un tipo de documento distinto de APA/Vancouver, que son estilos bibliográficos. Si hay guía institucional, léela antes de cerrar el plan; no presumas requisitos universales. Úsalo antes de phoenix_research_publish para tesis, monografías, protocolos, artículos, revisiones y trabajos de 60-120 páginas.',
-    parameters: { input: { type: 'object', required: true, additionalProperties: true,
-      description: 'intent, entry, citation_style (apa7/vancouver), document_type, level (bachelors/masters/doctorate), visual_preference (premium/standard), title, target_pages, page_scope, cover.' } },
+    description: 'PLANIFICA investigación científica y tesis de pregrado, maestría y doctorado. Recibe input:{intent,level,citation_style,document_type,target_pages,page_scope,cover?}; también acepta los mismos campos sin input. Los datos de portada son opcionales en la fase de búsqueda: si falla su esquema, reintenta con intent,level,citation_style y target_pages, NO suspendas la misión. Orquesta búsquedas institucionales por lotes (research_search domain=public_health batch=0..3 para APS RD), literatura temática paginada (research_scholar cursor_mark), verificación bibliográfica, evaluación de sesgos, análisis de vacíos y redacción. 15 referencias de un subagente nunca son el techo de una tesis: metas orientativas 20–40/40–80/100+ por nivel; prevalece manual universitario. APA7/Vancouver exactos, gráficos con fuentes y paginación real, no datos inventados.',
+    parameters: {
+      input: { type: 'object', additionalProperties: true,
+        description: 'Objeto con intent, citation_style, document_type, level, target_pages; portada opcional.' },
+      intent: { type: 'string', description: 'Intención académica; usar si no se suministra input.' },
+      entry: { type: 'string', description: 'apa7, vancouver, scientific_article' },
+      citation_style: { type: 'string', description: 'apa7 o vancouver' },
+      document_type: { type: 'string', description: 'thesis, monograph, research_protocol, etc.' },
+      level: { type: 'string', description: 'bachelors, masters, doctorate, etc.' },
+      target_pages: { type: 'integer', description: 'Objetivo estimado de páginas (no contenido ya escrito).' },
+      page_scope: { type: 'string', description: 'all, body o unknown' },
+      visual_preference: { type: 'string', description: 'standard o premium' },
+      cover: { type: 'object', additionalProperties: true, description: 'Portada opcional, no bloqueante.' },
+    },
     output: {
       schema: { type: 'object', additionalProperties: true },
       render: (_args, value) => [{ type: 'text',
@@ -228,7 +250,7 @@ export function createResearchPlanTool(): ToolDefinition {
           ? value.missing_fields.map(String).join(', ') : 'ninguno'),
       }],
     },
-    execute(args) { return Promise.resolve(planAcademicResearch(args.input)) },
+    execute(args) { return Promise.resolve(planAcademicResearch(args.input ?? args)) },
     presentCall() { return { card: 'generic', title: 'Plan académico y extensión verificable', kind: 'execute' } },
   })
 }
