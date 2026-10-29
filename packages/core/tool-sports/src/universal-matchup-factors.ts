@@ -283,9 +283,9 @@ export async function auditUniversalMatchup(
       ' · recibidos: '+String(awayForm.allowedPerGame??'N/D')),
     stat('Descanso local (horas)',home[0]?round((kickoff-Date.parse(home[0].date))/3_600_000):null),
     stat('Descanso visitante (horas)',away[0]?round((kickoff-Date.parse(away[0].date))/3_600_000):null),
+    ...descriptiveAdvantages.map(a=>stat('Ventaja descriptiva · '+a.factor,
+      a.favors+' · diferencia '+a.difference,a.caution)),
   ])
-  if(descriptiveAdvantages.length)put('Señales descriptivas de ventaja','metrics',
-    descriptiveAdvantages.map(a=>stat(a.factor,a.favors+' · diferencia '+a.difference,a.caution)))
   put('Últimos resultados','list',[
     ...home.slice(0,4).map(r=>stat(current.home.name+' vs '+r.opponent,
       r.scored+'-'+r.allowed,r.date.slice(0,10))),
