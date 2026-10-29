@@ -239,6 +239,31 @@ export function recoverScraperRows(stdout:unknown,output:unknown):unknown[]{
   return rows
 }
 /** Run a fixed local executable with fixed command shape, no shell, no user URLs. */
+/** Sanitized transport failure: retain exit status and stderr diagnostics without
+ * exposing environment variables, authorization headers or a raw shell command.
+ */
+export function describeScraperError(error:unknown):string{
+  const record=error&&typeof error==='object'?error as Record<string,unknown>:{}
+  const raw=typeof record.stderr==='string'?record.stderr:''
+  const scrub=(v:string)=>v.replace(/\\u001b\\[[0-9;]*m/gu,'')
+    .replace(/(?:api[_-]?key|token|authorization|password|secret)\\s*[:=]\\s*[^\\s,;]+/giu,'[credencial oculta]')
+    .replace(/(?:https?:\\/\\/)[^\\s]*?(?:apiKey|token|key)=[^&\\s]+/giu,'[URL con credencial oculta]')
+    .replace(/[\\r\\n]+/gu,' ').trim()
+  const diagnostic=scrub(raw).slice(-900)
+  const code=typeof record.code==='number'||typeof record.code==='string'?
+    String(record.code).slice(0,40):'desconocido'
+  const signal=typeof record.signal==='string'?record.signal.slice(0,30):'ninguna'
+  const killed=record.killed===true
+  const category=code==='ENOENT'?'missing-executable':
+    code==='ETIMEDOUT'||killed?'timeout':
+      /executable doesn.t exist|playwright.*install|chromium.*not found/iu.test(raw)?
+        'missing-playwright-browser':
+      /403|429|access denied|captcha|cloudflare/iu.test(raw)?
+        'site-blocked-or-limited':'scraper-exit-error'
+  return 'category='+category+'; exitCode='+code+'; signal='+signal+
+    '; killed='+String(killed)+'; stderr='+ (diagnostic||'sin detalles de stderr')+
+    '; verificar el log local del instalador y una consulta CLI controlada.'
+}
 async function runScraper(sport:KeylessSport,market:string,day:string,env:NodeJS.ProcessEnv):Promise<unknown>{
   const folder=await mkdtemp(join(tmpdir(),'phoenix-odds-'))
   const file=join(folder,'odds.json')
@@ -266,8 +291,7 @@ async function runScraper(sport:KeylessSport,market:string,day:string,env:NodeJS
     const recovered=recoverScraperRows(stdout,output)
     if(recovered.length)return recovered
     if(failure){
-      const message=failure instanceof Error?failure.message:'Fallo desconocido'
-      throw Error('OddsHarvester falló y no dejó partidos cotizables: '+message.slice(0,240))
+      throw Error('OddsHarvester falló sin cuotas recuperables: '+describeScraperError(failure))
     }
     return Array.isArray(output)?output:[]
   }finally{
@@ -293,6 +317,10 @@ export async function keylessOdds(
   const task=(async()=>{
     const raw=await runner(sport,market,date,env)
     const rows=normalizeOddsHarvester(raw,sport,now,3_600_000)
+    if(Array.isArray(raw)&&raw.length>0&&rows.length===0)
+      throw Error('OddsHarvester procesó '+raw.length+
+        ' partidos, pero no encontró precios elegibles: comprobar fecha de captura, '+
+        'inicio del partido, mercado, casa, período y líneas retiradas.')
     if(runner===runScraper){
       if(cache.size>=64)cache.clear()
       cache.set(key,{at:now,rows})
