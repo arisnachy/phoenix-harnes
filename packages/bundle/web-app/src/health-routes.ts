@@ -214,7 +214,7 @@ export function registerHealthRoutes(ctx:Context):void {
         if(!profile.ok||typeof email!=='string'||email.trim().toLowerCase()!==sender)
           throw new Error('El correo conectado no coincide con la identidad Kira autorizada')
         const planned=store.beginReminder(actor,id,sender)
-        const deliveryState={attempted:false}
+        const deliveryState={ attempted:false }
         try {
           const providerId=await sendReminderWithVerifiedGmail(
             ctx,sender,planned.recipient,planned.subject,planned.body,

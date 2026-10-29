@@ -77,15 +77,15 @@ export class HealthClinicStore {
     const sqlite = createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite')
     this.db=new sqlite.DatabaseSync(dbPath,{ timeout:5000 })
     try {chmodSync(dbPath,0o600)}catch {/* Windows uses directory ACLs */ }
-    this.db.exec("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON;")
+    this.db.exec('PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON;')
     this.db.exec(
-      "CREATE TABLE IF NOT EXISTS health_meta (name TEXT PRIMARY KEY, value TEXT NOT NULL);"+
-      "CREATE TABLE IF NOT EXISTS health_staff (username TEXT PRIMARY KEY, org TEXT NOT NULL, role TEXT NOT NULL, salt TEXT NOT NULL, digest TEXT NOT NULL);"+
-      "CREATE TABLE IF NOT EXISTS health_records (id TEXT PRIMARY KEY, org TEXT NOT NULL, kind TEXT NOT NULL, version INTEGER NOT NULL, iv TEXT NOT NULL, tag TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);"+
-      "CREATE INDEX IF NOT EXISTS health_records_org_kind ON health_records(org,kind);"+
-      "CREATE TABLE IF NOT EXISTS health_audit (id INTEGER PRIMARY KEY AUTOINCREMENT, org TEXT NOT NULL, actor TEXT NOT NULL, action TEXT NOT NULL, record_id TEXT NOT NULL, happened TEXT NOT NULL, prior_hash TEXT NOT NULL, hash TEXT NOT NULL);"+
-      "CREATE TABLE IF NOT EXISTS health_reminders (appointment_id TEXT PRIMARY KEY, org TEXT NOT NULL, status TEXT NOT NULL, sender TEXT NOT NULL, provider_id TEXT, started TEXT NOT NULL);"+
-      "CREATE TABLE IF NOT EXISTS health_patient_access (org TEXT NOT NULL, patient_id TEXT NOT NULL, staff_id TEXT NOT NULL, purpose TEXT NOT NULL, granted_by TEXT NOT NULL, granted_at TEXT NOT NULL, PRIMARY KEY(org,patient_id,staff_id));"
+      'CREATE TABLE IF NOT EXISTS health_meta (name TEXT PRIMARY KEY, value TEXT NOT NULL);'+
+      'CREATE TABLE IF NOT EXISTS health_staff (username TEXT PRIMARY KEY, org TEXT NOT NULL, role TEXT NOT NULL, salt TEXT NOT NULL, digest TEXT NOT NULL);'+
+      'CREATE TABLE IF NOT EXISTS health_records (id TEXT PRIMARY KEY, org TEXT NOT NULL, kind TEXT NOT NULL, version INTEGER NOT NULL, iv TEXT NOT NULL, tag TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);'+
+      'CREATE INDEX IF NOT EXISTS health_records_org_kind ON health_records(org,kind);'+
+      'CREATE TABLE IF NOT EXISTS health_audit (id INTEGER PRIMARY KEY AUTOINCREMENT, org TEXT NOT NULL, actor TEXT NOT NULL, action TEXT NOT NULL, record_id TEXT NOT NULL, happened TEXT NOT NULL, prior_hash TEXT NOT NULL, hash TEXT NOT NULL);'+
+      'CREATE TABLE IF NOT EXISTS health_reminders (appointment_id TEXT PRIMARY KEY, org TEXT NOT NULL, status TEXT NOT NULL, sender TEXT NOT NULL, provider_id TEXT, started TEXT NOT NULL);'+
+      'CREATE TABLE IF NOT EXISTS health_patient_access (org TEXT NOT NULL, patient_id TEXT NOT NULL, staff_id TEXT NOT NULL, purpose TEXT NOT NULL, granted_by TEXT NOT NULL, granted_at TEXT NOT NULL, PRIMARY KEY(org,patient_id,staff_id));',
     )
   }
   /**
@@ -304,15 +304,15 @@ export class HealthClinicStore {
    */
   assignments(actor:Actor):readonly RecordData[] {
     if(actor.role!=='admin'&&actor.role!=='reception')fail('Acceso denegado')
-    return this.db.prepare('SELECT patient_id AS patientId,staff_id AS staffId,purpose,granted_by AS grantedBy,granted_at AS grantedAt FROM health_patient_access WHERE org=? ORDER BY granted_at DESC LIMIT 500').all(actor.org) as RecordData[]
+    return this.db.prepare('SELECT patient_id AS patientId,staff_id AS staffId,purpose,granted_by AS grantedBy,granted_at AS grantedAt FROM health_patient_access WHERE org=? ORDER BY granted_at DESC LIMIT 500').all(actor.org)
   }
   private access(actor:Actor,kind:Kind,write=false):void {
-    if(!TYPES.has(kind)||(write?WRITE:READ)[kind].includes(actor.role)===false)fail('Permiso clínico insuficiente')
+    if(!TYPES.has(kind)||!(write?WRITE:READ)[kind].includes(actor.role))fail('Permiso clínico insuficiente')
   }
   /** Psychotherapy disclosures require exact note authorship even for administrators and nurses. */
   private mayReadEncounter(actor:Actor,data:RecordData):boolean {
     const restricted=data.confidentialPsychotherapy===true ||
-      /(?:psic[oó]log|psycholog|psicoterapi|psychiatr|psiquiatr)/iu.test(String(data.specialty??''))
+      /(?:psic[oó]log|psycholog|psicoterapi|psychiatr|psiquiatr)/iu.test(typeof data.specialty==='string'?data.specialty:'')
     if(restricted)return (actor.role==='psychologist'||actor.role==='clinician')&&data.practitioner===actor.username
     return actor.role==='admin'||actor.role==='nurse'||data.practitioner===actor.username
   }
@@ -348,8 +348,10 @@ export class HealthClinicStore {
   list(actor:Actor,kind:Kind):readonly RecordData[] {
     this.access(actor,kind)
     const rows=this.db.prepare('SELECT * FROM health_records WHERE org=? AND kind=? ORDER BY created_at DESC LIMIT 500').all(actor.org,kind) as Row[]
-    return rows.map((row):RecordData=>({ id:row.id,version:row.version,createdAt:row.created_at,updatedAt:row.updated_at,...this.open(row) }))
-      .filter(item=>this.hasPatient(actor,kind==='patients'?String(item.id):String(item.patientId??'')))
+    return rows.map((row):RecordData=>({
+      id:row.id,version:row.version,createdAt:row.created_at,updatedAt:row.updated_at,...this.open(row),
+    }))
+      .filter(item=>this.hasPatient(actor,kind==='patients'?String(item.id):typeof item.patientId==='string'?item.patientId:''))
       .filter(item=>kind!=='orders'||actor.role!=='lab'&&actor.role!=='radiology'||
         item.modality===(actor.role==='lab'?'laboratory':'imaging'))
       .filter(item=>kind!=='encounters'||this.mayReadEncounter(actor,item))
@@ -403,7 +405,7 @@ export class HealthClinicStore {
   audits(actor:Actor):readonly RecordData[] {
     if(actor.role!=='admin')fail('Acceso administrativo requerido')
     this.verifyAudit()
-    return this.db.prepare('SELECT id,org,actor,action,record_id AS recordId,happened FROM health_audit WHERE org=? ORDER BY id DESC LIMIT 500').all(actor.org) as RecordData[]
+    return this.db.prepare('SELECT id,org,actor,action,record_id AS recordId,happened FROM health_audit WHERE org=? ORDER BY id DESC LIMIT 500').all(actor.org)
   }
   private insert(actor:Actor,kind:Kind,data:RecordData):RecordData {
     const id=randomUUID(),now=new Date().toISOString(),sealed=this.seal(id,actor.org,kind,1,data)
@@ -429,7 +431,7 @@ export class HealthClinicStore {
       if(kind==='orders'&&data.status==='ordered'&&next.status==='critical-pending-review'){
         const encounterId=str(next.encounterId,'Consulta de resultado crítico',80)
         const clinicalRow=this.db.prepare(
-          "SELECT * FROM health_records WHERE id=? AND org=? AND kind='encounters'"
+          'SELECT * FROM health_records WHERE id=? AND org=? AND kind=\'encounters\'',
         ).get(encounterId,actor.org) as Row|undefined
         if(!clinicalRow)fail('Consulta de resultado crítico inexistente')
         const encounter=this.open(clinicalRow)
@@ -468,11 +470,11 @@ export class HealthClinicStore {
       const email=typeof x.email==='string'?x.email.trim():''
       if(email&&!/^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/u.test(email))fail('Correo de paciente inválido')
       const patient=this.insert(actor,kind,{ name:str(x.name,'Nombre',160),dateOfBirth:dob,
-      email:email.slice(0,254),phone:typeof x.phone==='string'?x.phone.trim().slice(0,35):'',
-      notes:typeof x.notes==='string'?x.notes.slice(0,4000):'',
-       medicalHistory:{pastMedical:'',pastSurgical:'',familyHistory:'',currentMedications:'',vaccinations:'',habits:'',problems:''},
-       medicalHistoryReview:null,emailConsent:false,
-      emailVerified:false,contactEvidence:null,allergyReview:null })
+        email:email.slice(0,254),phone:typeof x.phone==='string'?x.phone.trim().slice(0,35):'',
+        notes:typeof x.notes==='string'?x.notes.slice(0,4000):'',
+        medicalHistory:{ pastMedical:'',pastSurgical:'',familyHistory:'',currentMedications:'',vaccinations:'',habits:'',problems:'' },
+        medicalHistoryReview:null,emailConsent:false,
+        emailVerified:false,contactEvidence:null,allergyReview:null })
       if(actor.role==='clinician'){
         // Registering a patient is an explicit treatment relationship for this clinician.
         const newPatientId=str(patient.id,'Paciente creado',80)
@@ -598,9 +600,9 @@ export class HealthClinicStore {
       this.db.prepare('INSERT INTO health_reminders VALUES (?,?,?,?,?,?)').run(appointmentId,actor.org,'pending',sender,null,now)
       this.audit(actor,'reminder.queued',appointmentId)
       this.db.exec('COMMIT')
-    }catch(error){this.db.exec('ROLLBACK');throw new Error('Este recordatorio ya fue reservado; no se reenviará automáticamente')}
+    }catch(_error){this.db.exec('ROLLBACK');throw new Error('Este recordatorio ya fue reservado; no se reenviará automáticamente')}
     return { recipient,appointmentId,subject:'Recordatorio de cita',body:
-      'Este es un recordatorio de su cita programada. Para cualquier cambio, contacte directamente al consultorio. No responda con información clínica por correo.\n\nPHOENIX Health'}
+      'Este es un recordatorio de su cita programada. Para cualquier cambio, contacte directamente al consultorio. No responda con información clínica por correo.\n\nPHOENIX Health' }
   }
   /**
    * Reauthorize immediately before the Gmail send request. This is a second
@@ -613,8 +615,8 @@ export class HealthClinicStore {
   confirmReminderDelivery(actor:Actor,appointmentId:string,sender:string,recipient:string):void {
     if(actor.role!=='clinician')fail('El recordatorio requiere profesional clínico')
     const pending=this.db.prepare(
-      "SELECT sender,status FROM health_reminders WHERE appointment_id=? AND org=?"
-    ).get(appointmentId,actor.org) as {sender:string;status:string}|undefined
+      'SELECT sender,status FROM health_reminders WHERE appointment_id=? AND org=?',
+    ).get(appointmentId,actor.org) as { sender:string;status:string }|undefined
     if(!pending||pending.status!=='pending'||pending.sender!==sender)
       fail('Recordatorio no autorizado o no pendiente')
     const appointment=this.find(actor,'appointments',str(appointmentId,'Cita',80)).data
@@ -659,7 +661,7 @@ export class HealthClinicStore {
    */
   reminders(actor:Actor):readonly RecordData[] {
     if(actor.role!=='admin')fail('Acceso administrativo requerido')
-    return this.db.prepare('SELECT appointment_id AS appointmentId,status,sender,started FROM health_reminders WHERE org=? ORDER BY started DESC LIMIT 300').all(actor.org) as RecordData[]
+    return this.db.prepare('SELECT appointment_id AS appointmentId,status,sender,started FROM health_reminders WHERE org=? ORDER BY started DESC LIMIT 300').all(actor.org)
   }
 
   /**
@@ -697,12 +699,12 @@ export class HealthClinicStore {
         }
         return this.modify(actor,kind,id,version,current=>({
           ...current,medicalHistory,
-          medicalHistoryReview:{reviewedBy:actor.username,reviewedAt:new Date().toISOString(),source:'clinician-entered'},
+          medicalHistoryReview:{ reviewedBy:actor.username,reviewedAt:new Date().toISOString(),source:'clinician-entered' },
         }))
       }
       if(x.action==='allergy-review'){
         if(actor.role!=='clinician')fail('Solo el médico responsable puede verificar alergias')
-        return this.modify(actor,kind,id,version,current=>{
+        return this.modify(actor,kind,id,version,(current)=>{
           const status=str(x.status,'Estado de alergias',24)
           if(!['none-known','documented'].includes(status))fail('Estado de alergias no confirmado')
           const details=typeof x.details==='string'?x.details.trim():''
@@ -712,7 +714,7 @@ export class HealthClinicStore {
         })
       }
       if(x.action!=='contact')fail('Acción de contacto inválida')
-      return this.modify(actor,kind,id,version,current=>{
+      return this.modify(actor,kind,id,version,(current)=>{
         if(!['reception','clinician','admin'].includes(actor.role))fail('Acceso denegado')
         const method=str(x.method,'Método',30)
         if(!['in-person','signed-document','verified-call'].includes(method))fail('Método de verificación inválido')
@@ -731,7 +733,7 @@ export class HealthClinicStore {
       const data=this.find(actor,kind,id).data
       if(data.practitioner!==actor.username)fail('Consulta de otro profesional')
       const action=str(x.action,'Acción',30)
-      if(action==='answer')return this.modify(actor,kind,id,version,current=>{
+      if(action==='answer')return this.modify(actor,kind,id,version,(current)=>{
         if(current.status==='signed')fail('No se pueden alterar respuestas de una consulta firmada')
         const field=str(x.field,'Pregunta',40),answer=text(x.answer,'Respuesta',1600)
         const answered=current.interviewAnswers
@@ -745,7 +747,7 @@ export class HealthClinicStore {
           fail('Pregunta fuera del interrogatorio propuesto')
         return { ...current,interviewAnswers:{ ...previous,[field]:answer },status:'draft',reviewedVersion:null }
       })
-      if(action==='draft-from-interview')return this.modify(actor,kind,id,version,current=>{
+      if(action==='draft-from-interview')return this.modify(actor,kind,id,version,(current)=>{
         if(current.status==='signed')fail('La historia firmada no admite un nuevo borrador')
         if(typeof current.history==='string'&&current.history.trim())
           fail('La historia contiene texto; revísela manualmente para no sobrescribir información')
@@ -766,23 +768,23 @@ export class HealthClinicStore {
         return { ...current,history,exam:'',assessment:'',plan:'',status:'draft',
           reviewedVersion:null,draftSource:'professional-recorded-interview' }
       })
-      if(action==='document')return this.modify(actor,kind,id,version,current=>{
+      if(action==='document')return this.modify(actor,kind,id,version,(current)=>{
         if(current.status==='signed')fail('Historia firmada: requiere adenda independiente')
         return { ...current,history:text(x.history,'Historia'),exam:typeof x.exam==='string'?x.exam.slice(0,4000):'',
           assessment:typeof x.assessment==='string'?x.assessment.slice(0,4000):'',
           plan:typeof x.plan==='string'?x.plan.slice(0,4000):'',status:'draft',reviewedVersion:null }
       })
-      if(action==='review')return this.modify(actor,kind,id,version,current=>{
+      if(action==='review')return this.modify(actor,kind,id,version,(current)=>{
         if(current.status!=='draft'||!current.history)fail('Se requiere historia en borrador')
         return { ...current,status:'reviewed',reviewedVersion:version+1 }
       })
-      if(action==='sign')return this.modify(actor,kind,id,version,current=>{
+      if(action==='sign')return this.modify(actor,kind,id,version,(current)=>{
         if(current.status!=='reviewed'||current.reviewedVersion!==version)fail('La versión revisada debe coincidir para firmar')
         return { ...current,status:'signed',signedBy:actor.username,signedAt:new Date().toISOString() }
       })
       fail('Acción clínica no permitida')
     }
-    if(kind==='orders')return this.modify(actor,kind,id,version,current=>{
+    if(kind==='orders')return this.modify(actor,kind,id,version,(current)=>{
       const action=str(x.action,'Acción',40)
       if(action==='result'){
         if(current.status!=='ordered'||!(current.modality==='laboratory'&&actor.role==='lab'||current.modality==='imaging'&&actor.role==='radiology'))
@@ -806,18 +808,18 @@ export class HealthClinicStore {
       }
       fail('Transición de orden no permitida')
     })
-    if(kind==='inventory')return this.modify(actor,kind,id,version,current=>{
+    if(kind==='inventory')return this.modify(actor,kind,id,version,(current)=>{
       if(actor.role!=='pharmacy'&&actor.role!=='admin')fail('Acceso a farmacia requerido')
       const delta=Number(x.delta);if(!Number.isSafeInteger(delta)||delta===0||Math.abs(delta)>100000)fail('Movimiento inválido')
       const total=Number(current.units)+delta;if(total<0)fail('Inventario insuficiente')
       return { ...current,units:total }
     })
-    if(kind==='invoices')return this.modify(actor,kind,id,version,current=>{
+    if(kind==='invoices')return this.modify(actor,kind,id,version,(current)=>{
       const payment=Number(x.paymentCents)
       if(!Number.isSafeInteger(payment)||payment<=0||Number(current.paidCents)+payment>Number(current.amountCents))fail('Pago fuera de saldo')
       return { ...current,paidCents:Number(current.paidCents)+payment }
     })
-    if(kind==='appointments'||kind==='followups')return this.modify(actor,kind,id,version,current=>{
+    if(kind==='appointments'||kind==='followups')return this.modify(actor,kind,id,version,(current)=>{
       const status=str(x.status,'Estado',24)
       if(kind==='appointments'&&!['scheduled','completed','cancelled'].includes(status))fail('Estado inválido')
       if(kind==='followups'&&!['pending','done','cancelled'].includes(status))fail('Estado inválido')
