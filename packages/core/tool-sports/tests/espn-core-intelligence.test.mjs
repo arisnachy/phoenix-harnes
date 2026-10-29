@@ -105,3 +105,15 @@ test('normalizes actual ESPN moneyline, point spread and totals without guessing
  const bad=normalizeEspnMarkets(game,[{provider:{name:'Book X'},homeTeamOdds:{spreadOdds:-105}}])
  assert.deepEqual(bad,[])
 })
+
+test('rewrites only the exact ESPN private hostname to the public Core host',async()=>{
+ const calls=[]
+ const ref='https://sports.core.api.espn.pvt/v2/sports/football/leagues/nfl/events/401220181/competitions/401220181/odds/41'
+ const result=await queryEspnCore({...game,mode:'odds',page:10},async url=>{
+   calls.push(url)
+   return url.includes('/odds?')?{count:1,items:[{$ref:ref}]}:{provider:{name:'DraftKings'}}
+ })
+ assert.equal(result.resolvedRefs,1)
+ assert.equal(calls.length,2)
+ assert.match(calls[1],/^https:\/\/sports\.core\.api\.espn\.com\//u)
+})
