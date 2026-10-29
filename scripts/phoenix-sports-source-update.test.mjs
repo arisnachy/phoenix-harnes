@@ -5,7 +5,7 @@ import {join,resolve} from 'node:path'
 import {SPORTS_INSTALL_VERSION,ODDSHARVESTER_VERSION,verifyManifestShape,
   pythonCompatible,pythonCandidates,
   status as installerStatus} from './phoenix-sports-source-bootstrap.mjs'
-import {shouldBootstrap} from './phoenix-sports-source-auto.mjs'
+import {resolveSportsInstaller,shouldBootstrap,start} from './phoenix-sports-source-auto.mjs'
 const prefix=resolve(process.env.PHOENIX_SPORTS_SOURCE_HOME||join(homedir(),'.phoenix','sports-sources'))
 const cli=process.platform==='win32'
   ?join(prefix,'.venv','Scripts','oddsharvester.exe')
@@ -88,4 +88,31 @@ test('bootstrap CLI status reports archive coverage and log location for diagnos
   assert.equal(state.sports.length,4)
   assert.equal(typeof state.mlbAvailable,'boolean')
   assert.ok(state.log.endsWith('install.log'))
+})
+
+test('Windows updater falls back to source checkout when prepared runtime has no scripts',async()=>{
+  const {mkdtempSync,mkdirSync,writeFileSync,readFileSync,existsSync,rmSync}=await import('node:fs')
+  const {tmpdir}=await import('node:os')
+  const home=mkdtempSync(join(tmpdir(),'phoenix-sources-boot-fallback-'))
+  const checkout=join(home,'checkout'),runtime=join(home,'prepared-runtime')
+  const store=join(home,'sports')
+  try{
+    mkdirSync(join(checkout,'scripts'),{recursive:true})
+    mkdirSync(runtime,{recursive:true})
+    const source=join(checkout,'scripts','phoenix-sports-source-bootstrap.mjs')
+    writeFileSync(source,'// test fixture only')
+    const located=resolveSportsInstaller([runtime,checkout])
+    assert.equal(located.root,checkout)
+    let observed=null
+    const result=start((binary,args,options)=>{
+      observed={binary,args,options}
+      return{unref(){}}
+    },{PHOENIX_INSTALL_ROOT:checkout,PHOENIX_RUNTIME_ROOT:runtime,
+      PHOENIX_SPORTS_SOURCE_HOME:store})
+    assert.equal(result.status,'started')
+    assert.equal(observed.options.cwd,checkout)
+    assert.equal(observed.options.env.PHOENIX_SPORTS_BOOTSTRAP_ROOT,checkout)
+    assert.equal(existsSync(join(store,'install.lock')),true)
+    assert.match(readFileSync(join(store,'install.log'),'utf8'),/Launching background installer/)
+  }finally{rmSync(home,{recursive:true,force:true})}
 })
