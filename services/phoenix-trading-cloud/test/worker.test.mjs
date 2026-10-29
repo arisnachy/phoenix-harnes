@@ -1,7 +1,7 @@
 import {it, describe} from 'node:test';
 import assert from 'node:assert/strict';
 import {route,cycle} from '../src/worker.mjs';
-import {freshState} from '../src/strategy.mjs';
+import {freshState,paperFill,exitPlan} from '../src/strategy.mjs';
 
 const TOKEN='test-only-admin-token-123456789012345678901234567890';
 const NOW=1_700_000_000_000;
@@ -98,6 +98,55 @@ describe('Cloud worker auth and scheduling',()=>{
     assert.equal(start.status,200);
     assert.equal((await start.json()).enabled,true);
     assert.equal((await route(request('/admin/control',TOKEN,'POST',{action:'real'}),env)).status,400);
+  });
+  it('persists cloud PAPER stop before attempted sell-all and records real virtual receipts',async()=>{
+    const env={DB:new D1Fake(),ADMIN_TOKEN:TOKEN};
+    const state=freshState();state.enabled=true;
+    env.DB.state=paperFill(state,{id:'seed',at:NOW,symbol:'BTCUSDT',side:'buy',
+      price:100,quantity:1,strategy:'test',reason:'seed',plan:exitPlan(100,2,'test')});
+    const original=globalThis.fetch;
+    globalThis.fetch=async()=>new Response(JSON.stringify([
+      {symbol:'BTCUSDT',price:'110'}]),{status:200});
+    try{
+      const result=await route(request('/admin/control',TOKEN,'POST',
+        {action:'stop-liquidate'}),env);
+      assert.equal(result.status,200);
+      assert.deepEqual(await result.json(),{mode:'paper',enabled:false,
+        liquidated:true,positionsRemaining:0,sold:1});
+      const snapshot=await (await route(request('/snapshot',TOKEN),env)).json();
+      assert.equal(snapshot.enabled,false);
+      assert.equal(snapshot.liquidationPending,false);
+      assert.deepEqual(Object.keys(snapshot.positions),[]);
+      assert.equal(snapshot.journal.at(-1).side,'sell');
+      assert.equal(snapshot.journal.at(-1).reason,'user-stop-liquidate-paper');
+    }finally{globalThis.fetch=original;}
+  });
+  it('cannot restart cloud PAPER with open positions after failed panic liquidation',async()=>{
+    const env={DB:new D1Fake(),ADMIN_TOKEN:TOKEN};
+    const state=freshState();state.enabled=true;
+    env.DB.state=paperFill(state,{id:'seed',at:NOW,symbol:'ETHUSDT',side:'buy',
+      price:100,quantity:1,strategy:'test',reason:'seed',plan:exitPlan(100,2,'test')});
+    const original=globalThis.fetch;
+    globalThis.fetch=async()=>new Response('down',{status:429});
+    try{
+      const result=await route(request('/admin/control',TOKEN,'POST',
+        {action:'stop-liquidate'}),env);
+      assert.equal(result.status,409);
+      let snapshot=await (await route(request('/snapshot',TOKEN),env)).json();
+      assert.equal(snapshot.enabled,false);
+      assert.equal(snapshot.liquidationPending,true);
+      assert.equal(Object.keys(snapshot.positions).length,1);
+      const restart=await route(request('/admin/control',TOKEN,'POST',{action:'start'}),env);
+      assert.equal(restart.status,409);
+      globalThis.fetch=async()=>new Response(JSON.stringify([
+        {symbol:'ETHUSDT',price:'100'}]),{status:200});
+      const retry=await route(request('/admin/control',TOKEN,'POST',
+        {action:'stop-liquidate'}),env);
+      assert.equal(retry.status,200);
+      snapshot=await (await route(request('/snapshot',TOKEN),env)).json();
+      assert.equal(snapshot.liquidationPending,false);
+      assert.equal(Object.keys(snapshot.positions).length,0);
+    }finally{globalThis.fetch=original;}
   });
   it('checks each Cron slot once, stores universe and allows stop on a new session',async()=>{
     const env={DB:new D1Fake(),ADMIN_TOKEN:TOKEN};
