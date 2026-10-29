@@ -205,3 +205,39 @@ These are **outcome checks**, not profit guarantees. Backtests should use
 time-held-out samples, real bookmaker prices available before kickoff,
 sport-specific metrics, injury/team availability, correlation guards,
 and calibration assessments before publishing a quantitative edge.
+
+
+### Comprehensive odds access and validation by discipline
+
+The `sports_chat_odds_scan` read-only tool examines all eleven OddsHarvester
+sport categories in three bounded pages: `offset=0`, `offset=4` and
+`offset=8` (each `limit=4`). The returned `unprobed` and
+`nextOffset` values prevent a partial scan from being called complete.
+Coverage includes soccer, basketball (NBA and WNBA), baseball, American
+football, ice hockey, tennis (ATP and WTA), handball, volleyball, rugby
+league, rugby union and cricket. A league listed as supported is **not
+evidence** that a bookmaker has quoted an event.
+
+`sports_chat_odds` checks explicit league keys and separately queries
+available ESPN, OddsHarvester and API feeds. A sport-wide OddsHarvester
+result is never relabeled as NBA, WNBA, MLB, NFL, NHL, ATP or WTA without
+upstream league evidence. For soccer, the country/league path must match
+when league names are ambiguous. Tennis totals use
+`total_games_over_under` or `total_sets_over_under`; volleyball uses
+`total_points_over_under` or `total_sets_over_under`, rather than the
+unsupported generic `over_under` token.
+
+If OddsHarvester exits unsuccessfully, Kira receives a **redacted**
+diagnostic including `category`, `exitCode`, `signal`, `killed`
+and the useful stderr tail. Categories distinguish missing executable,
+Playwright Chromium not installed, timeout, site challenge and other
+scraper errors. If rows were read but none are eligible, Kira explains
+the exact-market, bookmaker, kickoff and timestamp requirements rather
+than silently treating a present executable as a live odds connection.
+
+To verify the orchestration:
+`node --experimental-strip-types --test packages/core/tool-sports/tests/sports-odds-coverage.test.mjs`.
+Only a genuine quote with source, bookmaker, event, market, period,
+price and observed time is evidence of real access. Source installation
+and CI success do not prove the user's Windows system can connect to
+OddsPortal.
