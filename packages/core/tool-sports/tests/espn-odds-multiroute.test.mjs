@@ -18,11 +18,6 @@ const priced=(provider={name:'DraftKings'})=>({
   homeTeamOdds:{moneyLine:-130},awayTeamOdds:{moneyLine:110},
 })
 const scoreboard=(events)=>({events})
-const read=(responses)=>async url=>{
-  const entry=responses.find(([match])=>String(url).includes(match))
-  if(!entry)throw Error('unexpected '+url)
-  return typeof entry[1]==='function'?entry[1](url):entry[1]
-}
 
 test('embedded ESPN scoreboard odds are preferred, bounded and attributable',async()=>{
   const paths=[]
@@ -70,7 +65,7 @@ test('Core list expands only same-game ESPN references; stale summary odds stay 
     if(url.includes('/summary?'))return {odds:[{...priced(),lastUpdated:'2026-10-01T12:00:00Z'}]}
     throw Error('unexpected '+url)
   }
-  const result=await fetchPublicEspnOddsDetailed('basketball_nba','h2h',read,{now,days:1})
+  const result=await fetchPublicEspnOddsDetailed('basketball_nba','h2h,totals',read,{now,days:1})
   assert.equal(result.quotes.length,2)
   assert.equal(result.diagnostics.resolvedRefs,1)
   assert.equal(tried.some(url=>url.includes('evil.example')),false)
