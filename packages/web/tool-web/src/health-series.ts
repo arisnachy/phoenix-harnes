@@ -4,6 +4,7 @@
  */
 import { defineTool, ToolArgsError, type JsonValue, type ToolDefinition } from '@phoenix-ai/dsh-tools'
 
+/** Published World Bank indicator codes and display units; no model-estimated values. */
 export const HEALTH_INDICATORS = {
   'SP.DYN.IMRT.IN': { label: 'Mortalidad infantil', unit: 'muertes por 1.000 nacidos vivos' },
   'SH_UHC_SCI': { label: 'Índice de cobertura de servicios de salud esenciales (UHC)', unit: 'índice de 0 a 100' },
@@ -164,7 +165,7 @@ export function createWorldBankHealthSeriesTool(): ToolDefinition {
       return result as unknown as Record<string, JsonValue>
     },
     presentCall(args) {
-      return { card: 'generic', title: 'Serie oficial · ' + String(args.indicator), kind: 'search' }
+      return { card: 'generic', title: 'Serie oficial · ' + args.indicator, kind: 'search' }
     },
   })
 }
