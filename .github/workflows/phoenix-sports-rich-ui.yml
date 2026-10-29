@@ -38,6 +38,8 @@ jobs:
           node --experimental-strip-types --test packages/core/tool-sports/tests/evidence-ticket.test.mjs
           node --experimental-strip-types --test packages/core/tool-sports/tests/evidence-priced-ticket.test.mjs
           node --experimental-strip-types --test packages/core/tool-sports/tests/pregame-investigation.test.mjs
+          node --experimental-strip-types --test packages/core/tool-sports/tests/sports-diversity.test.mjs
+          node --experimental-strip-types --test packages/core/tool-sports/tests/sports-source-health.test.mjs
           node --experimental-strip-types --test packages/core/tool-sports/tests/keyless-odds.test.mjs
           node --experimental-strip-types --test packages/core/tool-sports/tests/free-odds.test.mjs
       - name: Verify chat schema, visuals and prior UI compatibility

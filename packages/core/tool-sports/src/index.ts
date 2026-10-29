@@ -14,14 +14,16 @@ import { researchSport } from './multi-sport-research.ts'
 import { communityOpinions } from './sports-community.ts'
 import { evidenceTicket } from './evidence-ticket.ts'
 import { evidencePricedTicket } from './evidence-priced-ticket.ts'
+import { sportsSourcesHealth } from './sports-source-health.ts'
 
 export const name = 'tool-sports'
 export const inject = ['tools','systemPrompt']
 const GUIDANCE = [
-  'Solo cuando el usuario pida deportes, juegos del día, jugadores, cuotas o tickets, consulta las herramientas sports_chat_catalog, sports_chat_discover, sports_chat_games, sports_chat_mlb_pitchers, sports_chat_odds, sports_chat_ticket, sports_chat_ticket_research, sports_chat_ticket_research_auto, sports_chat_nba_research, sports_chat_research, sports_chat_historical_odds, sports_chat_community_opinions, sports_chat_odds_keyless, sports_chat_ticket_evidence_auto o sports_chat_ticket_evidence_priced_auto.',
+  'Solo cuando el usuario pida deportes, juegos del día, jugadores, cuotas o tickets, consulta las herramientas sports_chat_catalog, sports_chat_discover, sports_chat_games, sports_chat_mlb_pitchers, sports_chat_odds, sports_chat_ticket, sports_chat_ticket_research, sports_chat_ticket_research_auto, sports_chat_nba_research, sports_chat_research, sports_chat_historical_odds, sports_chat_community_opinions, sports_chat_odds_keyless, sports_chat_sources_health, sports_chat_ticket_evidence_auto o sports_chat_ticket_evidence_priced_auto.',
   'NO abras pantallas independientes ni crees entradas de menú. Antes de redactar una cartelera o boleto, llama sports_chat_games y, cuando corresponda, sports_chat_mlb_pitchers / sports_chat_odds / sports_chat_ticket. Phoenix dibuja de manera nativa las tarjetas verificadas de los resultados. NO copies el JSON de los resultados en la respuesta, NO escribas fences generative-ui ni bloques de código, aunque una herramienta los incluya en sus datos. No dibujes tickets con caracteres ASCII, bordes de texto ni bloques de código etiquetados text: para eventos y selecciones reales usa exclusivamente los contratos nativos, conservando la presentación original de Phoenix. Si el usuario quiere solo una demostración, descríbela explícitamente como ficticia y no introduzcas cuotas o equipos inventados como hechos. Explica los hallazgos y las fuentes con un texto humano breve.',
   'INVESTIGACIÓN NBA: antes de defender cualquier favorito o selección NBA, consulta sports_chat_nba_research (y sports_chat_odds cuando existan cuotas). Contrasta forma en marcadores finales, márgenes, descanso y muestra; revisa además informe oficial de lesiones, rotaciones, estadísticas avanzadas, rival, localía y movimiento de precios desde fuentes autorizadas. Lo no consultado debe permanecer explícitamente SIN VERIFICAR. No transformes la forma descriptiva en porcentajes de victoria ni cites atletas que no tengan plantilla actual confirmada. Un ticket automático se considera SOLO una preselección, nunca una investigación completa.',
   'INVESTIGAR TODOS LOS DEPORTES: llama sports_chat_research para estudiar los marcadores finales recientes del deporte y liga que el usuario pidió. Para MLB complementa con pitchers y bullpen; fútbol exige revisar goles, localía, bajas, forma y opciones 1X2/doble oportunidad; tenis requiere superficie, historial y fatiga; hockey necesita portero y estadísticas defensivas; en otros deportes usa métricas propias. Si el informe indica insuficiente, no proclames favorito respaldado. sports_chat_historical_odds agrega históricos de ambos repositorios SportsbookReview para entrenamiento/backtest, jamás cuotas actuales; y sports_chat_community_opinions observa pronósticos públicos solo como opinión separada.',
+  'Antes de declarar sin cuotas, llama sports_chat_sources_health para distinguir proveedor deshabilitado, CLI no instalado, histórico no cargado y precio no disponible. No confundas fuente configurada con consulta efectiva ni marcador con titular confirmado. Los 3 proyectos GitHub acordados NO son 3 feeds vivos: solo OddsHarvester puede consultar cuotas actuales cuando está activo y accesible; SportsbookReview y MLB son históricos. ',
   'Para cuotas gratuitas por scraping (sin API key) consulta sports_chat_odds_keyless si el host habilitó OddsHarvester. No prometas consultas ilimitadas ni uses cuotas históricas como cotizaciones vigentes. El motor debe investigar todas las disciplinas disponibles, no solo NBA, y contrastar historial, lesionados, alineaciones, rendimiento, localía, cuota y fuentes externas cuando existan. Las votaciones y picks de otras personas son una referencia secundaria, no estimaciones propias ni garantía.',
   'PROCEDIMIENTO DE INVESTIGACIÓN: nunca digas que un ticket está profundamente investigado solo por salir en 2 segundos o por cinco marcadores. Para 5/6 patas emplea sports_chat_ticket_evidence_priced_auto cuando haya proveedor de cuotas habilitado; si no, sports_chat_ticket_evidence_auto. Exige historial con al menos cinco partidos terminados DIFERENTES por equipo (NFL tres), coherencia entre forma y margen, y comprobación separada de resumen ESPN y disponibilidad de parte médico. Las ausencias, el portero NHL, rotaciones NBA, pitchers MLB, once y xG en fútbol, superficie en tenis y mercados actuales que no se hayan confirmado deben quedar marcados PENDIENTES, sin atribuir jugadores, estatus ni probabilidad inventados. Si hay menos de cinco/seis selecciones justificables, muestra borrador INCOMPLETO. La opción antigua sports_chat_ticket_research_auto solo vale para exploración, nunca como análisis profundo.',
   'EN VIVO SIN TOKENS: cuando el usuario pida juegos en vivo, marcadores actuales o seguimiento de los partidos de su ticket, llama sports_chat_games con liveOnly=true por cada liga incluida (o team/eventId para un partido). Conserva los nombres y liga del ticket sin inventar equivalencias. La cartelera y las tarjetas consultan ESPN directamente desde el navegador de manera compartida y periódica mientras están visibles, sin llamadas adicionales al modelo. Las situaciones de MLB incluyen bases/outs/conteo cuando ESPN los publica; NBA ofrece período, reloj, parciales y última jugada; NFL, NHL, fútbol y otras disciplinas muestran sus datos disponibles. No afirmes transmisión de video ni tiempo real garantizado: informa si la fuente se retrasa o no publica detalles.',
@@ -44,6 +46,19 @@ export function apply(ctx: Context): void {
       return sportsPromptNeeded(context.incomingUserText, context.agent?.session?.events) ? GUIDANCE : ''
     },
   })
+  ctx.tools.register(defineTool({
+    name:'sports_chat_sources_health',
+    description:'Audita de forma segura los proveedores deportivos de Kira: OddsHarvester instalado/habilitado, claves opcionales presentes sin exponer secretos, históricos GitHub montados. No promete precios disponibles.',
+    parameters:{},
+    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    isConcurrencySafe:()=>true,
+    async execute(){
+      const sources=await sportsSourcesHealth(process.env)
+      return JSON.stringify({sources,checkedAt:new Date().toISOString(),
+        warning:'Configuración o CLI disponible NO equivale a cuotas actuales. Para comprobar precios requiere consulta de mercado con marca de tiempo y casa. Los archivos de SportsbookReview y MLB no son cuotas vivas.'})
+    },
+    presentCall:()=>({card:'generic',title:'Comprobar proveedores deportivos y datos históricos',kind:'read' as const}),
+  }))
   ctx.tools.register(defineTool({
     name:'sports_chat_catalog',
     description:'Lista disciplinas y ligas documentadas. No crea menú ni abre otra pantalla.',
@@ -282,8 +297,10 @@ export function apply(ctx: Context): void {
       return JSON.stringify({uiBlock:result.card,requestedLegs:args.count,
         complete:result.complete,priced:result.priced,placed:false,
         verifiedEvents:result.verifiedEvents,quotedLegs:result.quotedLegs,
-        missingQuotes:result.missingQuotes,explanation:result.explanation,
-        instruction:'PHOENIX dibuja el ticket nativo. No llames alta probabilidad a un indicador histórico sin calibración. Cuotas en una única casa, si se verificaron, pueden cambiar y no hay garantía de ganar.'})
+        missingQuotes:result.missingQuotes,approvedLegs:result.approvedLegs,
+        multisportSatisfied:result.multisportSatisfied,sourceAudit:result.sourceAudit,
+        explanation:result.explanation,
+        instruction:'PHOENIX dibuja una PRESELECCIÓN, no apuestas aprobadas. La auditoría sourceAudit indica cuáles fuentes tenían precios realmente observados y cuántos coincidieron. Si approvedLegs=0, aclara 0 apuestas cotizadas aprobadas aunque existan 4 eventos ESPN. No confundir estado del feed médico con bajas individuales comprobadas.'})
     },
     presentCall:()=>({card:'generic',title:'Investigar ticket cotizado de 5 o 6 patas',kind:'read' as const}),
   }))
@@ -302,7 +319,9 @@ export function apply(ctx: Context): void {
       return JSON.stringify({uiBlock:result.card,requestedLegs:args.count,verifiedEvents:result.verifiedEvents,
         complete:result.complete,candidatesEvaluated:result.candidatesEvaluated,
         researchLeagues:result.researchLeagues,insufficientEvidence:result.insufficientEvidence,
-        researchStandard:result.researchStandard,pregameSummariesVerified:result.pregameSummariesVerified,
+        researchStandard:result.researchStandard,scannedSports:result.scannedSports,
+        selectedSports:result.selectedSports,multisportSatisfied:result.multisportSatisfied,
+        pregameSummariesVerified:result.pregameSummariesVerified,
         injuryFeedsVerified:result.injuryFeedsVerified,priced:false,placed:false,modelProbabilities:false,
         instruction:result.complete?
           'Ticket con exactamente las patas pedidas y resultados históricos verificados, pero aún no cotizado ni calibrado; requiere lesiones, modelos específicos, noticias y precio del operador antes de defenderlo como apuestas de mayor probabilidad.':
