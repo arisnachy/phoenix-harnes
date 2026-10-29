@@ -16,7 +16,6 @@ const board=(url)=>{
       {homeAway:'away',team:{id:String(i)+'2',displayName:'Away '+i},...(!pre?{score:'0'}:{})},
     ]}],
   }))}}
-}
 const feed=async url=>new Response(JSON.stringify(board(url)),{status:200})
 const mkQuotes=(alternating=false)=>async()=>{
   const out=[]
