@@ -43,6 +43,8 @@ test('NBA, WNBA, MLB, NFL, NHL, ATP and WTA are not mislabeled from generic spor
   assert.equal(belongsToLeague('tennis_atp',{league:'ATP - Rome'}),true)
   assert.equal(belongsToLeague('tennis_wta',{league:'ATP - Rome'}),false)
   assert.equal(belongsToLeague('tennis_wta',{league:'WTA - Dubai'}),true)
+  assert.equal(belongsToLeague('soccer_usa_mls',{league:'MLS Next Pro'}),false)
+  assert.equal(belongsToLeague('soccer_usa_mls',{league:'MLS'}),true)
   assert.equal(belongsToLeague('soccer_epl',{league:'Premier League'}),false)
   assert.equal(belongsToLeague('soccer_epl',{
     league:'Premier League',matchLink:'https://www.oddsportal.com/football/england/premier-league/game'
