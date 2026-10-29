@@ -39,6 +39,8 @@ export function belongsToLeague(
     case 'baseball_mlb':return /\\bmlb\\b|major league baseball/u.test(league)
     case 'americanfootball_nfl':return /\\bnfl\\b|national football league/u.test(league)
     case 'icehockey_nhl':return /\\bnhl\\b|national hockey league/u.test(league)
+    case 'tennis_atp':return /\batp\b/u.test(league)
+    case 'tennis_wta':return /\bwta\b/u.test(league)
     case 'soccer_epl':return is(/premier league/u)&&
       (/\\bengland\\b/u.test(league)||path.includes('/england/'))
     case 'soccer_spain_la_liga':return is(/la ?liga|primera divisi[oó]n/u)&&
