@@ -50,7 +50,7 @@ test('OddsHarvester requests the correct period for NHL winner including overtim
   assert.equal(nba[nba.indexOf('--period')+1],'full_time')
   const soccer=oddsHarvesterArgs('football','double_chance','2026-10-29','odds.json')
   assert.ok(!soccer.includes('--period'))
-  assert.deepEqual(soccer.slice(-6),['--headless','--format','json','--output','odds.json'].slice(-6))
+  assert.deepEqual(soccer.slice(-5),['--headless','--format','json','--output','odds.json'])
 })
 test('NHL per-bookmaker home/away FullIncludingOT fixture yields genuinely distinct priced selections',()=>{
   const hockey=[{
