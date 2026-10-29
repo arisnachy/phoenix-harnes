@@ -3,6 +3,7 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { evaluateBinanceAdaptiveSignal, type BinanceAdaptiveSignal } from './binance-adaptive.ts'
 import type { BinancePublicMarket } from './binance-paper.ts'
+import { binanceKnownAssetRisk } from './binance-asset-risk.ts'
 import { BinanceSpotTestnet, type BinanceTestnetOrderReceipt } from './binance-spot-testnet.ts'
 
 const POLL_MS = 60_000
@@ -151,7 +152,10 @@ export class BinanceTestnetAutomation {
     if(this.state.halted||this.state.pending)throw new Error('Testnet has a pending order or risk halt; manual reconciliation required')
     const ready=await this.testnet.status()
     if(!ready.connected||ready.canTrade!==true)throw new Error('Spot Testnet account is not authenticated for TESTING orders')
-    this.state.symbols=validSymbols(symbols)
+    const candidates = validSymbols(symbols)
+    if (candidates.some(symbol => binanceKnownAssetRisk(symbol) !== undefined))
+      throw new Error('Spot TESTNET watchlist includes known Binance risk-tag/delisting assets')
+    this.state.symbols=candidates
     this.state.enabled=true
     delete this.state.lastError
     this.state.failureCount=0
@@ -318,7 +322,8 @@ export class BinanceTestnetAutomation {
       // Always service existing software stops/TPs before considering a new BUY.
       for(const position of Object.values(this.state.positions)){
         const price=await this.testnet.quote(position.symbol)
-        const reason=price<=position.stop?'stop-loss':
+        const reason=binanceKnownAssetRisk(position.symbol)?'binance-asset-risk':
+          price<=position.stop?'stop-loss':
           price>=position.tp2?'tp2':!position.tp1Done&&price>=position.tp1?'tp1':undefined
         if(!reason)continue
         const limits=await this.testnet.lotSize(position.symbol)
@@ -346,6 +351,11 @@ export class BinanceTestnetAutomation {
       const signals:BinanceAdaptiveSignal[]=[]
       const barsBySymbol=new Map<string,number>()
       for(const symbol of this.state.symbols){
+        if (binanceKnownAssetRisk(symbol)) {
+          signals.push({symbol,regime:'range',strategy:'risk-filter',action:'hold',score:0,
+            lastClose:0,reason:'Binance risk-tag or delisting guard'})
+          continue
+        }
         try{
           const candles=await (this.market?.candles(symbol,'15m',80)
             ?? this.testnet.candles(symbol,'15m',80))
@@ -368,7 +378,8 @@ export class BinanceTestnetAutomation {
       this.state.failureCount=0
       delete this.state.lastError
       const candidate=[...signals].sort((a,b)=>b.score-a.score).find(s=>s.action==='buy'
-        && s.score>=ENTRY_SCORE && !this.state.positions[s.symbol]
+        && s.score>=ENTRY_SCORE && !binanceKnownAssetRisk(s.symbol)
+        && !this.state.positions[s.symbol]
         && this.state.lastEntryBar[s.symbol]!==barsBySymbol.get(s.symbol))
       if(!candidate){this.state.lastDecision='no-qualified-entry';await this.save();return}
       if(Object.keys(this.state.positions).length>=MAX_POSITIONS) {
