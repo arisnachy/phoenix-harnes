@@ -615,7 +615,10 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
     : undefined
   // MCP state is authoritative whenever installed: a gh CLI session cannot
   // hide a failed or unauthenticated GitHub MCP.
-  const status = (reauthorizeCodex ? { text: t('reconnectRequiredStatus'), className: connectorStyles['connectorStatusWarn'] ?? '' } : undefined)
+  const status = (definition.id === 'binance' && mcpRuntime?.status !== 'ready'
+    ? { text: 'Agentic OAuth: aprobación de Binance pendiente', className: connectorStyles['connectorStatusWarn'] ?? '' }
+    : undefined)
+    ?? (reauthorizeCodex ? { text: t('reconnectRequiredStatus'), className: connectorStyles['connectorStatusWarn'] ?? '' } : undefined)
     ?? (managed !== undefined || mcpRuntime !== undefined ? mcpStatus : undefined)
     ?? openClawStatus ?? mcpStatus ?? liveStatus ?? (connectedByAccount
     ? { text: t('connectedStatus'), className: connectorStyles['connectorStatusReady'] ?? '' }
@@ -1932,6 +1935,8 @@ export function ConnectorsSettingsSection({ api,
                 : runtime?.status === 'auth-required' && entry.stored !== undefined
                   ? connectorT('reauthorize')
                   : entry.stored === undefined ? connectorT('authorize') : connectorT('reconnect')
+              const agenticClientUnlisted = entry.key === 'mcp-client/binance-agent-os'
+                && runtime?.status !== 'ready'
               const runtimeReconnect = entry.stored !== undefined
                 && runtime !== undefined
                 && (runtime.status === 'failed' || runtime.status === 'disconnected')
@@ -1963,10 +1968,17 @@ export function ConnectorsSettingsSection({ api,
                     <p className={connectorStyles['connectorDescription']}>{presentation.description}</p>
                   )}
                   {lines.slice(0, 2).map(line => <p key={line} className={styles['advancedHint']}>{line}</p>)}
+                  {agenticClientUnlisted ? (
+                    <p className={styles['advancedHint']}>
+                      Binance no admite todavía la identidad OAuth propia de PHOENIX (3346001).
+                      No vuelvas a autorizar con este cliente. Puedes utilizar Binance REAL HMAC
+                      para lectura o un agente oficialmente compatible.
+                    </p>
+                  ) : null}
                   <div className={connectorStyles['connectorFooter']}>
                     <span className={`${connectorStyles['connectorStatus'] ?? ''} ${status.className}`.trim()}>{status.text}</span>
                     <div className={connectorStyles['connectorActions']}>
-                      {preferredMethod === undefined || (entry.stored !== undefined
+                      {agenticClientUnlisted || preferredMethod === undefined || (entry.stored !== undefined
                         && entry.key !== NATIVE_CODEX_ACCOUNT_KEY
                          && runtime?.status !== 'auth-required' && !runtimeReconnect) ? null : (
                           <button
@@ -2100,9 +2112,10 @@ export function ConnectorsSettingsSection({ api,
                       setFilter('available')
                       setQuery(row.definition.name)
                     }}
-                  onReconnect={mcpRegistry?.reconnect === undefined
+                  onReconnect={mcpRegistry?.reconnect === undefined || row.definition.id === 'binance'
                     ? undefined : (runtime) => { reconnectMcpConnector(runtime) }}
-                  onRepair={mcpRegistry?.repair === undefined ? undefined : repairManagedConnector}
+                  onRepair={mcpRegistry?.repair === undefined || row.definition.id === 'binance'
+                    ? undefined : repairManagedConnector}
                   onRemove={mcpRegistry?.remove === undefined ? undefined : removeManagedConnector}
                   onConfigure={row.definition.id === 'x' && mcpRegistry?.connectX !== undefined ? () => {
                     setXNotice(undefined)
