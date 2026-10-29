@@ -52,7 +52,7 @@ async function worker(){
     if(exit!==0)process.stderr.write('[PHOENIX SPORTS] Optional bootstrap incomplete; details: '+log+'\n')
   }finally{closeSync(out);unlink()}
 }
-function start(){
+export function start(launch=spawn){
   if(process.env.PHOENIX_SPORTS_SOURCES_AUTO_INSTALL==='0'||!existsSync(installer))return
   if(ready())return
   try{
@@ -72,7 +72,7 @@ function start(){
   try{fd=openSync(lock,'wx')}catch{return}
   closeSync(fd)
   try{
-    const child=spawn(process.execPath,[fileURLToPath(import.meta.url),'--worker'],{
+    const child=launch(process.execPath,[fileURLToPath(import.meta.url),'--worker'],{
       cwd:sourceRoot,env:process.env,
       detached:true,windowsHide:true,shell:false,stdio:'ignore',
     })
