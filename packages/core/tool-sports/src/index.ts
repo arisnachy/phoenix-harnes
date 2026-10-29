@@ -19,15 +19,19 @@ import { investigateEventDeep } from './sports-deep-context.ts'
 import { auditUniversalMatchup } from './universal-matchup-factors.ts'
 import { exploreEspn, type EspnExplorerInput } from './espn-intelligence.ts'
 import { compareBettingMarkets,supportedMarketFamilies } from './sports-market-intelligence.ts'
+import { describeBettingMarkets } from './sports-bet-markets.ts'
+import { checkSportsTicket, type SportsBetLeg } from './sports-bet-settlement.ts'
 import { espnCoreModes,queryEspnCore,type EspnCoreMode } from './espn-core-intelligence.ts'
 
 export const name = 'tool-sports'
 export const inject = ['tools','systemPrompt']
 const sportsEnv=():NodeJS.ProcessEnv=>hydrateSportsSources(process.env)
 const GUIDANCE = [
+  'JUANCITO SPORT: utiliza como fuente PRIMARIA su reglamento oficial https://www.juancitosport.com.do/reglas/ y términos https://www.juancitosport.com.do/banca/terminos/. Las reglas verificadas incluyen 3/5/9 innings, run line, ponches, hits, medio tiempo, props, 90 minutos fútbol y overtime diferenciado. Una apuesta solo es válida al mostrar el sistema «Apuesta Confirmada» (8.4); el mínimo publicado es RD$100 (7.10). Su condición 6.6 PROHÍBE usar robots o scripts para realizar apuestas: Kira NO debe automatizar clicks ni apuestas en esa web. Puede investigar fuentes, calcular y entregar el ticket; el usuario realiza la confirmación legalmente en la banca. El sitio juancitosports.com es informativo independiente: NO atribuirle reglamentos oficiales. ',
+  'APUESTAS REALES NO FICTICIAS: si el usuario pide un ticket para apostar dinero real, NO respondas por defecto «simulado», «apuesta ficticia» o «no puedo investigar apuestas». Investiga eventos y mercados verificables, contrasta las reglas EXACTAS de la casa con sports_chat_bet_rules, obtiene precios reales por fuente con sports_chat_odds, sports_chat_odds_keyless y sports_chat_market_intelligence; si no hay ofertas auténticas no inventes cuotas. Un boleto cotizado NO equivale a una apuesta aceptada. Solo tras confirmación independiente del comprobante de la casa se puede declarar colocada; sin ella di «ticket cotizado, pendiente de aceptación». No ejecutes apuestas ni transferencias sin autorización explícita y una integración oficial operativa. Las reglas oficiales varían para extra innings, suspensiones, jugadores inactivos, pitcher listado, push, overtime y mercados por período. Prioriza mercados no limitados a ganador: spread/run line, -1.5/+1.5, totales 3/5/9 entradas, props de ponches/hits, handicaps, puntos, tiros, córners y más. Los precios solo son reales si se observan con casa, mercado exacto, línea, momento y correspondencia de evento. La calculadora del ticket se actualiza con el importe sin transferir fondos. Tras la fecha consulta sports_chat_ticket_track con IDs y recibo si lo hay para grados provisionales según marcador y jamás declares cobro/void confirmado sin liquidación oficial.',
   'MATCHUP FACTORS UNIVERSAL: si el usuario pide favorito bien investigado, ventaja o desventaja, cruces, rendimiento en estadio, H2H, abridores MLB o carreras en 3/5/9 innings, llama sports_chat_matchup_factors con ID real y fecha ESPN. Combina forma reciente, descansos, enfrentamientos, sede, MLB tramos de entradas, abridores probables y últimas salidas, partes médicos, noticias y cuotas reconciliadas. Una media histórica de carreras no es predicción calibrada: no declares ganador cierto, porcentaje propio, ventaja de EV, o impacto causal del clima sin modelo validado. Si clima, bullpen, rotación, alineación, xG o condiciones del estadio carecen de fuentes, marca PENDIENTE y explica qué dato falta. Usa el panel adaptativo dentro del chat, no menús. ',
   'ESPN INTELLIGENCE: cuando el usuario pida un equipo específico, un jugador, su historia, splits, gamelog, tabla, líderes, noticias o búsqueda, consulta sports_chat_espn_explore con la vista apropiada y un ID real comprobado. Esa herramienta devuelve una superficie adaptable de estadísticas, noticias, plantillas, fotos y fuentes; Phoenix dibuja sports_espn_dashboard automáticamente. Para carteleras utiliza sports_chat_games y para cuotas comercializables sports_chat_odds; evita convertir probabilidades ESPN o referencias Core en cuotas actuales. Las plantillas se construyen dinámicamente a partir de secciones verificadas, sin nuevas pantallas.',
-  'Solo cuando el usuario pida deportes, juegos del día, jugadores, cuotas o tickets, consulta las herramientas sports_chat_catalog, sports_chat_discover, sports_chat_games, sports_chat_mlb_pitchers, sports_chat_odds, sports_chat_ticket, sports_chat_ticket_research, sports_chat_ticket_research_auto, sports_chat_nba_research, sports_chat_research, sports_chat_historical_odds, sports_chat_community_opinions, sports_chat_odds_keyless, sports_chat_sources_health, sports_chat_sources_repair, sports_chat_deep_research, sports_chat_matchup_factors, sports_chat_market_intelligence, sports_chat_espn_core, sports_chat_espn_core_catalog, sports_chat_ticket_evidence_auto o sports_chat_ticket_evidence_priced_auto.',
+  'Solo cuando el usuario pida deportes, juegos del día, jugadores, cuotas o tickets, consulta las herramientas sports_chat_catalog, sports_chat_discover, sports_chat_games, sports_chat_mlb_pitchers, sports_chat_odds, sports_chat_ticket, sports_chat_ticket_research, sports_chat_ticket_research_auto, sports_chat_nba_research, sports_chat_research, sports_chat_historical_odds, sports_chat_community_opinions, sports_chat_odds_keyless, sports_chat_sources_health, sports_chat_sources_repair, sports_chat_deep_research, sports_chat_matchup_factors, sports_chat_bet_rules, sports_chat_ticket_track, sports_chat_market_intelligence, sports_chat_espn_core, sports_chat_espn_core_catalog, sports_chat_ticket_evidence_auto o sports_chat_ticket_evidence_priced_auto.',
   'NO abras pantallas independientes ni crees entradas de menú. Antes de redactar una cartelera o boleto, llama sports_chat_games y, cuando corresponda, sports_chat_mlb_pitchers / sports_chat_odds / sports_chat_ticket. Phoenix dibuja de manera nativa las tarjetas verificadas de los resultados. NO copies el JSON de los resultados en la respuesta, NO escribas fences generative-ui ni bloques de código, aunque una herramienta los incluya en sus datos. No dibujes tickets con caracteres ASCII, bordes de texto ni bloques de código etiquetados text: para eventos y selecciones reales usa exclusivamente los contratos nativos, conservando la presentación original de Phoenix. Si el usuario quiere solo una demostración, descríbela explícitamente como ficticia y no introduzcas cuotas o equipos inventados como hechos. Explica los hallazgos y las fuentes con un texto humano breve.',
   'INVESTIGACIÓN NBA: antes de defender cualquier favorito o selección NBA, consulta sports_chat_nba_research (y sports_chat_odds cuando existan cuotas). Contrasta forma en marcadores finales, márgenes, descanso y muestra; revisa además informe oficial de lesiones, rotaciones, estadísticas avanzadas, rival, localía y movimiento de precios desde fuentes autorizadas. Lo no consultado debe permanecer explícitamente SIN VERIFICAR. No transformes la forma descriptiva en porcentajes de victoria ni cites atletas que no tengan plantilla actual confirmada. Un ticket automático se considera SOLO una preselección, nunca una investigación completa.',
   'INVESTIGAR TODOS LOS DEPORTES: llama sports_chat_research para estudiar los marcadores finales recientes del deporte y liga que el usuario pidió. Para MLB complementa con pitchers y bullpen; fútbol exige revisar goles, localía, bajas, forma y opciones 1X2/doble oportunidad; tenis requiere superficie, historial y fatiga; hockey necesita portero y estadísticas defensivas; en otros deportes usa métricas propias. Si el informe indica insuficiente, no proclames favorito respaldado. sports_chat_historical_odds agrega históricos de ambos repositorios SportsbookReview para entrenamiento/backtest, jamás cuotas actuales; y sports_chat_community_opinions observa pronósticos públicos solo como opinión separada.',
@@ -165,6 +169,82 @@ export function apply(ctx: Context): void {
         instruction:'PHOENIX dibuja automáticamente el panel sports_espn_dashboard. Distingue evidencia histórica, condición de titulares, disponibilidad actual, precios de casas y datos faltantes. Los tramos 3/5/9 innings son medias exploratorias si existe muestra; solo compáralos con cuotas que tengan EXACTAMENTE el mismo período, reglas y fuente. No atribuyas ventajas numéricas ni probabilidades de victoria calibradas a estos promedios. Si existen señales contradictorias, explícalas y deja la conclusión como incierta.'})
     },
     presentCall:()=>({card:'generic',title:'Investigar factores y ventajas reales del encuentro',kind:'read' as const}),
+  }))
+  ctx.tools.register(defineTool({
+    name:'sports_chat_bet_rules',
+    description:'Consulta catálogo extenso de mercados por disciplina y reglas relevantes de liquidación de casas verificables: run line -1.5/2.5, altas/bajas por 3/5/9 innings, props de jugadores, 1X2, hándicap, over/under, tickets/parlays, push, void y overtime. No atribuye reglas de otra casa a Juancito.',
+    parameters:{
+      sport:{type:'string',description:'Filtrar disciplina: baseball, basketball, soccer, americanfootball, hockey, tennis, mma, cricket, golf.'},
+      family:{type:'string',description:'Familia de mercado opcional: totals, moneyline, run_line, player_props, etc.'},
+      bookmaker:{type:'string',description:'Casa consultada, solo para advertir que debe leerse su propio reglamento actual.'},
+    },
+    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    isConcurrencySafe:()=>true,
+    execute:async args=>JSON.stringify({...describeBettingMarkets(args.sport,args.family),
+      requestedBookmaker:args.bookmaker??null,
+      instruction:'Estos son tipos de mercados, NO cuotas disponibles ni condiciones universales. Para Juancito y cualquier banca RD comprobar reglamento vigente de ese operador antes de liquidar. Distintas modalidades de 3/5/9 entradas, run line alternativo y props pueden cambiar según las reglas de participación, duración y tiempos extras.'}),
+    presentCall:()=>({card:'generic',title:'Consultar mercados y reglas reales por deporte',kind:'read' as const}),
+  }))
+  ctx.tools.register(defineTool({
+    name:'sports_chat_ticket_track',
+    description:'Seguimiento de un ticket con eventos ESPN reales y mercados explícitos, devuelve estado provisional por pata, push, potencial retorno y riesgo de anulación. No acredita aceptación ni pago de la banca; cotejar siempre con su recibo.',
+    parameters:{
+      sport:{type:'string',required:true,description:'Deporte ESPN de los eventos, p. ej. baseball.'},
+      league:{type:'string',required:true,description:'Liga ESPN, p. ej. mlb.'},
+      date:{type:'string',required:true,description:'Fecha del evento AAAA-MM-DD.'},
+      stake:{type:'number',required:true,description:'Monto efectivamente indicado por el usuario; no transfiere fondos.'},
+      ticketReference:{type:'string',description:'Folio registrado por la banca según el usuario (no verificado mediante API de operador).'},
+      legs:{type:'array',required:true,description:'Selecciones de la misma casa. IDs ESPN de cada encuentro, cuotas exactas, mercado, línea y equipo/jugador.',
+        items:{type:'object',additionalProperties:false,properties:{
+          eventId:{type:'string',required:true},
+          bookmaker:{type:'string',required:true},
+          market:{type:'string',required:true,description:'moneyline | h2h | 1x2 | run_line | spread | total | team_total | first_3_total | first_5_total | first_3_spread | first_5_spread | player_prop'},
+          selection:{type:'string',required:true,description:'home | away | draw | over | under | yes | no'},
+          price:{type:'number',required:true},
+          line:{type:'number',description:'Línea firmada (ej. -1.5), valor de total o prop; necesaria en totales y spreads.'},
+          team:{type:'string',description:'home | away para total del equipo'},
+          playerId:{type:'string',description:'ID oficial de jugador para props'},
+        }}},
+    },
+    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    isConcurrencySafe:()=>true,
+    async execute(args){
+      const result=await checkSportsTicket({
+        sport:args.sport,league:args.league,date:args.date,stake:args.stake,
+        legs:args.legs as SportsBetLeg[],
+        ...(args.ticketReference?{ticketReference:args.ticketReference.slice(0,80)}:{}),
+      },fetch,sportsEnv())
+      const named:Record<string,string>={
+        won:'Ganada provisional',lost:'Perdida provisional',push:'Push (sin acción) provisional',
+        pending:'Pendiente',unverifiable:'Sin datos suficientes',
+      }
+      const uiBlock={component:'sports_espn_dashboard',version:1,props:{
+        view:'event',title:'Seguimiento de ticket · '+result.sportsbook,
+        subtitle:'Estado: '+result.status+' · ESPN '+args.league.toUpperCase(),
+        source:'ESPN Site API · resultado observado, NO aceptación de la casa',
+        checkedAt:result.checkedAt,
+        sections:[
+          {heading:'Estado de las selecciones',kind:'list',items:result.legs.map((leg,i)=>({
+            label:(i+1)+'. '+leg.market+' · '+leg.selection,
+            value:named[leg.result]??leg.result,
+            detail:leg.score?leg.score+' · '+leg.reason:leg.reason,
+          }))},
+          {heading:'Balance provisional',kind:'metrics',items:[
+            {label:'Importe indicado',value:'RD$ '+result.stake.toFixed(2)},
+            {label:'Cuota después de pushes provisionales',value:result.combinedOdds.toFixed(3)},
+            {label:'Retorno preliminar',value:result.provisionalReturn===null?'Pendiente':
+              'RD$ '+result.provisionalReturn.toFixed(2)},
+            {label:'Ganancia/pérdida preliminar',value:result.profit===null?'Pendiente':
+              'RD$ '+result.profit.toFixed(2)},
+          ]},
+        ],
+        note:'No confirma colocación ni pago; cada resultado requiere reglas de la banca. '+
+          'Si el evento no está verificado, no se liquida.',
+      }}
+      return JSON.stringify({...result,uiBlock,
+        instruction:'Presenta los resultados como PRELIMINARES; un folio escrito por el usuario no prueba aceptación. Pregunta por el comprobante/registro de la casa para dictamen oficial y compara el mismo mercado, línea, período, cancelaciones y reglas. No inventes datos de jugadores ni una ganancia cobrada.'})
+    },
+    presentCall:()=>({card:'generic',title:'Seguir ticket: ganada, perdida, push o pendiente',kind:'read' as const}),
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_market_intelligence',
@@ -586,7 +666,7 @@ export function apply(ctx: Context): void {
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_ticket',
-    description:'Genera un ticket visual SIMULADO con selecciones verificadas nuevamente en cuotas reales. No ejecuta apuestas.',
+    description:'Prepara un ticket con cuotas comerciales verificadas y calculadora de retorno real, pendiente de aceptación de la banca; NO coloca apuestas sin integración y confirmación.',
     parameters:{
       sportKey:{ type:'string',description:'Clave deportiva de The Odds API. Para varios deportes utiliza sportKeys.' },
       sportKeys:{ type:'array',description:'Claves para ticket multisport, máximo cuatro.',items:{ type:'string' } },
@@ -597,7 +677,7 @@ export function apply(ctx: Context): void {
           market:{ type:'string',required:true },selection:{ type:'string',required:true },
           point:{ type:'number' },
         } } },
-      stake:{ type:'number',description:'Importe ficticio para simular el retorno; no es una operación financiera.' },
+      stake:{ type:'number',description:'Importe que el usuario desea consultar en RD$, solo para calcular retorno; no transfiere dinero.' },
     },
     output:{ schema:{ type:'string' },render:(_a,v)=>[{ type:'text' as const,text:v }] },
     isConcurrencySafe:()=>true,
@@ -605,10 +685,20 @@ export function apply(ctx: Context): void {
       const requestedKeys = args.sportKeys?.length ? args.sportKeys : args.sportKey ? [args.sportKey] : []
       const keys = [...new Set(requestedKeys)]
       if (keys.length < 1 || keys.length > 4) throw new Error('Indica entre 1 y 4 disciplinas para el ticket.')
+      const consultedAt=Date.now()
       const quotes = (await Promise.all(keys.map(key => marketOdds(key,args.markets)))).flat()
-      const { card,warning }=pricedTicket(args.selections as MarketSelection[],quotes,args.stake)
-      return JSON.stringify({ uiBlock:card,warning,simulationOnly:true,placed:false,
-        instruction:'Phoenix muestra uiBlock automáticamente en el chat. No reproduzcas su JSON ni un bloque de código. Nunca prometas que ganará.' })
+      const current=quotes.filter(q=>{
+        const at=Date.parse(q.updatedAt),kickoff=Date.parse(q.timeIso??q.time)
+        return Number.isFinite(at)&&at<=consultedAt&&consultedAt-at<=3_600_000&&
+          Number.isFinite(kickoff)&&kickoff>consultedAt&&q.price>1&&
+          Boolean(q.bookmaker.trim())&&Boolean(q.source?.trim())
+      })
+      if(!current.length)throw Error('No hay mercados y cuotas actuales confirmables: se requiere fuente, hora de actualización, partido futuro y casa identificada.')
+      const { card,warning }=pricedTicket(args.selections as MarketSelection[],current,args.stake)
+      return JSON.stringify({ uiBlock:card,warning,quoteVerified:true,placed:false,placementStatus:'not-confirmed',
+        observedQuotes:current.length,excludedMissingOrStale:quotes.length-current.length,
+        observedAt:new Date(consultedAt).toISOString(),
+        instruction:'Phoenix muestra uiBlock automáticamente en el chat. No reproduzcas su JSON ni un bloque de código. Nunca prometas que ganará. La tarjeta contiene cuotas observadas no aceptadas; confirma siempre la banca y el ticket antes de declararlo pagado.' })
     },
     presentCall:()=>({ card:'generic',title:'Crear ticket visual de análisis',kind:'read' as const }),
   }))

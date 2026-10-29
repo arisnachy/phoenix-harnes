@@ -342,3 +342,19 @@
   .sportsEspnSections{gap:13px}.sportsEspnSection{padding-top:12px}}
 
 .sportsEspnNewsLink{font-size:11px;font-weight:700;text-decoration:underline;text-underline-offset:2px;color:var(--dsw-alias-accent-primary,#bb5a27)}
+
+
+/* Live quote calculator; stays within Phoenix chat and adapts to mobile. */
+.sportsStakeCalculator{padding:12px var(--sports-ticket-inset);display:grid;gap:9px;
+  border-top:1px solid var(--dsw-alias-border-subtle,rgba(125,125,125,.3))}
+.sportsStakeCalculator>label{font-weight:750;font-size:12px}
+.sportsStakeCalculator>input{width:min(100%,300px);padding:10px 12px;border-radius:10px;
+  color:var(--dsw-alias-label-primary,inherit);
+  background:var(--dsw-alias-bg-primary,#fff);
+  border:1px solid var(--dsw-alias-border-subtle,rgba(125,125,125,.4));
+  font:inherit;font-variant-numeric:tabular-nums}
+.sportsStakeCalculator>input[aria-invalid="true"]{border-color:var(--dsw-alias-label-warning,#b45309)}
+.sportsStakeCalculator>small{font-size:11px;line-height:1.5;
+  color:var(--dsw-alias-label-secondary,#777)}
+.sportsStakeCalculator .sportsTicketTotal{padding:0;margin:0;grid-template-columns:repeat(3,minmax(0,1fr))}
+@media(max-width:540px){.sportsStakeCalculator .sportsTicketTotal{grid-template-columns:repeat(2,minmax(0,1fr))}}

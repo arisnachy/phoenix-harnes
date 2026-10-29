@@ -140,3 +140,68 @@ Use `sports_chat_matchup_factors` with the **verified ESPN** `sport`, `league`,
 
 Run:
 `node --experimental-strip-types --test packages/core/tool-sports/tests/universal-matchup-factors.test.mjs`
+
+## Real sportsbook markets, quotes and tracking (2026-10-29)
+
+Kira's sportsbook workflow separates **researched picks**, **observed current commercial
+quotes**, **bookmaker-accepted bets**, and **operator-settled outcomes**. A price is
+not placement: do not call a real quoted ticket fictional, but NEVER label a ticket
+accepted without independent operator evidence. Tool `sports_chat_ticket` filters
+out expired/unattributed quotes, and `sports_chat_ticket_evidence_priced_auto` matches
+bookmakers and selected fixtures. The native `sports_ticket_card` has a live
+stake input in RD$, potential gross return and **net profit**. This input does not
+submit or transfer money. Quotes may be withdrawn, changed or rejected.
+
+Kira can call `sports_chat_bet_rules` for the multi-sport market dictionary
+(moneyline, run line -1.5/+2.5, team/full-game totals, first 3/5 innings,
+player props, soccer 1X2/Asian handicap/BTTS, NBA quarter totals, NFL passing
+yards, hockey puck line and shots, tennis sets/games, golf, MMA, cricket).
+This is an **ontology**, not proof that all products are for sale now. An
+actual offer requires **bookmaker, event, period, line, player, price and
+timestamp** from the authorized source. Same-game parlays and correlated
+selections may require bookmaker-provided *combined prices*.
+
+`sports_chat_ticket_track` retrieves ESPN's official scores for a known
+date/league and IDs and computes a **provisional** won/lost/push/pending/
+unverifiable status for supported game markets. It handles run line, spreads,
+moneyline, 1X2, team totals and first 3/5 inning totals; it does NOT infer
+player-prop outcomes from team scores and does not handle settled winning
+receipts, payouts, Asian quarter-line half-win/half-loss, early cashouts,
+rescheduling or provider-specific settlement without operator confirmation.
+This is on-demand: continuous background monitoring requires connecting a
+persisted-ticket ledger and scheduler. Matching a user-entered folio does
+not prove the sportsbook accepted it.
+
+### PRIMARY Dominican bookmaker sources (verified)
+
+- **Juancito Sport official rules**:
+  https://www.juancitosport.com.do/reglas/
+  Baseball moneyline/run line require losing team to bat fifth inning;
+  full-game totals/individual team runs require losing team to bat ninth;
+  first 3 inning markets require 3 complete innings; first 5 inning O/U
+  requires 5 full innings. Player hit bases: single=1, double=2,
+  triple=3, HR=4. Soccer is 90 minutes plus stoppage, not extra time.
+  Asian handicap **quarter** lines yield partial wins/refunds/losses.
+- **Official Juancito terms**:
+  https://www.juancitosport.com.do/banca/terminos/
+  Electronic **"Apuesta Confirmada"** acceptance is required (8.4);
+  minimum stake RD$100 (7.10); posted maximum parlay winnings
+  RD$15,000,000 (4.9). Section 6.6 explicitly prohibits using bots or
+  scripts to place bets. **PHOENIX must not automate bookmaker placement
+  at Juancito**; a user must place the bet via its authorized UI. Rules,
+  limits and available products can change. Do not quote the independent
+  `juancitosports.com` promotional site as the official house rules.
+- Other domain-specific house rules, **not transitive to Juancito**:
+  https://www.appuesta.do/rules
+  https://www.facilitobet.com/regla/beisbol
+  https://sportsbook.draftkings.com/help/sport-rules/baseball
+  https://policies.fanduel.com/SB/NJ/2026-10-15T12-42-58.html
+- Dominican authority:
+  https://www.casinos.gob.do/juegos-autorizados/banca-de-apuestas-deportivas/
+
+To verify:
+`node --experimental-strip-types --test packages/core/tool-sports/tests/sports-bet-settlement.test.mjs`.
+These are **outcome checks**, not profit guarantees. Backtests should use
+time-held-out samples, real bookmaker prices available before kickoff,
+sport-specific metrics, injury/team availability, correlation guards,
+and calibration assessments before publishing a quantitative edge.
