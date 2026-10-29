@@ -231,13 +231,25 @@ function eventLeaders(data:unknown):Item[]{
     })
   })).filter((x):x is Item=>x!==null).slice(0,18)
 }
-function searchResults(data:unknown):Item[]{
-  const d=row(data),groups=array(d.results),hits=groups.flatMap(g=>array(row(g).items))
-  return hits.slice(0,30).map(h=>{
-    const x=row(h)
-    return item(x.displayName??x.name??x.title,
-      x.subtitle??x.type,x.description,
-      x.image??x.logo)
+function searchResults(data:unknown,sport:string,league:string):Item[]{
+  const d=row(data),groups=array(d.results)
+  const hits=groups.flatMap(g=>array(row(g).items).map(hit=>({
+    hit,category:txt(row(g).type??row(g).name,40).toLowerCase(),
+  })))
+  return hits.slice(0,30).map(({hit,category})=>{
+    const x=row(hit),result=item(x.displayName??x.name??x.title,
+      x.subtitle??x.type,x.description,x.image??x.logo)
+    const entityId=id(x.id)
+    const kind=txt(x.type,35).toLowerCase()||category
+    const player=/athlete|player|jugador/u.test(kind),team=/team|equipo|club/u.test(kind)
+    if(!result)return null
+    if(!entityId||!player&&!team)return result
+    const view=player?'player':'team'
+    return {...result,value:result.value??('ID ESPN: '+entityId),
+      action:{label:player?'Ficha y estadísticas':'Perfil del equipo',
+        prompt:'Kira, consulta sports_chat_espn_explore con sport='+sport+', league='+league+
+          ', view='+view+', '+(player?'athleteId':'teamId')+'='+entityId+
+          '. Usa exclusivamente hechos verificados por ESPN.'}}
   }).filter((x):x is Item=>x!==null)
 }
 /** Explores one ESPN entity with bounded optional evidence and a reusable adaptive UI.
@@ -369,7 +381,7 @@ export async function exploreEspn(
     })))
   }else if(view==='search'){
     subtitle='Resultados para '+txt(input.query,80)
-    put(section('Entidades encontradas','list',searchResults(data.get('Buscador ESPN')),20))
+    put(section('Entidades encontradas','list',searchResults(data.get('Buscador ESPN'),sport,league),20))
   }
   const limitations=[
     'Solo se muestran campos que el proveedor devolvió; un HTTP 200 vacío no valida una estadística.',
