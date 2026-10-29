@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { BinanceConnectorSetup } from '../src/client/BinanceConnectorSetup.tsx'
 
@@ -144,6 +144,9 @@ describe('Binance authenticated connector in Phoenix Settings', () => {
     expect(screen.queryByRole('button',{name:'Autorizar Binance OAuth'})).toBeNull()
     expect(screen.getByText(/Alternativa operativa:/)).toBeTruthy()
     expect(screen.getByRole('link',{name:'Agentes oficialmente compatibles y guía de Binance'})).toBeTruthy()
+    await waitFor(()=>expect(
+      (screen.getByRole('button',{name:'Opciones avanzadas (solo si Binance aprueba PHOENIX)'}) as HTMLButtonElement).disabled,
+    ).toBe(false))
     fireEvent.click(screen.getByRole('button',{name:'Opciones avanzadas (solo si Binance aprueba PHOENIX)'}))
     fireEvent.click(screen.getByRole('button',{name:'Preparar OAuth REAL'}))
     await screen.findByText(/MCP instalado localmente. Binance debe aprobar el cliente PHOENIX/)
