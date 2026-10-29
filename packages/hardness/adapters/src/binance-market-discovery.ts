@@ -6,7 +6,13 @@ export interface BinanceMarketCandidate {
   readonly quoteVolumeUsdt: number
 }
 
-/** Strictly filter active, liquid Spot USDT pairs. No fabricated prices. */
+/**
+ * Strictly filter active, liquid Spot USDT pairs. No fabricated prices.
+ * @param exchangeInfo - Binance Spot market metadata.
+ * @param ticker24h - Binance public 24-hour volume and quote feed.
+ * @param limit - Maximum number of eligible pairs to retain.
+ * @returns Deterministically ranked liquid Spot USDT pairs.
+ */
 export function selectBinanceSpotUniverse(
   exchangeInfo: unknown, ticker24h: unknown, limit = 1000,
 ): readonly string[] {
@@ -39,12 +45,15 @@ export function selectBinanceSpotUniverse(
   return symbols
 }
 
-/** Read the public Binance universe; failures are visible and never turn into buy signals. */
+/**
+ * Read the public Binance universe; failures never turn into buy signals.
+ * @returns Eligible public-market symbols without account credentials.
+ */
 export async function discoverBinanceSpotMarkets(): Promise<readonly string[]> {
   const api = 'https://data-api.binance.vision'
   const get = async (path: string): Promise<unknown> => {
     const response = await fetch(api + path, { signal: AbortSignal.timeout(10_000) })
-    if (!response.ok) throw new Error('Binance public market discovery failed (HTTP ' + response.status + ')')
+    if (!response.ok) throw new Error(`Binance public market discovery failed (HTTP ${response.status})`)
     return response.json() as Promise<unknown>
   }
   const [exchange, tickers] = await Promise.all([
