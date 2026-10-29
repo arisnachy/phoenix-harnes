@@ -47,7 +47,7 @@ export function apply(ctx: Context): void {
       const selected=answer?.selected.length===1?answer.selected[0]:undefined
       return JSON.stringify(interpretClinicalAsk(step,selected,response.automatic===true))
     },
-    presentCall:()=>({ card:'generic',title:'Kira Clínica · ASK',kind:'read' as const}),
+    presentCall:()=>({ card:'generic',title:'Kira Clínica · ASK',kind:'read' as const }),
   }))
   ctx.tools.register(defineTool({
     name: 'health_interview_plan',
