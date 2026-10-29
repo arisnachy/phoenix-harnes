@@ -111,6 +111,24 @@ function settledTool(callId = 'search-1'): ToolResultNode {
   }
 }
 
+/** One settled, first-party Binance snapshot, deliberately unrelated to a generic task. */
+function tradingTool(seq: number): ToolResultNode {
+  const dashboard = {
+    mode: 'paper', phase: 'running', enabled: true,
+    settings: { symbols: ['BTCUSDT'], interval: '15m', pollMs: 60_000 },
+    account: {
+      equityUsdt: 1000, cashUsdt: 1000, totalPnlUsdt: 0,
+      totalReturnPct: 0, maxDrawdownPct: 0, tradeCount: 0, positions: [],
+    },
+    signals: [], recentTrades: [], lastDecision: 'hold', rationale: 'No verified entry',
+  }
+  return {
+    ...settledTool('paper-' + seq), seq, time: seq * 1_000,
+    call: { name: 'binance_paper_dashboard', argsRaw: '{}' },
+    content: [{ type: 'text', text: JSON.stringify({ dashboard }) }],
+  }
+}
+
 const generatedAttachment = {
   attachmentId: AttachmentId(`sha256:${'b'.repeat(64)}`),
   mediaType: 'image/png' as const,
@@ -209,6 +227,22 @@ afterEach(cleanup)
 beforeEach(() => { localStorage.clear() })
 
 describe('chat tool activity grouping', () => {
+  it('does not summon the PAPER trading visor from background tool evidence in another task', () => {
+    renderChat([user(1, 'Investiga las fuentes de una tesis de salud pública'),
+      tradingTool(3), assistantWithReasoning(4)])
+    expect(screen.queryByRole('region', { name: 'Visor de trading Binance PAPER' })).toBeNull()
+  })
+
+  it('shows one PAPER visor on explicit user request, but never inserts another in a later unrelated turn', () => {
+    renderChat([
+      user(1, 'Kira, muestra el visor de trading PAPER de Binance'),
+      tradingTool(3), assistantWithReasoning(4),
+      user(5, 'Ahora investiga políticas públicas'),
+      tradingTool(6), assistantWithReasoning(7),
+    ])
+    expect(screen.getAllByRole('region', { name: 'Visor de trading Binance PAPER' })).toHaveLength(1)
+  })
+
   it('renders the browser workspace for nested Chrome activity while Tools stays collapsed', () => {
     renderChat([user(1, 'Investiga y completa el formulario en Chrome'), nestedChromeTool()])
 
