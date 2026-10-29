@@ -96,7 +96,7 @@ export async function investigateEventDeep(
     return athletes.slice(0,5).flatMap(a=>{
       const v=obj(a),athlete=str(get(v.athlete,'displayName'),95)
       const stats=arr(v.stats)
-      return athlete&&labels.length&&stats.length?
+      return athlete&&labels.length>0&&stats.length>0?
         [{athlete,stat:str(labels[0],60),value:str(stats[0],40),
           source:'ESPN Boxscore' as const}]:[]
     })
@@ -121,7 +121,7 @@ export async function investigateEventDeep(
         const dates=arr(get(schedule,'dates'))
         independentFixtureVerified=dates.some(entry=>arr(get(entry,'games')).some(game=>{
           const t=obj(get(game,'teams'))
-          const home=str(get(t.home?.team,'name')),away=str(get(t.away?.team,'name'))
+          const home=str(get(get(t.home,'team'),'name')),away=str(get(get(t.away,'team'),'name'))
           const actual=teams.map(team=>nameKey(team.name))
           return actual.includes(nameKey(home))&&actual.includes(nameKey(away))
         }))
