@@ -339,15 +339,15 @@ export async function marketOdds(sportKey:string,markets='h2h',env:NodeJS.Proces
     price:o.price,home:title(event.home_team),away:title(event.away_team),time:localTime(event.commence_time),timeIso:event.commence_time,updatedAt:title(market.last_update??book.last_update),source:'The Odds API',
   }))))).slice(0,500)
 }
-/** Simulate a ticket only when every leg matches a freshly retrieved quote.
+/** Prepare an unplaced real-quote ticket only when each leg matches a retrieved bookmaker quote.
  * @param selections - Requested legs to match exactly.
  * @param quotes - Current sportsbook quotes from the authorized source.
- * @param stake - Non-transactional simulated stake.
+ * @param stake - User-selected amount for potential payout calculation; no money is transferred.
  * @returns A rendered ticket and any correlation warnings.
  */
 export function pricedTicket(selections:MarketSelection[],quotes:MarketOutcome[],stake=0):{ card:ChatBlock;warning:string } {
   if(!Array.isArray(selections)||!selections.length||selections.length>10)throw Error('El ticket requiere entre 1 y 10 selecciones')
-  if(!Number.isFinite(stake)||stake<0||stake>1e6)throw Error('Importe de simulación inválido')
+  if(!Number.isFinite(stake)||stake<0||stake>1e6)throw Error('Importe de cálculo inválido')
   let combined=1
   const used=new Set<string>(),events=new Set<string>()
   const legs=selections.map((sel)=>{
@@ -361,6 +361,7 @@ export function pricedTicket(selections:MarketSelection[],quotes:MarketOutcome[]
     return { event:match.away+' vs '+match.home,selection:match.selection+(match.point==null?'':' '+match.point),
       bookmaker:match.bookmaker,price:match.price.toFixed(2),when:match.time,market:match.market,...taxonomy }
   })
+  if(new Set(legs.map(leg=>leg.bookmaker)).size!==1)throw Error('Una combinada necesita cotización aceptada de una misma casa; no mezclar bancas')
   const correlated=events.size!==legs.length
   const warning=correlated?'Incluye selecciones del mismo encuentro; no asumas independencia ni que todas pueden combinarse.':'No se ha estimado probabilidad conjunta ni ventaja estadística calibrada.'
   return { warning,card:{ component:'sports_ticket_card',version:1,props:{
@@ -370,7 +371,7 @@ export function pricedTicket(selections:MarketSelection[],quotes:MarketOutcome[]
       'OddsHarvester/OddsPortal · cuotas públicas observadas':
       quotes.some(q=>q.source?.includes('ESPN'))?'ESPN Site/Core (cuotas públicas cuando ESPN las publique)':
       quotes.some(q=>q.source==='TheOddsAPI')?'TheOddsAPI · cuotas de casas identificadas':
-      'The Odds API · precios de las casas indicadas',note:'SIMULACIÓN, SIN APUESTA REAL. '+warning+' Las cuotas pueden cambiar; no existe garantía de ganar.',
+      'The Odds API · precios de las casas indicadas',note:'COTIZACIÓN COMERCIAL CONSULTADA; PENDIENTE DE ACEPTACIÓN EN LA CASA. '+warning+' Deben comprobarse fecha, mercado, reglas y cambio de precio antes de enviar el ticket. No existe garantía de ganar.',
     askPrompt:'Kira, revisa este ticket con datos actuales, riesgos, ausencias y correlaciones antes de recomendar nada.',
   } } }
 }
