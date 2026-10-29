@@ -32,11 +32,11 @@ test('rejects stale, started, bogus-domain, missing timestamp and invalid prices
     '1x2_market':[{'1':'NaN',bookmaker_name:'Book A',period:'FullTime'}],
     'double_chance_market':[],'over_under_2_5_market':[]}],'football',now),[])
 })
-test('keyless command enforces opt-in and is testable without API key or network',async()=>{
+test('keyless is available by default, explicit opt-out works, and prices remain independently verifiable',async()=>{
   const fakeRunner=async()=>fixture
-  await assert.rejects(()=>keylessOdds('football','1x2','2026-10-28',{},now,fakeRunner),/desactivado/)
-  const out=await keylessOdds('football','1x2','2026-10-28',
-    {PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED:'1'},now,fakeRunner)
+  await assert.rejects(()=>keylessOdds('football','1x2','2026-10-28',
+    {PHOENIX_SPORTS_KEYLESS_ODDS_DISABLED:'1'},now,fakeRunner),/deshabilitado/)
+  const out=await keylessOdds('football','1x2','2026-10-28',{},now,fakeRunner)
   assert.equal(out.length,7)
   await assert.rejects(()=>keylessOdds('football','not-existing','2026-10-28',
     {PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED:'1'},now,fakeRunner),/sin soporte/)
