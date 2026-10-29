@@ -1,0 +1,38 @@
+name: PHOENIX free odds source resilience
+on:
+  pull_request:
+    paths:
+      - 'packages/core/tool-sports/**'
+      - 'scripts/setup-phoenix-sports-odds.mjs'
+      - 'scripts/setup-phoenix-sports-history.mjs'
+      - 'package.json'
+      - '.github/workflows/phoenix-free-odds.yml'
+  push:
+    branches: [main, stable]
+    paths:
+      - 'packages/core/tool-sports/**'
+      - 'scripts/setup-phoenix-sports-odds.mjs'
+      - 'scripts/setup-phoenix-sports-history.mjs'
+      - '.github/workflows/phoenix-free-odds.yml'
+permissions:
+  contents: read
+jobs:
+  keyless-sources:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Verify providers, markets, ticket matching, and legacy formats without keys
+        run: |
+          node --experimental-strip-types --test packages/core/tool-sports/tests/keyless-odds.test.mjs
+          node --experimental-strip-types --test packages/core/tool-sports/tests/odds-source-status.test.mjs
+          node --experimental-strip-types --test packages/core/tool-sports/tests/evidence-priced-ticket.test.mjs
+          node --experimental-strip-types --test packages/core/tool-sports/tests/sports-multisource.test.mjs
+      - name: Strict host library build
+        run: pnpm run build:lib:host
