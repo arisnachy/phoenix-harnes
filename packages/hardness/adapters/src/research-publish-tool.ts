@@ -13,7 +13,11 @@ import { defineTool, ToolArgsError, type ToolDefinition } from '@phoenix-ai/dsh-
 
 type Report = Record<string, unknown>
 
-/** Stable report location; identical contents reuse one local output directory. */
+/**
+ * Derive an isolated output path from report content.
+ * @param report - source-linked manuscript.
+ * @returns deterministic paths for each exported file format.
+ */
 export function researchOutputPaths(report: Report): { docx: string; pdf: string; html: string } {
   const signature = createHash('sha256').update(JSON.stringify(report)).digest('hex').slice(0, 16)
   const root = join(homedir(), '.dsh', 'research-reports', signature)
@@ -23,6 +27,8 @@ export function researchOutputPaths(report: Report): { docx: string; pdf: string
 /**
  * Fail closed before any Python process or file write. Does not pretend that
  * unverified model-provided references are independently verified.
+ * @param input - manuscript input to validate.
+ * @returns a validated source-linked report.
  */
 export function validateResearchPublication(input: unknown): Report {
   if (typeof input !== 'object' || input === null || Array.isArray(input)) {
@@ -51,7 +57,7 @@ export function validateResearchPublication(input: unknown): Report {
       throw new ToolArgsError(['Las claves bibliográficas deben ser únicas y válidas.'])
     }
     for (const field of ['authors', 'year', 'title', 'url']) {
-      if (typeof item[field] !== 'string' || (item[field] as string).trim() === '') {
+      if (typeof item[field] !== 'string' || item[field].trim() === '') {
         throw new ToolArgsError(['La fuente ' + item.key + ' necesita ' + field + '.'])
       }
     }
@@ -68,7 +74,7 @@ export function validateResearchPublication(input: unknown): Report {
       if (!/^\[@[A-Za-z0-9_-]{1,64}(?:\s*[,;]\s*@?[A-Za-z0-9_-]{1,64})*\]$/u.test(match[0])) {
         throw new ToolArgsError(['Grupo de citas inválido: ' + match[0].slice(0, 120)])
       }
-      tokens.push(...match[1]!.split(/[,;]/u).map(key => key.trim().replace(/^@/u, '')))
+      tokens.push(...(match[1] ?? '').split(/[,;]/u).map(key => key.trim().replace(/^@/u, '')))
     }
     if ((value.match(/\[@/gu) ?? []).length !== (value.match(all) ?? []).length) {
       throw new ToolArgsError(['Existe una cita [@clave] incompleta.'])
@@ -137,7 +143,7 @@ export function validateResearchPublication(input: unknown): Report {
     }
   } else {
     const type = report.document_type
-    if (type === undefined || type === 'brief') {
+    if (typeof type !== 'string' || type === 'brief') {
       throw new ToolArgsError(['No publiques una investigación profesional como brief. Identifica el tipo de estudio y desarrolla un manuscrito completo.'])
     }
     // The 15-source editorial floor remains distinct from nonbinding degree-specific guidance.
@@ -147,7 +153,7 @@ export function validateResearchPublication(input: unknown): Report {
       thesis: [8000, 15], monograph: [4000, 12],
       research_protocol: [1800, 8], policy_report: [1800, 8],
     }
-    const thresholds = minima[String(type)]
+    const thresholds = minima[type]
     if (thresholds) {
       const count = (report.sections as Array<{ text: string }>).reduce(
         (total, section) => total + (section.text.match(/[\p{L}\p{N}_]+/gu) ?? []).length, 0)
@@ -159,7 +165,7 @@ export function validateResearchPublication(input: unknown): Report {
       }
     }
     if (['narrative_review', 'systematic_review', 'original_research',
-      'journal_manuscript', 'thesis', 'monograph'].includes(String(type))
+      'journal_manuscript', 'thesis', 'monograph'].includes(type)
       && !(Array.isArray(report.tables) && report.tables.length > 0)
       && !(Array.isArray(report.charts) && report.charts.length > 0)) {
       throw new ToolArgsError(['Informe profesional sin tabla de evidencia ni figura documentada.'])
@@ -169,10 +175,12 @@ export function validateResearchPublication(input: unknown): Report {
     || !['standard', 'premium'].includes(report.visual_preference))) {
     throw new ToolArgsError(['visual_preference debe ser standard o premium.'])
   }
-  if (report.style !== undefined && !['apa', 'apa7', 'vancouver', 'ama'].includes(String(report.style))) {
+  if (report.style !== undefined && (typeof report.style !== 'string'
+    || !['apa', 'apa7', 'vancouver', 'ama'].includes(report.style))) {
     throw new ToolArgsError(['Estilo de citas inválido: APA 7, Vancouver o AMA preliminar.'])
   }
-  if (report.presentation !== undefined && !['academic', 'journal', 'editorial', 'hybrid'].includes(String(report.presentation))) {
+  if (report.presentation !== undefined && (typeof report.presentation !== 'string'
+    || !['academic', 'journal', 'editorial', 'hybrid'].includes(report.presentation))) {
     throw new ToolArgsError(['Presentación inválida: academic, journal, editorial o hybrid.'])
   }
   const designPresets = ['auto', 'academic_classic', 'editorial_navy', 'clinical_teal',
@@ -187,17 +195,18 @@ export function validateResearchPublication(input: unknown): Report {
     || (typeof report.journal_requirements === 'object' && report.journal_requirements !== null
       && !Array.isArray(report.journal_requirements)
       && typeof (report.journal_requirements as Record<string, unknown>).journal === 'string')
-  const presentation = report.presentation ?? (journalMode ? 'journal' : quality === 'professional' ? 'hybrid' : 'academic')
-  if (['academic', 'journal'].includes(String(presentation)) && report.design_preset !== undefined
+  const presentation = typeof report.presentation === 'string'
+    ? report.presentation : journalMode ? 'journal' : quality === 'professional' ? 'hybrid' : 'academic'
+  if (['academic', 'journal'].includes(presentation) && report.design_preset !== undefined
     && report.design_preset !== 'auto' && report.design_preset !== 'academic_classic') {
     throw new ToolArgsError(['Los modos academic y journal no admiten una portada decorativa.'])
   }
-  if (!['academic', 'journal'].includes(String(presentation)) && report.design_preset === 'academic_classic') {
+  if (!['academic', 'journal'].includes(presentation) && report.design_preset === 'academic_classic') {
     throw new ToolArgsError(['academic_classic requiere presentación academic o journal.'])
   }
   if (report.document_type !== undefined && !['brief', 'monograph', 'research_protocol',
     'narrative_review', 'systematic_review', 'original_research', 'thesis',
-    'journal_manuscript', 'policy_report'].includes(String(report.document_type))) {
+    'journal_manuscript', 'policy_report'].includes(typeof report.document_type === 'string' ? report.document_type : '')) {
     throw new ToolArgsError(['Tipo de investigación no reconocido.'])
   }
   if (report.page_plan !== undefined) {
@@ -238,7 +247,7 @@ function findPublisher(): string {
   const candidates = [
     ...(override ? [resolve(override)] : []),
     join(process.cwd(), 'scripts', file),
-    ...[1, 2, 3, 4, 5, 6].map(level => resolve(root, ...Array(level).fill('..'), 'scripts', file)),
+    ...[1, 2, 3, 4, 5, 6].map(level => resolve(root, ...Array.from({ length: level }, () => '..'), 'scripts', file)),
   ]
   const script = candidates.find(path => existsSync(path) && statSync(path).isFile())
   if (script === undefined) throw new Error('No se encontró scripts/phoenix-research-publisher.py en el runtime de Phoenix.')
@@ -252,7 +261,12 @@ type PublisherOutcome = {
   files: { docx: string; pdf: string; html: string }
   source_count: number
   source_verification: string
-  pagination?: { pdf_pages: number; requested_pages: number | null; scope: string; target_met: boolean | null }
+  pagination?: {
+    pdf_pages: number
+    requested_pages: number | null
+    scope: string
+    target_met: boolean | null
+  }
   warnings?: string[]
   advisory_warnings?: string[]
   reference_guidance?: {
@@ -266,8 +280,12 @@ type PublisherOutcome = {
   presentation?: string
   design_preset?: string
   document_type?: string
-  quality?: { required_sections_checked: boolean; submission_certified: boolean;
-    bibliographic_metadata_network_verified: boolean; visual_page_review: string }
+  quality?: {
+    required_sections_checked: boolean
+    submission_certified: boolean
+    bibliographic_metadata_network_verified: boolean
+    visual_page_review: string
+  }
 }
 
 async function runAttempt(bin: string, args: string[], payload: string, signal: AbortSignal): Promise<PublisherOutcome> {
@@ -280,19 +298,19 @@ async function runAttempt(bin: string, args: string[], payload: string, signal: 
     child.stdout.on('data', (chunk: string) => { output = (output + chunk).slice(-16000) })
     child.stderr.on('data', (chunk: string) => { errors = (errors + chunk).slice(-12000) })
     child.on('error', rejectOutcome)
-    child.on('close', code => {
+    child.on('close', (code) => {
       if (code !== 0) {
         rejectOutcome(new Error((errors.trim() || 'RESEARCH_PUBLISH_FAILED') + ' (exit ' + String(code) + ')'))
         return
       }
       try {
         const value = JSON.parse(output.trim()) as PublisherOutcome
-        if ((value.state !== 'REPORT_READY' && value.state !== 'REPORT_NEEDS_REVISION') || !/^[0-9a-f]{16}$/u.test(value.report_id) || typeof value.files !== 'object') {
+        if (!/^[0-9a-f]{16}$/u.test(value.report_id) || typeof value.files !== 'object') {
           throw new Error('La respuesta del publicador no confirmó un documento listo.')
         }
         resolveOutcome(value)
       } catch (error) {
-        rejectOutcome(error)
+        rejectOutcome(error instanceof Error ? error : new Error(String(error)))
       }
     })
     child.stdin.on('error', () => { /* Child may have exited after a failed import. */ })
@@ -304,6 +322,9 @@ async function runAttempt(bin: string, args: string[], payload: string, signal: 
  * Generate real DOCX, PDF, and readable HTML using the pinned local Python
  * publisher. Prefer installed Python packages; allow uv dependency bootstrap
  * only when the current environment lacks them.
+ * @param report - validated manuscript and sourced visuals.
+ * @param signal - cancellation signal for the publisher.
+ * @returns verified output paths and publication status.
  */
 export async function publishResearchReport(report: Report, signal: AbortSignal): Promise<PublisherOutcome> {
   validateResearchPublication(report)
@@ -336,7 +357,10 @@ export async function publishResearchReport(report: Report, signal: AbortSignal)
   throw new Error('No fue posible publicar el documento. ' + problems.join('; '))
 }
 
-/** Model-facing academic report publication with actual file evidence. */
+/**
+ * Register a model-facing tool producing real research artifacts.
+ * @returns governed publication tool with file receipts.
+ */
 export function createResearchPublishTool(): ToolDefinition {
   return defineTool({
     name: 'phoenix_research_publish',
@@ -356,9 +380,10 @@ export function createResearchPublishTool(): ToolDefinition {
           ? (value.state === 'REPORT_READY' ? 'Informe completo para revisión académica. Word: ' : 'Informe generado, PERO AÚN NO COMPLETO: la paginación requiere ampliación o revisión. Word: ') + String((value.files as Record<string, unknown>).docx)
             + '; PDF: ' + String((value.files as Record<string, unknown>).pdf)
             + '; vista HTML: ' + String((value.files as Record<string, unknown>).html)
-            + '. Edición: ' + String(value.presentation ?? 'academic')
-            + '; diseño: ' + String(value.design_preset ?? 'academic_classic')
-            + '; páginas PDF: ' + String((value.pagination as Record<string, unknown> | undefined)?.pdf_pages ?? 'sin verificar')
+            + '. Edición: ' + (typeof value.presentation === 'string' ? value.presentation : 'academic')
+            + '; diseño: ' + (typeof value.design_preset === 'string' ? value.design_preset : 'academic_classic')
+            + '; páginas PDF: ' + (typeof (value.pagination as Record<string, unknown> | undefined)?.pdf_pages === 'number'
+              ? String((value.pagination as { pdf_pages: number }).pdf_pages) : 'sin verificar')
             + '; observaciones: ' + (Array.isArray(value.warnings) ? value.warnings.map(String).join('; ') : 'ninguna')
             + '; orientación de referencias: ' + (Array.isArray(value.advisory_warnings)
             ? value.advisory_warnings.map(String).join('; ') : 'sin advertencias')
