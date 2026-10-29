@@ -59,10 +59,24 @@ describe('Phoenix academic research intake and length planning', () => {
     expect(thesis.reference_guidance?.min).toBe(20)
     expect(thesis.missing_fields).not.toContain('entrada: APA 7, Vancouver o Artículo científico')
   })
+  it('respects a requested enhanced visual presentation without fabricating charts', () => {
+    const formal = planAcademicResearch({ entry: 'apa7', level: 'masters', document_type: 'thesis' })
+    const enhanced = planAcademicResearch({ entry: 'apa7', level: 'masters',
+      document_type: 'thesis', visual_mode: 'enhanced' })
+    expect(formal.visual_guidance).toMatchObject({
+      presentation: 'academic', design_preset: 'academic_classic',
+    })
+    expect(enhanced.visual_guidance).toMatchObject({
+      presentation: 'hybrid', design_preset: 'minimal_graphite',
+    })
+    expect(enhanced.visual_guidance.safeguards.join(' ')).toContain('datos reales')
+  })
   it('rejects unsafe or impossible page budgets', () => {
     expect(() => planAcademicResearch({ entry: 'apa7', target_pages: -1 })).toThrow()
     expect(() => planAcademicResearch({ entry: 'apa7', target_pages: 10000 })).toThrow()
     expect(() => planAcademicResearch({ entry: 'fake' })).toThrow()
+    expect(() => planAcademicResearch({ entry: 'apa7', document_type: 'thesis', level: 'monograph' })).toThrow()
+    expect(() => planAcademicResearch({ entry: 'apa7', visual_mode: 'invalid' })).toThrow()
     expect(createResearchPlanTool().name).toBe('phoenix_research_plan')
   })
 })
