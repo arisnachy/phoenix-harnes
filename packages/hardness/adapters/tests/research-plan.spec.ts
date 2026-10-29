@@ -22,6 +22,33 @@ describe('Phoenix academic research intake and length planning', () => {
     expect(result.pages.page_plan.reduce((total, x) => total + x.pages, 0)).toBe(80)
     expect(result.pages.verification).toContain('pending PDF')
   })
+  it('plans level-specific bibliography guidance and premium academic visuals without inventing evidence', () => {
+    const cases = [
+      ['licenciatura', 'bachelors', 20, 40],
+      ['maestría', 'masters', 40, 80],
+      ['doctorado', 'doctorate', 100, null],
+    ] as const
+    for (const [name, level, minimum, suggestedMaximum] of cases) {
+      const plan = planAcademicResearch({ intent: 'Tesis APA 7 de ' + name + ' con gráficos hermosos' })
+      expect(plan.document_type).toBe('thesis')
+      expect(plan.level).toBe(level)
+      expect(plan.reference_guidance).toMatchObject({
+        minimum, suggested_maximum: suggestedMaximum, policy: 'advisory',
+      })
+      expect(plan.citation_requirements).toMatchObject({
+        style: 'apa7', citations: 'author-date', bibliography: 'alphabetical',
+      })
+      expect(plan.visual_plan).toMatchObject({
+        preference: 'premium', design_preset: 'academic_classic', evidence_required: true,
+      })
+    }
+    const vancouver = planAcademicResearch({ intent: 'Tesis de medicina Vancouver', level: 'masters' })
+    expect(vancouver.citation_requirements).toMatchObject({
+      style: 'vancouver', citations: 'numeric', bibliography: 'first-appearance',
+    })
+    expect(() => planAcademicResearch({ entry: 'apa7', visual_preference: 'bling' })).toThrow()
+  })
+
   it('only asks for truly missing fields, in one intake bundle', () => {
     const result = planAcademicResearch({ entry: 'vancouver', document_type: 'thesis', target_pages: 100 })
     expect(result.missing_fields).toEqual([
