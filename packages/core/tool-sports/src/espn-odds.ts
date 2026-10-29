@@ -156,13 +156,16 @@ export async function fetchPublicEspnOdds(
         const data=await getJSON<unknown>(url)
         odds=(Array.isArray(data)?list(data):isRecord(data)?list(data.items):[]).filter(x=>x.homeTeamOdds||x.awayTeamOdds||x.overOdds||x.underOdds||x.drawOdds)
         if(!odds.length&&isRecord(data)){
-          const refs=Array.isArray(data.items)?data.items.filter(isRecord).slice(0,2):[]
+          const refs=Array.isArray(data.items)?data.items.filter(isRecord).slice(0,4):[]
           for(const ref of refs){
             const link=ref.$ref
             if(typeof link!=='string')continue
             const parsed=new URL(link)
-            if(parsed.protocol!=='https:'||parsed.hostname!=='sports.core.api.espn.com')continue
-            try{odds.push(...list(await getJSON<EspnOdds>(link)))}catch{ /* A listed market may be inaccessible. */ }
+            if(parsed.protocol!=='https:'||!['sports.core.api.espn.com','sports.core.api.espn.pvt'].includes(parsed.hostname)
+              ||parsed.username||parsed.password||parsed.port)continue
+            if(parsed.hostname==='sports.core.api.espn.pvt')parsed.hostname='sports.core.api.espn.com'
+            if(!parsed.pathname.startsWith('/v2/sports/'+route[0]+'/leagues/'+route[1]+'/events/'+eventId+'/competitions/'+competitionId+'/odds/'))continue
+            try{odds.push(...list(await getJSON<EspnOdds>(parsed.toString())))}catch{ /* A listed market may be inaccessible. */ }
           }
         }
       }catch{ /* Missing Core odds must not hide the games or invent lines. */ }
