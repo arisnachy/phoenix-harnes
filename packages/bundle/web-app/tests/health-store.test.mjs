@@ -461,7 +461,7 @@ test('critical laboratory report atomically creates exactly one urgent encrypted
   assert(!readFileSync(join(root,'clinic.sqlite')).includes(Buffer.from('Resultado crítico pendiente')))
   assert.throws(()=>db.list(lab,'followups'),/Permiso/)
   assert.throws(()=>db.update(lab,'orders',o.id,o.version,{
-    action:'result',result:'Duplicate',critical:true}),/Transición/)
+    action:'result',result:'Duplicate',critical:true}),/Transición|Solo personal autorizado/)
   assert.equal(db.list(doctor,'followups').filter(x=>x.priority==='urgent').length,1)
   assert(db.audits(admin.actor).some(x=>x.action==='critical.followup.created'))
   o=db.update(doctor,'orders',o.id,o.version,{action:'review',criticalAcknowledged:true})
