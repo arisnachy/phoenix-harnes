@@ -100,7 +100,8 @@ async function worker(){
  */
 export function start(launch=spawn,env=process.env,{force=false}={}){
   const paths=pathsFor(env)
-  if(env.PHOENIX_SPORTS_SOURCES_AUTO_INSTALL==='0')
+  if(env.PHOENIX_SPORTS_SOURCES_AUTO_INSTALL==='0'||env.CI==='true'
+    ||env.NODE_ENV==='test')
     return{status:'disabled',logPath:paths.log}
   const source=resolveSportsInstaller([
     env.PHOENIX_INSTALL_ROOT,env.PHOENIX_RUNTIME_ROOT,localRoot,process.cwd(),
