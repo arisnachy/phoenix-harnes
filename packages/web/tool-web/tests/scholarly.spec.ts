@@ -29,6 +29,7 @@ describe('Europe PMC official scholarly metadata', () => {
       expect(parsed.pathname).toBe('/europepmc/webservices/rest/search')
       expect(parsed.searchParams.get('format')).toBe('json')
       expect(parsed.searchParams.get('pageSize')).toBe('3')
+      expect(parsed.searchParams.get('cursorMark')).toBe('*')
       return new Response(JSON.stringify(provider), { status: 200 })
     }) as unknown as typeof fetch
     const response = await searchEuropePmc('Alzheimer 2026', 3, undefined, fetcher)
@@ -65,5 +66,15 @@ describe('Europe PMC official scholarly metadata', () => {
     await expect(searchEuropePmc('primary health care', 31, undefined, fetcher)).rejects.toThrow()
     await expect(searchEuropePmc('primary health care', 5, undefined, fetcher, 'unsafe cursor')).rejects.toThrow()
   })
+
+  it('reads authoritative journal metadata from Europe PMC core results', () => {
+    const records = projectEuropePmcRecords({ resultList: { result: [{
+      pmid: '99887766', title: 'Assessment of primary health care',
+      authorString: 'Scholar A', pubYear: '2023', journalInfo: { journal: { title: 'Health Systems Research' } },
+    }] } })
+    expect(records).toHaveLength(1)
+    expect(records[0]?.journal).toBe('Health Systems Research')
+  })
+
 
 })
