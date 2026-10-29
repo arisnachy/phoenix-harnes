@@ -437,8 +437,12 @@ function MiniApp({ html, title, executable = false, minimumHeight = 1, gameDiagn
           <input type="text" readOnly aria-label="URL temporal de la página"
             value={standaloneUrl ?? ''} onFocus={(event) => { event.currentTarget.select() }} />
         </label>
-        {standaloneUrl !== undefined && <a className={styles.link} href={standaloneUrl}
-          target="_blank" rel="noopener noreferrer">Abrir página en otra pestaña</a>}
+        {standaloneUrl !== undefined && <>
+          <a className={styles.link} href={standaloneUrl}
+            target="_blank" rel="noopener noreferrer">Abrir página en otra pestaña</a>
+          <a className={styles.link} href={standaloneUrl}
+            download={title.replace(/[^a-z0-9._-]+/giu, '-') + '.html'}>Guardar HTML</a>
+        </>}
         <small>URL temporal del navegador, no publicación pública. Descarga el HTML para conservarlo.</small>
       </div>}
       {externalImagesAvailable && <button type="button" className={styles.remoteImageToggle}
