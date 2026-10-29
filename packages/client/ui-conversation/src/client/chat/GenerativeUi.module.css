@@ -340,3 +340,5 @@
 .sportsEspnArticles .sportsEspnRow{background:var(--dsw-alias-interactive-bg-hover,rgba(120,120,120,.025))}
 @media(max-width:560px){.sportsEspnMetrics{grid-template-columns:repeat(2,minmax(0,1fr))}
   .sportsEspnSections{gap:13px}.sportsEspnSection{padding-top:12px}}
+
+.sportsEspnNewsLink{font-size:11px;font-weight:700;text-decoration:underline;text-underline-offset:2px;color:var(--dsw-alias-accent-primary,#bb5a27)}
