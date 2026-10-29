@@ -77,6 +77,21 @@ export function createPhoenixCanvasTool(): ToolDefinition {
           || entries.some(([name]) => name.startsWith('/') || name.includes('..') || name.includes('\\\\')))
           throw new Error('files must be a bounded bundle of relative asset paths')
       }
+      // Do not claim publication when a generated image exists only as a
+      // filename. srcDoc cannot resolve arbitrary workspace paths.
+      const bundled = args.files === undefined ? {} : args.files as Record<string, unknown>
+      const imageRefs = [...args.html.matchAll(/<img\b[^>]*\bsrc\s*=\s*(["'])(.*?)\1/giu)]
+        .map(match => match[2] ?? '')
+      const missing = imageRefs.filter(reference => {
+        if (/^(?:data:image\/|blob:|https?:\/\/|\/\/)/iu.test(reference)) return false
+        const path = reference.split(/[?#]/u, 1)[0]!.replace(/^\/+/u, '').replace(/^\.\//u, '')
+        return path !== '' && bundled[path] === undefined && bundled['./' + path] === undefined
+      })
+      if (missing.length > 0) {
+        throw new Error('HTML tiene imágenes locales sin datos: ' + missing.slice(0, 5).join(', ')
+          + '. Adjunta el archivo mediante files[path]={attachment:{attachmentId,mediaType,bytes,width,height}} '
+          + 'o base64. No se publicó una página incompleta.')
+      }
       // Stop the model loop after a self-contained preview: the renderer owns later interactions.
       // Explicitly requested follow-up work may opt out without affecting ordinary delivery.
       if (args.continueAfterDisplay !== true) exec.concludeTurn()
