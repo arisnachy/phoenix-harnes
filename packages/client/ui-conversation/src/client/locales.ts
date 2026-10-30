@@ -465,6 +465,7 @@ export const en = {
  * complete English dictionary while the primary conversation path is native. */
 export const es = {
   ...en,
+  'context.tools': 'Herramientas',
   'status.thinking': 'Phoenix está pensando',
   'status.preparing': 'Phoenix está preparando la respuesta',
   'status.searching': 'Phoenix está buscando',
