@@ -2,6 +2,7 @@ import { Children, isValidElement, type ReactElement, type ReactNode } from 'rea
 import { describe, expect, it } from 'vitest'
 import {
   ModelActivityAvatar,
+  ModelEngineBadge,
   modelEngineMark,
   modelEngineFamily,
   agentAvatarKind,
@@ -28,12 +29,31 @@ describe('model engine glyphs', () => {
     expect(modelEngineMark('gpt-6-luna')).toBe('☾')
     expect(modelEngineMark('gpt-6-luna-max')).toBe('☾')
     expect(modelEngineMark('gpt-6-astra')).toBe('★')
+    expect(modelEngineMark('gpt-6.1-terra', 'openai-codex')).toBe('♁')
     expect(modelEngineMark('deepseek-v4', 'deepseek')).toBe('ϟ')
     expect(modelEngineMark('some-other-model')).toBeUndefined()
     expect(modelEngineFamily('gpt-6-luna', 'openai-codex')).toBe('luna')
     expect(modelEngineFamily('gpt-6-astra', 'openai-codex')).toBe('astra')
+    expect(modelEngineFamily('GPT-6.1-TERRA', 'openai-codex')).toBe('terra')
+    expect(modelEngineFamily('gpt-6.1-terra', 'deepseek')).toBe('other')
+    expect(modelEngineFamily('gpt-6.1-terrain', 'openai-codex')).toBe('other')
     expect(modelEngineFamily('some-other-model')).toBeUndefined()
     expect(modelEngineMark(undefined)).toBeUndefined()
+  })
+
+  it('renders Terra with its own globe icon and name instead of the Orión fallback', () => {
+    const badge = ModelEngineBadge({ model: 'gpt-6.1-terra', provider: 'openai-codex', placement: 'header' })
+    expect(badge?.props).toMatchObject({
+      'data-engine-model': 'gpt-6.1-terra',
+      'data-engine-family': 'terra',
+      'data-engine-mark': '♁',
+      'aria-label': 'Terra · openai-codex · gpt-6.1-terra',
+    })
+    const children = Children.toArray(badge?.props.children).filter(isValidElement<{ children?: ReactNode }>)
+    expect(children.some(child => child.props.children === 'Terra')).toBe(true)
+    expect(children.some(child => child.type === 'span')).toBe(true)
+    const other = ModelEngineBadge({ model: 'deepseek-v4', provider: 'deepseek', placement: 'header' })
+    expect(other?.props['data-engine-family']).toBe('other')
   })
 
   it('shows a lunar symbol beside a real worker portrait only when its model is known', () => {
