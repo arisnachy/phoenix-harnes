@@ -234,7 +234,7 @@ export async function runBinanceAdaptiveCycle(
     // unrelated pairs. A slow or unavailable candle provider must never hold
     // a marked stop/TP behind 12 new-entry requests.
     if (mode === 'paper-step') {
-      const exits = account.positions.flatMap(position => {
+      const exits = account.positions.flatMap((position) => {
         const plan = position.exitPlan
         const mark = position.marketPriceUsdt
         if (plan === undefined) return []
@@ -303,7 +303,7 @@ export async function runBinanceAdaptiveCycle(
     const executionFor = (
       decision: 'buy' | 'sell' | 'hold',
       trade?: BinancePaperTrade,
-    ): BinanceSignalExecution[] => sorted.map(signal => {
+    ): BinanceSignalExecution[] => sorted.map((signal) => {
       if (trade?.symbol === signal.symbol) return {
         symbol: signal.symbol, status: 'executed' as const,
         explanation: trade.side === 'buy'
@@ -368,7 +368,8 @@ export async function runBinanceAdaptiveCycle(
     const defensive = sorted.find(signal => signal.action === 'sell'
       && account.positions.some(position => position.symbol === signal.symbol))
     if (defensive !== undefined) {
-      const position = account.positions.find(item => item.symbol === defensive.symbol)!
+      const position = account.positions.find((item) => item.symbol === defensive.symbol)
+      if (position === undefined) throw new Error('Defensive exit requires a held PAPER position')
       const result = await broker.order({
         symbol: position.symbol, side: 'sell', quantity: position.quantity,
         strategyId: 'adaptive-defensive-v1', reason: defensive.reason,
