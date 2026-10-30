@@ -214,7 +214,7 @@ export async function runBinanceAdaptiveCycle(
     // Keep results in watchlist order and cap Binance request concurrency at four.
     const CANDLE_BATCH_SIZE = 4
     for (let offset = 0; offset < symbols.length; offset += CANDLE_BATCH_SIZE) {
-      const batch = await Promise.all(symbols.slice(offset, offset + CANDLE_BATCH_SIZE).map(async symbol => {
+      const batch = await Promise.all(symbols.slice(offset, offset + CANDLE_BATCH_SIZE).map(async (symbol) => {
         if (binanceKnownAssetRisk(symbol)) {
           return hold(symbol, 'Activo excluido por riesgo Binance conocido')
         }
