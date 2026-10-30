@@ -24,6 +24,7 @@ import { compareBettingMarkets,supportedMarketFamilies } from './sports-market-i
 import { describeBettingMarkets } from './sports-bet-markets.ts'
 import { checkSportsTicket, type SportsBetLeg } from './sports-bet-settlement.ts'
 import { espnCoreModes,queryEspnCore,type EspnCoreMode } from './espn-core-intelligence.ts'
+import { fetchPublicEspnOddsDetailed } from './espn-odds.ts'
 import { espnEndpointGuide,espnWorkflow } from './espn-endpoint-guide.ts'
 import { fetchEspnHistoricalOdds } from './espn-odds-history.ts'
 
@@ -36,6 +37,7 @@ const GUIDANCE = [
   'JUANCITO SPORT: utiliza como fuente PRIMARIA su reglamento oficial https://www.juancitosport.com.do/reglas/ y términos https://www.juancitosport.com.do/banca/terminos/. Las reglas verificadas incluyen 3/5/9 innings, run line, ponches, hits, medio tiempo, props, 90 minutos fútbol y overtime diferenciado. Una apuesta solo es válida al mostrar el sistema «Apuesta Confirmada» (8.4); el mínimo publicado es RD$100 (7.10). Su condición 6.6 PROHÍBE usar robots o scripts para realizar apuestas: Kira NO debe automatizar clicks ni apuestas en esa web. Puede investigar fuentes, calcular y entregar el ticket; el usuario realiza la confirmación legalmente en la banca. El sitio juancitosports.com es informativo independiente: NO atribuirle reglamentos oficiales. ',
   'APUESTAS REALES NO FICTICIAS: si el usuario pide un ticket para apostar dinero real, NO respondas por defecto «simulado», «apuesta ficticia» o «no puedo investigar apuestas». Investiga eventos y mercados verificables, contrasta las reglas EXACTAS de la casa con sports_chat_bet_rules, obtiene precios reales por fuente con sports_chat_odds, sports_chat_odds_keyless y sports_chat_market_intelligence; si no hay ofertas auténticas no inventes cuotas. Un boleto cotizado NO equivale a una apuesta aceptada. Solo tras confirmación independiente del comprobante de la casa se puede declarar colocada; sin ella di «ticket cotizado, pendiente de aceptación». No ejecutes apuestas ni transferencias sin autorización explícita y una integración oficial operativa. Las reglas oficiales varían para extra innings, suspensiones, jugadores inactivos, pitcher listado, push, overtime y mercados por período. Prioriza mercados no limitados a ganador: spread/run line, -1.5/+1.5, totales 3/5/9 entradas, props de ponches/hits, handicaps, puntos, tiros, córners y más. Los precios solo son reales si se observan con casa, mercado exacto, línea, momento y correspondencia de evento. La calculadora del ticket se actualiza con el importe sin transferir fondos. Tras la fecha consulta sports_chat_ticket_track con IDs y recibo si lo hay para grados provisionales según marcador y jamás declares cobro/void confirmado sin liquidación oficial.',
   'MATCHUP FACTORS UNIVERSAL: si el usuario pide favorito bien investigado, ventaja o desventaja, cruces, rendimiento en estadio, H2H, abridores MLB o carreras en 3/5/9 innings, llama sports_chat_matchup_factors con ID real y fecha ESPN. Combina forma reciente, descansos, enfrentamientos, sede, MLB tramos de entradas, abridores probables y últimas salidas, partes médicos, noticias y cuotas reconciliadas. Una media histórica de carreras no es predicción calibrada: no declares ganador cierto, porcentaje propio, ventaja de EV, o impacto causal del clima sin modelo validado. Si clima, bullpen, rotación, alineación, xG o condiciones del estadio carecen de fuentes, marca PENDIENTE y explica qué dato falta. Usa el panel adaptativo dentro del chat, no menús. ',
+  'ESPN ODDS PRIORITARIAS: usa sports_chat_odds (por defecto solo ESPN Scoreboard/Core/Summary) y nunca sustituyas una cuota ESPN por otra fuente sin pedir sourcePolicy=all y no usar eventId/fecha. Cuando la consulta sea de partido individual, primero obtén eventId y fecha del scoreboard con sports_chat_games. ESPN ODDS POR PARTIDO: sports_chat_odds admite eventId real de sports_chat_games y fecha local AAAA-MM-DD para consultar un encuentro concreto, verificando primero scoreboard, luego ESPN Core (lista de casas y referencias $ref seguras) y finalmente summary/pickcenter. Devuelve endpointSource, casa, mercado, línea y fecha de actualización, además de diagnósticos. Si eventId no corresponde a la fecha, no publiques cuotas de otro partido. Para history/movement, odds_records, ATS, futures, probabilities y predictor usa sports_chat_espn_core; esos datos no se deben transformar en cuotas apostables. ',
   'ESPN INTELLIGENCE: cuando el usuario pida un equipo específico, un jugador, su historia, splits, gamelog, tabla, líderes, noticias o búsqueda, consulta sports_chat_espn_explore con la vista apropiada y un ID real comprobado. Esa herramienta devuelve una superficie adaptable de estadísticas, noticias, plantillas, fotos y fuentes; Phoenix dibuja sports_espn_dashboard automáticamente. Para carteleras utiliza sports_chat_games y para cuotas comercializables sports_chat_odds; evita convertir probabilidades ESPN o referencias Core en cuotas actuales. Las plantillas se construyen dinámicamente a partir de secciones verificadas, sin nuevas pantallas.',
   'Solo cuando el usuario pida deportes, juegos del día, jugadores, cuotas o tickets, consulta las herramientas sports_chat_catalog, sports_chat_discover, sports_chat_games, sports_chat_mlb_pitchers, sports_chat_odds, sports_chat_ticket, sports_chat_ticket_research, sports_chat_ticket_research_auto, sports_chat_nba_research, sports_chat_research, sports_chat_historical_odds, sports_chat_community_opinions, sports_chat_odds_keyless, sports_chat_sources_health, sports_chat_sources_repair, sports_chat_deep_research, sports_chat_matchup_factors, sports_chat_bet_rules, sports_chat_ticket_track, sports_chat_market_intelligence, sports_chat_espn_core, sports_chat_espn_core_catalog, sports_chat_espn_historical_odds, sports_chat_ticket_evidence_auto o sports_chat_ticket_evidence_priced_auto.',
   'NO abras pantallas independientes ni crees entradas de menú. Antes de redactar una cartelera o boleto, llama sports_chat_games y, cuando corresponda, sports_chat_mlb_pitchers / sports_chat_odds / sports_chat_ticket. Phoenix dibuja de manera nativa las tarjetas verificadas de los resultados. NO copies el JSON de los resultados en la respuesta, NO escribas fences generative-ui ni bloques de código, aunque una herramienta los incluya en sus datos. No dibujes tickets con caracteres ASCII, bordes de texto ni bloques de código etiquetados text: para eventos y selecciones reales usa exclusivamente los contratos nativos, conservando la presentación original de Phoenix. Si el usuario quiere solo una demostración, descríbela explícitamente como ficticia y no introduzcas cuotas o equipos inventados como hechos. Explica los hallazgos y las fuentes con un texto humano breve.',
@@ -476,16 +478,55 @@ export function apply(ctx: Context): void {
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_odds',
-    description:'Busca cuotas públicas ESPN sin clave, el proveedor de nivel gratuito TheOddsAPI con THEODDSAPI_API_KEY o The Odds API v4 con THE_ODDS_API_KEY; mercados y cuota dependen de cada proveedor.',
+    description:'Consulta por defecto cuotas ESPN Scoreboard, Core y Summary/Pickcenter sin clave. Usa eventId ESPN y date para un partido exacto. sourcePolicy=all compara voluntariamente otros proveedores; sus IDs no se mezclan.',
     parameters:{
       sportKey:{ type:'string',required:true,description:'Clave del proveedor: baseball_mlb, basketball_nba, soccer_epl, etc.' },
       markets:{ type:'string',description:'h2h, totals o spreads. Por defecto h2h.' },
+      eventId:{type:'string',description:'ID ESPN real de un encuentro futuro; restringe la búsqueda a ese evento.'},
+      date:{type:'string',description:'Fecha AAAA-MM-DD del partido, obtenida del scoreboard.'},
+      sourcePolicy:{type:'string',description:'espn (por defecto) o all (comparación multifuente solo sin eventId ni fecha).'},
     },
     output:{ schema:{ type:'string' },render:(_a,v)=>[{ type:'text' as const,text:v }] },
     isConcurrencySafe:()=>true,
     async execute(args){
-      const report=await marketOddsDetailed(args.sportKey,args.markets,sportsEnv())
+      const env=sportsEnv()
       const observedAt=Date.now()
+      if(args.sourcePolicy&&!['espn','all'].includes(args.sourcePolicy))throw Error('sourcePolicy debe ser espn o all')
+      // ESPN is the primary market source. Other odds vendors are opt-in only,
+      // and their unrelated event IDs must never be matched to ESPN event IDs.
+      const useEspn=Boolean(args.eventId||args.date||args.sourcePolicy!=='all')
+      const report:Awaited<ReturnType<typeof marketOddsDetailed>>=useEspn?
+        await (async()=>{
+          if(env.PHOENIX_SPORTS_ESPN_DISABLED==='1')return{
+            quotes:[],sources:[{provider:'ESPN Site/Core',status:'unconfigured' as const,
+              count:0,detail:'ESPN deshabilitado por el operador'}],
+          }
+          const result=await fetchPublicEspnOddsDetailed(args.sportKey,args.markets??'h2h',
+            <T>(url:string)=>getFeed<T>(url),
+            {now:observedAt,cache:true,...(args.eventId?{eventId:args.eventId}:{}),
+              ...(args.date?{date:args.date}:{}),days:args.date?1:args.eventId?7:3})
+          return{
+            quotes:result.quotes.map(q=>({...q,sportKey:args.sportKey,
+              source:'ESPN '+q.endpointSource+' (sin clave)'})),
+            sources:[{provider:'ESPN Site/Core',status:result.quotes.length?
+              'observed' as const:'empty' as const,count:result.quotes.length,
+              rawCount:result.diagnostics.rawOddsEntries,
+              startedOddsEntries:result.diagnostics.startedOddsEntries,
+              undatedOutcomes:result.diagnostics.undatedOutcomes,
+              expiredOutcomes:result.diagnostics.expiredOutcomes,
+              detail:result.diagnostics.datesQueried.join(', ')+
+                ' · evento encontrado: '+String(result.diagnostics.eventMatched)+
+                ' · scoreboard '+result.diagnostics.embedded+
+                ' · Core '+result.diagnostics.core+
+                ' · summary '+result.diagnostics.summary+
+                ' · refs '+result.diagnostics.resolvedRefs+
+                ' · cuotas sin fecha '+result.diagnostics.undatedOutcomes+
+                ' · antiguas '+result.diagnostics.expiredOutcomes+
+                ' · fallos '+result.diagnostics.failures+
+                ' · '+result.diagnostics.notes.join(' | ').slice(0,350)}],
+          }
+        })():
+        await marketOddsDetailed(args.sportKey,args.markets,env)
       const quotes=report.quotes.filter(q=>{
         const updated=Date.parse(q.updatedAt),kickoff=Date.parse(q.timeIso??q.time)
         return Number.isFinite(updated)&&updated<=observedAt&&observedAt-updated<=3_600_000
@@ -515,7 +556,9 @@ export function apply(ctx: Context): void {
         }]
       })
       return JSON.stringify({ uiBlocks,source:quotes[0]?.source||'Sin ofertas recuperadas',sources:report.sources,
-        observedAt:new Date(observedAt).toISOString(),excludedStaleOrStarted,outcomes:quotes.slice(0,120),
+        observedAt:new Date(observedAt).toISOString(),requestedSourcePolicy:useEspn?'espn':'all',
+        requestedEventId:args.eventId??null,
+        requestedDate:args.date??null,excludedStaleOrStarted,outcomes:quotes.slice(0,120),
         total:quotes.length,remaining:Math.max(0,quotes.length-120),
         note:quotes.length?'Ofertas auténticas observadas; elegir la casa y el horario antes de cotizar. No son cuotas automáticamente atribuibles a Juancito.':espnRaw>0?'ESPN Core/Site entregó '+espnRaw+' registros de cuotas, pero ninguno superó las comprobaciones de precio, fecha y vigencia para apostar ahora. Consulta sources.rawCount, undatedOutcomes y expiredOutcomes. No describas ESPN como desconectado ni conviertas líneas históricas en vigentes.':'Sin precios confirmados para esta liga/mercado y fechas consultadas. Revisa las fuentes y amplía la búsqueda; nunca inventes cotizaciones.' })
     },

@@ -94,11 +94,12 @@ function trustedRef(ref:unknown,sport:string,league:string):string|null{
   if(typeof ref!=='string'||ref.length>600)return null
   try{
     const u=new URL(ref)
-    if(u.protocol!=='https:'||!['sports.core.api.espn.com','sports.core.api.espn.pvt'].includes(u.hostname)
+    if(!['https:','http:'].includes(u.protocol)||!['sports.core.api.espn.com','sports.core.api.espn.pvt'].includes(u.hostname)
       ||u.username||u.password||u.port)return null
     // Some public Core payloads contain ESPN's internal .pvt references. Restrict
     // rewriting to this exact upstream hostname; never follow arbitrary hosts.
     if(u.hostname==='sports.core.api.espn.pvt')u.hostname='sports.core.api.espn.com'
+    u.protocol='https:'
     if(!u.pathname.startsWith('/v2/sports/'+sport+'/leagues/'+league+'/'))return null
     if(u.searchParams.has('apiKey'))return null
     return u.toString()
