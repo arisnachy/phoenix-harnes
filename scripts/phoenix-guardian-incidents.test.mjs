@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict'
 import { afterEach, beforeEach, test } from 'node:test'
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import {
   acknowledgeGuardianIncident, guardianBlockedTarget, guardianIncidentPath,
   pendingGuardianIncidents, recordGuardianIncident,
@@ -86,6 +86,7 @@ test('rejects invalid SHA and redacts authorization headers', () => {
 
 test('refuses updates and preserves forensic bytes when incident ledger is corrupt', () => {
   const path = guardianIncidentPath()
+  mkdirSync(dirname(path), { recursive: true })
   writeFileSync(path, '{broken JSON', 'utf8')
   assert.equal(guardianBlockedTarget(broken), true)
   assert.throws(() => recordGuardianIncident({
