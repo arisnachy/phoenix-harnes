@@ -9,6 +9,7 @@ import {
   KiraTeamMessageView,
   teamIdentityOf,
 } from '../src/client/TeamChatMessage.tsx'
+import { formatTeamMarkdown } from '../src/client/team-markdown.ts'
 
 afterEach(cleanup)
 
@@ -228,6 +229,64 @@ describe('KIRA Team chat message', () => {
     expect(view.getByText('Zenith')).toBeTruthy()
     expect(view.getByText('→ Argo')).toBeTruthy()
     expect(view.container.querySelector('[data-avatar="zenith"]')).toBeTruthy()
+  })
+
+  it('recovers an inline review matrix as a semantic GFM table for Kira', () => {
+    const flattened = 'Argo: Matriz final de la revisión: | Criterio | Resultado | Evidencia / límite | |---|---|---| | Seguridad | OK | Tests unitarios | | Cobertura | Pendiente | Prueba real |'
+    const source = formatTeamMarkdown(flattened)
+    expect(source).toBe('Argo: Matriz final de la revisión:\\n\\n| Criterio | Resultado | Evidencia / límite |\\n|---|---|---|\\n| Seguridad | OK | Tests unitarios |\\n| Cobertura | Pendiente | Prueba real |'.replaceAll('\\n', '\n'))
+    const view = render(<View node={node({
+      senderId: 'root', senderName: 'Kira', senderKind: 'kira',
+      targetName: 'argo', purpose: 'review', content: [{ type: 'text', text: flattened }],
+    })} />)
+    const table = view.container.querySelector('table')
+    expect(table).not.toBeNull()
+    expect([...table!.querySelectorAll('th')].map(cell => cell.textContent))
+      .toEqual(['Criterio', 'Resultado', 'Evidencia / límite'])
+    expect(table!.querySelectorAll('tbody tr')).toHaveLength(2)
+    expect(view.getByText('Argo: Matriz final de la revisión:')).toBeTruthy()
+    expect(view.getByText('Kira')).toBeTruthy()
+    expect(view.getByText('→ Argo')).toBeTruthy()
+  })
+
+  it('renders Markdown for teammate answers and quoted messages with safe links', () => {
+    const md = [
+      '## Resultado de Argo',
+      '',
+      '- **Seguridad:** aprobada',
+      '- [Evidencia](https://example.org/evidence)',
+      '',
+      '> Revisar antes de publicar.',
+      '',
+      '```ts',
+      'const value = 1',
+      '```',
+    ].join('\n')
+    const view = render(<View node={node({
+      senderName: 'argo', senderKind: 'agent', purpose: 'result',
+      replyQuote: '**Texto original**',
+      content: [{ type: 'text', text: md }],
+    })} />)
+    expect(view.getByRole('heading', { name: 'Resultado de Argo' })).toBeTruthy()
+    expect(view.getByText('Seguridad:').tagName).toBe('STRONG')
+    expect(view.getByRole('link', { name: 'Evidencia' }).getAttribute('href')).toBe('https://example.org/evidence')
+    expect(view.container.querySelector('blockquote strong')?.textContent).toBe('Texto original')
+    expect(view.container.querySelector('pre code')?.textContent).toContain('const value = 1')
+    expect(view.container.querySelector('script')).toBeNull()
+  })
+
+  it('does not manufacture tables from prose, escaped pipes, or fenced examples', () => {
+    const ordinary = 'Plan A | Plan B | Plan C — sin tabla.'
+    const fence = ['```md', '| A | B | |---|---| | X | Y |', '```'].join('\n')
+    expect(formatTeamMarkdown(ordinary)).toBe(ordinary)
+    expect(formatTeamMarkdown(fence)).toBe(fence)
+    const correct = ['| A | B |', '| --- | --- |', '| X | Y |'].join('\n')
+    expect(formatTeamMarkdown(correct)).toBe(correct)
+    const view = render(<View node={node({
+      content: [{ type: 'text', text: ordinary + '\n\n' + fence }],
+    })} />)
+    expect(view.container.querySelector('table')).toBeNull()
+    expect(view.container.querySelector('pre code')?.textContent).toContain('|---|---|')
   })
 
 })
