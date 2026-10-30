@@ -1544,6 +1544,7 @@ function executeComputerInvocation(invocation: ComputerInvocation, signal?: Abor
  * Execute one fixed Windows desktop action and return driver stdout.
  * @param args - Validated Computer Use operation to execute.
  * @param signal - Optional cancellation signal forwarded to the PowerShell process.
+ * @param sessionId - Owning conversation for the isolated MiniBrowser fallback.
  * @returns Trimmed stdout; screenshots return base64 PNG bytes.
  */
 export async function runWindowsComputerAction(args: ComputerToolArgs, signal?: AbortSignal, sessionId?: string): Promise<string> {
