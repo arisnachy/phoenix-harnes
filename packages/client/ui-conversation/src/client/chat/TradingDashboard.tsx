@@ -50,6 +50,8 @@ function quote(value: number): string {
 }
 
 function strategyLabel(id: string): string {
+  if (id.includes('momentum-continuation')) return 'Continuación de momentum'
+  if (id.includes('ema-pullback')) return 'Recuperación de EMA'
   if (id.includes('mean-reversion')) return 'Reversión a la media'
   if (id.includes('trend-pullback')) return 'Retroceso en tendencia'
   if (id.includes('breakout')) return 'Ruptura de rango'
@@ -351,10 +353,13 @@ export function TradingDashboard({ initial }: Props) {
         {state.lastDiscoveryIssue && <span role="status">{state.lastDiscoveryIssue}</span>}
         <strong>{running ? 'Radar encendido' : 'Radar detenido'}</strong>
         <span>Último análisis: {clock(state.lastSuccessAt)}</span>
+        <span>Última operación confirmada: {clock(state.recentTrades.at(-1)?.executedAt)}</span>
         <span>Resultado: {state.lastDecision === 'buy' ? 'Compra PAPER' : state.lastDecision === 'sell' ? 'Venta PAPER' : 'Esperar / sin señal'}</span>
         <span>{state.signals.length} pares evaluados en el último ciclo</span>
         <span>Motivo de la última decisión: {state.rationale}</span>
         {state.lastError && <span role="alert">Error del Host: {state.lastError}</span>}
+        {running && (state.successfulCycles ?? 0) >= 3 && (state.filledCycles ?? 0) === 0
+          && <span role="status">Escáner activo sin compras confirmadas: revisa puntuaciones, volumen y motivos de bloqueo. No se inventarán operaciones.</span>}
         {running && state.lastSuccessAt
           && Date.now() - Date.parse(state.lastSuccessAt) > Math.max(180_000, settings.pollMs * 3)
           && <span role="alert">Escáner sin ciclo válido reciente. Revisa el Host y la conectividad.</span>}
