@@ -4,7 +4,7 @@ import { binanceKnownAssetRisk } from './binance-asset-risk.ts'
 /** Supported closed-candle market regimes for adaptive paper trading. */
 export type BinanceMarketRegime = 'uptrend' | 'downtrend' | 'range'
 /** Reproducible candidate strategy, never a prediction of guaranteed profit. */
-export type BinanceAdaptiveStrategy = 'breakout' | 'trend-pullback' | 'mean-reversion' | 'defensive-exit' | 'none'
+export type BinanceAdaptiveStrategy = 'breakout' | 'trend-pullback' | 'momentum-continuation' | 'mean-reversion' | 'defensive-exit' | 'none'
 
 /** Bounded scan output; no raw candle arrays are sent to the language model. */
 export interface BinanceAdaptiveSignal {
@@ -137,12 +137,29 @@ export function evaluateBinanceAdaptiveSignal(
     return { symbol, regime, strategy: 'breakout', action: 'buy', score: 80,
       lastClose, reason: 'Closed-bar breakout with confirmed volume and positive trend' }
   }
-  // Avoid buying a falling trend; a pullback must recover the fast EMA.
+  // Volume-confirmed trend recovery is independently actionable; a recovery
+  // without participation remains a WATCH (65/100) instead of a fake fill.
   if (regime === 'uptrend' && lastClose >= fast && lastClose <= fast * 1.012
     && lastClose > (closes.at(-2) ?? lastClose) && historicMean > 0) {
     const quality = Math.min(15, Math.max(0, Math.round((volumeRatio - 1) * 25)))
-    return { symbol, regime, strategy: 'trend-pullback', action: 'buy', score: 65 + quality,
-      lastClose, reason: 'Uptrend pullback recovering the fast moving average' }
+    const confirmed = volumeRatio >= 1.15 && slope > 0.006
+      && lastClose > (closes.at(-3) ?? lastClose)
+    return { symbol, regime, strategy: 'trend-pullback', action: 'buy',
+      score: confirmed ? Math.max(75, 65 + quality) : 65 + quality,
+      lastClose, reason: confirmed
+        ? 'Confirmed uptrend recovery with above-average volume'
+        : 'Uptrend pullback recovering the fast moving average; volume confirmation pending' }
+  }
+  // A trend need not make a fresh 20-bar breakout to justify an entry.
+  // Require accelerating recent closes and rising participation, while
+  // rejecting extended bars more than 3.5% above the short EMA.
+  if (regime === 'uptrend' && slope >= 0.008 && lastClose > fast * 1.012
+    && lastClose <= fast * 1.035 && volumeRatio >= 1.05
+    && lastClose >= (closes.at(-4) ?? lastClose) * 1.004
+    && lastClose > (closes.at(-2) ?? lastClose)) {
+    return { symbol, regime, strategy: 'momentum-continuation', action: 'buy',
+      score: 75 + Math.min(7, Math.max(0, Math.round((volumeRatio - 1.05) * 15))),
+      lastClose, reason: 'Confirmed multi-bar upward momentum with controlled EMA extension and volume' }
   }
   if (regime === 'range' && zScore <= -1.5 && lastClose > previousLow * 0.995
     && volumeRatio > 0) {
