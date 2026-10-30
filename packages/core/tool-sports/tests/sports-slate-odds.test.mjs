@@ -37,3 +37,14 @@ test('source timestamp differentiates recent observation from expired and missin
   }]},now)?.status,'antigua')
   assert.equal(espnSlateMarketPreview(withTime,now)?.updatedAt,'2026-10-30T17:30:00.000Z')
 })
+
+test('a complete total market can be displayed without a fabricated moneyline favorite',()=>{
+  const onlyTotals={...event,competitions:[{...event.competitions[0],odds:[
+    {provider:{name:'Caesars'},overUnder:222.5,overOdds:'-105',underOdds:'-110'},
+  ]}]}
+  const preview=espnSlateMarketPreview(onlyTotals,now)
+  assert.equal(preview?.bookmaker,'Caesars')
+  assert.equal(preview?.favorite,undefined)
+  assert.equal(preview?.prices.length,2)
+  assert.ok(preview?.prices.every(q=>q.market==='totals'&&q.point==='222.5'))
+})
