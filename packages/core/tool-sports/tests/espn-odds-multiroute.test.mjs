@@ -248,6 +248,8 @@ test('specific game/date queries ESPN scoreboard once, never borrowing another e
   const get=async url=>{
     urls.push(url)
     if(url.includes('/scoreboard?'))return scoreboard([foreign,target])
+    if(url.includes('/odds?'))return {items:[]}
+    if(url.includes('/summary?'))return {}
     throw Error('Unexpected fallback '+url)
   }
   const result=await fetchPublicEspnOddsDetailed('basketball_nba','h2h',get,{
@@ -258,7 +260,7 @@ test('specific game/date queries ESPN scoreboard once, never borrowing another e
   assert.ok(result.quotes.every(q=>q.endpointSource==='scoreboard'))
   assert.deepEqual(result.diagnostics.datesQueried,['20261030'])
   assert.equal(result.diagnostics.eventMatched,true)
-  assert.equal(urls.length,1)
+  assert.equal(urls.length,3)
   assert.equal(new URL(urls[0]).searchParams.get('dates'),'20261030')
 })
 
@@ -329,4 +331,62 @@ test('Core current.moneyLine is parsed when the top-level moneyline is missing, 
   assert.equal(result.length,2)
   assert.deepEqual(result.map(q=>q.price).sort((a,b)=>a-b),[1.83333,2.1])
   assert.equal(result.some(q=>q.price===1.2||q.price===5.5),false)
+})
+
+
+test('targeted event searches Scoreboard, Core and Summary for distinct ESPN books',async()=>{
+ const requests=[],when=new Date(now+86_400_000).toISOString()
+ const game={...event([priced({name:'BoardBook'})]),date:when}
+ const get=async url=>{
+  requests.push(url)
+  if(url.includes('/scoreboard?'))return scoreboard([game])
+  if(url.includes('/odds?'))return {items:[{...priced({name:'CoreBook'})}]}
+  if(url.includes('/summary?'))return {pickcenter:[priced({name:'SummaryBook'})]}
+  throw Error('Unexpected '+url)
+ }
+ const r=await fetchPublicEspnOddsDetailed('basketball_nba','h2h',get,
+  {now,eventId:'401111111',date:'2026-10-30',days:1})
+ assert.deepEqual([...new Set(r.quotes.map(x=>x.bookmaker))].sort(),['BoardBook','CoreBook','SummaryBook'])
+ assert.equal(requests.length,3)
+})
+
+test('ESPN missing timestamps and old prices remain available for research, not ticket odds',async()=>{
+ const game=event([{...priced({name:'Unknown time'}),lastUpdated:undefined},
+  {...priced({name:'Old book'}),lastUpdated:new Date(now-3_600_001).toISOString()}])
+ const read=async url=>{
+  if(url.includes('/scoreboard?'))return scoreboard([game])
+  if(url.includes('/odds?'))return {items:[]}
+  if(url.includes('/summary?'))return {}
+  throw Error('Unexpected '+url)
+ }
+ const r=await fetchPublicEspnOddsDetailed('basketball_nba','h2h',read,{now,days:1})
+ assert.equal(r.quotes.length,0)
+ assert.deepEqual([...new Set(r.observations.map(x=>x.reason))].sort(),['antigua','sin_fecha'])
+ assert.ok(r.observations.every(x=>x.price>1&&x.endpointSource==='scoreboard'))
+})
+
+test('top-level spread reconstructs sides only when the favorite is identified',()=>{
+ const odd={provider:{name:'Book'},lastUpdated:updated,spread:7.5,
+  homeTeamOdds:{favorite:false,spreadOdds:-110},awayTeamOdds:{favorite:true,spreadOdds:-105}}
+ const quotes=normalizeEspnMarkets(event(),[odd],{now})
+ assert.equal(quotes.find(x=>x.market==='spreads'&&x.selection==='Home Club')?.point,7.5)
+ assert.equal(quotes.find(x=>x.market==='spreads'&&x.selection==='Away Club')?.point,-7.5)
+ const unknown=normalizeEspnMarkets(event(),[{...odd,homeTeamOdds:{spreadOdds:-110},
+  awayTeamOdds:{spreadOdds:-105}}],{now})
+ assert.equal(unknown.filter(x=>x.market==='spreads').length,0)
+})
+
+test('provider ID alone is not a verified bookmaker name',async()=>{
+ const read=async url=>{
+  if(url.includes('/scoreboard?'))return scoreboard([event([{
+   provider:{id:'58'},lastUpdated:updated,homeTeamOdds:{moneyLine:-110},
+   awayTeamOdds:{moneyLine:120}}])])
+  if(url.includes('/odds?'))return {items:[]}
+  if(url.includes('/summary?'))return {}
+  throw Error('Unexpected '+url)
+ }
+ const r=await fetchPublicEspnOddsDetailed('basketball_nba','h2h',read,{now,days:1})
+ assert.equal(r.quotes.length,0)
+ assert.equal(r.observations.length,2)
+ assert.ok(r.observations.every(x=>x.reason==='proveedor_sin_nombre'))
 })

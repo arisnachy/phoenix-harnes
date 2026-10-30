@@ -20,7 +20,7 @@ export interface EspnMarketQuote {
 type QuotedPrice=number|string|{american?:string|number;decimal?:string|number;
   value?:string|number;alternateDisplayValue?:string|number}
 type OddsSide = { moneyLine?:QuotedPrice;moneyline?:QuotedPrice;spreadOdds?:QuotedPrice;
-  spread?:QuotedPrice;spreadValue?:number|string;pointSpread?:number|string;
+  spread?:QuotedPrice;spreadValue?:number|string;pointSpread?:number|string;favorite?:boolean;underdog?:boolean;
   current?:{moneyLine?:QuotedPrice;moneyline?:QuotedPrice};open?:Record<string,unknown> }
 type EspnOdds = {
   provider?: { name?: string;displayName?: string;id?: string|number } | string
@@ -74,7 +74,10 @@ const str=(v:unknown)=>typeof v==='string'?v.slice(0,170):String(v??'').slice(0,
 const bookmakerName=(odds:EspnOdds):string=>{
   const provider=odds.provider??odds.sportsbook
   if(typeof provider==='string')return provider.trim().slice(0,100)
-  return provider?.name?.trim()||provider?.displayName?.trim()||''
+  const named=provider?.name?.trim()||provider?.displayName?.trim()
+  if(named)return named
+  const id=provider&&'id' in provider?provider.id:undefined
+  return /^\d{1,16}$/u.test(String(id??''))?'ESPN proveedor #'+String(id)+' (nombre no verificado)':''
 }
 const isRecord=(v:unknown):v is Record<string,unknown>=>!!v&&typeof v==='object'&&!Array.isArray(v)
 const list=(v:unknown):EspnOdds[]=>Array.isArray(v)?v.filter(isRecord):isRecord(v)?[v]:[]
@@ -103,7 +106,7 @@ export function normalizeEspnMoneylines(event:EEvent,oddEntries:EspnOdds[],
   // Do not present pregame lines as current for matches which have already started.
   if(!Number.isFinite(kickoff.getTime())||(!options.historical&&kickoff.getTime()<=now))return []
   const result:EspnMarketQuote[]=[]
-  for(const odd of oddEntries.slice(0,5)){
+  for(const odd of oddEntries.slice(0,12)){
     const provider=bookmakerName(odd)
     if(!provider)continue
     const updatedAt=odd.lastUpdated||odd.lastUpdate||odd.updatedAt||'No indicada por ESPN'
@@ -134,7 +137,7 @@ export function normalizeEspnMarkets(event:EEvent,odds:EspnOdds[],
     const n=Number(v)
     return Number.isFinite(n)&&Math.abs(n)<=1000?n:null
   }
-  for(const odd of odds.slice(0,5)){
+  for(const odd of odds.slice(0,12)){
     const provider=bookmakerName(odd)
     if(!provider)continue
     const name=str(provider)
@@ -149,12 +152,17 @@ export function normalizeEspnMarkets(event:EEvent,odds:EspnOdds[],
           point:total,price})
       }
     }
-    for(const [selection,side] of [[homeName,odd.homeTeamOdds],[awayName,odd.awayTeamOdds]] as const){
+    for(const [selection,side,isHome] of [[homeName,odd.homeTeamOdds,true],[awayName,odd.awayTeamOdds,false]] as const){
       if(!side)continue
       // A nested spread object describes an odds PRICE, not the handicap line.
       // Never replace a missing current handicap with open.pointSpread.
+      const homeFav=odd.homeTeamOdds?.favorite===true&&odd.awayTeamOdds?.favorite!==true
+      const awayFav=odd.awayTeamOdds?.favorite===true&&odd.homeTeamOdds?.favorite!==true
+      const spreadMagnitude=number(odd.spread)
+      const homeLine=spreadMagnitude===null?null:homeFav?-Math.abs(spreadMagnitude):awayFav?Math.abs(spreadMagnitude):null
+      const inferred=homeLine===null?null:isHome?homeLine:-homeLine
       const point=number(side.spreadValue??side.pointSpread??
-        (isRecord(side.spread)?undefined:side.spread))
+        (isRecord(side.spread)?undefined:side.spread)??inferred)
       const price=priceToDecimal(side.spreadOdds??
         (isRecord(side.spread)?side.spread:undefined))
       if(point!==null&&price!==null)lines.push({...common,market:'spreads',
@@ -187,8 +195,9 @@ export type EspnOddsDiagnostics = {
   eventMatched:boolean
   datesQueried:string[]
 }
-export type EspnOddsResult={quotes:EspnMarketQuote[];diagnostics:EspnOddsDiagnostics}
-const MAX_QUOTE_AGE_MS=24*60*60*1000
+export type EspnOddsObservation=EspnMarketQuote & {reason:'sin_fecha'|'antigua'|'proveedor_sin_nombre'|'fecha_futura'}
+export type EspnOddsResult={quotes:EspnMarketQuote[];observations:EspnOddsObservation[];diagnostics:EspnOddsDiagnostics}
+const MAX_QUOTE_AGE_MS=60*60*1000 // Match the one-hour live quotation gate in sports_chat_odds.
 const MAX_REQUESTS=28
 const MAX_GAMES_PER_DAY=8
 const MAX_REFS_PER_GAME=3
@@ -228,7 +237,8 @@ const quotationEntries=(value:unknown):EspnOdds[]=>{
 }
 const availableQuote=(quote:EspnMarketQuote,now:number):boolean=>{
   const updated=Date.parse(quote.updatedAt)
-  return Number.isFinite(updated)&&updated<=now+5*60_000&&now-updated<=MAX_QUOTE_AGE_MS
+  return !quote.bookmaker.startsWith('ESPN proveedor #')&&Number.isFinite(updated)&&
+    updated<=now+5*60_000&&now-updated<=MAX_QUOTE_AGE_MS
 }
 /** Request-scoped budget plus in-process short cache only for trusted, live transport.
  * The injected test transport never shares global cache data between fixtures.
@@ -272,9 +282,9 @@ export async function fetchPublicEspnOddsDetailed(
     rawOddsEntries:0,undatedOutcomes:0,expiredOutcomes:0,failures:0,notes:[],
     eventMatched:false,datesQueried:[],
   }
-  if(!route)return {quotes:[],diagnostics:{...diagnostics,notes:['Liga sin ruta ESPN de cuotas confirmada']}}
+  if(!route)return {quotes:[],observations:[],diagnostics:{...diagnostics,notes:['Liga sin ruta ESPN de cuotas confirmada']}}
   const markets=[...new Set(requestedMarkets.split(',').filter(x=>['h2h','totals','spreads'].includes(x)))]
-  if(!markets.length)return {quotes:[],diagnostics}
+  if(!markets.length)return {quotes:[],observations:[],diagnostics}
   const now=options.now??Date.now()
   const exactDate=options.date?.replaceAll('-','')
   if(exactDate&&(!/^\d{8}$/u.test(exactDate)||plusUtcDay(exactDate,0)!==exactDate))
@@ -285,6 +295,8 @@ export async function fetchPublicEspnOddsDetailed(
     ?Math.min(7,Math.max(1,options.days)):(options.eventId?1:3)
   const budget={used:0}
   const quoteMap=new Map<string,EspnMarketQuote>()
+  const observationMap=new Map<string,EspnOddsObservation>()
+  const targeted=Boolean(options.eventId||options.date)
   let firstError:string|null=null
   const read=(url:string)=>readOddsJSON(url,getJSON,budget,options.cache===true)
   const remember=(event:EEvent,odds:EspnOdds[],origin:'embedded'|'core'|'summary')=>{
@@ -292,8 +304,18 @@ export async function fetchPublicEspnOddsDetailed(
     const candidates=normalizeEspnMarkets(event,odds,{now})
       .filter(q=>markets.includes(q.market))
     for(const q of candidates){
-      if(!Number.isFinite(Date.parse(q.updatedAt)))diagnostics.undatedOutcomes++
-      else if(!availableQuote(q,now))diagnostics.expiredOutcomes++
+      const timestamp=Date.parse(q.updatedAt)
+      const reason:EspnOddsObservation['reason']|null=
+        q.bookmaker.startsWith('ESPN proveedor #')?'proveedor_sin_nombre':
+        !Number.isFinite(timestamp)?'sin_fecha':
+        timestamp>now+5*60_000?'fecha_futura':
+        now-timestamp>MAX_QUOTE_AGE_MS?'antigua':null
+      if(!Number.isFinite(timestamp))diagnostics.undatedOutcomes++
+      else if(reason==='antigua'||reason==='fecha_futura')diagnostics.expiredOutcomes++
+      if(reason&&observationMap.size<120){
+        const key=[q.eventId,q.bookmaker,q.market,q.selection,q.point??''].join('|')
+        observationMap.set(key,{...q,reason,endpointSource:origin==='embedded'?'scoreboard':origin})
+      }
     }
     const found=candidates.filter(q=>availableQuote(q,now))
     if(found.length){
@@ -354,14 +376,14 @@ export async function fetchPublicEspnOddsDetailed(
       // every requested market, saving ESPN calls and avoiding duplicate prices.
       const observedMarkets=()=>new Set([...quoteMap.values()]
         .filter(q=>q.eventId===eventId).map(q=>q.market))
-      if(markets.every(m=>observedMarkets().has(m)))continue
+      if(!targeted&&markets.every(m=>observedMarkets().has(m)))continue
       // Embedded odds are checked for every scoreboard event; expensive Core
       // and summary probes are capped separately to protect ESPN's rate limits.
       if(fallbackEvents>=MAX_GAMES_PER_DAY||!competitionId)continue
       fallbackEvents++
       const corePath=coreBase+eventId+'/competitions/'+competitionId+'/odds'
       try{
-        const raw=await read(corePath+'?limit=5')
+        const raw=await read(corePath+'?limit='+(targeted?'12':'5'))
         const collection=quotationEntries(raw)
         // ESPN Core may place an odds payload alongside its canonical $ref.
         // Read these inline markets before attempting to follow the reference;
@@ -370,7 +392,7 @@ export async function fetchPublicEspnOddsDetailed(
           'provider'in x||'sportsbook'in x||'homeTeamOdds'in x||'awayTeamOdds'in x),'core')
         const references=isRecord(raw)&&Array.isArray(raw.items)
           ?raw.items.filter(isRecord).map(x=>safeCoreRef(x.$ref,route,eventId,competitionId))
-            .filter((x):x is string=>x!==null).slice(0,MAX_REFS_PER_GAME):[]
+            .filter((x):x is string=>x!==null).slice(0,targeted?6:MAX_REFS_PER_GAME):[]
         for(const link of markets.every(m=>observedMarkets().has(m))?[]:references){
           if(budget.used>=MAX_REQUESTS)break
           try{
@@ -380,7 +402,7 @@ export async function fetchPublicEspnOddsDetailed(
           }catch(error){reportFailure('Core referencia de '+eventId,error)}
         }
       }catch(error){reportFailure('Core odds de '+eventId,error)}
-      if(markets.every(m=>observedMarkets().has(m)))continue
+      if(!targeted&&markets.every(m=>observedMarkets().has(m)))continue
       if(budget.used>=MAX_REQUESTS)break
       try{
         const summary=await read(siteBase+'summary?event='+eventId)
@@ -388,6 +410,7 @@ export async function fetchPublicEspnOddsDetailed(
         remember(event,entries,'summary')
       }catch(error){reportFailure('Summary/pickcenter de '+eventId,error)}
     }
+    if(options.eventId&&diagnostics.eventMatched)break
     if(quoteMap.size>=80)break
   }
   if(diagnostics.scoreboards===0&&diagnostics.failures>0)
@@ -407,7 +430,7 @@ export async function fetchPublicEspnOddsDetailed(
             ?'Se encontraron próximos partidos, pero ESPN no publicó cuotas para los mercados solicitados'
             :'No se localizaron próximos encuentros en el período consultado')
   }
-  return {quotes:[...quoteMap.values()].slice(0,160),diagnostics}
+  return {quotes:[...quoteMap.values()].slice(0,160),observations:[...observationMap.values()].slice(0,120),diagnostics}
 }
 /** Compatibility facade: preserves the original two-stage API for callers. */
 export async function fetchPublicEspnOdds(
