@@ -42,12 +42,40 @@ test('ESPN result becomes verified chat card with local hour, venue, trusted log
   const disabled=await chatGames('soccer','mex.1','2026-10-24',{PHOENIX_SPORTS_IMAGES_DISABLED:'1'},mock)
   assert.equal(disabled.items[0].props.home.logo,undefined)
 })
+test('ESPN scoreboard exposes authentic distinct event/competition/team IDs for Kira Core queries',async()=>{
+  const mock=await response({events:[{id:'401999998',name:'Heat at Celtics',date:'2026-10-30T23:00:00Z',
+    status:{type:{state:'pre',description:'Scheduled'}},competitions:[{id:'901234567',competitors:[
+      {homeAway:'home',team:{id:'2',displayName:'Boston Celtics'}},
+      {homeAway:'away',team:{id:'14',displayName:'Miami Heat'}},
+    ]}]}]})
+  const out=await chatGames('basketball','nba','2026-10-30',{},mock)
+  assert.equal(out.count,1)
+  assert.deepEqual(out.espnIdentifiers,[{
+    eventId:'401999998',competitionId:'901234567',homeTeamId:'2',awayTeamId:'14',
+  }])
+  assert.equal(Object.hasOwn(out.items[0].props,'competitionId'),false,
+    'Keep the existing strict visual card schema; tool metadata carries ESPN IDs')
+})
+test('ESPN does not invent competition IDs when scoreboard omits or corrupts them',async()=>{
+  const mock=await response({events:[
+    {id:'401111111',name:'A vs B',date:'2026-10-30T23:00:00Z',competitions:[{
+      competitors:[{homeAway:'away',team:{id:'5',name:'A'}},{homeAway:'home',team:{id:'6',name:'B'}}],
+    }]},
+    {id:'401111112',name:'C vs D',date:'2026-10-30T23:00:00Z',competitions:[{
+      id:'../../../secret',competitors:[{homeAway:'away',team:{name:'C'}},{homeAway:'home',team:{name:'D'}}],
+    }]},
+  ]})
+  const out=await chatGames('basketball','nba','2026-10-30',{},mock)
+  assert.equal(out.count,2)
+  assert.deepEqual(out.espnIdentifiers,[])
+})
 test('MLB game cards show pitchers only if provided upstream',async()=>{
   const mock=await response({dates:[{games:[{gamePk:43,gameDate:'2026-10-24T19:00:00Z',status:{detailedState:'Pre-Game'},venue:{name:'Stadium'},teams:{home:{team:{id:1,name:'Home'},probablePitcher:{id:55,fullName:'Pitcher H'}},away:{team:{id:2,name:'Away'}}}}]}]})
   const out=await chatGames('baseball','mlb','2026-10-24',{PHOENIX_SPORTS_MLB_ALLOWED:'1'},mock)
   assert.equal(out.items[0].props.highlights[0].value,'Pitcher H')
   assert.equal(out.items[0].props.highlights.length,1)
   assert.equal(out.items[0].props.lineups[0].confirmed,false)
+  assert.deepEqual(out.espnIdentifiers,[], 'MLB Stats gamePk is not an ESPN event or competition ID')
 })
 test('only one bookmaker may price an independently verifiable ticket; same-game products are rejected',()=>{
   const odds=[{eventId:'evt1',bookmaker:'Book1',market:'h2h',selection:'Home',point:null,price:1.8,home:'Home',away:'Away',time:'today',updatedAt:'now'},

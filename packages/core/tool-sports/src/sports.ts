@@ -114,7 +114,7 @@ export async function getFeed<T>(url:string, fetcher:typeof fetch=fetch):Promise
   if(text.length>4_000_000)throw Error('Respuesta supera 4 MB')
   return JSON.parse(text) as T
 }
-type FeedEvent = { id?:string|number;date?:string;name?:string;status?:{ type?:{ description?:string;state?:string } };competitions?:Array<{ venue?:{ fullName?:string;address?:{ city?:string } };competitors?:Array<{ id?:string;homeAway?:string;score?:string|number;team?:{ displayName?:string;name?:string;id?:string;logo?:string;logos?:Array<{ href?:string }> };records?:Array<{ summary?:string }>;linescores?:Array<{ value?:number|string;displayValue?:string }>;leaders?:Array<{ name?:string;leaders?:Array<{ athlete?:{ displayName?:string;headshot?:{ href?:string } };displayValue?:string }> }> }>;broadcasts?:Array<{ names?:string[] }> }> }
+type FeedEvent = { id?:string|number;date?:string;name?:string;status?:{ type?:{ description?:string;state?:string } };competitions?:Array<{ id?:string|number;venue?:{ fullName?:string;address?:{ city?:string } };competitors?:Array<{ id?:string;homeAway?:string;score?:string|number;team?:{ displayName?:string;name?:string;id?:string;logo?:string;logos?:Array<{ href?:string }> };records?:Array<{ summary?:string }>;linescores?:Array<{ value?:number|string;displayValue?:string }>;leaders?:Array<{ name?:string;leaders?:Array<{ athlete?:{ displayName?:string;headshot?:{ href?:string } };displayValue?:string }> }> }>;broadcasts?:Array<{ names?:string[] }> }> }
 type MlbGame = { gamePk:number;gameDate?:string;venue?:{ name?:string };seriesDescription?:string;seriesGameNumber?:number;status?:{ detailedState?:string;abstractGameState?:string };teams?:Record<'home'|'away',{ team?:{ id?:number;name?:string };score?:number;probablePitcher?:{ id?:number;fullName?:string } }> }
 /** Safe, minimal sports UI payload; the client validates it before rendering. */
 export type ChatBlock = { component:'sports_game_card'|'sports_schedule_card'|'sports_ticket_card'|'sports_odds_card';version:1;props:Record<string,unknown> }
@@ -175,6 +175,12 @@ function localTime(dateString?:string):string {
   return new Intl.DateTimeFormat('es-DO',{ timeZone:'America/Santo_Domingo',dateStyle:'medium',timeStyle:'short' }).format(parsed)
 }
 function logosEnabled(env:NodeJS.ProcessEnv):boolean{return env.PHOENIX_SPORTS_IMAGES_DISABLED!=='1'}
+/** Numeric identifiers are taken only from the ESPN scoreboard; never fabricate IDs for Core requests. */
+export type EspnGameIdentifiers={eventId:string;competitionId:string;homeTeamId?:string;awayTeamId?:string}
+const espnNumericId=(value:unknown):string|undefined=>{
+  const id=typeof value==='number'&&Number.isSafeInteger(value)?String(value):typeof value==='string'?value:undefined
+  return id&&/^\d{1,16}$/u.test(id)?id:undefined
+}
 /** Normalize scoreboard results into validated chat renderable cards.
  * @param sport - Requested discipline.
  * @param league - Supported league identifier.
@@ -183,10 +189,10 @@ function logosEnabled(env:NodeJS.ProcessEnv):boolean{return env.PHOENIX_SPORTS_I
  * @param fetcher - Injectable HTTP client for tests.
  * @returns Attributed game cards, result count and date.
  */
-export async function chatGames(sport:string,league:string,requestedDate?:string,env:NodeJS.ProcessEnv=process.env,fetcher:typeof fetch=fetch,compactLive=false):Promise<{ summary:string;items:ChatBlock[];source:string;count:number;date:string }> {
+export async function chatGames(sport:string,league:string,requestedDate?:string,env:NodeJS.ProcessEnv=process.env,fetcher:typeof fetch=fetch,compactLive=false):Promise<{ summary:string;items:ChatBlock[];source:string;count:number;date:string;espnIdentifiers:EspnGameIdentifiers[] }> {
   if(!Object.hasOwn(sportsCatalog,sport)||!leagueValid(league))throw Error('Disciplina o liga inválida')
   if(!sportsCatalog[sport]?.includes(league)&&!(await discoverEspnLeagues(sport,env,fetcher)).includes(league))throw Error('Liga no encontrada en el catálogo público de ESPN')
-  const day=date(requestedDate),rows:ChatBlock[]=[]
+  const day=date(requestedDate),rows:ChatBlock[]=[],espnIdentifiers:EspnGameIdentifiers[]=[]
   const leagueInfo=leaguePresentation[league]
   const isMlb=sport==='baseball'&&league==='mlb'&&hasSportsPermission('mlb',env)
   const source=isMlb?'MLB Stats API':'ESPN Site API'
@@ -241,6 +247,13 @@ export async function chatGames(sport:string,league:string,requestedDate?:string
     if(!Array.isArray(feed.events))throw Error('Respuesta ESPN no válida')
     for(const e of feed.events.slice(0,25)){
       const comp=e.competitions?.[0],home=comp?.competitors?.find(x=>x.homeAway==='home'),away=comp?.competitors?.find(x=>x.homeAway==='away')
+      const eventId=espnNumericId(e.id),competitionId=espnNumericId(comp?.id)
+      // Core URLs must use ESPN's actual competition ID, which can differ from eventId.
+      if(eventId&&competitionId){
+        const homeTeamId=espnNumericId(home?.team?.id),awayTeamId=espnNumericId(away?.team?.id)
+        espnIdentifiers.push({eventId,competitionId,
+          ...(homeTeamId?{homeTeamId}:{}),...(awayTeamId?{awayTeamId}:{})})
+      }
       const side=(c:typeof home)=>{
         const name=title(c?.team?.displayName??c?.team?.name)
         const logo=c?.team?.logo??c?.team?.logos?.[0]?.href
@@ -289,7 +302,7 @@ export async function chatGames(sport:string,league:string,requestedDate?:string
       } })
     }
   }
-  return { summary:rows.length?'Eventos con fuente y horario, hora de Santo Domingo.':'No hay encuentros reportados para la fecha seleccionada.',items:rows,count:rows.length,source,date:day }
+  return { summary:rows.length?'Eventos con fuente y horario, hora de Santo Domingo.':'No hay encuentros reportados para la fecha seleccionada.',items:rows,count:rows.length,source,date:day,espnIdentifiers }
 }
 /** Unique sportsbook selection identity without an assumed price. */
 export type MarketSelection = { eventId:string;bookmaker:string;market:string;selection:string;point?:number|null }
