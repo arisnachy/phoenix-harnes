@@ -58,7 +58,7 @@ describe('KIRA Team chat message', () => {
   it('shows a clear recipient for Kira-to-human handoffs without changing the message', () => {
     const view = render(<View node={node({
       senderId: 'root', senderName: 'lead', senderKind: 'kira',
-      targetId: 'user', purpose: 'update', targetName: undefined,
+      targetId: 'user', purpose: 'update', 
       content: [{ type: 'text', text: 'La comprobación sigue pendiente de GitHub.' }],
     })} />)
     expect(view.container.querySelector('[data-kira-audience="user"]')).toBeTruthy()
@@ -69,7 +69,7 @@ describe('KIRA Team chat message', () => {
 
   it('identifies unaddressed peer messages as team context, not user-facing statements', () => {
     const view = render(<View node={node({
-      senderKind: 'agent', targetId: '', targetName: undefined,
+      senderKind: 'agent', targetId: '', 
       content: [{ type: 'text', text: 'Revisaré los hashes locales.' }],
     })} />)
     expect(view.container.querySelector('[data-kira-audience="team"]')).toBeTruthy()
@@ -93,7 +93,7 @@ describe('KIRA Team chat message', () => {
 
   it('recovers the Lead recipient from a durable target id when the name is absent', () => {
     const view = render(<View node={node({
-      senderKind: 'agent', targetId: 'root', targetName: undefined,
+      senderKind: 'agent', targetId: 'root', 
       content: [{ type: 'text', text: 'Confirmé el resultado.' }],
     })} />)
     expect(view.getByText('→ Kira')).toBeTruthy()
