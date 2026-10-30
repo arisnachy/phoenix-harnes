@@ -1,0 +1,50 @@
+name: Guardian PR1250 one-time catalog repair
+on:
+  push:
+    branches: [feature/guardian-update-recovery-20261030]
+    paths:
+      - '.github/workflows/guardian-pr1250-catalog-repair.yml'
+permissions:
+  contents: write
+concurrency:
+  group: guardian-pr1250-catalog-once
+  cancel-in-progress: false
+jobs:
+  regenerate:
+    if: github.repository == 'arisnachy/phoenix-harnes'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/guardian-update-recovery-20261030
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Regenerate reproducible catalogs only
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm run gen-doc-graphs
+          pnpm run gen-cordis-catalog
+          pnpm run gen-client-catalog
+          pnpm run gen-tool-catalog
+          pnpm run gen-config-catalog
+          pnpm run gen-persistence-catalog
+      - name: Commit mechanical catalog changes only
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'phoenix-guardian-ci'
+          git config user.email 'phoenix-guardian-ci@users.noreply.github.com'
+          git add docs/ packages/extensions/cordis-client-runner/src/client/slot-catalog.ts packages/extensions/tool-cordis/src/api-catalog.ts packages/core/session/src/known-event-types.ts || true
+          if git diff --cached --quiet; then
+            echo 'No generated catalog changes'
+            exit 0
+          fi
+          git commit -m 'chore(guardian-ci): refresh generated catalogs from current source'
+          git push origin HEAD:refs/heads/feature/guardian-update-recovery-20261030
