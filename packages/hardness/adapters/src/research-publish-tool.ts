@@ -142,7 +142,7 @@ export function validateResearchPublication(input: unknown): Report {
       throw new ToolArgsError(['professional_brief exige que el usuario solicite expresamente un informe breve.'])
     }
     const count = (report.sections as Array<{ text: string }>).reduce(
-      (total, section) => total + (section.text.match(/[\\p{L}\\p{N}_]+/gu) ?? []).length, 0)
+      (total, section) => total + (section.text.match(/[\p{L}\p{N}_]+/gu) ?? []).length, 0)
     if (count < 600 || citedKeys.size < 5) {
       throw new ToolArgsError(['El informe profesional breve requiere 600 palabras sustantivas y 5 fuentes citadas distintas.'])
     }
