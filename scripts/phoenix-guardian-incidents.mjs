@@ -52,6 +52,7 @@ function scrub(text) {
     .replace(/https?:\/\/[^\s/@]+:[^\s/@]+@/giu, 'https://[REDACTED]@')
     .replace(/\b(?:sk-(?:proj-)?[a-z0-9_-]{12,}|gh[pousr]_[a-z0-9_]{12,}|github_pat_[a-z0-9_]{12,})\b/giu, '[REDACTED]')
     .replace(/\bBearer\s+\S+/giu, 'Bearer [REDACTED]')
+    .replace(/\bBasic\s+[a-z0-9+/=]{8,}/giu, 'Basic [REDACTED]')
     .replace(/((?:"|')?(?:password|token|api[_ -]?key|client[_-]?secret|authorization|secret)(?:"|')?\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;}\]]+)/giu, '$1[REDACTED]')
     .slice(0, MAX_TEXT)
 }
