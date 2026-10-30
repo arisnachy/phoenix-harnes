@@ -260,7 +260,7 @@ export async function fetchPublicEspnOddsDetailed(
         const key=[quote.eventId,quote.bookmaker,quote.market,quote.selection,quote.point??''].join('|')
         const previous=quoteMap.get(key)
         if(previous===undefined||Date.parse(previous.updatedAt)<Date.parse(quote.updatedAt))
-          quoteMap.set(key,{...quote,endpointSource:origin})
+          quoteMap.set(key,{...quote,endpointSource:origin==='embedded'?'scoreboard':origin})
       }
     }
   }
