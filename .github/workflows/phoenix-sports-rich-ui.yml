@@ -37,6 +37,8 @@ jobs:
           node --experimental-strip-types --test packages/core/tool-sports/tests/chat-sports.test.mjs
           node --experimental-strip-types --test packages/core/tool-sports/tests/sports-prompt.test.mjs
           node --experimental-strip-types --test packages/core/tool-sports/tests/sports-secondary-sources.test.mjs
+          node --experimental-strip-types --test packages/core/tool-sports/tests/sports-slate-odds.test.mjs
+          node --experimental-strip-types --test packages/core/tool-sports/tests/sports-research-archive.test.mjs
           node --experimental-strip-types --test packages/core/tool-sports/tests/research-ticket.test.mjs
       - name: Verify deep evidence tickets, pregame sources and live odds fallbacks
         run: |

@@ -274,6 +274,41 @@ describe('Universal chat: compact sports schedules do not replace single-game ca
     expect(screen.queryByText('0')).toBeNull()
     expect(screen.getAllByText(/Favorito sin verificar/)).toHaveLength(2)
   })
+  it('renders ESPN sportsbook prices and separates market favorite from independent analysis',()=>{
+    const preview={bookmaker:'DraftKings',source:'ESPN Scoreboard',status:'sin_fecha',
+      favorite:'Atlanta Hawks',prices:[
+        {market:'h2h',selection:'Atlanta Hawks',price:'1.72'},
+        {market:'h2h',selection:'Miami Heat',price:'2.20'},
+        {market:'totals',selection:'Over',point:'222.5',price:'1.91'},
+        {market:'totals',selection:'Under',point:'222.5',price:'1.91'},
+      ]}
+    const card=parseGenerativeUiBlock({...slate,props:{...slate.props,events:[
+      {...slate.props.events[0],phase:'pre',marketPreview:preview},
+      {...slate.props.events[1],phase:'pre'},
+    ]}})
+    expect(card).not.toBeNull()
+    if(!card)throw Error('ESPN preview was rejected by strict card schema')
+    render(<GenerativeUi block={card}/>)
+    expect(screen.getByText('Cuotas ESPN · Referencia')).toBeTruthy()
+    expect(screen.getByText('DraftKings')).toBeTruthy()
+    expect(screen.getByText('1.72')).toBeTruthy()
+    expect(screen.getByText(/Favorito según DraftKings · Atlanta Hawks/)).toBeTruthy()
+    expect(screen.getByText(/Actualización no publicada/)).toBeTruthy()
+    expect(screen.getByText(/No equivale a cuota disponible para apostar/)).toBeTruthy()
+    expect(screen.getAllByText('VS · Sin iniciar')).toHaveLength(2)
+    expect(screen.queryByText('0')).toBeNull()
+  })
+  it('rejects fabricated sportsbook preview payloads and unsupported price markets',()=>{
+    const preview={bookmaker:'DraftKings',source:'ESPN Scoreboard',status:'sin_fecha',
+      prices:[{market:'h2h',selection:'Hawks',price:'1.72'},
+        {market:'h2h',selection:'Heat',price:'2.20'}]}
+    const changed=(data:unknown)=>parseGenerativeUiBlock({...slate,props:{...slate.props,
+      events:[{...slate.props.events[0],marketPreview:data},slate.props.events[1]]}})
+    expect(changed({...preview,prices:[{market:'props',selection:'Hawks',price:'1.4'},preview.prices[1]]})).toBeNull()
+    expect(changed({...preview,accessToken:'exfiltrate'})).toBeNull()
+    expect(changed({...preview,source:'https://evil.example'})).toBeNull()
+    expect(changed({...preview,status:'verified_bookmaker_live'})).toBeNull()
+  })
   it('does not invent opponents or provide actionable game analysis for unnamed WTA events',()=>{
     const card=parseGenerativeUiBlock({...slate,props:{...slate.props,sport:'tennis',league:'wta',
       events:[{...slate.props.events[0],phase:'post',status:'Final',

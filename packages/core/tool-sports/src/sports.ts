@@ -1,5 +1,6 @@
 /** Read-only sports information adapters for Kira's conversation tools. */
 import { fetchPublicEspnOddsDetailed } from './espn-odds.ts'
+import { espnSlateMarketPreview } from './sports-slate-odds.ts'
 import { fetchTheOddsApi } from './free-odds.ts'
 import { keylessEnabled, keylessOdds, type KeylessSport } from './keyless-odds.ts'
 import { saveOddsSnapshot } from './odds-snapshots.ts'
@@ -114,7 +115,7 @@ export async function getFeed<T>(url:string, fetcher:typeof fetch=fetch):Promise
   if(text.length>4_000_000)throw Error('Respuesta supera 4 MB')
   return JSON.parse(text) as T
 }
-type FeedEvent = { id?:string|number;date?:string;name?:string;status?:{ type?:{ description?:string;state?:string } };competitions?:Array<{ id?:string|number;venue?:{ fullName?:string;address?:{ city?:string } };competitors?:Array<{ id?:string;homeAway?:string;score?:string|number;team?:{ displayName?:string;name?:string;id?:string;logo?:string;logos?:Array<{ href?:string }> };records?:Array<{ summary?:string }>;linescores?:Array<{ value?:number|string;displayValue?:string }>;leaders?:Array<{ name?:string;leaders?:Array<{ athlete?:{ displayName?:string;headshot?:{ href?:string } };displayValue?:string }> }> }>;broadcasts?:Array<{ names?:string[] }> }> }
+type FeedEvent = { id?:string|number;date?:string;name?:string;status?:{ type?:{ description?:string;state?:string } };competitions?:Array<{ id?:string|number;odds?:unknown[];venue?:{ fullName?:string;address?:{ city?:string } };competitors?:Array<{ id?:string;homeAway?:string;score?:string|number;team?:{ displayName?:string;name?:string;id?:string;logo?:string;logos?:Array<{ href?:string }> };records?:Array<{ summary?:string }>;linescores?:Array<{ value?:number|string;displayValue?:string }>;leaders?:Array<{ name?:string;leaders?:Array<{ athlete?:{ displayName?:string;headshot?:{ href?:string } };displayValue?:string }> }> }>;broadcasts?:Array<{ names?:string[] }> }> }
 type MlbGame = { gamePk:number;gameDate?:string;venue?:{ name?:string };seriesDescription?:string;seriesGameNumber?:number;status?:{ detailedState?:string;abstractGameState?:string };teams?:Record<'home'|'away',{ team?:{ id?:number;name?:string };score?:number;probablePitcher?:{ id?:number;fullName?:string } }> }
 /** Safe, minimal sports UI payload; the client validates it before rendering. */
 export type ChatBlock = { component:'sports_game_card'|'sports_schedule_card'|'sports_ticket_card'|'sports_odds_card';version:1;props:Record<string,unknown> }
@@ -154,6 +155,7 @@ export function compactSportsSchedule(games:readonly ChatBlock[],day:string,sour
       away:p.away,home:p.home,
       ...(featured?{featured:featured+(detail?' · '+detail:'')}:{}),
       ...(favorite&&Array.isArray(research.evidence)&&research.evidence.length>0?{favorite}:{}),
+      ...(p.marketPreview?{marketPreview:p.marketPreview}:{}),
       ...(text(p.askPrompt,400)?{askPrompt:text(p.askPrompt,400)}:{}),
     }
   })
@@ -248,6 +250,8 @@ export async function chatGames(sport:string,league:string,requestedDate?:string
     for(const e of feed.events.slice(0,25)){
       const comp=e.competitions?.[0],home=comp?.competitors?.find(x=>x.homeAway==='home'),away=comp?.competitors?.find(x=>x.homeAway==='away')
       const eventId=espnNumericId(e.id),competitionId=espnNumericId(comp?.id)
+      const marketPreview=e.status?.type?.state==='in'||e.status?.type?.state==='post'
+        ?null:espnSlateMarketPreview(e)
       // Core URLs must use ESPN's actual competition ID, which can differ from eventId.
       if(eventId&&competitionId){
         const homeTeamId=espnNumericId(home?.team?.id),awayTeamId=espnNumericId(away?.team?.id)
@@ -296,9 +300,10 @@ export async function chatGames(sport:string,league:string,requestedDate?:string
         phase:e.status?.type?.state==='in'?'in':e.status?.type?.state==='post'?'post':'pre',
         ...(e.id !== undefined && String(e.id).trim() !== '' ? { eventId: String(e.id) } : {}),
         periods, highlights,
+        ...(marketPreview?{marketPreview}:{}),
         ...(sport==='basketball'&&league==='nba'?{ note:'Jugadores destacados omitidos hasta verificar su pertenencia a las plantillas vigentes.' }:{}),
         ...(comp?.broadcasts?.length?{ broadcast:comp.broadcasts.flatMap(x=>x.names??[]).slice(0,3).join(', ') }:{}),
-        askPrompt:'Kira, amplía el análisis verificado del evento '+title(e.id,50)+' de '+league+'. Incluye métricas específicas de '+sport+' con sus fuentes.',
+        askPrompt:'Kira, investiga el evento ESPN '+title(e.id,50)+' de '+league+' el '+day+'. Muestra favorito de mercado frente a tu análisis independiente y consulta cuotas de referencia h2h, spreads y totals vía sports_chat_odds (eventId y fecha exactos); nunca confundir líneas sin hora con cotizaciones vigentes.',
       } })
     }
   }

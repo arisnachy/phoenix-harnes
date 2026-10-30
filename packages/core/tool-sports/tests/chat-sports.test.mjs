@@ -69,6 +69,26 @@ test('ESPN does not invent competition IDs when scoreboard omits or corrupts the
   assert.equal(out.count,2)
   assert.deepEqual(out.espnIdentifiers,[])
 })
+test('NBA scoreboard sends authentic undated moneylines to native reference previews, not tickets',async()=>{
+  const fixture=await response({events:[{
+    id:'401991111',date:'2099-11-02T23:00:00Z',name:'Chicago Bulls at Boston Celtics',
+    status:{type:{state:'pre',description:'Programado'}},
+    competitions:[{id:'401991111',competitors:[
+      {homeAway:'away',team:{displayName:'Chicago Bulls'}},
+      {homeAway:'home',team:{displayName:'Boston Celtics'}},
+    ],odds:[{provider:{name:'DraftKings'},homeTeamOdds:{moneyLine:'-155'},
+      awayTeamOdds:{moneyLine:'+130'}}]}],
+  }]})
+  const result=await chatGames('basketball','nba','2099-11-02',{},fixture)
+  assert.equal(result.count,1)
+  const preview=result.items[0].props.marketPreview
+  assert.equal(preview.status,'sin_fecha')
+  assert.equal(preview.bookmaker,'DraftKings')
+  assert.equal(preview.favorite,'Boston Celtics')
+  assert.equal(preview.prices.filter(x=>x.market==='h2h').length,2)
+  const game=result.items[0]
+  assert.ok(game.props.askPrompt.includes('sports_chat_odds'))
+})
 test('MLB game cards show pitchers only if provided upstream',async()=>{
   const mock=await response({dates:[{games:[{gamePk:43,gameDate:'2026-10-24T19:00:00Z',status:{detailedState:'Pre-Game'},venue:{name:'Stadium'},teams:{home:{team:{id:1,name:'Home'},probablePitcher:{id:55,fullName:'Pitcher H'}},away:{team:{id:2,name:'Away'}}}}]}]})
   const out=await chatGames('baseball','mlb','2026-10-24',{PHOENIX_SPORTS_MLB_ALLOWED:'1'},mock)

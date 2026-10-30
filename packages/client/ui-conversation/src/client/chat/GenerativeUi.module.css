@@ -315,6 +315,17 @@
 .sportsSlateMatch .sportsPortrait{width:34px;height:34px;flex-basis:34px}
 .sportsSlateHeader{background:var(--dsw-alias-interactive-bg-hover,rgba(120,120,120,.025))}
 .sportsSlateFavorite{padding:6px 8px;border-radius:8px;background:var(--dsw-alias-bg-primary,rgba(255,255,255,.5));border:1px solid var(--dsw-alias-border-subtle,rgba(130,130,130,.12))}
+.sportsSlateOdds{display:grid;gap:7px;border:1px solid var(--dsw-alias-border-subtle,rgba(125,125,125,.2));
+  border-radius:11px;padding:9px;background:var(--dsw-alias-bg-primary,rgba(255,255,255,.55));min-width:0}
+.sportsSlateOddsHeading{display:flex;flex-wrap:wrap;gap:3px 10px;justify-content:space-between;align-items:center}
+.sportsSlateOddsHeading strong{font-size:11px;font-weight:800}
+.sportsSlateOddsHeading small{font-size:10px;color:var(--dsw-alias-label-secondary,#777)}
+.sportsSlateOddsLines{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,105px),1fr));gap:5px}
+.sportsSlateOddsLine{min-width:0;display:grid;gap:2px;padding:6px 7px;border-radius:7px;
+  background:var(--dsw-alias-interactive-bg-hover,rgba(125,125,125,.065));border:1px solid var(--dsw-alias-border-subtle,rgba(125,125,125,.1))}
+.sportsSlateOddsLine span{font-size:9px;line-height:1.3;overflow-wrap:anywhere;color:var(--dsw-alias-label-secondary,#777)}
+.sportsSlateOddsLine b{font-size:14px;font-variant-numeric:tabular-nums;color:var(--dsw-alias-label-primary,inherit)}
+.sportsSlateOddsCaution{font-size:9px;line-height:1.45;color:var(--dsw-alias-label-secondary,#777)}
 .sportsSlateAction{margin-top:auto;align-self:flex-start;border:0;background:transparent;
   padding:5px 0;cursor:pointer;font-size:11px;font-weight:750;
   color:var(--dsw-alias-accent-primary,#df5c1d)}

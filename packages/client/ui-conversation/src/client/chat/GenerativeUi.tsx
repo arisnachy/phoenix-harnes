@@ -85,6 +85,11 @@ type SportsPitcher = { team:string;name:string;id?:number;image?:string;stats?:s
 type SportsLineup = { team:string;confirmed:boolean;players:SportsPlayer[] }
 type SportsBullpen = { team:string;pitchers:SportsPlayer[];note:string }
 type SportsResearch = { favorite:string;method:string;source:string;evidence:string[] }
+type SportsSlateMarketPreview={
+  bookmaker:string;source:'ESPN Scoreboard';status:'sin_fecha'|'antigua'|'observada'
+  updatedAt?:string;favorite?:string
+  prices:Array<{market:'h2h'|'totals'|'spreads';selection:string;price:string;point?:string}>
+}
 type SportsGameCard = {
   component: 'sports_game_card'; version: 1
   props: {
@@ -94,6 +99,7 @@ type SportsGameCard = {
     pitchers?: SportsPitcher[]; lineups?: SportsLineup[]; bullpen?: SportsBullpen[]
     sport?: string; league?: string; providerLeague?:string; eventDate?:string; phase?:'pre'|'in'|'post'; country?: string; eventId?: string; broadcast?: string; research?: SportsResearch
     periods?: Array<{ label:string;away:string;home:string }>
+    marketPreview?:SportsSlateMarketPreview
     note?: string; askPrompt?: string
   }
 }
@@ -101,6 +107,7 @@ type SportsGameCard = {
 type SportsScheduleEvent = {
   eventId?:string;when:string;status?:string;phase?:'pre'|'in'|'post';venue?:string
   away:SportsSide;home:SportsSide;featured?:string;favorite?:string;askPrompt?:string
+  marketPreview?:SportsSlateMarketPreview
 }
 type SportsScheduleCard = {
   component:'sports_schedule_card';version:1
@@ -336,9 +343,29 @@ const sportsOdds = (v:Record<string,unknown>):v is SportsOddsCard => {
       && isText(x.event) && isText(x.market,50) && isText(x.selection)
       && isText(x.bookmaker) && isText(x.price,35) && optionalText(x.point,35))
 }
+const sportsSlateMarket=(value:unknown,home:unknown,away:unknown):value is SportsSlateMarketPreview=>isRecord(value)
+  && hasOnlyKeys(value,['bookmaker','source','status','updatedAt','favorite','prices'])
+  && isText(value.bookmaker,100) && value.source==='ESPN Scoreboard'
+  && ['sin_fecha','antigua','observada'].includes(String(value.status))
+  && optionalText(value.updatedAt,50) && optionalText(value.favorite,95)
+  && Array.isArray(value.prices) && value.prices.length>=2 && value.prices.length<=6
+  && value.prices.every(x=>isRecord(x)
+    && hasOnlyKeys(x,['market','selection','price','point'])
+    && ['h2h','totals','spreads'].includes(String(x.market))
+    && isText(x.selection,75) && isText(x.price,35) && optionalText(x.point,35))
+  && isRecord(home) && isRecord(away)
+  && typeof home.label==='string' && typeof away.label==='string'
+  && (value.favorite===undefined||[home.label,away.label].includes(String(value.favorite)))
+  && (value.prices.filter(x=>x.market==='h2h').length===0
+    || value.prices.filter(x=>x.market==='h2h').length===2)
+  && (value.prices.every(x=>x.market!=='h2h')
+    || (value.prices.some(x=>x.market==='h2h'&&x.selection===home.label)
+      && value.prices.some(x=>x.market==='h2h'&&x.selection===away.label)))
+  && (value.favorite===undefined||value.prices.some(x=>x.market==='h2h'))
+
 const sportsGame = (value: Record<string, unknown>): value is SportsGameCard => {
   if (!isRecord(value.props) || !hasOnlyKeys(value.props,
-    ['title','subtitle','status','when','venue','home','away','source','highlights','note','askPrompt','pitchers','lineups','bullpen','sport','league','providerLeague','eventDate','phase','country','eventId','broadcast','research','periods'])) return false
+    ['title','subtitle','status','when','venue','home','away','source','highlights','note','askPrompt','pitchers','lineups','bullpen','sport','league','providerLeague','eventDate','phase','country','eventId','broadcast','research','periods','marketPreview'])) return false
   const p = value.props
   return isText(p.title) && optionalText(p.subtitle) && optionalText(p.status,60)
     && isText(p.when) && optionalText(p.venue) && sportsSide(p.home) && sportsSide(p.away)
@@ -348,6 +375,7 @@ const sportsGame = (value: Record<string, unknown>): value is SportsGameCard => 
     && optionalText(p.country,100)
     && optionalText(p.eventId,50) && optionalText(p.broadcast,150)
     && (p.research===undefined || sportsResearch(p.research))
+    && (p.marketPreview===undefined || sportsSlateMarket(p.marketPreview,p.home,p.away))
     && (p.periods===undefined || Array.isArray(p.periods) && p.periods.length<=12 && p.periods.every(x=>isRecord(x)
       && hasOnlyKeys(x,['label','away','home']) && isText(x.label,30) && isText(x.away,30) && isText(x.home,30)))
     && (p.pitchers===undefined || Array.isArray(p.pitchers) && p.pitchers.length<=4 && p.pitchers.every(sportsPitcher))
@@ -366,11 +394,12 @@ const sportsSchedule = (value:Record<string,unknown>):value is SportsScheduleCar
     && typeof p.total==='number' && Number.isInteger(p.total) && p.total>=1 && p.total<=500
     && Array.isArray(p.events) && p.events.length>=2 && p.events.length<=25 && p.events.length<=p.total
     && p.events.every(x=>isRecord(x) && hasOnlyKeys(x,
-      ['eventId','when','status','phase','venue','away','home','featured','favorite','askPrompt'])
+      ['eventId','when','status','phase','venue','away','home','featured','favorite','askPrompt','marketPreview'])
       && optionalText(x.eventId,50) && isText(x.when,80) && optionalText(x.status,60)
       && (x.phase===undefined || ['pre','in','post'].includes(String(x.phase)))
       && optionalText(x.venue,180) && sportsSide(x.away) && sportsSide(x.home)
       && optionalText(x.featured,150) && optionalText(x.favorite,170)
+       && (x.marketPreview===undefined || sportsSlateMarket(x.marketPreview,x.home,x.away))
       && optionalText(x.askPrompt,400))
 }
 const sportsTicket = (value: Record<string, unknown>): value is SportsTicketCard => {
@@ -670,6 +699,22 @@ const Header = ({ title, subtitle, badge }: HeaderProps) => (
 const statusClass = (status: Status | undefined): string =>
   status === undefined ? '' : (css[status] ?? '')
 
+function SportsSlateMarketPanel({preview}:{preview:SportsSlateMarketPreview}):ReactNode{
+  const title=preview.status==='sin_fecha'?'Actualización no publicada':
+    preview.status==='antigua'?'Precio antiguo · no vigente':'Hora publicada · verificar en la casa'
+  return <section className={css.sportsSlateOdds} aria-label="Cuotas de referencia ESPN">
+    <div className={css.sportsSlateOddsHeading}>
+      <strong>Cuotas ESPN · Referencia</strong><small>{preview.bookmaker}</small>
+    </div>
+    <div className={css.sportsSlateOddsLines}>{preview.prices.map((quote,i)=>
+      <div key={i} className={css.sportsSlateOddsLine}>
+        <span>{quote.market==='h2h'?'Ganador':quote.market==='spreads'?'Hándicap':'Total'} · {quote.selection}{quote.point!==undefined?' '+quote.point:''}</span>
+        <b>{quote.price}</b>
+      </div>)}</div>
+    <small className={css.sportsSlateOddsCaution}>{title}{preview.updatedAt?' · '+preview.updatedAt:''} · No equivale a cuota disponible para apostar</small>
+  </section>
+}
+
 export function GenerativeUi({ block, onAction, conversationId }: { block: GenerativeUiBlock; onAction?: CanvasAction | undefined; conversationId?: string }): ReactNode {
   switch (block.component) {
     case 'ui_canvas': return <GenerativeCanvas spec={block} onAction={onAction} />
@@ -756,7 +801,8 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
             {!pending&&<SportsLiveFacts game={live} meta={meta} sport={p.sport}/>}
             {e.venue&&<small className={css.sportsSlateVenue}>⌖ {e.venue}</small>}
             {!pending&&e.featured&&<small className={css.sportsSlateFeatured}>{e.featured}</small>}
-            {!pending&&<small className={css.sportsSlateFavorite}>{e.favorite?`★ Favorito analítico · ${e.favorite}`:'☆ Favorito sin verificar · consultar análisis y cuotas'}</small>}
+            {!pending&&!hasStarted&&e.marketPreview&&<SportsSlateMarketPanel preview={e.marketPreview}/>} 
+            {!pending&&<small className={css.sportsSlateFavorite}>{e.favorite?`★ Favorito analítico · ${e.favorite}`:e.marketPreview?.favorite?`☆ Favorito según ${e.marketPreview.bookmaker} · ${e.marketPreview.favorite} (precio de referencia, no predicción)`:'☆ Favorito sin verificar · consultar análisis y cuotas'}</small>}
             {!pending&&(live?.phase==='in'||e.phase==='in')&&onAction&&<button className={css.sportsSlateAction}
               type="button" onClick={()=>onAction('Kira, muéstrame en vivo '+e.away.label+' vs '+e.home.label+' de '+(p.league??p.providerLeague??'esta liga')+' el '+p.date+'.','draft')}>
               Seguir en vivo · Detalle ›
@@ -797,6 +843,7 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
             {hasStarted&&(live?.homeScore??p.home.score)!==undefined&&<b>{live?.homeScore??p.home.score}</b>}</div>
         </div>
         <SportsLiveFacts game={live} meta={meta} sport={p.sport}/>
+        {!hasStarted&&p.marketPreview&&<SportsSlateMarketPanel preview={p.marketPreview}/>} 
         {!(live?.periods?.length)&&p.periods?.length?<section className={css.sportsDetailSection} aria-label="Parciales del partido">
           <h4>Marcador por período</h4><div className={css.sportsTableScroll}><table className={css.sportsTable}>
             <thead><tr><th>Equipo</th>{p.periods.map((period,i)=><th key={i}>{period.label}</th>)}</tr></thead>

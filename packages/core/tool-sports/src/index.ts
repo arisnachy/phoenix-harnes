@@ -11,6 +11,7 @@ import { researchNbaSlate } from './nba-research.ts'
 import { keylessOdds, keylessSports, keylessHistoricOdds } from './keyless-odds.ts'
 import { loadHistoricalOdds } from './sports-archive.ts'
 import { loadOddsSnapshots } from './odds-snapshots.ts'
+import { saveResearchOdds,readResearchOdds,type ResearchPriceInput } from './sports-research-archive.ts'
 import { oddsDisciplines,coveredSportKeys,scanOddsDisciplines,belongsToLeague } from './sports-odds-coverage.ts'
 import { researchSport } from './multi-sport-research.ts'
 import { communityOpinions } from './sports-community.ts'
@@ -34,14 +35,16 @@ export const inject = ['tools','systemPrompt']
 const sportsEnv=():NodeJS.ProcessEnv=>hydrateSportsSources(process.env)
 const GUIDANCE = [
   'ESCÁNER GLOBAL DE CUOTAS: si el usuario pregunta por acceso real a las cuotas deportivas o pide revisar TODOS los deportes, no te limites a NBA, NFL y NHL. sports_chat_odds_scan presenta los 11 deportes realmente admitidos por OddsHarvester; examina sus 3 páginas consecutivas offset=0,4,8, limit=4, incluso si una falla, y devuelve estado INDIVIDUAL por deporte, cuota, casa, liga, hora, motivo del fallo y fuentes pendientes. Incluye fútbol/soccer, tenis ATP/WTA, béisbol/MLB, baloncesto NBA/WNBA, fútbol americano NFL, hockey NHL, handball, voleibol, ambos rugby y cricket. WNBA es una liga de basketball, NO un deporte distinto. Una consulta de baloncesto sin liga verificada jamás justifica etiquetar su cuota como NBA o WNBA. Las ligas sin evidencia suficiente se muestran sin liga verificada, no se fuerzan. Para mercados de ligas específicas consulta además sports_chat_odds con basketball_wnba, basketball_nba, baseball_mlb, americanfootball_nfl, icehockey_nhl y soccer; para tenis usa odds_keyless, o tennis_atp/tennis_wta solo cuando el nombre de la liga sea explícito. El inventario no garantiza mercados presentes. Cuando el error de OddsHarvester contenga category, exitCode y stderr informa esos campos y no trunques la causa interna. ',
+  'ARCHIVO LOCAL DE CUOTAS DE INVESTIGACIÓN: PHOENIX conserva líneas ESPN que ya observó con sports_chat_games y sports_chat_odds, incluso sin hora de actualización. Consulta sports_chat_local_odds_archive para buscar días UTC de OBSERVACIÓN, sportKey y eventId: máximo 31 días por llamada. observedAt es la captura local y providerUpdatedAt solo la hora publicada por el proveedor; nunca las intercambies. Ninguna captura histórica es cotización vigente. No inventar registros anteriores a la instalación ni garantizar cobertura mientras la app está apagada. Desactivar vía PHOENIX_SPORTS_RESEARCH_ARCHIVE_DISABLED=1. Respetar permisos y condiciones; ParlayAPI demo es limitada y restringe caché a 90 días, The Odds Gap da muestra fija, Football-Data y Tennis-Data prohíben ingestión de bots/IA sin permiso. ',
   'ODDS REALES Y HISTORIALES: sports_chat_odds ahora consulta varias fuentes independientes y devuelve estado observado/vacío/error/no configurado por proveedor. No declares sin cuotas hasta evaluar sources y buscar fecha y mercados reales por liga. OddsHarvester v0.20.0 permite transmitir filas NDJSON para recuperar partidos cotizados incluso si otras páginas del scraping fallan; distingue precios recuperados de scraping completamente exitoso. sports_chat_historical_odds acepta fecha y clave de deporte para leer archivos públicos locales y los snapshots de cotizaciones realmente vistos por PHOENIX. Los históricos NO son precios actuales, y el archivo local solo cubre desde que se capturaron observaciones: no inventar historial ausente. The Odds API v4 y TheOddsAPI requieren sus respectivas claves; la disponibilidad histórica completa suele ser de planes pagados. No prometas que las cotizaciones son de Juancito si el bookmaker indicado es otro. ',
   'JUANCITO SPORT: utiliza como fuente PRIMARIA su reglamento oficial https://www.juancitosport.com.do/reglas/ y términos https://www.juancitosport.com.do/banca/terminos/. Las reglas verificadas incluyen 3/5/9 innings, run line, ponches, hits, medio tiempo, props, 90 minutos fútbol y overtime diferenciado. Una apuesta solo es válida al mostrar el sistema «Apuesta Confirmada» (8.4); el mínimo publicado es RD$100 (7.10). Su condición 6.6 PROHÍBE usar robots o scripts para realizar apuestas: Kira NO debe automatizar clicks ni apuestas en esa web. Puede investigar fuentes, calcular y entregar el ticket; el usuario realiza la confirmación legalmente en la banca. El sitio juancitosports.com es informativo independiente: NO atribuirle reglamentos oficiales. ',
   'APUESTAS REALES NO FICTICIAS: si el usuario pide un ticket para apostar dinero real, NO respondas por defecto «simulado», «apuesta ficticia» o «no puedo investigar apuestas». Investiga eventos y mercados verificables, contrasta las reglas EXACTAS de la casa con sports_chat_bet_rules, obtiene precios reales por fuente con sports_chat_odds, sports_chat_odds_keyless y sports_chat_market_intelligence; si no hay ofertas auténticas no inventes cuotas. Un boleto cotizado NO equivale a una apuesta aceptada. Solo tras confirmación independiente del comprobante de la casa se puede declarar colocada; sin ella di «ticket cotizado, pendiente de aceptación». No ejecutes apuestas ni transferencias sin autorización explícita y una integración oficial operativa. Las reglas oficiales varían para extra innings, suspensiones, jugadores inactivos, pitcher listado, push, overtime y mercados por período. Prioriza mercados no limitados a ganador: spread/run line, -1.5/+1.5, totales 3/5/9 entradas, props de ponches/hits, handicaps, puntos, tiros, córners y más. Los precios solo son reales si se observan con casa, mercado exacto, línea, momento y correspondencia de evento. La calculadora del ticket se actualiza con el importe sin transferir fondos. Tras la fecha consulta sports_chat_ticket_track con IDs y recibo si lo hay para grados provisionales según marcador y jamás declares cobro/void confirmado sin liquidación oficial.',
   'MATCHUP FACTORS UNIVERSAL: si el usuario pide favorito bien investigado, ventaja o desventaja, cruces, rendimiento en estadio, H2H, abridores MLB o carreras en 3/5/9 innings, llama sports_chat_matchup_factors con ID real y fecha ESPN. Combina forma reciente, descansos, enfrentamientos, sede, MLB tramos de entradas, abridores probables y últimas salidas, partes médicos, noticias y cuotas reconciliadas. Una media histórica de carreras no es predicción calibrada: no declares ganador cierto, porcentaje propio, ventaja de EV, o impacto causal del clima sin modelo validado. Si clima, bullpen, rotación, alineación, xG o condiciones del estadio carecen de fuentes, marca PENDIENTE y explica qué dato falta. Usa el panel adaptativo dentro del chat, no menús. ',
   'ESPN ODDS PRIORITARIAS: usa sports_chat_odds (por defecto solo ESPN Scoreboard/Core/Summary) y nunca sustituyas una cuota ESPN por otra fuente sin pedir sourcePolicy=all y no usar eventId/fecha. Cuando la consulta sea de partido individual, primero obtén eventId y fecha del scoreboard con sports_chat_games. ESPN ODDS POR PARTIDO: sports_chat_odds admite eventId real de sports_chat_games y fecha local AAAA-MM-DD para consultar un encuentro concreto, verificando primero scoreboard, luego ESPN Core (lista de casas y referencias $ref seguras) y finalmente summary/pickcenter. Devuelve endpointSource, casa, mercado, línea y fecha de actualización, además de diagnósticos. Si eventId no corresponde a la fecha, no publiques cuotas de otro partido. Si researchObservations contiene precios sin vigencia comprobada, muéstralos SOLO como referencias no cotizables. Para history/movement, odds_records, ATS, futures, probabilities y predictor usa sports_chat_espn_core; esos datos no se deben transformar en cuotas apostables. ',
+  'SPORTINTEL MCP: roizenlabs/sportintel-mcp tiene código MIT, pero get_live_odds utiliza The Odds API v4 y exige ODDS_API_KEY: NO ofrece un feed gratuito nuevo sin clave. En el código publicado, gameTime puede ser la hora de ejecución y equipos se infieren del spread: no confiar en esos campos sin cotejo ESPN. Nunca anuncies acceso a SportIntel ni consideres sus proyecciones modelo calibrado validado; sports_chat_market_source_catalog devuelve el estado y riesgos. Para favorito independiente contrasta forma, lesiones, localía y calidad de rival sin adoptar ciegamente opiniones de portales. ',
   'PORTALES EXTERNOS DE CONTRASTE: cuando el usuario pida investigar o comparar ScoresAndOdds, Covers, VegasInsider u OddsPortal, o ESPN no entregue actualización verificable, llama sports_chat_market_source_catalog. Es un directorio de conocimiento, NO una API conectada: jamás afirmes que obtuviste sus cuotas si no navegaste de verdad usando una herramienta autorizada y condiciones del portal. Prioriza ESPN Scoreboard/Core/Summary como ancla de partido, y usa fuentes secundarias solo con coincidencia de liga, los DOS equipos, fecha/hora/zona, mercado, período y casa. Registra por separado cuándo viste la página (pageObservedAt) y cuándo la casa actualizó el precio (quoteUpdatedAt); si no existe esta última fecha, la observación es SOLO investigación sin vigencia comprobada. No confundir apertura, histórico, consensus/crowd ni favorito de mercado con análisis independiente. Las páginas no habilitan automáticamente scrapers ni actualizan sports_chat_odds; consulta la casa para confirmar vigencia. Respetar acceso autorizado, términos, límites y bloqueos, sin eludir CAPTCHA ni geobloqueos. ',
   'ESPN INTELLIGENCE: cuando el usuario pida un equipo específico, un jugador, su historia, splits, gamelog, tabla, líderes, noticias o búsqueda, consulta sports_chat_espn_explore con la vista apropiada y un ID real comprobado. Esa herramienta devuelve una superficie adaptable de estadísticas, noticias, plantillas, fotos y fuentes; Phoenix dibuja sports_espn_dashboard automáticamente. Para carteleras utiliza sports_chat_games y para cuotas comercializables sports_chat_odds; evita convertir probabilidades ESPN o referencias Core en cuotas actuales. Las plantillas se construyen dinámicamente a partir de secciones verificadas, sin nuevas pantallas.',
-  'Solo cuando el usuario pida deportes, juegos del día, jugadores, cuotas o tickets, consulta las herramientas sports_chat_catalog, sports_chat_discover, sports_chat_games, sports_chat_mlb_pitchers, sports_chat_odds, sports_chat_ticket, sports_chat_ticket_research, sports_chat_ticket_research_auto, sports_chat_nba_research, sports_chat_research, sports_chat_historical_odds, sports_chat_community_opinions, sports_chat_odds_keyless, sports_chat_sources_health, sports_chat_sources_repair, sports_chat_market_source_catalog, sports_chat_deep_research, sports_chat_matchup_factors, sports_chat_bet_rules, sports_chat_ticket_track, sports_chat_market_intelligence, sports_chat_espn_core, sports_chat_espn_core_catalog, sports_chat_espn_historical_odds, sports_chat_ticket_evidence_auto o sports_chat_ticket_evidence_priced_auto.',
+  'Solo cuando el usuario pida deportes, juegos del día, jugadores, cuotas o tickets, consulta las herramientas sports_chat_catalog, sports_chat_discover, sports_chat_games, sports_chat_mlb_pitchers, sports_chat_odds, sports_chat_ticket, sports_chat_ticket_research, sports_chat_ticket_research_auto, sports_chat_nba_research, sports_chat_research, sports_chat_historical_odds, sports_chat_community_opinions, sports_chat_odds_keyless, sports_chat_sources_health, sports_chat_sources_repair, sports_chat_market_source_catalog, sports_chat_local_odds_archive, sports_chat_deep_research, sports_chat_matchup_factors, sports_chat_bet_rules, sports_chat_ticket_track, sports_chat_market_intelligence, sports_chat_espn_core, sports_chat_espn_core_catalog, sports_chat_espn_historical_odds, sports_chat_ticket_evidence_auto o sports_chat_ticket_evidence_priced_auto.',
   'NO abras pantallas independientes ni crees entradas de menú. Antes de redactar una cartelera o boleto, llama sports_chat_games y, cuando corresponda, sports_chat_mlb_pitchers / sports_chat_odds / sports_chat_ticket. Phoenix dibuja de manera nativa las tarjetas verificadas de los resultados. NO copies el JSON de los resultados en la respuesta, NO escribas fences generative-ui ni bloques de código, aunque una herramienta los incluya en sus datos. No dibujes tickets con caracteres ASCII, bordes de texto ni bloques de código etiquetados text: para eventos y selecciones reales usa exclusivamente los contratos nativos, conservando la presentación original de Phoenix. Si el usuario quiere solo una demostración, descríbela explícitamente como ficticia y no introduzcas cuotas o equipos inventados como hechos. Explica los hallazgos y las fuentes con un texto humano breve.',
   'INVESTIGACIÓN NBA: antes de defender cualquier favorito o selección NBA, consulta sports_chat_nba_research (y sports_chat_odds cuando existan cuotas). Contrasta forma en marcadores finales, márgenes, descanso y muestra; revisa además informe oficial de lesiones, rotaciones, estadísticas avanzadas, rival, localía y movimiento de precios desde fuentes autorizadas. Lo no consultado debe permanecer explícitamente SIN VERIFICAR. No transformes la forma descriptiva en porcentajes de victoria ni cites atletas que no tengan plantilla actual confirmada. Un ticket automático se considera SOLO una preselección, nunca una investigación completa.',
   'INVESTIGAR TODOS LOS DEPORTES: llama sports_chat_research para estudiar los marcadores finales recientes del deporte y liga que el usuario pidió. Para MLB complementa con pitchers y bullpen; fútbol exige revisar goles, localía, bajas, forma y opciones 1X2/doble oportunidad; tenis requiere superficie, historial y fatiga; hockey necesita portero y estadísticas defensivas; en otros deportes usa métricas propias. Si el informe indica insuficiente, no proclames favorito respaldado. sports_chat_historical_odds agrega históricos de ambos repositorios SportsbookReview para entrenamiento/backtest, jamás cuotas actuales; y sports_chat_community_opinions observa pronósticos públicos solo como opinión separada.',
@@ -117,6 +120,27 @@ export function apply(ctx: Context): void {
       return JSON.stringify(secondaryMarketSourceCatalog())
     },
     presentCall:()=>({card:'generic',title:'Investigar portales deportivos complementarios',kind:'read' as const}),
+  }))
+  ctx.tools.register(defineTool({
+    name:'sports_chat_local_odds_archive',
+    description:'Consulta SIN RED cuotas históricas locales ya observadas por PHOENIX, incluso líneas ESPN sin hora de actualización. No publica precios actuales.',
+    parameters:{
+      sportKey:{type:'string',required:true,description:'Clave basketball_nba, basketball_wnba, baseball_mlb, americanfootball_nfl, icehockey_nhl, etc.'},
+      fromDate:{type:'string',required:true,description:'Día UTC de captura inicial YYYY-MM-DD, NO fecha retroactiva de cuota.'},
+      toDate:{type:'string',required:true,description:'Día UTC final YYYY-MM-DD; máximo 31 días por solicitud.'},
+      eventId:{type:'string',description:'ID exacto de evento para filtrar.'},
+      limit:{type:'integer',description:'Máximo de 1..300 filas, por defecto 120.'},
+    },
+    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    isConcurrencySafe:()=>true,
+    async execute(args){
+      const archive=await readResearchOdds(args.sportKey,args.fromDate,args.toDate,
+        args.eventId,process.env,args.limit??120)
+      return JSON.stringify({...archive,source:'PHOENIX · archivo local de investigación',
+        checkedAt:new Date().toISOString(),sportKey:args.sportKey,
+        disclaimer:'Solo datos HISTÓRICOS: observedAt=hora de consulta local; providerUpdatedAt=hora comunicada por el proveedor cuando existe. No hay cuota actual ni observaciones de días anteriores a la primera captura.'})
+    },
+    presentCall:()=>({card:'generic',title:'Consultar histórico local de cuotas',kind:'read' as const}),
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_espn_explore',
@@ -288,7 +312,7 @@ export function apply(ctx: Context): void {
           (async()=>{
             const routes:Record<string,{sport:string;markets:string[]}> = {
               soccer:{sport:'football',markets:['1x2','double_chance','over_under']},
-              basketball:{sport:'basketball',markets:['moneyline','over_under']},
+              basketball:{sport:'basketball',markets:['moneyline','1x2','over_under']},
               baseball:{sport:'baseball',markets:['moneyline','over_under']},
               americanfootball:{sport:'american-football',markets:['moneyline','over_under']},
               icehockey:{sport:'ice-hockey',markets:['home_away','double_chance','over_under']},
@@ -367,8 +391,42 @@ export function apply(ctx: Context): void {
       const uiBlocks=slate?[slate]:selected.slice(0,6)
       const selectedIds=new Set(selected.map(card=>card.props.eventId).filter((id):id is string=>typeof id==='string'))
       const espnIdentifiers=result.espnIdentifiers.filter(ids=>selectedIds.has(ids.eventId))
+      // Save already-retrieved ESPN markets without scraping again or inventing timestamps.
+      const supportedArchiveSport:Record<string,string>={
+        'basketball/nba':'basketball_nba','basketball/wnba':'basketball_wnba',
+        'football/nfl':'americanfootball_nfl','baseball/mlb':'baseball_mlb',
+        'hockey/nhl':'icehockey_nhl',
+      }
+      const archiveKey=supportedArchiveSport[args.sport+'/'+args.league]
+      const archiveQuotes:ResearchPriceInput[]=selected.flatMap(card=>{
+        const p=card.props
+        const preview=p.marketPreview as {
+          bookmaker:string;updatedAt?:string;
+          prices:Array<{market:ResearchPriceInput['market'];selection:string;price:string;point?:string}>
+        }|undefined
+        if(!preview||!Array.isArray(preview.prices)||typeof p.eventId!=='string')return []
+        const home=(p.home as {label?:string}|undefined)?.label
+        const away=(p.away as {label?:string}|undefined)?.label
+        if(!home||!away)return []
+        return preview.prices.flatMap(price=>{
+          const value=Number(price.price)
+          const point=price.point===undefined?undefined:Number(price.point)
+          if(!Number.isFinite(value)||(price.point!==undefined&&!Number.isFinite(point)))return []
+          return [{eventId:p.eventId as string,home,away,market:price.market,
+            selection:price.selection,bookmaker:preview.bookmaker,price:value,
+            source:'ESPN Scoreboard' as const,eventDate:result.date,
+            ...(point===undefined?{}:{point}),
+            ...(preview.updatedAt?{providerUpdatedAt:preview.updatedAt}:{})}]
+        })
+      })
+      let archiveStatus:{saved:boolean;count:number;disabled:boolean}|null=null
+      if(archiveKey&&archiveQuotes.length){
+        try{archiveStatus=await saveResearchOdds(archiveKey,archiveQuotes,process.env)}
+        catch{/* A local storage failure cannot hide the valid scoreboard. */}
+      }
       return JSON.stringify({summary:selected.length?result.summary:(args.liveOnly?'No hay partidos en vivo confirmados para esta liga y fecha.':'Ningún encuentro coincide con esos filtros.'),
         date:result.date,source:result.source,count:selected.length,espnIdentifiers,uiBlocks,
+        researchArchive:archiveStatus,
         remaining:Math.max(0,selected.length-(slate?25:6)),
         instruction:'Phoenix renderiza uiBlocks automáticamente en el chat y consulta marcadores ESPN sin consumir tokens. espnIdentifiers contiene eventId, competitionId y team IDs REALES de la cartelera; usa esos ID para sports_chat_espn_core(mode=odds/provider/movement/probabilities/predictor/ats/odds_records), sin asumir competitionId=eventId si falta. Para MLB Stats API no atribuyas sus gamePk a ESPN. En juegos en vivo no repitas el marcador textual de la instantánea; la UI lo actualiza. Para partidos de un ticket, consulta las ligas/equipos de las patas pertinentes. No imprimas JSON ni repliques las tarjetas en prosa.' })
     },
@@ -561,7 +619,7 @@ export function apply(ctx: Context): void {
         if(rows.length<12)rows.push(quote)
         events.set(quote.eventId,rows)
       }
-      const uiBlocks=[...events.entries()].slice(0,5).flatMap(([,rows])=>{
+      const pricedBlocks=[...events.entries()].slice(0,5).flatMap(([,rows])=>{
         const first=rows[0]
         if(!first)return []
         return [{
@@ -576,7 +634,61 @@ export function apply(ctx: Context): void {
           },
         }]
       })
-      return JSON.stringify({ uiBlocks,source:quotes[0]?.source||'Sin ofertas recuperadas',sources:report.sources,
+      // Unverified ESPN observations are useful research, never ticket-eligible outcomes.
+      const observations=report.observations??[]
+      const referenceEvents=new Map<string,typeof observations>()
+      for(const quote of observations.slice(0,96)){
+        const key=quote.eventId+'|'+quote.bookmaker
+        const list=referenceEvents.get(key)??[]
+        if(list.length<12)list.push(quote)
+        referenceEvents.set(key,list)
+      }
+      const referenceBlocks=[...referenceEvents.values()].slice(0,5).flatMap(rows=>{
+        const first=rows[0]
+        if(!first)return []
+        const label=first.reason==='sin_fecha'?'SIN HORA DE ACTUALIZACIÓN':
+          first.reason==='antigua'?'CUOTA HISTÓRICA':
+          first.reason==='fecha_futura'?'FECHA DE COTIZACIÓN NO VÁLIDA':'PROVEEDOR SIN VERIFICAR'
+        return [{
+          component:'sports_odds_card',version:1,props:{
+            title:first.away+' vs '+first.home,
+            subtitle:'REFERENCIA ESPN · '+label+' · No cotizable',
+            source:first.source+' · '+first.bookmaker,
+            rows:rows.map(q=>({
+              event:q.away+' vs '+q.home,market:q.market,selection:q.selection,
+              bookmaker:q.bookmaker,price:q.price.toFixed(2),
+              ...(q.point===null||q.point===undefined?{}:{point:String(q.point)}),
+            })),
+            note:'Precio observado en ESPN pero su actualización no está verificada: NO es una oferta vigente de la casa, NO se incluye en tickets ni permite afirmar la cuota actual. Fuente: '+first.endpointSource+'.',
+          },
+        }]
+      })
+      const uiBlocks=pricedBlocks.length?pricedBlocks:referenceBlocks
+      let researchArchive:{saved:boolean;count:number;disabled:boolean}|null=null
+      // Archive ONLY ESPN observations we already fetched; not commercial feeds.
+      if(useEspn){
+        const inputs:ResearchPriceInput[]=[...quotes,...observations].flatMap(q=>{
+          const tagged=q as typeof q & {endpointSource?:string}
+          const source=tagged.endpointSource==='embedded'?'ESPN Scoreboard':
+            tagged.endpointSource==='core'?'ESPN Core':
+              tagged.endpointSource==='summary'?'ESPN Summary':null
+          if(!source||!['h2h','spreads','totals'].includes(q.market))return []
+          return [{
+            eventId:q.eventId,home:q.home,away:q.away,
+            market:q.market as ResearchPriceInput['market'],
+            selection:q.selection,bookmaker:q.bookmaker,price:q.price,
+            source:source as ResearchPriceInput['source'],
+            ...(q.point===null||q.point===undefined?{}:{point:q.point}),
+            ...(q.timeIso?{eventStartsAt:q.timeIso}:{}),
+            ...(Number.isFinite(Date.parse(q.updatedAt))?{providerUpdatedAt:q.updatedAt}:{}),
+          }]
+        })
+        if(inputs.length){
+          try{researchArchive=await saveResearchOdds(args.sportKey,inputs,env,observedAt)}
+          catch{/* A storage problem must not mask a live provider report. */}
+        }
+      }
+      return JSON.stringify({ uiBlocks,researchArchive,source:quotes[0]?.source||'Sin ofertas recuperadas',sources:report.sources,
         observedAt:new Date(observedAt).toISOString(),requestedSourcePolicy:useEspn?'espn':'all',
         requestedEventId:args.eventId??null,
         requestedDate:args.date??null,excludedStaleOrStarted,outcomes:quotes.slice(0,120),
@@ -717,9 +829,24 @@ export function apply(ctx: Context): void {
           instruction:'OddsHarvester todavía no está listo. PHOENIX solicitó la instalación/recuperación sin bloquear el chat; NO significa que se hayan obtenido cuotas. Ejecutar sports_chat_sources_health para ver progreso y errores, y consultar el mercado después de que el componente marque installed. Si falta el script o WinGet falló, mostrar la ruta del log y solo comandos PowerShell en la consola.'})
       }
       let quotes:Awaited<ReturnType<typeof keylessOdds>>=[]
+      let fallbackMarket:string|null=null
       let scrapeError:string|null=null
       try{quotes=await keylessOdds(args.sport,args.market,args.date,env)}
       catch(error){scrapeError=error instanceof Error?error.message.slice(0,1200):'Error del scraper'}
+      // OddsHarvester exposes distinct NBA markets: 2-way moneyline includes OT,
+      // whereas 3-way 1x2 is regulation ONLY. Never relabel the latter as moneyline.
+      if(args.sport==='basketball'&&args.market==='moneyline'&&(!quotes.length||scrapeError)){
+        try{
+          const regulation=await keylessOdds('basketball','1x2',args.date,env)
+          if(regulation.length){
+            quotes=regulation
+            fallbackMarket='1x2'
+          }
+        }catch(error){
+          const next=error instanceof Error?error.message.slice(0,650):'Sin detalle'
+          scrapeError=[scrapeError,'Intento alternativo 1x2 reglamentario: '+next].filter(Boolean).join(' | ')
+        }
+      }
       // The targeted scraping tool must not strand Kira after a blocked page.
       // Query other independently authorized sources, without re-running OddsHarvester.
       const knownSportKeys=coveredSportKeys
@@ -754,6 +881,8 @@ export function apply(ctx: Context): void {
       })
       return JSON.stringify({source:'OddsHarvester/OddsPortal (sin API key)',supported:keylessSports,
         status:quotes.length?'observed':scrapeError?'scraper-error':'no-observed-offers',
+        effectiveMarket:fallbackMarket??args.market,
+        marketCaveat:fallbackMarket==='1x2'?'Se obtuvo mercado 1x2 de TIEMPO REGLAMENTARIO: no equivale a moneyline NBA con prórroga, no combinar en tickets de moneyline.':null,
         scrapeError,alternativeSources:otherSources.map(r=>r.sources),
         alternativeQuotes:otherSources.flatMap(r=>r.quotes).filter(q=>{
           const updated=Date.parse(q.updatedAt),kickoff=Date.parse(q.timeIso??q.time),now=Date.now()

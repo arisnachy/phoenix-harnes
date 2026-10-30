@@ -206,7 +206,8 @@ const validDate=(day:string)=>/^\d{4}-\d{2}-\d{2}$/u.test(day)
 export function oddsHarvesterArgs(sport:KeylessSport,market:string,day:string,file:string):string[]{
   if(!sportOK(sport)||!marketOK(sport,market)||!validDate(day))throw Error('Petición no permitida')
   const period=(sport==='ice-hockey'&&market==='home_away')?'full_including_ot':
-    ((sport==='basketball'||sport==='american-football')&&market==='1x2')?'full_time':null
+    ((sport==='basketball'||sport==='american-football')&&market==='1x2')?'full_time':
+      ((sport==='basketball'||sport==='american-football')&&market==='moneyline')?'full_including_ot':null
   return ['upcoming','--sport',sport,'--date',day.replaceAll('-',''),
     '--market',market,...(period?['--period',period]:[]),
     '--headless','--format','json','--stream-ndjson','--output',file]
