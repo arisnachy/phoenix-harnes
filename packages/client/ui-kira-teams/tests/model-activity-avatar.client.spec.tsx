@@ -42,7 +42,9 @@ describe('model engine glyphs', () => {
   })
 
   it('renders Terra with its own globe icon and name instead of the Orión fallback', () => {
-    const badge = ModelEngineBadge({ model: 'gpt-6.1-terra', provider: 'openai-codex', placement: 'header' })
+    const badge: ReactElement<Record<string, unknown> & { children?: ReactNode }> | null = ModelEngineBadge({
+      model: 'gpt-6.1-terra', provider: 'openai-codex', placement: 'header',
+    })
     expect(badge?.props).toMatchObject({
       'data-engine-model': 'gpt-6.1-terra',
       'data-engine-family': 'terra',
@@ -52,12 +54,16 @@ describe('model engine glyphs', () => {
     const children = Children.toArray(badge?.props.children).filter(isValidElement<{ children?: ReactNode }>)
     expect(children.some(child => child.props.children === 'Terra')).toBe(true)
     expect(children.some(child => child.type === 'span')).toBe(true)
-    const other = ModelEngineBadge({ model: 'deepseek-v4', provider: 'deepseek', placement: 'header' })
+    expect(children.some(child => typeof child.type === 'function')).toBe(true)
+    const other: ReactElement<Record<string, unknown> & { children?: ReactNode }> | null = ModelEngineBadge({
+      model: 'deepseek-v4', provider: 'deepseek', placement: 'header',
+    })
     expect(other?.props['data-engine-family']).toBe('other')
   })
 
   it('shows a lunar symbol beside a real worker portrait only when its model is known', () => {
-    const luna = ModelActivityAvatar({ kind: 'atlas', model: 'gpt-6-luna',
+    const luna: ReactElement<Record<string, unknown> & { children?: ReactNode }> = ModelActivityAvatar({
+      kind: 'atlas', model: 'gpt-6-luna',
       modelProvider: 'openai-codex', activity: undefined, running: true, pending: false })
     const markers = Children.toArray(luna.props.children)
       .filter(isValidElement<Record<string, unknown> & { children?: ReactNode }>)
@@ -66,10 +72,12 @@ describe('model engine glyphs', () => {
     })
     const badge = markers.find(child => child.props['data-engine-model'] === 'gpt-6-luna')
     const badgeContents = Children.toArray(badge?.props.children).filter(isValidElement<Record<string, unknown>>)
-    expect(badgeContents.some(child => child.type === 'svg')).toBe(true)
+    expect(badgeContents.some(child => typeof child.type === 'function')).toBe(true)
     expect(badgeContents.some(child => child.type === 'span')).toBe(true)
 
-    const unknown = ModelActivityAvatar({ kind: 'atlas', activity: undefined, running: true, pending: false })
+    const unknown: ReactElement<Record<string, unknown> & { children?: ReactNode }> = ModelActivityAvatar({
+      kind: 'atlas', activity: undefined, running: true, pending: false,
+    })
     expect(Children.toArray(unknown.props.children).filter(isValidElement<Record<string, unknown>>)
       .some(child => child.props['data-engine-mark'] !== undefined)).toBe(false)
   })
@@ -137,8 +145,10 @@ describe('ModelActivityAvatar', () => {
   )
 
   it('renders a fixed sharp Kira image even when legacy callers request a pose', () => {
-    const element = ModelActivityAvatar({ kind: 'kira', activity: undefined,
-      running: false, pending: false, ready: true, pose: 'up', speaking: true })
+    const element: ReactElement<Record<string, unknown> & { children?: ReactNode }> = ModelActivityAvatar({
+      kind: 'kira', activity: undefined,
+      running: false, pending: false, ready: true, pose: 'up', speaking: true,
+    })
     const children = Children.toArray(element.props.children).filter(isValidElement<Record<string, unknown>>)
     const portraits = children.filter(child => child.props['data-agent-portrait-image'] === true)
     expect(element.props['data-avatar']).toBe('kira')
