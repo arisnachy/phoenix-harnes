@@ -21,6 +21,7 @@ import process from 'node:process'
 import { gitSafeDirectoryEnvironment } from './phoenix-git-safe-directory.mjs'
 import { classifyStableUpdate } from './phoenix-update-policy.mjs'
 import { writePhoenixUpdateState } from './phoenix-update-state.mjs'
+import { guardianBlockedTarget } from './phoenix-guardian-incidents.mjs'
 
 const EXPECTED_REPOSITORY = process.env.PHOENIX_UPDATE_REPOSITORY ?? 'arisnachy/phoenix-harnes'
 const REMOTE = process.env.PHOENIX_UPDATE_REMOTE ?? 'origin'
@@ -218,10 +219,12 @@ function restorePrevious(root, previous, failedTarget, cause) {
       status: 'rolled-back',
       previous,
       failedTarget,
+      detail: cause instanceof Error ? cause.stack ?? cause.message : String(cause),
       at: new Date().toISOString(),
     })
     console.error('[PHOENIX STABLE] recovery succeeded; the previous checkout was restored.')
-    blockStaleStartup('new stable activation failed and rollback restored an older runtime')
+    // The recovered last-known-good runtime MUST be allowed to boot.
+    // A quarantined target may be retried only after it receives a new SHA.
     return true
   } catch (error) {
     console.error(`[PHOENIX STABLE] CRITICAL: recovery failed: ${error instanceof Error ? error.message : String(error)}`)
@@ -229,6 +232,7 @@ function restorePrevious(root, previous, failedTarget, cause) {
       status: 'rollback-failed',
       previous,
       failedTarget,
+      detail: [cause instanceof Error ? cause.message : String(cause), error instanceof Error ? error.stack ?? error.message : String(error)].join(' | '),
       at: new Date().toISOString(),
     })
     return false
@@ -244,6 +248,12 @@ function applyStable(root, current, target, manifest, state) {
   if (UPDATE_MODE === 'notify') {
     const verb = state === 'ahead' ? 'realignment' : 'update'
     console.error(`[PHOENIX STABLE] stable ${verb} available: ${current.slice(0, 12)} -> ${target.slice(0, 12)} (notify-only mode).`)
+    return
+  }
+
+  if (guardianBlockedTarget(target)) {
+    console.error(`[PHOENIX GUARDIAN] stable ${target.slice(0, 12)} previously failed; starting the recovered version instead of retrying it.`)
+    writeState(root, { status: 'paused', phase: 'guardian-quarantine', current, target })
     return
   }
 
