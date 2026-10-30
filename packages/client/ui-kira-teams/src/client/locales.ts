@@ -14,6 +14,7 @@ export const zh = {
   'chat.searchEmoji': '搜索表情',
   'chat.user': '用户',
   'chat.userRole': '团队协作成员',
+  'chat.toUser': '对你说',
 
   'chat.pendingDelivery': '等待发送，重新连接后重试',
 
@@ -109,6 +110,7 @@ export const en: Record<KiraTeamsKey, string> = {
   'chat.searchEmoji': 'Search emoji',
   'chat.user': 'User',
   'chat.userRole': 'Team collaborator',
+  'chat.toUser': 'to you',
 
   'chat.pendingDelivery': 'Delivery pending; retry on reconnect',
 
@@ -201,6 +203,7 @@ export const es: Record<KiraTeamsKey, string> = {
   'chat.searchEmoji': 'Buscar emoji',
   'chat.user': 'Usuario',
   'chat.userRole': 'Parte del equipo',
+  'chat.toUser': 'para ti',
 
   'chat.pendingDelivery': 'Entrega pendiente; se reintentará al reconectar',
 
