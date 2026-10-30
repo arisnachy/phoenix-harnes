@@ -20,6 +20,22 @@ export function guardianIncidentPath(env = process.env) {
   return join(guardianDirectory(env), 'phoenix-guardian-incidents.json')
 }
 
+// One immutable marker per failed release SHA survives bounded incident-history
+// rotation and a concurrent writer replacing the JSON ledger.
+function guardianQuarantinePath(target, env) {
+  return join(guardianDirectory(env), 'quarantine', target.toLowerCase())
+}
+
+function persistGuardianQuarantine(target, env) {
+  const path = guardianQuarantinePath(target, env)
+  mkdirSync(dirname(path), { recursive: true, mode: 0o700 })
+  try {
+    writeFileSync(path, '', { mode: 0o600, flag: 'wx' })
+  } catch (error) {
+    if (error?.code !== 'EEXIST') throw error
+  }
+}
+
 function atomic(path, value) {
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 })
   const temporary = path + '.' + process.pid + '.' + randomUUID() + '.tmp'
@@ -36,7 +52,7 @@ function scrub(text) {
     .replace(/https?:\/\/[^\s/@]+:[^\s/@]+@/giu, 'https://[REDACTED]@')
     .replace(/\b(?:sk-(?:proj-)?[a-z0-9_-]{12,}|gh[pousr]_[a-z0-9_]{12,}|github_pat_[a-z0-9_]{12,})\b/giu, '[REDACTED]')
     .replace(/\bBearer\s+\S+/giu, 'Bearer [REDACTED]')
-    .replace(/(\b(?:password|token|api[_-]?key|client_secret|authorization|secret)\b\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;]+)/giu, '$1[REDACTED]')
+    .replace(/((?:"|')?(?:password|token|api[_ -]?key|client[_-]?secret|authorization|secret)(?:"|')?\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;}\]]+)/giu, '$1[REDACTED]')
     .slice(0, MAX_TEXT)
 }
 
@@ -68,6 +84,7 @@ export function recordGuardianIncident(event, env = process.env) {
     .includes(event.status) ? event.status : 'activation-failed'
   const phase = String(event.phase ?? 'activation').replace(/[^a-zA-Z0-9_-]/gu, '').slice(0, 64)
   const incidents = readLedger(path)
+  persistGuardianQuarantine(event.failedTarget, env)
   const key = [event.failedTarget.toLowerCase(), status, phase].join(':')
   if (incidents.some(entry => entry.key === key)) return key
   const incident = {
@@ -85,6 +102,7 @@ export function recordGuardianIncident(event, env = process.env) {
 export function guardianBlockedTarget(target, env = process.env) {
   if (!SHA.test(target ?? '')) return false
   try {
+    if (existsSync(guardianQuarantinePath(target, env))) return true
     return readLedger(guardianIncidentPath(env)).some(entry =>
       entry?.failedTarget === target.toLowerCase()
         && ['rolled-back', 'rollback-failed', 'activation-failed', 'startup-failed'].includes(entry.status))
