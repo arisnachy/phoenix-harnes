@@ -116,6 +116,12 @@ function runningStatus(status: string | undefined): boolean {
   return status === 'working' || status === 'running' || status === 'active' || status === 'provisioning'
 }
 
+/** Explicit delivery semantics: never guess a human addressee from a teammate's prose. */
+export function teamMessageAudience(data: Pick<KiraTeamMessageChatData, 'senderKind' | 'targetId'>): 'team' | 'user' {
+  if (data.senderKind !== 'user' && (data.targetId === 'user' || data.targetId === 'human')) return 'user'
+  return 'team'
+}
+
 function textOf(content: readonly unknown[]): string {
   return content.flatMap((block) => {
     if (typeof block !== 'object' || block === null || Array.isArray(block)) return []
@@ -148,6 +154,7 @@ export const KiraTeamMessageView = memo(function KiraTeamMessageView({
   const target = data.targetName === undefined
     ? undefined
     : identityFor(data.targetName, data.targetId)
+  const audience = teamMessageAudience(data)
   const senderStatus = participants[data.senderId]?.status
   const targetStatus = data.purpose === 'assignment'
     ? participants[data.targetId]?.status
@@ -172,7 +179,7 @@ export const KiraTeamMessageView = memo(function KiraTeamMessageView({
       data-kira-team-message={data.messageId}
       data-team-sender-id={data.senderId}
       data-team-sender-kind={data.senderKind}
-      data-kira-audience="team"
+      data-kira-audience={audience}
     >
       <div className={css.avatar}>
         {data.senderKind === 'user' ? <span aria-label="User">👤</span> : <ModelActivityAvatar
@@ -204,7 +211,17 @@ export const KiraTeamMessageView = memo(function KiraTeamMessageView({
             {data.purpose !== undefined && !['update', 'assignment', 'result'].includes(data.purpose) && (
               <span className={css.purpose} data-purpose={data.purpose}>{PURPOSE_LABEL[data.purpose]}</span>
             )}
-            {target !== undefined && <span className={css.target}>→ {target.name}</span>}
+            {audience === 'user' ? (
+              <span className={css.target} data-team-recipient="user">{t?.('chat.toUser') ?? 'para ti'}</span>
+            ) : target !== undefined ? (
+              <span className={css.target} data-team-recipient="team" aria-label={`${t?.('chat.to') ?? 'Para'} ${target.name}`}>
+                → {target.name}
+              </span>
+            ) : data.senderKind !== 'user' ? (
+              <span className={css.teamContext} data-team-recipient="unspecified">
+                {t?.('chat.teamContext') ?? 'Conversación del equipo'}
+              </span>
+            ) : null}
             {targetStatusKey !== undefined && (
               <span
                 className={css.assignmentStatus}
