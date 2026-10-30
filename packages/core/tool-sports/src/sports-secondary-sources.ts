@@ -83,6 +83,48 @@ export const sportIntelMcpAssessment={
   integrationDecision:'No añadir como fuente gratuita redundante; reutilizar conceptos de comparación solo con proveedores y tiempos comprobados.',
 } as const
 
+/** Audited no-cost options: zero license fee does not imply unlimited API traffic
+ * or rights to republish an upstream sportsbook's copyrighted odds.
+ */
+export const freeMarketSourceAssessment=[
+  {id:'espn-public',cost:'Sin clave ni tarifa por llamada en las rutas accesibles',
+    live:'Cuotas ocasionales, sin garantía de marca temporal',
+    history:'Scoreboards antiguos parciales, no un archivo de movimientos completo',
+    access:'API no oficial, sin SLA ni licencia de datos para redistribución confirmada',
+    automatedImport:false},
+  {id:'odds-harvester',cost:'Código abierto; ejecución local si está instalado',
+    live:'Prepartido y algunos mercados live, sujeto a condiciones de OddsPortal',
+    history:'Modo historic por temporadas/ligas, cobertura variable',
+    access:'Playwright; puede ser bloqueado; respetar permisos y límites',
+    automatedImport:false},
+  {id:'sharpapi-open-sample',cost:'CSV gratuito con licencia CC BY 4.0 y atribución',
+    live:'Ninguno: dos instantáneas de julio de 2026',
+    history:'9.805 filas de MLB y Mundial 2026; no cubre fechas posteriores',
+    access:'https://github.com/Sharp-API/SharpAPI-Sample-Data',
+    automatedImport:false},
+  {id:'sportsdataverse',cost:'Herramientas y varios archivos deportivos abiertos',
+    live:'Resultados, estadísticas y calendarios; no todas las cuotas',
+    history:'NBA y otros deportes: verificar licencia y campo de cuota por dataset',
+    access:'https://www.sportsdataverse.org/',
+    automatedImport:false},
+  {id:'parlayapi-demo',cost:'Sin clave solo demo: 60 consultas por hora y hasta 5 eventos',
+    live:'Moneyline limitada a 6 deportes',
+    history:'No alimentar archivo permanente: licencia restringe caché y reutilización',
+    access:'https://parlay-api.com/terms',
+    automatedImport:false},
+  {id:'odds-gap-sample',cost:'Gratis: muestra fija 15–21 septiembre 2026',
+    live:'No desde la descarga gratuita',
+    history:'Recientes e históricos completos requieren suscripción',
+    access:'https://theoddsgap.com/data',
+    automatedImport:false},
+  {id:'football-tennis-data',cost:'Archivos históricos sin tarifa para uso particular permitido',
+    live:'No garantiza feed de cuotas actuales',
+    history:'Fútbol y tenis con décadas de antecedentes',
+    access:'https://www.football-data.co.uk/data',
+    restriction:'No usar con bots/scrapers/IA sin autorización explícita',
+    automatedImport:false},
+] as const
+
 /** Identify an attributed page without fetching it or trusting arbitrary hosts.
  * @param sourceId - Known directory source key.
  * @param href - Candidate HTTPS research-page URL.
@@ -103,6 +145,7 @@ export function isKnownSecondaryMarketPage(sourceId:string,href:string):boolean 
  */
 export function secondaryMarketSourceCatalog(){
   return {sources:secondarySportsSources,workflow:secondaryMarketWorkflow,
+    freeMarketSourceAssessment,
     sportIntelMcp:sportIntelMcpAssessment,
     policy:secondaryMarketPolicy,
     instruction:'Estos son portales para investigación complementaria, no feeds API activados. Si no puedes navegar su contenido, indícalo: no inventes cuotas, movimientos ni marcas temporales. Las cuotas sin marca de actualización no son precios actuales verificables.'}
