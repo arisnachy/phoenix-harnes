@@ -103,6 +103,7 @@ describe('KIRA Team chat message', () => {
     expect(view.getByText('Coordinación')).toBeTruthy()
     expect(view.queryByText('Asignación')).toBeNull()
     expect(view.getByText('→ La Forja')).toBeTruthy()
+    expect(view.container.querySelector('[data-kira-audience="team"]')).not.toBeNull()
     expect(view.container.querySelector('[data-avatar="kira"]')).toBeTruthy()
     expect(view.container.querySelector('[data-agent-portrait-image]')).toBeTruthy()
     expect(view.getByRole('status').textContent).toContain('trabajando')
