@@ -382,7 +382,9 @@ export async function marketOddsDetailed(
       espnDetail=[diagnostics.scoreboards+' días consultados',
         diagnostics.games+' eventos futuros',diagnostics.resolvedRefs+' referencias resueltas',
         diagnostics.embedded+' líneas scoreboard',diagnostics.core+' líneas Core',
-        diagnostics.summary+' líneas summary',diagnostics.failures+' fallos parciales',
+        diagnostics.summary+' líneas summary',diagnostics.rawOddsEntries+' registros de cuotas encontrados',
+        diagnostics.undatedOutcomes+' resultados sin fecha',
+        diagnostics.expiredOutcomes+' resultados caducados',diagnostics.failures+' fallos parciales',
         ...diagnostics.notes.slice(0,2)].join(' · ')
       return quotes.map(quote=>({...quote,sportKey,source:'ESPN Site/Core (sin clave)'}))
     }})
