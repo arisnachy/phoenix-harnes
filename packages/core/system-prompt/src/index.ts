@@ -467,7 +467,7 @@ export class SystemPrompt extends Service {
       // The fallback narrows the optional input type; the schema already defaults it.
       text: config.persona ?? '',
     })
-    if (config.includeRuntimeContext ?? true) {
+    if ((config.includeRuntimeContext ?? true) && guardianRecoveryContext().length > 0) {
       this.context({ name: 'guardian:recovery-incidents', order: 35, text: guardianRecoveryContext })
     }
     if (!(config.includeRuntimeContext ?? true)) this.suppressRuntimeContext()
