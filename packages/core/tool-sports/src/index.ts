@@ -11,6 +11,7 @@ import { researchNbaSlate } from './nba-research.ts'
 import { keylessOdds, keylessSports, keylessHistoricOdds } from './keyless-odds.ts'
 import { loadHistoricalOdds } from './sports-archive.ts'
 import { loadOddsSnapshots } from './odds-snapshots.ts'
+import { oddsDisciplines,coveredSportKeys,scanOddsDisciplines,belongsToLeague } from './sports-odds-coverage.ts'
 import { researchSport } from './multi-sport-research.ts'
 import { communityOpinions } from './sports-community.ts'
 import { evidenceTicket } from './evidence-ticket.ts'
@@ -28,6 +29,7 @@ export const name = 'tool-sports'
 export const inject = ['tools','systemPrompt']
 const sportsEnv=():NodeJS.ProcessEnv=>hydrateSportsSources(process.env)
 const GUIDANCE = [
+  'ESCÁNER GLOBAL DE CUOTAS: si el usuario pregunta por acceso real a las cuotas deportivas o pide revisar TODOS los deportes, no te limites a NBA, NFL y NHL. sports_chat_odds_scan presenta los 11 deportes realmente admitidos por OddsHarvester; examina sus 3 páginas consecutivas offset=0,4,8, limit=4, incluso si una falla, y devuelve estado INDIVIDUAL por deporte, cuota, casa, liga, hora, motivo del fallo y fuentes pendientes. Incluye fútbol/soccer, tenis ATP/WTA, béisbol/MLB, baloncesto NBA/WNBA, fútbol americano NFL, hockey NHL, handball, voleibol, ambos rugby y cricket. WNBA es una liga de basketball, NO un deporte distinto. Una consulta de baloncesto sin liga verificada jamás justifica etiquetar su cuota como NBA o WNBA. Las ligas sin evidencia suficiente se muestran sin liga verificada, no se fuerzan. Para mercados de ligas específicas consulta además sports_chat_odds con basketball_wnba, basketball_nba, baseball_mlb, americanfootball_nfl, icehockey_nhl y soccer; para tenis usa odds_keyless, o tennis_atp/tennis_wta solo cuando el nombre de la liga sea explícito. El inventario no garantiza mercados presentes. Cuando el error de OddsHarvester contenga category, exitCode y stderr informa esos campos y no trunques la causa interna. ',
   'ODDS REALES Y HISTORIALES: sports_chat_odds ahora consulta varias fuentes independientes y devuelve estado observado/vacío/error/no configurado por proveedor. No declares sin cuotas hasta evaluar sources y buscar fecha y mercados reales por liga. OddsHarvester v0.20.0 permite transmitir filas NDJSON para recuperar partidos cotizados incluso si otras páginas del scraping fallan; distingue precios recuperados de scraping completamente exitoso. sports_chat_historical_odds acepta fecha y clave de deporte para leer archivos públicos locales y los snapshots de cotizaciones realmente vistos por PHOENIX. Los históricos NO son precios actuales, y el archivo local solo cubre desde que se capturaron observaciones: no inventar historial ausente. The Odds API v4 y TheOddsAPI requieren sus respectivas claves; la disponibilidad histórica completa suele ser de planes pagados. No prometas que las cotizaciones son de Juancito si el bookmaker indicado es otro. ',
   'JUANCITO SPORT: utiliza como fuente PRIMARIA su reglamento oficial https://www.juancitosport.com.do/reglas/ y términos https://www.juancitosport.com.do/banca/terminos/. Las reglas verificadas incluyen 3/5/9 innings, run line, ponches, hits, medio tiempo, props, 90 minutos fútbol y overtime diferenciado. Una apuesta solo es válida al mostrar el sistema «Apuesta Confirmada» (8.4); el mínimo publicado es RD$100 (7.10). Su condición 6.6 PROHÍBE usar robots o scripts para realizar apuestas: Kira NO debe automatizar clicks ni apuestas en esa web. Puede investigar fuentes, calcular y entregar el ticket; el usuario realiza la confirmación legalmente en la banca. El sitio juancitosports.com es informativo independiente: NO atribuirle reglamentos oficiales. ',
   'APUESTAS REALES NO FICTICIAS: si el usuario pide un ticket para apostar dinero real, NO respondas por defecto «simulado», «apuesta ficticia» o «no puedo investigar apuestas». Investiga eventos y mercados verificables, contrasta las reglas EXACTAS de la casa con sports_chat_bet_rules, obtiene precios reales por fuente con sports_chat_odds, sports_chat_odds_keyless y sports_chat_market_intelligence; si no hay ofertas auténticas no inventes cuotas. Un boleto cotizado NO equivale a una apuesta aceptada. Solo tras confirmación independiente del comprobante de la casa se puede declarar colocada; sin ella di «ticket cotizado, pendiente de aceptación». No ejecutes apuestas ni transferencias sin autorización explícita y una integración oficial operativa. Las reglas oficiales varían para extra innings, suspensiones, jugadores inactivos, pitcher listado, push, overtime y mercados por período. Prioriza mercados no limitados a ganador: spread/run line, -1.5/+1.5, totales 3/5/9 entradas, props de ponches/hits, handicaps, puntos, tiros, córners y más. Los precios solo son reales si se observan con casa, mercado exacto, línea, momento y correspondencia de evento. La calculadora del ticket se actualiza con el importe sin transferir fondos. Tras la fecha consulta sports_chat_ticket_track con IDs y recibo si lo hay para grados provisionales según marcador y jamás declares cobro/void confirmado sin liquidación oficial.',
@@ -272,15 +274,15 @@ export function apply(ctx: Context): void {
               baseball:{sport:'baseball',markets:['moneyline','over_under']},
               americanfootball:{sport:'american-football',markets:['moneyline','over_under']},
               icehockey:{sport:'ice-hockey',markets:['home_away','double_chance','over_under']},
-              tennis:{sport:'tennis',markets:['match_winner','over_under']},
+              tennis:{sport:'tennis',markets:['match_winner','total_games_over_under']},
             }
             const route=routes[args.sportKey.split('_')[0]??'']
             if(!route)return []
             const quotes=await Promise.allSettled(route.markets.map(m=>
               keylessOdds(route.sport,m,args.date,env)))
-            return quotes.flatMap(x=>x.status==='fulfilled'?x.value.map(q=>({
-              ...q,timeIso:q.time,
-            })):[])
+            return quotes.flatMap(x=>x.status==='fulfilled'?x.value
+              .filter(q=>belongsToLeague(args.sportKey,q))
+              .map(q=>({...q,timeIso:q.time,sportKey:args.sportKey})):[])
           })(),
         ]:[]),
       ])
@@ -567,11 +569,43 @@ export function apply(ctx: Context): void {
     presentCall:()=>({card:'generic',title:'Contrastar pronósticos públicos',kind:'read' as const}),
   }))
   ctx.tools.register(defineTool({
+    name:'sports_chat_odds_scan',
+    description:'Comprueba sistemáticamente los 11 deportes de OddsHarvester sin omitir tenis, soccer, baseball, basketball NBA/WNBA, rugby, volleyball, cricket y handball. Rondas de cuatro deportes, paginación por offset 0, 4 y 8. No inventa precios ni asigna ligas sin evidencia.',
+    parameters:{
+      sport:{type:'string',description:'Disciplina opcional (football, basketball, baseball, american-football, ice-hockey, tennis, handball, volleyball, rugby-league, rugby-union, cricket). Vacío recorre las 11.'},
+      offset:{type:'integer',description:'Índice inicial: 0, 4 u 8 al revisar todos.'},
+      limit:{type:'integer',description:'Máximo cuatro deportes por ronda; por defecto 4.'},
+      date:{type:'string',description:'Fecha AAAA-MM-DD de los partidos, por defecto hoy en República Dominicana.'},
+    },
+    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    isConcurrencySafe:()=>false,
+    async execute(args){
+      const env=sportsEnv()
+      const enabled=env.PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED==='1'
+      const report=await scanOddsDisciplines(
+        {...(args.sport?{sport:args.sport}:{}),
+          ...(args.offset!==undefined?{offset:args.offset}:{}),
+          ...(args.limit!==undefined?{limit:args.limit}:{})},
+        (sport,market)=>keylessOdds(sport,market,args.date,env),
+        enabled,
+      )
+      return JSON.stringify({
+        source:'OddsHarvester/OddsPortal',observedAt:new Date().toISOString(),
+        installation:managedSportsInstallStatus(process.env),
+        availableDisciplines:oddsDisciplines,report,
+        instruction:report.complete?
+          'Terminó la ronda solicitada. Solo las filas observadas con casa, selección, precio y fecha son cuotas reales del proveedor; liga no verificada no es NBA/WNBA. Si también se necesita ESPN o API comercial consulta sports_chat_odds por liga. Nunca prometas precios en todos los deportes.':
+          'FALTAN disciplinas: llamar otra vez sports_chat_odds_scan con offset='+report.nextOffset+' y limit=4; continuar hasta complete=true. No afirmar que el escaneo universal terminó mientras falten páginas.',
+      })
+    },
+    presentCall:()=>({card:'generic',title:'Escanear cobertura de cuotas en todos los deportes',kind:'read' as const}),
+  }))
+  ctx.tools.register(defineTool({
     name:'sports_chat_odds_keyless',
     description:'Cuotas multideporte sin API key desde OddsHarvester local autorizado: 11 deportes, mercados de prepartido, precios por casa con fuente y antigüedad. No promete acceso ilimitado.',
     parameters:{
       sport:{type:'string',required:true,description:'football, basketball, baseball, american-football, tennis, ice-hockey, rugby-league, rugby-union, handball, volleyball o cricket.'},
-      market:{type:'string',required:true,description:'Mercado del deporte: 1x2, double_chance, btts, moneyline, home_away, match_winner u over_under.'},
+      market:{type:'string',required:true,description:'Mercado compatible con deporte: 1x2, double_chance, btts, moneyline, home_away, match_winner, over_under, total_games_over_under, total_sets_over_under o total_points_over_under.'},
       date:{type:'string',description:'Día AAAA-MM-DD en Santo Domingo; predeterminado hoy.'},
     },
     output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
@@ -589,19 +623,15 @@ export function apply(ctx: Context): void {
       let quotes:Awaited<ReturnType<typeof keylessOdds>>=[]
       let scrapeError:string|null=null
       try{quotes=await keylessOdds(args.sport,args.market,args.date,env)}
-      catch(error){scrapeError=error instanceof Error?error.message.slice(0,240):'Error del scraper'}
+      catch(error){scrapeError=error instanceof Error?error.message.slice(0,1200):'Error del scraper'}
       // The targeted scraping tool must not strand Kira after a blocked page.
       // Query other independently authorized sources, without re-running OddsHarvester.
-      const knownSportKeys:Record<string,string[]>={
-        basketball:['basketball_nba'],baseball:['baseball_mlb'],
-        'american-football':['americanfootball_nfl'],'ice-hockey':['icehockey_nhl'],
-        football:['soccer_epl','soccer_spain_la_liga','soccer_usa_mls','soccer_mexico_ligamx'],
-      }
+      const knownSportKeys=coveredSportKeys
       const otherSources:Awaited<ReturnType<typeof marketOddsDetailed>>[]=[]
       if(scrapeError||!quotes.length){
         const alternativeEnv={...env,PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED:'0'}
         const candidate=knownSportKeys[args.sport]??[]
-        for(const key of candidate.slice(0,4)){
+        for(const key of candidate.slice(0,5)){
           try{otherSources.push(await marketOddsDetailed(key,
             args.market==='over_under'?'totals':'h2h',alternativeEnv))}
           catch{/* keep the original scraper failure and explicit provider statuses */}
