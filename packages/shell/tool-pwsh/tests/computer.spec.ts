@@ -134,9 +134,9 @@ describe('Integrated browser without Phoenix Desktop', () => {
   })
 
   it('uses loopback-only scoped navigation and never reports content verified before inspection', async () => {
-    const calls: Array<{ url: string; body?: string; headers?: HeadersInit }> = []
+    const calls: Array<{ url: string; body: string }> = []
     const send = (async (url: string, init?: RequestInit) => {
-      calls.push({ url, body: init?.body as string, headers: init?.headers })
+      calls.push({ url, body: String(init?.body ?? '') })
       return new Response(JSON.stringify({ available: true, tabId: 'tab-1', url: 'about:blank', title: '' }), { status: 200 })
     }) as typeof fetch
     const received = await runMiniBrowserFallback({ action: 'browser_open', url: 'https://example.org' }, 'session-1', undefined, send)
