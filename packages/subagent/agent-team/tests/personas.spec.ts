@@ -47,6 +47,7 @@ describe('KIRA Team social personalities', () => {
     expect(lead).toContain(KIRA_WORK_REPORT_CONTRACT)
     expect(lead).toContain('what is confirmed with concrete numbers or evidence')
     expect(lead).toContain('Use a preferred name or professional title already authorized')
+    expect(lead).toContain('once in the first material user-facing report or final delivery')
     expect(lead).toContain('complete, partial or blocked')
     expect(lead).toContain('four verified references but needs eight to twelve')
     expect(argo).not.toContain(KIRA_WORK_REPORT_CONTRACT)
