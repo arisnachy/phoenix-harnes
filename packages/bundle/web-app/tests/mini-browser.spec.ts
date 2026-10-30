@@ -202,8 +202,8 @@ describe('MiniBrowser capture recovery', () => {
 
 describe('MiniBrowser model-safe DOM inspection', () => {
   it('inspects only bounded text and field metadata without values or credentials', () => {
-    expect(MINI_BROWSER_INSPECT_EXPRESSION).toContain('Runtime')
-      // The expression must not request input.value or document.cookie.
+    expect(MINI_BROWSER_INSPECT_EXPRESSION).toContain('document.title')
+    // The expression must not request input.value or document.cookie.
     expect(MINI_BROWSER_INSPECT_EXPRESSION).not.toContain('node.value')
     expect(MINI_BROWSER_INSPECT_EXPRESSION).not.toContain('document.cookie')
     expect(MINI_BROWSER_INSPECT_EXPRESSION).toContain("querySelectorAll('input, textarea, select')")

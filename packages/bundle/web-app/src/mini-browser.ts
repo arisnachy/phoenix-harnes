@@ -65,7 +65,7 @@ type CdpSocket = {
 }
 type CdpSocketFactory = (url: string) => CdpSocket
 /** Model-safe browser inspection: visible text and field metadata, never input values. */
-export const MINI_BROWSER_INSPECT_EXPRESSION = \`(() => {
+export const MINI_BROWSER_INSPECT_EXPRESSION = `(() => {
   const shown = (node) => {
     const style = getComputedStyle(node)
     return style.display !== 'none' && style.visibility !== 'hidden' && node.getClientRects().length > 0
@@ -83,7 +83,7 @@ export const MINI_BROWSER_INSPECT_EXPRESSION = \`(() => {
     }))
   return { url: location.href, title: document.title,
     text: (document.body?.innerText ?? '').slice(0, 3000), fields, actions }
-})()\`
+})()`
 
 type Action = {
   type: string

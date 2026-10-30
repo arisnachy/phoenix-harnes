@@ -307,7 +307,7 @@ export async function runMiniBrowserFallback(
     )
   }
   const rawPort = process.env.PHOENIX_WEB_PORT?.trim() || '3080'
-  if (!/^\\d{1,5}$/u.test(rawPort) || Number(rawPort) < 1 || Number(rawPort) > 65535) {
+  if (!/^\d{1,5}$/u.test(rawPort) || Number(rawPort) < 1 || Number(rawPort) > 65535) {
     throw new Error('PHOENIX_WEB_PORT must be a valid local browser port')
   }
   const controller = new AbortController()
