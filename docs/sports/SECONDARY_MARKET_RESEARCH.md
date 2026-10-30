@@ -45,3 +45,34 @@ node --experimental-strip-types --test packages/core/tool-sports/tests/sports-se
 En Kira: «Muéstrame sports_chat_market_source_catalog, explica cuál fuente
 puedes consultar de verdad y cuáles son solo enlaces de investigación. Revisa
 un partido ESPN real; si no tienes acceso a estos portales, no inventes cuotas».
+
+## Diagnóstico de la cartelera NBA y SportIntel (30-oct-2026)
+
+- El adaptador `sports_chat_games` toma las líneas genuinas incluidas en ESPN
+  Scoreboard y, para partidos futuros con al menos dos selecciones reales de una
+  misma casa, las presenta dentro de las tarjetas, **incluso cuando ESPN omite
+  la hora de actualización**. En ese caso solo son referencias de investigación.
+- El favorito **de mercado** se muestra únicamente cuando una misma casa publica
+  precios individuales para ambos equipos. No reemplaza la tendencia propia de
+  Kira basada en resultados, localía, bajas y calidad de adversarios.
+- `sports_chat_odds` puede dibujar referencias de Core/Summary en tarjetas
+  `sports_odds_card` aunque no haya precios que cumplan los filtros de vigencia.
+  Los precios de referencia jamás se incluyen en tickets calculados.
+- OddsHarvester permite basketball `moneyline` con prórroga y `1x2` en tiempo
+  reglamentario. Su adaptador consulta periodos distintos y distingue claramente
+  la alternativa; **no** transforma una cuota 1x2 en moneyline.
+- SportIntel MCP (`roizenlabs/sportintel-mcp`) es código MIT, pero su
+  `get_live_odds` requiere `ODDS_API_KEY` para The Odds API v4. No es un feed
+  gratuito adicional: incorporarlo tal cual duplicaría la fuente. Además, su
+  implementación publicada infiere nombres de equipos de spreads y asigna
+  `gameTime` desde la hora del sistema, por lo que no cumple por sí sola el
+  estándar de integridad de datos de PHOENIX.
+
+### Prueba recomendada en Kira
+
+«Kira, muestra una cartelera NBA futura y las **cuotas de referencia que
+realmente devuelve ESPN**, indicando casa, línea, selección y si no se publica
+la actualización. Distingue favorito de mercado de favorito de tu investigación.
+Consulta `sports_chat_odds` del mismo `eventId` con h2h, spreads y totals.
+Si OddsHarvester falla, informa el error concreto e intenta basketball 1x2
+reglamentario SIN tratarlo como moneyline con prórroga. No inventes precios».
