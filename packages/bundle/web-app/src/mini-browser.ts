@@ -64,6 +64,27 @@ type CdpSocket = {
   addEventListener: (type: string, listener: (event: CdpEvent) => void) => void
 }
 type CdpSocketFactory = (url: string) => CdpSocket
+/** Model-safe browser inspection: visible text and field metadata, never input values. */
+export const MINI_BROWSER_INSPECT_EXPRESSION = `(() => {
+  const shown = (node) => {
+    const style = getComputedStyle(node)
+    return style.display !== 'none' && style.visibility !== 'hidden' && node.getClientRects().length > 0
+  }
+  const fields = Array.from(document.querySelectorAll('input, textarea, select')).slice(0, 100)
+    .filter(shown).slice(0, 60).map((node, field) => ({
+      field, tag: node.tagName.toLowerCase(),
+      type: node.getAttribute('type') ?? 'text',
+      label: (node.labels?.[0]?.innerText ?? node.getAttribute('aria-label')
+        ?? node.getAttribute('placeholder') ?? '').trim().slice(0, 100),
+    }))
+  const actions = Array.from(document.querySelectorAll('a, button')).slice(0, 160)
+    .filter(shown).slice(0, 60).map(node => ({
+      text: (node.innerText ?? node.getAttribute('aria-label') ?? '').trim().slice(0, 100),
+    }))
+  return { url: location.href, title: document.title,
+    text: (document.body?.innerText ?? '').slice(0, 3000), fields, actions }
+})()`
+
 type Action = {
   type: string
   url?: string
@@ -854,6 +875,19 @@ async function action(input: Action, signal?: AbortSignal): Promise<Record<strin
     persistBrowserScopes()
   }
   const tab = await selected(base, targetTabId, undefined, signal, sessionId === undefined)
+  if (type === 'inspect') {
+    const observation = await cdp<{ result?: { value?: unknown }; exceptionDetails?: unknown }>(
+      tab, 'Runtime.evaluate', { expression: MINI_BROWSER_INSPECT_EXPRESSION, returnByValue: true }, signal,
+    )
+    if (observation.exceptionDetails !== undefined || observation.result?.value === undefined) {
+      throw new Error('No se pudo inspeccionar el DOM de esta pestaña.')
+    }
+    const inspected = observation.result.value
+    if (typeof inspected !== 'object' || inspected === null || Array.isArray(inspected)) {
+      throw new Error('La inspección no devolvió metadatos válidos.')
+    }
+    return { ...(await state(base, undefined, signal, sessionId)), inspection: inspected }
+  }
   if (type === 'select-tab') {
     if (typeof input.tabId !== 'string') throw new Error('Falta la pestaña.')
     throwIfAborted(signal)
@@ -1097,7 +1131,7 @@ export function registerMiniBrowserRoutes(ctx: Context): void {
       res.once('close', onClose)
       try {
         const input = await awaitAbortable(readAction(req), controller.signal)
-        if (input.type === 'start') armDeadline(START_ACTION_LIMIT_MS)
+        if (input.type === 'start' || input.type === 'open' || input.type === 'new-tab') armDeadline(START_ACTION_LIMIT_MS)
         throwIfAborted(controller.signal)
         const result = await action(input, controller.signal)
         if (!controller.signal.aborted && !res.writableEnded) reply(res, 200, result)
