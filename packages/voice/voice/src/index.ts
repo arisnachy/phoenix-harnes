@@ -266,7 +266,7 @@ export function sessionEventToVoiceEvent(input: unknown, language = 'es-DO'): Vo
       // A localized status is preferable to unintelligible mixed-language audio.
       const spokenSummary = language.toLowerCase().startsWith('es')
         && summary !== undefined
-        && /\\b(?:the|your|task|completed|waiting|needs|please|before|review|approved|cannot|has been)\\b/iu.test(summary)
+        && /\b(?:the|your|task|completed|waiting|needs|please|before|review|approved|cannot|has been)\b/iu.test(summary)
         ? undefined : summary
       if (verdict === 'pass') {
         return {
