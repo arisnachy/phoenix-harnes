@@ -61,6 +61,7 @@ describe('user profile validation and projection helpers', () => {
     const allowed = projectConsentedProfile(configured)
     expect(allowed).toMatchObject({ preferredName: 'Aris', profession: 'Médico', professionalTitle: 'Doctor', addressingMode: 'title' })
     expect(renderConsentedProfile(allowed)).toContain('use the professional title occasionally')
+    expect(renderHumanConnection(allowed)).toContain('professional updates or final handoffs')
 
     const withdrawn = projectConsentedProfile({
       ...configured, consent: { ...configured.consent, profession: false, professionalTitle: false },
@@ -69,6 +70,7 @@ describe('user profile validation and projection helpers', () => {
     expect(context).not.toContain('Médico')
     expect(context).not.toContain('Doctor')
     expect(context).toContain('not authorized; use neutral wording')
+    expect(renderHumanConnection(withdrawn)).not.toContain('Authorized professional title:')
   })
 
   it('respects no address and rejects unrecognized addressing modes', () => {
@@ -176,6 +178,8 @@ describe('user profile validation and projection helpers', () => {
     const permitted = projectConsentedProfile(configured)
     const system = renderAssistantIdentity({ name: 'KIRA', gender: 'feminine' }, permitted)
     expect(system).toContain('Authorized preferred name: Aris')
+    expect(system).toContain('translate internal status into what was found')
+    expect(renderHumanConnection(permitted)).toContain('meaningful task updates or final handoffs')
     expect(system).toContain('Authorized professional title: Dr.')
     expect(system).toContain('Authorized conversational style: cercano, directo')
     expect(system).not.toContain('Médico')
