@@ -172,6 +172,7 @@ export const KiraTeamMessageView = memo(function KiraTeamMessageView({
       data-kira-team-message={data.messageId}
       data-team-sender-id={data.senderId}
       data-team-sender-kind={data.senderKind}
+      data-kira-audience="team"
     >
       <div className={css.avatar}>
         {data.senderKind === 'user' ? <span aria-label="User">👤</span> : <ModelActivityAvatar
