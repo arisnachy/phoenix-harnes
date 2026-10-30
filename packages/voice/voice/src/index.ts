@@ -963,10 +963,6 @@ export class VoiceRuntime extends TypertRemoteService {
     return this.conversationTtsProviders()[0]
   }
 
-  private selectTtsProvider(): VoiceTextToSpeechProvider | undefined {
-    return selectProvider(this.ttsProviders, this.config.ttsProvider)
-  }
-
   private selectSttProvider(): VoiceSpeechToTextProvider | undefined {
     return selectProvider(this.sttProviders, this.config.sttProvider)
   }
