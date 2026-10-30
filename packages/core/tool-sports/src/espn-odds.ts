@@ -168,6 +168,8 @@ export function normalizeEspnMarkets(event:EEvent,odds:EspnOdds[]):EspnMarketQuo
 export type EspnOddsDiagnostics = {
   scoreboards:number
   games:number
+  startedGames:number
+  startedOddsEntries:number
   embedded:number
   core:number
   summary:number
@@ -257,7 +259,8 @@ export async function fetchPublicEspnOddsDetailed(
 ):Promise<EspnOddsResult>{
   const route=slugs[sportKey]
   const diagnostics:EspnOddsDiagnostics={
-    scoreboards:0,games:0,embedded:0,core:0,summary:0,resolvedRefs:0,
+    scoreboards:0,games:0,startedGames:0,startedOddsEntries:0,
+    embedded:0,core:0,summary:0,resolvedRefs:0,
     rawOddsEntries:0,undatedOutcomes:0,expiredOutcomes:0,failures:0,notes:[],
   }
   if(!route)return {quotes:[],diagnostics:{...diagnostics,notes:['Liga sin ruta ESPN de cuotas confirmada']}}
@@ -307,6 +310,15 @@ export async function fetchPublicEspnOddsDetailed(
       diagnostics.scoreboards++
       if(!Array.isArray(board.events))throw Error('Scoreboard ESPN sin lista events')
     }catch(error){reportFailure('Scoreboard '+date,error);continue}
+    // Scoreboard odds from already started games remain *observations*.
+    // Count them for Kira's diagnostics but never promote to pregame offers.
+    for(const event of board.events??[]){
+      const kickoff=Date.parse(event.date??'')
+      if(Number.isFinite(kickoff)&&kickoff<=now){
+        diagnostics.startedGames++
+        diagnostics.startedOddsEntries+=list(event.competitions?.[0]?.odds).length
+      }
+    }
     const candidates=(board.events??[]).filter(event=>
       safeId(event.id)!==null&&Date.parse(event.date??'')>now)
       .sort((a,b)=>Date.parse(a.date??'')-Date.parse(b.date??''))
@@ -358,7 +370,9 @@ export async function fetchPublicEspnOddsDetailed(
   if(diagnostics.scoreboards===0&&diagnostics.failures>0)
     throw Error('ESPN Scoreboard no disponible: '+(firstError??'respuesta inválida'))
   if(quoteMap.size===0&&diagnostics.notes.length===0){
-    diagnostics.notes.push(diagnostics.undatedOutcomes
+    diagnostics.notes.push(diagnostics.startedOddsEntries
+      ?'ESPN conserva cuotas en encuentros ya iniciados; son referencias de investigación, NO precios prepartido actuales'
+      :diagnostics.undatedOutcomes
       ?'ESPN devolvió precios con proveedor, pero sin fecha verificable de actualización; quedan disponibles para investigación, NO para tickets vigentes'
       :diagnostics.expiredOutcomes
         ?'ESPN devolvió precios antiguos; ninguno cumple la ventana de vigencia del mercado'
