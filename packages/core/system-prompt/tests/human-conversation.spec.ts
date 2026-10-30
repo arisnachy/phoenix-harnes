@@ -10,6 +10,8 @@ describe('human conversational contract', () => {
     const prompt = renderPrompt(await ctx.systemPrompt.assemble())
 
     expect(prompt).toContain('Write naturally and conversationally')
+    expect(prompt).toContain('Messages to teammates are internal coordination')
+    expect(prompt).toContain('talk directly to the user in natural second-person language')
     expect(prompt).toContain('dry wit, mild sarcasm or irony, friendly teasing')
     expect(prompt).toContain('do not force humor')
     expect(prompt).toContain('Do not produce unsolicited status, memory, profile, or context summaries')
