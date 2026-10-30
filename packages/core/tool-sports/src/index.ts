@@ -288,7 +288,7 @@ export function apply(ctx: Context): void {
           (async()=>{
             const routes:Record<string,{sport:string;markets:string[]}> = {
               soccer:{sport:'football',markets:['1x2','double_chance','over_under']},
-              basketball:{sport:'basketball',markets:['moneyline','over_under']},
+              basketball:{sport:'basketball',markets:['moneyline','1x2','over_under']},
               baseball:{sport:'baseball',markets:['moneyline','over_under']},
               americanfootball:{sport:'american-football',markets:['moneyline','over_under']},
               icehockey:{sport:'ice-hockey',markets:['home_away','double_chance','over_under']},
@@ -747,9 +747,24 @@ export function apply(ctx: Context): void {
           instruction:'OddsHarvester todavía no está listo. PHOENIX solicitó la instalación/recuperación sin bloquear el chat; NO significa que se hayan obtenido cuotas. Ejecutar sports_chat_sources_health para ver progreso y errores, y consultar el mercado después de que el componente marque installed. Si falta el script o WinGet falló, mostrar la ruta del log y solo comandos PowerShell en la consola.'})
       }
       let quotes:Awaited<ReturnType<typeof keylessOdds>>=[]
+      let fallbackMarket:string|null=null
       let scrapeError:string|null=null
       try{quotes=await keylessOdds(args.sport,args.market,args.date,env)}
       catch(error){scrapeError=error instanceof Error?error.message.slice(0,1200):'Error del scraper'}
+      // OddsHarvester exposes distinct NBA markets: 2-way moneyline includes OT,
+      // whereas 3-way 1x2 is regulation ONLY. Never relabel the latter as moneyline.
+      if(args.sport==='basketball'&&args.market==='moneyline'&&(!quotes.length||scrapeError)){
+        try{
+          const regulation=await keylessOdds('basketball','1x2',args.date,env)
+          if(regulation.length){
+            quotes=regulation
+            fallbackMarket='1x2'
+          }
+        }catch(error){
+          const next=error instanceof Error?error.message.slice(0,650):'Sin detalle'
+          scrapeError=[scrapeError,'Intento alternativo 1x2 reglamentario: '+next].filter(Boolean).join(' | ')
+        }
+      }
       // The targeted scraping tool must not strand Kira after a blocked page.
       // Query other independently authorized sources, without re-running OddsHarvester.
       const knownSportKeys=coveredSportKeys
@@ -784,6 +799,8 @@ export function apply(ctx: Context): void {
       })
       return JSON.stringify({source:'OddsHarvester/OddsPortal (sin API key)',supported:keylessSports,
         status:quotes.length?'observed':scrapeError?'scraper-error':'no-observed-offers',
+        effectiveMarket:fallbackMarket??args.market,
+        marketCaveat:fallbackMarket==='1x2'?'Se obtuvo mercado 1x2 de TIEMPO REGLAMENTARIO: no equivale a moneyline NBA con prórroga, no combinar en tickets de moneyline.':null,
         scrapeError,alternativeSources:otherSources.map(r=>r.sources),
         alternativeQuotes:otherSources.flatMap(r=>r.quotes).filter(q=>{
           const updated=Date.parse(q.updatedAt),kickoff=Date.parse(q.timeIso??q.time),now=Date.now()
