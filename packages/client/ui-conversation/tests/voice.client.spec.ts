@@ -76,7 +76,7 @@ describe('browser voice adapter', () => {
       )).resolves.toBe(true)
       expect(speak).toHaveBeenCalledWith(expect.objectContaining({
         key: 'phoenix:proactive-attention',
-        text: expect.stringContaining('Arisnachy'),
+        text: 'Arisnachy, Necesito tu autorización. Revisa esta solicitud.',
         language: 'es-DO',
         final: true,
       }))
