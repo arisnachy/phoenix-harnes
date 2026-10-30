@@ -14,6 +14,7 @@ import type {
 } from '@phoenix-ai/dsh-client-ui-conversation/client'
 import { NS, type KiraTeamsKey } from './locales.ts'
 import css from './TeamChatMessage.module.css'
+import { formatTeamMarkdown } from './team-markdown.ts'
 
 interface TeamIdentity {
   readonly name: string
@@ -210,9 +211,9 @@ export const KiraTeamMessageView = memo(function KiraTeamMessageView({
           )}
         </div>
         {data.pendingDelivery === true && <span role="status">{t?.('chat.pendingDelivery') ?? 'Delivery pending; retry on reconnect'}</span>}
-        {data.replyQuote !== undefined && <blockquote>{data.replyQuote}</blockquote>}
+        {data.replyQuote !== undefined && <blockquote className={css.replyQuote}><MarkdownText text={formatTeamMarkdown(data.replyQuote)} /></blockquote>}
         <div className={css.bubble}>
-          <MarkdownText text={text} />
+          <MarkdownText text={formatTeamMarkdown(text)} />
         </div>
         </div>
         {messageActions !== undefined && <div className={css.messageActions}>{messageActions}</div>}
