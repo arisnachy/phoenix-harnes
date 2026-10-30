@@ -16,15 +16,18 @@ export interface EspnMarketQuote {
   timeIso: string
   updatedAt: string
 }
-type OddsSide = { moneyLine?: number | string; moneyline?: number | string; spreadOdds?: number|string;
-  spread?:number|string;spreadValue?:number|string;pointSpread?:number|string }
+type QuotedPrice=number|string|{american?:string|number;decimal?:string|number;
+  value?:string|number;alternateDisplayValue?:string|number}
+type OddsSide = { moneyLine?:QuotedPrice;moneyline?:QuotedPrice;spreadOdds?:QuotedPrice;
+  spread?:QuotedPrice;spreadValue?:number|string;pointSpread?:number|string;
+  open?:Record<string,unknown> }
 type EspnOdds = {
   provider?: { name?: string;displayName?: string;id?: string|number } | string
   sportsbook?:{ name?:string;displayName?:string }|string
   details?: string
   homeTeamOdds?: OddsSide;awayTeamOdds?: OddsSide
-  overOdds?: number|string;underOdds?: number|string
-  overUnder?: number|string;drawOdds?:number|string
+  overOdds?: QuotedPrice;underOdds?: QuotedPrice
+  overUnder?: number|string;drawOdds?:QuotedPrice
   spread?: number|string
   lastUpdated?: string;lastUpdate?: string;updatedAt?: string
 }
@@ -48,6 +51,23 @@ const americanToDecimal=(value:unknown):number|null=>{
   const n=Number(str)
   if(!Number.isFinite(n)||Math.abs(n)<100||Math.abs(n)>100000)return null
   return Number((n>0?1+n/100:1+100/Math.abs(n)).toFixed(5))
+}
+/** ESPN can express a current quote as an American string or an object
+ * containing American and decimal representations. Never interpret the
+ * opening-line (open.*) object as a current market price.
+ */
+const priceToDecimal=(value:unknown):number|null=>{
+  if(isRecord(value)){
+    const american=value.american??value.alternateDisplayValue
+    const converted=americanToDecimal(american)
+    if(converted!==null)return converted
+    const candidate=value.decimal??value.value
+    if(typeof candidate!=='string'&&typeof candidate!=='number')return null
+    const decimal=Number(candidate)
+    return Number.isFinite(decimal)&&decimal>1&&decimal<1000
+      ?Number(decimal.toFixed(5)):null
+  }
+  return americanToDecimal(value)
 }
 const str=(v:unknown)=>typeof v==='string'?v.slice(0,170):String(v??'').slice(0,170)
 const bookmakerName=(odds:EspnOdds):string=>{
@@ -84,8 +104,8 @@ export function normalizeEspnMoneylines(event:EEvent,oddEntries:EspnOdds[]):Espn
     const provider=bookmakerName(odd)
     if(!provider)continue
     const updatedAt=odd.lastUpdated||odd.lastUpdate||odd.updatedAt||'No indicada por ESPN'
-    for(const [selection,value] of [[homeName,odd.homeTeamOdds?.moneyLine??odd.homeTeamOdds?.moneyline],[awayName,odd.awayTeamOdds?.moneyLine??odd.awayTeamOdds?.moneyline]] as const){
-      const price=americanToDecimal(value)
+    for(const [selection,value] of [[homeName,odd.homeTeamOdds?.moneyline??odd.homeTeamOdds?.moneyLine],[awayName,odd.awayTeamOdds?.moneyline??odd.awayTeamOdds?.moneyLine]] as const){
+      const price=priceToDecimal(value)
       if(price!==null)result.push({ eventId:id,bookmaker:str(provider),market:'h2h',selection:str(selection),point:null,price,home:str(homeName),away:str(awayName),time:localTime(event.date||''),timeIso:kickoff.toISOString(),updatedAt:str(updatedAt) })
     }
   }
@@ -119,19 +139,23 @@ export function normalizeEspnMarkets(event:EEvent,odds:EspnOdds[]):EspnMarketQuo
     const total=number(odd.overUnder)
     if(total!==null){
       for(const [selection,oddsValue] of [['Over',odd.overOdds],['Under',odd.underOdds]] as const){
-        const price=americanToDecimal(oddsValue)
+        const price=priceToDecimal(oddsValue)
         if(price!==null)lines.push({...common,market:'totals',selection,
           point:total,price})
       }
     }
     for(const [selection,side] of [[homeName,odd.homeTeamOdds],[awayName,odd.awayTeamOdds]] as const){
       if(!side)continue
-      const point=number(side.spreadValue??side.pointSpread??side.spread)
-      const price=americanToDecimal(side.spreadOdds)
+      // A nested spread object describes an odds PRICE, not the handicap line.
+      // Never replace a missing current handicap with open.pointSpread.
+      const point=number(side.spreadValue??side.pointSpread??
+        (isRecord(side.spread)?undefined:side.spread))
+      const price=priceToDecimal(side.spreadOdds??
+        (isRecord(side.spread)?side.spread:undefined))
       if(point!==null&&price!==null)lines.push({...common,market:'spreads',
         selection:str(selection),point,price})
     }
-    const draw=americanToDecimal(odd.drawOdds)
+    const draw=priceToDecimal(odd.drawOdds)
     if(draw!==null)lines.push({...common,market:'h2h',selection:'Draw',point:null,price:draw})
   }
   return lines.slice(0,120)
@@ -148,6 +172,9 @@ export type EspnOddsDiagnostics = {
   core:number
   summary:number
   resolvedRefs:number
+  rawOddsEntries:number
+  undatedOutcomes:number
+  expiredOutcomes:number
   failures:number
   notes:string[]
 }
@@ -230,7 +257,8 @@ export async function fetchPublicEspnOddsDetailed(
 ):Promise<EspnOddsResult>{
   const route=slugs[sportKey]
   const diagnostics:EspnOddsDiagnostics={
-    scoreboards:0,games:0,embedded:0,core:0,summary:0,resolvedRefs:0,failures:0,notes:[],
+    scoreboards:0,games:0,embedded:0,core:0,summary:0,resolvedRefs:0,
+    rawOddsEntries:0,undatedOutcomes:0,expiredOutcomes:0,failures:0,notes:[],
   }
   if(!route)return {quotes:[],diagnostics:{...diagnostics,notes:['Liga sin ruta ESPN de cuotas confirmada']}}
   const markets=[...new Set(requestedMarkets.split(',').filter(x=>['h2h','totals','spreads'].includes(x)))]
@@ -244,8 +272,14 @@ export async function fetchPublicEspnOddsDetailed(
   let firstError:string|null=null
   const read=(url:string)=>readOddsJSON(url,getJSON,budget,options.cache===true)
   const remember=(event:EEvent,odds:EspnOdds[],origin:'embedded'|'core'|'summary')=>{
-    const found=normalizeEspnMarkets(event,odds)
-      .filter(q=>markets.includes(q.market)&&availableQuote(q,now))
+    diagnostics.rawOddsEntries+=odds.length
+    const candidates=normalizeEspnMarkets(event,odds)
+      .filter(q=>markets.includes(q.market))
+    for(const q of candidates){
+      if(!Number.isFinite(Date.parse(q.updatedAt)))diagnostics.undatedOutcomes++
+      else if(!availableQuote(q,now))diagnostics.expiredOutcomes++
+    }
+    const found=candidates.filter(q=>availableQuote(q,now))
     if(found.length){
       diagnostics[origin]+=found.length
       for(const quote of found){
@@ -324,9 +358,15 @@ export async function fetchPublicEspnOddsDetailed(
   if(diagnostics.scoreboards===0&&diagnostics.failures>0)
     throw Error('ESPN Scoreboard no disponible: '+(firstError??'respuesta inválida'))
   if(quoteMap.size===0&&diagnostics.notes.length===0){
-    diagnostics.notes.push(diagnostics.games
-      ?'Se encontraron próximos partidos, pero ESPN no publicó líneas con casa y fecha verificables'
-      :'No se localizaron próximos encuentros en el período consultado')
+    diagnostics.notes.push(diagnostics.undatedOutcomes
+      ?'ESPN devolvió precios con proveedor, pero sin fecha verificable de actualización; quedan disponibles para investigación, NO para tickets vigentes'
+      :diagnostics.expiredOutcomes
+        ?'ESPN devolvió precios antiguos; ninguno cumple la ventana de vigencia del mercado'
+        :diagnostics.rawOddsEntries
+          ?'ESPN publicó entradas de cuotas, pero faltan precios numéricos o equipos/mercados compatibles'
+          :diagnostics.games
+            ?'Se encontraron próximos partidos, pero ESPN no publicó cuotas para los mercados solicitados'
+            :'No se localizaron próximos encuentros en el período consultado')
   }
   return {quotes:[...quoteMap.values()].slice(0,160),diagnostics}
 }
