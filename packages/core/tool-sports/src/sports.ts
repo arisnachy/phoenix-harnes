@@ -1,8 +1,9 @@
 /** Read-only sports information adapters for Kira's conversation tools. */
-import { fetchPublicEspnOdds } from './espn-odds.ts'
+import { fetchPublicEspnOddsDetailed } from './espn-odds.ts'
 import { fetchTheOddsApi } from './free-odds.ts'
 import { keylessEnabled, keylessOdds, type KeylessSport } from './keyless-odds.ts'
 import { saveOddsSnapshot } from './odds-snapshots.ts'
+import { belongsToLeague } from './sports-odds-coverage.ts'
 import { enrichMlbMatch } from './mlb-matchup.ts'
 import { researchMlbTrend } from './mlb-research.ts'
 export const sportsCatalog: Readonly<Record<string, readonly string[]>> = {
@@ -113,7 +114,7 @@ export async function getFeed<T>(url:string, fetcher:typeof fetch=fetch):Promise
   if(text.length>4_000_000)throw Error('Respuesta supera 4 MB')
   return JSON.parse(text) as T
 }
-type FeedEvent = { id?:string|number;date?:string;name?:string;status?:{ type?:{ description?:string;state?:string } };competitions?:Array<{ venue?:{ fullName?:string;address?:{ city?:string } };competitors?:Array<{ id?:string;homeAway?:string;score?:string|number;team?:{ displayName?:string;name?:string;id?:string;logo?:string;logos?:Array<{ href?:string }> };records?:Array<{ summary?:string }>;linescores?:Array<{ value?:number|string;displayValue?:string }>;leaders?:Array<{ name?:string;leaders?:Array<{ athlete?:{ displayName?:string;headshot?:{ href?:string } };displayValue?:string }> }> }>;broadcasts?:Array<{ names?:string[] }> }> }
+type FeedEvent = { id?:string|number;date?:string;name?:string;status?:{ type?:{ description?:string;state?:string } };competitions?:Array<{ id?:string|number;venue?:{ fullName?:string;address?:{ city?:string } };competitors?:Array<{ id?:string;homeAway?:string;score?:string|number;team?:{ displayName?:string;name?:string;id?:string;logo?:string;logos?:Array<{ href?:string }> };records?:Array<{ summary?:string }>;linescores?:Array<{ value?:number|string;displayValue?:string }>;leaders?:Array<{ name?:string;leaders?:Array<{ athlete?:{ displayName?:string;headshot?:{ href?:string } };displayValue?:string }> }> }>;broadcasts?:Array<{ names?:string[] }> }> }
 type MlbGame = { gamePk:number;gameDate?:string;venue?:{ name?:string };seriesDescription?:string;seriesGameNumber?:number;status?:{ detailedState?:string;abstractGameState?:string };teams?:Record<'home'|'away',{ team?:{ id?:number;name?:string };score?:number;probablePitcher?:{ id?:number;fullName?:string } }> }
 /** Safe, minimal sports UI payload; the client validates it before rendering. */
 export type ChatBlock = { component:'sports_game_card'|'sports_schedule_card'|'sports_ticket_card'|'sports_odds_card';version:1;props:Record<string,unknown> }
@@ -174,6 +175,12 @@ function localTime(dateString?:string):string {
   return new Intl.DateTimeFormat('es-DO',{ timeZone:'America/Santo_Domingo',dateStyle:'medium',timeStyle:'short' }).format(parsed)
 }
 function logosEnabled(env:NodeJS.ProcessEnv):boolean{return env.PHOENIX_SPORTS_IMAGES_DISABLED!=='1'}
+/** Numeric identifiers are taken only from the ESPN scoreboard; never fabricate IDs for Core requests. */
+export type EspnGameIdentifiers={eventId:string;competitionId:string;homeTeamId?:string;awayTeamId?:string}
+const espnNumericId=(value:unknown):string|undefined=>{
+  const id=typeof value==='number'&&Number.isSafeInteger(value)?String(value):typeof value==='string'?value:undefined
+  return id&&/^\d{1,16}$/u.test(id)?id:undefined
+}
 /** Normalize scoreboard results into validated chat renderable cards.
  * @param sport - Requested discipline.
  * @param league - Supported league identifier.
@@ -182,10 +189,10 @@ function logosEnabled(env:NodeJS.ProcessEnv):boolean{return env.PHOENIX_SPORTS_I
  * @param fetcher - Injectable HTTP client for tests.
  * @returns Attributed game cards, result count and date.
  */
-export async function chatGames(sport:string,league:string,requestedDate?:string,env:NodeJS.ProcessEnv=process.env,fetcher:typeof fetch=fetch,compactLive=false):Promise<{ summary:string;items:ChatBlock[];source:string;count:number;date:string }> {
+export async function chatGames(sport:string,league:string,requestedDate?:string,env:NodeJS.ProcessEnv=process.env,fetcher:typeof fetch=fetch,compactLive=false):Promise<{ summary:string;items:ChatBlock[];source:string;count:number;date:string;espnIdentifiers:EspnGameIdentifiers[] }> {
   if(!Object.hasOwn(sportsCatalog,sport)||!leagueValid(league))throw Error('Disciplina o liga inválida')
   if(!sportsCatalog[sport]?.includes(league)&&!(await discoverEspnLeagues(sport,env,fetcher)).includes(league))throw Error('Liga no encontrada en el catálogo público de ESPN')
-  const day=date(requestedDate),rows:ChatBlock[]=[]
+  const day=date(requestedDate),rows:ChatBlock[]=[],espnIdentifiers:EspnGameIdentifiers[]=[]
   const leagueInfo=leaguePresentation[league]
   const isMlb=sport==='baseball'&&league==='mlb'&&hasSportsPermission('mlb',env)
   const source=isMlb?'MLB Stats API':'ESPN Site API'
@@ -240,6 +247,13 @@ export async function chatGames(sport:string,league:string,requestedDate?:string
     if(!Array.isArray(feed.events))throw Error('Respuesta ESPN no válida')
     for(const e of feed.events.slice(0,25)){
       const comp=e.competitions?.[0],home=comp?.competitors?.find(x=>x.homeAway==='home'),away=comp?.competitors?.find(x=>x.homeAway==='away')
+      const eventId=espnNumericId(e.id),competitionId=espnNumericId(comp?.id)
+      // Core URLs must use ESPN's actual competition ID, which can differ from eventId.
+      if(eventId&&competitionId){
+        const homeTeamId=espnNumericId(home?.team?.id),awayTeamId=espnNumericId(away?.team?.id)
+        espnIdentifiers.push({eventId,competitionId,
+          ...(homeTeamId?{homeTeamId}:{}),...(awayTeamId?{awayTeamId}:{})})
+      }
       const side=(c:typeof home)=>{
         const name=title(c?.team?.displayName??c?.team?.name)
         const logo=c?.team?.logo??c?.team?.logos?.[0]?.href
@@ -288,7 +302,7 @@ export async function chatGames(sport:string,league:string,requestedDate?:string
       } })
     }
   }
-  return { summary:rows.length?'Eventos con fuente y horario, hora de Santo Domingo.':'No hay encuentros reportados para la fecha seleccionada.',items:rows,count:rows.length,source,date:day }
+  return { summary:rows.length?'Eventos con fuente y horario, hora de Santo Domingo.':'No hay encuentros reportados para la fecha seleccionada.',items:rows,count:rows.length,source,date:day,espnIdentifiers }
 }
 /** Unique sportsbook selection identity without an assumed price. */
 export type MarketSelection = { eventId:string;bookmaker:string;market:string;selection:string;point?:number|null }
@@ -302,7 +316,8 @@ export type MarketOutcome = MarketSelection & { price:number;home:string;away:st
  * @returns Normalized quotes with bookmaker names and update times.
  */
 export type OddsSourceAttempt={provider:string;status:'observed'|'empty'|'unconfigured'|'error';
-  count:number;detail:string}
+  count:number;detail:string;rawCount?:number;startedOddsEntries?:number;
+  undatedOutcomes?:number;expiredOutcomes?:number}
 /** Query independent providers without allowing an empty/failed preferred provider
  * to suppress a healthy fallback. Preserve bookmaker identity and source times.
  */
@@ -315,6 +330,8 @@ export async function marketOddsDetailed(
     throw Error('Mercado inválido')
   const requests:Array<{name:string;run:()=>Promise<MarketOutcome[]>}>=[]
   const sources:OddsSourceAttempt[]=[]
+  let espnDetail=''
+  let espnRawCount=0,espnStarted=0,espnUndated=0,espnExpired=0
   const names=['The Odds API v4','TheOddsAPI','OddsHarvester','ESPN Site/Core']
   const configured=new Set<string>()
   if(hasSportsPermission('odds',env)){
@@ -362,23 +379,49 @@ export async function marketOddsDetailed(
       cricket:'cricket',rugbyleague:'rugby-league',rugbyunion:'rugby-union',
     }
     const sport=sportByPrefix[prefix??'']
-    const market=markets==='h2h'?sport==='football'||sport==='handball'?'1x2':
-      sport==='tennis'?'match_winner':sport==='ice-hockey'||sport==='volleyball'
-        ||sport==='rugby-league'||sport==='rugby-union'||sport==='cricket'?'home_away':'moneyline':
-      markets==='totals'?'over_under':null
-    if(sport&&market){
-      configured.add(names[2]!)
-      requests.push({name:names[2]!,run:async()=>
-        (await keylessOdds(sport,market,undefined,env,now))
-          .map(q=>({...q,sportKey,time:localTime(q.time),timeIso:q.time}))})
+    if(sport){
+      const chosen:string[]=[]
+      const wants=markets.split(',')
+      if(wants.includes('h2h')){
+        const market=sport==='football'||sport==='handball'?'1x2':
+          sport==='tennis'?'match_winner':
+            ['ice-hockey','volleyball','rugby-league','rugby-union','cricket'].includes(sport)?
+              'home_away':'moneyline'
+        chosen.push(market)
+      }
+      if(wants.includes('totals')&&sport!=='cricket'&&chosen.length<2)
+        chosen.push(sport==='tennis'?'total_games_over_under':
+          sport==='volleyball'?'total_points_over_under':'over_under')
+      if(chosen.length)configured.add(names[2]!)
+      for(const market of chosen){
+        requests.push({name:names[2]!,run:async()=>{
+          const rows=await keylessOdds(sport,market,undefined,env,now)
+          return rows.filter(q=>sportKey===sport||belongsToLeague(sportKey,q))
+            .map(q=>({...q,sportKey,time:localTime(q.time),timeIso:q.time}))
+        }})
+      }
     }
   }
   if(hasSportsPermission('espn',env)){
     configured.add(names[3]!)
-    requests.push({name:names[3]!,run:async()=>
-      (await fetchPublicEspnOdds(sportKey,markets,
-        <T>(url:string)=>getFeed<T>(url,fetcher)))
-        .map(quote=>({...quote,sportKey,source:'ESPN Site/Core (sin clave)'}))})
+    requests.push({name:names[3]!,run:async()=>{
+      const {quotes,diagnostics}=await fetchPublicEspnOddsDetailed(sportKey,markets,
+        <T>(url:string)=>getFeed<T>(url,fetcher),{now,cache:fetcher===fetch})
+      espnRawCount=diagnostics.rawOddsEntries+diagnostics.startedOddsEntries
+      espnStarted=diagnostics.startedOddsEntries
+      espnUndated=diagnostics.undatedOutcomes
+      espnExpired=diagnostics.expiredOutcomes
+      espnDetail=[diagnostics.scoreboards+' días consultados',
+        diagnostics.games+' eventos futuros',diagnostics.startedGames+' eventos iniciados',
+        diagnostics.startedOddsEntries+' cuotas en eventos iniciados',
+        diagnostics.resolvedRefs+' referencias resueltas',
+        diagnostics.embedded+' líneas scoreboard',diagnostics.core+' líneas Core',
+        diagnostics.summary+' líneas summary',diagnostics.rawOddsEntries+' registros de cuotas encontrados',
+        diagnostics.undatedOutcomes+' resultados sin fecha',
+        diagnostics.expiredOutcomes+' resultados caducados',diagnostics.failures+' fallos parciales',
+        ...diagnostics.notes.slice(0,2)].join(' · ')
+      return quotes.map(quote=>({...quote,sportKey,source:'ESPN Site/Core (sin clave)'}))
+    }})
   }
   const done=await Promise.allSettled(requests.map(x=>x.run()))
   const merged:MarketOutcome[]=[]
@@ -388,7 +431,7 @@ export async function marketOddsDetailed(
     if(result.status==='rejected'){
       const error=result.reason instanceof Error?result.reason.message:'Error del proveedor'
       sources.push({provider,status:'error',count:0,
-        detail:error.replace(/apiKey=[^&\s]+/giu,'apiKey=[redactado]').slice(0,170)})
+        detail:error.replace(/apiKey=[^&\s]+/giu,'apiKey=[redactado]').slice(0,700)})
       continue
     }
     let count=0
@@ -402,8 +445,12 @@ export async function marketOddsDetailed(
       if(merged.length>=1500)break
     }
     sources.push({provider,status:count?'observed':'empty',count,
-      detail:count?'Cuotas del proveedor con casa y mercado':
-        'Sin ofertas en la consulta (no implica que todos los mercados estén cerrados)'})
+      detail:(provider==='ESPN Site/Core'&&espnDetail?espnDetail:
+        count?'Cuotas del proveedor con casa y mercado':
+        'Sin ofertas en la consulta (no implica que todos los mercados estén cerrados)').slice(0,340),
+      ...(provider==='ESPN Site/Core'?{rawCount:espnRawCount,
+        startedOddsEntries:espnStarted,undatedOutcomes:espnUndated,
+        expiredOutcomes:espnExpired}:{})})
   }
   for(const name of names)if(!configured.has(name)){
     sources.push({provider:name,status:'unconfigured',count:0,

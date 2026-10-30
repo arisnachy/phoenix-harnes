@@ -1,0 +1,47 @@
+name: PHOENIX research evidence and academic intake
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'packages/web/tool-web/src/research.ts'
+      - 'packages/web/tool-web/src/scholarly.ts'
+      - 'packages/web/tool-web/src/health-series.ts'
+      - 'packages/web/tool-web/src/index.ts'
+      - 'packages/web/tool-web/tests/research.spec.ts'
+      - 'packages/web/tool-web/tests/scholarly.spec.ts'
+      - 'packages/web/tool-web/tests/health-series.spec.ts'
+      - 'packages/hardness/adapters/src/research-plan-tool.ts'
+      - 'packages/hardness/adapters/tests/research-plan.spec.ts'
+      - '.github/workflows/phoenix-research-depth.yml'
+  push:
+    branches: [main, stable]
+    paths:
+      - 'packages/web/tool-web/src/**'
+      - 'packages/web/tool-web/tests/**'
+      - 'packages/hardness/adapters/src/research-plan-tool.ts'
+      - '.github/workflows/phoenix-research-depth.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  academic-evidence:
+    name: Academic evidence / focused regression and types
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+      - name: Install immutable workspace
+        run: pnpm install --frozen-lockfile
+      - name: Verify source screening, Europe PMC, time-series and thesis intake
+        run: |
+          pnpm exec vitest run packages/web/tool-web/tests/research.spec.ts packages/web/tool-web/tests/scholarly.spec.ts packages/web/tool-web/tests/health-series.spec.ts packages/hardness/adapters/tests/research-plan.spec.ts
+      - name: Compile libraries with production TypeScript contracts
+        run: pnpm run build:lib

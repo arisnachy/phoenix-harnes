@@ -179,6 +179,7 @@
     { "path": "./packages/home/tool-home-gateway" },
     { "path": "./packages/voice/voice" },
     { "path": "./packages/voice/voice-local" },
+    { "path": "./packages/voice/tool-voice" },
     { "path": "./packages/session/session-title" },
     { "path": "./packages/session/session-title-llm" },
     { "path": "./packages/session/session-title-first-prompt-llm" },

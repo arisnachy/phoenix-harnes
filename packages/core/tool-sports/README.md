@@ -4,6 +4,10 @@ English | [中文](README.zh.md)
 
 Native chat-only sports tools for Kira: sports_chat_catalog, sports_chat_discover, sports_chat_games, sports_chat_mlb_pitchers, sports_chat_odds, and sports_chat_ticket. Sports questions use the existing conversation, not a menu. The assistant receives attributed data and declarative sports_game_card or sports_ticket_card blocks to show inside validated generative-ui fences.
 
+## ESPN Core / historial de cuotas
+
+Manual de las 14 rutas, movimiento, históricos y procedimientos de Kira: [ESPN_HISTORICOS.md](ESPN_HISTORICOS.md). El recuperador por fecha usa sports_chat_espn_historical_odds y nunca mezcla cuotas antiguas con apuestas vigentes.
+
 ## Provider access
 
 ESPN Site/Core and MLB Stats are queried as publicly reachable read-only sources without needing an API key or a PHOENIX_SPORTS_ESPN_ALLOWED setting. Operators may opt out using PHOENIX_SPORTS_ESPN_DISABLED=1 or PHOENIX_SPORTS_MLB_DISABLED=1; public access does not grant a license to reuse data. THE_ODDS_API_KEY selects the existing `api.the-odds-api.com` v4 adapter, with its own quota and license. Separately, `THEODDSAPI_API_KEY` selects the optional `api.theoddsapi.com` adapter, which publishes a free NBA/MLB moneyline tier (registration and a key still required); **these are independent services, credentials and JSON schemas**. If both keys are present the original v4 adapter takes priority; without either, PHOENIX tries published ESPN moneylines. The free adapter uses a fixed HTTPS host, a server-only `x-api-key` header, a bounded response and a 90-second per-account cache. No provider key is written into the URL or a rendered card. If missing, ESPN Core/Site moneyline quotes are read when available, but no absent prices or missing markets are fabricated. PHOENIX_SPORTS_ESPN_IMAGES_ALLOWED=1 is an additional opt-in after media rights review. Credentials stay in the host environment and never appear in tool output. Only fixed hosts can be queried.
@@ -50,31 +54,6 @@ The optional CLI has a bounded timeout, fixed arguments (never a user URL), requ
 - `sports_chat_ticket_evidence_priced_auto`: same research, then quote fresh pregame markets after exact event/date/team matching; computes combined decimal price **only when the same bookmaker offers every leg**. Missing, stale, withdrawn or mismatched prices make the ticket unpriced. No real wager is placed.
 
 For MLB retain `sports_chat_mlb_pitchers` and official MLB Stats API. For football/soccer use 1X2, BTTS, double chance, team form and lineups; tennis needs surface and match fatigue; NBA requires injury and matchup analysis; NFL requires quarterback/roster; NHL requires confirmed goalkeeper. Missing advanced data is explicitly unresolved; this integration **does not implement a validated betting model or guarantee a winning 5/6-leg ticket**.
-
-## Model Experience
-
-### Verified sports fixtures and inline cards
-
-#### What the model sees
-
-Kira receives bounded `sports_chat_games` results containing attributed fixture data and declarative `sports_game_card` payloads with local time, teams, source, and optional verified pitcher, lineup, and bullpen information. `sports_chat_odds` may supply real quoted markets; `sports_chat_ticket` only simulates a ticket.
-
-#### Token effect
-
-Each sports request contributes only source-attributed event fields and bounded visual-card payloads to the model context; absent player statistics and prices remain absent rather than becoming synthetic tokens.
-
-#### KV Cache effect
-
-Live fixtures and odds can change between requests, so dynamic tool results may alter the request prefix and reduce KV-cache reuse; stable static tool schemas and instructions remain cacheable.
-
-## Known Limitations and Deferred Work
-
-- ESPN's public endpoints are unofficial and can change or stop responding. Provider terms and image redistribution rights require independent review.
-- Favorites are descriptive standings trends, not calibrated win probabilities or promised winners; missing evidence does not justify a pick.
-- A bookmaker price can be displayed only when its source supplies it. No bet is placed, and no direct bookmaker transaction is supported.
-- First-party sports tools expose validated UI cards automatically; unsupported data and malformed schemas cannot render a card.
-- Some disciplines lack player-by-player comparisons, confirmed lineups, or bullpen details. An unavailable value must be shown as unavailable.
-
 
 ## ESPN Universal Intelligence — adaptive native chat
 
@@ -205,3 +184,113 @@ These are **outcome checks**, not profit guarantees. Backtests should use
 time-held-out samples, real bookmaker prices available before kickoff,
 sport-specific metrics, injury/team availability, correlation guards,
 and calibration assessments before publishing a quantitative edge.
+
+
+### Comprehensive odds access and validation by discipline
+
+The `sports_chat_odds_scan` read-only tool examines all eleven OddsHarvester
+sport categories in three bounded pages: `offset=0`, `offset=4` and
+`offset=8` (each `limit=4`). The returned `unprobed` and
+`nextOffset` values prevent a partial scan from being called complete.
+Coverage includes soccer, basketball (NBA and WNBA), baseball, American
+football, ice hockey, tennis (ATP and WTA), handball, volleyball, rugby
+league, rugby union and cricket. A league listed as supported is **not
+evidence** that a bookmaker has quoted an event.
+
+`sports_chat_odds` checks explicit league keys and separately queries
+available ESPN, OddsHarvester and API feeds. A sport-wide OddsHarvester
+result is never relabeled as NBA, WNBA, MLB, NFL, NHL, ATP or WTA without
+upstream league evidence. For soccer, the country/league path must match
+when league names are ambiguous. Tennis totals use
+`total_games_over_under` or `total_sets_over_under`; volleyball uses
+`total_points_over_under` or `total_sets_over_under`, rather than the
+unsupported generic `over_under` token.
+
+If OddsHarvester exits unsuccessfully, Kira receives a **redacted**
+diagnostic including `category`, `exitCode`, `signal`, `killed`
+and the useful stderr tail. Categories distinguish missing executable,
+Playwright Chromium not installed, timeout, site challenge and other
+scraper errors. If rows were read but none are eligible, Kira explains
+the exact-market, bookmaker, kickoff and timestamp requirements rather
+than silently treating a present executable as a live odds connection.
+
+To verify the orchestration:
+`node --experimental-strip-types --test packages/core/tool-sports/tests/sports-odds-coverage.test.mjs`.
+Only a genuine quote with source, bookmaker, event, market, period,
+price and observed time is evidence of real access. Source installation
+and CI success do not prove the user's Windows system can connect to
+OddsPortal.
+
+## Model Experience
+
+### Verified sports fixtures and inline cards
+
+#### What the model sees
+
+Kira receives bounded `sports_chat_games` results containing attributed fixture data and declarative `sports_game_card` payloads with local time, teams, source, and optional verified pitcher, lineup, and bullpen information. `sports_chat_odds` may supply real quoted markets; `sports_chat_ticket` only simulates a ticket.
+
+#### Token effect
+
+Each sports request contributes only source-attributed event fields and bounded visual-card payloads to the model context; absent player statistics and prices remain absent rather than becoming synthetic tokens.
+
+#### KV Cache effect
+
+Live fixtures and odds can change between requests, so dynamic tool results may alter the request prefix and reduce KV-cache reuse; stable static tool schemas and instructions remain cacheable.
+
+## Known Limitations and Deferred Work
+
+- ESPN's public endpoints are unofficial and can change or stop responding. Provider terms and image redistribution rights require independent review.
+- Favorites are descriptive standings trends, not calibrated win probabilities or promised winners; missing evidence does not justify a pick.
+- A bookmaker price can be displayed only when its source supplies it. No bet is placed, and no direct bookmaker transaction is supported.
+- First-party sports tools expose validated UI cards automatically; unsupported data and malformed schemas cannot render a card.
+- Some disciplines lack player-by-player comparisons, confirmed lineups, or bullpen details. An unavailable value must be shown as unavailable.
+
+### ESPN per-game odds by event ID, date and independent routes
+
+`sports_chat_odds` now defaults to **ESPN only** (`sourcePolicy=espn`),
+using Site Scoreboard → same-event Core `$ref` odds → Summary/Pickcenter.
+`sourcePolicy=all` is an explicit opt-in to independent bookmakers when
+no ESPN `eventId` or `date` is selected. Quoted event IDs from other
+providers must never be treated as ESPN event IDs. If no current ESPN
+prices can be verified, the tool reports diagnostics rather than silently
+substituting another operator's prices. Supported league coverage varies.
+
+Kira can request `sports_chat_odds` with `sportKey`, a verified
+`eventId` from `sports_chat_games`, and the local `date`
+(`YYYY-MM-DD`). The collector validates the date and event ID, reads
+the matching ESPN scoreboard, then attempts the same competition's
+ESPN Core odds collection (following a bounded set of ESPN-only
+`$ref`s) and the Site API summary/pickcenter if needed. No other
+game's odds are substituted for the requested event. Quotes identify
+the source route (`scoreboard`, `core` or `summary`), sportsbook,
+selection, market, line and dated update. Prices with no verified
+timestamp, a stale update or an already-started kickoff cannot become
+an advertised **current pregame quote**.
+
+League route examples use `baseball_mlb`, `basketball_nba`,
+`basketball_wnba`, `americanfootball_nfl`, `icehockey_nhl`,
+`soccer_epl`, `soccer_spain_la_liga`, `soccer_usa_mls`,
+`soccer_mexico_ligamx`, `basketball_ncaab` and others in the
+allowlist. The ESPN Site and Core endpoints are **unofficial and
+subject to breaking changes, coverage gaps and throttling**.
+A successful HTTP response is not proof that a sportsbook quoted the
+match. Paths are constructed and bounded; untrusted `$ref` hosts
+are not fetched. Short in-process caches and request caps reduce load.
+
+Core `items[]` can contain **both** a canonical `$ref` and an inline
+moneyline in one object. The collector reads inline market fields first;
+when the requested markets are already sourced, it avoids unnecessary
+provider follow-up calls. ESPN may also nest current moneylines under
+`homeTeamOdds.current.moneyLine` / `awayTeamOdds.current.moneyLine`.
+Historical `open.*` values are never promoted into current prices.
+
+For individual sportsbook provider records, line movement and
+historical market data, Kira must call `sports_chat_espn_core` with
+`mode=odds`, `provider` or `movement` using a real ESPN event ID.
+Other Core modes include `ats`, `odds_records`, `futures`,
+`probabilities` and `predictor`; the latter are **not** live
+prices. Provider IDs are discovered from ESPN's current catalog; do
+not hardcode illustrative provider IDs as universal or stable.
+
+Regression test:
+`node --experimental-strip-types --test packages/core/tool-sports/tests/espn-odds-multiroute.test.mjs`.

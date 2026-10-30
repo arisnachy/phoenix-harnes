@@ -46,7 +46,11 @@ class FakeCdpSocket {
     fakeCdpControl.commands.push(message.method + (type === undefined ? '' : ':' + type))
     const result = message.method === 'Page.captureScreenshot'
       ? { data: Buffer.concat([Buffer.from([0xff, 0xd8]), Buffer.from(this.target), Buffer.alloc(12), Buffer.from([0xff, 0xd9])]).toString('base64') }
-      : {}
+      : message.method === 'Runtime.evaluate' ? { result: { value: {
+        url: 'https://example.test/one', title: 'Example one',
+        text: 'Visible heading', fields: [{ field: 0, label: 'Search', type: 'text' }],
+        actions: [{ text: 'Continue' }],
+      } } } : {}
     const respond = (): void => {
       queueMicrotask(() => { this.emit('message', {
         data: JSON.stringify({ id: message.id, result }),
@@ -197,6 +201,19 @@ describe('MiniBrowser through the real Loader and WebServer composition', () => 
     expect(scopedState.status).toBe(200)
     expect(await scopedState.json()).toMatchObject({ available: true, tabId: 'tab-1' })
     expect(listCalls).toBe(1)
+
+    const inspection = await fetch(`http://127.0.0.1:${String(context.webServer.port)}/phoenix-mini-browser/action`, {
+      method: 'POST', headers: { ...headers, 'content-type': 'application/json' },
+      body: JSON.stringify({ type: 'inspect', tabId: 'tab-1' }),
+    })
+    expect(inspection.status).toBe(200)
+    expect(await inspection.json()).toMatchObject({
+      available: true, tabId: 'tab-1',
+      inspection: { url: 'https://example.test/one', text: 'Visible heading',
+        fields: [{ field: 0, label: 'Search', type: 'text' }],
+      },
+    })
+    expect(fakeCdpControl.commands).toContain('Runtime.evaluate')
 
     await writeFile(join(root, 'phoenix-browser-cdp.json'), JSON.stringify({
       pid: process.pid,

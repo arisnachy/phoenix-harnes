@@ -54,8 +54,16 @@ def citation_keys(value):
 def complete_research_profile(data, cited):
     """Admission gate: research isn't complete because a PDF happens to render."""
     profile = data.get("quality_profile", "professional")
-    if profile not in ("professional", "educational_brief"):
+    if profile not in ("professional", "professional_brief", "educational_brief"):
         raise ValueError("Invalid quality_profile")
+    if profile == "professional_brief":
+        if data.get("document_type") != "brief" or data.get("user_requested_brief") is not True:
+            raise ValueError("professional_brief requires an explicitly requested short report")
+        words = sum(len(re.findall(r"\b\w+\b", sec["text"], re.UNICODE))
+                    for sec in data["sections"])
+        if words < 600 or len(cited) < 5:
+            raise ValueError("professional_brief requires at least 600 substantive words and 5 distinct cited sources")
+        return
     if profile == "educational_brief":
         if data.get("document_type") != "brief" or data.get("user_requested_brief") is not True:
             raise ValueError("educational_brief requires explicit user_requested_brief and document_type brief")
@@ -228,6 +236,33 @@ def validate_visual_metadata(item, kind):
     if "title" in item and not item["title"].strip():
         raise ValueError(kind + ".title cannot be empty")
 
+def clean_visual_title(value):
+    """Avoid mechanical duplicated prefixes such as 'Tabla 1. Tabla 1.'."""
+    title = str(value).strip()
+    title = re.sub(
+        r"^(?:(?:tabla|table|figura|figure|gr[aá]fico)\s+\d+\s*[.\u2014:\-]\s*)+",
+        "", title, flags=re.IGNORECASE,
+    ).strip()
+    return title or str(value).strip()
+
+
+def editorial_visual_requirements(report):
+    """Explicit user demands override conservative document-specific defaults."""
+    requested = report.get("visual_requirements")
+    if requested is not None:
+        if not isinstance(requested, dict) or any(
+            k not in ("min_tables", "min_charts", "min_chart_types", "max_body_words")
+            or isinstance(value, bool) or not isinstance(value, int)
+            or not (1 <= value <= (100000 if k == "max_body_words" else 10))
+            for k, value in requested.items()
+        ):
+            raise ValueError("visual_requirements must be bounded integer minima/word limit")
+        return requested
+    if report.get("document_type") == "policy_report" and report.get("quality_profile", "professional") == "professional":
+        return {"min_tables": 2, "min_charts": 3, "min_chart_types": 2}
+    return {}
+
+
 def visual_notes(item, refs, style, numbers):
     """Print source, actual method and observed sample/units beneath each scientific visual."""
     result = ["Fuente: " + citation_string(item["source_key"], refs, style, numbers)]
@@ -257,6 +292,8 @@ def validate(data):
     if data.get("style", "apa") not in ("apa", "apa7", "vancouver", "ama"):
         raise ValueError("style must be apa, apa7, vancouver or ama")
     resolved_presentation = data.get("presentation", "journal" if (data.get("document_type") == "journal_manuscript" or data.get("journal_requirements", {}).get("journal")) else ("hybrid" if data.get("quality_profile", "professional") == "professional" else "academic"))
+    if data.get("quality_profile") == "professional_brief" and data.get("document_type") != "brief":
+        raise ValueError("professional_brief is permitted only for explicit brief")
     if resolved_presentation not in PRESENTATIONS:
         raise ValueError("presentation must be academic, journal, editorial or hybrid")
     selected_design = data.get("design_preset", "auto")
@@ -436,12 +473,13 @@ def validate(data):
         validate_visual_metadata(entry, "table")
     if not isinstance(data.get("charts", []), list) or len(data.get("charts", [])) > 20:
         raise ValueError("charts must be an array of up to 20 entries")
+    editorial_visual_requirements(data)
     for entry in data.get("charts", []):
         if not isinstance(entry, dict) or entry.get("source_key") not in cited:
             raise ValueError("each data chart must cite a referenced source_key")
         kind = entry.get("type", "bar")
-        if kind not in ("bar", "horizontal_bar", "line", "scatter", "forest"):
-            raise ValueError("chart type must be bar, horizontal_bar, line, scatter or forest")
+        if kind not in ("bar", "horizontal_bar", "line", "scatter", "forest", "lollipop", "area", "donut"):
+            raise ValueError("chart type must be bar, horizontal_bar, line, scatter, forest, lollipop, area or donut")
         vals = entry.get("values", [])
         labs = entry.get("labels", [])
         if not isinstance(labs, list) or not isinstance(vals, list) or not 1 <= len(vals) <= 15 or len(vals) != len(labs):
@@ -451,7 +489,21 @@ def validate(data):
         if any(not isinstance(label, str) or not label.strip() or len(label) > 100 for label in labs):
             raise ValueError("chart labels must be readable text")
         validate_visual_metadata(entry, "figure")
+        if kind == "donut":
+            if not 2 <= len(vals) <= 8 or any(value < 0 for value in vals) or abs(sum(vals) - 100) > 0.5:
+                raise ValueError("donut requires 2-8 observed percentages totaling 100; no synthetic remainder")
+            if not str(entry.get("units", "")).lower().strip() in ("%", "porcentaje", "percent"):
+                raise ValueError("donut requires units=% or porcentaje")
+        if kind == "area":
+            if len(vals) < 3 or any(value < 0 for value in vals):
+                raise ValueError("area requires at least 3 non-negative observed chronological values")
         x_values = entry.get("x_values")
+        if kind == "area" and x_values is None:
+            raise ValueError("area requires observed numerical x_values for a true time scale")
+        if kind == "area" and any(
+            left >= right for left, right in zip(x_values, x_values[1:])
+        ):
+            raise ValueError("area requires strictly increasing observed x_values")
         if kind == "scatter" and x_values is None:
             raise ValueError("scatter requires actual numeric x_values")
         if x_values is not None and (not isinstance(x_values, list) or len(x_values) != len(vals) or
@@ -647,7 +699,7 @@ def bibliography(ref, style, number):
     return f"{authors} ({year}). {title}. {journal}{detail}. {url}"
 
 def chart_image(chart, folder, ordinal, accent="#087783"):
-    """Draw scientific bars, lines, scatter points and confidence intervals from real inputs."""
+    """Draw observed bars, lollipops, area, composition, trends and confidence intervals."""
     labels, values = chart["labels"], chart["values"]
     kind = chart.get("type", "bar")
     image = Image.new("RGB", (1200, 650), "white")
@@ -679,8 +731,24 @@ def chart_image(chart, folder, ordinal, accent="#087783"):
     lows = chart.get("ci_low", values)
     highs = chart.get("ci_high", values)
     all_values = [*values, *lows, *highs]
-    if kind in ("forest", "horizontal_bar"):
-        low, high = bounds(all_values, kind == "horizontal_bar")
+    if kind == "donut":
+        # Donuts are only permitted for independently sourced, exhaustive 100% compositions.
+        palette = [accent, "#307c94", "#d3a35f", "#62758f", "#8da69c",
+                   "#b27d82", "#b4a4bf", "#7f9e60"]
+        angle = -90.0
+        for i, (label, value) in enumerate(zip(labels, values)):
+            end = angle + value * 3.6
+            draw.pieslice((215, 80, 640, 505), angle, end, fill=palette[i])
+            yy_legend = 115 + i * 49
+            draw.rectangle((735, yy_legend, 757, yy_legend + 22), fill=palette[i])
+            draw.text((775, yy_legend), str(label)[:24] + "  " + fmt(value) + "%",
+                      fill=ink, font=font)
+            angle = end
+        draw.ellipse((335, 200, 520, 385), fill="white")
+        draw.text((393, 278), "100%", fill=ink, font=font)
+        draw.text((390, 565), "Composición porcentual observada", fill=ink, font=font)
+    elif kind in ("forest", "horizontal_bar", "lollipop"):
+        low, high = bounds(all_values, kind in ("horizontal_bar", "lollipop"))
         x_left, x_right = 330, 970
         xx = lambda v: x_left + (v-low)/(high-low)*(x_right-x_left)
         for i in range(6):
@@ -705,12 +773,16 @@ def chart_image(chart, folder, ordinal, accent="#087783"):
                     draw.line((xx(bound),y-7,xx(bound),y+7),fill=accent,width=2)
                 draw.rectangle((xx(v)-7,y-7,xx(v)+7,y+7),fill=accent)
                 draw.text((985,y-10),f"{fmt(v)} [{fmt(lo)}, {fmt(hi)}]",fill=ink,font=small)
+            elif kind == "lollipop":
+                draw.line((xx(0), y, xx(v), y), fill=accent, width=5)
+                draw.ellipse((xx(v)-9, y-9, xx(v)+9, y+9), fill=accent)
+                draw.text((985,y-10),fmt(v),fill=ink,font=small)
             else:
                 draw.rectangle((min(xx(0),xx(v)),y-spacing*.25,max(xx(0),xx(v)),y+spacing*.25),fill=accent)
                 draw.text((985,y-10),fmt(v),fill=ink,font=small)
         draw.text((x_left+150,575),(chart.get("x_label") or chart.get("units") or "Valor")[:65],fill=ink,font=font)
     else:
-        low,high = bounds(all_values,kind == "bar")
+        low,high = bounds(all_values,kind in ("bar", "area"))
         yy = lambda v: bottom-(v-low)/(high-low)*(bottom-top)
         for i in range(6):
             v=low+(high-low)*i/5
@@ -721,7 +793,7 @@ def chart_image(chart, folder, ordinal, accent="#087783"):
         draw.line((left,bottom,right,bottom),fill=ink,width=3)
         if low<=0<=high:
             draw.line((left,yy(0),right,yy(0)),fill="#8695a0",width=2)
-        if kind == "scatter":
+        if kind in ("scatter", "area"):
             xs=chart["x_values"]
             x_low,x_high=bounds(xs)
             xx=lambda v:left+(v-x_low)/(x_high-x_low)*(right-left)
@@ -735,11 +807,19 @@ def chart_image(chart, folder, ordinal, accent="#087783"):
             for i,label in enumerate(labels):
                 draw.text((points[i][0]-min(32,step*.30),bottom+13),
                           str(label)[:max(3,int(step/11))],fill=ink,font=small)
+        if kind == "area":
+            baseline = yy(0)
+            polygon = [(points[0][0], baseline), *points, (points[-1][0], baseline)]
+            draw.polygon(polygon, fill="#d7e8e5")
+            if len(points) > 1:
+                draw.line(points, fill=accent, width=5)
+            for x, y in points:
+                draw.ellipse((x-5, y-5, x+5, y+5), fill=accent)
         if kind == "bar":
             step=(right-left)/len(values)
             for x,y in points:
                 draw.rectangle((x-step*.30,min(yy(0),y),x+step*.30,max(yy(0),y)),fill=accent)
-        else:
+        elif kind != "area":
             if kind == "line" and len(points)>1:
                 draw.line(points,fill=accent,width=4)
             for x,y in points:
@@ -795,8 +875,9 @@ def main():
     report = json.loads(raw.decode("utf-8"))
     refs, cited = validate(report)
     style = "apa" if report.get("style", "apa") == "apa7" else report.get("style", "apa")
-    presentation = report.get("presentation", "journal" if (report.get("document_type") == "journal_manuscript" or report.get("journal_requirements", {}).get("journal")) else ("hybrid" if report.get("quality_profile", "professional") == "professional" else "academic"))
+    presentation = report.get("presentation", "journal" if (report.get("document_type") == "journal_manuscript" or report.get("journal_requirements", {}).get("journal")) else ("hybrid" if report.get("quality_profile", "professional") in ("professional", "professional_brief") else "academic"))
     journal = report.get("journal_requirements", {})
+    key_points_label = "Key Points" if journal.get("journal") or presentation == "journal" else "Puntos clave"
     institutional = report.get("institutional_rules", {})
     editorial = presentation in ("editorial", "hybrid")
     design_preset = resolve_design_preset(report, presentation)
@@ -870,7 +951,19 @@ def main():
     for field in ("faculty", "department", "degree"):
         if cover.get(field): center_doc(cover[field])
     doc.add_paragraph("")
-    center_doc(title, True, 20 if editorial else 17)
+    title_para = center_doc(title, True, 20 if editorial else 17)
+    if editorial:
+        # Match the document's cover to the PDF editorial palette.
+        title_para.paragraph_format.space_after = Pt(20)
+        border = OxmlElement("w:pBdr")
+        bottom_rule = OxmlElement("w:bottom")
+        bottom_rule.set(qn("w:val"), "single")
+        bottom_rule.set(qn("w:sz"), "18")
+        bottom_rule.set(qn("w:color"), accent.lstrip("#"))
+        border.append(bottom_rule)
+        title_para._p.get_or_add_pPr().append(border)
+        for run in title_para.runs:
+            run.font.color.rgb = RGBColor.from_string(tokens["title"].lstrip("#"))
     for author in authors: center_doc("Autor(a): " + author)
     if cover.get("course"): center_doc("Asignatura: " + str(cover["course"]) +
                                        (" · " + str(cover["course_code"]) if cover.get("course_code") else ""))
@@ -889,14 +982,20 @@ def main():
     if include_toc:
         doc.add_heading("Índice general", level=1)
         add_word_field(doc.add_paragraph(), 'TOC \\o "1-3" \\h \\z \\u')
+        # Word can leave the TOC field empty before its first update; provide a
+        # readable, unnumbered fallback rather than a blank contents page.
+        for section in report["sections"]:
+            entry = doc.add_paragraph(section["heading"])
+            entry.style = doc.styles["Normal"]
+            entry.paragraph_format.left_indent = Cm(0.5)
         if report.get("tables"):
             doc.add_heading("Índice de tablas", level=1)
             for ix, item in enumerate(report["tables"], 1):
-                doc.add_paragraph("Tabla " + str(ix) + ". " + str(item.get("title", "Resultados")))
+                doc.add_paragraph("Tabla " + str(ix) + ". " + clean_visual_title(item.get("title", "Resultados")))
         if report.get("charts"):
             doc.add_heading("Índice de figuras", level=1)
             for ix, item in enumerate(report["charts"], 1):
-                doc.add_paragraph("Figura " + str(ix) + ". " + str(item.get("title", "Gráfico")))
+                doc.add_paragraph("Figura " + str(ix) + ". " + clean_visual_title(item.get("title", "Gráfico")))
         doc.add_page_break()
     settings = doc.settings._element
     update_field = OxmlElement("w:updateFields")
@@ -906,7 +1005,7 @@ def main():
     footer_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
     add_word_field(footer_paragraph, "PAGE")
     if front.get("key_points"):
-        doc.add_heading("Key Points", level=1)
+        doc.add_heading(key_points_label, level=1)
         for point in front["key_points"]: doc.add_paragraph("• " + point)
     if report.get("keywords"):
         doc.add_paragraph("Palabras clave: " + ", ".join(str(x) for x in report["keywords"]))
@@ -924,7 +1023,7 @@ def main():
         for ix, item in enumerate(report["tables"], 1):
             caption = doc.add_paragraph()
             caption.add_run("Tabla " + str(ix) + ". ").bold = True
-            caption.add_run(str(item.get("title", "Resultados"))).italic = True
+            caption.add_run(clean_visual_title(item.get("title", "Resultados"))).italic = True
             tab = doc.add_table(rows=1, cols=len(item["columns"]))
             tab.style = "Table Grid"
             header_row = tab.rows[0]
@@ -950,7 +1049,7 @@ def main():
             figures.append((chart, path))
             fig_caption = doc.add_paragraph()
             fig_caption.add_run("Figura " + str(ix) + ". ").bold = True
-            fig_caption.add_run(str(chart.get("title", "Gráfico"))).italic = True
+            fig_caption.add_run(clean_visual_title(chart.get("title", "Gráfico"))).italic = True
             usable_inches = max(2.0, (paper[0] - 2 * margin_cm * 72 / 2.54) / 72)
             doc.add_picture(str(path), width=Inches(min(5.8, usable_inches)))
             for note_line in visual_notes(chart, refs, style, numbers):
@@ -1092,14 +1191,14 @@ def main():
         if report.get("tables"):
             para("Índice de tablas", h1)
             for ix, item in enumerate(report["tables"], 1):
-                para("Tabla " + str(ix) + ". " + str(item.get("title", "Resultados")), small)
+                para("Tabla " + str(ix) + ". " + clean_visual_title(item.get("title", "Resultados")), small)
         if report.get("charts"):
             para("Índice de figuras", h1)
             for ix, item in enumerate(report["charts"], 1):
-                para("Figura " + str(ix) + ". " + str(item.get("title", "Gráfico")), small)
+                para("Figura " + str(ix) + ". " + clean_visual_title(item.get("title", "Gráfico")), small)
         story.append(PageBreak())
     if front.get("key_points"):
-        para("Key Points", h1)
+        para(key_points_label, h1)
         for point in front["key_points"]: para("• " + point)
     if report.get("keywords"):
         para("Palabras clave: " + ", ".join(str(x) for x in report["keywords"]), small)
@@ -1116,7 +1215,7 @@ def main():
     if report.get("tables"):
         para("Tablas", h1)
         for ix, item in enumerate(report["tables"], 1):
-            para("Tabla " + str(ix) + ". " + str(item.get("title", "Resultados")), caption_style)
+            para("Tabla " + str(ix) + ". " + clean_visual_title(item.get("title", "Resultados")), caption_style)
             weights = ([0.19, 0.21, 0.29, 0.31] if len(item["columns"]) == 4 and editorial
                        else [1 / len(item["columns"])] * len(item["columns"]))
             col_widths = [content_width * weight for weight in weights]
@@ -1143,7 +1242,7 @@ def main():
     if figures:
         para("Figuras", h1)
         for ix, (chart, path) in enumerate(figures, 1):
-            para(f"Figura {ix}. {chart.get('title','Gráfico')}", caption_style)
+            para(f"Figura {ix}. {clean_visual_title(chart.get('title','Gráfico'))}", caption_style)
             figure_width = min(420, content_width)
             story.append(PdfImage(str(path), width=figure_width, height=figure_width * 650 / 1200))
             for note_line in visual_notes(chart, refs, style, numbers):
@@ -1318,7 +1417,7 @@ def main():
     chunks.append("<p>"+html.escape(" · ".join(str(cover.get(k,"")) for k in ("institution","faculty","degree","date") if cover.get(k)))+"</p>")
     for author in authors: chunks.append("<p class='ref'>"+html.escape(author)+"</p>")
     if front.get("key_points"):
-        chunks.append("<section><h2>Key Points</h2><ul>")
+        chunks.append("<section><h2>" + html.escape(key_points_label) + "</h2><ul>")
         for point in front["key_points"]: chunks.append("<li>"+html.escape(point)+"</li>")
         chunks.append("</ul></section>")
     for key, label in FRONT_LABELS:
@@ -1330,7 +1429,7 @@ def main():
         rendered=format_text(section["text"],refs,style,numbers)
         chunks.append("<section id='sec-"+str(i)+"'><h2>"+html.escape(section["heading"])+"</h2><p>"+inline_markdown_html(rendered).replace("\n","</p><p>")+"</p></section>")
     for ix,item in enumerate(report.get("tables", []), 1):
-        chunks.append("<figure><figcaption>Tabla "+str(ix)+". "+html.escape(str(item.get("title","Resultados")))+"</figcaption><table><thead><tr>")
+        chunks.append("<figure><figcaption>Tabla "+str(ix)+". "+html.escape(clean_visual_title(item.get("title","Resultados")))+"</figcaption><table><thead><tr>")
         chunks.extend("<th scope='col'>"+html.escape(str(c))+"</th>" for c in item["columns"])
         chunks.append("</tr></thead><tbody>")
         for row in item["rows"]:
@@ -1340,7 +1439,7 @@ def main():
             chunks.append("<p class='ref'>"+html.escape(note_line)+"</p>")
         chunks.append("</figure>")
     for ix, (chart,path) in enumerate(figures,1):
-        chunks.append("<figure><figcaption>Figura "+str(ix)+". "+html.escape(str(chart.get("title","Figura")))+"</figcaption><img alt='"+html.escape(str(chart.get("alt_text") or chart.get("title","Gráfico")))+"' src='"+html.escape(path.name)+"'>")
+        chunks.append("<figure><figcaption>Figura "+str(ix)+". "+html.escape(clean_visual_title(chart.get("title","Figura")))+"</figcaption><img alt='"+html.escape(str(chart.get("alt_text") or chart.get("title","Gráfico")))+"' src='"+html.escape(path.name)+"'>")
         for note_line in visual_notes(chart, refs, style, numbers):
             chunks.append("<p class='ref'>"+html.escape(note_line)+"</p>")
         chunks.append("</figure>")
@@ -1376,6 +1475,37 @@ def main():
                    "research_protocol": 5, "policy_report": 5}
     editorial_minimum_pages = page_floors.get(report.get("document_type"), 5) if report.get("quality_profile", "professional") == "professional" else 0
     warnings = []
+    visual_rules = editorial_visual_requirements(report)
+    table_count = len(report.get("tables", []))
+    chart_count = len(report.get("charts", []))
+    chart_types = sorted({chart.get("type", "bar") for chart in report.get("charts", [])})
+    for key, actual, label in (
+        ("min_tables", table_count, "tablas"),
+        ("min_charts", chart_count, "figuras"),
+        ("min_chart_types", len(chart_types), "tipos distintos de gráfico"),
+    ):
+        if key in visual_rules and actual < visual_rules[key]:
+            warnings.append(
+                "Presentación incompleta: se solicitaron al menos "
+                + str(visual_rules[key]) + " " + label + "; disponibles " + str(actual)
+                + ". Recuperar más datos observados; nunca inventar visualizaciones."
+            )
+    body_words = sum(
+        len(re.findall(r"\b\w+\b", section["text"], re.UNICODE))
+        for section in report["sections"]
+    )
+    if "max_body_words" in visual_rules and body_words > visual_rules["max_body_words"]:
+        warnings.append(
+            "Extensión incumplida: " + str(body_words) + " palabras; máximo solicitado "
+            + str(visual_rules["max_body_words"]) + ". Editar y condensar sin perder evidencias."
+        )
+    mechanical = re.compile(
+        r"como (?:un )?modelo de lenguaje|como (?:una )?ia|"
+        r"generado por (?:ia|chatgpt|phoenix)|"
+        r"\[(?:insertar|pendiente|todo)\]", re.IGNORECASE
+    )
+    if any(mechanical.search(section["text"]) for section in report["sections"]):
+        warnings.append("Texto editorial con marcadores mecánicos o pendientes: revisar redacción; no ocultar procedencia requerida.")
     if rendered_pages[0] < editorial_minimum_pages:
         warnings.append("El PDF quedó corto para una publicación profesional: " +
                         str(rendered_pages[0]) + " páginas; piso editorial " +
@@ -1415,6 +1545,11 @@ def main():
                         "references_style_certified": False,
                         "citation_markers_resolved": True,
                         "manuscript_word_count": sum(len(re.findall(r"\b\w+\b", sec["text"], re.UNICODE)) for sec in report["sections"])},
+            "visual_audit": {
+                "tables": table_count, "figures": chart_count, "chart_types": chart_types,
+                "requirements": visual_rules, "body_words": body_words,
+                "requirements_met": not any("incompleta" in item or "Extensión incumplida" in item for item in warnings),
+            },
             "pagination": {"pdf_pages": rendered_pages[0], "requested_pages": target_pages,
                            "scope": scope, "target_met": page_match if scope == "all" else None},
             "warnings": warnings,
