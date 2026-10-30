@@ -30,6 +30,7 @@ import type {
   McpRegistrySearchSnapshot,
 } from './AuthorizationPanel.tsx'
 import type { TelegramBotClient, TelegramBotSnapshot } from './TelegramConnectorSetup.tsx'
+import type { TheOddsApiClient, TheOddsApiSnapshot } from './TheOddsApiConnectorSetup.tsx'
 import { DeepSeekOnboardingDialog } from './DeepSeekOnboardingDialog.tsx'
 import type { DeepSeekOnboardingInjected } from './DeepSeekOnboardingDialog.tsx'
 import { WelcomeNotice } from './WelcomeNotice.tsx'
@@ -181,6 +182,30 @@ type PluginInventoryMcpRegistryRemote = {
       phase: 'ready' | 'auth-required' | 'missing-runtime' | 'missing-skill'
     }>
   }>>
+}
+
+type PluginInventoryOddsRemote = {
+  theOddsApiState(): Promise<PluginInventoryRemoteResult<TheOddsApiSnapshot>>
+  configureTheOddsApi(request: { apiKey: string }): Promise<PluginInventoryRemoteResult<TheOddsApiSnapshot>>
+  disconnectTheOddsApi(): Promise<PluginInventoryRemoteResult<TheOddsApiSnapshot>>
+}
+
+/** Expose only secret-free snapshots. Password values travel to the trusted Host and never to Settings JSON. */
+function theOddsApiClient(ctx: ClientContext): TheOddsApiClient {
+  const remote = (): PluginInventoryOddsRemote => {
+    const service = ctx.get('remote.pluginInventory') as PluginInventoryOddsRemote | undefined
+    if (service === undefined) throw new Error('The Odds API connector requires the PHOENIX Host.')
+    return service
+  }
+  return {
+    state: async () => unwrapPluginInventory('theOddsApiState', await remote().theOddsApiState()),
+    configure: async apiKey => unwrapPluginInventory(
+      'configureTheOddsApi', await remote().configureTheOddsApi({apiKey}),
+    ),
+    disconnect: async () => unwrapPluginInventory(
+      'disconnectTheOddsApi', await remote().disconnectTheOddsApi(),
+    ),
+  }
 }
 
 type PluginInventoryTelegramRemote = {
@@ -357,6 +382,7 @@ export function apply(ctx: ClientContext): void {
   const localModel = localModelClient(ctx)
   const mcpRegistry = mcpRegistryClient(ctx)
   const telegram = telegramBotClient(ctx)
+  const oddsApi = theOddsApiClient(ctx)
   const loadEclipseCatalog = (): Promise<readonly EclipseCatalogChoice[]> =>
     loadEclipseCodexCatalog(connection.api)
   const injected = (): ModelsWithLocalSectionInjected => ({
@@ -463,6 +489,7 @@ export function apply(ctx: ClientContext): void {
     settings: connection.api.settings,
     mcpRegistry,
     telegram,
+    oddsApi,
     onAuthorized: () => { refreshIfLoaded(controller) },
   })
   const deepSeekOnboardingInjected = (): DeepSeekOnboardingInjected => ({
