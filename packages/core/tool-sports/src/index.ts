@@ -468,7 +468,8 @@ export function apply(ctx: Context): void {
           }
           const result=await fetchPublicEspnOddsDetailed(args.sportKey,args.markets??'h2h',
             <T>(url:string)=>getFeed<T>(url),
-            {now:observedAt,cache:true,eventId:args.eventId,date:args.date,days:1})
+            {now:observedAt,cache:true,eventId:args.eventId,
+              ...(args.date?{date:args.date}:{}),days:1})
           return{
             quotes:result.quotes.map(q=>({...q,sportKey:args.sportKey,
               source:'ESPN '+q.endpointSource+' (sin clave)'})),
