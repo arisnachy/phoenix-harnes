@@ -46,6 +46,21 @@ function broker(kinds: Record<string, 'breakout' | 'pullback' | 'downtrend' | 'f
 }
 
 describe('adaptive Binance strategy selection', () => {
+  it('does not misclassify a moderate 15-minute uptrend as sideways', () => {
+    const QUARTER_HOUR = 900_000
+    const bars = candles('flat').map((bar, index) => {
+      const close = 100 + index * 0.045
+      return { ...bar,
+        openTime: index * QUARTER_HOUR, closeTime: (index + 1) * QUARTER_HOUR - 1,
+        open: close, high: close * 1.005, low: close * 0.995, close,
+        volume: index === 79 ? 12 : 10 }
+    })
+    expect(evaluateBinanceAdaptiveSignal('SOLUSDT', bars,
+      QUARTER_HOUR, 80 * QUARTER_HOUR)).toMatchObject({
+      regime: 'uptrend', strategy: 'trend-pullback', action: 'buy', score: 75,
+    })
+  })
+
   it('recognizes closed-volume breakout with a reproducible score', () => {
     expect(evaluateBinanceAdaptiveSignal('BTCUSDT', candles(), HOUR, NOW)).toMatchObject({
       regime: 'uptrend', strategy: 'breakout', action: 'buy', score: 80,
