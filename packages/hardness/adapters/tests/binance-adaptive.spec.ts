@@ -158,6 +158,27 @@ describe('adaptive Binance paper cycle', () => {
     expect(result.account.tradeCount).toBe(1)
   })
 
+  it('tries the next ranked qualified market when Binance marks the first Spot pair ineligible', async () => {
+    const feed = market({ BTCUSDT: 'breakout', LTCUSDT: 'breakout' })
+    const guarded: BinancePublicMarket = {
+      price: feed.price.bind(feed), prices: feed.prices.bind(feed),
+      candles: feed.candles.bind(feed),
+      async eligible(symbol) { return symbol !== 'BTCUSDT' },
+    }
+    const root = mkdtempSync(join(tmpdir(), 'phoenix-spot-fallback-'))
+    temporary.push(root)
+    const paper = new BinancePaperBroker(join(root, 'paper.json'), guarded)
+    const cycle = await runBinanceAdaptiveCycle(paper, {
+      mode: 'paper-step', symbols: ['BTCUSDT', 'LTCUSDT'],
+    }, NOW)
+    expect(cycle.trade).toMatchObject({ symbol: 'LTCUSDT', side: 'buy' })
+    expect(cycle.execution.find(item => item.symbol === 'BTCUSDT'))
+      .toMatchObject({ status: 'blocked' })
+    expect(cycle.execution.find(item => item.symbol === 'LTCUSDT'))
+      .toMatchObject({ status: 'executed' })
+    expect((await paper.journal()).map(row => row.symbol)).toEqual(['LTCUSDT'])
+  })
+
   it('does not confuse a weak BUY indicator with an autonomous PAPER fill', async () => {
     const paper = broker({ ETHUSDT: 'pullback' })
     const result = await runBinanceAdaptiveCycle(paper, {
