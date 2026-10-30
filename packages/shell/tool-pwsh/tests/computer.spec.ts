@@ -124,7 +124,10 @@ describe('Integrated browser without Phoenix Desktop', () => {
     expect(miniBrowserFallbackCommand({ action: 'browser_reload' }, owner)).toEqual({ type: 'reload', sessionId: owner })
     expect(miniBrowserFallbackCommand({ action: 'browser_focus' }, owner)).toEqual({ type: 'start', sessionId: owner })
     expect(miniBrowserFallbackCommand({ action: 'browser_inspect' }, owner)).toEqual({ type: 'inspect', sessionId: owner })
-    expect(miniBrowserFallbackCommand({ action: 'browser_fill_form', origin: 'https://example.org', fields: [{ field: 1, value: 'secret' }] }, owner)).toBeUndefined()
+    expect(miniBrowserFallbackCommand({
+      action: 'browser_fill_form', origin: 'https://example.org',
+      fields: [{ field: 1, value: 'secret' }],
+    }, owner)).toBeUndefined()
     expect(miniBrowserFallbackCommand({ action: 'browser_click_text', origin: 'https://example.org', text: 'Pay' }, owner)).toBeUndefined()
     expect(miniBrowserFallbackCommand({ action: 'browser_login', origin: 'https://example.org' }, owner)).toBeUndefined()
     expect(() => miniBrowserFallbackCommand({ action: 'browser_inspect' }, '../other-session')).toThrow(/valid owning conversation/)
@@ -137,7 +140,9 @@ describe('Integrated browser without Phoenix Desktop', () => {
       return new Response(JSON.stringify({ available: true, tabId: 'tab-1', url: 'about:blank', title: '' }), { status: 200 })
     }) as typeof fetch
     const received = await runMiniBrowserFallback({ action: 'browser_open', url: 'https://example.org' }, 'session-1', undefined, send)
-    expect(JSON.parse(received)).toMatchObject({ browser: 'phoenix-mini-browser', status: 'navigation-started; inspect to verify content', tabId: 'tab-1' })
+    expect(JSON.parse(received)).toMatchObject({
+      browser: 'phoenix-mini-browser', status: 'navigation-started; inspect to verify content', tabId: 'tab-1',
+    })
     expect(isMiniBrowserReceipt(received)).toBe(true)
     expect(isMiniBrowserReceipt('hwnd=0x420024 active=true')).toBe(false)
     expect(calls[0]?.url).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/phoenix-mini-browser\/action$/u)
@@ -147,8 +152,12 @@ describe('Integrated browser without Phoenix Desktop', () => {
 
   it('fails explicitly when Chrome or the web controller is unavailable', async () => {
     const send = (async () => new Response(JSON.stringify({ error: 'No Chrome' }), { status: 503 })) as typeof fetch
-    await expect(runMiniBrowserFallback({ action: 'browser_inspect' }, 'session-1', undefined, send)).rejects.toThrow(/MiniBrowser unavailable/)
-    await expect(runMiniBrowserFallback({ action: 'browser_login', origin: 'https://example.org' }, 'session-1', undefined, send)).rejects.toThrow(/Never send vault credentials/)
+    await expect(runMiniBrowserFallback(
+      { action: 'browser_inspect' }, 'session-1', undefined, send,
+    )).rejects.toThrow(/MiniBrowser unavailable/)
+    await expect(runMiniBrowserFallback(
+      { action: 'browser_login', origin: 'https://example.org' }, 'session-1', undefined, send,
+    )).rejects.toThrow(/Never send vault credentials/)
   })
 })
 

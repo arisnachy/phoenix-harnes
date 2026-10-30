@@ -1661,7 +1661,10 @@ async function runOriginBoundBrowserLogin(
 ): Promise<string> {
   const descriptor = await readDesktopControlDescriptorIfAvailable()
   if (descriptor === undefined) {
-    throw new Error('Phoenix Desktop credential broker is absent. Use the authorized phoenix_browser/chrome login route; never send credentials through MiniBrowser.')
+    throw new Error(
+      'Phoenix Desktop credential broker is absent. Use the authorized '
+      + 'phoenix_browser/chrome login route; never send credentials through MiniBrowser.',
+    )
   }
   if (descriptor.schema === RESIDENT_DESKTOP_CONTROL_SCHEMA) {
     // Schema 2 owns credential prompting/fill in the native host. Do not resolve
@@ -1867,7 +1870,18 @@ export function registerComputerTool(ctx: Context): void {
   ctx.systemPrompt.section({
     name: 'tool:computer:embedded-browser',
     order: 106,
-    text: 'On Windows Phoenix Desktop, use computer browser_open/browser_inspect/browser_fill_form/browser_click_text/browser_login for structured work in the embedded WebView2 pane. browser_login resolves an origin-bound vault login internally: never ask the user to paste a stored secret and never place one in text/type arguments. Secure Ask automatic-access consent preauthorizes open/login/form/click work only for that exact origin, so recurring authorized tasks can run without repeated workspace-write prompts; other desktop interaction keeps the normal approval policy. browser_inspect is read-only and never returns current field values. If the native Desktop browser broker is absent or stale, computer browser_open/back/forward/reload/inspect automatically uses this conversation\'s independent MiniBrowser CDP controller (requires Phoenix Web). Use phoenix_browser/chrome for approved form edits, clicks and credentials; never downgrade credential actions. If the browser controller is unavailable, report that precise failure and continue with other appropriate web tools. Native Windows windows/focus/click/type/key/scroll still use the fixed PowerShell fallback.',
+    text: [
+      'On Windows Phoenix Desktop, prefer computer browser_open/browser_inspect/browser_fill_form/browser_click_text/browser_login',
+      'for structured web work in the embedded WebView2 pane.',
+      'browser_login resolves an origin-bound vault login internally: never ask the user to paste stored secrets.',
+      'Secure Ask automatic access applies only to the exact approved origin; other actions keep normal approvals.',
+      'browser_inspect returns read-only field metadata, never current input values.',
+      'When the Desktop broker is absent or stale, computer browser_open/back/forward/reload/inspect uses',
+      'this conversation\'s isolated MiniBrowser CDP controller automatically (requires Phoenix Web and Chrome/Edge).',
+      'Use phoenix_browser/chrome for approved form edits, clicks, and credentials; never downgrade credential actions.',
+      'If navigation fails, report the actual controller error and continue with other authorized web tools.',
+      'Native Windows windows/focus/click/type/key/scroll retain the fixed PowerShell fallback.',
+    ].join(' '),
   })
 
   ctx.tools.register(defineTool({
@@ -1926,7 +1940,11 @@ export function registerComputerTool(ctx: Context): void {
             : value.action === 'browser_inspect'
               ? `Phoenix embedded browser inspection:\n${value.details ?? '{}'}`
               : value.action.startsWith('browser_')
-                ? `Phoenix browser command ${value.action} dispatched.${value.details === undefined ? '' : `\n${value.details}`}${value.postScreenshot ? '\nA fresh desktop screenshot was attached.' : '\nCall browser_inspect to verify the rendered page when needed.'}`
+                ? `Phoenix browser command ${value.action} dispatched.`
+                  + (value.details === undefined ? '' : `\n${value.details}`)
+                  + (value.postScreenshot
+                    ? '\nA fresh desktop screenshot was attached.'
+                    : '\nCall browser_inspect to verify the rendered page when needed.')
                 : value.postScreenshot
                   ? `Desktop ${value.action} input sent and a fresh post-action screenshot was attached. Verify the visible result before proceeding.`
                   : `Desktop ${value.action} input sent.`,
