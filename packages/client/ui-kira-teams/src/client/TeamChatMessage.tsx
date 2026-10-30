@@ -151,9 +151,14 @@ export const KiraTeamMessageView = memo(function KiraTeamMessageView({
     : KIRA_ROSTER.find(persona => persona.kind === data.avatar)?.kind ?? identity.kind
   const sender = data.senderKind === 'user' ? { name: t?.('chat.user') ?? 'User', role: t?.('chat.userRole') ?? 'Team collaborator', kind: 'aurora' as const } : { ...identity, name: data.senderKind === 'kira' ? 'Kira'
     : participants[data.senderId]?.name ?? (data.missionId === undefined ? identity.name : data.senderName), kind: data.senderKind === 'kira' ? 'kira' : avatar }
-  const target = data.targetName === undefined
-    ? undefined
-    : identityFor(data.targetName, data.targetId)
+  // Existing peer IDs are authoritative even when a historical event omitted
+  // targetName. Resolve known team participants or the Lead; do not invent
+  // recipients from arbitrary IDs or from the message's text.
+  const targetName = data.targetName
+    ?? participants[data.targetId]?.name
+    ?? (data.targetId === 'root' || data.targetId === 'lead'
+      || (data.missionId !== undefined && data.targetId === data.missionId) ? 'Kira' : undefined)
+  const target = targetName === undefined ? undefined : identityFor(targetName, data.targetId)
   const audience = teamMessageAudience(data)
   const senderStatus = participants[data.senderId]?.status
   const targetStatus = data.purpose === 'assignment'
