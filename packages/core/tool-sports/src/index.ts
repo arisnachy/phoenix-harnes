@@ -664,7 +664,31 @@ export function apply(ctx: Context): void {
         }]
       })
       const uiBlocks=pricedBlocks.length?pricedBlocks:referenceBlocks
-      return JSON.stringify({ uiBlocks,source:quotes[0]?.source||'Sin ofertas recuperadas',sources:report.sources,
+      let researchArchive:{saved:boolean;count:number;disabled:boolean}|null=null
+      // Archive ONLY ESPN observations we already fetched; not commercial feeds.
+      if(useEspn){
+        const inputs:ResearchPriceInput[]=[...quotes,...observations].flatMap(q=>{
+          const tagged=q as typeof q & {endpointSource?:string}
+          const source=tagged.endpointSource==='embedded'?'ESPN Scoreboard':
+            tagged.endpointSource==='core'?'ESPN Core':
+              tagged.endpointSource==='summary'?'ESPN Summary':null
+          if(!source||!['h2h','spreads','totals'].includes(q.market))return []
+          return [{
+            eventId:q.eventId,home:q.home,away:q.away,
+            market:q.market as ResearchPriceInput['market'],
+            selection:q.selection,bookmaker:q.bookmaker,price:q.price,
+            source:source as ResearchPriceInput['source'],
+            ...(q.point===null||q.point===undefined?{}:{point:q.point}),
+            ...(q.timeIso?{eventStartsAt:q.timeIso}:{}),
+            ...(Number.isFinite(Date.parse(q.updatedAt))?{providerUpdatedAt:q.updatedAt}:{}),
+          }]
+        })
+        if(inputs.length){
+          try{researchArchive=await saveResearchOdds(args.sportKey,inputs,env,observedAt)}
+          catch{/* A storage problem must not mask a live provider report. */}
+        }
+      }
+      return JSON.stringify({ uiBlocks,researchArchive,source:quotes[0]?.source||'Sin ofertas recuperadas',sources:report.sources,
         observedAt:new Date(observedAt).toISOString(),requestedSourcePolicy:useEspn?'espn':'all',
         requestedEventId:args.eventId??null,
         requestedDate:args.date??null,excludedStaleOrStarted,outcomes:quotes.slice(0,120),
