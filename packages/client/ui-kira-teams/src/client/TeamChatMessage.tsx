@@ -116,6 +116,12 @@ function runningStatus(status: string | undefined): boolean {
   return status === 'working' || status === 'running' || status === 'active' || status === 'provisioning'
 }
 
+/** Explicit delivery semantics: never guess a human addressee from a teammate's prose. */
+export function teamMessageAudience(data: Pick<KiraTeamMessageChatData, 'senderKind' | 'targetId'>): 'team' | 'user' {
+  if (data.senderKind !== 'user' && (data.targetId === 'user' || data.targetId === 'human')) return 'user'
+  return 'team'
+}
+
 function textOf(content: readonly unknown[]): string {
   return content.flatMap((block) => {
     if (typeof block !== 'object' || block === null || Array.isArray(block)) return []
@@ -145,9 +151,15 @@ export const KiraTeamMessageView = memo(function KiraTeamMessageView({
     : KIRA_ROSTER.find(persona => persona.kind === data.avatar)?.kind ?? identity.kind
   const sender = data.senderKind === 'user' ? { name: t?.('chat.user') ?? 'User', role: t?.('chat.userRole') ?? 'Team collaborator', kind: 'aurora' as const } : { ...identity, name: data.senderKind === 'kira' ? 'Kira'
     : participants[data.senderId]?.name ?? (data.missionId === undefined ? identity.name : data.senderName), kind: data.senderKind === 'kira' ? 'kira' : avatar }
-  const target = data.targetName === undefined
-    ? undefined
-    : identityFor(data.targetName, data.targetId)
+  // Existing peer IDs are authoritative even when a historical event omitted
+  // targetName. Resolve known team participants or the Lead; do not invent
+  // recipients from arbitrary IDs or from the message's text.
+  const targetName = data.targetName
+    ?? participants[data.targetId]?.name
+    ?? (data.targetId === 'root' || data.targetId === 'lead'
+      || (data.missionId !== undefined && data.targetId === data.missionId) ? 'Kira' : undefined)
+  const target = targetName === undefined ? undefined : identityFor(targetName, data.targetId)
+  const audience = teamMessageAudience(data)
   const senderStatus = participants[data.senderId]?.status
   const targetStatus = data.purpose === 'assignment'
     ? participants[data.targetId]?.status
@@ -172,6 +184,7 @@ export const KiraTeamMessageView = memo(function KiraTeamMessageView({
       data-kira-team-message={data.messageId}
       data-team-sender-id={data.senderId}
       data-team-sender-kind={data.senderKind}
+      data-kira-audience={audience}
     >
       <div className={css.avatar}>
         {data.senderKind === 'user' ? <span aria-label="User">👤</span> : <ModelActivityAvatar
@@ -203,7 +216,17 @@ export const KiraTeamMessageView = memo(function KiraTeamMessageView({
             {data.purpose !== undefined && !['update', 'assignment', 'result'].includes(data.purpose) && (
               <span className={css.purpose} data-purpose={data.purpose}>{PURPOSE_LABEL[data.purpose]}</span>
             )}
-            {target !== undefined && <span className={css.target}>→ {target.name}</span>}
+            {audience === 'user' ? (
+              <span className={css.target} data-team-recipient="user">{t?.('chat.toUser') ?? 'para ti'}</span>
+            ) : target !== undefined ? (
+              <span className={css.target} data-team-recipient="team" aria-label={`${t?.('chat.to') ?? 'Para'} ${target.name}`}>
+                → {target.name}
+              </span>
+            ) : data.senderKind !== 'user' ? (
+              <span className={css.teamContext} data-team-recipient="unspecified">
+                {t?.('chat.teamContext') ?? 'Conversación del equipo'}
+              </span>
+            ) : null}
             {targetStatusKey !== undefined && (
               <span
                 className={css.assignmentStatus}

@@ -6,7 +6,7 @@ import css from './TeamChatMessage.module.css'
 export function TeamAuthor({ t, provenance }: PropsLocale<typeof NS> & {
   provenance?: { provider: string; model: string }
 }) {
-  return <div className={css.meta} data-team-author="kira">
+  return <div className={css.meta} data-team-author="kira" data-kira-audience="user">
     <span className={css.avatar}
       {...provenance === undefined ? {} : {
         'data-kira-model': provenance.model,
@@ -18,6 +18,6 @@ export function TeamAuthor({ t, provenance }: PropsLocale<typeof NS> & {
     </span>
     <strong>Kira</strong>
     <ModelEngineBadge model={provenance?.model} provider={provenance?.provider} placement="header" />
-    <span>{t('skill.orchestration')}</span>
+    <span className={css.userAudience}>{t('chat.toUser')}</span>
   </div>
 }

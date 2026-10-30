@@ -8,6 +8,7 @@ import type { ChatNode, KiraTeamMessageChatData } from '@phoenix-ai/dsh-client-u
 import {
   KiraTeamMessageView,
   teamIdentityOf,
+  teamMessageAudience,
 } from '../src/client/TeamChatMessage.tsx'
 import { formatTeamMarkdown } from '../src/client/team-markdown.ts'
 
@@ -46,6 +47,36 @@ function node(data: Partial<KiraTeamMessageChatData> = {}): ChatNode<'kira-team-
 }
 
 describe('KIRA Team chat message', () => {
+  it('routes actual recipients without guessing from names or prose', () => {
+    expect(teamMessageAudience({ senderKind: 'kira', targetId: 'user' })).toBe('user')
+    expect(teamMessageAudience({ senderKind: 'agent', targetId: 'human' })).toBe('user')
+    expect(teamMessageAudience({ senderKind: 'agent', targetId: 'root' })).toBe('team')
+    expect(teamMessageAudience({ senderKind: 'kira', targetId: '' })).toBe('team')
+    expect(teamMessageAudience({ senderKind: 'user', targetId: 'user' })).toBe('team')
+  })
+
+  it('shows a clear recipient for Kira-to-human handoffs without changing the message', () => {
+    const view = render(<View node={node({
+      senderId: 'root', senderName: 'lead', senderKind: 'kira',
+      targetId: 'user', purpose: 'update', 
+      content: [{ type: 'text', text: 'La comprobación sigue pendiente de GitHub.' }],
+    })} />)
+    expect(view.container.querySelector('[data-kira-audience="user"]')).toBeTruthy()
+    expect(view.getByText('para ti')).toBeTruthy()
+    expect(view.getByText('La comprobación sigue pendiente de GitHub.')).toBeTruthy()
+    expect(view.container.querySelector('[data-team-recipient="team"]')).toBeNull()
+  })
+
+  it('identifies unaddressed peer messages as team context, not user-facing statements', () => {
+    const view = render(<View node={node({
+      senderKind: 'agent', targetId: '', 
+      content: [{ type: 'text', text: 'Revisaré los hashes locales.' }],
+    })} />)
+    expect(view.container.querySelector('[data-kira-audience="team"]')).toBeTruthy()
+    expect(view.getByText('Conversación del equipo')).toBeTruthy()
+    expect(view.container.querySelector('[data-team-recipient="unspecified"]')).toBeTruthy()
+  })
+
   it('resolves stable personas without exposing model ids', () => {
     expect(teamIdentityOf('lead', 'root')).toMatchObject({ name: 'Kira', role: 'Coordinación', kind: 'kira' })
     expect(teamIdentityOf('KÍRA', 'root')).toMatchObject({ name: 'Kira' })
@@ -58,6 +89,16 @@ describe('KIRA Team chat message', () => {
     const first = teamIdentityOf('worker-a', 'session-a')
     const resumed = teamIdentityOf('worker-a', 'session-b')
     expect(resumed).toEqual(first)
+  })
+
+  it('recovers the Lead recipient from a durable target id when the name is absent', () => {
+    const view = render(<View node={node({
+      senderKind: 'agent', targetId: 'root', 
+      content: [{ type: 'text', text: 'Confirmé el resultado.' }],
+    })} />)
+    expect(view.getByText('→ Kira')).toBeTruthy()
+    expect(view.container.querySelector('[data-team-recipient="team"]')).toBeTruthy()
+    expect(view.container.querySelector('[data-team-recipient="unspecified"]')).toBeNull()
   })
 
   it('shows the human as a team collaborator without giving them an AI model identity', () => {
@@ -103,6 +144,7 @@ describe('KIRA Team chat message', () => {
     expect(view.getByText('Coordinación')).toBeTruthy()
     expect(view.queryByText('Asignación')).toBeNull()
     expect(view.getByText('→ La Forja')).toBeTruthy()
+    expect(view.container.querySelector('[data-kira-audience="team"]')).not.toBeNull()
     expect(view.container.querySelector('[data-avatar="kira"]')).toBeTruthy()
     expect(view.container.querySelector('[data-agent-portrait-image]')).toBeTruthy()
     expect(view.getByRole('status').textContent).toContain('trabajando')
@@ -180,6 +222,7 @@ describe('KIRA Team chat message', () => {
   it('keeps ordinary updates visually quiet and omits empty synthetic rows', () => {
     const update = render(<View node={node({
       purpose: 'update',
+      targetId: '',
       reactions: [],
     })} />)
     expect(update.queryByText('Actualización')).toBeNull()
