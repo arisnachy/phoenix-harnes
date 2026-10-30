@@ -2120,6 +2120,10 @@ if (supervisorInstanceLock === null) {
 const initialBootChecksStartedAt = Date.now()
 recoverStaleStagingIndexLock()
 restoreActiveRuntime()
+// A previously verified isolated Host is the real last-known-good release.
+// A restarted supervisor must not silently downgrade its rollback target
+// to the older source checkout while a newer candidate is in probation.
+if (runtimeRoot !== root) lastKnownGoodRuntimeRoot = runtimeRoot
 prepareKokoroFallback()
 // Old runtimes can be gigabytes on Windows/OneDrive. Pruning them (and
 // git worktree metadata) before the first Host spawn used to turn optional
