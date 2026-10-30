@@ -129,6 +129,7 @@ test('supervisor retains the last healthy runtime through cleanup', () => {
   assert.match(source, /if \(lastKnownGoodRuntimeRoot !== root\) keep\.add\(runtimePathKey\(lastKnownGoodRuntimeRoot\)\)/u)
   assert.match(source, /const recovered = lastGoodSha !== undefined && runtimeIsHealthy\(lastGood, lastGoodSha\)/u)
   assert.match(source, /probationTimer = setTimeout\(/u)
+  assert.match(source, /if \(runtimeRoot !== root\) lastKnownGoodRuntimeRoot = runtimeRoot/u)
   assert.match(source, /lastKnownGoodRuntimeRoot = hostRuntimeRoot/u)
   assert.match(source, /recordGuardianIncident\(\{/u)
   assert.match(source, /writeActiveRuntime\(lastGoodSha, runtimeRoot\)/u)
