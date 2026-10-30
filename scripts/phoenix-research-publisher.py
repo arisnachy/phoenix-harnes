@@ -440,8 +440,8 @@ def validate(data):
         if not isinstance(entry, dict) or entry.get("source_key") not in cited:
             raise ValueError("each data chart must cite a referenced source_key")
         kind = entry.get("type", "bar")
-        if kind not in ("bar", "horizontal_bar", "line", "scatter", "forest"):
-            raise ValueError("chart type must be bar, horizontal_bar, line, scatter or forest")
+        if kind not in ("bar", "horizontal_bar", "line", "scatter", "forest", "lollipop", "area", "donut"):
+            raise ValueError("chart type must be bar, horizontal_bar, line, scatter, forest, lollipop, area or donut")
         vals = entry.get("values", [])
         labs = entry.get("labels", [])
         if not isinstance(labs, list) or not isinstance(vals, list) or not 1 <= len(vals) <= 15 or len(vals) != len(labs):
@@ -451,7 +451,19 @@ def validate(data):
         if any(not isinstance(label, str) or not label.strip() or len(label) > 100 for label in labs):
             raise ValueError("chart labels must be readable text")
         validate_visual_metadata(entry, "figure")
+        if kind == "donut":
+            if not 2 <= len(vals) <= 8 or any(value < 0 for value in vals) or abs(sum(vals) - 100) > 0.5:
+                raise ValueError("donut requires 2-8 observed percentages totaling 100; no synthetic remainder")
+            if not str(entry.get("units", "")).lower().strip() in ("%", "porcentaje", "percent"):
+                raise ValueError("donut requires units=% or porcentaje")
+        if kind == "area":
+            if len(vals) < 3 or any(value < 0 for value in vals):
+                raise ValueError("area requires at least 3 non-negative observed chronological values")
         x_values = entry.get("x_values")
+        if kind == "area" and x_values is not None and any(
+            left >= right for left, right in zip(x_values, x_values[1:])
+        ):
+            raise ValueError("area requires strictly increasing observed x_values")
         if kind == "scatter" and x_values is None:
             raise ValueError("scatter requires actual numeric x_values")
         if x_values is not None and (not isinstance(x_values, list) or len(x_values) != len(vals) or
@@ -647,7 +659,7 @@ def bibliography(ref, style, number):
     return f"{authors} ({year}). {title}. {journal}{detail}. {url}"
 
 def chart_image(chart, folder, ordinal, accent="#087783"):
-    """Draw scientific bars, lines, scatter points and confidence intervals from real inputs."""
+    """Draw observed bars, lollipops, area, composition, trends and confidence intervals."""
     labels, values = chart["labels"], chart["values"]
     kind = chart.get("type", "bar")
     image = Image.new("RGB", (1200, 650), "white")
@@ -679,8 +691,24 @@ def chart_image(chart, folder, ordinal, accent="#087783"):
     lows = chart.get("ci_low", values)
     highs = chart.get("ci_high", values)
     all_values = [*values, *lows, *highs]
-    if kind in ("forest", "horizontal_bar"):
-        low, high = bounds(all_values, kind == "horizontal_bar")
+    if kind == "donut":
+        # Donuts are only permitted for independently sourced, exhaustive 100% compositions.
+        palette = [accent, "#307c94", "#d3a35f", "#62758f", "#8da69c",
+                   "#b27d82", "#b4a4bf", "#7f9e60"]
+        angle = -90.0
+        for i, (label, value) in enumerate(zip(labels, values)):
+            end = angle + value * 3.6
+            draw.pieslice((215, 80, 640, 505), angle, end, fill=palette[i])
+            yy_legend = 115 + i * 49
+            draw.rectangle((735, yy_legend, 757, yy_legend + 22), fill=palette[i])
+            draw.text((775, yy_legend), str(label)[:24] + "  " + fmt(value) + "%",
+                      fill=ink, font=font)
+            angle = end
+        draw.ellipse((335, 200, 520, 385), fill="white")
+        draw.text((393, 278), "100%", fill=ink, font=font)
+        draw.text((390, 565), "Composición porcentual observada", fill=ink, font=font)
+    elif kind in ("forest", "horizontal_bar", "lollipop"):
+        low, high = bounds(all_values, kind in ("horizontal_bar", "lollipop"))
         x_left, x_right = 330, 970
         xx = lambda v: x_left + (v-low)/(high-low)*(x_right-x_left)
         for i in range(6):
@@ -705,6 +733,10 @@ def chart_image(chart, folder, ordinal, accent="#087783"):
                     draw.line((xx(bound),y-7,xx(bound),y+7),fill=accent,width=2)
                 draw.rectangle((xx(v)-7,y-7,xx(v)+7,y+7),fill=accent)
                 draw.text((985,y-10),f"{fmt(v)} [{fmt(lo)}, {fmt(hi)}]",fill=ink,font=small)
+            elif kind == "lollipop":
+                draw.line((xx(0), y, xx(v), y), fill=accent, width=5)
+                draw.ellipse((xx(v)-9, y-9, xx(v)+9, y+9), fill=accent)
+                draw.text((985,y-10),fmt(v),fill=ink,font=small)
             else:
                 draw.rectangle((min(xx(0),xx(v)),y-spacing*.25,max(xx(0),xx(v)),y+spacing*.25),fill=accent)
                 draw.text((985,y-10),fmt(v),fill=ink,font=small)
@@ -735,11 +767,19 @@ def chart_image(chart, folder, ordinal, accent="#087783"):
             for i,label in enumerate(labels):
                 draw.text((points[i][0]-min(32,step*.30),bottom+13),
                           str(label)[:max(3,int(step/11))],fill=ink,font=small)
+        if kind == "area":
+            baseline = yy(0)
+            polygon = [(points[0][0], baseline), *points, (points[-1][0], baseline)]
+            draw.polygon(polygon, fill="#d7e8e5")
+            if len(points) > 1:
+                draw.line(points, fill=accent, width=5)
+            for x, y in points:
+                draw.ellipse((x-5, y-5, x+5, y+5), fill=accent)
         if kind == "bar":
             step=(right-left)/len(values)
             for x,y in points:
                 draw.rectangle((x-step*.30,min(yy(0),y),x+step*.30,max(yy(0),y)),fill=accent)
-        else:
+        elif kind != "area":
             if kind == "line" and len(points)>1:
                 draw.line(points,fill=accent,width=4)
             for x,y in points:
