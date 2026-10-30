@@ -91,6 +91,16 @@ describe('KIRA Team chat message', () => {
     expect(resumed).toEqual(first)
   })
 
+  it('recovers the Lead recipient from a durable target id when the name is absent', () => {
+    const view = render(<View node={node({
+      senderKind: 'agent', targetId: 'root', targetName: undefined,
+      content: [{ type: 'text', text: 'Confirmé el resultado.' }],
+    })} />)
+    expect(view.getByText('→ Kira')).toBeTruthy()
+    expect(view.container.querySelector('[data-team-recipient="team"]')).toBeTruthy()
+    expect(view.container.querySelector('[data-team-recipient="unspecified"]')).toBeNull()
+  })
+
   it('shows the human as a team collaborator without giving them an AI model identity', () => {
     const view = render(<View node={node({
       senderId: 'user', senderName: 'User', senderKind: 'user', targetId: 'worker-a',
@@ -212,6 +222,7 @@ describe('KIRA Team chat message', () => {
   it('keeps ordinary updates visually quiet and omits empty synthetic rows', () => {
     const update = render(<View node={node({
       purpose: 'update',
+      targetId: '',
       reactions: [],
     })} />)
     expect(update.queryByText('Actualización')).toBeNull()
