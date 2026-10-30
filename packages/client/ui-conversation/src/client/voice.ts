@@ -1740,6 +1740,10 @@ let attentionSpeechSequence = 0
  * Speak an important alert through the already-connected Codex Live channel
  * when it exists, otherwise use PHOENIX's local, language-aware Host TTS.
  * Do not silently open a microphone or start a WebRTC call without permission.
+ * @param title - Short human-facing notification title.
+ * @param detail - Optional context describing the user action required.
+ * @param preferredName - Preferred user name, when configured.
+ * @returns Whether Codex Live queued or local TTS accepted the alert.
  */
 export async function speakVoiceAssistantAttention(title: string, detail?: string, preferredName?: string): Promise<boolean> {
   const configuredLanguage = typeof document === 'undefined'
