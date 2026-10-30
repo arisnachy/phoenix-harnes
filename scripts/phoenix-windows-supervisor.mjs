@@ -25,11 +25,13 @@ import { hydratePhoenixEnvironment } from './phoenix-windows-environment.mjs'
 import { ensurePhoenixDesktopShortcut } from './phoenix-windows-shortcut.mjs'
 import { recordPhoenixUpdateStep, writePhoenixUpdateState } from './phoenix-update-state.mjs'
 import { pinPhoenixUpdateLiveHelper, validPinnedPhoenixUpdateLiveHelper } from './phoenix-update-live-pin.mjs'
+import { guardianBlockedTarget } from './phoenix-guardian-incidents.mjs'
 
 const root = resolve(process.cwd())
 const supervisorSourceRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 Object.assign(process.env, gitSafeDirectoryEnvironment(process.env, [root]))
 let runtimeRoot = root
+let lastKnownGoodRuntimeRoot = root
 const hostArgs = process.argv.slice(2)
 const desktopConsoleVisible = ['1', 'true', 'yes']
   .includes((process.env.PHOENIX_DESKTOP_CONSOLE ?? '').trim().toLowerCase())
@@ -1225,6 +1227,7 @@ function clearActiveRuntime() {
 }
 
 function activatePreparedRuntime(target) {
+  if (guardianBlockedTarget(target)) throw new Error(`Guardian quarantined failed release ${target}; activation denied`)
   // An already-compiled stable candidate may become obsolete while another
   // checkout advances. Never downgrade a newer durable source checkout even
   // when the crash-recovery watcher still holds an older prepared marker.
@@ -2184,6 +2187,7 @@ while (true) {
       persistLastKnownGoodConfiguration(launchConfiguration)
       confirmActiveRuntimeHealth()
       healthyCheckpointWritten = true
+      lastKnownGoodRuntimeRoot = hostRuntimeRoot
       console.error('[PHOENIX RECOVERY] healthy Host checkpoint recorded as last-known-good configuration.')
       // Only the actual target checkout running beyond the health checkpoint
       // completes an update. A request marker or successful build alone does not.
@@ -2452,12 +2456,15 @@ while (true) {
 
   if (runtimeRoot !== root) {
     const failedRuntime = runtimeRoot
-    runtimeRoot = root
+    const lastGood = lastKnownGoodRuntimeRoot
+    const lastGoodSha = gitValue(lastGood, ['rev-parse', 'HEAD'])
+    runtimeRoot = lastGoodSha !== undefined && runtimeIsHealthy(lastGood, lastGoodSha)
+      ? lastGood : root
     clearActiveRuntime()
     cleanupObsoleteRuntimes()
     console.error(
       `[PHOENIX RECOVERY] isolated runtime ${failedRuntime} exited unexpectedly; `
-      + 'retired its active marker and falling back to the source checkout instead of relaunching a broken update.',
+      + 'retired its active marker and falling back to the last-known-good runtime instead of relaunching a broken update.',
     )
     continue
   }
