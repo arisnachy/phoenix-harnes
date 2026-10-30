@@ -237,6 +237,6 @@ test('started NHL games retain detected embedded odds for diagnostics, never pre
     {PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED:'0'},mock,now)
   assert.equal(sources.quotes.length,0)
   const espn=sources.sources.find(x=>x.provider==='ESPN Site/Core')
-  assert.equal(espn.rawCount,3) // Three-day scan repeats the same fixture.
-  assert.equal(espn.startedOddsEntries,3)
+  assert.equal(espn.rawCount,1) // Duplicate scoreboard listings are counted only once.
+  assert.equal(espn.startedOddsEntries,1)
 })
