@@ -5,9 +5,15 @@ import { TeamAuthor } from '../src/client/TeamAuthor.tsx'
 import { portraitSrcForKind } from '../src/client/ModelActivityAvatar.tsx'
 
 afterEach(cleanup)
-const t = () => 'Coordination / orchestration'
+const t = (key: string) => key === 'chat.toUser' ? 'para ti' : 'Coordination / orchestration'
 
 describe('Kira actual model badge', () => {
+  it('distinguishes Kira speaking to the human from coordination between teammates', () => {
+    const { container } = render(<TeamAuthor t={t} />)
+    expect(container.querySelector('[data-kira-audience="user"]')).not.toBeNull()
+    expect(screen.getByText('para ti')).toBeTruthy()
+    expect(screen.queryByText('Coordination / orchestration')).toBeNull()
+  })
   it.each([
     ['gpt-6-sol', '☀'], ['gpt-6-luna', '☾'], ['gpt-6-astra', '★'], ['deepseek-v4-flash', 'ϟ'],
   ])('shows %s beside the unchanged Kira portrait', (model, icon) => {
