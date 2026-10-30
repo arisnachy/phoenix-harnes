@@ -6,6 +6,7 @@ on:
       - 'packages/core/tool-sports/src/index.ts'
       - 'packages/core/tool-sports/src/espn-odds.ts'
       - 'packages/core/tool-sports/tests/espn-core-intelligence.test.mjs'
+      - 'packages/core/tool-sports/tests/espn-odds-multiroute.test.mjs'
       - 'scripts/verify-espn-core-endpoints.mjs'
       - '.github/workflows/phoenix-espn-core-intelligence.yml'
   push:
@@ -29,7 +30,9 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Validate ESPN routes, provider references and safe error behavior
-        run: node --experimental-strip-types --test packages/core/tool-sports/tests/espn-core-intelligence.test.mjs
+        run: |
+          node --experimental-strip-types --test packages/core/tool-sports/tests/espn-core-intelligence.test.mjs
+          node --experimental-strip-types --test packages/core/tool-sports/tests/espn-odds-multiroute.test.mjs
       - name: Report real ESPN Core HTTP availability (not a bookmaker verification)
         run: node --experimental-strip-types scripts/verify-espn-core-endpoints.mjs
       - name: Strict host build
