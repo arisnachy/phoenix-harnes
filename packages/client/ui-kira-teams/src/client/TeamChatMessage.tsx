@@ -151,7 +151,7 @@ export const KiraTeamMessageView = memo(function KiraTeamMessageView({
     ?? (data.missionId !== undefined && data.targetId === data.missionId
       && data.senderKind === 'agent' ? 'Kira' : participants[data.targetId]?.name)
   const target = targetName === undefined ? undefined : identityFor(targetName, data.targetId)
-  const audience = target === undefined ? 'unknown' : 'team'
+  const audience = data.senderKind === 'user' ? 'user' : 'internal'
   const senderStatus = participants[data.senderId]?.status
   const targetStatus = data.purpose === 'assignment'
     ? participants[data.targetId]?.status
@@ -203,12 +203,21 @@ export const KiraTeamMessageView = memo(function KiraTeamMessageView({
               provider={participants[data.senderId]?.modelProvider}
               placement="header"
             />}
-            <span>{(data.role ?? participants[data.senderId]?.role) === undefined ? sender.role
+            <span className={css.role} title={sender.role}>{(data.role ?? participants[data.senderId]?.role) === undefined ? sender.role
               : t?.((data.role ?? participants[data.senderId]?.role) as import('./locales.ts').KiraTeamsKey) ?? sender.role}</span>
             {data.purpose !== undefined && !['update', 'assignment', 'result'].includes(data.purpose) && (
               <span className={css.purpose} data-purpose={data.purpose}>{PURPOSE_LABEL[data.purpose]}</span>
             )}
-            {target !== undefined && <span className={css.target} data-team-recipient={data.targetId}>Para {target.name}</span>}
+            {data.senderKind !== 'user' && (
+              <span className={css.audience} data-team-audience="internal">
+                {t?.('chat.internal') ?? 'Equipo interno'}
+              </span>
+            )}
+            {target !== undefined && (
+              <span className={css.target} data-team-recipient={data.targetId}>
+                {t?.('chat.forRecipient', { name: target.name }) ?? `Para ${target.name}`}
+              </span>
+            )}
             {targetStatusKey !== undefined && (
               <span
                 className={css.assignmentStatus}

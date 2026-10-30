@@ -602,3 +602,48 @@
   box-shadow: none;
 }
 .row[data-team-sender-kind='agent'] .meta { color: var(--dsw-alias-label-secondary); }
+
+/* Clear audience without badges that turn a conversation into a dashboard.
+   The person speaking is always the prominent identity; the destination
+   remains a small readable line of metadata. */
+.meta .role { display: none; }
+.meta .audience {
+  display: inline;
+  margin-left: 1px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--dsw-alias-label-tertiary) !important;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.meta .audience::before {
+  content: '·';
+  margin-right: 7px;
+  color: var(--dsw-alias-label-caption);
+}
+.meta .target {
+  display: inline;
+  flex: initial;
+  max-width: min(100%, 230px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: none;
+  color: var(--dsw-alias-label-tertiary) !important;
+  font-size: 12px;
+  font-weight: 400;
+  white-space: nowrap;
+}
+.meta .target::before {
+  content: '·';
+  margin-right: 7px;
+  color: var(--dsw-alias-label-caption);
+}
+@media (max-width: 620px) {
+  .meta .audience, .meta .target { font-size: 11px; }
+}

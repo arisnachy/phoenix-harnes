@@ -156,6 +156,7 @@ describe('KIRA Team chat message', () => {
     expect(view.getByText('Programación')).toBeTruthy()
     expect(view.getByText('Bloqueo')).toBeTruthy()
     expect(view.getByText('Para Kira')).toBeTruthy()
+    expect(view.getByText('Equipo interno')).toBeTruthy()
     expect(view.getByText(/Necesito dirección/)).toBeTruthy()
     expect(view.queryByLabelText('Reacciones del equipo')).toBeNull()
   })
@@ -256,7 +257,8 @@ describe('KIRA Team chat message', () => {
       content: [{ type: 'text', text: 'Kira, encontré las diferencias en origin/main.' }],
     })} />)
     expect(view.getByText('Para Kira')).toBeTruthy()
-    expect(view.container.querySelector('[data-team-audience="team"]')).toBeTruthy()
+    expect(view.container.querySelector('[data-team-audience="internal"]')).toBeTruthy()
+    expect(view.getByText('Equipo interno')).toBeTruthy()
     expect(view.getByText('Kira, encontré las diferencias en origin/main.')).toBeTruthy()
   })
 
@@ -266,8 +268,21 @@ describe('KIRA Team chat message', () => {
       missionId: undefined, targetId: 'root',
       content: [{ type: 'text', text: 'Ya lo revisé.' }],
     })} />)
-    expect(view.container.querySelector('[data-team-audience="unknown"]')).toBeTruthy()
+    expect(view.container.querySelector('[data-team-audience="internal"]')).toBeTruthy()
+    expect(view.getByText('Equipo interno')).toBeTruthy()
     expect(view.queryByText('Para Kira')).toBeNull()
+  })
+
+  it('distinguishes Kira directing her team from Kira speaking to the user', () => {
+    const view = render(<View node={node({
+      senderId: 'root', senderName: 'lead', senderKind: 'kira',
+      missionId: 'root', targetId: 'worker-a', targetName: 'lyra',
+      content: [{ type: 'text', text: 'Lyra, contrasta el checkout local con GitHub.' }],
+    })} />)
+    expect(view.getByText('Kira')).toBeTruthy()
+    expect(view.getByText('Equipo interno')).toBeTruthy()
+    expect(view.getByText('Para Lyra')).toBeTruthy()
+    expect(view.queryByText('Para ti')).toBeNull()
   })
 
   it('renders Markdown for teammate answers and quoted messages with safe links', () => {
