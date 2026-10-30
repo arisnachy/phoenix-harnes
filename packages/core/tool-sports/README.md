@@ -205,3 +205,39 @@ These are **outcome checks**, not profit guarantees. Backtests should use
 time-held-out samples, real bookmaker prices available before kickoff,
 sport-specific metrics, injury/team availability, correlation guards,
 and calibration assessments before publishing a quantitative edge.
+
+
+### ESPN per-game odds by event ID, date and independent routes
+
+Kira can request `sports_chat_odds` with `sportKey`, a verified
+`eventId` from `sports_chat_games`, and the local `date`
+(`YYYY-MM-DD`). The collector validates the date and event ID, reads
+the matching ESPN scoreboard, then attempts the same competition's
+ESPN Core odds collection (following a bounded set of ESPN-only
+`$ref`s) and the Site API summary/pickcenter if needed. No other
+game's odds are substituted for the requested event. Quotes identify
+the source route (`scoreboard`, `core` or `summary`), sportsbook,
+selection, market, line and dated update. Prices with no verified
+timestamp, a stale update or an already-started kickoff cannot become
+an advertised **current pregame quote**.
+
+League route examples use `baseball_mlb`, `basketball_nba`,
+`basketball_wnba`, `americanfootball_nfl`, `icehockey_nhl`,
+`soccer_epl`, `soccer_spain_la_liga`, `soccer_usa_mls`,
+`soccer_mexico_ligamx`, `basketball_ncaab` and others in the
+allowlist. The ESPN Site and Core endpoints are **unofficial and
+subject to breaking changes, coverage gaps and throttling**.
+A successful HTTP response is not proof that a sportsbook quoted the
+match. Paths are constructed and bounded; untrusted `$ref` hosts
+are not fetched. Short in-process caches and request caps reduce load.
+
+For individual sportsbook provider records, line movement and
+historical market data, Kira must call `sports_chat_espn_core` with
+`mode=odds`, `provider` or `movement` using a real ESPN event ID.
+Other Core modes include `ats`, `odds_records`, `futures`,
+`probabilities` and `predictor`; the latter are **not** live
+prices. Provider IDs are discovered from ESPN's current catalog; do
+not hardcode illustrative provider IDs as universal or stable.
+
+Regression test:
+`node --experimental-strip-types --test packages/core/tool-sports/tests/espn-odds-multiroute.test.mjs`.
