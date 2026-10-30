@@ -302,7 +302,7 @@ export type MarketOutcome = MarketSelection & { price:number;home:string;away:st
  * @returns Normalized quotes with bookmaker names and update times.
  */
 export type OddsSourceAttempt={provider:string;status:'observed'|'empty'|'unconfigured'|'error';
-  count:number;detail:string}
+  count:number;detail:string;rawCount?:number;undatedOutcomes?:number;expiredOutcomes?:number}
 /** Query independent providers without allowing an empty/failed preferred provider
  * to suppress a healthy fallback. Preserve bookmaker identity and source times.
  */
@@ -316,6 +316,7 @@ export async function marketOddsDetailed(
   const requests:Array<{name:string;run:()=>Promise<MarketOutcome[]>}>=[]
   const sources:OddsSourceAttempt[]=[]
   let espnDetail=''
+  let espnRawCount=0,espnUndated=0,espnExpired=0
   const names=['The Odds API v4','TheOddsAPI','OddsHarvester','ESPN Site/Core']
   const configured=new Set<string>()
   if(hasSportsPermission('odds',env)){
@@ -379,6 +380,9 @@ export async function marketOddsDetailed(
     requests.push({name:names[3]!,run:async()=>{
       const {quotes,diagnostics}=await fetchPublicEspnOddsDetailed(sportKey,markets,
         <T>(url:string)=>getFeed<T>(url,fetcher),{now,cache:fetcher===fetch})
+      espnRawCount=diagnostics.rawOddsEntries
+      espnUndated=diagnostics.undatedOutcomes
+      espnExpired=diagnostics.expiredOutcomes
       espnDetail=[diagnostics.scoreboards+' días consultados',
         diagnostics.games+' eventos futuros',diagnostics.resolvedRefs+' referencias resueltas',
         diagnostics.embedded+' líneas scoreboard',diagnostics.core+' líneas Core',
@@ -413,7 +417,9 @@ export async function marketOddsDetailed(
     sources.push({provider,status:count?'observed':'empty',count,
       detail:(provider==='ESPN Site/Core'&&espnDetail?espnDetail:
         count?'Cuotas del proveedor con casa y mercado':
-        'Sin ofertas en la consulta (no implica que todos los mercados estén cerrados)').slice(0,340)})
+        'Sin ofertas en la consulta (no implica que todos los mercados estén cerrados)').slice(0,340),
+      ...(provider==='ESPN Site/Core'?{rawCount:espnRawCount,
+        undatedOutcomes:espnUndated,expiredOutcomes:espnExpired}:{})})
   }
   for(const name of names)if(!configured.has(name)){
     sources.push({provider:name,status:'unconfigured',count:0,
