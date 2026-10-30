@@ -302,6 +302,7 @@ export async function fetchPublicEspnOddsDetailed(
   const coreBase='https://sports.core.api.espn.com/v2/sports/'+route[0]+'/leagues/'+route[1]+'/events/'
   const siteBase='https://site.api.espn.com/apis/site/v2/sports/'+route[0]+'/'+route[1]+'/'
   const seenEvents=new Set<string>()
+  const seenStartedEvents=new Set<string>()
   for(let offset=0;offset<days&&budget.used<MAX_REQUESTS;offset++){
     const date=plusUtcDay(start,offset)
     let board:ESPNBoard
@@ -314,7 +315,9 @@ export async function fetchPublicEspnOddsDetailed(
     // Count them for Kira's diagnostics but never promote to pregame offers.
     for(const event of board.events??[]){
       const kickoff=Date.parse(event.date??'')
-      if(Number.isFinite(kickoff)&&kickoff<=now){
+      const id=safeId(event.id)
+      if(id&&!seenStartedEvents.has(id)&&Number.isFinite(kickoff)&&kickoff<=now){
+        seenStartedEvents.add(id)
         diagnostics.startedGames++
         diagnostics.startedOddsEntries+=list(event.competitions?.[0]?.odds).length
       }
