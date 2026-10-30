@@ -170,3 +170,22 @@ test('event-specific lookups reject malformed ESPN IDs and calendar dates',async
   await assert.rejects(()=>fetchPublicEspnOddsDetailed('basketball_nba','h2h',noRequest,
     {now,date:'2026-10-30',eventId:'../other',days:1}),/eventId ESPN inválido/)
 })
+
+test('Core HTTP references from ESPN are upgraded to HTTPS only for exact game and host',async()=>{
+ const original='http://sports.core.api.espn.com/v2/sports/basketball/leagues/nba/events/401111111/competitions/401111111/odds/41'
+ const called=[]
+ const get=async url=>{
+  called.push(url)
+  if(url.includes('/scoreboard?'))return scoreboard([event()])
+  if(url.includes('/odds?'))return {items:[{$ref:original},{$ref:'http://not-espn.example/odds/11'}]}
+  if(url.endsWith('/odds/41'))return priced({name:'ESPN Resolved Book'})
+  if(url.includes('/summary?'))return {pickcenter:[]}
+  throw Error('Unexpected '+url)
+ }
+ const r=await fetchPublicEspnOddsDetailed('basketball_nba','h2h',get,{now,days:1})
+ assert.equal(r.quotes.length,2)
+ assert.equal(r.diagnostics.resolvedRefs,1)
+ assert.ok(called.some(url=>url==='https://'+original.slice('http://'.length)))
+ assert.ok(called.every(url=>!url.includes('not-espn.example')))
+ assert.ok(r.quotes.every(x=>x.endpointSource==='core'))
+})
