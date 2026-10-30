@@ -343,7 +343,7 @@ const sportsOdds = (v:Record<string,unknown>):v is SportsOddsCard => {
       && isText(x.event) && isText(x.market,50) && isText(x.selection)
       && isText(x.bookmaker) && isText(x.price,35) && optionalText(x.point,35))
 }
-const sportsSlateMarket=(value:unknown):value is SportsSlateMarketPreview=>isRecord(value)
+const sportsSlateMarket=(value:unknown,home:unknown,away:unknown):value is SportsSlateMarketPreview=>isRecord(value)
   && hasOnlyKeys(value,['bookmaker','source','status','updatedAt','favorite','prices'])
   && isText(value.bookmaker,100) && value.source==='ESPN Scoreboard'
   && ['sin_fecha','antigua','observada'].includes(String(value.status))
@@ -353,6 +353,12 @@ const sportsSlateMarket=(value:unknown):value is SportsSlateMarketPreview=>isRec
     && hasOnlyKeys(x,['market','selection','price','point'])
     && ['h2h','totals','spreads'].includes(String(x.market))
     && isText(x.selection,75) && isText(x.price,35) && optionalText(x.point,35))
+  && isRecord(home) && isRecord(away)
+  && typeof home.label==='string' && typeof away.label==='string'
+  && (value.favorite===undefined||[home.label,away.label].includes(value.favorite))
+  && value.prices.filter(x=>x.market==='h2h').length===2
+  && value.prices.some(x=>x.market==='h2h'&&x.selection===home.label)
+  && value.prices.some(x=>x.market==='h2h'&&x.selection===away.label)
 
 const sportsGame = (value: Record<string, unknown>): value is SportsGameCard => {
   if (!isRecord(value.props) || !hasOnlyKeys(value.props,
@@ -366,7 +372,7 @@ const sportsGame = (value: Record<string, unknown>): value is SportsGameCard => 
     && optionalText(p.country,100)
     && optionalText(p.eventId,50) && optionalText(p.broadcast,150)
     && (p.research===undefined || sportsResearch(p.research))
-    && (p.marketPreview===undefined || sportsSlateMarket(p.marketPreview))
+    && (p.marketPreview===undefined || sportsSlateMarket(p.marketPreview,p.home,p.away))
     && (p.periods===undefined || Array.isArray(p.periods) && p.periods.length<=12 && p.periods.every(x=>isRecord(x)
       && hasOnlyKeys(x,['label','away','home']) && isText(x.label,30) && isText(x.away,30) && isText(x.home,30)))
     && (p.pitchers===undefined || Array.isArray(p.pitchers) && p.pitchers.length<=4 && p.pitchers.every(sportsPitcher))
@@ -390,7 +396,7 @@ const sportsSchedule = (value:Record<string,unknown>):value is SportsScheduleCar
       && (x.phase===undefined || ['pre','in','post'].includes(String(x.phase)))
       && optionalText(x.venue,180) && sportsSide(x.away) && sportsSide(x.home)
       && optionalText(x.featured,150) && optionalText(x.favorite,170)
-       && (x.marketPreview===undefined || sportsSlateMarket(x.marketPreview))
+       && (x.marketPreview===undefined || sportsSlateMarket(x.marketPreview,x.home,x.away))
       && optionalText(x.askPrompt,400))
 }
 const sportsTicket = (value: Record<string, unknown>): value is SportsTicketCard => {
