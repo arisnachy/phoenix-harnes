@@ -1,5 +1,6 @@
 import {test} from 'node:test'
 import assert from 'node:assert/strict'
+import {readFileSync} from 'node:fs'
 import {
   secondaryMarketSourceCatalog,isKnownSecondaryMarketPage,
 } from '../src/sports-secondary-sources.ts'
@@ -31,4 +32,14 @@ test('link provenance admits only the exact official HTTPS host without credenti
   assert.equal(isKnownSecondaryMarketPage('covers','https://www.vegasinsider.com/'),false)
   assert.equal(isKnownSecondaryMarketPage('unknown','https://www.covers.com/'),false)
   assert.equal(isKnownSecondaryMarketPage('covers','this is not a URL'),false)
+})
+
+test('Kira exposes the catalog natively and knows when not to invent live website data',()=>{
+  const registered=readFileSync(new URL('../src/index.ts',import.meta.url),'utf8')
+  assert.match(registered,/name:'sports_chat_market_source_catalog'/u)
+  assert.match(registered,/secondaryMarketSourceCatalog\(\)/u)
+  assert.match(registered,/PORTALES EXTERNOS DE CONTRASTE/u)
+  assert.match(registered,/pageObservedAt/u)
+  assert.match(registered,/quoteUpdatedAt/u)
+  assert.match(registered,/jamás afirmes que obtuviste sus cuotas/u)
 })
