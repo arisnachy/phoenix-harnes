@@ -29,6 +29,17 @@ test('SportIntel MIT implementation is not misrepresented as a free live-odds pr
   assert.equal(intel.sportsbookExecution,false)
   assert.match(intel.risk,/gameTime/u)
 })
+test('no-cost sports source matrix distinguishes licensed snapshots from limited/unlicensed feeds',()=>{
+  const rows=secondaryMarketSourceCatalog().freeMarketSourceAssessment
+  const licensed=rows.find(x=>x.id==='sharpapi-open-sample')
+  assert.match(licensed.cost,/CC BY 4.0/u)
+  assert.match(licensed.history,/9.805/u)
+  assert.equal(licensed.automatedImport,false)
+  assert.match(rows.find(x=>x.id==='parlayapi-demo').cost,/60 consultas/u)
+  assert.match(rows.find(x=>x.id==='odds-gap-sample').history,/suscripción/u)
+  assert.match(rows.find(x=>x.id==='football-tennis-data').restriction,/sin autorización/u)
+  assert.equal(rows.every(x=>x.automatedImport===false),true)
+})
 test('link provenance admits only the exact official HTTPS host without credentials or port',()=>{
   assert.equal(isKnownSecondaryMarketPage('covers','https://www.covers.com/sport/odds'),true)
   assert.equal(isKnownSecondaryMarketPage('scoresandodds','https://scoresandodds.com/las-vegas-odds'),true)
