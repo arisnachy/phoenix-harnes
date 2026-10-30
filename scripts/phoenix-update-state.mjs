@@ -149,7 +149,7 @@ function guardianFailureDiagnostic(path, state) {
 function persistGuardianFailure(path, state) {
   if (!state || typeof state !== 'object') return
   const rollback = ['rolled-back', 'rollback-failed'].includes(state.status)
-  const prewarm = state.status === 'error' && state.phase === 'runtime-activation'
+  const prewarm = state.status === 'error' && ['runtime-activation', 'health-check'].includes(state.phase)
   if (!rollback && !prewarm) return
   try {
     recordGuardianIncident({
