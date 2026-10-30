@@ -21,7 +21,7 @@ type QuotedPrice=number|string|{american?:string|number;decimal?:string|number;
   value?:string|number;alternateDisplayValue?:string|number}
 type OddsSide = { moneyLine?:QuotedPrice;moneyline?:QuotedPrice;spreadOdds?:QuotedPrice;
   spread?:QuotedPrice;spreadValue?:number|string;pointSpread?:number|string;
-  open?:Record<string,unknown> }
+  current?:{moneyLine?:QuotedPrice;moneyline?:QuotedPrice};open?:Record<string,unknown> }
 type EspnOdds = {
   provider?: { name?: string;displayName?: string;id?: string|number } | string
   sportsbook?:{ name?:string;displayName?:string }|string
@@ -107,7 +107,7 @@ export function normalizeEspnMoneylines(event:EEvent,oddEntries:EspnOdds[],
     const provider=bookmakerName(odd)
     if(!provider)continue
     const updatedAt=odd.lastUpdated||odd.lastUpdate||odd.updatedAt||'No indicada por ESPN'
-    for(const [selection,value] of [[homeName,odd.homeTeamOdds?.moneyline??odd.homeTeamOdds?.moneyLine],[awayName,odd.awayTeamOdds?.moneyline??odd.awayTeamOdds?.moneyLine]] as const){
+    for(const [selection,value] of [[homeName,odd.homeTeamOdds?.moneyline??odd.homeTeamOdds?.moneyLine??odd.homeTeamOdds?.current?.moneyline??odd.homeTeamOdds?.current?.moneyLine],[awayName,odd.awayTeamOdds?.moneyline??odd.awayTeamOdds?.moneyLine??odd.awayTeamOdds?.current?.moneyline??odd.awayTeamOdds?.current?.moneyLine]] as const){
       const price=priceToDecimal(value)
       if(price!==null)result.push({ eventId:id,bookmaker:str(provider),market:'h2h',selection:str(selection),point:null,price,home:str(homeName),away:str(awayName),time:localTime(event.date||''),timeIso:kickoff.toISOString(),updatedAt:str(updatedAt) })
     }
@@ -363,11 +363,15 @@ export async function fetchPublicEspnOddsDetailed(
       try{
         const raw=await read(corePath+'?limit=5')
         const collection=quotationEntries(raw)
-        remember(event,collection.filter(x=>!('$ref'in x)),'core')
+        // ESPN Core may place an odds payload alongside its canonical $ref.
+        // Read these inline markets before attempting to follow the reference;
+        // a failed secondary GET must not discard an already observed quote.
+        remember(event,collection.filter(x=>
+          'provider'in x||'sportsbook'in x||'homeTeamOdds'in x||'awayTeamOdds'in x),'core')
         const references=isRecord(raw)&&Array.isArray(raw.items)
           ?raw.items.filter(isRecord).map(x=>safeCoreRef(x.$ref,route,eventId,competitionId))
             .filter((x):x is string=>x!==null).slice(0,MAX_REFS_PER_GAME):[]
-        for(const link of references){
+        for(const link of markets.every(m=>observedMarkets().has(m))?[]:references){
           if(budget.used>=MAX_REQUESTS)break
           try{
             const resolved=quotationEntries(await read(link))

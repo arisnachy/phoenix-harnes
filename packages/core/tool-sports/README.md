@@ -277,6 +277,13 @@ A successful HTTP response is not proof that a sportsbook quoted the
 match. Paths are constructed and bounded; untrusted `$ref` hosts
 are not fetched. Short in-process caches and request caps reduce load.
 
+Core `items[]` can contain **both** a canonical `$ref` and an inline
+moneyline in one object. The collector reads inline market fields first;
+when the requested markets are already sourced, it avoids unnecessary
+provider follow-up calls. ESPN may also nest current moneylines under
+`homeTeamOdds.current.moneyLine` / `awayTeamOdds.current.moneyLine`.
+Historical `open.*` values are never promoted into current prices.
+
 For individual sportsbook provider records, line movement and
 historical market data, Kira must call `sports_chat_espn_core` with
 `mode=odds`, `provider` or `movement` using a real ESPN event ID.
