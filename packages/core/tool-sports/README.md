@@ -247,6 +247,14 @@ Live fixtures and odds can change between requests, so dynamic tool results may 
 
 ### ESPN per-game odds by event ID, date and independent routes
 
+`sports_chat_odds` now defaults to **ESPN only** (`sourcePolicy=espn`),
+using Site Scoreboard → same-event Core `$ref` odds → Summary/Pickcenter.
+`sourcePolicy=all` is an explicit opt-in to independent bookmakers when
+no ESPN `eventId` or `date` is selected. Quoted event IDs from other
+providers must never be treated as ESPN event IDs. If no current ESPN
+prices can be verified, the tool reports diagnostics rather than silently
+substituting another operator's prices. Supported league coverage varies.
+
 Kira can request `sports_chat_odds` with `sportKey`, a verified
 `eventId` from `sports_chat_games`, and the local `date`
 (`YYYY-MM-DD`). The collector validates the date and event ID, reads
