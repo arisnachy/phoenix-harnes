@@ -100,7 +100,7 @@ describe('browser voice adapter', () => {
         .resolves.toBe(true)
       expect(speak).toHaveBeenCalledWith(expect.objectContaining({
         language: 'es-DO',
-        text: expect.stringContaining('Revisa la solicitud pendiente'),
+        text: 'necesito tu atención. Revisa la solicitud pendiente en PHOENIX.',
       }))
     } finally {
       dispose()
