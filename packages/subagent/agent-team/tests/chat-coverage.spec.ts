@@ -71,6 +71,41 @@ describe('human teamwork without progress spam', () => {
     ])
   })
 
+  it('does not republish procedural openings on each successive child turn', async () => {
+    const f = await fixture()
+    f.child.append('turn/start', { turn: 1 })
+    const speak = (turn: number, step: number, text: string) => f.child.append('assistant/message', {
+      turn, step, message: createAssistantMessage({
+        source: { provider: 'mock', model: 'mock' }, content: content(text),
+      }),
+    }, { surfaceOp: 'append' })
+    speak(1, 1, 'Kira, revisaré la bibliografía del informe.')
+    await f.chat.capture(f.root, f.child.header, f.child.events)
+    f.child.append('turn/start', { turn: 2 })
+    speak(2, 1, 'Kira, voy a volver a revisar las referencias.')
+    await f.chat.capture(f.root, f.child.header, f.child.events)
+    speak(2, 2, 'Kira, ¿puedo excluir este estudio por falta de datos?')
+    await f.chat.capture(f.root, f.child.header, f.child.events)
+    const shared = f.chat.messages(f.root).filter(row => row.senderKind === 'agent')
+    expect(shared.map(row => row.text)).toEqual([
+      'Kira, revisaré la bibliografía del informe.',
+      'Kira, ¿puedo excluir este estudio por falta de datos?',
+    ])
+    f.child.append('user/message', createUserMessage({
+      content: content('Nueva asignación: revisar otra sección'),
+      source: {
+        kind: 'team-message', teamId: TeamId(f.root.id),
+        messageId: TeamMessageId('new-assignment'), senderId: f.root.id,
+        senderName: 'Kira', purpose: 'assignment',
+      },
+    }), { surfaceOp: 'append' })
+    f.child.append('turn/start', { turn: 3 })
+    speak(3, 1, 'Kira, revisaré esta nueva sección.')
+    await f.chat.capture(f.root, f.child.header, f.child.events)
+    expect(f.chat.messages(f.root).filter(row => row.senderKind === 'agent').at(-1)?.text)
+      .toBe('Kira, revisaré esta nueva sección.')
+  })
+
   it('publishes only model identities observed from real teammate messages', async () => {
     const f = await fixture()
     f.child.append('turn/start', { turn: 1 })
@@ -332,14 +367,15 @@ describe('chat durable ownership and delivery', () => {
     expect(f.chat.messages(f.root).map(row => row.text)).toEqual([
       'Kira, abriré la portada y comprobaré el enlace.',
     ])
-    // An explicit new assignment can still produce new substantive dialogue.
+    // A new model turn without a new assignment or evidence does not justify
+    // another repetitive plan. Questions and verified findings remain visible.
     f.child.append('turn/start', { turn: 2 })
     const next = createAssistantMessage({
       source: { provider: 'mock', model: 'mock' }, content: content('Kira, comprobaré ahora el segundo artículo.'),
     })
     f.child.append('assistant/message', { turn: 2, step: 1, message: next }, { surfaceOp: 'append' })
     await f.chat.capture(f.root, f.child.header, f.child.events)
-    expect(f.chat.messages(f.root).map(row => row.text)).toContain('Kira, comprobaré ahora el segundo artículo.')
+    expect(f.chat.messages(f.root).map(row => row.text)).not.toContain('Kira, comprobaré ahora el segundo artículo.')
   })
 
   it('never publishes child narration produced after a user-stopped lead turn', async () => {
