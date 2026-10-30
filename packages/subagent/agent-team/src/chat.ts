@@ -258,13 +258,15 @@ export class TeamChat {
       const resultCallIds = new Set<string>()
       const workCallIds = new Set<string>()
       let handedOffResult = false
+      // Keep one opening per mission, not one new announcement per model turn.
       let alreadySpoke = false
       let newReceipt = false
       for (const event of events) {
         if (event.seq < (header.seedLength ?? 0)) continue
         if (event.type === 'turn/start') {
           handedOffResult = false
-          alreadySpoke = false
+          // A second turn is still the same assignment. Do not republish another
+          // no-evidence 'I will review' opening as if this were a new mission.
           newReceipt = false
         }
         if (event.type === 'tool/call'

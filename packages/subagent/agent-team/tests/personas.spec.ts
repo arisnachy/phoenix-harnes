@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   KIRA_SOCIAL_STYLE,
+  KIRA_WORK_REPORT_CONTRACT,
   TEAM_PERSONAS,
   TEAM_SKILL_POOLS,
   selectTeamPersonaName,
@@ -38,6 +39,18 @@ describe('KIRA Team social personalities', () => {
     }
     expect(lead).toContain('whether handling a task directly or delegating it')
     expect(lead).toContain('what is still unverified')
+  })
+
+  it('preserves a personal user-facing reporting contract only for the Lead during multi-step work', () => {
+    const lead = teamSocialStyle('Kira', 'lead')
+    const argo = teamSocialStyle('Argo', 'teammate')
+    expect(lead).toContain(KIRA_WORK_REPORT_CONTRACT)
+    expect(lead).toContain('what is confirmed with concrete numbers or evidence')
+    expect(lead).toContain('Use a preferred name or professional title already authorized')
+    expect(lead).toContain('complete, partial or blocked')
+    expect(lead).toContain('four verified references but needs eight to twelve')
+    expect(argo).not.toContain(KIRA_WORK_REPORT_CONTRACT)
+    expect(argo).toContain('The user is the human collaborator')
   })
 
   it('selects the real named specialist voice and preserves aliases', () => {

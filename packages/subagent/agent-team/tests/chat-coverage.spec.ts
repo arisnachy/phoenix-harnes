@@ -71,6 +71,28 @@ describe('human teamwork without progress spam', () => {
     ])
   })
 
+  it('does not republish procedural openings on each successive child turn', async () => {
+    const f = await fixture()
+    f.child.append('turn/start', { turn: 1 })
+    const speak = (turn: number, step: number, text: string) => f.child.append('assistant/message', {
+      turn, step, message: createAssistantMessage({
+        source: { provider: 'mock', model: 'mock' }, content: content(text),
+      }),
+    }, { surfaceOp: 'append' })
+    speak(1, 1, 'Kira, revisaré la bibliografía del informe.')
+    await f.chat.capture(f.root, f.child.header, f.child.events)
+    f.child.append('turn/start', { turn: 2 })
+    speak(2, 1, 'Kira, voy a volver a revisar las referencias.')
+    await f.chat.capture(f.root, f.child.header, f.child.events)
+    speak(2, 2, 'Kira, tengo una pregunta sobre el criterio de inclusión.')
+    await f.chat.capture(f.root, f.child.header, f.child.events)
+    const shared = f.chat.messages(f.root).filter(row => row.senderKind === 'agent')
+    expect(shared.map(row => row.text)).toEqual([
+      'Kira, revisaré la bibliografía del informe.',
+      'Kira, tengo una pregunta sobre el criterio de inclusión.',
+    ])
+  })
+
   it('publishes only model identities observed from real teammate messages', async () => {
     const f = await fixture()
     f.child.append('turn/start', { turn: 1 })

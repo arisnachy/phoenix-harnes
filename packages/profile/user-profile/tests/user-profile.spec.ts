@@ -158,6 +158,15 @@ describe('user profile validation and projection helpers', () => {
     }))
   })
 
+  it('keeps work reports personal and evidence-based without mandating any private name', () => {
+    const guidance = renderAssistantIdentity({ name: 'KIRA', gender: 'feminine' })
+    expect(guidance).toContain('During multi-step missions')
+    expect(guidance).toContain('a specialist reports findings')
+    expect(guidance).toContain('exact counts')
+    expect(guidance).toContain('complete/partial/blocked status')
+    expect(guidance).not.toContain('Authorized preferred name:')
+  })
+
   it('places consent-filtered address in the durable system section, including fast turns', () => {
     const configured = mergeUserProfile(profile(), {
       preferredName: 'Aris', professionalTitle: 'Dr.', profession: 'Médico',
