@@ -763,6 +763,10 @@ function cleanupDetachedLegacyStorage(keep, reportBusy = false) {
 
 function cleanupObsoleteRuntimes(extraKeep = [], { reportBusy = false } = {}) {
   const keep = new Set(extraKeep.filter(Boolean).map(runtimePathKey))
+  // During a handoff, the previous Host has already been stopped, but the new
+  // generation has NOT passed its health checkpoint. Never delete that fallback
+  // even when PHOENIX_UPDATE_RUNTIME_BACKUPS=0 or a storage sweep races activation.
+  if (lastKnownGoodRuntimeRoot !== root) keep.add(runtimePathKey(lastKnownGoodRuntimeRoot))
   const active = readActiveRuntimeRecord()
   if (active?.path !== undefined) keep.add(runtimePathKey(active.path))
   if (runtimeRoot !== root) keep.add(runtimePathKey(runtimeRoot))
