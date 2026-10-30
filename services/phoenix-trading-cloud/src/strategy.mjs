@@ -81,8 +81,11 @@ export function analyze(symbol, bars) {
   const rangeLow = Math.min(...bars.slice(-21, -1).map(b => b.low));
   const baseline = avg(closes, 20);
   const z = (latest - baseline) / Math.max(stdev(closes.slice(-20)), latest * 1e-7);
-  const trend = fast > slow * 1.004 && slow > long ? 'uptrend'
-    : fast < slow * .996 && slow < long ? 'downtrend' : 'range';
+  // Intraday 15m EMA spreads near 0.2%-0.4% can be genuine trends.
+  // Keep the long EMA alignment, price/volume and RSI checks as separate
+  // entry conditions instead of mislabelling every moderate trend as range.
+  const trend = fast > slow * 1.002 && slow > long ? 'uptrend'
+    : fast < slow * .998 && slow < long ? 'downtrend' : 'range';
   const base = { price: latest, atr: vol, rsi: strength, volatility, volumeRatio: vRatio };
   if (!safe(volatility) || volatility > .12 || volatility < .00001)
     return result(symbol, trend, 'volatility-filter', 'hold', 0, 'Unacceptable market volatility', base);
