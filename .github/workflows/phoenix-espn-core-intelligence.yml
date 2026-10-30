@@ -2,9 +2,17 @@ name: PHOENIX ESPN Core betting intelligence
 on:
   pull_request:
     paths:
+      - 'packages/core/tool-sports/src/espn-odds-history.ts'
+      - 'packages/core/tool-sports/src/espn-endpoint-guide.ts'
+      - 'packages/core/tool-sports/tests/espn-odds-history.test.mjs'
+      - 'packages/core/tool-sports/src/index.ts'
+      - 'packages/core/tool-sports/src/espn-odds.ts'
       - 'packages/core/tool-sports/src/espn-core-intelligence.ts'
       - 'packages/core/tool-sports/src/index.ts'
       - 'packages/core/tool-sports/src/espn-odds.ts'
+      - 'packages/core/tool-sports/src/espn-odds-history.ts'
+      - 'packages/core/tool-sports/src/espn-endpoint-guide.ts'
+      - 'packages/core/tool-sports/tests/espn-odds-history.test.mjs'
       - 'packages/core/tool-sports/tests/espn-core-intelligence.test.mjs'
       - 'packages/core/tool-sports/tests/espn-odds-multiroute.test.mjs'
       - 'scripts/verify-espn-core-endpoints.mjs'
@@ -33,6 +41,7 @@ jobs:
         run: |
           node --experimental-strip-types --test packages/core/tool-sports/tests/espn-core-intelligence.test.mjs
           node --experimental-strip-types --test packages/core/tool-sports/tests/espn-odds-multiroute.test.mjs
+          node --experimental-strip-types --test packages/core/tool-sports/tests/espn-odds-history.test.mjs
       - name: Report real ESPN Core HTTP availability (not a bookmaker verification)
         run: node --experimental-strip-types scripts/verify-espn-core-endpoints.mjs
       - name: Strict host build

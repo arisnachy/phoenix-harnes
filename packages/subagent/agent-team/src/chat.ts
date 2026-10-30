@@ -258,13 +258,20 @@ export class TeamChat {
       const resultCallIds = new Set<string>()
       const workCallIds = new Set<string>()
       let handedOffResult = false
+      // Keep one opening per mission, not one new announcement per model turn.
       let alreadySpoke = false
       let newReceipt = false
       for (const event of events) {
         if (event.seq < (header.seedLength ?? 0)) continue
+        if (event.type === 'user/message' && event.data.source.kind === 'team-message'
+          && event.data.source.purpose === 'assignment') {
+          // A real new assignment, unlike another model turn, may introduce itself.
+          alreadySpoke = false
+          newReceipt = false
+        }
         if (event.type === 'turn/start') {
           handedOffResult = false
-          alreadySpoke = false
+          // Another model turn is still the same assignment; keep its visible opening.
           newReceipt = false
         }
         if (event.type === 'tool/call'
