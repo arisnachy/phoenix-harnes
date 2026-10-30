@@ -67,18 +67,24 @@ export const secondaryMarketPolicy = {
   favoriteRule:'Favorito de mercado por precio observado ≠ favorito de un análisis deportivo independiente y validado.',
 } as const
 
-/** Identify an attributed page without fetching it or trusting arbitrary hosts. */
+/** Identify an attributed page without fetching it or trusting arbitrary hosts.
+ * @param sourceId - Known directory source key.
+ * @param href - Candidate HTTPS research-page URL.
+ * @returns Whether the URL belongs to this source's exact public host.
+ */
 export function isKnownSecondaryMarketPage(sourceId:string,href:string):boolean {
   const source=secondarySportsSources.find(item=>item.id===sourceId)
   if(!source||typeof href!=='string'||href.length>1200)return false
   try{
     const url=new URL(href)
     return url.protocol==='https:'&&!url.username&&!url.password&&!url.port
-      &&source.hosts.some(host=>host===url.hostname)
+      &&(source.hosts as readonly string[]).some(host=>host===url.hostname)
   }catch{return false}
 }
 
-/** Bounded, read-only directory for a human or an authorized browser workflow. */
+/** Bounded, read-only directory for a human or an authorized browser workflow.
+ * @returns Sources, workflow, access restrictions and provenance caveats.
+ */
 export function secondaryMarketSourceCatalog(){
   return {sources:secondarySportsSources,workflow:secondaryMarketWorkflow,
     policy:secondaryMarketPolicy,
