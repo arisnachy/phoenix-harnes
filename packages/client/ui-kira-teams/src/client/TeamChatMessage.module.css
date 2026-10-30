@@ -516,6 +516,26 @@
   }
 }
 
+/* A user-facing Kira reply must read as a conversation, not a control-panel status. */
+.meta .userAudience {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+.meta .userAudience::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--dsw-specific-phoenix-accent);
+  opacity: .72;
+}
+
 /* Kira's identity header is intentionally as compact as the ordinary message header. */
 .meta[data-team-author='kira'] { gap: 7px; align-items:center; min-height:42px; }
 .meta[data-team-author='kira'] .avatar { width:42px; height:42px; margin-right:5px; }
