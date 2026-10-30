@@ -264,10 +264,14 @@ export async function runBinanceAdaptiveCycle(
     const exit = exits.sort((a, b) =>
       (a.reason === 'paper-stop-loss' ? -1 : 0) - (b.reason === 'paper-stop-loss' ? -1 : 0))[0]
     const exposure = account.positions.reduce((sum, position) => sum + position.marketValueUsdt, 0)
-    const candidate = sorted.find(signal => signal.action === 'buy'
+    const candidates = sorted.filter(signal => signal.action === 'buy'
       && !binanceKnownAssetRisk(signal.symbol)
       && signal.score >= MIN_AUTONOMOUS_SCORE
       && !account.positions.some(position => position.symbol === signal.symbol))
+    const candidate = candidates[0]
+    // Symbols can change Spot eligibility between hourly discovery and order.
+    // Fail over to another qualified signal, not to unsafe or unverified markets.
+    const rejectedEntries = new Set<string>()
     // Fees reduce virtual equity at the fill. Reserve that reduction before
     // sizing the final slot so aggregate marked exposure stays <= 20%.
     const capacityAfterFees = Math.max(0,
@@ -286,6 +290,10 @@ export async function runBinanceAdaptiveCycle(
         explanation: trade.side === 'buy'
           ? 'Compra virtual confirmada en el ledger'
           : 'Venta virtual confirmada en el ledger',
+      }
+      if (rejectedEntries.has(signal.symbol)) return {
+        symbol: signal.symbol, status: 'blocked' as const,
+        explanation: 'Estado Spot actual no elegible; se intentó el siguiente candidato',
       }
       if (signal.action === 'hold') return {
         symbol: signal.symbol, status: 'none' as const,
@@ -363,19 +371,32 @@ export async function runBinanceAdaptiveCycle(
     if (candidate !== undefined && budget >= 10
       && account.positions.length < MAX_OPEN_POSITIONS
       && account.maxDrawdownPct < 5) {
-      const result = await broker.order({
-        symbol: candidate.symbol,
-        side: 'buy',
-        quoteAmountUsdt: Math.floor(budget * 100) / 100,
-        strategyId: 'adaptive-' + candidate.strategy + '-v1',
-        reason: candidate.reason,
-      })
-      return { mode, interval, signals: sorted, execution: executionFor('buy', result.trade), decision: 'buy',
-        rationale: 'Highest scored eligible virtual entry within portfolio limits',
-        trade: result.trade, account: result.account }
+      for (const eligibleSignal of candidates) {
+        try {
+          const result = await broker.order({
+            symbol: eligibleSignal.symbol,
+            side: 'buy',
+            quoteAmountUsdt: Math.floor(budget * 100) / 100,
+            strategyId: 'adaptive-' + eligibleSignal.strategy + '-v1',
+            reason: eligibleSignal.reason,
+          })
+          return { mode, interval, signals: sorted, execution: executionFor('buy', result.trade), decision: 'buy',
+            rationale: 'Highest ranked currently eligible PAPER entry confirmed in persisted ledger',
+            trade: result.trade, account: result.account }
+        } catch (error) {
+          // Only a documented, reversible Spot eligibility rejection may be
+          // skipped. Ledger corruption, price outages, and write failures must
+          // propagate and never be disguised as a successful cycle.
+          if (!(error instanceof Error)
+            || error.message !== 'Binance public Spot market is not eligible for PAPER buy') throw error
+          rejectedEntries.add(eligibleSignal.symbol)
+        }
+      }
     }
     const why = candidate === undefined
       ? 'Ninguna señal de compra supera el mínimo de ' + MIN_AUTONOMOUS_SCORE + '/100 sin posición existente'
+      : rejectedEntries.size === candidates.length && candidates.length > 0
+        ? 'Todos los candidatos fueron rechazados por el estado Spot actual de Binance'
       : account.positions.length >= MAX_OPEN_POSITIONS
         ? 'Bloqueada: ya hay ' + MAX_OPEN_POSITIONS + ' posiciones abiertas'
         : account.maxDrawdownPct >= 5
