@@ -174,13 +174,14 @@ const safeCoreRef=(value:unknown,route:readonly [string,string],
   if(typeof value!=='string'||value.length>600)return null
   try{
     const u=new URL(value)
-    if(u.protocol!=='https:'||u.username||u.password||u.port||
+    if(!['https:','http:'].includes(u.protocol)||u.username||u.password||u.port||
       !['sports.core.api.espn.com','sports.core.api.espn.pvt'].includes(u.hostname))return null
     const prefix='/v2/sports/'+route[0]+'/leagues/'+route[1]+'/events/'+eventId+
       '/competitions/'+competitionId+'/odds/'
     if(!u.pathname.startsWith(prefix)||!/^\/\d{1,16}$/u.test(u.pathname.slice(prefix.length-1)))return null
     // ESPN occasionally emits internal .pvt links in public Core collections.
     if(u.hostname==='sports.core.api.espn.pvt')u.hostname='sports.core.api.espn.com'
+    u.protocol='https:'
     if(u.searchParams.has('apiKey'))return null
     return u.toString()
   }catch{return null}
