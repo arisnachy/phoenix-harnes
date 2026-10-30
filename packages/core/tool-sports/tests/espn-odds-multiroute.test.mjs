@@ -301,3 +301,32 @@ test('Core HTTP references from ESPN are upgraded to HTTPS only for exact game a
  assert.ok(called.every(url=>!url.includes('not-espn.example')))
  assert.ok(r.quotes.every(x=>x.endpointSource==='core'))
 })
+
+
+test('Core inline records carrying $ref preserve priced odds without a second provider request',async()=>{
+  const urls=[]
+  const inline='http://sports.core.api.espn.com/v2/sports/basketball/leagues/nba/events/401111111/competitions/401111111/odds/41'
+  const get=async url=>{
+    urls.push(url)
+    if(url.includes('/scoreboard?'))return scoreboard([event([])])
+    if(url.includes('/odds?'))return {count:1,items:[{$ref:inline,...priced({name:'Inline Core Book'})}]}
+    throw Error('Already received inline odds; do not require extra request '+url)
+  }
+  const result=await fetchPublicEspnOddsDetailed('basketball_nba','h2h',get,{now,days:1})
+  assert.equal(result.quotes.length,2)
+  assert.equal(result.diagnostics.core,2)
+  assert.ok(result.quotes.every(q=>q.bookmaker==='Inline Core Book'&&q.endpointSource==='core'))
+  assert.equal(urls.length,2)
+})
+
+test('Core current.moneyLine is parsed when the top-level moneyline is missing, never the opening odds',()=>{
+  const quote={
+    provider:{id:'41',name:'Current Lines'},lastUpdated:updated,
+    homeTeamOdds:{current:{moneyLine:{american:'-120'}},open:{moneyLine:{american:'-500'}}},
+    awayTeamOdds:{current:{moneyLine:{american:'+110'}},open:{moneyLine:{american:'+450'}}},
+  }
+  const result=normalizeEspnMarkets(event([]),[quote],{now})
+  assert.equal(result.length,2)
+  assert.deepEqual(result.map(q=>q.price).sort((a,b)=>a-b),[1.83333,2.1])
+  assert.equal(result.some(q=>q.price===1.2||q.price===5.5),false)
+})
