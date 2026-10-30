@@ -355,10 +355,13 @@ const sportsSlateMarket=(value:unknown,home:unknown,away:unknown):value is Sport
     && isText(x.selection,75) && isText(x.price,35) && optionalText(x.point,35))
   && isRecord(home) && isRecord(away)
   && typeof home.label==='string' && typeof away.label==='string'
-  && (value.favorite===undefined||[home.label,away.label].includes(value.favorite))
-  && value.prices.filter(x=>x.market==='h2h').length===2
-  && value.prices.some(x=>x.market==='h2h'&&x.selection===home.label)
-  && value.prices.some(x=>x.market==='h2h'&&x.selection===away.label)
+  && (value.favorite===undefined||[home.label,away.label].includes(String(value.favorite)))
+  && (value.prices.filter(x=>x.market==='h2h').length===0
+    || value.prices.filter(x=>x.market==='h2h').length===2)
+  && (value.prices.every(x=>x.market!=='h2h')
+    || (value.prices.some(x=>x.market==='h2h'&&x.selection===home.label)
+      && value.prices.some(x=>x.market==='h2h'&&x.selection===away.label)))
+  && (value.favorite===undefined||value.prices.some(x=>x.market==='h2h'))
 
 const sportsGame = (value: Record<string, unknown>): value is SportsGameCard => {
   if (!isRecord(value.props) || !hasOnlyKeys(value.props,
