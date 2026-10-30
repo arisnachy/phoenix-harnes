@@ -54,7 +54,14 @@ describe('model engine glyphs', () => {
     const children = Children.toArray(badge?.props.children).filter(isValidElement<{ children?: ReactNode }>)
     expect(children.some(child => child.props.children === 'Terra')).toBe(true)
     expect(children.some(child => child.type === 'span')).toBe(true)
-    expect(children.some(child => typeof child.type === 'function')).toBe(true)
+    const terraIcon = children.find(child => typeof child.type === 'function')
+    expect(terraIcon).toBeDefined()
+    if (terraIcon === undefined) throw new Error('Terra icon component missing')
+    const renderIcon = terraIcon.type as (props: { family: 'terra' }) => ReactElement<{ children?: ReactNode }>
+    const globe = renderIcon({ family: 'terra' })
+    expect(globe.type).toBe('svg')
+    const strokes = Children.toArray(globe.props.children).filter(isValidElement)
+    expect(strokes.map(stroke => stroke.type)).toEqual(['circle', 'path'])
     const other: ReactElement<Record<string, unknown> & { children?: ReactNode }> | null = ModelEngineBadge({
       model: 'deepseek-v4', provider: 'deepseek', placement: 'header',
     })
