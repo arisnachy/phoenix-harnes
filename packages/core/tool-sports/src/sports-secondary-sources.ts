@@ -67,6 +67,22 @@ export const secondaryMarketPolicy = {
   favoriteRule:'Favorito de mercado por precio observado ≠ favorito de un análisis deportivo independiente y validado.',
 } as const
 
+/** SportIntel's MIT code can be reused, but live odds require an upstream API key.
+ * Source: roizenlabs/sportintel-mcp src/tools/live-odds.ts + integrations/odds-api.ts.
+ */
+export const sportIntelMcpAssessment={
+  url:'https://github.com/roizenlabs/sportintel-mcp',
+  tool:'get_live_odds',
+  codeLicense:'MIT',
+  provider:'The Odds API v4',
+  requiresApiKey:true,
+  environmentVariable:'ODDS_API_KEY',
+  independentFreeFeed:false,
+  sportsbookExecution:false,
+  risk:'La implementación observada deduce equipos desde el spread y asigna la hora actual a gameTime; no adoptar como fecha oficial de inicio ni cotización sin validar.',
+  integrationDecision:'No añadir como fuente gratuita redundante; reutilizar conceptos de comparación solo con proveedores y tiempos comprobados.',
+} as const
+
 /** Identify an attributed page without fetching it or trusting arbitrary hosts.
  * @param sourceId - Known directory source key.
  * @param href - Candidate HTTPS research-page URL.
@@ -87,6 +103,7 @@ export function isKnownSecondaryMarketPage(sourceId:string,href:string):boolean 
  */
 export function secondaryMarketSourceCatalog(){
   return {sources:secondarySportsSources,workflow:secondaryMarketWorkflow,
+    sportIntelMcp:sportIntelMcpAssessment,
     policy:secondaryMarketPolicy,
     instruction:'Estos son portales para investigación complementaria, no feeds API activados. Si no puedes navegar su contenido, indícalo: no inventes cuotas, movimientos ni marcas temporales. Las cuotas sin marca de actualización no son precios actuales verificables.'}
 }
