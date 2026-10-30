@@ -1734,28 +1734,68 @@ export function speakVoiceAssistantResponse(messageKey: string, text: string, me
  * @param detail - Optional human-facing context for the notification.
  * @returns Whether active Codex Realtime accepted or queued the notification.
  */
-export function speakVoiceAssistantAttention(title: string, detail?: string): boolean {
-  const realtime = codexRealtimeVoiceSession
-  if (!voiceAssistantSnapshot.active || realtime === undefined) return false
+let attentionSpeechSequence = 0
+
+/**
+ * Speak an important alert through the already-connected Codex Live channel
+ * when it exists, otherwise use PHOENIX's local, language-aware Host TTS.
+ * Do not silently open a microphone or start a WebRTC call without permission.
+ */
+export async function speakVoiceAssistantAttention(title: string, detail?: string, preferredName?: string): Promise<boolean> {
+  const configuredLanguage = typeof document === 'undefined'
+    ? 'es-DO'
+    : (document.documentElement.lang.trim() || 'es-DO')
+  const safeName = typeof preferredName === 'string'
+    && /^[\\p{L}][\\p{L}\\s'-]{0,40}$/u.test(preferredName.trim()) ? preferredName.trim() : ''
   const context = naturalAttentionContext(title, detail)
-  const utterance: PendingCodexRealtimeUtterance = {
-    sessionKey: realtime.key,
-    key: `attention:${context}`,
-    echoText: context,
-    instructions: [
-      'Give the user one brief, natural spoken notification in the user\'s current language.',
-      'PHOENIX needs the user\'s input or review before continuing.',
-      'Use the same voice and persona already active in this call.',
-      'Do not read UUIDs, task ids, hashes, timestamps, field names, or raw numbers used only as identifiers.',
-      'Avoid mechanical status-label wording; ask for the required review or input like a person would.',
-      'Use the following context only to explain naturally what the user should look at:',
-      context,
-    ].join(' '),
+  if (context === '') return false
+  const personalContext = safeName === '' ? context : `${safeName}, ${context}`
+  const realtime = codexRealtimeVoiceSession
+  if (voiceAssistantSnapshot.active && realtime !== undefined) {
+    const utterance: PendingCodexRealtimeUtterance = {
+      sessionKey: realtime.key,
+      key: `attention:${context}`,
+      echoText: personalContext,
+      instructions: [
+        'Give the user one brief, natural spoken notification in this configured language:',
+        configuredLanguage,
+        'PHOENIX needs the user\'s input or review before continuing.',
+        'Use the same voice and persona already active in this call.',
+        'Do not read UUIDs, task ids, hashes, timestamps, field names, or raw numbers used only as identifiers.',
+        'Avoid mechanical status-label wording; ask for the required review or input like a person would.',
+        'Use the following context only to explain naturally what the user should look at:',
+        personalContext,
+      ].join(' '),
+    }
+    if (!sendCodexRealtimeUtterance(realtime, utterance)) {
+      queueCodexRealtimeUtterance(utterance)
+    }
+    return true
   }
-  if (!sendCodexRealtimeUtterance(realtime, utterance)) {
-    queueCodexRealtimeUtterance(utterance)
+
+  // Codex CLI may be installed/authenticated but does not own an output
+  // channel until a user-authorized WebRTC session is open. Fall back now.
+  const remote = voiceAssistantRemote
+  if (remote === undefined) return false
+  // Avoid feeding an English machine status into a Spanish neural phonemizer.
+  // The full original detail remains visible in the attention panel.
+  const nativeText = configuredLanguage.toLowerCase().startsWith('es')
+    && spokenLanguage(context, configuredLanguage) === 'en-US'
+    ? (safeName === '' ? '' : `${safeName}, `)
+      + 'necesito tu atención. Revisa la solicitud pendiente en PHOENIX.'
+    : personalContext
+  try {
+    const result = await remote.conversationSpeak({
+      key: 'phoenix:proactive-attention',
+      sequence: ++attentionSpeechSequence,
+      text: nativeText,
+      language: configuredLanguage,
+      final: true,
+    })
+    return result.ok && result.value.accepted
+  } catch {
+    return false
   }
-  return true
 }
 
 function naturalAttentionContext(title: string, detail?: string): string {
