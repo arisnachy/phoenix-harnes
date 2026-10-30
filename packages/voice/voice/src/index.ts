@@ -243,37 +243,46 @@ export function displayOutputToVoiceText(displayOutput: string, maxChars = 480):
 
 /** Return one event only when it is an explicitly speakable important event.
  * @param input - untrusted session event candidate.
+ * @param language - Configured voice language, using es-DO by default.
  * @returns a normalized important voice event, or undefined.
  */
-export function sessionEventToVoiceEvent(input: unknown): VoiceImportantEvent | undefined {
+export function sessionEventToVoiceEvent(input: unknown, language = 'es-DO'): VoiceImportantEvent | undefined {
   if (!isRecord(input) || typeof input.type !== 'string' || !isRecord(input.data)) return undefined
   const data = input.data
   const id = stringValue(data.id) ?? stringValue(data.goalId) ?? 'event'
   const revision = stringValue(data.revision) ?? 'current'
+  const messages = importantVoiceMessages(language)
   switch (input.type) {
     case 'approval/asked':
       return {
         kind: 'authorization',
-        displayOutput: 'I need your approval before I can continue.',
+        displayOutput: messages.authorization,
         dedupeKey: `authorization:${id}`,
+        language,
       }
     case 'goal/judge': {
       const verdict = data.verdict
       const summary = naturalEventSummary(data.summary)
+      // Never feed unmistakably English judge prose to a Spanish phonemizer.
+      // A localized status is preferable to unintelligible mixed-language audio.
+      const spokenSummary = language.toLowerCase().startsWith('es')
+        && summary !== undefined
+        && /\b(?:the|your|task|completed|waiting|needs|please|before|review|approved|cannot|has been)\b/iu.test(summary)
+        ? undefined : summary
       if (verdict === 'pass') {
         return {
           kind: 'mission-completed',
-          displayOutput: summary ?? 'The task is complete and has passed review.',
+          displayOutput: spokenSummary ?? messages.completed,
           dedupeKey: `completed:${id}:${revision}`,
+          language,
         }
       }
       if (verdict === 'blocked') {
         return {
           kind: 'blocked',
-          displayOutput: summary === undefined
-            ? 'I need your input before I can continue with the task.'
-            : `I need your input before I can continue. ${summary}`,
+          displayOutput: spokenSummary === undefined ? messages.blocked : `${messages.blocked} ${spokenSummary}`,
           dedupeKey: `blocked:${id}:${revision}`,
+          language,
         }
       }
       return undefined
@@ -282,11 +291,48 @@ export function sessionEventToVoiceEvent(input: unknown): VoiceImportantEvent | 
       if (data.status !== 'blocked' && data.nextAction !== 'blocked') return undefined
       return {
         kind: 'blocked',
-        displayOutput: 'I need your input before I can continue with the task.',
+        displayOutput: messages.blocked,
         dedupeKey: `blocked:${id}:${revision}`,
+        language,
       }
     default:
       return undefined
+  }
+}
+
+/** Human-facing notification prompts in the configured speech language. */
+function importantVoiceMessages(language: string): { authorization: string; completed: string; blocked: string } {
+  switch (language.toLowerCase().split('-')[0]) {
+    case 'es':
+      return {
+        authorization: 'Necesito tu autorización para continuar.',
+        completed: 'He terminado la tarea y he comprobado el resultado.',
+        blocked: 'Necesito que revises algo para poder continuar.',
+      }
+    case 'pt':
+      return {
+        authorization: 'Preciso da sua autorização para continuar.',
+        completed: 'Terminei a tarefa e verifiquei o resultado.',
+        blocked: 'Preciso da sua ajuda para continuar.',
+      }
+    case 'fr':
+      return {
+        authorization: 'J’ai besoin de votre autorisation pour continuer.',
+        completed: 'J’ai terminé la tâche et vérifié le résultat.',
+        blocked: 'J’ai besoin de votre aide pour continuer.',
+      }
+    case 'it':
+      return {
+        authorization: 'Ho bisogno della tua autorizzazione per continuare.',
+        completed: 'Ho completato il compito e verificato il risultato.',
+        blocked: 'Ho bisogno del tuo aiuto per continuare.',
+      }
+    default:
+      return {
+        authorization: 'I need your approval before I can continue.',
+        completed: 'The task is complete and has passed review.',
+        blocked: 'I need your input before I can continue with the task.',
+      }
   }
 }
 
@@ -394,7 +440,7 @@ export class VoiceRuntime extends TypertRemoteService {
     }
     ctx.on('voice/important', (event) => { void this.announce(event) })
     ctx.on('session/event', (_session, event) => {
-      const important = sessionEventToVoiceEvent(event)
+      const important = sessionEventToVoiceEvent(event, this.config.language)
       if (important !== undefined) void this.announce(important)
     })
     ctx.effect(() => () => { this.stop() }, 'voice queue teardown')
@@ -585,12 +631,15 @@ export class VoiceRuntime extends TypertRemoteService {
   @Remote('conversationSpeak')
   async conversationSpeak(request: VoiceConversationSpeakRequest): Promise<VoiceConversationSpeakReceipt> {
     if (!this.config.enabled) return { accepted: false, reason: 'disabled' }
-    const providers = this.conversationTtsProviders()
+    const language = request.language?.trim() || this.config.language
+    const key = request.key.trim()
+    // Important UI alerts allow a same-language platform voice after neural TTS.
+    // Ordinary live conversation keeps the neural-only provider contract.
+    const providers = this.conversationTtsProviders(language, key.startsWith('phoenix:proactive-attention'))
     const provider = providers[0]
     if (provider === undefined) {
       return { accepted: false, reason: 'natural-unavailable' }
     }
-    const key = request.key.trim()
     if (key === '' || key.length > 256 || !Number.isSafeInteger(request.sequence) || request.sequence < 0) {
       return { accepted: false, reason: 'invalid', provider: provider.id }
     }
@@ -608,7 +657,6 @@ export class VoiceRuntime extends TypertRemoteService {
     channel.lastSequence = request.sequence
     const controller = new AbortController()
     channel.controllers.add(controller)
-    const language = request.language?.trim() || this.config.language
     const final = request.final === true
     const currentChannel = channel
     let spokenProvider = provider.id
@@ -703,11 +751,13 @@ export class VoiceRuntime extends TypertRemoteService {
       return { id, accepted: false, reason: 'duplicate' }
     }
     if (this.queue.length >= this.config.maxQueue) return { id, accepted: false, reason: 'queue-full' }
-    if (this.selectTtsProvider() === undefined) return { id, accepted: false, reason: 'no-provider' }
+    if (this.speechProviders(event.language ?? this.config.language).length === 0) return { id, accepted: false, reason: 'no-provider' }
     const queued: QueuedAnnouncement = { id, event, text, controller: new AbortController() }
     this.queue.push(queued)
     if (key !== undefined) this.pendingKeys.add(key)
-    void this.drain()
+    void this.drain().catch((error: unknown) => {
+      this.ctx.logger('voice').warn(`important voice announcement failed: ${String(error)}`)
+    })
     return { id, accepted: true, text }
   }
 
@@ -770,7 +820,7 @@ export class VoiceRuntime extends TypertRemoteService {
    * @returns Current queue, speaking, and selected-provider state.
    */
   status(): VoiceRuntimeStatus {
-    const ttsProvider = this.selectTtsProvider()
+    const ttsProvider = this.speechProviders(this.config.language)[0]
     const sttProvider = this.selectSttProvider()
     return {
       enabled: this.config.enabled,
@@ -893,26 +943,25 @@ export class VoiceRuntime extends TypertRemoteService {
     return () => { void dispose() }
   }
 
-  private conversationTtsProviders(): VoiceTextToSpeechProvider[] {
-    // Keep hands-free conversation human-sounding: use a configured natural
-    // neural engine first, then Kokoro. The old Windows SAPI voice is NOT a
-    // conversational fallback: if neither neural route works, the Client
-    // tries a language-matching browser voice instead of a robotic SAPI voice.
-    const ids = ['phoenix-natural', 'kokoro'] as const
-    const providers: VoiceTextToSpeechProvider[] = []
-    for (const id of ids) {
-      const provider = this.ttsProviders.get(id)
-      if (provider?.available() === true) providers.push(provider)
-    }
-    return providers
+  /** Prefer verified language-matched engines; never pronounce Spanish through
+   * an unvalidated CosyVoice reference (a common source of gibberish).
+   * To enable Spanish CosyVoice, verify it acoustically and opt in explicitly.
+   */
+  private speechProviders(language: string): VoiceTextToSpeechProvider[] {
+    const spanish = language.toLowerCase().split('-')[0] === 'es'
+    const naturalVerified = process.env.PHOENIX_NATURAL_VOICE_ES_VERIFIED === '1'
+    return orderedProviders(this.ttsProviders, this.config.ttsProvider)
+      .filter(provider => !spanish || naturalVerified || provider.id !== 'phoenix-natural')
+  }
+
+  private conversationTtsProviders(language = this.config.language, allowSystem = false): VoiceTextToSpeechProvider[] {
+    const ids = allowSystem ? ['phoenix-natural', 'kokoro', 'system'] : ['phoenix-natural', 'kokoro']
+    const providers = this.speechProviders(language)
+    return ids.flatMap(id => providers.filter(provider => provider.id === id))
   }
 
   private selectConversationTtsProvider(): VoiceTextToSpeechProvider | undefined {
     return this.conversationTtsProviders()[0]
-  }
-
-  private selectTtsProvider(): VoiceTextToSpeechProvider | undefined {
-    return selectProvider(this.ttsProviders, this.config.ttsProvider)
   }
 
   private selectSttProvider(): VoiceSpeechToTextProvider | undefined {
@@ -927,7 +976,7 @@ export class VoiceRuntime extends TypertRemoteService {
         const item = this.queue.shift()
         if (item === undefined) continue
         if (item.event.dedupeKey !== undefined) this.pendingKeys.delete(item.event.dedupeKey)
-        const providers = orderedProviders(this.ttsProviders, this.config.ttsProvider)
+        const providers = this.speechProviders(item.event.language ?? this.config.language)
         if (providers.length === 0) continue
         this.current = item
         try {
@@ -950,7 +999,7 @@ export class VoiceRuntime extends TypertRemoteService {
     text: string,
     language: string,
     signal: AbortSignal,
-    candidates = orderedProviders(this.ttsProviders, this.config.ttsProvider),
+    candidates = this.speechProviders(language),
   ): Promise<string | undefined> {
     let lastError: unknown
     for (const provider of candidates) {

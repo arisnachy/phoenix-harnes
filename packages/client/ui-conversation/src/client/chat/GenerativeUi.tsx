@@ -721,39 +721,47 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
     }
     case 'sports_schedule_card': {
       const p=block.props
+      const sportNames:Record<string,string>={basketball:'BALONCESTO',football:'FÚTBOL AMERICANO',baseball:'BÉISBOL',soccer:'FÚTBOL',hockey:'HOCKEY',tennis:'TENIS',cricket:'CRÍQUET',golf:'GOLF',mma:'ARTES MARCIALES',racing:'AUTOMOVILISMO'}
+      const sportName=sportNames[p.sport??'']??p.sport?.toLocaleUpperCase('es')??'DEPORTES'
       return <SportsLiveProvider sport={p.sport} league={p.providerLeague??p.league} date={p.date}>
         {(get,meta)=><section className={css.sportsSlate} data-generative-ui="sports_schedule_card"
         aria-label={p.title}>
         <header className={css.sportsSlateHeader}>
-          <div><span className={css.sportsKicker}>PHOENIX / CARTELERA EN EL CHAT</span>
-            <h3>{p.title}</h3><small>{[p.league,p.date].filter(Boolean).join(' · ')}</small></div>
+          <div><span className={css.sportsKicker}>PHOENIX / {sportName} · {p.league?.toLocaleUpperCase('es')??'CARTELERA'}</span>
+            <h3>{p.league?`${p.league} · ${p.title}`:p.title}</h3><small>{sportName} · {p.date}</small></div>
           <span className={css.sportsSlateCount}>{p.events.length} {p.events.length===1?'juego':'juegos'}</span>
         </header>
         <div className={css.sportsSlateGrid}>{p.events.map((e,i)=>{
           const live=get(e)
-          const away={...e.away,...(live?.awayScore===undefined?{}:{score:live.awayScore})}
-          const home={...e.home,...(live?.homeScore===undefined?{}:{score:live.homeScore})}
-          return <article key={e.eventId??i} className={css.sportsSlateEvent}>
+          const phase=live?.phase??e.phase
+          const hasStarted=phase==='in'||phase==='post'
+          const unknown=(name:string)=>!name.trim()||/^(?:sin confirmar|por confirmar|tbd|tba|unknown|sin definir)$/iu.test(name.trim())
+          const pending=unknown(e.away.label)||unknown(e.home.label)
+          const away={...e.away,...(hasStarted&&live?.awayScore!==undefined?{score:live.awayScore}:{})}
+          const home={...e.home,...(hasStarted&&live?.homeScore!==undefined?{score:live.homeScore}:{})}
+          return <article key={e.eventId??i} className={`${css.sportsSlateEvent} ${pending?css.sportsSlatePending:''}`}>
             <div className={css.sportsSlateMeta}>
-              <strong>{e.when}</strong>{(live?.status??e.status)&&<span>{live?.status??e.status}</span>}
+              <strong>{e.when}</strong><span className={css.sportsSlatePhase}>{pending?'Participantes pendientes':phase==='pre'?'No iniciado':phase==='in'?'● En vivo':phase==='post'?'Finalizado':live?.status??e.status??'Estado sin confirmar'}</span>
             </div>
-            <div className={css.sportsSlateMatch}>
+            {pending?<p className={css.sportsSlateUnknown}>ESPN aún no identifica a ambos participantes. No se muestra marcador, favorito ni análisis como si el cruce estuviera confirmado.</p>
+            :<div className={css.sportsSlateMatch}>
               <div><SportsPortrait label={away.label} logo={away.logo}/>
                 <span><strong>{away.label}</strong>{away.meta&&<small>{away.meta}</small>}</span>
-                {away.score!==undefined&&<b>{away.score}</b>}</div>
+                {hasStarted&&away.score!==undefined&&<b>{away.score}</b>}</div>
               <div><SportsPortrait label={home.label} logo={home.logo}/>
                 <span><strong>{home.label}</strong>{home.meta&&<small>{home.meta}</small>}</span>
-                {home.score!==undefined&&<b>{home.score}</b>}</div>
-            </div>
-            <SportsLiveFacts game={live} meta={meta} sport={p.sport}/>
+                {hasStarted&&home.score!==undefined&&<b>{home.score}</b>}</div>
+              {!hasStarted&&<span className={css.sportsSlateVs}>VS · Sin iniciar</span>}
+            </div>}
+            {!pending&&<SportsLiveFacts game={live} meta={meta} sport={p.sport}/>}
             {e.venue&&<small className={css.sportsSlateVenue}>⌖ {e.venue}</small>}
-            {e.featured&&<small className={css.sportsSlateFeatured}>{e.featured}</small>}
-            {e.favorite&&<small className={css.sportsSlateFavorite}>Tendencia fundamentada · {e.favorite}</small>}
-            {(live?.phase==='in'||e.phase==='in')&&onAction&&<button className={css.sportsSlateAction}
+            {!pending&&e.featured&&<small className={css.sportsSlateFeatured}>{e.featured}</small>}
+            {!pending&&<small className={css.sportsSlateFavorite}>{e.favorite?`★ Favorito analítico · ${e.favorite}`:'☆ Favorito sin verificar · consultar análisis y cuotas'}</small>}
+            {!pending&&(live?.phase==='in'||e.phase==='in')&&onAction&&<button className={css.sportsSlateAction}
               type="button" onClick={()=>onAction('Kira, muéstrame en vivo '+e.away.label+' vs '+e.home.label+' de '+(p.league??p.providerLeague??'esta liga')+' el '+p.date+'.','draft')}>
               Seguir en vivo · Detalle ›
             </button>}
-            {e.askPrompt&&onAction&&<button className={css.sportsSlateAction}
+            {!pending&&e.askPrompt&&onAction&&<button className={css.sportsSlateAction}
               type="button" onClick={()=>{if(e.askPrompt)onAction(e.askPrompt,'draft')}}>
               Ver análisis del encuentro ›
             </button>}
@@ -768,6 +776,7 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
       return <SportsLiveProvider sport={p.sport} league={p.providerLeague??p.league} date={p.eventDate}>
         {(get,meta)=>{
           const live=get(p)
+          const hasStarted=(live?.phase??p.phase)==='in'||(live?.phase??p.phase)==='post'
           return <section className={css.sportsCard} data-generative-ui="sports_game_card">
         <header className={css.sportsHeadline}>
           <div><span className={css.sportsKicker}>PHOENIX / {p.sport?.toUpperCase()??'DEPORTES'}</span>
@@ -781,11 +790,11 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
         <div className={css.sportsVersus}>
           <div className={css.sportsTeam}><SportsPortrait label={p.away.label} logo={p.away.logo}/>
             <strong>{p.away.label}</strong>{p.away.meta&&<small>{p.away.meta}</small>}
-            {(live?.awayScore??p.away.score)!==undefined&&<b>{live?.awayScore??p.away.score}</b>}</div>
-          <span className={css.sportsVs}>{live?.awayScore!==undefined||live?.homeScore!==undefined||p.away.score!==undefined||p.home.score!==undefined?'—':'VS'}</span>
+            {hasStarted&&(live?.awayScore??p.away.score)!==undefined&&<b>{live?.awayScore??p.away.score}</b>}</div>
+          <span className={css.sportsVs}>{hasStarted?'—':'VS · No iniciado'}</span>
           <div className={css.sportsTeam}><SportsPortrait label={p.home.label} logo={p.home.logo}/>
             <strong>{p.home.label}</strong>{p.home.meta&&<small>{p.home.meta}</small>}
-            {(live?.homeScore??p.home.score)!==undefined&&<b>{live?.homeScore??p.home.score}</b>}</div>
+            {hasStarted&&(live?.homeScore??p.home.score)!==undefined&&<b>{live?.homeScore??p.home.score}</b>}</div>
         </div>
         <SportsLiveFacts game={live} meta={meta} sport={p.sport}/>
         {!(live?.periods?.length)&&p.periods?.length?<section className={css.sportsDetailSection} aria-label="Parciales del partido">
@@ -828,14 +837,14 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
     case 'sports_odds_card': {
       const p=block.props
       return <section className={css.sportsCard} data-generative-ui="sports_odds_card">
-        <header className={css.sportsHeadline}><div><span className={css.sportsKicker}>PHOENIX / CUOTAS VERIFICADAS</span>
+        <header className={css.sportsHeadline}><div><span className={css.sportsKicker}>PHOENIX / CUOTAS OBSERVADAS · CONSULTAR VIGENCIA</span>
           <h3>{p.title}</h3>{p.subtitle&&<p>{p.subtitle}</p>}</div></header>
         <div className={css.sportsTableScroll}><table className={css.sportsTable}>
           <thead><tr><th>Partido</th><th>Mercado</th><th>Selección</th><th>Casa</th><th>Cuota decimal</th></tr></thead>
           <tbody>{p.rows.map((r,i)=><tr key={i}><th>{r.event}</th><td>{r.market}</td>
             <td>{r.selection}{r.point?' · '+r.point:''}</td><td>{r.bookmaker}</td><td><strong>{r.price}</strong></td>
           </tr>)}</tbody></table></div>
-        <footer className={css.sportsSourceBar}><span>Fuente: {p.source}</span><small>{p.note}</small></footer>
+        <footer className={css.sportsSourceBar}><span>Fuente: {p.source}</span><small>{p.note}</small><small>Sin hora de actualización confirmada, un precio es solo referencia de investigación, nunca una cotización operable.</small></footer>
       </section>
     }
     case 'sports_ticket_card': {

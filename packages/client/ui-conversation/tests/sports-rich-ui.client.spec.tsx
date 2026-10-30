@@ -260,6 +260,35 @@ describe('Universal chat: compact sports schedules do not replace single-game ca
     expect(screen.queryByText('Sin cuota')).toBeNull()
     expect(screen.queryByText(/%/)).toBeNull()
   })
+  it('identifies the sport and league, hides 0-0 for pregame, and marks unverified favorites',()=>{
+    const original=slate.props.events[0]
+    const card=parseGenerativeUiBlock({...slate,props:{...slate.props,events:[
+      {...original,phase:'pre',away:{...original.away,score:'0'},home:{...original.home,score:'0'}},
+      {...slate.props.events[1],phase:'pre'},
+    ]}})
+    if(!card)throw Error('Invalid pregame fixture')
+    render(<GenerativeUi block={card}/>)
+    expect(screen.getByText('PHOENIX / BALONCESTO · NBA')).toBeTruthy()
+    expect(screen.getByText('NBA · Cartelera deportiva')).toBeTruthy()
+    expect(screen.getAllByText('VS · Sin iniciar')).toHaveLength(2)
+    expect(screen.queryByText('0')).toBeNull()
+    expect(screen.getAllByText(/Favorito sin verificar/)).toHaveLength(2)
+  })
+  it('does not invent opponents or provide actionable game analysis for unnamed WTA events',()=>{
+    const card=parseGenerativeUiBlock({...slate,props:{...slate.props,sport:'tennis',league:'wta',
+      events:[{...slate.props.events[0],phase:'post',status:'Final',
+        away:{label:'Sin confirmar',score:'0'},home:{label:'Sin confirmar',score:'0'}},
+        {...slate.props.events[1],phase:'pre',askPrompt:'Kira, investiga este encuentro con fuentes verificadas.'}]}})
+    if(!card)throw Error('Invalid WTA fixture')
+    const actions:string[]=[]
+    render(<GenerativeUi block={card} onAction={text=>actions.push(text)}/>)
+    expect(screen.getByText('PHOENIX / TENIS · WTA')).toBeTruthy()
+    expect(screen.getByText(/ESPN aún no identifica a ambos participantes/)).toBeTruthy()
+    expect(screen.queryByText('Sin confirmar')).toBeNull()
+    expect(screen.queryByText('Finalizado')).toBeNull()
+    expect(screen.getAllByRole('button',{name:'Ver análisis del encuentro ›'})).toHaveLength(1)
+    expect(actions).toHaveLength(0)
+  })
   it('offers an actionable drilldown without replacing the rich individual card',()=>{
     const parsed=parseGenerativeUiBlock(slate)
     if(!parsed)throw Error('Schedule validation failed')
