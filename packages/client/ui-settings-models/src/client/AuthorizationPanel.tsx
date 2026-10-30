@@ -1109,7 +1109,6 @@ function OfficialMcpCard({ candidate, stale, managed, runtime, installing, recon
  */
 export function AuthorizationPanel({ api, t, onAuthorized }: AuthorizationPanelProps): ReactNode {
   const [entries, setEntries] = useState<Entry[]>([])
-  const [oddsApiSnapshot, setOddsApiSnapshot] = useState<TheOddsApiSnapshot | undefined>()
   const [catalogFailure, setCatalogFailure] = useState<string | undefined>()
   const [refresh, setRefresh] = useState(0)
   const { attempt, answer, setAnswer, failure, preparingKey, begin, submitAnswer, cancel } =
@@ -1197,6 +1196,7 @@ export function ConnectorsSettingsSection({ api,
   launchContext,
   onAuthorized }: ConnectorsSettingsSectionProps): ReactNode {
   const [entries, setEntries] = useState<Entry[]>([])
+  const [oddsApiSnapshot, setOddsApiSnapshot] = useState<TheOddsApiSnapshot | undefined>()
   const [catalogFailure, setCatalogFailure] = useState<string | undefined>()
   const [disconnectingKey, setDisconnectingKey] = useState<string | undefined>()
   const [refresh, setRefresh] = useState(0)
