@@ -98,5 +98,9 @@ test('refuses updates and preserves forensic bytes when incident ledger is corru
 test('supervisor retains the last healthy runtime through cleanup', () => {
   const source = readFileSync(new URL('./phoenix-windows-supervisor.mjs', import.meta.url), 'utf8')
   assert.match(source, /if \(lastKnownGoodRuntimeRoot !== root\) keep\.add\(runtimePathKey\(lastKnownGoodRuntimeRoot\)\)/u)
-  assert.match(source, /runtimeRoot = lastGoodSha !== undefined && runtimeIsHealthy\(lastGood, lastGoodSha\)/u)
+  assert.match(source, /const recovered = lastGoodSha !== undefined && runtimeIsHealthy\(lastGood, lastGoodSha\)/u)
+  assert.match(source, /probationTimer = setTimeout\(/u)
+  assert.match(source, /lastKnownGoodRuntimeRoot = hostRuntimeRoot/u)
+  assert.match(source, /recordGuardianIncident\(\{/u)
+  assert.match(source, /writeActiveRuntime\(lastGoodSha, runtimeRoot\)/u)
 })
