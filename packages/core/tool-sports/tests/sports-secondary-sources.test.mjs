@@ -19,6 +19,16 @@ test('Kira knows four secondary market portals but never pretends to have retrie
   assert.ok(directory.workflow.some(step=>step.includes('liga')&&step.includes('ESPN')))
   assert.ok(directory.workflow.some(step=>step.includes('vigencia no verificada')))
 })
+test('SportIntel MIT implementation is not misrepresented as a free live-odds provider',()=>{
+  const intel=secondaryMarketSourceCatalog().sportIntelMcp
+  assert.equal(intel.codeLicense,'MIT')
+  assert.equal(intel.provider,'The Odds API v4')
+  assert.equal(intel.requiresApiKey,true)
+  assert.equal(intel.environmentVariable,'ODDS_API_KEY')
+  assert.equal(intel.independentFreeFeed,false)
+  assert.equal(intel.sportsbookExecution,false)
+  assert.match(intel.risk,/gameTime/u)
+})
 test('link provenance admits only the exact official HTTPS host without credentials or port',()=>{
   assert.equal(isKnownSecondaryMarketPage('covers','https://www.covers.com/sport/odds'),true)
   assert.equal(isKnownSecondaryMarketPage('scoresandodds','https://scoresandodds.com/las-vegas-odds'),true)
