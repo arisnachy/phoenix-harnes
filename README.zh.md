@@ -4,7 +4,7 @@
 
 # PHOENIX
 
-[English](README.md) | 中文
+[English](README.md) | [Español](README.es.md) | 中文
 
 **PHOENIX 是一个以本地优先（local-first）为核心的认知式 AI 工作空间：在同一环境中跨模型、工具与项目完成思考、协调、执行、验证和恢复。**
 

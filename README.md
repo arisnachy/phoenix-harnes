@@ -4,7 +4,7 @@
 
 # PHOENIX
 
-English | [中文](README.zh.md)
+English | [Español](README.es.md) | [中文](README.zh.md)
 
 **PHOENIX is a local-first cognitive AI workspace: one environment to think, coordinate, act, verify, and recover across models, tools, and projects.**
 
