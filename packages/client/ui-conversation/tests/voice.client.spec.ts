@@ -57,6 +57,57 @@ describe('browser voice adapter', () => {
     expect(spokenLanguage('您好。', 'zh-CN')).toBe('zh-CN')
   })
 
+  it('uses the same-language native Host TTS when Codex Live is not connected', async () => {
+    const before = document.documentElement.lang
+    document.documentElement.lang = 'es-DO'
+    const speak = vi.fn(async () => ({
+      ok: true as const,
+      value: { accepted: true, provider: 'kokoro' },
+    }))
+    const dispose = configureVoiceAssistantRemote({
+      conversationStatus: vi.fn(async () => ({ ok: true as const, value: { enabled: true, natural: true } })),
+      conversationSpeak: speak,
+      conversationCancel: vi.fn(async () => ({ ok: true as const, value: { cancelled: 0 } })),
+    })
+    try {
+      expect(isCodexRealtimeVoiceActive()).toBe(false)
+      await expect(speakVoiceAssistantAttention(
+        'Necesito tu autorización', 'Revisa esta solicitud.', 'Arisnachy',
+      )).resolves.toBe(true)
+      expect(speak).toHaveBeenCalledWith(expect.objectContaining({
+        key: 'phoenix:proactive-attention',
+        text: expect.stringContaining('Arisnachy'),
+        language: 'es-DO',
+        final: true,
+      }))
+    } finally {
+      dispose()
+      document.documentElement.lang = before
+    }
+  })
+
+  it('does not pronounce an English technical status using the Spanish engine', async () => {
+    const before = document.documentElement.lang
+    document.documentElement.lang = 'es-DO'
+    const speak = vi.fn(async () => ({ ok: true as const, value: { accepted: true, provider: 'system' } }))
+    const dispose = configureVoiceAssistantRemote({
+      conversationStatus: vi.fn(async () => ({ ok: true as const, value: { enabled: true, natural: false } })),
+      conversationSpeak: speak,
+      conversationCancel: vi.fn(async () => ({ ok: true as const, value: { cancelled: 0 } })),
+    })
+    try {
+      await expect(speakVoiceAssistantAttention('Your task needs review', 'Please approve before continuing.'))
+        .resolves.toBe(true)
+      expect(speak).toHaveBeenCalledWith(expect.objectContaining({
+        language: 'es-DO',
+        text: expect.stringContaining('Revisa la solicitud pendiente'),
+      }))
+    } finally {
+      dispose()
+      document.documentElement.lang = before
+    }
+  })
+
   afterEach(() => { setVoiceAssistantActive(false) })
 
   it('requires prior explicit opt-in before reusing a browser-vendor voice backup', () => {
@@ -529,7 +580,7 @@ describe('browser voice adapter', () => {
 
       // A second spoken event queues until the real completion of the
       // first response; keep the same Codex V3 speech channel serialized.
-      expect(speakVoiceAssistantAttention(
+      expect(await speakVoiceAssistantAttention(
         'Aprobación 550e8400-e29b-41d4-a716-446655440000',
         'Revisa la acción antes de continuar; referencia 123456789 needs attention.',
       )).toBe(true)
