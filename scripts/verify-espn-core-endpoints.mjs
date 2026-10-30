@@ -13,6 +13,7 @@ const probes=[
     sport:'baseball',league:'mlb',mode:'odds',
     eventId:'401809303',competitionId:'401809303',limit:25,
   })},
+  {label:'MLB reference event summary',url:'https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/summary?event=401809303'},
   {label:'NBA scoreboard today',url:'https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates='+localDay},
   {label:'NHL scoreboard today',url:'https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard?dates='+localDay},
   {label:'NFL old reference',url:espnCoreUrl({...core,mode:'odds',eventId:'401220181',competitionId:'401220181'})},
@@ -35,6 +36,11 @@ for(const {label,url} of probes){
       const parsed=JSON.parse(raw)
       const items=Array.isArray(parsed?.items)?parsed.items:[]
       const events=Array.isArray(parsed?.events)?parsed.events:[]
+      const event=parsed?.header?.competitions?.[0]
+      if(event){
+        result.eventDate=typeof event.date==='string'?event.date:null
+        result.eventState=event.status?.type?.state??'unverified'
+      }
       result.itemCount=typeof parsed?.count==='number'?parsed.count:items.length
       result.eventCount=events.length
       result.embeddedOddsEntries=events.reduce((sum,event)=>sum+
