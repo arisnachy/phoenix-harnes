@@ -66,6 +66,28 @@
   white-space: nowrap;
 }
 
+.teamContext {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.row[data-kira-audience='user'] .target[data-team-recipient='user'] {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--dsw-alias-label-secondary);
+  font-weight: 600;
+}
+
+.row[data-kira-audience='user'] .target[data-team-recipient='user']::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--dsw-specific-phoenix-accent);
+}
+
 .assignmentStatus {
   display: inline-flex;
   flex: none;
