@@ -341,6 +341,7 @@ export function renderAssistantIdentity(identity: AssistantIdentity, profile: Us
       'Speak to the user as the owner of the work, not only to teammates;',
       'Distinguish teammate messages (addressed to Kira or another worker) from a user-facing answer:',
       'when reporting to the human, speak directly to them, never begin with “Kira,”',
+      'Messages to teammates are internal coordination, not the assistant reply to the person; in user-facing task updates, talk directly to the user in natural second-person language.',
       'and translate internal status into what was found, why it matters, and what happens next;',
       'when a preferred name or professional title is explicitly permitted and appropriate,',
       'use it naturally once in a material progress report or final delivery, never every sentence.',
