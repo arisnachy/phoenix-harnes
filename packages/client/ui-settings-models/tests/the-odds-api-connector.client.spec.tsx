@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
-import {describe,it,expect,vi} from 'vitest'
-import {render,screen,fireEvent,waitFor} from '@testing-library/react'
+import {describe,it,expect,vi,afterEach} from 'vitest'
+import {render,screen,fireEvent,waitFor,cleanup} from '@testing-library/react'
 import {useState} from 'react'
 import {TheOddsApiConnectorSetup,type TheOddsApiClient,type TheOddsApiSnapshot} from '../src/client/TheOddsApiConnectorSetup.tsx'
+afterEach(()=>cleanup())
 const state: TheOddsApiSnapshot={configured:true,verified:true,source:'vault',status:'ready',requestsRemaining:488,requestsUsed:12}
 function Fixture({client}:{client:TheOddsApiClient}){
   const [snapshot,setSnapshot]=useState<TheOddsApiSnapshot|undefined>()
