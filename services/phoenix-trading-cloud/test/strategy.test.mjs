@@ -91,6 +91,27 @@ describe('isolated simulated ledger and deterministic risk',()=>{
     assert.equal(state.journal.length,3);
     assert.throws(()=>paperFill(state,{...tp1,id:'run4'}),/virtual-oversell/);
   });
+  it('permits four independently journaled PAPER positions but not a fifth',()=>{
+    let state=freshState();state.enabled=true;
+    const names=['BTCUSDT','ETHUSDT','SOLUSDT','BNBUSDT'];
+    for(const [index,symbol] of names.entries()){
+      const signal={symbol,action:'buy',score:80};
+      const marks=Object.fromEntries(Object.keys(state.positions).map(name=>[name,100]));
+      const budget=riskBudget(state,signal,marks);
+      assert.ok(budget>=10);
+      state=paperFill(state,{id:'multi-'+index,at:NOW+index,symbol,side:'buy',
+        price:100,quantity:budget/(100*(1+0.001)),
+        strategy:index%2?'ema-pullback':'donchian-breakout',
+        reason:'deterministic paper test',plan:exitPlan(100,1.5,'test')});
+      const total=Object.values(state.positions).reduce((sum,p)=>sum+p.quantity*100,0);
+      const equity=state.cash+total;
+      assert.ok(total<=equity*0.20+0.01);
+    }
+    assert.equal(Object.keys(state.positions).length,4);
+    assert.equal(state.journal.length,4);
+    assert.equal(riskBudget(state,{symbol:'XRPUSDT',action:'buy',score:90},
+      Object.fromEntries(names.map(name=>[name,100]))),0);
+  });
   it('marks PnL and limits exposure, open positions, drawdown and daily losses',()=>{
     let state=freshState();state.enabled=true;
     const signal={symbol:'ETHUSDT',action:'buy',score:80};

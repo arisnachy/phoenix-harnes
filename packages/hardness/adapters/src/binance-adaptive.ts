@@ -56,7 +56,7 @@ const MAX_SYMBOLS = 12
 const MIN_AUTONOMOUS_SCORE = 75
 const MAX_POSITION_FRACTION = 0.05
 const MAX_PORTFOLIO_EXPOSURE = 0.20
-const MAX_OPEN_POSITIONS = 2
+const MAX_OPEN_POSITIONS = 4
 const MAX_MARKET_DATA_AGE = 2
 const cycleLocks = new WeakMap<BinanceAdaptiveBroker, Promise<void>>()
 
@@ -251,8 +251,13 @@ export async function runBinanceAdaptiveCycle(
       && !binanceKnownAssetRisk(signal.symbol)
       && signal.score >= MIN_AUTONOMOUS_SCORE
       && !account.positions.some(position => position.symbol === signal.symbol))
+    // Fees reduce virtual equity at the fill. Reserve that reduction before
+    // sizing the final slot so aggregate marked exposure stays <= 20%.
+    const capacityAfterFees = Math.max(0,
+      account.equityUsdt * MAX_PORTFOLIO_EXPOSURE - exposure)
+      / (1 + account.feeRate * MAX_PORTFOLIO_EXPOSURE)
     const budget = Math.min(account.equityUsdt * MAX_POSITION_FRACTION,
-      Math.max(0, account.equityUsdt * MAX_PORTFOLIO_EXPOSURE - exposure),
+      capacityAfterFees,
       account.cashUsdt / (1 + account.feeRate))
 
     const executionFor = (

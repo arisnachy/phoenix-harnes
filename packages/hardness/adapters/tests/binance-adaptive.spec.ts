@@ -140,28 +140,38 @@ describe('adaptive Binance paper cycle', () => {
     expect((await paper.journal()).at(-1)?.id).toBe(cycle.trade?.id)
   })
 
-  it('explains a blocked entry when portfolio slots are already occupied', async () => {
-    const paper = broker({ BTCUSDT: 'breakout', ETHUSDT: 'breakout', SOLUSDT: 'breakout' })
-    await paper.order({ symbol: 'BTCUSDT', side: 'buy', quoteAmountUsdt: 100 })
-    await paper.order({ symbol: 'ETHUSDT', side: 'buy', quoteAmountUsdt: 100 })
+  it('blocks a fifth simultaneous PAPER position without weakening the 20% exposure fence', async () => {
+    const kinds = { BTCUSDT: 'breakout', ETHUSDT: 'breakout', SOLUSDT: 'breakout',
+      BNBUSDT: 'breakout', XRPUSDT: 'breakout' } as const
+    const paper = broker(kinds)
+    for (const symbol of ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT']) {
+      await paper.order({ symbol, side: 'buy', quoteAmountUsdt: 100 })
+    }
     const result = await runBinanceAdaptiveCycle(paper, {
-      mode: 'paper-step', symbols: ['SOLUSDT'],
+      mode: 'paper-step', symbols: ['XRPUSDT'],
     }, NOW)
     expect(result.execution[0]).toMatchObject({ status: 'blocked' })
-    expect(result.execution[0]?.explanation).toContain('posiciones simultáneas')
+    expect(result.execution[0]?.explanation).toContain('4 posiciones simultáneas')
     expect(result.rationale).toContain('posiciones abiertas')
     expect(result.trade).toBeUndefined()
+    expect(result.account.tradeCount).toBe(4)
   })
 
-  it('holds after both virtual portfolio slots are occupied', async () => {
-    const paper = broker({ BTCUSDT: 'breakout', ETHUSDT: 'breakout', SOLUSDT: 'breakout' })
-    await paper.order({ symbol: 'BTCUSDT', side: 'buy', quoteAmountUsdt: 100 })
-    await paper.order({ symbol: 'ETHUSDT', side: 'buy', quoteAmountUsdt: 100 })
-    const result = await runBinanceAdaptiveCycle(paper, {
-      mode: 'paper-step', symbols: ['SOLUSDT'],
-    }, NOW)
-    expect(result.decision).toBe('hold')
-    expect(result.account.tradeCount).toBe(2)
+  it('confirms four distinct autonomous PAPER entries across cycles under one portfolio limit', async () => {
+    const symbols = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT']
+    const paper = broker(Object.fromEntries(symbols.map(symbol => [symbol, 'breakout'])))
+    for (const symbol of symbols) {
+      const cycle = await runBinanceAdaptiveCycle(paper, { mode: 'paper-step',
+        symbols: [symbol] }, NOW)
+      expect(cycle.trade).toMatchObject({ symbol, side: 'buy',
+        strategyId: 'adaptive-breakout-v1' })
+    }
+    const account = await paper.account()
+    expect(account.tradeCount).toBe(4)
+    expect(account.positions).toHaveLength(4)
+    const exposure = account.positions.reduce((sum, position) => sum + position.marketValueUsdt, 0)
+    expect(exposure).toBeLessThanOrEqual(account.equityUsdt * 0.20 + 0.02)
+    expect((await paper.journal()).map(trade => trade.symbol)).toEqual(symbols)
   })
 
   it('prioritizes defensive liquidation of an existing virtual position', async () => {

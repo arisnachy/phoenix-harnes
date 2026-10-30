@@ -1,4 +1,4 @@
-import {MAX_PER_TICK, MAX_UNIVERSE, SIMULATED_SLIPPAGE, FEE_RATE,
+import {MAX_PER_TICK, MAX_UNIVERSE, MAX_POSITIONS, SIMULATED_SLIPPAGE, FEE_RATE,
   analyze, exitPlan, freshState, marketValue, paperFill, parseKlines,
   pickUniverse, riskBudget} from './strategy.mjs';
 import {knownAssetRisk,spotAssetRisk,RISK_COVERAGE,RISK_SNAPSHOT_DATE} from './asset-risk.mjs';
@@ -193,7 +193,7 @@ async function cycle(env,now=Date.now()){
         }else{
           const positions=Object.keys(state.positions).length;
           state.lastDecisionReason=state.halted?'risk-circuit-breaker'
-            :positions>=2?'maximum-open-positions'
+            :positions>=MAX_POSITIONS?'maximum-open-positions'
             :state.positions[candidate.symbol]?'existing-position'
             :state.cash<10?'insufficient-virtual-cash'
             :state.equity<=state.maxEquity*.95?'maximum-drawdown'

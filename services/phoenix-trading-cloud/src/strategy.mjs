@@ -6,7 +6,7 @@ import {spotAssetRisk} from './asset-risk.mjs';
 
 export const MAX_UNIVERSE = 1000;
 export const MAX_PER_TICK = 4;
-export const MAX_POSITIONS = 2;
+export const MAX_POSITIONS = 4;
 export const FEE_RATE = 0.001;
 export const SIMULATED_SLIPPAGE = 0.001;
 export const MAX_POSITION_FRACTION = 0.05;
@@ -141,7 +141,8 @@ export function riskBudget(state, signal, prices) {
   if (state.dayLoss >= state.dayStartEquity * MAX_DAILY_LOSS_FRACTION) return 0;
   const existing = exposure(state,prices);
   const cap=Math.min(state.equity * MAX_POSITION_FRACTION,
-    state.equity * MAX_EXPOSURE_FRACTION-existing, state.cash / (1+FEE_RATE));
+    Math.max(0,state.equity * MAX_EXPOSURE_FRACTION-existing) /
+      (1+FEE_RATE*MAX_EXPOSURE_FRACTION), state.cash / (1+FEE_RATE));
   return Number.isFinite(cap) && cap >= 10 ? Math.floor(cap*100)/100 : 0;
 }
 
