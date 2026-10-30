@@ -21,7 +21,7 @@ import process from 'node:process'
 import { gitSafeDirectoryEnvironment } from './phoenix-git-safe-directory.mjs'
 import { classifyStableUpdate } from './phoenix-update-policy.mjs'
 import { writePhoenixUpdateState } from './phoenix-update-state.mjs'
-import { guardianBlockedTarget } from './phoenix-guardian-incidents.mjs'
+import { guardianBlockedTarget, recordGuardianIncident } from './phoenix-guardian-incidents.mjs'
 
 const EXPECTED_REPOSITORY = process.env.PHOENIX_UPDATE_REPOSITORY ?? 'arisnachy/phoenix-harnes'
 const REMOTE = process.env.PHOENIX_UPDATE_REMOTE ?? 'origin'
@@ -260,8 +260,24 @@ function applyStable(root, current, target, manifest, state) {
   const replacement = state === 'ahead' || state === 'diverged'
   const action = replacement ? 'realigning managed install to stable' : 'installing stable update'
   console.error(`[PHOENIX STABLE] ${action}: ${current.slice(0, 12)} -> ${target.slice(0, 12)}`)
-  git(root, ['diff', '--check', current, target])
-  stageCandidate(root, target)
+  try {
+    git(root, ['diff', '--check', current, target])
+    stageCandidate(root, target)
+  } catch (error) {
+    // Candidate validation failed before ANY live mutation: preserve the old,
+    // functional runtime and record the exact SHA that must not auto-retry.
+    const detail = error instanceof Error ? error.stack ?? error.message : String(error)
+    recordGuardianIncident({
+      status: 'activation-failed', phase: 'preflight', previous: current,
+      failedTarget: target, diagnosis: detail,
+    })
+    writeState(root, {
+      status: 'paused', phase: 'guardian-preflight', current, target,
+      detail: 'Candidate failed isolated preflight; existing runtime preserved.',
+    })
+    console.error('[PHOENIX GUARDIAN] candidate preflight failed; keeping last-known-good PHOENIX. ' + detail)
+    return
+  }
   if (!cleanWorktree(root)) throw new Error('worktree changed during stable preflight; refusing live mutation')
 
   if (replacement) {
