@@ -20,10 +20,6 @@ export function guardianIncidentPath(env = process.env) {
   return join(guardianDirectory(env), 'phoenix-guardian-incidents.json')
 }
 
-function readFile(path) {
-  try { return JSON.parse(readFileSync(path, 'utf8')) } catch { return undefined }
-}
-
 function atomic(path, value) {
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 })
   const temporary = path + '.' + process.pid + '.' + randomUUID() + '.tmp'
@@ -45,8 +41,19 @@ function scrub(text) {
 }
 
 function readLedger(path) {
-  const value = readFile(path)
-  return value?.schema === 1 && Array.isArray(value.incidents) ? value.incidents : []
+  let value
+  try {
+    value = JSON.parse(readFileSync(path, 'utf8'))
+  } catch (error) {
+    if (error?.code === 'ENOENT') return []
+    // Never treat a damaged on-disk quarantine as empty: that would silently
+    // unlock every previously rejected SHA and erase diagnostic evidence.
+    throw new Error('PHOENIX Guardian incident ledger is unreadable; preserving the original', { cause: error })
+  }
+  if (value?.schema !== 1 || !Array.isArray(value.incidents)) {
+    throw new Error('PHOENIX Guardian incident ledger has invalid schema; preserving the original')
+  }
+  return value.incidents
 }
 
 /**
@@ -77,9 +84,16 @@ export function recordGuardianIncident(event, env = process.env) {
 /** Failed release SHA is never auto-retried after recovery (a different SHA may proceed). */
 export function guardianBlockedTarget(target, env = process.env) {
   if (!SHA.test(target ?? '')) return false
-  return readLedger(guardianIncidentPath(env)).some(entry =>
-    entry?.failedTarget === target.toLowerCase()
-      && ['rolled-back', 'rollback-failed', 'activation-failed', 'startup-failed'].includes(entry.status))
+  try {
+    return readLedger(guardianIncidentPath(env)).some(entry =>
+      entry?.failedTarget === target.toLowerCase()
+        && ['rolled-back', 'rollback-failed', 'activation-failed', 'startup-failed'].includes(entry.status))
+  } catch (error) {
+    // The good runtime can keep running. Never activate an unknown new SHA
+    // when the recovery policy file cannot be verified.
+    console.error('[PHOENIX GUARDIAN] update blocked: ' + (error instanceof Error ? error.message : String(error)))
+    return true
+  }
 }
 
 /** Read-only limited model input. Never treats an incident as authority to change permissions. */
