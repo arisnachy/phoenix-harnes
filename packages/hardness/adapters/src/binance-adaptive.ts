@@ -128,7 +128,13 @@ export function evaluateBinanceAdaptiveSignal(
   const averageVolume = movingAverage(volumes)
   const volumeRatio = averageVolume > 0 ? last.volume / averageVolume : 0
   const slope = (fast - slow) / slow
-  const regime: BinanceMarketRegime = slope > 0.006 ? 'uptrend' : slope < -0.006 ? 'downtrend' : 'range'
+  // A fixed 0.6% EMA spread classifies most valid 15m trends as sideways.
+  // Scale the sensitivity by timeframe; volume and recent price confirmation
+  // still guard actual entries independently of regime detection.
+  const trendThreshold = intervalMs <= 900_000 ? 0.002
+    : intervalMs <= 3_600_000 ? 0.003 : 0.006
+  const regime: BinanceMarketRegime = slope > trendThreshold && lastClose > slow
+    ? 'uptrend' : slope < -trendThreshold && lastClose < slow ? 'downtrend' : 'range'
   const previousHigh = Math.max(...previousWindow)
   const previousLow = Math.min(...previousWindow)
   const historicMean = movingAverage(earlier)
@@ -142,7 +148,7 @@ export function evaluateBinanceAdaptiveSignal(
   if (regime === 'uptrend' && lastClose >= fast && lastClose <= fast * 1.012
     && lastClose > (closes.at(-2) ?? lastClose) && historicMean > 0) {
     const quality = Math.min(15, Math.max(0, Math.round((volumeRatio - 1) * 25)))
-    const confirmed = volumeRatio >= 1.15 && slope > 0.006
+    const confirmed = volumeRatio >= 1.15 && slope > trendThreshold
       && lastClose > (closes.at(-3) ?? lastClose)
     return { symbol, regime, strategy: 'trend-pullback', action: 'buy',
       score: confirmed ? Math.max(75, 65 + quality) : 65 + quality,
@@ -153,7 +159,7 @@ export function evaluateBinanceAdaptiveSignal(
   // A trend need not make a fresh 20-bar breakout to justify an entry.
   // Require accelerating recent closes and rising participation, while
   // rejecting extended bars more than 3.5% above the short EMA.
-  if (regime === 'uptrend' && slope >= 0.008 && lastClose > fast * 1.012
+  if (regime === 'uptrend' && slope >= trendThreshold * 1.25 && lastClose > fast * 1.012
     && lastClose <= fast * 1.035 && volumeRatio >= 1.05
     && lastClose >= (closes.at(-4) ?? lastClose) * 1.004
     && lastClose > (closes.at(-2) ?? lastClose)) {
