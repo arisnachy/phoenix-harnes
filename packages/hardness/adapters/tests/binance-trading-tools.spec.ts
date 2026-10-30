@@ -92,6 +92,7 @@ describe('Binance PAPER autonomous scan defaults', () => {
     }
     const tool = createBinanceTradingTools({
       broker: paper as never, automation: automation as never,
+      approval: { request: vi.fn() },
     }).find(item => item.name === 'binance_paper_auto')
     if (tool === undefined) throw new Error('Missing Binance PAPER automation tool')
     await tool.execute({ action: 'start', requestedByUser: true, watchlist: 'BTCUSDT' }, exec())
