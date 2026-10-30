@@ -875,6 +875,7 @@ def main():
     style = "apa" if report.get("style", "apa") == "apa7" else report.get("style", "apa")
     presentation = report.get("presentation", "journal" if (report.get("document_type") == "journal_manuscript" or report.get("journal_requirements", {}).get("journal")) else ("hybrid" if report.get("quality_profile", "professional") in ("professional", "professional_brief") else "academic"))
     journal = report.get("journal_requirements", {})
+    key_points_label = "Key Points" if journal.get("journal") or presentation == "journal" else "Puntos clave"
     institutional = report.get("institutional_rules", {})
     editorial = presentation in ("editorial", "hybrid")
     design_preset = resolve_design_preset(report, presentation)
@@ -1002,7 +1003,7 @@ def main():
     footer_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
     add_word_field(footer_paragraph, "PAGE")
     if front.get("key_points"):
-        doc.add_heading("Puntos clave", level=1)
+        doc.add_heading(key_points_label, level=1)
         for point in front["key_points"]: doc.add_paragraph("• " + point)
     if report.get("keywords"):
         doc.add_paragraph("Palabras clave: " + ", ".join(str(x) for x in report["keywords"]))
@@ -1195,7 +1196,7 @@ def main():
                 para("Figura " + str(ix) + ". " + clean_visual_title(item.get("title", "Gráfico")), small)
         story.append(PageBreak())
     if front.get("key_points"):
-        para("Puntos clave", h1)
+        para(key_points_label, h1)
         for point in front["key_points"]: para("• " + point)
     if report.get("keywords"):
         para("Palabras clave: " + ", ".join(str(x) for x in report["keywords"]), small)
@@ -1414,7 +1415,7 @@ def main():
     chunks.append("<p>"+html.escape(" · ".join(str(cover.get(k,"")) for k in ("institution","faculty","degree","date") if cover.get(k)))+"</p>")
     for author in authors: chunks.append("<p class='ref'>"+html.escape(author)+"</p>")
     if front.get("key_points"):
-        chunks.append("<section><h2>Puntos clave</h2><ul>")
+        chunks.append("<section><h2>" + html.escape(key_points_label) + "</h2><ul>")
         for point in front["key_points"]: chunks.append("<li>"+html.escape(point)+"</li>")
         chunks.append("</ul></section>")
     for key, label in FRONT_LABELS:
