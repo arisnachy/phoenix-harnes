@@ -132,7 +132,7 @@ export function sanitizePhoenixUpdateDiagnostic(raw) {
 }
 
 function guardianFailureDiagnostic(path, state) {
-  if (typeof state.detail === 'string' && state.detail.trim()) return sanitizePhoenixUpdateDiagnostic(state.detail)
+  // A verified failing process receipt outranks generic updater state text.
   try {
     const events = readFileSync(join(dirname(path), PROGRESS_JOURNAL_FILE), 'utf8').trim().split(String.fromCharCode(10))
     for (const item of events.slice(-60).reverse()) {
@@ -143,6 +143,7 @@ function guardianFailureDiagnostic(path, state) {
       return sanitizePhoenixUpdateDiagnostic(entry.diagnostic)
     }
   } catch { /* journal optional for old managed updater */ }
+  if (typeof state.detail === 'string' && state.detail.trim()) return sanitizePhoenixUpdateDiagnostic(state.detail)
   return 'The updater recorded a failed release without a process diagnostic.'
 }
 
