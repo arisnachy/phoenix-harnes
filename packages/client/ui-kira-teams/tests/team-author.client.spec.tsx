@@ -19,6 +19,7 @@ describe('Kira actual model badge', () => {
       : model.includes('luna') ? 'Luna' : model.includes('astra') ? 'Astra' : 'Orión')
     expect(badge.parentElement?.getAttribute('data-team-author')).toBe('kira')
     expect(badge.closest('[data-avatar]')).toBeNull()
+    expect(container.querySelector('[data-team-audience="user"]')).toBeTruthy()
     expect(container.querySelectorAll('[data-engine-model]')).toHaveLength(1)
     expect(container.querySelector('[data-agent-portrait-image]')?.getAttribute('src')).toBe(portraitSrcForKind('kira'))
   })

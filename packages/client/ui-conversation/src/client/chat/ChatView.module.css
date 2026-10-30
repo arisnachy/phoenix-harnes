@@ -583,3 +583,28 @@
 @media (max-width: 850px) {
   .column:has(> [data-browser-workspace]) { max-width: 100%; }
 }
+
+/* Kira's user-facing updates and specialist turns share a quiet visual rhythm. */
+.flowItem[data-chat-flow-kind='assistant-step']:has(> [data-team-author='kira'] + [data-assistant-body]) {
+  border-radius: 17px;
+  border-color: color-mix(in srgb, var(--dsw-alias-border-l2) 61%, transparent);
+  box-shadow: none;
+}
+.flowItem[data-chat-flow-kind='assistant-step']:has(> [data-team-author='kira'] + [data-assistant-body]) > [data-team-author='kira'] {
+  min-height: 45px;
+  padding-top: 7px;
+  padding-bottom: 7px;
+  border-radius: 17px 17px 0 0;
+  background: color-mix(in srgb, var(--dsw-alias-bg-layer-2) 22%, var(--dsw-alias-bg-layer-1));
+}
+.flowItem[data-chat-flow-kind='assistant-step'] > [data-assistant-body] {
+  padding-top: 12px;
+  padding-bottom: 14px;
+  font-size: 15px;
+  line-height: 1.6;
+}
+@media (max-width: 620px) {
+  .flowItem[data-chat-flow-kind='assistant-step'] > [data-assistant-body] {
+    padding: 11px 12px 13px;
+  }
+}

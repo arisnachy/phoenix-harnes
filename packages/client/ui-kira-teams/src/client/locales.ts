@@ -13,6 +13,7 @@ export const zh = {
   'chat.cancelReply': '取消回复',
   'chat.searchEmoji': '搜索表情',
   'chat.user': '用户',
+  'chat.forYou': '对你说',
   'chat.userRole': '团队协作成员',
 
   'chat.pendingDelivery': '等待发送，重新连接后重试',
@@ -108,6 +109,7 @@ export const en: Record<KiraTeamsKey, string> = {
   'chat.cancelReply': 'Cancel reply',
   'chat.searchEmoji': 'Search emoji',
   'chat.user': 'User',
+  'chat.forYou': 'For you',
   'chat.userRole': 'Team collaborator',
 
   'chat.pendingDelivery': 'Delivery pending; retry on reconnect',
@@ -200,6 +202,7 @@ export const es: Record<KiraTeamsKey, string> = {
   'chat.cancelReply': 'Cancelar respuesta',
   'chat.searchEmoji': 'Buscar emoji',
   'chat.user': 'Usuario',
+  'chat.forYou': 'Para ti',
   'chat.userRole': 'Parte del equipo',
 
   'chat.pendingDelivery': 'Entrega pendiente; se reintentará al reconectar',

@@ -571,3 +571,34 @@
   color: var(--dsw-alias-label-secondary);
 }
 .replyQuote > div { min-width: 0; font-size: 13px; line-height: 1.5; }
+
+/* Keep addressees visible as people, not files or administrative banners. */
+.target {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  max-width: 100%;
+  padding: 2px 8px;
+  border: 1px solid color-mix(in srgb, var(--dsw-alias-border-l2) 70%, transparent);
+  border-radius: 999px;
+  color: var(--dsw-alias-label-secondary) !important;
+  background: color-mix(in srgb, var(--dsw-alias-bg-layer-2) 58%, transparent);
+  font-size: 11px;
+  line-height: 17px;
+  font-weight: 500;
+}
+.audience {
+  margin-left: auto;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--dsw-alias-bg-layer-3) 44%, transparent);
+  color: var(--dsw-alias-label-secondary) !important;
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 500;
+}
+.row[data-team-audience='team'] .card .bubble {
+  border-color: color-mix(in srgb, var(--dsw-alias-border-l2) 62%, transparent);
+  box-shadow: none;
+}
+.row[data-team-sender-kind='agent'] .meta { color: var(--dsw-alias-label-secondary); }

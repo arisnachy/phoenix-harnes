@@ -67,7 +67,7 @@ describe('KIRA Team chat message', () => {
     })} />)
     expect(view.getByText('Team collaborator')).toBeTruthy()
     expect(view.getByText('Argo, revisa esa evidencia.')).toBeTruthy()
-    expect(view.getByText('→ Argo')).toBeTruthy()
+    expect(view.getByText('Para Argo')).toBeTruthy()
     expect(view.container.querySelector('[data-team-sender-kind="user"]')).toBeTruthy()
     expect(view.container.querySelector('[data-engine-model]')).toBeNull()
   })
@@ -102,7 +102,7 @@ describe('KIRA Team chat message', () => {
     expect(view.getByText('Kira')).toBeTruthy()
     expect(view.getByText('Coordinación')).toBeTruthy()
     expect(view.queryByText('Asignación')).toBeNull()
-    expect(view.getByText('→ La Forja')).toBeTruthy()
+    expect(view.getByText('Para La Forja')).toBeTruthy()
     expect(view.container.querySelector('[data-avatar="kira"]')).toBeTruthy()
     expect(view.container.querySelector('[data-agent-portrait-image]')).toBeTruthy()
     expect(view.getByRole('status').textContent).toContain('trabajando')
@@ -155,7 +155,7 @@ describe('KIRA Team chat message', () => {
     expect(view.getByText('La Forja')).toBeTruthy()
     expect(view.getByText('Programación')).toBeTruthy()
     expect(view.getByText('Bloqueo')).toBeTruthy()
-    expect(view.getByText('→ Kira')).toBeTruthy()
+    expect(view.getByText('Para Kira')).toBeTruthy()
     expect(view.getByText(/Necesito dirección/)).toBeTruthy()
     expect(view.queryByLabelText('Reacciones del equipo')).toBeNull()
   })
@@ -183,7 +183,7 @@ describe('KIRA Team chat message', () => {
       reactions: [],
     })} />)
     expect(update.queryByText('Actualización')).toBeNull()
-    expect(update.queryByText(/→/)).toBeNull()
+    expect(update.queryByText(/^Para /)).toBeNull()
     update.unmount()
 
     const empty = render(<View node={node({
@@ -207,7 +207,7 @@ describe('KIRA Team chat message', () => {
       content: [{ type: 'text', text: 'Astra, busca el titular y confirma el enlace.' }],
     })} />)
     expect(assignment.getByText('Kira')).toBeTruthy()
-    expect(assignment.getByText('→ Astra')).toBeTruthy()
+    expect(assignment.getByText('Para Astra')).toBeTruthy()
     expect(assignment.queryByText('Asignación')).toBeNull()
     assignment.unmount()
     const answer = render(<View node={node({
@@ -216,7 +216,7 @@ describe('KIRA Team chat message', () => {
       content: [{ type: 'text', text: 'Kira, aquí tienes el titular y su enlace verificado.' }],
     })} />)
     expect(answer.getByText('Astra')).toBeTruthy()
-    expect(answer.getByText('→ Kira')).toBeTruthy()
+    expect(answer.getByText('Para Kira')).toBeTruthy()
     expect(answer.queryByText('Resultado')).toBeNull()
   })
 
@@ -227,7 +227,7 @@ describe('KIRA Team chat message', () => {
         'worker-b': { id: 'worker-b', name: 'Argo', avatar: 'argo', role: 'skill.verification', status: 'working' },
       })} />)
     expect(view.getByText('Zenith')).toBeTruthy()
-    expect(view.getByText('→ Argo')).toBeTruthy()
+    expect(view.getByText('Para Argo')).toBeTruthy()
     expect(view.container.querySelector('[data-avatar="zenith"]')).toBeTruthy()
   })
 
@@ -246,7 +246,28 @@ describe('KIRA Team chat message', () => {
     expect(table!.querySelectorAll('tbody tr')).toHaveLength(2)
     expect(view.getByText('Argo: Matriz final de la revisión:')).toBeTruthy()
     expect(view.getByText('Kira')).toBeTruthy()
-    expect(view.getByText('→ Argo')).toBeTruthy()
+    expect(view.getByText('Para Argo')).toBeTruthy()
+  })
+
+  it('recovers the recipient of actual peer-to-lead speech from mission metadata', () => {
+    const view = render(<View node={node({
+      senderId: 'worker-a', senderName: 'lyra', senderKind: 'agent',
+      missionId: 'root', targetId: 'root',
+      content: [{ type: 'text', text: 'Kira, encontré las diferencias en origin/main.' }],
+    })} />)
+    expect(view.getByText('Para Kira')).toBeTruthy()
+    expect(view.container.querySelector('[data-team-audience="team"]')).toBeTruthy()
+    expect(view.getByText('Kira, encontré las diferencias en origin/main.')).toBeTruthy()
+  })
+
+  it('does not invent a destination when durable metadata is missing', () => {
+    const view = render(<View node={node({
+      senderId: 'worker-a', senderName: 'lyra', senderKind: 'agent',
+      missionId: undefined, targetId: 'root',
+      content: [{ type: 'text', text: 'Ya lo revisé.' }],
+    })} />)
+    expect(view.container.querySelector('[data-team-audience="unknown"]')).toBeTruthy()
+    expect(view.queryByText('Para Kira')).toBeNull()
   })
 
   it('renders Markdown for teammate answers and quoted messages with safe links', () => {
