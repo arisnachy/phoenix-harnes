@@ -561,7 +561,7 @@ export function apply(ctx: Context): void {
         if(rows.length<12)rows.push(quote)
         events.set(quote.eventId,rows)
       }
-      const uiBlocks=[...events.entries()].slice(0,5).flatMap(([,rows])=>{
+      const pricedBlocks=[...events.entries()].slice(0,5).flatMap(([,rows])=>{
         const first=rows[0]
         if(!first)return []
         return [{
@@ -576,6 +576,36 @@ export function apply(ctx: Context): void {
           },
         }]
       })
+      // Unverified ESPN observations are useful research, never ticket-eligible outcomes.
+      const observations=report.observations??[]
+      const referenceEvents=new Map<string,typeof observations>()
+      for(const quote of observations.slice(0,96)){
+        const key=quote.eventId+'|'+quote.bookmaker
+        const list=referenceEvents.get(key)??[]
+        if(list.length<12)list.push(quote)
+        referenceEvents.set(key,list)
+      }
+      const referenceBlocks=[...referenceEvents.values()].slice(0,5).flatMap(rows=>{
+        const first=rows[0]
+        if(!first)return []
+        const label=first.reason==='sin_fecha'?'SIN HORA DE ACTUALIZACIÓN':
+          first.reason==='antigua'?'CUOTA HISTÓRICA':
+          first.reason==='fecha_futura'?'FECHA DE COTIZACIÓN NO VÁLIDA':'PROVEEDOR SIN VERIFICAR'
+        return [{
+          component:'sports_odds_card',version:1,props:{
+            title:first.away+' vs '+first.home,
+            subtitle:'REFERENCIA ESPN · '+label+' · No cotizable',
+            source:first.source+' · '+first.bookmaker,
+            rows:rows.map(q=>({
+              event:q.away+' vs '+q.home,market:q.market,selection:q.selection,
+              bookmaker:q.bookmaker,price:q.price.toFixed(2),
+              ...(q.point===null||q.point===undefined?{}:{point:String(q.point)}),
+            })),
+            note:'Precio observado en ESPN pero su actualización no está verificada: NO es una oferta vigente de la casa, NO se incluye en tickets ni permite afirmar la cuota actual. Fuente: '+first.endpointSource+'.',
+          },
+        }]
+      })
+      const uiBlocks=pricedBlocks.length?pricedBlocks:referenceBlocks
       return JSON.stringify({ uiBlocks,source:quotes[0]?.source||'Sin ofertas recuperadas',sources:report.sources,
         observedAt:new Date(observedAt).toISOString(),requestedSourcePolicy:useEspn?'espn':'all',
         requestedEventId:args.eventId??null,
