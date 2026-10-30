@@ -6,15 +6,34 @@
 
 [English](README.md) | 中文
 
-**PHOENIX 是一个通用、与模型提供方无关的 AI agent harness，面向 local-first 与自带 provider 的工作流。**
+**PHOENIX 是一个以本地优先（local-first）为核心的认知式 AI 工作空间：在同一环境中跨模型、工具与项目完成思考、协调、执行、验证和恢复。**
 
-项目围绕智能模型选择、持久连续性、仓库智能、工具、多 agent 执行、恢复、评估和有边界的自我改进构建。各项能力会逐步落地；在仓库 gate 真正通过之前，不会把它们描述成已完成。
+**Kira** 是其中的协调体验核心。PHOENIX 旨在连接用户目标、专业智能体和各种能力，同时保留上下文、展示真实执行的证据，并让用户始终掌握控制权。**它不由任何单一模型、提供商或过去的项目来定义。**
+
+> **一个任务。合适的智能。可验证的执行。**
+
+## PHOENIX 的核心特点
+
+| 支柱 | 含义 |
+| --- | --- |
+| **Kira 与多智能体协作** | 主助手组织工作，将任务交给专业智能体，并区分面向用户的进展报告与团队内部沟通。 |
+| **自由选择模型** | 提供与模型提供商无关的适配和模型选择，支持下文介绍的 OpenRouter 以及可选的原生 ChatGPT / Codex 连接。 |
+| **以连续性为设计核心** | 本地会话历史、可重放事件和检查点为恢复与审计提供基础；更广泛的认知记忆仍在持续开发。 |
+| **真实工具与执行凭据** | 工具、浏览器与文件系统集成、权限及结果证据是工作流的一部分，而不是模拟的操作清单。 |
+| **不仅仅是聊天** | Web UI、Windows 启动方式、IDE 集成和可组合插件架构把能力集中在一个工作空间中。 |
+| **面向故障的执行机制** | 受控发布、隔离预检、恢复点和回滚机制旨在避免更新破坏正常运行的安装。 |
+
+## 专业工作空间
+
+PHOENIX 正逐步扩展至**科研与出版**、**临床辅助工作流**、**市场分析与交易**、**体育情报**、**商业运营**和**任务自动化**。这些是开发方向，不意味着所有功能都已安装、达到生产级、可以自主运行，或已获得执行真实操作的授权。各项集成都需要通过自身的运行和安全验证。
 
 ## 开发状态
 
-PHOENIX 正在积极开发。仓库展示、Web UI、PWA 元数据、浏览器标题和视觉系统均以 PHOENIX 作为产品身份。
+PHOENIX 是一个持续开发、拥有**独立产品身份、架构、路线图和发展方向**的产品。功能逐步交付；设计文档或尚未合并的 pull request 并不证明 `main` 或 `stable` 已具备该功能。
 
-为保持与上游运行时兼容，部分内部包名和 CLI 标识会暂时保留；PHOENIX 则通过彼此隔离、可测试的下游层持续演进。这些实现细节不定义产品身份。
+部分内部包名与 CLI 标识为了运行时兼容暂时保留。它们是实现细节，不属于 PHOENIX 的品牌标识；修改时必须确保现有安装和工作流正常运行。
+
+实现架构和验证边界请参阅[架构文档](docs/architecture.zh.md)、[开发指南](docs/development.zh.md)和[能力接口](docs/capability-seams.zh.md)。
 
 ## Run
 
@@ -86,11 +105,11 @@ Windows 安装、IDE 打包、原生 sandbox 边界与 continuity 状态参见 [
 
 面向 agent：请遵循 [AGENTS.md](AGENTS.md)。
 
-## 上游基础与署名
+## 开源组件与署名
 
-PHOENIX 是基于 [DeepSeek Harness](https://github.com/arisnachy/phoenix-harnes) 构建的下游演进项目；该项目是由 [DeepSeek AI](https://deepseek.com) 开发并采用 MIT 许可证的开源 agent harness。其插件架构由 [Cordis](https://github.com/cordiverse/cordis) 驱动，设计参见论文 [_A Programming Paradigm for Spatiotemporal Composability_](https://github.com/cordiverse/paper)。
+PHOENIX 拥有独立的产品身份与开发方向。仓库也包含由其他项目作者开发的开源组件。其作者署名、许可证声明、引入源码的来源及本地修改仍记录在 [LICENSE](LICENSE)、[引入软件包来源](vendor/README.md)和 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
-PHOENIX 不声称拥有上游代码的作者身份。上游署名与许可证声明会被保留，同时 PHOENIX 专属工作会明确作为下游演进进行区分。
+对代码来源的致谢**不意味着** PHOENIX 是其他产品的换名版本或衍生演进产品。
 
 ## 许可证
 
