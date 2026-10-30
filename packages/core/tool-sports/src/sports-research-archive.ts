@@ -28,6 +28,7 @@ export type ResearchArchiveCapture={
 const keyOK=(v:string)=>/^[a-z0-9_]{3,80}$/u.test(v)
 const eventOK=(v:string)=>/^[0-9a-z_-]{1,64}$/iu.test(v)
 const dateOK=(v:string)=>/^\d{4}-\d{2}-\d{2}$/u.test(v)
+  &&Number.isFinite(Date.parse(v+'T00:00:00Z'))
   &&new Date(v+'T00:00:00Z').toISOString().slice(0,10)===v
 const isTimestamp=(v:unknown):v is string=>typeof v==='string'
   &&v.length<=45&&Number.isFinite(Date.parse(v))
