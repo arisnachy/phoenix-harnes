@@ -58,6 +58,53 @@ describe('adaptive Binance strategy selection', () => {
     })
   })
 
+  it('promotes a recovered uptrend only when candle volume confirms the recovery', () => {
+    const weak = candles('pullback')
+    const low = evaluateBinanceAdaptiveSignal('BTCUSDT', weak, HOUR, NOW)
+    expect(low).toMatchObject({ strategy: 'trend-pullback', action: 'buy', score: 65 })
+    const confirmed = candles('pullback')
+    confirmed[79] = { ...confirmed[79]!, volume: 12 }
+    const high = evaluateBinanceAdaptiveSignal('BTCUSDT', confirmed, HOUR, NOW)
+    expect(high).toMatchObject({ strategy: 'trend-pullback', action: 'buy' })
+    expect(high.score).toBeGreaterThanOrEqual(75)
+  })
+
+  it('detects confirmed trend momentum without falsely requiring a breakout volume spike', () => {
+    const bars = candles('pullback')
+    const close = bars[79]!.close * 1.02
+    bars[79] = { ...bars[79]!, open: close, close,
+      high: close * 1.005, low: close * 0.995, volume: 10.8 }
+    expect(evaluateBinanceAdaptiveSignal('LTCUSDT', bars, HOUR, NOW)).toMatchObject({
+      strategy: 'momentum-continuation', action: 'buy', score: 75,
+    })
+  })
+
+  it('records a confirmed volume-backed virtual entry rather than showing BUY without filling', async () => {
+    const feed = market({ LTCUSDT: 'pullback' })
+    const original = feed.candles.bind(feed)
+    const boosted: BinancePublicMarket = {
+      price: feed.price.bind(feed), prices: feed.prices.bind(feed),
+      async candles(symbol, interval, limit) {
+        const bars = await original(symbol, interval, limit)
+        bars[79] = { ...bars[79]!, volume: 12 }
+        return bars
+      },
+    }
+    const root = mkdtempSync(join(tmpdir(), 'phoenix-recovery-fill-'))
+    temporary.push(root)
+    const paper = new BinancePaperBroker(join(root, 'paper.json'), boosted)
+    const cycle = await runBinanceAdaptiveCycle(paper, {
+      mode: 'paper-step', symbols: ['LTCUSDT'],
+    }, NOW)
+    expect(cycle.trade).toMatchObject({
+      symbol: 'LTCUSDT', side: 'buy', strategyId: 'adaptive-trend-pullback-v1',
+    })
+    expect(cycle.execution).toContainEqual(expect.objectContaining({
+      symbol: 'LTCUSDT', status: 'executed',
+    }))
+    expect((await paper.journal()).map(row => row.id)).toContain(cycle.trade!.id)
+  })
+
   it('identifies a bearish regime as a defensive sell, not an automatic short', () => {
     expect(evaluateBinanceAdaptiveSignal('BTCUSDT', candles('downtrend'), HOUR, NOW)).toMatchObject({
       regime: 'downtrend', strategy: 'defensive-exit', action: 'sell',
