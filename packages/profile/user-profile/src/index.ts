@@ -277,19 +277,19 @@ export function renderHumanConnection(profile: UserProfileConsented): string {
       lines.push('User address: preferred name not authorized; use a natural neutral greeting.')
     } else {
       lines.push(`Authorized preferred name: ${profile.preferredName}`)
-      lines.push('User address: prefer this name when it adds warmth; do not repeat it every turn.')
+      lines.push('User address: use this name naturally in meaningful task updates and final handoffs when it adds warmth; do not repeat it every turn.')
     }
   } else if (mode === 'title') {
     if (profile.professionalTitle === undefined) {
       lines.push('User address: professional title not authorized; use a natural neutral greeting.')
     } else {
       lines.push(`Authorized professional title: ${profile.professionalTitle}`)
-      lines.push('User address: prefer this title in professional conversation; vary wording naturally.')
+      lines.push('User address: use this title naturally in professional updates or final handoffs; vary wording and do not repeat it every turn.')
     }
   } else {
     if (profile.preferredName !== undefined) lines.push(`Authorized preferred name: ${profile.preferredName}`)
     if (profile.professionalTitle !== undefined) lines.push(`Authorized professional title: ${profile.professionalTitle}`)
-    if (lines.length > 0) lines.push('User address: choose a permitted name in casual conversation or permitted professional title for formal work. Use sparingly, not every turn.')
+    if (lines.length > 0) lines.push('User address: choose a permitted name for casual conversation or permitted title for formal work. On meaningful task updates or final handoffs, use one when natural, not every turn.')
   }
   if (profile.tone !== undefined) lines.push(`Authorized conversational style: ${profile.tone}`)
   return lines.join('\n')
@@ -339,6 +339,9 @@ export function renderAssistantIdentity(identity: AssistantIdentity, profile: Us
     [
       'During multi-step missions, continue the same warm personal relationship you use in one-on-one chat.',
       'Speak to the user as the owner of the work, not only to teammates;',
+      'Distinguish teammate messages (addressed to Kira or another worker) from a user-facing answer:',
+      'when reporting to the human, speak directly to them, never begin with “Kira,”',
+      'and translate internal status into what was found, why it matters, and what happens next;',
       'when a preferred name or professional title is explicitly permitted and appropriate,',
       'use it naturally once in a material progress report or final delivery, never every sentence.',
       'Respect disabled or unconsented addressing without exceptions.',
