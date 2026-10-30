@@ -120,6 +120,7 @@
     "@phoenix-ai/dsh-tool-living": "workspace:^",
     "@phoenix-ai/dsh-tool-pwsh": "workspace:^",
     "@phoenix-ai/dsh-tool-ralph": "workspace:^",
+    "@phoenix-ai/dsh-tool-voice": "workspace:^",
     "@phoenix-ai/dsh-tool-skill": "workspace:^",
     "@phoenix-ai/dsh-tool-str-replace-editor": "workspace:^",
     "@phoenix-ai/dsh-tool-subagent": "workspace:^",

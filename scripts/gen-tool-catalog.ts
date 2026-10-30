@@ -73,6 +73,8 @@ import * as ToolTeam from '@phoenix-ai/dsh-tool-agent-team'
 import * as ToolTodo from '@phoenix-ai/dsh-tool-todo'
 import * as ToolSubagent from '@phoenix-ai/dsh-tool-subagent'
 import * as ToolWeb from '@phoenix-ai/dsh-tool-web'
+import VoiceRuntime from '@phoenix-ai/dsh-voice'
+import * as ToolVoice from '@phoenix-ai/dsh-tool-voice'
 import VmWorkflowEngine from '@phoenix-ai/dsh-workflow-worker-thread'
 import * as ToolRalph from '@phoenix-ai/dsh-tool-ralph'
 import * as ToolWorkflow from '@phoenix-ai/dsh-tool-workflow'
@@ -696,6 +698,19 @@ const TOOL_PACKAGES: ToolPackage[] = [
       await ctx.plugin(VmWorkflowEngine, { provider: 'mock' })
       await ctx.plugin(ToolWorkflow)
     },
+  },
+  {
+    pkg: '@phoenix-ai/dsh-tool-voice',
+    dir: 'tool-voice',
+    source: 'packages/voice/tool-voice/src/index.ts',
+    requires: ['ctx.tools', 'ctx.systemPrompt', 'ctx.voice'],
+    writes: ['tool/call', 'Host speech synthesis or Codex Live output acceptance', 'tool/result'],
+    async mount(ctx) {
+      await ctx.plugin(VoiceRuntime, { enabled: false, codexRealtime: false })
+      await ctx.plugin(ToolVoice)
+    },
+    note:
+      'Speech is an explicit user-requested output side channel. A provider receipt is not proof that speakers were audible; this catalog boot never plays audio.',
   },
   {
     pkg: '@phoenix-ai/dsh-tool-web',

@@ -1288,6 +1288,9 @@ importers:
       '@phoenix-ai/dsh-tool-ralph':
         specifier: workspace:^
         version: link:../../workflow/tool-ralph
+      '@phoenix-ai/dsh-tool-voice':
+        specifier: workspace:^
+        version: link:../../voice/tool-voice
       '@phoenix-ai/dsh-tool-skill':
         specifier: workspace:^
         version: link:../../skill/tool-skill
@@ -9063,6 +9066,24 @@ importers:
       '@phoenix-ai/dsh-invariants':
         specifier: workspace:^
         version: link:../../runtime-diagnostics/invariants
+      '@phoenix-ai/dsh-voice':
+        specifier: workspace:^
+        version: link:../voice
+
+  packages/voice/tool-voice:
+    devDependencies:
+      '@phoenix-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@phoenix-ai/dsh-invariants':
+        specifier: workspace:^
+        version: link:../../runtime-diagnostics/invariants
+      '@phoenix-ai/dsh-system-prompt':
+        specifier: workspace:^
+        version: link:../../core/system-prompt
+      '@phoenix-ai/dsh-tools':
+        specifier: workspace:^
+        version: link:../../core/tools
       '@phoenix-ai/dsh-voice':
         specifier: workspace:^
         version: link:../voice

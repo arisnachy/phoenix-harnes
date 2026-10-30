@@ -247,6 +247,9 @@
     # Durable image bytes live outside the append-only session log. Messages
     # keep content-addressed references that this shared backend resolves for
     # provider requests and authorized history reads.
+    - id: tool-voice
+      name: '@phoenix-ai/dsh-tool-voice'
+
     - id: attachment-local
       name: '@phoenix-ai/dsh-attachment-local'
 
