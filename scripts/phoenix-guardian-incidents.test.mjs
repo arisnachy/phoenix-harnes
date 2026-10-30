@@ -84,6 +84,34 @@ test('rejects invalid SHA and redacts authorization headers', () => {
   assert.match(diagnosis, /REDACTED/)
 })
 
+test('retains exact SHA quarantine after rotating the bounded incident ledger', () => {
+  const oldest = '1'.repeat(40)
+  for (let index = 1; index <= 30; index++) {
+    const failedTarget = index.toString(16).padStart(40, '0')
+    recordGuardianIncident({
+      failedTarget, previous: stable, phase: 'health-check',
+      status: 'rolled-back', diagnosis: 'Runtime exited unexpectedly',
+    })
+  }
+  assert.equal(guardianBlockedTarget(oldest), false)
+  assert.equal(guardianBlockedTarget('0'.repeat(39) + '1'), true)
+  assert.equal(guardianBlockedTarget('0'.repeat(39) + '2'), true)
+  assert.equal(guardianBlockedTarget('0'.repeat(39) + 'f'), true)
+  assert.equal(guardianBlockedTarget('f'.repeat(40)), false)
+  assert.equal(JSON.parse(readFileSync(guardianIncidentPath(), 'utf8')).incidents.length, 24)
+})
+
+test('redacts quoted JSON credentials and Basic authorization before durable storage', () => {
+  recordGuardianIncident({
+    failedTarget: broken,
+    status: 'activation-failed',
+    diagnosis: 'HTTP response: {"token":"veryprivate123","client_secret":"hiddenvalue"}; Authorization: Basic QWxhZGRpbjpvcGVu',
+  })
+  const text = pendingGuardianIncidents()[0].diagnosis
+  assert.doesNotMatch(text, /veryprivate123|hiddenvalue|QWxhZGRpbjpvcGVu/)
+  assert.match(text, /REDACTED/)
+})
+
 test('refuses updates and preserves forensic bytes when incident ledger is corrupt', () => {
   const path = guardianIncidentPath()
   mkdirSync(dirname(path), { recursive: true })
