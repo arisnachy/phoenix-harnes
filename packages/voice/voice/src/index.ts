@@ -243,6 +243,7 @@ export function displayOutputToVoiceText(displayOutput: string, maxChars = 480):
 
 /** Return one event only when it is an explicitly speakable important event.
  * @param input - untrusted session event candidate.
+ * @param language - Configured voice language, using es-DO by default.
  * @returns a normalized important voice event, or undefined.
  */
 export function sessionEventToVoiceEvent(input: unknown, language = 'es-DO'): VoiceImportantEvent | undefined {
