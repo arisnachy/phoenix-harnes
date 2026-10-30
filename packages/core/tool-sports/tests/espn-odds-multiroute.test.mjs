@@ -128,3 +128,45 @@ test('still reads embedded prices beyond the eight per-day Core fallback probes'
   assert.equal(result.diagnostics.games,12)
   assert.equal(called.length,1)
 })
+
+test('specific game/date queries ESPN scoreboard once, never borrowing another event odds',async()=>{
+  const urls=[]
+  const target=event([priced({name:'TargetBook'})],'401111111')
+  const foreign=event([priced({name:'ForeignBook'})],'401222222')
+  const get=async url=>{
+    urls.push(url)
+    if(url.includes('/scoreboard?'))return scoreboard([foreign,target])
+    throw Error('Unexpected fallback '+url)
+  }
+  const result=await fetchPublicEspnOddsDetailed('basketball_nba','h2h',get,{
+    now,date:'2026-10-30',eventId:'401111111',days:1,
+  })
+  assert.equal(result.quotes.length,2)
+  assert.ok(result.quotes.every(q=>q.eventId==='401111111'&&q.bookmaker==='TargetBook'))
+  assert.ok(result.quotes.every(q=>q.endpointSource==='scoreboard'))
+  assert.deepEqual(result.diagnostics.datesQueried,['20261030'])
+  assert.equal(result.diagnostics.eventMatched,true)
+  assert.equal(urls.length,1)
+  assert.equal(new URL(urls[0]).searchParams.get('dates'),'20261030')
+})
+
+test('specific event odds never use unrelated event when the requested ID is not found',async()=>{
+  const get=async url=>{
+    if(url.includes('/scoreboard?'))return scoreboard([event([priced()],'401111111')])
+    throw Error('Secondary routes must not run')
+  }
+  const result=await fetchPublicEspnOddsDetailed('basketball_nba','h2h',get,{
+    now,date:'2026-10-30',eventId:'401999999',days:1,
+  })
+  assert.equal(result.quotes.length,0)
+  assert.equal(result.diagnostics.eventMatched,false)
+  assert.match(result.diagnostics.notes.join(' '),/no localizado/)
+})
+
+test('event-specific lookups reject malformed ESPN IDs and calendar dates',async()=>{
+  const noRequest=async()=>{throw Error('should not fetch')}
+  await assert.rejects(()=>fetchPublicEspnOddsDetailed('basketball_nba','h2h',noRequest,
+    {now,date:'2026-02-30',eventId:'401111111',days:1}),/Fecha ESPN inválida/)
+  await assert.rejects(()=>fetchPublicEspnOddsDetailed('basketball_nba','h2h',noRequest,
+    {now,date:'2026-10-30',eventId:'../other',days:1}),/eventId ESPN inválido/)
+})
