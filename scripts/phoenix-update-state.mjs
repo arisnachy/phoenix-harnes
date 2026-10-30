@@ -3,6 +3,7 @@ import { spawnSync } from 'node:child_process'
 import { appendFileSync, existsSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { basename, dirname, join, resolve } from 'node:path'
 import process from 'node:process'
+import { recordGuardianIncident } from './phoenix-guardian-incidents.mjs'
 
 const REPLACE_ATTEMPTS = 4
 const REPLACE_RETRY_MS = 20
@@ -128,6 +129,40 @@ export function sanitizePhoenixUpdateDiagnostic(raw) {
     safe = '[Earlier output truncated; last 96 KiB shown]\n' + safe.slice(-MAX_DIAGNOSTIC_CHARS)
   }
   return safe
+}
+
+function guardianFailureDiagnostic(path, state) {
+  if (typeof state.detail === 'string' && state.detail.trim()) return sanitizePhoenixUpdateDiagnostic(state.detail)
+  try {
+    const events = readFileSync(join(dirname(path), PROGRESS_JOURNAL_FILE), 'utf8').trim().split('\\n')
+    for (const item of events.slice(-60).reverse()) {
+      let entry
+      try { entry = JSON.parse(item) } catch { continue }
+      if (entry?.result !== 'failed' || !entry.diagnostic) continue
+      if (entry.target && entry.target !== (state.failedTarget ?? state.target)) continue
+      return sanitizePhoenixUpdateDiagnostic(entry.diagnostic)
+    }
+  } catch { /* journal optional for old managed updater */ }
+  return 'The updater recorded a failed release without a process diagnostic.'
+}
+
+function persistGuardianFailure(path, state) {
+  if (!state || typeof state !== 'object') return
+  const rollback = ['rolled-back', 'rollback-failed'].includes(state.status)
+  const prewarm = state.status === 'error' && state.phase === 'runtime-activation'
+  if (!rollback && !prewarm) return
+  try {
+    recordGuardianIncident({
+      status: rollback ? state.status : 'activation-failed',
+      phase: state.phase ?? (rollback ? 'rollback' : 'runtime-activation'),
+      failedTarget: state.failedTarget ?? state.target,
+      previous: state.previous ?? state.current,
+      diagnosis: guardianFailureDiagnostic(path, state),
+    })
+  } catch (error) {
+    console.error('[PHOENIX GUARDIAN] WARNING: failed to persist recovery incident: '
+      + (error instanceof Error ? error.message : String(error)))
+  }
 }
 
 function recordStateTransition(path, state) {
@@ -275,6 +310,7 @@ export function writePhoenixUpdateState(path, value) {
   }
   writeJsonAtomic(path, value)
   recordStateTransition(path, value)
+  persistGuardianFailure(path, value)
 }
 
 
