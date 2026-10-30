@@ -85,8 +85,8 @@ export async function fetchEspnHistoricalOdds(
   const capture=(event:Dict,lines:Dict[],source:HistoricalEspnRow['source']):number=>{
     report.rawEntries+=lines.length
     const eventDate=typeof event.date==='string'?event.date:''
-    const quotes=normalizeEspnMarkets(event as Parameters<typeof normalizeEspnMarkets>[0],
-      lines as Parameters<typeof normalizeEspnMarkets>[1],{historical:true})
+    const quotes=normalizeEspnMarkets(event as unknown as Parameters<typeof normalizeEspnMarkets>[0],
+      lines as unknown as Parameters<typeof normalizeEspnMarkets>[1],{historical:true})
     let saved=0
     for(const q of quotes){
       if(report.rows.length>=120)break
@@ -125,10 +125,10 @@ export async function fetchEspnHistoricalOdds(
         const items=priceEntries(result)
         const direct=items.filter(x=>typeof x.$ref!=='string')
         added+=capture(event,direct,'ESPN Core')
-        for(const refItem of items.filter(x=>typeof x.$ref==='string').slice(0,2)){
+        const refs=[...new Set(items.map(item=>safeRef(item.$ref,sport,league,id,compId))
+          .filter((ref):ref is string=>ref!==null))].slice(0,2)
+        for(const target of refs){
           if(report.requests>=maxRequests)break
-          const target=safeRef(refItem.$ref,sport,league,id,compId)
-          if(!target)continue
           try{
             const details=await get(target)
             report.refsResolved++
