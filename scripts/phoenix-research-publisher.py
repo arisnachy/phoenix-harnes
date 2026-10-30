@@ -498,7 +498,9 @@ def validate(data):
             if len(vals) < 3 or any(value < 0 for value in vals):
                 raise ValueError("area requires at least 3 non-negative observed chronological values")
         x_values = entry.get("x_values")
-        if kind == "area" and x_values is not None and any(
+        if kind == "area" and x_values is None:
+            raise ValueError("area requires observed numerical x_values for a true time scale")
+        if kind == "area" and any(
             left >= right for left, right in zip(x_values, x_values[1:])
         ):
             raise ValueError("area requires strictly increasing observed x_values")
@@ -791,7 +793,7 @@ def chart_image(chart, folder, ordinal, accent="#087783"):
         draw.line((left,bottom,right,bottom),fill=ink,width=3)
         if low<=0<=high:
             draw.line((left,yy(0),right,yy(0)),fill="#8695a0",width=2)
-        if kind == "scatter":
+        if kind in ("scatter", "area"):
             xs=chart["x_values"]
             x_low,x_high=bounds(xs)
             xx=lambda v:left+(v-x_low)/(x_high-x_low)*(right-left)
