@@ -41,21 +41,30 @@ export function espnSlateMarketPreview(value:unknown,now=Date.now()):SportsSlate
   const complete=[...groups.entries()].map(([bookmaker,rows])=>{
     const first=rows[0]
     const sides=rows.filter(q=>q.market==='h2h'&&(q.selection===first?.home||q.selection===first?.away))
-    return {bookmaker,rows,sides}
-  }).filter(g=>g.sides.length===2&&g.sides[0]?.selection!==g.sides[1]?.selection)
-  // Prefer complete markets; never mix bookmakers to manufacture a comparison.
-  complete.sort((a,b)=>b.rows.length-a.rows.length||a.bookmaker.localeCompare(b.bookmaker))
+    const twoWay=sides.length===2&&sides[0]?.selection!==sides[1]?.selection
+    const totals=rows.filter(q=>q.market==='totals')
+    const hasTotals=totals.some(q=>q.selection==='Over'&&totals.some(other=>
+      other.selection==='Under'&&other.point===q.point))
+    const spreads=rows.filter(q=>q.market==='spreads')
+    const hasSpreads=spreads.some(q=>spreads.some(other=>
+      other.selection!==q.selection&&q.point!==null&&other.point===-Number(q.point)))
+    return {bookmaker,rows,sides,twoWay,hasTotals,hasSpreads}
+  }).filter(g=>g.twoWay||g.hasTotals||g.hasSpreads)
+  // Prefer full moneyline pairs, then supported two-sided alternative markets.
+  // Never mix bookmakers or infer a favorite from spreads/totals alone.
+  complete.sort((a,b)=>Number(b.twoWay)-Number(a.twoWay)
+    ||b.rows.length-a.rows.length||a.bookmaker.localeCompare(b.bookmaker))
   const selected=complete[0]
   if(!selected)return null
-  const one=selected.sides[0],two=selected.sides[1]
-  if(!one||!two)return null
-  const favored=one.price===two.price?undefined:(one.price<two.price?one:two).selection
-  const timestamp=Date.parse(one.updatedAt)
+  const one=selected.twoWay?selected.sides[0]:undefined
+  const two=selected.twoWay?selected.sides[1]:undefined
+  const favored=one&&two&&one.price!==two.price?(one.price<two.price?one:two).selection:undefined
+  const timestamp=Date.parse(selected.rows[0]?.updatedAt??'')
   const fresh=Number.isFinite(timestamp)&&timestamp<=now&&now-timestamp<=3_600_000
   const status=Number.isFinite(timestamp)?fresh?'observada':'antigua':'sin_fecha'
   const priority=['h2h','spreads','totals']
   const prices=selected.rows.filter(q=>{
-    if(q.market==='h2h')return q.selection===one.selection||q.selection===two.selection
+    if(q.market==='h2h')return selected.twoWay&&(q.selection===one?.selection||q.selection===two?.selection)
     if(q.market==='spreads')return q.point!==null&&q.point!==undefined
     return q.market==='totals'&&q.point!==null&&q.point!==undefined
   }).sort((a,b)=>priority.indexOf(a.market)-priority.indexOf(b.market))
