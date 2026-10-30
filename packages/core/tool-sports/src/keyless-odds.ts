@@ -18,12 +18,12 @@ export const keylessSports = {
   basketball:['moneyline','1x2','over_under'],
   baseball:['moneyline','over_under'],
   'american-football':['moneyline','over_under'],
-  tennis:['match_winner','over_under'],
+  tennis:['match_winner','total_sets_over_under','total_games_over_under'],
   'ice-hockey':['home_away','1x2','double_chance','btts','over_under'],
   'rugby-league':['home_away','over_under'],
   'rugby-union':['home_away','over_under'],
-  handball:['1x2','over_under'],
-  volleyball:['home_away','over_under'],
+  handball:['1x2','home_away','over_under'],
+  volleyball:['home_away','total_sets_over_under','total_points_over_under'],
   cricket:['home_away'],
 } as const
 
@@ -33,6 +33,8 @@ export type KeylessQuote = {
   price:number;home:string;away:string;time:string;updatedAt:string
   source:string
   sportKey:string
+  league?:string
+  matchLink?:string
 }
 type ScrapedGame = {
   match_date?:unknown;scraped_date?:unknown;match_link?:unknown
@@ -121,6 +123,7 @@ export function normalizeOddsHarvester(
           dedupe.add(identity)
           result.push({eventId,bookmaker,market,selection,point,price:decimal,home,away,
             time:new Date(kickoff).toISOString(),updatedAt:new Date(observed).toISOString(),
+            league:str(game.league_name,120),matchLink:link,
             source:historical?'OddsHarvester/OddsPortal (histórico, no vigente)':'OddsHarvester/OddsPortal (sin API key)',sportKey})
           if(result.length>=2500)return result
         }
@@ -236,6 +239,36 @@ export function recoverScraperRows(stdout:unknown,output:unknown):unknown[]{
   return rows
 }
 /** Run a fixed local executable with fixed command shape, no shell, no user URLs. */
+/** Sanitized transport failure: retain exit status and stderr diagnostics without
+ * exposing environment variables, authorization headers or a raw shell command.
+ */
+export function describeScraperError(error:unknown):string{
+  const record=error&&typeof error==='object'?error as Record<string,unknown>:{}
+  const raw=typeof record.stderr==='string'?record.stderr:''
+  const scrub=(v:string)=>v.replace(/\u001b\[[0-9;]*m/gu,'')
+    // Redact the entire Authorization bearer value, not just the word "Bearer".
+    .replace(/\bauthorization\s*[:=]\s*bearer\s+[^\s,;]+/giu,'[credencial oculta]')
+    .replace(/\bbearer\s+[a-z0-9._~+\/-]{8,}/giu,'[credencial oculta]')
+    .replace(/(?:api[_-]?key|access[_-]?token|token|authorization|password|secret)\s*[:=]\s*(?:"[^"]+"|'[^']+'|[^\s,;]+)/giu,'[credencial oculta]')
+    .replace(/(?:--(?:api-key|token|password|secret)\s+)[^\s]+/giu,'[credencial oculta]')
+    .replace(/([?&](?:api[_-]?key|access_token|token|key|secret|password)=)[^&#\s]+/giu,'$1[oculto]')
+    .replace(/\b(?:sk-[a-z0-9_-]{12,}|gh[pousr]_[a-z0-9_]{20,})\b/giu,'[credencial oculta]')
+    .replace(/[\r\n]+/gu,' ').trim()
+  const diagnostic=scrub(raw).slice(-900)
+  const code=typeof record.code==='number'||typeof record.code==='string'?
+    String(record.code).slice(0,40):'desconocido'
+  const signal=typeof record.signal==='string'?record.signal.slice(0,30):'ninguna'
+  const killed=record.killed===true
+  const category=code==='ENOENT'?'missing-executable':
+    code==='ETIMEDOUT'||killed?'timeout':
+      /executable doesn.t exist|playwright.*install|chromium.*not found/iu.test(raw)?
+        'missing-playwright-browser':
+      /403|429|access denied|captcha|cloudflare/iu.test(raw)?
+        'site-blocked-or-limited':'scraper-exit-error'
+  return 'category='+category+'; exitCode='+code+'; signal='+signal+
+    '; killed='+String(killed)+'; stderr='+ (diagnostic||'sin detalles de stderr')+
+    '; verificar el log local del instalador y una consulta CLI controlada.'
+}
 async function runScraper(sport:KeylessSport,market:string,day:string,env:NodeJS.ProcessEnv):Promise<unknown>{
   const folder=await mkdtemp(join(tmpdir(),'phoenix-odds-'))
   const file=join(folder,'odds.json')
@@ -263,8 +296,7 @@ async function runScraper(sport:KeylessSport,market:string,day:string,env:NodeJS
     const recovered=recoverScraperRows(stdout,output)
     if(recovered.length)return recovered
     if(failure){
-      const message=failure instanceof Error?failure.message:'Fallo desconocido'
-      throw Error('OddsHarvester falló y no dejó partidos cotizables: '+message.slice(0,240))
+      throw Error('OddsHarvester falló sin cuotas recuperables: '+describeScraperError(failure))
     }
     return Array.isArray(output)?output:[]
   }finally{
@@ -290,6 +322,10 @@ export async function keylessOdds(
   const task=(async()=>{
     const raw=await runner(sport,market,date,env)
     const rows=normalizeOddsHarvester(raw,sport,now,3_600_000)
+    if(Array.isArray(raw)&&raw.length>0&&rows.length===0)
+      throw Error('OddsHarvester procesó '+raw.length+
+        ' partidos, pero no encontró precios elegibles: comprobar fecha de captura, '+
+        'inicio del partido, mercado, casa, período y líneas retiradas.')
     if(runner===runScraper){
       if(cache.size>=64)cache.clear()
       cache.set(key,{at:now,rows})

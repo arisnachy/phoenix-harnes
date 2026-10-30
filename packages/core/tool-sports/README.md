@@ -51,31 +51,6 @@ The optional CLI has a bounded timeout, fixed arguments (never a user URL), requ
 
 For MLB retain `sports_chat_mlb_pitchers` and official MLB Stats API. For football/soccer use 1X2, BTTS, double chance, team form and lineups; tennis needs surface and match fatigue; NBA requires injury and matchup analysis; NFL requires quarterback/roster; NHL requires confirmed goalkeeper. Missing advanced data is explicitly unresolved; this integration **does not implement a validated betting model or guarantee a winning 5/6-leg ticket**.
 
-## Model Experience
-
-### Verified sports fixtures and inline cards
-
-#### What the model sees
-
-Kira receives bounded `sports_chat_games` results containing attributed fixture data and declarative `sports_game_card` payloads with local time, teams, source, and optional verified pitcher, lineup, and bullpen information. `sports_chat_odds` may supply real quoted markets; `sports_chat_ticket` only simulates a ticket.
-
-#### Token effect
-
-Each sports request contributes only source-attributed event fields and bounded visual-card payloads to the model context; absent player statistics and prices remain absent rather than becoming synthetic tokens.
-
-#### KV Cache effect
-
-Live fixtures and odds can change between requests, so dynamic tool results may alter the request prefix and reduce KV-cache reuse; stable static tool schemas and instructions remain cacheable.
-
-## Known Limitations and Deferred Work
-
-- ESPN's public endpoints are unofficial and can change or stop responding. Provider terms and image redistribution rights require independent review.
-- Favorites are descriptive standings trends, not calibrated win probabilities or promised winners; missing evidence does not justify a pick.
-- A bookmaker price can be displayed only when its source supplies it. No bet is placed, and no direct bookmaker transaction is supported.
-- First-party sports tools expose validated UI cards automatically; unsupported data and malformed schemas cannot render a card.
-- Some disciplines lack player-by-player comparisons, confirmed lineups, or bullpen details. An unavailable value must be shown as unavailable.
-
-
 ## ESPN Universal Intelligence — adaptive native chat
 
 The read-only tool **sports_chat_espn_explore** complements, without replacing,
@@ -205,3 +180,63 @@ These are **outcome checks**, not profit guarantees. Backtests should use
 time-held-out samples, real bookmaker prices available before kickoff,
 sport-specific metrics, injury/team availability, correlation guards,
 and calibration assessments before publishing a quantitative edge.
+
+
+### Comprehensive odds access and validation by discipline
+
+The `sports_chat_odds_scan` read-only tool examines all eleven OddsHarvester
+sport categories in three bounded pages: `offset=0`, `offset=4` and
+`offset=8` (each `limit=4`). The returned `unprobed` and
+`nextOffset` values prevent a partial scan from being called complete.
+Coverage includes soccer, basketball (NBA and WNBA), baseball, American
+football, ice hockey, tennis (ATP and WTA), handball, volleyball, rugby
+league, rugby union and cricket. A league listed as supported is **not
+evidence** that a bookmaker has quoted an event.
+
+`sports_chat_odds` checks explicit league keys and separately queries
+available ESPN, OddsHarvester and API feeds. A sport-wide OddsHarvester
+result is never relabeled as NBA, WNBA, MLB, NFL, NHL, ATP or WTA without
+upstream league evidence. For soccer, the country/league path must match
+when league names are ambiguous. Tennis totals use
+`total_games_over_under` or `total_sets_over_under`; volleyball uses
+`total_points_over_under` or `total_sets_over_under`, rather than the
+unsupported generic `over_under` token.
+
+If OddsHarvester exits unsuccessfully, Kira receives a **redacted**
+diagnostic including `category`, `exitCode`, `signal`, `killed`
+and the useful stderr tail. Categories distinguish missing executable,
+Playwright Chromium not installed, timeout, site challenge and other
+scraper errors. If rows were read but none are eligible, Kira explains
+the exact-market, bookmaker, kickoff and timestamp requirements rather
+than silently treating a present executable as a live odds connection.
+
+To verify the orchestration:
+`node --experimental-strip-types --test packages/core/tool-sports/tests/sports-odds-coverage.test.mjs`.
+Only a genuine quote with source, bookmaker, event, market, period,
+price and observed time is evidence of real access. Source installation
+and CI success do not prove the user's Windows system can connect to
+OddsPortal.
+
+## Model Experience
+
+### Verified sports fixtures and inline cards
+
+#### What the model sees
+
+Kira receives bounded `sports_chat_games` results containing attributed fixture data and declarative `sports_game_card` payloads with local time, teams, source, and optional verified pitcher, lineup, and bullpen information. `sports_chat_odds` may supply real quoted markets; `sports_chat_ticket` only simulates a ticket.
+
+#### Token effect
+
+Each sports request contributes only source-attributed event fields and bounded visual-card payloads to the model context; absent player statistics and prices remain absent rather than becoming synthetic tokens.
+
+#### KV Cache effect
+
+Live fixtures and odds can change between requests, so dynamic tool results may alter the request prefix and reduce KV-cache reuse; stable static tool schemas and instructions remain cacheable.
+
+## Known Limitations and Deferred Work
+
+- ESPN's public endpoints are unofficial and can change or stop responding. Provider terms and image redistribution rights require independent review.
+- Favorites are descriptive standings trends, not calibrated win probabilities or promised winners; missing evidence does not justify a pick.
+- A bookmaker price can be displayed only when its source supplies it. No bet is placed, and no direct bookmaker transaction is supported.
+- First-party sports tools expose validated UI cards automatically; unsupported data and malformed schemas cannot render a card.
+- Some disciplines lack player-by-player comparisons, confirmed lineups, or bullpen details. An unavailable value must be shown as unavailable.
