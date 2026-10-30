@@ -5,13 +5,15 @@
 独立运行，不依赖 LLM 或本地 Windows。**仅限 PAPER 模拟交易**：绝不提交真实 Binance 订单，也不访问私人账户余额。此项目刻意放在 pnpm monorepo 工作区之外，避免构建时意外变成生产实盘交易代理。
 
 ## 当前范围
-- 从 Binance 公共市场数据接口发现最多 300 个流动性较好的**活跃 Spot USDT 市场**。
-- 按流动性筛选（24 小时计价成交量 >=500 万 USDT），排除杠杆代币，每分钟轮询分析 4 个市场（300 个约需 75 分钟完成一轮）。
+- 从 Binance 公共市场数据接口发现最多 1,000 个流动性较好的**活跃 Spot USDT 市场**。
+- 按流动性筛选（24 小时计价成交量 >=500 万 USDT），排除杠杆代币，并对 Binance 已公开的 Monitoring/Seed 风险标记及已宣布退市资产进行保守拦截；每分钟轮询分析 4 个市场（1,000 个约需 250 分钟完成一轮，不能同时扫描全部市场）。
 - 四种确定性策略假设：Donchian 突破、EMA 趋势回撤、结合 RSI 的布林带式统计均值回归、成交量确认的动量延续。
 - PAPER 虚拟成交计入手续费和不利滑点模拟，单仓上限为 5%，总敞口上限 20%，同时最多持有 2 个仓位。
 - 基于 ATR 的止损、分批 TP1、最终 TP2；定期按市价估值、累计熔断、不可重复的交易日志 ID、数据库乐观锁保护。
 - 可通过游标分页的 D1 持久事件日志，以及在重新连接后向 Kira 重放未读云端提醒的 PHOENIX Host 桥接器。事件本身**并不是**在云端运行的 Kira：电脑关机时本地代理不会唤醒。
 - src/research.mjs 提供保守的下一根 K 线回测和训练集/留出集试验（不在免费层约 10ms CPU 的 Cron 中运行，也不据此宣称能够盈利）。
+- Binance 官方 exchangeInfo 接口并不提供完整的未来退市计划或 Monitoring/Seed 标记清单。src/asset-risk.mjs 仅提供截至 2026-10-29 的部分官方公告快照；没有命中禁止名单不等于 Binance 认可。每次云端虚拟买入前，还会重新查询现时 Spot 交易权限；数据无法验证时拒绝买入。
+- 用户可通过 stop-liquidate 先持久停用 PAPER Worker，再尝试根据公开实时价格卖出所有账本中的虚拟持仓，并记录模拟成交。如报价不可用，保留未清仓状态、阻止重启并要求显式重试；这不是真实交易所卖单。
 - 不承诺盈利；没有证据证明长期有效的历史超额收益或实盘交易执行。
 
 ## 前提条件 / 授权
@@ -28,7 +30,7 @@
 6. 至少运行一次测试 Cron，验证版本号变化，且 /snapshot 显示最近一次成功扫描。
 7. 在 PHOENIX Host 中配置 PHOENIX_TRADING_CLOUD_URL，并在 Host 凭证库保存 PHOENIX_TRADING_CLOUD_ADMIN_TOKEN。绝不将密钥放入 Git 仓库或提示词。URL 必须使用专用 .workers.dev HTTPS 主机名。
 8. Host 配置并验证服务后，Kira 可使用 binance_cloud_status 和 binance_cloud_control。本地 Host 轮询将积压的云端 PAPER 事件转发至已有唤醒规则，无需每分钟调用 LLM。
-9. 用有效的 Bearer 令牌向 POST /admin/control 发送 {"action":"start"} 启动 PAPER，并确认持久状态。云端服务与本地 PAPER 是两个独立的虚拟投资组合。停止使用 action=stop。
+9. 用有效的 Bearer 令牌向 POST /admin/control 发送 {"action":"start"} 启动 PAPER，并确认持久状态。云端服务与本地 PAPER 是两个独立的虚拟投资组合。停止使用 action=stop。若还要清算所有 PAPER 虚拟持仓，可发送 action=stop-liquidate；实时报价不可用时会返回 409 和剩余仓位。
 
 不要自动购买收费资源或录入付款信息；权限不足时应明确返回需要配置的结果。Cloudflare Workers 免费层对每次触发的 CPU 时间和子请求数量有严格限制。该任务故意每分钟最多分析 4 个市场，可能需要进一步减少负载或转移到虚拟机；依赖全天候运行之前必须实测 CPU 使用量。
 
@@ -36,7 +38,7 @@
 - GET /health — 最小公共可达性检查，不证明交易机器人正在运行
 - GET /snapshot — 私有的、经身份验证的 PAPER 账户日志与状态
 - GET /events?after=SEQ — 私有的、经身份验证的追加式 D1 事件日志，每页 100 条，包含 nextCursor
-- POST /admin/control — 私有的、经身份验证的启动/停止接口
+- POST /admin/control — 私有的、经身份验证的启动/停止/虚拟清仓接口（仅 PAPER）
 
 Bearer 令牌是管理员密钥：若泄露应轮换；绝不放在聊天、URL 或源代码中。
 

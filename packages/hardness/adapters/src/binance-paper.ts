@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
+import { assessBinanceSpotSymbol, binanceKnownAssetRisk } from './binance-asset-risk.ts'
 
 const DEFAULT_INITIAL_CASH_USDT = 10_000
 const DEFAULT_FEE_RATE = 0.001
@@ -145,6 +146,7 @@ export interface BinancePublicMarket {
   price(symbol: string): Promise<number>
   prices(symbols: readonly string[]): Promise<Record<string, number>>
   candles(symbol: string, interval: string, limit: number): Promise<BinanceCandle[]>
+  eligible?: (symbol: string) => Promise<boolean>
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -194,6 +196,21 @@ function parsePrice(value: unknown, symbol: string): number {
 
 /** Public, credential-free Binance Spot market reader used by paper trading. */
 export class BinancePublicMarketClient implements BinancePublicMarket {
+  /**
+   * Verify live Spot trading status and conservative risk markers.
+   * @param rawSymbol - Spot symbol to verify before submitting a virtual buy.
+   * @returns True only if current metadata passes the fail-closed checks.
+   */
+  async eligible(rawSymbol: string): Promise<boolean> {
+    const symbol = normalizeSymbol(rawSymbol)
+    const url = new URL('/api/v3/exchangeInfo', BINANCE_PUBLIC_API)
+    url.searchParams.set('symbol', symbol)
+    const raw = await fetchJson(url)
+    if (!isRecord(raw) || !Array.isArray(raw.symbols)) throw new Error('Binance Spot status unavailable')
+    const row: unknown = raw.symbols.find(item => isRecord(item) && item.symbol === symbol)
+    return assessBinanceSpotSymbol(row) === undefined
+  }
+
   /**
    * Read the latest public Binance Spot price for one symbol.
    * @param rawSymbol - Spot symbol such as BTCUSDT.
@@ -521,6 +538,11 @@ export class BinancePaperBroker {
     const reason = input.reason?.trim()
     const trade = await withPathLock(this.path, async () => {
       const state = await readState(this.path) ?? freshState(DEFAULT_INITIAL_CASH_USDT, DEFAULT_FEE_RATE)
+      if (input.side === 'buy') {
+        if (binanceKnownAssetRisk(symbol)) throw new Error('Binance known high-risk asset is not eligible for PAPER buy')
+        if (this.market.eligible && !(await this.market.eligible(symbol)))
+          throw new Error('Binance public Spot market is not eligible for PAPER buy')
+      }
       const price = await this.market.price(symbol)
       let quantity: number
       if (input.side === 'buy') {

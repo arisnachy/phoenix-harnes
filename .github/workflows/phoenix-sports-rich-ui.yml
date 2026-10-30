@@ -48,10 +48,14 @@ jobs:
           node --experimental-strip-types --test packages/core/tool-sports/tests/sports-deep-context.test.mjs
           node --experimental-strip-types --test packages/core/tool-sports/tests/universal-matchup-factors.test.mjs
           node --experimental-strip-types --test packages/core/tool-sports/tests/espn-intelligence.test.mjs
+          node --experimental-strip-types --test packages/core/tool-sports/tests/espn-odds-multiroute.test.mjs
+          node --experimental-strip-types --test packages/core/tool-sports/tests/espn-core-intelligence.test.mjs
           node --experimental-strip-types --test packages/core/tool-sports/tests/sports-bet-settlement.test.mjs
           node --test scripts/phoenix-sports-source-update.test.mjs
           node --test scripts/phoenix-sports-historical-collect.test.mjs
           node --experimental-strip-types --test packages/core/tool-sports/tests/keyless-odds.test.mjs
+          node --experimental-strip-types --test packages/core/tool-sports/tests/odds-resilience.test.mjs
+          node --experimental-strip-types --test packages/core/tool-sports/tests/sports-odds-coverage.test.mjs
           node --experimental-strip-types --test packages/core/tool-sports/tests/free-odds.test.mjs
       - name: Verify chat schema, visuals and prior UI compatibility
         run: pnpm exec vitest run packages/client/ui-conversation/tests/sports-rich-ui.client.spec.tsx packages/client/ui-conversation/tests/generative-ui.client.spec.tsx packages/client/ui-conversation/tests/tool-activity-group.client.spec.tsx packages/client/ui-conversation/tests/sports-tool-visual.client.spec.ts

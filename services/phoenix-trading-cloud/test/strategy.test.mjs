@@ -4,6 +4,7 @@ import {
   MAX_UNIVERSE, analyze, exitPlan, freshState, paperFill, parseKlines,
   pickUniverse, riskBudget, marketValue, ema, rsi, atr,
 } from '../src/strategy.mjs';
+import {knownAssetRisk,spotAssetRisk} from '../src/asset-risk.mjs';
 
 const H=900000, NOW=1700000000000;
 function rows(now=NOW,flag='trend'){
@@ -36,6 +37,21 @@ describe('market evidence and strategy research',()=>{
     const flat=analyze('ETHUSDT',parseKlines(rows(NOW,'flat'),NOW,H));
     assert.equal(flat.action,'hold');
     assert.equal(flat.score,0);
+  });
+  it('blocks official Monitoring and delisting snapshot, non-SPOT permissions and nonstandard risk markers',()=>{
+    assert.equal(knownAssetRisk('BICOUSDT'),'monitoring-tag');
+    assert.equal(knownAssetRisk('QUICKUSDT'),'announced-delisting');
+    assert.equal(knownAssetRisk('BTCUSDT'),null);
+    assert.equal(spotAssetRisk({symbol:'ETHUSDT',status:'HALT',quoteAsset:'USDT'}),'not-trading');
+    assert.equal(spotAssetRisk({symbol:'ABCUSDT',status:'TRADING',quoteAsset:'USDT',
+      permissionSets:[['MARGIN']]}),'no-spot-permission');
+    assert.equal(spotAssetRisk({symbol:'XYZUSDT',status:'TRADING',quoteAsset:'USDT',
+      tags:['MONITORING']}),'risk-tag');
+    const markets={symbols:['BICOUSDT','QUICKUSDT','BTCUSDT'].map(symbol=>({
+      symbol,status:'TRADING',quoteAsset:'USDT'}))};
+    const tickers=['BICOUSDT','QUICKUSDT','BTCUSDT'].map(symbol=>({
+      symbol,lastPrice:'100',quoteVolume:'90000000'}));
+    assert.deepEqual(pickUniverse(markets,tickers),['BTCUSDT']);
   });
   it('discovers eligible Spot markets by actual exchange rules and liquidity',()=>{
     const exchange={symbols:[

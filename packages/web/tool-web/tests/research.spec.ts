@@ -67,4 +67,42 @@ describe('Phoenix universal research routing', () => {
     expect(outcome.sources).toHaveLength(2)
     expect(outcome.truncated).toBe(true)
   })
+  it('splits Dominican public-health evidence across all eight institutional hosts', () => {
+    const question = 'APS y cobertura efectiva 2015–2025 República Dominicana'
+    const batches = [0, 1, 2, 3].map(batch => planResearch(question, undefined, batch))
+    expect(batches.every(plan => plan.domain === 'public_health')).toBe(true)
+    expect(batches.every(plan => plan.totalBatches === 4)).toBe(true)
+    expect(batches.map(plan => plan.candidates.map(host => host.host))).toEqual([
+      ['paho.org', 'worldbank.org'],
+      ['one.gob.do', 'msp.gob.do'],
+      ['sns.gob.do', 'sisalril.gob.do'],
+      ['who.int', 'datos.bancomundial.org'],
+    ])
+    expect(batches[0]?.queries).toHaveLength(3)
+    expect(batches[1]?.queries).toHaveLength(2)
+    expect(batches[1]?.queries[0]).toContain('site:one.gob.do')
+    expect(batches[0]?.queries[2]).toContain('2015 2025')
+    expect(() => planResearch(question, 'public_health', 4)).toThrow(/batch/u)
+    expect(() => planResearch(question, 'public_health', -1)).toThrow(/batch/u)
+  })
+
+  it('drops irrelevant health search hits and preserves traceable Dominican evidence', async () => {
+    const search = vi.fn(async () => ({
+      truncated: false,
+      sources: [
+        { url: 'https://example.com/sports', title: 'Football league standings' },
+        { url: 'https://www.paho.org/es/documentos/republica-dominicana-salud',
+          title: 'República Dominicana atención primaria y cobertura', snippet: 'Indicadores de salud' },
+        { url: 'https://www.paho.org/es/documentos/republica-dominicana-salud?utm_source=news',
+          title: 'Duplicate official record' },
+      ],
+    }))
+    const ctx = { web: { search } } as unknown as Pick<Context, 'web'>
+    const result = await executeResearch(ctx, planResearch('APS en República Dominicana'), 8, signal)
+    expect(result.sources).toHaveLength(1)
+    expect(result.sources[0]?.url).toBe('https://www.paho.org/es/documentos/republica-dominicana-salud')
+    expect(result.offTopicDropped).toBeGreaterThan(0)
+    expect(result.totalBatches).toBe(4)
+  })
+
 })

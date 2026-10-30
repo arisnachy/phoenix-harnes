@@ -140,6 +140,8 @@ describe('dsh-tool-team', () => {
     expect(leadPrompt).toContain('an omitted effort may use the request-sensitive automatic tier')
     expect(leadPrompt).toContain('an omitted effort uses the provider default')
     expect(leadPrompt).toContain('Do not make a model call merely to classify a task')
+    expect(leadPrompt).toContain('Give a short human-facing progress report after the first material verified finding')
+    expect(leadPrompt).toContain('Use a preferred name or professional title already authorized')
     expect(leadPrompt).toContain('A normal peer result, question or wait stays on the coordinator route')
 
     const spawned = await execute(ctx, lead, 'spawn_teammate', {
@@ -159,6 +161,7 @@ describe('dsh-tool-team', () => {
     expect(childPrompt).toContain('Fénix Eclipse has exactly two model roles')
     expect(childPrompt).toContain('subagent for every child')
     expect(childPrompt).not.toContain('detective-like')
+    expect(childPrompt).not.toContain('Give a short human-facing progress report after the first material verified finding')
 
     const denied = await execute(ctx, child, 'spawn_teammate', {
       name: 'nested', description: 'not allowed', prompt: 'no',

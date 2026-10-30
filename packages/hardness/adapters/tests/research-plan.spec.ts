@@ -67,4 +67,25 @@ describe('Phoenix academic research intake and length planning', () => {
     expect(() => planAcademicResearch({ entry: 'fake' })).toThrow()
     expect(createResearchPlanTool().name).toBe('phoenix_research_plan')
   })
+  it('accepts an explicit bibliography style without forcing a redundant entry choice', () => {
+    const result = planAcademicResearch({
+      intent: 'Tesis sobre atención primaria de salud', citation_style: 'apa7', level: 'masters',
+      document_type: 'thesis', target_pages: 70, page_scope: 'all',
+      cover: { institution: 'Universidad', authors: [{ name: 'Investigador' }] },
+    })
+    expect(result.entry).toBe('apa7')
+    expect(result.citation_style).toBe('apa7')
+    expect(result.state).toBe('PLAN_READY')
+    expect(result.research_workflow.minimum_distinct_cited_sources).toBe(40)
+  })
+
+  it('keeps investigation possible when optional cover authors have a malformed shape', () => {
+    const result = planAcademicResearch({
+      intent: 'Tesis APA 7 de maestría', cover: { institution: 'Universidad', authors: 'wrong-shape' },
+    })
+    expect(result.state).toBe('INTAKE_INCOMPLETE')
+    expect(result.missing_fields).toContain('participantes')
+    expect(result.research_workflow.evidence_collection).toContain('gap analysis and focused searches')
+  })
+
 })

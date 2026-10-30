@@ -402,6 +402,9 @@ export function ConversationRoot({
         </div>
       </div>
       <div className={css.scrollBody} data-conversation-scroll="">
+        {settling && summaryBlank !== false && (
+          <div className={css.recoveryStatus} role="status">{t('chat.loadingHistory')}</div>
+        )}
         <SessionBodyOutlet sessionId={sessionId} renderSlot={renderSlot} />
         {composerSeat}
       </div>

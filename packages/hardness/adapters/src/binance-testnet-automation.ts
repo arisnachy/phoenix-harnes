@@ -3,6 +3,7 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { evaluateBinanceAdaptiveSignal, type BinanceAdaptiveSignal } from './binance-adaptive.ts'
 import type { BinancePublicMarket } from './binance-paper.ts'
+import { binanceKnownAssetRisk } from './binance-asset-risk.ts'
 import { BinanceSpotTestnet, type BinanceTestnetOrderReceipt } from './binance-spot-testnet.ts'
 
 const POLL_MS = 60_000
@@ -44,6 +45,7 @@ type FilledOrder = {
   reason: string
   at: string
 }
+/** Durable fake-funded Spot TESTNET scheduler and order reconciliation state. */
 export type BinanceTestnetAutomationState = {
   schema: 1
   mode: 'testnet'
@@ -109,6 +111,7 @@ export class BinanceTestnetAutomation {
     private readonly market?: Pick<BinancePublicMarket, 'candles'>,
   ) {}
 
+  /** @param sink - Host callback for confirmed testnet fills and safety halts. */
   setAttentionSink(sink: typeof this.sink): void { this.sink=sink }
   private notify(kind: 'fill'|'risk-halt', detail: string, symbol: string): void {
     try{this.sink?.({kind,detail,symbol})}catch{/* notifications never affect trading */}
@@ -119,6 +122,7 @@ export class BinanceTestnetAutomation {
     await writeFile(temp,JSON.stringify(this.state)+'\n',{mode:0o600,encoding:'utf8'})
     await rename(temp,this.file)
   }
+  /** Restore persisted TESTNET permission and ledger, failing closed on corruption. */
   async restore(): Promise<void> {
     if(this.loaded)return
     this.loaded=true
@@ -146,12 +150,20 @@ export class BinanceTestnetAutomation {
     this.timer=setInterval(()=>{void this.step()},POLL_MS)
     this.timer.unref()
   }
+  /**
+   * Enable a user-approved fake-funded Spot TESTNET scheduler.
+   * @param symbols - Bounded unique USDT pairs.
+   * @returns Current persisted and reconciled TESTNET state.
+   */
   async start(symbols: readonly string[]): Promise<BinanceTestnetAutomationState> {
     await this.restore()
     if(this.state.halted||this.state.pending)throw new Error('Testnet has a pending order or risk halt; manual reconciliation required')
     const ready=await this.testnet.status()
     if(!ready.connected||ready.canTrade!==true)throw new Error('Spot Testnet account is not authenticated for TESTING orders')
-    this.state.symbols=validSymbols(symbols)
+    const candidates = validSymbols(symbols)
+    if (candidates.some(symbol => binanceKnownAssetRisk(symbol) !== undefined))
+      throw new Error('Spot TESTNET watchlist includes known Binance risk-tag/delisting assets')
+    this.state.symbols=candidates
     this.state.enabled=true
     delete this.state.lastError
     this.state.failureCount=0
@@ -160,6 +172,7 @@ export class BinanceTestnetAutomation {
     await this.step()
     return this.snapshot()
   }
+  /** @returns Saved TESTNET state after halting future scheduled entries. */
   async stop(): Promise<BinanceTestnetAutomationState> {
     await this.restore()
     this.state.enabled=false
@@ -169,7 +182,64 @@ export class BinanceTestnetAutomation {
     await this.save()
     return this.snapshot()
   }
-  /** User-visible, READ-only recovery of uncertain Testnet order receipts. */
+  /**
+   * User-directed fake-funds panic exit. TESTNET orders are sent only to the
+   * fixed Binance Spot Testnet endpoint. Each signed exchange receipt is
+   * reconciled before the next sell. An unfilled or untradeable remainder is
+   * left on the ledger and a safety halt is persisted, never called "sold".
+   * @returns Confirmed TESTNET state only after all tracked positions close.
+   */
+  async stopAndLiquidate(): Promise<BinanceTestnetAutomationState> {
+    await this.stop() // stop is persisted before contacting Binance.
+    try {
+      if (this.state.pending) {
+        await this.reconcilePending()
+        if (this.state.pending) throw new Error('unresolved-testnet-order')
+      }
+      let sequence = 0
+      for (const symbol of Object.keys(this.state.positions)) {
+        while (this.state.positions[symbol] !== undefined) {
+          if (++sequence > 200) throw new Error('too-many-testnet-liquidation-orders')
+          const position = this.state.positions[symbol]
+          if (position === undefined) break
+          const account = await this.testnet.status()
+          if (!account.connected || account.canTrade !== true)
+            throw new Error('testnet-wallet-unavailable')
+          const balance = Number(account.balances?.find(
+            row => row.asset === symbol.slice(0, -4))?.free ?? 0)
+          const limits = await this.testnet.lotSize(symbol)
+          const price = await this.testnet.quote(symbol)
+          const quantity = sellQuantity(
+            Math.min(position.quantity, balance, Number(limits.maxQty), 100), limits)
+          if (!finite(quantity) || !finite(price) || quantity * price < 10)
+            throw new Error('testnet-position-below-executable-lot-or-notional')
+          const now = Date.now()
+          await this.submit({
+            symbol, side: 'SELL', quantity, strategy: position.strategy,
+            reason: 'user-stop-liquidate-testnet', requestedAt: new Date(now).toISOString(),
+            signalBar: now, clientOrderId: orderId(symbol, 'SELL', 'user-stop-liquidate-testnet', now + sequence),
+          })
+          if (this.state.pending) {
+            await this.reconcilePending()
+            if (this.state.pending) throw new Error('unresolved-testnet-order')
+          }
+        }
+      }
+      if (Object.keys(this.state.positions).length > 0)
+        throw new Error('testnet-liquidation-remaining-positions')
+      this.state.lastDecision = 'testnet-positions-liquidated-by-user'
+      await this.save()
+      return this.snapshot()
+    } catch {
+      await this.halt('testnet-liquidation-incomplete-review-provider-ledger')
+      throw new Error('Testnet liquidation incomplete: remaining positions or pending receipts need review')
+    }
+  }
+
+  /**
+   * Reconcile any uncertain provider order without submitting a new order.
+   * @returns Updated fake-funded TESTNET ledger state.
+   */
   async reconcilePending(): Promise<BinanceTestnetAutomationState> {
     await this.restore()
     const intent=this.state.pending
@@ -192,7 +262,10 @@ export class BinanceTestnetAutomation {
     return this.snapshot()
   }
 
-  /** A separate deliberate owner review can clear a Testnet-only safety halt. */
+  /**
+   * Clear a reviewed safety halt only when no orders remain uncertain.
+   * @returns Updated stopped testnet scheduler state.
+   */
   async clearReviewedHalt(): Promise<BinanceTestnetAutomationState> {
     await this.restore()
     if(this.state.pending)throw new Error('Cannot clear Testnet halt with an unresolved exchange order')
@@ -207,6 +280,7 @@ export class BinanceTestnetAutomation {
     return this.snapshot()
   }
 
+  /** @returns A defensive read-only copy of recorded TESTNET state. */
   snapshot(): BinanceTestnetAutomationState {return structuredClone(this.state)}
   private async halt(reason: string, symbol='BTCUSDT'): Promise<void> {
     this.state.enabled=false;this.state.halted=true;this.state.lastError=reason
@@ -259,7 +333,8 @@ export class BinanceTestnetAutomation {
       // Keep the real provider balance authoritative, but do not carry a
       // phantom strategy position once a protective full exit is confirmed.
       if(position.quantity<1e-10
-        || (intent.reason!=='tp1' && position.quantity<1e-6))
+        || (intent.reason!=='tp1' && intent.reason!=='user-stop-liquidate-testnet'
+          && position.quantity<1e-6))
         delete this.state.positions[intent.symbol]
       else if(intent.reason==='tp1')position.tp1Done=true
     }
@@ -318,7 +393,8 @@ export class BinanceTestnetAutomation {
       // Always service existing software stops/TPs before considering a new BUY.
       for(const position of Object.values(this.state.positions)){
         const price=await this.testnet.quote(position.symbol)
-        const reason=price<=position.stop?'stop-loss':
+        const reason=binanceKnownAssetRisk(position.symbol)?'binance-asset-risk':
+          price<=position.stop?'stop-loss':
           price>=position.tp2?'tp2':!position.tp1Done&&price>=position.tp1?'tp1':undefined
         if(!reason)continue
         const limits=await this.testnet.lotSize(position.symbol)
@@ -346,6 +422,11 @@ export class BinanceTestnetAutomation {
       const signals:BinanceAdaptiveSignal[]=[]
       const barsBySymbol=new Map<string,number>()
       for(const symbol of this.state.symbols){
+        if (binanceKnownAssetRisk(symbol)) {
+          signals.push({symbol,regime:'range',strategy:'none',action:'hold',score:0,
+            lastClose:0,reason:'Binance risk-tag or delisting guard'})
+          continue
+        }
         try{
           const candles=await (this.market?.candles(symbol,'15m',80)
             ?? this.testnet.candles(symbol,'15m',80))
@@ -368,7 +449,8 @@ export class BinanceTestnetAutomation {
       this.state.failureCount=0
       delete this.state.lastError
       const candidate=[...signals].sort((a,b)=>b.score-a.score).find(s=>s.action==='buy'
-        && s.score>=ENTRY_SCORE && !this.state.positions[s.symbol]
+        && s.score>=ENTRY_SCORE && !binanceKnownAssetRisk(s.symbol)
+        && !this.state.positions[s.symbol]
         && this.state.lastEntryBar[s.symbol]!==barsBySymbol.get(s.symbol))
       if(!candidate){this.state.lastDecision='no-qualified-entry';await this.save();return}
       if(Object.keys(this.state.positions).length>=MAX_POSITIONS) {
@@ -399,6 +481,10 @@ export class BinanceTestnetAutomation {
       else await this.save()
     }
   }
+  /**
+   * Evaluate one verified TESTNET market cycle when explicitly armed.
+   * @param now - Cycle timestamp in Unix milliseconds.
+   */
   async step(now=Date.now()): Promise<void> {
     await this.restore()
     if(this.active)return this.active
@@ -406,6 +492,7 @@ export class BinanceTestnetAutomation {
     this.active=job
     try{await job}finally{if(this.active===job)this.active=undefined}
   }
+  /** Drain active work and release process timers. */
   async dispose(): Promise<void> {
     if(this.timer!==undefined)clearInterval(this.timer)
     this.timer=undefined
@@ -414,6 +501,12 @@ export class BinanceTestnetAutomation {
 }
 
 const byPath=new Map<string,{engine:BinanceTestnetAutomation;refs:number}>()
+/**
+ * Obtain a reference-counted TESTNET worker bound to a durable ledger path.
+ * @param file - Filesystem path used to persist virtual strategy state.
+ * @param testnet - Separate Spot TESTNET API client (never production credentials).
+ * @returns Worker handle and release callback.
+ */
 export function acquireBinanceTestnetAutomation(file:string,testnet:BinanceSpotTestnet):{
   readonly engine:BinanceTestnetAutomation
   release():void
