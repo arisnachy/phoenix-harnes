@@ -184,7 +184,7 @@ describe('VoiceRuntime event gate and asynchronous queue', () => {
   })
 
   it('prefers a configured natural neural voice over Kokoro for conversation', async () => {
-    const { voice } = await mountVoice()
+    const { voice } = await mountVoice({ language: 'en-US' })
     const natural = vi.fn(() => Promise.resolve())
     const kokoro = vi.fn(() => Promise.resolve())
     const system = vi.fn(() => Promise.resolve())
@@ -208,7 +208,7 @@ describe('VoiceRuntime event gate and asynchronous queue', () => {
   })
 
   it('falls back from a broken neural voice to Kokoro, never robotic Windows SAPI', async () => {
-    const { voice } = await mountVoice()
+    const { voice } = await mountVoice({ language: 'en-US' })
     const natural = vi.fn(() => Promise.reject(new Error('neural startup unavailable')))
     const kokoro = vi.fn(() => Promise.reject(new Error('Kokoro model unavailable')))
     const system = vi.fn(() => Promise.resolve())
@@ -218,8 +218,8 @@ describe('VoiceRuntime event gate and asynchronous queue', () => {
     await expect(voice.conversationSpeak({
       key: 'assistant:no-robot',
       sequence: 0,
-      text: 'Estoy lista.',
-      language: 'es-DO',
+      text: 'I am ready.',
+      language: 'en-US',
       final: true,
     })).resolves.toMatchObject({ accepted: false, reason: 'natural-unavailable' })
     expect(natural).toHaveBeenCalledTimes(1)
@@ -254,7 +254,7 @@ describe('VoiceRuntime event gate and asynchronous queue', () => {
   })
 
   it('falls back when the preferred provider fails during synthesis', async () => {
-    const { voice } = await mountVoice({ ttsProvider: 'phoenix-natural' })
+    const { voice } = await mountVoice({ ttsProvider: 'phoenix-natural', language: 'en-US' })
     const natural = vi.fn(() => Promise.reject(new Error('engine warming failed')))
     const kokoro = vi.fn(() => Promise.resolve())
     const system = vi.fn(() => Promise.resolve())
