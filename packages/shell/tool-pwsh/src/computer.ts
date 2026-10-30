@@ -457,6 +457,11 @@ export function residentComputerRequestForAction(args: ComputerToolArgs, request
 }
 
 async function readDesktopControlDescriptorIfAvailable(): Promise<DesktopBrowserControlDescriptor | undefined> {
+  // A CLI launched outside the desktop shell may have no Windows profile.
+  // Treat the missing discovery directory as absence, not a fatal browser error.
+  if (!process.env[DESKTOP_CONTROL_DESCRIPTOR_ENV]?.trim() && !process.env.LOCALAPPDATA?.trim()) {
+    return undefined
+  }
   const path = desktopControlDescriptorPath()
   try {
     return parseDesktopBrowserControlDescriptor(await readFile(path, 'utf8'))

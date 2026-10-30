@@ -1131,7 +1131,7 @@ export function registerMiniBrowserRoutes(ctx: Context): void {
       res.once('close', onClose)
       try {
         const input = await awaitAbortable(readAction(req), controller.signal)
-        if (input.type === 'start') armDeadline(START_ACTION_LIMIT_MS)
+        if (input.type === 'start' || input.type === 'open' || input.type === 'new-tab') armDeadline(START_ACTION_LIMIT_MS)
         throwIfAborted(controller.signal)
         const result = await action(input, controller.signal)
         if (!controller.signal.aborted && !res.writableEnded) reply(res, 200, result)
