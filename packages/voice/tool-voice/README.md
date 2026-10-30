@@ -2,19 +2,21 @@
 
 English | [中文](README.zh.md)
 
-Model-facing PHOENIX speech controls for Kira. The base bundle registers the package as `tool-voice`; its two native tools are available to the model without MCP discovery.
+Model-facing PHOENIX speech controls for Kira. The base bundle mounts `tool-voice`, so its two native tools are available without MCP discovery.
+
+## Model Experience
+
+When a user asks Kira to speak, the model calls `phoenix_voice_speak` with the requested short phrase. For diagnosis it calls `phoenix_voice_status`. The tool reports the provider's actual acceptance or rejection; Kira must not claim the speakers were audible until the user confirms.
 
 ## Tools
 
-- `phoenix_voice_status`: read current Host speech status, including local provider and Codex Live readiness.
-- `phoenix_voice_speak`: play explicitly requested speech through an already-authorized Codex Live session; otherwise synthesize on the local Host using PHOENIX Natural, Kokoro, or a matching-language Windows/platform synthesizer.
-
-Only audio **output** is requested. These tools never request microphone permission, silently start a browser WebRTC session, or impersonate human speech input. A successful provider receipt confirms synthesis or transport acceptance, not that a speaker was physically audible.
+- `phoenix_voice_status`: read Host speech status, local provider, queue, and Codex Live readiness without playing audio.
+- `phoenix_voice_speak`: play explicitly requested speech through an already-authorized Codex Live session or synthesize through the local Host provider.
 
 ## Configuration
 
-Uses `PHOENIX_VOICE_ENABLED`, `PHOENIX_VOICE_LANGUAGE` (default `es-DO`), and the existing `@phoenix-ai/dsh-voice` and `@phoenix-ai/dsh-voice-local` services. Voice packages do not bundle universal model weights. The client must be restarted after installing a new bundle.
+Uses `PHOENIX_VOICE_ENABLED`, `PHOENIX_VOICE_LANGUAGE` (default `es-DO`), and the existing `@phoenix-ai/dsh-voice` and `@phoenix-ai/dsh-voice-local` services. Voice packages do not bundle universal model weights. Restart the client after installing a new bundle.
 
-## Known limitations
+## Known Limitations and Deferred Work
 
-When neither a local neural engine nor a system voice for the requested language is available, `phoenix_voice_speak` returns a failure receipt and does not claim to have played audio. The native Codex output path requires a pre-authorized session. Physical speaker volume and user audibility cannot be determined by a tool result.
+The tools provide audio output only: they never request microphone permission, start browser WebRTC silently, or impersonate speech input. Without an authorized Codex session or a suitable local synthesizer, speech returns an explicit failure. A successful provider receipt does not verify physical speaker volume or audibility.
