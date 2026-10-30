@@ -452,7 +452,7 @@ export function apply(ctx: Context): void {
     isConcurrencySafe:()=>true,
     async execute(args){
       if(!Object.hasOwn(espnCoreModes,args.mode))throw Error('Modo ESPN Core no reconocido: consulta sports_chat_espn_core_catalog')
-      if(await sportsEnv(ctx).PHOENIX_SPORTS_ESPN_DISABLED==='1')return JSON.stringify({
+      if((await sportsEnv(ctx)).PHOENIX_SPORTS_ESPN_DISABLED==='1')return JSON.stringify({
         state:'unavailable',provider:'ESPN Core',error:'ESPN deshabilitado expresamente por configuración del host'})
       const input={
         mode:args.mode as EspnCoreMode,sport:args.sport,league:args.league,
@@ -482,7 +482,7 @@ export function apply(ctx: Context): void {
     output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
     isConcurrencySafe:()=>true,
     async execute(args){
-      if(await sportsEnv(ctx).PHOENIX_SPORTS_ESPN_DISABLED==='1')
+      if((await sportsEnv(ctx)).PHOENIX_SPORTS_ESPN_DISABLED==='1')
         return JSON.stringify({historical:true,state:'unavailable',error:'ESPN deshabilitado por operador'})
       const report=await fetchEspnHistoricalOdds({
         sport:args.sport,league:args.league,date:args.date,
