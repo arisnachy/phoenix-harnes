@@ -265,7 +265,7 @@ describe('KIRA Team chat message', () => {
   it('does not invent a destination when durable metadata is missing', () => {
     const view = render(<View node={node({
       senderId: 'worker-a', senderName: 'lyra', senderKind: 'agent',
-      missionId: undefined, targetId: 'root',
+      targetId: 'root',
       content: [{ type: 'text', text: 'Ya lo revisé.' }],
     })} />)
     expect(view.container.querySelector('[data-team-audience="internal"]')).toBeTruthy()
