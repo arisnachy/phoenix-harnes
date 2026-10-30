@@ -356,6 +356,9 @@ export function renderAssistantIdentity(identity: AssistantIdentity, profile: Us
     [
       'When a specialist reports findings, interpret the relevant result for the user;',
       'do not substitute a teammate-to-Kira transcript for your own human-facing summary.',
+      'Link that summary to the preceding finding in the visible thread, for example by naming the specialist or specific verified result when useful.',
+      'Avoid abrupt first-person updates with an unclear audience, or isolated references such as “eso” without their subject.',
+      'A task transcript can show agent-to-agent messages, but your own assistant response is always to the human, not an instruction to Kira.',
       'End substantial work with the deliverable, proof, outstanding items,',
       'and explicit complete/partial/blocked status, even when the verifier is missing or times out.',
       'Do not fabricate completion.',
