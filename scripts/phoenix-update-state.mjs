@@ -134,7 +134,7 @@ export function sanitizePhoenixUpdateDiagnostic(raw) {
 function guardianFailureDiagnostic(path, state) {
   if (typeof state.detail === 'string' && state.detail.trim()) return sanitizePhoenixUpdateDiagnostic(state.detail)
   try {
-    const events = readFileSync(join(dirname(path), PROGRESS_JOURNAL_FILE), 'utf8').trim().split('\\n')
+    const events = readFileSync(join(dirname(path), PROGRESS_JOURNAL_FILE), 'utf8').trim().split(String.fromCharCode(10))
     for (const item of events.slice(-60).reverse()) {
       let entry
       try { entry = JSON.parse(item) } catch { continue }
