@@ -84,12 +84,12 @@ describe('human teamwork without progress spam', () => {
     f.child.append('turn/start', { turn: 2 })
     speak(2, 1, 'Kira, voy a volver a revisar las referencias.')
     await f.chat.capture(f.root, f.child.header, f.child.events)
-    speak(2, 2, 'Kira, tengo una pregunta sobre el criterio de inclusión.')
+    speak(2, 2, 'Kira, ¿puedo excluir este estudio por falta de datos?')
     await f.chat.capture(f.root, f.child.header, f.child.events)
     const shared = f.chat.messages(f.root).filter(row => row.senderKind === 'agent')
     expect(shared.map(row => row.text)).toEqual([
       'Kira, revisaré la bibliografía del informe.',
-      'Kira, tengo una pregunta sobre el criterio de inclusión.',
+      'Kira, ¿puedo excluir este estudio por falta de datos?',
     ])
   })
 
