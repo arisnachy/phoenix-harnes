@@ -354,14 +354,15 @@ describe('chat durable ownership and delivery', () => {
     expect(f.chat.messages(f.root).map(row => row.text)).toEqual([
       'Kira, abriré la portada y comprobaré el enlace.',
     ])
-    // An explicit new assignment can still produce new substantive dialogue.
+    // A new model turn without a new assignment or evidence does not justify
+    // another repetitive plan. Questions and verified findings remain visible.
     f.child.append('turn/start', { turn: 2 })
     const next = createAssistantMessage({
       source: { provider: 'mock', model: 'mock' }, content: content('Kira, comprobaré ahora el segundo artículo.'),
     })
     f.child.append('assistant/message', { turn: 2, step: 1, message: next }, { surfaceOp: 'append' })
     await f.chat.capture(f.root, f.child.header, f.child.events)
-    expect(f.chat.messages(f.root).map(row => row.text)).toContain('Kira, comprobaré ahora el segundo artículo.')
+    expect(f.chat.messages(f.root).map(row => row.text)).not.toContain('Kira, comprobaré ahora el segundo artículo.')
   })
 
   it('never publishes child narration produced after a user-stopped lead turn', async () => {
