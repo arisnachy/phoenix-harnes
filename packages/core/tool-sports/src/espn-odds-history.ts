@@ -85,7 +85,8 @@ export async function fetchEspnHistoricalOdds(
   const capture=(event:Dict,lines:Dict[],source:HistoricalEspnRow['source']):number=>{
     report.rawEntries+=lines.length
     const eventDate=typeof event.date==='string'?event.date:''
-    const quotes=normalizeEspnMarkets(event,lines,{historical:true})
+    const quotes=normalizeEspnMarkets(event as Parameters<typeof normalizeEspnMarkets>[0],
+      lines as Parameters<typeof normalizeEspnMarkets>[1],{historical:true})
     let saved=0
     for(const q of quotes){
       if(report.rows.length>=120)break
