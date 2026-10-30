@@ -10,6 +10,8 @@ import {
   parseDesktopBrowserControlDescriptor,
   residentComputerRequestForAction,
   runWindowsComputerAction,
+  miniBrowserFallbackCommand,
+  runMiniBrowserFallback,
   shouldCaptureAfterAction,
   systemBrowserOpenInvocation,
   validateComputerArgs,
@@ -108,6 +110,42 @@ describe('Computer Use desktop broker recovery', () => {
     expect(invocation.env.PHX_URL).toBe('https://example.com/game?q=phoenix')
     expect((invocation as unknown as { stdin?: string }).stdin).toContain('Start-Process')
     expect(() => systemBrowserOpenInvocation('file:///C:/secret.txt')).toThrow(/HTTP\(S\)/i)
+  })
+})
+
+describe('Integrated browser without Phoenix Desktop', () => {
+  it('routes only safe actions through a scoped MiniBrowser and never downgrades credentials', () => {
+    const owner = 'session-1'
+    expect(miniBrowserFallbackCommand({ action: 'browser_open', url: 'https://example.org' }, owner))
+      .toEqual({ type: 'open', sessionId: owner, url: 'https://example.org' })
+    expect(miniBrowserFallbackCommand({ action: 'browser_back' }, owner)).toEqual({ type: 'back', sessionId: owner })
+    expect(miniBrowserFallbackCommand({ action: 'browser_forward' }, owner)).toEqual({ type: 'forward', sessionId: owner })
+    expect(miniBrowserFallbackCommand({ action: 'browser_reload' }, owner)).toEqual({ type: 'reload', sessionId: owner })
+    expect(miniBrowserFallbackCommand({ action: 'browser_focus' }, owner)).toEqual({ type: 'start', sessionId: owner })
+    expect(miniBrowserFallbackCommand({ action: 'browser_inspect' }, owner)).toEqual({ type: 'inspect', sessionId: owner })
+    expect(miniBrowserFallbackCommand({ action: 'browser_fill_form', origin: 'https://example.org', fields: [{ field: 1, value: 'secret' }] }, owner)).toBeUndefined()
+    expect(miniBrowserFallbackCommand({ action: 'browser_click_text', origin: 'https://example.org', text: 'Pay' }, owner)).toBeUndefined()
+    expect(miniBrowserFallbackCommand({ action: 'browser_login', origin: 'https://example.org' }, owner)).toBeUndefined()
+    expect(() => miniBrowserFallbackCommand({ action: 'browser_inspect' }, '../other-session')).toThrow(/valid owning conversation/)
+  })
+
+  it('uses loopback-only scoped navigation and never reports content verified before inspection', async () => {
+    const calls: Array<{ url: string; body?: string; headers?: HeadersInit }> = []
+    const send = (async (url: string, init?: RequestInit) => {
+      calls.push({ url, body: init?.body as string, headers: init?.headers })
+      return new Response(JSON.stringify({ available: true, tabId: 'tab-1', url: 'about:blank', title: '' }), { status: 200 })
+    }) as typeof fetch
+    const received = await runMiniBrowserFallback({ action: 'browser_open', url: 'https://example.org' }, 'session-1', undefined, send)
+    expect(JSON.parse(received)).toMatchObject({ browser: 'phoenix-mini-browser', status: 'navigation-started; inspect to verify content', tabId: 'tab-1' })
+    expect(calls[0]?.url).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/phoenix-mini-browser\/action$/u)
+    expect(JSON.parse(calls[0]!.body!)).toEqual({ type: 'open', sessionId: 'session-1', url: 'https://example.org' })
+    expect(JSON.stringify(calls)).not.toContain('secret')
+  })
+
+  it('fails explicitly when Chrome or the web controller is unavailable', async () => {
+    const send = (async () => new Response(JSON.stringify({ error: 'No Chrome' }), { status: 503 })) as typeof fetch
+    await expect(runMiniBrowserFallback({ action: 'browser_inspect' }, 'session-1', undefined, send)).rejects.toThrow(/MiniBrowser unavailable/)
+    await expect(runMiniBrowserFallback({ action: 'browser_login', origin: 'https://example.org' }, 'session-1', undefined, send)).rejects.toThrow(/Never send vault credentials/)
   })
 })
 

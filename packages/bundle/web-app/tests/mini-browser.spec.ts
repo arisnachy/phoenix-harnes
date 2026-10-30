@@ -11,6 +11,7 @@ import {
   miniBrowserRequestAllowed,
   miniBrowserSingleHeader,
   normalizeMiniBrowserAddress,
+  MINI_BROWSER_INSPECT_EXPRESSION,
 } from '../src/mini-browser.ts'
 
 afterEach(() => { /* Pure contracts: no live Chrome or network is required. */ })
@@ -196,6 +197,17 @@ describe('MiniBrowser capture recovery', () => {
   it('returns an actionable failure instead of inventing a screenshot', async () => {
     await expect(captureBrowserFrameWithFallback(async () => { throw new Error('Target closed') }))
       .rejects.toThrow('CDP_CAPTURE_FAILED')
+  })
+})
+
+describe('MiniBrowser model-safe DOM inspection', () => {
+  it('inspects only bounded text and field metadata without values or credentials', () => {
+    expect(MINI_BROWSER_INSPECT_EXPRESSION).toContain('Runtime')
+      // The expression must not request input.value or document.cookie.
+    expect(MINI_BROWSER_INSPECT_EXPRESSION).not.toContain('node.value')
+    expect(MINI_BROWSER_INSPECT_EXPRESSION).not.toContain('document.cookie')
+    expect(MINI_BROWSER_INSPECT_EXPRESSION).toContain("querySelectorAll('input, textarea, select')")
+    expect(MINI_BROWSER_INSPECT_EXPRESSION).toContain("slice(0, 3000)")
   })
 })
 

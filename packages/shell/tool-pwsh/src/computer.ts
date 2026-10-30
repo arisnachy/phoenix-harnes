@@ -132,6 +132,7 @@ const RESIDENT_DESKTOP_CONTROL_SCHEMA = 2
 const DESKTOP_CONTROL_PIPE_PREFIX = 'PhoenixDesktop.Browser.'
 const DESKTOP_CONTROL_DESCRIPTOR_ENV = 'PHOENIX_DESKTOP_CONTROL_DESCRIPTOR'
 const DESKTOP_CONTROL_TIMEOUT_MS = 3_000
+const MINI_BROWSER_FALLBACK_TIMEOUT_MS = 28_000
 
 type EmbeddedBrowserAction =
   | 'browser_open'
@@ -256,6 +257,100 @@ function desktopControlDescriptorPath(): string {
     throw new Error('Phoenix Desktop control is unavailable: LOCALAPPDATA is not set')
   }
   return join(localAppData, 'Phoenix', 'desktop-control.json')
+}
+
+/**
+ * Build a conversation-isolated MiniBrowser operation when Phoenix.exe is absent.
+ * Credential mutations are never downgraded to this fallback.
+ * @param args - Validated browser action.
+ * @param sessionId - Owning conversation, used to select an isolated CDP browser.
+ * @returns A bounded MiniBrowser request; undefined for unsafe/unsupported operations.
+ */
+export function miniBrowserFallbackCommand(
+  args: ComputerToolArgs, sessionId: string,
+): { type: string; sessionId: string; url?: string } | undefined {
+  if (!/^[A-Za-z0-9._:-]{1,256}$/u.test(sessionId)) {
+    throw new TypeError('MiniBrowser fallback requires a valid owning conversation')
+  }
+  switch (args.action) {
+    case 'browser_open':
+      if (args.url === undefined) return undefined
+      return { type: 'open', sessionId, url: args.url }
+    case 'browser_back': return { type: 'back', sessionId }
+    case 'browser_forward': return { type: 'forward', sessionId }
+    case 'browser_reload': return { type: 'reload', sessionId }
+    case 'browser_inspect': return { type: 'inspect', sessionId }
+    case 'browser_focus': return { type: 'start', sessionId }
+    default: return undefined
+  }
+}
+
+/**
+ * Use the existing loopback-only, conversation-scoped MiniBrowser controller.
+ * No credentials or form values are passed through this path.
+ * @param args - Browser navigation/observation action.
+ * @param sessionId - Current user session.
+ * @param signal - Optional cancellation from the tool invocation.
+ * @param sender - Injectable network transport for deterministic tests.
+ * @returns Actual controller state, including real page evidence for inspect.
+ */
+export async function runMiniBrowserFallback(
+  args: ComputerToolArgs, sessionId: string, signal?: AbortSignal,
+  sender: typeof fetch = fetch,
+): Promise<string> {
+  const command = miniBrowserFallbackCommand(args, sessionId)
+  if (command === undefined) {
+    throw new Error(
+      'Native Phoenix Desktop browser control is unavailable for this action. '
+      + 'Use the phoenix_browser/chrome connector for secure forms/clicks, or launch Phoenix Desktop. '
+      + 'Never send vault credentials through MiniBrowser navigation.',
+    )
+  }
+  const rawPort = process.env.PHOENIX_WEB_PORT?.trim() || '3080'
+  if (!/^\\d{1,5}$/u.test(rawPort) || Number(rawPort) < 1 || Number(rawPort) > 65535) {
+    throw new Error('PHOENIX_WEB_PORT must be a valid local browser port')
+  }
+  const controller = new AbortController()
+  const timer = setTimeout(() => { controller.abort(new Error('MiniBrowser fallback timed out')) }, MINI_BROWSER_FALLBACK_TIMEOUT_MS)
+  const forwardAbort = (): void => { controller.abort(signal?.reason ?? new Error('Computer navigation canceled')) }
+  signal?.addEventListener('abort', forwardAbort, { once: true })
+  try {
+    signal?.throwIfAborted()
+    const result = await sender(`http://127.0.0.1:${rawPort}/phoenix-mini-browser/action`, {
+      method: 'POST',
+      headers: { 'x-phoenix-mini-browser': '1', 'content-type': 'application/json' },
+      body: JSON.stringify(command),
+      signal: controller.signal,
+    })
+    const parsed: unknown = await result.json()
+    if (!result.ok || parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new Error('MiniBrowser unavailable: controller returned HTTP ' + String(result.status))
+    }
+    const payload = parsed as Record<string, unknown>
+    if (payload.available !== true || typeof payload.tabId !== 'string') {
+      throw new Error('MiniBrowser did not confirm an available conversation tab')
+    }
+    // A Page.navigate acknowledgement proves dispatch, not that navigation finished.
+    return JSON.stringify({
+      browser: 'phoenix-mini-browser',
+      action: args.action,
+      status: args.action === 'browser_open' ? 'navigation-started; inspect to verify content' : 'observed',
+      tabId: payload.tabId,
+      ...(typeof payload.url === 'string' ? { url: payload.url } : {}),
+      ...(typeof payload.title === 'string' ? { title: payload.title } : {}),
+      ...(args.action === 'browser_inspect' ? { inspection: payload.inspection } : {}),
+    })
+  } catch (error) {
+    if (signal?.aborted) throw error
+    throw new Error(
+      'Integrated MiniBrowser control unavailable; verify Phoenix Web and Chrome/Edge or use phoenix_browser/chrome. '
+      + (error instanceof Error ? error.message : String(error)),
+      { cause: error },
+    )
+  } finally {
+    clearTimeout(timer)
+    signal?.removeEventListener('abort', forwardAbort)
+  }
 }
 
 /**
@@ -1438,7 +1533,7 @@ function executeComputerInvocation(invocation: ComputerInvocation, signal?: Abor
  * @param signal - Optional cancellation signal forwarded to the PowerShell process.
  * @returns Trimmed stdout; screenshots return base64 PNG bytes.
  */
-export async function runWindowsComputerAction(args: ComputerToolArgs, signal?: AbortSignal): Promise<string> {
+export async function runWindowsComputerAction(args: ComputerToolArgs, signal?: AbortSignal, sessionId?: string): Promise<string> {
   if (process.platform !== 'win32') {
     throw new Error(`Computer Use Windows driver is unavailable on ${process.platform}`)
   }
@@ -1482,8 +1577,8 @@ export async function runWindowsComputerAction(args: ComputerToolArgs, signal?: 
         // fall through
       } else if (neverConnected && !isEmbeddedBrowserAction(args.action)) {
         return await executeComputerInvocation(windowsComputerInvocation(args), signal)
-      } else if (neverConnected && args.action === 'browser_open' && args.url !== undefined) {
-        return await executeComputerInvocation(systemBrowserOpenInvocation(args.url), signal)
+      } else if (neverConnected && isEmbeddedBrowserAction(args.action) && sessionId !== undefined) {
+        return await runMiniBrowserFallback(args, sessionId, signal)
       } else {
         // Never replay a mutation after an ambiguous lost reply.
         throw error
@@ -1493,23 +1588,17 @@ export async function runWindowsComputerAction(args: ComputerToolArgs, signal?: 
 
   if (isEmbeddedBrowserAction(args.action)) {
     if (descriptor === undefined) {
-      if (args.action === 'browser_open' && args.url !== undefined) {
-        return await executeComputerInvocation(systemBrowserOpenInvocation(args.url), signal)
-      }
-      throw new Error(
-        'Phoenix Desktop browser control is unavailable. Continue with the phoenix_browser/chrome MCP route for web work; general Windows control remains available through computer.',
-      )
+      if (sessionId !== undefined) return await runMiniBrowserFallback(args, sessionId, signal)
+      throw new Error('Integrated browser requires an owning conversation; use phoenix_browser/chrome instead.')
     }
     try {
       return await runEmbeddedBrowserAction(args, signal)
     } catch (error) {
       if (!desktopControlConnectionWasNeverEstablished(error)) throw error
       await clearStaleDesktopControlDescriptor(descriptor)
-      if (args.action === 'browser_open' && args.url !== undefined) {
-        return await executeComputerInvocation(systemBrowserOpenInvocation(args.url), signal)
-      }
+      if (sessionId !== undefined) return await runMiniBrowserFallback(args, sessionId, signal)
       throw new Error(
-        'Phoenix Desktop browser broker is stale or offline. Continue with phoenix_browser/chrome for web work; do not stop the task because computer Windows control is still available.',
+        'Phoenix Desktop browser broker is offline. Use phoenix_browser/chrome to continue browsing.',
         { cause: error },
       )
     }
@@ -1557,9 +1646,10 @@ async function runOriginBoundBrowserLogin(
   args: ComputerToolArgs,
   signal?: AbortSignal,
 ): Promise<string> {
-  const descriptor = parseDesktopBrowserControlDescriptor(
-    await readFile(desktopControlDescriptorPath(), 'utf8'),
-  )
+  const descriptor = await readDesktopControlDescriptorIfAvailable()
+  if (descriptor === undefined) {
+    throw new Error('Phoenix Desktop credential broker is absent. Use the authorized phoenix_browser/chrome login route; never send credentials through MiniBrowser.')
+  }
   if (descriptor.schema === RESIDENT_DESKTOP_CONTROL_SCHEMA) {
     // Schema 2 owns credential prompting/fill in the native host. Do not resolve
     // or put account/secret values on the general Computer pipe.
@@ -1764,7 +1854,7 @@ export function registerComputerTool(ctx: Context): void {
   ctx.systemPrompt.section({
     name: 'tool:computer:embedded-browser',
     order: 106,
-    text: 'On Windows Phoenix Desktop, use computer browser_open/browser_inspect/browser_fill_form/browser_click_text/browser_login for structured work in the embedded WebView2 pane. browser_login resolves an origin-bound vault login internally: never ask the user to paste a stored secret and never place one in text/type arguments. Secure Ask automatic-access consent preauthorizes open/login/form/click work only for that exact origin, so recurring authorized tasks can run without repeated workspace-write prompts; other desktop interaction keeps the normal approval policy. browser_inspect is read-only and never returns current field values. If the native Desktop browser broker is absent or stale, do not stop the task: use phoenix_browser/chrome for web work and continue using computer windows/focus/click/type/key/scroll for the real Windows desktop; general desktop control has a fixed PowerShell fallback.',
+    text: 'On Windows Phoenix Desktop, use computer browser_open/browser_inspect/browser_fill_form/browser_click_text/browser_login for structured work in the embedded WebView2 pane. browser_login resolves an origin-bound vault login internally: never ask the user to paste a stored secret and never place one in text/type arguments. Secure Ask automatic-access consent preauthorizes open/login/form/click work only for that exact origin, so recurring authorized tasks can run without repeated workspace-write prompts; other desktop interaction keeps the normal approval policy. browser_inspect is read-only and never returns current field values. If the native Desktop browser broker is absent or stale, computer browser_open/back/forward/reload/inspect automatically uses this conversation\'s independent MiniBrowser CDP controller (requires Phoenix Web). Use phoenix_browser/chrome for approved form edits, clicks and credentials; never downgrade credential actions. If the browser controller is unavailable, report that precise failure and continue with other appropriate web tools. Native Windows windows/focus/click/type/key/scroll still use the fixed PowerShell fallback.',
   })
 
   ctx.tools.register(defineTool({
@@ -1849,7 +1939,8 @@ export function registerComputerTool(ctx: Context): void {
 
       const output = args.action === 'browser_login'
         ? await runOriginBoundBrowserLogin(ctx, effectiveArgs, exec.signal)
-        : await runWindowsComputerAction(effectiveArgs, exec.signal)
+        : await runWindowsComputerAction(effectiveArgs, exec.signal,
+          session === undefined ? undefined : String(session.header.id))
       if (session !== undefined && !isEmbeddedBrowserAction(args.action)
         && args.action !== 'windows' && args.action !== 'screenshot') {
         const observed = computerVerificationTarget({}, output)
