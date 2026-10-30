@@ -132,18 +132,18 @@
   box-shadow: none;
 }
 
-.row[data-team-activity='true'] .bubble :global(.markdown) {
+.row[data-team-activity='true'] .bubble > div {
   font-size: 12px;
   line-height: 18px;
 }
-.bubble :global(.markdown) {
+.bubble > div {
   overflow-wrap: anywhere;
   font-size: 14px;
   line-height: 21px;
 }
 
-.bubble :global(.markdown) > :first-child { margin-top: 0; }
-.bubble :global(.markdown) > :last-child { margin-bottom: 0; }
+.bubble > div > :first-child { margin-top: 0; }
+.bubble > div > :last-child { margin-bottom: 0; }
 
 .messageActions {
   display: flex;
@@ -486,7 +486,7 @@
   box-shadow: none;
 }
 
- .card .bubble :global(.markdown) {
+ .card .bubble > div {
   font-size: 15px;
   line-height: 1.62;
 }
@@ -524,7 +524,7 @@
  .row:not([data-team-sender-kind='user']) .avatar { width:38px; height:38px; margin-right:-11px; }
  .card .meta { padding:8px 10px 8px 25px; min-height:48px; }
  .card .bubble { padding:9px 12px 12px; }
- .card .bubble :global(.markdown) { font-size:14px; line-height:1.55; }
+ .card .bubble > div { font-size:14px; line-height:1.55; }
 }
 
 /* A conversational team thread, not giant repeated dashboard cards. */
@@ -548,7 +548,7 @@
   background: color-mix(in srgb, var(--dsw-alias-bg-layer-2) 73%, var(--dsw-alias-bg-layer-1));
   box-shadow: 0 1px 3px color-mix(in srgb, var(--dsw-alias-bg-mask-1) 5%, transparent);
 }
-.card .bubble :global(.markdown) { font-size: 14px; line-height: 1.55; }
+.card .bubble > div { font-size: 14px; line-height: 1.55; }
 .row[data-team-sender-kind='kira'] .card .bubble {
   background: color-mix(in srgb, var(--dsw-alias-bg-layer-3) 30%, var(--dsw-alias-bg-layer-1));
 }
@@ -559,3 +559,15 @@
   .card .meta { min-height: 0; padding: 2px 4px 5px; }
   .card .bubble { padding: 8px 11px; }
 }
+
+/* MarkdownText uses a CSS module, not a global .markdown class. Target its
+   actual root so the team-card typography applies to every rich block. */
+.bubble { min-width: 0; }
+.bubble > div { min-width: 0; }
+.replyQuote {
+  margin: 4px 0 8px;
+  padding: 5px 10px;
+  border-left: 2px solid var(--dsw-alias-border-l2);
+  color: var(--dsw-alias-label-secondary);
+}
+.replyQuote > div { min-width: 0; font-size: 13px; line-height: 1.5; }
