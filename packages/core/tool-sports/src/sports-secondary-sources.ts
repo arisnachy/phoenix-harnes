@@ -74,7 +74,7 @@ export const secondaryMarketPolicy = {
  */
 export function isKnownSecondaryMarketPage(sourceId:string,href:string):boolean {
   const source=secondarySportsSources.find(item=>item.id===sourceId)
-  if(!source||typeof href!=='string'||href.length>1200)return false
+  if(!source||href.length>1200)return false
   try{
     const url=new URL(href)
     return url.protocol==='https:'&&!url.username&&!url.password&&!url.port
