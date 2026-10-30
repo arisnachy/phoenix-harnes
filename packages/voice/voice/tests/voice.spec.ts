@@ -1154,6 +1154,64 @@ describe('Codex realtime safety gate', () => {
   })
 })
 
+describe('automatic notification voice and locale routing', () => {
+  it('speaks configured Spanish rather than hard-coded English events', () => {
+    const approval = sessionEventToVoiceEvent({ type: 'approval/asked', data: {} }, 'es-DO')
+    expect(approval).toMatchObject({
+      kind: 'authorization', language: 'es-DO',
+      displayOutput: 'Necesito tu autorización para continuar.',
+    })
+    expect(sessionEventToVoiceEvent({
+      type: 'goal/judge', data: { goalId: 'g1', verdict: 'pass' },
+    }, 'es-DO')?.displayOutput).toContain('He terminado')
+    expect(sessionEventToVoiceEvent({
+      type: 'goal/supervisor', data: { status: 'blocked' },
+    }, 'en-US')?.displayOutput).toBe('I need your input before I can continue with the task.')
+  })
+
+  it('does not pronounce English evaluator summaries with the Spanish phonemizer', () => {
+    expect(sessionEventToVoiceEvent({
+      type: 'goal/judge',
+      data: { verdict: 'blocked', summary: 'Your task needs review before continuing.' },
+    }, 'es-DO')?.displayOutput).toBe('Necesito que revises algo para poder continuar.')
+  })
+
+  it('routes Spanish alerts away from unverified CosyVoice to Kokoro', async () => {
+    const previous = process.env.PHOENIX_NATURAL_VOICE_ES_VERIFIED
+    delete process.env.PHOENIX_NATURAL_VOICE_ES_VERIFIED
+    try {
+      const { voice } = await mountVoice({ ttsProvider: 'phoenix-natural', language: 'es-DO' })
+      const natural = vi.fn(async () => {})
+      const kokoro = vi.fn(async () => {})
+      voice.registerTextToSpeechProvider(provider('phoenix-natural', natural, 300))
+      voice.registerTextToSpeechProvider(provider('kokoro', kokoro, 100))
+      expect(voice.announce({
+        kind: 'mission-completed', displayOutput: 'He terminado la tarea.',
+      }).accepted).toBe(true)
+      await new Promise(resolve => setTimeout(resolve, 0))
+      expect(natural).not.toHaveBeenCalled()
+      expect(kokoro).toHaveBeenCalledWith('He terminado la tarea.', expect.anything())
+    } finally {
+      if (previous === undefined) delete process.env.PHOENIX_NATURAL_VOICE_ES_VERIFIED
+      else process.env.PHOENIX_NATURAL_VOICE_ES_VERIFIED = previous
+    }
+  })
+
+  it('allows a matching system voice for unattended alerts but not ordinary conversation', async () => {
+    const { voice } = await mountVoice({ language: 'es-DO' })
+    const spoken = vi.fn(async () => {})
+    voice.registerTextToSpeechProvider(provider('system', spoken, 10))
+    await expect(voice.conversationSpeak({
+      key: 'assistant:normal', sequence: 1, text: 'Hola.', final: true,
+    })).resolves.toMatchObject({ accepted: false, reason: 'natural-unavailable' })
+    await expect(voice.conversationSpeak({
+      key: 'phoenix:proactive-attention', sequence: 2,
+      text: 'Necesito tu autorización.', language: 'es-DO', final: true,
+    })).resolves.toMatchObject({ accepted: true, provider: 'system' })
+    expect(spoken).toHaveBeenCalledWith('Necesito tu autorización.', expect.anything())
+  })
+})
+
 describe('session-event voice mapping', () => {
   it('announces only authorization, verified completion, and real blocking', () => {
     expect(sessionEventToVoiceEvent({ type: 'approval/asked', data: { toolName: 'home-control' } })).toMatchObject({ kind: 'authorization' })
