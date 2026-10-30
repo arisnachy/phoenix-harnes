@@ -334,6 +334,29 @@ describe('adaptive Binance paper cycle', () => {
     ])
   })
 
+  it('services a marked stop before requesting candles for any unrelated entry symbol', async () => {
+    let mark = 100
+    let candleCalls = 0
+    const feed: BinancePublicMarket = {
+      async price() { return mark },
+      async prices(symbols) { return Object.fromEntries(symbols.map(symbol => [symbol, mark])) },
+      async candles() { candleCalls++; throw new Error('Market candle provider unavailable') },
+    }
+    const root = mkdtempSync(join(tmpdir(), 'phoenix-priority-risk-'))
+    temporary.push(root)
+    const paper = new BinancePaperBroker(join(root, 'paper.json'), feed)
+    await paper.order({ symbol: 'BTCUSDT', side: 'buy', quoteAmountUsdt: 100,
+      strategyId: 'adaptive-breakout-v1' })
+    mark = 97
+    const result = await runBinanceAdaptiveCycle(paper, {
+      mode: 'paper-step', symbols: ['ETHUSDT'],
+    }, NOW)
+    expect(result.trade).toMatchObject({ symbol: 'BTCUSDT', side: 'sell', reason: 'paper-stop-loss' })
+    expect(result.account.positions).toHaveLength(0)
+    expect(candleCalls).toBe(0)
+    expect((await paper.journal()).map(row => row.side)).toEqual(['buy', 'sell'])
+  })
+
   it('exits legacy positions on a marked stop even if excluded from the watchlist', async () => {
     const base = market({ ETHUSDT: 'flat', BTCUSDT: 'flat' })
     let quote = 100
