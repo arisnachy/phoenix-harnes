@@ -873,7 +873,7 @@ def main():
     report = json.loads(raw.decode("utf-8"))
     refs, cited = validate(report)
     style = "apa" if report.get("style", "apa") == "apa7" else report.get("style", "apa")
-    presentation = report.get("presentation", "journal" if (report.get("document_type") == "journal_manuscript" or report.get("journal_requirements", {}).get("journal")) else ("hybrid" if report.get("quality_profile", "professional") == "professional" else "academic"))
+    presentation = report.get("presentation", "journal" if (report.get("document_type") == "journal_manuscript" or report.get("journal_requirements", {}).get("journal")) else ("hybrid" if report.get("quality_profile", "professional") in ("professional", "professional_brief") else "academic"))
     journal = report.get("journal_requirements", {})
     institutional = report.get("institutional_rules", {})
     editorial = presentation in ("editorial", "hybrid")
@@ -1499,7 +1499,7 @@ def main():
     mechanical = re.compile(
         r"como (?:un )?modelo de lenguaje|como (?:una )?ia|"
         r"generado por (?:ia|chatgpt|phoenix)|"
-        r"\\[(?:insertar|pendiente|todo)\\]", re.IGNORECASE
+        r"\[(?:insertar|pendiente|todo)\]", re.IGNORECASE
     )
     if any(mechanical.search(section["text"]) for section in report["sections"]):
         warnings.append("Texto editorial con marcadores mecánicos o pendientes: revisar redacción; no ocultar procedencia requerida.")
