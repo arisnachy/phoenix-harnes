@@ -10,6 +10,7 @@ export const name = 'tool-voice-invariant'
 /** Service required before the companion reserves package ownership. */
 export const inject = ['invariants']
 /** The speech tool owns no additional invariant beyond Host authorization. */
+// No runtime invariant: the voice provider checks configuration, authorization, and available output devices at execution time.
 const install: InvariantInstaller = () => {}
 /** Register the package-owned invariant companion. */
 export const apply = (ctx: Context): Promise<() => void> => Promise.resolve(ctx.invariants.register(PACKAGE_NAME, install))
