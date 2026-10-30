@@ -76,7 +76,8 @@ const bookmakerName=(odds:EspnOdds):string=>{
   if(typeof provider==='string')return provider.trim().slice(0,100)
   const named=provider?.name?.trim()||provider?.displayName?.trim()
   if(named)return named
-  return /^\d{1,16}$/u.test(String(provider?.id??''))?'ESPN proveedor #'+String(provider?.id)+' (nombre no verificado)':''
+  const id=provider&&'id' in provider?provider.id:undefined
+  return /^\d{1,16}$/u.test(String(id??''))?'ESPN proveedor #'+String(id)+' (nombre no verificado)':''
 }
 const isRecord=(v:unknown):v is Record<string,unknown>=>!!v&&typeof v==='object'&&!Array.isArray(v)
 const list=(v:unknown):EspnOdds[]=>Array.isArray(v)?v.filter(isRecord):isRecord(v)?[v]:[]
