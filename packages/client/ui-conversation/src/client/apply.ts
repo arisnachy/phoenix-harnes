@@ -207,6 +207,7 @@ export function apply(ctx: Context): void {
 
   const proactivityAttention = createSnapshotStore<readonly ProactivityAttentionItem[]>([])
   const spokenAttention = new Set<string>()
+  const speakingAttention = new Set<string>()
   const refreshAttention = async (): Promise<void> => {
     await refreshProactivityAttention(
       ctx.get('connection') as ConnectionHandle | undefined,
@@ -217,10 +218,17 @@ export function apply(ctx: Context): void {
     for (const key of spokenAttention) {
       if (!liveKeys.has(key)) spokenAttention.delete(key)
     }
-    const pending = rows.find(item => !spokenAttention.has(`${item.id}:${item.revision}`))
+    const pending = rows.find(item => !spokenAttention.has(`${item.id}:${item.revision}`)
+      && !speakingAttention.has(`${item.id}:${item.revision}`))
     if (pending === undefined) return
-    if (speakVoiceAssistantAttention(pending.title, pending.detail)) {
-      spokenAttention.add(`${pending.id}:${pending.revision}`)
+    const key = `${pending.id}:${pending.revision}`
+    speakingAttention.add(key)
+    try {
+      if (await speakVoiceAssistantAttention(pending.title, pending.detail, userProfile.getSnapshot().preferredName)) {
+        spokenAttention.add(key)
+      }
+    } finally {
+      speakingAttention.delete(key)
     }
   }
   void refreshAttention()
