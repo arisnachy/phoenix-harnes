@@ -213,3 +213,30 @@ test('dated nested ESPN Core lines are usable on a future game, old lines are ex
   assert.equal(result.diagnostics.rawOddsEntries,2)
   assert.equal(result.diagnostics.expiredOutcomes,2)
 })
+
+test('started NHL games retain detected embedded odds for diagnostics, never pregame ticket',async()=>{
+  const now=Date.now(),started=new Date(now-30*60_000).toISOString()
+  const read=async url=>{
+    if(!url.includes('/scoreboard?'))throw Error('No Core needed for started events')
+    return {events:[{id:'401888888',date:started,competitions:[{
+      id:'401888888',odds:[{provider:{name:'Book A'},homeTeamOdds:{moneyline:-125}}],
+      competitors:[
+        {homeAway:'home',team:{displayName:'Home Hockey'}},
+        {homeAway:'away',team:{displayName:'Away Hockey'}},
+      ],
+    }]}]}
+  }
+  const result=await fetchPublicEspnOddsDetailed('icehockey_nhl','h2h',read,{now,days:1})
+  assert.deepEqual(result.quotes,[])
+  assert.equal(result.diagnostics.games,0)
+  assert.equal(result.diagnostics.startedGames,1)
+  assert.equal(result.diagnostics.startedOddsEntries,1)
+  assert.match(result.diagnostics.notes.join(' '),/iniciados/)
+  const mock=async url=>new Response(JSON.stringify(await read(url)),{status:200})
+  const sources=await marketOddsDetailed('icehockey_nhl','h2h',
+    {PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED:'0'},mock,now)
+  assert.equal(sources.quotes.length,0)
+  const espn=sources.sources.find(x=>x.provider==='ESPN Site/Core')
+  assert.equal(espn.rawCount,3) // Three-day scan repeats the same fixture.
+  assert.equal(espn.startedOddsEntries,3)
+})
