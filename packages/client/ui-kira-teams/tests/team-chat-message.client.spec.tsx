@@ -8,6 +8,7 @@ import type { ChatNode, KiraTeamMessageChatData } from '@phoenix-ai/dsh-client-u
 import {
   KiraTeamMessageView,
   teamIdentityOf,
+  teamMessageAudience,
 } from '../src/client/TeamChatMessage.tsx'
 import { formatTeamMarkdown } from '../src/client/team-markdown.ts'
 
@@ -46,6 +47,36 @@ function node(data: Partial<KiraTeamMessageChatData> = {}): ChatNode<'kira-team-
 }
 
 describe('KIRA Team chat message', () => {
+  it('routes actual recipients without guessing from names or prose', () => {
+    expect(teamMessageAudience({ senderKind: 'kira', targetId: 'user' })).toBe('user')
+    expect(teamMessageAudience({ senderKind: 'agent', targetId: 'human' })).toBe('user')
+    expect(teamMessageAudience({ senderKind: 'agent', targetId: 'root' })).toBe('team')
+    expect(teamMessageAudience({ senderKind: 'kira', targetId: '' })).toBe('team')
+    expect(teamMessageAudience({ senderKind: 'user', targetId: 'user' })).toBe('team')
+  })
+
+  it('shows a clear recipient for Kira-to-human handoffs without changing the message', () => {
+    const view = render(<View node={node({
+      senderId: 'root', senderName: 'lead', senderKind: 'kira',
+      targetId: 'user', purpose: 'update', targetName: undefined,
+      content: [{ type: 'text', text: 'La comprobación sigue pendiente de GitHub.' }],
+    })} />)
+    expect(view.container.querySelector('[data-kira-audience="user"]')).toBeTruthy()
+    expect(view.getByText('para ti')).toBeTruthy()
+    expect(view.getByText('La comprobación sigue pendiente de GitHub.')).toBeTruthy()
+    expect(view.container.querySelector('[data-team-recipient="team"]')).toBeNull()
+  })
+
+  it('identifies unaddressed peer messages as team context, not user-facing statements', () => {
+    const view = render(<View node={node({
+      senderKind: 'agent', targetId: '', targetName: undefined,
+      content: [{ type: 'text', text: 'Revisaré los hashes locales.' }],
+    })} />)
+    expect(view.container.querySelector('[data-kira-audience="team"]')).toBeTruthy()
+    expect(view.getByText('Conversación del equipo')).toBeTruthy()
+    expect(view.container.querySelector('[data-team-recipient="unspecified"]')).toBeTruthy()
+  })
+
   it('resolves stable personas without exposing model ids', () => {
     expect(teamIdentityOf('lead', 'root')).toMatchObject({ name: 'Kira', role: 'Coordinación', kind: 'kira' })
     expect(teamIdentityOf('KÍRA', 'root')).toMatchObject({ name: 'Kira' })
