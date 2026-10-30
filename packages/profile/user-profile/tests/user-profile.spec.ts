@@ -179,6 +179,7 @@ describe('user profile validation and projection helpers', () => {
     const system = renderAssistantIdentity({ name: 'KIRA', gender: 'feminine' }, permitted)
     expect(system).toContain('Authorized preferred name: Aris')
     expect(system).toContain('translate internal status into what was found')
+    expect(system).toContain('Messages to teammates are internal coordination')
     expect(renderHumanConnection(permitted)).toContain('meaningful task updates or final handoffs')
     expect(system).toContain('Authorized professional title: Dr.')
     expect(system).toContain('Authorized conversational style: cercano, directo')
