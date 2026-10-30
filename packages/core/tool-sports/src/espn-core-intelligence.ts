@@ -23,7 +23,8 @@ export type EspnCoreInput={
   mode:EspnCoreMode;sport:string;league:string;eventId?:string|undefined;
   competitionId?:string|undefined;teamId?:string|undefined;
   providerId?:string|undefined;season?:number|undefined;
-  seasonType?:number|undefined;limit?:number|undefined;page?:number|undefined
+  seasonType?:number|undefined;movementType?:number|undefined;
+  limit?:number|undefined;page?:number|undefined
 }
 type Data=Record<string,unknown>
 const record=(v:unknown):v is Data=>v!==null&&typeof v==='object'&&!Array.isArray(v)
@@ -55,7 +56,12 @@ export function espnCoreUrl(input:EspnCoreInput):string{
       else{
         path+='/odds'
         if(mode!=='odds')path+='/'+safeId(input.providerId)
-        if(mode==='movement')path+='/history/0/movement'
+        if(mode==='movement'){
+          const movement=input.movementType??0
+          if(!Number.isInteger(movement)||movement<0||movement>1)
+            throw Error('Tipo de movimiento inválido: 0 moneyline o 1 spread')
+          path+='/history/'+movement+'/movement'
+        }
         if(mode==='head_to_heads')path+='/head-to-heads'
       }
       break
