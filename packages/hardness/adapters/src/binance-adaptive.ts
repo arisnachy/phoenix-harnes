@@ -240,9 +240,9 @@ export async function runBinanceAdaptiveCycle(
         if (plan === undefined) return []
         const crossed = binanceKnownAssetRisk(position.symbol) ? 'binance-asset-risk'
           : mark <= plan.stopLossPrice ? 'paper-stop-loss'
-          : mark >= plan.tp2Price ? 'paper-tp2'
-            : !plan.tp1Taken && mark >= plan.tp1Price ? 'paper-tp1'
-              : undefined
+            : mark >= plan.tp2Price ? 'paper-tp2'
+              : !plan.tp1Taken && mark >= plan.tp1Price ? 'paper-tp1'
+                : undefined
         return crossed === undefined ? [] : [{
           position, reason: crossed,
           quantity: crossed === 'paper-tp1' ? position.quantity * plan.tp1Fraction : position.quantity,
@@ -368,7 +368,7 @@ export async function runBinanceAdaptiveCycle(
     const defensive = sorted.find(signal => signal.action === 'sell'
       && account.positions.some(position => position.symbol === signal.symbol))
     if (defensive !== undefined) {
-      const position = account.positions.find((item) => item.symbol === defensive.symbol)
+      const position = account.positions.find(item => item.symbol === defensive.symbol)
       if (position === undefined) throw new Error('Defensive exit requires a held PAPER position')
       const result = await broker.order({
         symbol: position.symbol, side: 'sell', quantity: position.quantity,
