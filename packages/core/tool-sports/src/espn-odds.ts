@@ -87,7 +87,8 @@ const localTime=(value:string):string=>{
  * @param oddEntries - Embedded or Core API quotes.
  * @returns Attributed moneyline outcomes with decimal prices.
  */
-export function normalizeEspnMoneylines(event:EEvent,oddEntries:EspnOdds[]):EspnMarketQuote[]{
+export function normalizeEspnMoneylines(event:EEvent,oddEntries:EspnOdds[],
+  options:{historical?:boolean}={}):EspnMarketQuote[]{
   const competition=event.competitions?.[0]
   const id=safeId(event.id)
   if(!id||!competition)return []
@@ -98,7 +99,7 @@ export function normalizeEspnMoneylines(event:EEvent,oddEntries:EspnOdds[]):Espn
   if(!homeName||!awayName)return []
   const kickoff=new Date(event.date||'')
   // Do not present pregame lines as current for matches which have already started.
-  if(!Number.isFinite(kickoff.getTime())||kickoff.getTime()<=Date.now())return []
+  if(!Number.isFinite(kickoff.getTime())||(!options.historical&&kickoff.getTime()<=Date.now()))return []
   const result:EspnMarketQuote[]=[]
   for(const odd of oddEntries.slice(0,5)){
     const provider=bookmakerName(odd)
@@ -112,12 +113,13 @@ export function normalizeEspnMoneylines(event:EEvent,oddEntries:EspnOdds[]):Espn
   return result
 }
 /** Normalize only markets with explicit price, bookmaker and selection; never infer a spread side. */
-export function normalizeEspnMarkets(event:EEvent,odds:EspnOdds[]):EspnMarketQuote[]{
-  const money=normalizeEspnMoneylines(event,odds)
+export function normalizeEspnMarkets(event:EEvent,odds:EspnOdds[],
+  options:{historical?:boolean}={}):EspnMarketQuote[]{
+  const money=normalizeEspnMoneylines(event,odds,options)
   const comp=event.competitions?.[0]
   const eventId=safeId(event.id)
   const kickoff=Date.parse(event.date||'')
-  if(!comp||!eventId||!Number.isFinite(kickoff)||kickoff<=Date.now())return money
+  if(!comp||!eventId||!Number.isFinite(kickoff)||(!options.historical&&kickoff<=Date.now()))return money
   const home=comp.competitors?.find(x=>x.homeAway==='home')?.team
   const away=comp.competitors?.find(x=>x.homeAway==='away')?.team
   const homeName=home?.displayName||home?.name
