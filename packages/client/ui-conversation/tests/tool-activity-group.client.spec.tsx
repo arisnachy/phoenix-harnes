@@ -123,7 +123,7 @@ function tradingTool(seq: number): ToolResultNode {
     signals: [], recentTrades: [], lastDecision: 'hold', rationale: 'No verified entry',
   }
   return {
-    ...settledTool('paper-' + seq), seq, time: seq * 1_000,
+    ...settledTool('paper-' + String(seq)), seq, time: seq * 1_000,
     call: { name: 'binance_paper_dashboard', argsRaw: '{}' },
     content: [{ type: 'text', text: JSON.stringify({ dashboard }) }],
   }
