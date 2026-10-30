@@ -143,7 +143,7 @@ test('specific game/date queries ESPN scoreboard once, never borrowing another e
   })
   assert.equal(result.quotes.length,2)
   assert.ok(result.quotes.every(q=>q.eventId==='401111111'&&q.bookmaker==='TargetBook'))
-  assert.ok(result.quotes.every(q=>q.endpointSource==='embedded'))
+  assert.ok(result.quotes.every(q=>q.endpointSource==='scoreboard'))
   assert.deepEqual(result.diagnostics.datesQueried,['20261030'])
   assert.equal(result.diagnostics.eventMatched,true)
   assert.equal(urls.length,1)
