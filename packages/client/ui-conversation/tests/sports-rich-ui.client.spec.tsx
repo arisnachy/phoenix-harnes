@@ -278,7 +278,7 @@ describe('Universal chat: compact sports schedules do not replace single-game ca
     const card=parseGenerativeUiBlock({...slate,props:{...slate.props,sport:'tennis',league:'wta',
       events:[{...slate.props.events[0],phase:'post',status:'Final',
         away:{label:'Sin confirmar',score:'0'},home:{label:'Sin confirmar',score:'0'}},
-        {...slate.props.events[1],phase:'pre'}]}})
+        {...slate.props.events[1],phase:'pre',askPrompt:'Kira, investiga este encuentro con fuentes verificadas.'}]}})
     if(!card)throw Error('Invalid WTA fixture')
     const actions:string[]=[]
     render(<GenerativeUi block={card} onAction={text=>actions.push(text)}/>)
