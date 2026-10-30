@@ -2,15 +2,21 @@
 
 [English](README.md) | 中文
 
-本插件让 Kira 在模型运行时调用 PHOENIX 的语音输出功能，而不必通过 MCP 搜索。
+本插件让 Kira 在模型运行时调用 PHOENIX 的语音输出功能，无须通过 MCP 搜索。
 
-## 工具
+## Model Experience
 
-- `phoenix_voice_status`：查询本地语音引擎和 Codex Live 的可用状态。
-- `phoenix_voice_speak`：优先尝试已授权且处于活动状态的 Codex Live；如不可用，则使用 PHOENIX 本地语音合成服务播放指定文本。
+用户要求 Kira 说话时，模型调用 `phoenix_voice_speak` 朗读简短文本；需要诊断时调用 `phoenix_voice_status`。工具如实返回服务提供方的接受或拒绝状态；未经用户确认，不得声称扬声器已经发出可听见的声音。
 
-这些工具只处理**语音输出**，不会自动开启麦克风或 WebRTC。成功响应只证明语音提供方已接受请求，并不表示用户确实听到了声音。
+## Tools
 
-## 配置与限制
+- `phoenix_voice_status`：查询本地语音服务、队列以及 Codex Live 可用状态，不播放声音。
+- `phoenix_voice_speak`：优先使用已授权的活动 Codex Live 会话，否则尝试本地 Host 语音合成。
 
-使用现有的 `PHOENIX_VOICE_ENABLED` 和 `PHOENIX_VOICE_LANGUAGE` 配置（默认 `es-DO`）。语音模型和特定语言的系统声音需要单独安装。如果没有可用的语音引擎，工具明确返回失败原因，不会假称已播放语音。
+## Configuration
+
+使用 `PHOENIX_VOICE_ENABLED` 和 `PHOENIX_VOICE_LANGUAGE` 配置（默认 `es-DO`），以及现有 `@phoenix-ai/dsh-voice` 与 `@phoenix-ai/dsh-voice-local` 服务。语音模型需要单独安装；安装新版本后需要重新启动客户端。
+
+## Known Limitations and Deferred Work
+
+工具仅提供语音输出，不会自动开启麦克风、启动浏览器 WebRTC 或模拟语音输入。缺少已授权 Codex 会话或可用本地合成器时，工具明确返回失败。成功响应不等于扬声器确实可听。
