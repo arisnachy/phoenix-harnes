@@ -8,7 +8,6 @@ import * as ToolVoice from '../src/index.ts'
 describe('Kira speech tools in a real Cordis registry', () => {
   it('registers both model-discoverable names without opening a microphone or Codex session', async () => {
     const ctx = new Context()
-    try {
       await ctx.plugin(SystemPrompt)
       await ctx.plugin(ToolRuntime)
       await ctx.plugin(VoiceRuntime, { enabled: false, codexRealtime: false })
@@ -18,8 +17,5 @@ describe('Kira speech tools in a real Cordis registry', () => {
       expect(schemas.map(schema => schema.name)).toContain('phoenix_voice_speak')
       expect(schemas.find(schema => schema.name === 'phoenix_voice_speak')?.parameters)
         .toMatchObject({ type: 'object' })
-    } finally {
-      await ctx.dispose()
-    }
   })
 })
