@@ -263,10 +263,15 @@ export class TeamChat {
       let newReceipt = false
       for (const event of events) {
         if (event.seq < (header.seedLength ?? 0)) continue
+        if (event.type === 'user/message' && event.data.source.kind === 'team-message'
+          && event.data.source.purpose === 'assignment') {
+          // A real new assignment, unlike another model turn, may introduce itself.
+          alreadySpoke = false
+          newReceipt = false
+        }
         if (event.type === 'turn/start') {
           handedOffResult = false
-          // A second turn is still the same assignment. Do not republish another
-          // no-evidence 'I will review' opening as if this were a new mission.
+          // Another model turn is still the same assignment; keep its visible opening.
           newReceipt = false
         }
         if (event.type === 'tool/call'

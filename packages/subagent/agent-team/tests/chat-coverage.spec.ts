@@ -91,6 +91,19 @@ describe('human teamwork without progress spam', () => {
       'Kira, revisaré la bibliografía del informe.',
       'Kira, ¿puedo excluir este estudio por falta de datos?',
     ])
+    f.child.append('user/message', createUserMessage({
+      content: content('Nueva asignación: revisar otra sección'),
+      source: {
+        kind: 'team-message', teamId: TeamId(f.root.id),
+        messageId: TeamMessageId('new-assignment'), senderId: f.root.id,
+        senderName: 'Kira', purpose: 'assignment',
+      },
+    }), { surfaceOp: 'append' })
+    f.child.append('turn/start', { turn: 3 })
+    speak(3, 1, 'Kira, revisaré esta nueva sección.')
+    await f.chat.capture(f.root, f.child.header, f.child.events)
+    expect(f.chat.messages(f.root).filter(row => row.senderKind === 'agent').at(-1)?.text)
+      .toBe('Kira, revisaré esta nueva sección.')
   })
 
   it('publishes only model identities observed from real teammate messages', async () => {
