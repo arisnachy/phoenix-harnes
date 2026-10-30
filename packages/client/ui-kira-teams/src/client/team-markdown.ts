@@ -11,7 +11,11 @@ const splitBoundary = /\|[ \t]+(?=\|)/gu
 const flattenedSeparator = /\|[ \t]+(?=\|(?:[ \t]*:?-{3,}:?[ \t]*\|){2,})/u
 const fenceStart = /^[ \t]{0,3}(`{3,}|~{3,})/u
 
-/** Restore flattened GFM table rows without changing the durable source. */
+/**
+ * Restore flattened GFM table rows without changing the durable source.
+ * @param source - Original durable peer-message text.
+ * @returns A display-only string with recognisable table row boundaries restored.
+ */
 export function formatTeamMarkdown(source: string): string {
   const lines = source.replace(/\r\n?/gu, '\n').split('\n')
   const result: string[] = []
