@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { afterEach, beforeEach, test } from 'node:test'
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
@@ -82,4 +82,21 @@ test('rejects invalid SHA and redacts authorization headers', () => {
   const diagnosis = pendingGuardianIncidents()[0].diagnosis
   assert.doesNotMatch(diagnosis, /abcd1234|hello|ghp_abcdefghijklmnop1234/)
   assert.match(diagnosis, /REDACTED/)
+})
+
+test('refuses updates and preserves forensic bytes when incident ledger is corrupt', () => {
+  const path = guardianIncidentPath()
+  writeFileSync(path, '{broken JSON', 'utf8')
+  assert.equal(guardianBlockedTarget(broken), true)
+  assert.throws(() => recordGuardianIncident({
+    status: 'activation-failed', failedTarget: broken, diagnosis: 'invalid build',
+  }), /unreadable/)
+  assert.equal(readFileSync(path, 'utf8'), '{broken JSON')
+  assert.equal(guardianBlockedTarget('not-a-sha'), false)
+})
+
+test('supervisor retains the last healthy runtime through cleanup', () => {
+  const source = readFileSync(new URL('./phoenix-windows-supervisor.mjs', import.meta.url), 'utf8')
+  assert.match(source, /if \(lastKnownGoodRuntimeRoot !== root\) keep\.add\(runtimePathKey\(lastKnownGoodRuntimeRoot\)\)/u)
+  assert.match(source, /runtimeRoot = lastGoodSha !== undefined && runtimeIsHealthy\(lastGood, lastGoodSha\)/u)
 })
