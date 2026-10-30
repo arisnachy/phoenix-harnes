@@ -12,6 +12,7 @@ import {
   runWindowsComputerAction,
   miniBrowserFallbackCommand,
   runMiniBrowserFallback,
+  isMiniBrowserReceipt,
   shouldCaptureAfterAction,
   systemBrowserOpenInvocation,
   validateComputerArgs,
@@ -137,6 +138,8 @@ describe('Integrated browser without Phoenix Desktop', () => {
     }) as typeof fetch
     const received = await runMiniBrowserFallback({ action: 'browser_open', url: 'https://example.org' }, 'session-1', undefined, send)
     expect(JSON.parse(received)).toMatchObject({ browser: 'phoenix-mini-browser', status: 'navigation-started; inspect to verify content', tabId: 'tab-1' })
+    expect(isMiniBrowserReceipt(received)).toBe(true)
+    expect(isMiniBrowserReceipt('hwnd=0x420024 active=true')).toBe(false)
     expect(calls[0]?.url).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/phoenix-mini-browser\/action$/u)
     expect(JSON.parse(calls[0]!.body!)).toEqual({ type: 'open', sessionId: 'session-1', url: 'https://example.org' })
     expect(JSON.stringify(calls)).not.toContain('secret')
