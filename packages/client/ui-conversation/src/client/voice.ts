@@ -1746,7 +1746,7 @@ export async function speakVoiceAssistantAttention(title: string, detail?: strin
     ? 'es-DO'
     : (document.documentElement.lang.trim() || 'es-DO')
   const safeName = typeof preferredName === 'string'
-    && /^[\\p{L}][\\p{L}\\s'-]{0,40}$/u.test(preferredName.trim()) ? preferredName.trim() : ''
+    && /^[\p{L}][\p{L}\s'-]{0,40}$/u.test(preferredName.trim()) ? preferredName.trim() : ''
   const context = naturalAttentionContext(title, detail)
   if (context === '') return false
   const personalContext = safeName === '' ? context : `${safeName}, ${context}`
