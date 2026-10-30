@@ -145,14 +145,14 @@ test('keyless ESPN public market fallback resolves safe game odds to actual pric
 })
 
 test('Core resource reader upgrades same-host HTTP refs without allowing cross-host redirection',async()=>{
- const original='http://sports.core.api.espn.com/v2/sports/football/leagues/nfl/events/401220181/competitions/401220181/odds/41'
+ const original='http://sports.core.api.espn.com/v2/sports/football/leagues/nfl/events/401220181/competitions/401220181/odds/9941'
  const called=[]
  const r=await queryEspnCore({...game,mode:'odds',page:44},async url=>{
   called.push(url)
   if(url.includes('/odds?'))return {count:2,items:[
    {$ref:original},{$ref:'http://untrusted.example/v2/sports/football/leagues/nfl/events/401220181/competitions/401220181/odds/99'},
   ]}
-  return {provider:{id:'41',name:'Book'},homeTeamOdds:{moneyLine:-110}}
+  return {provider:{id:'9941',name:'Book'},homeTeamOdds:{moneyLine:-110}}
  })
  assert.equal(r.resolvedRefs,1)
  assert.ok(called.some(x=>x===original.replace('http:','https:')))
