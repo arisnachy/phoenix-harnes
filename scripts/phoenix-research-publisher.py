@@ -54,8 +54,16 @@ def citation_keys(value):
 def complete_research_profile(data, cited):
     """Admission gate: research isn't complete because a PDF happens to render."""
     profile = data.get("quality_profile", "professional")
-    if profile not in ("professional", "educational_brief"):
+    if profile not in ("professional", "professional_brief", "educational_brief"):
         raise ValueError("Invalid quality_profile")
+    if profile == "professional_brief":
+        if data.get("document_type") != "brief" or data.get("user_requested_brief") is not True:
+            raise ValueError("professional_brief requires an explicitly requested short report")
+        words = sum(len(re.findall(r"\b\w+\b", sec["text"], re.UNICODE))
+                    for sec in data["sections"])
+        if words < 600 or len(cited) < 5:
+            raise ValueError("professional_brief requires at least 600 substantive words and 5 distinct cited sources")
+        return
     if profile == "educational_brief":
         if data.get("document_type") != "brief" or data.get("user_requested_brief") is not True:
             raise ValueError("educational_brief requires explicit user_requested_brief and document_type brief")
@@ -232,7 +240,7 @@ def clean_visual_title(value):
     """Avoid mechanical duplicated prefixes such as 'Tabla 1. Tabla 1.'."""
     title = str(value).strip()
     title = re.sub(
-        r"^(?:(?:tabla|table|figura|figure|gr[aá]fico)\\s+\\d+\\s*[.\u2014:\-]\\s*)+",
+        r"^(?:(?:tabla|table|figura|figure|gr[aá]fico)\s+\d+\s*[.\u2014:\-]\s*)+",
         "", title, flags=re.IGNORECASE,
     ).strip()
     return title or str(value).strip()
@@ -284,6 +292,8 @@ def validate(data):
     if data.get("style", "apa") not in ("apa", "apa7", "vancouver", "ama"):
         raise ValueError("style must be apa, apa7, vancouver or ama")
     resolved_presentation = data.get("presentation", "journal" if (data.get("document_type") == "journal_manuscript" or data.get("journal_requirements", {}).get("journal")) else ("hybrid" if data.get("quality_profile", "professional") == "professional" else "academic"))
+    if data.get("quality_profile") == "professional_brief" and data.get("document_type") != "brief":
+        raise ValueError("professional_brief is permitted only for explicit brief")
     if resolved_presentation not in PRESENTATIONS:
         raise ValueError("presentation must be academic, journal, editorial or hybrid")
     selected_design = data.get("design_preset", "auto")
@@ -938,7 +948,19 @@ def main():
     for field in ("faculty", "department", "degree"):
         if cover.get(field): center_doc(cover[field])
     doc.add_paragraph("")
-    center_doc(title, True, 20 if editorial else 17)
+    title_para = center_doc(title, True, 20 if editorial else 17)
+    if editorial:
+        # Match the document's cover to the PDF editorial palette.
+        title_para.paragraph_format.space_after = Pt(20)
+        border = OxmlElement("w:pBdr")
+        bottom_rule = OxmlElement("w:bottom")
+        bottom_rule.set(qn("w:val"), "single")
+        bottom_rule.set(qn("w:sz"), "18")
+        bottom_rule.set(qn("w:color"), accent.lstrip("#"))
+        border.append(bottom_rule)
+        title_para._p.get_or_add_pPr().append(border)
+        for run in title_para.runs:
+            run.font.color.rgb = RGBColor.from_string(tokens["title"].lstrip("#"))
     for author in authors: center_doc("Autor(a): " + author)
     if cover.get("course"): center_doc("Asignatura: " + str(cover["course"]) +
                                        (" · " + str(cover["course_code"]) if cover.get("course_code") else ""))
@@ -957,6 +979,12 @@ def main():
     if include_toc:
         doc.add_heading("Índice general", level=1)
         add_word_field(doc.add_paragraph(), 'TOC \\o "1-3" \\h \\z \\u')
+        # Word can leave the TOC field empty before its first update; provide a
+        # readable, unnumbered fallback rather than a blank contents page.
+        for section in report["sections"]:
+            entry = doc.add_paragraph(section["heading"])
+            entry.style = doc.styles["Normal"]
+            entry.paragraph_format.left_indent = Cm(0.5)
         if report.get("tables"):
             doc.add_heading("Índice de tablas", level=1)
             for ix, item in enumerate(report["tables"], 1):
@@ -974,7 +1002,7 @@ def main():
     footer_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
     add_word_field(footer_paragraph, "PAGE")
     if front.get("key_points"):
-        doc.add_heading("Key Points", level=1)
+        doc.add_heading("Puntos clave", level=1)
         for point in front["key_points"]: doc.add_paragraph("• " + point)
     if report.get("keywords"):
         doc.add_paragraph("Palabras clave: " + ", ".join(str(x) for x in report["keywords"]))
@@ -1167,7 +1195,7 @@ def main():
                 para("Figura " + str(ix) + ". " + clean_visual_title(item.get("title", "Gráfico")), small)
         story.append(PageBreak())
     if front.get("key_points"):
-        para("Key Points", h1)
+        para("Puntos clave", h1)
         for point in front["key_points"]: para("• " + point)
     if report.get("keywords"):
         para("Palabras clave: " + ", ".join(str(x) for x in report["keywords"]), small)
@@ -1386,7 +1414,7 @@ def main():
     chunks.append("<p>"+html.escape(" · ".join(str(cover.get(k,"")) for k in ("institution","faculty","degree","date") if cover.get(k)))+"</p>")
     for author in authors: chunks.append("<p class='ref'>"+html.escape(author)+"</p>")
     if front.get("key_points"):
-        chunks.append("<section><h2>Key Points</h2><ul>")
+        chunks.append("<section><h2>Puntos clave</h2><ul>")
         for point in front["key_points"]: chunks.append("<li>"+html.escape(point)+"</li>")
         chunks.append("</ul></section>")
     for key, label in FRONT_LABELS:
@@ -1460,7 +1488,7 @@ def main():
                 + ". Recuperar más datos observados; nunca inventar visualizaciones."
             )
     body_words = sum(
-        len(re.findall(r"\\b\\w+\\b", section["text"], re.UNICODE))
+        len(re.findall(r"\b\w+\b", section["text"], re.UNICODE))
         for section in report["sections"]
     )
     if "max_body_words" in visual_rules and body_words > visual_rules["max_body_words"]:
@@ -1468,6 +1496,13 @@ def main():
             "Extensión incumplida: " + str(body_words) + " palabras; máximo solicitado "
             + str(visual_rules["max_body_words"]) + ". Editar y condensar sin perder evidencias."
         )
+    mechanical = re.compile(
+        r"como (?:un )?modelo de lenguaje|como (?:una )?ia|"
+        r"generado por (?:ia|chatgpt|phoenix)|"
+        r"\\[(?:insertar|pendiente|todo)\\]", re.IGNORECASE
+    )
+    if any(mechanical.search(section["text"]) for section in report["sections"]):
+        warnings.append("Texto editorial con marcadores mecánicos o pendientes: revisar redacción; no ocultar procedencia requerida.")
     if rendered_pages[0] < editorial_minimum_pages:
         warnings.append("El PDF quedó corto para una publicación profesional: " +
                         str(rendered_pages[0]) + " páginas; piso editorial " +
