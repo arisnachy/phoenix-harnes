@@ -23,7 +23,8 @@ export type HistoricalEspnReport={
   errors:string[];coverage:string;examples:string[];
   warning:string
 }
-type Options={sport:string;league:string;date:string;days?:number;eventsPerDay?:number}
+type Options={sport:string;league:string;date:string;days?:number|undefined;
+  eventsPerDay?:number|undefined}
 function safeRef(ref:unknown,sport:string,league:string,eventId:string,competitionId:string):string|null{
   if(typeof ref!=='string'||ref.length>700)return null
   try{
