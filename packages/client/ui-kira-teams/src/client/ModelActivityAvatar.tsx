@@ -55,13 +55,15 @@ const PORTRAIT_ALIAS: Record<Exclude<ModelAvatarKind, 'kira'>, PortraitKey> = {
 export function stableAgentIndex(agentId: string, length: number): number {
   if (length <= 0) return 0
   let total = 0
-  for (const character of agentId) total += character.codePointAt(0) ?? 0
+  // Iterating a string always yields a nonempty Unicode code point.
+  for (const character of agentId) total += character.codePointAt(0) as number
   return total % length
 }
 
 /** Pick the portrait aligned with the stable visible KIRA codename roster. */
 export function agentAvatarKind(agentId: string): ModelAvatarKind {
-  return AGENT_AVATAR_KINDS[stableAgentIndex(agentId, AGENT_AVATAR_KINDS.length)] ?? 'generic'
+  // The fixed roster is nonempty and stableAgentIndex always stays in range.
+  return AGENT_AVATAR_KINDS[stableAgentIndex(agentId, AGENT_AVATAR_KINDS.length)] as PortraitKey
 }
 
 /** Resolve the model-only fallback identity when no KIRA agent id is available. */
