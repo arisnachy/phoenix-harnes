@@ -2966,6 +2966,9 @@ importers:
       '@phoenix-ai/cordis':
         specifier: workspace:^
         version: link:../../../vendor/cordis
+      '@phoenix-ai/dsh-client-connection':
+        specifier: workspace:^
+        version: link:../connection
       '@phoenix-ai/dsh-client-locale':
         specifier: workspace:^
         version: link:../locale
@@ -5973,6 +5976,9 @@ importers:
       '@phoenix-ai/cordis':
         specifier: workspace:^
         version: link:../../../vendor/cordis
+      '@phoenix-ai/dsh-client-connection':
+        specifier: workspace:^
+        version: link:../../client/connection
       '@phoenix-ai/dsh-attachment':
         specifier: workspace:^
         version: link:../../attachment/attachment
