@@ -19,7 +19,7 @@
 
 #### What the model sees
 
-插件注册后，模型可看到 `phoenix_voice_status` 和 `phoenix_voice_speak` 两项工具的定义。前者只读取 Host 的语音状态和队列，不播放声音；后者请求已授权服务播放用户指定的文本。工具可见不代表语音会话已连接，也不代表声音已经播放。
+插件注册后，模型可看到 `phoenix_voice_status` 和 `phoenix_voice_speak` 两项工具的定义。具体的模型可见定义参见[生成的工具 Schema 目录](../../../docs/tool-catalog.md#phoenix-aidsh-tool-voice)。前者只读取 Host 的语音状态和队列，不播放声音；后者请求已授权服务播放用户指定的文本。工具可见不代表语音会话已连接，也不代表声音已经播放。
 
 #### Token effect
 
