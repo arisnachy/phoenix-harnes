@@ -1,12 +1,20 @@
-# DeepSeek Harness Brand Asset Usage Guidelines
+# PHOENIX Brand Guidelines
 
-English | [中文](BRAND_GUIDELINES.zh.md)
+English | [Español](BRAND_GUIDELINES.es.md) | [中文](BRAND_GUIDELINES.zh.md)
 
-To maintain the long\-term healthy development of the DeepSeek Harness ecosystem, avoid user confusion, and facilitate the retrieval and identification of related resources, we have established these specifications and hope that everyone will adhere to them:
+PHOENIX has its own product identity, voice and visual language. These guidelines help contributors present it clearly and consistently.
 
-- In your project's descriptive text, you may use "DeepSeek Harness" to truthfully and accurately describe your project's relationship with DeepSeek Harness, for example, "built on DeepSeek Harness" or "compatible with DeepSeek Harness\." Such descriptions comply with license requirements and help users understand your project's positioning\.
-- If you wish your project name to reflect its association with the DeepSeek Harness ecosystem, we recommend using the abbreviated "DSH" designation for naming, which is both clear and facilitates communication within the community\.
-- When naming your project, please avoid using the full "DeepSeek Harness" trademark directly\. "DeepSeek Harness" is a registered trademark of DeepSeek\. Unauthorized use in project names can easily lead to user misunderstanding and confusion, thereby affecting the clarity of the entire ecosystem\. It may also involve trademark infringement\.
-- Additionally, please avoid using official brand materials in your promotions or presentations in a way that could cause misunderstanding, so as not to give users the false impression of official endorsement, cooperation, or authorization\.
+## Product identity
 
-We believe that a clear and orderly community environment will make every developer's efforts more visible and more readily recognized\. For the few cases that do not comply with the above specifications, we may contact the relevant parties to make appropriate adjustments in order to maintain the overall order of the ecosystem\. Thank you for your understanding and support—let us work together to build a more friendly and sustainable open\-source community\.
+Use **PHOENIX** as the public-facing product name. **Kira** identifies its coordinating assistant, not a competing product. Technical package names, repository paths and legacy compatibility identifiers must not be used as the public brand.
+
+## Names, logos and communications
+
+- Use the PHOENIX name, emblem and approved assets consistently; do not substitute another project's identity.
+- Describe implemented capabilities accurately, and label prototypes, planned features and incomplete integrations.
+- Do not imply endorsement, ownership, partnership or certification by another model provider or third party.
+- Keep interface labels, installation guidance, documentation and language switchers aligned across supported languages.
+
+## Attribution and licenses
+
+Brand independence does not remove copyright or license obligations. Preserve required notices in [LICENSE](LICENSE), relevant vendored license files and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Those records document code provenance; they are not marketing copy or the PHOENIX product description.
