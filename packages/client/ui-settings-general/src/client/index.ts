@@ -23,6 +23,7 @@ import { SettingsRoot } from './SettingsRoot.tsx'
 import { CloseLabel, HeaderContent, TriggerContent } from './chrome.tsx'
 import { GeneralSection } from './GeneralSection.tsx'
 import { DiagnosticsRow } from './DiagnosticsRow.tsx'
+import { VersionHistorySection, type VersionHistorySectionInjected } from './VersionHistorySection.tsx'
 import { TokenTelemetrySection, type TokenTelemetrySectionInjected } from './TokenTelemetrySection.tsx'
 import type { DiagnosticsRowInjected } from './DiagnosticsRow.tsx'
 import { SettingsDocumentAction } from './SettingsDocumentAction.tsx'
@@ -37,6 +38,7 @@ export type {
   GeneralSectionComponentProps,
 } from './GeneralSection.tsx'
 export type { DiagnosticsRowInjected, DiagnosticsRowProps } from './DiagnosticsRow.tsx'
+export type { VersionHistorySectionInjected, VersionHistorySectionProps } from './VersionHistorySection.tsx'
 export type { TokenTelemetrySectionInjected, TokenTelemetrySectionProps } from './TokenTelemetrySection.tsx'
 export type { SettingsDocumentActionInjected, SettingsDocumentActionProps } from './SettingsDocumentAction.tsx'
 export type { SettingsDocumentState } from './settings-document-store.ts'
@@ -180,6 +182,24 @@ export function apply(ctx: ClientContext): void {
     locale: NS,
     children: { 'settings.general.item': { kind: 'list', scope: 'root' } },
   }, GeneralSection))
+  const history: VersionHistorySectionInjected = {
+    readUpdateState: async () => {
+      const bridge = ctx.remote.pluginInventory
+      if (typeof bridge.updateState !== 'function') throw new Error('PHOENIX_UPDATE_HOST_REQUIRED')
+      const reply = await bridge.updateState()
+      if (!reply.ok) throw new Error(reply.error.code)
+      return reply.value
+    },
+  }
+  ctx.slots.inject('settings.section', () => ctx.slots.register({
+    name: 'settings.section',
+    id: 'versions',
+    order: 55,
+    label: () => t('version.nav'),
+    locale: NS,
+    inject: () => history,
+  }, VersionHistorySection))
+
   const telemetry: TokenTelemetrySectionInjected = {
     readTelemetry: async () => {
       const bridge = ctx.remote.pluginInventory
