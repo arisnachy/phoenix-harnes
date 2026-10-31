@@ -690,7 +690,11 @@ async function useLogin(origin: string, tabId: string, manual: boolean,
   return result
 }
 
-/** Stable human-readable failure codes. Never reflect raw secrets or CDP payloads. */
+/**
+ * Stable human-readable failure codes. Never reflect raw secrets or CDP payloads.
+ * @param error - untrusted failure from the secure login flow.
+ * @returns a safe HTTP status and redacted, user-facing error body.
+ */
 export function safeSecureLoginFailure(error: unknown): { code: number; body: { error: string; reason: string } } {
   const message = error instanceof Error ? error.message : ''
   if (/bóveda|vault|no se pudo leer el acceso cifrado|registro de acceso dañado/i.test(message)
