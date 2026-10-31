@@ -16,8 +16,9 @@ export function TeamAuthor({ t, provenance }: PropsLocale<typeof NS> & {
         model={provenance?.model} modelProvider={provenance?.provider}
         showEngineBadge={false} variant="card" />
     </span>
-    <strong>Kira</strong>
+    <strong title={t('skill.orchestration')}>Kira</strong>
     <ModelEngineBadge model={provenance?.model} provider={provenance?.provider} placement="header" />
-    <span>{t('skill.orchestration')}</span>
+    <span className={css.role}>{t('skill.orchestration')}</span>
+    <span className={css.audience} data-team-audience="user">{t('chat.forYou')}</span>
   </div>
 }

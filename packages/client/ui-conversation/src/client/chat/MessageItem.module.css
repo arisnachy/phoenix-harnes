@@ -431,3 +431,27 @@
 .refIcon {
   flex: none;
 }
+
+/* Team mentions are people, never fake file attachments. */
+.refChip[data-ref-chip='agent'] {
+  padding: 0 4px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 7%, transparent);
+  color: var(--dsw-alias-label-primary);
+}
+
+.recipientHeader {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+  padding-right: 11px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 17px;
+}
+
+.recipientHeader strong {
+  color: var(--dsw-alias-label-primary);
+  font-weight: 600;
+}
