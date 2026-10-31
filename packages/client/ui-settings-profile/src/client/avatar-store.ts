@@ -128,7 +128,7 @@ function hasRasterSignature(b: Uint8Array): boolean {
 }
 /** Reject non-raster uploads, then decode, strip metadata and make a square 768px portrait. */
 export async function normalizeAvatar(image: Blob, zoom = 1, offsetX = 0, offsetY = 0): Promise<Blob> {
-  if (image.size === 0 || image.size > MAX_RASTER) throw new Error('Select an image under 15 MB')
+  if (image.size === 0 || image.size > MAX_UPLOAD) throw new Error('Select an image under 8 MB')
   if (!['image/png', 'image/jpeg', 'image/webp'].includes(image.type)) {
     throw new Error('Only PNG, JPEG and WebP photos are accepted')
   }
