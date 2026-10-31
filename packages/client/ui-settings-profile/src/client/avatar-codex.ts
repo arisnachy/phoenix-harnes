@@ -1,5 +1,4 @@
 /** Browser image-edit client. Carries only a normalized original photograph through the trusted Host RPC. */
-import { normalizeAvatar } from './avatar-store.ts'
 interface AvatarRpc {
   call(channel: string, endpoint: string, payload: unknown): Promise<
     { ok: true; value: unknown } | { ok: false; error: { message: string } }
@@ -36,6 +35,11 @@ export async function transformAvatarThroughCodex(original: Blob, rpc: AvatarRpc
   const raw = atob(result.image)
   const decoded = new Uint8Array(raw.length)
   for (let index = 0; index < raw.length; index++) decoded[index] = raw.charCodeAt(index)
-  // Normalize/crop and remove metadata, exactly like a manually uploaded photo.
-  return normalizeAvatar(new Blob([decoded], { type: result.mediaType }))
+  // Retain the complete composition. The profile creates a separate face-only avatar.
+  const signature = decoded[0] === 137 && decoded[1] === 80 && decoded[2] === 78 && decoded[3] === 71
+    || decoded[0] === 0xff && decoded[1] === 0xd8 && decoded[2] === 0xff
+    || decoded[0] === 82 && decoded[1] === 73 && decoded[2] === 70 && decoded[3] === 70
+      && decoded[8] === 87 && decoded[9] === 69 && decoded[10] === 66 && decoded[11] === 80
+  if (!signature) throw new Error('Codex no devolvió una imagen válida.')
+  return new Blob([decoded], { type: result.mediaType })
 }
