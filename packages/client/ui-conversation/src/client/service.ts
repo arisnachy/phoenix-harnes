@@ -19,6 +19,7 @@ import type { ComposerAttachment } from './contract/slots.ts'
 import type { QueueAction, QueueItemId } from './contract/queue.ts'
 import type { ComposerBlocks, DraftAttachmentId, SessionInputResolver } from './contract/input.ts'
 import type { InputSubmitMode } from './contract/composer-submission.ts'
+import { savedPhotoForSelfImageRequest } from './portrait-reference.ts'
 
 /**
  * The outward conversation face (`ctx.conversation`): the scope-addressed
@@ -161,7 +162,15 @@ export class ConversationController extends Service implements IConversation {
     if (attachments.length !== imageIds.length) {
       throw new Error('conversation.sendSession: one or more draft images are no longer available')
     }
-    const uploaded = await this.serializeAttachments(attachments.map(attachment => attachment.file))
+    // Profile only grants this on an explicit opt-in; self-image intent is
+    // checked again per prompt and the untouched original is appended as a
+    // genuine image attachment, never as fabricated text or an agent avatar.
+    const portraitReference = await savedPhotoForSelfImageRequest(text)
+    const files = attachments.map(attachment => attachment.file)
+    if (portraitReference !== undefined && !files.some(file => file.name === portraitReference.name)) {
+      files.push(portraitReference)
+    }
+    const uploaded = await this.serializeAttachments(files)
     const content = [...uploaded, ...(text === '' ? [] : [{ type: 'text' as const, text }])]
     const result = await session.prompt(content, mode, signal)
     if (!result.ok) return { kind: 'error' }
