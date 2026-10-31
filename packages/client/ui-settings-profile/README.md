@@ -6,7 +6,7 @@ Browser settings row for the local user profile. The row keeps drafts local unti
 
 The row also edits KIRA's assistant name and masculine, feminine, or neutral presentation. The Models settings page owns the adjacent-arrow editor for provider order; it persists the order in the same local preference namespace so the conversation model selector receives it from the Host.
 
-The Profile page now exposes an opt-in Moments section: ISO country, IANA time zone, private recurring dates (`MM-DD | label` and optional `| solemn`) and a separate permission checkbox. If enabled, the shell renders a small, noninteractive, light-theme-safe calendar accent. It picks one of three deterministic variants and respects reduced-motion preferences. The accent never generates conversation messages, changes the model persona, or uploads personal events. Nager.Date requests only country/year. The public provider is not a complete registry of regional/cultural occasions.
+The Profile page now exposes an opt-in Moments section: ISO country, IANA time zone, private recurring dates (`MM-DD | label` and optional `| solemn`) and a separate permission checkbox. If enabled, the shell renders a compact, clickable, light-theme-safe calendar accent. It selects one of four deterministic presentations, cycles through them on click, uses occasion-specific colors and small motifs, and respects reduced-motion preferences. The accent never generates conversation messages, changes the model persona, or uploads personal events. Nager.Date requests only country/year. The public provider is not a complete registry of regional/cultural occasions.
 
 ## Model Experience
 
