@@ -345,6 +345,29 @@ describe('origin-scoped secure login', () => {
     expect(body).not.toContain('password')
   })
 
+  it('rejects non-string POST origins rather than coercing arrays into valid URLs', async () => {
+    let handler: ((req: unknown, res: unknown) => Promise<void>) | undefined
+    registerSecureLogin({ webServer: { register: (route: { handler: typeof handler }) => {
+      handler = route.handler
+      return () => {}
+    } } } as never)
+    const requestStatus = async (origin: unknown): Promise<number> => {
+      let status = 0
+      await handler?.({
+        method: 'POST',
+        url: '/phoenix-secure-login/provision-eligibility',
+        socket: { remoteAddress: '127.0.0.1' },
+        headers: { host: '127.0.0.1:3080', origin: 'http://127.0.0.1:3080',
+          'x-phoenix-secure-login': '1' },
+        async *[Symbol.asyncIterator]() { yield Buffer.from(JSON.stringify({ origin, authorized: true })) },
+      }, { writeHead(code: number) { status = code }, end() {} })
+      return status
+    }
+    expect(await requestStatus(['https://example.org'])).toBe(400)
+    expect(await requestStatus({ url: 'https://example.org' })).toBe(400)
+    expect(await requestStatus('https://example.org')).toBe(200)
+  })
+
   it('rejects cross-origin POST requests even from loopback', async () => {
     let handler: ((req: unknown, res: unknown) => Promise<void>) | undefined
     const webServer = { register: (route: { handler: typeof handler }) => {

@@ -744,7 +744,7 @@ export function registerSecureLogin(ctx: Context, vault?: CredentialProvider): (
         }
         if (req.method !== 'POST') { respond(res, 405, { error: 'Operación no permitida' }); return }
         const payload = await input(req)
-        const origin = loginOrigin(String(payload.origin ?? ''))
+        const origin = loginOrigin(typeof payload.origin === 'string' ? payload.origin : '')
         if (route.pathname === PREFIX + '/select') {
           if (typeof payload.tabId !== 'string' || !/^[A-Za-z0-9_-]{1,200}$/.test(payload.tabId)) {
             throw new Error('Pestaña no válida')
