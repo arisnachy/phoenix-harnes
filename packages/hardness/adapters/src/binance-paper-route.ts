@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { GameWebRouteHost } from './godot-web-bundle.ts'
 import type { BinancePaperAutomation } from './binance-paper-automation.ts'
+import { binanceKronosStatus, installBinanceKronos } from './binance-kronos.ts'
 import { dashboardJson, type BinanceAgentOsHostService } from './binance-trading-tools.ts'
 import type { BinanceSpotTestnet } from './binance-spot-testnet.ts'
 import type { BinanceSpotRealReadOnly } from './binance-spot-real-auth.ts'
@@ -11,6 +12,8 @@ const ROUTE = '/phoenix-trading/paper'
 const ENDPOINT = ROUTE + '/dashboard'
 const CONTROL = ROUTE + '/control'
 const CANDLES = ROUTE + '/candles'
+const KRONOS_STATUS = ROUTE + '/kronos-status'
+const KRONOS_INSTALL = ROUTE + '/kronos-install'
 const TESTNET_STATUS = ROUTE + '/testnet-status'
 const TESTNET_AUTO_STATUS = ROUTE + '/testnet-auto-status'
 const TESTNET_CONNECT = ROUTE + '/testnet-connect'
@@ -70,9 +73,10 @@ async function readControl(req: IncomingMessage): Promise<{
   interval?: '15m' | '1h' | '4h' | '1d'
   pollMinutes?: number
   autoDiscover?: boolean
+  predictionEnabled?: boolean
 }> {
   const payload = await readRequestObject(req)
-  if (Object.keys(payload).some(key => !['action', 'symbols', 'interval', 'pollMinutes', 'autoDiscover'].includes(key))) {
+  if (Object.keys(payload).some(key => !['action', 'symbols', 'interval', 'pollMinutes', 'autoDiscover', 'predictionEnabled'].includes(key))) {
     throw new Error('Unsupported control field')
   }
   if (payload.action !== 'start' && payload.action !== 'stop'
@@ -82,6 +86,7 @@ async function readControl(req: IncomingMessage): Promise<{
   if (payload.action === 'start') {
     if (!Array.isArray(payload.symbols) || !payload.symbols.every(symbol => typeof symbol === 'string')
       || (payload.autoDiscover !== undefined && typeof payload.autoDiscover !== 'boolean')
+      || (payload.predictionEnabled !== undefined && typeof payload.predictionEnabled !== 'boolean')
       || (payload.interval !== undefined && (typeof payload.interval !== 'string' || !['15m', '1h', '4h', '1d'].includes(payload.interval)))
       || (payload.pollMinutes !== undefined && (!Number.isInteger(payload.pollMinutes)
         || !Number.isFinite(payload.pollMinutes) || Number(payload.pollMinutes) < 1
@@ -91,6 +96,7 @@ async function readControl(req: IncomingMessage): Promise<{
     return {
       action: 'start', symbols: payload.symbols,
       ...(payload.autoDiscover === undefined ? {} : { autoDiscover: payload.autoDiscover as boolean }),
+      ...(payload.predictionEnabled === undefined ? {} : { predictionEnabled: payload.predictionEnabled as boolean }),
       ...(payload.interval === undefined ? {} : { interval: payload.interval as '15m' | '1h' | '4h' | '1d' }),
       ...(payload.pollMinutes === undefined ? {} : { pollMinutes: payload.pollMinutes as number }),
     }
@@ -159,6 +165,8 @@ export function mountBinancePaperDashboardRoute(
     const read = url.pathname === ENDPOINT
     const write = url.pathname === CONTROL
     const market = url.pathname === CANDLES
+    const kronosStatus = url.pathname === KRONOS_STATUS
+    const kronosInstall = url.pathname === KRONOS_INSTALL
     const testing = url.pathname === TESTNET_STATUS
     const testnetAutomation = url.pathname === TESTNET_AUTO_STATUS
     const connect = url.pathname === TESTNET_CONNECT
@@ -169,18 +177,35 @@ export function mountBinancePaperDashboardRoute(
     const reconnect = url.pathname === MCP_RECONNECT
     const activate = url.pathname === MCP_ACTIVATE
     const repair = url.pathname === MCP_REPAIR
-    if (!read && !write && !market && !testing && !testnetAutomation && !connect && !realStatus && !realConnect && !realMigrate && !mcpStatus && !reconnect && !activate && !repair) { res.writeHead(404).end(); return }
+    if (!read && !write && !market && !kronosStatus && !kronosInstall && !testing && !testnetAutomation && !connect && !realStatus && !realConnect && !realMigrate && !mcpStatus && !reconnect && !activate && !repair) { res.writeHead(404).end(); return }
     res.setHeader('Cache-Control', 'no-store')
     res.setHeader('Content-Type', 'application/json; charset=utf-8')
     res.setHeader('X-Content-Type-Options', 'nosniff')
     res.setHeader('Referrer-Policy', 'no-referrer')
-    if ((read || market || testing || realStatus || testnetAutomation || mcpStatus) && req.method !== 'GET' && req.method !== 'HEAD'
-      || (write || connect || realConnect || realMigrate || reconnect || activate || repair) && req.method !== 'POST') { res.writeHead(405).end(); return }
-    if ((write || connect || realConnect || realMigrate || reconnect || activate || repair) && !localUserAction(req)) {
+    if ((read || market || kronosStatus || testing || realStatus || testnetAutomation || mcpStatus) && req.method !== 'GET' && req.method !== 'HEAD'
+      || (write || kronosInstall || connect || realConnect || realMigrate || reconnect || activate || repair) && req.method !== 'POST') { res.writeHead(405).end(); return }
+    if ((write || kronosInstall || connect || realConnect || realMigrate || reconnect || activate || repair) && !localUserAction(req)) {
       res.writeHead(403).end(JSON.stringify({ error: 'Same-origin user action required' }))
       return
     }
     try {
+      if (kronosStatus) {
+        res.statusCode = 200
+        if (req.method === 'HEAD') res.end()
+        else res.end(JSON.stringify(binanceKronosStatus()))
+        return
+      }
+      if (kronosInstall) {
+        const data = await readRequestObject(req)
+        if (Object.keys(data).length !== 0) {
+          res.writeHead(400).end(JSON.stringify({ error: 'Kronos install accepts no parameters' }))
+          return
+        }
+        const status = installBinanceKronos()
+        res.statusCode = status.state === 'error' ? 503 : status.state === 'installing' ? 202 : 200
+        res.end(JSON.stringify(status))
+        return
+      }
       if (activate) {
         // Explicit same-origin browser action installs only the pinned OAuth
         // MCP. No Binance token, authorization grant or REAL order is issued.
@@ -496,6 +521,7 @@ export function mountBinancePaperDashboardRoute(
         await engine.start({
           symbols: action.symbols ?? [],
           ...(action.autoDiscover === undefined ? {} : { autoDiscover: action.autoDiscover }),
+          ...(action.predictionEnabled === undefined ? {} : { predictionEnabled: action.predictionEnabled }),
           ...(action.interval === undefined ? {} : { interval: action.interval }),
           ...(action.pollMinutes === undefined ? {} : { pollMs: action.pollMinutes * 60_000 }),
         })
