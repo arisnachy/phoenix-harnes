@@ -108,6 +108,15 @@
 .ambient[data-phoenix-theme="harvest"]::before { content: '✿'; color: #ba8a3e; }
 .ambient[data-phoenix-theme="water"] { --moment-accent: #4a99ba; --moment-tint: #eefaff; }
 .ambient[data-phoenix-theme="water"]::before { content: '◦'; color: #4a99ba; }
+
+.ambient[data-phoenix-theme="islamic"] { --moment-accent: #4b9d86; --moment-tint: #eefaf5; }
+.ambient[data-phoenix-theme="islamic"]::before { content: '✧'; color: #4b9d86; }
+.ambient[data-phoenix-theme="jewish"] { --moment-accent: #608ac1; --moment-tint: #eff6ff; }
+.ambient[data-phoenix-theme="jewish"]::before { content: '✦'; color: #608ac1; }
+.ambient[data-phoenix-theme="buddhist"] { --moment-accent: #c48e5a; --moment-tint: #fff7eb; }
+.ambient[data-phoenix-theme="buddhist"]::before { content: '✿'; color: #c48e5a; }
+.ambient[data-phoenix-theme="christian"] { --moment-accent: #7c92bc; --moment-tint: #f2f7fe; }
+.ambient[data-phoenix-theme="christian"]::before { content: '✧'; color: #7c92bc; }
 .ambient[data-phoenix-theme="spiritual"] { --moment-accent: #9872bd; --moment-tint: #f9f1ff; }
 .ambient[data-phoenix-theme="spiritual"]::before { content: '✧'; color: #9872bd; }
 .ambient[data-phoenix-theme="heritage"] { --moment-accent: #b47557; --moment-tint: #fff6f0; }
