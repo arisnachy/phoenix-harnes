@@ -200,7 +200,7 @@ function theOddsApiClient(ctx: ClientContext): TheOddsApiClient {
   return {
     state: async () => unwrapPluginInventory('theOddsApiState', await remote().theOddsApiState()),
     configure: async apiKey => unwrapPluginInventory(
-      'configureTheOddsApi', await remote().configureTheOddsApi({apiKey}),
+      'configureTheOddsApi', await remote().configureTheOddsApi({ apiKey }),
     ),
     disconnect: async () => unwrapPluginInventory(
       'disconnectTheOddsApi', await remote().disconnectTheOddsApi(),

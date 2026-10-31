@@ -26,11 +26,11 @@ describe('User-authorized media analysis', () => {
       vi.stubEnv('PHOENIX_VIDEO_ALLOWED_DIRS',other)
       await expect(videoMediaInput(path)).rejects.toThrow('VIDEO_FILE_NOT_APPROVED')
       vi.stubEnv('PHOENIX_VIDEO_ALLOWED_DIRS',dir)
-      await expect(videoMediaInput(path)).resolves.toMatchObject({source:'approved-local-file'})
+      await expect(videoMediaInput(path)).resolves.toMatchObject({ source:'approved-local-file' })
       await expect(videoMediaInput(join(dir,'private.txt'))).rejects.toThrow('VIDEO_FILE_NOT_APPROVED')
     } finally {
-      rmSync(dir,{recursive:true,force:true})
-      rmSync(other,{recursive:true,force:true})
+      rmSync(dir,{ recursive:true,force:true })
+      rmSync(other,{ recursive:true,force:true })
     }
   })
 })

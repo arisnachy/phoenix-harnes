@@ -406,10 +406,10 @@ export function createResearchPublishTool(): ToolDefinition {
             + '. Edición: ' + (typeof value.presentation === 'string' ? value.presentation : 'academic')
             + '; diseño: ' + (typeof value.design_preset === 'string' ? value.design_preset : 'academic_classic')
             + '; páginas PDF: ' + (typeof (value.pagination as Record<string, unknown> | undefined)?.pdf_pages === 'number'
-              ? String((value.pagination as { pdf_pages: number }).pdf_pages) : 'sin verificar')
+            ? String((value.pagination as { pdf_pages: number }).pdf_pages) : 'sin verificar')
             + '; observaciones: ' + (Array.isArray(value.warnings) ? value.warnings.map(String).join('; ') : 'ninguna')
             + '; orientación de referencias: ' + (Array.isArray(value.advisory_warnings)
-          ? value.advisory_warnings.map(String).join('; ') : 'sin advertencias')
+            ? value.advisory_warnings.map(String).join('; ') : 'sin advertencias')
             + '. Estas son rutas locales de archivos, NO enlaces web. Ábrelos desde los archivos generados al pie del turno en Phoenix, no como una URL del navegador. No se ha certificado la veracidad de las fuentes ni el cumplimiento específico de una revista.'
           : 'El informe no alcanzó estado REPORT_READY.',
       }],

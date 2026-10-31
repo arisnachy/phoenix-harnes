@@ -2,17 +2,17 @@
  * Enumerating a sport does not imply that a provider offers today's markets.
  */
 export const oddsDisciplines=[
-  {sport:'football',label:'Fútbol / soccer',market:'1x2',leagues:['Premier League','LaLiga','Liga MX','MLS','Champions League']},
-  {sport:'basketball',label:'Baloncesto',market:'moneyline',leagues:['NBA','WNBA','otras ligas']},
-  {sport:'baseball',label:'Béisbol',market:'moneyline',leagues:['MLB','otras ligas']},
-  {sport:'american-football',label:'Fútbol americano',market:'moneyline',leagues:['NFL','college']},
-  {sport:'ice-hockey',label:'Hockey hielo',market:'home_away',leagues:['NHL','otras ligas']},
-  {sport:'tennis',label:'Tenis',market:'match_winner',leagues:['ATP','WTA','otros circuitos']},
-  {sport:'handball',label:'Balonmano',market:'1x2',leagues:['según cobertura del proveedor']},
-  {sport:'volleyball',label:'Voleibol',market:'home_away',leagues:['según cobertura del proveedor']},
-  {sport:'rugby-league',label:'Rugby league',market:'home_away',leagues:['según cobertura del proveedor']},
-  {sport:'rugby-union',label:'Rugby union',market:'home_away',leagues:['según cobertura del proveedor']},
-  {sport:'cricket',label:'Críquet',market:'home_away',leagues:['según cobertura del proveedor']},
+  { sport:'football',label:'Fútbol / soccer',market:'1x2',leagues:['Premier League','LaLiga','Liga MX','MLS','Champions League'] },
+  { sport:'basketball',label:'Baloncesto',market:'moneyline',leagues:['NBA','WNBA','otras ligas'] },
+  { sport:'baseball',label:'Béisbol',market:'moneyline',leagues:['MLB','otras ligas'] },
+  { sport:'american-football',label:'Fútbol americano',market:'moneyline',leagues:['NFL','college'] },
+  { sport:'ice-hockey',label:'Hockey hielo',market:'home_away',leagues:['NHL','otras ligas'] },
+  { sport:'tennis',label:'Tenis',market:'match_winner',leagues:['ATP','WTA','otros circuitos'] },
+  { sport:'handball',label:'Balonmano',market:'1x2',leagues:['según cobertura del proveedor'] },
+  { sport:'volleyball',label:'Voleibol',market:'home_away',leagues:['según cobertura del proveedor'] },
+  { sport:'rugby-league',label:'Rugby league',market:'home_away',leagues:['según cobertura del proveedor'] },
+  { sport:'rugby-union',label:'Rugby union',market:'home_away',leagues:['según cobertura del proveedor'] },
+  { sport:'cricket',label:'Críquet',market:'home_away',leagues:['según cobertura del proveedor'] },
 ] as const
 export type OddsDiscipline=typeof oddsDisciplines[number]['sport']
 export const coveredSportKeys:Readonly<Record<string,readonly string[]>>={
@@ -29,7 +29,7 @@ export const coveredSportKeys:Readonly<Record<string,readonly string[]>>={
  * URL retained by the scraper and cannot be a free-form source from a user.
  */
 export function belongsToLeague(
-  sportKey:string,quote:{league?:string;matchLink?:string},
+  sportKey:string,quote:{ league?:string;matchLink?:string },
 ):boolean{
   const league=(quote.league??'').toLowerCase()
   const path=(quote.matchLink??'').toLowerCase()
@@ -57,9 +57,9 @@ export function belongsToLeague(
   }
 }
 export type SportScanResult={
-  sport:OddsDiscipline;label:string;market:string;leagues:readonly string[];
+  sport:OddsDiscipline;label:string;market:string;leagues:readonly string[]
   status:'observed'|'empty'|'error'|'disabled';total:number;sample:Array<{
-    home:string;away:string;league:string;bookmaker:string;market:string;
+    home:string;away:string;league:string;bookmaker:string;market:string
     selection:string;price:number;updatedAt:string
   }>;error?:string
 }
@@ -67,14 +67,14 @@ export type SportScanResult={
  * coverage for unprobed disciplines prevents Kira from silently dropping them.
  */
 export async function scanOddsDisciplines(
-  params:{sport?:string;offset?:number;limit?:number},
+  params:{ sport?:string;offset?:number;limit?:number },
   lookup:(sport:OddsDiscipline,market:string)=>Promise<Array<{
-    home:string;away:string;league?:string;bookmaker:string;market:string;
+    home:string;away:string;league?:string;bookmaker:string;market:string
     selection:string;price:number;updatedAt:string
   }>>,
   enabled=true,
-):Promise<{totalDisciplines:number;checked:SportScanResult[];
-  unprobed:string[];nextOffset:number|null;complete:boolean}>{
+):Promise<{ totalDisciplines:number;checked:SportScanResult[]
+  unprobed:string[];nextOffset:number|null;complete:boolean }>{
   const all=params.sport?oddsDisciplines.filter(s=>s.sport===params.sport):oddsDisciplines
   if(!all.length)throw Error('Disciplina no soportada en OddsHarvester')
   const offset=params.offset??0,limit=params.limit??4
@@ -91,12 +91,12 @@ export async function scanOddsDisciplines(
     for(const [idx,item] of batch.entries()){
       const outcome=results[idx]!
       const ok=outcome.status==='fulfilled'?outcome.value:[]
-      const record:SportScanResult={sport:item.sport,label:item.label,market:item.market,
+      const record:SportScanResult={ sport:item.sport,label:item.label,market:item.market,
         leagues:item.leagues,status:!enabled?'disabled':outcome.status==='rejected'?'error':
           ok.length?'observed':'empty',total:ok.length,
-        sample:ok.slice(0,6).map(q=>({home:q.home,away:q.away,
+        sample:ok.slice(0,6).map(q=>({ home:q.home,away:q.away,
           league:q.league??'Liga no identificada',bookmaker:q.bookmaker,
-          market:q.market,selection:q.selection,price:q.price,updatedAt:q.updatedAt})),
+          market:q.market,selection:q.selection,price:q.price,updatedAt:q.updatedAt })),
       }
       if(outcome.status==='rejected'){
         const reason=outcome.reason instanceof Error?outcome.reason.message:'Error desconocido'
@@ -106,7 +106,7 @@ export async function scanOddsDisciplines(
     }
   }
   const next=offset+targets.length
-  return {totalDisciplines:all.length,checked,
+  return { totalDisciplines:all.length,checked,
     unprobed:all.slice(next).map(s=>s.sport),nextOffset:next<all.length?next:null,
-    complete:next>=all.length}
+    complete:next>=all.length }
 }

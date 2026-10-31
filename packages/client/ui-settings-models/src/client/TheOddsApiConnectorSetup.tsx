@@ -93,12 +93,12 @@ export function TheOddsApiConnectorSetup({ client, snapshot, onStatus }: {
     </p>
     {snapshot?.requestsRemaining !== undefined || snapshot?.requestsUsed !== undefined
       ? (
-          <p style={{ margin: 0, fontSize: 11 }}>
-            Créditos: {snapshot.requestsRemaining === undefined ? 'no informados' : `${snapshot.requestsRemaining} restantes`}
-            {snapshot.requestsUsed === undefined ? '' : ` · ${snapshot.requestsUsed} usados`}
-            {' · '}Sujeto a tu plan
-          </p>
-        )
+        <p style={{ margin: 0, fontSize: 11 }}>
+          Créditos: {snapshot.requestsRemaining === undefined ? 'no informados' : `${snapshot.requestsRemaining} restantes`}
+          {snapshot.requestsUsed === undefined ? '' : ` · ${snapshot.requestsUsed} usados`}
+          {' · '}Sujeto a tu plan
+        </p>
+      )
       : null}
     <p style={{ margin: 0, fontSize: 11, lineHeight: 1.55 }}>
       La clave se guarda exclusivamente en el almacén de credenciales del Host.
@@ -125,17 +125,17 @@ export function TheOddsApiConnectorSetup({ client, snapshot, onStatus }: {
         event.preventDefault()
         save()
       }} style={{ display: 'grid', gap: 6 }}>
-          <label htmlFor="phoenix-the-odds-api-key" style={{ fontSize: 12, fontWeight: 600 }}>API key · The Odds API v4</label>
-          <input id="phoenix-the-odds-api-key" type="password" autoComplete="new-password"
-            spellCheck={false} placeholder="Pega aquí tu API key"
-            value={input} disabled={busy || !client} onChange={(event) => {
-              setInput(event.target.value)
-            }}
-            minLength={16} maxLength={128}/>
-          <button type="submit" disabled={busy || !client || !/^[A-Za-z0-9_-]{16,128}$/u.test(input.trim())}>
-            {busy ? 'Verificando…' : 'Guardar en el vault y verificar'}
-          </button>
-        </form>
+        <label htmlFor="phoenix-the-odds-api-key" style={{ fontSize: 12, fontWeight: 600 }}>API key · The Odds API v4</label>
+        <input id="phoenix-the-odds-api-key" type="password" autoComplete="new-password"
+          spellCheck={false} placeholder="Pega aquí tu API key"
+          value={input} disabled={busy || !client} onChange={(event) => {
+            setInput(event.target.value)
+          }}
+          minLength={16} maxLength={128}/>
+        <button type="submit" disabled={busy || !client || !/^[A-Za-z0-9_-]{16,128}$/u.test(input.trim())}>
+          {busy ? 'Verificando…' : 'Guardar en el vault y verificar'}
+        </button>
+      </form>
       : null}
     {feedback ? <p role="status" style={{ fontSize: 11, margin: 0 }}>{feedback}</p> : null}
     {error ? <p role="alert" style={{ fontSize: 11, margin: 0 }}>{error}</p> : null}

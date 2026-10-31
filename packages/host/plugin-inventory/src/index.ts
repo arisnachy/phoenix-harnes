@@ -378,7 +378,7 @@ export class PluginInventoryGateway extends TypertRemoteService {
 
   /** Save an owner-entered The Odds API v4 key only in the Host credential vault. */
   @Remote('configureTheOddsApi')
-  async configureTheOddsApi(request:{apiKey:string}):Promise<OddsApiConnectorState>{
+  async configureTheOddsApi(request:{ apiKey:string }):Promise<OddsApiConnectorState>{
     return configureTheOddsApiConnector(this.ctx,request.apiKey)
   }
 

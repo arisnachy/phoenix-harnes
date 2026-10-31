@@ -1338,7 +1338,7 @@ describe('Fetch MCP Windows Node/npm environment hydration', () => {
     }, {
       platform: 'win32',
       nodeExecutable: nodeExe,
-      fileExists: (name) => fileExists(name) || name.endsWith('sitecustomize.py'),
+      fileExists: name => fileExists(name) || name.endsWith('sitecustomize.py'),
     })
     expect(result.Path).toBe('C:\\Program Files\\nodejs;C:\\Windows\\System32')
     expect(result.PHOENIX_FETCH_MCP_NPM_SHIM).toBe('1')
@@ -1381,7 +1381,7 @@ describe('Fetch MCP Windows Node/npm environment hydration', () => {
       fetchServer,
       { Path: 'C:\\Windows\\System32' },
       { platform: 'win32', nodeExecutable: nodeExe,
-        fileExists: (path) => path.toLowerCase() === nodeExe.toLowerCase() },
+        fileExists: path => path.toLowerCase() === nodeExe.toLowerCase() },
     )
     expect(result).toEqual({ Path: 'C:\\Windows\\System32' })
   })

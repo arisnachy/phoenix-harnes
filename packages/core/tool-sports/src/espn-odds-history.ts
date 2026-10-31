@@ -3,7 +3,7 @@
  * provider collections + Site summary. This is NOT a historical odds database.
  * Old games can retain incomplete quotes with no line timestamp.
  */
-import {normalizeEspnMarkets,type EspnMarketQuote} from './espn-odds.ts'
+import { normalizeEspnMarkets,type EspnMarketQuote } from './espn-odds.ts'
 
 type Dict=Record<string,unknown>
 const obj=(v:unknown):v is Dict=>Boolean(v)&&typeof v==='object'&&!Array.isArray(v)
@@ -13,18 +13,18 @@ const sportValid=(v:string)=>/^[a-z][a-z-]{1,35}$/u.test(v)
 const leagueValid=(v:string)=>/^[a-z0-9][a-z0-9._-]{0,45}$/u.test(v)
 const maxRequests=42
 export type HistoricalEspnRow=EspnMarketQuote&{
-  historical:true;priceStatus:'historical_unverified';source:'ESPN Scoreboard'|'ESPN Core'|'ESPN Summary';
+  historical:true;priceStatus:'historical_unverified';source:'ESPN Scoreboard'|'ESPN Core'|'ESPN Summary'
   quoteTimestampKnown:boolean;eventDate:string
 }
 export type HistoricalEspnReport={
-  historical:true;source:'ESPN Site/Core (sin clave, no oficial)';sport:string;league:string;
-  requestedStart:string;daysScanned:number;eventCount:number;eventsWithPrices:number;
-  rawEntries:number;requests:number;refsResolved:number;rows:HistoricalEspnRow[];
-  errors:string[];coverage:string;examples:string[];
+  historical:true;source:'ESPN Site/Core (sin clave, no oficial)';sport:string;league:string
+  requestedStart:string;daysScanned:number;eventCount:number;eventsWithPrices:number
+  rawEntries:number;requests:number;refsResolved:number;rows:HistoricalEspnRow[]
+  errors:string[];coverage:string;examples:string[]
   warning:string
 }
-type Options={sport:string;league:string;date:string;days?:number|undefined;
-  eventsPerDay?:number|undefined}
+type Options={ sport:string;league:string;date:string;days?:number|undefined
+  eventsPerDay?:number|undefined }
 function safeRef(ref:unknown,sport:string,league:string,eventId:string,competitionId:string):string|null{
   if(typeof ref!=='string'||ref.length>700)return null
   try{
@@ -56,7 +56,7 @@ const priceEntries=(value:unknown):Dict[]=>{
 export async function fetchEspnHistoricalOdds(
   options:Options,getJSON:<T>(url:string)=>Promise<T>,now=Date.now(),
 ):Promise<HistoricalEspnReport>{
-  const {sport,league,date}=options
+  const { sport,league,date }=options
   if(!sportValid(sport)||!leagueValid(league)||
     !/^\d{4}-\d{2}-\d{2}$/u.test(date)||
     !Number.isFinite(Date.parse(date+'T00:00:00Z'))||
@@ -86,16 +86,16 @@ export async function fetchEspnHistoricalOdds(
   const capture=(event:Dict,lines:Dict[],source:HistoricalEspnRow['source']):number=>{
     report.rawEntries+=lines.length
     const eventDate=typeof event.date==='string'?event.date:''
-    const quotes=normalizeEspnMarkets(event as unknown as Parameters<typeof normalizeEspnMarkets>[0],
-      lines as unknown as Parameters<typeof normalizeEspnMarkets>[1],{historical:true})
+    const quotes=normalizeEspnMarkets(event,
+      lines,{ historical:true })
     let saved=0
     for(const q of quotes){
       if(report.rows.length>=120)break
       const key=[q.eventId,q.bookmaker,q.market,q.selection,q.point??'',q.price,q.updatedAt].join('|')
       if(seenQuotes.has(key))continue
       seenQuotes.add(key)
-      report.rows.push({...q,historical:true,priceStatus:'historical_unverified',source,
-        quoteTimestampKnown:Number.isFinite(Date.parse(q.updatedAt)),eventDate})
+      report.rows.push({ ...q,historical:true,priceStatus:'historical_unverified',source,
+        quoteTimestampKnown:Number.isFinite(Date.parse(q.updatedAt)),eventDate })
       saved++
     }
     return saved

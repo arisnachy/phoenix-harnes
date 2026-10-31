@@ -149,7 +149,7 @@ describe('Binance Host PAPER automation', () => {
   it('emits only meaningful fill events for Kira, not one per candle', async () => {
     const { worker } = setup()
     const events: Array<{ kind: string; symbol: string }> = []
-    worker.setAttentionSink(event => { events.push({ kind: event.kind, symbol: event.symbol }) })
+    worker.setAttentionSink((event) => { events.push({ kind: event.kind, symbol: event.symbol }) })
     await worker.start({ symbols: ['BTCUSDT'] })
     expect(events).toEqual([{ kind: 'paper-trade', symbol: 'BTCUSDT' }])
     await worker.step()

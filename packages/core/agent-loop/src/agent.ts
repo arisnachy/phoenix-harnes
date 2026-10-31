@@ -799,7 +799,7 @@ export class ReactLoopAgent implements Agent {
         model: config.model,
         reasoningEffort: config.reasoningEffort,
         ...auditInput,
-      reusedSystemPrefixChars,
+        reusedSystemPrefixChars,
       }))
     }
     return { request, ...preparedCall === undefined ? {} : { preparedCall } }

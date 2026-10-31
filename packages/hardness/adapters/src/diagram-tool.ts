@@ -79,12 +79,12 @@ export function admitPhoenixDiagram(raw: unknown, title: string): PhoenixDiagram
       || !between(node.y, node.shape === 'point' ? 0 : 80, node.shape === 'point' ? 620 : 520)
       || (node.detail !== undefined && !text(node.detail, 650)))
       invalid('Nodo ' + (index + 1) + ': id único, label y coordenadas x=95..905/y=80..520; junction point admite 0..1000/0..620.')
-    ids.add(node.id as string)
+    ids.add(node.id)
     nodes.push({
-      id: node.id as string, label: node.label as string,
-      x: node.x as number, y: node.y as number,
+      id: node.id, label: node.label,
+      x: node.x, y: node.y,
       ...(node.shape === undefined ? {} : { shape: node.shape as Shape }),
-      ...(node.detail === undefined ? {} : { detail: node.detail as string }),
+      ...(node.detail === undefined ? {} : { detail: node.detail }),
     })
   }
   if (nodes.filter(node => node.shape !== 'point').length < 2)
@@ -105,25 +105,25 @@ export function admitPhoenixDiagram(raw: unknown, title: string): PhoenixDiagram
           && between(point.x, 0, 1000) && between(point.y, 0, 620)))))
       invalid('Conexión inválida: from/to existentes, puertos correctos y via[{x,y}] dentro del lienzo.')
     edges.push({
-      from: edge.from as string, to: edge.to as string,
+      from: edge.from, to: edge.to,
       ...(edge.fromPort === undefined ? {} : { fromPort: edge.fromPort as Port }),
       ...(edge.toPort === undefined ? {} : { toPort: edge.toPort as Port }),
       ...(edge.kind === undefined ? {} : { kind: edge.kind as LineKind }),
-      ...(edge.label === undefined ? {} : { label: edge.label as string }),
+      ...(edge.label === undefined ? {} : { label: edge.label }),
       ...(edge.via === undefined ? {} : { via: edge.via as Waypoint[] }),
     })
   }
   const id = raw.id === undefined
     ? ('diagrama-' + title.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
       .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 64))
-    : raw.id as string
+    : raw.id
   return {
     component: 'diagram', version: 1,
     props: {
       id: id || 'diagrama', title, nodes,
       ...(raw.kind === undefined ? {} : { kind: raw.kind as Kind }),
-      ...(raw.subtitle === undefined ? {} : { subtitle: raw.subtitle as string }),
-      ...(raw.note === undefined ? {} : { note: raw.note as string }),
+      ...(raw.subtitle === undefined ? {} : { subtitle: raw.subtitle }),
+      ...(raw.note === undefined ? {} : { note: raw.note }),
       ...(edges.length === 0 ? {} : { edges }),
     },
   }
@@ -149,7 +149,7 @@ export function createPhoenixDiagramTool(): ToolDefinition {
         title: { type: 'string', required: true },
         diagram: { type: 'json', required: true },
         publication: { type: 'string', required: true },
-      }},
+      } },
       render: (_args, result) => [{ type: 'text', text: 'Diagrama emitido como artefacto nativo: '
         + result.title + '. Emisión confirmada, presentación visual del cliente sin inspeccionar.' }],
       presentationMeta: (_args, result) => ({ artifact: {
@@ -158,7 +158,7 @@ export function createPhoenixDiagramTool(): ToolDefinition {
         title: result.title,
         data: result.diagram,
         executable: false,
-      }}),
+      } }),
     },
     async execute(args, exec) {
       const title = args.title.trim()

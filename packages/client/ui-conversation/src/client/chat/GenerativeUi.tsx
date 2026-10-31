@@ -7,7 +7,8 @@ import { SceneMap, parseSceneMapSpec, type SceneMapSpec } from './SceneMap.tsx'
 import { DiagramSurface, parseDiagramSpec, type DiagramSpec } from './DiagramSurface.tsx'
 import { GenerativeCanvas, parseCanvasSpec, type CanvasAction, type CanvasSpec } from './GenerativeCanvas.tsx'
 import css from './GenerativeUi.module.css'
-import {SportsLiveProvider,SportsLiveFacts,SportsLiveStamp} from './SportsLive.tsx'
+import { SportsLiveProvider,SportsLiveFacts,SportsLiveStamp } from './SportsLive.tsx'
+import { SportsGameCenter } from './SportsGameCenter.tsx'
 
 const MAX_UI_BLOCKS = 6
 const MAX_TEXT = 1200
@@ -111,7 +112,7 @@ type SportsScheduleCard = {
 }
 
 /** Data-driven ESPN surface: templates expand with sections rather than one card per sport. */
-type SportsEspnItem = {label:string;value?:string;detail?:string;image?:string;href?:string;action?:{label:string;prompt:string}}
+type SportsEspnItem = { label:string;value?:string;detail?:string;image?:string;href?:string;action?:{ label:string;prompt:string } }
 type SportsEspnSection = {
   heading:string;kind:'metrics'|'list'|'articles';items:SportsEspnItem[]
 }
@@ -133,7 +134,7 @@ type SportsTicketCard = {
   component: 'sports_ticket_card'; version: 1
   props: {
     title: string; subtitle?: string; source: string
-    legs: Array<{ event: string; selection: string; price: string; bookmaker: string; when?: string; image?: string;
+    legs: Array<{ event: string; selection: string; price: string; bookmaker: string; when?: string; image?: string
       sport?:string;country?:string;league?:string;market?:string;player?:string;rationale?:string
       homeLogo?:string;awayLogo?:string;homeTeam?:string;awayTeam?:string }>
     requestedLegs?:number; combinedOdds: string; stake?: string; grossReturn?: string; note: string
@@ -569,7 +570,7 @@ function expandRawCanvases(segments: GenerativeUiSegment[], streaming: boolean):
 /** Isolated stateful calculation: real observed quotes, not a posted wager.
  * Handles partial typing without silently changing the stake.
  */
-function SportsTicketCalculator({combinedOdds,initialStake}:{combinedOdds:string;initialStake?:string}){
+function SportsTicketCalculator({ combinedOdds,initialStake }:{ combinedOdds:string;initialStake?:string }){
   const inputId=useId()
   const [amount,setAmount]=useState(initialStake??'100')
   const decimal=Number(combinedOdds)
@@ -585,7 +586,7 @@ function SportsTicketCalculator({combinedOdds,initialStake}:{combinedOdds:string
     <label htmlFor={inputId}>Importe de apuesta (RD$)</label>
     <input id={inputId} type="number" inputMode="decimal"
       step="0.01" min="0" max="1000000" value={amount}
-      onChange={e=>setAmount(e.target.value)} aria-invalid={!valid}/>
+      onChange={(e)=>{ setAmount(e.target.value) }} aria-invalid={!valid}/>
     <div className={css.sportsTicketTotal} aria-live="polite">
       <div><small>Cuota combinada observada</small><strong>{available?combinedOdds:'Sin cotizar'}</strong></div>
       <div><small>Retorno bruto potencial</small><strong>{returnValue===null?'No calculable':money(returnValue)}</strong></div>
@@ -721,54 +722,52 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
     }
     case 'sports_schedule_card': {
       const p=block.props
-      const sportNames:Record<string,string>={basketball:'BALONCESTO',football:'FÚTBOL AMERICANO',baseball:'BÉISBOL',soccer:'FÚTBOL',hockey:'HOCKEY',tennis:'TENIS',cricket:'CRÍQUET',golf:'GOLF',mma:'ARTES MARCIALES',racing:'AUTOMOVILISMO'}
+      const sportNames:Record<string,string>={ basketball:'BALONCESTO',football:'FÚTBOL AMERICANO',baseball:'BÉISBOL',soccer:'FÚTBOL',hockey:'HOCKEY',tennis:'TENIS',cricket:'CRÍQUET',golf:'GOLF',mma:'ARTES MARCIALES',racing:'AUTOMOVILISMO' }
       const sportName=sportNames[p.sport??'']??p.sport?.toLocaleUpperCase('es')??'DEPORTES'
       return <SportsLiveProvider sport={p.sport} league={p.providerLeague??p.league} date={p.date}>
         {(get,meta)=><section className={css.sportsSlate} data-generative-ui="sports_schedule_card"
-        aria-label={p.title}>
-        <header className={css.sportsSlateHeader}>
-          <div><span className={css.sportsKicker}>PHOENIX / {sportName} · {p.league?.toLocaleUpperCase('es')??'CARTELERA'}</span>
-            <h3>{p.league?`${p.league} · ${p.title}`:p.title}</h3><small>{sportName} · {p.date}</small></div>
-          <span className={css.sportsSlateCount}>{p.events.length} {p.events.length===1?'juego':'juegos'}</span>
-        </header>
-        <div className={css.sportsSlateGrid}>{p.events.map((e,i)=>{
-          const live=get(e)
-          const phase=live?.phase??e.phase
-          const hasStarted=phase==='in'||phase==='post'
-          const unknown=(name:string)=>!name.trim()||/^(?:sin confirmar|por confirmar|tbd|tba|unknown|sin definir)$/iu.test(name.trim())
-          const pending=unknown(e.away.label)||unknown(e.home.label)
-          const away={...e.away,...(hasStarted&&live?.awayScore!==undefined?{score:live.awayScore}:{})}
-          const home={...e.home,...(hasStarted&&live?.homeScore!==undefined?{score:live.homeScore}:{})}
-          return <article key={e.eventId??i} className={`${css.sportsSlateEvent} ${pending?css.sportsSlatePending:''}`}>
-            <div className={css.sportsSlateMeta}>
-              <strong>{e.when}</strong><span className={css.sportsSlatePhase}>{pending?'Participantes pendientes':phase==='pre'?'No iniciado':phase==='in'?'● En vivo':phase==='post'?'Finalizado':live?.status??e.status??'Estado sin confirmar'}</span>
-            </div>
-            {pending?<p className={css.sportsSlateUnknown}>ESPN aún no identifica a ambos participantes. No se muestra marcador, favorito ni análisis como si el cruce estuviera confirmado.</p>
-            :<div className={css.sportsSlateMatch}>
-              <div><SportsPortrait label={away.label} logo={away.logo}/>
-                <span><strong>{away.label}</strong>{away.meta&&<small>{away.meta}</small>}</span>
-                {hasStarted&&away.score!==undefined&&<b>{away.score}</b>}</div>
-              <div><SportsPortrait label={home.label} logo={home.logo}/>
-                <span><strong>{home.label}</strong>{home.meta&&<small>{home.meta}</small>}</span>
-                {hasStarted&&home.score!==undefined&&<b>{home.score}</b>}</div>
-              {!hasStarted&&<span className={css.sportsSlateVs}>VS · Sin iniciar</span>}
-            </div>}
-            {!pending&&<SportsLiveFacts game={live} meta={meta} sport={p.sport}/>}
-            {e.venue&&<small className={css.sportsSlateVenue}>⌖ {e.venue}</small>}
-            {!pending&&e.featured&&<small className={css.sportsSlateFeatured}>{e.featured}</small>}
-            {!pending&&<small className={css.sportsSlateFavorite}>{e.favorite?`★ Favorito analítico · ${e.favorite}`:'☆ Favorito sin verificar · consultar análisis y cuotas'}</small>}
-            {!pending&&(live?.phase==='in'||e.phase==='in')&&onAction&&<button className={css.sportsSlateAction}
-              type="button" onClick={()=>onAction('Kira, muéstrame en vivo '+e.away.label+' vs '+e.home.label+' de '+(p.league??p.providerLeague??'esta liga')+' el '+p.date+'.','draft')}>
-              Seguir en vivo · Detalle ›
-            </button>}
-            {!pending&&e.askPrompt&&onAction&&<button className={css.sportsSlateAction}
-              type="button" onClick={()=>{if(e.askPrompt)onAction(e.askPrompt,'draft')}}>
-              Ver análisis del encuentro ›
-            </button>}
-          </article>})}</div>
-        <footer className={css.sportsSourceBar}><span>Datos · {p.source}</span><SportsLiveStamp meta={meta}/>
-          <small>{p.note??'Solo encuentros verificados; datos sujetos a actualización.'}</small></footer>
-      </section>}
+          aria-label={p.title}>
+          <header className={css.sportsSlateHeader}>
+            <div><span className={css.sportsKicker}>PHOENIX / {sportName} · {p.league?.toLocaleUpperCase('es')??'CARTELERA'}</span>
+              <h3>{p.league?`${p.league} · ${p.title}`:p.title}</h3><small>{sportName} · {p.date}</small></div>
+            <span className={css.sportsSlateCount}>{p.events.length} {p.events.length===1?'juego':'juegos'}</span>
+          </header>
+          <div className={css.sportsSlateGrid}>{p.events.map((e,i)=>{
+            const live=get(e)
+            const phase=live?.phase??e.phase
+            const hasStarted=phase==='in'||phase==='post'
+            const unknown=(name:string)=>!name.trim()||/^(?:sin confirmar|por confirmar|tbd|tba|unknown|sin definir)$/iu.test(name.trim())
+            const pending=unknown(e.away.label)||unknown(e.home.label)
+            const away={ ...e.away,...(hasStarted&&live?.awayScore!==undefined?{ score:live.awayScore }:{}) }
+            const home={ ...e.home,...(hasStarted&&live?.homeScore!==undefined?{ score:live.homeScore }:{}) }
+            return <article key={e.eventId??i} className={`${css.sportsSlateEvent} ${pending?css.sportsSlatePending:''}`}>
+              <div className={css.sportsSlateMeta}>
+                <strong>{e.when}</strong><span className={css.sportsSlatePhase}>{pending?'Participantes pendientes':phase==='pre'?'No iniciado':phase==='in'?'● En vivo':phase==='post'?'Finalizado':live?.status??e.status??'Estado sin confirmar'}</span>
+              </div>
+              {pending?<p className={css.sportsSlateUnknown}>ESPN aún no identifica a ambos participantes. No se muestra marcador, favorito ni análisis como si el cruce estuviera confirmado.</p>
+                :<div className={css.sportsSlateMatch}>
+                  <div><SportsPortrait label={away.label} logo={away.logo}/>
+                    <span><strong>{away.label}</strong>{away.meta&&<small>{away.meta}</small>}</span>
+                    {hasStarted&&away.score!==undefined&&<b>{away.score}</b>}</div>
+                  <div><SportsPortrait label={home.label} logo={home.logo}/>
+                    <span><strong>{home.label}</strong>{home.meta&&<small>{home.meta}</small>}</span>
+                    {hasStarted&&home.score!==undefined&&<b>{home.score}</b>}</div>
+                  {!hasStarted&&<span className={css.sportsSlateVs}>VS · Sin iniciar</span>}
+                </div>}
+              {!pending&&<SportsLiveFacts game={live} meta={meta} sport={p.sport} compact/>}
+              {e.venue&&<small className={css.sportsSlateVenue}>⌖ {e.venue}</small>}
+              {!pending&&e.featured&&<small className={css.sportsSlateFeatured}>{e.featured}</small>}
+              {!pending&&<small className={css.sportsSlateFavorite}>{e.favorite?`★ Favorito analítico · ${e.favorite}`:'☆ Favorito sin verificar · consultar análisis y cuotas'}</small>}
+              {!pending&&<SportsGameCenter sport={p.sport} league={p.providerLeague??p.league}
+                eventId={live?.id??e.eventId} phase={live?.phase??e.phase} game={live}/>}
+              {!pending&&e.askPrompt&&onAction&&<button className={css.sportsSlateAction}
+                type="button" onClick={()=>{if(e.askPrompt)onAction(e.askPrompt,'draft')}}>
+                Ver análisis del encuentro ›
+              </button>}
+            </article>})}</div>
+          <footer className={css.sportsSourceBar}><span>Datos · {p.source}</span><SportsLiveStamp meta={meta}/>
+            <small>{p.note??'Solo encuentros verificados; datos sujetos a actualización.'}</small></footer>
+        </section>}
       </SportsLiveProvider>
     }
     case 'sports_game_card': {
@@ -777,61 +776,65 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
         {(get,meta)=>{
           const live=get(p)
           const hasStarted=(live?.phase??p.phase)==='in'||(live?.phase??p.phase)==='post'
-          return <section className={css.sportsCard} data-generative-ui="sports_game_card">
-        <header className={css.sportsHeadline}>
-          <div><span className={css.sportsKicker}>PHOENIX / {p.sport?.toUpperCase()??'DEPORTES'}</span>
-            {(p.country||p.league)&&<div className={css.sportsCompetition}>{[p.country,p.league].filter(Boolean).join(' · ')}</div>}
-            <h3>{p.title}</h3>{p.subtitle&&<p>{p.subtitle}</p>}</div>
-          {(live?.status??p.status)&&<span className={css.sportsStatus}>{live?.status??p.status}</span>}
-        </header>
-        <div className={css.sportsVenue}><span>◷ {p.when}</span>
-          <span>⌖ {p.venue||'Sede sin confirmar'}</span>
-          {p.broadcast&&<span>TV · {p.broadcast}</span>}</div>
-        <div className={css.sportsVersus}>
-          <div className={css.sportsTeam}><SportsPortrait label={p.away.label} logo={p.away.logo}/>
-            <strong>{p.away.label}</strong>{p.away.meta&&<small>{p.away.meta}</small>}
-            {hasStarted&&(live?.awayScore??p.away.score)!==undefined&&<b>{live?.awayScore??p.away.score}</b>}</div>
-          <span className={css.sportsVs}>{hasStarted?'—':'VS · No iniciado'}</span>
-          <div className={css.sportsTeam}><SportsPortrait label={p.home.label} logo={p.home.logo}/>
-            <strong>{p.home.label}</strong>{p.home.meta&&<small>{p.home.meta}</small>}
-            {hasStarted&&(live?.homeScore??p.home.score)!==undefined&&<b>{live?.homeScore??p.home.score}</b>}</div>
-        </div>
-        <SportsLiveFacts game={live} meta={meta} sport={p.sport}/>
-        {!(live?.periods?.length)&&p.periods?.length?<section className={css.sportsDetailSection} aria-label="Parciales del partido">
-          <h4>Marcador por período</h4><div className={css.sportsTableScroll}><table className={css.sportsTable}>
-            <thead><tr><th>Equipo</th>{p.periods.map((period,i)=><th key={i}>{period.label}</th>)}</tr></thead>
-            <tbody><tr><th>{p.away.label}</th>{p.periods.map((period,i)=><td key={i}>{period.away}</td>)}</tr>
-              <tr><th>{p.home.label}</th>{p.periods.map((period,i)=><td key={i}>{period.home}</td>)}</tr></tbody>
-          </table></div></section>:null}
-        {p.pitchers?.length?<section className={css.sportsDetailSection} aria-label="Lanzadores probables">
-          <h4>Abridores probables</h4>
-          <div className={css.sportsStarters}>{p.pitchers.map((pitcher,i)=>
-            <div key={pitcher.id??i} className={css.sportsStarter}>
-              <SportsPortrait label={pitcher.name} logo={pitcher.image}/>
-              <div><span>{pitcher.team}</span><strong>{pitcher.name}</strong>
-                <small>{pitcher.stats??'Estadísticas de temporada no disponibles'}</small></div>
-            </div>)}</div>
-          <p className={css.sportsNote}>Probables según MLB; sujetos a cambios.</p>
-        </section>:null}
-        {!p.pitchers?.length&&p.highlights?.length?<dl className={css.sportsFacts}>{p.highlights.map((h,i)=>
-          <div key={i}>{h.image&&<SportsPortrait label={h.value} logo={h.image}/>}
-            <dt>{h.label}</dt><dd>{h.value}</dd>{h.detail&&<small>{h.detail}</small>}</div>)}</dl>:null}
-        {p.research&&<section className={css.sportsDetailSection} aria-label="Investigación de Phoenix">
-          <h4>Investigación Phoenix · Tendencia</h4>
-          <div className={css.sportsResearch}><strong>{p.research.favorite}</strong>
-            <p>{p.research.method}</p>
-            <ul>{p.research.evidence.map((line,i)=><li key={i}>{line}</li>)}</ul>
-            <small>Fuente: {p.research.source}</small></div>
-        </section>}
-        {p.lineups?.length?<SportsLineups lineups={p.lineups}/>:null}
-        {p.bullpen?.length?<SportsBullpen bullpen={p.bullpen}/>:null}
-        <footer className={css.sportsSourceBar}>
-          <span>Datos · {p.source}</span><SportsLiveStamp meta={meta}/>
-          {p.note&&<small>{p.note}</small>}
-          {p.askPrompt&&onAction&&<button type="button" onClick={() => { if (p.askPrompt) onAction(p.askPrompt, 'draft') }}>
-            Investigar análisis y mercados</button>}
-        </footer>
-      </section>}}
+          return <section className={css.sportsCard+' '+css.sportsGameCompact} data-generative-ui="sports_game_card">
+            <header className={css.sportsHeadline}>
+              <div><span className={css.sportsKicker}>PHOENIX / {p.sport?.toUpperCase()??'DEPORTES'}</span>
+                {(p.country||p.league)&&<div className={css.sportsCompetition}>{[p.country,p.league].filter(Boolean).join(' · ')}</div>}
+                <h3>{p.title}</h3>{p.subtitle&&<p>{p.subtitle}</p>}</div>
+              {(live?.status??p.status)&&<span className={css.sportsStatus}>{live?.status??p.status}</span>}
+            </header>
+            <div className={css.sportsVenue}><span>◷ {p.when}</span>
+              <span>⌖ {p.venue||'Sede sin confirmar'}</span>
+              {p.broadcast&&<span>TV · {p.broadcast}</span>}</div>
+            <div className={css.sportsVersus}>
+              <div className={css.sportsTeam}><SportsPortrait label={p.away.label} logo={p.away.logo}/>
+                <strong>{p.away.label}</strong>{p.away.meta&&<small>{p.away.meta}</small>}
+                {hasStarted&&(live?.awayScore??p.away.score)!==undefined&&<b>{live?.awayScore??p.away.score}</b>}</div>
+              <span className={css.sportsVs}>{hasStarted?'—':'VS · No iniciado'}</span>
+              <div className={css.sportsTeam}><SportsPortrait label={p.home.label} logo={p.home.logo}/>
+                <strong>{p.home.label}</strong>{p.home.meta&&<small>{p.home.meta}</small>}
+                {hasStarted&&(live?.homeScore??p.home.score)!==undefined&&<b>{live?.homeScore??p.home.score}</b>}</div>
+            </div>
+            <SportsLiveFacts game={live} meta={meta} sport={p.sport} compact/>
+            <SportsGameCenter sport={p.sport} league={p.providerLeague??p.league}
+              eventId={live?.id??p.eventId} phase={live?.phase??p.phase} game={live}/>
+            <details className={css.sportsExtra}><summary>Ver estadísticas y análisis</summary>
+              {!(live?.periods?.length)&&p.periods?.length?<section className={css.sportsDetailSection} aria-label="Parciales del partido">
+                <h4>Marcador por período</h4><div className={css.sportsTableScroll}><table className={css.sportsTable}>
+                  <thead><tr><th>Equipo</th>{p.periods.map((period,i)=><th key={i}>{period.label}</th>)}</tr></thead>
+                  <tbody><tr><th>{p.away.label}</th>{p.periods.map((period,i)=><td key={i}>{period.away}</td>)}</tr>
+                    <tr><th>{p.home.label}</th>{p.periods.map((period,i)=><td key={i}>{period.home}</td>)}</tr></tbody>
+                </table></div></section>:null}
+              {p.pitchers?.length?<section className={css.sportsDetailSection} aria-label="Lanzadores probables">
+                <h4>Abridores probables</h4>
+                <div className={css.sportsStarters}>{p.pitchers.map((pitcher,i)=>
+                  <div key={pitcher.id??i} className={css.sportsStarter}>
+                    <SportsPortrait label={pitcher.name} logo={pitcher.image}/>
+                    <div><span>{pitcher.team}</span><strong>{pitcher.name}</strong>
+                      <small>{pitcher.stats??'Estadísticas de temporada no disponibles'}</small></div>
+                  </div>)}</div>
+                <p className={css.sportsNote}>Probables según MLB; sujetos a cambios.</p>
+              </section>:null}
+              {!p.pitchers?.length&&p.highlights?.length?<dl className={css.sportsFacts}>{p.highlights.map((h,i)=>
+                <div key={i}>{h.image&&<SportsPortrait label={h.value} logo={h.image}/>}
+                  <dt>{h.label}</dt><dd>{h.value}</dd>{h.detail&&<small>{h.detail}</small>}</div>)}</dl>:null}
+              {p.research&&<section className={css.sportsDetailSection} aria-label="Investigación de Phoenix">
+                <h4>Investigación Phoenix · Tendencia</h4>
+                <div className={css.sportsResearch}><strong>{p.research.favorite}</strong>
+                  <p>{p.research.method}</p>
+                  <ul>{p.research.evidence.map((line,i)=><li key={i}>{line}</li>)}</ul>
+                  <small>Fuente: {p.research.source}</small></div>
+              </section>}
+              {p.lineups?.length?<SportsLineups lineups={p.lineups}/>:null}
+              {p.bullpen?.length?<SportsBullpen bullpen={p.bullpen}/>:null}
+            </details>
+            <footer className={css.sportsSourceBar}>
+              <span>Datos · {p.source}</span><SportsLiveStamp meta={meta}/>
+              {p.note&&<small>{p.note}</small>}
+              {p.askPrompt&&onAction&&<button type="button" onClick={() => { if (p.askPrompt) onAction(p.askPrompt, 'draft') }}>
+                Investigar análisis y mercados</button>}
+            </footer>
+          </section>}}
       </SportsLiveProvider>
     }
     case 'sports_odds_card': {
@@ -870,7 +873,7 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
           </div>
           <div className={css.sportsTicketProgress} role="progressbar" aria-label="Patas verificadas"
             aria-valuemin={0} aria-valuemax={requested} aria-valuenow={p.legs.length}>
-            <span style={{width:`${100*p.legs.length/requested}%`}}/>
+            <span style={{ width:`${100*p.legs.length/requested}%` }}/>
           </div>
           {incomplete&&<p className={css.sportsTicketMissing}>Faltan {requested-p.legs.length} selecciones por verificar. Esto no es un ticket completo.</p>}
           {unpriced&&<p className={css.sportsTicketMissing}>0 / {requested} selecciones con cuotas de una misma casa confirmadas. Los partidos visibles son hipótesis de investigación, no apuestas aprobadas.</p>}
@@ -899,21 +902,21 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
               {unpriced
                 ? <span className={css.sportsTicketVerified} aria-label="Partido verificado">✓ Evento</span>
                 : <div className={css.sportsTicketPrice}>
-                    <small>CUOTA</small>
-                    <b aria-label={`Cuota ${leg.price}`}>{leg.price}</b>
-                  </div>}
+                  <small>CUOTA</small>
+                  <b aria-label={`Cuota ${leg.price}`}>{leg.price}</b>
+                </div>}
             </article>)}</div>
           </section>)}</div>
         {unpriced?<div className={css.sportsTicketTotal}>
           <div><small>Estado de las cuotas</small><strong>Pendientes de confirmar</strong></div>
-        </div>:<SportsTicketCalculator combinedOdds={p.combinedOdds} {...(p.stake===undefined?{}:{initialStake:p.stake})}/>}
+        </div>:<SportsTicketCalculator combinedOdds={p.combinedOdds} {...(p.stake===undefined?{}:{ initialStake:p.stake })}/>}
 
         <footer className={css.sportsFoot}>
           <strong>Ticket investigado · Aceptación de la casa sin verificar</strong>
           <span>Fuente: {p.source}</span>
           <details className={css.sportsTicketDisclaimer}><summary>Fuentes, metodología y advertencias</summary><p>{p.note}</p></details>
-          {onAction&&<button type="button" onClick={()=>onAction('Kira, muestra los marcadores y jugadas en vivo de los partidos de este ticket, agrupados por deporte y liga. Para cada encuentro usa sports_chat_games y liveOnly si ya comenzó. No supongas resultados ni partidos activos. Encuentros: '+p.legs.map(l=>[l.sport,l.league,l.event].filter(Boolean).join(' / ')).join('; '),'draft')}>Ver juegos de mi ticket en vivo</button>}
-          {onAction&&<button type="button" onClick={()=>onAction('Kira, haz seguimiento y liquidación preliminar de las selecciones reales de este ticket. Usa sports_chat_ticket_track con los IDs ESPN y mercados exactos SOLO si fueron capturados y verificados. Verifica reglas del operador y el recibo para diferenciar apuesta aceptada, resultado provisional, anulación y pago. Si faltan IDs/fecha, identifícalos antes de calcular. Selecciones: '+p.legs.map(l=>[l.event,l.selection,l.market,l.bookmaker,l.price].join(' / ')).join('; '),'draft')}>Verificar si ganó o perdió</button>}
+          {onAction&&<button type="button" onClick={()=>{ onAction('Kira, muestra los marcadores y jugadas en vivo de los partidos de este ticket, agrupados por deporte y liga. Para cada encuentro usa sports_chat_games y liveOnly si ya comenzó. No supongas resultados ni partidos activos. Encuentros: '+p.legs.map(l=>[l.sport,l.league,l.event].filter(Boolean).join(' / ')).join('; '),'draft') }}>Ver juegos de mi ticket en vivo</button>}
+          {onAction&&<button type="button" onClick={()=>{ onAction('Kira, haz seguimiento y liquidación preliminar de las selecciones reales de este ticket. Usa sports_chat_ticket_track con los IDs ESPN y mercados exactos SOLO si fueron capturados y verificados. Verifica reglas del operador y el recibo para diferenciar apuesta aceptada, resultado provisional, anulación y pago. Si faltan IDs/fecha, identifícalos antes de calcular. Selecciones: '+p.legs.map(l=>[l.event,l.selection,l.market,l.bookmaker,l.price].join(' / ')).join('; '),'draft') }}>Verificar si ganó o perdió</button>}
           {p.askPrompt&&onAction&&<button type="button" onClick={() => {if(p.askPrompt)onAction(p.askPrompt,'draft')}}>Revisar selecciones</button>}
         </footer>
       </section>

@@ -2,11 +2,11 @@
  * Includes only coherent, time-stamped, complete markets so a single low
  * quote does not become a fabricated "highest chance" recommendation.
  */
-import type {MarketOutcome} from './sports.ts'
+import type { MarketOutcome } from './sports.ts'
 export type MarketComparison={
   event:string;market:string;bookmaker:string;source:string
-  selections:Array<{name:string;price:number;point:number|null;
-    impliedFromQuote:number;noVigShare:number|null}>
+  selections:Array<{ name:string;price:number;point:number|null
+    impliedFromQuote:number;noVigShare:number|null }>
   totalBookOverround:number|null
   freshnessMinutes:number
   observation:'market-pricing-only'
@@ -18,7 +18,7 @@ const key=(row:MarketOutcome)=>[row.sportKey??'',row.eventId,row.bookmaker,
     ?Math.abs(row.point):row.point??''].join('|')
 export function compareBettingMarkets(
   source:readonly MarketOutcome[],now=Date.now(),maxAgeMs=60*60*1000,
-):{markets:MarketComparison[];rejected:number;warning:string}{
+):{ markets:MarketComparison[];rejected:number;warning:string }{
   const groups=new Map<string,MarketOutcome[]>()
   let rejected=0
   for(const row of source.slice(0,1500)){
@@ -78,14 +78,14 @@ export function compareBettingMarkets(
   }
   comparisons.sort((a,b)=>b.selections.length-a.selections.length||
     a.freshnessMinutes-b.freshnessMinutes)
-  return{markets:comparisons.slice(0,40),rejected,
-    warning:'1/cuota es probabilidad implícita del PRECIO, no estimación independiente de victoria. Doble oportunidad, mercados de jugador y apuestas relacionadas pueden solaparse. Sin probabilidades calibradas, lesiones y titulares confirmados NO se puede afirmar ventaja esperada ni que la opción más barata ganará.'}
+  return{ markets:comparisons.slice(0,40),rejected,
+    warning:'1/cuota es probabilidad implícita del PRECIO, no estimación independiente de victoria. Doble oportunidad, mercados de jugador y apuestas relacionadas pueden solaparse. Sin probabilidades calibradas, lesiones y titulares confirmados NO se puede afirmar ventaja esperada ni que la opción más barata ganará.' }
 }
 export const supportedMarketFamilies=[
-  {sport:'Fútbol',markets:['1X2','1X/X2','Ambos marcan','Totales','Hándicap asiático']},
-  {sport:'NBA/WNBA',markets:['Moneyline','Hándicap','Total de puntos','Jugador: puntos/rebotes/asistencias si el proveedor lo publica']},
-  {sport:'NHL',markets:['Moneyline','Puck line','Totales de goles','Tiros/portero si el proveedor lo publica']},
-  {sport:'MLB',markets:['Moneyline','Run line','Totales de carreras','Ponches del abridor si se verifican']},
-  {sport:'NFL',markets:['Moneyline','Spread','Total de puntos','Recepciones/yarda del jugador si se publican']},
-  {sport:'Tenis',markets:['Ganador','Hándicap de juegos','Total de juegos/sets']},
+  { sport:'Fútbol',markets:['1X2','1X/X2','Ambos marcan','Totales','Hándicap asiático'] },
+  { sport:'NBA/WNBA',markets:['Moneyline','Hándicap','Total de puntos','Jugador: puntos/rebotes/asistencias si el proveedor lo publica'] },
+  { sport:'NHL',markets:['Moneyline','Puck line','Totales de goles','Tiros/portero si el proveedor lo publica'] },
+  { sport:'MLB',markets:['Moneyline','Run line','Totales de carreras','Ponches del abridor si se verifican'] },
+  { sport:'NFL',markets:['Moneyline','Spread','Total de puntos','Recepciones/yarda del jugador si se publican'] },
+  { sport:'Tenis',markets:['Ganador','Hándicap de juegos','Total de juegos/sets'] },
 ] as const

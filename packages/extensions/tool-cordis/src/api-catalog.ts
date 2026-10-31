@@ -1256,6 +1256,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'The current project identifier, when the active session has one.',
       },
       {
+        signature: 'projectIdForSession(sessionId: string): string | undefined',
+        description: 'Resolve the project for the owning session, never another active chat.',
+        parameters: [{ name: 'sessionId', description: 'Root human conversation or mission session.' }],
+        returns: 'Project scope to use when assembling its model context.',
+      },
+      {
         signature: 'remember(input: MemoryRecordInput): Promise<MemoryRecord>',
         description: 'Store an explicit, bounded lesson supplied by the model or user workflow.',
         parameters: [{ name: 'input', description: 'Memory record to persist.' }],
@@ -3775,7 +3781,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'CognitiveMemoryQuery',
-    declaration: 'export interface CognitiveMemoryQuery {\n    readonly query?: string;\n    readonly layers?: readonly CognitiveMemoryLayer[];\n    readonly projectId?: string;\n    readonly sessionId?: string;\n    readonly entity?: string;\n    readonly from?: number;\n    readonly to?: number;\n    readonly includeHistory?: boolean;\n    readonly limit?: number;\n}',
+    declaration: 'export interface CognitiveMemoryQuery {\n    readonly query?: string;\n    readonly kind?: CognitiveMemoryKind;\n    readonly layers?: readonly CognitiveMemoryLayer[];\n    readonly projectId?: string;\n    readonly sessionId?: string;\n    readonly entity?: string;\n    readonly from?: number;\n    readonly to?: number;\n    readonly includeHistory?: boolean;\n    readonly limit?: number;\n}',
   },
   {
     name: 'CognitiveMemoryRecord',
@@ -4479,7 +4485,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'LlmDiscoveredModel',
-    declaration: 'export interface LlmDiscoveredModel {\n    id: string;\n    name?: string;\n    contextWindow?: number;\n    maxTokens?: number;\n}',
+    declaration: 'export interface LlmDiscoveredModel {\n    id: string;\n    name?: string;\n    contextWindow?: number;\n    maxTokens?: number;\n    reasoning?: {\n        efforts: Array<{\n            id: string;\n            name: string;\n            description?: string;\n        }>;\n        defaultEffort?: string;\n    };\n}',
   },
   {
     name: 'LlmFailure',
@@ -6051,15 +6057,15 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'UserProfileConsented',
-    declaration: 'export interface UserProfileConsented {\n    preferredName?: string;\n    age?: number;\n    gender?: string;\n    pronouns?: string;\n    tone?: string;\n    family?: UserProfileFamilyMember[];\n}',
+    declaration: 'export interface UserProfileConsented {\n    preferredName?: string;\n    profession?: string;\n    professionalTitle?: string;\n    addressingMode?: UserAddressMode;\n    age?: number;\n    gender?: string;\n    pronouns?: string;\n    tone?: string;\n    family?: UserProfileFamilyMember[];\n}',
   },
   {
     name: 'UserProfileRedacted',
-    declaration: 'export interface UserProfileRedacted {\n    hasPreferredName: boolean;\n    hasDateOfBirth: boolean;\n    hasGender: boolean;\n    hasPronouns: boolean;\n    hasTone: boolean;\n    familyCount: number;\n    consent: UserProfileConsent;\n}',
+    declaration: 'export interface UserProfileRedacted {\n    hasPreferredName: boolean;\n    hasProfession: boolean;\n    hasProfessionalTitle: boolean;\n    hasDateOfBirth: boolean;\n    hasGender: boolean;\n    hasPronouns: boolean;\n    hasTone: boolean;\n    familyCount: number;\n    specialDateCount: number;\n    hasCountryCode: boolean;\n    consent: UserProfileConsent;\n}',
   },
   {
     name: 'UserProfileUpdate',
-    declaration: 'export interface UserProfileUpdate {\n    assistantName?: string | null;\n    assistantGender?: AssistantGender | null;\n    assistantGenderSource?: AssistantGenderSource | null;\n    modelProviderOrder?: string[] | null;\n    preferredName?: string | null;\n    dateOfBirth?: string | null;\n    gender?: string | null;\n    pronouns?: string | null;\n    tone?: string | null;\n    family?: UserProfileFamilyMember[] | null;\n    consent?: Partial<UserProfileConsent>;\n}',
+    declaration: 'export interface UserProfileUpdate {\n    assistantName?: string | null;\n    assistantGender?: AssistantGender | null;\n    assistantGenderSource?: AssistantGenderSource | null;\n    modelProviderOrder?: string[] | null;\n    preferredName?: string | null;\n    profession?: string | null;\n    professionalTitle?: string | null;\n    addressingMode?: UserAddressMode | null;\n    dateOfBirth?: string | null;\n    gender?: string | null;\n    pronouns?: string | null;\n    tone?: string | null;\n    family?: UserProfileFamilyMember[] | null;\n    countryCode?: string | null;\n    momentsTimeZone?: string | null;\n    specialDates?: PersonalMoment[] | null;\n    consent?: Partial<UserProfileConsent>;\n}',
   },
   {
     name: 'UserProfileView',

@@ -78,8 +78,13 @@ it('hot-reloads a real client-plugin source edit without refreshing the page', a
     .map(path => join(REPO_ROOT, path))
   const originalClientBundles = await Promise.all(clientBundlePaths.map(async path => [path, await readFile(path)] as const))
   const originalSource = await readFile(sourcePath)
-  const oldText = '¿Qué quieres construir hoy en Phoenix?'
-  const sourceNeedle = '<p className={css.subtitle}>¿Qué quieres construir hoy en Phoenix?</p>'
+  const originalMarkup = originalSource.toString()
+  // Track the real hero copy rather than assuming an obsolete hard-coded phrase.
+  const subtitleMatch = originalMarkup.match(/<p className=\{css\.subtitle\}>([^<]+)<\/p>/u)
+  if (subtitleMatch === null || subtitleMatch[1] === undefined) {
+    throw new Error('HMR source lacks the hero subtitle paragraph')
+  }
+  const [sourceNeedle, oldText] = subtitleMatch
   const newText = `HMR UPDATED ${'x'.repeat(80)}`
   const updatedSource = originalSource.toString().replace(
     sourceNeedle,

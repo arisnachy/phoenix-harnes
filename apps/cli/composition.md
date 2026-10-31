@@ -72,6 +72,8 @@ flowchart LR
   cfg --> plugin_dsh_base_voice
   plugin_dsh_base_voice_local["voice-local<br/>@phoenix-ai/dsh-voice-local"]
   cfg --> plugin_dsh_base_voice_local
+  plugin_dsh_base_tool_voice["tool-voice<br/>@phoenix-ai/dsh-tool-voice"]
+  cfg --> plugin_dsh_base_tool_voice
   plugin_dsh_base_attachment_local["attachment-local<br/>@phoenix-ai/dsh-attachment-local"]
   cfg --> plugin_dsh_base_attachment_local
   plugin_dsh_base_session_query_sqlite["session-query-sqlite<br/>@phoenix-ai/dsh-session-query-sqlite"]
@@ -262,6 +264,7 @@ flowchart LR
 | `cognitive-runtime` | `@phoenix-ai/dsh-cognitive-runtime` |
 | `voice` | `@phoenix-ai/dsh-voice` |
 | `voice-local` | `@phoenix-ai/dsh-voice-local` |
+| `tool-voice` | `@phoenix-ai/dsh-tool-voice` |
 | `attachment-local` | `@phoenix-ai/dsh-attachment-local` |
 | `session-query-sqlite` | `@phoenix-ai/dsh-session-query-sqlite` |
 | `session-projection` | `@phoenix-ai/dsh-session-projection` |

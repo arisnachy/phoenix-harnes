@@ -31,7 +31,7 @@ describe('read-only model-safe Vault status tied to the inspected tab', () => {
       relatedOrigin: 'https://deportes.juancitosport.com.do',
     }), { status: 200 }))
     const result = await inspectVaultPresence('https://www.juancitosport.com.do/deportes',
-      query as typeof fetch, '3080')
+      query, '3080')
     expect(result).toEqual({ known: true, saved: false, automatic: false,
       relatedSaved: true, relatedOrigin: 'https://deportes.juancitosport.com.do' })
   })

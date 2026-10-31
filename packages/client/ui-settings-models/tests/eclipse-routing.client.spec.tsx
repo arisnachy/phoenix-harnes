@@ -172,7 +172,7 @@ describe('Eclipse model settings', () => {
     expect(screen.getAllByRole('combobox')).toHaveLength(9)
 
     fireEvent.click(screen.getByRole('button', { name: en.eclipseSave }))
-    await waitFor(() => expect(mutate).toHaveBeenCalledTimes(1))
+    await waitFor(() =>{  expect(mutate).toHaveBeenCalledTimes(1) })
     expect(mutate.mock.calls[0]?.[0]).toMatchObject({
       ns: 'eclipse-routing', expectedRevision: 4,
       ops: expect.arrayContaining([
@@ -200,7 +200,7 @@ describe('Eclipse model settings', () => {
       JSON.stringify(['openai-codex', 'gpt-6-luna']))
     fireEvent.change(screen.getByLabelText(en.eclipseStrategy), { target: { value: 'quality' } })
     fireEvent.click(screen.getByRole('button', { name: en.eclipseSave }))
-    await waitFor(() => expect(mutate).toHaveBeenCalledOnce())
+    await waitFor(() =>{  expect(mutate).toHaveBeenCalledOnce() })
     expect(mutate.mock.calls[0]?.[0]).toMatchObject({
       ops: expect.arrayContaining([
         { op: 'set', path: ['planner'], value: { provider: 'openai-codex', model: 'gpt-6.1-sol', reasoningEffort: 'medium' } },

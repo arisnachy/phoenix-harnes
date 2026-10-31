@@ -311,7 +311,7 @@ function parseState(raw: string): BinancePaperState {
     }
     positions[key] = {
       symbol: key, quantity: position.quantity, costBasisUsdt: position.costBasisUsdt,
-      ...(position.exitPlan === undefined ? {} : { exitPlan: position.exitPlan as unknown as BinancePaperExitPlan }),
+      ...(position.exitPlan === undefined ? {} : { exitPlan: position.exitPlan }),
     }
   }
 

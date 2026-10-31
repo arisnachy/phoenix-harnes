@@ -113,8 +113,8 @@ describe('connector catalog', () => {
 
   it('exposes The Odds API v4 as an independent, native API-key sports connector',()=>{
     const entry=CONNECTOR_CATALOG.find(row=>row.id==='the-odds-api')
-    expect(entry).toMatchObject({mode:'api-key',providerFamily:'the-odds-api',
-      provenance:'vendor-official',category:'Sports'})
+    expect(entry).toMatchObject({ mode:'api-key',providerFamily:'the-odds-api',
+      provenance:'vendor-official',category:'Sports' })
     expect(entry?.aliases).toContain('sports-odds-v4')
     expect(entry?.curatedMcp).toBeUndefined()
     expect(entry?.description).toContain('vault')
