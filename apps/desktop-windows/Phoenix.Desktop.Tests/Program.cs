@@ -65,6 +65,18 @@ False(BrowserCommand.TryParse("{\"type\":\"phoenix.audio.capture\",\"sessionId\"
 False(BrowserCommand.TryParse("{\"type\":\"phoenix.audio.capture\",\"sessionId\":\"../other\"}",
     out _, allowAutomation: true), "foreign session rejected", failures);
 
+
+True(BrowserCommand.TryParse("{\"type\":\"phoenix.audio.capture\",\"sessionId\":\"turn-1\",\"seconds\":6,\"source\":\"microphone\"}",
+    out var audioMic, allowAutomation: true), "microphone capture requires native command", failures);
+Equal("microphone", audioMic.AudioSource, "microphone source retained", failures);
+False(BrowserCommand.TryParse("{\"type\":\"phoenix.audio.capture\",\"sessionId\":\"turn-1\",\"source\":\"all\"}",
+    out _, allowAutomation: true), "arbitrary audio source rejected", failures);
+False(BrowserCommand.TryParse("{\"type\":\"phoenix.senses.status\",\"sessionId\":\"turn-1\"}",
+    out _), "web bridge cannot query sense inventory", failures);
+True(BrowserCommand.TryParse("{\"type\":\"phoenix.senses.status\",\"sessionId\":\"turn-1\"}",
+    out var senses, allowAutomation: true), "native pipe supports viewer inventory", failures);
+Equal("turn-1", senses.SessionId, "sense inventory retains session", failures);
+
 False(BrowserCommand.TryParse("{not-json}", out _), "malformed json rejected", failures);
 False(BrowserCommand.TryParse("{\"type\":\"phoenix.browser.open\",\"url\":\"javascript:alert(1)\"}", out _), "unsafe open command rejected", failures);
 

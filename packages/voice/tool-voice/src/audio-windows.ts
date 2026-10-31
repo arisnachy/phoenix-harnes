@@ -9,7 +9,7 @@ import { basename, dirname, isAbsolute, join } from 'node:path'
 
 interface NativeAudioSample {
   status: 'captured'
-  source: 'windows-output-loopback'
+  source: 'windows-output-loopback' | 'windows-microphone'
   file: string
   bytes: number
   seconds: number
@@ -62,14 +62,17 @@ function pipeQuery(pipeName: string, command: unknown): Promise<string> {
   })
 }
 
-async function callNative(type: 'phoenix.audio.status' | 'phoenix.audio.capture', sessionId: string, seconds = 8): Promise<string> {
+async function callNative(
+  type: 'phoenix.audio.status' | 'phoenix.audio.capture' | 'phoenix.senses.status',
+  sessionId: string, seconds = 8, source: 'output' | 'microphone' = 'output',
+): Promise<string> {
   if (process.platform !== 'win32') throw new Error('AUDIO_WINDOWS_DESKTOP_REQUIRED')
   const appData = process.env.LOCALAPPDATA?.trim()
   const descriptor = process.env.PHOENIX_DESKTOP_CONTROL_DESCRIPTOR?.trim()
     || (appData ? join(appData, 'Phoenix', 'desktop-control.json') : '')
   if (!descriptor) throw new Error('AUDIO_WINDOWS_DESKTOP_REQUIRED')
   const pipe = parseAudioDescriptor(await readFile(descriptor, 'utf8'))
-  const raw = await pipeQuery(pipe, { type, sessionId, seconds })
+  const raw = await pipeQuery(pipe, { type, sessionId, seconds, source })
   const response: unknown = JSON.parse(raw)
   if (response === null || typeof response !== 'object' || Array.isArray(response)) {
     throw new Error('AUDIO_PIPE_RESPONSE_INVALID')
@@ -82,13 +85,14 @@ async function callNative(type: 'phoenix.audio.status' | 'phoenix.audio.capture'
   return data.details
 }
 
-export function parseAudioCapture(raw: string, sessionId: string, seconds: number): NativeAudioSample {
+export function parseAudioCapture(raw: string, sessionId: string, seconds: number,
+  requestedSource: 'output' | 'microphone' = 'output'): NativeAudioSample {
   const data: unknown = JSON.parse(raw)
   if (data === null || typeof data !== 'object' || Array.isArray(data)) {
     throw new Error('AUDIO_CAPTURE_RECEIPT_INVALID')
   }
   const item = data as Partial<NativeAudioSample>
-  if (item.status !== 'captured' || item.source !== 'windows-output-loopback'
+  if (item.status !== 'captured' || item.source !== (requestedSource === 'microphone' ? 'windows-microphone' : 'windows-output-loopback')
     || typeof item.file !== 'string' || !isAbsolute(item.file)
     || !/^audio-[a-f0-9]{32}\.wav$/iu.test(basename(item.file))
     || typeof item.bytes !== 'number' || !Number.isSafeInteger(item.bytes)
@@ -181,12 +185,13 @@ export async function windowsAudioStatus(sessionId: string): Promise<unknown> {
   return JSON.parse(await callNative('phoenix.audio.status', sessionId))
 }
 
-export async function listenWindowsAudio(sessionId: string, seconds: number): Promise<unknown> {
-  if (!Number.isInteger(seconds) || seconds < 3 || seconds > 12) {
+export async function listenWindowsAudio(sessionId: string, seconds: number,
+  source: 'output' | 'microphone' = 'output'): Promise<unknown> {
+  if (!Number.isInteger(seconds) || seconds < 3 || seconds > 12 || !['output','microphone'].includes(source)) {
     throw new Error('AUDIO_CAPTURE_SECONDS_OUT_OF_RANGE')
   }
   const receipt = parseAudioCapture(
-    await callNative('phoenix.audio.capture', sessionId, seconds),sessionId,seconds)
+    await callNative('phoenix.audio.capture', sessionId, seconds, source),sessionId,seconds,source)
   // Cleanup even when media is corrupt, the model is unavailable, or transcription fails.
   try {
     await verifiedWav(receipt.file)
@@ -203,4 +208,9 @@ export async function listenWindowsAudio(sessionId: string, seconds: number): Pr
   finally {
     await rm(receipt.file,{force:true})
   }
+}
+
+/** Grounded viewer state from the Windows shell; no synthetic screen observations. */
+export async function windowsSensesStatus(sessionId: string): Promise<unknown> {
+  return JSON.parse(await callNative('phoenix.senses.status', sessionId))
 }
