@@ -20,6 +20,7 @@ def load():
     tokenizer = KronosTokenizer.from_pretrained("NeoQuasar/Kronos-Tokenizer-" + ("2k" if MODEL == "mini" else "base"))
     model = Kronos.from_pretrained("NeoQuasar/Kronos-" + MODEL)
     model.eval()
+    tokenizer.eval()
     return KronosPredictor(model, tokenizer, device="cpu", max_context=512 if MODEL == "small" else 2048)
 
 def forecast(predictor, request):
