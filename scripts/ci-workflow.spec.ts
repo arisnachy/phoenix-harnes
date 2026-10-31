@@ -524,6 +524,40 @@ describe('Issue lifecycle workflow', () => {
   })
 })
 
+describe('Superseded pull-request CI runs', () => {
+  it('cancels old PR work while retaining all main, stable, manual and publish gates', () => {
+    const workflows = [
+      'phoenix-main-guard.yml',
+      'release.yml',
+      'release-vendor.yml',
+      'desktop-live-native.yml',
+      'phoenix-windows-desktop.yml',
+      'phoenix-microsoft-x-connectors.yml',
+      'phoenix-sports-rich-ui.yml',
+      'phoenix-sports-chat-ui.yml',
+      'phoenix-sports-studio.yml',
+    ]
+    for (const file of workflows) {
+      const workflow = loadWorkflow(`.github/workflows/${file}`)
+      if (!isRecord(workflow.concurrency) || !isRecord(workflow.on) || !isRecord(workflow.jobs)) {
+        throw new TypeError(`${file} must preserve triggers, jobs and PR queue isolation`)
+      }
+      expect(workflow.concurrency['cancel-in-progress']).toBe("${{ github.event_name == 'pull_request' }}")
+      expect(workflow.on).toHaveProperty('pull_request')
+      expect(Object.keys(workflow.jobs).length).toBeGreaterThan(0)
+      expect(String(workflow.concurrency.group)).toContain('${{ github.ref }}')
+    }
+    const guard = loadWorkflow('.github/workflows/phoenix-main-guard.yml')
+    expect(guard.on).toHaveProperty('push')
+    expect(guard.on).toHaveProperty('workflow_dispatch')
+    for (const file of ['release.yml', 'release-vendor.yml']) {
+      const workflow = loadWorkflow(`.github/workflows/${file}`)
+      expect(workflow.on).toHaveProperty('workflow_dispatch')
+      expect(workflow.jobs).toHaveProperty('pack')
+    }
+  })
+})
+
 describe('npm release workflows', () => {
   it('keeps publication dispatch-only and pack in the PR workflow', () => {
     // pack stays in the PR/master release workflows so a PR proves the set packs.

@@ -15,6 +15,11 @@ on:
       - '.github/workflows/phoenix-sports-studio.yml'
   workflow_dispatch:
 
+# Keep only current PR SHA checks running; never cancel branch pushes or manual tests.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   smoke:
     runs-on: ubuntu-latest
