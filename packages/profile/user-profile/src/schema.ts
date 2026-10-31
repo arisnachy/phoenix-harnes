@@ -59,6 +59,7 @@ export const UserProfileSettingsSchema: z<UserProfileSettings> = z.object({
     name: z.string().required(false),
   })).required(false),
   countryCode: z.string().required(false),
+  momentsRegion: z.string().required(false),
   momentsTimeZone: z.string().required(false),
   specialDates: z.array(z.object({
     date: z.string(),
@@ -80,7 +81,7 @@ export const UserProfileSettingsSchema: z<UserProfileSettings> = z.object({
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 const PROFILE_TEXT_FIELDS = ['assistantName', 'preferredName', 'profession', 'professionalTitle', 'gender', 'pronouns', 'tone'] as const
-const PROFILE_UPDATE_FIELDS = [...PROFILE_TEXT_FIELDS, 'assistantGender', 'assistantGenderSource', 'modelProviderOrder', 'dateOfBirth', 'family', 'addressingMode', 'countryCode', 'momentsTimeZone', 'specialDates'] as const
+const PROFILE_UPDATE_FIELDS = [...PROFILE_TEXT_FIELDS, 'assistantGender', 'assistantGenderSource', 'modelProviderOrder', 'dateOfBirth', 'family', 'addressingMode', 'countryCode', 'momentsRegion', 'momentsTimeZone', 'specialDates'] as const
 const CONSENT_FIELDS = ['preferredName', 'profession', 'professionalTitle', 'dateOfBirth', 'gender', 'pronouns', 'tone', 'family', 'moments'] as const
 
 /** Validate cross-field and bounded profile constraints.
@@ -102,6 +103,10 @@ export function validateUserProfile(profile: UserProfileSettings): void {
   }
   validateProviderOrder(profile.modelProviderOrder)
   if (profile.countryCode !== undefined && !/^[A-Z]{2}$/.test(profile.countryCode)) throw new TypeError('user profile countryCode must be ISO 3166-1 alpha-2')
+  if (profile.momentsRegion !== undefined && (!/^[A-Z]{2}-[A-Z0-9]{1,4}$/.test(profile.momentsRegion)
+    || profile.countryCode === undefined || !profile.momentsRegion.startsWith(profile.countryCode + '-'))) {
+    throw new TypeError('user profile momentsRegion must match the country ISO 3166-2 code')
+  }
   if (profile.momentsTimeZone !== undefined) {
     try { new Intl.DateTimeFormat('en-US', { timeZone: profile.momentsTimeZone }) } catch { throw new TypeError('user profile momentsTimeZone must be a valid IANA zone') }
   }
@@ -192,6 +197,7 @@ function clearProfileField(profile: UserProfileSettings, field: typeof PROFILE_U
     case 'tone': delete profile.tone; break
     case 'family': delete profile.family; break
     case 'countryCode': delete profile.countryCode; break
+    case 'momentsRegion': delete profile.momentsRegion; break
     case 'momentsTimeZone': delete profile.momentsTimeZone; break
     case 'specialDates': delete profile.specialDates; break
   }

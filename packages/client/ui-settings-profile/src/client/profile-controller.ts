@@ -6,7 +6,7 @@ import type { AssistantGender, AssistantGenderMode, UserAddressMode, UserProfile
 /** Settings namespace join key; it intentionally does not import the Host package. */
 export const USER_PROFILE_SETTINGS_NAMESPACE = 'user-profile'
 
-const FIELDS = ['assistantName', 'preferredName', 'profession', 'professionalTitle', 'dateOfBirth', 'gender', 'pronouns', 'tone', 'countryCode', 'momentsTimeZone'] as const
+const FIELDS = ['assistantName', 'preferredName', 'profession', 'professionalTitle', 'dateOfBirth', 'gender', 'pronouns', 'tone', 'countryCode', 'momentsRegion', 'momentsTimeZone'] as const
 type TextField = typeof FIELDS[number]
 type ConsentField = keyof UserProfileConsent
 
@@ -41,6 +41,7 @@ interface Draft {
   tone: string
   family: string
   countryCode: string
+  momentsRegion: string
   momentsTimeZone: string
   specialDates: string
   consent: UserProfileConsent
@@ -62,7 +63,7 @@ function emptyDraft(): Draft {
   return {
     assistantName: 'KIRA', assistantGender: 'feminine', assistantGenderSource: 'auto',
     preferredName: '', profession: '', professionalTitle: '', addressingMode: 'automatic',
-    dateOfBirth: '', gender: '', pronouns: '', tone: '', family: '', countryCode: '', momentsTimeZone: '', specialDates: '',
+    dateOfBirth: '', gender: '', pronouns: '', tone: '', family: '', countryCode: '', momentsRegion: '', momentsTimeZone: '', specialDates: '',
     consent: { ...EMPTY_CONSENT },
   }
 }
@@ -87,6 +88,7 @@ function toDraft(value: UserProfileSettings | undefined): Draft {
     tone: textValue(value.tone),
     family: value.family?.map(member => member.name === undefined ? member.relationship : `${member.relationship} | ${member.name}`).join('\n') ?? '',
     countryCode: textValue(value.countryCode),
+    momentsRegion: textValue(value.momentsRegion),
     momentsTimeZone: textValue(value.momentsTimeZone),
     specialDates: value.specialDates?.map(row => `${row.date} | ${row.label}${row.solemn ? ' | solemn' : ''}`).join('\n') ?? '',
     consent: { ...EMPTY_CONSENT, ...value.consent },
@@ -339,6 +341,8 @@ export class UserProfileForm {
 
   private invalid(): boolean {
     return this.draft.countryCode.trim() !== '' && !/^[A-Z]{2}$/.test(this.draft.countryCode.trim().toUpperCase())
+      || (this.draft.momentsRegion.trim() !== '' && (!/^[A-Z]{2}-[A-Z0-9]{1,4}$/.test(this.draft.momentsRegion.trim())
+        || !this.draft.momentsRegion.startsWith(this.draft.countryCode + '-')))
       || (this.draft.momentsTimeZone.trim() !== '' && !isValidZone(this.draft.momentsTimeZone.trim()))
       || parseSpecialDates(this.draft.specialDates) === undefined
       || this.draft.dateOfBirth !== '' && !/^\d{4}-\d{2}-\d{2}$/.test(this.draft.dateOfBirth.trim())
@@ -388,6 +392,7 @@ export class UserProfileForm {
       pronouns: fieldState(this.draft.pronouns),
       tone: fieldState(this.draft.tone),
       countryCode: fieldState(this.draft.countryCode),
+      momentsRegion: fieldState(this.draft.momentsRegion),
       momentsTimeZone: fieldState(this.draft.momentsTimeZone),
       specialDates: fieldState(this.draft.specialDates, parseSpecialDates(this.draft.specialDates) === undefined),
       family: fieldState(this.draft.family, this.draft.family.trim() !== '' && parseFamily(this.draft.family) === undefined),

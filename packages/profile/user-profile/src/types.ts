@@ -51,6 +51,8 @@ export interface UserProfileSettings {
   tone?: string
   family?: UserProfileFamilyMember[]
   countryCode?: string
+  /** Optional ISO 3166-2 subnational region (for example DO-25 or US-NY). */
+  momentsRegion?: string
   momentsTimeZone?: string
   specialDates?: PersonalMoment[]
   consent: UserProfileConsent
@@ -72,6 +74,7 @@ export interface UserProfileUpdate {
   tone?: string | null
   family?: UserProfileFamilyMember[] | null
   countryCode?: string | null
+  momentsRegion?: string | null
   momentsTimeZone?: string | null
   specialDates?: PersonalMoment[] | null
   consent?: Partial<UserProfileConsent>
