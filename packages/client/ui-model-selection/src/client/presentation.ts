@@ -22,7 +22,12 @@ import {
   siZdotai,
 } from 'simple-icons'
 
-/** Fénix Eclipse is the display name; phoenix-auto remains the stable orchestration route ID. */
+/**
+ * Fénix Eclipse is the display name; phoenix-auto remains the stable route ID.
+ * @param modelId Stable model identifier.
+ * @param modelName Human-readable model name.
+ * @returns Whether the model uses the PHOENIX automatic route.
+ */
 export function isPhoenixAutoRouting(modelId: string, modelName: string): boolean {
   return modelId.toLowerCase() === 'phoenix-auto'
     || /^phoenix[\s-]+auto$/iu.test(modelName.trim())

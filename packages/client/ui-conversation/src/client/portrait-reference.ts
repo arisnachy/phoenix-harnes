@@ -2,6 +2,8 @@
  * Explicitly opted-in profile-photo reference for unambiguous self-image requests.
  * Only the original picture is used. No image goes to ordinary conversation turns.
  * The reference is read from the same browser-local IndexedDB store as Profile.
+ * @param text User-authored image request.
+ * @returns Whether the request explicitly asks for an image of the user.
  */
 export function isSelfImageRequest(text: string): boolean {
   const normalized = text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/gu, '')
@@ -17,7 +19,12 @@ export function isSelfImageRequest(text: string): boolean {
     || /\b(?:put me in|draw me as|make me appear|generate me in)\b/u.test(normalized)
 }
 
-/** Explain that the real source photo was already attached so Kira calls image_generation instead of asking again. */
+/**
+ * Explain that the real source photo was already attached so Kira calls image_generation instead of asking again.
+ * @param text User-authored image request.
+ * @param attached Whether the user's authorized reference photo was attached.
+ * @returns The original request, optionally with an explicit attachment handoff.
+ */
 export function messageWithProfileReference(text: string, attached: boolean): string {
   if (!attached) return text
   return text + '\n\n[PHOENIX: Ya adjunté la fotografía REAL del perfil con autorización del usuario. '
@@ -26,7 +33,11 @@ export function messageWithProfileReference(text: string, attached: boolean): st
     + 'NO pidas otra foto ni generes SVG o sustitutos textuales; si falla, informa el error real.]'
 }
 
-/** Read only when the user has deliberately enabled profile-reference sharing. */
+/**
+ * Read only when the user has deliberately enabled profile-reference sharing.
+ * @param text User-authored image request.
+ * @returns The authorized original profile photo, if available.
+ */
 export async function savedPhotoForSelfImageRequest(text: string): Promise<File | undefined> {
   if (!isSelfImageRequest(text) || typeof indexedDB === 'undefined') return undefined
   return new Promise<File | undefined>((resolve, reject) => {

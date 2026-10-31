@@ -44,6 +44,7 @@ export type BrowserInteractionResult = {
  * not reference any module variables; everything it uses is browser DOM.
  * Keep results bounded and never return sensitive field values.
  * @param input - Validated locator, operation and bounded user-intended value.
+ * @param cache - Optional per-batch DOM elements and candidate controls reused across steps.
  * @returns A sanitized DOM action result without credentials or field secrets.
  */
 export function executeBrowserInteraction(

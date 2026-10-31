@@ -1,6 +1,11 @@
 import type { GeoFeature, GeoLayer } from './GeoMap.tsx'
 
-/** Geographic viewport fitting in projected Web Mercator space with 14% breathing room. */
+/**
+ * Fit a geographic viewport to the supplied layers in projected Web Mercator space.
+ * @param layers - geographic feature layers used to determine the bounds.
+ * @param size - viewport dimensions in pixels.
+ * @returns the center longitude, latitude and bounded zoom level.
+ */
 export function fitGeoView(layers: readonly GeoLayer[], size: { readonly w:number; readonly h:number }):
   { lng:number; lat:number; zoom:number } {
   const points = layers.flatMap(layer => layer.features.flatMap(feature => feature.coordinates))
@@ -23,8 +28,13 @@ export function fitGeoView(layers: readonly GeoLayer[], size: { readonly w:numbe
   return {lng:(minX+maxX)/2,lat,zoom}
 }
 
+/** A legend swatch keyed by its source layer and actual feature color. */
 export interface GeoLegendEntry { readonly key:string; readonly label:string; readonly color:string }
-/** Distinct swatches must match actual feature colors, not invented threshold labels. */
+/**
+ * Build a bounded legend using actual feature colors, never inferred thresholds.
+ * @param layers - geographic layers whose features supply legend colors.
+ * @returns up to eight distinct labeled swatches.
+ */
 export function buildGeoLegend(layers: readonly GeoLayer[]): readonly GeoLegendEntry[] {
   const list: GeoLegendEntry[]=[]
   for (const layer of layers) {

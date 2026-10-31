@@ -1,0 +1,49 @@
+name: PHOENIX Guardian Recovery Gate
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/phoenix-guardian-incidents.mjs'
+      - 'scripts/phoenix-guardian-incidents.test.mjs'
+      - 'scripts/phoenix-update-state.mjs'
+      - 'scripts/phoenix-auto-update.mjs'
+      - 'scripts/phoenix-managed-update.mjs'
+      - 'scripts/phoenix-windows-supervisor.mjs'
+      - 'packages/core/system-prompt/src/index.ts'
+      - '.github/workflows/phoenix-guardian-recovery.yml'
+  push:
+    branches: [main, stable]
+    paths:
+      - 'scripts/phoenix-guardian-incidents.mjs'
+      - 'scripts/phoenix-guardian-incidents.test.mjs'
+      - 'scripts/phoenix-update-state.mjs'
+      - 'scripts/phoenix-auto-update.mjs'
+      - 'scripts/phoenix-managed-update.mjs'
+      - 'scripts/phoenix-windows-supervisor.mjs'
+      - 'packages/core/system-prompt/src/index.ts'
+      - '.github/workflows/phoenix-guardian-recovery.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  guardian-recovery:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Check updater and Guardian syntax
+        shell: pwsh
+        run: |
+          node --check scripts/phoenix-guardian-incidents.mjs
+          node --check scripts/phoenix-update-state.mjs
+          node --check scripts/phoenix-auto-update.mjs
+          node --check scripts/phoenix-managed-update.mjs
+          node --check scripts/phoenix-windows-supervisor.mjs
+      - name: Prove rollback receipt, quarantine, redaction and recovery handoff
+        run: node --test scripts/phoenix-guardian-incidents.test.mjs

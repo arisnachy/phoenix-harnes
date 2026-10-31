@@ -78,8 +78,8 @@ it('hot-reloads a real client-plugin source edit without refreshing the page', a
     .map(path => join(REPO_ROOT, path))
   const originalClientBundles = await Promise.all(clientBundlePaths.map(async path => [path, await readFile(path)] as const))
   const originalSource = await readFile(sourcePath)
-  const oldText = '¿Qué quieres construir hoy en Phoenix?'
-  const sourceNeedle = '<p className={css.subtitle}>¿Qué quieres construir hoy en Phoenix?</p>'
+  const oldText = '¿En qué podemos trabajar hoy?'
+  const sourceNeedle = '<p className={css.subtitle}>¿En qué podemos trabajar hoy?</p>'
   const newText = `HMR UPDATED ${'x'.repeat(80)}`
   const updatedSource = originalSource.toString().replace(
     sourceNeedle,

@@ -238,9 +238,10 @@ export function recoverScraperRows(stdout:unknown,output:unknown):unknown[]{
   }
   return rows
 }
-/** Run a fixed local executable with fixed command shape, no shell, no user URLs. */
-/** Sanitized transport failure: retain exit status and stderr diagnostics without
- * exposing environment variables, authorization headers or a raw shell command.
+/**
+ * Summarize a local scraper failure without exposing secrets or raw commands.
+ * @param error - Unknown process failure, potentially including stderr and exit status.
+ * @returns Bounded and redacted failure diagnostics for the operator.
  */
 export function describeScraperError(error:unknown):string{
   const record=error&&typeof error==='object'?error as Record<string,unknown>:{}

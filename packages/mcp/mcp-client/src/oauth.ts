@@ -560,7 +560,8 @@ export class McpOAuthController {
       // Once the URL is published, user approval has no time limit.
       const aborted = new Promise<never>((_resolve, reject) => {
         preparationDeadline.signal.addEventListener('abort', () => {
-          reject(preparationDeadline.signal.reason)
+          const reason: unknown = preparationDeadline.signal.reason
+          reject(reason instanceof Error ? reason : new Error(String(reason ?? 'OAuth preparation aborted')))
         }, { once: true })
       })
       const first = await Promise.race([

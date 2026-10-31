@@ -30,7 +30,10 @@ describe('headless-agent keyless smoke', () => {
         if (relativePath === undefined) return
         const compressed = await readFile(join(cwd, relativePath))
         expect(compressed.subarray(0, 4).toString('hex')).toBe('28b52ffd')
-        persistedHeader = JSON.parse((await decompress(compressed)).toString()) as Record<string, unknown>
+        const records = (await decompress(compressed)).toString('utf8').trimEnd().split('\n')
+          .map(line => JSON.parse(line) as Record<string, unknown>)
+        expect(records.length).toBeGreaterThan(1)
+        persistedHeader = records[0]
       },
     })
     const lines = stdout.trimEnd().split('\n').map(line => JSON.parse(line) as Record<string, unknown>)
