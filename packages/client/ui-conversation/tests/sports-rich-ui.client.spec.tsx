@@ -278,8 +278,6 @@ describe('Universal chat: compact sports schedules do not replace single-game ca
     expect(screen.queryByText('0')).toBeNull()
     expect(screen.queryByText(/Favorito sin verificar/)).toBeNull()
     expect(screen.getAllByText('Contexto del encuentro')).toHaveLength(2)
-    const details=document.querySelectorAll<HTMLDetailsElement>('.sportsSlateContext')
-    expect(details.length).toBe(0) // CSS module hashes class names; use native structure below
     const summary=screen.getAllByText('Contexto del encuentro')[0]
     expect(summary?.closest('details')?.open).toBe(false)
     if(summary)fireEvent.click(summary)
