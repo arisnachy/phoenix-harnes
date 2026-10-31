@@ -3,6 +3,8 @@ export type AvatarMode = 'original' | 'styled'
 export interface AvatarSnapshot {
   original?: Blob
   styled?: Blob
+  /** Full cinematic composition, never used as the small circular avatar. */
+  styledFull?: Blob
   mode: AvatarMode
   /** Explicit permission to attach the original photo to self-image requests. */
   referenceEnabled: boolean
@@ -44,13 +46,15 @@ export async function readAvatar(): Promise<AvatarSnapshot> {
   try {
     const tx = database.transaction('portrait', 'readonly')
     const store = tx.objectStore('portrait')
-    const [original, styled, active, referenceEnabled] = await Promise.all([
-      get<Blob>(store, 'original'), get<Blob>(store, 'styled'), get<AvatarMode>(store, 'mode'),
+    const [original, styled, styledFull, active, referenceEnabled] = await Promise.all([
+      get<Blob>(store, 'original'), get<Blob>(store, 'styled'), get<Blob>(store, 'styledFull'),
+      get<AvatarMode>(store, 'mode'),
       get<boolean>(store, 'referenceEnabled'),
     ])
     return {
       ...(original instanceof Blob ? { original } : {}),
       ...(styled instanceof Blob ? { styled } : {}),
+      ...(styledFull instanceof Blob ? { styledFull } : {}),
       mode: active === 'styled' && styled instanceof Blob ? 'styled' : 'original',
       referenceEnabled: referenceEnabled === true && original instanceof Blob,
     }
@@ -59,6 +63,7 @@ export async function readAvatar(): Promise<AvatarSnapshot> {
 async function write(values: {
   original?: Blob
   styled?: Blob
+  styledFull?: Blob
   mode?: AvatarMode
   referenceEnabled?: boolean
   clear?: boolean
@@ -71,6 +76,7 @@ async function write(values: {
     if (values.original !== undefined) {
       store.put(values.original, 'original')
       store.delete('styled')
+      store.delete('styledFull')
       store.put('original', 'mode')
       // A replacement is a different face: require renewed sharing consent.
       store.put(false, 'referenceEnabled')
@@ -79,6 +85,7 @@ async function write(values: {
       store.put(values.styled, 'styled')
       store.put('styled', 'mode')
     }
+    if (values.styledFull !== undefined) store.put(values.styledFull, 'styledFull')
     if (values.mode !== undefined) store.put(values.mode, 'mode')
     if (values.referenceEnabled !== undefined) store.put(values.referenceEnabled, 'referenceEnabled')
     await finish(tx)
@@ -88,7 +95,9 @@ async function write(values: {
 /** This keeps the original normalized but separate from any edited variant. */
 export async function storeOriginalAvatar(image: Blob): Promise<void> { await write({ original: image }) }
 /** Preserve a successful AI output as a new variant, never overwrite the source photo. */
-export async function storeStyledAvatar(image: Blob): Promise<void> { await write({ styled: image }) }
+export async function storeStyledAvatar(image: Blob, full?: Blob): Promise<void> {
+  await write({ styled: image, ...(full === undefined ? {} : { styledFull: full }) })
+}
 export async function activateAvatar(mode: AvatarMode): Promise<void> {
   const snapshot = await readAvatar()
   if (mode === 'styled' && snapshot.styled === undefined) throw new Error('No edited portrait was saved')
@@ -146,6 +155,71 @@ export async function normalizeAvatar(image: Blob, zoom = 1, offsetX = 0, offset
     return output
   } finally { bitmap.close() }
 }
+/** Compute a safe square crop with the eyes/face filling the small circular avatar. */
+export function faceAvatarCrop(
+  width: number, height: number,
+  face?: { x: number; y: number; width: number; height: number },
+  zoom = 1,
+): { x: number; y: number; side: number } {
+  const factor = Math.max(0.8, Math.min(1.5, Number.isFinite(zoom) ? zoom : 1))
+  const baseSide = Math.min(width, height)
+  const requested = face === undefined
+    ? baseSide * 0.58 / factor
+    : Math.max(face.width * 1.7, face.height * 1.45) / factor
+  const side = Math.min(baseSide, Math.max(64, requested))
+  const centerX = face === undefined ? width * 0.5 : face.x + face.width * 0.5
+  const centerY = face === undefined ? height * 0.40 : face.y + face.height * 0.51
+  return {
+    x: Math.max(0, Math.min(width - side, centerX - side / 2)),
+    y: Math.max(0, Math.min(height - side, centerY - side / 2)),
+    side,
+  }
+}
+
+/** Produce the compact chat avatar from a genuine face crop, never from the full scene.
+ * Native face detection is optional; unsupported browsers use an upper-center portrait crop.
+ */
+export async function createFaceAvatar(image: Blob, zoom = 1): Promise<Blob> {
+  if (image.size === 0 || image.size > MAX_RASTER) throw new Error('La imagen supera el límite de 15 MB.')
+  if (!['image/png', 'image/jpeg', 'image/webp'].includes(image.type)) {
+    throw new Error('La imagen generada tiene un formato incompatible.')
+  }
+  const bitmap = await createImageBitmap(image, { imageOrientation: 'from-image' })
+  try {
+    if (bitmap.width < 64 || bitmap.height < 64 || bitmap.width * bitmap.height > 40_000_000) {
+      throw new Error('La imagen generada tiene dimensiones incompatibles.')
+    }
+    type FaceBox = { x: number; y: number; width: number; height: number }
+    type Detector = { detect(input: ImageBitmap): Promise<{ boundingBox: FaceBox }[]> }
+    type DetectorConstructor = new (options: { fastMode: boolean; maxDetectedFaces: number }) => Detector
+    const DetectorClass = (globalThis as typeof globalThis & { FaceDetector?: DetectorConstructor }).FaceDetector
+    let face: FaceBox | undefined
+    if (DetectorClass !== undefined) {
+      try {
+        const detected = await new DetectorClass({ fastMode: true, maxDetectedFaces: 4 }).detect(bitmap)
+        face = detected.sort((a, b) =>
+          b.boundingBox.width * b.boundingBox.height - a.boundingBox.width * a.boundingBox.height
+        )[0]?.boundingBox
+      } catch { /* FaceDetector is experimental; preserve deterministic fallback. */ }
+    }
+    const { x, y, side: crop } = faceAvatarCrop(bitmap.width, bitmap.height, face, zoom)
+    const canvas = document.createElement('canvas')
+    canvas.width = 768
+    canvas.height = 768
+    const context = canvas.getContext('2d')
+    if (context === null) throw new Error('El navegador no permite recortar el rostro.')
+    context.fillStyle = '#f5f3ef'
+    context.fillRect(0, 0, 768, 768)
+    context.drawImage(bitmap, x, y, crop, crop, 0, 0, 768, 768)
+    return await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob((blob) => {
+        if (blob === null) reject(new Error('No se pudo guardar el avatar del rostro.'))
+        else resolve(blob)
+      }, 'image/webp', 0.91)
+    })
+  } finally { bitmap.close() }
+}
+
 export function validatedLocalEditor(value: string): string {
   const url = new URL(value.trim())
   if (url.username || url.password || url.search || url.hash
