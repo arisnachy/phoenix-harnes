@@ -17,6 +17,10 @@ interface NativeAudioSample {
   device: string
 }
 
+/** Validate a native Windows user-pipe descriptor.
+ * @param raw - JSON descriptor from the current Windows user.
+ * @returns The validated pipe name.
+ */
 export function parseAudioDescriptor(raw: string): string {
   const object: unknown = JSON.parse(raw)
   if (object === null || typeof object !== 'object' || Array.isArray(object)) {
@@ -45,7 +49,7 @@ function pipeQuery(pipeName: string, command: unknown): Promise<string> {
     }
     // Includes time for the foreground consent dialog. It is not a silent retry.
     const timer = setTimeout(() => finish(new Error('AUDIO_CONSENT_OR_CAPTURE_TIMEOUT')), 120_000)
-    socket.once('connect', () => socket.write(JSON.stringify(command) + '\n'))
+    socket.once('connect', () => { socket.write(JSON.stringify(command) + '\n') })
     socket.on('data', (chunk: string) => {
       received += chunk
       if (received.length > 32_768) {
@@ -55,7 +59,7 @@ function pipeQuery(pipeName: string, command: unknown): Promise<string> {
       const end = received.indexOf('\n')
       if (end >= 0) finish(undefined, received.slice(0, end).trim())
     })
-    socket.once('error', (error: Error) => finish(error))
+    socket.once('error', (error: Error) => { finish(error) })
     socket.once('close', () => {
       if (!done) finish(new Error('AUDIO_PIPE_CLOSED'))
     })
@@ -85,6 +89,13 @@ async function callNative(
   return data.details
 }
 
+/** Validate and bind a real capture receipt to the exact session and requested source.
+ * @param raw - Native capture receipt.
+ * @param sessionId - Actual conversation identity.
+ * @param seconds - User-authorized capture length.
+ * @param requestedSource - The selected audio device category.
+ * @returns The authenticated capture file receipt.
+ */
 export function parseAudioCapture(raw: string, sessionId: string, seconds: number,
   requestedSource: 'output' | 'microphone' = 'output'): NativeAudioSample {
   const data: unknown = JSON.parse(raw)
@@ -131,7 +142,7 @@ async function transcribeLocal(file: string): Promise<{ language?: string; cues:
     'print(json.dumps({"language":info.language,"cues":cues},ensure_ascii=False))',
   ].join('\n')
   const configuredModel = process.env.PHOENIX_VIDEO_WHISPER_MODEL
-  const model = ['tiny','base','small'].includes(configuredModel ?? '') ? configuredModel! : 'base'
+  const model = configuredModel && ['tiny', 'base', 'small'].includes(configuredModel) ? configuredModel : 'base'
   const python = process.env.PHOENIX_VIDEO_PYTHON?.trim()
   const command = python || 'uv'
   const args = python ? ['-c',script,file,model]
@@ -161,15 +172,16 @@ async function transcribeLocal(file: string): Promise<{ language?: string; cues:
         finish(new Error('AUDIO_TRANSCRIPT_TOO_LARGE'))
       }
     })
-    child.once('error', () => finish(new Error('AUDIO_LOCAL_TRANSCRIBER_UNAVAILABLE: install uv')))
-    child.once('close', (code) => finish(code === 0 ? undefined
-      : new Error('AUDIO_LOCAL_TRANSCRIPTION_FAILED: check uv and Whisper model')))
+    child.once('error', () => { finish(new Error('AUDIO_LOCAL_TRANSCRIBER_UNAVAILABLE: install uv')) })
+    child.once('close', code => {
+      finish(code === 0 ? undefined : new Error('AUDIO_LOCAL_TRANSCRIPTION_FAILED: check uv and Whisper model'))
+    })
   })
   const data: unknown = JSON.parse(output)
   if (data === null || typeof data !== 'object' || Array.isArray(data)) throw new Error('AUDIO_TRANSCRIPT_INVALID')
   const parsed = data as Record<string,unknown>
   if (!Array.isArray(parsed.cues)) throw new Error('AUDIO_TRANSCRIPT_INVALID')
-  const cues = parsed.cues.slice(0,100).filter((cue):cue is {start:number;end:number;text:string} => {
+  const cues = parsed.cues.slice(0, 100).filter((cue): cue is { start: number; end: number; text: string } => {
     if (cue === null || typeof cue !== 'object') return false
     const v = cue as Record<string,unknown>
     return typeof v.start === 'number' && Number.isFinite(v.start)
@@ -180,11 +192,20 @@ async function transcribeLocal(file: string): Promise<{ language?: string; cues:
     ? { language: parsed.language.slice(0,12) } : {}, cues }
 }
 
-/** No raw audio enters the model's context or is stored in conversation history. */
+/** Report available local Windows audio devices without opening a microphone.
+ * @param sessionId - Actual conversation identity.
+ * @returns Native availability information.
+ */
 export async function windowsAudioStatus(sessionId: string): Promise<unknown> {
   return JSON.parse(await callNative('phoenix.audio.status', sessionId))
 }
 
+/** Capture only user-authorized native audio, transcribe and discard the temporary WAV.
+ * @param sessionId - Actual conversation identity.
+ * @param seconds - Sample length from 3 to 12 seconds.
+ * @param source - Selected speaker or microphone source.
+ * @returns Speech transcript and verified audio provenance.
+ */
 export async function listenWindowsAudio(sessionId: string, seconds: number,
   source: 'output' | 'microphone' = 'output'): Promise<unknown> {
   if (!Number.isInteger(seconds) || seconds < 3 || seconds > 12 || !['output','microphone'].includes(source)) {
@@ -206,11 +227,14 @@ export async function listenWindowsAudio(sessionId: string, seconds: number,
     }
   }
   finally {
-    await rm(receipt.file,{force:true})
+    await rm(receipt.file, { force: true })
   }
 }
 
-/** Grounded viewer state from the Windows shell; no synthetic screen observations. */
+/** Query actual Windows viewer state, not a screenshot.
+ * @param sessionId - Actual conversation identity.
+ * @returns Grounded viewer state or a reported blocker.
+ */
 export async function windowsSensesStatus(sessionId: string): Promise<unknown> {
   return JSON.parse(await callNative('phoenix.senses.status', sessionId))
 }
@@ -220,6 +244,8 @@ const SUPPORTED_AUDIO_SUFFIXES = /\.(?:wav|mp3|m4a|ogg|flac|webm|mp4)$/iu
 /**
  * Only explicitly allowlisted, user-owned local media. Symlinks resolve before comparison.
  * Never use this to scan the disk or silently transcribe microphone recordings.
+ * @param input - Absolute user-approved media file path.
+ * @returns Local speech recognition result.
  */
 export async function transcribeApprovedAudioFile(input: string): Promise<unknown> {
   if (typeof input !== 'string' || !isAbsolute(input) || input.length > 2048
@@ -230,7 +256,7 @@ export async function transcribeApprovedAudioFile(input: string): Promise<unknow
     .map(x => x.trim()).filter(Boolean) ?? []
   if (allowed.length === 0) throw new Error('AUDIO_FILE_DIRECTORY_NOT_AUTHORIZED')
   const target = await realpath(input)
-  const granted = await Promise.all(allowed.filter(isAbsolute).map(async directory => {
+  const granted = await Promise.all(allowed.filter(isAbsolute).map(async (directory) => {
     try {
       const base = await realpath(directory)
       const rel = relative(base,target)
@@ -249,6 +275,6 @@ export async function transcribeApprovedAudioFile(input: string): Promise<unknow
     mediaSizeBytes:details.size,
     speechRecognized:result.cues.length > 0,
     ...result,
-    note:'Archivo autorizado procesado localmente. El audio de origen no fue modificado; no inferir sonidos que no se reconocen.'
+    note: 'Archivo autorizado procesado localmente. El audio de origen no fue modificado; no inferir sonidos que no se reconocen.',
   }
 }
