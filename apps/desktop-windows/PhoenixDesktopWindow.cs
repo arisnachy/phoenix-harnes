@@ -631,6 +631,10 @@ internal sealed class PhoenixDesktopWindow : Form
                 return desktopLive.StateForSession(command.SessionId);
             case "phoenix.desktop.live-frame":
                 return desktopLive.FrameForSession(command.SessionId);
+            case "phoenix.audio.status":
+                return DesktopAudioCapture.Status();
+            case "phoenix.audio.capture":
+                return await DesktopAudioCapture.CaptureAsync(this, command.SessionId!, command.Seconds);
             case "phoenix.browser.inspect":
                 return await InspectBrowserAsync();
             case "phoenix.browser.fill-form":
