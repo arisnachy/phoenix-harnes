@@ -66,6 +66,8 @@ async function write(values: { original?: Blob; styled?: Blob; mode?: AvatarMode
       store.put(values.original, 'original')
       store.delete('styled')
       store.put('original', 'mode')
+      // A replacement is a different face: require renewed sharing consent.
+      store.put(false, 'referenceEnabled')
     }
     if (values.styled !== undefined) {
       store.put(values.styled, 'styled')
