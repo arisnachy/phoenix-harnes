@@ -647,3 +647,11 @@
 @media (max-width: 620px) {
   .meta .audience, .meta .target { font-size: 11px; }
 }
+
+/* User is not a PHOENIX agent: replace generic silhouette with their own photo. */
+:global(html[data-phoenix-user-avatar='ready']) .row[data-team-sender-kind='user'] .avatar {
+  border-radius: 50%; background: var(--phoenix-user-avatar-image) center / cover no-repeat;
+}
+:global(html[data-phoenix-user-avatar='ready']) .row[data-team-sender-kind='user'] .avatar > span {
+  visibility: hidden;
+}
