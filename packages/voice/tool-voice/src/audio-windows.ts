@@ -48,7 +48,7 @@ function pipeQuery(pipeName: string, command: unknown): Promise<string> {
       else resolveResult(result ?? '')
     }
     // Includes time for the foreground consent dialog. It is not a silent retry.
-    const timer = setTimeout(() => finish(new Error('AUDIO_CONSENT_OR_CAPTURE_TIMEOUT')), 120_000)
+    const timer = setTimeout(() => { finish(new Error('AUDIO_CONSENT_OR_CAPTURE_TIMEOUT')) }, 120_000)
     socket.once('connect', () => { socket.write(JSON.stringify(command) + '\n') })
     socket.on('data', (chunk: string) => {
       received += chunk
@@ -173,7 +173,7 @@ async function transcribeLocal(file: string): Promise<{ language?: string; cues:
       }
     })
     child.once('error', () => { finish(new Error('AUDIO_LOCAL_TRANSCRIBER_UNAVAILABLE: install uv')) })
-    child.once('close', code => {
+    child.once('close', (code) => {
       finish(code === 0 ? undefined : new Error('AUDIO_LOCAL_TRANSCRIPTION_FAILED: check uv and Whisper model'))
     })
   })
