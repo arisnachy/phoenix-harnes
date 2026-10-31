@@ -1,7 +1,8 @@
 import { chromium, type Browser, type Page } from 'playwright'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
-const URL = process.env.CANVAS_SCATTERPLOT_URL ?? 'http://127.0.0.1:3080/demos/canvas-scatterplot.html'
+// The demo is a standalone HTML asset: tests must not depend on a running PHOENIX web server.
+const URL = process.env.CANVAS_SCATTERPLOT_URL ?? new URL('../public/demos/canvas-scatterplot.html', import.meta.url).href
 
 describe('Canvas2D scatterplot live demo', () => {
   let browser: Browser
