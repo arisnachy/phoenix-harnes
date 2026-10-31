@@ -40,7 +40,8 @@
     "@phoenix-ai/dsh-llm": "workspace:^",
     "@phoenix-ai/dsh-settings": "workspace:^",
     "@phoenix-ai/dsh-timeout": "workspace:^",
-    "@phoenix-ai/cordis": "workspace:^"
+    "@phoenix-ai/cordis": "workspace:^",
+    "@phoenix-ai/dsh-client-connection": "workspace:^"
   },
   "dependencies": {
     "@earendil-works/pi-ai": "^0.82.1",
@@ -56,6 +57,7 @@
     "@phoenix-ai/dsh-llm-deepseek": "workspace:^",
     "@phoenix-ai/dsh-settings": "workspace:^",
     "@phoenix-ai/dsh-timeout": "workspace:^",
-    "@phoenix-ai/cordis": "workspace:^"
+    "@phoenix-ai/cordis": "workspace:^",
+    "@phoenix-ai/dsh-client-connection": "workspace:^"
   }
 }

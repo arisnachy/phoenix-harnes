@@ -15,6 +15,7 @@ import { lstat, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'n
 import { homedir, tmpdir } from 'node:os'
 import { basename, dirname, extname, join, resolve } from 'node:path'
 import type { Context } from '@phoenix-ai/cordis'
+import type {} from '@phoenix-ai/dsh-client-connection'
 import type { AttachmentStore, ImageAttachmentRef, ImageMediaType } from '@phoenix-ai/dsh-attachment'
 import { credentialRef } from '@phoenix-ai/dsh-credentials'
 import type { ContentBlock } from '@phoenix-ai/dsh-llm'
@@ -1032,20 +1033,9 @@ async function generateWithCodexProvider(
   }
 }
 
-/** Channel shape injected by the Host connection plugin; no transport import at runtime. */
-interface AvatarConnection {
-  rpc: {
-    handle(
-      channel: string,
-      handler: (endpoint: string, payload: unknown, signal: AbortSignal) => Promise<unknown>,
-      options: { authority: 'loopback' },
-    ): () => Promise<void>
-  }
-}
-
 /** Bound, same-origin RPC for a private, user-initiated profile portrait edit. */
 export function installCodexAvatarTransform(ctx: Context): void {
-  const connection = (ctx as unknown as { connection: AvatarConnection }).connection
+  const connection = ctx.connection
   connection.rpc.handle('/avatar', async (endpoint, payload, signal) => {
     if (endpoint !== 'transform') {
       return { ok: false, error: { code: 'bad-request', message: 'Unknown avatar operation', details: { issues: [] } } }
