@@ -3,7 +3,7 @@ export type MomentKind = 'personal' | 'patriotic' | 'public' | 'cultural' | 'sol
 export interface VisualMoment { readonly label: string; readonly kind: MomentKind }
 export type MomentTheme =
   | 'halloween' | 'winter' | 'birthday' | 'patriotic' | 'solemn' | 'love' | 'nature'
-  | 'lunar' | 'lights' | 'spring' | 'harvest' | 'water' | 'spiritual' | 'heritage'
+  | 'lunar' | 'lights' | 'spring' | 'harvest' | 'water' | 'spiritual' | 'islamic' | 'jewish' | 'buddhist' | 'christian' | 'heritage'
   | 'music' | 'health' | 'education' | 'science' | 'family' | 'peace' | 'sports'
   | 'community' | 'newyear' | 'festival' | 'general'
 
@@ -12,12 +12,16 @@ interface VisualRule { readonly theme: MomentTheme; readonly icon: string; reado
 const RULES: readonly VisualRule[] = [
   { theme: 'halloween', icon: '🎃', pattern: /halloween|día de muertos|day of the dead|samha[ií]n|萬聖|万圣|할로윈/iu },
   { theme: 'winter', icon: '🎄', pattern: /navidad|nochebuena|christmas|no[eë]l|weihnacht|natale|рождеств|聖誕|圣诞|크리스마스/iu },
+  { theme: 'islamic', icon: '🌙', pattern: /ramadan|ramadán|eid|fitr|adha|mawlid|hijri|muharram|ashura|ramazan|رمضان|عيد|محرم|عاشوراء|ईद/iu },
+  { theme: 'jewish', icon: '🕎', pattern: /hanukkah|chanukah|chanukkah|passover|pesaj|pesach|yom kippur|sukkot|purim|rosh hashanah|shavuot|חנוכה|פסח|ראש השנה|יום כיפור/iu },
+  { theme: 'buddhist', icon: '🪷', pattern: /vesak|vesakh|vesaka|buddha|bodhi day|buddhist|佛誕|卫塞|衛塞|仏誕|부처님/iu },
+  { theme: 'christian', icon: '🕊️', pattern: /pascua|easter|good friday|viernes santo|pentecost|epiphany|ascension|resurrecci[oó]n|復活祭|復活節/iu },
   { theme: 'lunar', icon: '🧧', pattern: /lunar new year|chinese new year|tet\b|tết|seollal|spring festival|春节|春節|설날|元旦祭/iu },
-  { theme: 'lights', icon: '🪔', pattern: /diwali|deepavali|dipavali|hanukkah|chanukah|חנוכה|दिवाली|दीपावली|灯节|燈節|lantern|farol|luces/iu },
+  { theme: 'lights', icon: '🪔', pattern: /diwali|deepavali|dipavali|दिवाली|दीपावली|灯节|燈節|lantern|farol|luces/iu },
   { theme: 'spring', icon: '🌸', pattern: /hanami|sakura|holi\b|nowruz|norouz|navruz|equinox|primavera|spring|花見|花祭|عید نوروز/iu },
   { theme: 'harvest', icon: '🌾', pattern: /harvest|cosecha|thanksgiving|acción de gracias|pongal|onam|chuseok|추석|mid.autumn|中秋|trung thu/iu },
   { theme: 'water', icon: '💦', pattern: /songkran|loy krathong|water festival|festival de agua|เทศกาลสงกรานต์|สงกรานต์/iu },
-  { theme: 'spiritual', icon: '🪷', pattern: /ramadan|ramadán|eid|fitr|adha|vesak|vesakh|buddha|pascua|easter|passover|pesaj|pesach|yom kippur|sukkot|purim|navratri|mawlid|vesaka|رمضان|عيد|ईद|佛誕|卫塞|復活祭/iu },
+  { theme: 'spiritual', icon: '🪷', pattern: /navratri|religious festival|festividad religiosa|espiritual|spiritual|faith celebration/iu },
   { theme: 'heritage', icon: '🎎', pattern: /carnaval|carnival|karneval|mardi gras|heritage|patrimonio|cultura|cultural|tradici[oó]n|tradition|intangible|heritage day|文化|festival folkl[oó]rico/iu },
   { theme: 'music', icon: '🎶', pattern: /música|music|jazz|dance|baile|tanz|concert|música|音楽|音樂|음악/iu },
   { theme: 'health', icon: '🩺', pattern: /salud|health|medicin|enfermer|nurs|cáncer|cancer|mental health|wellness|sanidad|gesundheit|健康|保健/iu },
