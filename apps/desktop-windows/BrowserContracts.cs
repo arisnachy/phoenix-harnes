@@ -115,7 +115,9 @@ public sealed record BrowserCommand(
     IReadOnlyList<BrowserFormValue>? Fields = null,
     IReadOnlyDictionary<string, string>? Extras = null,
     string? SessionId = null,
-    bool Observe = false)
+    bool Observe = false,
+    int Seconds = 8,
+    string AudioSource = "output")
 {
     private static readonly HashSet<string> PublicTypes = new(StringComparer.Ordinal)
     {
@@ -140,6 +142,9 @@ public sealed record BrowserCommand(
         "phoenix.desktop.preview",
         "phoenix.desktop.live-state",
         "phoenix.desktop.live-frame",
+        "phoenix.audio.status",
+        "phoenix.audio.capture",
+        "phoenix.senses.status",
     };
 
     public static bool TryParse(string json, out BrowserCommand command, bool allowAutomation = false)
@@ -178,12 +183,30 @@ public sealed record BrowserCommand(
                 return true;
             }
 
-            if (type is "phoenix.desktop.live-state" or "phoenix.desktop.live-frame")
+            if (type is "phoenix.desktop.live-state" or "phoenix.desktop.live-frame" or "phoenix.audio.status" or "phoenix.audio.capture" or "phoenix.senses.status")
             {
                 if (!TryGetString(doc.RootElement, "sessionId", out var requestedSession)
                     || requestedSession.Length > 128
                     || requestedSession.Any(ch => !(char.IsAsciiLetterOrDigit(ch) || ch is '-' or '_' or ':')))
                     return false;
+                if (type == "phoenix.audio.capture")
+                {
+                    var seconds = 8;
+                    if (doc.RootElement.TryGetProperty("seconds", out var node))
+                    {
+                        if (node.ValueKind != JsonValueKind.Number || !node.TryGetInt32(out seconds)
+                            || seconds is < 3 or > 12) return false;
+                    }
+                    var source = "output";
+                    if (doc.RootElement.TryGetProperty("source", out var audioSource))
+                    {
+                        if (audioSource.ValueKind != JsonValueKind.String) return false;
+                        source = audioSource.GetString() ?? "";
+                        if (source is not "output" and not "microphone") return false;
+                    }
+                    command = new BrowserCommand(type, SessionId: requestedSession, Seconds: seconds, AudioSource: source);
+                    return true;
+                }
                 command = new BrowserCommand(type, SessionId: requestedSession, Observe: true);
                 return true;
             }

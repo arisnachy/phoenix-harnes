@@ -2,21 +2,39 @@
 
 English | [中文](README.zh.md)
 
-Model-facing PHOENIX speech controls for Kira. The base bundle mounts `tool-voice`, so its two native tools are available without MCP discovery.
+PHOENIX audio perception and speech tools for Kira. The installed base bundle exposes these tools in the runtime registry; a restarted Host and active native shell are required to capture Windows audio.
 
 ## Tools
 
-- `phoenix_voice_status`: read Host speech status, local provider, queue, and Codex Live readiness without playing audio.
-- `phoenix_voice_speak`: play explicitly requested speech through an already-authorized Codex Live session or synthesize through the local Host provider.
+- `phoenix_voice_status`: inspect local speech providers, queue, and Codex Live readiness.
+- `phoenix_voice_speak`: synthesize explicitly requested speech, using authorized providers.
+- `phoenix_audio_status`: inspect Windows output and microphone availability without recording.
+- `phoenix_audio_listen`: capture 3–12 seconds of approved speakers or microphone audio.
+- `phoenix_audio_file_listen`: transcribe local media from explicitly allowed directories.
+- `phoenix_senses_status`: inspect actual viewers, device availability, and voice state.
 
 ## Configuration
 
-Uses `PHOENIX_VOICE_ENABLED`, `PHOENIX_VOICE_LANGUAGE` (default `es-DO`), and the existing `@phoenix-ai/dsh-voice` and `@phoenix-ai/dsh-voice-local` services. Voice packages do not bundle universal model weights. Restart the client after installing a new bundle.
+PHOENIX uses `PHOENIX_VOICE_ENABLED`, `PHOENIX_VOICE_LANGUAGE` (default `es-DO`), and the existing local voice services. Native audio requires the Windows `Phoenix.exe` bridge and user consent for each sample. The optional `PHOENIX_AUDIO_ALLOWED_DIRS` variable contains semicolon-separated trusted directories for local media. The transcriber uses local CPU `faster-whisper` via `uv`, installed on demand.
 
 ## Model Experience
 
-When a user asks Kira to speak, the model calls `phoenix_voice_speak` with the requested short phrase. For diagnosis it calls `phoenix_voice_status`. The tool reports the provider's actual acceptance or rejection; Kira must not claim the speakers were audible until the user confirms.
+### Consent-gated perception tools
+
+#### What the model sees
+
+The tools `phoenix_audio_listen` and `phoenix_audio_file_listen` return actual timecoded speech segments or explicit errors. `phoenix_senses_status` reports only capability metadata, never evidence of recorded sound or image.
+
+#### Token effect
+
+Only short transcripts and structured receipts enter the model context; raw WAV bytes remain transient in the Host. Output length is bounded.
+
+#### KV Cache effect
+
+Stable tool descriptions and prompt guidance can be reused across turns; live transcripts vary and do not have reusable token prefixes.
 
 ## Known Limitations and Deferred Work
 
-- The tools provide audio output only: they never request microphone permission, start browser WebRTC silently, or impersonate speech input. Without an authorized Codex session or a suitable local synthesizer, speech returns an explicit failure. A successful provider receipt does not verify physical speaker volume or audibility.
+- These tools do not listen continuously, identify every acoustic event, infer who spoke, or bypass protected media.
+- Speaker synthesis does not prove audibility; desktop viewer availability does not prove that a frame was captured.
+- Each Windows audio request requires a human decision in a native permission dialog.

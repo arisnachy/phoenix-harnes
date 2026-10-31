@@ -631,6 +631,20 @@ internal sealed class PhoenixDesktopWindow : Form
                 return desktopLive.StateForSession(command.SessionId);
             case "phoenix.desktop.live-frame":
                 return desktopLive.FrameForSession(command.SessionId);
+            case "phoenix.audio.status":
+                return DesktopAudioCapture.Status();
+            case "phoenix.audio.capture":
+                return await DesktopAudioCapture.CaptureAsync(this, command.SessionId!, command.Seconds, command.AudioSource);
+            case "phoenix.senses.status":
+                return JsonSerializer.Serialize(new
+                {
+                    desktopShell = true,
+                    browserPaneVisible = !split.Panel2Collapsed && !desktopLive.Visible,
+                    desktopLivePaneVisible = !split.Panel2Collapsed && desktopLive.Visible,
+                    desktopLive = JsonSerializer.Deserialize<JsonElement>(desktopLive.StateForSession(command.SessionId)),
+                    windowsAudio = JsonSerializer.Deserialize<JsonElement>(DesktopAudioCapture.Status()),
+                    evidence = "A visible viewer is not proof of a frame. Verify desktop.live-frame or computer screenshots separately."
+                });
             case "phoenix.browser.inspect":
                 return await InspectBrowserAsync();
             case "phoenix.browser.fill-form":

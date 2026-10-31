@@ -52,6 +52,31 @@ True(BrowserCommand.TryParse("{\"type\":\"phoenix.app.logout\"}", out var logout
 Equal("phoenix.app.logout", logout.Type, "native logout command type", failures);
 Equal(null, logout.Url, "native logout command has no url", failures);
 
+False(BrowserCommand.TryParse("{\"type\":\"phoenix.audio.capture\",\"sessionId\":\"turn-1\"}", out _),
+    "web surface cannot start Windows audio capture", failures);
+True(BrowserCommand.TryParse("{\"type\":\"phoenix.audio.status\",\"sessionId\":\"turn-1\"}",
+    out var audioState, allowAutomation: true), "native pipe can inspect audio capability", failures);
+Equal("turn-1", audioState.SessionId, "audio status retains session", failures);
+True(BrowserCommand.TryParse("{\"type\":\"phoenix.audio.capture\",\"sessionId\":\"turn-1\",\"seconds\":8}",
+    out var audioCapture, allowAutomation: true), "native pipe accepts bounded audio", failures);
+EqualInt(8, audioCapture.Seconds, "native audio clip bounded", failures);
+False(BrowserCommand.TryParse("{\"type\":\"phoenix.audio.capture\",\"sessionId\":\"turn-1\",\"seconds\":60}",
+    out _, allowAutomation: true), "unbounded audio rejected", failures);
+False(BrowserCommand.TryParse("{\"type\":\"phoenix.audio.capture\",\"sessionId\":\"../other\"}",
+    out _, allowAutomation: true), "foreign session rejected", failures);
+
+
+True(BrowserCommand.TryParse("{\"type\":\"phoenix.audio.capture\",\"sessionId\":\"turn-1\",\"seconds\":6,\"source\":\"microphone\"}",
+    out var audioMic, allowAutomation: true), "microphone capture requires native command", failures);
+Equal("microphone", audioMic.AudioSource, "microphone source retained", failures);
+False(BrowserCommand.TryParse("{\"type\":\"phoenix.audio.capture\",\"sessionId\":\"turn-1\",\"source\":\"all\"}",
+    out _, allowAutomation: true), "arbitrary audio source rejected", failures);
+False(BrowserCommand.TryParse("{\"type\":\"phoenix.senses.status\",\"sessionId\":\"turn-1\"}",
+    out _), "web bridge cannot query sense inventory", failures);
+True(BrowserCommand.TryParse("{\"type\":\"phoenix.senses.status\",\"sessionId\":\"turn-1\"}",
+    out var senses, allowAutomation: true), "native pipe supports viewer inventory", failures);
+Equal("turn-1", senses.SessionId, "sense inventory retains session", failures);
+
 False(BrowserCommand.TryParse("{not-json}", out _), "malformed json rejected", failures);
 False(BrowserCommand.TryParse("{\"type\":\"phoenix.browser.open\",\"url\":\"javascript:alert(1)\"}", out _), "unsafe open command rejected", failures);
 
