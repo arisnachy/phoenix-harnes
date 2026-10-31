@@ -33,7 +33,9 @@ export async function transformAvatarThroughCodex(original: Blob, rpc: AvatarRpc
     || !/^[a-zA-Z0-9+/]+={0,2}$/u.test(result.image)) {
     throw new Error('Codex devolvió una imagen demasiado grande o inválida.')
   }
-  const decoded = Uint8Array.from(atob(result.image), (character) => character.charCodeAt(0))
+  const raw = atob(result.image)
+  const decoded = new Uint8Array(raw.length)
+  for (let index = 0; index < raw.length; index++) decoded[index] = raw.charCodeAt(index)
   // Normalize/crop and remove metadata, exactly like a manually uploaded photo.
   return normalizeAvatar(new Blob([decoded], { type: result.mediaType }))
 }
