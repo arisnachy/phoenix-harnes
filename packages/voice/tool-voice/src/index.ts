@@ -4,7 +4,7 @@ import { defineTool } from '@phoenix-ai/dsh-tools'
 import type {} from '@phoenix-ai/dsh-system-prompt'
 import type {} from '@phoenix-ai/dsh-voice'
 import { deliverAgentSpeech } from './delivery.ts'
-import { windowsAudioStatus, listenWindowsAudio, windowsSensesStatus } from './audio-windows.ts'
+import { windowsAudioStatus, listenWindowsAudio, windowsSensesStatus, transcribeApprovedAudioFile } from './audio-windows.ts'
 
 export const name = 'tool-voice'
 export const inject = ['tools', 'voice', 'systemPrompt']
@@ -18,6 +18,7 @@ export function apply(ctx: Context): void {
       + 'Use phoenix_voice_status for diagnostics. Host TTS needs no microphone or active Codex call; an existing authorized Codex Live call has priority. '
       + 'Never claim that the speaker was audible or that microphone audio was heard based solely on a successful synthesis receipt. '
       + 'When asked to hear Windows audio or the microphone, use phoenix_audio_status and phoenix_audio_listen (source output or microphone), not phoenix_voice_speak. The Windows host must be open and the user approves every 3-12 second clip in a native dialog. Never activate a microphone implicitly or listen continuously. If unavailable, try already-authorized browser tab or video_media_inspect; never invent hearing. '
+      + 'For an explicitly user-approved audio or video file in PHOENIX_AUDIO_ALLOWED_DIRS, call phoenix_audio_file_listen; never browse the disk to find audio or bypass a blocked directory. '
       + 'When asked what Kira can perceive or what viewer is open, call phoenix_senses_status; it distinguishes actual Windows viewer state, local audio hardware and voice providers. If the user asks to SEE the desktop use an actual computer screenshot, not the senses status alone; for shared browser tabs use existing MiniBrowser capture. '
       + 'Do not search the web for local speech, simulate tool invocations, or tell the user there is no speech tool before checking these tools.',
   })
@@ -109,6 +110,21 @@ export function apply(ctx: Context): void {
       }) }
     },
     presentCall: () => ({ card:'generic',title:'Escuchar audio de Windows (con permiso)',kind:'read' as const }),
+  }))
+  ctx.tools.register(defineTool({
+    name: 'phoenix_audio_file_listen',
+    description: 'Transcribe un archivo local de audio aportado/autorizado por el usuario dentro de PHOENIX_AUDIO_ALLOWED_DIRS (rutas separadas por punto y coma). Solo lectura; faster-whisper local. Soporta WAV, MP3, M4A, OGG, FLAC, WebM, MP4; tamaño máximo 32 MiB. No escanea rutas ni accede a carpetas no autorizadas.',
+    parameters: {
+      path: { type:'string', required:true, description:'Ruta absoluta exacta de un archivo autorizado; no una carpeta ni URL.' },
+    },
+    output: { schema: {type:'string'}, render: (_args,value) => [{type:'text' as const,text:value}] },
+    isConcurrencySafe: () => true,
+    async execute(args) {
+      try { return JSON.stringify(await transcribeApprovedAudioFile(args.path)) }
+      catch (error) { return JSON.stringify({captureVerified:false, reason:String(error).slice(0,240),
+        instruction:'Archivo no transcrito; obtener autorizacion concreta para la carpeta o un archivo compatible, no inventar contenido.'}) }
+    },
+    presentCall: () => ({card:'generic',title:'Transcribir archivo de audio autorizado',kind:'read' as const}),
   }))
   ctx.tools.register(defineTool({
     name: 'phoenix_senses_status',

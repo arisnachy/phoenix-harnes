@@ -5,7 +5,7 @@ import { spawn } from 'node:child_process'
 import { createConnection } from 'node:net'
 import { readFile, realpath, rm, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { basename, dirname, isAbsolute, join } from 'node:path'
+import { basename, dirname, isAbsolute, join, relative, sep } from 'node:path'
 
 interface NativeAudioSample {
   status: 'captured'
@@ -213,4 +213,42 @@ export async function listenWindowsAudio(sessionId: string, seconds: number,
 /** Grounded viewer state from the Windows shell; no synthetic screen observations. */
 export async function windowsSensesStatus(sessionId: string): Promise<unknown> {
   return JSON.parse(await callNative('phoenix.senses.status', sessionId))
+}
+
+const SUPPORTED_AUDIO_SUFFIXES = /\.(?:wav|mp3|m4a|ogg|flac|webm|mp4)$/iu
+
+/**
+ * Only explicitly allowlisted, user-owned local media. Symlinks resolve before comparison.
+ * Never use this to scan the disk or silently transcribe microphone recordings.
+ */
+export async function transcribeApprovedAudioFile(input: string): Promise<unknown> {
+  if (typeof input !== 'string' || !isAbsolute(input) || input.length > 2048
+    || !SUPPORTED_AUDIO_SUFFIXES.test(input)) {
+    throw new Error('AUDIO_FILE_PATH_INVALID')
+  }
+  const allowed = process.env.PHOENIX_AUDIO_ALLOWED_DIRS?.split(';')
+    .map(x => x.trim()).filter(Boolean) ?? []
+  if (allowed.length === 0) throw new Error('AUDIO_FILE_DIRECTORY_NOT_AUTHORIZED')
+  const target = await realpath(input)
+  const granted = await Promise.all(allowed.filter(isAbsolute).map(async directory => {
+    try {
+      const base = await realpath(directory)
+      const rel = relative(base,target)
+      return rel !== '' && rel !== '..' && !rel.startsWith('..' + sep) && !isAbsolute(rel)
+    } catch { return false }
+  }))
+  if (!granted.some(Boolean)) throw new Error('AUDIO_FILE_DIRECTORY_NOT_AUTHORIZED')
+  const details = await stat(target)
+  if (!details.isFile() || details.size < 512 || details.size > 32 * 1024 * 1024) {
+    throw new Error('AUDIO_FILE_SIZE_INVALID')
+  }
+  const result = await transcribeLocal(target)
+  return {
+    source:'authorized-local-audio-file',
+    captureVerified:true,
+    mediaSizeBytes:details.size,
+    speechRecognized:result.cues.length > 0,
+    ...result,
+    note:'Archivo autorizado procesado localmente. El audio de origen no fue modificado; no inferir sonidos que no se reconocen.'
+  }
 }

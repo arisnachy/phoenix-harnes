@@ -18,6 +18,7 @@ describe('Kira speech tools in a real Cordis registry', () => {
       expect(schemas.map(schema => schema.name)).toContain('phoenix_audio_status')
       expect(schemas.map(schema => schema.name)).toContain('phoenix_audio_listen')
       expect(schemas.map(schema => schema.name)).toContain('phoenix_senses_status')
+      expect(schemas.map(schema => schema.name)).toContain('phoenix_audio_file_listen')
       expect(schemas.find(schema => schema.name === 'phoenix_audio_listen')?.parameters)
         .toMatchObject({type:'object'})
       expect(schemas.find(schema => schema.name === 'phoenix_voice_speak')?.parameters)
