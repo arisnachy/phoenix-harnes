@@ -249,6 +249,42 @@ describe('Cloud worker auth and scheduling',()=>{
       assert.equal(snapshot.lastDecisionReason,'Virtual exit confirmed in ledger: tp2');
     }finally{globalThis.fetch=original;}
   });
+  it('executes a verified PAPER stop without universe discovery or candle requests',async()=>{
+    const env={DB:new D1Fake(),ADMIN_TOKEN:TOKEN};
+    const initial=freshState();initial.enabled=true;
+    env.DB.state=paperFill(initial,{id:'seed-protective-position',at:NOW-60_000,
+      symbol:'BTCUSDT',side:'buy',price:100,quantity:1,
+      strategy:'test-protective-exit',reason:'seed-only',
+      plan:exitPlan(100,2,'test-protective-exit')});
+    const original=globalThis.fetch;
+    let discoveryCalls=0,candleCalls=0;
+    globalThis.fetch=async input=>{
+      const url=new URL(input);
+      if(url.pathname==='/api/v3/exchangeInfo'||url.pathname==='/api/v3/ticker/24hr'){
+        discoveryCalls++;
+        return new Response('provider unavailable',{status:503});
+      }
+      if(url.pathname==='/api/v3/klines'){
+        candleCalls++;
+        return new Response('provider unavailable',{status:503});
+      }
+      if(url.pathname==='/api/v3/ticker/price')return new Response(
+        JSON.stringify([{symbol:'BTCUSDT',price:'90'}]),{status:200});
+      throw new Error('unexpected-market-request:'+url.pathname);
+    };
+    try{
+      const result=await cycle(env,NOW);
+      assert.equal(result.status,'ok');
+      assert.equal(result.decision,'stop-loss');
+      const snapshot=await (await route(request('/snapshot'),env)).json();
+      assert.equal(Object.keys(snapshot.positions).length,0);
+      assert.equal(snapshot.journal.at(-1).side,'sell');
+      assert.equal(snapshot.journal.at(-1).reason,'stop-loss');
+      assert.equal(discoveryCalls,0);
+      assert.equal(candleCalls,0);
+      assert.equal(snapshot.lastDecisionReason,'Virtual exit confirmed in ledger: stop-loss');
+    }finally{globalThis.fetch=original;}
+  });
   it('halts after three consecutive provider failures and refuses auto-restart',async()=>{
     const env={DB:new D1Fake(),ADMIN_TOKEN:TOKEN};
     await route(request('/admin/control',TOKEN,'POST',{action:'start'}),env);
