@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { CONNECTOR_CATALOG, CONNECTOR_PRESETS } from '../src/client/connector-catalog.ts'
 
 const REQUIRED_CONNECTORS = [
+  'the-odds-api',
   'google-workspace',
   'outlook-mail', 'outlook-calendar', 'onedrive', 'sharepoint', 'box', 'notion',
   'slack', 'microsoft-teams', 'zoom', 'github', 'linear', 'vercel', 'firebase',
@@ -110,6 +111,14 @@ describe('connector catalog', () => {
     ]))
   })
 
+  it('exposes The Odds API v4 as an independent, native API-key sports connector',()=>{
+    const entry=CONNECTOR_CATALOG.find(row=>row.id==='the-odds-api')
+    expect(entry).toMatchObject({mode:'api-key',providerFamily:'the-odds-api',
+      provenance:'vendor-official',category:'Sports'})
+    expect(entry?.aliases).toContain('sports-odds-v4')
+    expect(entry?.curatedMcp).toBeUndefined()
+    expect(entry?.description).toContain('vault')
+  })
   it('keeps retired Jev out of the connector catalog', () => {
     expect(CONNECTOR_CATALOG.some(connector => connector.id === 'jev')).toBe(false)
     expect(CONNECTOR_CATALOG.some(connector => connector.providerFamily === 'jev')).toBe(false)

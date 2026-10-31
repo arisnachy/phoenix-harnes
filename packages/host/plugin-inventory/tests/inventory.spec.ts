@@ -71,6 +71,9 @@ describe('PluginInventoryGateway', () => {
       { method: 'restartForUpdate', invocation: { kind: 'direct' } },
       { method: 'refreshForUpdate', invocation: { kind: 'direct' } },
       { method: 'mcpConnectorHubState', invocation: { kind: 'direct' } },
+      { method: 'theOddsApiState', invocation: { kind: 'direct' } },
+      { method: 'configureTheOddsApi', invocation: { kind: 'direct' } },
+      { method: 'disconnectTheOddsApi', invocation: { kind: 'direct' } },
     ]))
     expect(new Set(exposed.map(entry => entry.method)).size).toBe(exposed.length)
     expect(exposed.every(entry => entry.invocation.kind === 'direct')).toBe(true)

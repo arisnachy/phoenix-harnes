@@ -60,6 +60,9 @@ jobs:
           node --experimental-strip-types --test packages/core/tool-sports/tests/free-odds.test.mjs
       - name: Verify chat schema, visuals and prior UI compatibility
         run: pnpm exec vitest run packages/client/ui-conversation/tests/sports-rich-ui.client.spec.tsx packages/client/ui-conversation/tests/generative-ui.client.spec.tsx packages/client/ui-conversation/tests/tool-activity-group.client.spec.tsx packages/client/ui-conversation/tests/sports-tool-visual.client.spec.ts
+      - name: Verify The Odds API vault connector, client settings and credential handoff
+        run: |
+          pnpm exec vitest run packages/host/plugin-inventory/tests/odds-api-connector.spec.ts packages/host/plugin-inventory/tests/inventory.spec.ts packages/client/ui-settings-models/tests/the-odds-api-connector.client.spec.tsx packages/client/ui-settings-models/tests/connector-catalog.client.spec.ts packages/client/ui-settings-models/tests/optional-plugin-inventory.client.spec.ts packages/core/tool-sports/tests/sports-credential-env.test.ts
       - name: Compile shared server contracts
         run: pnpm run build:lib:host
       - name: Strict types and Phoenix client build

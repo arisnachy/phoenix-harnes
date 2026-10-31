@@ -24,6 +24,7 @@ import { readBusinessLibrarySnapshot } from './business-library.ts'
 import { OpenClawConnectorBridge } from './openclaw-connectors.ts'
 import { TokenTelemetryCollector } from './telemetry.ts'
 import { readTelegramBotState, saveTelegramBot, removeTelegramBot, TelegramInbox } from './telegram-bot.ts'
+import { theOddsApiConnectorState, configureTheOddsApiConnector, disconnectTheOddsApiConnector } from './odds-api-connector.ts'
 import {
   BINANCE_AGENT_OS_SERVER_NAME,
   BINANCE_AGENT_OS_URL,
@@ -61,6 +62,7 @@ import type {
   PhoenixUpdateRefreshReceipt,
   PhoenixUpdateSnapshot,
   TokenTelemetrySnapshot,
+  OddsApiConnectorState,
   TokenTelemetryPreference,
   TelegramBotSnapshot,
   PluginEntryId,
@@ -364,6 +366,26 @@ export class PluginInventoryGateway extends TypertRemoteService {
   @Remote('repairManagedMcpConnector')
   async repairManagedMcpConnector(request: ManagedMcpEntryRequest): Promise<McpRegistryInstallReceipt> {
     return this.managedMcp.repair(request)
+  }
+
+  /** Read The Odds API vault state and verify using the provider's zero-credit sports catalog.
+   * The returned snapshot contains no key, endpoint URL, or user secrets.
+   */
+  @Remote('theOddsApiState')
+  async theOddsApiState():Promise<OddsApiConnectorState>{
+    return theOddsApiConnectorState(this.ctx)
+  }
+
+  /** Save an owner-entered The Odds API v4 key only in the Host credential vault. */
+  @Remote('configureTheOddsApi')
+  async configureTheOddsApi(request:{apiKey:string}):Promise<OddsApiConnectorState>{
+    return configureTheOddsApiConnector(this.ctx,request.apiKey)
+  }
+
+  /** Forget the vault-owned The Odds API key without modifying ambient environment. */
+  @Remote('disconnectTheOddsApi')
+  async disconnectTheOddsApi():Promise<OddsApiConnectorState>{
+    return disconnectTheOddsApiConnector(this.ctx)
   }
 
   /** Describe the configured Telegram bot without revealing its token.
