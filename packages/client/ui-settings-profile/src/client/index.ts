@@ -4,6 +4,7 @@ import type { ClientContext } from '@phoenix-ai/dsh-client-runtime/client'
 import type {} from '@phoenix-ai/dsh-client-ui-settings/client'
 import type {} from '@phoenix-ai/dsh-client-locale/client'
 import { UserProfileRow } from './UserProfileRow.tsx'
+import { MomentsAmbient } from './MomentsAmbient.tsx'
 import { UserProfileForm, USER_PROFILE_SETTINGS_NAMESPACE } from './profile-controller.ts'
 import { en, es, zh, type UserProfileLocaleKey } from './locales.ts'
 import type { UserProfileSettings } from './types.ts'
@@ -40,4 +41,8 @@ export function apply(ctx: ClientContext): void {
     locale: SETTINGS_NS,
     inject: () => form.inject(),
   }, UserProfileRow))
+  ctx.slots.inject('shell.overlay', () => ctx.slots.register({
+    name: 'shell.overlay', id: 'phoenix-moments', order: 20,
+    inject: () => ({ scope }),
+  }, MomentsAmbient))
 }

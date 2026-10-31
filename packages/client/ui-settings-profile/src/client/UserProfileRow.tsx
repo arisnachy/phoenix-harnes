@@ -20,6 +20,7 @@ const CONSENT_FIELDS = [
   ['pronouns', 'consentPronouns'],
   ['tone', 'consentTone'],
   ['family', 'consentFamily'],
+  ['moments', 'consentMoments'],
 ] as const
 
 /** Render Phoenix identity, learned preference provenance, and private context controls. */
@@ -113,6 +114,20 @@ export function UserProfileRow(props: UserProfileRowProps) {
         <label className={css.label} htmlFor="profile-family">{t('family')}</label>
         <textarea id="profile-family" className={state.family.invalid ? css.inputInvalid : css.textarea} value={state.family.text} disabled={disabled} onChange={(event) => { props.edit('family', event.target.value) }} />
         <p className={css.hint}>{state.family.invalid ? t('invalid') : t('familyHint')}</p>
+      </div>
+
+      <div className={css.group}>
+        <h3 className={css.groupTitle}>{t('momentsSection')}</h3>
+        <p className={css.hint}>{t('momentsHint')}</p>
+        <ProfileInput id="profile-country" label={t('countryCode')} hint={t('countryHint')} value={state.countryCode.text} invalid={state.countryCode.invalid} disabled={disabled} onChange={(value) => { props.edit('countryCode', value.toUpperCase()) }} />
+        <ProfileInput id="profile-moments-zone" label={t('momentsZone')} hint={t('momentsZoneHint')} value={state.momentsTimeZone.text} invalid={state.momentsTimeZone.invalid} disabled={disabled} onChange={(value) => { props.edit('momentsTimeZone', value) }} />
+        <label className={css.label} htmlFor="profile-moments-dates">{t('specialDates')}</label>
+        <textarea id="profile-moments-dates" className={state.specialDates.invalid ? css.inputInvalid : css.textarea} value={state.specialDates.text} disabled={disabled} onChange={(event) => { props.edit('specialDates', event.target.value) }} />
+        <p className={state.specialDates.invalid ? css.error : css.hint}>{t('specialDatesHint')}</p>
+        <label className={css.check}>
+          <input type="checkbox" checked={state.consent.moments} disabled={disabled} onChange={(event) => { props.setConsent('moments', event.target.checked) }} />
+          {t('consentMoments')}
+        </label>
       </div>
 
       <div className={css.group}>

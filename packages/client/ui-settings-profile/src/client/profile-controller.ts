@@ -1,18 +1,18 @@
 /** Staged browser form over the Host's user-profile settings namespace. */
 
 import { createSnapshotStore, type SettingsScope, type SnapshotStore } from '@phoenix-ai/dsh-client-runtime/client'
-import type { AssistantGender, AssistantGenderMode, UserAddressMode, UserProfileConsent, UserProfileFamilyMember, UserProfileRowState, UserProfileSettings } from './types.ts'
+import type { AssistantGender, AssistantGenderMode, UserAddressMode, UserProfileConsent, UserProfileFamilyMember, PersonalMoment, UserProfileRowState, UserProfileSettings } from './types.ts'
 
 /** Settings namespace join key; it intentionally does not import the Host package. */
 export const USER_PROFILE_SETTINGS_NAMESPACE = 'user-profile'
 
-const FIELDS = ['assistantName', 'preferredName', 'profession', 'professionalTitle', 'dateOfBirth', 'gender', 'pronouns', 'tone'] as const
+const FIELDS = ['assistantName', 'preferredName', 'profession', 'professionalTitle', 'dateOfBirth', 'gender', 'pronouns', 'tone', 'countryCode', 'momentsTimeZone'] as const
 type TextField = typeof FIELDS[number]
 type ConsentField = keyof UserProfileConsent
 
 /** Actions injected into the row component. */
 export interface UserProfileRowActions {
-  edit: (field: TextField | 'family', text: string) => void
+  edit: (field: TextField | 'family' | 'specialDates', text: string) => void
   setAssistantGender: (value: AssistantGender) => void
   setAssistantGenderAutomatic: () => void
   setAddressingMode: (mode: UserAddressMode) => void
@@ -40,6 +40,7 @@ interface Draft {
   pronouns: string
   tone: string
   family: string
+  specialDates: string
   consent: UserProfileConsent
 }
 
@@ -52,13 +53,14 @@ const EMPTY_CONSENT: UserProfileConsent = {
   pronouns: false,
   tone: false,
   family: false,
+  moments: false,
 }
 
 function emptyDraft(): Draft {
   return {
     assistantName: 'KIRA', assistantGender: 'feminine', assistantGenderSource: 'auto',
     preferredName: '', profession: '', professionalTitle: '', addressingMode: 'automatic',
-    dateOfBirth: '', gender: '', pronouns: '', tone: '', family: '',
+    dateOfBirth: '', gender: '', pronouns: '', tone: '', family: '', countryCode: '', momentsTimeZone: '', specialDates: '',
     consent: { ...EMPTY_CONSENT },
   }
 }
@@ -82,6 +84,9 @@ function toDraft(value: UserProfileSettings | undefined): Draft {
     pronouns: textValue(value.pronouns),
     tone: textValue(value.tone),
     family: value.family?.map(member => member.name === undefined ? member.relationship : `${member.relationship} | ${member.name}`).join('\n') ?? '',
+    countryCode: textValue(value.countryCode),
+    momentsTimeZone: textValue(value.momentsTimeZone),
+    specialDates: value.specialDates?.map(row => `${row.date} | ${row.label}${row.solemn ? ' | solemn' : ''}`).join('\n') ?? '',
     consent: { ...EMPTY_CONSENT, ...value.consent },
   }
 }
@@ -98,6 +103,26 @@ function parseFamily(text: string): UserProfileFamilyMember[] | undefined {
     members.push(name === '' ? { relationship: relation } : { relationship: relation, name })
   }
   return members
+}
+
+/** User-friendly lines, with conservative dates and explicit solemn opt-in. */
+function parseSpecialDates(text: string): PersonalMoment[] | undefined {
+  const lines = text.split(/\r?\n/).map(line => line.trim()).filter(Boolean)
+  if (lines.length === 0) return []
+  if (lines.length > 100) return undefined
+  const result: PersonalMoment[] = []
+  for (const line of lines) {
+    const parts = line.split('|').map(part => part.trim())
+    const date = parts[0] ?? ''
+    const label = parts[1] ?? ''
+    const third = parts[2]
+    const annual = /^\d{2}-\d{2}$/.test(date) ? `2024-${date}` : date
+    const parsed = /^\d{4}-\d{2}-\d{2}$/.test(annual) ? new Date(annual + 'T00:00:00Z') : new Date(NaN)
+    if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== annual
+      || !label || label.length > 120 || (third !== undefined && third !== 'solemn') || parts.length > 3) return undefined
+    result.push({ date, label, ...(third === 'solemn' ? { solemn: true } : {}) })
+  }
+  return result
 }
 
 function fieldState(text: string, invalid = false) {
@@ -161,7 +186,7 @@ export class UserProfileForm {
     this.unsubscribe()
   }
 
-  private edit(field: TextField | 'family', text: string): void {
+  private edit(field: TextField | 'family' | 'specialDates', text: string): void {
     this.draft[field] = text
     this.failed = false
     this.saved = false
@@ -212,7 +237,7 @@ export class UserProfileForm {
     this.saved = false
     this.publish()
     let ok = true
-    for (const field of [...FIELDS, 'assistantGender' as const, 'assistantGenderSource' as const, 'addressingMode' as const, 'family' as const, 'consent' as const]) {
+    for (const field of [...FIELDS, 'assistantGender' as const, 'assistantGenderSource' as const, 'addressingMode' as const, 'family' as const, 'specialDates' as const, 'consent' as const]) {
       try {
         await this.scope.unset(field)
       } catch {
@@ -250,6 +275,7 @@ export class UserProfileForm {
       assistantGender: this.draft.assistantGender,
       assistantGenderSource: this.draft.assistantGenderSource,
       family: parseFamily(this.draft.family),
+      specialDates: parseSpecialDates(this.draft.specialDates),
       consent: this.draft.consent,
     }
     try {
@@ -282,6 +308,9 @@ export class UserProfileForm {
       const family = values.family
       if (family === undefined) await this.scope.unset('family')
       else await this.scope.set('family', family)
+      const specialDates = values.specialDates as PersonalMoment[] | undefined
+      if (specialDates === undefined || specialDates.length === 0) await this.scope.unset('specialDates')
+      else await this.scope.set('specialDates', specialDates)
       await this.scope.set('consent', values.consent)
     } catch {
       ok = false
@@ -298,12 +327,16 @@ export class UserProfileForm {
   }
 
   private invalid(): boolean {
-    return this.draft.dateOfBirth !== '' && !/^\d{4}-\d{2}-\d{2}$/.test(this.draft.dateOfBirth.trim())
+    return this.draft.countryCode.trim() !== '' && !/^[A-Z]{2}$/.test(this.draft.countryCode.trim().toUpperCase())
+      || (this.draft.momentsTimeZone.trim() !== '' && !isValidZone(this.draft.momentsTimeZone.trim()))
+      || parseSpecialDates(this.draft.specialDates) === undefined
+      || this.draft.dateOfBirth !== '' && !/^\d{4}-\d{2}-\d{2}$/.test(this.draft.dateOfBirth.trim())
       || (this.draft.family.trim() !== '' && parseFamily(this.draft.family) === undefined)
   }
 
   private invalidAgainst(value: UserProfileSettings): boolean {
-    return this.draft.assistantName.trim() !== textValue(value.assistantName)
+    return this.draft.specialDates.trim() !== (value.specialDates?.map(row => `${row.date} | ${row.label}${row.solemn ? ' | solemn' : ''}`).join('\n') ?? '')
+      || this.draft.assistantName.trim() !== textValue(value.assistantName)
       || this.draft.assistantGender !== value.assistantGender
       || this.draft.assistantGenderSource !== (value.assistantGenderSource ?? 'auto')
       || this.draft.addressingMode !== (value.addressingMode ?? 'automatic')
@@ -316,6 +349,7 @@ export class UserProfileForm {
     const next = toDraft(this.source)
     return FIELDS.some(field => this.draft[field].trim() !== next[field].trim())
       || this.draft.family.trim() !== next.family.trim()
+      || this.draft.specialDates.trim() !== next.specialDates.trim()
       || this.draft.addressingMode !== next.addressingMode
       || this.draft.assistantGender !== next.assistantGender
       || this.draft.assistantGenderSource !== next.assistantGenderSource
@@ -342,6 +376,9 @@ export class UserProfileForm {
       gender: fieldState(this.draft.gender),
       pronouns: fieldState(this.draft.pronouns),
       tone: fieldState(this.draft.tone),
+      countryCode: fieldState(this.draft.countryCode),
+      momentsTimeZone: fieldState(this.draft.momentsTimeZone),
+      specialDates: fieldState(this.draft.specialDates, parseSpecialDates(this.draft.specialDates) === undefined),
       family: fieldState(this.draft.family, this.draft.family.trim() !== '' && parseFamily(this.draft.family) === undefined),
       consent: { ...this.draft.consent },
     }
@@ -350,4 +387,8 @@ export class UserProfileForm {
   private publish(): void {
     if (!this.disposed) this.store.set(this.project())
   }
+}
+
+function isValidZone(value: string): boolean {
+  try { new Intl.DateTimeFormat('en-US', { timeZone: value }); return true } catch { return false }
 }
