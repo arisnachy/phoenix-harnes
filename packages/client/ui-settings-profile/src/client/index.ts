@@ -2,8 +2,10 @@
 
 import type { ClientContext } from '@phoenix-ai/dsh-client-runtime/client'
 import type {} from '@phoenix-ai/dsh-client-ui-settings/client'
+import type {} from '@phoenix-ai/dsh-client-ui-layout/client'
 import type {} from '@phoenix-ai/dsh-client-locale/client'
 import { UserProfileRow } from './UserProfileRow.tsx'
+import { MomentsAmbient } from './MomentsAmbient.tsx'
 import { transformAvatarThroughCodex } from './avatar-codex.ts'
 import type {} from '@phoenix-ai/dsh-client-connection/client'
 import { UserProfileForm, USER_PROFILE_SETTINGS_NAMESPACE } from './profile-controller.ts'
@@ -45,4 +47,8 @@ export function apply(ctx: ClientContext): void {
       transformAvatar: (photo: Blob) => transformAvatarThroughCodex(photo, ctx.connection.rpc),
     }),
   }, UserProfileRow))
+  ctx.slots.inject('shell.overlay', () => ctx.slots.register({
+    name: 'shell.overlay', id: 'phoenix-moments', order: 20,
+    inject: () => ({ scope }),
+  }, MomentsAmbient))
 }

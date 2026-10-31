@@ -10,12 +10,20 @@ export interface UserProfileConsent {
   pronouns: boolean
   tone: boolean
   family: boolean
+  moments: boolean
 }
 
 /** One optional family entry supplied explicitly by the user. */
 export interface UserProfileFamilyMember {
   relationship: string
   name?: string
+}
+
+/** A user-owned recurring date; year-specific dates also recur each year. */
+export interface PersonalMoment {
+  date: string
+  label: string
+  solemn?: boolean
 }
 
 /** Data persisted by the profile namespace. Age is intentionally absent. */
@@ -42,6 +50,9 @@ export interface UserProfileSettings {
   pronouns?: string
   tone?: string
   family?: UserProfileFamilyMember[]
+  countryCode?: string
+  momentsTimeZone?: string
+  specialDates?: PersonalMoment[]
   consent: UserProfileConsent
 }
 
@@ -60,6 +71,9 @@ export interface UserProfileUpdate {
   pronouns?: string | null
   tone?: string | null
   family?: UserProfileFamilyMember[] | null
+  countryCode?: string | null
+  momentsTimeZone?: string | null
+  specialDates?: PersonalMoment[] | null
   consent?: Partial<UserProfileConsent>
 }
 
@@ -73,6 +87,8 @@ export interface UserProfileRedacted {
   hasPronouns: boolean
   hasTone: boolean
   familyCount: number
+  specialDateCount: number
+  hasCountryCode: boolean
   consent: UserProfileConsent
 }
 
