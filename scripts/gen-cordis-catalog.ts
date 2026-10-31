@@ -635,6 +635,7 @@ export const TYPE_LINK_EXEMPTIONS: Readonly<Record<string, string>> = {
   CognitiveMemoryRecord: 'cognitive memory record is owned by packages/session/session-learning/README.md',
   CognitiveRuntimeConfig: 'cognitive runtime configuration is owned by packages/session/cognitive-runtime/README.md',
   CognitiveState: 'cognitive runtime state is owned by packages/session/cognitive-runtime/README.md',
+  OperationalSelfModel: 'read-only session introspection contract is owned by packages/session/cognitive-runtime/README.md',
   AgentHandle: 'agent ownership handle is owned by packages/core/agent/README.md',
   AgentPreset: 'discovered preset record is owned by packages/preset/agent-presets/README.md',
   PresetMetadata: 'preset display text is owned by packages/preset/agent-presets/README.md',

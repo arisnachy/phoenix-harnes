@@ -30,6 +30,8 @@ Each snapshot contains the exact `SessionId`, the highest represented event sequ
 
 `maxCandidates` accepts 1–128 records and defaults to 64. `activeLimit` and `backgroundLimit` accept 0–128 records and default to 8 and 16. Each attention weight is finite and non-negative; the base composition sets every weight to 1. `suppressed` means that a candidate fell outside the configured memory budgets; it is not a safety inhibition, permission denial, or policy decision.
 
+The read-only `ctx.cognitiveRuntime.introspect(sessionId)` method derives an `OperationalSelfModel` from the existing session projection. It reports bounded provenance-backed evidence of identity, focus, goals, pending work, errors, and learning; it never includes budget-suppressed records or records belonging to another session. The result declares `epistemicStatus: 'operational-model-only'` and `subjectiveExperience: 'undetermined'`. No model request, new durable memory, or authorization is created.
+
 This projection does not claim consciousness, sentience, human equivalence, or human-like subjective experience. It supplies an inspectable state model for later consumers while leaving goals, permissions, approvals, credentials, tools, prompts, and agent-loop control to their existing owners.
 
 ## Failure and persistence behavior
