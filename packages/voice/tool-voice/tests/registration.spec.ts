@@ -15,6 +15,8 @@ describe('Kira speech tools in a real Cordis registry', () => {
       const schemas = ctx.tools.schemas()
       expect(schemas.map(schema => schema.name)).toContain('phoenix_voice_status')
       expect(schemas.map(schema => schema.name)).toContain('phoenix_voice_speak')
+      expect(schemas.map(schema => schema.name)).toContain('phoenix_audio_status')
+      expect(schemas.map(schema => schema.name)).toContain('phoenix_audio_listen')
       expect(schemas.find(schema => schema.name === 'phoenix_voice_speak')?.parameters)
         .toMatchObject({ type: 'object' })
   })

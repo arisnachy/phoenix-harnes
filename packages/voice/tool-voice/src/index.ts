@@ -4,6 +4,7 @@ import { defineTool } from '@phoenix-ai/dsh-tools'
 import type {} from '@phoenix-ai/dsh-system-prompt'
 import type {} from '@phoenix-ai/dsh-voice'
 import { deliverAgentSpeech } from './delivery.ts'
+import { windowsAudioStatus, listenWindowsAudio } from './audio-windows.ts'
 
 export const name = 'tool-voice'
 export const inject = ['tools', 'voice', 'systemPrompt']
@@ -16,6 +17,7 @@ export function apply(ctx: Context): void {
     text: 'If the user explicitly asks you to speak, test audio, or say a phrase out loud, call phoenix_voice_speak with short natural text in the configured language. '
       + 'Use phoenix_voice_status for diagnostics. Host TTS needs no microphone or active Codex call; an existing authorized Codex Live call has priority. '
       + 'Never claim that the speaker was audible or that microphone audio was heard based solely on a successful synthesis receipt. '
+      + 'When asked to hear real Windows application/system audio, use phoenix_audio_status and phoenix_audio_listen, not phoenix_voice_speak. The Windows host must be open and the user approves every clip in a native dialog. Capture is bounded and local. If unavailable, try already-authorized browser tab or video_media_inspect; never invent hearing. '
       + 'Do not search the web for local speech, simulate tool invocations, or tell the user there is no speech tool before checking these tools.',
   })
   ctx.tools.register(defineTool({
@@ -71,4 +73,38 @@ export function apply(ctx: Context): void {
     },
     presentCall: () => ({ card: 'generic', title: 'Kira habla en voz alta', kind: 'other' as const }),
   }))
+  ctx.tools.register(defineTool({
+    name: 'phoenix_audio_status',
+    description: 'Consulta si PHOENIX Desktop en Windows puede escuchar la salida WASAPI del equipo. No inicia grabacion, no requiere microfono. Aclara si el dispositivo realmente esta disponible.',
+    parameters: {},
+    output: { schema: { type: 'string' }, render: (_args, value) => [{ type: 'text' as const, text: value }] },
+    isConcurrencySafe: () => true,
+    async execute(_args, exec) {
+      const sessionId = 'agent-' + (exec.agent?.id ?? 'kira').replace(/[^A-Za-z0-9_-]/gu,'').slice(0,80)
+      try { return JSON.stringify(await windowsAudioStatus(sessionId)) }
+      catch (error) { return JSON.stringify({ available:false, reason:String(error).slice(0,220),
+        note:'El oido de Windows requiere Phoenix.exe. Para pestañas autorizadas usa las herramientas de video existentes.' }) }
+    },
+    presentCall: () => ({ card: 'generic', title: 'Diagnosticar oído de PHOENIX', kind: 'read' as const }),
+  }))
+  ctx.tools.register(defineTool({
+    name: 'phoenix_audio_listen',
+    description: 'ESCUCHAR AUDIO REAL del dispositivo de salida predeterminado de Windows durante 3 a 12 segundos. La ventana de PHOENIX solicita permiso visible cada vez. Transcribe con faster-whisper local; elimina WAV temporal. No utiliza microfono ni escucha continua. Si el usuario pide analizar la voz o sonido que sale de sus aplicaciones, usar aqui; no inventar lo no capturado.',
+    parameters: {
+      seconds: { type:'number', description:'Segundos enteros de captura, 3 a 12; por defecto 8. No sirve para escucha continua.' },
+    },
+    output: { schema: { type:'string' }, render: (_args,value) => [{type:'text' as const,text:value}] },
+    isConcurrencySafe: () => false,
+    async execute(args, exec) {
+      const sessionId = 'agent-' + (exec.agent?.id ?? 'kira').replace(/[^A-Za-z0-9_-]/gu,'').slice(0,80)
+      const seconds = args.seconds === undefined ? 8 : args.seconds
+      try { return JSON.stringify(await listenWindowsAudio(sessionId,seconds)) }
+      catch (error) { return JSON.stringify({
+        captureVerified:false, heardSeconds:0, reason:String(error).slice(0,240),
+        instruction:'No afirmar que se escucho el audio. Informar el bloqueo concreto y pedir solo el permiso o la fuente necesaria.',
+      }) }
+    },
+    presentCall: () => ({ card:'generic',title:'Escuchar audio de Windows (con permiso)',kind:'read' as const }),
+  }))
+
 }
