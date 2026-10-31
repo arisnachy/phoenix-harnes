@@ -6,7 +6,9 @@ describe('private Codex avatar operation', () => {
   it('rejects malformed or oversized images before invoking any backend', async () => {
     let registered = ''
     let authority = ''
-    let route: ((endpoint: string, payload: unknown, signal: AbortSignal) => Promise<unknown>) | undefined
+    const captured: {
+      route?: (endpoint: string, payload: unknown, signal: AbortSignal) => Promise<unknown>
+    } = {}
     const ctx = {
       connection: {
         rpc: {
@@ -17,7 +19,7 @@ describe('private Codex avatar operation', () => {
           ) => {
             registered = channel
             authority = options.authority
-            route = handler
+            captured.route = handler
             return async () => {}
           },
         },
@@ -26,6 +28,7 @@ describe('private Codex avatar operation', () => {
     installCodexAvatarTransform(ctx)
     expect(registered).toBe('/avatar')
     expect(authority).toBe('loopback')
+    const route = captured.route
     if (route === undefined) throw new Error('Route was not registered')
     const signal = new AbortController().signal
     for (const request of [
