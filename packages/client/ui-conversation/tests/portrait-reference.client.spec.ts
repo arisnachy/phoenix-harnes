@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isSelfImageRequest } from '../src/client/portrait-reference.ts'
+import { isSelfImageRequest, messageWithProfileReference } from '../src/client/portrait-reference.ts'
 
 describe('private user portrait reference intent', () => {
   it('recognizes specific image requests depicting the user', () => {
@@ -23,5 +23,13 @@ describe('private user portrait reference intent', () => {
     expect(isSelfImageRequest('Dame una imagen de mi casa')).toBe(false)
     expect(isSelfImageRequest('Esa foto mía no me gusta')).toBe(false)
     expect(isSelfImageRequest('Explícame cómo generar una foto mía')).toBe(false)
+  })
+  it('informs Kira of the attached real photo only after authorization', () => {
+    const prompt = 'Dame una imagen mía como comandante de nave, estilo Kira'
+    expect(messageWithProfileReference(prompt, false)).toBe(prompt)
+    const withPhoto = messageWithProfileReference(prompt, true)
+    expect(withPhoto).toContain('referencia-original-del-usuario.webp')
+    expect(withPhoto).toContain('image_generation')
+    expect(withPhoto).toContain('NO pidas otra foto')
   })
 })
