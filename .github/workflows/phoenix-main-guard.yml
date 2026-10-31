@@ -12,7 +12,8 @@ permissions:
 
 concurrency:
   group: phoenix-main-guard-${{ github.ref }}
-  cancel-in-progress: false
+  # Only obsolete PR revisions are cancelled; never cancel validation of main pushes.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   compiled-main:
