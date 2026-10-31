@@ -24,7 +24,7 @@ describe('compact ESPN game center',()=>{
     render(<SportsGameCenter sport="basketball" league="nba" eventId="40183001" phase="in"/>)
     expect(fetcher).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button',{ name:/Seguir partido/ }))
-    await waitFor(()=>expect(screen.getByText('Two-point shot')).toBeTruthy())
+    await waitFor(()=>{expect(screen.getByText('Two-point shot')).toBeTruthy()})
     expect(fetcher).toHaveBeenCalledTimes(1)
   })
   it('does not treat MLB gamePk as a confirmed ESPN event ID',()=>{

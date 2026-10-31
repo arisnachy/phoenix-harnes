@@ -40,8 +40,8 @@ const empty:Snapshot={ url:'',plays:[],at:0,error:false,loading:false }
  * @returns A compact opt-in game timeline or null for unsupported identifiers.
  */
 export function SportsGameCenter({ sport,league,eventId,phase,game }:{
-  sport?:string|undefined;league?:string|undefined;eventId?:string|undefined;
-  phase?:'pre'|'in'|'post'|undefined;game?:PhoenixLiveGame|undefined
+  sport?:string|undefined,league?:string|undefined,eventId?:string|undefined,
+  phase?:'pre'|'in'|'post'|undefined,game?:PhoenixLiveGame|undefined
 }):ReactNode{
   const [open,setOpen]=useState(false),[state,setState]=useState<Snapshot>(empty)
   // MLB Stats gamePk and ESPN eventId differ: only use a confirmed ESPN ID for MLB.
@@ -52,20 +52,20 @@ export function SportsGameCenter({ sport,league,eventId,phase,game }:{
     let active=true,busy=false,controller:AbortController|undefined
     const update=async()=>{
       if(!active||busy||typeof document!=='undefined'&&document.visibilityState==='hidden')return
-      if(typeof navigator!=='undefined'&&navigator.onLine===false)return
+      if(typeof navigator!=='undefined'&&!navigator.onLine)return
       busy=true
       controller=new AbortController()
       const current=controller
-      const timeout=setTimeout(()=>current.abort(),9000)
+      const timeout=setTimeout(()=>{current.abort()},9000)
       setState(s=>({ url,plays:s.url===url?s.plays:[],at:s.url===url?s.at:0,error:false,loading:true }))
       try{
         const res=await fetch(url,{ signal:current.signal,cache:'no-store',headers:{ accept:'application/json' } })
-        if(!res.ok)throw Error('ESPN '+res.status)
+        if(!res.ok)throw Error('ESPN '+String(res.status))
         if(Number(res.headers.get('content-length')??0)>3_000_000)throw Error('ESPN payload too large')
         const value=await res.json() as unknown
-        if(active)setState({ url,plays:parseEspnGamePlays(value),at:Date.now(),error:false,loading:false })
+        if(!current.signal.aborted)setState({ url,plays:parseEspnGamePlays(value),at:Date.now(),error:false,loading:false })
       }catch{
-        if(active)setState(s=>({ ...s,url,error:true,loading:false }))
+        if(!current.signal.aborted)setState(s=>({ ...s,url,error:true,loading:false }))
       }finally{clearTimeout(timeout);busy=false}
     }
     void update()
@@ -76,7 +76,7 @@ export function SportsGameCenter({ sport,league,eventId,phase,game }:{
   const valid=state.url===url,plays=valid?state.plays:[]
   return <section className={css.center} aria-label="Seguimiento ESPN del partido">
     <button type="button" className={css.toggle} aria-expanded={open}
-      onClick={()=>setOpen(!open)}> {open?'Cerrar seguimiento':'Seguir partido · Jugadas'} <span aria-hidden="true">{open?'▴':'▾'}</span></button>
+      onClick={()=>{setOpen(!open)}}> {open?'Cerrar seguimiento':'Seguir partido · Jugadas'} <span aria-hidden="true">{open?'▴':'▾'}</span></button>
     {open&&<div className={css.panel}>
       <div className={css.heading}><strong>Jugadas · ESPN</strong><small>{
         valid&&state.at>0?'Recibido '+new Date(state.at).toLocaleTimeString('es-DO',{ hour:'2-digit',minute:'2-digit' }):

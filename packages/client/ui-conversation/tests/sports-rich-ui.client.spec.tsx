@@ -159,8 +159,8 @@ describe('No fake tickets when strict research finds zero eligible matches',()=>
 })
 describe('Five-leg Phoenix ticket completion and compact progress',()=>{
   const makeLeg=(i:number)=>({
-    event:'Away '+i+' vs Home '+i,
-    selection:'Home '+i,
+    event:`Away ${i} vs Home ${i}`,
+    selection:`Home ${i}`,
     price:'Por verificar',
     bookmaker:'Sin casa confirmada',
     sport:'Baloncesto',
