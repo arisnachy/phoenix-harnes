@@ -4,7 +4,7 @@ import { binanceKnownAssetRisk } from './binance-asset-risk.ts'
 /** Supported closed-candle market regimes for adaptive paper trading. */
 export type BinanceMarketRegime = 'uptrend' | 'downtrend' | 'range'
 /** Reproducible candidate strategy, never a prediction of guaranteed profit. */
-export type BinanceAdaptiveStrategy = 'breakout' | 'trend-pullback' | 'mean-reversion' | 'defensive-exit' | 'none'
+export type BinanceAdaptiveStrategy = 'breakout' | 'trend-pullback' | 'momentum-continuation' | 'mean-reversion' | 'defensive-exit' | 'none'
 
 /** Bounded scan output; no raw candle arrays are sent to the language model. */
 export interface BinanceAdaptiveSignal {
@@ -56,7 +56,7 @@ const MAX_SYMBOLS = 12
 const MIN_AUTONOMOUS_SCORE = 75
 const MAX_POSITION_FRACTION = 0.05
 const MAX_PORTFOLIO_EXPOSURE = 0.20
-const MAX_OPEN_POSITIONS = 2
+const MAX_OPEN_POSITIONS = 4
 const MAX_MARKET_DATA_AGE = 2
 const cycleLocks = new WeakMap<BinanceAdaptiveBroker, Promise<void>>()
 
@@ -128,7 +128,13 @@ export function evaluateBinanceAdaptiveSignal(
   const averageVolume = movingAverage(volumes)
   const volumeRatio = averageVolume > 0 ? last.volume / averageVolume : 0
   const slope = (fast - slow) / slow
-  const regime: BinanceMarketRegime = slope > 0.006 ? 'uptrend' : slope < -0.006 ? 'downtrend' : 'range'
+  // A fixed 0.6% EMA spread classifies most valid 15m trends as sideways.
+  // Scale the sensitivity by timeframe; volume and recent price confirmation
+  // still guard actual entries independently of regime detection.
+  const trendThreshold = intervalMs <= 900_000 ? 0.002
+    : intervalMs <= 3_600_000 ? 0.003 : 0.006
+  const regime: BinanceMarketRegime = slope > trendThreshold && lastClose > slow
+    ? 'uptrend' : slope < -trendThreshold && lastClose < slow ? 'downtrend' : 'range'
   const previousHigh = Math.max(...previousWindow)
   const previousLow = Math.min(...previousWindow)
   const historicMean = movingAverage(earlier)
@@ -137,12 +143,29 @@ export function evaluateBinanceAdaptiveSignal(
     return { symbol, regime, strategy: 'breakout', action: 'buy', score: 80,
       lastClose, reason: 'Closed-bar breakout with confirmed volume and positive trend' }
   }
-  // Avoid buying a falling trend; a pullback must recover the fast EMA.
+  // Volume-confirmed trend recovery is independently actionable; a recovery
+  // without participation remains a WATCH (65/100) instead of a fake fill.
   if (regime === 'uptrend' && lastClose >= fast && lastClose <= fast * 1.012
     && lastClose > (closes.at(-2) ?? lastClose) && historicMean > 0) {
     const quality = Math.min(15, Math.max(0, Math.round((volumeRatio - 1) * 25)))
-    return { symbol, regime, strategy: 'trend-pullback', action: 'buy', score: 65 + quality,
-      lastClose, reason: 'Uptrend pullback recovering the fast moving average' }
+    const confirmed = volumeRatio >= 1.15 && slope > trendThreshold
+      && lastClose > (closes.at(-3) ?? lastClose)
+    return { symbol, regime, strategy: 'trend-pullback', action: 'buy',
+      score: confirmed ? Math.max(75, 65 + quality) : 65 + quality,
+      lastClose, reason: confirmed
+        ? 'Confirmed uptrend recovery with above-average volume'
+        : 'Uptrend pullback recovering the fast moving average; volume confirmation pending' }
+  }
+  // A trend need not make a fresh 20-bar breakout to justify an entry.
+  // Require accelerating recent closes and rising participation, while
+  // rejecting extended bars more than 3.5% above the short EMA.
+  if (regime === 'uptrend' && slope >= trendThreshold * 1.25 && lastClose > fast * 1.012
+    && lastClose <= fast * 1.035 && volumeRatio >= 1.05
+    && lastClose >= (closes.at(-4) ?? lastClose) * 1.004
+    && lastClose > (closes.at(-2) ?? lastClose)) {
+    return { symbol, regime, strategy: 'momentum-continuation', action: 'buy',
+      score: 75 + Math.min(7, Math.max(0, Math.round((volumeRatio - 1.05) * 15))),
+      lastClose, reason: 'Confirmed multi-bar upward momentum with controlled EMA extension and volume' }
   }
   if (regime === 'range' && zScore <= -1.5 && lastClose > previousLow * 0.995
     && volumeRatio > 0) {
@@ -207,63 +230,94 @@ export async function runBinanceAdaptiveCycle(
     if (!['scan', 'paper-step'].includes(requestedMode)) throw new Error('Invalid adaptive mode')
     const mode = requestedMode as BinanceAdaptiveCycle['mode']
     const account = await broker.account()
+    // Service protective exits from current public marks before scanning any
+    // unrelated pairs. A slow or unavailable candle provider must never hold
+    // a marked stop/TP behind 12 new-entry requests.
+    if (mode === 'paper-step') {
+      const exits = account.positions.flatMap((position) => {
+        const plan = position.exitPlan
+        const mark = position.marketPriceUsdt
+        if (plan === undefined) return []
+        const crossed = binanceKnownAssetRisk(position.symbol) ? 'binance-asset-risk'
+          : mark <= plan.stopLossPrice ? 'paper-stop-loss'
+            : mark >= plan.tp2Price ? 'paper-tp2'
+              : !plan.tp1Taken && mark >= plan.tp1Price ? 'paper-tp1'
+                : undefined
+        return crossed === undefined ? [] : [{
+          position, reason: crossed,
+          quantity: crossed === 'paper-tp1' ? position.quantity * plan.tp1Fraction : position.quantity,
+        }]
+      })
+      const exit = exits.sort((a, b) =>
+        (a.reason === 'paper-stop-loss' ? -1 : 0) - (b.reason === 'paper-stop-loss' ? -1 : 0))[0]
+      if (exit !== undefined) {
+        const result = await broker.order({
+          symbol: exit.position.symbol, side: 'sell', quantity: exit.quantity,
+          strategyId: exit.position.exitPlan?.strategyId ?? 'adaptive-exit',
+          reason: exit.reason,
+        })
+        return { mode, interval, signals: [], execution: [], decision: 'sell',
+          rationale: 'Priority PAPER risk exit confirmed in persistent ledger: ' + exit.reason,
+          trade: result.trade, account: result.account }
+      }
+    }
     const signals: BinanceAdaptiveSignal[] = []
     let failedSymbols = 0
-    for (const symbol of symbols) {
-      if (binanceKnownAssetRisk(symbol)) {
-        signals.push(hold(symbol, 'Activo excluido por riesgo Binance conocido'))
-        continue
-      }
-      try {
-        const bars = await broker.candles(symbol, interval, 80)
-        signals.push(evaluateBinanceAdaptiveSignal(symbol, bars, intervalMs, now))
-      } catch {
-        // A temporarily unavailable pair must not stop the rest of the radar.
-        // Keep the failure visible and never turn missing data into a buy signal.
-        failedSymbols += 1
-        signals.push(hold(symbol, 'No verified public candles; retry in the next scan'))
-      }
+    // Independent public candle reads run in bounded batches: a slow pair must
+    // not serialize the entire 12-market radar or delay already-held stop checks.
+    // Keep results in watchlist order and cap Binance request concurrency at four.
+    const CANDLE_BATCH_SIZE = 4
+    for (let offset = 0; offset < symbols.length; offset += CANDLE_BATCH_SIZE) {
+      const batch = await Promise.all(symbols.slice(offset, offset + CANDLE_BATCH_SIZE).map(async (symbol) => {
+        if (binanceKnownAssetRisk(symbol)) {
+          return hold(symbol, 'Activo excluido por riesgo Binance conocido')
+        }
+        try {
+          const bars = await broker.candles(symbol, interval, 80)
+          return evaluateBinanceAdaptiveSignal(symbol, bars, intervalMs, now)
+        } catch {
+          // One failing provider cannot fabricate an entry or halt other pairs.
+          failedSymbols += 1
+          return hold(symbol, 'No verified public candles; retry in the next scan')
+        }
+      }))
+      signals.push(...batch)
     }
     // Existing PAPER stops must still be serviced from fresh authenticated
     // public prices even when the candle scanner for a watchlist is down.
     const scannerUnavailable = failedSymbols === symbols.length
     const sorted = [...signals].sort((a, b) => b.score - a.score || a.symbol.localeCompare(b.symbol))
-    // Enforce registered exit plans using fresh broker marks even when
-    // today's watchlist no longer contains an existing open position.
-    const exits = account.positions.flatMap(position => {
-      const plan = position.exitPlan
-      const mark = position.marketPriceUsdt
-      if (plan === undefined) return []
-      const crossed = binanceKnownAssetRisk(position.symbol) ? 'binance-asset-risk'
-        : mark <= plan.stopLossPrice ? 'paper-stop-loss'
-        : mark >= plan.tp2Price ? 'paper-tp2'
-          : !plan.tp1Taken && mark >= plan.tp1Price ? 'paper-tp1'
-            : undefined
-      return crossed === undefined ? [] : [{
-        position, reason: crossed,
-        quantity: crossed === 'paper-tp1' ? position.quantity * plan.tp1Fraction : position.quantity,
-      }]
-    })
-    const exit = exits.sort((a, b) =>
-      (a.reason === 'paper-stop-loss' ? -1 : 0) - (b.reason === 'paper-stop-loss' ? -1 : 0))[0]
     const exposure = account.positions.reduce((sum, position) => sum + position.marketValueUsdt, 0)
-    const candidate = sorted.find(signal => signal.action === 'buy'
+    const candidates = sorted.filter(signal => signal.action === 'buy'
       && !binanceKnownAssetRisk(signal.symbol)
       && signal.score >= MIN_AUTONOMOUS_SCORE
       && !account.positions.some(position => position.symbol === signal.symbol))
+    const candidate = candidates[0]
+    // Symbols can change Spot eligibility between hourly discovery and order.
+    // Fail over to another qualified signal, not to unsafe or unverified markets.
+    const rejectedEntries = new Set<string>()
+    // Fees reduce virtual equity at the fill. Reserve that reduction before
+    // sizing the final slot so aggregate marked exposure stays <= 20%.
+    const capacityAfterFees = Math.max(0,
+      account.equityUsdt * MAX_PORTFOLIO_EXPOSURE - exposure)
+      / (1 + account.feeRate * MAX_PORTFOLIO_EXPOSURE)
     const budget = Math.min(account.equityUsdt * MAX_POSITION_FRACTION,
-      Math.max(0, account.equityUsdt * MAX_PORTFOLIO_EXPOSURE - exposure),
+      capacityAfterFees,
       account.cashUsdt / (1 + account.feeRate))
 
     const executionFor = (
       decision: 'buy' | 'sell' | 'hold',
       trade?: BinancePaperTrade,
-    ): BinanceSignalExecution[] => sorted.map(signal => {
+    ): BinanceSignalExecution[] => sorted.map((signal) => {
       if (trade?.symbol === signal.symbol) return {
         symbol: signal.symbol, status: 'executed' as const,
         explanation: trade.side === 'buy'
           ? 'Compra virtual confirmada en el ledger'
           : 'Venta virtual confirmada en el ledger',
+      }
+      if (rejectedEntries.has(signal.symbol)) return {
+        symbol: signal.symbol, status: 'blocked' as const,
+        explanation: 'Estado Spot actual no elegible; se intentó el siguiente candidato',
       }
       if (signal.action === 'hold') return {
         symbol: signal.symbol, status: 'none' as const,
@@ -313,24 +367,14 @@ export async function runBinanceAdaptiveCycle(
       return { mode, interval, signals: sorted, execution: executionFor('hold'), decision: 'hold',
         rationale: 'Read-only ranked scan; paper orders require paper-step mode', account }
     }
-    if (exit !== undefined) {
-      const result = await broker.order({
-        symbol: exit.position.symbol,
-        side: 'sell', quantity: exit.quantity,
-        strategyId: exit.position.exitPlan?.strategyId ?? 'adaptive-exit',
-        reason: exit.reason,
-      })
-      return { mode, interval, signals: sorted, execution: executionFor('sell', result.trade), decision: 'sell',
-        rationale: 'Persisted PAPER exit executed: ' + exit.reason,
-        trade: result.trade, account: result.account }
-    }
     if (scannerUnavailable) throw new Error('No Binance Spot pairs returned verified candles')
     // A bearish defensive signal can exit a held position independently of
     // TP/SL, but never treat an absent signal as permission to liquidate.
     const defensive = sorted.find(signal => signal.action === 'sell'
       && account.positions.some(position => position.symbol === signal.symbol))
     if (defensive !== undefined) {
-      const position = account.positions.find(item => item.symbol === defensive.symbol)!
+      const position = account.positions.find(item => item.symbol === defensive.symbol)
+      if (position === undefined) throw new Error('Defensive exit requires a held PAPER position')
       const result = await broker.order({
         symbol: position.symbol, side: 'sell', quantity: position.quantity,
         strategyId: 'adaptive-defensive-v1', reason: defensive.reason,
@@ -341,26 +385,39 @@ export async function runBinanceAdaptiveCycle(
     if (candidate !== undefined && budget >= 10
       && account.positions.length < MAX_OPEN_POSITIONS
       && account.maxDrawdownPct < 5) {
-      const result = await broker.order({
-        symbol: candidate.symbol,
-        side: 'buy',
-        quoteAmountUsdt: Math.floor(budget * 100) / 100,
-        strategyId: 'adaptive-' + candidate.strategy + '-v1',
-        reason: candidate.reason,
-      })
-      return { mode, interval, signals: sorted, execution: executionFor('buy', result.trade), decision: 'buy',
-        rationale: 'Highest scored eligible virtual entry within portfolio limits',
-        trade: result.trade, account: result.account }
+      for (const eligibleSignal of candidates) {
+        try {
+          const result = await broker.order({
+            symbol: eligibleSignal.symbol,
+            side: 'buy',
+            quoteAmountUsdt: Math.floor(budget * 100) / 100,
+            strategyId: 'adaptive-' + eligibleSignal.strategy + '-v1',
+            reason: eligibleSignal.reason,
+          })
+          return { mode, interval, signals: sorted, execution: executionFor('buy', result.trade), decision: 'buy',
+            rationale: 'Highest ranked currently eligible PAPER entry confirmed in persisted ledger',
+            trade: result.trade, account: result.account }
+        } catch (error) {
+          // Only a documented, reversible Spot eligibility rejection may be
+          // skipped. Ledger corruption, price outages, and write failures must
+          // propagate and never be disguised as a successful cycle.
+          if (!(error instanceof Error)
+            || error.message !== 'Binance public Spot market is not eligible for PAPER buy') throw error
+          rejectedEntries.add(eligibleSignal.symbol)
+        }
+      }
     }
     const why = candidate === undefined
       ? 'Ninguna señal de compra supera el mínimo de ' + MIN_AUTONOMOUS_SCORE + '/100 sin posición existente'
-      : account.positions.length >= MAX_OPEN_POSITIONS
-        ? 'Bloqueada: ya hay ' + MAX_OPEN_POSITIONS + ' posiciones abiertas'
-        : account.maxDrawdownPct >= 5
-          ? 'Bloqueada: drawdown máximo de 5% alcanzado'
-          : budget < 10
-            ? 'Bloqueada: capital libre o exposición insuficiente'
-            : 'El motor no pudo encontrar una orden virtual apta'
+      : rejectedEntries.size === candidates.length && candidates.length > 0
+        ? 'Todos los candidatos fueron rechazados por el estado Spot actual de Binance'
+        : account.positions.length >= MAX_OPEN_POSITIONS
+          ? `Bloqueada: ya hay ${MAX_OPEN_POSITIONS} posiciones abiertas`
+          : account.maxDrawdownPct >= 5
+            ? 'Bloqueada: drawdown máximo de 5% alcanzado'
+            : budget < 10
+              ? 'Bloqueada: capital libre o exposición insuficiente'
+              : 'El motor no pudo encontrar una orden virtual apta'
     return { mode, interval, signals: sorted, execution: executionFor('hold'), decision: 'hold',
       rationale: why, account }
   })
