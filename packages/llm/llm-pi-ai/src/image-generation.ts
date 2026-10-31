@@ -1245,10 +1245,10 @@ export function installCodexImageGeneration(ctx: Context): void {
         throw new Error('Para hacer una imagen tuya, activa la referencia de foto en Perfil y vuelve a pedirla.')
       }
       const requestedBackend = reference === undefined ? (args.backend ?? 'auto') : 'codex'
-      const wantsKira = /\\b(?:tipo|estilo|como)\\s+(?:el\\s+|equipo\\s+)?kira\\b/iu.test(
-        requestText.toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/gu, ''),
-      ) || /\\b(?:tipo|estilo)\\s+(?:el\\s+|equipo\\s+)?kira\\b/iu.test(prompt)
-      const styledPrompt = wantsKira ? prompt + '\\n' + KIRA_TEAM_STYLE : prompt
+      const wantsKira = /\b(?:tipo|estilo|como)\s+(?:el\s+|equipo\s+)?kira\b/iu.test(
+        requestText.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/gu, ''),
+      ) || /\b(?:tipo|estilo)\s+(?:el\s+|equipo\s+)?kira\b/iu.test(prompt)
+      const styledPrompt = wantsKira ? prompt + '\n' + KIRA_TEAM_STYLE : prompt
       const failures: string[] = []
       for (const backend of imageGenerationBackendOrder(requestedBackend, exec.agent?.options.provider)) {
         let image: ImageGenerationValue
