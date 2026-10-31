@@ -90,11 +90,15 @@ describe('PHOENIX Moments calendar facts', () => {
   })
 
   it('validates country, zone and personal occasions before persistence', () => {
-    expect(() => { validateUserProfile(profile() }).not.toThrow()
-    expect(() => { validateUserProfile(profile({ countryCode: 'DOM' }) }).toThrow('countryCode')
-    expect(() => { validateUserProfile(profile({ momentsTimeZone: 'Moon/Sea' }) }).toThrow('momentsTimeZone')
-    expect(() => { validateUserProfile(profile({ specialDates: [{ date: '02-30', label: 'Invalid' }] }) }).toThrow('invalid date')
-    expect(() => { validateUserProfile(profile({ specialDates: [{ date: '02-20', label: '' }] }) }).toThrow('cannot be empty')
+    expect(() => { validateUserProfile(profile()) }).not.toThrow()
+    expect(() => { validateUserProfile(profile({ countryCode: 'DOM' })) }).toThrow('countryCode')
+    expect(() => { validateUserProfile(profile({ momentsTimeZone: 'Moon/Sea' })) }).toThrow('momentsTimeZone')
+    expect(() => {
+      validateUserProfile(profile({ specialDates: [{ date: '02-30', label: 'Invalid' }] }))
+    }).toThrow('invalid date')
+    expect(() => {
+      validateUserProfile(profile({ specialDates: [{ date: '02-20', label: '' }] }))
+    }).toThrow('cannot be empty')
   })
 
   it('fetches country-only public holidays and filters invalid provider records', async () => {
