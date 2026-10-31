@@ -167,11 +167,11 @@ describe('PHOENIX updater state persistence', () => {
     const path = join(root, 'phoenix-update-state.json')
     const now = Date.parse('2026-10-25T16:00:00Z')
     const target = 'b'.repeat(40)
-    const setStatus = (status: string, ageMinutes: number) =>
+    const setStatus = (status: string, ageMinutes: number) =>{
       writeFileSync(path, JSON.stringify({
         schema: 1, status, phase: 'restart', target,
         at: new Date(now - ageMinutes * 60_000).toISOString(),
-      }))
+      })) }
     setStatus('restarting', 2)
     expect(diagnoseStalledPhoenixActivation(path, now)).toBe(false)
     setStatus('updated', 55)

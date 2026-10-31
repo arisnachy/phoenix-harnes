@@ -252,7 +252,7 @@ describe('createMcpOAuthProvider', () => {
     } as unknown as CredentialProvider
     const controller=new McpOAuthController(
       credentials,'binance-agent-os','https://agent.binance.com/mcp/agentic',{
-        resolveClientInformation:async()=>({client_id:PHOENIX_BINANCE_AGENTIC_CIMD_ID}),
+        resolveClientInformation:async()=>({ client_id:PHOENIX_BINANCE_AGENTIC_CIMD_ID }),
       })
     const notify=vi.fn()
     try{
@@ -266,7 +266,7 @@ describe('createMcpOAuthProvider', () => {
         })
         expect(provider.clientMetadata.redirect_uris).toEqual([controller.callbackServer.redirectUri])
         expect(opts.serverUrl.toString()).toBe('https://agent.binance.com/mcp/agentic')
-        await provider.saveTokens({access_token:'fake-access',token_type:'Bearer'})
+        await provider.saveTokens({ access_token:'fake-access',token_type:'Bearer' })
         return 'AUTHORIZED'
       })
       await controller.authorize({

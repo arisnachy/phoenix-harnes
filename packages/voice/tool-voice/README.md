@@ -15,7 +15,19 @@ Uses `PHOENIX_VOICE_ENABLED`, `PHOENIX_VOICE_LANGUAGE` (default `es-DO`), and th
 
 ## Model Experience
 
-When a user asks Kira to speak, the model calls `phoenix_voice_speak` with the requested short phrase. For diagnosis it calls `phoenix_voice_status`. The tool reports the provider's actual acceptance or rejection; Kira must not claim the speakers were audible until the user confirms.
+### User-authorized speech and status checks
+
+#### What the model sees
+
+Kira may request `phoenix_voice_status` to inspect the configured speech provider and `phoenix_voice_speak` to speak text explicitly requested by the user. Tool responses report provider acceptance or rejection, not a guarantee that the speakers are audible.
+
+#### Token effect
+
+Only tool schemas, short requested text, and bounded status or playback receipts enter the model context; the audio waveform is not inserted into the conversation.
+
+#### KV Cache effect
+
+The static speech tool contracts remain cacheable. Dynamic provider status and playback receipts may vary per request and only affect the suffix of the context.
 
 ## Known Limitations and Deferred Work
 

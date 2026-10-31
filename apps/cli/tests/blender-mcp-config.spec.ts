@@ -60,7 +60,7 @@ describe('official Blender Lab MCP overlay', () => {
     expect(row.config?.transport).toBe('stdio')
     expect(source).toContain(officialSource)
     expect(source).toContain("'blender-mcp'")
-    expect(source).not.toMatch(/args:\s*\[\s*['\"]blender-mcp['\"]\s*\]/u)
+    expect(source).not.toMatch(/args:\s*\[\s*['"]blender-mcp['"]\s*\]/u)
     expect(source).not.toContain('ahujasid/blender-mcp')
     expect(source).not.toMatch(/\bsk-[A-Za-z0-9_-]{8,}\b/u)
   })

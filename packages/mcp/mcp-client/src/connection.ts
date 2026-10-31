@@ -179,7 +179,23 @@ export function startConnection(
   const label = `mcp-client(${config.serverName})`
   const publishStatus = lifecycle?.setStatus.bind(lifecycle)
   const publishTools = lifecycle?.setTools.bind(lifecycle)
-  let markAuthorizationRequired: (() => void) | undefined
+  const markAuthorizationRequired = () => {
+    const generation = client
+    if (generation === undefined) {
+      publishStatus?.('auth-required', 'authorization-required')
+      return
+    }
+    generationDown(generation, { status: 'auth-required', reasonCode: 'authorization-required' })
+    connectedAt = undefined
+    syncChain = syncChain.then(() => {
+      for (const dispose of disposers.values()) dispose()
+      disposers = new Map()
+      publishTools?.([])
+    })
+    void generation.close().catch((error: unknown) => {
+      ctx.logger.warn(`${label}: failed to close generation after an authorization rejection: ${String(error)}`)
+    })
+  }
   const opts: ToolBridgeOptions = {
     registrationFailure: 'contain',
     serverName: config.serverName,
@@ -257,23 +273,6 @@ export function startConnection(
     scheduleReconnect()
   }
 
-  markAuthorizationRequired = () => {
-    const generation = client
-    if (generation === undefined) {
-      publishStatus?.('auth-required', 'authorization-required')
-      return
-    }
-    generationDown(generation, { status: 'auth-required', reasonCode: 'authorization-required' })
-    connectedAt = undefined
-    syncChain = syncChain.then(() => {
-      for (const dispose of disposers.values()) dispose()
-      disposers = new Map()
-      publishTools?.([])
-    })
-    void generation.close().catch((error: unknown) => {
-      ctx.logger.warn(`${label}: failed to close generation after an authorization rejection: ${String(error)}`)
-    })
-  }
 
   /** Wait for the transport-owned close signal without letting a broken transport wedge teardown forever. */
   function waitForClose(closed: Promise<void>): Promise<boolean> {

@@ -185,7 +185,7 @@ export function DiagramSurface({ spec, onAction }: {
             return <g key={node.id} className={css.node} role="button" tabIndex={0}
               aria-label={'Ver ' + node.label} aria-pressed={focused}
               onClick={() => { choose(node.id) }}
-              onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); choose(node.id) } }}>
+              onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); choose(node.id) } }}>
               <title>{node.label + (node.detail ? ': ' + node.detail : '')}</title>
               {focused && <circle cx={node.x} cy={node.y} r={shape === 'rectangle' ? 96 : 64}
                 fill="none" stroke="#e97839" strokeDasharray="7 7" strokeWidth="2.8"/>}

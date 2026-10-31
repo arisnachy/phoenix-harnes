@@ -81,11 +81,11 @@ export function parseSceneMapSpec(value:unknown):SceneMapSpec|null {
   }
   return value as unknown as SceneMapSpec
 }
-type Palette={background:string;water:string;shore:string;land:string;ink:string;accent:string;path:string;paper:string}
+type Palette={ background:string;water:string;shore:string;land:string;ink:string;accent:string;path:string;paper:string }
 const palettes:Record<SceneTheme,Palette>={
- fantasy:{background:'#d3e8e7',water:'#c4e0df',shore:'#a3c5b0',land:'#d8e1b9',ink:'#243b43',accent:'#9d612c',path:'#946d46',paper:'#fffdf4'},
- treasure:{background:'#e7d5af',water:'#d7be8b',shore:'#b9a17a',land:'#f3e0ad',ink:'#433526',accent:'#ac4f33',path:'#886a45',paper:'#fff5dd'},
- atlas:{background:'#dfe6ef',water:'#cbd9e8',shore:'#b4bfc8',land:'#e3e7d4',ink:'#303c4c',accent:'#4b6b8f',path:'#6b7784',paper:'#ffffff'},
+  fantasy:{ background:'#d3e8e7',water:'#c4e0df',shore:'#a3c5b0',land:'#d8e1b9',ink:'#243b43',accent:'#9d612c',path:'#946d46',paper:'#fffdf4' },
+  treasure:{ background:'#e7d5af',water:'#d7be8b',shore:'#b9a17a',land:'#f3e0ad',ink:'#433526',accent:'#ac4f33',path:'#886a45',paper:'#fff5dd' },
+  atlas:{ background:'#dfe6ef',water:'#cbd9e8',shore:'#b4bfc8',land:'#e3e7d4',ink:'#303c4c',accent:'#4b6b8f',path:'#6b7784',paper:'#ffffff' },
 }
 function coastPath(coast:readonly Position[]):string {
   if(coast.length<3)return ''
@@ -100,7 +100,7 @@ function coastPath(coast:readonly Position[]):string {
   return path+' Q '+first[0]+' '+first[1]+' '+((first[0]+points[1]![0])/2)+' '+((first[1]+points[1]![1])/2)+' Z'
 }
 function emblem(kind:PlaceKind):string {
-  return ({city:'◆',port:'⚓',forest:'♠',mountain:'▲',ruins:'✦',castle:'♜',tower:'♜',temple:'✧',cave:'◈',village:'●'} as const)[kind]
+  return ({ city:'◆',port:'⚓',forest:'♠',mountain:'▲',ruins:'✦',castle:'♜',tower:'♜',temple:'✧',cave:'◈',village:'●' } as const)[kind]
 }
 function saveSvg(svg:SVGSVGElement|null,name:string):void{
   if(!svg)return
@@ -108,13 +108,13 @@ function saveSvg(svg:SVGSVGElement|null,name:string):void{
   copy.setAttribute('xmlns','http://www.w3.org/2000/svg')
   copy.setAttribute('width','1400')
   copy.setAttribute('height','840')
-  copy.querySelectorAll('[data-scene-action]').forEach(item=>item.removeAttribute('data-scene-action'))
+  copy.querySelectorAll('[data-scene-action]').forEach((item)=>{ item.removeAttribute('data-scene-action') })
   const xml=new XMLSerializer().serializeToString(copy)
-  const url=URL.createObjectURL(new Blob([xml],{type:'image/svg+xml;charset=utf-8'}))
+  const url=URL.createObjectURL(new Blob([xml],{ type:'image/svg+xml;charset=utf-8' }))
   const a=document.createElement('a')
   a.href=url;a.download=(name.normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/gi,'-').slice(0,64)||'mapa-ficticio')+'.svg'
   a.click()
-  window.setTimeout(()=>URL.revokeObjectURL(url),1000)
+  window.setTimeout(()=>{ URL.revokeObjectURL(url) },1000)
 }
 /**
  * Render a real, interactive fictional atlas without third-party map services.
@@ -122,7 +122,7 @@ function saveSvg(svg:SVGSVGElement|null,name:string):void{
  * @param onAction - Optional composer action for selected place continuity.
  * @returns Native React SVG atlas and interactive controls.
  */
-export function SceneMap({spec,onAction}:{spec:SceneMapSpec;onAction?:CanvasAction|undefined}){
+export function SceneMap({ spec,onAction }:{ spec:SceneMapSpec;onAction?:CanvasAction|undefined }){
   const p=spec.props
   const gradientId=useId().replaceAll(':','-')
   const [selected,setSelected]=useState(p.places[0]!.id)
@@ -136,7 +136,7 @@ export function SceneMap({spec,onAction}:{spec:SceneMapSpec;onAction?:CanvasActi
   const coast=coastPath(p.coast??defaultCoast)
   const viewWidth=1000/zoom,viewHeight=600/zoom
   const box=[500-viewWidth/2,300-viewHeight/2,viewWidth,viewHeight].join(' ')
-  const select=(id:string):void=>setSelected(id)
+  const select=(id:string):void=>{ setSelected(id) }
   const consult=():void=>{
     onAction?.('En el mapa ficticio "'+p.title+'" he seleccionado "'+active.name+'": '
       +active.description+'. Continúa la exploración de este mundo y conserva la continuidad.', 'draft')
@@ -149,13 +149,13 @@ export function SceneMap({spec,onAction}:{spec:SceneMapSpec;onAction?:CanvasActi
     </div>
     <div className={css.toolbar} aria-label="Herramientas del atlas">
       <div className={css.actions}>
-        <button type="button" disabled={zoom>=2.5} aria-label="Acercar mapa ficticio" onClick={()=>setZoom(x=>Math.min(2.5,Math.round((x+.25)*100)/100))}>+</button>
-        <button type="button" disabled={zoom<=1} aria-label="Alejar mapa ficticio" onClick={()=>setZoom(x=>Math.max(1,Math.round((x-.25)*100)/100))}>−</button>
+        <button type="button" disabled={zoom>=2.5} aria-label="Acercar mapa ficticio" onClick={()=>{ setZoom(x=>Math.min(2.5,Math.round((x+.25)*100)/100)) }}>+</button>
+        <button type="button" disabled={zoom<=1} aria-label="Alejar mapa ficticio" onClick={()=>{ setZoom(x=>Math.max(1,Math.round((x-.25)*100)/100)) }}>−</button>
         <button type="button" onClick={()=>{setZoom(1);setSelected(p.places[0]!.id)}}>Ver mapa completo</button>
-        <label><input type="checkbox" checked={routesVisible} onChange={e=>setRoutesVisible(e.target.checked)}/>Rutas</label>
-        <label><input type="checkbox" checked={labelsVisible} onChange={e=>setLabelsVisible(e.target.checked)}/>Nombres</label>
+        <label><input type="checkbox" checked={routesVisible} onChange={(e)=>{ setRoutesVisible(e.target.checked) }}/>Rutas</label>
+        <label><input type="checkbox" checked={labelsVisible} onChange={(e)=>{ setLabelsVisible(e.target.checked) }}/>Nombres</label>
       </div>
-      <button type="button" className={css.export} onClick={()=>saveSvg(svgRef.current,p.title)}>Exportar SVG</button>
+      <button type="button" className={css.export} onClick={()=>{ saveSvg(svgRef.current,p.title) }}>Exportar SVG</button>
     </div>
     <div className={css.layout}>
       <div className={css.illustration}>
@@ -180,12 +180,12 @@ export function SceneMap({spec,onAction}:{spec:SceneMapSpec;onAction?:CanvasActi
           </g>
           <path d="M 260 232 Q 320 278 367 260 T 500 300 T 664 290" stroke="#fff" strokeOpacity=".23"
             strokeWidth="22" fill="none" strokeLinecap="round"/>
-          {[{x:355,y:220},{x:413,y:230},{x:480,y:205},{x:555,y:225}].map((point,i)=>
+          {[{ x:355,y:220 },{ x:413,y:230 },{ x:480,y:205 },{ x:555,y:225 }].map((point,i)=>
             <g key={'mountain'+i} opacity=".32" fill="#657e74">
               <path d={'M '+(point.x-25)+' '+(point.y+35)+' l 25 -68 l 25 68 Z'}/>
               <path d={'M '+(point.x-9)+' '+(point.y-8)+' l 9 -25 l 9 25 Z'} fill="#fbfbec"/>
             </g>)}
-          {[{x:295,y:363},{x:331,y:389},{x:686,y:379},{x:641,y:399},{x:700,y:333}].map((point,i)=>
+          {[{ x:295,y:363 },{ x:331,y:389 },{ x:686,y:379 },{ x:641,y:399 },{ x:700,y:333 }].map((point,i)=>
             <g key={'forest'+i} opacity=".28" fill="#366c58">
               <path d={'M '+point.x+' '+(point.y-22)+' l -15 30 h 30 Z'}/>
               <path d={'M '+point.x+' '+(point.y-37)+' l -11 23 h 22 Z'}/>
@@ -195,18 +195,18 @@ export function SceneMap({spec,onAction}:{spec:SceneMapSpec;onAction?:CanvasActi
             if(!from||!to)return null
             const x1=from.x*10,y1=from.y*6,x2=to.x*10,y2=to.y*6
             return <g key={i}><path d={'M '+x1+' '+y1+' Q '+((x1+x2)/2+23)+' '+((y1+y2)/2-22)+' '+x2+' '+y2}
-                fill="none" stroke={palette.paper} strokeWidth="6" opacity=".9"/>
-              <path d={'M '+x1+' '+y1+' Q '+((x1+x2)/2+23)+' '+((y1+y2)/2-22)+' '+x2+' '+y2}
-                fill="none" stroke={palette.path} strokeWidth="3" strokeDasharray="8 7" strokeLinecap="round"/>
-              {route.label&&<title>{route.label}</title>}</g>
+              fill="none" stroke={palette.paper} strokeWidth="6" opacity=".9"/>
+            <path d={'M '+x1+' '+y1+' Q '+((x1+x2)/2+23)+' '+((y1+y2)/2-22)+' '+x2+' '+y2}
+              fill="none" stroke={palette.path} strokeWidth="3" strokeDasharray="8 7" strokeLinecap="round"/>
+            {route.label&&<title>{route.label}</title>}</g>
           })}
-          {p.places.map(place=>{
+          {p.places.map((place)=>{
             const marked=active.id===place.id
             return <g key={place.id} transform={'translate('+(place.x*10)+' '+(place.y*6)+')'}
               data-scene-action={place.id} role="button" tabIndex={0} className={css.pin}
               aria-label={'Explorar '+place.name}
-              onClick={()=>select(place.id)}
-              onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();select(place.id)}}}>
+              onClick={()=>{ select(place.id) }}
+              onKeyDown={(e)=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();select(place.id)}}}>
               {marked&&<circle r="34" fill="none" stroke={palette.accent} strokeWidth="2.5" strokeDasharray="6 5"/>}
               <circle r="24" fill={palette.paper} stroke={palette.ink} strokeWidth="2.5"/>
               <circle r="19" fill={marked?palette.accent:palette.ink}/>
@@ -234,11 +234,11 @@ export function SceneMap({spec,onAction}:{spec:SceneMapSpec;onAction?:CanvasActi
         <div className={css.sideHeader}><strong>Explorar lugares</strong><span>{p.places.length} puntos</span></div>
         <div className={css.placeList}>
           {p.places.map(place=><button type="button" key={place.id} className={css.placeButton}
-            aria-pressed={place.id===active.id} onClick={()=>select(place.id)}>
-              <span className={css.placeSymbol}>{emblem(place.kind)}</span>
-              <span>{place.name}</span>
-              <span aria-hidden="true">›</span>
-            </button>)}
+            aria-pressed={place.id===active.id} onClick={()=>{ select(place.id) }}>
+            <span className={css.placeSymbol}>{emblem(place.kind)}</span>
+            <span>{place.name}</span>
+            <span aria-hidden="true">›</span>
+          </button>)}
         </div>
         <section className={css.description} aria-live="polite">
           <small>LUGAR SELECCIONADO</small>

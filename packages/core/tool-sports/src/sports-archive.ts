@@ -35,9 +35,9 @@ export function normalizeSportsbookReviewArchive(value:unknown,sport:string):His
     const v=raw as Record<string,unknown>
     const home=name(v.home_team),away=name(v.away_team),day=isoDate(v.date)
     if(!home||!away||!day)continue
-    rows.push({source:'flancast90/sportsbookreview-scraper',sport,date:day,home,away,
+    rows.push({ source:'flancast90/sportsbookreview-scraper',sport,date:day,home,away,
       bookmaker:'SportsbookReview cierre agregado',market:'h2h',
-      homeDecimal:odds(v.home_close_ml),awayDecimal:odds(v.away_close_ml),historical:true})
+      homeDecimal:odds(v.home_close_ml),awayDecimal:odds(v.away_close_ml),historical:true })
   }
   return rows
 }
@@ -62,9 +62,9 @@ export function normalizeMlbHistoricalArchive(value:unknown):HistoricalMarket[]{
         const current=b.currentLine as Record<string,unknown>|undefined
         const nameBook=name(b.sportsbook)
         if(!nameBook)continue
-        rows.push({source:'ArnavSaraogi/mlb-odds-scraper',sport:'mlb',date,home,away,
+        rows.push({ source:'ArnavSaraogi/mlb-odds-scraper',sport:'mlb',date,home,away,
           bookmaker:nameBook,market:'h2h',homeDecimal:odds(current?.homeOdds),
-          awayDecimal:odds(current?.awayOdds),historical:true})
+          awayDecimal:odds(current?.awayOdds),historical:true })
       }
     }
   }
@@ -72,18 +72,18 @@ export function normalizeMlbHistoricalArchive(value:unknown):HistoricalMarket[]{
 }
 export async function loadHistoricalOdds(
   sport:string,env:NodeJS.ProcessEnv=process.env,
-):Promise<{sources:Array<{name:string;available:boolean;count:number;error?:string}>;
-  historical:HistoricalMarket[]; liveQuotes:false}>{
+):Promise<{ sources:Array<{ name:string;available:boolean;count:number;error?:string }>
+  historical:HistoricalMarket[]; liveQuotes:false }>{
   if(!['nba','mlb','nfl','nhl'].includes(sport))throw Error('Archivo histórico disponible para NBA, MLB, NFL, NHL')
   const directory=env.PHOENIX_SPORTS_HISTORY_DIR??''
   if(!isAbsolute(directory))throw Error('Configura PHOENIX_SPORTS_HISTORY_DIR como ruta absoluta a los datos históricos')
-  const filenames:Array<{name:string;file:string;parse:(x:unknown)=>HistoricalMarket[]}>= [
-    {name:'flancast90/sportsbookreview-scraper',file:'sportsbookreview-'+sport+'.json',
-      parse:x=>normalizeSportsbookReviewArchive(x,sport)},
-    ...(sport==='mlb'?[{name:'ArnavSaraogi/mlb-odds-scraper',file:'mlb-odds.json',
-      parse:normalizeMlbHistoricalArchive}]:[]),
+  const filenames:Array<{ name:string;file:string;parse:(x:unknown)=>HistoricalMarket[] }>= [
+    { name:'flancast90/sportsbookreview-scraper',file:'sportsbookreview-'+sport+'.json',
+      parse:x=>normalizeSportsbookReviewArchive(x,sport) },
+    ...(sport==='mlb'?[{ name:'ArnavSaraogi/mlb-odds-scraper',file:'mlb-odds.json',
+      parse:normalizeMlbHistoricalArchive }]:[]),
   ]
-  const sources:Array<{name:string;available:boolean;count:number;error?:string}>=[]
+  const sources:Array<{ name:string;available:boolean;count:number;error?:string }>=[]
   const historical:HistoricalMarket[]=[]
   for(const spec of filenames){
     try{
@@ -92,11 +92,11 @@ export async function loadHistoricalOdds(
       const data=JSON.parse(await readFile(path,'utf8')) as unknown
       const normalized=spec.parse(data)
       historical.push(...normalized)
-      sources.push({name:spec.name,available:true,count:normalized.length})
+      sources.push({ name:spec.name,available:true,count:normalized.length })
     }catch(error){
-      sources.push({name:spec.name,available:false,count:0,
-        error:error instanceof Error?error.message.slice(0,160):'Fallo de lectura'})
+      sources.push({ name:spec.name,available:false,count:0,
+        error:error instanceof Error?error.message.slice(0,160):'Fallo de lectura' })
     }
   }
-  return {sources,historical:historical.slice(-120000),liveQuotes:false}
+  return { sources,historical:historical.slice(-120000),liveQuotes:false }
 }
