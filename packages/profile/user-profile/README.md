@@ -22,9 +22,7 @@ The profile block adds only the consented values to each assembled request; an e
 
 The dynamic profile block is stable while the consented projection is unchanged; saving an allowed value replaces that context and may prevent prefix reuse for the next request.
 
-**PHOENIX Moments**
-
-(opt-in)
+**PHOENIX Moments (opt-in)**
 
 The user profile can hold an ISO 3166-1 alpha-2 `countryCode`, an optional IANA `momentsTimeZone`, and up to 100 `specialDates` (annual `MM-DD` or `YYYY-MM-DD`, label, optional solemn marker). None of these reaches model context unless `consent.moments` is enabled. A user's birthday additionally requires `consent.dateOfBirth`. Disabling Moments clears holiday context immediately but does not delete user-owned dates.
 

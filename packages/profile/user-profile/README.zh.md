@@ -22,7 +22,7 @@
 
 同意投影不变时，动态资料区块保持稳定；保存获准的值会替换该上下文，可能使下一次请求无法复用此前缀。
 
-**PHOENIX Moments（用户授权后启用）
+**PHOENIX Moments（用户授权后启用）**
 
 用户资料可以保存 ISO 两位国家代码 `countryCode`，以及可选 IANA 时区`momentsTimeZone` 以及最多 100 个个人日期 `specialDates`（`MM-DD` 或 `YYYY-MM-DD`，名称，可选庄重标记）。默认关闭；只有 `consent.moments` 开启后才会向模型传递当天的重要日期。用户生日还需要独立允许 `consent.dateOfBirth`。关闭功能立即停止提供日期上下文，但不会删除用户自行保存的数据。
 
