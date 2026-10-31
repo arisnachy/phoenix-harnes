@@ -141,6 +141,24 @@ it('hot-reloads a real client-plugin source edit without refreshing the page', a
       Object.defineProperty(window, '__dshHmrPageIdentity', { value: identity })
       return identity
     })
+    // Independent SSE observer: distinguish a missing host rebuild frame from
+    // a browser-side reload failure without weakening the visible-DOM assertion.
+    await page.evaluate(() => {
+      const source = new EventSource('/plugins/events')
+      source.addEventListener('open', () => {
+        Object.defineProperty(window, '__dshHmrProbeConnected', { value: true })
+      })
+      source.addEventListener('message', (event: MessageEvent<string>) => {
+        const frame = JSON.parse(event.data) as { type?: string; id?: string; rev?: string }
+        console.info(`[HMR probe] ${String(frame.type)} ${frame.id ?? ''} ${frame.rev ?? ''}`)
+      })
+      source.addEventListener('error', () => { console.warn('[HMR probe] event stream error') })
+    })
+    await page.waitForFunction(
+      () => (window as Window & { __dshHmrProbeConnected?: boolean }).__dshHmrProbeConnected === true,
+      null,
+      { timeout: 10_000 },
+    )
 
     await writeFile(sourcePath, updatedSource)
     await page.getByText(newText, { exact: true }).waitFor({ timeout: 60_000 })
