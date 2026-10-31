@@ -2,7 +2,7 @@ import { chromium, type Browser, type Page } from 'playwright'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 // The demo is a standalone HTML asset: tests must not depend on a running PHOENIX web server.
-const URL = process.env.CANVAS_SCATTERPLOT_URL ?? new URL('../public/demos/canvas-scatterplot.html', import.meta.url).href
+const demoUrl = process.env.CANVAS_SCATTERPLOT_URL ?? new URL('../public/demos/canvas-scatterplot.html', import.meta.url).href
 
 describe('Canvas2D scatterplot live demo', () => {
   let browser: Browser
@@ -14,7 +14,7 @@ describe('Canvas2D scatterplot live demo', () => {
     page = await browser.newPage({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 })
     page.on('console', (message) => { if (message.type() === 'error') consoleErrors.push(message.text()) })
     page.on('pageerror', (error) => { consoleErrors.push(error.message) })
-    await page.goto(URL, { waitUntil: 'networkidle' })
+    await page.goto(demoUrl, { waitUntil: 'networkidle' })
   }, 60_000)
 
   afterAll(async () => { await browser?.close() })
