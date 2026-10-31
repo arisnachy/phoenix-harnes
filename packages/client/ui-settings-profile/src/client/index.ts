@@ -5,7 +5,7 @@ import type {} from '@phoenix-ai/dsh-client-ui-settings/client'
 import type {} from '@phoenix-ai/dsh-client-locale/client'
 import { UserProfileRow } from './UserProfileRow.tsx'
 import { transformAvatarThroughCodex } from './avatar-codex.ts'
-import type {} from '@phoenix-ai/dsh-client-connection/client'
+import type { ConnectionHandle } from '@phoenix-ai/dsh-client-connection/client'
 import { UserProfileForm, USER_PROFILE_SETTINGS_NAMESPACE } from './profile-controller.ts'
 import { en, es, zh, type UserProfileLocaleKey } from './locales.ts'
 import type { UserProfileSettings } from './types.ts'
@@ -33,6 +33,7 @@ export function apply(ctx: ClientContext): void {
   const t = ctx.locale.bind(SETTINGS_NS)
   const scope = ctx.settingsScope.bind<UserProfileSettings>({ namespace: USER_PROFILE_SETTINGS_NAMESPACE })
   const form = new UserProfileForm(scope)
+  const connection = ctx.get('connection') as ConnectionHandle
   ctx.effect(() => () => { form.dispose() }, 'ui-settings-profile: form')
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section',
@@ -42,7 +43,7 @@ export function apply(ctx: ClientContext): void {
     locale: SETTINGS_NS,
     inject: () => ({
       ...form.inject(),
-      transformAvatar: (photo: Blob) => transformAvatarThroughCodex(photo, ctx.connection.rpc),
+      transformAvatar: (photo: Blob) => transformAvatarThroughCodex(photo, connection.rpc),
     }),
   }, UserProfileRow))
 }
