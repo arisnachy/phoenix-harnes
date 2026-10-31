@@ -77,6 +77,53 @@ describe('PHOENIX Moments calendar facts', () => {
     expect(momentsForDay(profile(), 'bad-date')).toEqual([])
   })
 
+  it('covers international events and Dominican family dates when the holiday service is unavailable', () => {
+    expect(momentsForDay(profile(), '2026-03-08').map(row => row.label)).toContain('Día Internacional de la Mujer')
+    expect(momentsForDay(profile(), '2026-04-07').map(row => row.label)).toContain('Día Mundial de la Salud')
+    expect(momentsForDay(profile(), '2026-01-21')[0]).toMatchObject({ label: 'Nuestra Señora de la Altagracia', kind: 'cultural' })
+    expect(momentsForDay(profile(), '2026-05-31').map(row => row.label)).toContain('Día de las Madres')
+    expect(momentsForDay(profile(), '2026-07-26').map(row => row.label)).toContain('Día de los Padres')
+    expect(momentsForDay(profile(), '2026-05-30')).toEqual([])
+    expect(momentsForDay(profile({ countryCode: 'US' }), '2026-11-26').map(row => row.label)).toContain('Acción de Gracias')
+    expect(momentsForDay(profile({ countryCode: 'US' }), '2026-11-25')).toEqual([])
+    expect(momentsForDay(profile({ countryCode: 'CA' }), '2026-11-26')).toEqual([])
+  })
+
+
+  it('scopes regional festivities and differentiates observances', () => {
+    const us = profile({ countryCode: 'US', momentsRegion: 'US-NY' })
+    const records = [
+      { date: '2026-06-19', name: 'Local Festival', countryCode: 'US', nationalHoliday: false, subdivisionCodes: ['US-CA'] },
+      { date: '2026-06-19', name: 'Regional Ceremony', countryCode: 'US', nationalHoliday: false, subdivisionCodes: ['US-NY'] },
+      { date: '2026-06-19', name: 'Global Observation', countryCode: 'US', nationalHoliday: true, holidayTypes: ['Observance'] },
+    ]
+    expect(momentsForDay(us, '2026-06-19', records).map(row => row.label))
+      .toEqual(['Regional Ceremony', 'Global Observation'])
+    expect(momentsForDay(profile({ countryCode: 'US' }), '2026-06-19', records).map(row => row.label))
+      .toEqual(['Global Observation'])
+    expect(momentsForDay(us, '2026-06-19', records)[1]?.kind).toBe('cultural')
+  })
+
+  it('validates v4 holiday scope and classifications', async () => {
+    const fetcher = vi.fn(async () => ({
+      ok: true,
+      json: async () => [
+        { date: '2026-07-04', name: 'National Day', countryCode: 'US',
+          nationalHoliday: true, subdivisionCodes: null, holidayTypes: ['Public'] },
+        { date: '2026-07-05', name: 'Local Day', countryCode: 'US',
+          nationalHoliday: false, subdivisionCodes: ['US-NY'], holidayTypes: ['Optional'] },
+        { date: '2026-07-04', name: 'Foreign Day', countryCode: 'CA' },
+      ],
+    })) as unknown as typeof fetch
+    expect(await fetchPublicHolidays('US', 2026, fetcher)).toEqual([
+      { date: '2026-07-04', name: 'National Day', countryCode: 'US', nationalHoliday: true,
+        holidayTypes: ['Public'] },
+      { date: '2026-07-05', name: 'Local Day', countryCode: 'US', nationalHoliday: false,
+        subdivisionCodes: ['US-NY'], holidayTypes: ['Optional'] },
+    ])
+    expect(vi.mocked(fetcher).mock.calls[0]?.[0]).toContain('/Holidays/US/2026')
+  })
+
   it('can learn conservative annual dates without guessing a date from unrelated text', () => {
     expect(detectPersonalMoment('El 15 de noviembre cumple años mi hija')).toMatchObject({
       date: '11-15', label: 'Cumpleaños de mi hija',
@@ -114,7 +161,7 @@ describe('PHOENIX Moments calendar facts', () => {
     expect(holidays).toEqual([{
       date: '2026-07-04', name: 'Independence Day', localName: 'Día de la Independencia', countryCode: 'US',
     }])
-    expect(vi.mocked(fakeFetch).mock.calls[0]?.[0]).toContain('/2026/US')
+    expect(vi.mocked(fakeFetch).mock.calls[0]?.[0]).toContain('/US/2026')
     expect(await fetchPublicHolidays('bad', 2026, fakeFetch)).toEqual([])
   })
 })
