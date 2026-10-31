@@ -95,8 +95,8 @@ async function readControl(req: IncomingMessage): Promise<{
     }
     return {
       action: 'start', symbols: payload.symbols,
-      ...(payload.autoDiscover === undefined ? {} : { autoDiscover: payload.autoDiscover as boolean }),
-      ...(payload.predictionEnabled === undefined ? {} : { predictionEnabled: payload.predictionEnabled as boolean }),
+      ...(payload.autoDiscover === undefined ? {} : { autoDiscover: payload.autoDiscover }),
+      ...(payload.predictionEnabled === undefined ? {} : { predictionEnabled: payload.predictionEnabled }),
       ...(payload.interval === undefined ? {} : { interval: payload.interval as '15m' | '1h' | '4h' | '1d' }),
       ...(payload.pollMinutes === undefined ? {} : { pollMinutes: payload.pollMinutes as number }),
     }
