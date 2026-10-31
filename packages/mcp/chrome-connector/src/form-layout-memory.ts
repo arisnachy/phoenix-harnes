@@ -38,7 +38,13 @@ function safeLocator(step: BrowserInteraction): LayoutLocator | undefined {
   return undefined
 }
 
-/** Drops every field value, clicked option, label and free-form user text. */
+/**
+ * Drops every field value, clicked option, label and free-form user text.
+ * @param phases - Form interaction phases containing candidate field locators.
+ * @param checks - Verification steps whose locators may be retained.
+ * @param learnedAt - Timestamp for the sanitized layout snapshot.
+ * @returns A bounded, value-free layout only when verification locators exist.
+ */
 export function sanitizeFormLayout(
   phases: readonly (readonly BrowserInteraction[])[],
   checks: readonly BrowserInteraction[],
@@ -56,7 +62,11 @@ export function sanitizeFormLayout(
   return { version: 1, learnedAt, steps, verifiedChecks }
 }
 
-/** Page query parameters and fragment never affect a site's reusable mapping. */
+/**
+ * Page query parameters and fragment never affect a site's reusable mapping.
+ * @param pageUrl - HTTP(S) page address, limited to secure or loopback origins.
+ * @returns Stable SHA-256 storage key for the origin and pathname.
+ */
 export function formLayoutKey(pageUrl: string): string {
   const url = new URL(pageUrl)
   if (!['https:', 'http:'].includes(url.protocol)) throw new TypeError('Invalid form origin')
@@ -133,8 +143,12 @@ export interface LearnedFieldValue {
   value?: string
   checked?: boolean
 }
-/** Rebuild a strictly non-submitting form workflow from proven locators.
+/**
+ * Rebuild a strictly non-submitting form workflow from proven locators.
  * A stale/unknown/ambiguous field fails before any page mutation.
+ * @param layout - Previously verified value-free field locator mapping.
+ * @param entries - Fresh values supplied for the current form, never persisted.
+ * @returns Non-submitting actions and verification checks, or undefined when unsafe.
  */
 export function prepareLearnedFormWorkflow(
   layout: LearnedFormLayout,
