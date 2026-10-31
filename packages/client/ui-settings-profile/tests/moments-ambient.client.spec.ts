@@ -54,7 +54,7 @@ describe('compact PHOENIX Moments', () => {
 
   it('recognizes global celebrations without a hardcoded date-to-theme list', () => {
     for (const [label, theme] of [
-      ['Diwali', 'lights'], ['Eid al-Fitr', 'spiritual'], ['春节', 'lunar'],
+      ['Diwali', 'lights'], ['Hanukkah', 'jewish'], ['Vesak', 'buddhist'], ['Easter Sunday', 'christian'], ['Eid al-Fitr', 'islamic'], ['春节', 'lunar'],
       ['Songkran', 'water'], ['Holi', 'spring'], ['Chuseok', 'harvest'],
       ['Carnaval de Río', 'heritage'], ['World Health Day', 'health'],
       ['Festival de Música', 'music'], ['Día de las Madres', 'family'],
