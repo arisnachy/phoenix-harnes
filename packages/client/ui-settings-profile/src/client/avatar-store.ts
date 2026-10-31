@@ -4,6 +4,8 @@ export interface AvatarSnapshot {
   original?: Blob
   styled?: Blob
   mode: AvatarMode
+  /** Explicit permission to attach the original photo to self-image requests. */
+  referenceEnabled: boolean
 }
 const DATABASE = 'phoenix-user-portrait-v1'
 const EVENT = 'phoenix-user-portrait-changed'
@@ -42,17 +44,25 @@ export async function readAvatar(): Promise<AvatarSnapshot> {
   try {
     const tx = database.transaction('portrait', 'readonly')
     const store = tx.objectStore('portrait')
-    const [original, styled, active] = await Promise.all([
+    const [original, styled, active, referenceEnabled] = await Promise.all([
       get<Blob>(store, 'original'), get<Blob>(store, 'styled'), get<AvatarMode>(store, 'mode'),
+      get<boolean>(store, 'referenceEnabled'),
     ])
     return {
       ...(original instanceof Blob ? { original } : {}),
       ...(styled instanceof Blob ? { styled } : {}),
       mode: active === 'styled' && styled instanceof Blob ? 'styled' : 'original',
+      referenceEnabled: referenceEnabled === true && original instanceof Blob,
     }
   } finally { database.close() }
 }
-async function write(values: { original?: Blob; styled?: Blob; mode?: AvatarMode; clear?: boolean }): Promise<void> {
+async function write(values: {
+  original?: Blob
+  styled?: Blob
+  mode?: AvatarMode
+  referenceEnabled?: boolean
+  clear?: boolean
+}): Promise<void> {
   const database = await db()
   try {
     const tx = database.transaction('portrait', 'readwrite')
@@ -62,12 +72,15 @@ async function write(values: { original?: Blob; styled?: Blob; mode?: AvatarMode
       store.put(values.original, 'original')
       store.delete('styled')
       store.put('original', 'mode')
+      // A replacement is a different face: require renewed sharing consent.
+      store.put(false, 'referenceEnabled')
     }
     if (values.styled !== undefined) {
       store.put(values.styled, 'styled')
       store.put('styled', 'mode')
     }
     if (values.mode !== undefined) store.put(values.mode, 'mode')
+    if (values.referenceEnabled !== undefined) store.put(values.referenceEnabled, 'referenceEnabled')
     await finish(tx)
     announce()
   } finally { database.close() }
@@ -81,6 +94,12 @@ export async function activateAvatar(mode: AvatarMode): Promise<void> {
   if (mode === 'styled' && snapshot.styled === undefined) throw new Error('No edited portrait was saved')
   if (snapshot.original === undefined) throw new Error('No portrait was saved')
   await write({ mode })
+}
+/** The permission is stored alongside the private photo and cleared with it. */
+export async function setAvatarReferenceEnabled(enabled: boolean): Promise<void> {
+  const snapshot = await readAvatar()
+  if (enabled && snapshot.original === undefined) throw new Error('Guarda una fotografía antes de activar la referencia.')
+  await write({ referenceEnabled: enabled })
 }
 export async function deleteAvatar(): Promise<void> { await write({ clear: true }) }
 export function subscribeAvatar(listener: () => void): () => void {
@@ -121,21 +140,37 @@ export async function normalizeAvatar(image: Blob, zoom = 1, offsetX = 0, offset
     const y = Math.max(0, Math.min(bitmap.height - side, (bitmap.height - side) * (offsetY + 1) / 2))
     ctx.drawImage(bitmap, x, y, side, side, 0, 0, 768, 768)
     const output = await new Promise<Blob>((resolve, reject) => {
-      canvas.toBlob(blob => { if (blob === null) reject(new Error('Image conversion failed')); else resolve(blob) }, 'image/webp', 0.9)
+      canvas.toBlob((blob) => { if (blob === null) reject(new Error('Image conversion failed')); else resolve(blob) }, 'image/webp', 0.9)
     })
     if (output.size > MAX_RASTER) throw new Error('Normalized portrait exceeds size limits')
     return output
   } finally { bitmap.close() }
 }
 export function validatedLocalEditor(value: string): string {
-  const url = new URL(value)
+  const url = new URL(value.trim())
   if (url.username || url.password || url.search || url.hash
     || !['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)
     || url.protocol !== 'http:') {
     throw new Error('Use an HTTP image editor on localhost only. Remote photo uploads are disabled.')
   }
-  const base = url.href.replace(/\/+$/u, '')
-  return base.endsWith('/v1') ? base : base + '/v1'
+  const path = url.pathname.replace(/\/+$/u, '')
+  if (path !== '' && path !== '/v1' && path !== '/v1/images/edits') {
+    throw new Error('La dirección del editor debe terminar en /v1 o /v1/images/edits.')
+  }
+  return url.origin + '/v1'
+}
+/** Check that a configured local editor responds before sending any photo. */
+export async function probeLocalAvatarEditor(endpoint: string): Promise<void> {
+  const base = validatedLocalEditor(endpoint)
+  try {
+    const response = await fetch(base + '/models', { method: 'GET', signal: AbortSignal.timeout(5000) })
+    if (!response.ok) throw new Error('El servicio respondió HTTP ' + String(response.status))
+  } catch (cause) {
+    throw new Error(
+      'No fue posible contactar al editor local. Comprueba que esté iniciado. '
+      + (cause instanceof Error ? cause.message : ''),
+    )
+  }
 }
 /** Actual image-to-image operation, never text-to-image substitution.
  * Requires an explicitly configured local OpenAI-compatible /images/edits service.
@@ -149,13 +184,18 @@ export async function editAvatarLocally(original: Blob, endpoint: string, model 
   form.append('size', '1024x1024')
   form.append('response_format', 'b64_json')
   form.append('prompt',
-    'Edit THIS uploaded person into a premium semi-realistic PHOENIX portrait, with warm amber lighting, subtle cinematic depth and elegant editorial styling aligned to the Kira team. Preserve the exact person, recognizable facial features, age, skin tone, expression and natural human identity. No agent name, badge, icons or text.')
+    'Edit THIS uploaded person into a premium semi-realistic PHOENIX portrait. '
+    + 'Use warm amber lighting, cinematic depth and elegant editorial styling aligned to the Kira team. '
+    + 'Preserve this exact person, recognizable facial features, age, skin tone and natural human identity. '
+    + 'No agent name, badge, icon or text.')
   const response = await fetch(base + '/images/edits', { method: 'POST', body: form })
   if (!response.ok) throw new Error('Local image editor failed (HTTP ' + String(response.status) + ')')
   const json: unknown = await response.json()
-  if (typeof json !== 'object' || json === null || !('data' in json) || !Array.isArray(json.data)
-    || typeof json.data[0]?.b64_json !== 'string') throw new Error('Local editor did not return an edited image')
-  const encoded = json.data[0].b64_json as string
+  const payload: unknown = typeof json === 'object' && json !== null && 'data' in json ? json.data : undefined
+  const first: unknown = Array.isArray(payload) ? payload[0] : undefined
+  if (typeof first !== 'object' || first === null || !('b64_json' in first)
+    || typeof first.b64_json !== 'string') throw new Error('Local editor did not return an edited image')
+  const encoded = first.b64_json
   if (encoded.length > MAX_RASTER * 1.5) throw new Error('Edited image exceeds the size limit')
   const decoded = atob(encoded)
   const bytes = Uint8Array.from(decoded, char => char.charCodeAt(0))
