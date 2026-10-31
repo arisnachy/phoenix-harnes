@@ -1,0 +1,52 @@
+name: CI Repair Generated Catalog Patch
+
+on:
+  push:
+    branches:
+      - fix/ci-general-jsonl-hmr-20261030
+    paths:
+      - .github/workflows/ci-repair-generated-patch.yml
+
+permissions:
+  contents: read
+
+jobs:
+  generate-reviewed-patch:
+    if: github.repository == 'arisnachy/phoenix-harnes'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          dest: ${{ runner.temp }}/setup-pnpm
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+      - name: Install immutable workspace
+        run: pnpm install --frozen-lockfile
+      - name: Regenerate source-backed documentation (do not push)
+        run: |
+          pnpm run gen-doc-graphs
+          pnpm run gen-cordis-catalog
+          pnpm run gen-client-catalog
+          pnpm run gen-config-catalog
+          pnpm run gen-tool-catalog
+          pnpm run gen-module-graph
+      - name: Capture exact patch and status for review
+        if: always()
+        run: |
+          git diff --binary > ci-generated.patch
+          git status --short > ci-generated-status.txt
+          git diff --check
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: phoenix-generated-catalog-review
+          path: |
+            ci-generated.patch
+            ci-generated-status.txt
+          retention-days: 3
