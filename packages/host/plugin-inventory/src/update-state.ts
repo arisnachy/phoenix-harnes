@@ -290,6 +290,10 @@ function readPhoenixUpdateEvents(controlDir: string, target?: string): readonly 
 
 /**
  * Validate streamed command output at the Host boundary and redact again.
+ * @param content - Newline-delimited updater console records to validate.
+ * @param target - Expected update target; records for other targets are rejected.
+ * @param since - Earliest accepted event timestamp, in milliseconds since the epoch.
+ * @returns Bounded, redacted console entries that passed schema and target checks.
  */
 export function parsePhoenixUpdateConsole(
   content: string, target?: string, since = 0,
