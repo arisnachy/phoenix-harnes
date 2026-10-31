@@ -658,7 +658,8 @@ async function injectLogin(tab: BrowserTab, login: LoginContent): Promise<string
         }
         if (data.id !== 1) return
         if (data.error || data.result?.exceptionDetails) {  finish(new Error('El formulario rechazó el inicio de sesión')); return }
-        finish(undefined, String(data.result?.result?.value ?? 'failed'))
+        const resultValue = data.result?.result?.value
+        finish(undefined, typeof resultValue === 'string' ? resultValue : JSON.stringify(resultValue ?? 'failed'))
       } catch { finish(new Error('Respuesta inválida de Chrome')) }
     })
   })
