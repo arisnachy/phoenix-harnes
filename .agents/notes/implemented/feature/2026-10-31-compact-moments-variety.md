@@ -12,7 +12,7 @@ PHOENIX already recognizes a few dates, but most occasions have no offline fallb
 
 The consent-gated user-profile calendar remains the owner of occasion facts. Its international fixed-date observances and limited offline Dominican fallback are expanded, with deterministic rules for Dominican Mother's and Father's days and United States Thanksgiving. The Nager v4 country/year public-holiday and observance lookup, with local ISO 3166-2 region filtering, continues to supply broader country-specific holidays and remains non-exhaustive. Personal dates keep precedence, and solemn dates retain a restrained presentation.
 
-The browser shell shows only a narrow seasonal badge alongside existing controls. Eight appearance variants and 25 visual families can be cycled by clicking it; occasion-specific motifs use the existing theme tokens with small local accents. Neither the chat layout nor Kira's avatar identity is changed. The profile service may expose factual context to Kira only with consent. It never inserts prewritten messages or scheduled greetings.
+The browser shell shows only a narrow seasonal badge alongside existing controls. Eight appearance variants and 29 visual families can be cycled by clicking it; occasion-specific motifs use the existing theme tokens with small local accents. Neither the chat layout nor Kira's avatar identity is changed. The profile service may expose factual context to Kira only with consent. It never inserts prewritten messages or scheduled greetings.
 
 ## Alternatives considered
 
