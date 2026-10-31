@@ -1,4 +1,5 @@
 /** Browser image-edit client. Carries only a normalized original photograph through the trusted Host RPC. */
+import { normalizeAvatar } from './avatar-store.ts'
 interface AvatarRpc {
   call(channel: string, endpoint: string, payload: unknown): Promise<
     { ok: true; value: unknown } | { ok: false; error: { message: string } }
@@ -34,6 +35,5 @@ export async function transformAvatarThroughCodex(original: Blob, rpc: AvatarRpc
   }
   const decoded = Uint8Array.from(atob(result.image), (character) => character.charCodeAt(0))
   // Normalize/crop and remove metadata, exactly like a manually uploaded photo.
-  const { normalizeAvatar } = await import('./avatar-store.ts')
   return normalizeAvatar(new Blob([decoded], { type: result.mediaType }))
 }

@@ -875,7 +875,7 @@ function generationPrompt(
       `MANDATORY source photograph: ${referencePath}`,
       'Read and visually inspect this exact input photograph, then supply it as the image reference to the built-in image_gen tool.',
       'This is an IMAGE EDIT, not a text-to-image generation. Preserve the recognizable face, skin tone and age of this exact individual.',
-      'If you cannot read and provide the source photograph to the image tool, STOP: do not invent a different person or fabricate success.',
+      'If you cannot read the source or provide it to the image tool, STOP; never fabricate a matching face.',
     ]),
     'After the image tool finishes, end the task.',
   ].join('\n')

@@ -107,6 +107,10 @@ export function AvatarPanel({ transformAvatar }: { transformAvatar: (photo: Blob
   const confirm = () => {
     if (suggested === undefined) return
     void act(async () => {
+      const latest = await readAvatar()
+      if (latest.original === undefined) {
+        throw new Error('Guarda primero una fotografía original para activar un retrato.')
+      }
       await storeStyledAvatar(suggested)
       setSuggested(undefined)
     }, 'Retrato estilo Kira guardado. Tu foto original sigue disponible.')
@@ -176,7 +180,10 @@ export function AvatarPanel({ transformAvatar }: { transformAvatar: (photo: Blob
             </button>
           )}
           <button type="button" className={css.danger} disabled={busy}
-            onClick={() => { void act(deleteAvatar, 'Avatar eliminado de este dispositivo.') }}>
+            onClick={() => {
+              setSuggested(undefined)
+              void act(deleteAvatar, 'Avatar eliminado de este dispositivo.')
+            }}>
             Eliminar foto
           </button>
         </div>
