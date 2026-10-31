@@ -63,8 +63,8 @@ describe('published PHOENIX versions', () => {
       previous: oldSha,
     })
     render(<VersionHistorySection {...kit} t={t} readUpdateState={readUpdateState} close={vi.fn()} />)
-    expect(await screen.findByTestId('installed-sha')).toHaveTextContent('aaaaaaaaaaaa')
-    await waitFor(() => { expect(screen.getByText('bbbbbbbbbbbb')).toBeTruthy() })
+    expect((await screen.findByTestId('installed-sha')).textContent).toContain('aaaaaaaaaaaa')
+    await waitFor(() => { expect(screen.getAllByText('bbbbbbbbbbbb').length).toBeGreaterThan(0) })
     expect(screen.getByText('cccccccccccc')).toBeTruthy()
     expect(await screen.findByText('feat(profile): coherencia del avatar y fotografía original')).toBeTruthy()
     expect(screen.getByText('Differs from verified local version')).toBeTruthy()
@@ -109,8 +109,8 @@ describe('published PHOENIX versions', () => {
       close={vi.fn()}
       readUpdateState={async () => { throw new Error('offline host') }}
     />)
-    expect(await screen.findByRole('alert')).toHaveTextContent('Cannot contact the Host')
-    expect(screen.getByTestId('installed-sha')).toHaveTextContent('Not verified')
+    expect((await screen.findByRole('alert')).textContent).toContain('Cannot contact the Host')
+    expect(screen.getByTestId('installed-sha').textContent).toContain('Not verified')
     expect(await screen.findByText('feat(profile): coherencia del avatar y fotografía original')).toBeTruthy()
   })
 })
