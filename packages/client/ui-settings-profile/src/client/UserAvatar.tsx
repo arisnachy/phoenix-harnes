@@ -99,7 +99,10 @@ export function AvatarPanel() {
     }, 'Tu fotografía se guardó en este dispositivo.')
   }
   const checkEditor = () => {
-    void act(() => probeLocalAvatarEditor(editor), 'El servicio local responde. Puedes intentar la transformación; la edición efectiva depende del modelo instalado.')
+    void act(
+      () => probeLocalAvatarEditor(editor),
+      'El servicio local responde. La edición efectiva depende del modelo instalado.',
+    )
   }
   const transform = () => {
     if (stored.original === undefined) return
@@ -130,19 +133,42 @@ export function AvatarPanel() {
       <div className={css.top}>
         <UserAvatar size={76} />
         <div className={css.details}>
-          <strong>{stored.mode === 'styled' ? 'Tu retrato PHOENIX' : stored.original === undefined ? 'Sin foto personal' : 'Tu fotografía original'}</strong>
+          <strong>
+            {stored.mode === 'styled' ? 'Tu retrato PHOENIX'
+              : stored.original === undefined ? 'Sin foto personal' : 'Tu fotografía original'}
+          </strong>
           <span>Visible junto a tus mensajes, con tu propia identidad.</span>
         </div>
       </div>
       <label className={css.pick} htmlFor="user-avatar-upload">Subir fotografía</label>
-      <input className={css.file} id="user-avatar-upload" aria-label="Seleccionar una fotografía" type="file" accept="image/png,image/jpeg,image/webp" onChange={choose} disabled={busy} />
+      <input
+        className={css.file} id="user-avatar-upload" aria-label="Seleccionar una fotografía"
+        type="file" accept="image/png,image/jpeg,image/webp" onChange={choose} disabled={busy}
+      />
       {selected !== undefined && preview !== undefined ? (
         <div className={css.editor}>
           <p className={css.hint}>Ajusta el encuadre antes de guardar la imagen. Se eliminan los metadatos personales.</p>
-          <div className={css.preview}><img src={preview} alt="Vista previa de la fotografía" style={{ transform: `scale(${zoom})`, objectPosition: `${50 + offsetX * 50}% ${50 + offsetY * 50}%` }} /></div>
-          <label>Acercar <input aria-label="Acercar" type="range" min="1" max="3" step=".1" value={zoom} onChange={(e) => { setZoom(Number(e.target.value)) }} /></label>
-          <label>Encuadre horizontal <input aria-label="Encuadre horizontal" type="range" min="-1" max="1" step=".1" value={offsetX} onChange={(e) => { setOffsetX(Number(e.target.value)) }} /></label>
-          <label>Encuadre vertical <input aria-label="Encuadre vertical" type="range" min="-1" max="1" step=".1" value={offsetY} onChange={(e) => { setOffsetY(Number(e.target.value)) }} /></label>
+          <div className={css.preview}>
+            <img
+              src={preview} alt="Vista previa de la fotografía"
+              style={{ transform: `scale(${zoom})`, objectPosition: `${50 + offsetX * 50}% ${50 + offsetY * 50}%` }}
+            />
+          </div>
+          <label>
+            Acercar
+            <input aria-label="Acercar" type="range" min="1" max="3" step=".1" value={zoom}
+              onChange={(e) => { setZoom(Number(e.target.value)) }} />
+          </label>
+          <label>
+            Encuadre horizontal
+            <input aria-label="Encuadre horizontal" type="range" min="-1" max="1" step=".1" value={offsetX}
+              onChange={(e) => { setOffsetX(Number(e.target.value)) }} />
+          </label>
+          <label>
+            Encuadre vertical
+            <input aria-label="Encuadre vertical" type="range" min="-1" max="1" step=".1" value={offsetY}
+              onChange={(e) => { setOffsetY(Number(e.target.value)) }} />
+          </label>
           <div className={css.actions}>
             <button type="button" onClick={save} disabled={busy}>Guardar foto</button>
             <button type="button" onClick={() => { setSelected(undefined) }} disabled={busy}>Cancelar</button>
@@ -151,9 +177,20 @@ export function AvatarPanel() {
       ) : null}
       {stored.original !== undefined ? (
         <div className={css.actions}>
-          <button type="button" disabled={busy || stored.mode === 'original'} onClick={() => { void act(() => activateAvatar('original'), 'Foto original restaurada.') }}>Volver a mi foto real</button>
-          {stored.styled !== undefined && <button type="button" disabled={busy || stored.mode === 'styled'} onClick={() => { void act(() => activateAvatar('styled'), 'Retrato PHOENIX activado.') }}>Usar retrato</button>}
-          <button type="button" className={css.danger} disabled={busy} onClick={() => { void act(deleteAvatar, 'Avatar eliminado de este dispositivo.') }}>Eliminar foto</button>
+          <button type="button" disabled={busy || stored.mode === 'original'}
+            onClick={() => { void act(() => activateAvatar('original'), 'Foto original restaurada.') }}>
+            Volver a mi foto real
+          </button>
+          {stored.styled !== undefined && (
+            <button type="button" disabled={busy || stored.mode === 'styled'}
+              onClick={() => { void act(() => activateAvatar('styled'), 'Retrato PHOENIX activado.') }}>
+              Usar retrato
+            </button>
+          )}
+          <button type="button" className={css.danger} disabled={busy}
+            onClick={() => { void act(deleteAvatar, 'Avatar eliminado de este dispositivo.') }}>
+            Eliminar foto
+          </button>
         </div>
       ) : null}
       {stored.original !== undefined && (
@@ -181,14 +218,23 @@ export function AvatarPanel() {
             La versión real queda siempre guardada. Se requiere un editor local compatible; no se simula el resultado.
           </p>
           <label htmlFor="user-avatar-editor">Editor de imágenes local (solo localhost)</label>
-          <input id="user-avatar-editor" type="url" className={css.endpoint} value={editor} placeholder="http://127.0.0.1:PORT/v1" onChange={(e) => { updateEditor(e.target.value) }} disabled={busy} />
+          <input id="user-avatar-editor" type="url" className={css.endpoint} value={editor}
+            placeholder="http://127.0.0.1:PORT/v1" onChange={(e) => { updateEditor(e.target.value) }} disabled={busy} />
           <label htmlFor="user-avatar-model">Modelo de edición instalado</label>
-          <input id="user-avatar-model" className={css.endpoint} value={model} placeholder="local-image-edit" onChange={(e) => { updateModel(e.target.value) }} disabled={busy} />
+          <input id="user-avatar-model" className={css.endpoint} value={model}
+            placeholder="local-image-edit" onChange={(e) => { updateModel(e.target.value) }} disabled={busy} />
           <div className={css.actions}>
             <button type="button" disabled={busy || !editorValid} onClick={checkEditor}>Comprobar conexión</button>
-            <button type="button" className={css.primary} disabled={busy || !/^[a-zA-Z0-9._/-]{1,120}$/u.test(model)} onClick={transform}>{busy ? 'Procesando…' : 'Transformar con IA'}</button>
+            <button type="button" className={css.primary}
+              disabled={busy || !/^[a-zA-Z0-9._/-]{1,120}$/u.test(model)} onClick={transform}>
+              {busy ? 'Procesando…' : 'Transformar con IA'}
+            </button>
           </div>
-          <p className={css.hint}>{!editorValid ? 'Primero introduce la URL de un editor real iniciado en tu equipo (por ejemplo, http://127.0.0.1:8188/v1). El botón explicará qué falta si intentas transformar sin conexión.' : 'Al pulsar transformar autorizas enviar tu foto únicamente a ese servicio local. Si falla, la original permanece intacta.'}</p>
+          <p className={css.hint}>
+            {!editorValid
+              ? 'Primero introduce la URL de un editor real iniciado en tu equipo. El botón explicará qué falta.'
+              : 'Autorizas enviar tu foto a ese servicio local. Si falla, la original permanece intacta.'}
+          </p>
         </div>
       )}
       {error !== '' && <p className={css.error} role="alert">{error}</p>}

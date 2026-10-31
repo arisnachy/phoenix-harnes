@@ -166,7 +166,10 @@ export async function probeLocalAvatarEditor(endpoint: string): Promise<void> {
     const response = await fetch(base + '/models', { method: 'GET', signal: AbortSignal.timeout(5000) })
     if (!response.ok) throw new Error('El servicio respondió HTTP ' + String(response.status))
   } catch (cause) {
-    throw new Error('No fue posible contactar al editor local. Comprueba que esté iniciado y permita conexiones desde PHOENIX. ' + (cause instanceof Error ? cause.message : ''))
+    throw new Error(
+      'No fue posible contactar al editor local. Comprueba que esté iniciado. '
+      + (cause instanceof Error ? cause.message : ''),
+    )
   }
 }
 /** Actual image-to-image operation, never text-to-image substitution.
@@ -181,7 +184,10 @@ export async function editAvatarLocally(original: Blob, endpoint: string, model 
   form.append('size', '1024x1024')
   form.append('response_format', 'b64_json')
   form.append('prompt',
-    'Edit THIS uploaded person into a premium semi-realistic PHOENIX portrait, with warm amber lighting, subtle cinematic depth and elegant editorial styling aligned to the Kira team. Preserve the exact person, recognizable facial features, age, skin tone, expression and natural human identity. No agent name, badge, icons or text.')
+    'Edit THIS uploaded person into a premium semi-realistic PHOENIX portrait. '
+    + 'Use warm amber lighting, cinematic depth and elegant editorial styling aligned to the Kira team. '
+    + 'Preserve this exact person, recognizable facial features, age, skin tone and natural human identity. '
+    + 'No agent name, badge, icon or text.')
   const response = await fetch(base + '/images/edits', { method: 'POST', body: form })
   if (!response.ok) throw new Error('Local image editor failed (HTTP ' + String(response.status) + ')')
   const json: unknown = await response.json()
