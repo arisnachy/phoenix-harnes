@@ -8,11 +8,14 @@ import {
   deriveAge, mergeUserProfile, validateUserProfile, validateUserProfileUpdate,
 } from './schema.ts'
 import { inferAssistantGenderFromUserMessage } from './inference.ts'
+import { detectPersonalMoment, fetchPublicHolidays, renderMomentContext } from './moments.ts'
+import type { PublicHoliday } from './moments.ts'
 import type {
   AssistantIdentity, UserProfileConsented, UserProfileRedacted, UserProfileSettings, UserProfileUpdate, UserProfileView,
 } from './types.ts'
 
 export * from './schema.ts'
+export * from './moments.ts'
 export { inferAssistantGenderFromUserMessage } from './inference.ts'
 export type { AssistantGenderInference } from './inference.ts'
 export type * from './types.ts'
@@ -37,6 +40,8 @@ function redactProfile(profile: UserProfileSettings): UserProfileRedacted {
     hasPronouns: profile.pronouns !== undefined,
     hasTone: profile.tone !== undefined,
     familyCount: profile.family?.length ?? 0,
+    specialDateCount: profile.specialDates?.length ?? 0,
+    hasCountryCode: profile.countryCode !== undefined,
     consent: { ...profile.consent },
   }
 }
@@ -107,6 +112,10 @@ export class UserProfileService extends Service {
   private readonly scope: SettingsScope<UserProfileSettings>
   private assistantIdentityTail: Promise<void> = Promise.resolve()
   private legacyAssistantGenderManual = false
+  private holidays: PublicHoliday[] = []
+  private holidayKey = ''
+  private holidayLoading = ''
+  private momentsTail: Promise<void> = Promise.resolve()
 
   /** @param ctx - Host context providing settings and system-prompt services. */
   constructor(ctx: Context) {
@@ -119,6 +128,13 @@ export class UserProfileService extends Service {
       order: -50,
       text: () => renderConsentedProfile(this.getConsented()),
     })
+    ctx.systemPrompt.context({
+      name: 'user-profile:moments',
+      order: -49,
+      text: () => renderMomentContext(this.scope.get(), this.holidays),
+    })
+    ctx.effect(() => this.scope.subscribe(() => { void this.refreshHolidays() }), 'user-profile: public holiday refresh')
+    void this.refreshHolidays()
     // Assistant identity is a system section, not runtime context. Runtime
     // context may be omitted on bounded/fast/provider-specific paths, while a
     // configured identity must remain authoritative for every model request.
@@ -136,6 +152,8 @@ export class UserProfileService extends Service {
     ctx.events.on('session/event', (_session: unknown, event: unknown) => {
       const text = userMessageEventText(event)
       if (text !== undefined) this.observeAssistantPresentation(text)
+      const humanText = humanMessageEventText(event)
+      if (humanText !== undefined) this.observePersonalMoment(humanText)
     })
   }
 
@@ -163,6 +181,7 @@ export class UserProfileService extends Service {
     }
     const next = mergeUserProfile(this.scope.get(), accepted)
     await this.scope.replace(next)
+    void this.refreshHolidays()
     return this.view()
   }
 
@@ -198,6 +217,45 @@ export class UserProfileService extends Service {
       name: profile.assistantName,
       gender: profile.assistantGender,
     }
+  }
+
+  private async refreshHolidays(): Promise<void> {
+    const profile = this.scope.get()
+    const country = profile.consent.moments ? profile.countryCode : undefined
+    if (country === undefined) {
+      this.holidays = []
+      this.holidayKey = ''
+      return
+    }
+    const year = new Date().getFullYear()
+    const key = `${country}:${year}`
+    if (key === this.holidayKey || key === this.holidayLoading) return
+    this.holidayLoading = key
+    try {
+      const holidays = await fetchPublicHolidays(country, year)
+      if (this.holidayLoading !== key) return
+      this.holidays = holidays
+      this.holidayKey = key
+    } catch {
+      // No profile or private calendar data is sent. The curated regional fallback remains usable offline.
+    } finally {
+      if (this.holidayLoading === key) this.holidayLoading = ''
+    }
+  }
+
+  /** Conservative opt-in extraction: a chat date cannot override settings or trigger a message. */
+  private observePersonalMoment(text: string): void {
+    const candidate = detectPersonalMoment(text)
+    if (candidate === undefined) return
+    this.momentsTail = this.momentsTail.then(async () => {
+      const profile = this.scope.get()
+      if (!profile.consent.moments) return
+      const stored = profile.specialDates ?? []
+      if (stored.some(row => row.date === candidate.date && row.label === candidate.label) || stored.length >= 100) return
+      await this.scope.replace({ ...profile, specialDates: [...stored, candidate] })
+    }).catch((error: unknown) => {
+      this.ctx.logger.warn(`user-profile: moments inference ignored: ${String(error)}`)
+    })
   }
 
   private async persistLegacyAssistantGenderProvenance(): Promise<void> {
@@ -367,3 +425,13 @@ export function renderAssistantIdentity(identity: AssistantIdentity, profile: Us
 export { DEFAULT_USER_PROFILE_CONSENT }
 
 export default UserProfileService
+
+/** Only actual human messages can teach Phoenix personal dates. */
+function humanMessageEventText(value: unknown): string | undefined {
+  if (typeof value !== 'object' || value === null || !('type' in value) || !('data' in value)) return undefined
+  const event = value as { type?: unknown; data?: unknown }
+  if (event.type !== 'user/message' || typeof event.data !== 'object' || event.data === null) return undefined
+  const data = event.data as { source?: { kind?: string } }
+  if (data.source?.kind !== 'user') return undefined
+  return userMessageText(data)
+}
