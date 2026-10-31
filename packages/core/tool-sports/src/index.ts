@@ -28,12 +28,16 @@ import { fetchPublicEspnOddsDetailed } from './espn-odds.ts'
 import { espnEndpointGuide,espnWorkflow } from './espn-endpoint-guide.ts'
 import { fetchEspnHistoricalOdds } from './espn-odds-history.ts'
 import { secondaryMarketSourceCatalog } from './sports-secondary-sources.ts'
+import {sportsEnvWithVaultKey} from './sports-credential-env.ts'
 
 export const name = 'tool-sports'
 export const inject = ['tools','systemPrompt']
-const sportsEnv=():NodeJS.ProcessEnv=>hydrateSportsSources(process.env)
+/** Resolves credentials fresh per tool invocation and never changes process.env. */
+const sportsEnv=(ctx:Context):Promise<NodeJS.ProcessEnv>=>
+  sportsEnvWithVaultKey(ctx,hydrateSportsSources(process.env))
 const GUIDANCE = [
   'ESCÁNER GLOBAL DE CUOTAS: si el usuario pregunta por acceso real a las cuotas deportivas o pide revisar TODOS los deportes, no te limites a NBA, NFL y NHL. sports_chat_odds_scan presenta los 11 deportes realmente admitidos por OddsHarvester; examina sus 3 páginas consecutivas offset=0,4,8, limit=4, incluso si una falla, y devuelve estado INDIVIDUAL por deporte, cuota, casa, liga, hora, motivo del fallo y fuentes pendientes. Incluye fútbol/soccer, tenis ATP/WTA, béisbol/MLB, baloncesto NBA/WNBA, fútbol americano NFL, hockey NHL, handball, voleibol, ambos rugby y cricket. WNBA es una liga de basketball, NO un deporte distinto. Una consulta de baloncesto sin liga verificada jamás justifica etiquetar su cuota como NBA o WNBA. Las ligas sin evidencia suficiente se muestran sin liga verificada, no se fuerzan. Para mercados de ligas específicas consulta además sports_chat_odds con basketball_wnba, basketball_nba, baseball_mlb, americanfootball_nfl, icehockey_nhl y soccer; para tenis usa odds_keyless, o tennis_atp/tennis_wta solo cuando el nombre de la liga sea explícito. El inventario no garantiza mercados presentes. Cuando el error de OddsHarvester contenga category, exitCode y stderr informa esos campos y no trunques la causa interna. ',
+  'THE ODDS API v4 · CONECTOR: la clave del proveedor api.the-odds-api.com se configura de forma segura en Ajustes > Conectores > The Odds API y el Host la verifica mediante el catálogo gratuito /v4/sports. No pedir claves en el chat ni confundir con TheOddsAPI (api.theoddsapi.com, credencial distinta). El motor sports_chat_odds con sourcePolicy=all y sin eventId/fecha puede usar la clave guardada para obtener precios con casa, hora de actualización y cuota remanente. La clave se resuelve del vault en CADA operación, incluida la creación de tickets cotizados; cambiarla no requiere reiniciar Kira. El proveedor limita créditos según el plan; NO prometer cuotas ilimitadas ni históricos gratuitos. El endpoint de verificación de la clave es de coste cero, no consulta cuotas apostables. ',
   'ODDS REALES Y HISTORIALES: sports_chat_odds ahora consulta varias fuentes independientes y devuelve estado observado/vacío/error/no configurado por proveedor. No declares sin cuotas hasta evaluar sources y buscar fecha y mercados reales por liga. OddsHarvester v0.20.0 permite transmitir filas NDJSON para recuperar partidos cotizados incluso si otras páginas del scraping fallan; distingue precios recuperados de scraping completamente exitoso. sports_chat_historical_odds acepta fecha y clave de deporte para leer archivos públicos locales y los snapshots de cotizaciones realmente vistos por PHOENIX. Los históricos NO son precios actuales, y el archivo local solo cubre desde que se capturaron observaciones: no inventar historial ausente. The Odds API v4 y TheOddsAPI requieren sus respectivas claves; la disponibilidad histórica completa suele ser de planes pagados. No prometas que las cotizaciones son de Juancito si el bookmaker indicado es otro. ',
   'JUANCITO SPORT: utiliza como fuente PRIMARIA su reglamento oficial https://www.juancitosport.com.do/reglas/ y términos https://www.juancitosport.com.do/banca/terminos/. Las reglas verificadas incluyen 3/5/9 innings, run line, ponches, hits, medio tiempo, props, 90 minutos fútbol y overtime diferenciado. Una apuesta solo es válida al mostrar el sistema «Apuesta Confirmada» (8.4); el mínimo publicado es RD$100 (7.10). Su condición 6.6 PROHÍBE usar robots o scripts para realizar apuestas: Kira NO debe automatizar clicks ni apuestas en esa web. Puede investigar fuentes, calcular y entregar el ticket; el usuario realiza la confirmación legalmente en la banca. El sitio juancitosports.com es informativo independiente: NO atribuirle reglamentos oficiales. ',
   'APUESTAS REALES NO FICTICIAS: si el usuario pide un ticket para apostar dinero real, NO respondas por defecto «simulado», «apuesta ficticia» o «no puedo investigar apuestas». Investiga eventos y mercados verificables, contrasta las reglas EXACTAS de la casa con sports_chat_bet_rules, obtiene precios reales por fuente con sports_chat_odds, sports_chat_odds_keyless y sports_chat_market_intelligence; si no hay ofertas auténticas no inventes cuotas. Un boleto cotizado NO equivale a una apuesta aceptada. Solo tras confirmación independiente del comprobante de la casa se puede declarar colocada; sin ella di «ticket cotizado, pendiente de aceptación». No ejecutes apuestas ni transferencias sin autorización explícita y una integración oficial operativa. Las reglas oficiales varían para extra innings, suspensiones, jugadores inactivos, pitcher listado, push, overtime y mercados por período. Prioriza mercados no limitados a ganador: spread/run line, -1.5/+1.5, totales 3/5/9 entradas, props de ponches/hits, handicaps, puntos, tiros, córners y más. Los precios solo son reales si se observan con casa, mercado exacto, línea, momento y correspondencia de evento. La calculadora del ticket se actualiza con el importe sin transferir fondos. Tras la fecha consulta sports_chat_ticket_track con IDs y recibo si lo hay para grados provisionales según marcador y jamás declares cobro/void confirmado sin liquidación oficial.',
@@ -84,7 +88,7 @@ export function apply(ctx: Context): void {
       // Recover missing source installs even when the prepared Windows runtime
       // did not ship the updater script. Launch remains nonblocking.
       const autoRepair=await ensureSportsSourcesStarted(process.env)
-      const env=sportsEnv()
+      const env=await sportsEnv(ctx)
       const installation=managedSportsInstallStatus(env)
       const sources=await sportsSourcesHealth(env)
       return JSON.stringify({sources,installation,autoRepair,checkedAt:new Date().toISOString(),
@@ -141,7 +145,7 @@ export function apply(ctx: Context): void {
         ...(args.eventId?{eventId:args.eventId}:{}),
         ...(args.season?{season:args.season}:{}),
         ...(args.query?{query:args.query}:{}),
-      },fetch,sportsEnv())
+      },fetch,await sportsEnv(ctx))
       return JSON.stringify({
         summary:report.title+' · '+report.subtitle,
         sources:report.sources,
@@ -163,7 +167,7 @@ export function apply(ctx: Context): void {
     output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
     isConcurrencySafe:()=>true,
     async execute(args){
-      const result=await investigateEventDeep(args.sport,args.league,args.eventId,fetch,Date.now(),sportsEnv())
+      const result=await investigateEventDeep(args.sport,args.league,args.eventId,fetch,Date.now(),await sportsEnv(ctx))
       return JSON.stringify({...result,instruction:'Identifica qué noticias hablan realmente de los equipos. Los recuentos de lesiones y las plantillas NO confirman alineaciones. Si la fuente no aporta estadísticas individuales no atribuyas rendimiento ni pronósticos. Contrasta por separado mercados de cuotas reales.'})
     },
     presentCall:()=>({card:'generic',title:'Investigar noticias, estadísticas y bajas de un evento',kind:'read' as const}),
@@ -186,7 +190,7 @@ export function apply(ctx: Context): void {
         sport:args.sport,league:args.league,eventId:args.eventId,date:args.date,
         ...(args.lookbackDays===undefined?{}:{lookbackDays:args.lookbackDays}),
         ...(args.includeOdds===undefined?{}:{includeOdds:args.includeOdds}),
-      },fetch,Date.now(),sportsEnv())
+      },fetch,Date.now(),await sportsEnv(ctx))
       return JSON.stringify({...result,
         instruction:'PHOENIX dibuja automáticamente el panel sports_espn_dashboard. Distingue evidencia histórica, condición de titulares, disponibilidad actual, precios de casas y datos faltantes. Los tramos 3/5/9 innings son medias exploratorias si existe muestra; solo compáralos con cuotas que tengan EXACTAMENTE el mismo período, reglas y fuente. No atribuyas ventajas numéricas ni probabilidades de victoria calibradas a estos promedios. Si existen señales contradictorias, explícalas y deja la conclusión como incierta.'})
     },
@@ -235,7 +239,7 @@ export function apply(ctx: Context): void {
         sport:args.sport,league:args.league,date:args.date,stake:args.stake,
         legs:args.legs as SportsBetLeg[],
         ...(args.ticketReference?{ticketReference:args.ticketReference.slice(0,80)}:{}),
-      },fetch,sportsEnv())
+      },fetch,await sportsEnv(ctx))
       const named:Record<string,string>={
         won:'Ganada provisional',lost:'Perdida provisional',push:'Push (sin acción) provisional',
         pending:'Pendiente',unverifiable:'Sin datos suficientes',
@@ -278,7 +282,7 @@ export function apply(ctx: Context): void {
     output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
     isConcurrencySafe:()=>true,
     async execute(args){
-      const env=sportsEnv()
+      const env=await sportsEnv(ctx)
       const autoRepair=env.PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED==='1'?
         null:await ensureSportsSourcesStarted(process.env)
       const sources=await sportsSourcesHealth(env)
@@ -448,7 +452,7 @@ export function apply(ctx: Context): void {
     isConcurrencySafe:()=>true,
     async execute(args){
       if(!Object.hasOwn(espnCoreModes,args.mode))throw Error('Modo ESPN Core no reconocido: consulta sports_chat_espn_core_catalog')
-      if(sportsEnv().PHOENIX_SPORTS_ESPN_DISABLED==='1')return JSON.stringify({
+      if((await sportsEnv(ctx)).PHOENIX_SPORTS_ESPN_DISABLED==='1')return JSON.stringify({
         state:'unavailable',provider:'ESPN Core',error:'ESPN deshabilitado expresamente por configuración del host'})
       const input={
         mode:args.mode as EspnCoreMode,sport:args.sport,league:args.league,
@@ -478,7 +482,7 @@ export function apply(ctx: Context): void {
     output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
     isConcurrencySafe:()=>true,
     async execute(args){
-      if(sportsEnv().PHOENIX_SPORTS_ESPN_DISABLED==='1')
+      if((await sportsEnv(ctx)).PHOENIX_SPORTS_ESPN_DISABLED==='1')
         return JSON.stringify({historical:true,state:'unavailable',error:'ESPN deshabilitado por operador'})
       const report=await fetchEspnHistoricalOdds({
         sport:args.sport,league:args.league,date:args.date,
@@ -504,7 +508,7 @@ export function apply(ctx: Context): void {
     output:{ schema:{ type:'string' },render:(_a,v)=>[{ type:'text' as const,text:v }] },
     isConcurrencySafe:()=>true,
     async execute(args){
-      const env=sportsEnv()
+      const env=await sportsEnv(ctx)
       const observedAt=Date.now()
       if(args.sourcePolicy&&!['espn','all'].includes(args.sourcePolicy))throw Error('sourcePolicy debe ser espn o all')
       // ESPN is the primary market source. Other odds vendors are opt-in only,
@@ -618,7 +622,7 @@ export function apply(ctx: Context): void {
     output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
     isConcurrencySafe:()=>true,
     async execute(args){
-      const env=sportsEnv()
+      const env=await sportsEnv(ctx)
       const limit=Math.min(500,Math.max(1,args.limit??100))
       if(args.date&&!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/u.test(args.date))throw Error('Fecha histórica inválida')
       let archived:Awaited<ReturnType<typeof loadHistoricalOdds>>|null=null
@@ -676,7 +680,7 @@ export function apply(ctx: Context): void {
     output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
     isConcurrencySafe:()=>false,
     async execute(args){
-      const env=sportsEnv()
+      const env=await sportsEnv(ctx)
       const enabled=env.PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED==='1'
       const report=await scanOddsDisciplines(
         {...(args.sport?{sport:args.sport}:{}),
@@ -707,7 +711,7 @@ export function apply(ctx: Context): void {
     output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
     isConcurrencySafe:()=>true,
     async execute(args){
-      const env=sportsEnv()
+      const env=await sportsEnv(ctx)
       if(env.PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED!=='1'
         &&process.env.PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED!=='0'){
         const autoRepair=await ensureSportsSourcesStarted(process.env)
@@ -783,7 +787,7 @@ export function apply(ctx: Context): void {
       const preference=args.marketPreference??'winner'
       if(preference!=='winner'&&preference!=='double_chance')throw Error('Mercado de ticket inválido')
       const result=await evidencePricedTicket(args.count,args.date,args.sport,args.stake??0,
-        Date.now(),sportsEnv(),fetch,undefined,preference)
+        Date.now(),await sportsEnv(ctx),fetch,undefined,preference)
       return JSON.stringify({uiBlock:result.card,requestedLegs:args.count,
         complete:result.complete,priced:result.priced,placed:false,
         verifiedEvents:result.verifiedEvents,quotedLegs:result.quotedLegs,
@@ -805,7 +809,7 @@ export function apply(ctx: Context): void {
     output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
     isConcurrencySafe:()=>true,
     async execute(args){
-      const result=await evidenceTicket(args.count,args.date,args.sport,fetch,Date.now(),sportsEnv())
+      const result=await evidenceTicket(args.count,args.date,args.sport,fetch,Date.now(),await sportsEnv(ctx))
       return JSON.stringify({uiBlock:result.card,requestedLegs:args.count,verifiedEvents:result.verifiedEvents,
         complete:result.complete,candidatesEvaluated:result.candidatesEvaluated,
         researchLeagues:result.researchLeagues,insufficientEvidence:result.insufficientEvidence,
@@ -885,7 +889,8 @@ export function apply(ctx: Context): void {
       const keys = [...new Set(requestedKeys)]
       if (keys.length < 1 || keys.length > 4) throw new Error('Indica entre 1 y 4 disciplinas para el ticket.')
       const consultedAt=Date.now()
-      const quotes = (await Promise.all(keys.map(key => marketOdds(key,args.markets)))).flat()
+      const env=await sportsEnv(ctx)
+      const quotes = (await Promise.all(keys.map(key => marketOdds(key,args.markets,env)))).flat()
       const current=quotes.filter(q=>{
         const at=Date.parse(q.updatedAt),kickoff=Date.parse(q.timeIso??q.time)
         return Number.isFinite(at)&&at<=consultedAt&&consultedAt-at<=3_600_000&&

@@ -474,3 +474,9 @@
   color: var(--dsw-alias-label-secondary);
 }
 .userAvatar img { width: 100%; height: 100%; object-fit: cover; }
+/* Match Kira's premium circular portrait footprint and optical alignment. */
+.userRow{padding-right:59px}
+.userStack{max-width:min(525px,100%)}
+.userAvatar{box-sizing:border-box;top:0;right:2px;width:49px;height:49px;padding:2px;border:2px solid color-mix(in srgb,var(--dsw-alias-brand-primary) 64%,transparent);outline:2px solid var(--dsw-alias-bg-layer-1);border-radius:50%;box-shadow:0 2px 10px color-mix(in srgb,var(--dsw-alias-brand-primary) 14%,transparent);background:var(--dsw-alias-bg-layer-2)}
+.userAvatar img{display:block;border-radius:50%;object-position:center}
+@media(max-width:520px){.userRow{padding-right:49px}.userAvatar{width:42px;height:42px;right:0}}
