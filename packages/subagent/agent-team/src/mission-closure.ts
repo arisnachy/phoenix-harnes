@@ -114,13 +114,12 @@ export function teamMissionClosed(events: readonly SessionEvent[]): boolean {
   const unfinished = unfinishedMissionWork(events)
   for (let index = events.length - 1; index >= 0; index--) {
     const event = events[index]
-    // Guard sparse/unchecked indexed events before reading their discriminated payload.
     if (event === undefined) continue
     if (event.type === 'turn/end') {
       if (event.data.reason.kind === 'aborted' && event.data.reason.reason.kind === 'user') return true
       return !unfinished && (event.data.reason.kind === 'completed' || event.data.reason.kind === 'aborted')
     }
-    if (event?.type === 'user/message' && event.data.source.kind === 'user') break
+    if (event.type === 'user/message' && event.data.source.kind === 'user') break
   }
 
   if (unfinished) return false
