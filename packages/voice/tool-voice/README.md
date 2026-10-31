@@ -19,7 +19,7 @@ Uses `PHOENIX_VOICE_ENABLED`, `PHOENIX_VOICE_LANGUAGE` (default `es-DO`), and th
 
 #### What the model sees
 
-The model sees the `phoenix_voice_status` and `phoenix_voice_speak` tool definitions when this plugin is registered. `phoenix_voice_status` reads Host voice availability and queue state without playing audio. `phoenix_voice_speak` requests playback of explicit text through an authorized provider; tool availability alone does not imply a live session or audible output.
+The model sees the `phoenix_voice_status` and `phoenix_voice_speak` tool definitions when this plugin is registered. See the [generated tool schema catalog](../../../docs/tool-catalog.md#phoenix-aidsh-tool-voice) for their model-facing definitions. `phoenix_voice_status` reads Host voice availability and queue state without playing audio. `phoenix_voice_speak` requests playback of explicit text through an authorized provider; tool availability alone does not imply a live session or audible output.
 
 #### Token effect
 
