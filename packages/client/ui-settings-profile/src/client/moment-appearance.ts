@@ -38,7 +38,7 @@ const GENERIC_ICONS = ['✨', '🎊', '🌟', '✦', '🎈', '💫', '🎐', '�
 /** Stable hash lets previously unseen events receive different motifs without hardcoding their names. */
 export function occasionHash(value: string): number {
   let seed = 2166136261
-  for (const char of value) seed = Math.imul(seed ^ (char.codePointAt(0) ?? 0), 16777619) >>> 0
+  for (const char of value) seed = Math.imul(seed ^ (char.codePointAt(0) as number), 16777619) >>> 0
   return seed
 }
 
@@ -57,5 +57,5 @@ export function appearanceFor(moment: VisualMoment, country?: string): { icon: s
   const rule = RULES.find(value => value.pattern.test(moment.label))
   if (rule !== undefined) return { icon: rule.icon, theme: rule.theme }
   if (moment.kind === 'personal') return { icon: '🎁', theme: 'birthday' }
-  return { icon: GENERIC_ICONS[occasionHash(moment.label) % GENERIC_ICONS.length] ?? '✨', theme: 'general' }
+  return { icon: GENERIC_ICONS[occasionHash(moment.label) % GENERIC_ICONS.length], theme: 'general' }
 }
