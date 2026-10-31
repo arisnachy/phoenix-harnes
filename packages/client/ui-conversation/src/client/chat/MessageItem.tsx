@@ -269,6 +269,54 @@ function projectUserText(text: string, sessionLabels: readonly string[]): ReactN
   return <>{parts}</>
 }
 
+/** Private local portrait, projected into the user's messages without exposing it to models. */
+function UserPhotoAvatar(): ReactNode {
+  const [source, setSource] = useState<string>()
+  useEffect(() => {
+    if (typeof indexedDB === 'undefined') return
+    let active = true
+    let current: string | undefined
+    const refresh = () => {
+      const open = indexedDB.open('phoenix-user-portrait-v1', 1)
+      open.onupgradeneeded = () => {
+        if (!open.result.objectStoreNames.contains('portrait')) open.result.createObjectStore('portrait')
+      }
+      open.onsuccess = () => {
+        const database = open.result
+        const tx = database.transaction('portrait', 'readonly')
+        const store = tx.objectStore('portrait')
+        const photo = store.get('original')
+        const styled = store.get('styled')
+        const mode = store.get('mode')
+        tx.oncomplete = () => {
+          database.close()
+          if (!active) return
+          const candidate = mode.result === 'styled' && styled.result instanceof Blob
+            ? styled.result as Blob
+            : photo.result instanceof Blob ? photo.result as Blob : undefined
+          const next = candidate === undefined ? undefined : URL.createObjectURL(candidate)
+          setSource(next)
+          if (current !== undefined) URL.revokeObjectURL(current)
+          current = next
+        }
+        tx.onerror = () => { database.close() }
+      }
+    }
+    refresh()
+    window.addEventListener('phoenix-user-portrait-changed', refresh)
+    window.addEventListener('focus', refresh)
+    return () => {
+      active = false
+      window.removeEventListener('phoenix-user-portrait-changed', refresh)
+      window.removeEventListener('focus', refresh)
+      if (current !== undefined) URL.revokeObjectURL(current)
+    }
+  }, [])
+  return <span className={css.userAvatar} data-user-avatar aria-label="Tu avatar">
+    {source === undefined ? <span aria-hidden="true">●</span> : <img src={source} alt="" />}
+  </span>
+}
+
 /** Right-aligned bubble shared by user and steering rows. */
 function UserStyleBubble({
   content, renderMessageImages, actions, pending = false, referenceLabels = [], t,
@@ -290,6 +338,7 @@ function UserStyleBubble({
   const showBubble = visibleText !== '' || rest.length > 0
   return (
     <div className={css.userRow} data-pending-steering={pending || undefined} data-time-hover-root>
+      <UserPhotoAvatar />
       <div className={css.userStack}>
         {renderMessageImages({ images, align: 'end' })}
         {files.map(({ attachment }) => (
