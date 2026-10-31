@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import type { ChangeEvent } from 'react'
 import {
-  activateAvatar, deleteAvatar, normalizeAvatar,
+  activateAvatar, createFaceAvatar, deleteAvatar, normalizeAvatar,
   readAvatar, storeOriginalAvatar, storeStyledAvatar, subscribeAvatar,
   setAvatarReferenceEnabled, type AvatarSnapshot,
 } from './avatar-store.ts'
@@ -36,6 +36,16 @@ export function UserAvatar({ size = 36, className }: { size?: number; className?
     {url === undefined ? <span aria-hidden="true">◉</span> : <img src={url} alt="" />}
   </span>
 }
+/** Only the full saved artwork is displayed here; the compact chat portrait uses the cropped blob. */
+function SavedImage({ image }: { image: Blob }) {
+  const [src, setSrc] = useState<string>()
+  useEffect(() => {
+    const url = URL.createObjectURL(image)
+    setSrc(url)
+    return () => { URL.revokeObjectURL(url) }
+  }, [image])
+  return src === undefined ? null : <img src={src} alt="Imagen completa del retrato Kira" />
+}
 const empty: AvatarSnapshot = { mode: 'original', referenceEnabled: false }
 
 /** In-profile photo picker, real crop, original/restyle variants and local editing. */
@@ -51,6 +61,9 @@ export function AvatarPanel({ transformAvatar }: { transformAvatar: (photo: Blob
   const [offsetY, setOffsetY] = useState(0)
   const [suggested, setSuggested] = useState<Blob>()
   const [suggestedUrl, setSuggestedUrl] = useState<string>()
+  const [faceCrop, setFaceCrop] = useState<Blob>()
+  const [faceCropUrl, setFaceCropUrl] = useState<string>()
+  const [faceZoom, setFaceZoom] = useState(1)
   const refresh = async () => { setStored(await readAvatar()) }
   useEffect(() => {
     void refresh().catch(() => { setError('No se pudo abrir el almacenamiento local de fotos.') })
@@ -68,6 +81,22 @@ export function AvatarPanel({ transformAvatar }: { transformAvatar: (photo: Blob
     setSuggestedUrl(next)
     return () => { URL.revokeObjectURL(next) }
   }, [suggested])
+  useEffect(() => {
+    if (suggested === undefined) { setFaceCrop(undefined); return }
+    let active = true
+    void createFaceAvatar(suggested, faceZoom).then((cropped) => {
+      if (active) setFaceCrop(cropped)
+    }).catch((cause: unknown) => {
+      if (active) setError(cause instanceof Error ? cause.message : 'No se pudo recortar la cara.')
+    })
+    return () => { active = false }
+  }, [suggested, faceZoom])
+  useEffect(() => {
+    if (faceCrop === undefined) { setFaceCropUrl(undefined); return }
+    const next = URL.createObjectURL(faceCrop)
+    setFaceCropUrl(next)
+    return () => { URL.revokeObjectURL(next) }
+  }, [faceCrop])
   const act = async (operation: () => Promise<void>, success: string) => {
     setBusy(true); setError(''); setMessage('')
     try {
@@ -86,7 +115,7 @@ export function AvatarPanel({ transformAvatar }: { transformAvatar: (photo: Blob
       setError('Selecciona una imagen PNG, JPEG o WebP de máximo 8 MB.')
       return
     }
-    setSelected(file); setSuggested(undefined); setError(''); setMessage('')
+    setSelected(file); setSuggested(undefined); setFaceCrop(undefined); setError(''); setMessage('')
     setZoom(1); setOffsetX(0); setOffsetY(0)
   }
   const save = () => {
@@ -101,18 +130,21 @@ export function AvatarPanel({ transformAvatar }: { transformAvatar: (photo: Blob
     if (stored.original === undefined) return
     void act(async () => {
       const result = await transformAvatar(stored.original as Blob)
+      setFaceZoom(1)
+      setFaceCrop(undefined)
       setSuggested(result)
-    }, 'Retrato generado. Comprueba que conserva tus rasgos antes de guardarlo.')
+    }, 'Retrato estilo Kira generado. Comprueba que el rostro se reconoce y que el estilo es futurista.')
   }
   const confirm = () => {
-    if (suggested === undefined) return
+    if (suggested === undefined || faceCrop === undefined) return
     void act(async () => {
       const latest = await readAvatar()
       if (latest.original === undefined) {
         throw new Error('Guarda primero una fotografía original para activar un retrato.')
       }
-      await storeStyledAvatar(suggested)
+      await storeStyledAvatar(faceCrop, suggested)
       setSuggested(undefined)
+      setFaceCrop(undefined)
     }, 'Retrato estilo Kira guardado. Tu foto original sigue disponible.')
   }
   return (
@@ -182,12 +214,19 @@ export function AvatarPanel({ transformAvatar }: { transformAvatar: (photo: Blob
           <button type="button" className={css.danger} disabled={busy}
             onClick={() => {
               setSuggested(undefined)
+              setFaceCrop(undefined)
               void act(deleteAvatar, 'Avatar eliminado de este dispositivo.')
             }}>
             Eliminar foto
           </button>
         </div>
       ) : null}
+      {stored.styledFull !== undefined && (
+        <div className={css.fullSaved}>
+          <strong>Imagen Kira completa conservada</strong>
+          <SavedImage image={stored.styledFull} />
+        </div>
+      )}
       {stored.original !== undefined && (
         <label className={css.referenceOption}>
           <input type="checkbox" checked={stored.referenceEnabled} disabled={busy} onChange={(event) => {
@@ -209,7 +248,8 @@ export function AvatarPanel({ transformAvatar }: { transformAvatar: (photo: Blob
         <div className={css.transform}>
           <h4>Transformar al estilo del equipo Kira</h4>
           <p className={css.hint}>
-            Codex utiliza tu foto real como referencia para crear un retrato con luz cálida y acabado premium.
+            Codex utiliza tu foto real para crear un personaje cinematográfico del universo Kira:
+            rostro protagonista, vestuario tecnológico, fondo claro marfil y detalles futuristas discretos.
             No necesitas configurar un servidor local ni una clave API adicional.
             La foto original siempre se conserva.
           </p>
@@ -220,13 +260,28 @@ export function AvatarPanel({ transformAvatar }: { transformAvatar: (photo: Blob
           </div>
           {suggested !== undefined && suggestedUrl !== undefined && (
             <div className={css.candidate}>
-              <img src={suggestedUrl} alt="Vista previa del retrato generado por Codex" />
+              <div className={css.previewPair}>
+                <div className={css.previewFull}>
+                  <img src={suggestedUrl} alt="Composición completa generada por Codex" />
+                  <span>Imagen completa</span>
+                </div>
+                <div className={css.previewFace}>
+                  {faceCropUrl !== undefined && <img src={faceCropUrl} alt="Recorte facial del avatar" />}
+                  <span>Avatar: solo rostro</span>
+                </div>
+              </div>
+              <label className={css.faceZoom}>
+                Acercar rostro
+                <input type="range" min="0.8" max="1.5" step="0.1" value={faceZoom}
+                  onChange={(event) => { setFaceZoom(Number(event.target.value)) }}
+                  aria-label="Acercar rostro para el avatar" />
+              </label>
               <p className={css.hint}>
-                Comprueba que el rostro sea reconocible. Guardar activa el nuevo retrato;
-                descartar mantiene intacta tu fotografía actual.
+                Guarda la imagen completa y el recorte facial por separado. El chat usa
+                únicamente el avatar del rostro sobre un fondo claro.
               </p>
               <div className={css.actions}>
-                <button type="button" className={css.primary} disabled={busy} onClick={confirm}>
+                <button type="button" className={css.primary} disabled={busy || faceCrop === undefined} onClick={confirm}>
                   Guardar retrato
                 </button>
                 <button type="button" disabled={busy} onClick={() => { setSuggested(undefined) }}>

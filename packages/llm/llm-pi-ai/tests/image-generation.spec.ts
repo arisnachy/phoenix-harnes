@@ -11,6 +11,9 @@ import {
   codexDoctorSupportsImageGeneration,
   imageGenerationToolDescription,
   imageGenerationBackendOrder,
+  latestProfileReference,
+  requestsProfileLikeness,
+  KIRA_TEAM_STYLE,
   freeImageProviderOrder,
   installCodexImageGeneration,
   materializeGeneratedImageInWorkspace,
@@ -34,6 +37,60 @@ type CapturedImageTool = {
     readonly presentationMeta?: (args: unknown, value: unknown) => unknown
   }
 }
+
+describe('current-turn private photo binding for Codex image tools', () => {
+  const original = {
+    attachmentId: 'sha256:portrait',
+    mediaType: 'image/webp',
+    bytes: 100,
+    width: 768,
+    height: 768,
+    name: 'referencia-original-del-usuario.webp',
+  }
+  const photoMessage = {
+    type: 'user/message',
+    data: {
+      source: { kind: 'user' },
+      content: [
+        { type: 'image', attachment: original },
+        { type: 'text', text: 'Dame una imagen mía en una ciudad futurista tipo Kira' },
+      ],
+    },
+  }
+
+  it('uses only the opted-in original photo in this turn', () => {
+    const current = [
+      { type: 'turn/start', data: {} },
+      photoMessage,
+      { type: 'tool/call', data: {} },
+    ]
+    expect(latestProfileReference(current)).toEqual(original)
+    expect(latestProfileReference([
+      ...current,
+      { type: 'turn/start', data: {} },
+      { type: 'user/message', data: { source: { kind: 'user' }, content: [] } },
+    ])).toBeUndefined()
+    expect(latestProfileReference([
+      { type: 'turn/start', data: {} },
+      { type: 'user/message', data: {
+        source: { kind: 'user' },
+        content: [{ type: 'image', attachment: { ...original, name: 'other.webp' } }],
+      } },
+    ])).toBeUndefined()
+  })
+
+  it("distinguishes the user's likeness from possessions", () => {
+    expect(requestsProfileLikeness('Dame una imagen mía en París')).toBe(true)
+    expect(requestsProfileLikeness('Dame una imagen de mí en Nueva York')).toBe(true)
+    expect(requestsProfileLikeness('Dame una imagen de mi casa')).toBe(false)
+    expect(requestsProfileLikeness('Dame una imagen de Kira')).toBe(false)
+  })
+  it('specifies the science-fiction team visual language rather than a photo filter', () => {
+    expect(KIRA_TEAM_STYLE).toContain('futuristic city')
+    expect(KIRA_TEAM_STYLE).toContain('holograms')
+    expect(KIRA_TEAM_STYLE).toContain('NOT')
+  })
+})
 
 describe('Codex image generation bridge', () => {
   it('launches npm/pnpm Windows Codex shims with cmd /d /s /c and retains stdin prompt separation', () => {
