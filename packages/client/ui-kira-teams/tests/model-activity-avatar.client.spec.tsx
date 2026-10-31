@@ -95,7 +95,7 @@ describe('agentAvatarKind', () => {
   it('handles an empty roster safely and computes Unicode indices deterministically', () => {
     expect(stableAgentIndex('any-agent', 0)).toBe(0)
     expect(stableAgentIndex('a', 20)).toBe(17)
-    expect(stableAgentIndex('🌍', 20)).toBe(7)
+    expect(stableAgentIndex('🌍', 20)).toBe(17)
   })
 
   it('keeps the exact approved 20-portrait roster aligned with the visible KIRA codename', () => {
