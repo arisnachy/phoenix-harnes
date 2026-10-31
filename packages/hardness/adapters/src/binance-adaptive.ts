@@ -239,10 +239,10 @@ export async function runBinanceAdaptiveCycle(
       const mark = position.marketPriceUsdt
       if (plan === undefined) return []
       const crossed = binanceKnownAssetRisk(position.symbol) ? 'binance-asset-risk'
-        : mark <= plan.stopLossPrice ? 'paper-stop-loss'
-        : mark >= plan.tp2Price ? 'paper-tp2'
-          : !plan.tp1Taken && mark >= plan.tp1Price ? 'paper-tp1'
-            : undefined
+          : mark <= plan.stopLossPrice ? 'paper-stop-loss'
+            : mark >= plan.tp2Price ? 'paper-tp2'
+              : !plan.tp1Taken && mark >= plan.tp1Price ? 'paper-tp1'
+                : undefined
       return crossed === undefined ? [] : [{
         position, reason: crossed,
         quantity: crossed === 'paper-tp1' ? position.quantity * plan.tp1Fraction : position.quantity,
@@ -262,7 +262,7 @@ export async function runBinanceAdaptiveCycle(
     const executionFor = (
       decision: 'buy' | 'sell' | 'hold',
       trade?: BinancePaperTrade,
-    ): BinanceSignalExecution[] => sorted.map(signal => {
+    ): BinanceSignalExecution[] => sorted.map((signal) => {
       if (trade?.symbol === signal.symbol) return {
         symbol: signal.symbol, status: 'executed' as const,
         explanation: trade.side === 'buy'
@@ -349,7 +349,7 @@ export async function runBinanceAdaptiveCycle(
       && account.positions.length < MAX_OPEN_POSITIONS && account.maxDrawdownPct < 5) {
       const rejectForecast = (rationale: string, status: 'rejected' | 'unavailable'): BinanceAdaptiveCycle => ({
         mode, interval, signals: sorted,
-        execution: executionFor('hold').map((row) => row.symbol === candidate.symbol
+        execution: executionFor('hold').map(row => row.symbol === candidate.symbol
           ? { ...row, status: 'blocked' as const, explanation: rationale } : row),
         decision: 'hold', rationale, account,
         ...(forecast === undefined ? {} : { forecast }),
