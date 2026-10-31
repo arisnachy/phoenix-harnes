@@ -7,7 +7,12 @@ interface AvatarRpc {
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024
 const MAX_RESULT_BYTES = 15 * 1024 * 1024
 
-/** Request a real Codex-backed image edit without exporting credentials to the browser. */
+/**
+ * Request a real Codex-backed image edit without exporting credentials to the browser.
+ * @param original - Validated original WebP photograph to transform.
+ * @param rpc - Trusted Host RPC transport; browser code never receives provider credentials.
+ * @returns Verified transformed image bytes as a Blob.
+ */
 export async function transformAvatarThroughCodex(original: Blob, rpc: AvatarRpc): Promise<Blob> {
   if (original.type !== 'image/webp' || original.size === 0 || original.size > MAX_IMAGE_BYTES) {
     throw new Error('Primero guarda una foto de perfil válida.')
