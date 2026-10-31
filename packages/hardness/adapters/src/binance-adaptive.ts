@@ -412,7 +412,7 @@ export async function runBinanceAdaptiveCycle(
       : rejectedEntries.size === candidates.length && candidates.length > 0
         ? 'Todos los candidatos fueron rechazados por el estado Spot actual de Binance'
         : account.positions.length >= MAX_OPEN_POSITIONS
-          ? 'Bloqueada: ya hay ' + MAX_OPEN_POSITIONS + ' posiciones abiertas'
+          ? `Bloqueada: ya hay ${MAX_OPEN_POSITIONS} posiciones abiertas`
           : account.maxDrawdownPct >= 5
             ? 'Bloqueada: drawdown máximo de 5% alcanzado'
             : budget < 10
