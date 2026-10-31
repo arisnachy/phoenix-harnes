@@ -24,3 +24,24 @@
 .actions button:disabled,.transform button:disabled{opacity:.5;cursor:not-allowed}
 .error{margin:0;color:var(--dsw-alias-label-error);font-size:12px}
 .success{margin:0;color:var(--dsw-alias-brand-primary);font-size:12px}
+/* PHOENIX portrait language: the human and Kira have matching frames, not agent badges. */
+.panel{gap:14px;padding:20px;border-radius:18px}
+.top{gap:16px}
+.avatar{box-sizing:border-box;border:3px solid var(--dsw-alias-bg-layer-2);outline:2px solid color-mix(in srgb,var(--dsw-alias-brand-primary) 55%,transparent);box-shadow:0 2px 12px color-mix(in srgb,var(--dsw-alias-brand-primary) 14%,transparent)}
+.avatar img{display:block;object-position:center}
+.details strong{font-size:14px}
+.actions{gap:9px}
+.actions button,.transform button,.pick{font-size:13px;line-height:19px;padding:9px 14px;border-radius:12px;transition:border-color .15s ease,background .15s ease}
+.actions button:focus-visible,.transform button:focus-visible,.pick:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:2px}
+.transform{align-items:stretch;gap:11px;padding-top:17px}
+.transform h4{font-size:15px;line-height:23px}
+.transform label{font-size:13px;font-weight:550}
+.endpoint{font-size:13px;line-height:21px;padding:11px 12px;border-radius:12px}
+.transform .primary{color:var(--dsw-alias-bg-layer-2);background:var(--dsw-alias-brand-primary);border-color:var(--dsw-alias-brand-primary);font-weight:650}
+.transform .primary:hover{filter:brightness(1.05)}
+.referenceOption{display:flex;align-items:flex-start;gap:12px;border:1px solid var(--dsw-alias-border-l2);border-radius:14px;padding:14px;background:var(--dsw-alias-bg-layer-3);cursor:pointer}
+.referenceOption input{width:17px;height:17px;accent-color:var(--dsw-alias-brand-primary);margin:3px 0 0;flex:none}
+.referenceOption span{display:flex;flex-direction:column;gap:5px;min-width:0}
+.referenceOption strong{font-size:13px;line-height:19px}
+.referenceOption small{font-size:12px;line-height:19px;color:var(--dsw-alias-label-secondary)}
+@media(max-width:520px){.panel{padding:14px}.actions button,.transform button{width:100%}.transform .actions{flex-direction:column;align-items:stretch}}
