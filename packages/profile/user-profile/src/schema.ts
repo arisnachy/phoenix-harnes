@@ -103,9 +103,10 @@ export function validateUserProfile(profile: UserProfileSettings): void {
   }
   validateProviderOrder(profile.modelProviderOrder)
   if (profile.countryCode !== undefined && !/^[A-Z]{2}$/.test(profile.countryCode)) throw new TypeError('user profile countryCode must be ISO 3166-1 alpha-2')
-  if (profile.momentsRegion !== undefined && (!/^[A-Z]{2}-[A-Z0-9]{1,4}$/.test(profile.momentsRegion)
-    || profile.countryCode === undefined || !profile.momentsRegion.startsWith(profile.countryCode + '-'))) {
-    throw new TypeError('user profile momentsRegion must match the country ISO 3166-2 code')
+  // Region and country are saved as individual settings fields; validate the shape
+  // here and let the completed Profile form validate their pair atomically.
+  if (profile.momentsRegion !== undefined && !/^[A-Z]{2}-[A-Z0-9]{1,4}$/.test(profile.momentsRegion)) {
+    throw new TypeError('user profile momentsRegion must be an ISO 3166-2 code')
   }
   if (profile.momentsTimeZone !== undefined) {
     try { new Intl.DateTimeFormat('en-US', { timeZone: profile.momentsTimeZone }) } catch { throw new TypeError('user profile momentsTimeZone must be a valid IANA zone') }
