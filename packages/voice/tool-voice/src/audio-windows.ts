@@ -150,8 +150,8 @@ async function transcribeLocal(file: string): Promise<{ language?: string; cues:
   const output = await new Promise<string>((ok, fail) => {
     let stdout = '', settled = false
     const child = spawn(command,args,{
-      windowsHide: true, shell: false, stdio:['ignore','pipe','pipe'],
-      env: { ...process.env, PYTHONIOENCODING:'utf-8' },
+      windowsHide: true, shell: false, stdio: ['ignore', 'pipe', 'pipe'],
+      env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
     })
     const finish = (error?: Error): void => {
       if (settled) return
@@ -165,7 +165,7 @@ async function transcribeLocal(file: string): Promise<{ language?: string; cues:
       finish(new Error('AUDIO_LOCAL_TRANSCRIPTION_TIMEOUT'))
     }, 180_000)
     child.stdout.setEncoding('utf8')
-    child.stdout.on('data',(chunk:string)=>{
+    child.stdout.on('data', (chunk: string) => {
       stdout += chunk
       if (stdout.length > 60_000) {
         child.kill()
@@ -270,10 +270,10 @@ export async function transcribeApprovedAudioFile(input: string): Promise<unknow
   }
   const result = await transcribeLocal(target)
   return {
-    source:'authorized-local-audio-file',
-    captureVerified:true,
-    mediaSizeBytes:details.size,
-    speechRecognized:result.cues.length > 0,
+    source: 'authorized-local-audio-file',
+    captureVerified: true,
+    mediaSizeBytes: details.size,
+    speechRecognized: result.cues.length > 0,
     ...result,
     note: 'Archivo autorizado procesado localmente. El audio de origen no fue modificado; no inferir sonidos que no se reconocen.',
   }

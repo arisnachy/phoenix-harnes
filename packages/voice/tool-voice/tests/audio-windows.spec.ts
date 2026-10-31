@@ -26,7 +26,7 @@ describe('PHOENIX Universal Ear trust boundary', () => {
       await expect(transcribeApprovedAudioFile('https://example.test/audio.wav')).rejects.toThrow(/PATH_INVALID/)
     } finally {
       vi.unstubAllEnvs()
-      await rm(root,{ recursive: true, force: true })
+      await rm(root, { recursive: true, force: true })
     }
   })
 
@@ -35,12 +35,12 @@ describe('PHOENIX Universal Ear trust boundary', () => {
       status: 'captured', source: 'windows-output-loopback', file: 'C:\\Temp\\audio-12345678901234567890123456789012.wav',
       bytes: 1024, seconds: 8, sessionId: 'agent-kira', device: 'Speakers',
     }
-    expect(() => parseAudioCapture(JSON.stringify({ ...data, sessionId:'other'}), 'agent-kira', 8)).toThrow(/INVALID/)
-    expect(() => parseAudioCapture(JSON.stringify({ ...data, seconds:60}), 'agent-kira', 8)).toThrow(/INVALID/)
-    expect(() => parseAudioCapture(JSON.stringify({ ...data, file:'C:\\Temp\\evil.wav'}), 'agent-kira', 8)).toThrow(/INVALID/)
-    expect(() => parseAudioCapture(JSON.stringify({ ...data, source:'windows-microphone'}), 'agent-kira', 8,'output'))
+    expect(() => parseAudioCapture(JSON.stringify({ ...data, sessionId: 'other'}), 'agent-kira', 8)).toThrow(/INVALID/)
+    expect(() => parseAudioCapture(JSON.stringify({ ...data, seconds: 60}), 'agent-kira', 8)).toThrow(/INVALID/)
+    expect(() => parseAudioCapture(JSON.stringify({ ...data, file: 'C:\\Temp\\evil.wav'}), 'agent-kira', 8)).toThrow(/INVALID/)
+    expect(() => parseAudioCapture(JSON.stringify({ ...data, source: 'windows-microphone'}), 'agent-kira', 8, 'output'))
       .toThrow(/INVALID/)
-    expect(() => parseAudioCapture(JSON.stringify({ ...data, source:'windows-output-loopback'}), 'agent-kira', 8,'microphone'))
+    expect(() => parseAudioCapture(JSON.stringify({ ...data, source: 'windows-output-loopback'}), 'agent-kira', 8, 'microphone'))
       .toThrow(/INVALID/)
   })
 })

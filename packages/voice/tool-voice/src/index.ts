@@ -96,9 +96,15 @@ export function apply(ctx: Context): void {
     isConcurrencySafe: () => true,
     async execute(_args, exec) {
       const sessionId = senseSessionId(exec.agent?.id)
-      try { return JSON.stringify(await windowsAudioStatus(sessionId)) }
-      catch (error) { return JSON.stringify({ available:false, reason: String(error).slice(0,220),
-        note: 'El oido de Windows requiere Phoenix.exe. Para pestañas autorizadas usa las herramientas de video existentes.', }) }
+      try {
+        return JSON.stringify(await windowsAudioStatus(sessionId))
+      } catch (error) {
+        return JSON.stringify({
+          available: false,
+          reason: String(error).slice(0, 220),
+          note: 'El oído de Windows requiere Phoenix.exe. Para pestañas autorizadas, usa las herramientas de vídeo.',
+        })
+      }
     },
     presentCall: () => ({ card: 'generic', title: 'Diagnosticar oído de PHOENIX', kind: 'read' as const }),
   }))
@@ -106,38 +112,38 @@ export function apply(ctx: Context): void {
     name: 'phoenix_audio_listen',
     description: 'ESCUCHAR AUDIO REAL del dispositivo de salida predeterminado de Windows durante 3 a 12 segundos. La ventana de PHOENIX solicita permiso visible cada vez. Transcribe con faster-whisper local; elimina WAV temporal. No utiliza microfono ni escucha continua. Si el usuario pide analizar la voz o sonido que sale de sus aplicaciones, usar aqui; no inventar lo no capturado.',
     parameters: {
-      seconds: { type:'integer', description: 'Segundos enteros de captura, 3 a 12; por defecto 8. No sirve para escucha continua.' },
-      source: { type:'string', enum: ['output','microphone'],
+      seconds: { type: 'integer', description: 'Segundos enteros de captura, 3 a 12; por defecto 8. No sirve para escucha continua.' },
+      source: { type: 'string', enum: ['output', 'microphone'],
         description: 'output escucha altavoces/aplicaciones; microphone capta sonido de microfono por autorizacion. Defecto output.' },
     },
-    output: { schema: { type:'string' }, render: (_args,value) => [{ type: 'text' as const, text:  value}] },
+    output: { schema: { type: 'string' }, render: (_args, value) => [{ type: 'text' as const, text: value }] },
     isConcurrencySafe: () => false,
     async execute(args, exec) {
       const sessionId = senseSessionId(exec.agent?.id)
       const seconds = args.seconds === undefined ? 8 : args.seconds
       const source = args.source ?? 'output'
-      try { return JSON.stringify(await listenWindowsAudio(sessionId,seconds,source)) }
+      try { return JSON.stringify(await listenWindowsAudio(sessionId, seconds, source)) }
       catch (error) { return JSON.stringify({
-        captureVerified:false, heardSeconds:0, reason: String(error).slice(0,240),
+        captureVerified: false, heardSeconds: 0, reason: String(error).slice(0, 240),
         instruction: 'No afirmar que se escucho el audio. Informar el bloqueo concreto y pedir solo el permiso o la fuente necesaria.',
       }) }
     },
-    presentCall: () => ({ card: 'generic',title: 'Escuchar audio de Windows (con permiso)',kind: 'read' as const }),
+    presentCall: () => ({ card: 'generic',title: 'Escuchar audio de Windows (con permiso)', kind: 'read' as const }),
   }))
   ctx.tools.register(defineTool({
     name: 'phoenix_audio_file_listen',
     description: 'Transcribe un archivo local de audio aportado/autorizado por el usuario dentro de PHOENIX_AUDIO_ALLOWED_DIRS (rutas separadas por punto y coma). Solo lectura; faster-whisper local. Soporta WAV, MP3, M4A, OGG, FLAC, WebM, MP4; tamaño máximo 32 MiB. No escanea rutas ni accede a carpetas no autorizadas.',
     parameters: {
-      path: { type:'string', required:true, description: 'Ruta absoluta exacta de un archivo autorizado; no una carpeta ni URL.' },
+      path: { type: 'string', required: true, description: 'Ruta absoluta exacta de un archivo autorizado; no una carpeta ni URL.' },
     },
-    output: { schema: { type: 'string' }, render: (_args,value) => [{ type: 'text' as const, text:  value}] },
+    output: { schema: { type: 'string' }, render: (_args, value) => [{ type: 'text' as const, text: value }] },
     isConcurrencySafe: () => true,
     async execute(args) {
       try { return JSON.stringify(await transcribeApprovedAudioFile(args.path)) }
-      catch (error) { return JSON.stringify({ captureVerified: false, reason: String(error).slice(0,240),
+      catch (error) { return JSON.stringify({ captureVerified: false, reason: String(error).slice(0, 240),
         instruction: 'Archivo no transcrito; obtener autorizacion concreta para la carpeta o un archivo compatible, no inventar contenido.'}) }
     },
-    presentCall: () => ({card: 'generic',title: 'Transcribir archivo de audio autorizado',kind: 'read' as const }),
+    presentCall: () => ({ card: 'generic', title: 'Transcribir archivo de audio autorizado', kind: 'read' as const }),
   }))
   ctx.tools.register(defineTool({
     name: 'phoenix_senses_status',
@@ -148,8 +154,8 @@ export function apply(ctx: Context): void {
     async execute(_args, exec) {
       const sessionId = senseSessionId(exec.agent?.id)
       const [audio, desktop] = await Promise.all([
-        windowsAudioStatus(sessionId).catch((error: unknown) => ({ available: false, reason: String(error).slice(0,180) })),
-        windowsSensesStatus(sessionId).catch((error: unknown) => ({ available: false, reason: String(error).slice(0,180) })),
+        windowsAudioStatus(sessionId).catch((error: unknown) => ({ available: false, reason: String(error).slice(0, 180) })),
+        windowsSensesStatus(sessionId).catch((error: unknown) => ({ available: false, reason: String(error).slice(0, 180) })),
       ])
       const voice = ctx.voice.status()
       const realtime = await ctx.voice.conversationRealtimeStatus().catch(() => undefined)
@@ -164,5 +170,4 @@ export function apply(ctx: Context): void {
     },
     presentCall: () => ({ card: 'generic', title: 'Estado de los sentidos de Kira', kind: 'read' as const }),
   }))
-
 }
