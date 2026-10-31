@@ -15,12 +15,16 @@ permissions:
 
 jobs:
   generate-reviewed-patch:
-    if: github.repository == 'arisnachy/phoenix-harnes'
+    if: github.repository == 'arisnachy/phoenix-harnes' && github.event_name == 'pull_request' && github.head_ref == 'fix/ci-general-jsonl-hmr-20261030'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v6
         with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
           persist-credentials: false
       - uses: pnpm/action-setup@v4
         with:
@@ -53,3 +57,17 @@ jobs:
             ci-generated.patch
             ci-generated-status.txt
           retention-days: 3
+      - name: Commit exactly the reviewed catalogs to the PR branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo '0dae4f356bfd9ee16132f472b6af6e02c0c505ee4f9d3a5186f4455551b87ad5  ci-generated.patch' | sha256sum -c -
+          git diff --check
+          git add -- apps/cli/composition.md docs/config-catalog.md docs/module-graph.md docs/subsystems/session.i18n.yaml docs/subsystems/session.md docs/subsystems/session.zh.md docs/tool-catalog.md packages/extensions/cordis-client-runner/src/client/slot-catalog.ts packages/extensions/tool-cordis/src/api-catalog.ts
+          git diff --cached --check
+          test "$(git diff --cached --name-only | wc -l | tr -d ' ')" -eq 9
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'docs(ci): synchronize source-generated catalogs without changing gates'
+          gh auth setup-git
+          git push origin HEAD:refs/heads/fix/ci-general-jsonl-hmr-20261030
