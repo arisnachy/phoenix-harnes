@@ -14,8 +14,11 @@ export interface PublicHoliday {
   readonly name: string
   readonly localName?: string
   readonly countryCode?: string
+  readonly subdivisionCodes?: readonly string[]
+  readonly nationalHoliday?: boolean
+  readonly holidayTypes?: readonly string[]
 }
-const HOLIDAY_API = 'https://date.nager.at/api/v3/PublicHolidays'
+const HOLIDAY_API = 'https://date.nager.at/api/v4/Holidays'
 // Guaranteed offline fallback for the user's country. The country-only public
 // calendar remains authoritative for other national and movable holidays.
 const COUNTRY_FALLBACK: Readonly<Record<string, readonly [string, string, CalendarMoment['kind']][]>> = {
@@ -112,6 +115,14 @@ export function validAnnualDay(value: string): boolean {
 function matchesDay(date: string, today: string): boolean {
   return date.slice(-5) === today.slice(-5)
 }
+/** A local festivity is shown only for the matching ISO subdivision. */
+export function holidayApplies(holiday: PublicHoliday, region?: string): boolean {
+  if (holiday.nationalHoliday === true) return true
+  if (holiday.subdivisionCodes !== undefined && holiday.subdivisionCodes.length > 0) {
+    return region !== undefined && holiday.subdivisionCodes.includes(region)
+  }
+  return holiday.nationalHoliday !== false
+}
 function kindFromHoliday(name: string): CalendarMoment['kind'] {
   return /independ|independenc|restaur|constituci|constitution|liberation|nacional|national|patria/i.test(name)
     ? 'patriotic'
@@ -150,10 +161,11 @@ export function momentsForDay(
   }
   for (const holiday of publicHolidays) {
     if (holiday.date !== today) continue
-    if (country === undefined || holiday.countryCode !== country) continue
+    if (country === undefined || holiday.countryCode !== country || !holidayApplies(holiday, profile.momentsRegion)) continue
     const label = holiday.localName || holiday.name
     if (typeof label !== 'string' || label.length > 120 || label.trim() === '') continue
-    add({ id: `calendar:${country}:${holiday.date}:${label}`, label, kind: kindFromHoliday(label + ' ' + holiday.name), source: 'calendar' })
+    const kind = holiday.holidayTypes?.includes('Observance') ? 'cultural' : kindFromHoliday(label + ' ' + holiday.name)
+    add({ id: `calendar:${country}:${holiday.date}:${label}`, label, kind, source: 'calendar' })
   }
   for (const [date, label, kind] of GLOBAL) {
     if (date === today.slice(-5)) add({ id: `global:${date}`, label, kind, source: 'regional' })
@@ -162,27 +174,41 @@ export function momentsForDay(
   return results
 }
 
-/** Read public holidays, sending no personal identifiers.
+/** Read world-wide public and regional observances from the Nager v4 calendar.
  * @param country - ISO 3166-1 alpha-2 code.
- * @param year - calendar year to request.
- * @param fetcher - network transport, injectable for tests.
- * @returns validated holiday entries or an empty list for invalid requests.
+ * @param year - user-local calendar year.
+ * @param fetcher - injectable transport for deterministic tests.
+ * @returns validated events; country/year are the only data sent to provider.
  */
 export async function fetchPublicHolidays(country: string, year: number, fetcher: typeof fetch = fetch): Promise<PublicHoliday[]> {
   if (!/^[A-Z]{2}$/.test(country) || !Number.isInteger(year) || year < 1900 || year > 2200) return []
-  const response = await fetcher(`${HOLIDAY_API}/${year}/${country}`, { signal: AbortSignal.timeout(5000) })
+  const response = await fetcher(`${HOLIDAY_API}/${country}/${year}`, { signal: AbortSignal.timeout(5000) })
   if (!response.ok) throw new Error(`Holiday API HTTP ${response.status}`)
   const data: unknown = await response.json()
   if (!Array.isArray(data)) return []
-  return data.slice(0, 500).flatMap((entry): PublicHoliday[] => {
+  return data.slice(0, 1000).flatMap((entry): PublicHoliday[] => {
     if (typeof entry !== 'object' || entry === null) return []
     const row = entry as Record<string, unknown>
     if (typeof row.date !== 'string' || !validDay(row.date)
       || typeof row.name !== 'string' || row.name.length > 120 || row.name.trim() === ''
       || row.countryCode !== country) return []
+    const subdivisions = Array.isArray(row.subdivisionCodes)
+      ? row.subdivisionCodes.filter((item): item is string =>
+        typeof item === 'string' && new RegExp(`^${country}-[A-Z0-9]{1,4}$`).test(item)).slice(0, 80)
+      : Array.isArray(row.counties)
+        ? row.counties.filter((item): item is string => typeof item === 'string'
+          && new RegExp(`^${country}-[A-Z0-9]{1,4}$`).test(item)).slice(0, 80)
+        : undefined
+    const types = Array.isArray(row.holidayTypes)
+      ? row.holidayTypes.filter((item): item is string => typeof item === 'string' && item.length <= 20).slice(0, 8)
+      : undefined
     return [{
       date: row.date, name: row.name, countryCode: country,
       ...(typeof row.localName === 'string' && row.localName.length <= 120 ? { localName: row.localName } : {}),
+      ...(subdivisions === undefined ? {} : { subdivisionCodes: subdivisions }),
+      ...(typeof row.nationalHoliday === 'boolean' ? { nationalHoliday: row.nationalHoliday }
+        : typeof row.global === 'boolean' ? { nationalHoliday: row.global } : {}),
+      ...(types === undefined ? {} : { holidayTypes: types }),
     }]
   })
 }
