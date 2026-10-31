@@ -605,8 +605,8 @@ const ticketSportEmblem=(groupHeading:string):string=>{
   if(sport.includes('tenis')||sport.includes('tennis'))return '🎾'
   return '🏆'
 }
-const SportsPortrait = ({ label,logo }:{ label:string;logo?:string|undefined }) => (
-  <span className={css.sportsPortrait}>
+const SportsPortrait = ({ label,logo,variant }:{ label:string;logo?:string|undefined;variant?:'player' }) => (
+  <span className={variant==='player'?`${css.sportsPortrait} ${css.sportsPortraitPlayer}`:css.sportsPortrait}>
     <span>{label.slice(0,2).toUpperCase()}</span>
     {logo && <img src={logo} alt={label} loading="lazy" referrerPolicy="no-referrer"
       onError={(event)=>{event.currentTarget.style.display='none'}}/>}
@@ -627,7 +627,7 @@ const SportsLineups = ({ lineups }:{ lineups:SportsLineup[] }) => {
       <thead><tr><th scope="col">Bateador</th><th scope="col">Pos.</th><th scope="col">Temporada</th></tr></thead>
       <tbody>{lineup.players.map((p,i)=><tr key={p.id??i}>
         <th scope="row"><span className={css.sportsPlayerName}>
-          {p.image&&<SportsPortrait label={p.name} logo={p.image}/>}
+          {p.image&&<SportsPortrait label={p.name} logo={p.image} variant="player"/>}
           {i+1}. {p.name}</span></th><td>{p.role??'—'}</td>
         <td>{p.stats??'Pendiente'}</td>
       </tr>)}</tbody></table></div>:<p className={css.sportsNote}>MLB todavía no publicó la alineación oficial.</p>}
@@ -639,7 +639,7 @@ const SportsBullpen = ({ bullpen }:{ bullpen:SportsBullpen[] }) => (
     <div className={css.sportsBulpenGrid}>{bullpen.map((b,i)=><div key={i} className={css.sportsBullpenTeam}>
       <strong>{b.team}</strong>{b.pitchers.length?b.pitchers.map((p,j)=>
         <div className={css.sportsPitcherRow} key={p.id??j}>
-          <SportsPortrait label={p.name} logo={p.image}/>
+          <SportsPortrait label={p.name} logo={p.image} variant="player"/>
           <span><b>{p.name}</b><small>{p.stats??'Estadísticas no disponibles'}</small></span>
         </div>):<p className={css.sportsNote}>Sin datos de bullpen verificables.</p>}
       <p className={css.sportsNote}>{b.note}</p>
@@ -687,7 +687,7 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
         <header className={css.sportsHeadline}>
           <div><span className={css.sportsKicker}>PHOENIX / ESPN INTELLIGENCE · {p.view.toUpperCase()}</span>
             <h3>{p.title}</h3><p>{p.subtitle}</p></div>
-          {p.image&&<SportsPortrait label={p.title} logo={p.image}/>}
+          {p.image&&<SportsPortrait label={p.title} logo={p.image} {...(p.view==='player'?{variant:'player' as const}:{})}/>}
         </header>
         <div className={css.sportsEspnSections}>
           {p.sections.map((s,i)=><section key={i} className={css.sportsEspnSection}
@@ -754,9 +754,12 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
               {!hasStarted&&<span className={css.sportsSlateVs}>VS · Sin iniciar</span>}
             </div>}
             {!pending&&<SportsLiveFacts game={live} meta={meta} sport={p.sport}/>}
-            {e.venue&&<small className={css.sportsSlateVenue}>⌖ {e.venue}</small>}
-            {!pending&&e.featured&&<small className={css.sportsSlateFeatured}>{e.featured}</small>}
-            {!pending&&<small className={css.sportsSlateFavorite}>{e.favorite?`★ Favorito analítico · ${e.favorite}`:'☆ Favorito sin verificar · consultar análisis y cuotas'}</small>}
+            {!pending&&(e.venue||e.featured||e.favorite)&&<details className={css.sportsSlateContext}>
+              <summary>Contexto del encuentro</summary>
+              {e.venue&&<small className={css.sportsSlateVenue}>⌖ {e.venue}</small>}
+              {e.featured&&<small className={css.sportsSlateFeatured}>{e.featured}</small>}
+              {e.favorite&&<small className={css.sportsSlateFavorite}>★ Tendencia descriptiva · {e.favorite}</small>}
+            </details>}
             {!pending&&(live?.phase==='in'||e.phase==='in')&&onAction&&<button className={css.sportsSlateAction}
               type="button" onClick={()=>onAction('Kira, muéstrame en vivo '+e.away.label+' vs '+e.home.label+' de '+(p.league??p.providerLeague??'esta liga')+' el '+p.date+'.','draft')}>
               Seguir en vivo · Detalle ›
@@ -777,7 +780,7 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
         {(get,meta)=>{
           const live=get(p)
           const hasStarted=(live?.phase??p.phase)==='in'||(live?.phase??p.phase)==='post'
-          return <section className={css.sportsCard} data-generative-ui="sports_game_card">
+          return <section className={`${css.sportsCard} ${css.sportsGameCompact}`} data-generative-ui="sports_game_card">
         <header className={css.sportsHeadline}>
           <div><span className={css.sportsKicker}>PHOENIX / {p.sport?.toUpperCase()??'DEPORTES'}</span>
             {(p.country||p.league)&&<div className={css.sportsCompetition}>{[p.country,p.league].filter(Boolean).join(' · ')}</div>}
@@ -797,6 +800,9 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
             {hasStarted&&(live?.homeScore??p.home.score)!==undefined&&<b>{live?.homeScore??p.home.score}</b>}</div>
         </div>
         <SportsLiveFacts game={live} meta={meta} sport={p.sport}/>
+        <details className={css.sportsGameDisclosure}>
+          <summary>Estadísticas, jugadores y análisis <span aria-hidden="true">⌄</span></summary>
+          <div className={css.sportsGameExpanded}>
         {!(live?.periods?.length)&&p.periods?.length?<section className={css.sportsDetailSection} aria-label="Parciales del partido">
           <h4>Marcador por período</h4><div className={css.sportsTableScroll}><table className={css.sportsTable}>
             <thead><tr><th>Equipo</th>{p.periods.map((period,i)=><th key={i}>{period.label}</th>)}</tr></thead>
@@ -807,7 +813,7 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
           <h4>Abridores probables</h4>
           <div className={css.sportsStarters}>{p.pitchers.map((pitcher,i)=>
             <div key={pitcher.id??i} className={css.sportsStarter}>
-              <SportsPortrait label={pitcher.name} logo={pitcher.image}/>
+              <SportsPortrait label={pitcher.name} logo={pitcher.image} variant="player"/>
               <div><span>{pitcher.team}</span><strong>{pitcher.name}</strong>
                 <small>{pitcher.stats??'Estadísticas de temporada no disponibles'}</small></div>
             </div>)}</div>
@@ -825,6 +831,8 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
         </section>}
         {p.lineups?.length?<SportsLineups lineups={p.lineups}/>:null}
         {p.bullpen?.length?<SportsBullpen bullpen={p.bullpen}/>:null}
+          </div>
+        </details>
         <footer className={css.sportsSourceBar}>
           <span>Datos · {p.source}</span><SportsLiveStamp meta={meta}/>
           {p.note&&<small>{p.note}</small>}
@@ -889,7 +897,7 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
                   {(leg.homeLogo||leg.awayLogo||leg.homeTeam||leg.awayTeam||leg.image)&&<span className={css.sportsTicketLogos}>
                     {(leg.awayTeam||leg.awayLogo)&&<SportsPortrait label={leg.awayTeam??'Visitante'} logo={leg.awayLogo}/>}
                     {(leg.homeTeam||leg.homeLogo)&&<SportsPortrait label={leg.homeTeam??'Local'} logo={leg.homeLogo}/>}
-                    {leg.image&&<SportsPortrait label={leg.player??leg.selection} logo={leg.image}/>}
+                    {leg.image&&<SportsPortrait label={leg.player??leg.selection} logo={leg.image} variant="player"/>}
                   </span>}
                   <strong>{leg.selection}</strong>
                 </div>
