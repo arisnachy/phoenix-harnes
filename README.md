@@ -4,7 +4,9 @@
 
 # PHOENIX
 
-English | [Español](README.es.md) | [中文](README.zh.md)
+English | [中文](README.zh.md)
+
+[Español](README.es.md)
 
 **PHOENIX is a distinct, local-first AI agent platform designed to work with multiple model providers, tools and specialized agents.**
 
@@ -27,6 +29,8 @@ PHOENIX has its own product identity, development roadmap and user experience. K
 
 These areas have different levels of implementation and verification. See the relevant module and CI evidence before relying on one for critical work.
 
+<a id="run"></a>
+
 ## Install
 
 ### Windows installer
@@ -38,6 +42,8 @@ irm https://raw.githubusercontent.com/arisnachy/phoenix-harnes/main/install-phoe
 ```
 
 Review scripts before running them with elevated privileges. The installer requires a supported Windows environment and may prepare Node.js, Git, dependencies and application shortcuts. See [PHOENIX on Windows](docs/phoenix-windows.md) for installation and platform limitations.
+
+<a id="run-from-source"></a>
 
 ### Run from source
 

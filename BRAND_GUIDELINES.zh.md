@@ -1,6 +1,8 @@
 # PHOENIX 品牌规范
 
-[English](BRAND_GUIDELINES.md) | [Español](BRAND_GUIDELINES.es.md) | 中文
+[English](BRAND_GUIDELINES.md) | 中文
+
+[Español](BRAND_GUIDELINES.es.md)
 
 PHOENIX 拥有自己的产品身份、表达风格和视觉语言。本规范帮助贡献者清晰、一致地展示 PHOENIX。
 

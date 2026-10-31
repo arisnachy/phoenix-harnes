@@ -1,6 +1,8 @@
 # PHOENIX Brand Guidelines
 
-English | [Español](BRAND_GUIDELINES.es.md) | [中文](BRAND_GUIDELINES.zh.md)
+English | [中文](BRAND_GUIDELINES.zh.md)
+
+[Español](BRAND_GUIDELINES.es.md)
 
 PHOENIX has its own product identity, voice and visual language. These guidelines help contributors present it clearly and consistently.
 

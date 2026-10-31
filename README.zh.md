@@ -4,7 +4,9 @@
 
 # PHOENIX
 
-[English](README.md) | [Español](README.es.md) | 中文
+[English](README.md) | 中文
+
+[Español](README.es.md)
 
 **PHOENIX 是一个具有独立产品定位、以本地优先为设计原则的 AI 智能体平台，可连接不同模型提供方、工具和专业智能体。**
 
@@ -27,6 +29,8 @@ PHOENIX 拥有自己的产品身份、开发路线和用户体验。Kira 是平�
 
 这些领域的实现和验证程度各不相同。在关键任务中依赖某项能力前，请查阅对应模块与 CI 验证证据。
 
+<a id="run"></a>
+
 ## 安装
 
 ### Windows 安装程序
@@ -38,6 +42,8 @@ irm https://raw.githubusercontent.com/arisnachy/phoenix-harnes/main/install-phoe
 ```
 
 使用高权限运行脚本前请先检查其内容。安装程序需要受支持的 Windows 环境，可能会准备 Node.js、Git、依赖项和应用快捷方式。安装说明及平台限制请参阅 [Windows 上的 PHOENIX](docs/phoenix-windows.zh.md)。
+
+<a id="run-from-source"></a>
 
 ### 从源码运行
 
