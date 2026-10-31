@@ -88,7 +88,7 @@ describe('connectors settings section', () => {
     expect(screen.queryByRole('button',{ name:'Autorizar Binance OAuth' })).toBeNull()
     // Only owners who have separately obtained Binance approval may retry.
     await waitFor(() =>{  expect(
-      (screen.getByRole('button',{ name:'Opciones avanzadas (solo si Binance aprueba PHOENIX)' })).disabled,
+      (screen.getByRole('button',{ name:'Opciones avanzadas (solo si Binance aprueba PHOENIX)' }) as HTMLButtonElement).disabled,
     ).toBe(false) })
     fireEvent.click(screen.getByRole('button',{ name:'Opciones avanzadas (solo si Binance aprueba PHOENIX)' }))
     const button=await screen.findByRole('button',{ name:'Autorizar Binance OAuth' })

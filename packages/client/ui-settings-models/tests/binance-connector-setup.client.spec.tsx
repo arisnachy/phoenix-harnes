@@ -109,8 +109,8 @@ describe('Binance authenticated connector in Phoenix Settings', () => {
     expect(sent[0]?.url).toBe('/phoenix-trading/paper/testnet-connect')
     expect(sent[0]?.init?.credentials).toBe('same-origin')
     expect(JSON.parse(String(sent[0]?.init?.body))).toEqual({ apiKey:key,secret })
-    expect((screen.getByPlaceholderText('Pega tu clave Testnet, nunca tu clave REAL')).value).toBe('')
-    expect((screen.getByPlaceholderText('El secreto solo se envía a la bóveda del Host')).value).toBe('')
+    expect((screen.getByPlaceholderText('Pega tu clave Testnet, nunca tu clave REAL') as HTMLInputElement).value).toBe('')
+    expect((screen.getByPlaceholderText('El secreto solo se envía a la bóveda del Host') as HTMLInputElement).value).toBe('')
     expect(document.body.textContent).not.toContain(secret)
     expect(calls.every(call => call.init?.cache === 'no-store')).toBe(true)
   })
@@ -145,7 +145,7 @@ describe('Binance authenticated connector in Phoenix Settings', () => {
     expect(screen.getByText(/Alternativa operativa:/)).toBeTruthy()
     expect(screen.getByRole('link',{ name:'Agentes oficialmente compatibles y guía de Binance' })).toBeTruthy()
     await waitFor(()=>{ expect(
-      (screen.getByRole('button',{ name:'Opciones avanzadas (solo si Binance aprueba PHOENIX)' })).disabled,
+      (screen.getByRole('button',{ name:'Opciones avanzadas (solo si Binance aprueba PHOENIX)' }) as HTMLButtonElement).disabled,
     ).toBe(false) })
     fireEvent.click(screen.getByRole('button',{ name:'Opciones avanzadas (solo si Binance aprueba PHOENIX)' }))
     fireEvent.click(screen.getByRole('button',{ name:'Preparar OAuth REAL' }))
