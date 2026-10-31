@@ -3,6 +3,7 @@
  * quote does not become a fabricated "highest chance" recommendation.
  */
 import type { MarketOutcome } from './sports.ts'
+/** Timestamped, bookmaker-specific market observations and price-derived shares. */
 export type MarketComparison={
   event:string;market:string;bookmaker:string;source:string
   selections:Array<{ name:string;price:number;point:number|null
@@ -16,6 +17,13 @@ const MARKET_SET=new Set(['h2h','1x2','double_chance','totals','spreads','btts',
 const key=(row:MarketOutcome)=>[row.sportKey??'',row.eventId,row.bookmaker,
   row.market.toLowerCase(),row.market.toLowerCase()==='spreads'&&typeof row.point==='number'
     ?Math.abs(row.point):row.point??''].join('|')
+/**
+ * Compare complete, recent bookmaker markets without claiming predictive odds.
+ * @param source - Provider observations with provenance and update timestamps.
+ * @param now - Current timestamp for expiry and event-start checks.
+ * @param maxAgeMs - Maximum accepted observation age in milliseconds.
+ * @returns Validated market comparisons, rejection count, and interpretation warning.
+ */
 export function compareBettingMarkets(
   source:readonly MarketOutcome[],now=Date.now(),maxAgeMs=60*60*1000,
 ):{ markets:MarketComparison[];rejected:number;warning:string }{
@@ -81,6 +89,7 @@ export function compareBettingMarkets(
   return{ markets:comparisons.slice(0,40),rejected,
     warning:'1/cuota es probabilidad implícita del PRECIO, no estimación independiente de victoria. Doble oportunidad, mercados de jugador y apuestas relacionadas pueden solaparse. Sin probabilidades calibradas, lesiones y titulares confirmados NO se puede afirmar ventaja esperada ni que la opción más barata ganará.' }
 }
+/** Supported market families for research; availability depends on verified quotes. */
 export const supportedMarketFamilies=[
   { sport:'Fútbol',markets:['1X2','1X/X2','Ambos marcan','Totales','Hándicap asiático'] },
   { sport:'NBA/WNBA',markets:['Moneyline','Hándicap','Total de puntos','Jugador: puntos/rebotes/asistencias si el proveedor lo publica'] },

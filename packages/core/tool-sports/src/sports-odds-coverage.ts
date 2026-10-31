@@ -14,7 +14,9 @@ export const oddsDisciplines=[
   { sport:'rugby-union',label:'Rugby union',market:'home_away',leagues:['según cobertura del proveedor'] },
   { sport:'cricket',label:'Críquet',market:'home_away',leagues:['según cobertura del proveedor'] },
 ] as const
+/** Canonical sportsbook discipline identifiers supported by the scanner. */
 export type OddsDiscipline=typeof oddsDisciplines[number]['sport']
+/** League keys requiring evidence before a discipline-wide quote can be attributed. */
 export const coveredSportKeys:Readonly<Record<string,readonly string[]>>={
   football:['soccer_epl','soccer_spain_la_liga','soccer_mexico_ligamx',
     'soccer_usa_mls','soccer_uefa_champs_league'],
@@ -24,9 +26,12 @@ export const coveredSportKeys:Readonly<Record<string,readonly string[]>>={
   'ice-hockey':['icehockey_nhl'],
   tennis:['tennis_atp','tennis_wta'],
 }
-/** A sport-wide scrape is NOT proof that its matches belong to NBA, WNBA etc.
- * Fail closed on missing league evidence. The match URL is the fixed OddsPortal
- * URL retained by the scraper and cannot be a free-form source from a user.
+/**
+ * Require league evidence before attributing a sport-wide scrape to a league.
+ * The match URL is the fixed provider URL, never a free-form user source.
+ * @param sportKey - Exact league key requested by the user.
+ * @param quote - Provider league name and optional match link to verify.
+ * @returns Whether the provider observation belongs to the requested league.
  */
 export function belongsToLeague(
   sportKey:string,quote:{ league?:string;matchLink?:string },
@@ -56,6 +61,7 @@ export function belongsToLeague(
     default:return false
   }
 }
+/** Bounded discipline probe outcome, including explicit empty and error states. */
 export type SportScanResult={
   sport:OddsDiscipline;label:string;market:string;leagues:readonly string[]
   status:'observed'|'empty'|'error'|'disabled';total:number;sample:Array<{
@@ -63,8 +69,12 @@ export type SportScanResult={
     selection:string;price:number;updatedAt:string
   }>;error?:string
 }
-/** Executes a deterministic page of at most four scraper probes. Returning
- * coverage for unprobed disciplines prevents Kira from silently dropping them.
+/**
+ * Probe at most four disciplines per page and report those not yet checked.
+ * @param params - Optional discipline filter, offset, and bounded page size.
+ * @param lookup - Provider-backed read-only market lookup for each discipline.
+ * @param enabled - Whether the scraper is authorized for this scan.
+ * @returns Checked results, remaining disciplines, and pagination state.
  */
 export async function scanOddsDisciplines(
   params:{ sport?:string;offset?:number;limit?:number },

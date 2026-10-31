@@ -6,10 +6,12 @@ type View = 'team'|'player'|'event'|'standings'|'news'|'leaders'|'search'
 type Item = { label:string; value?:string; detail?:string; image?:string; href?:string; action?:{ label:string;prompt:string } }
 type Section = { heading:string; kind:'metrics'|'list'|'articles'; items:Item[] }
 type Source = { name:string; status:'available'|'unavailable'; records:number }
+/** Validated ESPN exploration scope and optional entity identifiers. */
 export type EspnExplorerInput = {
   sport:string; league:string; view:View; teamId?:string; athleteId?:string
   eventId?:string; season?:number; query?:string
 }
+/** Source-attributed ESPN evidence, limitations, and dashboard view model. */
 export type EspnExplorerResult = {
   view:View; title:string; subtitle:string; source:string; checkedAt:string
   sections:Section[]; sources:Source[]; limitations:string[]
@@ -269,8 +271,14 @@ function searchResults(data:unknown,sport:string,league:string):Item[]{
           '. Usa exclusivamente hechos verificados por ESPN.' } }
   }).filter((x):x is Item=>x!==null)
 }
-/** Explores one ESPN entity with bounded optional evidence and a reusable adaptive UI.
- * Each route is constructed internally; references/redirects never become fetch URLs.
+/**
+ * Explore one ESPN entity with bounded evidence and a reusable adaptive UI.
+ * Routes are constructed internally; references never become arbitrary fetch URLs.
+ * @param input - Validated sport, league, view, and optional entity identifiers.
+ * @param fetcher - HTTP transport for the fixed ESPN endpoints.
+ * @param env - Host permission settings controlling ESPN access.
+ * @param now - Observation timestamp used to date the evidence.
+ * @returns Source-attributed dashboard sections with explicit limitations.
  */
 export async function exploreEspn(
   input:EspnExplorerInput,fetcher:typeof fetch=fetch,

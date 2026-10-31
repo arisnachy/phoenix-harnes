@@ -111,7 +111,10 @@ export class BinanceTestnetAutomation {
     private readonly market?: Pick<BinancePublicMarket, 'candles'>,
   ) {}
 
-  /** @param sink - Host callback for confirmed testnet fills and safety halts. */
+  /**
+   * Register a best-effort host notification callback for confirmed Testnet events.
+   * @param sink - Callback for confirmed fills and safety halts.
+   */
   setAttentionSink(sink: typeof this.sink): void { this.sink=sink }
   private notify(kind: 'fill'|'risk-halt', detail: string, symbol: string): void {
     try{this.sink?.({ kind,detail,symbol })}catch{/* notifications never affect trading */}
@@ -172,7 +175,10 @@ export class BinanceTestnetAutomation {
     await this.step()
     return this.snapshot()
   }
-  /** @returns Saved TESTNET state after halting future scheduled entries. */
+  /**
+   * Persistently stop future Testnet entries and drain the current cycle.
+   * @returns Saved TESTNET state after halting future scheduled entries.
+   */
   async stop(): Promise<BinanceTestnetAutomationState> {
     await this.restore()
     this.state.enabled=false
@@ -280,7 +286,10 @@ export class BinanceTestnetAutomation {
     return this.snapshot()
   }
 
-  /** @returns A defensive read-only copy of recorded TESTNET state. */
+  /**
+   * Return the current Testnet ledger without exposing its mutable backing state.
+   * @returns A defensive copy of recorded TESTNET state.
+   */
   snapshot(): BinanceTestnetAutomationState {return structuredClone(this.state)}
   private async halt(reason: string, symbol='BTCUSDT'): Promise<void> {
     this.state.enabled=false;this.state.halted=true;this.state.lastError=reason
