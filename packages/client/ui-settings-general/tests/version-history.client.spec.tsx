@@ -77,7 +77,7 @@ describe('published PHOENIX versions', () => {
       previous: oldSha,
     })
     render(<VersionHistorySection {...kit} t={t} readUpdateState={readUpdateState} close={vi.fn()} />)
-    expect((await screen.findByTestId('installed-sha')).textContent).toContain('aaaaaaaaaaaa')
+    await waitFor(() => { expect(screen.getByTestId('installed-sha').textContent).toContain('aaaaaaaaaaaa') })
     await waitFor(() => { expect(screen.getAllByText('bbbbbbbbbbbb').length).toBeGreaterThan(0) })
     expect(screen.getByText('cccccccccccc')).toBeTruthy()
     expect(await screen.findByText('feat(profile): coherencia del avatar y fotografía original')).toBeTruthy()
