@@ -29,6 +29,9 @@ export const coveredSportKeys:Readonly<Record<string,readonly string[]>>={
 /** A sport-wide scrape is NOT proof that its matches belong to NBA, WNBA etc.
  * Fail closed on missing league evidence. The match URL is the fixed OddsPortal
  * URL retained by the scraper and cannot be a free-form source from a user.
+ * @param sportKey - Exact league-specific sportsbook market key to validate.
+ * @param quote - Provider league label and optional fixed match URL evidence.
+ * @returns Whether the quote has positive evidence for the requested league.
  */
 export function belongsToLeague(
   sportKey:string,quote:{league?:string;matchLink?:string},
