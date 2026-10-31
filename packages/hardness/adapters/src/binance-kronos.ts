@@ -1,9 +1,10 @@
-import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
+import { spawn, type ChildProcessByStdio } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { createInterface } from 'node:readline'
+import type { Readable, Writable } from 'node:stream'
 import type { BinanceCandle } from './binance-paper.ts'
 
 /** Experimental prediction data; never a calibrated confidence or guaranteed return. */
@@ -26,7 +27,7 @@ const python = process.platform === 'win32'
 const runner = resolve(process.cwd(), 'services', 'phoenix-kronos', 'runner.py')
 const installer = resolve(process.cwd(), 'scripts', 'phoenix-kronos-install.mjs')
 const forecastRequests = new Map<string, { resolve: (value: BinanceKronosForecast) => void; reject: (error: Error) => void; timeout: ReturnType<typeof setTimeout> }>()
-let processHandle: ChildProcessWithoutNullStreams | undefined
+let processHandle: ChildProcessByStdio<Writable, Readable, null> | undefined
 let startup: Promise<void> | undefined
 let installing = false
 let failed = false
