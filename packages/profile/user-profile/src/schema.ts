@@ -1,6 +1,7 @@
 /** Validation and projection helpers for the private user-profile namespace. */
 
 import z from '@phoenix-ai/schemastery'
+import { validAnnualDay } from './moments.ts'
 import type { AssistantGender, AssistantGenderSource, UserAddressMode, UserProfileConsent, UserProfileFamilyMember, UserProfileSettings, UserProfileUpdate } from './types.ts'
 
 /** Settings namespace stored in the Harness-home settings document. */
@@ -27,6 +28,7 @@ export const DEFAULT_USER_PROFILE_CONSENT: UserProfileConsent = Object.freeze({
   pronouns: false,
   tone: false,
   family: false,
+  moments: false,
 })
 
 /** Hard limits for locally stored profile data. */
@@ -35,6 +37,7 @@ export const USER_PROFILE_LIMITS = Object.freeze({
   familyMembers: 20,
   maximumAge: 130,
   providerOrderEntries: 128,
+  specialDates: 100,
 })
 
 /** Schemastery schema used by the settings provider and browser decoder. */
@@ -55,6 +58,13 @@ export const UserProfileSettingsSchema: z<UserProfileSettings> = z.object({
     relationship: z.string(),
     name: z.string().required(false),
   })).required(false),
+  countryCode: z.string().required(false),
+  momentsTimeZone: z.string().required(false),
+  specialDates: z.array(z.object({
+    date: z.string(),
+    label: z.string(),
+    solemn: z.boolean().required(false),
+  })).required(false),
   consent: z.object({
     preferredName: z.boolean().default(false),
     profession: z.boolean().default(false),
@@ -64,13 +74,14 @@ export const UserProfileSettingsSchema: z<UserProfileSettings> = z.object({
     pronouns: z.boolean().default(false),
     tone: z.boolean().default(false),
     family: z.boolean().default(false),
+    moments: z.boolean().default(false),
   }).default(DEFAULT_USER_PROFILE_CONSENT),
 })
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 const PROFILE_TEXT_FIELDS = ['assistantName', 'preferredName', 'profession', 'professionalTitle', 'gender', 'pronouns', 'tone'] as const
-const PROFILE_UPDATE_FIELDS = [...PROFILE_TEXT_FIELDS, 'assistantGender', 'assistantGenderSource', 'modelProviderOrder', 'dateOfBirth', 'family', 'addressingMode'] as const
-const CONSENT_FIELDS = ['preferredName', 'profession', 'professionalTitle', 'dateOfBirth', 'gender', 'pronouns', 'tone', 'family'] as const
+const PROFILE_UPDATE_FIELDS = [...PROFILE_TEXT_FIELDS, 'assistantGender', 'assistantGenderSource', 'modelProviderOrder', 'dateOfBirth', 'family', 'addressingMode', 'countryCode', 'momentsTimeZone', 'specialDates'] as const
+const CONSENT_FIELDS = ['preferredName', 'profession', 'professionalTitle', 'dateOfBirth', 'gender', 'pronouns', 'tone', 'family', 'moments'] as const
 
 /** Validate cross-field and bounded profile constraints.
  * @param profile - complete profile settings to validate.
@@ -90,6 +101,18 @@ export function validateUserProfile(profile: UserProfileSettings): void {
     throw new TypeError('user profile addressingMode must be automatic, name, title, or none')
   }
   validateProviderOrder(profile.modelProviderOrder)
+  if (profile.countryCode !== undefined && !/^[A-Z]{2}$/.test(profile.countryCode)) throw new TypeError('user profile countryCode must be ISO 3166-1 alpha-2')
+  if (profile.momentsTimeZone !== undefined) {
+    try { new Intl.DateTimeFormat('en-US', { timeZone: profile.momentsTimeZone }) } catch { throw new TypeError('user profile momentsTimeZone must be a valid IANA zone') }
+  }
+  if (profile.specialDates !== undefined) {
+    if (profile.specialDates.length > USER_PROFILE_LIMITS.specialDates) throw new TypeError('user profile specialDates exceed limit')
+    for (const item of profile.specialDates) {
+      if (!validAnnualDay(item.date)) throw new TypeError('user profile specialDates contains invalid date')
+      validateText(item.label, 'specialDates label')
+      if (item.solemn !== undefined && typeof item.solemn !== 'boolean') throw new TypeError('user profile specialDates solemn must be boolean')
+    }
+  }
   if (profile.dateOfBirth !== undefined) validateDateOfBirth(profile.dateOfBirth)
   if (profile.family !== undefined) {
     if (profile.family.length > USER_PROFILE_LIMITS.familyMembers) {
@@ -109,7 +132,7 @@ export function validateUserProfileUpdate(patch: unknown): asserts patch is User
   for (const field of PROFILE_UPDATE_FIELDS) {
     if (!Object.hasOwn(patch, field)) continue
     const value = patch[field]
-    if (value !== null && value !== undefined && field !== 'family' && field !== 'modelProviderOrder' && typeof value !== 'string') {
+    if (value !== null && value !== undefined && field !== 'family' && field !== 'specialDates' && field !== 'modelProviderOrder' && typeof value !== 'string') {
       throw new TypeError(`user profile update field "${field}" must be a string or null`)
     }
     if (field === 'assistantGender' && value !== null && value !== undefined
@@ -127,6 +150,7 @@ export function validateUserProfileUpdate(patch: unknown): asserts patch is User
     if (field === 'modelProviderOrder' && value !== null && value !== undefined && !Array.isArray(value)) {
       throw new TypeError('user profile update field "modelProviderOrder" must be an array or null')
     }
+    if (field === 'specialDates' && value !== null && value !== undefined && !Array.isArray(value)) throw new TypeError('user profile specialDates must be an array or null')
     if (field === 'family' && value !== null && value !== undefined && !Array.isArray(value)) {
       throw new TypeError('user profile update field "family" must be an array or null')
     }
@@ -167,6 +191,9 @@ function clearProfileField(profile: UserProfileSettings, field: typeof PROFILE_U
     case 'pronouns': delete profile.pronouns; break
     case 'tone': delete profile.tone; break
     case 'family': delete profile.family; break
+    case 'countryCode': delete profile.countryCode; break
+    case 'momentsTimeZone': delete profile.momentsTimeZone; break
+    case 'specialDates': delete profile.specialDates; break
   }
 }
 

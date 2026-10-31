@@ -2,8 +2,10 @@
 
 import type { ClientContext } from '@phoenix-ai/dsh-client-runtime/client'
 import type {} from '@phoenix-ai/dsh-client-ui-settings/client'
+import type {} from '@phoenix-ai/dsh-client-ui-layout/client'
 import type {} from '@phoenix-ai/dsh-client-locale/client'
 import { UserProfileRow } from './UserProfileRow.tsx'
+import { MomentsAmbient } from './MomentsAmbient.tsx'
 import { transformAvatarThroughCodex } from './avatar-codex.ts'
 import type {} from '@phoenix-ai/dsh-client-connection/client'
 import { UserProfileForm, USER_PROFILE_SETTINGS_NAMESPACE } from './profile-controller.ts'
@@ -34,7 +36,6 @@ export function apply(ctx: ClientContext): void {
   const scope = ctx.settingsScope.bind<UserProfileSettings>({ namespace: USER_PROFILE_SETTINGS_NAMESPACE })
   const form = new UserProfileForm(scope)
   ctx.effect(() => () => { form.dispose() }, 'ui-settings-profile: form')
-  const connection = ctx.get('connection') as { rpc: Parameters<typeof transformAvatarThroughCodex>[1] }
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section',
     id: 'profile',
@@ -43,7 +44,11 @@ export function apply(ctx: ClientContext): void {
     locale: SETTINGS_NS,
     inject: () => ({
       ...form.inject(),
-      transformAvatar: (photo: Blob) => transformAvatarThroughCodex(photo, connection.rpc),
+      transformAvatar: (photo: Blob) => transformAvatarThroughCodex(photo, (ctx.get('connection') as import('@phoenix-ai/dsh-client-connection/client').ConnectionHandle).rpc),
     }),
   }, UserProfileRow))
+  ctx.slots.inject('shell.overlay', () => ctx.slots.register({
+    name: 'shell.overlay', id: 'phoenix-moments', order: 20,
+    inject: () => ({ scope }),
+  }, MomentsAmbient))
 }

@@ -23,6 +23,7 @@ const persisted: UserProfileSettings = {
     pronouns: false,
     tone: true,
     family: false,
+    moments: false,
   },
 }
 

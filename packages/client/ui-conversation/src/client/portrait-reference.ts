@@ -6,12 +6,12 @@
 export function isSelfImageRequest(text: string): boolean {
   const normalized = text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/gu, '')
   // The user must ask for a created/edited image. Mere mention of their face is not consent.
-  const action = /\b(?:crea|crear|creame|genera|generar|generame|haz|hazme|dibuja|dibujame|edita|editame|transforma|transformame|ponme|colocame|retratame|fotografiame|quiero|quisiera|gustaria|create|generate|make|draw|edit|transform|put me|i want|i would like)\b/u
+  const action = /\b(?:crea|crear|creame|genera|generar|generame|dame|muestrame|pon|ponme|mandame|haz|hazme|dibuja|dibujame|edita|editame|transforma|transformame|ponme|colocame|retratame|fotografiame|quiero|quisiera|gustaria|create|generate|make|draw|edit|transform|put me|i want|i would like)\b/u
   if (!action.test(normalized)) return false
   // Reject queries ABOUT generating photos; those should not load private images.
   if (/\b(?:como|por que|explica|explicame|tutorial|guia|how to|what is|can you explain)\b/u.test(normalized)) return false
   const image = /\b(?:foto|imagen|retrato|selfie|fotografia|photo|picture|image|portrait|photograph)\b/u
-  const identity = /\b(?:mia|mio|conmigo|salga yo|aparezca yo|este yo|yo en|de mi (?:cara|rostro|persona)|of me|myself|my face)\b/u
+  const identity = /\b(?:mia|mio|conmigo|salga yo|aparezca yo|este yo|yo en|de mi (?:cara|rostro|persona|en|como)|of me|myself|my face)\b/u
   if (image.test(normalized) && identity.test(normalized)) return true
   return /\b(?:ponme|colocame|dibujame|retratame|fotografiame)\s+(?:en|como|con|junto)\b/u.test(normalized)
     || /\b(?:put me in|draw me as|make me appear|generate me in)\b/u.test(normalized)
