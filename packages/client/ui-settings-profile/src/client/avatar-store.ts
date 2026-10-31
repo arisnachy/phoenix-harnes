@@ -56,7 +56,13 @@ export async function readAvatar(): Promise<AvatarSnapshot> {
     }
   } finally { database.close() }
 }
-async function write(values: { original?: Blob; styled?: Blob; mode?: AvatarMode; referenceEnabled?: boolean; clear?: boolean }): Promise<void> {
+async function write(values: {
+  original?: Blob
+  styled?: Blob
+  mode?: AvatarMode
+  referenceEnabled?: boolean
+  clear?: boolean
+}): Promise<void> {
   const database = await db()
   try {
     const tx = database.transaction('portrait', 'readwrite')
@@ -134,7 +140,7 @@ export async function normalizeAvatar(image: Blob, zoom = 1, offsetX = 0, offset
     const y = Math.max(0, Math.min(bitmap.height - side, (bitmap.height - side) * (offsetY + 1) / 2))
     ctx.drawImage(bitmap, x, y, side, side, 0, 0, 768, 768)
     const output = await new Promise<Blob>((resolve, reject) => {
-      canvas.toBlob(blob => { if (blob === null) reject(new Error('Image conversion failed')); else resolve(blob) }, 'image/webp', 0.9)
+      canvas.toBlob((blob) => { if (blob === null) reject(new Error('Image conversion failed')); else resolve(blob) }, 'image/webp', 0.9)
     })
     if (output.size > MAX_RASTER) throw new Error('Normalized portrait exceeds size limits')
     return output
@@ -179,9 +185,11 @@ export async function editAvatarLocally(original: Blob, endpoint: string, model 
   const response = await fetch(base + '/images/edits', { method: 'POST', body: form })
   if (!response.ok) throw new Error('Local image editor failed (HTTP ' + String(response.status) + ')')
   const json: unknown = await response.json()
-  if (typeof json !== 'object' || json === null || !('data' in json) || !Array.isArray(json.data)
-    || typeof json.data[0]?.b64_json !== 'string') throw new Error('Local editor did not return an edited image')
-  const encoded = json.data[0].b64_json as string
+  const payload: unknown = typeof json === 'object' && json !== null && 'data' in json ? json.data : undefined
+  const first: unknown = Array.isArray(payload) ? payload[0] : undefined
+  if (typeof first !== 'object' || first === null || !('b64_json' in first)
+    || typeof first.b64_json !== 'string') throw new Error('Local editor did not return an edited image')
+  const encoded = first.b64_json
   if (encoded.length > MAX_RASTER * 1.5) throw new Error('Edited image exceeds the size limit')
   const decoded = atob(encoded)
   const bytes = Uint8Array.from(decoded, char => char.charCodeAt(0))
