@@ -161,8 +161,8 @@ export class BinancePaperAutomation {
     const available = Math.max(0, MAX_SCAN_SYMBOLS - pinned.length)
     const rotating = choices.length === 0 ? [] : Array.from(
       { length: Math.min(available, choices.length) },
-      (_, i) => choices[(this.universeCursor + i) % choices.length]!,
-    )
+      (_, i) => choices[(this.universeCursor + i) % choices.length],
+    ).filter((symbol): symbol is string => symbol !== undefined)
     this.universeCursor = choices.length ? (this.universeCursor + rotating.length) % choices.length : 0
     return [...pinned, ...rotating]
   }
