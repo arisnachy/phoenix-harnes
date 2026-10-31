@@ -6,6 +6,11 @@ import VoiceRuntime from '@phoenix-ai/dsh-voice'
 import * as ToolVoice from '../src/index.ts'
 
 describe('Kira speech tools in a real Cordis registry', () => {
+  it('keeps the real conversation identity for native viewer ownership', () => {
+    expect(ToolVoice.senseSessionId('thread-4:step_8')).toBe('thread-4:step_8')
+    expect(() => ToolVoice.senseSessionId(undefined)).toThrow(/SESSION_NOT_AVAILABLE/)
+    expect(() => ToolVoice.senseSessionId('../other')).toThrow(/SESSION_NOT_AVAILABLE/)
+  })
   it('registers both model-discoverable names without opening a microphone or Codex session', async () => {
     const ctx = new Context()
       await ctx.plugin(SystemPrompt)

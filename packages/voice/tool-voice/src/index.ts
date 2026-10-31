@@ -6,6 +6,18 @@ import type {} from '@phoenix-ai/dsh-voice'
 import { deliverAgentSpeech } from './delivery.ts'
 import { windowsAudioStatus, listenWindowsAudio, windowsSensesStatus, transcribeApprovedAudioFile } from './audio-windows.ts'
 
+
+/** Preserve the actual conversation owner: the agent id IS its session id.
+ * Hashing or prefixing it would break Desktop Live ownership checks.
+ */
+export function senseSessionId(value: string | undefined): string {
+  if (typeof value !== 'string' || value.length > 128
+    || !/^[A-Za-z0-9_:-]+$/u.test(value)) {
+    throw new Error('SENSES_SESSION_NOT_AVAILABLE')
+  }
+  return value
+}
+
 export const name = 'tool-voice'
 export const inject = ['tools', 'voice', 'systemPrompt']
 
@@ -82,7 +94,7 @@ export function apply(ctx: Context): void {
     output: { schema: { type: 'string' }, render: (_args, value) => [{ type: 'text' as const, text: value }] },
     isConcurrencySafe: () => true,
     async execute(_args, exec) {
-      const sessionId = 'agent-' + (exec.agent?.id ?? 'kira').replace(/[^A-Za-z0-9_-]/gu,'').slice(0,80)
+      const sessionId = senseSessionId(exec.agent?.id)
       try { return JSON.stringify(await windowsAudioStatus(sessionId)) }
       catch (error) { return JSON.stringify({ available:false, reason:String(error).slice(0,220),
         note:'El oido de Windows requiere Phoenix.exe. Para pestañas autorizadas usa las herramientas de video existentes.' }) }
@@ -100,7 +112,7 @@ export function apply(ctx: Context): void {
     output: { schema: { type:'string' }, render: (_args,value) => [{type:'text' as const,text:value}] },
     isConcurrencySafe: () => false,
     async execute(args, exec) {
-      const sessionId = 'agent-' + (exec.agent?.id ?? 'kira').replace(/[^A-Za-z0-9_-]/gu,'').slice(0,80)
+      const sessionId = senseSessionId(exec.agent?.id)
       const seconds = args.seconds === undefined ? 8 : args.seconds
       const source = args.source ?? 'output'
       try { return JSON.stringify(await listenWindowsAudio(sessionId,seconds,source)) }
@@ -133,7 +145,7 @@ export function apply(ctx: Context): void {
     output: { schema: { type: 'string' }, render: (_args, value) => [{ type: 'text' as const, text: value }] },
     isConcurrencySafe: () => true,
     async execute(_args, exec) {
-      const sessionId = 'agent-' + (exec.agent?.id ?? 'kira').replace(/[^A-Za-z0-9_-]/gu, '').slice(0,80)
+      const sessionId = senseSessionId(exec.agent?.id)
       const [audio, desktop] = await Promise.all([
         windowsAudioStatus(sessionId).catch(error => ({ available: false, reason: String(error).slice(0,180) })),
         windowsSensesStatus(sessionId).catch(error => ({ available: false, reason: String(error).slice(0,180) })),
