@@ -38,6 +38,10 @@ describe('Phoenix Sports rich native cards',()=>{
     const card=parseGenerativeUiBlock(rich)
     if(!card)throw Error('Fixture rejected')
     render(<GenerativeUi block={card}/>)
+    const disclosure=document.querySelector('[data-generative-ui="sports_game_card"] details') as HTMLDetailsElement
+    expect(disclosure.open).toBe(false)
+    fireEvent.click(screen.getByText(/Estadísticas, jugadores y análisis/))
+    expect(disclosure.open).toBe(true)
     expect(screen.getByRole('heading',{name:'Abridores probables'})).toBeTruthy()
     expect(screen.getByRole('heading',{name:'Alineaciones'})).toBeTruthy()
     expect(screen.getByRole('heading',{name:'Bullpen y cuerpo de lanzadores'})).toBeTruthy()
@@ -260,7 +264,7 @@ describe('Universal chat: compact sports schedules do not replace single-game ca
     expect(screen.queryByText('Sin cuota')).toBeNull()
     expect(screen.queryByText(/%/)).toBeNull()
   })
-  it('identifies the sport and league, hides 0-0 for pregame, and marks unverified favorites',()=>{
+  it('identifies the sport and league, hides 0-0 for pregame, and avoids fabricated favorites',()=>{
     const original=slate.props.events[0]
     const card=parseGenerativeUiBlock({...slate,props:{...slate.props,events:[
       {...original,phase:'pre',away:{...original.away,score:'0'},home:{...original.home,score:'0'}},
@@ -272,7 +276,13 @@ describe('Universal chat: compact sports schedules do not replace single-game ca
     expect(screen.getByText('NBA · Cartelera deportiva')).toBeTruthy()
     expect(screen.getAllByText('VS · Sin iniciar')).toHaveLength(2)
     expect(screen.queryByText('0')).toBeNull()
-    expect(screen.getAllByText(/Favorito sin verificar/)).toHaveLength(2)
+    expect(screen.queryByText(/Favorito sin verificar/)).toBeNull()
+    expect(screen.getAllByText('Contexto del encuentro')).toHaveLength(2)
+    const summary=screen.getAllByText('Contexto del encuentro')[0]
+    expect(summary?.closest('details')?.open).toBe(false)
+    if(summary)fireEvent.click(summary)
+    expect(summary?.closest('details')?.open).toBe(true)
+    expect(screen.getByText('⌖ State Farm Arena')).toBeTruthy()
   })
   it('does not invent opponents or provide actionable game analysis for unnamed WTA events',()=>{
     const card=parseGenerativeUiBlock({...slate,props:{...slate.props,sport:'tennis',league:'wta',
