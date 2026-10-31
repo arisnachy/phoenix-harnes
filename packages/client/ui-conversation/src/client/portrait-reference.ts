@@ -19,7 +19,12 @@ export function isSelfImageRequest(text: string): boolean {
     || /\b(?:put me in|draw me as|make me appear|generate me in)\b/u.test(normalized)
 }
 
-/** Explain that the real source photo was already attached so Kira calls image_generation instead of asking again. */
+/**
+ * Explain that the real source photo was already attached so Kira calls image_generation instead of asking again.
+ * @param text User-authored image request.
+ * @param attached Whether the user's authorized reference photo was attached.
+ * @returns The original request, optionally with an explicit attachment handoff.
+ */
 export function messageWithProfileReference(text: string, attached: boolean): string {
   if (!attached) return text
   return text + '\n\n[PHOENIX: Ya adjunté la fotografía REAL del perfil con autorización del usuario. '
