@@ -123,11 +123,11 @@ it('hot-reloads a real client-plugin source edit without refreshing the page', a
     const baseUrl = await waitForOutput(host, /dsh web: (http:\/\/[^\s]+)/, 'built dsh web')
     browser = await chromium.launch()
     const page = await browser.newPage()
-    page.on('console', message => { browserEvents.push(`console ${message.type()}: ${message.text()}`) })
-    page.on('requestfailed', request => {
-      browserEvents.push(`request failed: ${request.url()} (${request.failure() ?? 'unknown'})`)
+    page.on('console', (message) => { browserEvents.push(`console ${message.type()}: ${message.text()}`) })
+    page.on('requestfailed', (request) => {
+      browserEvents.push(`request failed: ${request.url()} (${request.failure()?.errorText ?? 'unknown'})`)
     })
-    page.on('response', response => {
+    page.on('response', (response) => {
       if (response.url().includes('/plugins/events')) {
         browserEvents.push(`HMR event stream response: ${String(response.status())} ${response.url()}`)
       }
