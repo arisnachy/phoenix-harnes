@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
 import { randomUUID } from 'node:crypto'
-import { mkdir, writeFile, rm } from 'node:fs/promises'
+import { mkdir, realpath, writeFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { parseAudioDescriptor, parseAudioCapture, transcribeApprovedAudioFile } from '../src/audio-windows.ts'
+import { parseAudioDescriptor, parseAudioCapture, transcribeApprovedAudioFile, trustedAudioCapturePath } from '../src/audio-windows.ts'
 
 describe('PHOENIX Universal Ear trust boundary', () => {
   it('accepts only the current-user native descriptor schema', () => {
@@ -27,6 +27,28 @@ describe('PHOENIX Universal Ear trust boundary', () => {
     } finally {
       vi.unstubAllEnvs()
       await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('rejects a forged capture path before cleanup can touch an unrelated file', async () => {
+    const privateRoot = join(tmpdir(), 'phoenix-audio-captures')
+    const outside = join(tmpdir(), 'phoenix-audio-test-' + randomUUID())
+    const fileName = 'audio-' + randomUUID().replaceAll('-', '') + '.wav'
+    const foreignFile = join(outside, fileName)
+    const approvedFile = join(privateRoot, fileName)
+    await mkdir(privateRoot, { recursive: true })
+    await mkdir(outside)
+    await writeFile(foreignFile, Buffer.alloc(600))
+    await writeFile(approvedFile, Buffer.alloc(600))
+    try {
+      await expect(trustedAudioCapturePath(foreignFile)).rejects.toThrow(/AUDIO_CAPTURE_PATH_UNTRUSTED/)
+      await expect(trustedAudioCapturePath(approvedFile)).resolves.toBe(await realpath(approvedFile))
+      // An invalid receipt must never result in deletion of this unrelated file.
+      await expect(realpath(foreignFile)).resolves.toBeTruthy()
+    } finally {
+      await rm(foreignFile, { force: true })
+      await rm(approvedFile, { force: true })
+      await rm(outside, { recursive: true, force: true })
     }
   })
 
