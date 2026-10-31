@@ -38,7 +38,7 @@ const GENERIC_ICONS = ['✨', '🎊', '🌟', '✦', '🎈', '💫', '🎐', '�
 /** Stable hash lets previously unseen events receive different motifs without hardcoding their names. */
 export function occasionHash(value: string): number {
   let seed = 2166136261
-  for (const char of value) seed = Math.imul(seed ^ char.codePointAt(0)!, 16777619) >>> 0
+  for (const char of value) seed = Math.imul(seed ^ (char.codePointAt(0) ?? 0), 16777619) >>> 0
   return seed
 }
 
