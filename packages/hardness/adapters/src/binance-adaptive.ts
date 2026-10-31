@@ -411,13 +411,13 @@ export async function runBinanceAdaptiveCycle(
       ? 'Ninguna señal de compra supera el mínimo de ' + MIN_AUTONOMOUS_SCORE + '/100 sin posición existente'
       : rejectedEntries.size === candidates.length && candidates.length > 0
         ? 'Todos los candidatos fueron rechazados por el estado Spot actual de Binance'
-      : account.positions.length >= MAX_OPEN_POSITIONS
-        ? 'Bloqueada: ya hay ' + MAX_OPEN_POSITIONS + ' posiciones abiertas'
-        : account.maxDrawdownPct >= 5
-          ? 'Bloqueada: drawdown máximo de 5% alcanzado'
-          : budget < 10
-            ? 'Bloqueada: capital libre o exposición insuficiente'
-            : 'El motor no pudo encontrar una orden virtual apta'
+        : account.positions.length >= MAX_OPEN_POSITIONS
+          ? 'Bloqueada: ya hay ' + MAX_OPEN_POSITIONS + ' posiciones abiertas'
+          : account.maxDrawdownPct >= 5
+            ? 'Bloqueada: drawdown máximo de 5% alcanzado'
+            : budget < 10
+              ? 'Bloqueada: capital libre o exposición insuficiente'
+              : 'El motor no pudo encontrar una orden virtual apta'
     return { mode, interval, signals: sorted, execution: executionFor('hold'), decision: 'hold',
       rationale: why, account }
   })
