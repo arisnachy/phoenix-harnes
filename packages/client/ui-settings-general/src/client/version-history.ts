@@ -37,7 +37,7 @@ export function parsePhoenixVersionHistory(payload: unknown): readonly PhoenixVe
       || !Array.isArray(parents) || parents.length < 2
       || typeof message !== 'string') continue
     const lines = message.split(/\r?\n/u).map(line => line.trim()).filter(Boolean)
-    const pr = /^Merge PR #([0-9]{1,8})\b/iu.exec(lines[0] ?? '')
+    const pr = /^Merge (?:PR|pull request) #([0-9]{1,8})\b/iu.exec(lines[0] ?? '')
     // Avoid mistaking arbitrary merges on a PR branch for stable publications.
     if (pr === null) continue
     const date = author?.date
