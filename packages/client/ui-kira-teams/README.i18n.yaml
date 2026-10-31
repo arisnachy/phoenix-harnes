@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/client/ui-kira-teams/README.md
-README.md: aeef8f0f18a83893563a047ca710fbfd63e1b982
-README.zh.md: 49c9b8324760c42c6f36331468f09ad98ef8564c
+README.md: 271247e775b73f4a3be0ca3f1a4c16d8cc349148
+README.zh.md: e67a8fd794d25d3df2f45f31c5f2dc04f3531c6b

@@ -2966,12 +2966,18 @@ importers:
       '@phoenix-ai/cordis':
         specifier: workspace:^
         version: link:../../../vendor/cordis
+      '@phoenix-ai/dsh-client-connection':
+        specifier: workspace:^
+        version: link:../connection
       '@phoenix-ai/dsh-client-locale':
         specifier: workspace:^
         version: link:../locale
       '@phoenix-ai/dsh-client-runtime':
         specifier: workspace:^
         version: link:../runtime
+      '@phoenix-ai/dsh-client-ui-layout':
+        specifier: workspace:^
+        version: link:../ui-layout
       '@phoenix-ai/dsh-client-ui-settings':
         specifier: workspace:^
         version: link:../ui-settings

@@ -66,7 +66,7 @@ import { codexNativeAccessToken } from './codex-auth.ts'
 import { assertServiceable, CHATGPT_WEB_PROVIDER, chatgptWebDefaults, Config, resolveProfiles } from './config.ts'
 import type { PiAiProviderProfile, ResolvedPiAiProviderProfile } from './config.ts'
 import { discoverModels } from './discovery.ts'
-import { installCodexImageGeneration } from './image-generation.ts'
+import { installCodexAvatarTransform, installCodexImageGeneration } from './image-generation.ts'
 import { registerPiAiFlows } from './login.ts'
 import {
   OPENCODE_FREE_PROVIDER,
@@ -201,6 +201,9 @@ export function apply(ctx: Context, config: Config): void {
   if (config.imageOnly === true) {
     ctx.inject(['tools', 'subprocess', 'attachments'], (imageCtx) => {
       installCodexImageGeneration(imageCtx)
+      imageCtx.inject(['connection'], (connectionCtx) => {
+        installCodexAvatarTransform(connectionCtx)
+      })
     })
     return
   }
