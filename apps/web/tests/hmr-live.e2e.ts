@@ -93,6 +93,14 @@ it('hot-reloads a real client-plugin source edit without refreshing the page', a
   let host: SubprocessHandle | undefined
   let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined
   const failures: unknown[] = []
+  const processOutput: { watcher: string; host: string } = { watcher: '', host: '' }
+  const captureOutput = (child: SubprocessHandle, label: 'watcher' | 'host'): void => {
+    const append = (chunk: Buffer): void => {
+      processOutput[label] = (processOutput[label] + chunk.toString()).slice(-12_000)
+    }
+    child.stdout?.on('data', append)
+    child.stderr?.on('data', append)
+  }
   try {
     subprocessFiber = await subprocessCtx.plugin(LocalSubprocessRuntime)
     watcher = subprocessCtx.subprocess.spawn(spawnSpec(
@@ -100,6 +108,7 @@ it('hot-reloads a real client-plugin source edit without refreshing the page', a
       REPO_ROOT,
       { ...clientBuildEnvironment },
     ))
+    captureOutput(watcher, 'watcher')
     await waitForOutput(watcher, /dev-web: watching/, 'dev-web watcher')
     host = subprocessCtx.subprocess.spawn(spawnSpec(
       [process.execPath, binPath, 'web', '--no-open', '--port', '0'],
@@ -109,6 +118,7 @@ it('hot-reloads a real client-plugin source edit without refreshing the page', a
         DSH_HOME: join(world, '.dsh'),
       },
     ))
+    captureOutput(host, 'host')
     const baseUrl = await waitForOutput(host, /dsh web: (http:\/\/[^\s]+)/, 'built dsh web')
     browser = await chromium.launch()
     const page = await browser.newPage()
@@ -128,7 +138,14 @@ it('hot-reloads a real client-plugin source edit without refreshing the page', a
       .toBe(pageIdentity)
     expect(pageErrors).toEqual([])
   } catch (error) {
-    failures.push(error)
+    const clientBundle = await readFile(join(REPO_ROOT, 'packages/client/ui-conversation/lib/client.js'), 'utf8')
+      .catch(() => '')
+    failures.push(new Error(
+      `HMR browser failure; client bundle contains edit=${String(clientBundle.includes(newText))}`
+      + `\nwatcher output (tail):\n${processOutput.watcher}`
+      + `\nhost output (tail):\n${processOutput.host}`,
+      { cause: error },
+    ))
   } finally {
     await writeFile(sourcePath, originalSource).catch((error: unknown) => failures.push(error))
     if (watcher !== undefined) await stopTree(watcher).catch((error: unknown) => failures.push(error))
