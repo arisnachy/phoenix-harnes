@@ -207,45 +207,63 @@ export async function runBinanceAdaptiveCycle(
     if (!['scan', 'paper-step'].includes(requestedMode)) throw new Error('Invalid adaptive mode')
     const mode = requestedMode as BinanceAdaptiveCycle['mode']
     const account = await broker.account()
+    // Service protective exits from current public marks before scanning any
+    // unrelated pairs. A slow or unavailable candle provider must never hold
+    // a marked stop/TP behind 12 new-entry requests.
+    if (mode === 'paper-step') {
+      const exits = account.positions.flatMap((position) => {
+        const plan = position.exitPlan
+        const mark = position.marketPriceUsdt
+        if (plan === undefined) return []
+        const crossed = binanceKnownAssetRisk(position.symbol) ? 'binance-asset-risk'
+          : mark <= plan.stopLossPrice ? 'paper-stop-loss'
+            : mark >= plan.tp2Price ? 'paper-tp2'
+              : !plan.tp1Taken && mark >= plan.tp1Price ? 'paper-tp1'
+                : undefined
+        return crossed === undefined ? [] : [{
+          position, reason: crossed,
+          quantity: crossed === 'paper-tp1' ? position.quantity * plan.tp1Fraction : position.quantity,
+        }]
+      })
+      const exit = exits.sort((a, b) =>
+        (a.reason === 'paper-stop-loss' ? -1 : 0) - (b.reason === 'paper-stop-loss' ? -1 : 0))[0]
+      if (exit !== undefined) {
+        const result = await broker.order({
+          symbol: exit.position.symbol, side: 'sell', quantity: exit.quantity,
+          strategyId: exit.position.exitPlan?.strategyId ?? 'adaptive-exit',
+          reason: exit.reason,
+        })
+        return { mode, interval, signals: [], execution: [], decision: 'sell',
+          rationale: 'Priority PAPER risk exit confirmed in persistent ledger: ' + exit.reason,
+          trade: result.trade, account: result.account }
+      }
+    }
     const signals: BinanceAdaptiveSignal[] = []
     let failedSymbols = 0
-    for (const symbol of symbols) {
-      if (binanceKnownAssetRisk(symbol)) {
-        signals.push(hold(symbol, 'Activo excluido por riesgo Binance conocido'))
-        continue
-      }
-      try {
-        const bars = await broker.candles(symbol, interval, 80)
-        signals.push(evaluateBinanceAdaptiveSignal(symbol, bars, intervalMs, now))
-      } catch {
-        // A temporarily unavailable pair must not stop the rest of the radar.
-        // Keep the failure visible and never turn missing data into a buy signal.
-        failedSymbols += 1
-        signals.push(hold(symbol, 'No verified public candles; retry in the next scan'))
-      }
+    // Independent public candle reads run in bounded batches: a slow pair must
+    // not serialize the entire 12-market radar or delay already-held stop checks.
+    // Keep results in watchlist order and cap Binance request concurrency at four.
+    const CANDLE_BATCH_SIZE = 4
+    for (let offset = 0; offset < symbols.length; offset += CANDLE_BATCH_SIZE) {
+      const batch = await Promise.all(symbols.slice(offset, offset + CANDLE_BATCH_SIZE).map(async (symbol) => {
+        if (binanceKnownAssetRisk(symbol)) {
+          return hold(symbol, 'Activo excluido por riesgo Binance conocido')
+        }
+        try {
+          const bars = await broker.candles(symbol, interval, 80)
+          return evaluateBinanceAdaptiveSignal(symbol, bars, intervalMs, now)
+        } catch {
+          // One failing provider cannot fabricate an entry or halt other pairs.
+          failedSymbols += 1
+          return hold(symbol, 'No verified public candles; retry in the next scan')
+        }
+      }))
+      signals.push(...batch)
     }
     // Existing PAPER stops must still be serviced from fresh authenticated
     // public prices even when the candle scanner for a watchlist is down.
     const scannerUnavailable = failedSymbols === symbols.length
     const sorted = [...signals].sort((a, b) => b.score - a.score || a.symbol.localeCompare(b.symbol))
-    // Enforce registered exit plans using fresh broker marks even when
-    // today's watchlist no longer contains an existing open position.
-    const exits = account.positions.flatMap(position => {
-      const plan = position.exitPlan
-      const mark = position.marketPriceUsdt
-      if (plan === undefined) return []
-      const crossed = binanceKnownAssetRisk(position.symbol) ? 'binance-asset-risk'
-        : mark <= plan.stopLossPrice ? 'paper-stop-loss'
-        : mark >= plan.tp2Price ? 'paper-tp2'
-          : !plan.tp1Taken && mark >= plan.tp1Price ? 'paper-tp1'
-            : undefined
-      return crossed === undefined ? [] : [{
-        position, reason: crossed,
-        quantity: crossed === 'paper-tp1' ? position.quantity * plan.tp1Fraction : position.quantity,
-      }]
-    })
-    const exit = exits.sort((a, b) =>
-      (a.reason === 'paper-stop-loss' ? -1 : 0) - (b.reason === 'paper-stop-loss' ? -1 : 0))[0]
     const exposure = account.positions.reduce((sum, position) => sum + position.marketValueUsdt, 0)
     const candidate = sorted.find(signal => signal.action === 'buy'
       && !binanceKnownAssetRisk(signal.symbol)
@@ -312,17 +330,6 @@ export async function runBinanceAdaptiveCycle(
       if (scannerUnavailable) throw new Error('No Binance Spot pairs returned verified candles')
       return { mode, interval, signals: sorted, execution: executionFor('hold'), decision: 'hold',
         rationale: 'Read-only ranked scan; paper orders require paper-step mode', account }
-    }
-    if (exit !== undefined) {
-      const result = await broker.order({
-        symbol: exit.position.symbol,
-        side: 'sell', quantity: exit.quantity,
-        strategyId: exit.position.exitPlan?.strategyId ?? 'adaptive-exit',
-        reason: exit.reason,
-      })
-      return { mode, interval, signals: sorted, execution: executionFor('sell', result.trade), decision: 'sell',
-        rationale: 'Persisted PAPER exit executed: ' + exit.reason,
-        trade: result.trade, account: result.account }
     }
     if (scannerUnavailable) throw new Error('No Binance Spot pairs returned verified candles')
     // A bearish defensive signal can exit a held position independently of

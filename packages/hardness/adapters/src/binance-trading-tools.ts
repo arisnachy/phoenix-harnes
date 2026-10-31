@@ -734,7 +734,9 @@ function paperAutoTool(deps: BinanceTradingToolDependencies): ToolDefinition {
         // virtual fill can be reviewed by the initiating conversation.
         await deps.automation.start({
           symbols: args.watchlist.split(','),
-          autoDiscover: args.autoDiscover === true,
+          // An explicitly started autonomous PAPER radar searches beyond the
+          // pinned watchlist unless the owner explicitly opts out.
+          autoDiscover: args.autoDiscover ?? true,
           ...(args.interval === undefined ? {} : { interval: args.interval }),
           ...(args.pollMinutes === undefined ? {} : { pollMs: args.pollMinutes * 60_000 }),
         })
