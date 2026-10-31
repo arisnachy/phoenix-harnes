@@ -37,7 +37,11 @@ const SCRIPT = [
   '[Console]::Out.Write([Convert]::ToBase64String($result))',
 ].join('\n')
 
-/** Only complete secure web origins are accepted, with loopback HTTP for development. */
+/**
+ * Accept only complete secure web origins, with loopback HTTP for development.
+ * @param raw - Candidate origin to validate.
+ * @returns The validated canonical origin.
+ */
 export function loginOrigin(raw: string): string {
   const parsed = new URL(raw)
   if (parsed.username || parsed.password || parsed.origin === 'null') throw new Error('Origen no válido')
@@ -50,7 +54,11 @@ export function loginOrigin(raw: string): string {
  * Show only that a related access exists; NEVER share or replay its secret
  * across origins automatically. The user must approve an explicit copy.
  */
-/** Registered related origins are only discovery hints; no implicit cross-site login. */
+/**
+ * Return discovery hints only; never authorize implicit cross-site login.
+ * @param origin - Exact origin whose related sites are being discovered.
+ * @returns Explicitly allowlisted related origins.
+ */
 export function relatedCredentialOrigins(origin: string): readonly string[] {
   // This site's apex, www portal and embedded sports module may each host
   // their own login. An exact allowlist avoids matching lookalike domains.
@@ -65,7 +73,11 @@ export function relatedCredentialOrigins(origin: string): readonly string[] {
   }
   return []
 }
-/** Backward-compatible primary related-site hint; status searches all known origins. */
+/**
+ * Provide a backward-compatible primary related-site hint.
+ * @param origin - Exact origin whose related site is being queried.
+ * @returns The first allowlisted related origin, if any.
+ */
 export function relatedCredentialOrigin(origin: string): string | undefined {
   return relatedCredentialOrigins(origin)[0]
 }
@@ -384,6 +396,7 @@ async function tabForLogin(tabId: string, origin: string): Promise<BrowserTab> {
 /** Detect a visible login even when a modal appeared without navigation.
  * Includes same-origin iframes; never inspect cross-origin frame secrets.
  * Detection failures are errors, NOT “no login needed”.
+ * @returns A self-contained browser-side detection expression.
  */
 export function loginDetectionExpression(): string {
   return `(() => {
@@ -411,6 +424,7 @@ export function loginDetectionExpression(): string {
   })()`
 }
 
+/** Public, non-secret metadata describing a visible login input. */
 export interface LoginInputHint {
   key: string
   role: 'account' | 'secret' | 'extra'
@@ -419,6 +433,7 @@ export interface LoginInputHint {
   inputType: 'text' | 'email' | 'tel' | 'password' | 'number'
   required: boolean
 }
+/** Public state of a login gate, without field contents or credentials. */
 export interface LoginGateState {
   required: boolean
   formVisible: boolean
@@ -430,6 +445,8 @@ export interface LoginGateState {
 }
 /** Inspect a login gate without reading fields, or open exactly one in-page login trigger.
  * Never navigate away, submit an unrelated form, or expose DOM text to the model.
+ * @param action - Inspect the gate or open its existing in-page trigger.
+ * @returns A self-contained browser-side gate inspection expression.
  */
 export function loginGateExpression(action: 'inspect' | 'open' = 'inspect'): string {
   const expression = `(() => {
@@ -693,6 +710,7 @@ async function useLogin(origin: string, tabId: string, manual: boolean,
 
 /**
  * Stable human-readable failure codes. Never reflect raw secrets or CDP payloads.
+ * @param error - Internal failure to classify without exposing its details.
  * @returns A sanitized HTTP status and public failure reason without secret values.
  */
 export function safeSecureLoginFailure(error: unknown): { code: number; body: { error: string; reason: string } } {
@@ -710,7 +728,12 @@ export function safeSecureLoginFailure(error: unknown): { code: number; body: { 
     error: 'No se pudo completar la operación segura. Comprueba los datos y el estado de la bóveda.' } }
 }
 
-/** Route lives on the host, outside every model-facing MCP tool and session log. */
+/**
+ * Register a host-only secure login route outside model-facing tools and logs.
+ * @param ctx - Host context owning the local web route.
+ * @param vault - Optional credential provider for the host route.
+ * @returns A disposer that unregisters the route.
+ */
 export function registerSecureLogin(ctx: Context, vault?: CredentialProvider): () => void {
   return ctx.webServer.register({
     kind: 'prefix',
