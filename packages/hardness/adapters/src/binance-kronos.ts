@@ -53,6 +53,7 @@ export function installBinanceKronos(): ReturnType<typeof binanceKronosStatus> {
   if (binanceKronosStatus().available) {
     // Retry a failed model load without reinstalling a healthy venv.
     failed = false
+    void ensureReady().catch(() => { /* status exposes a safe error */ })
     return binanceKronosStatus()
   }
   installing = true
@@ -61,7 +62,11 @@ export function installBinanceKronos(): ReturnType<typeof binanceKronosStatus> {
     cwd: process.cwd(), env: process.env, stdio: 'ignore', windowsHide: true,
   })
   child.once('error', () => { installing = false; failed = true })
-  child.once('close', code => { installing = false; failed = code !== 0 })
+  child.once('close', code => {
+    installing = false
+    failed = code !== 0
+    if (code === 0) void ensureReady().catch(() => { /* model may need repair */ })
+  })
   return binanceKronosStatus()
 }
 
