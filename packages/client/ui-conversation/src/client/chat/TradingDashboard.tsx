@@ -26,9 +26,9 @@ type TestnetAutoState = {
   lastDecision: string
   lastError?: string
   realizedPnlUsdt: number
-  journal: Array<{clientOrderId:string;side:'BUY'|'SELL';symbol:string;quantity:number;reason:string;at:string}>
-  positions: Record<string,{symbol:string;quantity:number;entryPrice:number;stop:number;tp1:number;tp2:number;strategy:string}>
-  pending?: {symbol:string;side:'BUY'|'SELL'}
+  journal: Array<{ clientOrderId: string; side: 'BUY' | 'SELL'; symbol: string; quantity: number; reason: string; at: string }>
+  positions: Record<string, { symbol: string; quantity: number; entryPrice: number; stop: number; tp1: number; tp2: number; strategy: string }>
+  pending?: { symbol: string; side: 'BUY' | 'SELL' }
 }
 type McpState = {
   configured: boolean
@@ -307,7 +307,7 @@ export function TradingDashboard({ initial }: Props) {
       setState(valid)
       if (action === 'start') setWatchlistDraft(undefined)
       setConnection('connected')
-      setRefreshKey((current) => current + 1)
+      setRefreshKey(current => current + 1)
     } catch {
       setControlError('No se pudo confirmar la acción PAPER desde el Host. No se asume ninguna orden ejecutada.')
     } finally {
@@ -346,16 +346,16 @@ export function TradingDashboard({ initial }: Props) {
       </div>
       <div className={css.toolbar}>
         <div>
-          <strong>Escáner multimoneda · {settings.autoDiscover ? 'Radar dinámico' : settings.symbols.length + ' pares fijos'}</strong>
+          <strong>Escáner multimoneda · {settings.autoDiscover ? 'Radar dinámico' : `${settings.symbols.length} pares fijos`}</strong>
           <small>{settings.interval} · Revisión cada {settings.pollMs / 60_000} min mientras el Host esté activo</small>
         </div>
         <div className={css.actions}>
-          <button type="button" disabled={controlBusy} onClick={() => { setRefreshKey((current) => current + 1) }}>Actualizar</button>
+          <button type="button" disabled={controlBusy} onClick={() => { setRefreshKey(current => current + 1) }}>Actualizar</button>
           <button type="button" disabled={controlBusy || !running} onClick={() => { void control('check-now') }}>Evaluar ahora</button>
           {running
             ? <button type="button" className={css.danger} disabled={controlBusy} onClick={() => { void control('stop') }}>Detener</button>
             : <button type="button" className={css.primary} disabled={controlBusy}
-                onClick={() => { void control('start') }}>Iniciar PAPER</button>}
+              onClick={() => { void control('start') }}>Iniciar PAPER</button>}
           {(running || account.positions.length > 0) && (
             <button type="button" className={css.danger} disabled={controlBusy}
               onClick={() => { void control('stop-liquidate') }}>
@@ -487,11 +487,12 @@ export function TradingDashboard({ initial }: Props) {
               <small>Decisión: {testnetAutoState.lastDecision}</small>
               <small>Órdenes verificadas por Binance Testnet: {testnetAutoState.journal.length} ·
                 PnL realizado estimado (sin comisiones): {amount(testnetAutoState.realizedPnlUsdt)} USDT ficticios</small>
-              {testnetAutoState.pending&&<small>Orden {testnetAutoState.pending.side} pendiente de conciliar: {testnetAutoState.pending.symbol}</small>}
-              {Object.values(testnetAutoState.positions).slice(0,2).map((position)=>
+              {testnetAutoState.pending && <small>Orden {testnetAutoState.pending.side} pendiente de conciliar:
+                {' '}{testnetAutoState.pending.symbol}</small>}
+              {Object.values(testnetAutoState.positions).slice(0,2).map(position =>
                 <small key={position.symbol}>{position.symbol} · {strategyLabel(position.strategy)}
                   {' · '}TP1 {quote(position.tp1)} · TP2 {quote(position.tp2)} · SL {quote(position.stop)}</small>)}
-              {testnetAutoState.journal.slice(-2).reverse().map((trade)=>
+              {testnetAutoState.journal.slice(-2).reverse().map(trade =>
                 <small key={trade.clientOrderId}>{trade.side==='BUY'?'Compra':'Venta'} TESTNET confirmada:
                   {' '}{trade.symbol} · {amount(trade.quantity,8)} · {trade.reason} · {clock(trade.at)}</small>)}
               {testnetAutoState.lastError&&<small role="alert">Bloqueo: {testnetAutoState.lastError}</small>}
@@ -511,7 +512,8 @@ export function TradingDashboard({ initial }: Props) {
         </div>
         {credentialOpen && <div className={css.credentialForm}>
           <strong>Guardar claves exclusivas de Spot Testnet</strong>
-          <small>Solo se envían directamente al Host para verificar la cuenta ficticia y guardarlas en su bóveda. Nunca uses claves reales.</small>
+          <small>Solo se envían al Host para verificar y guardar las claves en su bóveda.
+            Nunca uses claves reales.</small>
           <input type="password" aria-label="Clave API de Spot Testnet" autoComplete="off"
             placeholder="Testnet API key" value={testingKey} onChange={(event) => { setTestingKey(event.currentTarget.value) }} />
           <input type="password" aria-label="Secreto API de Spot Testnet" autoComplete="off"
@@ -530,7 +532,7 @@ export function TradingDashboard({ initial }: Props) {
           <h4>Radar de estrategias</h4>
           {state.signals.length === 0 ? <p className={css.empty}>Todavía no hay un análisis confirmado en esta sesión.</p>
             : <div className={css.rows}>
-              {state.signals.map(signal => {
+              {state.signals.map((signal) => {
                 const evidence = state.execution?.find(item => item.symbol === signal.symbol)
                 // A technical BUY is NOT an exchange order or a PAPER fill.
                 const status = !running ? 'paused' : evidence?.status ?? 'scan-only'
@@ -564,7 +566,7 @@ export function TradingDashboard({ initial }: Props) {
           {account.positions.length === 0
             ? <p className={css.empty}>Sin posiciones abiertas. Esperando una señal de entrada validada.</p>
             : <div className={css.positionCards}>
-              {account.positions.map(position => {
+              {account.positions.map((position) => {
                 const plan = position.exitPlan
                 const lastPrice = position.marketPriceUsdt
                 const pnl = position.unrealizedPnlUsdt
@@ -591,7 +593,7 @@ export function TradingDashboard({ initial }: Props) {
                   {plan === undefined
                     ? <p className={css.exitMissing}>Sin plan de salida verificado. No se muestran TP/SL ficticios.</p>
                     : <div className={css.exitLevels}>
-                        <div className={css.exitLevel} data-level="stop">
+                      <div className={css.exitLevel} data-level="stop">
                           <span>SL · {targetReturn(plan.stopLossPrice, plan.entryPriceUsdt)}</span><strong>{quote(plan.stopLossPrice)}</strong>
                           <small>{lastPrice === undefined ? 'Sin cotización' : lastPrice <= plan.stopLossPrice ? 'Nivel alcanzado · pendiente de ciclo' : 'Vigilando'}</small>
                         </div>
@@ -610,7 +612,8 @@ export function TradingDashboard({ initial }: Props) {
                     Estrategia: {strategyLabel(strategy)} ({strategy}) · {plan.origin === 'legacy-adopted'
                       ? 'Plan adoptado para una posición histórica'
                       : 'Plan persistido en el ledger al ejecutar la compra'}
-                    . PnL incluye el coste de entrada, no la comisión de salida. SL/TP virtuales se evalúan en cada ciclo del Host y no son órdenes stop/limit de Binance.
+                    . PnL incluye el coste de entrada, no la comisión de salida.
+                    Los SL/TP virtuales se evalúan en cada ciclo del Host, no en órdenes nativas de Binance.
                   </p>}
                 </article>
               })}
@@ -626,15 +629,16 @@ export function TradingDashboard({ initial }: Props) {
                 <span data-signal={trade.side}>{trade.side === 'buy' ? 'COMPRA' : 'VENTA'}</span>
                 <div><strong>{trade.symbol}</strong><small>{trade.strategyId ?? 'Manual'} · {clock(trade.executedAt)}</small></div>
                 <div className={css.right}>
-                    <strong>{amount(trade.grossUsdt)} USDT</strong>
-                    <small>Precio {amount(trade.price, 7)}</small>
-                  </div>
+                  <strong>{amount(trade.grossUsdt)} USDT</strong>
+                  <small>Precio {amount(trade.price, 7)}</small>
+                </div>
               </div>
             ))}
           </div>}
       </section>
       <p className={css.tradingNotice}>
-        Kira supervisa cuando recibe un evento o una petición; el escáner PAPER funciona en el Host sin mantener un modelo de IA ejecutándose por cada vela.
+        Kira supervisa los eventos relevantes. El escáner PAPER funciona en el Host
+        sin ejecutar un modelo de IA por cada vela.
         Las señales no son órdenes y nunca se atribuyen a la cuenta real de Binance.
       </p>
       <div className={css.footer} aria-live="polite">
