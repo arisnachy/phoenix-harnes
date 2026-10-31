@@ -29,12 +29,12 @@ const participant=(s:Side|undefined)=>{
     &&typeof name==='string'&&name.trim()&&name.length<=120
     ?{id,name:name.trim()}:null
 }
-export type DailySportsEvent = {
+type DailySportsEvent = {
   sport:string,league:string,eventId:string,kickoff:string,
   home:{id:string,name:string},away:{id:string,name:string},
   source:'ESPN Site API',status:'scheduled'
 }
-export type DailySportsCoverage = {
+type DailySportsCoverage = {
   sport:string,league:string,status:'available'|'empty'|'unavailable',
   futureEvents:number,reason:string
 }
