@@ -333,6 +333,24 @@ describe('boot manifest wire', () => {
 })
 
 describe('HMR reset', () => {
+  it('loads the rebuilt immutable URL instead of the boot-time revision', async () => {
+    const b = bench([row('a')], { a: () => ({ marker: 'updated' }) })
+    await b.loader.import('a', '', {})
+    b.loader.invalidate('a')
+    await b.loader.prefetch('a', '123456789abc')
+    expect(b.fetched).toEqual([
+      '/plugins/a/client.js?rev=0',
+      '/plugins/a/client.js?rev=123456789abc',
+    ])
+    expect((await b.loader.import('a', '', {}) as { marker: string }).marker).toBe('updated')
+  })
+
+  it('rejects malformed rebuilt revisions without loading a script', async () => {
+    const b = bench([row('a')], { a: () => ({}) })
+    await expect(b.loader.prefetch('a', '../outside')).rejects.toThrow('invalid rebuilt revision')
+    expect(b.fetched).toEqual([])
+  })
+
   it('invalidate drops the factory and record so the module reloads and re-registers', async () => {
     let generation = 0
     const b = bench([row('a')], { a: () => ({ generation: ++generation }) })

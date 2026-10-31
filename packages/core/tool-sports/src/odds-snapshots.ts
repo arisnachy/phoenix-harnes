@@ -51,6 +51,11 @@ export async function saveOddsSnapshot(
 }
 /** Search local snapshots by the UTC observation date, not event date.
  * All prices returned are historical regardless of how old the match is.
+ * @param sportKey - supported sport identifier.
+ * @param day - UTC observation date.
+ * @param env - environment used to resolve the local storage root.
+ * @param limit - maximum number of quote rows to return.
+ * @returns historical snapshots, coverage summary and any read errors.
  */
 export async function loadOddsSnapshots(
   sportKey:string,day:string,env:NodeJS.ProcessEnv=process.env,limit=150,

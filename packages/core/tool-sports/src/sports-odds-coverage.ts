@@ -65,6 +65,10 @@ export type SportScanResult={
 }
 /** Executes a deterministic page of at most four scraper probes. Returning
  * coverage for unprobed disciplines prevents Kira from silently dropping them.
+ * @param params - optional sport and bounded pagination controls.
+ * @param lookup - scraper probe for one sport and market.
+ * @param enabled - whether probing is enabled.
+ * @returns checked disciplines, unprobed coverage and pagination status.
  */
 export async function scanOddsDisciplines(
   params:{sport?:string;offset?:number;limit?:number},

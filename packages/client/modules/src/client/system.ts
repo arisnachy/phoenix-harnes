@@ -203,11 +203,25 @@ export class ClientModuleSystem implements ClientModuleLoader {
     return this.materialize(id).exports
   }
 
-  async prefetch(id: string): Promise<void> {
+  async prefetch(id: string, revision?: string): Promise<void> {
     const normalized = stripClientSuffix(id)
     if (this.loadCache.has(normalized)) return
     const row = this.graphRows.get(normalized)
     if (row === undefined) throw new Error(`client-modules: prefetch("${id}") — not a graph entry`)
+    if (revision !== undefined && revision !== row.rev) {
+      if (!/^[0-9a-f]{12}$/.test(revision)) {
+        throw new Error(`client-modules: invalid rebuilt revision for "${id}"`)
+      }
+      // The host rejects an old ?rev with 404 and caches matching revisions
+      // immutably. Refresh the URL before fetching, not only the factory.
+      const url = new URL(row.url, 'http://localhost')
+      if (url.origin !== 'http://localhost') {
+        throw new Error(`client-modules: non-local bundle URL for "${id}"`)
+      }
+      url.searchParams.set('rev', revision)
+      row.url = `${url.pathname}${url.search}`
+      row.rev = revision
+    }
     await this.arriveGraphRow(row)
   }
 

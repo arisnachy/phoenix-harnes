@@ -241,6 +241,8 @@ export function recoverScraperRows(stdout:unknown,output:unknown):unknown[]{
 /** Run a fixed local executable with fixed command shape, no shell, no user URLs. */
 /** Sanitized transport failure: retain exit status and stderr diagnostics without
  * exposing environment variables, authorization headers or a raw shell command.
+ * @param error - untrusted scraper transport failure.
+ * @returns redacted diagnostics suitable for a user-facing error.
  */
 export function describeScraperError(error:unknown):string{
   const record=error&&typeof error==='object'?error as Record<string,unknown>:{}

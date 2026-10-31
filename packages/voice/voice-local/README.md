@@ -44,5 +44,6 @@ There is no cache effect because command execution and audio playback stay outsi
 
 ## Known Limitations and Deferred Work
 
-- Explicit custom command availability is configuration-based. Bundled Kokoro requires an installed virtualenv, ONNX model, voice pack and successful setup marker. It runs locally only on Windows for now.
-- STT format conversion, microphone capture, and audio playback policy belong to the client or deployment adapter.
+- Bundled Kokoro requires an installed virtualenv, ONNX model, voice pack and successful setup marker. Its automatic installer currently runs only on Windows.
+- Explicit custom command availability is configuration-based, not proof that the model is installed or ready; failed execution can fall back to another available voice provider.
+- Unsupported Kokoro languages, STT format conversion, microphone capture, audio playback policy, and system voice-pack installation belong to the client or platform adapter.

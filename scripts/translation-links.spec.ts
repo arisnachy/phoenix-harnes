@@ -142,6 +142,33 @@ describe('translation link locale validation', () => {
     )).toEqual([])
   })
 
+  it('accepts Spanish-to-Chinese switchers without exempting wrong-locale body links', () => {
+    const root = fixture()
+    const spanish = '# Guía\n\nEspañol | [中文](guide.zh.md)\n\n[Referencia](reference.zh.md)\n'
+    expect(translationLinkLocaleViolations(
+      spanish,
+      linkContext(root, 'docs/guide.md'),
+      ['guide.zh.md'],
+    )).toEqual([{
+      sourcePath: 'docs/guide.md',
+      line: 5,
+      url: 'reference.zh.md',
+      expectedUrl: 'reference.md',
+    }])
+
+    const chinese = '# 指南\n\n[Español](guide.md) | 中文\n\n[参考](reference.md)\n'
+    expect(translationLinkLocaleViolations(
+      chinese,
+      linkContext(root, 'docs/guide.zh.md'),
+      ['guide.md'],
+    )).toEqual([{
+      sourcePath: 'docs/guide.zh.md',
+      line: 5,
+      url: 'reference.md',
+      expectedUrl: 'reference.zh.md',
+    }])
+  })
+
   it('does not exempt an ordinary body link to the counterpart', () => {
     const root = fixture()
     const markdown = '# 指南\n\n[English](guide.md) | 中文\n\n[正文](guide.md)\n'

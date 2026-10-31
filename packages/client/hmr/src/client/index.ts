@@ -101,7 +101,7 @@ export function apply(ctx: Context): void {
   const modLoader = ctx.modules
   const loader: Loader = ctx.loader
 
-  async function reload(id: string): Promise<void> {
+  async function reload(id: string, rev: string): Promise<void> {
     const entry = findEntry(loader, id)
     if (entry === undefined) {
       ctx.logger.warn(`client-hmr: rebuilt frame for unknown entry "${id}" (not in the loader tree)`)
@@ -113,7 +113,7 @@ export function apply(ctx: Context): void {
     // the fresh factory with zero side effects (lazy CJS — module bodies run
     // at materialization, not execution).
     modLoader.invalidate(id)
-    await modLoader.prefetch(id)
+    await modLoader.prefetch(id, rev)
 
     const oldFiber = entry.fiber
     if (oldFiber !== undefined) {
@@ -145,7 +145,7 @@ export function apply(ctx: Context): void {
   const handle = (frame: PluginsEventFrame): void => {
     switch (frame.type) {
       case 'rebuilt':
-        queue = queue.then(() => reload(frame.id)).catch((error: unknown) => {
+        queue = queue.then(() => reload(frame.id, frame.rev)).catch((error: unknown) => {
           ctx.logger.error(`client-hmr: reload of "${frame.id}" failed`)
           ctx.logger.error(error)
         })

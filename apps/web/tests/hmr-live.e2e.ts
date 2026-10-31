@@ -78,8 +78,8 @@ it('hot-reloads a real client-plugin source edit without refreshing the page', a
     .map(path => join(REPO_ROOT, path))
   const originalClientBundles = await Promise.all(clientBundlePaths.map(async path => [path, await readFile(path)] as const))
   const originalSource = await readFile(sourcePath)
-  const oldText = '¿Qué quieres construir hoy en Phoenix?'
-  const sourceNeedle = '<p className={css.subtitle}>¿Qué quieres construir hoy en Phoenix?</p>'
+  const oldText = '¿En qué podemos trabajar hoy?'
+  const sourceNeedle = '<p className={css.subtitle}>¿En qué podemos trabajar hoy?</p>'
   const newText = `HMR UPDATED ${'x'.repeat(80)}`
   const updatedSource = originalSource.toString().replace(
     sourceNeedle,
@@ -93,6 +93,15 @@ it('hot-reloads a real client-plugin source edit without refreshing the page', a
   let host: SubprocessHandle | undefined
   let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined
   const failures: unknown[] = []
+  const processOutput: { watcher: string; host: string } = { watcher: '', host: '' }
+  const browserEvents: string[] = []
+  const captureOutput = (child: SubprocessHandle, label: 'watcher' | 'host'): void => {
+    const append = (chunk: Buffer): void => {
+      processOutput[label] = (processOutput[label] + chunk.toString()).slice(-12_000)
+    }
+    child.stdout?.on('data', append)
+    child.stderr?.on('data', append)
+  }
   try {
     subprocessFiber = await subprocessCtx.plugin(LocalSubprocessRuntime)
     watcher = subprocessCtx.subprocess.spawn(spawnSpec(
@@ -100,6 +109,7 @@ it('hot-reloads a real client-plugin source edit without refreshing the page', a
       REPO_ROOT,
       { ...clientBuildEnvironment },
     ))
+    captureOutput(watcher, 'watcher')
     await waitForOutput(watcher, /dev-web: watching/, 'dev-web watcher')
     host = subprocessCtx.subprocess.spawn(spawnSpec(
       [process.execPath, binPath, 'web', '--no-open', '--port', '0'],
@@ -109,9 +119,19 @@ it('hot-reloads a real client-plugin source edit without refreshing the page', a
         DSH_HOME: join(world, '.dsh'),
       },
     ))
+    captureOutput(host, 'host')
     const baseUrl = await waitForOutput(host, /dsh web: (http:\/\/[^\s]+)/, 'built dsh web')
     browser = await chromium.launch()
     const page = await browser.newPage()
+    page.on('console', (message) => { browserEvents.push(`console ${message.type()}: ${message.text()}`) })
+    page.on('requestfailed', (request) => {
+      browserEvents.push(`request failed: ${request.url()} (${request.failure()?.errorText ?? 'unknown'})`)
+    })
+    page.on('response', (response) => {
+      if (response.url().includes('/plugins/events')) {
+        browserEvents.push(`HMR event stream response: ${String(response.status())} ${response.url()}`)
+      }
+    })
     const pageErrors: string[] = []
     page.on('pageerror', error => pageErrors.push(String(error)))
     await page.goto(baseUrl, { waitUntil: 'load' })
@@ -121,6 +141,24 @@ it('hot-reloads a real client-plugin source edit without refreshing the page', a
       Object.defineProperty(window, '__dshHmrPageIdentity', { value: identity })
       return identity
     })
+    // Independent SSE observer: distinguish a missing host rebuild frame from
+    // a browser-side reload failure without weakening the visible-DOM assertion.
+    await page.evaluate(() => {
+      const source = new EventSource('/plugins/events')
+      source.addEventListener('open', () => {
+        Object.defineProperty(window, '__dshHmrProbeConnected', { value: true })
+      })
+      source.addEventListener('message', (event: MessageEvent<string>) => {
+        const frame = JSON.parse(event.data) as { type?: string; id?: string; rev?: string }
+        console.info(`[HMR probe] ${String(frame.type)} ${frame.id ?? ''} ${frame.rev ?? ''}`)
+      })
+      source.addEventListener('error', () => { console.warn('[HMR probe] event stream error') })
+    })
+    await page.waitForFunction(
+      () => (window as Window & { __dshHmrProbeConnected?: boolean }).__dshHmrProbeConnected === true,
+      null,
+      { timeout: 10_000 },
+    )
 
     await writeFile(sourcePath, updatedSource)
     await page.getByText(newText, { exact: true }).waitFor({ timeout: 60_000 })
@@ -128,7 +166,15 @@ it('hot-reloads a real client-plugin source edit without refreshing the page', a
       .toBe(pageIdentity)
     expect(pageErrors).toEqual([])
   } catch (error) {
-    failures.push(error)
+    const clientBundle = await readFile(join(REPO_ROOT, 'packages/client/ui-conversation/lib/client.js'), 'utf8')
+      .catch(() => '')
+    failures.push(new Error(
+      `HMR browser failure; client bundle contains edit=${String(clientBundle.includes(newText))}`
+      + `\nwatcher output (tail):\n${processOutput.watcher}`
+      + `\nhost output (tail):\n${processOutput.host}`
+      + `\nbrowser events (tail):\n${browserEvents.slice(-40).join('\n')}`,
+      { cause: error },
+    ))
   } finally {
     await writeFile(sourcePath, originalSource).catch((error: unknown) => failures.push(error))
     if (watcher !== undefined) await stopTree(watcher).catch((error: unknown) => failures.push(error))

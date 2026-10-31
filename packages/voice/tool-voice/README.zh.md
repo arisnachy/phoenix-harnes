@@ -6,7 +6,19 @@
 
 ## Model Experience
 
-用户要求 Kira 说话时，模型调用 `phoenix_voice_speak` 朗读简短文本；需要诊断时调用 `phoenix_voice_status`。工具如实返回服务提供方的接受或拒绝状态；未经用户确认，不得声称扬声器已经发出可听见的声音。
+### 明确请求的语音输出与诊断工具
+
+#### What the model sees
+
+用户明确要求语音回答时，模型可以调用 `phoenix_voice_speak`；诊断语音服务时可以调用 `phoenix_voice_status`。工具返回服务提供方的接受或失败状态，并不证明扬声器实际可听。未经用户确认，Kira 不得声称已经听到声音。
+
+#### Token effect
+
+工具定义在注册到模型可用工具列表时占用上下文 token。调用 `phoenix_voice_status` 或 `phoenix_voice_speak` 的参数与返回状态也会进入对话上下文；本地音频合成本身不增加模型 token。
+
+#### KV Cache effect
+
+工具定义未变化时可复用模型上下文前缀缓存。每次工具调用及其状态消息会延长对话上下文，并可能影响后续缓存复用；音频播放和本地服务队列状态不进入模型 KV 缓存。
 
 ## Tools
 
