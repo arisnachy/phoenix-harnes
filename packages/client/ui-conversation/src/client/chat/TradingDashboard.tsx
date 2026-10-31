@@ -82,6 +82,9 @@ export function TradingDashboard({ initial }: Props) {
   // A user can configure a multi-asset PAPER watchlist without spending tokens.
   const [watchlistDraft, setWatchlistDraft] = useState<string | undefined>()
   const [autoDiscoverDraft, setAutoDiscoverDraft] = useState(true)
+  const [predictionDraft, setPredictionDraft] = useState<boolean | undefined>()
+  const [installBusy, setInstallBusy] = useState(false)
+  const [installIssue, setInstallIssue] = useState<string | undefined>()
   const [testnetState, setTestnetState] = useState<TestnetState | undefined>()
   const [testnetAutoState,setTestnetAutoState]=useState<TestnetAutoState|undefined>()
   const [mcpState, setMcpState] = useState<McpState | undefined>()
@@ -255,6 +258,24 @@ export function TradingDashboard({ initial }: Props) {
       </section>
     )
   }
+  async function installPredictor(): Promise<void> {
+    if (installBusy) return
+    setInstallBusy(true)
+    setInstallIssue(undefined)
+    try {
+      const response = await fetch('/phoenix-trading/paper/kronos-install', {
+        method: 'POST', cache: 'no-store', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' }, body: '{}',
+      })
+      if (!response.ok) throw new Error('Installation rejected')
+      // Installation may continue in the isolated Host process; the dashboard
+      // polls status and never claims readiness before the model is loaded.
+      setRefreshKey(key => key + 1)
+    } catch {
+      setInstallIssue('No se pudo iniciar el instalador local. Verifica Python 3.10–3.12, Git y conexión.')
+    } finally { setInstallBusy(false) }
+  }
+
   async function control(action: 'start' | 'stop' | 'stop-liquidate' | 'check-now'): Promise<void> {
     if (state === undefined || controlBusy) return
     if (action === 'stop-liquidate' && !window.confirm(
@@ -272,7 +293,8 @@ export function TradingDashboard({ initial }: Props) {
       }
       const payload = action === 'start'
         ? { action, symbols: watchlist, interval: state.settings.interval,
-          pollMinutes: state.settings.pollMs / 60_000, autoDiscover: autoDiscoverDraft }
+          pollMinutes: state.settings.pollMs / 60_000, autoDiscover: autoDiscoverDraft,
+          predictionEnabled: predictionDraft ?? state.settings.predictionEnabled === true }
         : { action }
       const response = await fetch('/phoenix-trading/paper/control', {
         method: 'POST', cache: 'no-store', credentials: 'same-origin',
@@ -342,6 +364,52 @@ export function TradingDashboard({ initial }: Props) {
           )}
         </div>
       </div>
+      <section className={css.predictivePanel} aria-label="Predicción Kronos">
+        <div className={css.predictiveHeading}>
+          <div>
+            <strong>Kronos AI · Proyección de tendencia</strong>
+            <small>Predicción local experimental · no es probabilidad ni garantía de ganancia</small>
+          </div>
+          <span className={css.predictiveState} data-kronos-state={state.predictor?.state ?? 'not-installed'}>
+            {state.predictor?.state === 'ready' ? 'Modelo preparado'
+              : state.predictor?.state === 'loading' ? 'Cargando pesos'
+                : state.predictor?.state === 'installing' ? 'Instalando'
+                  : state.predictor?.state === 'installed' ? 'Instalado · carga pendiente'
+                    : state.predictor?.state === 'error' ? 'Requiere reparación'
+                      : 'Sin instalar'}
+          </span>
+        </div>
+        <div className={css.predictiveControls}>
+          <label>
+            <input type="checkbox" disabled={running || controlBusy}
+              checked={running ? state.settings.predictionEnabled === true
+                : predictionDraft ?? state.settings.predictionEnabled === true}
+              onChange={event => { setPredictionDraft(event.currentTarget.checked) }} />
+            <span>Exigir confirmación Kronos para nuevas compras PAPER</span>
+          </label>
+          {state.predictor?.state === 'not-installed' || state.predictor?.state === 'error'
+            ? <button type="button" onClick={() => { void installPredictor() }}
+              disabled={installBusy || running}>Instalar Kronos gratis</button>
+            : <small>Modelo: {state.predictor?.model ?? 'mini'} · CPU local</small>}
+        </div>
+        <p>El filtro predictivo no altera ventas defensivas, SL, TP ni límites de exposición.
+          Solo se consulta cuando ya existe una señal técnica candidata y se descuentan costos estimados.</p>
+        {installIssue && <p role="alert">{installIssue}</p>}
+        {state.settings.predictionEnabled === true && state.predictor?.state !== 'ready'
+          && <p role="status">La predicción puede bloquear compras nuevas mientras el modelo se carga o no esté disponible.</p>}
+        {state.forecast && (
+          <div className={css.forecastSummary}>
+            <strong>{state.forecast.symbol} · {state.forecast.interval} · horizonte {state.forecast.horizonBars} velas</strong>
+            <span>Último cierre previsto: {quote(state.forecast.projectedClose)} USDT</span>
+            <span>Variación prevista: {state.forecast.projectedReturnPct > 0 ? '+' : ''}{amount(state.forecast.projectedReturnPct)}%</span>
+            <span>Peor mínimo previsto: {amount(state.forecast.maxDownsidePct)}%</span>
+            <span>Filtro: {state.forecastStatus === 'accepted' ? 'Entrada aceptada por el predictor'
+              : state.forecastStatus === 'rejected' ? 'Entrada rechazada'
+                : 'Sin proyección utilizable'}</span>
+            <small>Proyección emitida desde la vela cerrada de {new Date(state.forecast.forecastAt).toLocaleString('es-DO')} · No es un resultado de mercado.</small>
+          </div>
+        )}
+      </section>
       <div className={css.tradingRadarMeta} aria-live="polite">
         <span>Ciclos válidos: {state.successfulCycles ?? 'sin telemetría'}</span>
         <span>Oportunidades de 75/100+: {state.signalsQualified ?? 'sin telemetría'}</span>
@@ -351,6 +419,7 @@ export function TradingDashboard({ initial }: Props) {
         {state.lastDiscoveryIssue && <span role="status">{state.lastDiscoveryIssue}</span>}
         <strong>{running ? 'Radar encendido' : 'Radar detenido'}</strong>
         <span>Último análisis: {clock(state.lastSuccessAt)}</span>
+        <span>Última orden PAPER confirmada: {clock(state.recentTrades.at(-1)?.executedAt)}</span>
         <span>Resultado: {state.lastDecision === 'buy' ? 'Compra PAPER' : state.lastDecision === 'sell' ? 'Venta PAPER' : 'Esperar / sin señal'}</span>
         <span>{state.signals.length} pares evaluados en el último ciclo</span>
         <span>Motivo de la última decisión: {state.rationale}</span>
