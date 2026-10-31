@@ -4,6 +4,7 @@ import type { ChangeEvent } from 'react'
 import {
   activateAvatar, deleteAvatar, editAvatarLocally, normalizeAvatar,
   readAvatar, storeOriginalAvatar, storeStyledAvatar, subscribeAvatar,
+  setAvatarReferenceEnabled, probeLocalAvatarEditor,
   type AvatarSnapshot, validatedLocalEditor,
 } from './avatar-store.ts'
 import css from './UserAvatar.module.css'
@@ -36,7 +37,7 @@ export function UserAvatar({ size = 36, className }: { size?: number; className?
     {url === undefined ? <span aria-hidden="true">◉</span> : <img src={url} alt="" />}
   </span>
 }
-const empty: AvatarSnapshot = { mode: 'original' }
+const empty: AvatarSnapshot = { mode: 'original', referenceEnabled: false }
 const editorKey = 'phoenix-avatar-local-edit-url'
 const modelKey = 'phoenix-avatar-local-edit-model'
 
@@ -97,6 +98,9 @@ export function AvatarPanel() {
       setSelected(undefined)
     }, 'Tu fotografía se guardó en este dispositivo.')
   }
+  const checkEditor = () => {
+    void act(() => probeLocalAvatarEditor(editor), 'El servicio local responde. Puedes intentar la transformación; la edición efectiva depende del modelo instalado.')
+  }
   const transform = () => {
     if (stored.original === undefined) return
     void act(async () => {
@@ -144,21 +148,34 @@ export function AvatarPanel() {
       ) : null}
       {stored.original !== undefined ? (
         <div className={css.actions}>
-          <button type="button" disabled={busy || stored.mode === 'original'} onClick={() => { void act(() => activateAvatar('original'), 'Foto original restaurada.') }}>Usar original</button>
+          <button type="button" disabled={busy || stored.mode === 'original'} onClick={() => { void act(() => activateAvatar('original'), 'Foto original restaurada.') }}>Volver a mi foto real</button>
           {stored.styled !== undefined && <button type="button" disabled={busy || stored.mode === 'styled'} onClick={() => { void act(() => activateAvatar('styled'), 'Retrato PHOENIX activado.') }}>Usar retrato</button>}
           <button type="button" className={css.danger} disabled={busy} onClick={() => { void act(deleteAvatar, 'Avatar eliminado de este dispositivo.') }}>Eliminar foto</button>
         </div>
       ) : null}
       {stored.original !== undefined && (
+        <label className={css.referenceOption}>
+          <input type="checkbox" checked={stored.referenceEnabled} disabled={busy} onChange={event => {
+            void act(() => setAvatarReferenceEnabled(event.target.checked), event.target.checked
+              ? 'Tu foto original será referencia en peticiones explícitas de imágenes donde aparezcas.'
+              : 'La referencia automática está desactivada.')
+          }} />
+          <span><strong>Usar mi rostro como referencia en nuevas imágenes</strong><small>Solo cuando pidas expresamente una imagen en la que aparezcas tú. Se adjuntará la foto original a esa solicitud y podrá enviarse al proveedor de IA elegido; no se envía en conversaciones ordinarias. Puedes desactivarlo cuando quieras.</small></span>
+        </label>
+      )}
+      {stored.original !== undefined && (
         <div className={css.transform}>
           <h4>Transformar al estilo del equipo Kira</h4>
-          <p className={css.hint}>Retrato semirrealista con luz cálida y acabado premium, conservando tus rasgos. Necesita un editor de imágenes real, compatible con <code>/v1/images/edits</code>; el generador de imágenes nuevas no sirve para editar tu rostro.</p>
+          <p className={css.hint}>Convierte tu fotografía en un retrato semirrealista de luz cálida, respetando tu identidad. La versión real queda siempre guardada. Se requiere un editor de imágenes local compatible; no se simula el resultado.</p>
           <label htmlFor="user-avatar-editor">Editor de imágenes local (solo localhost)</label>
           <input id="user-avatar-editor" type="url" className={css.endpoint} value={editor} placeholder="http://127.0.0.1:PORT/v1" onChange={e => { updateEditor(e.target.value) }} disabled={busy} />
           <label htmlFor="user-avatar-model">Modelo de edición instalado</label>
           <input id="user-avatar-model" className={css.endpoint} value={model} placeholder="local-image-edit" onChange={e => { updateModel(e.target.value) }} disabled={busy} />
-          <button type="button" disabled={busy || !editorValid || !/^[a-zA-Z0-9._/-]{1,120}$/u.test(model)} onClick={transform}>{busy ? 'Procesando…' : 'Transformar con IA'}</button>
-          <p className={css.hint}>Al pulsar transformar, autorizas enviar tu foto normalizada a ese servicio local. Si el servicio no admite edición o falla, tu foto permanece intacta.</p>
+          <div className={css.actions}>
+            <button type="button" disabled={busy || !editorValid} onClick={checkEditor}>Comprobar conexión</button>
+            <button type="button" className={css.primary} disabled={busy || !/^[a-zA-Z0-9._/-]{1,120}$/u.test(model)} onClick={transform}>{busy ? 'Procesando…' : 'Transformar con IA'}</button>
+          </div>
+          <p className={css.hint}>{!editorValid ? 'Primero introduce la URL de un editor real iniciado en tu equipo (por ejemplo, http://127.0.0.1:8188/v1). El botón explicará qué falta si intentas transformar sin conexión.' : 'Al pulsar transformar autorizas enviar tu foto únicamente a ese servicio local. Si falla, la original permanece intacta.'}</p>
         </div>
       )}
       {error !== '' && <p className={css.error} role="alert">{error}</p>}
