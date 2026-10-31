@@ -2,9 +2,7 @@
 
 English | [中文](README.zh.md)
 
-PHOENIX audio perception and speech tools for Kira. The installed base bundle exposes
-these tools in the runtime registry; a restarted Host and active native shell are required
-to capture Windows audio.
+PHOENIX audio perception and speech tools for Kira. The installed base bundle exposes these tools in the runtime registry; a restarted Host and active native shell are required to capture Windows audio.
 
 ## Tools
 
@@ -17,11 +15,7 @@ to capture Windows audio.
 
 ## Configuration
 
-PHOENIX uses `PHOENIX_VOICE_ENABLED`, `PHOENIX_VOICE_LANGUAGE` (default `es-DO`),
-and the existing local voice services. Native audio requires the Windows `Phoenix.exe`
-bridge and user consent for each sample. The optional `PHOENIX_AUDIO_ALLOWED_DIRS`
-variable contains semicolon-separated trusted directories for local media. The
-transcriber uses local CPU `faster-whisper` via `uv`, installed on demand.
+PHOENIX uses `PHOENIX_VOICE_ENABLED`, `PHOENIX_VOICE_LANGUAGE` (default `es-DO`), and the existing local voice services. Native audio requires the Windows `Phoenix.exe` bridge and user consent for each sample. The optional `PHOENIX_AUDIO_ALLOWED_DIRS` variable contains semicolon-separated trusted directories for local media. The transcriber uses local CPU `faster-whisper` via `uv`, installed on demand.
 
 ## Model Experience
 
@@ -29,23 +23,18 @@ transcriber uses local CPU `faster-whisper` via `uv`, installed on demand.
 
 #### What the model sees
 
-The tools `phoenix_audio_listen` and `phoenix_audio_file_listen` return actual
-timecoded speech segments or explicit errors. `phoenix_senses_status` reports
-capability metadata; it does not contain images or recorded audio.
+The tools `phoenix_audio_listen` and `phoenix_audio_file_listen` return actual timecoded speech segments or explicit errors. `phoenix_senses_status` reports only capability metadata, never evidence of recorded sound or image.
 
 #### Token effect
 
-Only short transcripts and structured receipts enter the model context; raw WAV
-bytes remain transient in the Host. The response size is bounded.
+Only short transcripts and structured receipts enter the model context; raw WAV bytes remain transient in the Host. Output length is bounded.
 
 #### KV Cache effect
 
-The small, stable tool descriptions and prompt guidance are reused across turns;
-captured transcripts are dynamic and do not have reusable token prefixes.
+Stable tool descriptions and prompt guidance can be reused across turns; live transcripts vary and do not have reusable token prefixes.
 
 ## Known Limitations and Deferred Work
 
-These tools do not listen continuously, identify every acoustic event, infer who
-spoke, or bypass protected media. Speaker synthesis does not prove audibility.
-Desktop viewer availability does not prove that a frame was captured. Each Windows
-audio request requires a human decision in a native permission dialog.
+- These tools do not listen continuously, identify every acoustic event, infer who spoke, or bypass protected media.
+- Speaker synthesis does not prove audibility; desktop viewer availability does not prove that a frame was captured.
+- Each Windows audio request requires a human decision in a native permission dialog.
