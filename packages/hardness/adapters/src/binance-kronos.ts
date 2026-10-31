@@ -20,20 +20,27 @@ export interface BinanceKronosForecast {
   readonly maxDownsidePct: number
   readonly forecastAt: number
 }
+/** Provider lifecycle visible in the PAPER dashboard; not an order status. */
 export type BinanceKronosState = 'not-installed' | 'installed' | 'installing' | 'loading' | 'ready' | 'error'
 const home = resolve(process.env.PHOENIX_KRONOS_HOME || join(homedir(), '.phoenix', 'kronos'))
 const python = process.platform === 'win32'
   ? join(home, '.venv', 'Scripts', 'python.exe') : join(home, '.venv', 'bin', 'python')
 const runner = resolve(process.cwd(), 'services', 'phoenix-kronos', 'runner.py')
 const installer = resolve(process.cwd(), 'scripts', 'phoenix-kronos-install.mjs')
-const forecastRequests = new Map<string, { resolve: (value: BinanceKronosForecast) => void; reject: (error: Error) => void; timeout: ReturnType<typeof setTimeout> }>()
+const forecastRequests = new Map<string, {
+  resolve: (value: BinanceKronosForecast) => void
+  reject: (error: Error) => void
+  timeout: ReturnType<typeof setTimeout>
+}>()
 let processHandle: ChildProcessByStdio<Writable, Readable, null> | undefined
 let startup: Promise<void> | undefined
 let installing = false
 let failed = false
 let ready = false
 
-/** Safe to expose in the viewer: no paths, secrets, subprocess logs or private holdings. */
+/** Safe to expose in the viewer: no paths, secrets, subprocess logs or private holdings.
+ * @returns Actual Kronos installation, process readiness and model size.
+ */
 export function binanceKronosStatus(): { state: BinanceKronosState; model: 'mini' | 'small'; available: boolean } {
   const available = existsSync(python) && existsSync(join(home, 'source', 'model')) && existsSync(runner)
   return {
@@ -44,7 +51,9 @@ export function binanceKronosStatus(): { state: BinanceKronosState; model: 'mini
   }
 }
 
-/** One explicit same-origin click installs only local Python/CPU dependencies. */
+/** One explicit same-origin click installs only local Python/CPU dependencies.
+ * @returns Install state, never evidence of a filled order.
+ */
 export function installBinanceKronos(): ReturnType<typeof binanceKronosStatus> {
   if (installing) return binanceKronosStatus()
   if (!existsSync(installer) || !existsSync(runner)) {
@@ -63,7 +72,7 @@ export function installBinanceKronos(): ReturnType<typeof binanceKronosStatus> {
     cwd: process.cwd(), env: process.env, stdio: 'ignore', windowsHide: true,
   })
   child.once('error', () => { installing = false; failed = true })
-  child.once('close', code => {
+  child.once('close', (code) => {
     installing = false
     failed = code !== 0
     if (code === 0) void ensureReady().catch(() => { /* model may need repair */ })
@@ -107,7 +116,7 @@ async function ensureReady(): Promise<void> {
       if (processHandle === child) processHandle = undefined
     }
     const rl = createInterface({ input: child.stdout })
-    rl.on('line', line => {
+    rl.on('line', (line) => {
       let message: Record<string, unknown>
       try { message = JSON.parse(line) as Record<string, unknown> } catch { return }
       if (!settled && message.ready === true) {
@@ -132,7 +141,12 @@ async function ensureReady(): Promise<void> {
   return startup
 }
 
-/** Entry-only decision support. A failure never becomes a BUY recommendation. */
+/** Entry-only decision support. A failure never becomes a BUY recommendation.
+ * @param symbol - Validated Binance Spot pair.
+ * @param bars - Closed, chronological, public OHLCV.
+ * @param interval - Binance candle interval.
+ * @returns Forecast evidence after model and timestamp verification.
+ */
 export async function forecastBinanceKronos(
   symbol: string, bars: readonly BinanceCandle[], interval: string,
 ): Promise<BinanceKronosForecast> {
@@ -142,7 +156,8 @@ export async function forecastBinanceKronos(
   const child = processHandle
   if (!ready || !child || !child.stdin.writable) throw new Error('Kronos unavailable')
   const id = randomUUID()
-  const latest = bars.at(-1)!.closeTime
+  const latest = bars[bars.length - 1]?.closeTime
+  if (latest === undefined) throw new Error('Kronos history missing')
   const payload = JSON.stringify({
     id, symbol, interval, candles: bars.map(c => ({
       closeTime: c.closeTime, open: c.open, high: c.high, low: c.low,
@@ -157,7 +172,7 @@ export async function forecastBinanceKronos(
       rejectForecast(new Error('Kronos forecast timeout'))
     }, 60_000)
     forecastRequests.set(id, { resolve: resolveForecast, reject: rejectForecast, timeout })
-    child.stdin.write(payload, error => {
+    child.stdin.write(payload, (error) => {
       if (error && forecastRequests.delete(id)) {
         clearTimeout(timeout)
         rejectForecast(new Error('Kronos worker input failure'))
