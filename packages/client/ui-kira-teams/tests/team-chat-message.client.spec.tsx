@@ -35,7 +35,8 @@ function node(data: Partial<KiraTeamMessageChatData> = {}): ChatNode<'kira-team-
       messageId: 'message-1',
       senderId: 'worker-a',
       senderName: 'la-forja',
-      targetId: 'root',
+      ...(data.senderKind === 'agent' && data.replyTo !== undefined && data.targetId === undefined
+        ? {} : { targetId: 'root' }),
       content: [{ type: 'text', text: 'Cambio listo.' }],
       time: 1,
       seq: 1,
@@ -253,7 +254,7 @@ describe('KIRA Team chat message', () => {
   it('addresses a real direct human reply to the user, not the internal team', () => {
     const view = render(<View node={node({
       senderId: 'worker-a', senderName: 'Senda', senderKind: 'agent',
-      targetId: undefined, replyTo: 'human-question',
+      replyTo: 'human-question',
       replyQuote: 'User: ¿Cómo quedó?',
       content: [{ type: 'text', text: 'La navegación ya responde.' }],
     })} />)
