@@ -141,7 +141,7 @@ export function apply(ctx: Context): void {
     async execute(args) {
       try { return JSON.stringify(await transcribeApprovedAudioFile(args.path)) }
       catch (error) { return JSON.stringify({ captureVerified: false, reason: String(error).slice(0, 240),
-        instruction: 'Archivo no transcrito; obtener autorizacion concreta para la carpeta o un archivo compatible, no inventar contenido.'}) }
+        instruction: 'Archivo no transcrito; obtener autorizacion concreta para la carpeta o un archivo compatible, no inventar contenido.' }) }
     },
     presentCall: () => ({ card: 'generic', title: 'Transcribir archivo de audio autorizado', kind: 'read' as const }),
   }))
