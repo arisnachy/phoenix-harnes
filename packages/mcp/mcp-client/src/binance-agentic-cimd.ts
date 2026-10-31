@@ -9,7 +9,11 @@
 export const PHOENIX_BINANCE_AGENTIC_CIMD_ID =
   'https://cdn.jsdelivr.net/gh/arisnachy/phoenix-harnes@main/website/public/oauth/binance-agentic-client.json'
 
-/** Only the exact pinned official server gets the CIMD identity. */
+/**
+ * Only the exact pinned official server gets the CIMD identity.
+ * @param config - MCP server transport and OAuth client configuration.
+ * @returns The public CIMD URL for the pinned server, otherwise undefined.
+ */
 export function binanceAgenticCimdClientId(config: {
   readonly transport: string
   readonly serverName: string

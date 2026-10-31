@@ -283,12 +283,20 @@ function managedCodexRuntime(homeOverride?: string): { bin: string; signature: s
   }
 }
 
-/** Stable runtime identity used to invalidate model caches after managed CLI activation. */
+/**
+ * Stable runtime identity used to invalidate model caches after managed CLI activation.
+ * @param homeOverride - Optional managed runtime home directory override.
+ * @returns Managed CLI activation signature, or system-path when not managed.
+ */
 export function codexRuntimeSignature(homeOverride?: string): string {
   return managedCodexRuntime(homeOverride)?.signature ?? 'system-path'
 }
 
-/** Start the same official Codex installation for model discovery and native auth. */
+/**
+ * Start the same official Codex installation for model discovery and native auth.
+ * @param signal - Optional abort signal to stop the discovery process.
+ * @returns Child process connected to the selected official Codex runtime.
+ */
 export function codexProcess(signal?: AbortSignal): ChildProcessWithoutNullStreams {
   const common = {
     cwd: process.cwd(),

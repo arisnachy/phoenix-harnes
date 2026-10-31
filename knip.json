@@ -147,10 +147,6 @@
       "project": [
         "src/**/*.ts",
         "src/**/*.tsx"
-      ],
-      "ignoreDependencies": [
-        "@types/react",
-        "react"
       ]
     },
     "packages/client/ui-directory-picker-browse": {
