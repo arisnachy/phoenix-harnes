@@ -132,7 +132,7 @@ async function dpapi(mode: 'protect' | 'unprotect', body: string, origin: string
       child.kill()
       finish(new Error('La bóveda no respondió'))
     }, 12_000)
-    child.on('error', () => finish(new Error('La bóveda no está disponible')))
+    child.on('error', () => { finish(new Error('La bóveda no está disponible')) })
     child.stdout.on('data', (chunk: Buffer) => {
       result += chunk.toString('utf8')
       if (result.length > 65_536) {
@@ -174,7 +174,7 @@ Promise<{ login: LoginContent; automatic: boolean } | undefined> {
 async function load(origin: string, profile: LoginProfile = 'personal'): Promise<LoginRecord | undefined> {
   try {
     const row = JSON.parse(await readFile(filename(origin, profile), 'utf8')) as LoginRecord
-    if (row.version !== 1 || row.origin !== origin || typeof row.sealed !== 'string'
+    if ((row as { version?: unknown }).version !== 1 || row.origin !== origin || typeof row.sealed !== 'string'
       || !row.sealed || typeof row.automatic !== 'boolean') {
       throw new Error('Registro de acceso dañado')
     }
@@ -550,8 +550,8 @@ async function inspectLoginGate(tab: BrowserTab, action: 'inspect' | 'open' = 'i
       else if (value) resolve(value)
       else reject(new Error('La inspección segura no devolvió un estado'))
     }
-    const timer = setTimeout(() => finish(undefined, new Error('Chrome no respondió al acceso seguro')), 5_000)
-    ws.addEventListener('error', () => finish(undefined, new Error('Conexión segura con Chrome no disponible')))
+    const timer = setTimeout(() => { finish(undefined, new Error('Chrome no respondió al acceso seguro')) }, 5_000)
+    ws.addEventListener('error', () => { finish(undefined, new Error('Conexión segura con Chrome no disponible')) })
     ws.addEventListener('open', () => {
       try { ws.send(JSON.stringify({ id: 1, method: 'Runtime.evaluate',
         params: { expression: loginGateExpression(action), returnByValue: true } }))
@@ -658,8 +658,8 @@ async function injectLogin(tab: BrowserTab, login: LoginContent): Promise<string
       if (error) reject(error)
       else resolve(status ?? 'failed')
     }
-    const timer = setTimeout(() => finish(new Error('Chrome no respondió')), 12_000)
-    ws.addEventListener('error', () => finish(new Error('Conexión segura con Chrome fallida')))
+    const timer = setTimeout(() => { finish(new Error('Chrome no respondió')) }, 12_000)
+    ws.addEventListener('error', () => { finish(new Error('Conexión segura con Chrome fallida')) })
     ws.addEventListener('open', () => {
       ws.send(JSON.stringify({
         id: 1, method: 'Runtime.evaluate',
@@ -674,7 +674,7 @@ async function injectLogin(tab: BrowserTab, login: LoginContent): Promise<string
           result?: { exceptionDetails?: unknown; result?: { value?: unknown } }
         }
         if (data.id !== 1) return
-        if (data.error || data.result?.exceptionDetails) return finish(new Error('El formulario rechazó el inicio de sesión'))
+        if (data.error || data.result?.exceptionDetails) { finish(new Error('El formulario rechazó el inicio de sesión')); return }
         const value = data.result?.result?.value
         finish(undefined, typeof value === 'string' ? value : 'failed')
       } catch { finish(new Error('Respuesta inválida de Chrome')) }
