@@ -34,6 +34,7 @@ export function apply(ctx: ClientContext): void {
   const scope = ctx.settingsScope.bind<UserProfileSettings>({ namespace: USER_PROFILE_SETTINGS_NAMESPACE })
   const form = new UserProfileForm(scope)
   ctx.effect(() => () => { form.dispose() }, 'ui-settings-profile: form')
+  const connection = ctx.get('connection') as { rpc: Parameters<typeof transformAvatarThroughCodex>[1] }
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section',
     id: 'profile',
@@ -42,7 +43,7 @@ export function apply(ctx: ClientContext): void {
     locale: SETTINGS_NS,
     inject: () => ({
       ...form.inject(),
-      transformAvatar: (photo: Blob) => transformAvatarThroughCodex(photo, ctx.connection.rpc),
+      transformAvatar: (photo: Blob) => transformAvatarThroughCodex(photo, connection.rpc),
     }),
   }, UserProfileRow))
 }
