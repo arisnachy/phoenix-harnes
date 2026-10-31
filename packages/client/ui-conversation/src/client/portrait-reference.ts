@@ -20,7 +20,7 @@ export function isSelfImageRequest(text: string): boolean {
 /** Explain that the real source photo was already attached so Kira calls image_generation instead of asking again. */
 export function messageWithProfileReference(text: string, attached: boolean): string {
   if (!attached) return text
-  return text + '\\n\\n[PHOENIX: Ya adjunté la fotografía REAL del perfil con autorización del usuario. '
+  return text + '\n\n[PHOENIX: Ya adjunté la fotografía REAL del perfil con autorización del usuario. '
     + 'La imagen está disponible en este turno como referencia-original-del-usuario.webp. '
     + 'Usa la herramienta image_generation con la fotografía como entrada visual. '
     + 'NO pidas otra foto ni generes SVG o sustitutos textuales; si falla, informa el error real.]'
