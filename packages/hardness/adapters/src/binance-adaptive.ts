@@ -234,7 +234,7 @@ export async function runBinanceAdaptiveCycle(
     const sorted = [...signals].sort((a, b) => b.score - a.score || a.symbol.localeCompare(b.symbol))
     // Enforce registered exit plans using fresh broker marks even when
     // today's watchlist no longer contains an existing open position.
-    const exits = account.positions.flatMap(position => {
+    const exits = account.positions.flatMap((position) => {
       const plan = position.exitPlan
       const mark = position.marketPriceUsdt
       if (plan === undefined) return []
@@ -281,8 +281,7 @@ export async function runBinanceAdaptiveCycle(
       }
       if (signal.score < MIN_AUTONOMOUS_SCORE) return {
         symbol: signal.symbol, status: 'watch' as const,
-        explanation: 'Puntuación ' + signal.score + '/100 inferior al mínimo autónomo de '
-          + MIN_AUTONOMOUS_SCORE + '/100',
+        explanation: `Puntuación ${signal.score}/100 inferior al mínimo autónomo de ${MIN_AUTONOMOUS_SCORE}/100`,
       }
       if (mode === 'scan') return {
         symbol: signal.symbol, status: 'scan-only' as const,
@@ -298,7 +297,7 @@ export async function runBinanceAdaptiveCycle(
       }
       if (account.positions.length >= MAX_OPEN_POSITIONS) return {
         symbol: signal.symbol, status: 'blocked' as const,
-        explanation: 'Límite de ' + MAX_OPEN_POSITIONS + ' posiciones simultáneas',
+        explanation: `Límite de ${MAX_OPEN_POSITIONS} posiciones simultáneas`,
       }
       if (budget < 10) return {
         symbol: signal.symbol, status: 'blocked' as const,
@@ -334,7 +333,8 @@ export async function runBinanceAdaptiveCycle(
     const defensive = sorted.find(signal => signal.action === 'sell'
       && account.positions.some(position => position.symbol === signal.symbol))
     if (defensive !== undefined) {
-      const position = account.positions.find(item => item.symbol === defensive.symbol)!
+      const position = account.positions.find(item => item.symbol === defensive.symbol)
+      if (position === undefined) throw new Error('Defensive position could not be verified')
       const result = await broker.order({
         symbol: position.symbol, side: 'sell', quantity: position.quantity,
         strategyId: 'adaptive-defensive-v1', reason: defensive.reason,
@@ -349,7 +349,7 @@ export async function runBinanceAdaptiveCycle(
       && account.positions.length < MAX_OPEN_POSITIONS && account.maxDrawdownPct < 5) {
       const rejectForecast = (rationale: string, status: 'rejected' | 'unavailable'): BinanceAdaptiveCycle => ({
         mode, interval, signals: sorted,
-        execution: executionFor('hold').map(row => row.symbol === candidate.symbol
+        execution: executionFor('hold').map((row) => row.symbol === candidate.symbol
           ? { ...row, status: 'blocked' as const, explanation: rationale } : row),
         decision: 'hold', rationale, account,
         ...(forecast === undefined ? {} : { forecast }),
@@ -363,7 +363,7 @@ export async function runBinanceAdaptiveCycle(
           return rejectForecast('Kronos: faltan velas cerradas y recientes; entrada omitida', 'unavailable')
         }
         forecast = await request.predictor(candidate.symbol, history, interval)
-        if (forecast.source !== 'kronos' || forecast.symbol !== candidate.symbol
+        if (forecast.symbol !== candidate.symbol
           || forecast.interval !== interval || forecast.forecastAt !== last.closeTime
           || !Number.isFinite(forecast.projectedReturnPct) || !Number.isFinite(forecast.maxDownsidePct)
           || !Number.isFinite(forecast.baseClose) || forecast.baseClose <= 0
@@ -396,9 +396,9 @@ export async function runBinanceAdaptiveCycle(
         trade: result.trade, account: result.account }
     }
     const why = candidate === undefined
-      ? 'Ninguna señal de compra supera el mínimo de ' + MIN_AUTONOMOUS_SCORE + '/100 sin posición existente'
+      ? `Ninguna señal de compra supera el mínimo de ${MIN_AUTONOMOUS_SCORE}/100 sin posición existente`
       : account.positions.length >= MAX_OPEN_POSITIONS
-        ? 'Bloqueada: ya hay ' + MAX_OPEN_POSITIONS + ' posiciones abiertas'
+        ? `Bloqueada: ya hay ${MAX_OPEN_POSITIONS} posiciones abiertas`
         : account.maxDrawdownPct >= 5
           ? 'Bloqueada: drawdown máximo de 5% alcanzado'
           : budget < 10
