@@ -48,7 +48,7 @@ export interface TradingDashboardSnapshot {
   readonly phase: 'running' | 'stopped' | 'error'
   readonly enabled: boolean
   readonly settings: { readonly symbols: readonly string[]; readonly interval: string; readonly pollMs: number;
-    readonly autoDiscover?: boolean }
+    readonly autoDiscover?: boolean; readonly predictionEnabled?: boolean }
   readonly account: {
     readonly equityUsdt: number
     readonly cashUsdt: number
@@ -58,6 +58,13 @@ export interface TradingDashboardSnapshot {
     readonly tradeCount: number
     readonly positions: readonly TradingPosition[]
   }
+  readonly predictor?: { readonly state: 'not-installed' | 'installed' | 'installing' | 'loading' | 'ready' | 'error';
+    readonly model: 'mini' | 'small'; readonly available: boolean }
+  readonly forecast?: { readonly source: 'kronos'; readonly model: 'mini' | 'small';
+    readonly symbol: string; readonly interval: string; readonly horizonBars: number;
+    readonly baseClose: number; readonly projectedClose: number;
+    readonly projectedReturnPct: number; readonly maxDownsidePct: number; readonly forecastAt: number }
+  readonly forecastStatus?: 'accepted' | 'rejected' | 'unavailable'
   readonly signals: readonly TradingSignal[]
   readonly execution?: readonly TradingSignalExecution[]
   readonly recentTrades: readonly TradingTrade[]
@@ -115,6 +122,7 @@ export function parseTradingDashboard(value: unknown): TradingDashboardSnapshot 
   if (account === undefined || settings === undefined
     || !Array.isArray(settings.symbols) || settings.symbols.length > 12
     || (settings.autoDiscover !== undefined && typeof settings.autoDiscover !== 'boolean')
+    || (settings.predictionEnabled !== undefined && typeof settings.predictionEnabled !== 'boolean')
     || !settings.symbols.every(s => typeof s === 'string' && /^[A-Z0-9]{3,16}USDT$/u.test(s))
     || typeof settings.interval !== 'string' || !finite(settings.pollMs)
     || !['equityUsdt', 'cashUsdt', 'totalPnlUsdt', 'totalReturnPct', 'maxDrawdownPct', 'tradeCount']
@@ -132,6 +140,20 @@ export function parseTradingDashboard(value: unknown): TradingDashboardSnapshot 
     || root.lastDiscoveryIssue !== undefined && (
       typeof root.lastDiscoveryIssue !== 'string' || root.lastDiscoveryIssue.length > 300
     )) return undefined
+  if (root.predictor !== undefined) {
+    const predictor = record(root.predictor)
+    if (!predictor || !['not-installed', 'installed', 'installing', 'loading', 'ready', 'error'].includes(String(predictor.state))
+      || !['mini', 'small'].includes(String(predictor.model)) || typeof predictor.available !== 'boolean') return undefined
+  }
+  if (root.forecast !== undefined) {
+    const forecast = record(root.forecast)
+    if (!forecast || forecast.source !== 'kronos' || !['mini', 'small'].includes(String(forecast.model))
+      || typeof forecast.symbol !== 'string' || !/^[A-Z0-9]{3,16}USDT$/u.test(forecast.symbol)
+      || typeof forecast.interval !== 'string' || !['15m', '1h', '4h', '1d'].includes(forecast.interval)
+      || forecast.horizonBars !== 6 || !['baseClose', 'projectedClose', 'projectedReturnPct', 'maxDownsidePct', 'forecastAt']
+        .every(key => finite(forecast[key]))) return undefined
+  }
+  if (root.forecastStatus !== undefined && !['accepted', 'rejected', 'unavailable'].includes(String(root.forecastStatus))) return undefined
   const positions = account.positions.map(record)
   if (positions.some(p => p === undefined || typeof p.symbol !== 'string'
     || !finite(p.quantity) || !finite(p.marketValueUsdt) || !finite(p.unrealizedPnlUsdt)
