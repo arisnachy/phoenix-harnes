@@ -8,7 +8,11 @@ const rows=(x:unknown):Obj[]=>Array.isArray(x)?x.filter(v=>v!==null&&typeof v===
 const txt=(v:unknown,n=200):string=>(typeof v==='string'||typeof v==='number'
   ?String(v).replace(/[\u0000-\u001f]/gu,' ').trim().slice(0,n):'')
 export type EspnPlay={id:string;text:string;clock?:string;period?:string;team?:string;score?:string}
-/** Use actual provider descriptions only; preserve event chronology and deduplicate IDs. */
+/**
+ * Use actual provider descriptions only; preserve event chronology and deduplicate IDs.
+ * @param input - Untrusted ESPN summary data.
+ * @returns Deduplicated provider events, newest first.
+ */
 export function parseEspnGamePlays(input:unknown):EspnPlay[]{
   const root=obj(input),plays=rows(root.plays),scores=rows(root.scoringPlays)
   const source=plays.length?plays:scores.length?scores:rows(root.keyEvents)
@@ -30,8 +34,14 @@ export function parseEspnGamePlays(input:unknown):EspnPlay[]{
 }
 type Snapshot={url:string;plays:EspnPlay[];at:number;error:boolean;loading:boolean}
 const empty:Snapshot={url:'',plays:[],at:0,error:false,loading:false}
+/**
+ * Show in-chat, on-demand ESPN play-by-play for one verified event.
+ * @param props - ESPN sport, league, identifier, phase and observed scoreboard entry.
+ * @returns A compact opt-in game timeline or null for unsupported identifiers.
+ */
 export function SportsGameCenter({sport,league,eventId,phase,game}:{
-  sport?:string;league?:string;eventId?:string;phase?:'pre'|'in'|'post';game?:PhoenixLiveGame
+  sport?:string|undefined;league?:string|undefined;eventId?:string|undefined;
+  phase?:'pre'|'in'|'post'|undefined;game?:PhoenixLiveGame|undefined
 }):ReactNode{
   const [open,setOpen]=useState(false),[state,setState]=useState<Snapshot>(empty)
   // MLB Stats gamePk and ESPN eventId differ: only use a confirmed ESPN ID for MLB.

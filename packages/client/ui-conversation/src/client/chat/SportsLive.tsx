@@ -37,7 +37,13 @@ export function espnLiveUrl(sport?:string,league?:string,date?:string):string|nu
   if(new Date(date+'T00:00:00Z').toISOString().slice(0,10)!==date)return null
   return 'https://site.api.espn.com/apis/site/v2/sports/'+sport+'/'+slug+'/scoreboard?dates='+date.replaceAll('-','')
 }
-/** Validate host, sport, league and event ID before requesting an ESPN game summary. */
+/**
+ * Validate host, sport, league and event ID before requesting an ESPN game summary.
+ * @param sport - Valid ESPN sport slug.
+ * @param league - Known league name or validated ESPN slug.
+ * @param eventId - Numeric ESPN event identifier.
+ * @returns Pinned ESPN summary URL or null for unsafe inputs.
+ */
 export function espnLiveSummaryUrl(sport?:string,league?:string,eventId?:string):string|null{
   if(!eventId||!/^\d{1,18}$/u.test(eventId))return null
   const board=espnLiveUrl(sport,league,'2026-01-01')
