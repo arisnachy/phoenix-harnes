@@ -455,3 +455,22 @@
   color: var(--dsw-alias-label-primary);
   font-weight: 600;
 }
+
+/* Photo belongs to the human author, never to a Kira agent or model badge. */
+.userRow { position: relative; padding-right: 43px; }
+.userAvatar {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: flex;
+  width: 34px;
+  height: 34px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--dsw-alias-bg-layer-3);
+  color: var(--dsw-alias-label-secondary);
+}
+.userAvatar img { width: 100%; height: 100%; object-fit: cover; }
