@@ -50,7 +50,11 @@ export function installBinanceKronos(): ReturnType<typeof binanceKronosStatus> {
     failed = true
     return binanceKronosStatus()
   }
-  if (binanceKronosStatus().available) return binanceKronosStatus()
+  if (binanceKronosStatus().available) {
+    // Retry a failed model load without reinstalling a healthy venv.
+    failed = false
+    return binanceKronosStatus()
+  }
   installing = true
   failed = false
   const child = spawn(process.execPath, [installer], {
