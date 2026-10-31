@@ -9,6 +9,8 @@
 服务将直属子代理真实生成的文本发布到根会话，排除继承历史、替换输出、推理和工具内容。`teamChatParticipants` 在任务完成后仍保留任务所属的名称、头像和运行状态。文本发布及 Unicode 表情的添加和移除不会唤醒模型。反应投影版本 2 在恢复版本 1 的 checkpoint 时，将历史 Team 语义反应重放到统一表情流中，保留 Lead 或 teammate 的反应者身份。 明确描述首个待执行动作的更新可在执行凭据之前显示，但不代表结果或任务完成。操作完成声明仍需执行凭据。新成员在真实任务中直接收到此启动指导；表情确认是可选的。
 
 生成的 `chatMessages`、`chatReact` 和 `chatReply` 远程方法使用准确的根会话及消息身份。回复针对已有的可继续直属子代理，保留引用上下文，只发布一条用户消息，并持久化每个目标的接收记录。重试保留 `requestId`；`queued` 区分待发送状态。根会话恢复时重试待发送消息及监督上下文。模型读取共同受一个配置的 `maxMessageBytes` 预算约束。参见[会话契约](../../../docs/subsystems/agent-team.zh.md#main-conversation)及[所有权决策](../../../.agents/notes/implemented/feature/2026-10-01-kira-main-chat.zh.md)。
+当前任务所属参与者的持久状态若为 `working`、`running` 或 `provisioning`，即使 Lead 模型回合结束或口头声称完成，也会阻止自动关闭任务。后续 `done` 或 `failed` 记录解除这一状态限制，其他任务、目标和执行证据要求仍然有效。Kira 面向用户的报告应使用真实名单中的专家姓名，区分交付承诺与已验证交接；措辞要求不能取代工具执行凭据。
+
 ## 配置
 
 ```yaml

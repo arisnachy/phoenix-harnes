@@ -45,3 +45,6 @@
 .referenceOption strong{font-size:13px;line-height:19px}
 .referenceOption small{font-size:12px;line-height:19px;color:var(--dsw-alias-label-secondary)}
 @media(max-width:520px){.panel{padding:14px}.actions button,.transform button{width:100%}.transform .actions{flex-direction:column;align-items:stretch}}
+
+.candidate{display:flex;flex-direction:column;align-items:flex-start;gap:10px}
+.candidate img{width:148px;height:148px;object-fit:cover;border-radius:50%;border:2px solid var(--dsw-alias-brand-primary)}
