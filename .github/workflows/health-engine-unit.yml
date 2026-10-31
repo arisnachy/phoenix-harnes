@@ -5,6 +5,7 @@ on:
       - 'packages/core/tool-health/**'
       - 'packages/bundle/web-app/src/health-*.ts'
       - 'packages/bundle/web-app/tests/health-*.test.mjs'
+      - 'packages/bundle/web-app/tests/health-*.spec.ts'
       - 'packages/bundle/web-app/package.json'
       - 'pnpm-lock.yaml'
       - '.github/workflows/health-engine-unit.yml'
@@ -41,3 +42,5 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Verify clinical copilot through actual ASK service
         run: pnpm exec vitest run packages/core/tool-health/tests/clinical-copilot-ask.spec.ts
+      - name: Verify protected local interview pathways and fail-closed inputs
+        run: pnpm exec vitest run packages/bundle/web-app/tests/health-interview.spec.ts
