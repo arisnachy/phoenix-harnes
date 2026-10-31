@@ -2975,6 +2975,9 @@ importers:
       '@phoenix-ai/dsh-client-runtime':
         specifier: workspace:^
         version: link:../runtime
+      '@phoenix-ai/dsh-client-ui-layout':
+        specifier: workspace:^
+        version: link:../ui-layout
       '@phoenix-ai/dsh-client-ui-settings':
         specifier: workspace:^
         version: link:../ui-settings
