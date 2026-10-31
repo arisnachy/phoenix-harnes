@@ -38,6 +38,20 @@ describe('published PHOENIX versions', () => {
       publishedAt: '2026-10-31T16:05:37Z',
       prNumber: 1271,
     }])
+    const githubMerge = {
+      ...release,
+      sha: 'f'.repeat(40),
+      commit: {
+        message: 'Merge pull request #1256 from arisnachy/feature/the-odds-api-key-connector-20261030\n\nfeat(connectors): Secure The Odds API v4 key setup',
+        committer: { date: '2026-10-31T16:10:11Z' },
+      },
+    }
+    expect(parsePhoenixVersionHistory([githubMerge])[0]).toMatchObject({
+      sha: 'f'.repeat(40),
+      prNumber: 1256,
+      summary: 'feat(connectors): Secure The Odds API v4 key setup',
+    })
+
     expect(parsePhoenixVersionHistory('not an API array')).toEqual([])
     expect(parsePhoenixVersionHistory([{
       ...release,
