@@ -11,8 +11,8 @@
  */
 
 import { randomUUID } from 'node:crypto'
-import { lstat, mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises'
-import { homedir } from 'node:os'
+import { lstat, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { homedir, tmpdir } from 'node:os'
 import { basename, dirname, extname, join, resolve } from 'node:path'
 import type { Context } from '@phoenix-ai/cordis'
 import type { AttachmentStore, ImageAttachmentRef, ImageMediaType } from '@phoenix-ai/dsh-attachment'
@@ -856,6 +856,7 @@ function generationPrompt(
   size: string,
   quality: string,
   background: string,
+  referencePath?: string,
 ): string {
   return [
     'You are the PHOENIX image worker.',
@@ -869,6 +870,12 @@ function generationPrompt(
     `Requested quality guidance: ${quality}.`,
     `Requested background guidance: ${background}.`,
     `Image request: ${highQualityPrompt(prompt)}`,
+    ...(referencePath === undefined ? [] : [
+      `MANDATORY source photograph: ${referencePath}`,
+      'Read and visually inspect this exact input photograph, then supply it as the image reference to the built-in image_gen tool.',
+      'This is an IMAGE EDIT, not a text-to-image generation. Preserve the recognizable face, skin tone and age of this exact individual.',
+      'If you cannot read and provide the source photograph to the image tool, STOP: do not invent a different person or fabricate success.',
+    ]),
     'After the image tool finishes, end the task.',
   ].join('\n')
 }
@@ -966,6 +973,7 @@ async function generateWithCodexProvider(
   args: ImageGenerationArgs,
   prompt: string,
   signal: AbortSignal,
+  referencePath?: string,
 ): Promise<ImageGenerationValue> {
   await probeCodexImagePosture(ctx, signal)
   const generatedRoot = join(codexHome(), 'generated_images')
@@ -989,6 +997,7 @@ async function generateWithCodexProvider(
       args.size ?? 'auto',
       args.quality ?? 'auto',
       args.background ?? 'auto',
+      referencePath,
     ), signal)
   } catch (error) {
     signal.throwIfAborted()
@@ -1021,6 +1030,74 @@ async function generateWithCodexProvider(
     path: generated.path,
     attachment,
   }
+}
+
+/** Channel shape injected by the Host connection plugin; no transport import at runtime. */
+interface AvatarConnection {
+  rpc: {
+    handle(
+      channel: string,
+      handler: (endpoint: string, payload: unknown, signal: AbortSignal) => Promise<unknown>,
+      options: { authority: 'loopback' },
+    ): () => Promise<void>
+  }
+}
+
+/** Bound, same-origin RPC for a private, user-initiated profile portrait edit. */
+export function installCodexAvatarTransform(ctx: Context): void {
+  const connection = (ctx as unknown as { connection: AvatarConnection }).connection
+  connection.rpc.handle('/avatar', async (endpoint, payload, signal) => {
+    if (endpoint !== 'transform') {
+      return { ok: false, error: { code: 'bad-request', message: 'Unknown avatar operation', details: { issues: [] } } }
+    }
+    if (typeof payload !== 'object' || payload === null || !('image' in payload)
+      || typeof payload.image !== 'string') {
+      return { ok: false, error: { code: 'bad-request', message: 'A saved original photo is required', details: { issues: [] } } }
+    }
+    const encoded = payload.image
+    // 8 MiB normalized input limit; validation happens BEFORE allocating a file or calling Codex.
+    if (encoded.length === 0 || encoded.length > Math.ceil(8 * 1024 * 1024 * 4 / 3) + 4
+      || !/^[a-zA-Z0-9+/]+={0,2}$/u.test(encoded)) {
+      return { ok: false, error: { code: 'bad-request', message: 'Invalid portrait encoding or size', details: { issues: [] } } }
+    }
+    const data = Buffer.from(encoded, 'base64')
+    if (data.length === 0 || data.length > 8 * 1024 * 1024 || imageMediaTypeFromBytes(data) !== 'image/webp') {
+      return { ok: false, error: { code: 'bad-request', message: 'Expected one normalized WebP photo', details: { issues: [] } } }
+    }
+    const directory = await mkdtemp(join(tmpdir(), 'phoenix-codex-avatar-'))
+    try {
+      const source = join(directory, 'user-original.webp')
+      await writeFile(source, data, { flag: 'wx' })
+      const prompt = [
+        'Edit the person in the attached source photo into a PHOENIX/Kira-team premium semi-realistic portrait.',
+        'Warm, soft cinematic amber lighting; polished editorial illustration; harmonious with the team avatar.',
+        'Keep the same recognizable individual, facial geometry, age, natural skin tone, hairstyle and expression.',
+        'Centered head-and-shoulders composition for a circular profile crop. No text, badge, watermark or logo.',
+        'Do not replace the person with an imagined person. Use the real photograph as the image-edit reference.',
+      ].join(' ')
+      const result = await generateWithCodexProvider(
+        ctx, { prompt, size: '1024x1024', quality: 'high' }, prompt, signal, source,
+      )
+      const stored = await servicesOf(ctx).attachments.readImage(result.attachment, signal)
+      if (stored.data.length === 0 || stored.data.length > 15 * 1024 * 1024) {
+        throw new Error('El editor de Codex devolvió un retrato demasiado grande.')
+      }
+      return {
+        ok: true,
+        value: {
+          provider: 'codex',
+          image: stored.data.toString('base64'),
+          mediaType: stored.ref.mediaType,
+        },
+      }
+    } catch (cause) {
+      signal.throwIfAborted()
+      const diagnostic = cause instanceof Error ? cause.message : 'Error al transformar el retrato'
+      return { ok: false, error: { code: 'internal', message: diagnostic.slice(0,900), details: {} } }
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  }, { authority: 'loopback' })
 }
 
 /**

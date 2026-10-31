@@ -12,7 +12,7 @@ import type {} from '@phoenix-ai/dsh-client-ui-settings/client'
 export type UserProfileRowProps =
   PropsRuntime<'settings.section'>
   & PropsLocale<'settings.profile'>
-  & InjectFace<UserProfileRowFace>
+  & InjectFace<UserProfileRowFace & { transformAvatar: (photo: Blob) => Promise<Blob> }>
 
 const CONSENT_FIELDS = [
   ['dateOfBirth', 'consentAge'],
@@ -78,7 +78,7 @@ export function UserProfileRow(props: UserProfileRowProps) {
         </div>
       </div>
 
-      <AvatarPanel />
+      <AvatarPanel transformAvatar={props.transformAvatar} />
 
       <div className={css.group}>
         <h3 className={css.groupTitle}>{t('aboutYouSection')}</h3>

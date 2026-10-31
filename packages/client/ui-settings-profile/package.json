@@ -2,7 +2,9 @@
   "name": "@phoenix-ai/dsh-client-ui-settings-profile",
   "description": "Top-level durable Phoenix identity and private user-profile settings",
   "version": "0.1.1-rc.2",
-  "publishConfig": { "access": "public" },
+  "publishConfig": {
+    "access": "public"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/arisnachy/phoenix-harnes.git",
@@ -12,15 +14,25 @@
   "main": "lib/index.js",
   "types": "lib/types/index.d.ts",
   "exports": {
-    ".": { "types": "./lib/types/index.d.ts", "default": "./lib/index.js" },
-    "./invariant": { "types": "./lib/types/invariant.d.ts", "default": "./lib/invariant.js" },
-    "./client": { "types": "./lib/types/client/index.d.ts", "default": "./lib/client.js" },
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./invariant": {
+      "types": "./lib/types/invariant.d.ts",
+      "default": "./lib/invariant.js"
+    },
+    "./client": {
+      "types": "./lib/types/client/index.d.ts",
+      "default": "./lib/client.js"
+    },
     "./src/*": "./src/*",
     "./package.json": "./package.json"
   },
   "dsh": {
     "client": {
       "inject": [
+        "@phoenix-ai/dsh-client-connection",
         "@phoenix-ai/dsh-client-locale",
         "@phoenix-ai/dsh-client-runtime",
         "@phoenix-ai/dsh-client-ui-settings"
@@ -28,14 +40,18 @@
       "platform": "web"
     }
   },
-  "scripts": { "bundle": "tsdown", "watch": "tsdown --watch" },
+  "scripts": {
+    "bundle": "tsdown",
+    "watch": "tsdown --watch"
+  },
   "license": "MIT",
   "peerDependencies": {
     "@phoenix-ai/cordis": "workspace:^",
     "@phoenix-ai/dsh-client-locale": "workspace:^",
     "@phoenix-ai/dsh-client-runtime": "workspace:^",
     "@phoenix-ai/dsh-client-ui-settings": "workspace:^",
-    "@phoenix-ai/dsh-invariants": "workspace:^"
+    "@phoenix-ai/dsh-invariants": "workspace:^",
+    "@phoenix-ai/dsh-client-connection": "workspace:^"
   },
   "devDependencies": {
     "@phoenix-ai/cordis": "workspace:^",
@@ -45,7 +61,13 @@
     "@phoenix-ai/dsh-client-ui-slots": "workspace:^",
     "@phoenix-ai/dsh-invariants": "workspace:^",
     "@types/react": "~18.3.1",
-    "react": "^18.2.0"
+    "react": "^18.2.0",
+    "@phoenix-ai/dsh-client-connection": "workspace:^"
   },
-  "files": ["lib/index.js", "lib/invariant.js", "lib/client.js", "lib/types/**/*.d.ts"]
+  "files": [
+    "lib/index.js",
+    "lib/invariant.js",
+    "lib/client.js",
+    "lib/types/**/*.d.ts"
+  ]
 }
