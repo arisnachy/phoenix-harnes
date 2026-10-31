@@ -81,7 +81,7 @@ describe('published PHOENIX versions', () => {
     await waitFor(() => { expect(screen.getAllByText('bbbbbbbbbbbb').length).toBeGreaterThan(0) })
     expect(screen.getByText('cccccccccccc')).toBeTruthy()
     expect(await screen.findByText('feat(profile): coherencia del avatar y fotografía original')).toBeTruthy()
-    expect(screen.getByText('Differs from verified local version')).toBeTruthy()
+    expect(screen.getByText(/Differs from verified local version/u)).toBeTruthy()
     expect(screen.queryByText('fix(profile): work in progress')).toBeNull()
     expect(fetchMock).toHaveBeenCalledWith(
       'https://api.github.com/repos/arisnachy/phoenix-harnes/commits?sha=stable&per_page=100',
