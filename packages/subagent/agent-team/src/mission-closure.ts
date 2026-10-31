@@ -83,8 +83,26 @@ export function unfinishedMissionTeamTasks(events: readonly SessionEvent[]): boo
  * @param events - Lead session events.
  * @returns Whether the current mission has remaining authorized work.
  */
+/** A worker still doing its assignment prevents premature model-turn closure.
+ * Read only mission-owned durable participant statuses; model text cannot mark work finished.
+ * @param events - Current Lead Session events.
+ * @returns Whether a child currently has an active nonterminal work receipt.
+ */
+export function unfinishedMissionTeamMembers(events: readonly SessionEvent[]): boolean {
+  const statuses = new Map<string, string>()
+  for (const event of events.slice(missionBoundary(events) + 1)) {
+    if (event.type !== 'team/chat-participant' || event.data.version !== 1) continue
+    const participant = event.data.participant
+    if (participant.missionId === undefined) continue
+    statuses.set(participant.id, participant.status)
+  }
+  return [...statuses.values()].some(status => ['working', 'running', 'provisioning'].includes(status))
+}
+
+/** Unfinished goals, checklists, Team tasks and actual working teammates remain work. */
 export function unfinishedMissionWork(events: readonly SessionEvent[]): boolean {
-  return unfinishedMissionGoal(events) || unfinishedMissionTodos(events) || unfinishedMissionTeamTasks(events)
+  return unfinishedMissionGoal(events) || unfinishedMissionTodos(events)
+    || unfinishedMissionTeamTasks(events) || unfinishedMissionTeamMembers(events)
 }
 
 /**

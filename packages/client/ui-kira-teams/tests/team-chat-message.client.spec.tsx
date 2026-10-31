@@ -250,6 +250,19 @@ describe('KIRA Team chat message', () => {
     expect(view.getByText('Para Argo')).toBeTruthy()
   })
 
+  it('addresses a real direct human reply to the user, not the internal team', () => {
+    const view = render(<View node={node({
+      senderId: 'worker-a', senderName: 'Senda', senderKind: 'agent',
+      targetId: undefined, replyTo: 'human-question',
+      replyQuote: 'User: ¿Cómo quedó?',
+      content: [{ type: 'text', text: 'La navegación ya responde.' }],
+    })} />)
+    expect(view.getByText('Senda')).toBeTruthy()
+    expect(view.getByText('Para ti')).toBeTruthy()
+    expect(view.queryByText('Equipo interno')).toBeNull()
+    expect(view.container.querySelector('[data-team-audience="user"]')).toBeTruthy()
+  })
+
   it('recovers the recipient of actual peer-to-lead speech from mission metadata', () => {
     const view = render(<View node={node({
       senderId: 'worker-a', senderName: 'lyra', senderKind: 'agent',

@@ -151,7 +151,11 @@ export const KiraTeamMessageView = memo(function KiraTeamMessageView({
     ?? (data.missionId !== undefined && data.targetId === data.missionId
       && data.senderKind === 'agent' ? 'Kira' : participants[data.targetId]?.name)
   const target = targetName === undefined ? undefined : identityFor(targetName, data.targetId)
-  const audience = data.senderKind === 'user' ? 'user' : 'internal'
+  // Direct child replies to a human question carry replyTo without an agent target.
+  // Never label them "Equipo interno"; all other directed peer speech stays internal.
+  const audience = data.senderKind === 'user'
+    || (data.senderKind === 'agent' && data.replyTo !== undefined && data.targetId === undefined)
+    ? 'user' : 'internal'
   const senderStatus = participants[data.senderId]?.status
   const targetStatus = data.purpose === 'assignment'
     ? participants[data.targetId]?.status
@@ -209,8 +213,10 @@ export const KiraTeamMessageView = memo(function KiraTeamMessageView({
               <span className={css.purpose} data-purpose={data.purpose}>{PURPOSE_LABEL[data.purpose]}</span>
             )}
             {data.senderKind !== 'user' && (
-              <span className={css.audience} data-team-audience="internal">
-                {t?.('chat.internal') ?? 'Equipo interno'}
+              <span className={css.audience} data-team-audience={audience}>
+                {audience === 'user'
+                  ? t?.('chat.forYou') ?? 'Para ti'
+                  : t?.('chat.internal') ?? 'Equipo interno'}
               </span>
             )}
             {target !== undefined && (
