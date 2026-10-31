@@ -9,14 +9,8 @@ const DATABASE = 'phoenix-user-portrait-v1'
 const EVENT = 'phoenix-user-portrait-changed'
 const MAX_UPLOAD = 8 * 1024 * 1024
 const MAX_RASTER = 15 * 1024 * 1024
-let channel: BroadcastChannel | undefined
-if (typeof window !== 'undefined' && typeof BroadcastChannel !== 'undefined') {
-  channel = new BroadcastChannel(EVENT)
-  channel.onmessage = () => { window.dispatchEvent(new Event(EVENT)) }
-}
 function announce(): void {
   if (typeof window !== 'undefined') window.dispatchEvent(new Event(EVENT))
-  channel?.postMessage('updated')
 }
 function db(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -92,7 +86,11 @@ export async function deleteAvatar(): Promise<void> { await write({ clear: true 
 export function subscribeAvatar(listener: () => void): () => void {
   if (typeof window === 'undefined') return () => {}
   window.addEventListener(EVENT, listener)
-  return () => { window.removeEventListener(EVENT, listener) }
+  window.addEventListener('focus', listener)
+  return () => {
+    window.removeEventListener(EVENT, listener)
+    window.removeEventListener('focus', listener)
+  }
 }
 function hasRasterSignature(b: Uint8Array): boolean {
   return (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff)
