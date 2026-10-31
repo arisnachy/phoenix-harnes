@@ -2,21 +2,13 @@
  * Secret never enters catalog, telemetry, model answers or stored connector configs.
  */
 import type {Context} from '@phoenix-ai/cordis'
+import type {OddsApiConnectorState} from './types.ts'
 import {credentialRef,type CredentialRef} from '@phoenix-ai/dsh-credentials'
 
 export const THE_ODDS_API_CREDENTIAL='THE_ODDS_API_KEY' as const
 const ENDPOINT='https://api.the-odds-api.com/v4/sports/'
 const KEY_FORMAT=/^[A-Za-z0-9_-]{16,128}$/u
 
-export interface OddsApiConnectorState {
-  configured:boolean
-  verified:boolean
-  source:'vault'|'environment'|'none'
-  status:'ready'|'unconfigured'|'invalid-key'|'unreachable'|'rate-limited'|'vault-unavailable'
-  requestsRemaining?:number
-  requestsUsed?:number
-  lastRequestCost?:number
-}
 type Credentials={
   resolve(ref:CredentialRef):Promise<{value:string}|undefined>
   set(ref:CredentialRef,value:string):Promise<void>
