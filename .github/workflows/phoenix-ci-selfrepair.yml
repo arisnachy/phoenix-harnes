@@ -1,0 +1,57 @@
+name: PHOENIX one-shot CI repair
+
+on:
+  push:
+    branches:
+      - fix/ci-general-repair-20261031
+
+permissions:
+  contents: write
+
+concurrency:
+  group: phoenix-ci-selfrepair
+  cancel-in-progress: false
+
+jobs:
+  selfrepair:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Apply repository lint autofixes
+        run: pnpm run lint:fix:contracts-ready
+      - name: Regenerate source-derived catalogs
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm run gen-cordis-catalog
+          pnpm run gen-client-catalog
+          pnpm run gen-config-catalog
+          pnpm run gen-tool-catalog
+          pnpm run gen-doc-graphs
+          pnpm run gen-module-graph
+          pnpm run gen-scoped-events
+          pnpm run gen-persistence-catalog
+          pnpm run gen-third-party-notices
+      - name: Review diff and commit generated repairs
+        shell: bash
+        run: |
+          set -euo pipefail
+          git status --short
+          git diff --stat
+          git add -u
+          if ! git diff --cached --quiet; then
+            git -c user.name='PHOENIX CI Repair' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+              commit -m 'fix(ci): apply official lint autofixes and regenerate committed catalogs'
+            git push origin HEAD:refs/heads/fix/ci-general-repair-20261031
+          fi
