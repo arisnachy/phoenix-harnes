@@ -15,5 +15,7 @@ describe('private user portrait reference intent', () => {
     expect(isSelfImageRequest('Haz una foto del equipo Kira')).toBe(false)
     expect(isSelfImageRequest('Explica cómo transformar mi foto')).toBe(false)
     expect(isSelfImageRequest('Crea una foto de mi perro')).toBe(false)
+    expect(isSelfImageRequest('Esa foto mía no me gusta')).toBe(false)
+    expect(isSelfImageRequest('Explícame cómo generar una foto mía')).toBe(false)
   })
 })
