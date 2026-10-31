@@ -51,6 +51,33 @@ describe('compact PHOENIX Moments', () => {
     expect(occasionFor(profile({ countryCode: 'US' }), '2026-11-26', [])?.label).toBe('Acción de Gracias')
   })
 
+
+  it('recognizes global celebrations without a hardcoded date-to-theme list', () => {
+    for (const [label, theme] of [
+      ['Diwali', 'lights'], ['Eid al-Fitr', 'spiritual'], ['春节', 'lunar'],
+      ['Songkran', 'water'], ['Holi', 'spring'], ['Chuseok', 'harvest'],
+      ['Carnaval de Río', 'heritage'], ['World Health Day', 'health'],
+      ['Festival de Música', 'music'], ['Día de las Madres', 'family'],
+      ['Día de la Tierra', 'nature'], ['Día Mundial de la Educación', 'education'],
+      ['Olympic Day', 'sports'], ['Día Internacional de la Paz', 'peace'],
+    ] as const) {
+      expect(appearanceFor({ label, kind: 'cultural' }).theme).toBe(theme)
+    }
+    const unlisted = appearanceFor({ label: 'Local arts gathering', kind: 'public' })
+    expect(unlisted.icon).toBeTruthy()
+    expect(unlisted.theme).toBe('general')
+  })
+
+  it('filters subdivision-specific festivals by configured region', () => {
+    const rows = [
+      { date: '2026-07-04', countryCode: 'US', name: 'NY Festival',
+        nationalHoliday: false, subdivisionCodes: ['US-NY'] },
+      { date: '2026-07-04', countryCode: 'US', name: 'US Day', nationalHoliday: true },
+    ]
+    expect(occasionFor(profile({ countryCode: 'US', momentsRegion: 'US-CA' }), '2026-07-04', rows)?.label).toBe('US Day')
+    expect(occasionFor(profile({ countryCode: 'US', momentsRegion: 'US-NY' }), '2026-07-04', rows)?.label).toBe('NY Festival')
+  })
+
   it('keeps regional movable dates on their correct Sundays', () => {
     expect(occasionFor(profile(), '2026-05-31', [])?.label).toBe('Día de las Madres')
     expect(occasionFor(profile(), '2026-07-26', [])?.label).toBe('Día de los Padres')
@@ -67,6 +94,6 @@ describe('compact PHOENIX Moments', () => {
     expect(appearanceFor({ label: 'Independencia Nacional', kind: 'patriotic' }, 'DO')).toEqual({
       icon: '🇩🇴', theme: 'patriotic',
     })
-    expect(appearanceFor({ label: 'Día de la Paz', kind: 'cultural' })).toEqual({ icon: '✨', theme: 'general' })
+    expect(appearanceFor({ label: 'Día de la Paz', kind: 'cultural' })).toEqual({ icon: '🕊️', theme: 'peace' })
   })
 })
