@@ -44,7 +44,7 @@ export function apply(ctx: ClientContext): void {
     locale: SETTINGS_NS,
     inject: () => ({
       ...form.inject(),
-      transformAvatar: (photo: Blob) => transformAvatarThroughCodex(photo, (ctx.get('connection') as import('@phoenix-ai/dsh-client-connection/client').ConnectionHandle).rpc),
+      transformAvatar: (photo: Blob) => transformAvatarThroughCodex(photo, ((ctx.get as (key: string) => unknown)('connection') as import('@phoenix-ai/dsh-client-connection/client').ConnectionHandle).rpc),
     }),
   }, UserProfileRow))
   ctx.slots.inject('shell.overlay', () => ctx.slots.register({

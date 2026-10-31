@@ -115,7 +115,7 @@ export class ClinicalLedger {
       if (isMissing(error)) return []
       throw error
     }
-    const envelope = JSON.parse(raw) as VaultEnvelope
+    const envelope = JSON.parse(raw) as Partial<VaultEnvelope>
     if (envelope.version !== 1 || typeof envelope.iv !== 'string' ||
         typeof envelope.tag !== 'string' || typeof envelope.ciphertext !== 'string') {
       throw new Error('CLINICAL_VAULT_FORMAT_INVALID')

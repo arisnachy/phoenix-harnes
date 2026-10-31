@@ -1,0 +1,372 @@
+/**
+ * Render the local clinical workspace without exposing clinical data to Kira's prompt.
+ * @param nonce - Fresh per-response CSP nonce injected into the inline script.
+ * @returns HTML for the authenticated local workspace.
+ */
+export function renderHealthPage(nonce:string):string {
+  const html=String.raw`<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>PHOENIX Health · Clínica</title>
+<style>
+:root{color-scheme:light;font:14px/1.45 "Segoe UI",system-ui,sans-serif;background:#f6f9fc;color:#263a53}*{box-sizing:border-box}
+body{margin:0}button,input,select,textarea{font:inherit}button{cursor:pointer}header{background:#fff;border-bottom:1px solid #e2e8f0;padding:17px 24px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+h1{font-size:20px;margin:0}h2{font-size:17px;margin:0 0 15px}p{margin:9px 0}small,.muted{color:#728399;font-size:12px}
+main{display:grid;grid-template-columns:200px minmax(0,1fr);min-height:calc(100vh - 74px)}
+aside{background:#fff;border-right:1px solid #e2e8f0;padding:15px}aside button{display:block;width:100%;margin:3px 0;text-align:left;padding:12px;border-radius:9px;border:0;background:transparent;color:#35516c}
+aside button.active{background:#e9f3ff;color:#155b9d;font-weight:700}section{padding:20px;max-width:1150px;width:100%;margin:auto}
+.card{background:#fff;border:1px solid #e1e8f0;border-radius:14px;padding:20px;margin-bottom:14px}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.wide{grid-column:1/-1}
+label{display:block;color:#52657a;font-weight:650;font-size:12px;margin:10px 0 5px}
+input,select,textarea{display:block;width:100%;border:1px solid #cad6e1;border-radius:9px;padding:11px;color:#1c3148;background:white}
+textarea{min-height:140px}.primary,.secondary{padding:10px 15px;border-radius:10px;border:0;margin:9px 7px 5px 0;background:#2271bd;color:white}
+.secondary{color:#155a99;background:#e9f3fc}.danger{color:#9e3131;background:#fff0f0}
+.notice{padding:14px;border-radius:12px;background:#eff7ff;color:#315a7c;margin:10px 0}.warning{background:#fff7e8;color:#815e20}
+table{width:100%;border-collapse:collapse;font-size:12px}td,th{border-bottom:1px solid #eef1f4;padding:10px;text-align:left;vertical-align:top}th{color:#51687b}
+.tag{font-size:11px;border-radius:12px;background:#eef4f8;padding:4px 8px;color:#3e5971}
+#flash{display:none;position:fixed;bottom:16px;right:16px;max-width:90vw;background:#1d557e;color:#fff;border-radius:10px;padding:14px;z-index:20}
+@media(max-width:700px){main{grid-template-columns:1fr}aside{display:flex;overflow:auto;gap:5px}aside button{white-space:nowrap;width:auto}header{padding:12px}section{padding:11px}.grid{grid-template-columns:1fr}}
+</style></head><body>
+<header><div><h1>♡ PHOENIX Health</h1><div class="muted">Sistema clínico local · Expediente cifrado · Kira Clinical Flow</div></div><div id="account"></div></header>
+<div id="app"></div><div id="flash" role="alert"></div>
+<script nonce="__NONCE__">
+"use strict";
+const root=document.getElementById("app"),account=document.getElementById("account"),flash=document.getElementById("flash");
+let actor=null,csrf="",tab="patients",data={},current=null;
+const modules=[["patients","Pacientes"],["encounters","Consultas"],["appointments","Agenda"],["orders","Laboratorio e imágenes"],["prescriptions","Recetas"],["inventory","Farmacia"],["invoices","Administración"],["followups","Seguimiento"],["staff","Personal"],["assignments","Equipo asistencial"],["backups","Respaldos"],["audit","Auditoría"]];
+const safe=x=>String(x??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const val=id=>document.getElementById(id)?.value??"";
+const box=(title,content)=>'<article class="card"><h2>'+safe(title)+'</h2>'+content+'</article>';
+const field=(id,label,type="text",required=true,place="")=>'<label for="'+id+'">'+safe(label)+'</label><input id="'+id+'" type="'+type+'" placeholder="'+safe(place)+'" '+(required?'required':'')+'>';
+const area=(id,label)=>'<label for="'+id+'">'+safe(label)+'</label><textarea id="'+id+'"></textarea>';
+const pick=(id,label,items,selector)=>'<label for="'+id+'">'+safe(label)+'</label><select id="'+id+'">'+items.map(x=>'<option value="'+safe(x.id)+'">'+safe(selector(x))+'</option>').join('')+'</select>';
+const button=(action,title,cls="primary")=>'<button type="button" class="'+cls+'" data-act="'+action+'">'+safe(title)+'</button>';
+const rows=(items,cols)=>items.length?'<div style="overflow:auto"><table><thead><tr>'+cols.map(c=>'<th>'+safe(c[0])+'</th>').join('')+'<th>Acciones</th></tr></thead><tbody>'+items.map(o=>'<tr>'+cols.map(c=>'<td>'+safe(o[c[1]])+'</td>').join('')+'<td>'+actionFor(o)+'</td></tr>').join('')+'</tbody></table></div>':'<p class="muted">No hay registros.</p>';
+let columnAction=null;
+function notice(msg){flash.textContent=msg;flash.style.display="block";setTimeout(()=>flash.style.display="none",5200)}
+async function api(path,method="GET",body){
+ const r=await fetch("/health/api/"+path,{method,credentials:"same-origin",cache:"no-store",headers:{
+  "content-type":"application/json","x-phoenix-health":"1",...(csrf?{"x-phoenix-csrf":csrf}:{}),
+ },...(body?{body:JSON.stringify(body)}:{})});
+ const x=await r.json();if(!r.ok)throw Error(x.error||"Solicitud rechazada");return x;
+}
+async function refresh(){
+ try{const x=await api("session");actor=x.actor;csrf=x.csrf;data={};await load()}catch{actor=null;csrf="";await splash()}
+}
+async function splash(){
+ let status=await api("status");
+ account.textContent="Clínica protegida";
+ root.innerHTML='<section style="max-width:570px">'+box(status.initialized?"Acceso profesional":"Configurar clínica",
+ '<p class="notice warning">Servicio local con base de datos cifrada. No acceda desde un equipo compartido. El administrador debe conservar una copia segura de la contraseña maestra: sin ella no podrán recuperarse los expedientes.</p>'+
+ (status.initialized?'':field("org","Centro / Institución"))+
+ field("user","Usuario")+field("pass","Contraseña (16 caracteres o más)","password")+
+ button(status.initialized?"login":"setup",status.initialized?"Iniciar sesión":"Crear clínica y administrador"))+'</section>';
+}
+async function load(){
+ account.innerHTML='<span class="tag">'+safe(actor.username)+" · "+safe(actor.role)+'</span> '+button("logout","Salir","secondary");
+ const menu={admin:["patients","appointments","inventory","invoices","followups","assignments","staff","backups","audit"],
+ clinician:["patients","encounters","appointments","orders","prescriptions","followups"],
+ psychologist:["patients","encounters","appointments","followups"],
+ nurse:["patients","encounters","appointments","orders","followups"],
+ reception:["patients","appointments","followups","assignments"],lab:["orders"],radiology:["orders"],
+ pharmacy:["prescriptions","inventory"],billing:["invoices"]};
+ const resources=modules.filter(m=>(menu[actor.role]||[]).includes(m[0]));
+ if(!resources.some(x=>x[0]===tab))tab=resources[0]?.[0]||"patients";
+ root.innerHTML='<main><aside>'+resources.map(x=>'<button data-tab="'+x[0]+'" class="'+(x[0]===tab?'active':'')+'">'+x[1]+'</button>').join('')+
+ '</aside><section><div id="view"><div class="card">Cargando…</div></div></section></main>';
+ const ids=tab==="assignments"?["assignments","patients"]:tab==="orders"?["orders","encounters"]:tab==="prescriptions"?["prescriptions","encounters","inventory"]:tab==="encounters"?["encounters","patients"]:tab==="appointments"?["appointments","patients"]:tab==="invoices"?["invoices","patient-options"]:tab==="followups"?["followups","patients"]:["patients",tab];
+ if((actor.role==="clinician"||actor.role==="admin")&&!ids.includes("followups"))
+  ids.push("followups");
+ for(const id of new Set(ids)){try{data[id]=(await api(id)).items}catch{data[id]=[]}}
+ render()
+}
+function actionFor(o){
+ let actions=[];
+ if(tab==="assignments")actions=[["revokePatient","Revocar acceso"]];
+ if(tab==="patients"&&["admin","clinician","reception"].includes(actor.role))actions=[["contactEvidence","Consentimiento"],
+   ...(actor.role==="clinician"?[["allergyReview","Revisar alergias"],["openMedicalHistory","Historia longitudinal"]]:[])];
+ if(tab==="encounters"&&o.status!=="signed"&&o.practitioner===actor.username)
+   actions=[["interview","Entrevista Kira"],["draftInterview","Preparar SOAP desde entrevista"],
+     ["document","Documentar"],["review","Revisar"],["sign","Firmar"]];
+ if(tab==="prescriptions"&&actor.role==="pharmacy"&&o.status==="prescribed")actions=[["dispense","Dispensar"]];
+ if(tab==="orders")actions=o.status==="ordered"&&((actor.role==="lab"&&o.modality==="laboratory")||(actor.role==="radiology"&&o.modality==="imaging"))?[["result","Resultado"]]:
+ (o.status==="resulted"||o.status==="critical-pending-review")&&actor.role==="clinician"?
+ [["reviewOrder",o.status==="critical-pending-review"?"Reconocer resultado crítico":"Revisar"]]:[];
+ if(tab==="inventory")actions=[["receive","Movimiento"]];
+ if(tab==="invoices")actions=[["pay","Cobrar"]];
+ if(tab==="appointments"&&o.status==="scheduled")actions=[["completeAppointment","Completar"],...(actor.role==="clinician"&&o.practitioner===actor.username?[["sendReminder","Kira: enviar recordatorio"]]:[])];
+ if(tab==="followups"&&o.status==="pending"){
+  if(o.origin!=="critical-result")actions=[["finishFollowup","Completar"]];
+  else if(actor.role==="clinician"&&o.assignedTo===actor.username)
+    actions=[["finishFollowup","Cerrar gestión crítica"]];
+ }
+ return actions.map(a=>'<button class="secondary" data-act="'+a[0]+'" data-id="'+safe(tab==="assignments"?o.patientId+"|"+o.staffId:o.id)+'">'+a[1]+'</button>').join("");
+}
+function render(){
+ const d=tab==="backups"?(data.backups||[]).map(fileName=>({fileName})):data[tab]||[],patients=tab==="invoices"&&actor.role==="billing"?(data["patient-options"]||[]):data.patients||data["patient-options"]||[];
+ const p=pick("patientId","Paciente",patients,x=>x.name+(x.dateOfBirth?" · "+x.dateOfBirth:""));
+ let form="";
+ if(tab==="patients"&&["admin","clinician","reception"].includes(actor.role))form=field("name","Nombre completo")+field("dateOfBirth","Nacimiento","date")+field("email","Correo","email",false)+field("phone","Teléfono","tel",false)+
+ '<p class="muted">El consentimiento se registra después de verificarlo, con responsable y referencia de evidencia.</p>'+button("create","Registrar paciente");
+ if(tab==="encounters"&&["clinician","psychologist"].includes(actor.role))form=p+field("specialty","Especialidad", "text", true,"Medicina familiar")+
+ field("complaint","Motivo de consulta")+
+ '<label>Modalidad Kira</label><select id="mode"><option value="kira">Kira interroga</option><option value="mixed">Mixto</option><option value="manual">Profesional</option></select>'+button("create","Abrir consulta")+
+ button("openAskCopilot","Kira · ASK clínico","secondary")+
+ '<p class="notice">El profesional decide y firma. Kira puede guiar preguntas desde el chat, pero el contenido identificable del expediente no se envía al modelo.</p>';
+ if(tab==="appointments")form=p+field("practitioner","Profesional")+field("startsAt","Fecha y hora","datetime-local")+field("reason","Motivo")+button("create","Programar cita");
+ if(tab==="orders"&&actor.role==="clinician")form=pick("encounterId","Consulta firmada",data.encounters.filter(x=>x.status==="signed"),x=>x.complaint+" · "+x.practitioner)+
+ '<label>Tipo</label><select id="modality"><option value="laboratory">Laboratorio</option><option value="imaging">Imagen</option></select>'+area("description","Descripción y estudio indicado")+button("create","Emitir orden");
+ if(tab==="prescriptions"&&actor.role==="clinician")form=pick("encounterId","Consulta firmada",data.encounters.filter(x=>x.status==="signed"),x=>x.complaint)+field("medication","Medicamento")+area("directions","Indicaciones autorizadas")+
+ '<label><input type="checkbox" id="safety" style="width:auto;display:inline"> Como prescriptor confirmo revisión de alergias registradas, interacciones y dosis. PHOENIX aún no dispone de catálogo farmacológico validado.</label>'+button("create","Registrar prescripción");
+ if(tab==="inventory")form=field("item","Producto")+button("create","Agregar producto");
+ if(tab==="invoices")form=p+field("concept","Concepto")+field("amountCents","Monto en centavos","number")+button("create","Emitir factura");
+ if(tab==="followups")form=p+field("assignedTo","Asignado a")+field("dueAt","Fecha y hora","datetime-local")+area("description","Tarea de seguimiento")+button("create","Crear seguimiento");
+ if(tab==="backups")form='<p class="notice warning">Copia SQLite consistente y verificada. Resguárdela mediante un procedimiento institucional y pruebe restauración fuera del Host.</p>'+button("backup","Crear respaldo verificado");
+ if(tab==="assignments")form=pick("patientId","Paciente",patients,x=>x.name)+field("staffId","Usuario profesional")+field("purpose","Motivo de atención")+button("grantPatient","Autorizar atención");
+ if(tab==="staff")form=field("username","Usuario")+field("password","Contraseña inicial (16+)","password")+
+ '<label>Rol</label><select id="role">'+["clinician","psychologist","nurse","reception","lab","radiology","pharmacy","billing"].map(x=>'<option>'+x+'</option>').join('')+'</select>'+button("create","Crear personal");
+ const titles=Object.fromEntries(modules.map(x=>[x[0],x[1]]));
+ const genericRows=(d,columns)=>rows(d,columns);
+ let cols=[["ID","id"],["Estado","status"]];
+ if(tab==="patients")cols=[["Nombre","name"],["Nacimiento","dateOfBirth"],["Email","email"],["Consentimiento","emailConsent"]];
+ if(tab==="encounters")cols=[["Motivo","complaint"],["Especialidad","specialty"],["Profesional","practitioner"],["Estado","status"]];
+ if(tab==="appointments")cols=[["Profesional","practitioner"],["Inicio","startsAt"],["Estado","status"]];
+ if(tab==="orders")cols=[["Tipo","modality"],["Estudio","description"],["Estado","status"],
+   ["Crítico indicado por laboratorio","critical"]];
+ if(tab==="prescriptions")cols=[["Medicamento","medication"],["Firmado por","signedBy"],["Estado","status"]];
+ if(tab==="inventory")cols=[["Producto","item"],["Unidades","units"]];
+ if(tab==="invoices")cols=[["Concepto","concept"],["Total (centavos)","amountCents"],["Pagado","paidCents"]];
+ if(tab==="followups")cols=[["Tarea","description"],["Prioridad","priority"],
+   ["Asignado a","assignedTo"],["Vence","dueAt"],["Estado","status"]];
+ if(tab==="backups")cols=[["Archivo verificado","fileName"]];
+ if(tab==="assignments")cols=[["Paciente","patientId"],["Profesional","staffId"],["Finalidad","purpose"],["Autorizó","grantedBy"]];
+ if(tab==="staff")cols=[["Usuario","username"],["Rol","role"],["Centro","org"]];
+ if(tab==="audit")cols=[["Acción","action"],["Actor","actor"],["Registro","recordId"],["Hora","happened"]];
+ const criticalFollowupCount=(data.followups||[]).filter(x=>
+  x.status==="pending"&&x.priority==="urgent"&&
+  (actor.role==="admin"||x.assignedTo===actor.username)).length;
+ const criticalBanner=criticalFollowupCount?
+  '<div role="alert" class="notice warning"><strong>Atención clínica urgente: '+
+  criticalFollowupCount+' seguimiento(s) pendientes.</strong> '+
+  'Contacte directamente al equipo responsable según el protocolo institucional. '+
+  'PHOENIX no envía avisos externos automáticos. '+
+  button("openCriticalFollowups","Abrir seguimiento urgente","secondary")+'</div>':'';
+ document.getElementById("view").innerHTML=criticalBanner+
+ box(titles[tab],'<div class="muted">Datos de la institución autenticada · Registro persistente cifrado</div>'+form)+
+ box("Registros",genericRows(d,cols))+(tab==="prescriptions"?'<p class="notice warning">Las recetas no se envían por correo desde esta versión. La firma clínica exige revisión profesional.</p>':'');
+}
+async function execute(action,id){
+ if(action==="openCriticalFollowups"){tab="followups";return load()}
+ if(action==="logout"){await api("logout","POST",{});actor=null;csrf="";data={};tab="patients";return splash()}
+ if(action==="setup"){await api("setup","POST",{username:val("user"),password:val("pass"),organization:val("org")});notice("Clínica configurada. Inicia sesión.");return splash()}
+ if(action==="login"){const x=await api("login","POST",{username:val("user"),password:val("pass")});csrf=x.csrf;actor=x.actor;data={};tab="patients";return load()}
+ if(action==="openAskCopilot"){
+  // The chat's genuine ASK provider belongs to PHOENIX, not the clinical HTTP session.
+  // Never transfer an encounter ID, a patient name or the protected encounter contents.
+  const promptText="Kira, usa health_copilot_ask con action=choose_mode para guiar una consulta desidentificada. Después realiza screen_urgency y next_question. Registraré las respuestas clínicas únicamente dentro de PHOENIX Health.";
+  const opened=window.open("/","_blank","noopener,noreferrer");
+  document.getElementById("view").insertAdjacentHTML("beforeend",
+    box("Kira Clínica · ASK de PHOENIX",
+      '<p class="notice">Se abrió el chat general de PHOENIX. ASK puede coordinar el interrogatorio, pero no lee ni escribe este expediente. No copies identificadores, nombres, imágenes, resultados o historia clínica a esa conversación.</p>'+
+      '<label>Petición genérica para Kira</label><textarea readonly id="ask-instructions">'+safe(promptText)+'</textarea>'+
+      '<p> '+button("copyAskInstructions","Copiar instrucciones sin datos personales","secondary")+'</p>'));
+  if(!opened)notice("Si el navegador bloqueó la nueva pestaña, abre el chat PHOENIX manualmente.");
+  return;
+ }
+ if(action==="copyAskInstructions"){
+  const content=val("ask-instructions");
+  if(!content)throw Error("No hay instrucciones");
+  await navigator.clipboard.writeText(content);
+  notice("Instrucciones genéricas copiadas; no incluyen datos de paciente.");
+  return;
+ }
+ if(action==="interview"){
+  const encounter=data.encounters?.find(x=>x.id===id);if(!encounter)throw Error("Consulta no disponible");
+  const reply=await api("interview/"+id);
+  const guide=reply.guide;
+  current={encounterId:id,field:guide.nextQuestions[0]?.key||null};
+  const questions=guide.nextQuestions.map(q=>'<li>'+safe(q.question)+'</li>').join('');
+  const controls=current.field?
+    '<label for="interview-answer">Respuesta a la primera pregunta pendiente</label>'+
+    '<textarea id="interview-answer" placeholder="Registrar respuesta obtenida por el profesional; no asumir respuestas negativas"></textarea>'+
+    '<p>'+button("saveInterview","Guardar respuesta y continuar")+'</p>':
+    '<p class="notice">Todas las preguntas de esta guía fueron registradas. El profesional debe completar la valoración clínica.</p>';
+  document.getElementById("view").insertAdjacentHTML("beforeend",
+    box("Kira · Interrogatorio dirigido",'<p class="notice">Guía determinista local. No es diagnóstico, ni se envía el expediente al modelo. Los signos de alarma requieren valoración inmediata.</p>'+
+    '<p class="muted">Ruta: '+safe(guide.pathway)+' · Modalidad: '+safe(guide.mode)+'</p><ol>'+questions+'</ol>'+controls));
+  return;
+ }
+ if(action==="saveInterview"){
+  if(!current?.encounterId||!current.field)throw Error("No hay pregunta activa");
+  const answer=val("interview-answer").trim();
+  if(!answer)throw Error("Registre la respuesta real antes de avanzar");
+  const encounter=data.encounters?.find(x=>x.id===current.encounterId);
+  if(!encounter)throw Error("Consulta no disponible");
+  const encounterId=current.encounterId,field=current.field;
+  await api("encounters/"+encounterId,"PATCH",{version:encounter.version,action:"answer",field,answer});
+  current=null;
+  await load();
+  await execute("interview",encounterId);
+  notice("Respuesta guardada en el expediente cifrado");
+  return;
+ }
+ if(action==="backup"){
+  if(!confirm("¿Crear una copia consistente del expediente cifrado?"))return;
+  const result=await api("backups","POST",{});
+  notice("Respaldo verificado: "+result.backup.name+" · "+result.backup.records+" registros");return load();
+ }
+ if(action==="openMedicalHistory"){
+  const patient=data.patients?.find(x=>x.id===id);
+  if(!patient||actor.role!=="clinician")throw Error("Historia longitudinal no autorizada");
+  current={kind:"medicalHistory",patientId:id};
+  const sections=[
+    ["pastMedical","Antecedentes personales patológicos"],
+    ["pastSurgical","Antecedentes quirúrgicos"],
+    ["familyHistory","Antecedentes familiares"],
+    ["currentMedications","Medicación habitual"],
+    ["vaccinations","Vacunación documentada"],
+    ["habits","Hábitos y contexto"],
+    ["problems","Problemas activos confirmados"],
+  ];
+  const fields=sections.map(([key,label])=>
+    '<label for="history-'+key+'">'+label+'</label>'+
+    '<textarea id="history-'+key+'">'+safe(patient.medicalHistory?.[key]||"")+'</textarea>').join("");
+  document.getElementById("view").insertAdjacentHTML("beforeend",
+    box("Historia longitudinal · "+safe(patient.name),
+      '<p class="notice">Solo el médico asignado puede revisar y actualizar estos antecedentes. Un campo vacío significa no documentado, nunca ausencia de patología.</p>'+
+      fields+button("saveMedicalHistory","Guardar antecedentes revisados")));
+  return;
+ }
+ if(action==="saveMedicalHistory"){
+  if(actor.role!=="clinician"||current?.kind!=="medicalHistory")throw Error("Editor no autorizado");
+  const patient=data.patients?.find(x=>x.id===current.patientId);
+  if(!patient)throw Error("Paciente no disponible");
+  const keys=["pastMedical","pastSurgical","familyHistory","currentMedications","vaccinations","habits","problems"];
+  const record=Object.fromEntries(keys.map(key=>[key,val("history-"+key)]));
+  if(!confirm("¿Confirma que verificó estos antecedentes con las fuentes disponibles?"))return;
+  await api("patients/"+patient.id,"PATCH",{version:patient.version,action:"history",record});
+  current=null;notice("Historia longitudinal cifrada y auditada.");return load();
+ }
+ if(action==="draftInterview"){
+  const encounter=data.encounters?.find(x=>x.id===id);
+  if(!encounter||encounter.practitioner!==actor.username)throw Error("Consulta ajena o inexistente");
+  if(!confirm("¿Preparar un borrador subjetivo solo con respuestas documentadas, sin diagnóstico inferido?"))return;
+  await api("encounters/"+id,"PATCH",{version:encounter.version,action:"draft-from-interview"});
+  await load();await execute("document",id);
+  notice("Borrador preparado. Complete y valide el SOAP antes de revisarlo o firmarlo.");
+  return;
+ }
+ if(action==="allergyReview"){
+  const patient=data.patients?.find(x=>x.id===id);if(!patient)throw Error("Paciente no encontrado");
+  const choice=prompt("Alergias: none-known (sin alergias conocidas) o documented (alergias reportadas)","documented");
+  if(choice===null)return;
+  const details=choice==="documented"?prompt("Documente alérgenos y reacciones, tal como fueron confirmados en la consulta:"): "";
+  if(details===null)return;
+  if(!confirm("¿Confirma como profesional que revisó alergias y consignó el estado real del paciente?"))return;
+  await api("patients/"+id,"PATCH",{version:patient.version,action:"allergy-review",status:choice,details});
+  notice("Revisión de alergias documentada y auditada.");return load();
+ }
+ if(action==="contactEvidence"){
+  const patient=data.patients?.find(x=>x.id===id);if(!patient)throw Error("Paciente no encontrado");
+  const choice=prompt("¿Autoriza o revoca correo? Escriba GRANTED o REVOKED","REVOKED");if(choice===null)return;
+  const consent=choice.toUpperCase()==="GRANTED"?"granted":choice.toUpperCase()==="REVOKED"?"revoked":null;
+  if(!consent)throw Error("Indique GRANTED o REVOKED");
+  const method=prompt("Método: in-person, signed-document o verified-call","in-person");if(method===null)return;
+  const evidenceRef=prompt("Referencia de evidencia verificable:");if(evidenceRef===null)return;
+  if(!confirm("¿Certifica que verificó el contacto y documentó el consentimiento o su revocación?"))return;
+  await api("patients/"+id,"PATCH",{version:patient.version,action:"contact",consent,method,
+    evidenceRef,emailVerified:consent==="granted"});
+  notice("Consentimiento y responsable auditados.");return load();
+ }
+ if(action==="grantPatient"){
+  await api("assignments","POST",{action:"grant",patientId:val("patientId"),staffId:val("staffId"),purpose:val("purpose")});
+  notice("Relación asistencial autorizada y auditada.");return load();
+ }
+ if(action==="revokePatient"){
+  const row=data.assignments?.find(x=>x.patientId+"|"+x.staffId===id);
+  if(!row)throw Error("Asignación no encontrada");
+  if(!confirm("¿Revocar acceso asistencial de este profesional al paciente?"))return;
+  await api("assignments","POST",{action:"revoke",patientId:row.patientId,staffId:row.staffId});return load();
+ }
+ if(action==="create"){
+  const v={
+   patients:{name:val("name"),dateOfBirth:val("dateOfBirth"),email:val("email"),phone:val("phone")},
+   encounters:{patientId:val("patientId"),specialty:val("specialty"),complaint:val("complaint"),mode:val("mode")},
+   appointments:{patientId:val("patientId"),practitioner:val("practitioner"),startsAt:val("startsAt"),reason:val("reason")},
+   orders:{encounterId:val("encounterId"),modality:val("modality"),description:val("description")},
+   prescriptions:{encounterId:val("encounterId"),medication:val("medication"),directions:val("directions"),safetyAcknowledged:!!document.getElementById("safety")?.checked},
+   inventory:{item:val("item")},invoices:{patientId:val("patientId"),concept:val("concept"),amountCents:Number(val("amountCents"))},
+   followups:{patientId:val("patientId"),assignedTo:val("assignedTo"),dueAt:val("dueAt"),description:val("description")},
+   staff:{username:val("username"),password:val("password"),role:val("role")},
+  };
+  await api(tab,"POST",v[tab]);notice("Operación guardada en el expediente cifrado.");return load()
+ }
+ if(action==="dispense"){
+  const rx=data.prescriptions?.find(x=>x.id===id);
+  const stock=(data.inventory||[]).find(x=>x.item===rx?.medication&&x.units>0);
+  if(!rx||!stock)throw Error("No existe un producto correspondiente con existencias.");
+  if(!confirm("¿Confirma la dispensación farmacéutica de esta receta firmada? Se descontará una unidad del inventario."))return;
+  await api("dispense/"+rx.id,"POST",{inventoryId:stock.id});notice("Dispensación registrada y existencias actualizadas.");return load();
+ }
+ if(action==="sendReminder"){
+  if(!confirm("¿Confirma el profesional el recordatorio de cita al correo verificado, con consentimiento registrado? Se enviará realmente desde la cuenta institucional de Kira si está conectada."))return;
+  const result=await api("reminders/"+id,"POST",{});
+  if(result.status==="sent")notice("Kira confirmó el envío del recordatorio con Gmail.");
+  return;
+ }
+ if(action==="document"){
+  const encounter=data.encounters?.find(x=>x.id===id);
+  if(!encounter||encounter.practitioner!==actor.username||encounter.status==="signed")
+    throw Error("Consulta no disponible para edición");
+  current={kind:"soap",encounterId:id};
+  const section=(key,label,value)=>'<label for="soap-'+key+'">'+label+'</label><textarea id="soap-'+key+'">'+safe(value||"")+'</textarea>';
+  document.getElementById("view").insertAdjacentHTML("beforeend",box("Historia clínica estructurada · SOAP",
+    '<p class="notice">Borrador del profesional. Verifique cada hallazgo antes de revisar y firmar; los campos vacíos no significan hallazgos negativos.</p>'+
+    section("history","S · Anamnesis y relato",encounter.history)+
+    section("exam","O · Exploración y datos objetivos",encounter.exam)+
+    section("assessment","A · Evaluación y razonamiento clínico",encounter.assessment)+
+    section("plan","P · Plan diagnóstico y terapéutico",encounter.plan)+
+    '<button class="primary" data-act="saveDocument" data-id="'+safe(id)+'">Guardar borrador cifrado</button>'));
+  return;
+ }
+ if(action==="saveDocument"){
+  const encounter=data.encounters?.find(x=>x.id===id);
+  if(!encounter||current?.kind!=="soap"||current.encounterId!==id)
+    throw Error("Editor clínico no autorizado");
+  const history=val("soap-history").trim();
+  if(!history)throw Error("La anamnesis requiere información documentada");
+  await api("encounters/"+id,"PATCH",{version:encounter.version,action:"document",history,
+    exam:val("soap-exam"),assessment:val("soap-assessment"),plan:val("soap-plan")});
+  current=null;
+  notice("Historia clínica cifrada guardada como borrador");
+  return load();
+ }
+ const resource=data[tab]?.find(x=>x.id===id);if(!resource)throw Error("Registro no encontrado");
+ let patch={version:resource.version};
+ if(action==="review"){if(!confirm("¿Revisaste íntegramente la historia?"))return;patch.action="review"}
+ if(action==="sign"){if(!confirm("¿Confirmas tu firma profesional sobre la versión revisada?"))return;patch.action="sign"}
+ if(action==="result"){
+  patch.action="result";patch.result=prompt("Informe verificado del estudio:");if(patch.result===null)return;
+  patch.critical=confirm("¿El laboratorio o imagenología clasificó el resultado como CRÍTICO? Aceptar = sí; Cancelar = no.");
+  if(patch.critical)alert("RESULTADO CRÍTICO: es necesaria una comunicación asistencial directa urgente. Este registro no envía avisos automáticos.");
+ }
+ if(action==="reviewOrder"){
+  patch.action="review";
+  if(resource.critical===true){
+   if(!confirm("Resultado crítico: ¿revisó el informe y realizó la gestión asistencial urgente correspondiente?"))return;
+   patch.criticalAcknowledged=true;
+  }
+ }
+ if(action==="receive"){patch.delta=Number(prompt("Movimiento de existencias (+/-):"));if(!patch.delta)return}
+ if(action==="pay"){patch.paymentCents=Number(prompt("Pago recibido (centavos):"));if(!patch.paymentCents)return}
+ if(action==="completeAppointment"){patch.status="completed"}
+ if(action==="finishFollowup"){patch.status="done"}
+ await api(tab+"/"+id,"PATCH",patch);notice("Registro actualizado; cambio auditado.");return load()
+}
+document.addEventListener("click",async e=>{
+ const tabButton=e.target.closest("[data-tab]");if(tabButton){tab=tabButton.dataset.tab;try{await load()}catch(err){notice(err.message)}return}
+ const action=e.target.closest("[data-act]");if(action){
+  action.disabled=true;try{await execute(action.dataset.act,action.dataset.id)}catch(err){notice(err.message)}finally{action.disabled=false}
+ }
+});
+refresh();
+</script></body></html>`
+  return html.replace('__NONCE__',nonce)
+}

@@ -30,7 +30,10 @@ describe('headless-agent keyless smoke', () => {
         if (relativePath === undefined) return
         const compressed = await readFile(join(cwd, relativePath))
         expect(compressed.subarray(0, 4).toString('hex')).toBe('28b52ffd')
-        persistedHeader = JSON.parse((await decompress(compressed)).toString()) as Record<string, unknown>
+        // Persistence is JSONL: validate every record, then inspect the session header.
+        const persistedRecords = (await decompress(compressed)).toString().trimEnd().split(/\r?\n/u)
+          .map(line => JSON.parse(line) as Record<string, unknown>)
+        persistedHeader = persistedRecords[0]
       },
     })
     const lines = stdout.trimEnd().split('\n').map(line => JSON.parse(line) as Record<string, unknown>)
