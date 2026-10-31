@@ -16,7 +16,9 @@ const SIMPLE_NAME = /^[a-zA-Z_][\w:-]{0,59}$/
 const SIMPLE_SELECTOR = /^(?:[a-zA-Z][\w-]{0,30})?(?:#[a-zA-Z_][\w-]{0,59}|\.[a-zA-Z_][\w-]{0,59})$/
 const DISALLOWED = /password|passwd|secret|token|credential|authorization|api.?key|otp|cvv|credit.?card|card.?number|account.?number|session|cookie|bearer|email|phone|address/i
 
+/** Value-free field locator and the permitted form interaction kind. */
 export type LayoutLocator = { selector?: string; name?: string; operation: 'fill'|'select'|'check'|'verify' }
+/** Bounded, timestamped mapping of verified form locators without user values. */
 export interface LearnedFormLayout {
   version: 1
   learnedAt: number
@@ -66,6 +68,14 @@ export function formLayoutKey(pageUrl: string): string {
 function fileFor(pageUrl: string, directory: string): string {
   return join(directory, formLayoutKey(pageUrl) + '.json')
 }
+/**
+ * Persist only sanitized, previously verified field locators for an origin and route.
+ * @param pageUrl - Current page address used to derive the storage key.
+ * @param phases - Current form interaction phases, stripped of field values.
+ * @param checks - Verification operations proving the locators are usable.
+ * @param directory - Optional private storage directory.
+ * @returns Whether a safe, verified layout was persisted.
+ */
 export async function saveVerifiedFormLayout(
   pageUrl: string,
   phases: readonly (readonly BrowserInteraction[])[],
@@ -85,6 +95,13 @@ export async function saveVerifiedFormLayout(
   }
   return true
 }
+/**
+ * Recall a recent layout only if its schema, age and sanitized representation match.
+ * @param pageUrl - Current page address used to derive the storage key.
+ * @param directory - Optional private storage directory.
+ * @param now - Current timestamp for freshness validation.
+ * @returns Verified value-free layout, or undefined if absent, stale or tampered.
+ */
 export async function recallVerifiedFormLayout(
   pageUrl: string, directory = DEFAULT_DIRECTORY, now = Date.now(),
 ): Promise<LearnedFormLayout | undefined> {
