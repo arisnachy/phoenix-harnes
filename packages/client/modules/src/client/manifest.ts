@@ -280,8 +280,10 @@ export interface ClientModuleLoader {
    * concurrent arrivals share one in-flight task. To force a fresh load (HMR),
    * {@link invalidate} first.
    * @param id - graph entry name.
+   * @param revision - optional new 12-hex host bundle revision from a rebuilt SSE frame;
+   *   replaces the boot-time URL before HMR fetch so immutable old revisions cannot be reused.
    */
-  prefetch(id: string): Promise<void>
+  prefetch(id: string, revision?: string): Promise<void>
   /**
    * Full reset of one non-bootstrap module: drop its registered factory and
    * materialized record so the next prefetch/import reloads it (the HMR
