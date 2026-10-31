@@ -868,6 +868,7 @@ export const KIRA_TEAM_STYLE = [
 export function latestProfileReference(events: readonly { type: string; data: unknown }[]): ImageAttachmentRef | undefined {
   for (let i = events.length - 1; i >= 0; i--) {
     const event = events[i]
+    if (event?.type === 'turn/start') return undefined
     if (event?.type !== 'user/message') continue
     if (typeof event.data !== 'object' || event.data === null) return undefined
     const msg = event.data as { source?: { kind?: string }; content?: readonly ContentBlock[] }
@@ -881,6 +882,7 @@ export function latestProfileReference(events: readonly { type: string; data: un
 function latestUserText(events: readonly { type: string; data: unknown }[]): string {
   for (let i = events.length - 1; i >= 0; i--) {
     const event = events[i]
+    if (event?.type === 'turn/start') return ''
     if (event?.type !== 'user/message') continue
     if (typeof event.data !== 'object' || event.data === null) return ''
     const msg = event.data as { source?: { kind?: string }; content?: readonly ContentBlock[] }
@@ -1253,6 +1255,10 @@ export function installCodexImageGeneration(ctx: Context): void {
         try {
           if (backend === 'codex' && reference !== undefined) {
             const photo = await servicesOf(ctx).attachments.readImage(reference, exec.signal)
+            if (photo.ref.mediaType !== 'image/webp' || photo.data.length === 0
+              || photo.data.length > 8 * 1024 * 1024) {
+              throw new Error('La fotografía de perfil no es un WebP válido de hasta 8 MB.')
+            }
             const dir = await mkdtemp(join(tmpdir(), 'phoenix-user-photo-'))
             try {
               const source = join(dir, 'profile-original.webp')
