@@ -5,7 +5,7 @@ import { spawn } from 'node:child_process'
 import { createConnection } from 'node:net'
 import { readFile, realpath, rm, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
+import { basename, dirname, isAbsolute, join } from 'node:path'
 
 interface NativeAudioSample {
   status: 'captured'
