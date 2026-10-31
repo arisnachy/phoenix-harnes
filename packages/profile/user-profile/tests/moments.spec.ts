@@ -77,6 +77,18 @@ describe('PHOENIX Moments calendar facts', () => {
     expect(momentsForDay(profile(), 'bad-date')).toEqual([])
   })
 
+  it('covers international events and Dominican family dates when the holiday service is unavailable', () => {
+    expect(momentsForDay(profile(), '2026-03-08').map(row => row.label)).toContain('Día Internacional de la Mujer')
+    expect(momentsForDay(profile(), '2026-04-07').map(row => row.label)).toContain('Día Mundial de la Salud')
+    expect(momentsForDay(profile(), '2026-01-21')[0]).toMatchObject({ label: 'Nuestra Señora de la Altagracia', kind: 'cultural' })
+    expect(momentsForDay(profile(), '2026-05-31').map(row => row.label)).toContain('Día de las Madres')
+    expect(momentsForDay(profile(), '2026-07-26').map(row => row.label)).toContain('Día de los Padres')
+    expect(momentsForDay(profile(), '2026-05-30')).toEqual([])
+    expect(momentsForDay(profile({ countryCode: 'US' }), '2026-11-26').map(row => row.label)).toContain('Acción de Gracias')
+    expect(momentsForDay(profile({ countryCode: 'US' }), '2026-11-25')).toEqual([])
+    expect(momentsForDay(profile({ countryCode: 'CA' }), '2026-11-26')).toEqual([])
+  })
+
   it('can learn conservative annual dates without guessing a date from unrelated text', () => {
     expect(detectPersonalMoment('El 15 de noviembre cumple años mi hija')).toMatchObject({
       date: '11-15', label: 'Cumpleaños de mi hija',
