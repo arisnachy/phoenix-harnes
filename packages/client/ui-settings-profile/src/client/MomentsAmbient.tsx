@@ -98,7 +98,7 @@ export function MomentsAmbient(props: { scope: SettingsScope<UserProfileSettings
   useEffect(() => {
     if (!country || !/^[A-Z]{2}$/.test(country)) { setHolidays([]); return }
     const controller = new AbortController()
-    void fetch(`https://date.nager.at/api/v4/Holidays/${country}/${year}`, { signal: controller.signal })
+    void fetch(`https://nagerholidays.com/api/v4/Holidays/${country}/${year}`, { signal: controller.signal })
       .then(response => response.ok ? response.json() as Promise<unknown> : [])
       .then((data) => {
         if (controller.signal.aborted || !Array.isArray(data)) return
