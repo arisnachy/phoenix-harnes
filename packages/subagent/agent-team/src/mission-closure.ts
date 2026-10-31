@@ -77,12 +77,6 @@ export function unfinishedMissionTeamTasks(events: readonly SessionEvent[]): boo
   return [...statuses.values()].some(status => status === 'pending' || status === 'in_progress')
 }
 
-/**
- * Preserve automatic Team work while its goal, checklist or task board is
- * unfinished, even when the Lead model has simply completed a text turn.
- * @param events - Lead session events.
- * @returns Whether the current mission has remaining authorized work.
- */
 /** A worker still doing its assignment prevents premature model-turn closure.
  * Read only mission-owned durable participant statuses; model text cannot mark work finished.
  * @param events - Current Lead Session events.
@@ -91,7 +85,7 @@ export function unfinishedMissionTeamTasks(events: readonly SessionEvent[]): boo
 export function unfinishedMissionTeamMembers(events: readonly SessionEvent[]): boolean {
   const statuses = new Map<string, string>()
   for (const event of events.slice(missionBoundary(events) + 1)) {
-    if (event.type !== 'team/chat-participant' || event.data.version !== 1) continue
+    if (event.type !== 'team/chat-participant') continue
     const participant = event.data.participant
     if (participant.missionId === undefined) continue
     statuses.set(participant.id, participant.status)
@@ -99,7 +93,10 @@ export function unfinishedMissionTeamMembers(events: readonly SessionEvent[]): b
   return [...statuses.values()].some(status => ['working', 'running', 'provisioning'].includes(status))
 }
 
-/** Unfinished goals, checklists, Team tasks and actual working teammates remain work. */
+/** Preserve automatic Team work while a goal, checklist, Team task or teammate remains unfinished.
+ * @param events - Lead session events.
+ * @returns Whether the current mission has remaining authorized work.
+ */
 export function unfinishedMissionWork(events: readonly SessionEvent[]): boolean {
   return unfinishedMissionGoal(events) || unfinishedMissionTodos(events)
     || unfinishedMissionTeamTasks(events) || unfinishedMissionTeamMembers(events)
@@ -117,7 +114,7 @@ export function teamMissionClosed(events: readonly SessionEvent[]): boolean {
   const unfinished = unfinishedMissionWork(events)
   for (let index = events.length - 1; index >= 0; index--) {
     const event = events[index]
-    if (event?.type === 'turn/end') {
+    if (event.type === 'turn/end') {
       if (event.data.reason.kind === 'aborted' && event.data.reason.reason.kind === 'user') return true
       return !unfinished && (event.data.reason.kind === 'completed' || event.data.reason.kind === 'aborted')
     }
