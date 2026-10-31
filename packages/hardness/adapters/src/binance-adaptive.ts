@@ -1,5 +1,6 @@
 import type { BinanceCandle, BinancePaperAccount, BinancePaperBroker, BinancePaperTrade } from './binance-paper.ts'
 import { binanceKnownAssetRisk } from './binance-asset-risk.ts'
+import type { BinanceKronosForecast } from './binance-kronos.ts'
 
 /** Supported closed-candle market regimes for adaptive paper trading. */
 export type BinanceMarketRegime = 'uptrend' | 'downtrend' | 'range'
@@ -34,6 +35,8 @@ export interface BinanceAdaptiveCycle {
   readonly rationale: string
   readonly trade?: BinancePaperTrade
   readonly account: BinancePaperAccount
+  readonly forecast?: BinanceKronosForecast
+  readonly forecastStatus?: 'accepted' | 'rejected' | 'unavailable'
 }
 
 /** Bounded configuration for one deterministic scan. */
@@ -41,6 +44,7 @@ export interface BinanceAdaptiveRequest {
   readonly symbols: readonly string[]
   readonly interval?: BinanceAdaptiveCycle['interval']
   readonly mode?: BinanceAdaptiveCycle['mode']
+  readonly predictor?: (symbol: string, candles: readonly BinanceCandle[], interval: BinanceAdaptiveCycle['interval']) => Promise<BinanceKronosForecast>
 }
 
 /** Minimal paper-only broker dependency; no real-account connector is accessible. */
@@ -338,6 +342,44 @@ export async function runBinanceAdaptiveCycle(
       return { mode, interval, signals: sorted, execution: executionFor('sell', result.trade), decision: 'sell',
         rationale: 'Confirmed bearish defensive exit', trade: result.trade, account: result.account }
     }
+    // Forecasting is entry-only. Every existing stop/take-profit and the
+    // technical defensive exit were processed before reaching this gate.
+    let forecast: BinanceKronosForecast | undefined
+    if (candidate !== undefined && request.predictor !== undefined && budget >= 10
+      && account.positions.length < MAX_OPEN_POSITIONS && account.maxDrawdownPct < 5) {
+      const rejectForecast = (rationale: string, status: 'rejected' | 'unavailable'): BinanceAdaptiveCycle => ({
+        mode, interval, signals: sorted,
+        execution: executionFor('hold').map(row => row.symbol === candidate.symbol
+          ? { ...row, status: 'blocked' as const, explanation: rationale } : row),
+        decision: 'hold', rationale, account,
+        ...(forecast === undefined ? {} : { forecast }),
+        forecastStatus: status,
+      })
+      try {
+        const history = (await broker.candles(candidate.symbol, interval, 80))
+          .filter(candle => candle.closeTime <= now)
+        const last = history.at(-1)
+        if (history.length < 48 || !last || now - last.closeTime > intervalMs * MAX_MARKET_DATA_AGE) {
+          return rejectForecast('Kronos: faltan velas cerradas y recientes; entrada omitida', 'unavailable')
+        }
+        forecast = await request.predictor(candidate.symbol, history, interval)
+        if (forecast.source !== 'kronos' || forecast.symbol !== candidate.symbol
+          || forecast.interval !== interval || forecast.forecastAt !== last.closeTime
+          || !Number.isFinite(forecast.projectedReturnPct) || !Number.isFinite(forecast.maxDownsidePct)
+          || !Number.isFinite(forecast.baseClose) || forecast.baseClose <= 0
+          || Math.abs(forecast.baseClose / last.close - 1) > 0.001) {
+          return rejectForecast('Kronos: proyección inválida o desactualizada; entrada omitida', 'unavailable')
+        }
+        const estimatedNetReturn = forecast.projectedReturnPct / 100 - 2 * account.feeRate - 0.003
+        // 30 bps round-trip slippage allowance plus 30 bps minimum expected net
+        // edge. These are conservative heuristics, not a win probability.
+        if (estimatedNetReturn < 0.003 || forecast.maxDownsidePct < -2.5) {
+          return rejectForecast('Kronos: sin ventaja neta proyectada tras comisiones, deslizamiento y riesgo', 'rejected')
+        }
+      } catch {
+        return rejectForecast('Kronos: predicción no disponible; la entrada queda bloqueada', 'unavailable')
+      }
+    }
     if (candidate !== undefined && budget >= 10
       && account.positions.length < MAX_OPEN_POSITIONS
       && account.maxDrawdownPct < 5) {
@@ -346,10 +388,11 @@ export async function runBinanceAdaptiveCycle(
         side: 'buy',
         quoteAmountUsdt: Math.floor(budget * 100) / 100,
         strategyId: 'adaptive-' + candidate.strategy + '-v1',
-        reason: candidate.reason,
+        reason: candidate.reason + (forecast === undefined ? '' : '; Kronos entry gate approved'),
       })
       return { mode, interval, signals: sorted, execution: executionFor('buy', result.trade), decision: 'buy',
         rationale: 'Highest scored eligible virtual entry within portfolio limits',
+        ...(forecast === undefined ? {} : { forecast, forecastStatus: 'accepted' as const }),
         trade: result.trade, account: result.account }
     }
     const why = candidate === undefined
