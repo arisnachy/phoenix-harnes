@@ -97,8 +97,8 @@ async function execute(command: string, args: string[], timeout = 30_000, maxOut
     })
     child.stderr.setEncoding('utf8')
     child.stderr.on('data', (chunk: string) => { stderr = (stderr + chunk).slice(-4000) })
-    child.once('error', () => finish(new Error('VIDEO_DECODER_UNAVAILABLE')))
-    child.once('close', code => finish(undefined, code ?? -1))
+    child.once('error', () => { finish(new Error('VIDEO_DECODER_UNAVAILABLE')) })
+    child.once('close', code => { finish(undefined, code ?? -1) })
   })
 }
 let cachedDecoder: Promise<string> | undefined
@@ -119,7 +119,7 @@ export async function resolveVideoDecoder(): Promise<string> {
     const verify = await execute(path, ['-version'], 7000, 5000)
     if (verify.code !== 0) throw new Error('VIDEO_FFMPEG_UNAVAILABLE')
     return path
-  })().catch(error => { cachedDecoder = undefined; throw error })
+  })().catch((error: unknown) => { cachedDecoder = undefined; throw error })
   return await cachedDecoder
 }
 
