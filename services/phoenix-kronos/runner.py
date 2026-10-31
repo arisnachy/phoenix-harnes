@@ -51,7 +51,7 @@ def forecast(predictor, request):
     step = pd.Timedelta(minutes=INTERVALS[interval])
     ys = pd.Series(pd.date_range(xs.iloc[-1] + step, periods=6, freq=step))
     result = predictor.predict(df=df, x_timestamp=xs, y_timestamp=ys, pred_len=6,
-                               T=1.0, top_p=0.9, sample_count=1)
+                               T=1.0, top_p=0.9, sample_count=1, verbose=False)
     closes = result["close"].astype(float).to_numpy()
     lows = result["low"].astype(float).to_numpy()
     if len(closes) != 6 or any(not math.isfinite(float(x)) or x <= 0 for x in closes):
