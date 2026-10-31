@@ -1,3 +1,14 @@
+/** Secret-free The Odds API v4 credential state projected to trusted clients. */
+export interface OddsApiConnectorState {
+  readonly configured: boolean
+  readonly verified: boolean
+  readonly source: 'vault' | 'environment' | 'none'
+  readonly status: 'ready' | 'unconfigured' | 'invalid-key' | 'unreachable' | 'rate-limited' | 'vault-unavailable'
+  readonly requestsRemaining?: number
+  readonly requestsUsed?: number
+  readonly lastRequestCost?: number
+}
+
 import type { Branded } from '@phoenix-ai/dsh-brand'
 
 /** One request's bounded input and actual provider token counters. No text or session IDs. */

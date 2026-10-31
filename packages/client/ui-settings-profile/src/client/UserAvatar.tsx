@@ -2,9 +2,9 @@
 import { useEffect, useState } from 'react'
 import type { ChangeEvent } from 'react'
 import {
-  activateAvatar, deleteAvatar, editAvatarLocally, normalizeAvatar,
+  activateAvatar, deleteAvatar, normalizeAvatar,
   readAvatar, storeOriginalAvatar, storeStyledAvatar, subscribeAvatar,
-  type AvatarSnapshot, validatedLocalEditor,
+  setAvatarReferenceEnabled, type AvatarSnapshot,
 } from './avatar-store.ts'
 import css from './UserAvatar.module.css'
 
@@ -15,7 +15,7 @@ export function UserAvatar({ size = 36, className }: { size?: number; className?
     let alive = true
     let current: string | undefined
     const reload = () => {
-      void readAvatar().then(snapshot => {
+      void readAvatar().then((snapshot) => {
         if (!alive) return
         const photo = snapshot.mode === 'styled' ? snapshot.styled : snapshot.original
         const next = photo === undefined ? undefined : URL.createObjectURL(photo)
@@ -36,12 +36,10 @@ export function UserAvatar({ size = 36, className }: { size?: number; className?
     {url === undefined ? <span aria-hidden="true">◉</span> : <img src={url} alt="" />}
   </span>
 }
-const empty: AvatarSnapshot = { mode: 'original' }
-const editorKey = 'phoenix-avatar-local-edit-url'
-const modelKey = 'phoenix-avatar-local-edit-model'
+const empty: AvatarSnapshot = { mode: 'original', referenceEnabled: false }
 
 /** In-profile photo picker, real crop, original/restyle variants and local editing. */
-export function AvatarPanel() {
+export function AvatarPanel({ transformAvatar }: { transformAvatar: (photo: Blob) => Promise<Blob> }) {
   const [stored, setStored] = useState<AvatarSnapshot>(empty)
   const [selected, setSelected] = useState<File>()
   const [preview, setPreview] = useState<string>()
@@ -51,12 +49,8 @@ export function AvatarPanel() {
   const [zoom, setZoom] = useState(1)
   const [offsetX, setOffsetX] = useState(0)
   const [offsetY, setOffsetY] = useState(0)
-  const [editor, setEditor] = useState(() => {
-    try { return localStorage.getItem(editorKey) ?? '' } catch { return '' }
-  })
-  const [model, setModel] = useState(() => {
-    try { return localStorage.getItem(modelKey) ?? 'local-image-edit' } catch { return 'local-image-edit' }
-  })
+  const [suggested, setSuggested] = useState<Blob>()
+  const [suggestedUrl, setSuggestedUrl] = useState<string>()
   const refresh = async () => { setStored(await readAvatar()) }
   useEffect(() => {
     void refresh().catch(() => { setError('No se pudo abrir el almacenamiento local de fotos.') })
@@ -68,6 +62,12 @@ export function AvatarPanel() {
     setPreview(url)
     return () => { URL.revokeObjectURL(url) }
   }, [selected])
+  useEffect(() => {
+    if (suggested === undefined) { setSuggestedUrl(undefined); return }
+    const next = URL.createObjectURL(suggested)
+    setSuggestedUrl(next)
+    return () => { URL.revokeObjectURL(next) }
+  }, [suggested])
   const act = async (operation: () => Promise<void>, success: string) => {
     setBusy(true); setError(''); setMessage('')
     try {
@@ -86,7 +86,7 @@ export function AvatarPanel() {
       setError('Selecciona una imagen PNG, JPEG o WebP de máximo 8 MB.')
       return
     }
-    setSelected(file); setError(''); setMessage('')
+    setSelected(file); setSuggested(undefined); setError(''); setMessage('')
     setZoom(1); setOffsetX(0); setOffsetY(0)
   }
   const save = () => {
@@ -100,42 +100,67 @@ export function AvatarPanel() {
   const transform = () => {
     if (stored.original === undefined) return
     void act(async () => {
-      if (editor.trim() === '') throw new Error('Configura primero un editor local de imágenes compatible con /v1/images/edits.')
-      // Explicit user click consents to sharing the normalized image with THIS local service only.
-      const styled = await editAvatarLocally(stored.original as Blob, editor, model)
-      await storeStyledAvatar(styled)
-    }, '¡Listo! Se guardó el retrato transformado. Tu foto original sigue disponible.')
+      const result = await transformAvatar(stored.original as Blob)
+      setSuggested(result)
+    }, 'Retrato estilo Kira generado. Comprueba que el rostro se reconoce y que el estilo es futurista.')
   }
-  const updateEditor = (value: string) => {
-    setEditor(value)
-    try { localStorage.setItem(editorKey, value) } catch { /* Non-essential convenience. */ }
+  const confirm = () => {
+    if (suggested === undefined) return
+    void act(async () => {
+      const latest = await readAvatar()
+      if (latest.original === undefined) {
+        throw new Error('Guarda primero una fotografía original para activar un retrato.')
+      }
+      await storeStyledAvatar(suggested)
+      setSuggested(undefined)
+    }, 'Retrato estilo Kira guardado. Tu foto original sigue disponible.')
   }
-  const updateModel = (value: string) => {
-    setModel(value)
-    try { localStorage.setItem(modelKey, value) } catch { /* Non-essential convenience. */ }
-  }
-  let editorValid = false
-  try { if (editor.trim() !== '') { validatedLocalEditor(editor); editorValid = true } } catch { /* Invalid address will be explained. */ }
   return (
     <section className={css.panel} aria-labelledby="user-avatar-title">
       <h3 className={css.heading} id="user-avatar-title">Mi avatar</h3>
-      <p className={css.hint}>Tu foto es tuya, no un agente del equipo. Se conserva en este navegador o instalación de PHOENIX, no se agrega a los prompts ni se sube automáticamente.</p>
+      <p className={css.hint}>
+        Tu foto es tuya, no un agente del equipo. Se conserva en este navegador o instalación de PHOENIX,
+        no se comparte salvo cuando autorizas expresamente una transformación o una referencia.
+      </p>
       <div className={css.top}>
         <UserAvatar size={76} />
         <div className={css.details}>
-          <strong>{stored.mode === 'styled' ? 'Tu retrato PHOENIX' : stored.original === undefined ? 'Sin foto personal' : 'Tu fotografía original'}</strong>
+          <strong>
+            {stored.mode === 'styled' ? 'Tu retrato PHOENIX'
+              : stored.original === undefined ? 'Sin foto personal' : 'Tu fotografía original'}
+          </strong>
           <span>Visible junto a tus mensajes, con tu propia identidad.</span>
         </div>
       </div>
       <label className={css.pick} htmlFor="user-avatar-upload">Subir fotografía</label>
-      <input className={css.file} id="user-avatar-upload" aria-label="Seleccionar una fotografía" type="file" accept="image/png,image/jpeg,image/webp" onChange={choose} disabled={busy} />
+      <input
+        className={css.file} id="user-avatar-upload" aria-label="Seleccionar una fotografía"
+        type="file" accept="image/png,image/jpeg,image/webp" onChange={choose} disabled={busy}
+      />
       {selected !== undefined && preview !== undefined ? (
         <div className={css.editor}>
           <p className={css.hint}>Ajusta el encuadre antes de guardar la imagen. Se eliminan los metadatos personales.</p>
-          <div className={css.preview}><img src={preview} alt="Vista previa de la fotografía" style={{ transform: `scale(${zoom})`, objectPosition: `${50 + offsetX * 50}% ${50 + offsetY * 50}%` }} /></div>
-          <label>Acercar <input aria-label="Acercar" type="range" min="1" max="3" step=".1" value={zoom} onChange={e => { setZoom(Number(e.target.value)) }} /></label>
-          <label>Encuadre horizontal <input aria-label="Encuadre horizontal" type="range" min="-1" max="1" step=".1" value={offsetX} onChange={e => { setOffsetX(Number(e.target.value)) }} /></label>
-          <label>Encuadre vertical <input aria-label="Encuadre vertical" type="range" min="-1" max="1" step=".1" value={offsetY} onChange={e => { setOffsetY(Number(e.target.value)) }} /></label>
+          <div className={css.preview}>
+            <img
+              src={preview} alt="Vista previa de la fotografía"
+              style={{ transform: `scale(${zoom})`, objectPosition: `${50 + offsetX * 50}% ${50 + offsetY * 50}%` }}
+            />
+          </div>
+          <label>
+            Acercar
+            <input aria-label="Acercar" type="range" min="1" max="3" step=".1" value={zoom}
+              onChange={(e) => { setZoom(Number(e.target.value)) }} />
+          </label>
+          <label>
+            Encuadre horizontal
+            <input aria-label="Encuadre horizontal" type="range" min="-1" max="1" step=".1" value={offsetX}
+              onChange={(e) => { setOffsetX(Number(e.target.value)) }} />
+          </label>
+          <label>
+            Encuadre vertical
+            <input aria-label="Encuadre vertical" type="range" min="-1" max="1" step=".1" value={offsetY}
+              onChange={(e) => { setOffsetY(Number(e.target.value)) }} />
+          </label>
           <div className={css.actions}>
             <button type="button" onClick={save} disabled={busy}>Guardar foto</button>
             <button type="button" onClick={() => { setSelected(undefined) }} disabled={busy}>Cancelar</button>
@@ -144,21 +169,77 @@ export function AvatarPanel() {
       ) : null}
       {stored.original !== undefined ? (
         <div className={css.actions}>
-          <button type="button" disabled={busy || stored.mode === 'original'} onClick={() => { void act(() => activateAvatar('original'), 'Foto original restaurada.') }}>Usar original</button>
-          {stored.styled !== undefined && <button type="button" disabled={busy || stored.mode === 'styled'} onClick={() => { void act(() => activateAvatar('styled'), 'Retrato PHOENIX activado.') }}>Usar retrato</button>}
-          <button type="button" className={css.danger} disabled={busy} onClick={() => { void act(deleteAvatar, 'Avatar eliminado de este dispositivo.') }}>Eliminar foto</button>
+          <button type="button" disabled={busy || stored.mode === 'original'}
+            onClick={() => { void act(() => activateAvatar('original'), 'Foto original restaurada.') }}>
+            Volver a mi foto real
+          </button>
+          {stored.styled !== undefined && (
+            <button type="button" disabled={busy || stored.mode === 'styled'}
+              onClick={() => { void act(() => activateAvatar('styled'), 'Retrato PHOENIX activado.') }}>
+              Usar retrato
+            </button>
+          )}
+          <button type="button" className={css.danger} disabled={busy}
+            onClick={() => {
+              setSuggested(undefined)
+              void act(deleteAvatar, 'Avatar eliminado de este dispositivo.')
+            }}>
+            Eliminar foto
+          </button>
         </div>
       ) : null}
       {stored.original !== undefined && (
+        <label className={css.referenceOption}>
+          <input type="checkbox" checked={stored.referenceEnabled} disabled={busy} onChange={(event) => {
+            void act(() => setAvatarReferenceEnabled(event.target.checked), event.target.checked
+              ? 'Tu foto original será referencia en peticiones explícitas de imágenes donde aparezcas.'
+              : 'La referencia automática está desactivada.')
+          }} />
+          <span>
+            <strong>Usar mi rostro como referencia en nuevas imágenes</strong>
+            <small>
+              Solo cuando pidas expresamente una imagen en la que aparezcas tú.
+              Se adjuntará la foto original a esa solicitud y podrá enviarse al proveedor de IA elegido;
+              no se envía en conversaciones ordinarias. Puedes desactivarlo cuando quieras.
+            </small>
+          </span>
+        </label>
+      )}
+      {stored.original !== undefined && (
         <div className={css.transform}>
           <h4>Transformar al estilo del equipo Kira</h4>
-          <p className={css.hint}>Retrato semirrealista con luz cálida y acabado premium, conservando tus rasgos. Necesita un editor de imágenes real, compatible con <code>/v1/images/edits</code>; el generador de imágenes nuevas no sirve para editar tu rostro.</p>
-          <label htmlFor="user-avatar-editor">Editor de imágenes local (solo localhost)</label>
-          <input id="user-avatar-editor" type="url" className={css.endpoint} value={editor} placeholder="http://127.0.0.1:PORT/v1" onChange={e => { updateEditor(e.target.value) }} disabled={busy} />
-          <label htmlFor="user-avatar-model">Modelo de edición instalado</label>
-          <input id="user-avatar-model" className={css.endpoint} value={model} placeholder="local-image-edit" onChange={e => { updateModel(e.target.value) }} disabled={busy} />
-          <button type="button" disabled={busy || !editorValid || !/^[a-zA-Z0-9._/-]{1,120}$/u.test(model)} onClick={transform}>{busy ? 'Procesando…' : 'Transformar con IA'}</button>
-          <p className={css.hint}>Al pulsar transformar, autorizas enviar tu foto normalizada a ese servicio local. Si el servicio no admite edición o falla, tu foto permanece intacta.</p>
+          <p className={css.hint}>
+            Codex utiliza tu foto real para crear un personaje cinematográfico del universo Kira:
+            ciudad futurista, hologramas azules y violetas, vestuario tecnológico e iluminación dramática.
+            No necesitas configurar un servidor local ni una clave API adicional.
+            La foto original siempre se conserva.
+          </p>
+          <div className={css.actions}>
+            <button type="button" className={css.primary} disabled={busy} onClick={transform}>
+              {busy ? 'Generando retrato…' : 'Transformar con Codex'}
+            </button>
+          </div>
+          {suggested !== undefined && suggestedUrl !== undefined && (
+            <div className={css.candidate}>
+              <img src={suggestedUrl} alt="Vista previa del retrato generado por Codex" />
+              <p className={css.hint}>
+                Comprueba que el rostro sea reconocible. Guardar activa el nuevo retrato;
+                descartar mantiene intacta tu fotografía actual.
+              </p>
+              <div className={css.actions}>
+                <button type="button" className={css.primary} disabled={busy} onClick={confirm}>
+                  Guardar retrato
+                </button>
+                <button type="button" disabled={busy} onClick={() => { setSuggested(undefined) }}>
+                  Descartar
+                </button>
+              </div>
+            </div>
+          )}
+          <p className={css.hint}>
+            La transformación envía la fotografía normalizada al generador Codex/ChatGPT configurado
+            en PHOENIX. Si no está disponible, verás el error real sin perder la imagen original.
+          </p>
         </div>
       )}
       {error !== '' && <p className={css.error} role="alert">{error}</p>}

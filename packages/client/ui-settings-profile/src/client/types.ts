@@ -10,6 +10,7 @@ export interface UserProfileConsent {
   pronouns: boolean
   tone: boolean
   family: boolean
+  moments: boolean
 }
 
 /** One optional family entry entered explicitly by the user. */
@@ -17,6 +18,9 @@ export interface UserProfileFamilyMember {
   relationship: string
   name?: string
 }
+
+/** Optional personal recurring or annual occasion. */
+export interface PersonalMoment { date: string; label: string; solemn?: boolean }
 
 /** Presentation preference for the assistant identity shown by Settings. */
 export type AssistantGender = 'masculine' | 'feminine' | 'neutral'
@@ -42,6 +46,9 @@ export interface UserProfileSettings {
   pronouns?: string
   tone?: string
   family?: UserProfileFamilyMember[]
+  countryCode?: string
+  momentsTimeZone?: string
+  specialDates?: PersonalMoment[]
   consent: UserProfileConsent
 }
 /* jscpd:ignore-end */
@@ -70,6 +77,9 @@ export interface UserProfileRowState {
   pronouns: UserProfileFieldState
   tone: UserProfileFieldState
   family: UserProfileFieldState
+  countryCode: UserProfileFieldState
+  momentsTimeZone: UserProfileFieldState
+  specialDates: UserProfileFieldState
   assistantName: UserProfileFieldState
   assistantGender: AssistantGender
   assistantGenderSource: AssistantGenderMode

@@ -11,8 +11,8 @@
  */
 
 import { randomUUID } from 'node:crypto'
-import { lstat, mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises'
-import { homedir } from 'node:os'
+import { lstat, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { homedir, tmpdir } from 'node:os'
 import { basename, dirname, extname, join, resolve } from 'node:path'
 import type { Context } from '@phoenix-ai/cordis'
 import type { AttachmentStore, ImageAttachmentRef, ImageMediaType } from '@phoenix-ai/dsh-attachment'
@@ -76,6 +76,7 @@ interface ImageExecutionContext {
       readonly header: {
         readonly cwd?: string
       }
+      readonly events?: readonly { readonly type: string; readonly data: unknown }[]
     }
   }
 }
@@ -195,6 +196,7 @@ export const imageGenerationToolDescription =
   + 'For a webpage, landing page, dashboard, report, or similar visual deliverable, generate type-appropriate imagery when it materially improves the requested result and wire the generated attachment into the final artifact when the format permits it; keep data charts and tables on structured visualization surfaces rather than inventing them as image content. '
   + 'For ordinary real-world subjects, prefer natural, professional, coherent imagery and do not turn objects into living characters or mascots unless the user asks for that. '
   + 'The successful result includes a durable attachment and, when the session has a workspace, an exported image under <workspace>/.artifacts/generated-images/; use that stable path in subsequent read_image, shell, webpage and game-building steps rather than the Codex temporary cache path. '
+  + 'When generating the user in a scene, use the currently attached opted-in original profile photo as real Codex image input, not as a text description. Style Kira means cinematic futuristic sci-fi key art, not a painted portrait. '
   + 'Pass the complete visual request in prompt. Governed HARDNESS recovery may supply the same request as brief or objective. Generate one distinct final visual per call.'
 
 /**
@@ -851,11 +853,58 @@ async function probeCodexImagePosture(ctx: Context, signal: AbortSignal): Promis
   }
 }
 
+
+/** Kira reference is cinematic futuristic concept art rather than a paint-over portrait. */
+export const KIRA_TEAM_STYLE = [
+  'Kira team visual direction: richly detailed cinematic science-fiction ensemble concept art.',
+  'A monumental futuristic city at night, rain-slick architecture, luminous blue and violet holograms,',
+  'black tactical techwear with small amber indicator lights, blue holographic accents, beautiful moody depth.',
+  'High-budget movie-poster composition, natural expressive recognizable faces, believable dimensional lighting.',
+  'For one-person profile avatars create a single protagonist in the same cinematic universe, not a group.',
+  'This must NOT be a warm amber professional headshot, watercolor, business photograph or paint-over filter.',
+].join(' ')
+
+/** The profile image must belong to the CURRENT human turn; never reuse historic photographs. */
+export function latestProfileReference(events: readonly { type: string; data: unknown }[]): ImageAttachmentRef | undefined {
+  for (let i = events.length - 1; i >= 0; i--) {
+    const event = events[i]
+    if (event?.type === 'turn/start') return undefined
+    if (event?.type !== 'user/message') continue
+    if (typeof event.data !== 'object' || event.data === null) return undefined
+    const msg = event.data as { source?: { kind?: string }; content?: readonly ContentBlock[] }
+    if (msg.source?.kind !== 'user') continue
+    if (!Array.isArray(msg.content)) return undefined
+    const block = msg.content.find(item =>
+      item.type === 'image' && item.attachment.name === 'referencia-original-del-usuario.webp')
+    return block?.type === 'image' ? block.attachment : undefined
+  }
+  return undefined
+}
+function latestUserText(events: readonly { type: string; data: unknown }[]): string {
+  for (let i = events.length - 1; i >= 0; i--) {
+    const event = events[i]
+    if (event?.type === 'turn/start') return ''
+    if (event?.type !== 'user/message') continue
+    if (typeof event.data !== 'object' || event.data === null) return ''
+    const msg = event.data as { source?: { kind?: string }; content?: readonly ContentBlock[] }
+    if (msg.source?.kind !== 'user') continue
+    if (!Array.isArray(msg.content)) return ''
+    return msg.content.filter(item => item.type === 'text')
+      .map(item => item.type === 'text' ? item.text : '').join(' ')
+  }
+  return ''
+}
+export function requestsProfileLikeness(text: string): boolean {
+  const normalized = text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/gu, '')
+  return /\b(?:foto|imagen|retrato|selfie|photograph|image|portrait)\b/u.test(normalized)
+    && /\b(?:mia|mio|conmigo|de mi (?:cara|rostro|persona|en|como)|yo en|salga yo|aparezca yo|mi cara|mi rostro|of me|myself|my face)\b/u.test(normalized)
+}
 function generationPrompt(
   prompt: string,
   size: string,
   quality: string,
   background: string,
+  referencePath?: string,
 ): string {
   return [
     'You are the PHOENIX image worker.',
@@ -869,6 +918,13 @@ function generationPrompt(
     `Requested quality guidance: ${quality}.`,
     `Requested background guidance: ${background}.`,
     `Image request: ${highQualityPrompt(prompt)}`,
+    ...(referencePath === undefined ? [] : [
+      `MANDATORY source photograph: ${referencePath}`,
+      'Read and visually inspect this exact input photograph, then supply it as the image reference to the built-in image_gen tool.',
+      'This is IMAGE-TO-IMAGE. Include the source pixels as input to image_gen, preserving actual likeness; never invent a different face.',
+      'Transform the wardrobe, pose and entire setting. Do not apply a simple paint filter to the original headshot.',
+      'If you cannot read the source or provide it to the image tool, STOP; never fabricate a matching face.',
+    ]),
     'After the image tool finishes, end the task.',
   ].join('\n')
 }
@@ -966,6 +1022,7 @@ async function generateWithCodexProvider(
   args: ImageGenerationArgs,
   prompt: string,
   signal: AbortSignal,
+  referencePath?: string,
 ): Promise<ImageGenerationValue> {
   await probeCodexImagePosture(ctx, signal)
   const generatedRoot = join(codexHome(), 'generated_images')
@@ -989,6 +1046,7 @@ async function generateWithCodexProvider(
       args.size ?? 'auto',
       args.quality ?? 'auto',
       args.background ?? 'auto',
+      referencePath,
     ), signal)
   } catch (error) {
     signal.throwIfAborted()
@@ -1021,6 +1079,72 @@ async function generateWithCodexProvider(
     path: generated.path,
     attachment,
   }
+}
+
+/** Narrow Host connection boundary: do not import the full Connection module graph. */
+interface AvatarHostRpc {
+  handle(
+    channel: string,
+    handler: (endpoint: string, payload: unknown, signal: AbortSignal) => Promise<unknown>,
+    options: { authority: 'loopback' },
+  ): () => Promise<void>
+}
+
+/** Bound, same-origin RPC for a private, user-initiated profile portrait edit. */
+export function installCodexAvatarTransform(ctx: Context): void {
+  const connection = (ctx as unknown as { connection: { rpc: AvatarHostRpc } }).connection
+  connection.rpc.handle('/avatar', async (endpoint, payload, signal) => {
+    if (endpoint !== 'transform') {
+      return { ok: false, error: { code: 'bad-request', message: 'Unknown avatar operation', details: { issues: [] } } }
+    }
+    if (typeof payload !== 'object' || payload === null || !('image' in payload)
+      || typeof payload.image !== 'string') {
+      return { ok: false, error: { code: 'bad-request', message: 'A saved original photo is required', details: { issues: [] } } }
+    }
+    const encoded = payload.image
+    // 8 MiB normalized input limit; validation happens BEFORE allocating a file or calling Codex.
+    if (encoded.length === 0 || encoded.length > Math.ceil(8 * 1024 * 1024 * 4 / 3) + 4
+      || !/^[a-zA-Z0-9+/]+={0,2}$/u.test(encoded)) {
+      return { ok: false, error: { code: 'bad-request', message: 'Invalid portrait encoding or size', details: { issues: [] } } }
+    }
+    const data = Buffer.from(encoded, 'base64')
+    if (data.length === 0 || data.length > 8 * 1024 * 1024 || imageMediaTypeFromBytes(data) !== 'image/webp') {
+      return { ok: false, error: { code: 'bad-request', message: 'Expected one normalized WebP photo', details: { issues: [] } } }
+    }
+    const directory = await mkdtemp(join(tmpdir(), 'phoenix-codex-avatar-'))
+    try {
+      const source = join(directory, 'user-original.webp')
+      await writeFile(source, data, { flag: 'wx' })
+      const prompt = [
+        'Reimagine this exact human as an original futuristic Kira team protagonist. NOT a painted business photograph.',
+        KIRA_TEAM_STYLE,
+        'Keep the identifiable source face, age, hairstyle and facial hair, but replace background and clothing completely.',
+        'Futuristic jacket or techwear, cyan-neon sci-fi city, luminous holograms and amber accents.',
+        'Cinematic character key art, strong depth, square head-and-shoulders crop. No text, watermark or logo.',
+      ].join(' ')
+      const result = await generateWithCodexProvider(
+        ctx, { prompt, size: '1024x1024', quality: 'high' }, prompt, signal, source,
+      )
+      const stored = await servicesOf(ctx).attachments.readImage(result.attachment, signal)
+      if (stored.data.length === 0 || stored.data.length > 15 * 1024 * 1024) {
+        throw new Error('El editor de Codex devolvió un retrato demasiado grande.')
+      }
+      return {
+        ok: true,
+        value: {
+          provider: 'codex',
+          image: Buffer.from(stored.data).toString('base64'),
+          mediaType: stored.ref.mediaType,
+        },
+      }
+    } catch (cause) {
+      signal.throwIfAborted()
+      const diagnostic = cause instanceof Error ? cause.message : 'Error al transformar el retrato'
+      return { ok: false, error: { code: 'internal', message: diagnostic.slice(0,900), details: {} } }
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  }, { authority: 'loopback' })
 }
 
 /**
@@ -1116,14 +1240,38 @@ export function installCodexImageGeneration(ctx: Context): void {
       if (prompt.length === 0) throw new Error('image_generation: prompt must not be empty')
       if (prompt.length > 32_000) throw new Error('image_generation: prompt exceeds the 32,000-character safety bound')
 
-      const requestedBackend = args.backend ?? 'auto'
+      const events = exec.agent?.session?.events
+      const reference = events === undefined ? undefined : latestProfileReference(events)
+      const requestText = events === undefined ? '' : latestUserText(events)
+      if (requestsProfileLikeness(requestText) && reference === undefined) {
+        throw new Error('Para hacer una imagen tuya, activa la referencia de foto en Perfil y vuelve a pedirla.')
+      }
+      const requestedBackend = reference === undefined ? (args.backend ?? 'auto') : 'codex'
+      const wantsKira = /\b(?:tipo|estilo|como)\s+(?:(?:de|del|al)\s+)?(?:equipo\s+)?kira\b/iu.test(
+        requestText.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/gu, ''),
+      ) || /\b(?:tipo|estilo)\s+(?:(?:de|del|al)\s+)?(?:equipo\s+)?kira\b/iu.test(prompt)
+      const styledPrompt = wantsKira ? prompt + '\n' + KIRA_TEAM_STYLE : prompt
       const failures: string[] = []
       for (const backend of imageGenerationBackendOrder(requestedBackend, exec.agent?.options.provider)) {
         let image: ImageGenerationValue
         try {
-          if (backend === 'codex') image = await generateWithCodexProvider(ctx, args, prompt, exec.signal)
-          else if (backend === 'local') image = await generateWithLocalProvider(ctx, args, prompt, exec.signal)
-          else image = await generateWithFreeProvider(ctx, args, prompt, exec.signal)
+          if (backend === 'codex' && reference !== undefined) {
+            const photo = await servicesOf(ctx).attachments.readImage(reference, exec.signal)
+            if (photo.ref.mediaType !== 'image/webp' || photo.data.length === 0
+              || photo.data.length > 8 * 1024 * 1024) {
+              throw new Error('La fotografía de perfil no es un WebP válido de hasta 8 MB.')
+            }
+            const dir = await mkdtemp(join(tmpdir(), 'phoenix-user-photo-'))
+            try {
+              const source = join(dir, 'profile-original.webp')
+              await writeFile(source, photo.data, { flag: 'wx' })
+              image = await generateWithCodexProvider(ctx, args, styledPrompt, exec.signal, source)
+            } finally {
+              await rm(dir, { recursive: true, force: true })
+            }
+          } else if (backend === 'codex') image = await generateWithCodexProvider(ctx, args, styledPrompt, exec.signal)
+          else if (backend === 'local') image = await generateWithLocalProvider(ctx, args, styledPrompt, exec.signal)
+          else image = await generateWithFreeProvider(ctx, args, styledPrompt, exec.signal)
         } catch (error) {
           exec.signal.throwIfAborted()
           if (requestedBackend !== 'auto') throw error
