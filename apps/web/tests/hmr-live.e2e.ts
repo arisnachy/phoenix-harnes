@@ -94,6 +94,7 @@ it('hot-reloads a real client-plugin source edit without refreshing the page', a
   let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined
   const failures: unknown[] = []
   const processOutput: { watcher: string; host: string } = { watcher: '', host: '' }
+  const browserEvents: string[] = []
   const captureOutput = (child: SubprocessHandle, label: 'watcher' | 'host'): void => {
     const append = (chunk: Buffer): void => {
       processOutput[label] = (processOutput[label] + chunk.toString()).slice(-12_000)
@@ -122,6 +123,15 @@ it('hot-reloads a real client-plugin source edit without refreshing the page', a
     const baseUrl = await waitForOutput(host, /dsh web: (http:\/\/[^\s]+)/, 'built dsh web')
     browser = await chromium.launch()
     const page = await browser.newPage()
+    page.on('console', message => { browserEvents.push(`console ${message.type()}: ${message.text()}`) })
+    page.on('requestfailed', request => {
+      browserEvents.push(`request failed: ${request.url()} (${request.failure()?.errorText ?? 'unknown'})`)
+    })
+    page.on('response', response => {
+      if (response.url().includes('/plugins/events')) {
+        browserEvents.push(`HMR event stream response: ${String(response.status())} ${response.url()}`)
+      }
+    })
     const pageErrors: string[] = []
     page.on('pageerror', error => pageErrors.push(String(error)))
     await page.goto(baseUrl, { waitUntil: 'load' })
@@ -143,7 +153,8 @@ it('hot-reloads a real client-plugin source edit without refreshing the page', a
     failures.push(new Error(
       `HMR browser failure; client bundle contains edit=${String(clientBundle.includes(newText))}`
       + `\nwatcher output (tail):\n${processOutput.watcher}`
-      + `\nhost output (tail):\n${processOutput.host}`,
+      + `\nhost output (tail):\n${processOutput.host}`
+      + `\nbrowser events (tail):\n${browserEvents.slice(-40).join('\n')}`,
       { cause: error },
     ))
   } finally {
