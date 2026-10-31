@@ -16,6 +16,7 @@ import { CompactionItem } from './CompactionItem.tsx'
 import { ContextInjectionRow } from './ContextInjectionRow.tsx'
 import { MessageIconActions } from './MessageIconActions.tsx'
 import { formatStructuredError } from './structured-error.ts'
+import { isTeamMention, parseDirectedTeamMessage } from './team-recipient.ts'
 import css from './MessageItem.module.css'
 
 type UserImage = Extract<UserMessageNode['content'][number], { type: 'image' }>
@@ -238,10 +239,12 @@ function projectUserText(text: string, sessionLabels: readonly string[]): ReactN
     if (tokenStart > cursor) parts.push(<MessageText key={cursor} text={text.slice(cursor, tokenStart)} />)
     const referenceKind = kind === 'session'
       ? 'session'
-      : label.startsWith('@')
-        ? label.endsWith('/') ? 'folder' : 'file'
-        : undefined
-    const displayLabel = referenceKind === undefined
+      : isTeamMention(label)
+        ? 'agent'
+        : label.startsWith('@')
+          ? label.endsWith('/') ? 'folder' : 'file'
+          : undefined
+    const displayLabel = referenceKind === undefined || referenceKind === 'agent'
       ? label
       : referenceKind === 'session'
         ? label.slice(1)
@@ -253,7 +256,7 @@ function projectUserText(text: string, sessionLabels: readonly string[]): ReactN
         data-ref-chip={referenceKind ?? 'skill'}
         title={label}
       >
-        {referenceKind !== undefined && (
+        {referenceKind !== undefined && referenceKind !== 'agent' && (
           <ReferenceIcon kind={referenceKind} size={16} className={css.refIcon} />
         )}
         {displayLabel}
@@ -281,8 +284,10 @@ function UserStyleBubble({
   t: ChatViewSlotProps['t']
 }): ReactNode {
   const { text, images, files, rest } = contentParts(content)
+  const addressed = parseDirectedTeamMessage(text)
+  const visibleText = addressed?.body ?? text
   const truncated = (total: number): string => t('json.truncated', { total })
-  const showBubble = text !== '' || rest.length > 0
+  const showBubble = visibleText !== '' || rest.length > 0
   return (
     <div className={css.userRow} data-pending-steering={pending || undefined} data-time-hover-root>
       <div className={css.userStack}>
@@ -296,8 +301,14 @@ function UserStyleBubble({
             </span>
           </div>
         ))}
+        {addressed !== undefined && (
+          <div className={css.recipientHeader} data-team-recipient={addressed.recipient}>
+            <span aria-hidden="true">↗</span>
+            <span>Para <strong>{addressed.recipient}</strong></span>
+          </div>
+        )}
         {showBubble && <div className={css.bubble}>
-          {projectUserText(text, referenceLabels)}
+          {projectUserText(visibleText, referenceLabels)}
           {rest.map((block, i) => <JsonBlock key={i} label={t('message.extraBlock')} payload={block} truncatedLabel={truncated} />)}
         </div>}
         {referenceLabels.length > 0 && (

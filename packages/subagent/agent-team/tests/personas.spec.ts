@@ -24,6 +24,8 @@ describe('KIRA Team social personalities', () => {
   it('gives Kira a human lead voice without trading away quality, speed, or cost', () => {
     const style = teamSocialStyle('lead', 'lead')
     expect(style).toContain(KIRA_SOCIAL_STYLE)
+    expect(style).toContain('verified facts, not emotion tags')
+    expect(style).toContain('recognizable, proportionate way')
     expect(style).toContain('Humor, sarcasm, and emoji are optional and contextual')
     expect(style).toContain('high quality, fast completion, and low cost')
     expect(style).toContain('never degrade any of the three')
@@ -50,8 +52,12 @@ describe('KIRA Team social personalities', () => {
     expect(lead).toContain('once in the first material user-facing report or final delivery')
     expect(lead).toContain('complete, partial or blocked')
     expect(lead).toContain('four verified references but needs eight to twelve')
+    expect(lead).toContain('Separate audiences faithfully')
+    expect(lead).toContain('bridge the thread')
+    expect(lead).toContain('not in every update, not for peers')
     expect(argo).not.toContain(KIRA_WORK_REPORT_CONTRACT)
     expect(argo).toContain('The user is the human collaborator')
+    expect(argo).toContain('without fabricated feelings')
   })
 
   it('selects the real named specialist voice and preserves aliases', () => {
