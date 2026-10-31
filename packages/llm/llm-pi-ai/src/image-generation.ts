@@ -1076,7 +1076,7 @@ export function installCodexAvatarTransform(ctx: Context): void {
         ok: true,
         value: {
           provider: 'codex',
-          image: stored.data.toString('base64'),
+          image: Buffer.from(stored.data).toString('base64'),
           mediaType: stored.ref.mediaType,
         },
       }
