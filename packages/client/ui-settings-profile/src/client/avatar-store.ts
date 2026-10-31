@@ -1,5 +1,6 @@
 /** Browser-private avatar binaries: never placed in model context or settings JSON. */
 export type AvatarMode = 'original' | 'portrait'
+/** Stored photo, optional independently generated variant, and selected display mode. */
 export interface AvatarState {
   readonly original?: Blob
   readonly portrait?: Blob
@@ -37,14 +38,14 @@ async function read<T>(key: string): Promise<T | undefined> {
     const transaction = database.transaction('assets', 'readonly')
     const request = transaction.objectStore('assets').get(key)
     request.onsuccess = () => { resolve(request.result as T | undefined) }
-    request.onerror = () => { reject(request.error) }
+    request.onerror = () => { reject(request.error ?? new Error('No se pudo leer la foto local.')) }
     transaction.oncomplete = () => { database.close() }
     transaction.onerror = () => { database.close() }
   })
 }
 
 function mutate(callback: (store: IDBObjectStore) => void): Promise<void> {
-  return db().then(database => new Promise<void>((resolve, reject) => {
+  return db().then((database) => new Promise<void>((resolve, reject) => {
     const transaction = database.transaction('assets', 'readwrite')
     callback(transaction.objectStore('assets'))
     transaction.oncomplete = () => { database.close(); announce(); resolve() }
@@ -52,7 +53,7 @@ function mutate(callback: (store: IDBObjectStore) => void): Promise<void> {
       database.close()
       reject(transaction.error ?? new Error('No se pudo guardar la foto.'))
     }
-    transaction.onabort = () => { database.close(); reject(transaction.error) }
+    transaction.onabort = () => { database.close(); reject(transaction.error ?? new Error('No se pudo guardar la foto local.')) }
   }))
 }
 
@@ -60,6 +61,9 @@ function announce(): void {
   if (typeof window !== 'undefined') window.dispatchEvent(new Event(CHANGED))
 }
 
+/** Load the local picture variants without touching the model context.
+ * @returns Current stored photo, optional portrait, and selected mode.
+ */
 export async function loadAvatar(): Promise<AvatarState> {
   const [original, portrait, selected] = await Promise.all([
     read<Blob>('original'), read<Blob>('portrait'), read<AvatarMode>('mode'),
@@ -71,6 +75,11 @@ export async function loadAvatar(): Promise<AvatarState> {
   }
 }
 
+/** Persist a verified raster in the browser's private binary storage.
+ * @param mode - Original photo or independently generated portrait.
+ * @param blob - Validated raster file without untrusted metadata.
+ * @returns Settlement after the binary is committed.
+ */
 export async function saveAvatar(mode: AvatarMode, blob: Blob): Promise<void> {
   if (!avatarMimeFromBytes(new Uint8Array(await blob.slice(0, 16).arrayBuffer()))
     || blob.size === 0 || blob.size > MAX_BYTES) {
@@ -83,18 +92,28 @@ export async function saveAvatar(mode: AvatarMode, blob: Blob): Promise<void> {
   })
 }
 
+/** Switch the visible variant without overwriting the original.
+ * @param mode - Variant to display.
+ * @returns Settlement after the selection is persisted.
+ */
 export async function selectAvatar(mode: AvatarMode): Promise<void> {
   const state = await loadAvatar()
   if (mode === 'portrait' && state.portrait === undefined) throw new Error('Todavía no existe un retrato transformado.')
   if (state.original === undefined) throw new Error('Primero debes subir una fotografía.')
-  await mutate(store => { store.put(mode, 'mode') })
+  await mutate((store) => { store.put(mode, 'mode') })
 }
 
+/** Remove both images and their active selection.
+ * @returns Settlement after all avatar records are deleted.
+ */
 export async function clearAvatar(): Promise<void> {
-  await mutate(store => { store.clear() })
+  await mutate((store) => { store.clear() })
 }
 
-/** Strict file-signature check; rejecting SVG and mismatched extension/MIME is intentional. */
+/** Strict file-signature check; SVG and spoofed media are never accepted.
+ * @param bytes - First sixteen bytes of a candidate raster.
+ * @returns Verified raster MIME type, or undefined for unsupported content.
+ */
 export function avatarMimeFromBytes(bytes: Uint8Array): 'image/jpeg' | 'image/png' | 'image/webp' | undefined {
   if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'image/jpeg'
   if (bytes.length >= 8 && [137, 80, 78, 71, 13, 10, 26, 10].every((value, i) => bytes[i] === value)) return 'image/png'
@@ -103,12 +122,22 @@ export function avatarMimeFromBytes(bytes: Uint8Array): 'image/jpeg' | 'image/pn
   return undefined
 }
 
+/** Crop, orient and re-encode a user photo, stripping EXIF and external metadata.
+ * @param file - User-supplied image file.
+ * @param zoom - Magnification factor between 1 and 3.
+ * @param x - Relative horizontal crop position from 0 to 100.
+ * @param y - Relative vertical crop position from 0 to 100.
+ * @returns Verified normalized square JPEG blob.
+ */
 export async function prepareAvatar(file: File, zoom: number, x: number, y: number): Promise<Blob> {
   if (file.size === 0 || file.size > MAX_BYTES) throw new Error('La foto debe tener menos de 8 MB.')
   const magic = avatarMimeFromBytes(new Uint8Array(await file.slice(0, 16).arrayBuffer()))
   if (magic === undefined || magic !== file.type) throw new Error('Usa una foto JPG, PNG o WebP auténtica.')
   const image = await createImageBitmap(file, { imageOrientation: 'from-image' })
   try {
+    if (image.width > 8192 || image.height > 8192 || image.width === 0 || image.height === 0) {
+      throw new Error('La resolución de la foto no es compatible (máximo 8192 píxeles por lado).')
+    }
     const canvas = document.createElement('canvas')
     canvas.width = 512
     canvas.height = 512
@@ -118,7 +147,7 @@ export async function prepareAvatar(file: File, zoom: number, x: number, y: numb
     ctx.drawImage(image, (image.width - side) * x / 100, (image.height - side) * y / 100,
       side, side, 0, 0, 512, 512)
     return await new Promise<Blob>((resolve, reject) => {
-      canvas.toBlob(blob => { if (blob === null) reject(new Error('No se pudo codificar la foto.')); else resolve(blob) },
+      canvas.toBlob((blob) => { if (blob === null) reject(new Error('No se pudo codificar la foto.')); else resolve(blob) },
         'image/jpeg', 0.91)
     })
   } finally {
@@ -127,6 +156,10 @@ export async function prepareAvatar(file: File, zoom: number, x: number, y: numb
 }
 
 /** Never forward user photos to any server without an explicit edit action. */
+/** Guard the optional image editor against off-device photo disclosure.
+ * @param raw - User-entered local OpenAI-compatible editor base URL.
+ * @returns Validated HTTP loopback URL with no trailing slash.
+ */
 export function localEditorEndpoint(raw: string): string {
   let url: URL
   try { url = new URL(raw) } catch { throw new Error('Indica una dirección válida del editor local.') }
@@ -138,9 +171,12 @@ export function localEditorEndpoint(raw: string): string {
   return url.toString().replace(/\/+$/u, '')
 }
 
-/**
- * Actual image-to-image edit against an explicitly configured local OpenAI-compatible
- * /images/edits endpoint. No fallback to text-to-image or fabricated filters.
+/** Actual image-to-image edit with an explicitly configured local editing server.
+ * No fallback to text-to-image or fabricated filters.
+ * @param original - Sanitized and cropped human photo.
+ * @param rawBaseUrl - Local-only configured service base URL.
+ * @param model - Real image-edit model supported by the service.
+ * @returns Generated raster as an independent blob.
  */
 export async function editAvatarWithLocalAI(
   original: Blob, rawBaseUrl: string, model: string,
@@ -163,13 +199,15 @@ export async function editAvatarWithLocalAI(
     throw new Error('El editor no devolvió una imagen editada válida.')
   }
   const decoded = atob(encoded)
-  const bytes = Uint8Array.from(decoded, char => char.charCodeAt(0))
+  const bytes = Uint8Array.from(decoded, (char) => char.charCodeAt(0))
   const mime = avatarMimeFromBytes(bytes)
   if (mime === undefined || bytes.length > MAX_BYTES) throw new Error('Formato de imagen editada no válido.')
   return new Blob([bytes], { type: mime })
 }
 
-/** Own and revoke the current object URL; no permanent base64 string in localStorage. */
+/** Own and revoke the visible object URL; no long-lived base64 in localStorage.
+ * @returns Cleanup for the browser appearance event listener and object URL.
+ */
 export function mountAvatarAppearance(): () => void {
   if (typeof document === 'undefined' || typeof window === 'undefined') return () => {}
   let current: string | undefined

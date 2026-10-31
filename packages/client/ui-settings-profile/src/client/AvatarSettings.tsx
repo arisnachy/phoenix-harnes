@@ -28,8 +28,8 @@ export function AvatarSettings({ t, disabled }: { t: Translator; disabled: boole
 
   useEffect(() => {
     let alive = true
-    void loadAvatar().then(value => { if (alive) setSnapshot(value) })
-      .catch(e => { if (alive) setError(e instanceof Error ? e.message : String(e)) })
+    void loadAvatar().then((value) => { if (alive) setSnapshot(value) })
+      .catch((e: unknown) => { if (alive) setError(e instanceof Error ? e.message : String(e)) })
     return () => { alive = false }
   }, [revision])
 
@@ -55,7 +55,7 @@ export function AvatarSettings({ t, disabled }: { t: Translator; disabled: boole
     try {
       await action()
       setNotice(successful)
-      setRevision(v => v + 1)
+      setRevision((v) => v + 1)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally { setBusy(false) }
@@ -77,7 +77,7 @@ export function AvatarSettings({ t, disabled }: { t: Translator; disabled: boole
             onClick={() => { fileRef.current?.click() }}>{t('avatarUpload')}</button>
           <input ref={fileRef} className={css.hiddenFile} type="file" accept="image/jpeg,image/png,image/webp"
             aria-label={t('avatarUpload')} disabled={unavailable}
-            onChange={event => {
+            onChange={(event) => {
               const chosen = event.currentTarget.files?.[0]
               if (chosen !== undefined) { setFile(chosen); setError(''); setNotice('') }
               event.currentTarget.value = ''
@@ -90,15 +90,15 @@ export function AvatarSettings({ t, disabled }: { t: Translator; disabled: boole
           {incomingUrl !== undefined && <img className={css.cropPreview} src={incomingUrl} alt={t('avatarCrop')}/>}
           <label className={css.label}>{t('avatarZoom')}
             <input type="range" min="1" max="3" step=".1" value={zoom}
-              onChange={event => { setZoom(Number(event.target.value)) }} disabled={unavailable}/>
+              onChange={(event) => { setZoom(Number(event.target.value)) }} disabled={unavailable}/>
           </label>
           <label className={css.label}>{t('avatarHorizontal')}
             <input type="range" min="0" max="100" value={x}
-              onChange={event => { setX(Number(event.target.value)) }} disabled={unavailable}/>
+              onChange={(event) => { setX(Number(event.target.value)) }} disabled={unavailable}/>
           </label>
           <label className={css.label}>{t('avatarVertical')}
             <input type="range" min="0" max="100" value={y}
-              onChange={event => { setY(Number(event.target.value)) }} disabled={unavailable}/>
+              onChange={(event) => { setY(Number(event.target.value)) }} disabled={unavailable}/>
           </label>
           <div className={css.actions}>
             <button type="button" className={css.primary} disabled={unavailable} onClick={() => {
@@ -120,21 +120,24 @@ export function AvatarSettings({ t, disabled }: { t: Translator; disabled: boole
           <label className={css.label} htmlFor="avatar-editor-url">{t('avatarEditorUrl')}</label>
           <input id="avatar-editor-url" className={css.input} placeholder="http://127.0.0.1:7860/v1"
             value={editorUrl} disabled={unavailable}
-            onChange={event => { setEditorUrl(event.target.value) }}/>
+            onChange={(event) => { setEditorUrl(event.target.value) }}/>
           <label className={css.label} htmlFor="avatar-editor-model">{t('avatarEditorModel')}</label>
           <input id="avatar-editor-model" className={css.input} value={editorModel} disabled={unavailable}
-            onChange={event => { setEditorModel(event.target.value) }}/>
+            onChange={(event) => { setEditorModel(event.target.value) }}/>
           <label className={css.check}>
             <input type="checkbox" checked={consentEdit} disabled={unavailable}
-              onChange={event => { setConsentEdit(event.target.checked) }}/>
+              onChange={(event) => { setConsentEdit(event.target.checked) }}/>
             {t('avatarEditorConsent')}
           </label>
           <div className={css.actions}>
             <button type="button" className={css.primary}
               disabled={unavailable || !consentEdit || editorUrl.trim() === ''}
               onClick={() => {
+                setConsentEdit(false)
                 void run(async () => {
-                  const result = await editAvatarWithLocalAI(snapshot.original!, editorUrl, editorModel)
+                  const original = snapshot.original
+                  if (original === undefined) throw new Error('Primero debes subir una foto.')
+                  const result = await editAvatarWithLocalAI(original, editorUrl, editorModel)
                   await saveAvatar('portrait', result)
                   setConsentEdit(false)
                 }, t('avatarPortraitSaved'))
