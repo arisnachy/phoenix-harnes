@@ -6,6 +6,7 @@ import {
   modelEngineMark,
   modelEngineFamily,
   agentAvatarKind,
+  stableAgentIndex,
   modelAvatarKind,
   portraitSrcForKind,
 } from '../src/client/ModelActivityAvatar.tsx'
@@ -91,6 +92,12 @@ describe('model engine glyphs', () => {
 })
 
 describe('agentAvatarKind', () => {
+  it('handles an empty roster safely and computes Unicode indices deterministically', () => {
+    expect(stableAgentIndex('any-agent', 0)).toBe(0)
+    expect(stableAgentIndex('a', 20)).toBe(17)
+    expect(stableAgentIndex('🌍', 20)).toBe(7)
+  })
+
   it('keeps the exact approved 20-portrait roster aligned with the visible KIRA codename', () => {
     expect(agentAvatarKind('c1')).toBe('vega')
     expect(agentAvatarKind('c2')).toBe('eclipse')
