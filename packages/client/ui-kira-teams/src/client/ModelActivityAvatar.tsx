@@ -74,7 +74,7 @@ export function modelAvatarKind(model: string | undefined): ModelAvatarKind {
 }
 
 /** The badge class is observed model provenance, never the specialist's persona. */
-export type ModelEngineFamily = 'sol' | 'luna' | 'astra' | 'other'
+export type ModelEngineFamily = 'sol' | 'luna' | 'terra' | 'astra' | 'other'
 
 /** Recognize the actual engine route; an absent model must never produce a badge. */
 export function modelEngineFamily(model: string | undefined, provider?: string): ModelEngineFamily | undefined {
@@ -82,15 +82,17 @@ export function modelEngineFamily(model: string | undefined, provider?: string):
   if (provider !== undefined && provider !== 'openai-codex') return 'other'
   if (/^gpt-\d+(?:\.\d+)?-sol(?:$|[-_])/iu.test(model)) return 'sol'
   if (/^gpt-\d+(?:\.\d+)?-luna(?:$|[-_])/iu.test(model)) return 'luna'
+  if (/^gpt-\d+(?:\.\d+)?-terra(?:$|[-_])/iu.test(model)) return 'terra'
   if (/^gpt-\d+(?:\.\d+)?-astra(?:$|[-_])/iu.test(model)) return 'astra'
   return provider === undefined ? undefined : 'other'
 }
 
 /** A small, consistent icon across the Lead and all real Team workers. */
-export function modelEngineMark(model: string | undefined, provider?: string): '☀' | '☾' | '★' | 'ϟ' | undefined {
+export function modelEngineMark(model: string | undefined, provider?: string): '☀' | '☾' | '♁' | '★' | 'ϟ' | undefined {
   const family = modelEngineFamily(model, provider)
   if (family === 'sol') return '☀'
   if (family === 'luna') return '☾'
+  if (family === 'terra') return '♁'
   if (family === 'astra') return '★'
   return family === 'other' ? 'ϟ' : undefined
 }
@@ -109,6 +111,10 @@ function ModelBadgeIcon({ family }: { family: ModelEngineFamily }) {
   if (family === 'luna') return (
     <svg {...base}><path d="M20.4 14.3A8.6 8.6 0 0 1 9.7 3.6 8.6 8.6 0 1 0 20.4 14.3Z" /></svg>
   )
+  if (family === 'terra') return (
+    <svg {...base}><circle cx="12" cy="12" r="9" />
+      <path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18" /></svg>
+  )
   if (family === 'astra') return (
     <svg {...base}><path d="m12 2 2.5 7.5L22 12l-7.5 2.5L12 22l-2.5-7.5L2 12l7.5-2.5Z" /></svg>
   )
@@ -121,6 +127,7 @@ function ModelBadgeIcon({ family }: { family: ModelEngineFamily }) {
 const MODEL_ENGINE_LABEL: Readonly<Record<ModelEngineFamily, string>> = {
   sol: 'Sol',
   luna: 'Luna',
+  terra: 'Terra',
   astra: 'Astra',
   other: 'Orión',
 }
