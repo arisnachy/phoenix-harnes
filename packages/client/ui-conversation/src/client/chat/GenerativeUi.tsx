@@ -8,6 +8,7 @@ import { DiagramSurface, parseDiagramSpec, type DiagramSpec } from './DiagramSur
 import { GenerativeCanvas, parseCanvasSpec, type CanvasAction, type CanvasSpec } from './GenerativeCanvas.tsx'
 import css from './GenerativeUi.module.css'
 import {SportsLiveProvider,SportsLiveFacts,SportsLiveStamp} from './SportsLive.tsx'
+import {SportsGameCenter} from './SportsGameCenter.tsx'
 
 const MAX_UI_BLOCKS = 6
 const MAX_TEXT = 1200
@@ -753,14 +754,12 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
                 {hasStarted&&home.score!==undefined&&<b>{home.score}</b>}</div>
               {!hasStarted&&<span className={css.sportsSlateVs}>VS · Sin iniciar</span>}
             </div>}
-            {!pending&&<SportsLiveFacts game={live} meta={meta} sport={p.sport}/>}
+            {!pending&&<SportsLiveFacts game={live} meta={meta} sport={p.sport} compact/>}
             {e.venue&&<small className={css.sportsSlateVenue}>⌖ {e.venue}</small>}
             {!pending&&e.featured&&<small className={css.sportsSlateFeatured}>{e.featured}</small>}
             {!pending&&<small className={css.sportsSlateFavorite}>{e.favorite?`★ Favorito analítico · ${e.favorite}`:'☆ Favorito sin verificar · consultar análisis y cuotas'}</small>}
-            {!pending&&(live?.phase==='in'||e.phase==='in')&&onAction&&<button className={css.sportsSlateAction}
-              type="button" onClick={()=>onAction('Kira, muéstrame en vivo '+e.away.label+' vs '+e.home.label+' de '+(p.league??p.providerLeague??'esta liga')+' el '+p.date+'.','draft')}>
-              Seguir en vivo · Detalle ›
-            </button>}
+            {!pending&&<SportsGameCenter sport={p.sport} league={p.providerLeague??p.league}
+              eventId={live?.id??e.eventId} phase={live?.phase??e.phase} game={live}/>}
             {!pending&&e.askPrompt&&onAction&&<button className={css.sportsSlateAction}
               type="button" onClick={()=>{if(e.askPrompt)onAction(e.askPrompt,'draft')}}>
               Ver análisis del encuentro ›
@@ -777,7 +776,7 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
         {(get,meta)=>{
           const live=get(p)
           const hasStarted=(live?.phase??p.phase)==='in'||(live?.phase??p.phase)==='post'
-          return <section className={css.sportsCard} data-generative-ui="sports_game_card">
+          return <section className={css.sportsCard+" "+css.sportsGameCompact} data-generative-ui="sports_game_card">
         <header className={css.sportsHeadline}>
           <div><span className={css.sportsKicker}>PHOENIX / {p.sport?.toUpperCase()??'DEPORTES'}</span>
             {(p.country||p.league)&&<div className={css.sportsCompetition}>{[p.country,p.league].filter(Boolean).join(' · ')}</div>}
@@ -796,7 +795,10 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
             <strong>{p.home.label}</strong>{p.home.meta&&<small>{p.home.meta}</small>}
             {hasStarted&&(live?.homeScore??p.home.score)!==undefined&&<b>{live?.homeScore??p.home.score}</b>}</div>
         </div>
-        <SportsLiveFacts game={live} meta={meta} sport={p.sport}/>
+        <SportsLiveFacts game={live} meta={meta} sport={p.sport} compact/>
+        <SportsGameCenter sport={p.sport} league={p.providerLeague??p.league}
+          eventId={live?.id??p.eventId} phase={live?.phase??p.phase} game={live}/>
+        <details className={css.sportsExtra}><summary>Ver estadísticas y análisis</summary>
         {!(live?.periods?.length)&&p.periods?.length?<section className={css.sportsDetailSection} aria-label="Parciales del partido">
           <h4>Marcador por período</h4><div className={css.sportsTableScroll}><table className={css.sportsTable}>
             <thead><tr><th>Equipo</th>{p.periods.map((period,i)=><th key={i}>{period.label}</th>)}</tr></thead>
@@ -825,6 +827,7 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
         </section>}
         {p.lineups?.length?<SportsLineups lineups={p.lineups}/>:null}
         {p.bullpen?.length?<SportsBullpen bullpen={p.bullpen}/>:null}
+        </details>
         <footer className={css.sportsSourceBar}>
           <span>Datos · {p.source}</span><SportsLiveStamp meta={meta}/>
           {p.note&&<small>{p.note}</small>}

@@ -38,6 +38,7 @@ describe('Phoenix Sports rich native cards',()=>{
     const card=parseGenerativeUiBlock(rich)
     if(!card)throw Error('Fixture rejected')
     render(<GenerativeUi block={card}/>)
+    fireEvent.click(screen.getByText('Ver estadísticas y análisis'))
     expect(screen.getByRole('heading',{name:'Abridores probables'})).toBeTruthy()
     expect(screen.getByRole('heading',{name:'Alineaciones'})).toBeTruthy()
     expect(screen.getByRole('heading',{name:'Bullpen y cuerpo de lanzadores'})).toBeTruthy()

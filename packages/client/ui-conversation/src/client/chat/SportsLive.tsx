@@ -37,6 +37,12 @@ export function espnLiveUrl(sport?:string,league?:string,date?:string):string|nu
   if(new Date(date+'T00:00:00Z').toISOString().slice(0,10)!==date)return null
   return 'https://site.api.espn.com/apis/site/v2/sports/'+sport+'/'+slug+'/scoreboard?dates='+date.replaceAll('-','')
 }
+/** Validate host, sport, league and event ID before requesting an ESPN game summary. */
+export function espnLiveSummaryUrl(sport?:string,league?:string,eventId?:string):string|null{
+  if(!eventId||!/^\d{1,18}$/u.test(eventId))return null
+  const board=espnLiveUrl(sport,league,'2026-01-01')
+  return board?board.replace('/scoreboard?dates=20260101','/summary?event='+eventId):null
+}
 function fieldText(data:Obj,...keys:string[]):string{
   for(const k of keys){const v=str(data[k]);if(v)return v}return ''
 }
@@ -193,8 +199,16 @@ export function SportsLiveProvider({sport,league,date,children}:{
   return children(get,{updatedAt:state.url===url?state.at:0,error:state.url===url&&state.error,
     enabled:Boolean(url),stale:state.url!==url||!state.at||Date.now()-state.at>95_000})
 }
-export function SportsLiveFacts({game,meta,sport}:{game?:PhoenixLiveGame|undefined;meta:PhoenixLiveMeta;sport?:string|undefined}):ReactNode{
+export function SportsLiveFacts({game,meta,sport,compact=false}:{
+  game?:PhoenixLiveGame|undefined;meta:PhoenixLiveMeta;sport?:string|undefined;compact?:boolean
+}):ReactNode{
   if(!game||game.phase!=='in')return null
+  if(compact)return <div className={css.liveMini} aria-label="Situación del partido en vivo">
+    <span className={css.liveDot} aria-hidden="true"/>
+    <strong>EN VIVO · {game.status}</strong>
+    {game.lastPlay&&<span className={css.liveMiniPlay}>{game.lastPlay}</span>}
+    {(meta.error||meta.stale)&&<small>Último dato recibido</small>}
+  </div>
   const baseball=sport==='baseball'
   return <div className={css.liveFacts} aria-label="Situación del partido en vivo">
     <div className={css.liveHeading}><span className={css.liveDot} aria-hidden="true"/> EN VIVO · {game.status}
