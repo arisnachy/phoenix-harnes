@@ -152,7 +152,7 @@ export function TradingDashboard({ initial }: Props) {
     const abort = new AbortController()
     void fetch('/phoenix-trading/paper/testnet-status', {
       method: 'GET', credentials: 'same-origin', cache: 'no-store', signal: abort.signal,
-    }).then(async response => {
+    }).then(async (response) => {
       if (!response.ok) return
       const value = await response.json() as TestnetState
       if (!abort.signal.aborted && value.mode === 'testnet'
@@ -307,7 +307,7 @@ export function TradingDashboard({ initial }: Props) {
       setState(valid)
       if (action === 'start') setWatchlistDraft(undefined)
       setConnection('connected')
-      setRefreshKey(current => current + 1)
+      setRefreshKey((current) => current + 1)
     } catch {
       setControlError('No se pudo confirmar la acción PAPER desde el Host. No se asume ninguna orden ejecutada.')
     } finally {
@@ -350,7 +350,7 @@ export function TradingDashboard({ initial }: Props) {
           <small>{settings.interval} · Revisión cada {settings.pollMs / 60_000} min mientras el Host esté activo</small>
         </div>
         <div className={css.actions}>
-          <button type="button" disabled={controlBusy} onClick={() => { setRefreshKey(current => current + 1) }}>Actualizar</button>
+          <button type="button" disabled={controlBusy} onClick={() => { setRefreshKey((current) => current + 1) }}>Actualizar</button>
           <button type="button" disabled={controlBusy || !running} onClick={() => { void control('check-now') }}>Evaluar ahora</button>
           {running
             ? <button type="button" className={css.danger} disabled={controlBusy} onClick={() => { void control('stop') }}>Detener</button>
@@ -384,7 +384,7 @@ export function TradingDashboard({ initial }: Props) {
             <input type="checkbox" disabled={running || controlBusy}
               checked={running ? state.settings.predictionEnabled === true
                 : predictionDraft ?? state.settings.predictionEnabled === true}
-              onChange={event => { setPredictionDraft(event.currentTarget.checked) }} />
+              onChange={(event) => { setPredictionDraft(event.currentTarget.checked) }} />
             <span>Exigir confirmación Kronos para nuevas compras PAPER</span>
           </label>
           {state.predictor?.state === 'not-installed' || state.predictor?.state === 'error'
@@ -433,13 +433,13 @@ export function TradingDashboard({ initial }: Props) {
         <input type="text" spellCheck={false} aria-label="Lista de mercados PAPER"
           disabled={running || controlBusy}
           value={watchlistDraft ?? settings.symbols.join(', ')}
-          onChange={event => { setWatchlistDraft(event.currentTarget.value) }}
+          onChange={(event) => { setWatchlistDraft(event.currentTarget.value) }}
           placeholder="BTCUSDT, ETHUSDT, SOLUSDT, BNBUSDT" />
       </label>
       <label className={css.autoDiscovery}>
         <input type="checkbox" checked={running ? settings.autoDiscover : autoDiscoverDraft}
           disabled={running || controlBusy}
-          onChange={event => { setAutoDiscoverDraft(event.currentTarget.checked) }} />
+          onChange={(event) => { setAutoDiscoverDraft(event.currentTarget.checked) }} />
         <span>Al iniciar: revisar hasta 1.000 pares Spot USDT líquidos y rotar 12 por ciclo.
           Se excluyen activos conocidos con etiqueta Monitoring o retiro anunciado, pares suspendidos y tokens apalancados.
           La cobertura de anuncios de riesgo no es exhaustiva. Solo PAPER.</span>
@@ -488,10 +488,10 @@ export function TradingDashboard({ initial }: Props) {
               <small>Órdenes verificadas por Binance Testnet: {testnetAutoState.journal.length} ·
                 PnL realizado estimado (sin comisiones): {amount(testnetAutoState.realizedPnlUsdt)} USDT ficticios</small>
               {testnetAutoState.pending&&<small>Orden {testnetAutoState.pending.side} pendiente de conciliar: {testnetAutoState.pending.symbol}</small>}
-              {Object.values(testnetAutoState.positions).slice(0,2).map(position=>
+              {Object.values(testnetAutoState.positions).slice(0,2).map((position)=>
                 <small key={position.symbol}>{position.symbol} · {strategyLabel(position.strategy)}
                   {' · '}TP1 {quote(position.tp1)} · TP2 {quote(position.tp2)} · SL {quote(position.stop)}</small>)}
-              {testnetAutoState.journal.slice(-2).reverse().map(trade=>
+              {testnetAutoState.journal.slice(-2).reverse().map((trade)=>
                 <small key={trade.clientOrderId}>{trade.side==='BUY'?'Compra':'Venta'} TESTNET confirmada:
                   {' '}{trade.symbol} · {amount(trade.quantity,8)} · {trade.reason} · {clock(trade.at)}</small>)}
               {testnetAutoState.lastError&&<small role="alert">Bloqueo: {testnetAutoState.lastError}</small>}
@@ -513,9 +513,9 @@ export function TradingDashboard({ initial }: Props) {
           <strong>Guardar claves exclusivas de Spot Testnet</strong>
           <small>Solo se envían directamente al Host para verificar la cuenta ficticia y guardarlas en su bóveda. Nunca uses claves reales.</small>
           <input type="password" aria-label="Clave API de Spot Testnet" autoComplete="off"
-            placeholder="Testnet API key" value={testingKey} onChange={event => { setTestingKey(event.currentTarget.value) }} />
+            placeholder="Testnet API key" value={testingKey} onChange={(event) => { setTestingKey(event.currentTarget.value) }} />
           <input type="password" aria-label="Secreto API de Spot Testnet" autoComplete="off"
-            placeholder="Testnet API secret" value={testingSecret} onChange={event => { setTestingSecret(event.currentTarget.value) }} />
+            placeholder="Testnet API secret" value={testingSecret} onChange={(event) => { setTestingSecret(event.currentTarget.value) }} />
           <button type="button" disabled={connectionBusy} onClick={() => { void saveTestnetCredentials() }}>Verificar y guardar Testnet</button>
         </div>}
         {connectionIssue && <p role="alert" className={css.connectionError}>{connectionIssue}</p>}
