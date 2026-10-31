@@ -42,6 +42,14 @@ describe('protected local interview guide', () => {
     expect(localInterviewPlan('dolor abdominal', 'Medicina familiar', 'kira', answered).nextQuestions).toEqual([])
   })
 
+  it('rejects an unsupported interview mode rather than bypassing clinician safeguards', () => {
+    const untrustedMode: unknown = 'autonomous'
+    expect(() => localInterviewPlan(
+      'consulta preventiva', 'Medicina familiar',
+      untrustedMode as Parameters<typeof localInterviewPlan>[2], [],
+    )).toThrow(/Modo inválido/)
+  })
+
   it('rejects missing, oversized and malformed input before proposing questions', () => {
     expect(() => localInterviewPlan(' ', 'Medicina familiar', 'mixed', [])).toThrow(/Motivo/)
     expect(() => localInterviewPlan('Consulta', ' ', 'mixed', [])).toThrow(/Especialidad/)
