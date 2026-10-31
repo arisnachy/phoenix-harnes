@@ -115,17 +115,25 @@ export function parseAudioCapture(raw: string, sessionId: string, seconds: numbe
   return item as NativeAudioSample
 }
 
-async function verifiedWav(file: string): Promise<void> {
+/** Resolve a capture only inside PHOENIX's private temporary audio directory.
+ * @param file - Claimed native-capture path.
+ * @returns Canonical path safe to transcribe and delete.
+ */
+export async function trustedAudioCapturePath(file: string): Promise<string> {
   const root = await realpath(join(tmpdir(), 'phoenix-audio-captures'))
   const actual = await realpath(file)
   if (dirname(actual).toLowerCase() !== root.toLowerCase()) {
     throw new Error('AUDIO_CAPTURE_PATH_UNTRUSTED')
   }
-  const details = await stat(actual)
+  return actual
+}
+
+async function verifiedWav(file: string): Promise<void> {
+  const details = await stat(file)
   if (!details.isFile() || details.size < 556 || details.size > 24_000_000) {
     throw new Error('AUDIO_CAPTURE_SIZE_INVALID')
   }
-  const wav = await readFile(actual)
+  const wav = await readFile(file)
   if (wav.toString('ascii', 0, 4) !== 'RIFF' || wav.toString('ascii', 8, 12) !== 'WAVE') {
     throw new Error('AUDIO_CAPTURE_WAV_INVALID')
   }
@@ -213,10 +221,13 @@ export async function listenWindowsAudio(sessionId: string, seconds: number,
   }
   const receipt = parseAudioCapture(
     await callNative('phoenix.audio.capture', sessionId, seconds, source),sessionId,seconds,source)
+  // Never unlink an arbitrary path from a forged native receipt.
+  // Trust the canonical capture path before entering the cleanup block.
+  const capturedFile = await trustedAudioCapturePath(receipt.file)
   // Cleanup even when media is corrupt, the model is unavailable, or transcription fails.
   try {
-    await verifiedWav(receipt.file)
-    const transcript = await transcribeLocal(receipt.file)
+    await verifiedWav(capturedFile)
+    const transcript = await transcribeLocal(capturedFile)
     return {
       source: receipt.source, device: receipt.device, seconds: receipt.seconds,
       captureVerified: true, speechRecognized: transcript.cues.length > 0,
@@ -227,7 +238,7 @@ export async function listenWindowsAudio(sessionId: string, seconds: number,
     }
   }
   finally {
-    await rm(receipt.file, { force: true })
+    await rm(capturedFile, { force: true })
   }
 }
 
