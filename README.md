@@ -1,36 +1,49 @@
 <p align="center">
-  <img src="apps/web/public/phoenix-emblem.png" alt="PHOENIX — Universal AI Harness" width="300">
+  <img src="apps/web/public/phoenix-emblem.png" alt="PHOENIX" width="300">
 </p>
 
 # PHOENIX
 
 English | [中文](README.zh.md)
 
-**PHOENIX is a universal, provider-agnostic AI agent harness for local-first and bring-your-own-provider workflows.**
+[Español](README.es.md)
 
-It is being built around intelligent model selection, durable continuity, repository intelligence, tools, multi-agent execution, recovery, evaluation, and bounded self-improvement. Capabilities land incrementally and are not presented as complete until their repository gates are green.
+**PHOENIX is a distinct, local-first AI agent platform designed to work with multiple model providers, tools and specialized agents.**
 
-## Development status
+PHOENIX has its own product identity, development roadmap and user experience. Kira is its coordinating assistant: the goal is to turn conversations into traceable work, connect the right capabilities and preserve useful context across tasks. PHOENIX is under active development; a feature is not considered production-ready merely because it appears in the interface.
 
-PHOENIX is under active development. Its product identity is PHOENIX across the repository presentation, Web UI, PWA metadata, browser title, and visual system.
+## The platform
 
-Some internal package and CLI identifiers are intentionally retained for compatibility with the upstream runtime while PHOENIX evolves through isolated, testable downstream layers. Those implementation details do not define the product identity.
+- **Kira and agent teams:** coordination, delegation, tool use and user-facing progress within a shared workflow.
+- **Flexible models:** connect supported remote or local providers, select models and manage account connections without tying the product to one vendor.
+- **Practical tools:** work with code, repositories, documents, browser workflows and supported integrations, subject to available permissions.
+- **Continuity:** sessions, memories, goals and recovery mechanisms intended to preserve work beyond a single model response.
+- **Controlled execution:** checkpoints, verification, permissions and recovery paths to reduce silent failures and unintended changes.
 
-## Run
+## Specialized workflows
 
-### One-line Windows install
+- **Research and education:** evidence gathering, structured analysis and preparation of academic work.
+- **Clinical assistance:** clinician-directed documentation and decision support, with professional oversight rather than autonomous medical practice.
+- **Trading and markets:** market data, strategy evaluation and paper/test environments; no return or autonomous-execution guarantee is implied.
+- **Sports and automation:** sports-data workflows and scheduled operations where their sources, connectors and runtime are available.
 
-Open PowerShell and run:
+These areas have different levels of implementation and verification. See the relevant module and CI evidence before relying on one for critical work.
+
+<a id="run"></a>
+
+## Install
+
+### Windows installer
+
+Open PowerShell and run the repository installer:
 
 ```powershell
 irm https://raw.githubusercontent.com/arisnachy/phoenix-harnes/main/install-phoenix.ps1 | iex
 ```
 
-The bootstrap installs missing Node.js/Git through `winget`, clones or fast-forwards the dedicated PHOENIX installation, performs an immutable dependency install and build, and creates **PHOENIX HARDNESS** shortcuts in the Start menu, Windows startup, and the taskbar shortcut store. Windows versions without a localized pin action still receive a taskbar-ready shortcut; pin it once from the shortcut context menu. Use `-NoStartup` or `-NoTaskbar` to opt out. Managed installations check the promoted `stable` branch at launch and apply only clean, preflighted updates; a clean managed release checkout may also safely replace unrelated legacy history while retaining a recovery ref. Set `PHOENIX_AUTO_UPDATE=0` to disable that check. Local changes are preserved instead of overwritten. The script is not a signed MSIX; code signing remains a release gate until a project certificate is configured.
+Review scripts before running them with elevated privileges. The installer requires a supported Windows environment and may prepare Node.js, Git, dependencies and application shortcuts. See [PHOENIX on Windows](docs/phoenix-windows.md) for installation and platform limitations.
 
-### VS Code and Cursor
-
-Build the installable extension with `pnpm --dir apps/vscode run package:vsix`, then install `dist/phoenix-hardness-vscode.vsix` from **Extensions → Install from VSIX**. Its Explorer panel starts the local PHOENIX runtime and opens the Web UI without reading model credentials.
+<a id="run-from-source"></a>
 
 ### Run from source
 
@@ -42,58 +55,44 @@ cd phoenix-harnes
 .\phoenix-windows.cmd
 ```
 
-`phoenix-windows.cmd` changes to its own repository directory, uses the Corepack copy included with Node.js to prepare dependencies, builds PHOENIX when needed, and starts the local Web UI. A global `pnpm` installation is not required.
+The launcher prepares dependencies and starts the local interface. A global `pnpm` installation is not required for this Windows entry point.
 
-### Stable automatic updates
+### VS Code and Cursor
 
-PHOENIX source installations follow the repository's stable update channel. A new `main` commit is published to clients only after the current `main` CI succeeds. Running installations detect the new stable commit and, by default, install it after the active PHOENIX session closes; Windows also checks the stable channel before the next launch.
+Build the repository's VSIX and install the generated extension through the editor's **Extensions → Install from VSIX** menu:
 
-Automatic installation requires an official `origin`, branch `main` or `stable`, a clean worktree, a successful isolated preflight build, and a recovery checkpoint. A locally modified checkout may still prepare and validate a candidate in detached staging, but it is never overwritten or activated until clean. Fast-forward releases use `git merge --ff-only`; managed release checkouts with unrelated legacy history use a guarded `git reset --hard` after preflight. A failed live update rolls back to the previous known-good commit. Development branches and locally modified checkouts are never overwritten automatically, and the updater never mutates PHOENIX user data, credentials, sessions, memories, or projects.
+```powershell
+pnpm --dir apps/vscode run package:vsix
+```
 
-Set `PHOENIX_UPDATE_MODE=notify` for notifications without installation or `PHOENIX_UPDATE_MODE=off` to disable checking. See [PHOENIX Stable Auto-Update](docs/evolution/PHOENIX_AUTO_UPDATE.md) for the complete release, recovery, and trust contract.
+The current package filename may retain compatibility identifiers; those are implementation details, not PHOENIX's product name.
 
-Codex plugin and OpenClaw skill updates use the isolated [upstream intake](docs/evolution/PHOENIX_UPSTREAM_INTAKE.md), which stages and verifies candidates before changing initialized bridges.
+## Connect models
 
-### Configure OpenRouter on Windows
+### OpenRouter
 
-PHOENIX starts with the `openrouter/free` model route selected. Create an [OpenRouter API key](https://openrouter.ai/settings/keys), then configure it inside PHOENIX:
+PHOENIX can use the `openrouter/free` route, subject to the provider's availability and limits.
 
-1. Open **Settings → Models → OpenRouter**.
-2. Paste the key and save it. The key is written to the local PHOENIX credential store and is not committed to Git.
-3. Use the model selector in the composer to switch from `openrouter/free` to another OpenRouter model.
+1. Create a key at [OpenRouter](https://openrouter.ai/settings/keys).
+2. In PHOENIX, open **Settings → Models → OpenRouter** and save the key in its credential store.
+3. Select an available model from the conversation model selector.
 
-The provider, key, endpoint, model catalog, and active model are managed from the Web UI. Free models are intended for testing and remain subject to OpenRouter availability and rate limits.
+### ChatGPT / Codex
 
-### Connect ChatGPT / Codex
+The native Codex connection uses the official Codex account login when that bridge is installed and available. ChatGPT subscription authentication and OpenAI API keys are separate; PHOENIX does not ask for your ChatGPT password. Availability depends on the installed bridge and account permissions.
 
-PHOENIX keeps OpenAI API-key authentication separate from ChatGPT subscription authentication. The native Codex bridge uses the official Codex app-server managed ChatGPT login, so Codex owns OAuth persistence and token refresh. PHOENIX does not ask for a ChatGPT password and does not parse, copy, or persist ChatGPT OAuth tokens.
+## Updates and recovery
 
-When the native Codex bridge is mounted, **Settings → Models → Account connections** offers **ChatGPT / Codex** sign-in. The same native account plane can read the active ChatGPT plan, Codex rate-limit windows, reset times, and account token-activity data without routing the subscription through the generic `pi-ai` OAuth adapter.
+`main` is the development branch; `stable` is the promotion channel. A change should reach the stable channel only after the applicable checks pass. Supported managed installations check for validated updates and preserve local changes rather than silently overwriting them. See the [auto-update and recovery contract](docs/evolution/PHOENIX_AUTO_UPDATE.md).
 
-## Community and support
+## Documentation and community
 
-Use this repository's [Issues](https://github.com/arisnachy/phoenix-harnes/issues) and [Discussions](https://github.com/arisnachy/phoenix-harnes/discussions) for PHOENIX feedback, bugs, design discussion, and support.
+- Read the [architecture](docs/architecture.md) and [development guide](docs/development.md) to understand the current system.
+- See [Contributing](CONTRIBUTING.md) and [agent instructions](AGENTS.md) before making changes.
+- Open [Issues](https://github.com/arisnachy/phoenix-harnes/issues) or [Discussions](https://github.com/arisnachy/phoenix-harnes/discussions) for bugs, ideas and support.
 
-## Contributing
+## Identity, credits and license
 
-See [CONTRIBUTING.md](CONTRIBUTING.md).
+**The public product is PHOENIX.** Names retained in internal package paths, command-line interfaces or build artifacts exist for technical compatibility and do not define its identity. PHOENIX is not presented as another company's product or as a renaming of another harness.
 
-## Development
-
-Start with the [development guide](docs/development.md) and [architecture documentation](docs/architecture.md). PHOENIX capabilities are integrated through staged, independently verified branches and pull requests so the stable base stays auditable.
-
-Windows installation, IDE packaging, native sandbox boundaries, and continuity status are documented in [PHOENIX on Windows](docs/phoenix-windows.md).
-
-For agents, follow [AGENTS.md](AGENTS.md).
-
-## Upstream foundation and attribution
-
-PHOENIX is a downstream evolution built on [DeepSeek Harness](https://github.com/arisnachy/phoenix-harnes), the MIT-licensed open-source agent harness developed by [DeepSeek AI](https://deepseek.com). Its plugin architecture is powered by [Cordis](https://github.com/cordiverse/cordis), whose design is described in [_A Programming Paradigm for Spatiotemporal Composability_](https://github.com/cordiverse/paper).
-
-PHOENIX does not claim authorship of upstream code. Upstream attribution and license notices are preserved while PHOENIX-specific work remains clearly separated as downstream evolution.
-
-## License
-
-[MIT](LICENSE)
-
-Third-party dependencies and their licenses are disclosed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+The repository uses the [MIT license](LICENSE) and preserves applicable existing copyright notices. Third-party components and their licensing information are documented separately in [Third-Party Notices](THIRD_PARTY_NOTICES.md). Attribution is a legal and technical obligation, not the PHOENIX product description.
