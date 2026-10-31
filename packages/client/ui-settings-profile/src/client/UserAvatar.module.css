@@ -48,3 +48,16 @@
 
 .candidate{display:flex;flex-direction:column;align-items:flex-start;gap:10px}
 .candidate img{width:148px;height:148px;object-fit:cover;border-radius:50%;border:2px solid var(--dsw-alias-brand-primary)}
+
+/* Profile artwork is preserved independently from the small, face-only chat avatar. */
+.avatar{background:#f5f3ef}
+.avatar img{object-fit:cover;object-position:center 40%}
+.candidate{padding:12px;border:1px solid var(--dsw-alias-border-l2);border-radius:15px;background:#faf9f6}
+.previewPair{display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start}
+.previewFull,.previewFace{display:flex;flex-direction:column;gap:7px;color:#504c45;font-size:12px}
+.previewFull img{width:180px;height:180px;object-fit:contain;border-radius:12px;border:1px solid #dedbd5;background:#f5f3ef}
+.previewFace img{width:126px;height:126px;border:3px solid white;border-radius:50%;object-fit:cover;background:#f5f3ef;box-shadow:0 0 0 1px #c5b9a8}
+.faceZoom{display:flex;align-items:center;gap:12px;font-size:12px}
+.faceZoom input{accent-color:var(--dsw-alias-brand-primary)}
+.fullSaved{display:flex;flex-direction:column;align-items:flex-start;gap:8px;font-size:12px}
+.fullSaved img{max-width:230px;max-height:230px;object-fit:contain;border:1px solid #d9d6cf;border-radius:12px;background:#f8f6f1}

@@ -171,7 +171,12 @@ export class ConversationController extends Service implements IConversation {
       files.push(portraitReference)
     }
     const uploaded = await this.serializeAttachments(files)
-    const content = [...uploaded, ...(text === '' ? [] : [{ type: 'text' as const, text }])]
+    const contextualText = portraitReference === undefined ? text
+      : text + '\\n\\n[PHOENIX: Ya adjunté la fotografía REAL del perfil con autorización del usuario. '
+        + 'La imagen está disponible en este turno como referencia-original-del-usuario.webp. '
+        + 'Usa la herramienta image_generation con la fotografía como entrada visual. '
+        + 'NO pidas otra foto ni generes SVG o sustitutos textuales; si falla, informa el error real.]'
+    const content = [...uploaded, ...(contextualText === '' ? [] : [{ type: 'text' as const, text: contextualText }])]
     const result = await session.prompt(content, mode, signal)
     if (!result.ok) return { kind: 'error' }
     this.releaseDraftImages(attachments)
