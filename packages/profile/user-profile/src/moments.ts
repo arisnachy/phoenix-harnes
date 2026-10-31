@@ -16,20 +16,64 @@ export interface PublicHoliday {
   readonly countryCode?: string
 }
 const HOLIDAY_API = 'https://date.nager.at/api/v3/PublicHolidays'
+// Guaranteed offline fallback for the user's country. The country-only public
+// calendar remains authoritative for other national and movable holidays.
 const COUNTRY_FALLBACK: Readonly<Record<string, readonly [string, string, CalendarMoment['kind']][]>> = {
   DO: [
+    ['01-21', 'Nuestra Señora de la Altagracia', 'cultural'],
     ['01-26', 'Natalicio de Juan Pablo Duarte', 'patriotic'],
     ['02-27', 'Independencia Nacional', 'patriotic'],
     ['08-16', 'Restauración de la República', 'patriotic'],
+    ['09-24', 'Nuestra Señora de las Mercedes', 'cultural'],
     ['11-06', 'Día de la Constitución', 'patriotic'],
   ],
 }
+// International observances are factual calendar context, not assumptions
+// about a user's faith, customs, politics, or wish to receive a greeting.
 const GLOBAL: readonly [string, string, CalendarMoment['kind']][] = [
   ['01-01', 'Año Nuevo', 'cultural'],
+  ['02-14', 'San Valentín', 'cultural'],
+  ['03-08', 'Día Internacional de la Mujer', 'cultural'],
+  ['03-20', 'Día Internacional de la Felicidad', 'cultural'],
+  ['04-07', 'Día Mundial de la Salud', 'cultural'],
+  ['04-22', 'Día de la Tierra', 'cultural'],
+  ['05-01', 'Día Internacional de los Trabajadores', 'cultural'],
+  ['06-05', 'Día Mundial del Medio Ambiente', 'cultural'],
+  ['07-30', 'Día Internacional de la Amistad', 'cultural'],
+  ['08-12', 'Día Internacional de la Juventud', 'cultural'],
+  ['09-21', 'Día Internacional de la Paz', 'cultural'],
+  ['10-10', 'Día Mundial de la Salud Mental', 'cultural'],
   ['10-31', 'Halloween', 'cultural'],
+  ['11-20', 'Día Mundial de la Infancia', 'cultural'],
+  ['12-10', 'Día de los Derechos Humanos', 'cultural'],
+  ['12-24', 'Nochebuena', 'cultural'],
   ['12-25', 'Navidad', 'cultural'],
   ['12-31', 'Fin de año', 'cultural'],
 ]
+/** Movable observances with deterministic civil-calendar rules. */
+function movingMoments(today: string, country: string | undefined): CalendarMoment[] {
+  const year = Number(today.slice(0, 4))
+  const monthDay = today.slice(-5)
+  const values: CalendarMoment[] = []
+  const add = (id: string, label: string) => { values.push({ id, label, kind: 'cultural', source: 'regional' }) }
+  if (country === 'DO') {
+    for (const [month, label] of [[5, 'Día de las Madres'], [7, 'Día de los Padres']] as const) {
+      const finalDay = new Date(Date.UTC(year, month, 0))
+      const sunday = finalDay.getUTCDate() - finalDay.getUTCDay()
+      if (monthDay === `${String(month).padStart(2, '0')}-${String(sunday).padStart(2, '0')}`) {
+        add(`regional:DO:${monthDay}`, label)
+      }
+    }
+  }
+  if (country === 'US') {
+    const first = new Date(Date.UTC(year, 10, 1)).getUTCDay()
+    const fourthThursday = 1 + ((4 - first + 7) % 7) + 21
+    if (monthDay === `11-${String(fourthThursday).padStart(2, '0')}`) {
+      add(`regional:US:${monthDay}`, 'Acción de Gracias')
+    }
+  }
+  return values
+}
 const MONTHS: Readonly<Record<string, string>> = {
   enero: '01', febrero: '02', marzo: '03', abril: '04', mayo: '05', junio: '06',
   julio: '07', agosto: '08', septiembre: '09', setiembre: '09', octubre: '10',
@@ -114,6 +158,7 @@ export function momentsForDay(
   for (const [date, label, kind] of GLOBAL) {
     if (date === today.slice(-5)) add({ id: `global:${date}`, label, kind, source: 'regional' })
   }
+  for (const value of movingMoments(today, country)) add(value)
   return results
 }
 
