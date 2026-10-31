@@ -2,6 +2,8 @@
  * Explicitly opted-in profile-photo reference for unambiguous self-image requests.
  * Only the original picture is used. No image goes to ordinary conversation turns.
  * The reference is read from the same browser-local IndexedDB store as Profile.
+ * @param text User-authored image request.
+ * @returns Whether the request explicitly asks for an image of the user.
  */
 export function isSelfImageRequest(text: string): boolean {
   const normalized = text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/gu, '')
@@ -17,7 +19,11 @@ export function isSelfImageRequest(text: string): boolean {
     || /\b(?:put me in|draw me as|make me appear|generate me in)\b/u.test(normalized)
 }
 
-/** Read only when the user has deliberately enabled profile-reference sharing. */
+/**
+ * Read only when the user has deliberately enabled profile-reference sharing.
+ * @param text User-authored image request.
+ * @returns The authorized original profile photo, if available.
+ */
 export async function savedPhotoForSelfImageRequest(text: string): Promise<File | undefined> {
   if (!isSelfImageRequest(text) || typeof indexedDB === 'undefined') return undefined
   return new Promise<File | undefined>((resolve, reject) => {
