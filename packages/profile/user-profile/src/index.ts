@@ -131,9 +131,9 @@ export class UserProfileService extends Service {
     ctx.systemPrompt.context({
       name: 'user-profile:moments',
       order: -49,
-      text: () => renderMomentContext(this.scope.get(), this.holidays),
+      text: () => { void this.refreshHolidays(); return renderMomentContext(this.scope.get(), this.holidays) },
     })
-    ctx.effect(() => this.scope.subscribe(() => { void this.refreshHolidays() }), 'user-profile: public holiday refresh')
+    ctx.effect(() => this.scope.watch(() => { void this.refreshHolidays() }), 'user-profile: public holiday refresh')
     void this.refreshHolidays()
     // Assistant identity is a system section, not runtime context. Runtime
     // context may be omitted on bounded/fast/provider-specific paths, while a

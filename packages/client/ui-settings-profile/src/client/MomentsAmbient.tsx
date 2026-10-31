@@ -76,7 +76,8 @@ export function MomentsAmbient(props: { scope: SettingsScope<UserProfileSettings
   const day = localDay(now, profile.momentsTimeZone)
   const moment = occasion(profile, day, holidays)
   if (moment === undefined) return null
-  const emoji = moment.kind === 'personal' ? '🎂' : moment.kind === 'patriotic' ? '🇩🇴' : moment.kind === 'solemn' ? '🕯️'
+  const flag = profile.countryCode?.replace(/./g, letter => String.fromCodePoint(letter.charCodeAt(0) + 127397)) ?? '🏳️'
+  const emoji = moment.kind === 'personal' ? '🎂' : moment.kind === 'patriotic' ? flag : moment.kind === 'solemn' ? '🕯️'
     : moment.label === 'Halloween' ? '🎃' : moment.label === 'Navidad' ? '🎄' : '✨'
   const variant = variantFor(day, moment.label)
   return (

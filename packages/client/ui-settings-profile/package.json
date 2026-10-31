@@ -35,6 +35,7 @@
     "@phoenix-ai/dsh-client-locale": "workspace:^",
     "@phoenix-ai/dsh-client-runtime": "workspace:^",
     "@phoenix-ai/dsh-client-ui-settings": "workspace:^",
+    "@phoenix-ai/dsh-client-ui-layout": "workspace:^",
     "@phoenix-ai/dsh-invariants": "workspace:^"
   },
   "devDependencies": {
