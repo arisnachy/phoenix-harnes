@@ -61,7 +61,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          echo '0dae4f356bfd9ee16132f472b6af6e02c0c505ee4f9d3a5186f4455551b87ad5  ci-generated.patch' | sha256sum -c -
+          sed -E 's/^index [0-9a-f]+\.\.[0-9a-f]+ /index HASH..HASH /' ci-generated.patch | sha256sum | grep -Fx '1e8ecdcc21f6b8118e780c46fc0be379b26845ee3b662708bc48281ac511705b  -'
           git diff --check
           git add -- apps/cli/composition.md docs/config-catalog.md docs/module-graph.md docs/subsystems/session.i18n.yaml docs/subsystems/session.md docs/subsystems/session.zh.md docs/tool-catalog.md packages/extensions/cordis-client-runner/src/client/slot-catalog.ts packages/extensions/tool-cordis/src/api-catalog.ts
           git diff --cached --check
