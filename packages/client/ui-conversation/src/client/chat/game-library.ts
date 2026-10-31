@@ -39,7 +39,7 @@ function transact<T>(mode: IDBTransactionMode, createRequest: (store: IDBObjectS
       transaction.onabort = () => { db.close(); reject(transaction.error ?? new Error('La operación fue cancelada.')) }
     } catch (error) {
       db.close()
-      reject(error)
+      reject(error instanceof Error ? error : new Error(String(error)))
     }
   }))
 }
