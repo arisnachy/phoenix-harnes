@@ -28,7 +28,7 @@ export function parseEspnGamePlays(input:unknown):EspnPlay[]{
     if(seen.has(id))continue
     seen.add(id)
     out.push({ id,text:description,...(clock?{ clock }:{}),...(period?{ period }:{}),
-      ...(team?{ team }:{}),...(away&&home?{ score:away+' – '+home}:{})})
+      ...(team?{ team }:{}),...(away&&home?{ score:away+' – '+home }:{}) })
   }
   return out.reverse().slice(0,45)
 }
@@ -40,7 +40,7 @@ const empty:Snapshot={ url:'',plays:[],at:0,error:false,loading:false }
  * @returns A compact opt-in game timeline or null for unsupported identifiers.
  */
 export function SportsGameCenter({ sport,league,eventId,phase,game }:{
-  sport?:string|undefined,league?:string|undefined,eventId?:string|undefined,
+  sport?:string|undefined,league?:string|undefined,eventId?:string|undefined
   phase?:'pre'|'in'|'post'|undefined,game?:PhoenixLiveGame|undefined
 }):ReactNode{
   const [open,setOpen]=useState(false),[state,setState]=useState<Snapshot>(empty)

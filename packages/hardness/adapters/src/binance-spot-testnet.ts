@@ -260,7 +260,7 @@ export class BinanceSpotTestnet {
       || typeof filter.maxQty!=='string' || ![filter.stepSize,filter.minQty,filter.maxQty].every(x=>Number(x)>0)) {
       throw new TestnetVerificationError('invalid-response')
     }
-    return {stepSize:filter.stepSize,minQty:filter.minQty,maxQty:filter.maxQty}
+    return { stepSize:filter.stepSize,minQty:filter.minQty,maxQty:filter.maxQty }
   }
 
   /**

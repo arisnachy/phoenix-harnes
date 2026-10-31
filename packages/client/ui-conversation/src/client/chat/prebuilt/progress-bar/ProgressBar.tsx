@@ -1,9 +1,9 @@
 // Adapted from https://github.com/hemasurya106/react-generative-ui (v0.4.6, MIT)
-import React from 'react';
+import React from 'react'
 // Phoenix validates declarative props before this upstream visual component renders.
 // Zod-only metadata was omitted so this React 18 adaptation needs no new npm dependency.
 
-export type ProgressBarProps = { label?: string; value: number; color?: string };
+export type ProgressBarProps = { label?: string; value: number; color?: string }
 
 export const ProgressBar: React.FC<ProgressBarProps> = ({
   label,
@@ -46,5 +46,5 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
         }} />
       </div>
     </div>
-  );
-};
+  )
+}

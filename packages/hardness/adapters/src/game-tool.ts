@@ -151,7 +151,7 @@ function validateRecordedAudio(html: string, manifest: Record<string, unknown>):
     throw new ToolArgsError(['Game Studio: sampled-production necesita una lista válida de señales de sonido y música.'])
   }
   const tags = [...html.matchAll(/<audio\b[^>]*>/giu)].map(match => match[0])
-  for (const cue of new Set(names as string[])) {
+  for (const cue of new Set(names)) {
     const id = 'phoenix-audio-' + cue
     const tag = tags.find((value) => {
       const match = /\bid\s*=\s*(["'])([^"']+)\1/iu.exec(value)

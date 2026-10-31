@@ -20,11 +20,11 @@ const normalized=(name:string)=>name.normalize('NFD').replace(/[\u0300-\u036f]/g
 const score=(v:Obj)=>str(v.score,15)||undefined
 const fullTeam=(v:Obj)=>str(object(v.team).displayName)||str(object(v.team).name)
 export type PhoenixLiveGame={
-  id:string;home:string;away:string;homeScore?:string|undefined;awayScore?:string|undefined;
-  phase:'pre'|'in'|'post';status:string;clock?:string|undefined;period?:number|undefined;
-  lastPlay?:string|undefined;outs?:number|undefined;balls?:number|undefined;strikes?:number|undefined;
-  bases?:[boolean,boolean,boolean]|undefined;down?:string|undefined;possession?:string|undefined;
-  shots?:string|undefined;leaders?:string[]|undefined;periods?:Array<{ label:string;away:string;home:string }>|undefined;
+  id:string;home:string;away:string;homeScore?:string|undefined;awayScore?:string|undefined
+  phase:'pre'|'in'|'post';status:string;clock?:string|undefined;period?:number|undefined
+  lastPlay?:string|undefined;outs?:number|undefined;balls?:number|undefined;strikes?:number|undefined
+  bases?:[boolean,boolean,boolean]|undefined;down?:string|undefined;possession?:string|undefined
+  shots?:string|undefined;leaders?:string[]|undefined;periods?:Array<{ label:string;away:string;home:string }>|undefined
 }
 export type PhoenixLiveLookup={ eventId?:string;home:{ label:string };away:{ label:string } }
 export type PhoenixLiveMeta={ updatedAt:number;stale:boolean;error:boolean;enabled:boolean }
@@ -62,7 +62,7 @@ function stat(team:Obj,names:string[]):string|undefined{
 }
 function leadersFrom(comp:Obj):string[]{
   const categories=arr(comp.leaders)
-  return categories.slice(0,3).flatMap(c=>arr(c.leaders).slice(0,1).map(v=>{
+  return categories.slice(0,3).flatMap(c=>arr(c.leaders).slice(0,1).map((v)=>{
     const athlete=object(v.athlete)
     const name=fieldText(athlete,'displayName','fullName')
     return name?name+' · '+str(v.displayValue,50):''
@@ -71,7 +71,7 @@ function leadersFrom(comp:Obj):string[]{
 /** Coerces only explicitly reported ESPN fields; unknown states stay unknown. */
 export function parseEspnLiveScoreboard(payload:unknown):PhoenixLiveGame[]{
   const events=arr(object(payload).events)
-  return events.slice(0,50).flatMap(event=>{
+  return events.slice(0,50).flatMap((event)=>{
     const comp=arr(event.competitions)[0]
     if(!comp)return []
     const teams=arr(comp.competitors)
@@ -87,7 +87,7 @@ export function parseEspnLiveScoreboard(payload:unknown):PhoenixLiveGame[]{
     const awayPeriods=arr(away.linescores),homePeriods=arr(home.linescores)
     const periods=awayPeriods.length>0&&awayPeriods.length===homePeriods.length
       ?awayPeriods.slice(0,12).map((v,i)=>({ label:String(i+1),away:str(v.displayValue??v.value,25)||'—',
-        home:str(homePeriods[i]?.displayValue??homePeriods[i]?.value,25)||'—'})):[]
+        home:str(homePeriods[i]?.displayValue??homePeriods[i]?.value,25)||'—' })):[]
     return [{
       id:str(event.id,50),home:fullTeam(home),away:fullTeam(away),
       ...(score(home)?{ homeScore:score(home) }:{}),...(score(away)?{ awayScore:score(away) }:{}),
@@ -151,7 +151,7 @@ async function liveFeed(url:string):Promise<PhoenixLiveGame[]>{
     const scores=parseEspnLiveScoreboard(await fetchJson(url))
     // Enrich at most four running games for last play/leaders. All other games keep live scores.
     let detailed=0
-    const enriched=await Promise.all(scores.map(async game=>{
+    const enriched=await Promise.all(scores.map(async (game)=>{
       if(game.phase!=='in'||game.lastPlay||detailed>=4)return game
       detailed++
       const endpoint=new URL(url),prefix=endpoint.pathname.replace('/scoreboard','')
@@ -168,14 +168,14 @@ async function liveFeed(url:string):Promise<PhoenixLiveGame[]>{
 }
 /** Shared scoped polling for the entire slate, never once per row. */
 export function SportsLiveProvider({ sport,league,date,children }:{
-  sport?:string|undefined;league?:string|undefined;date?:string|undefined;
+  sport?:string|undefined;league?:string|undefined;date?:string|undefined
   children:(get:(match:PhoenixLiveLookup)=>PhoenixLiveGame|undefined,meta:PhoenixLiveMeta)=>ReactNode
 }):ReactNode{
   const url=espnLiveUrl(sport,league,date)
   const [state,setState]=useState<{ url:string;games:PhoenixLiveGame[];at:number;error:boolean }>({ url:'',games:[],at:0,error:false })
   useEffect(()=>{
     if(!url)return
-    const lifecycle={active:true};let busy=false,lastAttempt=0
+    const lifecycle={ active:true };let busy=false,lastAttempt=0
     const update=async()=>{
       if(!lifecycle.active||busy||typeof document!=='undefined'&&document.visibilityState==='hidden')return
       if(typeof navigator!=='undefined'&&!navigator.onLine)return

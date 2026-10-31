@@ -90,7 +90,7 @@ async function readControl(req: IncomingMessage): Promise<{
     }
     return {
       action: 'start', symbols: payload.symbols,
-      ...(payload.autoDiscover === undefined ? {} : { autoDiscover: payload.autoDiscover as boolean }),
+      ...(payload.autoDiscover === undefined ? {} : { autoDiscover: payload.autoDiscover }),
       ...(payload.interval === undefined ? {} : { interval: payload.interval as '15m' | '1h' | '4h' | '1d' }),
       ...(payload.pollMinutes === undefined ? {} : { pollMinutes: payload.pollMinutes as number }),
     }
@@ -278,7 +278,7 @@ export function mountBinancePaperDashboardRoute(
         return
       }
       if (testnetAutomation) {
-        if(options.testnetAuto===undefined){res.writeHead(503).end(JSON.stringify({error:'Testnet automation unavailable'}));return}
+        if(options.testnetAuto===undefined){res.writeHead(503).end(JSON.stringify({ error:'Testnet automation unavailable' }));return}
         const snapshot=options.testnetAuto.snapshot()
         res.statusCode=200
         if(req.method==='HEAD')res.end()
@@ -286,7 +286,7 @@ export function mountBinancePaperDashboardRoute(
         return
       }
       if (realStatus) {
-        if (!options.real) { res.writeHead(503).end(JSON.stringify({error:'Binance REAL read-only Host unavailable'})); return }
+        if (!options.real) { res.writeHead(503).end(JSON.stringify({ error:'Binance REAL read-only Host unavailable' })); return }
         const status = await options.real.status()
         res.statusCode = 200
         if (req.method === 'HEAD') res.end()
@@ -295,19 +295,19 @@ export function mountBinancePaperDashboardRoute(
       }
       if (realMigrate) {
         if (!privateCredentialAction(req) || !options.credentials || !options.real) {
-          res.writeHead(403).end(JSON.stringify({error:'Secure credential migration unavailable'}))
+          res.writeHead(403).end(JSON.stringify({ error:'Secure credential migration unavailable' }))
           return
         }
         const data = await readRequestObject(req)
         if (Object.keys(data).length !== 0) {
-          res.writeHead(400).end(JSON.stringify({error:'Migration accepts no credentials or orders'}))
+          res.writeHead(400).end(JSON.stringify({ error:'Migration accepts no credentials or orders' }))
           return
         }
         // A Testnet trading journal must never be moved silently between wallets.
         const state = options.testnetAuto?.snapshot()
         if (state?.enabled === true || state?.pending !== undefined
           || state && Object.keys(state.positions).length > 0) {
-          res.writeHead(409).end(JSON.stringify({error:'testnet-automation-account-change-blocked'}))
+          res.writeHead(409).end(JSON.stringify({ error:'testnet-automation-account-change-blocked' }))
           return
         }
         const [key, secret] = await Promise.all([
@@ -315,16 +315,16 @@ export function mountBinancePaperDashboardRoute(
           options.credentials.resolve(credentialRef('PHOENIX_BINANCE_TESTNET_API_SECRET')),
         ])
         if (!key?.value || !secret?.value) {
-          res.writeHead(409).end(JSON.stringify({error:'No stored Testnet candidate to verify'}))
+          res.writeHead(409).end(JSON.stringify({ error:'No stored Testnet candidate to verify' }))
           return
         }
         // Verify on Binance production BEFORE copying secrets into the REAL vault.
-        const result = await options.real.forCredentials({apiKey:key.value,secret:secret.value}).status()
+        const result = await options.real.forCredentials({ apiKey:key.value,secret:secret.value }).status()
         if (!result.connected) {
           res.statusCode = 200
           res.end(JSON.stringify({
             migrated:false, connected:false, tradingAuthorized:false,
-            ...(result.issue === undefined ? {} : {issue:result.issue}),
+            ...(result.issue === undefined ? {} : { issue:result.issue }),
             nextAction:result.nextAction,
           }))
           return
@@ -332,7 +332,7 @@ export function mountBinancePaperDashboardRoute(
         try { await storeTestnetPair(options.credentials,key.value,secret.value,'real') }
         catch (error) {
           res.writeHead(error instanceof Error && error.message==='vault-read-only' ? 409 : 503)
-            .end(JSON.stringify({error:'REAL credential vault is unavailable for migration'}))
+            .end(JSON.stringify({ error:'REAL credential vault is unavailable for migration' }))
           return
         }
         // Keep the previous Testnet refs intact: the vault's existing values
@@ -346,7 +346,7 @@ export function mountBinancePaperDashboardRoute(
       }
       if (realConnect) {
         if (!privateCredentialAction(req) || !options.credentials || !options.real) {
-          res.writeHead(403).end(JSON.stringify({error:'Secure REAL credential setup unavailable'}))
+          res.writeHead(403).end(JSON.stringify({ error:'Secure REAL credential setup unavailable' }))
           return
         }
         let key: string
@@ -362,7 +362,7 @@ export function mountBinancePaperDashboardRoute(
           key = data.apiKey
           secret = data.secret
         } catch {
-          res.writeHead(400).end(JSON.stringify({error:'Invalid Binance REAL HMAC credential format'}))
+          res.writeHead(400).end(JSON.stringify({ error:'Invalid Binance REAL HMAC credential format' }))
           return
         }
         try { await storeTestnetPair(options.credentials,key,secret,'real') }
@@ -375,7 +375,7 @@ export function mountBinancePaperDashboardRoute(
         }
         const probe = await options.real.status()
         res.statusCode = 200
-        res.end(JSON.stringify({...probe, saved:true, tradingAuthorized:false}))
+        res.end(JSON.stringify({ ...probe, saved:true, tradingAuthorized:false }))
         return
       }
       if (testing) {

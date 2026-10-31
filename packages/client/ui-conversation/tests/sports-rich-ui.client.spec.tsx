@@ -11,7 +11,7 @@ const rich={
     venue:'American Family Field',source:'MLB Stats API · 2026-10-24',
     home:{ label:'Milwaukee Brewers',logo:'https://www.mlbstatic.com/team-logos/158.svg' },
     away:{ label:'Tampa Bay Rays',logo:'https://www.mlbstatic.com/team-logos/139.svg' },
-    pitchers:[{ team:'Tampa Bay Rays',name:'Starter Away',id:678021,probable:true,image:trusted,stats:'ERA 2.91 · WHIP 1.02'}],
+    pitchers:[{ team:'Tampa Bay Rays',name:'Starter Away',id:678021,probable:true,image:trusted,stats:'ERA 2.91 · WHIP 1.02' }],
     lineups:[{ team:'Rays',confirmed:false,players:[{ name:'Player 1',role:'DH',stats:'AVG .300' }] },
       { team:'Brewers',confirmed:false,players:[] }],
     bullpen:[{ team:'Rays',pitchers:[{ name:'Reliever',role:'Pitcher',stats:'ERA 3.01' }],note:'Roster activo' },
@@ -42,7 +42,7 @@ describe('Phoenix Sports rich native cards',()=>{
     expect(screen.getByRole('heading',{ name:'Abridores probables' })).toBeTruthy()
     expect(screen.getByRole('heading',{ name:'Alineaciones' })).toBeTruthy()
     expect(screen.getByRole('heading',{ name:'Bullpen y cuerpo de lanzadores' })).toBeTruthy()
-    expect(screen.getByRole('heading',{ name:'Investigación Phoenix · Tendencia'})).toBeTruthy()
+    expect(screen.getByRole('heading',{ name:'Investigación Phoenix · Tendencia' })).toBeTruthy()
     expect(screen.getByAltText('Milwaukee Brewers')).toBeTruthy()
     expect(screen.getByAltText('Tampa Bay Rays')).toBeTruthy()
     expect(screen.getByAltText('Starter Away')).toBeTruthy()
@@ -78,11 +78,11 @@ describe('Phoenix Sports ticket hierarchy and theme compatibility',()=>{
       note:'SIMULACIÓN, SIN APUESTA REAL. No es una recomendación garantizada.',
       legs:[
         { event:'Arsenal vs Chelsea',selection:'Arsenal',price:'1.80',bookmaker:'Casa A',market:'h2h',
-          sport:'Fútbol',country:'Inglaterra',league:'Premier League'},
+          sport:'Fútbol',country:'Inglaterra',league:'Premier League' },
         { event:'Liverpool vs Leeds',selection:'Liverpool',price:'1.70',bookmaker:'Casa A',market:'h2h',
-          sport:'Fútbol',country:'Inglaterra',league:'Premier League'},
+          sport:'Fútbol',country:'Inglaterra',league:'Premier League' },
         { event:'Brewers vs Rays',selection:'Brewers',price:'2.08',bookmaker:'Casa B',market:'h2h',
-          sport:'Béisbol',league:'MLB'},
+          sport:'Béisbol',league:'MLB' },
       ],
     },
   } as const
@@ -91,8 +91,8 @@ describe('Phoenix Sports ticket hierarchy and theme compatibility',()=>{
     expect(block).not.toBeNull()
     if(!block)throw Error('Ticket fixture rejected')
     render(<GenerativeUi block={block}/>)
-    expect(screen.getByRole('region',{ name:'Fútbol · Inglaterra · Premier League'})).toBeTruthy()
-    expect(screen.getByRole('region',{ name:'Béisbol · MLB'})).toBeTruthy()
+    expect(screen.getByRole('region',{ name:'Fútbol · Inglaterra · Premier League' })).toBeTruthy()
+    expect(screen.getByRole('region',{ name:'Béisbol · MLB' })).toBeTruthy()
     expect(screen.getByText('⚽')).toBeTruthy()
     expect(screen.getByText('⚾')).toBeTruthy()
     expect(screen.getAllByText(/Casa A/).length).toBe(2)
@@ -113,15 +113,15 @@ describe('Phoenix Sports ticket hierarchy and theme compatibility',()=>{
     let prompt=''
     const card=parseGenerativeUiBlock(ticket)
     if(!card)throw Error('Invalid quoted ticket')
-    render(<GenerativeUi block={card} onAction={value=>{prompt=value}}/>)
-    fireEvent.click(screen.getByRole('button',{ name:'Verificar si ganó o perdió'}))
+    render(<GenerativeUi block={card} onAction={(value)=>{prompt=value}}/>)
+    fireEvent.click(screen.getByRole('button',{ name:'Verificar si ganó o perdió' }))
     expect(prompt).toContain('sports_chat_ticket_track')
     expect(prompt).toContain('Casa A')
     expect(screen.getByText(/Aceptación de la casa sin verificar/)).toBeTruthy()
   })
   it('preserves detailed sourced research while rejecting excessive model prose',()=>{
     const detailed={ ...ticket,props:{ ...ticket.props,legs:[
-      { ...ticket.props.legs[0],rationale:'ESPN · 5 partidos diferentes · '.padEnd(470,'x')},
+      { ...ticket.props.legs[0],rationale:'ESPN · 5 partidos diferentes · '.padEnd(470,'x') },
     ] } }
     expect(parseGenerativeUiBlock(detailed)).not.toBeNull()
     expect(parseGenerativeUiBlock({ ...detailed,props:{ ...detailed.props,legs:[
@@ -243,7 +243,7 @@ describe('Universal chat: compact sports schedules do not replace single-game ca
       events:[
         { eventId:'evt-1',when:'28 oct 2026, 7:00 p. m.',status:'Programado',
           away:{ label:'Miami Heat' },home:{ label:'Atlanta Hawks' },venue:'State Farm Arena',
-          featured:'Líder verificado · 20 PTS',askPrompt:'Kira, investiga el evento evt-1.'},
+          featured:'Líder verificado · 20 PTS',askPrompt:'Kira, investiga el evento evt-1.' },
         { eventId:'evt-2',when:'28 oct 2026, 8:00 p. m.',
           away:{ label:'Houston Rockets' },home:{ label:'Los Angeles Lakers' },venue:'Crypto.com Arena' },
       ],
@@ -287,7 +287,7 @@ describe('Universal chat: compact sports schedules do not replace single-game ca
     expect(screen.getByText(/ESPN aún no identifica a ambos participantes/)).toBeTruthy()
     expect(screen.queryByText('Sin confirmar')).toBeNull()
     expect(screen.queryByText('Finalizado')).toBeNull()
-    expect(screen.getAllByRole('button',{ name:'Ver análisis del encuentro ›'})).toHaveLength(1)
+    expect(screen.getAllByRole('button',{ name:'Ver análisis del encuentro ›' })).toHaveLength(1)
     expect(actions).toHaveLength(0)
   })
   it('offers an actionable drilldown without replacing the rich individual card',()=>{
@@ -297,7 +297,7 @@ describe('Universal chat: compact sports schedules do not replace single-game ca
     render(<GenerativeUi block={parsed} onAction={(message,mode)=>{
       actions.push(message+':'+mode)
     }}/>)
-    fireEvent.click(screen.getByRole('button',{ name:'Ver análisis del encuentro ›'}))
+    fireEvent.click(screen.getByRole('button',{ name:'Ver análisis del encuentro ›' }))
     expect(actions).toEqual(['Kira, investiga el evento evt-1.:draft'])
     expect(parseGenerativeUiBlock(rich)?.component).toBe('sports_game_card')
   })
@@ -320,8 +320,8 @@ describe('ESPN universal adaptive panels',()=>{
     source:'ESPN Common v3',checkedAt:'2026-10-29T13:00:00.000Z',
     image:'https://a.espncdn.com/i/headshots/nba/players/full/1.png',
     sections:[
-      { heading:'Perfil',kind:'metrics',items:[{ label:'Posición',value:'Guard'}]},
-      { heading:'Últimos partidos',kind:'list',items:[{label:'Match 1',value:'PTS: 28'}]},
+      { heading:'Perfil',kind:'metrics',items:[{ label:'Posición',value:'Guard' }] },
+      { heading:'Últimos partidos',kind:'list',items:[{ label:'Match 1',value:'PTS: 28' }] },
       { heading:'Noticias',kind:'articles',items:[{ label:'Headline',value:'Oct 29',href:'https://www.espn.com/nhl/story/_/id/99/article' }] },
     ],
     note:'3 de 3 fuentes con datos',
@@ -332,7 +332,7 @@ describe('ESPN universal adaptive panels',()=>{
     if(!card)throw Error('ESPN template rejected')
     render(<GenerativeUi block={card}/>)
     expect(screen.getByRole('region',{ name:'Perfil' })).toBeTruthy()
-    expect(screen.getByRole('region',{ name:'Últimos partidos'})).toBeTruthy()
+    expect(screen.getByRole('region',{ name:'Últimos partidos' })).toBeTruthy()
     expect(screen.getByText('PTS: 28')).toBeTruthy()
     expect(screen.getByText('Headline')).toBeTruthy()
     expect(screen.getByRole('link',{ name:'Leer noticia en ESPN' }).getAttribute('href')).toContain('espn.com')
@@ -365,7 +365,7 @@ describe('ESPN contextual navigation',()=>{
     if(!card)throw Error('Invalid contextual fixture')
     let prompt=''
     render(<GenerativeUi block={card} onAction={(text)=>{prompt=text}}/>)
-    fireEvent.click(screen.getByRole('button',{ name:'Estadísticas del jugador'}))
+    fireEvent.click(screen.getByRole('button',{ name:'Estadísticas del jugador' }))
     expect(prompt).toContain('athleteId=991')
   })
 })

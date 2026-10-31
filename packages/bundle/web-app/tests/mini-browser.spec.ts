@@ -207,7 +207,7 @@ describe('MiniBrowser model-safe DOM inspection', () => {
     expect(MINI_BROWSER_INSPECT_EXPRESSION).not.toContain('node.value')
     expect(MINI_BROWSER_INSPECT_EXPRESSION).not.toContain('document.cookie')
     expect(MINI_BROWSER_INSPECT_EXPRESSION).toContain("querySelectorAll('input, textarea, select')")
-    expect(MINI_BROWSER_INSPECT_EXPRESSION).toContain("slice(0, 3000)")
+    expect(MINI_BROWSER_INSPECT_EXPRESSION).toContain('slice(0, 3000)')
   })
 })
 

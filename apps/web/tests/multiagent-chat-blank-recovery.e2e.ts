@@ -34,11 +34,11 @@ describe('web e2e: multi-agent chat history recovery', () => {
   it('keeps a visible transcript placeholder and composer while nonblank history is pending', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-multiagent-chat-blank-recovery'))
     let releaseHistory = (): void => {}
-    const held = new Promise<void>(resolve => { releaseHistory = resolve })
+    const held = new Promise<void>((resolve) => { releaseHistory = resolve })
     let markRequested = (): void => {}
-    const requested = new Promise<void>(resolve => { markRequested = resolve })
+    const requested = new Promise<void>((resolve) => { markRequested = resolve })
     let intercepted = false
-    await page.route('**/api/session.history', async route => {
+    await page.route('**/api/session.history', async (route) => {
       if (intercepted) { await route.continue(); return }
       intercepted = true
       markRequested()

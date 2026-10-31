@@ -7,10 +7,10 @@ const model={
   version:1,units:'meters',name:'Showroom interior',background:'#f7f2eb',
   camera:'isometric',environment:'studio',
   nodes:[
-    {type:'box',name:'Cristal',position:[2,1,-3],size:[4,2,.2],color:'#b5d8d6',
-      material:{preset:'glass',baseColor:'#b5d8d6',metallic:0,roughness:.06,opacity:.6,transmission:.8,clearcoat:.2}},
-    {type:'sphere',name:'Mesa',position:[0,1,0],size:[2,1.5,2],color:'#b08056',
-      material:{preset:'wood',baseColor:'#b08056',metallic:0,roughness:.8}},
+    { type:'box',name:'Cristal',position:[2,1,-3],size:[4,2,.2],color:'#b5d8d6',
+      material:{ preset:'glass',baseColor:'#b5d8d6',metallic:0,roughness:.06,opacity:.6,transmission:.8,clearcoat:.2 } },
+    { type:'sphere',name:'Mesa',position:[0,1,0],size:[2,1.5,2],color:'#b08056',
+      material:{ preset:'wood',baseColor:'#b08056',metallic:0,roughness:.8 } },
   ],
 }
 describe('Phoenix 3D standard GLB/glTF models',()=>{
@@ -22,7 +22,7 @@ describe('Phoenix 3D standard GLB/glTF models',()=>{
     expect(json.asset.version).toBe('2.0')
     expect(json.meshes.length).toBe(2)
     expect(json.buffers[0].uri).toMatch(/^data:application\/octet-stream;base64,/u)
-    expect(json.accessors[0]).toMatchObject({componentType:5126,type:'VEC3'})
+    expect(json.accessors[0]).toMatchObject({ componentType:5126,type:'VEC3' })
     expect(json.materials[0].pbrMetallicRoughness).toMatchObject({
       baseColorFactor:expect.any(Array),roughnessFactor:.06,metallicFactor:0,
     })
@@ -43,7 +43,7 @@ describe('Phoenix 3D standard GLB/glTF models',()=>{
       expect(item?.environment).toBe('studio')
       expect(item?.camera).toBe('isometric')
       expect(item?.nodes[0]).toMatchObject({
-        type:'mesh',name:'Cristal',material:{metallic:0,roughness:.06,transmission:.8,clearcoat:.2},
+        type:'mesh',name:'Cristal',material:{ metallic:0,roughness:.06,transmission:.8,clearcoat:.2 },
       })
       expect(item?.nodes[0]?.vertices?.length).toBeGreaterThan(100)
       expect(item?.nodes[1]?.vertices?.length).toBeGreaterThan(100)
@@ -52,11 +52,11 @@ describe('Phoenix 3D standard GLB/glTF models',()=>{
   })
   it('round-trips PBR base color, normal, AO and metallic/roughness texture maps without external fetches',()=>{
     const tinyPng='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y8YyM8AAAAASUVORK5CYII='
-    const textured=parseScene3D({...model,nodes:[{
-      ...model.nodes[0]!,material:{...model.nodes[0]!.material,
+    const textured=parseScene3D({ ...model,nodes:[{
+      ...model.nodes[0]!,material:{ ...model.nodes[0]!.material,
         baseColorTexture:tinyPng,normalTexture:tinyPng,occlusionTexture:tinyPng,
-        metallicRoughnessTexture:tinyPng},
-    }]})
+        metallicRoughnessTexture:tinyPng },
+    }] })
     expect(textured).toBeDefined()
     const glb=exportSceneGLB(textured!)
     const recovered=importSceneGLTF(glb)
@@ -72,11 +72,11 @@ describe('Phoenix 3D standard GLB/glTF models',()=>{
   })
   it('rejects malformed GLB headers, unsupported external buffers and poisoned geometry',()=>{
     expect(()=>importSceneGLTF(new Uint8Array(20))).toThrow()
-    expect(()=>importSceneGLTF(JSON.stringify({asset:{version:'2.0'},buffers:[{uri:'https://bad.example/a.bin'}]}))).toThrow()
+    expect(()=>importSceneGLTF(JSON.stringify({ asset:{ version:'2.0' },buffers:[{ uri:'https://bad.example/a.bin' }] }))).toThrow()
     const corrupt=exportSceneGLB(scene).slice()
     corrupt[0]=0
     expect(()=>importSceneGLTF(corrupt)).toThrow()
-    expect(parseScene3D({...scene,nodes:[{type:'mesh',position:[0,0,0],size:[1,1,1],color:'#ffffff',
-      vertices:[0,0,0,1,0,0,NaN,1,0]}]})).toBeUndefined()
+    expect(parseScene3D({ ...scene,nodes:[{ type:'mesh',position:[0,0,0],size:[1,1,1],color:'#ffffff',
+      vertices:[0,0,0,1,0,0,NaN,1,0] }] })).toBeUndefined()
   })
 })

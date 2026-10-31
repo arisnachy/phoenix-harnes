@@ -164,7 +164,7 @@ export function scopeCodexToolsForPaint(options: GenerateOptions): GenerateOptio
     && /\b(?:abre|abrir|entra|entrar|crea|crear|dibuja|dibujo|trazo|carita|usa|open|draw)\b/u.test(text)
     && !/\b(?:publica|publicar|campana|campaign|redes sociales|social media|youtube|instagram|facebook|chrome|navegador)\b/u.test(text)
   if (!paint) return options
-  const tools = options.tools.filter(tool => {
+  const tools = options.tools.filter((tool) => {
     const name = tool.name.toLowerCase()
     if (/^(?:image_generation|phoenix_3d)$/u.test(name)) return false
     if (!name.startsWith('mcp__')) return true

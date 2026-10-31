@@ -86,7 +86,7 @@ export function isKnownSecondaryMarketPage(sourceId:string,href:string):boolean 
  * @returns Sources, workflow, access restrictions and provenance caveats.
  */
 export function secondaryMarketSourceCatalog(){
-  return {sources:secondarySportsSources,workflow:secondaryMarketWorkflow,
+  return { sources:secondarySportsSources,workflow:secondaryMarketWorkflow,
     policy:secondaryMarketPolicy,
-    instruction:'Estos son portales para investigación complementaria, no feeds API activados. Si no puedes navegar su contenido, indícalo: no inventes cuotas, movimientos ni marcas temporales. Las cuotas sin marca de actualización no son precios actuales verificables.'}
+    instruction:'Estos son portales para investigación complementaria, no feeds API activados. Si no puedes navegar su contenido, indícalo: no inventes cuotas, movimientos ni marcas temporales. Las cuotas sin marca de actualización no son precios actuales verificables.' }
 }

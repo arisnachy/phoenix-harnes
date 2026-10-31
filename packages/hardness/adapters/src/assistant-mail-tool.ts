@@ -305,12 +305,12 @@ export function createAssistantMailManageTool(resolve: () => AssistantMailContro
       const service = resolve()
       if (service === undefined) throw new Error('Kira mailbox Host service is unavailable')
       const input: KiraMailOperationInput = {
-        action: args.action as KiraMailOperationInput['action'],
+        action: args.action,
         ...(args.message_id === undefined ? {} : { messageId: args.message_id }),
         ...(args.thread_id === undefined ? {} : { threadId: args.thread_id }),
         ...(args.draft_id === undefined ? {} : { draftId: args.draft_id }),
         ...(args.attachment_id === undefined ? {} : { attachmentId: args.attachment_id }),
-        ...(args.folder === undefined ? {} : { folder: args.folder as NonNullable<KiraMailOperationInput['folder']> }),
+        ...(args.folder === undefined ? {} : { folder: args.folder }),
         ...(args.query === undefined ? {} : { query: args.query }),
         ...(args.page_token === undefined ? {} : { pageToken: args.page_token }),
         ...(args.limit === undefined ? {} : { limit: args.limit }),

@@ -292,8 +292,8 @@ function UserPhotoAvatar(): ReactNode {
           database.close()
           if (!active) return
           const candidate = mode.result === 'styled' && styled.result instanceof Blob
-            ? styled.result as Blob
-            : photo.result instanceof Blob ? photo.result as Blob : undefined
+            ? styled.result
+            : photo.result instanceof Blob ? photo.result : undefined
           const next = candidate === undefined ? undefined : URL.createObjectURL(candidate)
           setSource(next)
           if (current !== undefined) URL.revokeObjectURL(current)

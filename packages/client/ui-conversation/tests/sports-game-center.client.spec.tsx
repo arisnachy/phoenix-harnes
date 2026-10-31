@@ -16,7 +16,7 @@ describe('compact ESPN game center',()=>{
       { id:'2',text:'Goal',team:{ displayName:'FC Dallas' },awayScore:1,homeScore:0 },
       { id:'2',text:'Goal' },
       { id:'3',html:'<iframe/>' },
-    ] })).toMatchObject([{ id:'2',text:'Goal',score:'1 – 0'},{id:'1',text:'Kick off'}])
+    ] })).toMatchObject([{ id:'2',text:'Goal',score:'1 – 0' },{ id:'1',text:'Kick off' }])
   })
   it('does not fetch until opened, then renders only ESPN responses',async()=>{
     const fetcher=vi.fn(async()=>new Response(JSON.stringify({ plays:[{ id:'100',text:'Two-point shot' }] }),{ status:200 }))
