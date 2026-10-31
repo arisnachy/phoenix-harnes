@@ -154,7 +154,7 @@ export const KiraTeamMessageView = memo(function KiraTeamMessageView({
   // Direct child replies to a human question carry replyTo without an agent target.
   // Never label them "Equipo interno"; all other directed peer speech stays internal.
   const audience = data.senderKind === 'user'
-    || (data.senderKind === 'agent' && data.replyTo !== undefined && data.targetId === undefined)
+    || (data.senderKind === 'agent' && data.replyTo !== undefined && data.targetId === '')
     ? 'user' : 'internal'
   const senderStatus = participants[data.senderId]?.status
   const targetStatus = data.purpose === 'assignment'
