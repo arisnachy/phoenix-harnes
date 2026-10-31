@@ -44,8 +44,10 @@ function localUserAction(req: IncomingMessage): boolean {
 
 function privateCredentialAction(req: IncomingMessage): boolean {
   if (!localUserAction(req)) return false
+  const origin = req.headers.origin
+  if (origin === undefined) return false
   try {
-    const source = new URL(req.headers.origin!)
+    const source = new URL(origin)
     return source.protocol === 'https:' || ['localhost', '127.0.0.1', '[::1]'].includes(source.hostname)
   } catch { return false }
 }
