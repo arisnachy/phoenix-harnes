@@ -16,7 +16,7 @@ export function UserAvatar({ size = 36, className }: { size?: number; className?
     let alive = true
     let current: string | undefined
     const reload = () => {
-      void readAvatar().then(snapshot => {
+      void readAvatar().then((snapshot) => {
         if (!alive) return
         const photo = snapshot.mode === 'styled' ? snapshot.styled : snapshot.original
         const next = photo === undefined ? undefined : URL.createObjectURL(photo)
@@ -123,7 +123,10 @@ export function AvatarPanel() {
   return (
     <section className={css.panel} aria-labelledby="user-avatar-title">
       <h3 className={css.heading} id="user-avatar-title">Mi avatar</h3>
-      <p className={css.hint}>Tu foto es tuya, no un agente del equipo. Se conserva en este navegador o instalación de PHOENIX, no se agrega a los prompts ni se sube automáticamente.</p>
+      <p className={css.hint}>
+        Tu foto es tuya, no un agente del equipo. Se conserva en este navegador o instalación de PHOENIX,
+        no se agrega a los prompts ni se sube automáticamente.
+      </p>
       <div className={css.top}>
         <UserAvatar size={76} />
         <div className={css.details}>
@@ -137,9 +140,9 @@ export function AvatarPanel() {
         <div className={css.editor}>
           <p className={css.hint}>Ajusta el encuadre antes de guardar la imagen. Se eliminan los metadatos personales.</p>
           <div className={css.preview}><img src={preview} alt="Vista previa de la fotografía" style={{ transform: `scale(${zoom})`, objectPosition: `${50 + offsetX * 50}% ${50 + offsetY * 50}%` }} /></div>
-          <label>Acercar <input aria-label="Acercar" type="range" min="1" max="3" step=".1" value={zoom} onChange={e => { setZoom(Number(e.target.value)) }} /></label>
-          <label>Encuadre horizontal <input aria-label="Encuadre horizontal" type="range" min="-1" max="1" step=".1" value={offsetX} onChange={e => { setOffsetX(Number(e.target.value)) }} /></label>
-          <label>Encuadre vertical <input aria-label="Encuadre vertical" type="range" min="-1" max="1" step=".1" value={offsetY} onChange={e => { setOffsetY(Number(e.target.value)) }} /></label>
+          <label>Acercar <input aria-label="Acercar" type="range" min="1" max="3" step=".1" value={zoom} onChange={(e) => { setZoom(Number(e.target.value)) }} /></label>
+          <label>Encuadre horizontal <input aria-label="Encuadre horizontal" type="range" min="-1" max="1" step=".1" value={offsetX} onChange={(e) => { setOffsetX(Number(e.target.value)) }} /></label>
+          <label>Encuadre vertical <input aria-label="Encuadre vertical" type="range" min="-1" max="1" step=".1" value={offsetY} onChange={(e) => { setOffsetY(Number(e.target.value)) }} /></label>
           <div className={css.actions}>
             <button type="button" onClick={save} disabled={busy}>Guardar foto</button>
             <button type="button" onClick={() => { setSelected(undefined) }} disabled={busy}>Cancelar</button>
@@ -155,22 +158,32 @@ export function AvatarPanel() {
       ) : null}
       {stored.original !== undefined && (
         <label className={css.referenceOption}>
-          <input type="checkbox" checked={stored.referenceEnabled} disabled={busy} onChange={event => {
+          <input type="checkbox" checked={stored.referenceEnabled} disabled={busy} onChange={(event) => {
             void act(() => setAvatarReferenceEnabled(event.target.checked), event.target.checked
               ? 'Tu foto original será referencia en peticiones explícitas de imágenes donde aparezcas.'
               : 'La referencia automática está desactivada.')
           }} />
-          <span><strong>Usar mi rostro como referencia en nuevas imágenes</strong><small>Solo cuando pidas expresamente una imagen en la que aparezcas tú. Se adjuntará la foto original a esa solicitud y podrá enviarse al proveedor de IA elegido; no se envía en conversaciones ordinarias. Puedes desactivarlo cuando quieras.</small></span>
+          <span>
+            <strong>Usar mi rostro como referencia en nuevas imágenes</strong>
+            <small>
+              Solo cuando pidas expresamente una imagen en la que aparezcas tú.
+              Se adjuntará la foto original a esa solicitud y podrá enviarse al proveedor de IA elegido;
+              no se envía en conversaciones ordinarias. Puedes desactivarlo cuando quieras.
+            </small>
+          </span>
         </label>
       )}
       {stored.original !== undefined && (
         <div className={css.transform}>
           <h4>Transformar al estilo del equipo Kira</h4>
-          <p className={css.hint}>Convierte tu fotografía en un retrato semirrealista de luz cálida, respetando tu identidad. La versión real queda siempre guardada. Se requiere un editor de imágenes local compatible; no se simula el resultado.</p>
+          <p className={css.hint}>
+            Convierte tu fotografía en un retrato semirrealista de luz cálida, respetando tu identidad.
+            La versión real queda siempre guardada. Se requiere un editor local compatible; no se simula el resultado.
+          </p>
           <label htmlFor="user-avatar-editor">Editor de imágenes local (solo localhost)</label>
-          <input id="user-avatar-editor" type="url" className={css.endpoint} value={editor} placeholder="http://127.0.0.1:PORT/v1" onChange={e => { updateEditor(e.target.value) }} disabled={busy} />
+          <input id="user-avatar-editor" type="url" className={css.endpoint} value={editor} placeholder="http://127.0.0.1:PORT/v1" onChange={(e) => { updateEditor(e.target.value) }} disabled={busy} />
           <label htmlFor="user-avatar-model">Modelo de edición instalado</label>
-          <input id="user-avatar-model" className={css.endpoint} value={model} placeholder="local-image-edit" onChange={e => { updateModel(e.target.value) }} disabled={busy} />
+          <input id="user-avatar-model" className={css.endpoint} value={model} placeholder="local-image-edit" onChange={(e) => { updateModel(e.target.value) }} disabled={busy} />
           <div className={css.actions}>
             <button type="button" disabled={busy || !editorValid} onClick={checkEditor}>Comprobar conexión</button>
             <button type="button" className={css.primary} disabled={busy || !/^[a-zA-Z0-9._/-]{1,120}$/u.test(model)} onClick={transform}>{busy ? 'Procesando…' : 'Transformar con IA'}</button>
