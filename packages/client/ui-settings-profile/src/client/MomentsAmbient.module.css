@@ -97,6 +97,63 @@
   background: var(--moment-tint);
   box-shadow: none;
 }
+/* Worldwide visual families. Decorations stay inside the tiny badge margin. */
+.ambient[data-phoenix-theme="lunar"] { --moment-accent: #c7503a; --moment-tint: #fff2e9; }
+.ambient[data-phoenix-theme="lunar"]::before { content: '✧'; color: #c7503a; }
+.ambient[data-phoenix-theme="lights"] { --moment-accent: #c49a35; --moment-tint: #fff9e9; }
+.ambient[data-phoenix-theme="lights"]::before { content: '✦'; color: #c49a35; }
+.ambient[data-phoenix-theme="spring"] { --moment-accent: #d77f9c; --moment-tint: #fff2f8; }
+.ambient[data-phoenix-theme="spring"]::before { content: '❀'; color: #d77f9c; }
+.ambient[data-phoenix-theme="harvest"] { --moment-accent: #ba8a3e; --moment-tint: #fff8e9; }
+.ambient[data-phoenix-theme="harvest"]::before { content: '✿'; color: #ba8a3e; }
+.ambient[data-phoenix-theme="water"] { --moment-accent: #4a99ba; --moment-tint: #eefaff; }
+.ambient[data-phoenix-theme="water"]::before { content: '◦'; color: #4a99ba; }
+.ambient[data-phoenix-theme="spiritual"] { --moment-accent: #9872bd; --moment-tint: #f9f1ff; }
+.ambient[data-phoenix-theme="spiritual"]::before { content: '✧'; color: #9872bd; }
+.ambient[data-phoenix-theme="heritage"] { --moment-accent: #b47557; --moment-tint: #fff6f0; }
+.ambient[data-phoenix-theme="heritage"]::before { content: '✦'; color: #b47557; }
+.ambient[data-phoenix-theme="music"] { --moment-accent: #8b7bb8; --moment-tint: #f5f2ff; }
+.ambient[data-phoenix-theme="music"]::before { content: '♫'; color: #8b7bb8; }
+.ambient[data-phoenix-theme="health"] { --moment-accent: #3e9e90; --moment-tint: #eefaf7; }
+.ambient[data-phoenix-theme="health"]::before { content: '+'; color: #3e9e90; }
+.ambient[data-phoenix-theme="education"] { --moment-accent: #6485b5; --moment-tint: #f3f6ff; }
+.ambient[data-phoenix-theme="education"]::before { content: '✦'; color: #6485b5; }
+.ambient[data-phoenix-theme="science"] { --moment-accent: #7187c4; --moment-tint: #f0f5ff; }
+.ambient[data-phoenix-theme="science"]::before { content: '✧'; color: #7187c4; }
+.ambient[data-phoenix-theme="family"] { --moment-accent: #c48491; --moment-tint: #fff3f5; }
+.ambient[data-phoenix-theme="family"]::before { content: '♡'; color: #c48491; }
+.ambient[data-phoenix-theme="peace"] { --moment-accent: #799aae; --moment-tint: #f1f9fd; }
+.ambient[data-phoenix-theme="peace"]::before { content: '✦'; color: #799aae; }
+.ambient[data-phoenix-theme="sports"] { --moment-accent: #ad924a; --moment-tint: #fff8ec; }
+.ambient[data-phoenix-theme="sports"]::before { content: '★'; color: #ad924a; }
+.ambient[data-phoenix-theme="community"] { --moment-accent: #66978d; --moment-tint: #eff9f6; }
+.ambient[data-phoenix-theme="community"]::before { content: '✧'; color: #66978d; }
+.ambient[data-phoenix-theme="newyear"] { --moment-accent: #ba8b55; --moment-tint: #fff7ec; }
+.ambient[data-phoenix-theme="newyear"]::before { content: '✦'; color: #ba8b55; }
+.ambient[data-phoenix-theme="festival"] { --moment-accent: #c27c9b; --moment-tint: #fff1f8; }
+.ambient[data-phoenix-theme="festival"]::before { content: '✧'; color: #c27c9b; }
+/* Eight low-noise compositions, allowing local variation on every occasion. */
+.ambient[data-variant="4"] {
+  border-color: var(--moment-accent);
+  border-radius: 10px;
+  background: var(--moment-tint);
+  box-shadow: none;
+}
+.ambient[data-variant="5"] {
+  border: 1px solid var(--dsw-alias-border-l2, #ddd);
+  background: var(--dsw-alias-bg-layer-1, #fff);
+  box-shadow: inset 3px 0 var(--moment-accent);
+}
+.ambient[data-variant="6"] {
+  border-color: color-mix(in srgb, var(--moment-accent) 55%, transparent);
+  background: linear-gradient(90deg, var(--dsw-alias-bg-layer-1, #fff), var(--moment-tint));
+  box-shadow: 0 1px 7px rgb(0 0 0 / 4%);
+}
+.ambient[data-variant="7"] {
+  border: 1px solid var(--dsw-alias-border-l2, #ddd);
+  background: var(--moment-tint);
+  box-shadow: inset 0 2px var(--moment-accent);
+}
 @media (max-width: 700px) {
   .ambient { top: 62px; right: 8px; max-width: 116px; height: 26px; padding: 0 7px; }
   .ambient::before { display: none; }
