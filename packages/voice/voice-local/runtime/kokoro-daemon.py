@@ -38,6 +38,14 @@ closed = threading.Event()
 jobs: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=8)
 
 
+def configure_stdio() -> None:
+    """Force the NDJSON process protocol to use UTF-8 on Windows pipes."""
+    for stream, errors in ((sys.stdin, "strict"), (sys.stdout, "strict"), (sys.stderr, "replace")):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if callable(reconfigure):
+            reconfigure(encoding="utf-8", errors=errors)
+
+
 def voice_for(language: str, gender: str) -> tuple[str, str, str]:
     primary = language.strip().lower().replace("_", "-").split("-")[0]
     if primary not in SPANS:
@@ -68,8 +76,8 @@ phonemizers: dict[str, Any] = {}
 def spoken_text(text: str) -> str:
     """Prepare display text for Kokoro without destroying prosodic punctuation.
 
-    Misaki's Spanish grapheme-to-phoneme converter treats inverted Spanish
-    punctuation and Markdown delimiters as pronounceable input.  Keep normal
+    Misaki retains inverted Spanish punctuation and can pronounce Markdown
+    delimiters as words. Keep normal
     sentence punctuation because Kokoro uses it for pauses and intonation,
     while removing visual syntax and standalone accent marks at this process
     boundary as well as in the Host client.
@@ -186,6 +194,7 @@ def worker() -> None:
 
 def main() -> int:
     global model
+    configure_stdio()
     if len(sys.argv) == 2 and sys.argv[1] == "--self-test":
         assert voice_for("es-DO", "feminine")[0] == "ef_dora"
         assert voice_for("es-DO", "masculine")[0] == "em_alex"

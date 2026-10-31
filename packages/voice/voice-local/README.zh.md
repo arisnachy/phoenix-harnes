@@ -24,6 +24,8 @@
 
 在西班牙语音素转换前，内置守护进程会将分解形式的 Unicode 重音规范化为 NFC，删除 Markdown 和视觉符号，并去掉倒置的 `¡`/`¿` 标记。同时保留逗号、句号、问号、感叹号和省略号等承载停顿与语气的标点，避免把格式字符读出来。
 
+常驻 NDJSON 协议在读取请求前会明确将 stdin、stdout 和 stderr 配置为 UTF-8，因此 Windows 管道的本地编码不会破坏西班牙语重音和标点。
+
 进程通过 `shell: false` 启动，并通过 stdin/stdout 传递文本或语音请求。系统 TTS 在 Windows 使用 `System.Speech`，macOS 使用 `say`，Linux 使用 `espeak-ng`。
 
 ## 扩展点

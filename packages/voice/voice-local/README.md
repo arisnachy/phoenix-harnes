@@ -22,6 +22,8 @@ When `kokoroCommand` is present, the `kokoro` provider receives normalized UTF-8
 
 Before Spanish phonemization, the bundled daemon normalizes decomposed Unicode accents to NFC, removes Markdown and visual symbols, and drops inverted `¡`/`¿` markers. Sentence punctuation such as commas, periods, question marks, exclamation marks, and ellipses remains so Kokoro can produce pauses and sentence intonation without reading formatting characters aloud.
 
+The resident NDJSON protocol explicitly reconfigures stdin, stdout, and stderr to UTF-8 before reading requests, so Spanish accents and punctuation survive Windows pipe locale settings.
+
 Commands run with `shell: false`, explicit arguments, hidden Windows windows, bounded stdin/stdout pipes, and abort handling. No secret is put in command arguments or logs by this package.
 
 ## Extension points

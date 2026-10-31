@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 import importlib.util
+import json
+import os
+import subprocess
+import sys
 import unicodedata
 import unittest
 from pathlib import Path
@@ -78,6 +82,28 @@ class KokoroGenerationBoundaryTests(unittest.TestCase):
         assert model.received is not None
         self.assertEqual(model.received[0], "prepared phonemes")
         self.assertTrue(model.received[1]["is_phonemes"])
+
+    def test_utf8_protocol_input_survives_non_utf8_parent_stdio(self) -> None:
+        script = (
+            "import importlib.util,json,sys; "
+            "spec=importlib.util.spec_from_file_location('daemon',sys.argv[1]); "
+            "module=importlib.util.module_from_spec(spec); spec.loader.exec_module(module); "
+            "module.configure_stdio(); sys.stdout.write(json.dumps(sys.stdin.read(), ensure_ascii=True))"
+        )
+        payload = json.dumps({"text": "¿Cómo estás? ¡Muy bien!"}, ensure_ascii=False).encode("utf-8")
+        environment = os.environ.copy()
+        environment["PYTHONUTF8"] = "0"
+        environment["PYTHONIOENCODING"] = "cp1252"
+        result = subprocess.run(
+            [sys.executable, "-B", "-c", script, str(DAEMON)],
+            input=payload,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=True,
+            env=environment,
+            timeout=10,
+        )
+        self.assertEqual(json.loads(result.stdout), payload.decode("utf-8"))
 
 
 if __name__ == "__main__":
