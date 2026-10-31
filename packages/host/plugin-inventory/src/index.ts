@@ -24,7 +24,7 @@ import { readBusinessLibrarySnapshot } from './business-library.ts'
 import { OpenClawConnectorBridge } from './openclaw-connectors.ts'
 import { TokenTelemetryCollector } from './telemetry.ts'
 import { readTelegramBotState, saveTelegramBot, removeTelegramBot, TelegramInbox } from './telegram-bot.ts'
-import {theOddsApiConnectorState,configureTheOddsApiConnector,disconnectTheOddsApiConnector,type OddsApiConnectorState} from './odds-api-connector.ts'
+import { theOddsApiConnectorState, configureTheOddsApiConnector, disconnectTheOddsApiConnector } from './odds-api-connector.ts'
 import {
   BINANCE_AGENT_OS_SERVER_NAME,
   BINANCE_AGENT_OS_URL,
@@ -62,6 +62,7 @@ import type {
   PhoenixUpdateRefreshReceipt,
   PhoenixUpdateSnapshot,
   TokenTelemetrySnapshot,
+  OddsApiConnectorState,
   TokenTelemetryPreference,
   TelegramBotSnapshot,
   PluginEntryId,
