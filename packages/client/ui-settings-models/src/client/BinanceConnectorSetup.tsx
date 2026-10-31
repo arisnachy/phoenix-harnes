@@ -166,7 +166,7 @@ export function BinanceConnectorSetup({ onChanged, onAuthorizeMcp }: {
     setBusy('real'); setError(undefined); setNotice(undefined)
     try {
       const result = await readHostJson<RealConnection & { migrated: boolean }>('/real-migrate', {})
-      if (result.migrated === true && result.connected === true) {
+      if (result.migrated &&  result.connected) {
         setReal(result)
         setNotice('Claves previamente guardadas verificadas con Binance REAL. Acceso solo lectura; ninguna orden autorizada.')
         onChanged()
@@ -197,7 +197,7 @@ export function BinanceConnectorSetup({ onChanged, onAuthorizeMcp }: {
     try {
       if (reconnect) {
         const receipt = await readHostJson<{ reconnectAccepted: boolean }>('/mcp-reconnect', {})
-        if (receipt.reconnectAccepted !== true) {
+        if (!receipt.reconnectAccepted) {
           throw new Error('El MCP no aceptó reconexión. Usa Reparar MCP y luego Reautorizar.')
         }
       } else {
@@ -236,13 +236,13 @@ export function BinanceConnectorSetup({ onChanged, onAuthorizeMcp }: {
             <label className={styles['field']}>
               <span className={styles['fieldLabel']}>API Key de Spot Testnet</span>
               <input className={styles['input']} type="password" autoComplete="off"
-                value={apiKey} onChange={event => { setApiKey(event.target.value) }}
+                value={apiKey} onChange={(event) => { setApiKey(event.target.value) }}
                 placeholder="Pega tu clave Testnet, nunca tu clave REAL"/>
             </label>
             <label className={styles['field']}>
               <span className={styles['fieldLabel']}>API Secret de Spot Testnet</span>
               <input className={styles['input']} type="password" autoComplete="new-password"
-                value={secret} onChange={event => { setSecret(event.target.value) }}
+                value={secret} onChange={(event) => { setSecret(event.target.value) }}
                 placeholder="El secreto solo se envía a la bóveda del Host"/>
             </label>
             <div className={styles['editorActions']}>
@@ -274,13 +274,13 @@ export function BinanceConnectorSetup({ onChanged, onAuthorizeMcp }: {
             <label className={styles['field']}>
               <span className={styles['fieldLabel']}>Binance REAL · API Key HMAC</span>
               <input className={styles['input']} type="password" autoComplete="off"
-                value={realKey} onChange={event => { setRealKey(event.target.value) }}
+                value={realKey} onChange={(event) => { setRealKey(event.target.value) }}
                 placeholder="API Key de Binance REAL" />
             </label>
             <label className={styles['field']}>
               <span className={styles['fieldLabel']}>Binance REAL · API Secret HMAC</span>
               <input className={styles['input']} type="password" autoComplete="new-password"
-                value={realSecret} onChange={event => { setRealSecret(event.target.value) }}
+                value={realSecret} onChange={(event) => { setRealSecret(event.target.value) }}
                 placeholder="Se guarda cifrado en la bóveda del Host" />
             </label>
             <div className={styles['editorActions']}>
@@ -355,36 +355,36 @@ export function BinanceConnectorSetup({ onChanged, onAuthorizeMcp }: {
             )}
             {agentic?.connected && agentic?.accountVerified || showAgenticAdvanced ? (
               <>
-          <div className={styles['editorActions']}>
-              <button type="button" className={connectorStyles['connectorPrimaryButton']}
-                onClick={() => { void activateAgentic(false) }}>
-                {busy === 'agentic' ? 'Instalando…' : agentic?.configured ? 'Revisar / instalar MCP REAL' : 'Preparar OAuth REAL'}
-              </button>
-              {agentic?.configured ? (
-                <button type="button" className={connectorStyles['connectorSecondaryButton']}
-                  onClick={() => { void activateAgentic(true) }}>Reconectar MCP</button>
-              ) : null}
-              {agentic?.configured && onAuthorizeMcp !== undefined ? (
-                <button type="button" className={connectorStyles['connectorPrimaryButton']}
-                  onClick={onAuthorizeMcp}>Autorizar Binance OAuth</button>
-              ) : null}
-              {agentic?.configured && agentic.status !== 'ready' ? (
-                <button type="button" className={connectorStyles['connectorSecondaryButton']}
-                  onClick={() => { void repairAgentic() }}>
-                  {busy === 'repair' ? 'Reparando…' : 'Reparar MCP'}
-                </button>
-              ) : null}
-            </div>
-            {agentic?.configured && onAuthorizeMcp === undefined ? (
-              <p role="alert" className={styles['advancedHint']}>
-                El Host todavía no registró un flujo OAuth autorizable. Usa Reparar MCP;
-                si continúa igual, revisa la versión del cliente MCP y sus logs de autorización.
-              </p>
-            ) : null}
-            {agentic?.reasonCode === undefined ? null : (
-              <p role="status" className={styles['advancedHint']}>Diagnóstico MCP: {agentic.reasonCode}</p>
-            )}
-            {agentic?.nextAction === undefined ? null : <p className={styles['advancedHint']}>{agentic.nextAction}</p>}
+                <div className={styles['editorActions']}>
+                  <button type="button" className={connectorStyles['connectorPrimaryButton']}
+                    onClick={() => { void activateAgentic(false) }}>
+                    {busy === 'agentic' ? 'Instalando…' : agentic?.configured ? 'Revisar / instalar MCP REAL' : 'Preparar OAuth REAL'}
+                  </button>
+                  {agentic?.configured ? (
+                    <button type="button" className={connectorStyles['connectorSecondaryButton']}
+                      onClick={() => { void activateAgentic(true) }}>Reconectar MCP</button>
+                  ) : null}
+                  {agentic?.configured && onAuthorizeMcp !== undefined ? (
+                    <button type="button" className={connectorStyles['connectorPrimaryButton']}
+                      onClick={onAuthorizeMcp}>Autorizar Binance OAuth</button>
+                  ) : null}
+                  {agentic?.configured && agentic.status !== 'ready' ? (
+                    <button type="button" className={connectorStyles['connectorSecondaryButton']}
+                      onClick={() => { void repairAgentic() }}>
+                      {busy === 'repair' ? 'Reparando…' : 'Reparar MCP'}
+                    </button>
+                  ) : null}
+                </div>
+                {agentic?.configured && onAuthorizeMcp === undefined ? (
+                  <p role="alert" className={styles['advancedHint']}>
+                    El Host todavía no registró un flujo OAuth autorizable. Usa Reparar MCP;
+                    si continúa igual, revisa la versión del cliente MCP y sus logs de autorización.
+                  </p>
+                ) : null}
+                {agentic?.reasonCode === undefined ? null : (
+                  <p role="status" className={styles['advancedHint']}>Diagnóstico MCP: {agentic.reasonCode}</p>
+                )}
+                {agentic?.nextAction === undefined ? null : <p className={styles['advancedHint']}>{agentic.nextAction}</p>}
               </>
             ) : null}
           </fieldset>

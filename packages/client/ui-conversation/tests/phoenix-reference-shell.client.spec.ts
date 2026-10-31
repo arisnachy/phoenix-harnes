@@ -32,7 +32,7 @@ describe('Phoenix approved header and thinking reference', () => {
     expect(chatCss).toContain(".turnStatus[data-centered='true'] {")
     expect(chatCss).toContain('align-self: center;')
     expect(chatCss).toContain('margin: clamp(60px, 9vh, 110px) auto 16px;')
-    expect(chatCss).toContain("@media (max-width: 720px)")
+    expect(chatCss).toContain('@media (max-width: 720px)')
     expect(chatCss).toContain(".turnStatus[data-centered='true'] .turnStatusText")
   })
 })

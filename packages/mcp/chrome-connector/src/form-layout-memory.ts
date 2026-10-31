@@ -42,11 +42,11 @@ export function sanitizeFormLayout(
   checks: readonly BrowserInteraction[],
   learnedAt = Date.now(),
 ): LearnedFormLayout | undefined {
-  const steps = phases.flatMap(phase => phase.flatMap(step => {
+  const steps = phases.flatMap(phase => phase.flatMap((step) => {
     const locator = safeLocator(step)
     return locator && locator.operation !== 'verify' ? [locator] : []
   })).slice(0, MAX_STEPS)
-  const verifiedChecks = checks.flatMap(step => {
+  const verifiedChecks = checks.flatMap((step) => {
     const locator = safeLocator(step)
     return locator && locator.operation === 'verify' ? [locator] : []
   }).slice(0, MAX_STEPS)

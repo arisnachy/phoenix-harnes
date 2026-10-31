@@ -47,7 +47,7 @@ export interface TradingDashboardSnapshot {
   readonly mode: 'paper'
   readonly phase: 'running' | 'stopped' | 'error'
   readonly enabled: boolean
-  readonly settings: { readonly symbols: readonly string[]; readonly interval: string; readonly pollMs: number;
+  readonly settings: { readonly symbols: readonly string[]; readonly interval: string; readonly pollMs: number
     readonly autoDiscover?: boolean }
   readonly account: {
     readonly equityUsdt: number

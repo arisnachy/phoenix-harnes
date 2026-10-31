@@ -50,7 +50,7 @@ export function youtubeCaptionUrl(input: string): string {
  * @returns Chosen supported track, if any.
  */
 export function chooseYoutubeCaptions(tracks: readonly YoutubeCaptionTrack[]): YoutubeCaptionTrack | undefined {
-  const safe = tracks.filter(track => {
+  const safe = tracks.filter((track) => {
     try { youtubeCaptionUrl(track.baseUrl); return true } catch { return false }
   })
   const priority = (track: YoutubeCaptionTrack): number => {

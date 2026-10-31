@@ -19,7 +19,7 @@ describe('one-time Windows recovery for deleted runtime helper', () => {
 
   it('rejects unrelated checkouts and requires both native-streaming fallbacks', () => {
     expect(recovery).toContain('https://github.com/arisnachy/phoenix-harnes')
-    expect(recovery).toContain("pinPhoenixUpdateLiveHelper\\(root,\\s*journalStatePath\\)")
+    expect(recovery).toContain('pinPhoenixUpdateLiveHelper\\(root,\\s*journalStatePath\\)')
     expect(recovery).toContain('const directStream = liveEligible && !live')
     expect(recovery).toContain('const directStream = liveEligible && !streamLive')
   })

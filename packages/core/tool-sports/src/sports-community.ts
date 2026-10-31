@@ -10,7 +10,7 @@ import { keylessEnabled } from './keyless-odds.ts'
 const runFile=promisify(execFile)
 export type CommunityOpinion={
   home:string;away:string;sport:string;league:string;market:string;source:'OddsPortal Community'
-  observedAt:string;votes:Array<{selection:string;percentage:number}>
+  observedAt:string;votes:Array<{ selection:string;percentage:number }>
   limitation:'votación pública, no probabilidad predictiva'
 }
 const str=(v:unknown,n=110)=>typeof v==='string'?v.trim().slice(0,n):''
@@ -25,15 +25,15 @@ export function normalizeCommunity(input:unknown,now=Date.now(),maxAgeMs=12*60*6
     const home=str(v.home_team),away=str(v.away_team),sport=str(v.sport),market=str(v.market)
     const league=str(v.league)
     if(!home||!away||!sport||!market||!Array.isArray(v.community_votes_pct))continue
-    const votes=v.community_votes_pct.slice(0,4).flatMap(item=>{
+    const votes=v.community_votes_pct.slice(0,4).flatMap((item)=>{
       if(!item||typeof item!=='object')return []
       const row=item as Record<string,unknown>
       const pct=Number(row.pct),selection=str(row.outcome,35)
-      return Number.isFinite(pct)&&pct>=0&&pct<=100&&selection?[{selection,percentage:pct}]:[]
+      return Number.isFinite(pct)&&pct>=0&&pct<=100&&selection?[{ selection,percentage:pct }]:[]
     })
     if(!votes.length)continue
-    opinions.push({home,away,sport,league,market,source:'OddsPortal Community',
-      observedAt:new Date(at).toISOString(),votes,limitation:'votación pública, no probabilidad predictiva'})
+    opinions.push({ home,away,sport,league,market,source:'OddsPortal Community',
+      observedAt:new Date(at).toISOString(),votes,limitation:'votación pública, no probabilidad predictiva' })
   }
   return opinions
 }
@@ -50,10 +50,10 @@ export async function communityOpinions(sport:string,env:NodeJS.ProcessEnv=proce
     try{
       await runFile(env.PHOENIX_SPORTS_ODDSHARVESTER_BIN||'oddsharvester',
         ['community','-s',sport,'--headless','-f','json','-o',file],{
-          shell:false,windowsHide:true,timeout:120_000,maxBuffer:256_000,env:process.env})
+          shell:false,windowsHide:true,timeout:120_000,maxBuffer:256_000,env:process.env })
       if((await stat(file)).size>2_000_000)throw Error('Archivo comunitario demasiado grande')
       raw=JSON.parse(await readFile(file,'utf8')) as unknown
-    }finally{await rm(folder,{recursive:true,force:true})}
+    }finally{await rm(folder,{ recursive:true,force:true })}
   }
   return normalizeCommunity(raw)
 }

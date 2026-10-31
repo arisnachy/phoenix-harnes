@@ -137,7 +137,7 @@ describe('phoenix_visualize tool', () => {
     const args = { title: 'Cripto ficticia · velas simuladas',
       visual: { visualType: 'chart', chartType: 'candlestick', demo: true } }
     const result = await tool.execute(args, execution()) as {
-      visual: { chartType: string; simulated: boolean; description: string;
+      visual: { chartType: string; simulated: boolean; description: string
         candles: Array<{ open: number; high: number; low: number; close: number; time: string }> }
     }
     expect(result.visual.chartType).toBe('candlestick')

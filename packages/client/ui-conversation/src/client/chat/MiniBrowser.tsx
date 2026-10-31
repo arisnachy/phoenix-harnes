@@ -337,7 +337,7 @@ export function MiniBrowser({
         ...(!formObserved && !status.saved && !status.relatedSaved ? {
           diagnostic: detection === undefined
             ? 'No se pudo observar el formulario de acceso real en esta página.'
-            : detection.required === false
+            : ! detection.required
               ? 'Esta página no solicita un formulario de acceso en este momento.'
               : 'No se observó un formulario de acceso real. Phoenix no inventará campos ni solicitará credenciales todavía.',
         } : {}),
@@ -371,7 +371,7 @@ export function MiniBrowser({
       try {
         // Vault presence is independent of Chrome's RPC health.
         const status = await secureApi<SecureStatus>('/status?origin=' + encodeURIComponent(siteOrigin))
-          .catch(() => ({ saved: false, automatic: false, unavailable: true } as SecureStatus & { unavailable: true }))
+          .catch(() => ({ saved: false, automatic: false, unavailable: true }))
         if (stopped) return
         const detection = await secureApi<SecureDetection>('/detect', { origin: siteOrigin, tabId })
           .catch(() => undefined)

@@ -78,7 +78,7 @@ export function apply(ctx: Context): void {
     name:'sports_chat_sources_health',
     description:'Audita los proveedores deportivos. Si faltan, inicia su instalación administrada opcional sin bloquear el chat; retorna estado y logs, sin exponer credenciales ni prometer cuotas.',
     parameters:{},
-    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    output:{ schema:{ type:'string' },render:(_a,v)=>[{ type:'text' as const,text:v }] },
     isConcurrencySafe:()=>false,
     async execute(){
       // Recover missing source installs even when the prepared Windows runtime
@@ -87,60 +87,60 @@ export function apply(ctx: Context): void {
       const env=sportsEnv()
       const installation=managedSportsInstallStatus(env)
       const sources=await sportsSourcesHealth(env)
-      return JSON.stringify({sources,installation,autoRepair,checkedAt:new Date().toISOString(),
+      return JSON.stringify({ sources,installation,autoRepair,checkedAt:new Date().toISOString(),
         repair:'Si la instalación falla: ejecutar node scripts/phoenix-sports-source-bootstrap.mjs --status y revisar installation.logPath. Para reparar, node scripts/phoenix-sports-source-bootstrap.mjs --install desde la carpeta de PHOENIX. OddsHarvester requiere Python >=3.12 y Playwright Chromium. No copiar claves al chat.',
-        warning:'Instalado no equivale a cuota real. OddsHarvester usa Playwright sobre OddsPortal; comprueba bookmaker, mercado, período y timestamp. SportsbookReview y MLB solo contienen históricos; para extraer datos nuevos se ejecutan sus propios scripts en tareas explícitas, no funcionan como fuentes vivas.'})
+        warning:'Instalado no equivale a cuota real. OddsHarvester usa Playwright sobre OddsPortal; comprueba bookmaker, mercado, período y timestamp. SportsbookReview y MLB solo contienen históricos; para extraer datos nuevos se ejecutan sus propios scripts en tareas explícitas, no funcionan como fuentes vivas.' })
     },
-    presentCall:()=>({card:'generic',title:'Verificar y autorreparar fuentes deportivas',kind:'read' as const}),
+    presentCall:()=>({ card:'generic',title:'Verificar y autorreparar fuentes deportivas',kind:'read' as const }),
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_sources_repair',
     description:'Reparar de forma autónoma y sin bloquear el chat los tres proveedores deportivos opcionales: OddsHarvester/Chromium y dos repositorios históricos. Devuelve el estado del lanzador y archivo de errores. No promete cuotas.',
     parameters:{},
-    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    output:{ schema:{ type:'string' },render:(_a,v)=>[{ type:'text' as const,text:v }] },
     isConcurrencySafe:()=>false,
     async execute(){
       const autoRepair=await ensureSportsSourcesStarted(process.env,true)
       const installation=managedSportsInstallStatus(process.env)
-      return JSON.stringify({autoRepair,installation,checkedAt:new Date().toISOString(),
-        instruction:'Se ha solicitado la reparación en segundo plano; no se han verificado cuotas ni operaciones. Consulta sports_chat_sources_health para ver progreso, logs y los proveedores listos. Si falta el instalador en el runtime o checkout, informa el bloqueo concreto.'})
+      return JSON.stringify({ autoRepair,installation,checkedAt:new Date().toISOString(),
+        instruction:'Se ha solicitado la reparación en segundo plano; no se han verificado cuotas ni operaciones. Consulta sports_chat_sources_health para ver progreso, logs y los proveedores listos. Si falta el instalador en el runtime o checkout, informa el bloqueo concreto.' })
     },
-    presentCall:()=>({card:'generic',title:'Reparar fuentes deportivas automáticamente',kind:'read' as const}),
+    presentCall:()=>({ card:'generic',title:'Reparar fuentes deportivas automáticamente',kind:'read' as const }),
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_market_source_catalog',
     description:'Catálogo SIN RED de ScoresAndOdds, Covers, VegasInsider y OddsPortal para comparar líneas, movimientos y contexto con ESPN. Retorna URL, capacidades, límites y flujo de comprobación; no asegura conexión ni permisos de extracción.',
     parameters:{},
-    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    output:{ schema:{ type:'string' },render:(_a,v)=>[{ type:'text' as const,text:v }] },
     isConcurrencySafe:()=>true,
     async execute(){
       return JSON.stringify(secondaryMarketSourceCatalog())
     },
-    presentCall:()=>({card:'generic',title:'Investigar portales deportivos complementarios',kind:'read' as const}),
+    presentCall:()=>({ card:'generic',title:'Investigar portales deportivos complementarios',kind:'read' as const }),
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_espn_explore',
     description:'ESPN universal: perfiles de equipos/jugadores, estadísticas por temporada, registros partido a partido, splits, clasificaciones, noticias, líderes, encuentros y búsqueda. Devuelve un panel dinámico seguro con logos, fotos y fuentes, dentro del chat. IDs deben provenir de ESPN.',
     parameters:{
-      sport:{type:'string',required:true,description:'Disciplina ESPN, como basketball, soccer, hockey, baseball o football.'},
-      league:{type:'string',required:true,description:'Slug ESPN real: nba, nhl, eng.1, mlb, nfl, etc.'},
-      view:{type:'string',required:true,description:'team | player | event | standings | news | leaders | search'},
-      teamId:{type:'string',description:'ID numérico confirmado de equipo para view=team.'},
-      athleteId:{type:'string',description:'ID numérico confirmado de deportista para view=player.'},
-      eventId:{type:'string',description:'ID numérico confirmado de partido para view=event.'},
-      season:{type:'integer',description:'Año de temporada, cuando se solicita uno.'},
-      query:{type:'string',description:'Texto a buscar en ESPN, solo para view=search.'},
+      sport:{ type:'string',required:true,description:'Disciplina ESPN, como basketball, soccer, hockey, baseball o football.' },
+      league:{ type:'string',required:true,description:'Slug ESPN real: nba, nhl, eng.1, mlb, nfl, etc.' },
+      view:{ type:'string',required:true,description:'team | player | event | standings | news | leaders | search' },
+      teamId:{ type:'string',description:'ID numérico confirmado de equipo para view=team.' },
+      athleteId:{ type:'string',description:'ID numérico confirmado de deportista para view=player.' },
+      eventId:{ type:'string',description:'ID numérico confirmado de partido para view=event.' },
+      season:{ type:'integer',description:'Año de temporada, cuando se solicita uno.' },
+      query:{ type:'string',description:'Texto a buscar en ESPN, solo para view=search.' },
     },
-    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    output:{ schema:{ type:'string' },render:(_a,v)=>[{ type:'text' as const,text:v }] },
     isConcurrencySafe:()=>true,
     async execute(args){
       const report=await exploreEspn({
         sport:args.sport,league:args.league,view:args.view as EspnExplorerInput['view'],
-        ...(args.teamId?{teamId:args.teamId}:{}),
-        ...(args.athleteId?{athleteId:args.athleteId}:{}),
-        ...(args.eventId?{eventId:args.eventId}:{}),
-        ...(args.season?{season:args.season}:{}),
-        ...(args.query?{query:args.query}:{}),
+        ...(args.teamId?{ teamId:args.teamId }:{}),
+        ...(args.athleteId?{ athleteId:args.athleteId }:{}),
+        ...(args.eventId?{ eventId:args.eventId }:{}),
+        ...(args.season?{ season:args.season }:{}),
+        ...(args.query?{ query:args.query }:{}),
       },fetch,sportsEnv())
       return JSON.stringify({
         summary:report.title+' · '+report.subtitle,
@@ -150,132 +150,132 @@ export function apply(ctx: Context): void {
         instruction:'El panel ESPN ya se muestra en el chat. No repitas su JSON ni inventes secciones que la fuente no confirmó. Si falta una estadística, explícalo; partido, plantillas y cuotas se verifican por separado.',
       })
     },
-    presentCall:()=>({card:'generic',title:'Explorar estadísticas, jugadores, equipos y noticias ESPN',kind:'read' as const}),
+    presentCall:()=>({ card:'generic',title:'Explorar estadísticas, jugadores, equipos y noticias ESPN',kind:'read' as const }),
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_deep_research',
     description:'Investiga un partido ESPN confirmado: noticias relacionadas, partes médicos, plantillas, estadísticas verificadas de jugadores y confirmación independiente MLB/NHL. Nunca inventa titulares ni probabilidades.',
     parameters:{
-      sport:{type:'string',required:true,description:'Deporte ESPN, p. ej. hockey, basketball, soccer, football o baseball.'},
-      league:{type:'string',required:true,description:'Liga ESPN comprobada, p. ej. nhl, nba, eng.1 o mlb.'},
-      eventId:{type:'string',required:true,description:'ID exacto del evento obtenido de la cartelera ESPN.'},
+      sport:{ type:'string',required:true,description:'Deporte ESPN, p. ej. hockey, basketball, soccer, football o baseball.' },
+      league:{ type:'string',required:true,description:'Liga ESPN comprobada, p. ej. nhl, nba, eng.1 o mlb.' },
+      eventId:{ type:'string',required:true,description:'ID exacto del evento obtenido de la cartelera ESPN.' },
     },
-    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    output:{ schema:{ type:'string' },render:(_a,v)=>[{ type:'text' as const,text:v }] },
     isConcurrencySafe:()=>true,
     async execute(args){
       const result=await investigateEventDeep(args.sport,args.league,args.eventId,fetch,Date.now(),sportsEnv())
-      return JSON.stringify({...result,instruction:'Identifica qué noticias hablan realmente de los equipos. Los recuentos de lesiones y las plantillas NO confirman alineaciones. Si la fuente no aporta estadísticas individuales no atribuyas rendimiento ni pronósticos. Contrasta por separado mercados de cuotas reales.'})
+      return JSON.stringify({ ...result,instruction:'Identifica qué noticias hablan realmente de los equipos. Los recuentos de lesiones y las plantillas NO confirman alineaciones. Si la fuente no aporta estadísticas individuales no atribuyas rendimiento ni pronósticos. Contrasta por separado mercados de cuotas reales.' })
     },
-    presentCall:()=>({card:'generic',title:'Investigar noticias, estadísticas y bajas de un evento',kind:'read' as const}),
+    presentCall:()=>({ card:'generic',title:'Investigar noticias, estadísticas y bajas de un evento',kind:'read' as const }),
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_matchup_factors',
     description:'Investigación universal de ventaja deportiva por evento ESPN confirmado: forma de ambos equipos, H2H, descansos, localía/estadio, contexto de noticias/lesiones y cuotas reconciliadas. En MLB desglosa referencias de carreras en 3, 5, 9 innings y consulta abridores probables y sus últimas salidas. Ninguna cifra es probabilidad calibrada; clima no verificado permanece pendiente.',
     parameters:{
-      sport:{type:'string',required:true,description:'Disciplina ESPN: baseball, basketball, soccer, football, hockey, tennis, etc.'},
-      league:{type:'string',required:true,description:'Slug real de liga del catálogo ESPN.'},
-      eventId:{type:'string',required:true,description:'ID real ESPN obtenido de sports_chat_games.'},
-      date:{type:'string',required:true,description:'Día de cartelera del evento, AAAA-MM-DD.'},
-      lookbackDays:{type:'integer',description:'Ventana histórica de 3 a 28 días, por defecto 14.'},
-      includeOdds:{type:'boolean',description:'Consulta mercados actuales por proveedor si existe; por defecto true.'},
+      sport:{ type:'string',required:true,description:'Disciplina ESPN: baseball, basketball, soccer, football, hockey, tennis, etc.' },
+      league:{ type:'string',required:true,description:'Slug real de liga del catálogo ESPN.' },
+      eventId:{ type:'string',required:true,description:'ID real ESPN obtenido de sports_chat_games.' },
+      date:{ type:'string',required:true,description:'Día de cartelera del evento, AAAA-MM-DD.' },
+      lookbackDays:{ type:'integer',description:'Ventana histórica de 3 a 28 días, por defecto 14.' },
+      includeOdds:{ type:'boolean',description:'Consulta mercados actuales por proveedor si existe; por defecto true.' },
     },
-    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    output:{ schema:{ type:'string' },render:(_a,v)=>[{ type:'text' as const,text:v }] },
     isConcurrencySafe:()=>true,
     async execute(args){
       const result=await auditUniversalMatchup({
         sport:args.sport,league:args.league,eventId:args.eventId,date:args.date,
-        ...(args.lookbackDays===undefined?{}:{lookbackDays:args.lookbackDays}),
-        ...(args.includeOdds===undefined?{}:{includeOdds:args.includeOdds}),
+        ...(args.lookbackDays===undefined?{}:{ lookbackDays:args.lookbackDays }),
+        ...(args.includeOdds===undefined?{}:{ includeOdds:args.includeOdds }),
       },fetch,Date.now(),sportsEnv())
-      return JSON.stringify({...result,
-        instruction:'PHOENIX dibuja automáticamente el panel sports_espn_dashboard. Distingue evidencia histórica, condición de titulares, disponibilidad actual, precios de casas y datos faltantes. Los tramos 3/5/9 innings son medias exploratorias si existe muestra; solo compáralos con cuotas que tengan EXACTAMENTE el mismo período, reglas y fuente. No atribuyas ventajas numéricas ni probabilidades de victoria calibradas a estos promedios. Si existen señales contradictorias, explícalas y deja la conclusión como incierta.'})
+      return JSON.stringify({ ...result,
+        instruction:'PHOENIX dibuja automáticamente el panel sports_espn_dashboard. Distingue evidencia histórica, condición de titulares, disponibilidad actual, precios de casas y datos faltantes. Los tramos 3/5/9 innings son medias exploratorias si existe muestra; solo compáralos con cuotas que tengan EXACTAMENTE el mismo período, reglas y fuente. No atribuyas ventajas numéricas ni probabilidades de victoria calibradas a estos promedios. Si existen señales contradictorias, explícalas y deja la conclusión como incierta.' })
     },
-    presentCall:()=>({card:'generic',title:'Investigar factores y ventajas reales del encuentro',kind:'read' as const}),
+    presentCall:()=>({ card:'generic',title:'Investigar factores y ventajas reales del encuentro',kind:'read' as const }),
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_bet_rules',
     description:'Consulta catálogo extenso de mercados por disciplina y reglas relevantes de liquidación de casas verificables: run line -1.5/2.5, altas/bajas por 3/5/9 innings, props de jugadores, 1X2, hándicap, over/under, tickets/parlays, push, void y overtime. No atribuye reglas de otra casa a Juancito.',
     parameters:{
-      sport:{type:'string',description:'Filtrar disciplina: baseball, basketball, soccer, americanfootball, hockey, tennis, mma, cricket, golf.'},
-      family:{type:'string',description:'Familia de mercado opcional: totals, moneyline, run_line, player_props, etc.'},
-      bookmaker:{type:'string',description:'Casa consultada, solo para advertir que debe leerse su propio reglamento actual.'},
+      sport:{ type:'string',description:'Filtrar disciplina: baseball, basketball, soccer, americanfootball, hockey, tennis, mma, cricket, golf.' },
+      family:{ type:'string',description:'Familia de mercado opcional: totals, moneyline, run_line, player_props, etc.' },
+      bookmaker:{ type:'string',description:'Casa consultada, solo para advertir que debe leerse su propio reglamento actual.' },
     },
-    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    output:{ schema:{ type:'string' },render:(_a,v)=>[{ type:'text' as const,text:v }] },
     isConcurrencySafe:()=>true,
-    execute:async args=>JSON.stringify({...describeBettingMarkets(args.sport,args.family),
+    execute:async args=>JSON.stringify({ ...describeBettingMarkets(args.sport,args.family),
       requestedBookmaker:args.bookmaker??null,
-      instruction:'Estos son tipos de mercados, NO cuotas disponibles ni condiciones universales. Para Juancito y cualquier banca RD comprobar reglamento vigente de ese operador antes de liquidar. Distintas modalidades de 3/5/9 entradas, run line alternativo y props pueden cambiar según las reglas de participación, duración y tiempos extras.'}),
-    presentCall:()=>({card:'generic',title:'Consultar mercados y reglas reales por deporte',kind:'read' as const}),
+      instruction:'Estos son tipos de mercados, NO cuotas disponibles ni condiciones universales. Para Juancito y cualquier banca RD comprobar reglamento vigente de ese operador antes de liquidar. Distintas modalidades de 3/5/9 entradas, run line alternativo y props pueden cambiar según las reglas de participación, duración y tiempos extras.' }),
+    presentCall:()=>({ card:'generic',title:'Consultar mercados y reglas reales por deporte',kind:'read' as const }),
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_ticket_track',
     description:'Seguimiento de un ticket con eventos ESPN reales y mercados explícitos, devuelve estado provisional por pata, push, potencial retorno y riesgo de anulación. No acredita aceptación ni pago de la banca; cotejar siempre con su recibo.',
     parameters:{
-      sport:{type:'string',required:true,description:'Deporte ESPN de los eventos, p. ej. baseball.'},
-      league:{type:'string',required:true,description:'Liga ESPN, p. ej. mlb.'},
-      date:{type:'string',required:true,description:'Fecha del evento AAAA-MM-DD.'},
-      stake:{type:'number',required:true,description:'Monto efectivamente indicado por el usuario; no transfiere fondos.'},
-      ticketReference:{type:'string',description:'Folio registrado por la banca según el usuario (no verificado mediante API de operador).'},
-      legs:{type:'array',required:true,description:'Selecciones de la misma casa. IDs ESPN de cada encuentro, cuotas exactas, mercado, línea y equipo/jugador.',
-        items:{type:'object',additionalProperties:false,properties:{
-          eventId:{type:'string',required:true},
-          bookmaker:{type:'string',required:true},
-          market:{type:'string',required:true,description:'moneyline | h2h | 1x2 | run_line | spread | total | team_total | first_3_total | first_5_total | first_3_spread | first_5_spread | player_prop'},
-          selection:{type:'string',required:true,description:'home | away | draw | over | under | yes | no'},
-          price:{type:'number',required:true},
-          line:{type:'number',description:'Línea firmada (ej. -1.5), valor de total o prop; necesaria en totales y spreads.'},
-          team:{type:'string',description:'home | away para total del equipo'},
-          playerId:{type:'string',description:'ID oficial de jugador para props'},
-        }}},
+      sport:{ type:'string',required:true,description:'Deporte ESPN de los eventos, p. ej. baseball.' },
+      league:{ type:'string',required:true,description:'Liga ESPN, p. ej. mlb.' },
+      date:{ type:'string',required:true,description:'Fecha del evento AAAA-MM-DD.' },
+      stake:{ type:'number',required:true,description:'Monto efectivamente indicado por el usuario; no transfiere fondos.' },
+      ticketReference:{ type:'string',description:'Folio registrado por la banca según el usuario (no verificado mediante API de operador).' },
+      legs:{ type:'array',required:true,description:'Selecciones de la misma casa. IDs ESPN de cada encuentro, cuotas exactas, mercado, línea y equipo/jugador.',
+        items:{ type:'object',additionalProperties:false,properties:{
+          eventId:{ type:'string',required:true },
+          bookmaker:{ type:'string',required:true },
+          market:{ type:'string',required:true,description:'moneyline | h2h | 1x2 | run_line | spread | total | team_total | first_3_total | first_5_total | first_3_spread | first_5_spread | player_prop' },
+          selection:{ type:'string',required:true,description:'home | away | draw | over | under | yes | no' },
+          price:{ type:'number',required:true },
+          line:{ type:'number',description:'Línea firmada (ej. -1.5), valor de total o prop; necesaria en totales y spreads.' },
+          team:{ type:'string',description:'home | away para total del equipo' },
+          playerId:{ type:'string',description:'ID oficial de jugador para props' },
+        } } },
     },
-    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    output:{ schema:{ type:'string' },render:(_a,v)=>[{ type:'text' as const,text:v }] },
     isConcurrencySafe:()=>true,
     async execute(args){
       const result=await checkSportsTicket({
         sport:args.sport,league:args.league,date:args.date,stake:args.stake,
         legs:args.legs as SportsBetLeg[],
-        ...(args.ticketReference?{ticketReference:args.ticketReference.slice(0,80)}:{}),
+        ...(args.ticketReference?{ ticketReference:args.ticketReference.slice(0,80) }:{}),
       },fetch,sportsEnv())
       const named:Record<string,string>={
         won:'Ganada provisional',lost:'Perdida provisional',push:'Push (sin acción) provisional',
         pending:'Pendiente',unverifiable:'Sin datos suficientes',
       }
-      const uiBlock={component:'sports_espn_dashboard',version:1,props:{
+      const uiBlock={ component:'sports_espn_dashboard',version:1,props:{
         view:'event',title:'Seguimiento de ticket · '+result.sportsbook,
         subtitle:'Estado: '+result.status+' · ESPN '+args.league.toUpperCase(),
         source:'ESPN Site API · resultado observado, NO aceptación de la casa',
         checkedAt:result.checkedAt,
         sections:[
-          {heading:'Estado de las selecciones',kind:'list',items:result.legs.map((leg,i)=>({
+          { heading:'Estado de las selecciones',kind:'list',items:result.legs.map((leg,i)=>({
             label:(i+1)+'. '+leg.market+' · '+leg.selection,
             value:named[leg.result]??leg.result,
             detail:leg.score?leg.score+' · '+leg.reason:leg.reason,
-          }))},
-          {heading:'Balance provisional',kind:'metrics',items:[
-            {label:'Importe indicado',value:'RD$ '+result.stake.toFixed(2)},
-            {label:'Cuota después de pushes provisionales',value:result.combinedOdds.toFixed(3)},
-            {label:'Retorno preliminar',value:result.provisionalReturn===null?'Pendiente':
-              'RD$ '+result.provisionalReturn.toFixed(2)},
-            {label:'Ganancia/pérdida preliminar',value:result.profit===null?'Pendiente':
-              'RD$ '+result.profit.toFixed(2)},
-          ]},
+          })) },
+          { heading:'Balance provisional',kind:'metrics',items:[
+            { label:'Importe indicado',value:'RD$ '+result.stake.toFixed(2) },
+            { label:'Cuota después de pushes provisionales',value:result.combinedOdds.toFixed(3) },
+            { label:'Retorno preliminar',value:result.provisionalReturn===null?'Pendiente':
+              'RD$ '+result.provisionalReturn.toFixed(2) },
+            { label:'Ganancia/pérdida preliminar',value:result.profit===null?'Pendiente':
+              'RD$ '+result.profit.toFixed(2) },
+          ] },
         ],
         note:'No confirma colocación ni pago; cada resultado requiere reglas de la banca. '+
           'Si el evento no está verificado, no se liquida.',
-      }}
-      return JSON.stringify({...result,uiBlock,
-        instruction:'Presenta los resultados como PRELIMINARES; un folio escrito por el usuario no prueba aceptación. Pregunta por el comprobante/registro de la casa para dictamen oficial y compara el mismo mercado, línea, período, cancelaciones y reglas. No inventes datos de jugadores ni una ganancia cobrada.'})
+      } }
+      return JSON.stringify({ ...result,uiBlock,
+        instruction:'Presenta los resultados como PRELIMINARES; un folio escrito por el usuario no prueba aceptación. Pregunta por el comprobante/registro de la casa para dictamen oficial y compara el mismo mercado, línea, período, cancelaciones y reglas. No inventes datos de jugadores ni una ganancia cobrada.' })
     },
-    presentCall:()=>({card:'generic',title:'Seguir ticket: ganada, perdida, push o pendiente',kind:'read' as const}),
+    presentCall:()=>({ card:'generic',title:'Seguir ticket: ganada, perdida, push o pendiente',kind:'read' as const }),
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_market_intelligence',
     description:'Compara mercados reales vigentes por bookmaker: ganador, doble oportunidad, totales, ambos marcan y handicap cuando la fuente los publicó. Solo calcula probabilidad IMPLÍCITA del precio, nunca probabilidad de acierto propia.',
     parameters:{
-      sportKey:{type:'string',required:true,description:'Clave de mercado: soccer_epl, icehockey_nhl, basketball_nba, baseball_mlb, etc.'},
-      date:{type:'string',description:'Fecha YYYY-MM-DD en Santo Domingo para scraping local, por defecto hoy.'},
+      sportKey:{ type:'string',required:true,description:'Clave de mercado: soccer_epl, icehockey_nhl, basketball_nba, baseball_mlb, etc.' },
+      date:{ type:'string',description:'Fecha YYYY-MM-DD en Santo Domingo para scraping local, por defecto hoy.' },
     },
-    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    output:{ schema:{ type:'string' },render:(_a,v)=>[{ type:'text' as const,text:v }] },
     isConcurrencySafe:()=>true,
     async execute(args){
       const env=sportsEnv()
@@ -286,13 +286,13 @@ export function apply(ctx: Context): void {
         marketOdds(args.sportKey,'h2h,totals,spreads',env,fetch),
         ...(env.PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED==='1'?[
           (async()=>{
-            const routes:Record<string,{sport:string;markets:string[]}> = {
-              soccer:{sport:'football',markets:['1x2','double_chance','over_under']},
-              basketball:{sport:'basketball',markets:['moneyline','over_under']},
-              baseball:{sport:'baseball',markets:['moneyline','over_under']},
-              americanfootball:{sport:'american-football',markets:['moneyline','over_under']},
-              icehockey:{sport:'ice-hockey',markets:['home_away','double_chance','over_under']},
-              tennis:{sport:'tennis',markets:['match_winner','total_games_over_under']},
+            const routes:Record<string,{ sport:string;markets:string[] }> = {
+              soccer:{ sport:'football',markets:['1x2','double_chance','over_under'] },
+              basketball:{ sport:'basketball',markets:['moneyline','over_under'] },
+              baseball:{ sport:'baseball',markets:['moneyline','over_under'] },
+              americanfootball:{ sport:'american-football',markets:['moneyline','over_under'] },
+              icehockey:{ sport:'ice-hockey',markets:['home_away','double_chance','over_under'] },
+              tennis:{ sport:'tennis',markets:['match_winner','total_games_over_under'] },
             }
             const route=routes[args.sportKey.split('_')[0]??'']
             if(!route)return []
@@ -300,18 +300,18 @@ export function apply(ctx: Context): void {
               keylessOdds(route.sport,m,args.date,env)))
             return quotes.flatMap(x=>x.status==='fulfilled'?x.value
               .filter(q=>belongsToLeague(args.sportKey,q))
-              .map(q=>({...q,timeIso:q.time,sportKey:args.sportKey})):[])
+              .map(q=>({ ...q,timeIso:q.time,sportKey:args.sportKey })):[])
           })(),
         ]:[]),
       ])
       const combined=odds.flatMap(x=>x.status==='fulfilled'?x.value:[])
       const comparison=compareBettingMarkets(combined)
-      return JSON.stringify({sportKey:args.sportKey,availableMarkets:supportedMarketFamilies,
+      return JSON.stringify({ sportKey:args.sportKey,availableMarkets:supportedMarketFamilies,
         ...comparison,sourceReadiness:sources,autoRepair,
         sourcesAttempted:odds.length,quotesObserved:combined.length,
-        instruction:'Los precios implícitos NO son probabilidades predictivas. Mercados superpuestos no deben normalizarse ni combinarse como independientes. Si no existen cuotas, noticia o lesión verificables, indica explícitamente que falta evidencia. No fabriques un ticket de mayor probabilidad.'})
+        instruction:'Los precios implícitos NO son probabilidades predictivas. Mercados superpuestos no deben normalizarse ni combinarse como independientes. Si no existen cuotas, noticia o lesión verificables, indica explícitamente que falta evidencia. No fabriques un ticket de mayor probabilidad.' })
     },
-    presentCall:()=>({card:'generic',title:'Comparar mercados y cuotas verificadas',kind:'read' as const}),
+    presentCall:()=>({ card:'generic',title:'Comparar mercados y cuotas verificadas',kind:'read' as const }),
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_catalog',
@@ -353,11 +353,11 @@ export function apply(ctx: Context): void {
       const result=await chatGames(args.sport,args.league,args.date,process.env,fetch,args.liveOnly===true)
       const normalize=(name:string)=>name.normalize('NFD').replace(/[\u0300-\u036f]/gu,'').toLowerCase().trim()
       const matches=(name:unknown,wanted:string)=>typeof name==='string'&&normalize(name).includes(normalize(wanted))
-      const selected=result.items.filter(game=>{
+      const selected=result.items.filter((game)=>{
         const props=game.props
         if(args.liveOnly===true&&props.phase!=='in')return false
         if(args.eventId&&props.eventId!==args.eventId)return false
-        const home=props.home as {label?:string},away=props.away as {label?:string}
+        const home=props.home as { label?:string },away=props.away as { label?:string }
         if(args.team&&!matches(home?.label,args.team)&&!matches(away?.label,args.team))return false
         if(args.opponent&&!matches(home?.label,args.opponent)&&!matches(away?.label,args.opponent))return false
         return true
@@ -367,7 +367,7 @@ export function apply(ctx: Context): void {
       const uiBlocks=slate?[slate]:selected.slice(0,6)
       const selectedIds=new Set(selected.map(card=>card.props.eventId).filter((id):id is string=>typeof id==='string'))
       const espnIdentifiers=result.espnIdentifiers.filter(ids=>selectedIds.has(ids.eventId))
-      return JSON.stringify({summary:selected.length?result.summary:(args.liveOnly?'No hay partidos en vivo confirmados para esta liga y fecha.':'Ningún encuentro coincide con esos filtros.'),
+      return JSON.stringify({ summary:selected.length?result.summary:(args.liveOnly?'No hay partidos en vivo confirmados para esta liga y fecha.':'Ningún encuentro coincide con esos filtros.'),
         date:result.date,source:result.source,count:selected.length,espnIdentifiers,uiBlocks,
         remaining:Math.max(0,selected.length-(slate?25:6)),
         instruction:'Phoenix renderiza uiBlocks automáticamente en el chat y consulta marcadores ESPN sin consumir tokens. espnIdentifiers contiene eventId, competitionId y team IDs REALES de la cartelera; usa esos ID para sports_chat_espn_core(mode=odds/provider/movement/probabilities/predictor/ats/odds_records), sin asumir competitionId=eventId si falta. Para MLB Stats API no atribuyas sus gamePk a ESPN. En juegos en vivo no repitas el marcador textual de la instantánea; la UI lo actualiza. Para partidos de un ticket, consulta las ligas/equipos de las patas pertinentes. No imprimas JSON ni repliques las tarjetas en prosa.' })
@@ -417,39 +417,39 @@ export function apply(ctx: Context): void {
     name:'sports_chat_espn_core_catalog',
     description:'Lista las 11 familias de endpoints Core ESPN para cuotas, historial, ATS, futuros, movimientos de mercado, pronósticos y proveedores. No se realiza red ni se gasta cuota.',
     parameters:{},
-    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    output:{ schema:{ type:'string' },render:(_a,v)=>[{ type:'text' as const,text:v }] },
     isConcurrencySafe:()=>true,
     async execute(){
-      return JSON.stringify({source:'ESPN Site/Core API /v2 pública (no oficial)',modes:espnCoreModes,
+      return JSON.stringify({ source:'ESPN Site/Core API /v2 pública (no oficial)',modes:espnCoreModes,
         endpoints:espnEndpointGuide,workflow:espnWorkflow,guide:'Primero usa sports_chat_games para identificar eventId/competitionId y sports_chat_catalog para league; para ATS e históricos usa teamId y season o providerId genuinos. Consulta un modo por vez mediante sports_chat_espn_core. Providers informa los IDs de las casas en ESPN; su presencia no prueba que haya cuotas publicadas.',
-        warning:'Rutas documentadas pero disponibilidad y autorización no garantizadas. No hacer consultas ilimitadas ni tratar resultados de ATS/predictor/históricos como cuotas vigentes.'})
+        warning:'Rutas documentadas pero disponibilidad y autorización no garantizadas. No hacer consultas ilimitadas ni tratar resultados de ATS/predictor/históricos como cuotas vigentes.' })
     },
-    presentCall:()=>({card:'generic',title:'Catálogo de datos ESPN Core',kind:'read' as const}),
+    presentCall:()=>({ card:'generic',title:'Catálogo de datos ESPN Core',kind:'read' as const }),
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_espn_core',
     description:'Lee de ESPN Core público SIN API key: odds por partido/proveedor, movimiento, enfrentamientos, ATS, futures, past-performances, odds-records, probabilities, predictor y providers. Resuelve pocas referencias y devuelve el JSON relevante limitado, con estado real de acceso.',
     parameters:{
-      mode:{type:'string',required:true,description:'odds | provider | movement | head_to_heads | ats | futures | past_performances | odds_records | probabilities | predictor | providers'},
-      sport:{type:'string',required:true,description:'Slug de deporte ESPN: football, basketball, baseball, hockey, soccer...'},
-      league:{type:'string',required:true,description:'Liga ESPN: nfl, nba, mlb, nhl, usa.1, eng.1...'},
-      eventId:{type:'string',description:'ID real de partido ESPN para odds, provider, movement, head_to_heads, probabilities, predictor'},
-      competitionId:{type:'string',description:'ID competition real, por defecto eventId (ESPN a menudo usa ambos iguales)'},
-      teamId:{type:'string',description:'ID ESPN de equipo para ats, odds_records y past_performances'},
-      providerId:{type:'string',description:'ID ESPN de proveedor (obtener con mode=providers), obligatorio para provider/movement/head_to_heads/past_performances'},
-      season:{type:'integer',description:'Temporada 1900..2100, requerida para ats, odds_records y futures'},
-      seasonType:{type:'integer',description:'0..4; ATS por defecto 2 (regular), odds_records por defecto 0'},
-      movementType:{type:'integer',description:'Solo mode=movement: 0 moneyline, 1 spread según endpoints comunitarios. Por defecto 0'},
-      limit:{type:'integer',description:'1..100, por defecto 25. Hasta 12 muestras y 6 referencias resueltas'},
-      page:{type:'integer',description:'Página ESPN 1..1000, por defecto 1'},
-      resolveRefs:{type:'boolean',description:'Resolver hasta 6 referencias Core del mismo deporte y liga, por defecto true'},
+      mode:{ type:'string',required:true,description:'odds | provider | movement | head_to_heads | ats | futures | past_performances | odds_records | probabilities | predictor | providers' },
+      sport:{ type:'string',required:true,description:'Slug de deporte ESPN: football, basketball, baseball, hockey, soccer...' },
+      league:{ type:'string',required:true,description:'Liga ESPN: nfl, nba, mlb, nhl, usa.1, eng.1...' },
+      eventId:{ type:'string',description:'ID real de partido ESPN para odds, provider, movement, head_to_heads, probabilities, predictor' },
+      competitionId:{ type:'string',description:'ID competition real, por defecto eventId (ESPN a menudo usa ambos iguales)' },
+      teamId:{ type:'string',description:'ID ESPN de equipo para ats, odds_records y past_performances' },
+      providerId:{ type:'string',description:'ID ESPN de proveedor (obtener con mode=providers), obligatorio para provider/movement/head_to_heads/past_performances' },
+      season:{ type:'integer',description:'Temporada 1900..2100, requerida para ats, odds_records y futures' },
+      seasonType:{ type:'integer',description:'0..4; ATS por defecto 2 (regular), odds_records por defecto 0' },
+      movementType:{ type:'integer',description:'Solo mode=movement: 0 moneyline, 1 spread según endpoints comunitarios. Por defecto 0' },
+      limit:{ type:'integer',description:'1..100, por defecto 25. Hasta 12 muestras y 6 referencias resueltas' },
+      page:{ type:'integer',description:'Página ESPN 1..1000, por defecto 1' },
+      resolveRefs:{ type:'boolean',description:'Resolver hasta 6 referencias Core del mismo deporte y liga, por defecto true' },
     },
-    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    output:{ schema:{ type:'string' },render:(_a,v)=>[{ type:'text' as const,text:v }] },
     isConcurrencySafe:()=>true,
     async execute(args){
       if(!Object.hasOwn(espnCoreModes,args.mode))throw Error('Modo ESPN Core no reconocido: consulta sports_chat_espn_core_catalog')
       if(sportsEnv().PHOENIX_SPORTS_ESPN_DISABLED==='1')return JSON.stringify({
-        state:'unavailable',provider:'ESPN Core',error:'ESPN deshabilitado expresamente por configuración del host'})
+        state:'unavailable',provider:'ESPN Core',error:'ESPN deshabilitado expresamente por configuración del host' })
       const input={
         mode:args.mode as EspnCoreMode,sport:args.sport,league:args.league,
         eventId:args.eventId,competitionId:args.competitionId,
@@ -460,36 +460,36 @@ export function apply(ctx: Context): void {
       const report=await queryEspnCore(input,<T>(url:string)=>getFeed<T>(url),{
         resolveRefs:args.resolveRefs!==false,
       })
-      return JSON.stringify({...report,
-        instruction:'Muestra solo datos realmente devueltos por ESPN con sus fechas, source y endpoint. Para acceder a la página siguiente incrementa page; no digas que todos los datos históricos están cargados. Solo las líneas de casa identificada, mercado, partido futuro y precio actualizado pueden cotizar tickets; ATS, predictor, probabilidades, futures e históricos son inteligencia complementaria. Si unavailable, indica el error exacto.'})
+      return JSON.stringify({ ...report,
+        instruction:'Muestra solo datos realmente devueltos por ESPN con sus fechas, source y endpoint. Para acceder a la página siguiente incrementa page; no digas que todos los datos históricos están cargados. Solo las líneas de casa identificada, mercado, partido futuro y precio actualizado pueden cotizar tickets; ATS, predictor, probabilidades, futures e históricos son inteligencia complementaria. Si unavailable, indica el error exacto.' })
     },
-    presentCall:()=>({card:'generic',title:'Consultar mercados y estadísticas ESPN Core',kind:'read' as const}),
+    presentCall:()=>({ card:'generic',title:'Consultar mercados y estadísticas ESPN Core',kind:'read' as const }),
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_espn_historical_odds',
     description:'Recupera precios HISTÓRICOS ESPN de una fecha: scoreboard diario, Core odds por encuentro y summary/pickcenter, siguiendo pocas $ref seguras. Útil para retrospectiva/backtest, NUNCA para tickets actuales.',
     parameters:{
-      sport:{type:'string',required:true,description:'Deporte ESPN: baseball, basketball, football, hockey, soccer, etc.'},
-      league:{type:'string',required:true,description:'Liga ESPN: mlb, nba, nfl, nhl, eng.1, etc.'},
-      date:{type:'string',required:true,description:'Día anterior AAAA-MM-DD'},
-      days:{type:'integer',description:'Número de días consecutivos, 1..3, por defecto 1'},
-      eventsPerDay:{type:'integer',description:'Encuentros estudiados por día, 1..8 (por defecto 6)'},
+      sport:{ type:'string',required:true,description:'Deporte ESPN: baseball, basketball, football, hockey, soccer, etc.' },
+      league:{ type:'string',required:true,description:'Liga ESPN: mlb, nba, nfl, nhl, eng.1, etc.' },
+      date:{ type:'string',required:true,description:'Día anterior AAAA-MM-DD' },
+      days:{ type:'integer',description:'Número de días consecutivos, 1..3, por defecto 1' },
+      eventsPerDay:{ type:'integer',description:'Encuentros estudiados por día, 1..8 (por defecto 6)' },
     },
-    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    output:{ schema:{ type:'string' },render:(_a,v)=>[{ type:'text' as const,text:v }] },
     isConcurrencySafe:()=>true,
     async execute(args){
       if(sportsEnv().PHOENIX_SPORTS_ESPN_DISABLED==='1')
-        return JSON.stringify({historical:true,state:'unavailable',error:'ESPN deshabilitado por operador'})
+        return JSON.stringify({ historical:true,state:'unavailable',error:'ESPN deshabilitado por operador' })
       const report=await fetchEspnHistoricalOdds({
         sport:args.sport,league:args.league,date:args.date,
         days:args.days,eventsPerDay:args.eventsPerDay,
       },<T>(url:string)=>getFeed<T>(url))
-      return JSON.stringify({...report,totalRows:report.rows.length,rows:report.rows.slice(0,48),
+      return JSON.stringify({ ...report,totalRows:report.rows.length,rows:report.rows.slice(0,48),
         instruction:report.rows.length
           ?'Cada fila es HISTÓRICA y no está disponible para tickets actuales. Distingue partido, fuente, mercado, provider y quoteTimestampKnown; si falta lineDate, NO afirmes apertura o cierre.'
-          :'Sin precios conservados para esta muestra. Revisar errores y otras fechas: no equivale a ausencia global de históricos ESPN.'})
+          :'Sin precios conservados para esta muestra. Revisar errores y otras fechas: no equivale a ausencia global de históricos ESPN.' })
     },
-    presentCall:()=>({card:'generic',title:'Investigar cuotas históricas ESPN',kind:'read' as const}),
+    presentCall:()=>({ card:'generic',title:'Investigar cuotas históricas ESPN',kind:'read' as const }),
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_odds',
@@ -497,9 +497,9 @@ export function apply(ctx: Context): void {
     parameters:{
       sportKey:{ type:'string',required:true,description:'Clave del proveedor: baseball_mlb, basketball_nba, soccer_epl, etc.' },
       markets:{ type:'string',description:'h2h, totals o spreads. Por defecto h2h.' },
-      eventId:{type:'string',description:'ID ESPN real de un encuentro futuro; restringe la búsqueda a ese evento.'},
-      date:{type:'string',description:'Fecha AAAA-MM-DD del partido, obtenida del scoreboard.'},
-      sourcePolicy:{type:'string',description:'espn (por defecto) o all (comparación multifuente solo sin eventId ni fecha).'},
+      eventId:{ type:'string',description:'ID ESPN real de un encuentro futuro; restringe la búsqueda a ese evento.' },
+      date:{ type:'string',description:'Fecha AAAA-MM-DD del partido, obtenida del scoreboard.' },
+      sourcePolicy:{ type:'string',description:'espn (por defecto) o all (comparación multifuente solo sin eventId ni fecha).' },
     },
     output:{ schema:{ type:'string' },render:(_a,v)=>[{ type:'text' as const,text:v }] },
     isConcurrencySafe:()=>true,
@@ -510,32 +510,32 @@ export function apply(ctx: Context): void {
       // ESPN is the primary market source. Other odds vendors are opt-in only,
       // and their unrelated event IDs must never be matched to ESPN event IDs.
       const useEspn=Boolean(args.eventId||args.date||args.sourcePolicy!=='all')
-      const report:Awaited<ReturnType<typeof marketOddsDetailed>> & {observations?:Array<{
-        eventId:string;bookmaker:string;market:string;selection:string;point:number|null;
-        price:number;home:string;away:string;time:string;timeIso:string;updatedAt:string;
+      const report:Awaited<ReturnType<typeof marketOddsDetailed>> & { observations?:Array<{
+        eventId:string;bookmaker:string;market:string;selection:string;point:number|null
+        price:number;home:string;away:string;time:string;timeIso:string;updatedAt:string
         endpointSource?:string;reason:string;source:string;sportKey:string
-      }>}=useEspn?
+      }> }=useEspn?
         await (async()=>{
           if(env.PHOENIX_SPORTS_ESPN_DISABLED==='1')return{
-            quotes:[],sources:[{provider:'ESPN Site/Core',status:'unconfigured' as const,
-              count:0,detail:'ESPN deshabilitado por el operador'}],
+            quotes:[],sources:[{ provider:'ESPN Site/Core',status:'unconfigured' as const,
+              count:0,detail:'ESPN deshabilitado por el operador' }],
           }
           const result=await fetchPublicEspnOddsDetailed(args.sportKey,args.markets??'h2h',
             <T>(url:string)=>getFeed<T>(url),
-            {now:observedAt,cache:true,...(args.eventId?{eventId:args.eventId}:{}),
-              ...(args.date?{date:args.date}:{}),days:args.date?1:args.eventId?7:3})
+            { now:observedAt,cache:true,...(args.eventId?{ eventId:args.eventId }:{}),
+              ...(args.date?{ date:args.date }:{}),days:args.date?1:args.eventId?7:3 })
           return{
-            quotes:result.quotes.map(q=>({...q,sportKey:args.sportKey,
-              source:'ESPN '+q.endpointSource+' (sin clave)'})),
-            observations:result.observations.map(q=>({...q,sportKey:args.sportKey,
-              source:'ESPN '+q.endpointSource+' (referencia no cotizable)'})),
-            sources:[{provider:'ESPN Site/Core',status:result.quotes.length?
+            quotes:result.quotes.map(q=>({ ...q,sportKey:args.sportKey,
+              source:'ESPN '+q.endpointSource+' (sin clave)' })),
+            observations:result.observations.map(q=>({ ...q,sportKey:args.sportKey,
+              source:'ESPN '+q.endpointSource+' (referencia no cotizable)' })),
+            sources:[{ provider:'ESPN Site/Core',status:result.quotes.length?
               'observed' as const:'empty' as const,count:result.quotes.length,
-              rawCount:result.diagnostics.rawOddsEntries,
-              startedOddsEntries:result.diagnostics.startedOddsEntries,
-              undatedOutcomes:result.diagnostics.undatedOutcomes,
-              expiredOutcomes:result.diagnostics.expiredOutcomes,
-              detail:result.diagnostics.datesQueried.join(', ')+
+            rawCount:result.diagnostics.rawOddsEntries,
+            startedOddsEntries:result.diagnostics.startedOddsEntries,
+            undatedOutcomes:result.diagnostics.undatedOutcomes,
+            expiredOutcomes:result.diagnostics.expiredOutcomes,
+            detail:result.diagnostics.datesQueried.join(', ')+
                 ' · evento encontrado: '+String(result.diagnostics.eventMatched)+
                 ' · scoreboard '+result.diagnostics.embedded+
                 ' · Core '+result.diagnostics.core+
@@ -544,11 +544,11 @@ export function apply(ctx: Context): void {
                 ' · cuotas sin fecha '+result.diagnostics.undatedOutcomes+
                 ' · antiguas '+result.diagnostics.expiredOutcomes+
                 ' · fallos '+result.diagnostics.failures+
-                ' · '+result.diagnostics.notes.join(' | ').slice(0,350)}],
+                ' · '+result.diagnostics.notes.join(' | ').slice(0,350) }],
           }
         })():
         await marketOddsDetailed(args.sportKey,args.markets,env)
-      const quotes=report.quotes.filter(q=>{
+      const quotes=report.quotes.filter((q)=>{
         const updated=Date.parse(q.updatedAt),kickoff=Date.parse(q.timeIso??q.time)
         return Number.isFinite(updated)&&updated<=observedAt&&observedAt-updated<=3_600_000
           &&Number.isFinite(kickoff)&&kickoff>observedAt
@@ -590,32 +590,32 @@ export function apply(ctx: Context): void {
     name:'sports_chat_research',
     description:'Analiza TODOS los deportes del catálogo ESPN por liga: marcadores terminados, victorias/derrotas/empates, medias anotadas/recibidas, descanso y falta de evidencias. No transforma forma en probabilidad.',
     parameters:{
-      sport:{type:'string',required:true,description:'soccer, basketball, baseball, football, hockey, etc.'},
-      league:{type:'string',required:true,description:'ID real ESPN del catálogo: nba, mlb, eng.1, usa.1, nfl, nhl, etc.'},
-      date:{type:'string',description:'Fecha AAAA-MM-DD; por defecto hoy.'},
-      lookbackDays:{type:'integer',description:'Días históricos por liga, 1 a 28; por defecto 14.'},
+      sport:{ type:'string',required:true,description:'soccer, basketball, baseball, football, hockey, etc.' },
+      league:{ type:'string',required:true,description:'ID real ESPN del catálogo: nba, mlb, eng.1, usa.1, nfl, nhl, etc.' },
+      date:{ type:'string',description:'Fecha AAAA-MM-DD; por defecto hoy.' },
+      lookbackDays:{ type:'integer',description:'Días históricos por liga, 1 a 28; por defecto 14.' },
     },
-    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    output:{ schema:{ type:'string' },render:(_a,v)=>[{ type:'text' as const,text:v }] },
     isConcurrencySafe:()=>true,
     async execute(args){
       const report=await researchSport(args.sport,args.league,args.date,fetch,Date.now(),process.env,args.lookbackDays??14)
-      return JSON.stringify({...report,instruction:'Usa solo partidos terminados verificados y destaca faltantes por disciplina; estadísticas descriptivas, NO pronósticos calibrados. Contrasta cuotas reales, plantillas, lesiones, pitching, superficie o porteros según el deporte.'})
+      return JSON.stringify({ ...report,instruction:'Usa solo partidos terminados verificados y destaca faltantes por disciplina; estadísticas descriptivas, NO pronósticos calibrados. Contrasta cuotas reales, plantillas, lesiones, pitching, superficie o porteros según el deporte.' })
     },
-    presentCall:()=>({card:'generic',title:'Investigar enfrentamientos por deporte',kind:'read' as const}),
+    presentCall:()=>({ card:'generic',title:'Investigar enfrentamientos por deporte',kind:'read' as const }),
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_historical_odds',
     description:'Históricos por fecha: archivos gratuitos SBR/MLB y observaciones auténticas que PHOENIX capturó de proveedores desde su instalación. Nunca cuotas actuales.',
     parameters:{
-      sport:{type:'string',description:'nba, mlb, nfl, nhl para los archivos públicos; otros deportes requieren observaciones locales.'},
-      sportKey:{type:'string',description:'Clave de mercado para snapshots: basketball_nba, baseball_mlb, americanfootball_nfl, soccer_epl, etc.'},
-      date:{type:'string',description:'Fecha histórica AAAA-MM-DD. Para snapshots es la fecha UTC de OBSERVACIÓN, no fecha del encuentro.'},
-      limit:{type:'integer',description:'Límite de filas (máximo 500), por defecto 100'},
-      leagueSlug:{type:'string',description:'Liga OddsHarvester histórica (ej. england-premier-league), opcional.'},
-      season:{type:'string',description:'Temporada de OddsHarvester, por ejemplo 2024-2025 o 2025.'},
-      market:{type:'string',description:'Mercado histórico, ej. 1x2, moneyline u over_under.'},
+      sport:{ type:'string',description:'nba, mlb, nfl, nhl para los archivos públicos; otros deportes requieren observaciones locales.' },
+      sportKey:{ type:'string',description:'Clave de mercado para snapshots: basketball_nba, baseball_mlb, americanfootball_nfl, soccer_epl, etc.' },
+      date:{ type:'string',description:'Fecha histórica AAAA-MM-DD. Para snapshots es la fecha UTC de OBSERVACIÓN, no fecha del encuentro.' },
+      limit:{ type:'integer',description:'Límite de filas (máximo 500), por defecto 100' },
+      leagueSlug:{ type:'string',description:'Liga OddsHarvester histórica (ej. england-premier-league), opcional.' },
+      season:{ type:'string',description:'Temporada de OddsHarvester, por ejemplo 2024-2025 o 2025.' },
+      market:{ type:'string',description:'Mercado histórico, ej. 1x2, moneyline u over_under.' },
     },
-    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    output:{ schema:{ type:'string' },render:(_a,v)=>[{ type:'text' as const,text:v }] },
     isConcurrencySafe:()=>true,
     async execute(args){
       const env=sportsEnv()
@@ -628,60 +628,60 @@ export function apply(ctx: Context): void {
         catch(error){archiveError=error instanceof Error?error.message:'Archivo histórico no accesible'}
       }
       const historical=archived?.historical.filter(row=>!args.date||row.date===args.date).slice(-limit)??[]
-      const sportKey=args.sportKey||({nba:'basketball_nba',mlb:'baseball_mlb',
-        nfl:'americanfootball_nfl',nhl:'icehockey_nhl'} as Record<string,string>)[args.sport??'']
+      const sportKey=args.sportKey||({ nba:'basketball_nba',mlb:'baseball_mlb',
+        nfl:'americanfootball_nfl',nhl:'icehockey_nhl' } as Record<string,string>)[args.sport??'']
       const local= sportKey&&args.date?await loadOddsSnapshots(sportKey,args.date,env,limit):
-        {snapshots:[],rows:0,coverage:'Para observaciones locales especificar date (día UTC de consulta) y sportKey.',errors:[]}
+        { snapshots:[],rows:0,coverage:'Para observaciones locales especificar date (día UTC de consulta) y sportKey.',errors:[] }
       const autoRepair=archiveError||archived?.sources.some(x=>!x.available)?await ensureSportsSourcesStarted(process.env):null
-      const kind=({soccer:'football',basketball:'basketball',baseball:'baseball',
-        americanfootball:'american-football',icehockey:'ice-hockey',tennis:'tennis'} as Record<string,string>)[sportKey?.split('_')[0]??'']
+      const kind=({ soccer:'football',basketball:'basketball',baseball:'baseball',
+        americanfootball:'american-football',icehockey:'ice-hockey',tennis:'tennis' } as Record<string,string>)[sportKey?.split('_')[0]??'']
       let scraped:null|Awaited<ReturnType<typeof keylessHistoricOdds>>=null
       let scrapingError:string|null=null
       if(args.leagueSlug&&args.season&&args.market&&kind){
         try{scraped=await keylessHistoricOdds(kind,args.leagueSlug,args.season,args.market,env)}
         catch(error){scrapingError=error instanceof Error?error.message.slice(0,180):'Histórico del scraper no accesible'}
       }
-      return JSON.stringify({sport:args.sport??null,sportKey:sportKey??null,date:args.date??null,
+      return JSON.stringify({ sport:args.sport??null,sportKey:sportKey??null,date:args.date??null,
         sources:archived?.sources??[],archiveError,autoRepair,liveQuotes:false,
         count:historical.length+local.rows+(scraped?.rows.length??0),archiveCount:historical.length,
         scraperHistoricalCount:scraped?.rows.length??0,scraperHistoricalRows:scraped?.rows??[],scrapingError,
         observedSnapshotCount:local.rows,observationCoverage:local.coverage,
         samples:historical,snapshots:local.snapshots,readErrors:local.errors,
-        instruction:'HISTÓRICO (NO COTIZACIÓN VIGENTE). El modo historic de OddsHarvester v0.20 está sujeto a disponibilidad del sitio, liga y temporada. SBR y MLB cubren los años disponibles en archivos instalados; observaciones PHOENIX solo desde que se guardaron. Nunca usar cuotas antiguas como precio apostable hoy. Si no hay archivo reportar error/estado de instalación y fecha sin cobertura.'})
+        instruction:'HISTÓRICO (NO COTIZACIÓN VIGENTE). El modo historic de OddsHarvester v0.20 está sujeto a disponibilidad del sitio, liga y temporada. SBR y MLB cubren los años disponibles en archivos instalados; observaciones PHOENIX solo desde que se guardaron. Nunca usar cuotas antiguas como precio apostable hoy. Si no hay archivo reportar error/estado de instalación y fecha sin cobertura.' })
     },
-    presentCall:()=>({card:'generic',title:'Investigar históricos de casas',kind:'read' as const}),
+    presentCall:()=>({ card:'generic',title:'Investigar históricos de casas',kind:'read' as const }),
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_community_opinions',
     description:'Consulta opiniones y votaciones públicas de pronosticadores desde OddsPortal mediante OddsHarvester; nunca son probabilidades calculadas ni recomendación independiente.',
-    parameters:{sport:{type:'string',required:true,description:'Deporte OddsHarvester: football, tennis, basketball, baseball, etc.'}},
-    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    parameters:{ sport:{ type:'string',required:true,description:'Deporte OddsHarvester: football, tennis, basketball, baseball, etc.' } },
+    output:{ schema:{ type:'string' },render:(_a,v)=>[{ type:'text' as const,text:v }] },
     isConcurrencySafe:()=>true,
     async execute(args){
       const opinions=await communityOpinions(args.sport)
-      return JSON.stringify({source:'OddsPortal Community',opinions:opinions.slice(0,15),
-        disclaimer:'Votos de usuarios con sesgo de selección; NO probabilidades de ganar. Contrastar con investigación propia.'})
+      return JSON.stringify({ source:'OddsPortal Community',opinions:opinions.slice(0,15),
+        disclaimer:'Votos de usuarios con sesgo de selección; NO probabilidades de ganar. Contrastar con investigación propia.' })
     },
-    presentCall:()=>({card:'generic',title:'Contrastar pronósticos públicos',kind:'read' as const}),
+    presentCall:()=>({ card:'generic',title:'Contrastar pronósticos públicos',kind:'read' as const }),
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_odds_scan',
     description:'Comprueba sistemáticamente los 11 deportes de OddsHarvester sin omitir tenis, soccer, baseball, basketball NBA/WNBA, rugby, volleyball, cricket y handball. Rondas de cuatro deportes, paginación por offset 0, 4 y 8. No inventa precios ni asigna ligas sin evidencia.',
     parameters:{
-      sport:{type:'string',description:'Disciplina opcional (football, basketball, baseball, american-football, ice-hockey, tennis, handball, volleyball, rugby-league, rugby-union, cricket). Vacío recorre las 11.'},
-      offset:{type:'integer',description:'Índice inicial: 0, 4 u 8 al revisar todos.'},
-      limit:{type:'integer',description:'Máximo cuatro deportes por ronda; por defecto 4.'},
-      date:{type:'string',description:'Fecha AAAA-MM-DD de los partidos, por defecto hoy en República Dominicana.'},
+      sport:{ type:'string',description:'Disciplina opcional (football, basketball, baseball, american-football, ice-hockey, tennis, handball, volleyball, rugby-league, rugby-union, cricket). Vacío recorre las 11.' },
+      offset:{ type:'integer',description:'Índice inicial: 0, 4 u 8 al revisar todos.' },
+      limit:{ type:'integer',description:'Máximo cuatro deportes por ronda; por defecto 4.' },
+      date:{ type:'string',description:'Fecha AAAA-MM-DD de los partidos, por defecto hoy en República Dominicana.' },
     },
-    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    output:{ schema:{ type:'string' },render:(_a,v)=>[{ type:'text' as const,text:v }] },
     isConcurrencySafe:()=>false,
     async execute(args){
       const env=sportsEnv()
       const enabled=env.PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED==='1'
       const report=await scanOddsDisciplines(
-        {...(args.sport?{sport:args.sport}:{}),
-          ...(args.offset!==undefined?{offset:args.offset}:{}),
-          ...(args.limit!==undefined?{limit:args.limit}:{})},
+        { ...(args.sport?{ sport:args.sport }:{}),
+          ...(args.offset!==undefined?{ offset:args.offset }:{}),
+          ...(args.limit!==undefined?{ limit:args.limit }:{}) },
         (sport,market)=>keylessOdds(sport,market,args.date,env),
         enabled,
       )
@@ -694,27 +694,27 @@ export function apply(ctx: Context): void {
           'FALTAN disciplinas: llamar otra vez sports_chat_odds_scan con offset='+report.nextOffset+' y limit=4; continuar hasta complete=true. No afirmar que el escaneo universal terminó mientras falten páginas.',
       })
     },
-    presentCall:()=>({card:'generic',title:'Escanear cobertura de cuotas en todos los deportes',kind:'read' as const}),
+    presentCall:()=>({ card:'generic',title:'Escanear cobertura de cuotas en todos los deportes',kind:'read' as const }),
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_odds_keyless',
     description:'Cuotas multideporte sin API key desde OddsHarvester local autorizado: 11 deportes, mercados de prepartido, precios por casa con fuente y antigüedad. No promete acceso ilimitado.',
     parameters:{
-      sport:{type:'string',required:true,description:'football, basketball, baseball, american-football, tennis, ice-hockey, rugby-league, rugby-union, handball, volleyball o cricket.'},
-      market:{type:'string',required:true,description:'Mercado compatible con deporte: 1x2, double_chance, btts, moneyline, home_away, match_winner, over_under, total_games_over_under, total_sets_over_under o total_points_over_under.'},
-      date:{type:'string',description:'Día AAAA-MM-DD en Santo Domingo; predeterminado hoy.'},
+      sport:{ type:'string',required:true,description:'football, basketball, baseball, american-football, tennis, ice-hockey, rugby-league, rugby-union, handball, volleyball o cricket.' },
+      market:{ type:'string',required:true,description:'Mercado compatible con deporte: 1x2, double_chance, btts, moneyline, home_away, match_winner, over_under, total_games_over_under, total_sets_over_under o total_points_over_under.' },
+      date:{ type:'string',description:'Día AAAA-MM-DD en Santo Domingo; predeterminado hoy.' },
     },
-    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    output:{ schema:{ type:'string' },render:(_a,v)=>[{ type:'text' as const,text:v }] },
     isConcurrencySafe:()=>true,
     async execute(args){
       const env=sportsEnv()
       if(env.PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED!=='1'
         &&process.env.PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED!=='0'){
         const autoRepair=await ensureSportsSourcesStarted(process.env)
-        return JSON.stringify({source:'OddsHarvester',status:'not-ready',
+        return JSON.stringify({ source:'OddsHarvester',status:'not-ready',
           autoRepair,installation:managedSportsInstallStatus(process.env),
           observedPrices:0,bookmaker:null,
-          instruction:'OddsHarvester todavía no está listo. PHOENIX solicitó la instalación/recuperación sin bloquear el chat; NO significa que se hayan obtenido cuotas. Ejecutar sports_chat_sources_health para ver progreso y errores, y consultar el mercado después de que el componente marque installed. Si falta el script o WinGet falló, mostrar la ruta del log y solo comandos PowerShell en la consola.'})
+          instruction:'OddsHarvester todavía no está listo. PHOENIX solicitó la instalación/recuperación sin bloquear el chat; NO significa que se hayan obtenido cuotas. Ejecutar sports_chat_sources_health para ver progreso y errores, y consultar el mercado después de que el componente marque installed. Si falta el script o WinGet falló, mostrar la ruta del log y solo comandos PowerShell en la consola.' })
       }
       let quotes:Awaited<ReturnType<typeof keylessOdds>>=[]
       let scrapeError:string|null=null
@@ -725,7 +725,7 @@ export function apply(ctx: Context): void {
       const knownSportKeys=coveredSportKeys
       const otherSources:Awaited<ReturnType<typeof marketOddsDetailed>>[]=[]
       if(scrapeError||!quotes.length){
-        const alternativeEnv={...env,PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED:'0'}
+        const alternativeEnv={ ...env,PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED:'0' }
         const candidate=knownSportKeys[args.sport]??[]
         for(const key of candidate.slice(0,5)){
           try{otherSources.push(await marketOddsDetailed(key,
@@ -739,23 +739,23 @@ export function apply(ctx: Context): void {
         if(rows.length<12)rows.push(quote)
         grouped.set(quote.eventId,rows)
       }
-      const uiBlocks=[...grouped.values()].slice(0,5).flatMap(rows=>{
+      const uiBlocks=[...grouped.values()].slice(0,5).flatMap((rows)=>{
         const first=rows[0]
         if(!first)return []
-        return [{component:'sports_odds_card',version:1,props:{
+        return [{ component:'sports_odds_card',version:1,props:{
           title:first.away+' vs '+first.home,
           subtitle:'Mercado '+first.market+' · precios observados, no una predicción',
           source:first.source+' · '+first.updatedAt,
-          rows:rows.map(q=>({event:q.away+' vs '+q.home,market:q.market,
+          rows:rows.map(q=>({ event:q.away+' vs '+q.home,market:q.market,
             selection:q.selection,bookmaker:q.bookmaker,price:q.price.toFixed(2),
-            ...(q.point===null?{}:{point:String(q.point)})})),
+            ...(q.point===null?{}:{ point:String(q.point) }) })),
           note:'Scraping autorizado, sujeto a disponibilidad y condiciones del sitio. No se ejecutó apuesta.',
-        }}]
+        } }]
       })
-      return JSON.stringify({source:'OddsHarvester/OddsPortal (sin API key)',supported:keylessSports,
+      return JSON.stringify({ source:'OddsHarvester/OddsPortal (sin API key)',supported:keylessSports,
         status:quotes.length?'observed':scrapeError?'scraper-error':'no-observed-offers',
         scrapeError,alternativeSources:otherSources.map(r=>r.sources),
-        alternativeQuotes:otherSources.flatMap(r=>r.quotes).filter(q=>{
+        alternativeQuotes:otherSources.flatMap(r=>r.quotes).filter((q)=>{
           const updated=Date.parse(q.updatedAt),kickoff=Date.parse(q.timeIso??q.time),now=Date.now()
           return Number.isFinite(updated)&&updated<=now&&now-updated<=3_600_000&&
             Number.isFinite(kickoff)&&kickoff>now
@@ -763,50 +763,50 @@ export function apply(ctx: Context): void {
         instructionOnFailure:'Si hay alternativeQuotes, preséntalas por bookmaker (NO las atribuyas a OddsHarvester ni a Juancito). Si ninguna fuente entrega precios, informa errores exactos, ausencia de claves y el estado instalación; no marques installed como live verified.',
         sport:args.sport,market:args.market,observedAt:new Date().toISOString(),total:quotes.length,
         uiBlocks,outcomes:quotes.slice(0,80),remaining:Math.max(0,quotes.length-80),
-        instruction:'PHOENIX renderiza tarjetas nativas. No confundir IDs del scraper con IDs ESPN sin reconciliar nombres/fecha/liga. La cuota refleja un precio observado, no una probabilidad propia ni garantía.'})
+        instruction:'PHOENIX renderiza tarjetas nativas. No confundir IDs del scraper con IDs ESPN sin reconciliar nombres/fecha/liga. La cuota refleja un precio observado, no una probabilidad propia ni garantía.' })
     },
-    presentCall:()=>({card:'generic',title:'Investigar cuotas multideporte sin API key',kind:'read' as const}),
+    presentCall:()=>({ card:'generic',title:'Investigar cuotas multideporte sin API key',kind:'read' as const }),
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_ticket_evidence_priced_auto',
     description:'Investiga 5 o 6 eventos con historial más amplio y contextualización prepartido, consulta OddsHarvester habilitado para precios reales; combina SOLO cuotas vigentes de una misma casa. No inventa cuotas, lesiones ni probabilidades.',
     parameters:{
-      count:{type:'integer',required:true,description:'Patas deseadas: 5 o 6 (admite 1 a 6).'},
-      date:{type:'string',description:'Fecha AAAA-MM-DD; por defecto hoy.'},
-      sport:{type:'string',description:'Limita a soccer, baseball, basketball, football, hockey o tennis; omite para varios deportes.'},
-      stake:{type:'number',description:'Monto de simulación; 0 por defecto. No compra apuestas.'},
-      marketPreference:{type:'string',description:'winner: ganador directo; double_chance: 1X/X2 para encuentros de fútbol con cuota verificable.'},
+      count:{ type:'integer',required:true,description:'Patas deseadas: 5 o 6 (admite 1 a 6).' },
+      date:{ type:'string',description:'Fecha AAAA-MM-DD; por defecto hoy.' },
+      sport:{ type:'string',description:'Limita a soccer, baseball, basketball, football, hockey o tennis; omite para varios deportes.' },
+      stake:{ type:'number',description:'Monto de simulación; 0 por defecto. No compra apuestas.' },
+      marketPreference:{ type:'string',description:'winner: ganador directo; double_chance: 1X/X2 para encuentros de fútbol con cuota verificable.' },
     },
-    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    output:{ schema:{ type:'string' },render:(_a,v)=>[{ type:'text' as const,text:v }] },
     isConcurrencySafe:()=>true,
     async execute(args){
       const preference=args.marketPreference??'winner'
       if(preference!=='winner'&&preference!=='double_chance')throw Error('Mercado de ticket inválido')
       const result=await evidencePricedTicket(args.count,args.date,args.sport,args.stake??0,
         Date.now(),sportsEnv(),fetch,undefined,preference)
-      return JSON.stringify({uiBlock:result.card,requestedLegs:args.count,
+      return JSON.stringify({ uiBlock:result.card,requestedLegs:args.count,
         complete:result.complete,priced:result.priced,placed:false,
         verifiedEvents:result.verifiedEvents,quotedLegs:result.quotedLegs,
         missingQuotes:result.missingQuotes,approvedLegs:result.approvedLegs,
         multisportSatisfied:result.multisportSatisfied,sourceAudit:result.sourceAudit,
         explanation:result.explanation,
-        instruction:'PHOENIX dibuja una PRESELECCIÓN, no apuestas aprobadas. La auditoría sourceAudit indica cuáles fuentes tenían precios realmente observados y cuántos coincidieron. Si approvedLegs=0, aclara 0 apuestas cotizadas aprobadas aunque existan 4 eventos ESPN. No confundir estado del feed médico con bajas individuales comprobadas.'})
+        instruction:'PHOENIX dibuja una PRESELECCIÓN, no apuestas aprobadas. La auditoría sourceAudit indica cuáles fuentes tenían precios realmente observados y cuántos coincidieron. Si approvedLegs=0, aclara 0 apuestas cotizadas aprobadas aunque existan 4 eventos ESPN. No confundir estado del feed médico con bajas individuales comprobadas.' })
     },
-    presentCall:()=>({card:'generic',title:'Investigar ticket cotizado de 5 o 6 patas',kind:'read' as const}),
+    presentCall:()=>({ card:'generic',title:'Investigar ticket cotizado de 5 o 6 patas',kind:'read' as const }),
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_ticket_evidence_auto',
     description:'Ticket multideporte de 1 a 6 patas, obtenido de marcadores finales verificables de varias ligas (no solo récords). Selecciones independientes por partido; sin probabilidades calibradas ni precios inventados. Incompleto si no hay suficientes.',
     parameters:{
-      count:{type:'integer',required:true,description:'Número exacto solicitado: 5 o 6, entre 1 y 6.'},
-      date:{type:'string',description:'Fecha AAAA-MM-DD, por defecto hoy.'},
-      sport:{type:'string',description:'Limitar a soccer, basketball, baseball, football, hockey o tennis; omitir para multideporte.'},
+      count:{ type:'integer',required:true,description:'Número exacto solicitado: 5 o 6, entre 1 y 6.' },
+      date:{ type:'string',description:'Fecha AAAA-MM-DD, por defecto hoy.' },
+      sport:{ type:'string',description:'Limitar a soccer, basketball, baseball, football, hockey o tennis; omitir para multideporte.' },
     },
-    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    output:{ schema:{ type:'string' },render:(_a,v)=>[{ type:'text' as const,text:v }] },
     isConcurrencySafe:()=>true,
     async execute(args){
       const result=await evidenceTicket(args.count,args.date,args.sport,fetch,Date.now(),sportsEnv())
-      return JSON.stringify({uiBlock:result.card,requestedLegs:args.count,verifiedEvents:result.verifiedEvents,
+      return JSON.stringify({ uiBlock:result.card,requestedLegs:args.count,verifiedEvents:result.verifiedEvents,
         complete:result.complete,candidatesEvaluated:result.candidatesEvaluated,
         researchLeagues:result.researchLeagues,insufficientEvidence:result.insufficientEvidence,
         researchStandard:result.researchStandard,scannedSports:result.scannedSports,
@@ -816,9 +816,9 @@ export function apply(ctx: Context): void {
         newsMatched:result.newsMatched,playerStatsChecked:result.playerStatsChecked,priced:false,placed:false,modelProbabilities:false,
         instruction:result.complete?
           'Ticket con exactamente las patas pedidas y resultados históricos verificados, pero aún no cotizado ni calibrado; requiere lesiones, modelos específicos, noticias y precio del operador antes de defenderlo como apuestas de mayor probabilidad.':
-          'Borrador incompleto. No sustituyas patas ni inventes cuotas. Indica cuántas selecciones se pudieron fundamentar.'})
+          'Borrador incompleto. No sustituyas patas ni inventes cuotas. Indica cuántas selecciones se pudieron fundamentar.' })
     },
-    presentCall:()=>({card:'generic',title:'Investigar ticket multideporte por evidencia',kind:'read' as const}),
+    presentCall:()=>({ card:'generic',title:'Investigar ticket multideporte por evidencia',kind:'read' as const }),
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_ticket_research_auto',
@@ -886,7 +886,7 @@ export function apply(ctx: Context): void {
       if (keys.length < 1 || keys.length > 4) throw new Error('Indica entre 1 y 4 disciplinas para el ticket.')
       const consultedAt=Date.now()
       const quotes = (await Promise.all(keys.map(key => marketOdds(key,args.markets)))).flat()
-      const current=quotes.filter(q=>{
+      const current=quotes.filter((q)=>{
         const at=Date.parse(q.updatedAt),kickoff=Date.parse(q.timeIso??q.time)
         return Number.isFinite(at)&&at<=consultedAt&&consultedAt-at<=3_600_000&&
           Number.isFinite(kickoff)&&kickoff>consultedAt&&q.price>1&&

@@ -17,22 +17,22 @@ describe('Phoenix local video listening: bounded evidence', () => {
   })
 
   it('admits only bounded verified WebM clips, no arbitrary or misleading audio results', () => {
-    const input=JSON.stringify({ok:true,base64:webm.toString('base64'),startSeconds:62,durationSeconds:8})
+    const input=JSON.stringify({ ok:true,base64:webm.toString('base64'),startSeconds:62,durationSeconds:8 })
     expect(parseCapturedVideoAudio(input)).toMatchObject({
       ok:true,startSeconds:62,durationSeconds:8,
     })
     expect(parseCapturedVideoAudio(input).base64).toBe(webm.toString('base64'))
-    expect(parseCapturedVideoAudio(JSON.stringify({ok:true,base64:Buffer.alloc(200).toString('base64'),
-      startSeconds:62,durationSeconds:8}))).toEqual({ok:false,reason:'AUDIO_WEBM_INVALID'})
-    expect(parseCapturedVideoAudio(JSON.stringify({ok:true,base64:webm.toString('base64'),
-      startSeconds:62,durationSeconds:50}))).toEqual({ok:false,reason:'AUDIO_CAPTURE_RESPONSE_INVALID'})
-    expect(parseCapturedVideoAudio('{')).toEqual({ok:false,reason:'AUDIO_CAPTURE_RESPONSE_INVALID'})
+    expect(parseCapturedVideoAudio(JSON.stringify({ ok:true,base64:Buffer.alloc(200).toString('base64'),
+      startSeconds:62,durationSeconds:8 }))).toEqual({ ok:false,reason:'AUDIO_WEBM_INVALID' })
+    expect(parseCapturedVideoAudio(JSON.stringify({ ok:true,base64:webm.toString('base64'),
+      startSeconds:62,durationSeconds:50 }))).toEqual({ ok:false,reason:'AUDIO_CAPTURE_RESPONSE_INVALID' })
+    expect(parseCapturedVideoAudio('{')).toEqual({ ok:false,reason:'AUDIO_CAPTURE_RESPONSE_INVALID' })
   })
 
   it('preserves specific browser limitations rather than inventing speech', () => {
-    expect(parseCapturedVideoAudio(JSON.stringify({ok:false,reason:'NO_ACCESSIBLE_AUDIO_TRACK'})))
-      .toEqual({ok:false,reason:'NO_ACCESSIBLE_AUDIO_TRACK'})
-    expect(parseCapturedVideoAudio(JSON.stringify({ok:false,reason:'BROWSER_PLAYBACK_REQUIRES_GESTURE'})))
-      .toEqual({ok:false,reason:'BROWSER_PLAYBACK_REQUIRES_GESTURE'})
+    expect(parseCapturedVideoAudio(JSON.stringify({ ok:false,reason:'NO_ACCESSIBLE_AUDIO_TRACK' })))
+      .toEqual({ ok:false,reason:'NO_ACCESSIBLE_AUDIO_TRACK' })
+    expect(parseCapturedVideoAudio(JSON.stringify({ ok:false,reason:'BROWSER_PLAYBACK_REQUIRES_GESTURE' })))
+      .toEqual({ ok:false,reason:'BROWSER_PLAYBACK_REQUIRES_GESTURE' })
   })
 })

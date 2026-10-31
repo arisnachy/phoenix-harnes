@@ -2,9 +2,9 @@ import type { GeoFeature, GeoLayer } from './GeoMap.tsx'
 
 /** Geographic viewport fitting in projected Web Mercator space with 14% breathing room. */
 export function fitGeoView(layers: readonly GeoLayer[], size: { readonly w:number; readonly h:number }):
-  { lng:number; lat:number; zoom:number } {
+{ lng:number; lat:number; zoom:number } {
   const points = layers.flatMap(layer => layer.features.flatMap(feature => feature.coordinates))
-  if (points.length === 0) return {lng:0,lat:0,zoom:2}
+  if (points.length === 0) return { lng:0,lat:0,zoom:2 }
   const xs=points.map(p=>p[0]),ys=points.map(p=>p[1])
   const minX=Math.min(...xs),maxX=Math.max(...xs),minY=Math.min(...ys),maxY=Math.max(...ys)
   const latToY=(lat:number):number => {
@@ -20,7 +20,7 @@ export function fitGeoView(layers: readonly GeoLayer[], size: { readonly w:numbe
   const zoom=Math.max(2,Math.min(16,Math.floor(Math.min(xZoom,yZoom))))
   const mercatorY=(mercatorYMin+mercatorYMax)/2
   const lat=Math.atan(Math.sinh(Math.PI*(1-2*mercatorY)))*180/Math.PI
-  return {lng:(minX+maxX)/2,lat,zoom}
+  return { lng:(minX+maxX)/2,lat,zoom }
 }
 
 export interface GeoLegendEntry { readonly key:string; readonly label:string; readonly color:string }
@@ -36,11 +36,11 @@ export function buildGeoLegend(layers: readonly GeoLayer[]): readonly GeoLegendE
     }
     if (distinct.size <= 1) {
       const color=[...distinct.keys()][0]
-      if (color) list.push({key:layer.id+':'+color,label:layer.name,color})
+      if (color) list.push({ key:layer.id+':'+color,label:layer.name,color })
     } else {
       for (const [color,items] of distinct) {
         // No assumed clinical/commercial semantics: label actual sample name and count.
-        list.push({key:layer.id+':'+color,label:layer.name+' · '+items.length+' ('+items[0]!.label+')',color})
+        list.push({ key:layer.id+':'+color,label:layer.name+' · '+items.length+' ('+items[0]!.label+')',color })
       }
     }
   }

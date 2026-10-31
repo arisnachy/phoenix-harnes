@@ -370,13 +370,13 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
       if (service && typeof service.register === 'function') removeGodotRoute = mountGodotWebRoute(service)
     }
     attachGodotRoute()
-    disposers.push(ctx.on('internal/service', name => {
+    disposers.push(ctx.on('internal/service', (name) => {
       if (name === 'webServer') attachGodotRoute()
     }))
     disposers.push(() => { removeGodotRoute?.() })
   }
   const binance = acquireBinancePaperAutomation(binancePaperLedgerPath())
-  const secretProvider = ctx.get('credentials') as CredentialProvider | undefined
+  const secretProvider = ctx.get('credentials')
   // A Cloud runner is independent from local PAPER, and is never silently
   // auto-provisioned. The operator must authorize a provider and vault secret.
   const cloudUrl = process.env.PHOENIX_TRADING_CLOUD_URL?.trim()
@@ -416,7 +416,7 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
   )
   disposers.push(() => { testnetAuto.release() })
   if (!modelTools) {
-    testnetAuto.engine.setAttentionSink(event => {
+    testnetAuto.engine.setAttentionSink((event) => {
       ctx.emit('phoenix/wake-event', wakeEvent({
         id: 'binance-testnet:' + randomUUID(),
         source: 'phoenix-trading', eventType: 'testnet.attention',
@@ -430,7 +430,7 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
   if (!modelTools) {
     // Only the Host publishes PAPER attention events; agent-scoped projections
     // must not create duplicate notifications for the same virtual fill.
-    binance.engine.setAttentionSink(event => {
+    binance.engine.setAttentionSink((event) => {
       ctx.emit('phoenix/wake-event', wakeEvent({
         id: 'binance-paper:' + randomUUID(),
         source: 'phoenix-trading',
@@ -450,7 +450,7 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
       if (server?.register !== undefined) removeTradingRoute = mountBinancePaperDashboardRoute(server, binance.engine, { testnet, real: realBinance, testnetAuto: testnetAuto.engine, ...(secretProvider === undefined ? {} : { credentials: secretProvider }), ...(pluginInventory === undefined ? {} : { agentOs: pluginInventory }) })
     }
     mountTradingRoute()
-    disposers.push(ctx.on('internal/service', name => {
+    disposers.push(ctx.on('internal/service', (name) => {
       if (name === 'webServer') mountTradingRoute()
     }))
     disposers.push(() => { removeTradingRoute?.() })

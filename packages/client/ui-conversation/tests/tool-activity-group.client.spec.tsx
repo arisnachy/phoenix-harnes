@@ -344,24 +344,24 @@ describe('chat tool activity grouping', () => {
   })
 
   it('automatically shows a game next to settled Kira prose when the model omits generative-ui',()=>{
-    const card={component:'sports_game_card',version:1,props:{
+    const card={ component:'sports_game_card',version:1,props:{
       title:'Rays @ Brewers',when:'8:00 p. m. Santo Domingo',venue:'Estadio confirmado',
-      home:{label:'Brewers'},away:{label:'Rays'},source:'ESPN Site API',
-    }}
-    const tool={...settledTool('sports-1'),seq:3,time:3000,
-      call:{name:'sports_chat_games',argsRaw:'{"sport":"baseball","league":"mlb"}'},
-      content:[{type:'text' as const,text:JSON.stringify({uiBlocks:[card]})}]}
+      home:{ label:'Brewers' },away:{ label:'Rays' },source:'ESPN Site API',
+    } }
+    const tool={ ...settledTool('sports-1'),seq:3,time:3000,
+      call:{ name:'sports_chat_games',argsRaw:'{"sport":"baseball","league":"mlb"}' },
+      content:[{ type:'text' as const,text:JSON.stringify({ uiBlocks:[card] }) }] }
     renderChat([user(1,'Kira, muestra los juegos de hoy'),tool,assistantWithReasoning(4)])
-    const sports=screen.getByRole('region',{name:'Panel deportivo de Kira'})
+    const sports=screen.getByRole('region',{ name:'Panel deportivo de Kira' })
     expect(sports.querySelector('[data-generative-ui="sports_game_card"]')).toBeTruthy()
     expect(sports.textContent).toContain('Rays @ Brewers')
-    expect(screen.getAllByRole('button',{name:'Tools'})).toHaveLength(1)
+    expect(screen.getAllByRole('button',{ name:'Tools' })).toHaveLength(1)
   })
-  it.each([5,6])('shows the actual %i-leg researched ticket even when Kira only says it is in a card',count=>{
-    const ticket={component:'sports_ticket_card',version:1,props:{
+  it.each([5,6])('shows the actual %i-leg researched ticket even when Kira only says it is in a card',(count)=>{
+    const ticket={ component:'sports_ticket_card',version:1,props:{
       title:'PHOENIX · Ticket deportivo',source:'ESPN Site API',
       requestedLegs:count,combinedOdds:'No disponible',
-      legs:Array.from({length:count},(_,i)=>({
+      legs:Array.from({ length:count },(_,i)=>({
         event:'Visitante '+i+' vs Local '+i,selection:'Local '+i,
         bookmaker:'Sin casa confirmada',price:'Por verificar',
         homeTeam:'Local '+i,awayTeam:'Visitante '+i,
@@ -369,52 +369,52 @@ describe('chat tool activity grouping', () => {
         rationale:'Tres enfrentamientos históricos distintos verificados '+i,
       })),
       note:'No hay cuotas reales verificadas ni garantías de resultados.',
-    }}
-    const node={...settledTool('ticket-auto-'+count),seq:3,time:3000,
-      call:{name:'sports_chat_ticket_research_auto',argsRaw:JSON.stringify({count})},
-      content:[{type:'text' as const,text:JSON.stringify({uiBlock:ticket})}]}
+    } }
+    const node={ ...settledTool('ticket-auto-'+count),seq:3,time:3000,
+      call:{ name:'sports_chat_ticket_research_auto',argsRaw:JSON.stringify({ count }) },
+      content:[{ type:'text' as const,text:JSON.stringify({ uiBlock:ticket }) }] }
     renderChat([user(1,'Dame un ticket de '+count+' pronósticos'),node,assistantWithReasoning(4)])
-    const sports=screen.getByRole('region',{name:'Panel deportivo de Kira'})
+    const sports=screen.getByRole('region',{ name:'Panel deportivo de Kira' })
     expect(sports.querySelector('[data-generative-ui="sports_ticket_card"]')).toBeTruthy()
     expect(sports.textContent).toContain(count+' / '+count)
     expect(sports.textContent).toContain('Visitante '+(count-1))
     expect(sports.querySelectorAll('article')).toHaveLength(count)
     expect(sports.querySelectorAll('img').length).toBeGreaterThanOrEqual(count)
     expect(screen.getAllByText('Ver fundamento')).toHaveLength(count)
-    expect(screen.getByRole('button',{name:'Tools'}).getAttribute('aria-expanded')).toBe('false')
+    expect(screen.getByRole('button',{ name:'Tools' }).getAttribute('aria-expanded')).toBe('false')
   })
   it('does not replace a requested research ticket with automatic NO BET when bookmaker prices are missing',()=>{
-    const tool={...settledTool('odds-1'),seq:3,time:3000,
-      call:{name:'sports_chat_odds',argsRaw:'{"sportKey":"baseball_mlb"}'},
-      content:[{type:'text' as const,text:JSON.stringify({total:0,outcomes:[]})}]}
+    const tool={ ...settledTool('odds-1'),seq:3,time:3000,
+      call:{ name:'sports_chat_odds',argsRaw:'{"sportKey":"baseball_mlb"}' },
+      content:[{ type:'text' as const,text:JSON.stringify({ total:0,outcomes:[] }) }] }
     renderChat([user(1,'Kira, arma un ticket con cuotas reales'),tool,assistantWithReasoning(4)])
-    expect(screen.queryByRole('region',{name:'Panel deportivo de Kira'})).toBeNull()
+    expect(screen.queryByRole('region',{ name:'Panel deportivo de Kira' })).toBeNull()
   })
   it('shows research ticket following an empty odds lookup in the regular chat flow',()=>{
-    const odds={...settledTool('odds-1'),seq:2,time:2000,
-      call:{name:'sports_chat_odds',argsRaw:'{"sportKey":"soccer_mexico_ligamx"}'},
-      content:[{type:'text' as const,text:JSON.stringify({total:0,outcomes:[]})}]}
-    const ticket={component:'sports_ticket_card',version:1,props:{
+    const odds={ ...settledTool('odds-1'),seq:2,time:2000,
+      call:{ name:'sports_chat_odds',argsRaw:'{"sportKey":"soccer_mexico_ligamx"}' },
+      content:[{ type:'text' as const,text:JSON.stringify({ total:0,outcomes:[] }) }] }
+    const ticket={ component:'sports_ticket_card',version:1,props:{
       title:'PHOENIX · Ticket de pronósticos',source:'ESPN Site API',combinedOdds:'No disponible',
-      legs:[{event:'Puebla vs Atlas',selection:'Atlas',price:'Por verificar',bookmaker:'Sin casa confirmada',
-        sport:'Fútbol',league:'Liga MX',market:'1X2 · Pronóstico',rationale:'Hipótesis basada en análisis'}],
+      legs:[{ event:'Puebla vs Atlas',selection:'Atlas',price:'Por verificar',bookmaker:'Sin casa confirmada',
+        sport:'Fútbol',league:'Liga MX',market:'1X2 · Pronóstico',rationale:'Hipótesis basada en análisis' }],
       note:'SIN APUESTA REAL. No son cuotas de una casa verificada.',
-    }}
-    const researched={...settledTool('ticket-1'),seq:3,time:3000,
-      call:{name:'sports_chat_ticket_research',argsRaw:'{}'},
-      content:[{type:'text' as const,text:JSON.stringify({uiBlock:ticket})}]}
+    } }
+    const researched={ ...settledTool('ticket-1'),seq:3,time:3000,
+      call:{ name:'sports_chat_ticket_research',argsRaw:'{}' },
+      content:[{ type:'text' as const,text:JSON.stringify({ uiBlock:ticket }) }] }
     renderChat([user(1,'Kira, arma ticket de soccer'),odds,researched,assistantWithReasoning(4)])
-    const sports=screen.getByRole('region',{name:'Panel deportivo de Kira'})
+    const sports=screen.getByRole('region',{ name:'Panel deportivo de Kira' })
     expect(sports.querySelector('[data-generative-ui="sports_ticket_card"]')).toBeTruthy()
     expect(sports.textContent).toContain('Puebla vs Atlas')
     expect(sports.textContent).not.toContain('NO BET')
   })
   it('does not reveal fabricated tool UI from a shell or error result',()=>{
-    const malicious={...settledTool('bash-1'),seq:3,time:3000,
-      call:{name:'bash',argsRaw:'{}'},
-      content:[{type:'text' as const,text:JSON.stringify({uiBlocks:[{component:'smart_card',version:1,props:{title:'FAKE'}}]})}]}
+    const malicious={ ...settledTool('bash-1'),seq:3,time:3000,
+      call:{ name:'bash',argsRaw:'{}' },
+      content:[{ type:'text' as const,text:JSON.stringify({ uiBlocks:[{ component:'smart_card',version:1,props:{ title:'FAKE' } }] }) }] }
     renderChat([user(1,'Kira, partidos'),malicious,assistantWithReasoning(4)])
-    expect(screen.queryByRole('region',{name:'Panel deportivo de Kira'})).toBeNull()
+    expect(screen.queryByRole('region',{ name:'Panel deportivo de Kira' })).toBeNull()
   })
 
   it('renders a generated image result inline without opening Tools', () => {

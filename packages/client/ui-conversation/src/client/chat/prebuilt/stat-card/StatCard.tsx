@@ -1,9 +1,9 @@
 // Adapted from https://github.com/hemasurya106/react-generative-ui (v0.4.6, MIT)
-import React from 'react';
+import React from 'react'
 // Phoenix validates declarative props before this upstream visual component renders.
 // Zod-only metadata was omitted so this React 18 adaptation needs no new npm dependency.
 
-export type StatCardProps = { title: string; value: string | number; change?: string | number; trend?: 'up' | 'down' | 'neutral'; icon?: string; detail?: string | undefined };
+export type StatCardProps = { title: string; value: string | number; change?: string | number; trend?: 'up' | 'down' | 'neutral'; icon?: string; detail?: string | undefined }
 
 export const StatCard: React.FC<StatCardProps> = ({
   title,
@@ -13,10 +13,10 @@ export const StatCard: React.FC<StatCardProps> = ({
   icon,
   detail,
 }) => {
-  const isUp = trend === 'up';
-  const isDown = trend === 'down';
-  const trendColor = isUp ? '#10b981' : isDown ? '#ef4444' : '#6b7280';
-  const trendBg = isUp ? '#ecfdf5' : isDown ? '#fef2f2' : '#f3f4f6';
+  const isUp = trend === 'up'
+  const isDown = trend === 'down'
+  const trendColor = isUp ? '#10b981' : isDown ? '#ef4444' : '#6b7280'
+  const trendBg = isUp ? '#ecfdf5' : isDown ? '#fef2f2' : '#f3f4f6'
 
   return (
     <div style={{
@@ -53,7 +53,7 @@ export const StatCard: React.FC<StatCardProps> = ({
             borderRadius: '0.25rem',
             display: 'inline-flex',
             alignItems: 'center',
-            gap: '0.125rem'
+            gap: '0.125rem',
           }}>
             {isUp && '↑'}
             {isDown && '↓'}
@@ -63,5 +63,5 @@ export const StatCard: React.FC<StatCardProps> = ({
       </div>
       {detail && <small style={{ fontSize: '0.73rem', lineHeight: 1.35, color: 'var(--dsw-alias-label-secondary,#777)' }}>{detail}</small>}
     </div>
-  );
-};
+  )
+}

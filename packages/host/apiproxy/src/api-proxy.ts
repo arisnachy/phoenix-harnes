@@ -2303,8 +2303,8 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
     try {
       return await Promise.race([
         probe(),
-        new Promise<undefined>(resolve => {
-          timeout = setTimeout(() => resolve(undefined), AUTHORIZATION_INSPECTION_UI_BUDGET_MS)
+        new Promise<undefined>((resolve) => {
+          timeout = setTimeout(() =>{  resolve(undefined) }, AUTHORIZATION_INSPECTION_UI_BUDGET_MS)
           timeout.unref?.()
         }),
       ])

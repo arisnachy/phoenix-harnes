@@ -2,7 +2,7 @@
  * Public, read-only, keyless requests from the browser: zero LLM token usage.
  * Provider responses are never rendered as HTML and never authorize remote URLs.
  */
-import {useEffect,useState,type ReactNode} from 'react'
+import { useEffect,useState,type ReactNode } from 'react'
 import css from './SportsLive.module.css'
 
 const SPORTS=new Set(['baseball','basketball','football','hockey','soccer','tennis','cricket','rugby','golf','mma','racing','lacrosse','volleyball','australian-football'])
@@ -20,14 +20,14 @@ const normalized=(name:string)=>name.normalize('NFD').replace(/[\u0300-\u036f]/g
 const score=(v:Obj)=>str(v.score,15)||undefined
 const fullTeam=(v:Obj)=>str(object(v.team).displayName)||str(object(v.team).name)
 export type PhoenixLiveGame={
-  id:string;home:string;away:string;homeScore?:string|undefined;awayScore?:string|undefined;
-  phase:'pre'|'in'|'post';status:string;clock?:string|undefined;period?:number|undefined;
-  lastPlay?:string|undefined;outs?:number|undefined;balls?:number|undefined;strikes?:number|undefined;
-  bases?:[boolean,boolean,boolean]|undefined;down?:string|undefined;possession?:string|undefined;
-  shots?:string|undefined;leaders?:string[]|undefined;periods?:Array<{label:string;away:string;home:string}>|undefined;
+  id:string;home:string;away:string;homeScore?:string|undefined;awayScore?:string|undefined
+  phase:'pre'|'in'|'post';status:string;clock?:string|undefined;period?:number|undefined
+  lastPlay?:string|undefined;outs?:number|undefined;balls?:number|undefined;strikes?:number|undefined
+  bases?:[boolean,boolean,boolean]|undefined;down?:string|undefined;possession?:string|undefined
+  shots?:string|undefined;leaders?:string[]|undefined;periods?:Array<{ label:string;away:string;home:string }>|undefined
 }
-export type PhoenixLiveLookup={eventId?:string;home:{label:string};away:{label:string}}
-export type PhoenixLiveMeta={updatedAt:number;stale:boolean;error:boolean;enabled:boolean}
+export type PhoenixLiveLookup={ eventId?:string;home:{ label:string };away:{ label:string } }
+export type PhoenixLiveMeta={ updatedAt:number;stale:boolean;error:boolean;enabled:boolean }
 
 export function espnLiveUrl(sport?:string,league?:string,date?:string):string|null{
   if(!sport||!SPORTS.has(sport)||!league)return null
@@ -50,7 +50,7 @@ function stat(team:Obj,names:string[]):string|undefined{
 }
 function leadersFrom(comp:Obj):string[]{
   const categories=arr(comp.leaders)
-  return categories.slice(0,3).flatMap(c=>arr(c.leaders).slice(0,1).map(v=>{
+  return categories.slice(0,3).flatMap(c=>arr(c.leaders).slice(0,1).map((v)=>{
     const athlete=object(v.athlete)
     const name=fieldText(athlete,'displayName','fullName')
     return name?name+' · '+str(v.displayValue,50):''
@@ -59,7 +59,7 @@ function leadersFrom(comp:Obj):string[]{
 /** Coerces only explicitly reported ESPN fields; unknown states stay unknown. */
 export function parseEspnLiveScoreboard(payload:unknown):PhoenixLiveGame[]{
   const events=arr(object(payload).events)
-  return events.slice(0,50).flatMap(event=>{
+  return events.slice(0,50).flatMap((event)=>{
     const comp=arr(event.competitions)[0]
     if(!comp)return []
     const teams=arr(comp.competitors)
@@ -74,25 +74,25 @@ export function parseEspnLiveScoreboard(payload:unknown):PhoenixLiveGame[]{
     const awayShots=stat(away,['shotsOnGoal','shots','SOG']),homeShots=stat(home,['shotsOnGoal','shots','SOG'])
     const awayPeriods=arr(away.linescores),homePeriods=arr(home.linescores)
     const periods=awayPeriods.length>0&&awayPeriods.length===homePeriods.length
-      ?awayPeriods.slice(0,12).map((v,i)=>({label:String(i+1),away:str(v.displayValue??v.value,25)||'—',
-          home:str(homePeriods[i]?.displayValue??homePeriods[i]?.value,25)||'—'})):[]
+      ?awayPeriods.slice(0,12).map((v,i)=>({ label:String(i+1),away:str(v.displayValue??v.value,25)||'—',
+        home:str(homePeriods[i]?.displayValue??homePeriods[i]?.value,25)||'—' })):[]
     return [{
       id:str(event.id,50),home:fullTeam(home),away:fullTeam(away),
-      ...(score(home)?{homeScore:score(home)}:{}),...(score(away)?{awayScore:score(away)}:{}),
+      ...(score(home)?{ homeScore:score(home) }:{}),...(score(away)?{ awayScore:score(away) }:{}),
       phase,status:fieldText(type,'shortDetail','description','detail')||str(status.displayClock)||'Sin estado',
-      ...(str(status.displayClock)?{clock:str(status.displayClock,35)}:{}),
-      ...(num(status.period)!==undefined?{period:num(status.period)}:{}),
-      ...(playsFrom(situation)?{lastPlay:playsFrom(situation)}:{}),
-      ...(num(situation.outs)!==undefined?{outs:num(situation.outs)}:{}),
-      ...(num(situation.balls)!==undefined?{balls:num(situation.balls)}:{}),
-      ...(num(situation.strikes)!==undefined?{strikes:num(situation.strikes)}:{}),
+      ...(str(status.displayClock)?{ clock:str(status.displayClock,35) }:{}),
+      ...(num(status.period)!==undefined?{ period:num(status.period) }:{}),
+      ...(playsFrom(situation)?{ lastPlay:playsFrom(situation) }:{}),
+      ...(num(situation.outs)!==undefined?{ outs:num(situation.outs) }:{}),
+      ...(num(situation.balls)!==undefined?{ balls:num(situation.balls) }:{}),
+      ...(num(situation.strikes)!==undefined?{ strikes:num(situation.strikes) }:{}),
       ...(Object.hasOwn(situation,'onFirst')||Object.hasOwn(situation,'onSecond')||Object.hasOwn(situation,'onThird')
-        ?{bases:[first,second,third] as [boolean,boolean,boolean]}:{}),
-      ...(fieldText(situation,'downDistanceText','shortDownDistanceText')?{down:fieldText(situation,'downDistanceText','shortDownDistanceText')}:{}),
-      ...(str(situation.possession)?{possession:str(situation.possession,80)}:{}),
-      ...(awayShots&&homeShots?{shots:awayShots+' - '+homeShots}:{}),
-      ...(leadersFrom(comp).length?{leaders:leadersFrom(comp)}:{}),
-      ...(periods.length?{periods}:{}),
+        ?{ bases:[first,second,third] as [boolean,boolean,boolean] }:{}),
+      ...(fieldText(situation,'downDistanceText','shortDownDistanceText')?{ down:fieldText(situation,'downDistanceText','shortDownDistanceText') }:{}),
+      ...(str(situation.possession)?{ possession:str(situation.possession,80) }:{}),
+      ...(awayShots&&homeShots?{ shots:awayShots+' - '+homeShots }:{}),
+      ...(leadersFrom(comp).length?{ leaders:leadersFrom(comp) }:{}),
+      ...(periods.length?{ periods }:{}),
     } satisfies PhoenixLiveGame]
   })
 }
@@ -110,21 +110,21 @@ function enrichSummary(item:PhoenixLiveGame,data:unknown):PhoenixLiveGame{
   const headerCompetition=arr(object(root.header).competitions)[0]
   const situation=object(headerCompetition?.situation)
   const leaders=leadersFrom(root)
-  return {...item,
-    ...(item.lastPlay?{}:latest?{lastPlay:latest.slice(0,190)}:{}),
-    ...(item.outs===undefined&&num(situation.outs)!==undefined?{outs:num(situation.outs)}:{}),
-    ...(item.balls===undefined&&num(situation.balls)!==undefined?{balls:num(situation.balls)}:{}),
-    ...(item.strikes===undefined&&num(situation.strikes)!==undefined?{strikes:num(situation.strikes)}:{}),
+  return { ...item,
+    ...(item.lastPlay?{}:latest?{ lastPlay:latest.slice(0,190) }:{}),
+    ...(item.outs===undefined&&num(situation.outs)!==undefined?{ outs:num(situation.outs) }:{}),
+    ...(item.balls===undefined&&num(situation.balls)!==undefined?{ balls:num(situation.balls) }:{}),
+    ...(item.strikes===undefined&&num(situation.strikes)!==undefined?{ strikes:num(situation.strikes) }:{}),
     ...(item.bases===undefined&&(Object.hasOwn(situation,'onFirst')||Object.hasOwn(situation,'onSecond')||Object.hasOwn(situation,'onThird'))?
-      {bases:[Boolean(situation.onFirst),Boolean(situation.onSecond),Boolean(situation.onThird)] as [boolean,boolean,boolean]}:{}),
-    ...(item.leaders?.length?{}:leaders.length?{leaders}:{}),
+      { bases:[Boolean(situation.onFirst),Boolean(situation.onSecond),Boolean(situation.onThird)] as [boolean,boolean,boolean] }:{}),
+    ...(item.leaders?.length?{}:leaders.length?{ leaders }:{}),
   }
 }
-const memo=new Map<string,{at:number;value:PhoenixLiveGame[];pending?:Promise<PhoenixLiveGame[]>}>()
+const memo=new Map<string,{ at:number;value:PhoenixLiveGame[];pending?:Promise<PhoenixLiveGame[]> }>()
 async function fetchJson(url:string):Promise<unknown>{
-  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),8000)
+  const controller=new AbortController(),timer=setTimeout(()=>{ controller.abort() },8000)
   try{
-    const res=await fetch(url,{signal:controller.signal,headers:{accept:'application/json'},cache:'no-store'})
+    const res=await fetch(url,{ signal:controller.signal,headers:{ accept:'application/json' },cache:'no-store' })
     if(!res.ok)throw new Error('ESPN '+res.status)
     const length=Number(res.headers.get('content-length')??0)
     if(length>3_000_000)throw Error('ESPN payload too large')
@@ -139,44 +139,44 @@ async function liveFeed(url:string):Promise<PhoenixLiveGame[]>{
     const scores=parseEspnLiveScoreboard(await fetchJson(url))
     // Enrich at most four running games for last play/leaders. All other games keep live scores.
     let detailed=0
-    const enriched=await Promise.all(scores.map(async game=>{
+    const enriched=await Promise.all(scores.map(async (game)=>{
       if(game.phase!=='in'||game.lastPlay||detailed>=4)return game
       detailed++
       const endpoint=new URL(url),prefix=endpoint.pathname.replace('/scoreboard','')
       try{return enrichSummary(game,await fetchJson(endpoint.origin+prefix+'/summary?event='+encodeURIComponent(game.id)))}
       catch{return game}
     }))
-    memo.set(url,{at:Date.now(),value:enriched});return enriched
+    memo.set(url,{ at:Date.now(),value:enriched });return enriched
   })()
-  memo.set(url,{at:previous?.at??0,value:previous?.value??[],pending:promise})
+  memo.set(url,{ at:previous?.at??0,value:previous?.value??[],pending:promise })
   try{return await promise}catch(error){
     if(previous)memo.set(url,previous);else memo.delete(url)
     throw error
   }
 }
 /** Shared scoped polling for the entire slate, never once per row. */
-export function SportsLiveProvider({sport,league,date,children}:{
-  sport?:string|undefined;league?:string|undefined;date?:string|undefined;
+export function SportsLiveProvider({ sport,league,date,children }:{
+  sport?:string|undefined;league?:string|undefined;date?:string|undefined
   children:(get:(match:PhoenixLiveLookup)=>PhoenixLiveGame|undefined,meta:PhoenixLiveMeta)=>ReactNode
 }):ReactNode{
   const url=espnLiveUrl(sport,league,date)
-  const [state,setState]=useState<{url:string;games:PhoenixLiveGame[];at:number;error:boolean}>({url:'',games:[],at:0,error:false})
+  const [state,setState]=useState<{ url:string;games:PhoenixLiveGame[];at:number;error:boolean }>({ url:'',games:[],at:0,error:false })
   useEffect(()=>{
     if(!url)return
     let active=true, busy=false,lastAttempt=0
     const update=async()=>{
       if(!active||busy||typeof document!=='undefined'&&document.visibilityState==='hidden')return
-      if(typeof navigator!=='undefined'&&navigator.onLine===false)return
+      if(typeof navigator!=='undefined'&&!navigator.onLine)return
       const cached=memo.get(url)?.value??[]
       const running=cached.some(g=>g.phase==='in')
-      const today=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santo_Domingo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date())
+      const today=new Intl.DateTimeFormat('en-CA',{ timeZone:'America/Santo_Domingo',year:'numeric',month:'2-digit',day:'2-digit' }).format(new Date())
       // One archival lookup is enough; completed scoreboards must not poll indefinitely.
       if(lastAttempt>0&&!running&&(date!==undefined&&date<today||cached.length>0&&cached.every(g=>g.phase==='post')))return
       const interval=running?20_000:60_000
       if(Date.now()-lastAttempt<interval)return
       lastAttempt=Date.now();busy=true
-      try{const result=await liveFeed(url);if(active)setState({url,games:result,at:Date.now(),error:false})}
-      catch{if(active)setState(old=>({...old,error:true}))}
+      try{const result=await liveFeed(url);if(active)setState({ url,games:result,at:Date.now(),error:false })}
+      catch{if(active)setState(old=>({ ...old,error:true }))}
       finally{busy=false}
     }
     void update()
@@ -190,10 +190,10 @@ export function SportsLiveProvider({sport,league,date,children}:{
   },[url])
   const games=state.url===url?state.games:[]
   const get=(lookup:PhoenixLiveLookup)=>matchEspnGame(games,lookup)
-  return children(get,{updatedAt:state.url===url?state.at:0,error:state.url===url&&state.error,
-    enabled:Boolean(url),stale:state.url!==url||!state.at||Date.now()-state.at>95_000})
+  return children(get,{ updatedAt:state.url===url?state.at:0,error:state.url===url&&state.error,
+    enabled:Boolean(url),stale:state.url!==url||!state.at||Date.now()-state.at>95_000 })
 }
-export function SportsLiveFacts({game,meta,sport}:{game?:PhoenixLiveGame|undefined;meta:PhoenixLiveMeta;sport?:string|undefined}):ReactNode{
+export function SportsLiveFacts({ game,meta,sport }:{ game?:PhoenixLiveGame|undefined;meta:PhoenixLiveMeta;sport?:string|undefined }):ReactNode{
   if(!game||game.phase!=='in')return null
   const baseball=sport==='baseball'
   return <div className={css.liveFacts} aria-label="Situación del partido en vivo">
@@ -218,10 +218,10 @@ export function SportsLiveFacts({game,meta,sport}:{game?:PhoenixLiveGame|undefin
       <div>{game.periods.map(x=><span key={x.label}>{x.label}: {x.away}–{x.home}</span>)}</div></details>:null}
   </div>
 }
-export function SportsLiveStamp({meta}:{meta:PhoenixLiveMeta}):ReactNode{
+export function SportsLiveStamp({ meta }:{ meta:PhoenixLiveMeta }):ReactNode{
   if(!meta.enabled)return null
   if(!meta.updatedAt)return <small className={css.liveStamp}>ESPN · {meta.error?'sin datos en vivo disponibles':'consultando marcadores…'}</small>
   return <small className={css.liveStamp}>ESPN · {meta.error||meta.stale?'sin conexión reciente · ':''}
-    {new Date(meta.updatedAt).toLocaleTimeString('es-DO',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false})}
+    {new Date(meta.updatedAt).toLocaleTimeString('es-DO',{ hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false })}
   </small>
 }

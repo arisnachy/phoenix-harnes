@@ -16,10 +16,10 @@ describe('MiniBrowser per-conversation isolation', () => {
   it('refuses cross-conversation target hijacking through an explicit Chrome tool tab ID', () => {
     const scopes = new MiniBrowserScopes()
     scopes.claim('chat-a', 'owned-a')
-    expect(() => scopes.claim('chat-b', 'owned-a')).toThrow('otra conversación')
+    expect(() =>{  scopes.claim('chat-b', 'owned-a') }).toThrow('otra conversación')
     expect(() => scopes.choose('chat-b', ['owned-a'], 'owned-a')).toThrow('otra conversación')
-    expect(() => scopes.select('chat-b', 'owned-a')).toThrow('no pertenece')
-    expect(() => scopes.release('chat-b', 'owned-a')).toThrow('no pertenece')
+    expect(() =>{  scopes.select('chat-b', 'owned-a') }).toThrow('no pertenece')
+    expect(() =>{  scopes.release('chat-b', 'owned-a') }).toThrow('no pertenece')
     expect(scopes.owns('chat-a', 'owned-a')).toBe(true)
   })
 

@@ -101,11 +101,11 @@ describe('interactive scales and spreadsheet', () => {
 
   it('edits cells, recalculates totals and supports undo', () => {
     render(<SpreadsheetSurface spec={parseSpreadsheet(workbook)!} />)
-    expect((screen.getByRole('textbox', { name: 'D4' }) as HTMLInputElement).value).toBe('540')
+    expect((screen.getByRole('textbox', { name: 'D4' })).value).toBe('540')
     fireEvent.change(screen.getByRole('textbox', { name: 'B2' }), { target: { value: '4' } })
-    expect((screen.getByRole('textbox', { name: 'D4' }) as HTMLInputElement).value).toBe('840')
+    expect((screen.getByRole('textbox', { name: 'D4' })).value).toBe('840')
     fireEvent.click(screen.getByRole('button', { name: /Deshacer/ }))
-    expect((screen.getByRole('textbox', { name: 'D4' }) as HTMLInputElement).value).toBe('540')
+    expect((screen.getByRole('textbox', { name: 'D4' })).value).toBe('540')
   })
 
   it('imports quoted CSV and guards exported values from formula injection', () => {
