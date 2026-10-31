@@ -38,6 +38,7 @@ export function UserAvatar({ size = 36, className }: { size?: number; className?
 }
 const empty: AvatarSnapshot = { mode: 'original' }
 const editorKey = 'phoenix-avatar-local-edit-url'
+const modelKey = 'phoenix-avatar-local-edit-model'
 
 /** In-profile photo picker, real crop, original/restyle variants and local editing. */
 export function AvatarPanel() {
@@ -52,6 +53,9 @@ export function AvatarPanel() {
   const [offsetY, setOffsetY] = useState(0)
   const [editor, setEditor] = useState(() => {
     try { return localStorage.getItem(editorKey) ?? '' } catch { return '' }
+  })
+  const [model, setModel] = useState(() => {
+    try { return localStorage.getItem(modelKey) ?? 'local-image-edit' } catch { return 'local-image-edit' }
   })
   const refresh = async () => { setStored(await readAvatar()) }
   useEffect(() => {
@@ -98,13 +102,17 @@ export function AvatarPanel() {
     void act(async () => {
       if (editor.trim() === '') throw new Error('Configura primero un editor local de imágenes compatible con /v1/images/edits.')
       // Explicit user click consents to sharing the normalized image with THIS local service only.
-      const styled = await editAvatarLocally(stored.original as Blob, editor)
+      const styled = await editAvatarLocally(stored.original as Blob, editor, model)
       await storeStyledAvatar(styled)
     }, '¡Listo! Se guardó el retrato transformado. Tu foto original sigue disponible.')
   }
   const updateEditor = (value: string) => {
     setEditor(value)
     try { localStorage.setItem(editorKey, value) } catch { /* Non-essential convenience. */ }
+  }
+  const updateModel = (value: string) => {
+    setModel(value)
+    try { localStorage.setItem(modelKey, value) } catch { /* Non-essential convenience. */ }
   }
   let editorValid = false
   try { if (editor.trim() !== '') { validatedLocalEditor(editor); editorValid = true } } catch { /* Invalid address will be explained. */ }
@@ -147,7 +155,9 @@ export function AvatarPanel() {
           <p className={css.hint}>Retrato semirrealista con luz cálida y acabado premium, conservando tus rasgos. Necesita un editor de imágenes real, compatible con <code>/v1/images/edits</code>; el generador de imágenes nuevas no sirve para editar tu rostro.</p>
           <label htmlFor="user-avatar-editor">Editor de imágenes local (solo localhost)</label>
           <input id="user-avatar-editor" type="url" className={css.endpoint} value={editor} placeholder="http://127.0.0.1:PORT/v1" onChange={e => { updateEditor(e.target.value) }} disabled={busy} />
-          <button type="button" disabled={busy || !editorValid} onClick={transform}>{busy ? 'Procesando…' : 'Transformar con IA'}</button>
+          <label htmlFor="user-avatar-model">Modelo de edición instalado</label>
+          <input id="user-avatar-model" className={css.endpoint} value={model} placeholder="local-image-edit" onChange={e => { updateModel(e.target.value) }} disabled={busy} />
+          <button type="button" disabled={busy || !editorValid || !/^[a-zA-Z0-9._/-]{1,120}$/u.test(model)} onClick={transform}>{busy ? 'Procesando…' : 'Transformar con IA'}</button>
           <p className={css.hint}>Al pulsar transformar, autorizas enviar tu foto normalizada a ese servicio local. Si el servicio no admite edición o falla, tu foto permanece intacta.</p>
         </div>
       )}

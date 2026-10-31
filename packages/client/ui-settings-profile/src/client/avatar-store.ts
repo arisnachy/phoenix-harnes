@@ -142,11 +142,12 @@ export function validatedLocalEditor(value: string): string {
 /** Actual image-to-image operation, never text-to-image substitution.
  * Requires an explicitly configured local OpenAI-compatible /images/edits service.
  */
-export async function editAvatarLocally(original: Blob, endpoint: string): Promise<Blob> {
+export async function editAvatarLocally(original: Blob, endpoint: string, model = 'local-image-edit'): Promise<Blob> {
+  if (!/^[a-zA-Z0-9._/-]{1,120}$/u.test(model)) throw new Error('Invalid local image editing model name')
   const base = validatedLocalEditor(endpoint)
   const form = new FormData()
   form.append('image', original, 'portrait.webp')
-  form.append('model', 'local-image-edit')
+  form.append('model', model)
   form.append('size', '1024x1024')
   form.append('response_format', 'b64_json')
   form.append('prompt',
