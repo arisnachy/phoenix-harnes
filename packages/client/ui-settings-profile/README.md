@@ -25,3 +25,15 @@ This package does not assemble or send provider requests, so it does not affect 
 ## Known Limitations and Deferred Work
 
 - The row requires the Host settings scope to be writable; read-only deployments can display status but cannot save profile changes.
+
+
+## PHOENIX Moments
+
+The Profile page now exposes an opt-in Moments section: ISO country, IANA
+time zone, private recurring dates (`MM-DD | label` and optional
+`| solemn`) and a separate permission checkbox. If enabled, the shell
+renders a small, noninteractive, light-theme-safe calendar accent. It picks
+one of three deterministic variants and respects reduced-motion preferences.
+The accent never generates conversation messages, changes the model persona,
+or uploads personal events. Nager.Date requests only country/year. The public
+provider is not a complete registry of regional/cultural occasions.

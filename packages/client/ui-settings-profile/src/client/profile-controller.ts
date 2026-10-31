@@ -216,6 +216,15 @@ export class UserProfileForm {
   }
 
   private setConsent(field: ConsentField, value: boolean): void {
+    if (field === 'moments' && value) {
+      if (this.draft.countryCode.trim() === '') {
+        const region = typeof navigator === 'undefined' ? undefined : new Intl.Locale(navigator.language).region
+        if (region !== undefined && /^[A-Z]{2}$/.test(region)) this.draft.countryCode = region
+      }
+      if (this.draft.momentsTimeZone.trim() === '') {
+        this.draft.momentsTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone
+      }
+    }
     this.draft.consent = { ...this.draft.consent, [field]: value }
     this.failed = false
     this.saved = false

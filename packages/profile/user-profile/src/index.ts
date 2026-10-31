@@ -252,7 +252,7 @@ export class UserProfileService extends Service {
       if (!profile.consent.moments) return
       const stored = profile.specialDates ?? []
       if (stored.some(row => row.date === candidate.date && row.label === candidate.label) || stored.length >= 100) return
-      await this.scope.replace({ ...profile, specialDates: [...stored, candidate] })
+      await this.scope.update({ specialDates: [...stored, candidate] })
     }).catch((error: unknown) => {
       this.ctx.logger.warn(`user-profile: moments inference ignored: ${String(error)}`)
     })
