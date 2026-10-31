@@ -3,6 +3,7 @@
 import type { InjectFace, PropsLocale, PropsRuntime } from '@phoenix-ai/dsh-client-ui-slots'
 import type { UserProfileRowFace } from './profile-controller.ts'
 import type { AssistantGender, UserAddressMode } from './types.ts'
+import { AvatarPanel } from './UserAvatar.tsx'
 import css from './UserProfileRow.module.css'
 import type {} from '@phoenix-ai/dsh-client-ui-settings/client'
 
@@ -75,6 +76,8 @@ export function UserProfileRow(props: UserProfileRowProps) {
           ) : null}
         </div>
       </div>
+
+      <AvatarPanel />
 
       <div className={css.group}>
         <h3 className={css.groupTitle}>{t('aboutYouSection')}</h3>

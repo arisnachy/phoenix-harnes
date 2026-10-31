@@ -10,7 +10,7 @@ const EVENT = 'phoenix-user-portrait-changed'
 const MAX_UPLOAD = 8 * 1024 * 1024
 const MAX_RASTER = 15 * 1024 * 1024
 let channel: BroadcastChannel | undefined
-if (typeof BroadcastChannel !== 'undefined') {
+if (typeof window !== 'undefined' && typeof BroadcastChannel !== 'undefined') {
   channel = new BroadcastChannel(EVENT)
   channel.onmessage = () => { window.dispatchEvent(new Event(EVENT)) }
 }
