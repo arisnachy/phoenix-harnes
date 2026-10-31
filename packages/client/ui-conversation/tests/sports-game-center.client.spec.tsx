@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach,describe,expect,it,vi } from 'vitest'
-import { cleanup,fireEvent,render,screen,waitFor } from '@testing-library/react'
+import { act,cleanup,fireEvent,render,screen,waitFor } from '@testing-library/react'
 import { SportsGameCenter,parseEspnGamePlays } from '../src/client/chat/SportsGameCenter.tsx'
 import { espnLiveSummaryUrl } from '../src/client/chat/SportsLive.tsx'
 afterEach(()=>{cleanup();vi.unstubAllGlobals()})
@@ -26,6 +26,32 @@ describe('compact ESPN game center',()=>{
     fireEvent.click(screen.getByRole('button',{ name:/Seguir partido/ }))
     await waitFor(()=>{expect(screen.getByText('Two-point shot')).toBeTruthy()})
     expect(fetcher).toHaveBeenCalledTimes(1)
+  })
+  it('aborts the ESPN request when the user closes the game center',async()=>{
+    const signals:AbortSignal[]=[]
+    vi.stubGlobal('fetch',vi.fn((_url:unknown,init:RequestInit)=>{
+      if(init.signal)signals.push(init.signal)
+      return new Promise<Response>(()=>{})
+    }))
+    render(<SportsGameCenter sport="basketball" league="nba" eventId="40183001" phase="post"/>)
+    fireEvent.click(screen.getByRole('button',{ name:/Seguir partido/ }))
+    await waitFor(()=>{expect(signals).toHaveLength(1)})
+    fireEvent.click(screen.getByRole('button',{ name:/Cerrar seguimiento/ }))
+    expect(signals[0]?.aborted).toBe(true)
+  })
+  it('shows a timeout error rather than leaving the ESPN loading indicator stuck',async()=>{
+    vi.useFakeTimers()
+    try{
+      vi.stubGlobal('fetch',vi.fn((_url:unknown,init:RequestInit)=>new Promise<Response>((_resolve,reject)=>{
+        init.signal?.addEventListener('abort',()=>reject(new DOMException('Aborted','AbortError')),{ once:true })
+      })))
+      render(<SportsGameCenter sport="basketball" league="nba" eventId="40183001" phase="post"/>)
+      fireEvent.click(screen.getByRole('button',{ name:/Seguir partido/ }))
+      await act(async()=>{await vi.advanceTimersByTimeAsync(9000)})
+      expect(screen.getByText(/ESPN no respondió/)).toBeTruthy()
+      expect(screen.queryByText(/Consultando cronología/)).toBeNull()
+      expect(screen.queryByText(/ESPN no publicó jugadas/)).toBeNull()
+    }finally{vi.useRealTimers()}
   })
   it('does not treat MLB gamePk as a confirmed ESPN event ID',()=>{
     render(<SportsGameCenter sport="baseball" league="MLB" eventId="849802" phase="in"/>)

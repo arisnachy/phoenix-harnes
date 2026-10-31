@@ -56,7 +56,8 @@ export function SportsGameCenter({ sport,league,eventId,phase,game }:{
       busy=true
       controller=new AbortController()
       const current=controller
-      const timeout=setTimeout(()=>{current.abort()},9000)
+      let timedOut=false
+      const timeout=setTimeout(()=>{timedOut=true;current.abort()},9000)
       setState(s=>({ url,plays:s.url===url?s.plays:[],at:s.url===url?s.at:0,error:false,loading:true }))
       try{
         const res=await fetch(url,{ signal:current.signal,cache:'no-store',headers:{ accept:'application/json' } })
@@ -65,7 +66,8 @@ export function SportsGameCenter({ sport,league,eventId,phase,game }:{
         const value=await res.json() as unknown
         if(!current.signal.aborted)setState({ url,plays:parseEspnGamePlays(value),at:Date.now(),error:false,loading:false })
       }catch{
-        if(!current.signal.aborted)setState(s=>({ ...s,url,error:true,loading:false }))
+        if(active&&(timedOut||!current.signal.aborted))
+          setState(s=>({ ...s,url,error:true,loading:false }))
       }finally{clearTimeout(timeout);busy=false}
     }
     void update()
@@ -83,7 +85,7 @@ export function SportsGameCenter({ sport,league,eventId,phase,game }:{
           'Sin actualización confirmada'}</small></div>
       {valid&&state.error&&<p role="status">ESPN no respondió; se muestran los últimos datos recibidos.</p>}
       {(!valid||state.loading&&!state.at)&&<p role="status">Consultando cronología…</p>}
-      {valid&&!state.loading&&!plays.length&&<p>ESPN no publicó jugadas detalladas para este encuentro.</p>}
+      {valid&&!state.loading&&!state.error&&!plays.length&&<p>ESPN no publicó jugadas detalladas para este encuentro.</p>}
       {plays.length>0&&<ol className={css.plays}>{plays.map(play=><li key={play.id}>
         <span className={css.minute}>{[play.period,play.clock].filter(Boolean).join(' · ')||'—'}</span>
         <span className={css.description}>{play.text}
