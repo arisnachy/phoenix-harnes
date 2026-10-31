@@ -367,3 +367,83 @@
   color:var(--dsw-alias-label-secondary,#777)}
 .sportsStakeCalculator .sportsTicketTotal{padding:0;margin:0;grid-template-columns:repeat(3,minmax(0,1fr))}
 @media(max-width:540px){.sportsStakeCalculator .sportsTicketTotal{grid-template-columns:repeat(2,minmax(0,1fr))}}
+/* PHOENIX Sports Lab: dense, ESPN-style glance surfaces; full evidence on demand.
+ * This block deliberately comes after legacy layouts to preserve compact overrides. */
+.sportsGameCompact{
+  max-width:680px;padding:12px 14px;margin:8px 0 12px;border-radius:14px;
+  box-shadow:none
+}
+.sportsGameCompact .sportsHeadline{gap:8px;align-items:center}
+.sportsGameCompact .sportsHeadline h3{font-size:15px;line-height:1.3;margin:3px 0}
+.sportsGameCompact .sportsHeadline p{font-size:11px}
+.sportsGameCompact .sportsKicker{font-size:9px;letter-spacing:.055em}
+.sportsGameCompact .sportsCompetition{font-size:10px;margin-top:2px}
+.sportsGameCompact .sportsStatus{font-size:10px;padding:4px 7px}
+.sportsGameCompact .sportsVenue{
+  margin-top:7px;padding:7px 0;gap:5px 12px;font-size:10px
+}
+.sportsGameCompact .sportsVersus{gap:8px;padding:11px 0 8px}
+.sportsGameCompact .sportsTeam{gap:3px}
+.sportsGameCompact .sportsTeam .sportsPortrait{
+  width:43px;height:43px;font-size:11px
+}
+.sportsGameCompact .sportsTeam strong{font-size:12px;line-height:1.25}
+.sportsGameCompact .sportsTeam small{font-size:10px}
+.sportsGameCompact .sportsTeam b{font-size:20px}
+.sportsGameCompact .sportsVs{font-size:10px}
+.sportsGameCompact .sportsSourceBar{
+  margin-top:8px;padding-top:8px;font-size:10px;gap:6px
+}
+.sportsGameCompact .sportsSourceBar small{font-size:10px}
+.sportsGameDisclosure{
+  border-top:1px solid var(--dsw-alias-border-subtle,rgba(125,125,125,.2));
+  margin-top:7px
+}
+.sportsGameDisclosure>summary,.sportsSlateContext>summary{
+  cursor:pointer;font-size:11px;font-weight:700;
+  color:var(--dsw-alias-label-secondary,#6b7280);
+  padding:8px 0;list-style-position:inside
+}
+.sportsGameDisclosure>summary:focus-visible,.sportsSlateContext>summary:focus-visible{
+  outline:2px solid var(--dsw-alias-accent-primary,#b77535);outline-offset:2px
+}
+.sportsGameDisclosure>summary span{float:right}
+.sportsGameExpanded{padding-bottom:7px}
+.sportsGameExpanded .sportsDetailSection{margin-top:9px;padding-top:10px}
+.sportsGameExpanded .sportsFacts{margin-top:10px}
+.sportsPortraitPlayer img{object-fit:cover;object-position:center top}
+.sportsSlateHeader{padding:10px 12px 9px}
+.sportsSlateHeader h3{font-size:15px;line-height:1.2;margin:2px 0}
+.sportsSlateCount{font-size:10px;padding:4px 7px}
+.sportsSlateGrid{
+  padding:7px;gap:6px;
+  grid-template-columns:repeat(auto-fit,minmax(min(100%,205px),1fr))
+}
+.sportsSlateEvent{padding:8px 9px;border-radius:10px;gap:4px;box-shadow:none}
+.sportsSlateMeta{font-size:10px;gap:4px;align-items:center}
+.sportsSlatePhase{padding:2px 5px;font-size:9px}
+.sportsSlateMatch{gap:4px}
+.sportsSlateMatch>div{gap:6px}
+.sportsSlateMatch .sportsPortrait{width:24px;height:24px;flex-basis:24px;font-size:9px}
+.sportsSlateMatch strong{font-size:11px;line-height:1.2}
+.sportsSlateMatch small{font-size:9px}
+.sportsSlateMatch b{font-size:13px}
+.sportsSlateVs{padding-left:30px;font-size:9px}
+.sportsSlateFavorite{
+  padding:4px 6px;font-size:10px;font-weight:600
+}
+.sportsSlateContext{
+  margin:0;padding:0;border-top:1px solid var(--dsw-alias-border-subtle,rgba(125,125,125,.14))
+}
+.sportsSlateContext>summary{font-size:10px;padding:5px 0}
+.sportsSlateContext small{margin:4px 0}
+.sportsSlateEvent .sportsSlateAction{margin-top:0;padding:3px 0;font-size:10px}
+.sportsSlate .sportsSourceBar{padding:7px 11px;margin-top:0}
+@media(max-width:560px){
+  .sportsGameCompact{padding:10px 11px;border-radius:12px}
+  .sportsGameCompact .sportsVersus{grid-template-columns:minmax(0,1fr) 28px minmax(0,1fr)}
+  .sportsGameCompact .sportsTeam .sportsPortrait{width:38px;height:38px}
+  .sportsSlateHeader{padding:9px 10px}
+  .sportsSlateHeader h3{font-size:14px}
+  .sportsSlateGrid{padding:6px;gap:6px}
+}
