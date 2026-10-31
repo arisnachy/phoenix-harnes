@@ -1,12 +1,14 @@
 /** Calendar-aware, consent-gated moments. Facts are context, never canned greetings. */
 import type { UserProfileSettings, PersonalMoment } from './types.ts'
 
+/** One occasion that Kira may consider without receiving a scripted greeting. */
 export interface CalendarMoment {
   readonly id: string
   readonly label: string
   readonly kind: 'personal' | 'patriotic' | 'public' | 'cultural' | 'solemn'
   readonly source: 'profile' | 'calendar' | 'regional'
 }
+/** Verified external holiday record, limited to a country and civil date. */
 export interface PublicHoliday {
   readonly date: string
   readonly name: string
@@ -34,7 +36,11 @@ const MONTHS: Readonly<Record<string, string>> = {
   noviembre: '11', diciembre: '12',
 }
 
-/** Resolve an instant in an explicitly configured IANA zone (or the host's zone). */
+/** Resolve an instant in the requested civil time zone.
+ * @param now - absolute instant being checked.
+ * @param zone - optional IANA time zone.
+ * @returns calendar date YYYY-MM-DD.
+ */
 export function calendarDay(now: Date, zone?: string): string {
   const format = new Intl.DateTimeFormat('en-US', {
     year: 'numeric', month: '2-digit', day: '2-digit',
@@ -50,7 +56,10 @@ function validDay(value: string): boolean {
   const date = new Date(Date.UTC(year, month - 1, day))
   return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day
 }
-/** Annual dates accept MM-DD and full YYYY-MM-DD dates. Leap-day dates are valid. */
+/** Validate annual or full civil dates, including leap day.
+ * @param value - MM-DD or YYYY-MM-DD.
+ * @returns true for a real calendar day.
+ */
 export function validAnnualDay(value: string): boolean {
   return /^\d{2}-\d{2}$/.test(value)
     ? validDay(`2024-${value}`)
@@ -66,7 +75,12 @@ function kindFromHoliday(name: string): CalendarMoment['kind'] {
       ? 'solemn'
       : 'public'
 }
-/** Priority: personal, national/regional, public, then global; deduplicate labels. */
+/** Resolve today's events in priority order and remove duplicate labels.
+ * @param profile - consented profile settings; no context without opt-in.
+ * @param today - civil date in the user's zone.
+ * @param publicHolidays - validated country calendar records.
+ * @returns user-visible and model-visible occasion facts.
+ */
 export function momentsForDay(
   profile: UserProfileSettings,
   today: string,
@@ -103,7 +117,12 @@ export function momentsForDay(
   return results
 }
 
-/** Only country and year are transmitted to the holiday provider, never personal profile fields. */
+/** Read public holidays, sending no personal identifiers.
+ * @param country - ISO 3166-1 alpha-2 code.
+ * @param year - calendar year to request.
+ * @param fetcher - network transport, injectable for tests.
+ * @returns validated holiday entries or an empty list for invalid requests.
+ */
 export async function fetchPublicHolidays(country: string, year: number, fetcher: typeof fetch = fetch): Promise<PublicHoliday[]> {
   if (!/^[A-Z]{2}$/.test(country) || !Number.isInteger(year) || year < 1900 || year > 2200) return []
   const response = await fetcher(`${HOLIDAY_API}/${year}/${country}`, { signal: AbortSignal.timeout(5000) })
@@ -122,7 +141,12 @@ export async function fetchPublicHolidays(country: string, year: number, fetcher
     }]
   })
 }
-/** Compact, non-directive context; Kira decides whether to mention a moment. */
+/** Generate neutral facts for natural conversation, never canned greetings.
+ * @param profile - durable profile with permissions.
+ * @param holidays - current public calendar cache.
+ * @param now - injected clock instant.
+ * @returns bounded prompt context or an empty string when irrelevant.
+ */
 export function renderMomentContext(profile: UserProfileSettings, holidays: readonly PublicHoliday[], now = new Date()): string {
   if (!profile.consent.moments) return ''
   const today = calendarDay(now, profile.momentsTimeZone)
@@ -134,7 +158,10 @@ export function renderMomentContext(profile: UserProfileSettings, holidays: read
     'These are facts, not a request to greet or send a message. React naturally only if appropriate to the conversation; never use scripted greetings or repeat a celebration in every response. Treat solemn occasions respectfully. Do not infer personal relationships beyond what the user authorized.',
   ].join('\n')
 }
-/** A conservative Spanish detector; only saves when the user enabled moments memory. */
+/** Recognize clearly declared personal dates in Spanish user messages.
+ * @param text - text provided by the human user.
+ * @returns candidate personal moment or undefined when evidence is absent.
+ */
 export function detectPersonalMoment(text: string): PersonalMoment | undefined {
   if (!/\b(mi hija|mi hijo|mi esposa|mi esposo|mi pareja|mi madre|mi padre|mi hermano|mi hermana|mi cumpleaños|mi cumpleaños|nuestro aniversario)\b/i.test(text)) return undefined
   if (!/\b(cumple|cumpleaños|aniversario)\b/i.test(text)) return undefined

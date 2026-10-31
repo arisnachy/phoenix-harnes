@@ -51,7 +51,8 @@
     "@phoenix-ai/dsh-client-runtime": "workspace:^",
     "@phoenix-ai/dsh-client-ui-settings": "workspace:^",
     "@phoenix-ai/dsh-invariants": "workspace:^",
-    "@phoenix-ai/dsh-client-connection": "workspace:^"
+    "@phoenix-ai/dsh-client-connection": "workspace:^",
+    "@phoenix-ai/dsh-client-ui-layout": "workspace:^"
   },
   "devDependencies": {
     "@phoenix-ai/cordis": "workspace:^",
