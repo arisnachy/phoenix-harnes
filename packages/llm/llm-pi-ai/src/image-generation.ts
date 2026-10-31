@@ -872,7 +872,8 @@ export function latestProfileReference(events: readonly { type: string; data: un
     if (event?.type !== 'user/message') continue
     if (typeof event.data !== 'object' || event.data === null) return undefined
     const msg = event.data as { source?: { kind?: string }; content?: readonly ContentBlock[] }
-    if (msg.source?.kind !== 'user' || !Array.isArray(msg.content)) return undefined
+    if (msg.source?.kind !== 'user') continue
+    if (!Array.isArray(msg.content)) return undefined
     const block = msg.content.find(item =>
       item.type === 'image' && item.attachment.name === 'referencia-original-del-usuario.webp')
     return block?.type === 'image' ? block.attachment : undefined
@@ -886,7 +887,8 @@ function latestUserText(events: readonly { type: string; data: unknown }[]): str
     if (event?.type !== 'user/message') continue
     if (typeof event.data !== 'object' || event.data === null) return ''
     const msg = event.data as { source?: { kind?: string }; content?: readonly ContentBlock[] }
-    if (msg.source?.kind !== 'user' || !Array.isArray(msg.content)) return ''
+    if (msg.source?.kind !== 'user') continue
+    if (!Array.isArray(msg.content)) return ''
     return msg.content.filter(item => item.type === 'text')
       .map(item => item.type === 'text' ? item.text : '').join(' ')
   }
@@ -895,7 +897,7 @@ function latestUserText(events: readonly { type: string; data: unknown }[]): str
 export function requestsProfileLikeness(text: string): boolean {
   const normalized = text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/gu, '')
   return /\b(?:foto|imagen|retrato|selfie|photograph|image|portrait)\b/u.test(normalized)
-    && /\b(?:mia|mio|conmigo|de mi|yo en|salga yo|aparezca yo|of me|myself|my face)\b/u.test(normalized)
+    && /\b(?:mia|mio|conmigo|de mi (?:cara|rostro|persona|en|como)|yo en|salga yo|aparezca yo|mi cara|mi rostro|of me|myself|my face)\b/u.test(normalized)
 }
 function generationPrompt(
   prompt: string,
