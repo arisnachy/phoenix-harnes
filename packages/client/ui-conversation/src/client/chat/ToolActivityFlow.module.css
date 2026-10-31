@@ -211,3 +211,9 @@
   font-size: 12px;
 }
 .followLatest:focus-visible { outline: 2px solid var(--browser-accent); }
+
+/* Tools are context, not the principal speaker: keep the conversation first. */
+.toggle { min-height: 25px; gap: 6px; font-size: 12px; font-weight: 500; }
+.icon { width: 15px; height: 15px; }
+.receipt { padding-left: 21px; font-size: 11px; color: var(--dsw-alias-label-tertiary); }
+.body { padding-left: 21px; }
