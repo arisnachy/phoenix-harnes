@@ -20,6 +20,8 @@ Local process providers for [`@phoenix-ai/dsh-voice`](../voice/). The plugin sta
 
 When `kokoroCommand` is present, the `kokoro` provider receives normalized UTF-8 text on stdin and has priority over the system provider. Otherwise the plugin detects the installed Windows Kokoro daemon; its model remains resident between utterances. The client sends the actual text/UI language for each utterance; the Host defaults to es-DO for older clients. The Kokoro v1.0 engine refuses unsupported languages instead of pronouncing them using English rules, and rejects excessive output duration that can indicate repeated or invented speech. Windows system TTS selects an installed voice matching the language, or returns control to the browser speech fallback. The active assistant profile selects `ef_dora` (feminine) or `em_alex` (masculine) in Spanish, and `af_heart` or `am_michael` in English. Codex Realtime remains the first choice, Kokoro is second, and native system TTS is third. `sttCommand` receives audio bytes on stdin and must print one transcript to stdout. The system provider uses PowerShell `System.Speech` on Windows, `say` on macOS, and `espeak-ng` on Linux.
 
+Before Spanish phonemization, the bundled daemon normalizes decomposed Unicode accents to NFC, removes Markdown and visual symbols, and drops inverted `¡`/`¿` markers. Sentence punctuation such as commas, periods, question marks, exclamation marks, and ellipses remains so Kokoro can produce pauses and sentence intonation without reading formatting characters aloud.
+
 Commands run with `shell: false`, explicit arguments, hidden Windows windows, bounded stdin/stdout pipes, and abort handling. No secret is put in command arguments or logs by this package.
 
 ## Extension points

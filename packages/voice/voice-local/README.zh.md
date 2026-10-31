@@ -22,6 +22,8 @@
 
 西班牙语女性助手使用 `ef_dora`，男性助手使用 `em_alex`；英语使用 `af_heart` 和 `am_michael`。Kokoro 通过隔离环境内的 eSpeak NG 实现西班牙语音素转换。对话的优先级为 Codex Realtime、Kokoro、平台语音，然后客户端浏览器语音回退。
 
+在西班牙语音素转换前，内置守护进程会将分解形式的 Unicode 重音规范化为 NFC，删除 Markdown 和视觉符号，并去掉倒置的 `¡`/`¿` 标记。同时保留逗号、句号、问号、感叹号和省略号等承载停顿与语气的标点，避免把格式字符读出来。
+
 进程通过 `shell: false` 启动，并通过 stdin/stdout 传递文本或语音请求。系统 TTS 在 Windows 使用 `System.Speech`，macOS 使用 `say`，Linux 使用 `espeak-ng`。
 
 ## 扩展点

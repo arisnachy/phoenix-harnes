@@ -15,6 +15,7 @@ import re
 import sys
 import tempfile
 import threading
+import unicodedata
 import wave
 from pathlib import Path
 from typing import Any
@@ -65,9 +66,35 @@ phonemizers: dict[str, Any] = {}
 
 
 def spoken_text(text: str) -> str:
-    """Remove non-spoken marks before phonemization (also for old Host clients)."""
+    """Prepare display text for Kokoro without destroying prosodic punctuation.
+
+    Misaki's Spanish grapheme-to-phoneme converter treats inverted Spanish
+    punctuation and Markdown delimiters as pronounceable input.  Keep normal
+    sentence punctuation because Kokoro uses it for pauses and intonation,
+    while removing visual syntax and standalone accent marks at this process
+    boundary as well as in the Host client.
+    """
+    text = unicodedata.normalize("NFC", text)
+    text = re.sub(r"```[\s\S]*?```", " ", text)
+    text = re.sub(r"`([^`]*)`", r"\1", text)
+    text = re.sub(r"!?\[([^\]]*)\]\([^)]*\)", r"\1", text)
+    text = re.sub(r"https?://\S+", " ", text, flags=re.IGNORECASE)
+    text = re.sub(r"<[^>]*>", " ", text)
+    text = re.sub(r"^\s*#{1,6}\s*", "", text, flags=re.MULTILINE)
+    text = re.sub(r"^\s*[-*+]\s+", "", text, flags=re.MULTILINE)
+    text = re.sub(r"[#>*_~|{}\[\]\\]", " ", text)
     text = re.sub(r"[®™℠©]", " ", text)
+    text = re.sub(r"[¡¿]", " ", text)
+    text = re.sub(r"[`´]", "", text)
     text = re.sub(r"[\u200b-\u200f\u202a-\u202e\u2060\ufeff]", "", text)
+    # Keep punctuation that carries pauses or sentence mood.  Remove pictorial
+    # symbols and invisible format characters; currency, math, dashes, and
+    # other language punctuation remain available to the phonemizer.
+    text = "".join(
+        " " if unicodedata.category(char) in {"So", "Sk", "Cf"} and not char.isspace() else char
+        for char in text
+    )
+    text = re.sub(r"\s+([.,!?;:…])", r"\1", text)
     return " ".join(text.split())
 
 
