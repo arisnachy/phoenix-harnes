@@ -102,7 +102,7 @@ export function AvatarPanel({ transformAvatar }: { transformAvatar: (photo: Blob
     void act(async () => {
       const result = await transformAvatar(stored.original as Blob)
       setSuggested(result)
-    }, 'Retrato generado. Comprueba que conserva tus rasgos antes de guardarlo.')
+    }, 'Retrato estilo Kira generado. Comprueba que el rostro se reconoce y que el estilo es futurista.')
   }
   const confirm = () => {
     if (suggested === undefined) return
@@ -209,7 +209,8 @@ export function AvatarPanel({ transformAvatar }: { transformAvatar: (photo: Blob
         <div className={css.transform}>
           <h4>Transformar al estilo del equipo Kira</h4>
           <p className={css.hint}>
-            Codex utiliza tu foto real como referencia para crear un retrato con luz cálida y acabado premium.
+            Codex utiliza tu foto real para crear un personaje cinematográfico del universo Kira:
+            ciudad futurista, hologramas azules y violetas, vestuario tecnológico e iluminación dramática.
             No necesitas configurar un servidor local ni una clave API adicional.
             La foto original siempre se conserva.
           </p>
