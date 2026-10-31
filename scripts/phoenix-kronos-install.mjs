@@ -31,8 +31,13 @@ try {
     run(binary, [...prefix, '-m', 'venv', join(home, '.venv')])
   }
   if (!existsSync(join(source, 'model'))) {
-    run('git', ['init', source])
-    run('git', ['-C', source, 'remote', 'add', 'origin', 'https://github.com/shiyu-coder/Kronos.git'])
+    if (!existsSync(join(source, '.git'))) run('git', ['init', source])
+    const remote = spawnSync('git', ['-C', source, 'remote', 'get-url', 'origin'], { encoding: 'utf8' })
+    if (remote.status !== 0) {
+      run('git', ['-C', source, 'remote', 'add', 'origin', 'https://github.com/shiyu-coder/Kronos.git'])
+    } else if (remote.stdout.trim() !== 'https://github.com/shiyu-coder/Kronos.git') {
+      throw new Error('Unexpected Kronos source remote; refusing untrusted dependency')
+    }
     run('git', ['-C', source, 'fetch', '--depth=1', 'origin', checkout])
     run('git', ['-C', source, 'checkout', '--detach', 'FETCH_HEAD'])
   } else {
