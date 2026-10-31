@@ -147,8 +147,7 @@
       "project": [
         "src/**/*.ts",
         "src/**/*.tsx"
-      ],
-
+      ]
     },
     "packages/client/ui-directory-picker-browse": {
       "entry": [
