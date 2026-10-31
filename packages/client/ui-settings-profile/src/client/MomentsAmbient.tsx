@@ -58,7 +58,7 @@ export function MomentsAmbient(props: { scope: SettingsScope<UserProfileSettings
     const controller = new AbortController()
     void fetch(`https://date.nager.at/api/v3/PublicHolidays/${year}/${country}`, { signal: controller.signal })
       .then(response => response.ok ? response.json() as Promise<unknown> : [])
-      .then(data => {
+      .then((data) => {
         if (controller.signal.aborted || !Array.isArray(data)) return
         setHolidays(data.slice(0, 500).flatMap((item): Holiday[] => {
           if (typeof item !== 'object' || item === null) return []
@@ -66,7 +66,7 @@ export function MomentsAmbient(props: { scope: SettingsScope<UserProfileSettings
           return typeof holiday.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(holiday.date)
             && holiday.countryCode === country && typeof holiday.name === 'string' && holiday.name.length < 120
             ? [{ date: holiday.date, name: holiday.name, countryCode: country,
-                ...(typeof holiday.localName === 'string' && holiday.localName.length < 120 ? { localName: holiday.localName } : {}) }]
+              ...(typeof holiday.localName === 'string' && holiday.localName.length < 120 ? { localName: holiday.localName } : {}) }]
             : []
         }))
       }).catch(() => { if (!controller.signal.aborted) setHolidays([]) })

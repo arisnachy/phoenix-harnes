@@ -163,9 +163,11 @@ export function renderMomentContext(profile: UserProfileSettings, holidays: read
  * @returns candidate personal moment or undefined when evidence is absent.
  */
 export function detectPersonalMoment(text: string): PersonalMoment | undefined {
-  if (!/\b(mi hija|mi hijo|mi esposa|mi esposo|mi pareja|mi madre|mi padre|mi hermano|mi hermana|mi cumpleaños|mi cumpleaños|nuestro aniversario)\b/i.test(text)) return undefined
+  const personalContext = /\b(mi (?:hija|hijo|esposa|esposo|pareja|madre|padre|hermano|hermana|cumpleaños)|nuestro aniversario)\b/i
+  if (!personalContext.test(text)) return undefined
   if (!/\b(cumple|cumpleaños|aniversario)\b/i.test(text)) return undefined
-  const match = /\b(\d{1,2})\s+de\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)\b/i.exec(text)
+  const months = 'enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre'
+  const match = new RegExp(`\\b(\\d{1,2})\\s+de\\s+(${months})\\b`, 'i').exec(text)
   if (match === null) return undefined
   const day = Number(match[1])
   const month = MONTHS[match[2]?.toLocaleLowerCase() ?? '']
