@@ -155,6 +155,27 @@ export async function normalizeAvatar(image: Blob, zoom = 1, offsetX = 0, offset
     return output
   } finally { bitmap.close() }
 }
+/** Compute a safe square crop with the eyes/face filling the small circular avatar. */
+export function faceAvatarCrop(
+  width: number, height: number,
+  face?: { x: number; y: number; width: number; height: number },
+  zoom = 1,
+): { x: number; y: number; side: number } {
+  const factor = Math.max(0.8, Math.min(1.5, Number.isFinite(zoom) ? zoom : 1))
+  const baseSide = Math.min(width, height)
+  const requested = face === undefined
+    ? baseSide * 0.58 / factor
+    : Math.max(face.width * 1.7, face.height * 1.45) / factor
+  const side = Math.min(baseSide, Math.max(64, requested))
+  const centerX = face === undefined ? width * 0.5 : face.x + face.width * 0.5
+  const centerY = face === undefined ? height * 0.40 : face.y + face.height * 0.51
+  return {
+    x: Math.max(0, Math.min(width - side, centerX - side / 2)),
+    y: Math.max(0, Math.min(height - side, centerY - side / 2)),
+    side,
+  }
+}
+
 /** Produce the compact chat avatar from a genuine face crop, never from the full scene.
  * Native face detection is optional; unsupported browsers use an upper-center portrait crop.
  */
@@ -181,16 +202,7 @@ export async function createFaceAvatar(image: Blob, zoom = 1): Promise<Blob> {
         )[0]?.boundingBox
       } catch { /* FaceDetector is experimental; preserve deterministic fallback. */ }
     }
-    const factor = Math.max(0.8, Math.min(1.5, zoom))
-    const baseSide = Math.min(bitmap.width, bitmap.height)
-    const side = face === undefined
-      ? baseSide * 0.58 / factor
-      : Math.max(face.width * 1.7, face.height * 1.45) / factor
-    const crop = Math.min(baseSide, Math.max(64, side))
-    const centerX = face === undefined ? bitmap.width * 0.5 : face.x + face.width * 0.5
-    const centerY = face === undefined ? bitmap.height * 0.40 : face.y + face.height * 0.51
-    const x = Math.max(0, Math.min(bitmap.width - crop, centerX - crop / 2))
-    const y = Math.max(0, Math.min(bitmap.height - crop, centerY - crop / 2))
+    const { x, y, side: crop } = faceAvatarCrop(bitmap.width, bitmap.height, face, zoom)
     const canvas = document.createElement('canvas')
     canvas.width = 768
     canvas.height = 768
