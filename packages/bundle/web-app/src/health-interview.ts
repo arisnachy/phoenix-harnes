@@ -107,7 +107,7 @@ export function localInterviewPlan(
     throw new TypeError('Preguntas registradas inválidas')
   const specialtyText=s.toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/gu,'')
   const pathway=/(?:dolor abdominal|abdomen|barriga)/u.test(c)?'abdominal':
-    /(?:cefalea|migraña|dolor de cabeza)/u.test(c)?'headache':
+    /(?:cefalea|migrana|dolor de cabeza)/u.test(c)?'headache':
       /(?:ansiedad|depresion|tristeza|angustia)/u.test(c)?'mental-health':
         /(?:tos|disnea|dificultad respiratoria|falta de aire)/u.test(c)||/(?:neumologia)/u.test(specialtyText)?'respiratory':
           /(?:dolor toracico|dolor en el pecho|palpitaciones)/u.test(c)||/(?:cardiologia)/u.test(specialtyText)?'cardiovascular':
