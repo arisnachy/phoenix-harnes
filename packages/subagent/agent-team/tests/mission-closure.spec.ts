@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { SessionEvent } from '@phoenix-ai/dsh-session'
-import { teamMissionClosed, unfinishedMissionTodos, unfinishedMissionGoal, unfinishedMissionTeamTasks, unfinishedMissionWork } from '../src/mission-closure.ts'
+import { teamMissionClosed, unfinishedMissionTodos, unfinishedMissionGoal, unfinishedMissionTeamTasks, unfinishedMissionTeamMembers, unfinishedMissionWork } from '../src/mission-closure.ts'
 
 const start = { type: 'turn/start', data: { turn: 1 } } as unknown as SessionEvent
 const finished = { type: 'turn/end', data: { turn: 1, reason: { kind: 'completed' } } } as unknown as SessionEvent
@@ -50,7 +50,27 @@ const teamTask = (status: 'pending' | 'in_progress' | 'completed', revision: num
   },
 }) as unknown as SessionEvent
 
+const teammate = (status: 'provisioning' | 'working' | 'done' | 'failed', id = 'senda'): SessionEvent => ({
+  type: 'team/chat-participant', data: { version: 1, participant: {
+    id, name: 'Senda', role: 'skill.engineering', status, missionId: 'root',
+  } },
+}) as unknown as SessionEvent
+
 describe('Kira Team closure after verified completion', () => {
+  it('does not close a mission while Senda is still working, even after Kira says done', () => {
+    const inProgress = [human, start, teammate('working')]
+    expect(unfinishedMissionTeamMembers(inProgress)).toBe(true)
+    expect(teamMissionClosed([...inProgress, finished])).toBe(false)
+    expect(teamMissionClosed([...inProgress,
+      browserCall('send', 'mcp__phoenix_browser__submit_form'), browserResult('send'),
+      browserCall('check', 'mcp__phoenix_browser__wait_for'), browserResult('check'),
+      kiraAnswer('No queda trabajo pendiente que justifique delegar.'),
+    ])).toBe(false)
+    expect(teamMissionClosed([...inProgress, teammate('done'), finished])).toBe(true)
+    expect(unfinishedMissionTeamMembers([...inProgress, teammate('failed')])).toBe(false)
+    expect(teamMissionClosed([...inProgress, cancelled])).toBe(true)
+  })
+
   it('does not equate a model turn end with completion of an active durable Goal', () => {
     expect(unfinishedMissionGoal([human, goalChange('active')])).toBe(true)
     expect(unfinishedMissionWork([human, goalChange('active')])).toBe(true)

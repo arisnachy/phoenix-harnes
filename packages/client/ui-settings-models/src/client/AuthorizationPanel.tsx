@@ -1,5 +1,6 @@
 import { AssistantMailPanel, type AssistantMailClient } from './AssistantMailPanel.tsx'
 import { TelegramConnectorSetup, type TelegramBotClient } from './TelegramConnectorSetup.tsx'
+import { TheOddsApiConnectorSetup,type TheOddsApiClient,type TheOddsApiSnapshot } from './TheOddsApiConnectorSetup.tsx'
 import { BinanceConnectorSetup } from './BinanceConnectorSetup.tsx'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
@@ -244,6 +245,7 @@ export interface ConnectorsSettingsSectionProps extends AuthorizationPanelProps 
   settings?: ChatGptWebSettingsClient
   mcpRegistry?: McpRegistryClient
   telegram?: TelegramBotClient
+  oddsApi?: TheOddsApiClient
 }
 
 function integer(value: number): string {
@@ -551,7 +553,7 @@ function accountGrantConnectsCatalogEntry(account: Entry | undefined): boolean {
   return scopedConnectors === undefined || scopedConnectors.length === 0
 }
 
-function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw, telegram, connected, reauthorizeCodex, t, authorizationProgress,
+function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw, telegram, oddsApi, oddsApiSnapshot, onOddsApiStatus, connected, reauthorizeCodex, t, authorizationProgress,
   onAuthorize, onDisconnect, onConfigure, onInstallCurated, onFindOfficial, onFindRegistry, onReconnect, onRepair, onRemove, onChanged,
   pending, installingCurated, reconnecting,
   repairing, removing }: {
@@ -562,6 +564,9 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
   managed?: ManagedMcpConnectorView | undefined
   openClaw?: OpenClawConnectorView | undefined
   telegram?: TelegramBotClient | undefined
+  oddsApi?: TheOddsApiClient | undefined
+  oddsApiSnapshot?: TheOddsApiSnapshot | undefined
+  onOddsApiStatus: (snapshot:TheOddsApiSnapshot)=>void
   connected: boolean
   reauthorizeCodex?: boolean
   t: ConnectorsSettingsSectionProps['connectorT']
@@ -615,7 +620,11 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
     : undefined
   // MCP state is authoritative whenever installed: a gh CLI session cannot
   // hide a failed or unauthenticated GitHub MCP.
-  const status = (definition.id === 'binance' && mcpRuntime !== undefined && mcpRuntime.status !== 'ready'
+  const status = (definition.id==='the-odds-api' && oddsApiSnapshot!==undefined
+    ? {text:oddsApiSnapshot.verified?'API verificada':oddsApiSnapshot.configured?'Clave guardada · sin verificar':'Clave pendiente',
+      className:oddsApiSnapshot.verified?(connectorStyles['connectorStatusReady']??''):(connectorStyles['connectorStatusWarn']??'')}
+    : undefined)
+    ?? (definition.id === 'binance' && mcpRuntime !== undefined && mcpRuntime.status !== 'ready'
     ? { text: 'Agentic OAuth: aprobación de Binance pendiente', className: connectorStyles['connectorStatusWarn'] ?? '' }
     : undefined)
     ?? (reauthorizeCodex ? { text: t('reconnectRequiredStatus'), className: connectorStyles['connectorStatusWarn'] ?? '' } : undefined)
@@ -690,6 +699,8 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
         {...authorizationAccount?.methods.some(method => method.id === 'oauth')
           ? { onAuthorizeMcp: () => { onAuthorize(authorizationAccount, 'oauth') } } : {}} /> : null}
       {definition.id === 'telegram' ? <TelegramConnectorSetup client={telegram} /> : null}
+      {definition.id === 'the-odds-api' ? <TheOddsApiConnectorSetup client={oddsApi}
+        snapshot={oddsApiSnapshot} onStatus={onOddsApiStatus}/> : null}
       {definition.id === 'github' ? (
         <div className={styles['advancedHint']}>
           <p>
@@ -1180,10 +1191,12 @@ export function ConnectorsSettingsSection({ api,
   settings,
   mcpRegistry,
   telegram,
+  oddsApi,
   assistantMail,
   launchContext,
   onAuthorized }: ConnectorsSettingsSectionProps): ReactNode {
   const [entries, setEntries] = useState<Entry[]>([])
+  const [oddsApiSnapshot, setOddsApiSnapshot] = useState<TheOddsApiSnapshot | undefined>()
   const [catalogFailure, setCatalogFailure] = useState<string | undefined>()
   const [disconnectingKey, setDisconnectingKey] = useState<string | undefined>()
   const [refresh, setRefresh] = useState(0)
@@ -1246,6 +1259,18 @@ export function ConnectorsSettingsSection({ api,
     setRefresh(current => current + 1)
     onAuthorized()
   })
+
+  useEffect(() => {
+    if (oddsApi===undefined)return
+    let stale=false
+    void readConnectorRemoteWithRetry(()=>oddsApi.state(),()=>stale).then(
+      snapshot=>{if(!stale)setOddsApiSnapshot(snapshot)},
+      ()=>{if(!stale)setOddsApiSnapshot({
+        configured:false,verified:false,source:'none',status:'vault-unavailable',
+      })},
+    )
+    return ()=>{stale=true}
+  },[oddsApi])
 
   useEffect(() => {
     if (chatGptWeb === undefined) return
@@ -1464,14 +1489,15 @@ export function ConnectorsSettingsSection({ api,
       && mcpRuntime === undefined
       && accountGrantConnectsCatalogEntry(account)
     const runtimeAuthoritative = managed !== undefined || mcpRuntime !== undefined
-    const connected = (openClawRoute?.connected === true && !runtimeAuthoritative)
+    const connected = (definition.id==='the-odds-api' && oddsApiSnapshot?.verified===true)
+      || (openClawRoute?.connected === true && !runtimeAuthoritative)
       || (runtimeAuthoritative
         ? mcpRuntime?.status === 'ready' && mcpRuntime.toolNames.length > 0
           && !(['microsoft-personal','outlook-mail','outlook-calendar','microsoft-contacts',
             'onedrive','microsoft-teams','sharepoint','x'].includes(definition.id))
         : live?.callable === true || accountConnected)
     return { definition, live, account, mcpRuntime, managed, openClaw: openClawRoute, connected }
-  }), [catalogDefinitions, entries, liveConnectors, mcpHub, openClaw])
+  }), [catalogDefinitions, entries, liveConnectors, mcpHub, openClaw, oddsApiSnapshot])
 
   const visibleRows = catalogRows.filter(({ definition, connected }) => {
     if (filter === 'connected' && !connected) return false
@@ -2069,6 +2095,9 @@ export function ConnectorsSettingsSection({ api,
                   managed={row.managed}
                   openClaw={row.openClaw}
                   telegram={telegram}
+                  oddsApi={oddsApi}
+                  oddsApiSnapshot={oddsApiSnapshot}
+                  onOddsApiStatus={setOddsApiSnapshot}
                   connected={row.connected}
                   reauthorizeCodex={launchContext === 'codex-reconnect' && row.definition.id === 'codex'}
                   t={connectorT}
@@ -2104,6 +2133,7 @@ export function ConnectorsSettingsSection({ api,
                     : () => { installCuratedConnector(row.definition) }}
                   onFindOfficial={mcpRegistry?.search === undefined
                     || row.definition.id === 'binance'
+                    || row.definition.id === 'the-odds-api'
                     || row.definition.mode === 'native'
                     || (row.definition.curatedMcp === true && mcpRegistry.installCurated !== undefined)
                     ? undefined
