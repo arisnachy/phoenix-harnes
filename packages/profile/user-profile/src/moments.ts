@@ -18,7 +18,7 @@ export interface PublicHoliday {
   readonly nationalHoliday?: boolean
   readonly holidayTypes?: readonly string[]
 }
-const HOLIDAY_API = 'https://date.nager.at/api/v4/Holidays'
+const HOLIDAY_API = 'https://nagerholidays.com/api/v4/Holidays'
 // Guaranteed offline fallback for the user's country. The country-only public
 // calendar remains authoritative for other national and movable holidays.
 const COUNTRY_FALLBACK: Readonly<Record<string, readonly [string, string, CalendarMoment['kind']][]>> = {
