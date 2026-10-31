@@ -72,11 +72,14 @@ describe('current-turn private photo binding for Codex image tools', () => {
     ])).toBeUndefined()
     expect(latestProfileReference([
       { type: 'turn/start', data: {} },
-      { type: 'user/message', data: { source: { kind: 'user' }, content: [{ type: 'image', attachment: { ...original, name: 'other.webp' } }] } },
+      { type: 'user/message', data: {
+        source: { kind: 'user' },
+        content: [{ type: 'image', attachment: { ...original, name: 'other.webp' } }],
+      } },
     ])).toBeUndefined()
   })
 
-  it('distinguishes the user's likeness from possessions', () => {
+  it("distinguishes the user's likeness from possessions", () => {
     expect(requestsProfileLikeness('Dame una imagen mía en París')).toBe(true)
     expect(requestsProfileLikeness('Dame una imagen de mí en Nueva York')).toBe(true)
     expect(requestsProfileLikeness('Dame una imagen de mi casa')).toBe(false)
