@@ -1,6 +1,9 @@
 name: CI Repair Generated Catalog Patch
 
 on:
+  pull_request:
+    paths:
+      - .github/workflows/ci-repair-generated-patch.yml
   push:
     branches:
       - fix/ci-general-jsonl-hmr-20261030
