@@ -4,6 +4,8 @@ export interface AvatarSnapshot {
   original?: Blob
   styled?: Blob
   mode: AvatarMode
+  /** Explicit permission to attach the original photo to self-image requests. */
+  referenceEnabled: boolean
 }
 const DATABASE = 'phoenix-user-portrait-v1'
 const EVENT = 'phoenix-user-portrait-changed'
@@ -42,17 +44,19 @@ export async function readAvatar(): Promise<AvatarSnapshot> {
   try {
     const tx = database.transaction('portrait', 'readonly')
     const store = tx.objectStore('portrait')
-    const [original, styled, active] = await Promise.all([
+    const [original, styled, active, referenceEnabled] = await Promise.all([
       get<Blob>(store, 'original'), get<Blob>(store, 'styled'), get<AvatarMode>(store, 'mode'),
+      get<boolean>(store, 'referenceEnabled'),
     ])
     return {
       ...(original instanceof Blob ? { original } : {}),
       ...(styled instanceof Blob ? { styled } : {}),
       mode: active === 'styled' && styled instanceof Blob ? 'styled' : 'original',
+      referenceEnabled: referenceEnabled === true && original instanceof Blob,
     }
   } finally { database.close() }
 }
-async function write(values: { original?: Blob; styled?: Blob; mode?: AvatarMode; clear?: boolean }): Promise<void> {
+async function write(values: { original?: Blob; styled?: Blob; mode?: AvatarMode; referenceEnabled?: boolean; clear?: boolean }): Promise<void> {
   const database = await db()
   try {
     const tx = database.transaction('portrait', 'readwrite')
@@ -68,6 +72,7 @@ async function write(values: { original?: Blob; styled?: Blob; mode?: AvatarMode
       store.put('styled', 'mode')
     }
     if (values.mode !== undefined) store.put(values.mode, 'mode')
+    if (values.referenceEnabled !== undefined) store.put(values.referenceEnabled, 'referenceEnabled')
     await finish(tx)
     announce()
   } finally { database.close() }
@@ -81,6 +86,12 @@ export async function activateAvatar(mode: AvatarMode): Promise<void> {
   if (mode === 'styled' && snapshot.styled === undefined) throw new Error('No edited portrait was saved')
   if (snapshot.original === undefined) throw new Error('No portrait was saved')
   await write({ mode })
+}
+/** The permission is stored alongside the private photo and cleared with it. */
+export async function setAvatarReferenceEnabled(enabled: boolean): Promise<void> {
+  const snapshot = await readAvatar()
+  if (enabled && snapshot.original === undefined) throw new Error('Guarda una fotografía antes de activar la referencia.')
+  await write({ referenceEnabled: enabled })
 }
 export async function deleteAvatar(): Promise<void> { await write({ clear: true }) }
 export function subscribeAvatar(listener: () => void): () => void {
@@ -128,14 +139,27 @@ export async function normalizeAvatar(image: Blob, zoom = 1, offsetX = 0, offset
   } finally { bitmap.close() }
 }
 export function validatedLocalEditor(value: string): string {
-  const url = new URL(value)
+  const url = new URL(value.trim())
   if (url.username || url.password || url.search || url.hash
     || !['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)
     || url.protocol !== 'http:') {
     throw new Error('Use an HTTP image editor on localhost only. Remote photo uploads are disabled.')
   }
-  const base = url.href.replace(/\/+$/u, '')
-  return base.endsWith('/v1') ? base : base + '/v1'
+  const path = url.pathname.replace(/\/+$/u, '')
+  if (path !== '' && path !== '/v1' && path !== '/v1/images/edits') {
+    throw new Error('La dirección del editor debe terminar en /v1 o /v1/images/edits.')
+  }
+  return url.origin + '/v1'
+}
+/** Check that a configured local editor responds before sending any photo. */
+export async function probeLocalAvatarEditor(endpoint: string): Promise<void> {
+  const base = validatedLocalEditor(endpoint)
+  try {
+    const response = await fetch(base + '/models', { method: 'GET', signal: AbortSignal.timeout(5000) })
+    if (!response.ok) throw new Error('El servicio respondió HTTP ' + String(response.status))
+  } catch (cause) {
+    throw new Error('No fue posible contactar al editor local. Comprueba que esté iniciado y permita conexiones desde PHOENIX. ' + (cause instanceof Error ? cause.message : ''))
+  }
 }
 /** Actual image-to-image operation, never text-to-image substitution.
  * Requires an explicitly configured local OpenAI-compatible /images/edits service.
