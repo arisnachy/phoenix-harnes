@@ -1116,11 +1116,13 @@ export function installCodexAvatarTransform(ctx: Context): void {
       const source = join(directory, 'user-original.webp')
       await writeFile(source, data, { flag: 'wx' })
       const prompt = [
-        'Reimagine this exact human as an original futuristic Kira team protagonist. NOT a painted business photograph.',
-        KIRA_TEAM_STYLE,
-        'Keep the identifiable source face, age, hairstyle and facial hair, but replace background and clothing completely.',
-        'Futuristic jacket or techwear, cyan-neon sci-fi city, luminous holograms and amber accents.',
-        'Cinematic character key art, strong depth, square head-and-shoulders crop. No text, watermark or logo.',
+        'Produce an original PHOENIX Kira team PROFILE AVATAR, not a paint filter over the original photograph.',
+        'Keep the exact recognizable face, expression, skin tone, age, hairstyle and facial hair of the input.',
+        'Make the face large and centered, showing head and only a little of the shoulders: portrait-first composition.',
+        'Dress this same person in sophisticated futuristic techwear with refined cyan and amber highlights.',
+        'IMPORTANT: use a LIGHT soft ivory/pearl-gray studio background (#f5f3ef), not a nighttime cityscape.',
+        'Modern cinematic science-fiction character art with dimensional detail, but a bright uncluttered backdrop.',
+        'Do not include other people, dark scenery, business suits, text, badges, watermarks or logos.',
       ].join(' ')
       const result = await generateWithCodexProvider(
         ctx, { prompt, size: '1024x1024', quality: 'high' }, prompt, signal, source,
