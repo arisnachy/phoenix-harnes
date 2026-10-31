@@ -128,4 +128,52 @@ describe('The Odds API secure connector', () => {
     )).rejects.toThrow('API key')
     expect(records.size).toBe(0)
   })
+
+  it('never sends a key to the network when vault is unavailable', async () => {
+    const ctx = new Context()
+    const request = vi.fn()
+    await expect(configureTheOddsApiConnector(ctx, key, request as unknown as typeof fetch))
+      .rejects.toThrow('vault')
+    await expect(disconnectTheOddsApiConnector(ctx, request as unknown as typeof fetch))
+      .rejects.toThrow('vault')
+    expect(request).not.toHaveBeenCalled()
+  })
+
+  it('uses a temporary environment key only when no vault key exists', async () => {
+    const previous = process.env.THE_ODDS_API_KEY
+    const { ctx } = makeContext()
+    const request = vi.fn(async () => response())
+    try {
+      process.env.THE_ODDS_API_KEY = key
+      const state = await theOddsApiConnectorState(ctx, request as unknown as typeof fetch)
+      expect(state).toMatchObject({ configured: true, verified: true, source: 'environment' })
+      const disconnected = await disconnectTheOddsApiConnector(ctx, request as unknown as typeof fetch)
+      expect(disconnected.source).toBe('environment')
+    } finally {
+      if (previous === undefined) delete process.env.THE_ODDS_API_KEY
+      else process.env.THE_ODDS_API_KEY = previous
+    }
+  })
+
+  it('safely rejects malicious quota headers and accepts only nonnegative safe integers', async () => {
+    const request = vi.fn(async () => ({
+      ...response(),
+      headers: {
+        get: (name: string) => name === 'x-requests-remaining'
+          ? '999999999999999999999999'
+          : name === 'x-requests-used' ? 'not-a-number' : name === 'x-requests-last' ? '0' : null,
+      },
+    } as unknown as Response))
+    const state = await verifyTheOddsApiKey(key, request as unknown as typeof fetch)
+    expect(state).toEqual({ status: 'ready', verified: true, lastRequestCost: 0 })
+  })
+
+  it('distinguishes HTTP 403, response shape, and no vault state without leaking keys', async () => {
+    expect(await verifyTheOddsApiKey(key, vi.fn(async () => response(403)) as unknown as typeof fetch))
+      .toMatchObject({ status: 'invalid-key', verified: false })
+    const ctx = new Context()
+    const state = await theOddsApiConnectorState(ctx, vi.fn() as unknown as typeof fetch)
+    expect(state).toMatchObject({ configured: false, verified: false, status: 'vault-unavailable' })
+    expect(JSON.stringify(state)).not.toContain(key)
+  })
 })
