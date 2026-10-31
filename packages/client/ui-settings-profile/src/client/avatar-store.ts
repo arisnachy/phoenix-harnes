@@ -45,7 +45,7 @@ async function read<T>(key: string): Promise<T | undefined> {
 }
 
 function mutate(callback: (store: IDBObjectStore) => void): Promise<void> {
-  return db().then((database) => new Promise<void>((resolve, reject) => {
+  return db().then(database => new Promise<void>((resolve, reject) => {
     const transaction = database.transaction('assets', 'readwrite')
     callback(transaction.objectStore('assets'))
     transaction.oncomplete = () => { database.close(); announce(); resolve() }
@@ -199,7 +199,7 @@ export async function editAvatarWithLocalAI(
     throw new Error('El editor no devolvió una imagen editada válida.')
   }
   const decoded = atob(encoded)
-  const bytes = Uint8Array.from(decoded, (char) => char.charCodeAt(0))
+  const bytes = Uint8Array.from(decoded, char => char.charCodeAt(0))
   const mime = avatarMimeFromBytes(bytes)
   if (mime === undefined || bytes.length > MAX_BYTES) throw new Error('Formato de imagen editada no válido.')
   return new Blob([bytes], { type: mime })

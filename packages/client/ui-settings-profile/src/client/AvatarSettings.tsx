@@ -55,7 +55,7 @@ export function AvatarSettings({ t, disabled }: { t: Translator; disabled: boole
     try {
       await action()
       setNotice(successful)
-      setRevision((v) => v + 1)
+      setRevision(v => v + 1)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally { setBusy(false) }
