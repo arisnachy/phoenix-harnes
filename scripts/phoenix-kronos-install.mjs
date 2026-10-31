@@ -14,7 +14,7 @@ function run(command, args) {
 }
 function findPython() {
   const candidates = process.platform === 'win32'
-    ? [['py', ['-3.11']], ['py', ['-3.12']], ['python', []]]
+    ? [['py', ['-3.11']], ['py', ['-3.12']], ['py', ['-3.10']], ['python', []]]
     : [['python3', []], ['python', []]]
   for (const [binary, args] of candidates) {
     const version = spawnSync(binary, [...args, '--version'], { encoding: 'utf8', timeout: 5000 })
