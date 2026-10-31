@@ -1,8 +1,8 @@
 /** Bounded daily multi-sport discovery. Scheduling availability is NOT a prediction. */
 import { getFeed,hasSportsPermission,sportsCatalog } from './sports.ts'
 
-type Side = { homeAway?:string, team?:{id?:string,displayName?:string,name?:string},
-  athlete?:{id?:string,displayName?:string,name?:string} }
+type Side = { homeAway?:string, team?:{id?:string|number,displayName?:string,name?:string},
+  athlete?:{id?:string|number,displayName?:string,name?:string} }
 type Event = { id?:string|number, date?:string,
   status?:{type?:{state?:string}},
   competitions?:Array<{competitors?:Side[]}> }
@@ -22,9 +22,10 @@ const dateValid=(s:string)=>/^\d{4}-\d{2}-\d{2}$/u.test(s)
 const dayNow=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santo_Domingo',
   year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date())
 const participant=(s:Side|undefined)=>{
-  const id=s?.team?.id??s?.athlete?.id
+  const rawId=s?.team?.id??s?.athlete?.id
+  const id=typeof rawId==='number'||typeof rawId==='string'?String(rawId):''
   const name=s?.team?.displayName??s?.athlete?.displayName??s?.team?.name??s?.athlete?.name
-  return typeof id==='string'&&/^\d{1,20}$/u.test(id)
+  return /^\d{1,20}$/u.test(id)
     &&typeof name==='string'&&name.trim()&&name.length<=120
     ?{id,name:name.trim()}:null
 }
