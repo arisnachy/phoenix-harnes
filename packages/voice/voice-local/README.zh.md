@@ -22,6 +22,10 @@
 
 西班牙语女性助手使用 `ef_dora`，男性助手使用 `em_alex`；英语使用 `af_heart` 和 `am_michael`。Kokoro 通过隔离环境内的 eSpeak NG 实现西班牙语音素转换。对话的优先级为 Codex Realtime、Kokoro、平台语音，然后客户端浏览器语音回退。
 
+在西班牙语音素转换前，内置守护进程会将分解形式的 Unicode 重音规范化为 NFC，删除 Markdown 和视觉符号，并去掉倒置的 `¡`/`¿` 标记。同时保留逗号、句号、问号、感叹号和省略号等承载停顿与语气的标点，避免把格式字符读出来。
+
+常驻 NDJSON 协议在读取请求前会明确将 stdin、stdout 和 stderr 配置为 UTF-8，因此 Windows 管道的本地编码不会破坏西班牙语重音和标点。
+
 进程通过 `shell: false` 启动，并通过 stdin/stdout 传递文本或语音请求。系统 TTS 在 Windows 使用 `System.Speech`，macOS 使用 `say`，Linux 使用 `espeak-ng`。
 
 ## 扩展点
@@ -46,6 +50,5 @@
 
 ## 已知限制与暂缓事项
 
-- 内置 Kokoro 安装与探测目前针对 Windows；首次安装需要 Python 3.12、足够磁盘空间与模型下载。
-- 自定义命令的可用性检测不等于模型已安装；若运行失败会尝试其他可用语音。
-- 不支持的 Kokoro 语言、STT 音频格式转换以及系统语音包的安装由对应平台处理。
+- 自定义命令是否可用取决于配置。内置 Kokoro 需要已安装的虚拟环境、ONNX 模型、语音包和成功安装标记，目前仅在 Windows 本地运行。
+- STT 格式转换、麦克风采集和音频播放策略由客户端或部署适配器负责。
