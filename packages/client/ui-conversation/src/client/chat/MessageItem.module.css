@@ -455,3 +455,11 @@
   color: var(--dsw-alias-label-primary);
   font-weight: 600;
 }
+
+/* Browser-private photo is loaded by the Profile plugin; not an agent avatar. */
+:global(html[data-phoenix-user-avatar='ready']) .userRow { position: relative; padding-right: 40px; }
+:global(html[data-phoenix-user-avatar='ready']) .userRow::after {
+  content: ''; width: 31px; height: 31px; position: absolute; right: 0; top: 1px;
+  border: 1px solid var(--dsw-alias-border-l2); border-radius: 50%;
+  background: var(--phoenix-user-avatar-image) center / cover no-repeat;
+}
