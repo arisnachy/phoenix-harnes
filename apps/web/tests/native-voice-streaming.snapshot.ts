@@ -115,7 +115,7 @@ it('requests the first native sentence while the assembled turn remains open', a
   fireEvent.change(composer, { target: { value: 'p' } })
   expect(composer.value).toBe('p')
   expect(conversation.getAttribute('data-header-compact')).toBe('true')
-  await waitFor(() => expect(document.querySelector('[data-input-backdrop]')?.textContent).toContain('p'))
+  await waitFor(() => { expect(document.querySelector('[data-input-backdrop]')?.textContent).toContain('p')) })
   fireEvent.change(composer, { target: { value: '' } })
 
   const fixtureWindow = window as VoiceFixtureWindow
@@ -124,7 +124,7 @@ it('requests the first native sentence while the assembled turn remains open', a
   if (trace === undefined || timing === undefined) throw new Error('assembled voice fixture hooks missing')
 
   fireEvent.click(screen.getByRole('button', { name: 'Start voice assistant' }))
-  await waitFor(() => expect(trace.starts).toHaveLength(1), { timeout: 10_000 })
+  await waitFor(() => { expect(trace.starts).toHaveLength(1), { timeout: 10_000 }) })
   expect(trace.statusCalls).toBeGreaterThan(0)
   expect(trace.realtimeStatusCalls).toBeGreaterThan(0)
   const channel = FakePeerConnection.latest?.channel
@@ -135,7 +135,7 @@ it('requests the first native sentence while the assembled turn remains open', a
   // mux/fold/AssistantNodeView path the shipped client consumes. The turn is
   // intentionally left open while the first sentence is requested.
   const streamingTurn = timing.startConversationalTail('fx-alpha')
-  await waitFor(() => expect(trace.speaks.length).toBeGreaterThan(0), { timeout: 10_000 })
+  await waitFor(() => { expect(trace.speaks.length).toBeGreaterThan(0), { timeout: 10_000 }) })
   expect(trace.speaks[0]?.key).toBe('fx-alpha')
   expect(trace.speaks[0]?.text).toMatch(/[.!?]$/u)
   expect(trace.speaks[0]?.text).toContain('Primera oración.')
@@ -144,14 +144,14 @@ it('requests the first native sentence while the assembled turn remains open', a
   // advance. The second sentence is appended while the same turn is open.
   channel.onmessage?.({ data: JSON.stringify({ type: 'response.done' }) })
   timing.appendConversationalTailText('fx-alpha', ' Segunda oración.')
-  await waitFor(() => expect(trace.speaks.length).toBeGreaterThan(1), { timeout: 10_000 })
+  await waitFor(() => { expect(trace.speaks.length).toBeGreaterThan(1), { timeout: 10_000 }) })
   expect(trace.speaks[1]?.text).toContain('Segunda oración.')
   expect(trace.stops).toHaveLength(0)
 
   timing.finishConversationalTail('fx-alpha')
-  await waitFor(() => expect(document.querySelector(`[data-turn-tail="${streamingTurn}"]`)).not.toBeNull())
+  await waitFor(() => { expect(document.querySelector(`[data-turn-tail="${streamingTurn}"]`)).not.toBeNull()) })
   channel.onmessage?.({ data: JSON.stringify({ type: 'response.done' }) })
-  await waitFor(() => expect(trace.speaks).toHaveLength(2))
+  await waitFor(() => { expect(trace.speaks).toHaveLength(2)) })
   // The observed call trace is the assertion surface; no synthetic latency
   // is measured here, only the ordering required for pre-close speech.
   expect({
