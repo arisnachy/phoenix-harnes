@@ -564,7 +564,11 @@ describe('catalog routes with per-model configuration', () => {
 
     // An explicit list is the user's choice: never redirect old M3 to M3.1.
     const selected = resolveProfiles({
-      nvidia: { models: [{ id: 'minimaxai/minimax-m3' }] },
+      nvidia: {
+        api: 'openai-completions',
+        baseURL: 'https://integrate.api.nvidia.com/v1',
+        models: [{ id: 'minimaxai/minimax-m3' }],
+      },
     }).get('nvidia')?.piProvider.getModels()
     expect(selected?.map(model => model.id)).toEqual(['minimaxai/minimax-m3'])
   })
