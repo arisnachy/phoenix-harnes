@@ -182,6 +182,10 @@ export class NvidiaLiveCatalog {
   ): Readonly<Record<string, PiAiProviderProfile>> {
     const profile = providers.nvidia
     if (profile === undefined || this.dispatch === undefined) return providers
+    // A user-owned NVIDIA NIM server must enumerate its own models; never
+    // mix public NVIDIA Build IDs into a private, self-hosted endpoint.
+    if (profile.baseURL !== undefined
+      && profile.baseURL.replace(/[/]+$/u, '') !== NVIDIA_BUILD_BASE_URL) return providers
     const pinned = profile.models ?? []
     const entries = new Map<string, PiAiModelProfile>()
     for (const model of pinned) entries.set(model.id, model)
