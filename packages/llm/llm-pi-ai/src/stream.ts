@@ -165,7 +165,10 @@ export function mapStopReason(
         : classified
       const providerRetryAfterMs = code === 'RATE_LIMIT' ? retryAfterMsFromMessage(text) : undefined
       const detail = code === 'MODEL_UNAVAILABLE' && /^nvidia(?:-nim)?$/i.test(message.provider)
-        ? `NVIDIA NIM returned HTTP 410 for model "${message.model}". The model may be retired or this account may lack Public API Endpoints access. Select a confirmed working model or check NVIDIA access. Original error: ${text}`
+        ? `NVIDIA NIM returned HTTP 410 for model "${message.model}".`
+          + ' The model may be retired or this account may lack Public API Endpoints access.'
+          + ' Select a confirmed working model or check NVIDIA access.'
+          + ` Original error: ${text}`
         : text
       return {
         kind: 'error',
