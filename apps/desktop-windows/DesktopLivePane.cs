@@ -48,6 +48,7 @@ internal sealed class DesktopLivePane : UserControl
     private uint pinnedProcessId;
     private string? ownerSession;
     private DateTimeOffset ownerLastAction = DateTimeOffset.MinValue;
+    private bool CapturePrimaryScreen => string.Equals(selectedTarget, "screen:primary", StringComparison.OrdinalIgnoreCase);
 
     internal bool IsPaused { get; private set; }
     internal bool IsDismissed { get; private set; }
@@ -57,13 +58,16 @@ internal sealed class DesktopLivePane : UserControl
     {
         var owned = !string.IsNullOrWhiteSpace(sessionId)
             && string.Equals(sessionId, ownerSession, StringComparison.Ordinal);
-        var selectedWindow = owned && Visible && !IsDismissed ? ResolveTargetWindow() : IntPtr.Zero;
-        var ready = selectedWindow != IntPtr.Zero && !IsIconic(selectedWindow);
+        var primaryScreen = owned && Visible && !IsDismissed && CapturePrimaryScreen ? Screen.PrimaryScreen : null;
+        var selectedWindow = owned && Visible && !IsDismissed && primaryScreen is null
+            ? ResolveTargetWindow() : IntPtr.Zero;
+        var ready = primaryScreen is not null || (selectedWindow != IntPtr.Zero && !IsIconic(selectedWindow));
         return System.Text.Json.JsonSerializer.Serialize(new
         {
             available = ready,
             paused = ready && IsPaused,
-            title = ready ? WindowTitle(selectedWindow) : string.Empty,
+            title = primaryScreen is not null ? "Pantalla principal"
+                : ready ? WindowTitle(selectedWindow) : string.Empty,
             reason = ready ? string.Empty : owned && Visible
                 ? "La ventana vinculada a Desktop Live ya no está disponible; usa computer focus para seleccionar otra."
                 : "No hay una sesión Desktop Live visible y vinculada a esta conversación."
@@ -134,6 +138,10 @@ internal sealed class DesktopLivePane : UserControl
 
     internal void Open(string? target, string? sessionId)
     {
+        // Computer Use already authorizes this conversation. When no app was
+        // selected, show the primary display rather than a permanently empty viewer.
+        if (string.IsNullOrWhiteSpace(target) && selectedTarget is null)
+            target = "screen:primary";
         if (!string.IsNullOrWhiteSpace(target)
             && !string.Equals(selectedTarget, target.Trim(), StringComparison.OrdinalIgnoreCase))
         {
@@ -217,6 +225,35 @@ internal sealed class DesktopLivePane : UserControl
 
     private Bitmap? CaptureNativeWindow(out string explanation)
     {
+        if (CapturePrimaryScreen)
+        {
+            var screen = Screen.PrimaryScreen;
+            if (screen is null)
+            {
+                explanation = "No se detectó pantalla principal";
+                return null;
+            }
+            var bounds = screen.Bounds;
+            if (bounds.Width <= 0 || bounds.Height <= 0
+                || (long)bounds.Width * bounds.Height > 16_000_000)
+            {
+                explanation = "Resolución de pantalla no compatible";
+                return null;
+            }
+            var primaryFrame = new Bitmap(bounds.Width, bounds.Height);
+            try
+            {
+                using var graphics = Graphics.FromImage(primaryFrame);
+                graphics.CopyFromScreen(bounds.Location, Point.Empty, bounds.Size, CopyPixelOperation.SourceCopy);
+                explanation = "Pantalla principal (captura visible)";
+                return primaryFrame;
+            }
+            catch
+            {
+                primaryFrame.Dispose();
+                throw;
+            }
+        }
         var hwnd = ResolveTargetWindow();
         if (hwnd == IntPtr.Zero)
         {
