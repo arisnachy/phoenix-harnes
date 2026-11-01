@@ -40,8 +40,8 @@ const empty:Snapshot={ url:'',plays:[],at:0,error:false,loading:false }
  * @returns A compact opt-in game timeline or null for unsupported identifiers.
  */
 export function SportsGameCenter({ sport,league,eventId,phase,game }:{
-  sport?:string|undefined;league?:string|undefined;eventId?:string|undefined
-  phase?:'pre'|'in'|'post'|undefined;game?:PhoenixLiveGame|undefined
+  sport?:string|undefined,league?:string|undefined,eventId?:string|undefined
+  phase?:'pre'|'in'|'post'|undefined,game?:PhoenixLiveGame|undefined
 }):ReactNode{
   const [open,setOpen]=useState(false),[state,setState]=useState<Snapshot>(empty)
   // MLB Stats gamePk and ESPN eventId differ: only use a confirmed ESPN ID for MLB.
@@ -56,17 +56,17 @@ export function SportsGameCenter({ sport,league,eventId,phase,game }:{
       busy=true
       controller=new AbortController()
       const current=controller
-      let timedOut=false
-      const timeout=setTimeout(()=>{timedOut=true;current.abort()},9000)
+      const timeoutState={ expired:false }
+      const timeout=setTimeout(()=>{timeoutState.expired=true;current.abort()},9000)
       setState(s=>({ url,plays:s.url===url?s.plays:[],at:s.url===url?s.at:0,error:false,loading:true }))
       try{
         const res=await fetch(url,{ signal:current.signal,cache:'no-store',headers:{ accept:'application/json' } })
         if(!res.ok)throw Error('ESPN '+String(res.status))
         if(Number(res.headers.get('content-length')??0)>3_000_000)throw Error('ESPN payload too large')
         const value=await res.json() as unknown
-        if(active&&!current.signal.aborted)setState({ url,plays:parseEspnGamePlays(value),at:Date.now(),error:false,loading:false })
+        if(!current.signal.aborted)setState({ url,plays:parseEspnGamePlays(value),at:Date.now(),error:false,loading:false })
       }catch{
-        if(active&&(timedOut||!current.signal.aborted))
+        if(timeoutState.expired||!current.signal.aborted)
           setState(s=>({ ...s,url,error:true,loading:false }))
       }finally{clearTimeout(timeout);busy=false}
     }
