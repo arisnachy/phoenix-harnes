@@ -24,6 +24,8 @@ export type {
   TokenTelemetrySnapshot,
   TokenTelemetryRecord,
   PluginInventorySnapshot,
+  OpenClawProbeState,
+  OpenClawRuntimeSnapshot,
 } from '@phoenix-ai/dsh-host-plugin-inventory/types'
 export type {} from '@phoenix-ai/dsh-commands/remote'
 export type {} from '@phoenix-ai/dsh-file-reference/remote'

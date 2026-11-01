@@ -619,8 +619,11 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
               ? { text: t('runtimeMissingStatus'), className: connectorStyles['connectorStatusInfo'] ?? '' }
               : undefined
   const companionStatus = definition.id === 'openclaw'
-    ? { text: openClawRuntime?.installed === true ? t('ocDetected') : t('ocMissing'),
-        className: connectorStyles['connectorStatusWarn'] ?? '' }
+    ? {
+        text: openClawRuntime === undefined ? t('ocWaiting')
+          : openClawRuntime.installed ? t('ocDetected') : t('ocMissing'),
+        className: connectorStyles['connectorStatusWarn'] ?? '',
+      }
     : undefined
   const openClawStatus = openClaw?.connected === true
     ? { text: t('openClawConnectedStatus'), className: connectorStyles['connectorStatusReady'] ?? '' }
