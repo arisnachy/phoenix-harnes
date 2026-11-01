@@ -112,7 +112,7 @@ export function apply(ctx: Context): void {
   }))
   ctx.tools.register(defineTool({
     name: 'phoenix_audio_listen',
-    description: 'ESCUCHAR AUDIO REAL del dispositivo de salida predeterminado de Windows durante 3 a 12 segundos. La ventana de PHOENIX solicita permiso visible cada vez. Transcribe con faster-whisper local; elimina WAV temporal. No utiliza microfono ni escucha continua. Si el usuario pide analizar la voz o sonido que sale de sus aplicaciones, usar aqui; no inventar lo no capturado.',
+    description: 'ESCUCHAR AUDIO REAL del dispositivo de salida predeterminado de Windows durante 3 a 12 segundos. Windows solicita permiso visible al principio; el usuario puede autorizar una fuente durante 15 minutos solo para esta conversación, sin repetir la selección. Transcribe con faster-whisper local y elimina el WAV temporal. No utiliza microfono ni escucha continua. Si el usuario pide analizar la voz o sonido que sale de sus aplicaciones, usar aqui; no inventar lo no capturado.',
     parameters: {
       seconds: { type: 'integer', description: 'Segundos enteros de captura, 3 a 12; por defecto 8. No sirve para escucha continua.' },
       source: { type: 'string', enum: ['output', 'microphone'],
@@ -163,7 +163,7 @@ export function apply(ctx: Context): void {
       const realtime = await ctx.voice.conversationRealtimeStatus().catch(() => undefined)
       return JSON.stringify({
         vision: { desktop, note: 'La existencia de un visor no confirma fotogramas. Usar computer o desktop.live-frame para mirar de verdad.' },
-        hearing: { audio, browserTab: { verified: false, note: 'Revisar video_media_inspect / youtube_video_listen si estan registrados. Si se reproduce en Windows, usar phoenix_audio_listen con source output y permiso visible; no requiere compartir pestaña. Audio capturado solo si existe recibo verificado.' } },
+        hearing: { audio, browserTab: { verified: false, note: 'Revisar video_media_inspect / youtube_video_listen si estan registrados. Si el vídeo se reproduce realmente por la salida de Windows, usar phoenix_audio_listen con source output. El primer permiso puede autorizar esta conversación por 15 minutos, sin compartir pestañas; jamás afirmar escucha sin un recibo real. Audio capturado solo si existe recibo verificado.' } },
         speech: { enabled: voice.enabled, provider: voice.ttsProvider ?? null, speaking: voice.speaking,
           liveAvailable: realtime?.available ?? false, note: 'Proveedor aceptado no garantiza que el usuario escuche.' },
         physicalSensors: 'excluidos por decisión del usuario',
