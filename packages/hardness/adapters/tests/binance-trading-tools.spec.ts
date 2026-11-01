@@ -75,6 +75,38 @@ function activateTool(deps: Parameters<typeof createBinanceTradingTools>[0]) {
   return tool
 }
 
+describe('Binance PAPER autonomous scan defaults', () => {
+  it('rotates eligible markets after an explicit START unless discovery was disabled', async () => {
+    const paper = broker()
+    const account = await paper.account()
+    const automation = {
+      start: vi.fn(async () => {}),
+      dashboard: vi.fn(async () => ({
+        mode: 'paper', phase: 'running', enabled: true,
+        settings: { schema: 1, enabled: true, symbols: ['BTCUSDT'],
+          interval: '15m', pollMs: 60_000, autoDiscover: true },
+        account, recentTrades: [], markedAt: new Date().toISOString(),
+        successfulCycles: 0, filledCycles: 0, signalsQualified: 0,
+        universeSize: 0, lastScannedSymbols: [],
+      })),
+    }
+    const tool = createBinanceTradingTools({
+      broker: paper as never, automation: automation as never,
+      approval: { request: vi.fn() },
+    }).find(item => item.name === 'binance_paper_auto')
+    if (tool === undefined) throw new Error('Missing Binance PAPER automation tool')
+    await tool.execute({ action: 'start', requestedByUser: true, watchlist: 'BTCUSDT' }, exec())
+    expect(automation.start).toHaveBeenCalledWith(expect.objectContaining({
+      symbols: ['BTCUSDT'], autoDiscover: true,
+    }))
+    await tool.execute({ action: 'start', requestedByUser: true,
+      watchlist: 'ETHUSDT', autoDiscover: false }, exec())
+    expect(automation.start).toHaveBeenLastCalledWith(expect.objectContaining({
+      symbols: ['ETHUSDT'], autoDiscover: false,
+    }))
+  })
+})
+
 describe('Binance trading activation boundary', () => {
   it('enters PAPER without approval and removes an earlier managed REAL connector', async () => {
     const paper = broker()
