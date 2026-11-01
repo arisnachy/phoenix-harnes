@@ -640,9 +640,7 @@
       "ignoreDependencies": [
         "@phoenix-ai/dsh-client-ui-primitives",
         "@phoenix-ai/dsh-client-ui-slots",
-        "@types/react",
         "@types/react-dom",
-        "react",
         "react-dom"
       ]
     },

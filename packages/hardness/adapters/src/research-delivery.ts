@@ -21,6 +21,9 @@ type Receipt = { channel: Channel; format: Format; state: 'sent' | 'blocked' | '
 /**
  * Construct a file path only from an authenticated Research Studio digest, never
  * from an arbitrary model-supplied filesystem path.
+ * @param reportId - Verified hexadecimal identifier issued by the report publisher.
+ * @param format - Document format to resolve, PDF or DOCX.
+ * @returns Absolute path to the verified report artifact.
  */
 export function researchDeliveryFile(reportId: string, format: Format): string {
   if (!/^[0-9a-f]{16}$/u.test(reportId) || !['pdf', 'docx'].includes(format)) {
@@ -29,7 +32,12 @@ export function researchDeliveryFile(reportId: string, format: Format): string {
   return join(homedir(), '.dsh', 'research-reports', reportId, 'informe.' + format)
 }
 
-/** Admission: a file is eligible only when its original publisher manifest points to that file. */
+/**
+ * Admit only a document referenced by the original publisher's ready manifest.
+ * @param reportId - Verified report identifier to inspect.
+ * @param format - Expected document format.
+ * @returns Verified path and validated document bytes.
+ */
 export async function verifyPublishedDocument(reportId: string, format: Format): Promise<{ path: string; bytes: Uint8Array }> {
   const path = researchDeliveryFile(reportId, format)
   const manifestPath = join(homedir(), '.dsh', 'research-reports', reportId, 'manifest.json')
@@ -170,6 +178,8 @@ async function sendByTelegram(
 /**
  * Send a previously verified report only after native user approval; each
  * recipient/format gets an isolated durable receipt and no blind retry.
+ * @param deps - Explicitly authorized vault, transport, and approval dependencies.
+ * @returns The delivery tool with independent per-channel receipts.
  */
 export function createResearchDeliverTool(deps: ResearchDeliveryDeps): ToolDefinition {
   return defineTool({

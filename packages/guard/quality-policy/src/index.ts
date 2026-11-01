@@ -279,6 +279,8 @@ export function isUnfinishedResearchHandoff(text: string): boolean {
  * Detect a premature categorical refusal of an otherwise ongoing authorized task.
  * A single refusal is not evidence the user objective was completed, but this
  * nudge never overrides actual tool permissions, site terms or transaction consent.
+ * @param text - Assistant response to examine for premature task abandonment.
+ * @returns True only when the language indicates an unfinished authorized task.
  */
 export function isPrematureAuthorizedTaskRefusal(text: string): boolean {
   const refusal = /(?:no (?:puedo|podr[eé]|es posible) (?:armar|preparar|completar|rellenar|crear|configurar|terminar|continuar|hacer|realizar|enviar|colocar)|i (?:can't|cannot|won't|am unable to) (?:prepare|complete|fill|create|finish|continue|make|place|submit))/iu

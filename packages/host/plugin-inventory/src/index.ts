@@ -238,6 +238,10 @@ export class PluginInventoryGateway extends TypertRemoteService {
     return readBusinessLibrarySnapshot()
   }
 
+  /**
+   * Expose the local model readiness snapshot without private filesystem paths.
+   * @returns Sanitized, provider-verified local model state.
+   */
   @Remote('localModelState')
   async localModelState(): Promise<PhoenixLocalModelSnapshot> {
     return publicLocalSnapshot((await this.localModel).snapshot())
@@ -369,19 +373,27 @@ export class PluginInventoryGateway extends TypertRemoteService {
 
   /** Read The Odds API vault state and verify using the provider's zero-credit sports catalog.
    * The returned snapshot contains no key, endpoint URL, or user secrets.
+   * @returns Secret-free Odds API connector readiness.
    */
   @Remote('theOddsApiState')
   async theOddsApiState():Promise<OddsApiConnectorState>{
     return theOddsApiConnectorState(this.ctx)
   }
 
-  /** Save an owner-entered The Odds API v4 key only in the Host credential vault. */
+  /**
+   * Save an owner-entered The Odds API v4 key only in the Host vault.
+   * @param request - Explicit owner-provided API credential to store privately.
+   * @returns Sanitized connector configuration state.
+   */
   @Remote('configureTheOddsApi')
   async configureTheOddsApi(request:{apiKey:string}):Promise<OddsApiConnectorState>{
     return configureTheOddsApiConnector(this.ctx,request.apiKey)
   }
 
-  /** Forget the vault-owned The Odds API key without modifying ambient environment. */
+  /**
+   * Forget the vault-owned Odds API key without altering ambient environment.
+   * @returns Secret-free connector state after disconnection.
+   */
   @Remote('disconnectTheOddsApi')
   async disconnectTheOddsApi():Promise<OddsApiConnectorState>{
     return disconnectTheOddsApiConnector(this.ctx)
@@ -581,6 +593,8 @@ export class PluginInventoryGateway extends TypertRemoteService {
    * Store X Developer App credentials in the Host credential provider, never
    * in an MCP configuration or a chat response. The caller must be a trusted
    * Settings session; the bridge receives values through envCredentialRefs.
+   * @param request - Owner-provided X Developer application credentials.
+   * @returns Flags indicating that the credentials were stored privately.
    */
   @Remote('configureXDeveloperApplication')
   async configureXDeveloperApplication(request: {

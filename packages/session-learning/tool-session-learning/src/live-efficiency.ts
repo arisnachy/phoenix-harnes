@@ -68,7 +68,10 @@ function freshState(contextWindow?: number): SessionEfficiency {
 export class LiveEfficiencyMonitor {
   private readonly sessions = new Map<string, SessionEfficiency>()
 
-  /** Start a direct human task; prior task friction must not contaminate it. */
+  /**
+   * Start a direct human task; prior task friction must not contaminate it.
+   * @param sessionId - Session for which independent task counters are reset.
+   */
   startTask(sessionId: string): void {
     const previous = this.sessions.get(sessionId)
     this.sessions.delete(sessionId)
@@ -79,12 +82,21 @@ export class LiveEfficiencyMonitor {
     }
   }
 
-  /** Drop all task counters after completion or explicit cancellation. */
+  /**
+   * Drop all task counters after completion or explicit cancellation.
+   * @param sessionId - Session whose pending measurements are cleared.
+   */
   clear(sessionId: string): void {
     this.sessions.delete(sessionId)
   }
 
-  /** Fold only known event shapes; missing provider metrics remain unknown. */
+  /**
+   * Fold only known event shapes; missing provider metrics remain unknown.
+   * @param sessionId - Session receiving the event.
+   * @param type - Durable telemetry event category.
+   * @param data - Raw event payload, validated before aggregation.
+   * @param occurredAt - Optional event timestamp for latency calculations.
+   */
   observe(sessionId: string, type: string, data: unknown, occurredAt?: number): void {
     const state = this.sessions.get(sessionId)
     const payload = record(data)
@@ -185,6 +197,8 @@ export class LiveEfficiencyMonitor {
   /**
    * Supply short, session-local execution advice only when evidence warrants.
    * Never block tools, force a model change, or skip required verification.
+   * @param sessionId - Current session whose measured signals are considered.
+   * @returns Short, evidence-based advice, or an empty string without signals.
    */
   guidance(sessionId: string): string {
     const state = this.sessions.get(sessionId)
