@@ -3,6 +3,7 @@ import { spawnSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import type { Context } from '@phoenix-ai/cordis'
+import type { StoredImageAttachment, ImageMediaType } from '@phoenix-ai/dsh-attachment'
 import { describe, expect, it } from 'vitest'
 import {
   classifyCodexImageFailure,
@@ -12,6 +13,7 @@ import {
   imageGenerationToolDescription,
   imageGenerationBackendOrder,
   latestProfileReference,
+  codexProfileReferenceExtension,
   requestsProfileLikeness,
   KIRA_TEAM_STYLE,
   freeImageProviderOrder,
@@ -37,6 +39,47 @@ type CapturedImageTool = {
     readonly presentationMeta?: (args: unknown, value: unknown) => unknown
   }
 }
+
+describe('Codex profile reference after attachment normalization', () => {
+  function stored(
+    type: ImageMediaType,
+    bytes: readonly number[],
+    declaredBytes?: number,
+  ): StoredImageAttachment {
+    const data = new Uint8Array(bytes)
+    return {
+      ref: {
+        attachmentId: 'sha256:test' as StoredImageAttachment['ref']['attachmentId'],
+        mediaType: type,
+        bytes: declaredBytes ?? data.byteLength,
+        width: 768,
+        height: 768,
+        name: 'referencia-original-del-usuario.webp',
+      },
+      data,
+    }
+  }
+
+  it('accepts verified WebP input and normalized PNG/JPEG even with .webp upload name', () => {
+    const webp = [82, 73, 70, 70, 4, 0, 0, 0, 87, 69, 66, 80]
+    const png = [137, 80, 78, 71, 13, 10, 26, 10]
+    const jpeg = [255, 216, 255, 224]
+    expect(codexProfileReferenceExtension(stored('image/webp', webp))).toBe('.webp')
+    expect(codexProfileReferenceExtension(stored('image/png', png))).toBe('.png')
+    expect(codexProfileReferenceExtension(stored('image/jpeg', jpeg))).toBe('.jpg')
+  })
+
+  it('rejects corrupted, mislabeled, oversized, empty or inconsistent attachments', () => {
+    const webp = [82, 73, 70, 70, 4, 0, 0, 0, 87, 69, 66, 80]
+    expect(() => codexProfileReferenceExtension(stored('image/jpeg', webp))).toThrow('no coincide')
+    expect(() => codexProfileReferenceExtension(stored('image/webp', [1, 2, 3, 4]))).toThrow('no coincide')
+    expect(() => codexProfileReferenceExtension(stored('image/webp', webp, 999))).toThrow('no coincide')
+    expect(() => codexProfileReferenceExtension(stored('image/webp', []))).toThrow('vacía')
+    const oversized = stored('image/webp', webp)
+    const tooBig = { ...oversized, data: new Uint8Array(8 * 1024 * 1024 + 1) }
+    expect(() => codexProfileReferenceExtension(tooBig)).toThrow('8 MB')
+  })
+})
 
 describe('current-turn private photo binding for Codex image tools', () => {
   const original = {

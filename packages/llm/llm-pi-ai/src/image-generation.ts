@@ -15,7 +15,7 @@ import { lstat, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'n
 import { homedir, tmpdir } from 'node:os'
 import { basename, dirname, extname, join, resolve } from 'node:path'
 import type { Context } from '@phoenix-ai/cordis'
-import type { AttachmentStore, ImageAttachmentRef, ImageMediaType } from '@phoenix-ai/dsh-attachment'
+import type { AttachmentStore, ImageAttachmentRef, ImageMediaType, StoredImageAttachment } from '@phoenix-ai/dsh-attachment'
 import { credentialRef } from '@phoenix-ai/dsh-credentials'
 import type { ContentBlock } from '@phoenix-ai/dsh-llm'
 
@@ -380,6 +380,28 @@ function imageMediaTypeFromBytes(data: Buffer): ImageMediaType | undefined {
   if (data.length >= 12 && data.toString('ascii', 0, 4) === 'RIFF' && data.toString('ascii', 8, 12) === 'WEBP') return 'image/webp'
   if (data.length >= 6 && (data.toString('ascii', 0, 6) === 'GIF87a' || data.toString('ascii', 0, 6) === 'GIF89a')) return 'image/gif'
   return undefined
+}
+
+/** The attachment store may re-encode WebP uploads into PNG/JPEG after admission.
+ * Always use the verified stored raster and its true extension, never the upload filename.
+ */
+export function codexProfileReferenceExtension(photo: StoredImageAttachment): '.png' | '.jpg' | '.webp' {
+  if (photo.data.byteLength === 0 || photo.data.byteLength > 8 * 1024 * 1024) {
+    throw new Error('La fotografía de perfil supera el límite permitido de 8 MB o está vacía.')
+  }
+  // This store returns verified normalized content; independently check the raster signature
+  // to avoid handing the Codex worker a mislabeled or corrupted binary payload.
+  const actual = imageMediaTypeFromBytes(Buffer.from(photo.data))
+  if (actual === undefined || !['image/png', 'image/jpeg', 'image/webp'].includes(actual)
+    || actual !== photo.ref.mediaType || photo.ref.bytes !== photo.data.byteLength) {
+    throw new Error('La fotografía normalizada no coincide con el formato de imagen almacenado.')
+  }
+  switch (actual) {
+    case 'image/png': return '.png'
+    case 'image/jpeg': return '.jpg'
+    case 'image/webp': return '.webp'
+    default: throw new Error('Formato de fotografía de perfil no admitido.')
+  }
 }
 
 function imageExtension(mediaType: ImageMediaType): string {
@@ -1259,13 +1281,10 @@ export function installCodexImageGeneration(ctx: Context): void {
         try {
           if (backend === 'codex' && reference !== undefined) {
             const photo = await servicesOf(ctx).attachments.readImage(reference, exec.signal)
-            if (photo.ref.mediaType !== 'image/webp' || photo.data.length === 0
-              || photo.data.length > 8 * 1024 * 1024) {
-              throw new Error('La fotografía de perfil no es un WebP válido de hasta 8 MB.')
-            }
+            const extension = codexProfileReferenceExtension(photo)
             const dir = await mkdtemp(join(tmpdir(), 'phoenix-user-photo-'))
             try {
-              const source = join(dir, 'profile-original.webp')
+              const source = join(dir, 'profile-original' + extension)
               await writeFile(source, photo.data, { flag: 'wx' })
               image = await generateWithCodexProvider(ctx, args, styledPrompt, exec.signal, source)
             } finally {
