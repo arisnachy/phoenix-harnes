@@ -213,6 +213,11 @@ export function apply(ctx: Context, config: Config): void {
   let openCodeCatalogRevision = 0
   const codexCatalog = new CodexLiveCatalog({ logger: ctx.logger })
   const nvidiaCatalog = new NvidiaLiveCatalog({ logger: ctx.logger })
+  const officialNvidiaRoute = (): boolean => {
+    const route = current().providers?.nvidia
+    return route !== undefined
+      && (route.baseURL === undefined || route.baseURL.replace(/[/]+$/u, '') === NVIDIA_BUILD_BASE_URL)
+  }
   let current: () => Config = () => config
   let lastRaw: Config | undefined
   let lastCatalogRevision = -1
@@ -279,17 +284,17 @@ export function apply(ctx: Context, config: Config): void {
     auth,
     refreshModels: (provider, force) => {
       if (provider === 'nvidia') {
-        const configured = current().providers?.nvidia
-        if (configured === undefined || (configured.baseURL !== undefined
-          && configured.baseURL.replace(/[/]+$/u, '') !== NVIDIA_BUILD_BASE_URL)) return Promise.resolve(undefined)
+        if (!officialNvidiaRoute()) return Promise.resolve(undefined)
         return nvidiaCatalog.refresh(force)
       }
       return codexCatalog.refresh(provider, current().providers?.[provider], force)
     },
     preferredModel: (provider, model, needsImage) =>
-      provider === 'nvidia' ? nvidiaCatalog.preferredModel(model, needsImage) : undefined,
+      provider === 'nvidia' && officialNvidiaRoute()
+        ? nvidiaCatalog.preferredModel(model, needsImage)
+        : undefined,
     onModelUnavailable: async (provider, model, needsImage) => {
-      if (provider !== 'nvidia') return undefined
+      if (provider !== 'nvidia' || !officialNvidiaRoute()) return undefined
       const alternative = await nvidiaCatalog.markUnavailable(model, needsImage)
       if (alternative !== undefined) {
         ctx.logger.warn(`nvidia: model "${model}" returned HTTP 410; switching this turn to "${alternative}"`)
@@ -414,9 +419,9 @@ export function apply(ctx: Context, config: Config): void {
   // NVIDIA's hosted model IDs change independently of PHOENIX releases.
   // Poll in the Host and invalidate profile snapshots only when the live list changes.
   void ctx.effect(async () => {
-    if (current().providers?.nvidia !== undefined) await nvidiaCatalog.refresh(true)
+    if (officialNvidiaRoute()) await nvidiaCatalog.refresh(true)
     const timer = setInterval(() => {
-      if (current().providers?.nvidia !== undefined) void nvidiaCatalog.refresh()
+      if (officialNvidiaRoute()) void nvidiaCatalog.refresh()
     }, NVIDIA_MODEL_REFRESH_MS)
     timer.unref()
     return () => { clearInterval(timer) }
