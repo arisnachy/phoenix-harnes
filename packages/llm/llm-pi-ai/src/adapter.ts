@@ -661,7 +661,7 @@ export class PiAiAdapter extends LlmAdapter {
       // Some SDKs throw transport errors instead of emitting terminal error
       // events. Treat a bare NVIDIA 410 the same way: one safe replacement
       // attempt before any streamed content, never an unbounded retry.
-      if (!emittedChunk && !recoveredModel && /\\b410\\b/u.test(detail)) {
+      if (!emittedChunk && !recoveredModel && /\b410\b/u.test(detail)) {
         const needsImage = options.messages.some(message => contentHasImage(message.content))
         const replacement = await this.config.onModelUnavailable?.(
           options.provider, options.model, needsImage,
