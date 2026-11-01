@@ -366,6 +366,30 @@ describe('ESPN universal adaptive panels',()=>{
   })
 })
 
+describe('Phoenix sports newsroom uses the shared intelligent UI contract',()=>{
+  it('renders image-first article tiles, Spanish labels and a provider-neutral league title',()=>{
+    const news={ component:'sports_espn_dashboard',version:1,props:{
+      view:'news',title:'ESPN · ENG.1',subtitle:'Noticias',
+      source:'ESPN Common v3',checkedAt:'2026-11-01T13:40:00Z',
+      note:'Titulares de origen verificado',
+      sections:[{heading:'Últimos titulares',kind:'articles',items:[
+        {label:'Liverpool host Arsenal',value:'2026-11-01T13:41:41Z',
+          detail:'Liverpool welcome Arsenal to Anfield.',
+          image:'https://a.espncdn.com/news-photo.png',
+          href:'https://www.espn.com/soccer/story/_/id/42/article'},
+      ]}],
+    } }
+    const block=parseGenerativeUiBlock(news)
+    if(!block)throw Error('Valid news panel rejected')
+    const {container}=render(<GenerativeUi block={block}/>)
+    expect(screen.getByText('Premier League · Inglaterra')).toBeTruthy()
+    expect(screen.getByText('Leer noticia')).toBeTruthy()
+    expect(container.querySelector('img')?.getAttribute('src')).toContain('a.espncdn.com')
+    expect(container.querySelector('[data-generative-ui="sports_espn_dashboard"]')).toBeTruthy()
+    expect(container.textContent).not.toContain('ESPN INTELLIGENCE')
+  })
+})
+
 describe('ESPN contextual navigation',()=>{
   it('routes an ESPN verified player drill-down back into the same conversation',()=>{
     const value={ component:'sports_espn_dashboard',version:1,props:{
