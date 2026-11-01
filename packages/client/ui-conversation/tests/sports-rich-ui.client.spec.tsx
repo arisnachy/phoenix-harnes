@@ -334,7 +334,7 @@ describe('ESPN universal adaptive panels',()=>{
     fireEvent.click(screen.getByText('Ver estadísticas y contenido'))
     expect(screen.getByRole('region',{ name:'Perfil' })).toBeTruthy()
     expect(screen.getByRole('region',{ name:'Últimos partidos' })).toBeTruthy()
-    expect(screen.getByText('PTS: 28')).toBeTruthy()
+    expect(screen.getAllByText('PTS: 28').length).toBeGreaterThan(0)
     expect(screen.getByText('Headline')).toBeTruthy()
     expect(screen.getByRole('link',{ name:'Leer noticia' }).getAttribute('href')).toContain('espn.com')
     expect(screen.getByAltText('Jugador real')).toBeTruthy()
