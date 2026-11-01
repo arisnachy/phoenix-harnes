@@ -22,7 +22,12 @@
   "scripts": {
     "build": "vite build",
     "dev": "vite",
-    "watch": "vite build --watch --no-emptyOutDir"
+    "watch": "vite build --watch --no-emptyOutDir",
+    "qa:chromium:install": "playwright install --with-deps chromium",
+    "qa:geo:build": "vite build --config geo-visual-qa.config.ts",
+    "qa:geo:preview": "vite preview --config geo-visual-qa.config.ts --host 127.0.0.1 --port 5187",
+    "qa:scene:build": "vite build --config scene-map-qa.config.ts",
+    "qa:scene:preview": "vite preview --config scene-map-qa.config.ts"
   },
   "license": "MIT",
   "devDependencies": {
