@@ -8,27 +8,27 @@ import { createHash } from 'node:crypto'
 
 /** One sportsbook offer observed from a real provider at a recorded time. */
 export type ObservedOdds = {
-  eventId: string;
-  bookmaker: string;
-  market: string;
-  selection: string;
-  point?: number | null;
-  price: number;
-  home: string;
-  away: string;
-  time: string;
-  timeIso?: string;
-  updatedAt: string;
-  source?: string;
-  sportKey?: string;
+  eventId: string
+  bookmaker: string
+  market: string
+  selection: string
+  point?: number | null
+  price: number
+  home: string
+  away: string
+  time: string
+  timeIso?: string
+  updatedAt: string
+  source?: string
+  sportKey?: string
 }
 /** Dated offers kept for historical analysis, never represented as live prices. */
 export type OddsSnapshot = {
-  sportKey: string;
-  observedAt: string;
-  historical: true;
-  quotes: ObservedOdds[];
-  source: string;
+  sportKey: string
+  observedAt: string
+  historical: true
+  quotes: ObservedOdds[]
+  source: string
 }
 const sportValid=(s:string)=>/^[a-z0-9_]{3,80}$/u.test(s)
 const dayValid=(d:string)=>/^\d{4}-\d{2}-\d{2}$/u.test(d)&&
