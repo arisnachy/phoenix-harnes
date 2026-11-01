@@ -1,5 +1,5 @@
 /** Trusted Host-backed connector for The Odds API v4 (not TheOddsAPI). */
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 
 export interface TheOddsApiSnapshot {
@@ -37,6 +37,15 @@ export function TheOddsApiConnectorSetup({ client, snapshot, onStatus }: {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | undefined>()
   const [feedback, setFeedback] = useState<string | undefined>()
+
+  useEffect(() => {
+    if (!busy) return
+    const timer = globalThis.setTimeout(() => {
+      setBusy(false)
+      setError('El Host no respondió a tiempo. No se pudo confirmar la operación; comprueba el estado antes de volver a intentarlo.')
+    }, 20_000)
+    return () => { globalThis.clearTimeout(timer) }
+  }, [busy])
 
   const save = (): void => {
     if (!client || busy || !/^[A-Za-z0-9_-]{16,128}$/u.test(input.trim())) return
