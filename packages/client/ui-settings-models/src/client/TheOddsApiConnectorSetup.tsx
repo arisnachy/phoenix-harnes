@@ -18,18 +18,6 @@ export interface TheOddsApiClient {
   disconnect(): Promise<TheOddsApiSnapshot>
 }
 
-const HOST_CALL_TIMEOUT_MS = 20_000
-
-function boundedHostCall<T>(request: Promise<T>): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const timer = globalThis.setTimeout(() => { reject(new Error('odds-api-host-timeout')) }, HOST_CALL_TIMEOUT_MS)
-    void request.then(
-      value => { globalThis.clearTimeout(timer); resolve(value) },
-      reason => { globalThis.clearTimeout(timer); reject(reason) },
-    )
-  })
-}
-
 const MESSAGES: Record<TheOddsApiSnapshot['status'], string> = {
   ready: 'Conectada · API key verificada',
   unconfigured: 'Sin configurar',
