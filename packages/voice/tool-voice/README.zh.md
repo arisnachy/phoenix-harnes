@@ -37,4 +37,4 @@ PHOENIX 使用 `PHOENIX_VOICE_ENABLED`、`PHOENIX_VOICE_LANGUAGE` （默认 `es-
 
 - 这些工具不能持续监听，不能识别所有环境声音或确认说话人，也不能绕过受保护媒体。
 - 语音合成回执不证明用户听到了声音；查看器处于可用状态也不证明已收到图像。
-- 每次 Windows 音频采集都要人工批准。
+- 首次 Windows 音频采集都要人工批准。
