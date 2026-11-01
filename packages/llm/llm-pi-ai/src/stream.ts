@@ -168,7 +168,8 @@ export function mapStopReason(
       const retiredTrial = nvidiaGone && message.model === 'minimaxai/minimax-m3'
       const detail = retiredTrial
         ? 'NVIDIA dejó de ofrecer el endpoint gratuito de MiniMax-M3 (HTTP 410). '
-          + 'Selecciona minimaxai/minimax-m3.1-flash en Modelos; NVIDIA indica que su endpoint gratuito está disponible. '
+          + 'Selecciona minimaxai/minimax-m3.1-flash en Modelos; '
+          + 'NVIDIA indica que su endpoint gratuito está disponible. '
           + 'El M3 original puede seguir accesible mediante proveedores asociados. '
           + `Error original: ${text}`
         : nvidiaGone
