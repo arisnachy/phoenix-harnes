@@ -8,7 +8,7 @@ El resultado de un comando externo solamente demuestra que la CLI respondió. **
 
 El script explícito `scripts/phoenix-openclaw-companion.mjs` queda disponible para diagnóstico. La captura del navegador administrado por OpenClaw exige `--approve-capture`.
 
-El adaptador de ejecución OpenClaw → `ctx.tools` con autorización y auditoría sigue siendo una fase pendiente.
+El puente de búsqueda de lectura, descrito a continuación, ya se registra en `ctx.tools` cuando el propietario lo habilita. Un adaptador **general** para plugins nativos, navegador y acciones con efectos externos continúa pendiente: requiere permisos, trazabilidad y un contrato por herramienta.
 
 ## Conexión de búsqueda real al Gateway (optativa)
 

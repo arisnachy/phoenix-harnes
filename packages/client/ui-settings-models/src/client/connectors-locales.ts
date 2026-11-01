@@ -1,6 +1,6 @@
 /** Copy for the dedicated Settings → Connectors surface. */
 export const connectorEn = {
-  ocDetected: 'External CLI detected · not routed to Kira',
+  ocDetected: 'CLI detected · native plugins need a separate runtime',
   ocMissing: 'OpenClaw not installed',
   ocGateway: 'Gateway', ocBrowser: 'Browser', ocPlugins: 'Plugins', ocChannels: 'Channels',
   ocResponded: 'CLI responded', ocUnavailable: 'Unavailable',
@@ -109,7 +109,7 @@ export type ConnectorKey = keyof typeof connectorEn
 
 /** Spanish copy for the dedicated Settings → Connectors surface. */
 export const connectorEs: { [Key in ConnectorKey]: string } = {
-  ocDetected: 'CLI detectada · todavía no conectada con Kira',
+  ocDetected: 'CLI detectada · plugins nativos requieren runtime propio',
   ocMissing: 'OpenClaw no está instalado',
   ocGateway: 'Gateway', ocBrowser: 'Navegador', ocPlugins: 'Plugins', ocChannels: 'Canales',
   ocResponded: 'CLI respondió', ocUnavailable: 'No disponible',
@@ -215,7 +215,7 @@ export const connectorEs: { [Key in ConnectorKey]: string } = {
 
 /** Simplified Chinese copy for the dedicated Settings → Connectors surface. */
 export const connectorZh: { [Key in ConnectorKey]: string } = {
-  ocDetected: '已检测外部 CLI · 尚未路由到 Kira',
+  ocDetected: '检测到 CLI · 原生插件仍需独立运行时',
   ocMissing: '未安装 OpenClaw',
   ocGateway: 'Gateway', ocBrowser: '浏览器', ocPlugins: '插件', ocChannels: '渠道',
   ocResponded: 'CLI 已响应', ocUnavailable: '不可用',
