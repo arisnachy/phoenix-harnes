@@ -6,6 +6,8 @@
  * Unlike a pinned pi-ai snapshot this catalog admits newly published models
  * and removes missing ids from the selector. Historical ids stay dispatchable
  * for old sessions, and a 410 temporarily quarantines a model for this runtime.
+ *
+ * @module dsh-llm-pi-ai/nvidia-live-catalog
  */
 import { catalogModels } from './catalog.ts'
 import type { PiAiModelProfile, PiAiProviderProfile } from './config.ts'
@@ -232,6 +234,10 @@ export class NvidiaLiveCatalog {
       ...providers,
       nvidia: {
         ...profile,
+        // Unknown fresh IDs disclose no capacity. Use conservative values
+        // while preserving the SDK's richer metadata for known models.
+        defaultContextWindow: profile.defaultContextWindow ?? 32_768,
+        defaultMaxTokens: profile.defaultMaxTokens ?? 4_096,
         models: [...entries.values()],
         modelOverrides: undefined,
       },
