@@ -1,4 +1,4 @@
 # Bilingual-pair consistency record (docs/i18n/README.md): git blob hashes of both
 # documents after reviewing equivalent meaning, headings and list structure.
-README.md: b2dcc4167cdd9d6ba51a6d89c2432e09cfa1f82e
-README.zh.md: 37742a5448698d88e9c379a022fab2dc352b49e3
+README.md: 126cb66138022f6f36cae8febbcbec4ecb4307d4
+README.zh.md: 2f2915f0a3b4a85e58beff8f4fe9f9e2653b3feb

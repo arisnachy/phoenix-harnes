@@ -15,7 +15,19 @@ Uses `PHOENIX_VOICE_ENABLED`, `PHOENIX_VOICE_LANGUAGE` (default `es-DO`), and th
 
 ## Model Experience
 
-When a user asks Kira to speak, the model calls `phoenix_voice_speak` with the requested short phrase. For diagnosis it calls `phoenix_voice_status`. The tool reports the provider's actual acceptance or rejection; Kira must not claim the speakers were audible until the user confirms.
+### Model-invoked speech controls
+
+#### What the model sees
+
+When a user asks Kira to speak, the model can call `phoenix_voice_speak` with a short phrase. `phoenix_voice_status` reports the current Host voice status. Tool receipts identify whether the provider accepted the request, but not whether physical speakers were audible; Kira asks the user to confirm playback.
+
+#### Token effect
+
+The two tool schemas add a bounded amount of model context. Voice synthesis and playback run in the Host and do not insert audio bytes into the conversation prompt.
+
+#### KV Cache effect
+
+The tool schemas and static instructions remain reusable across requests. Live provider status and playback receipts vary per call and may reduce KV-cache reuse for those dynamic tool results.
 
 ## Known Limitations and Deferred Work
 
