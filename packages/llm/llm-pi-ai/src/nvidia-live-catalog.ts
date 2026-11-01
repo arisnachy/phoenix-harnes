@@ -91,9 +91,18 @@ export class NvidiaLiveCatalog {
     return this.visible?.filter(model => this.active(model.id)).map(model => model.id)
   }
 
-  /** Last successfully discovered models, for the configuration discovery UI. */
+  /** Last successfully discovered models, enriched with installed capacity metadata. */
   visibleModels(): readonly PiAiModelProfile[] | undefined {
-    return this.visible?.filter(model => this.active(model.id)).map(model => ({ ...model }))
+    const known = catalogModels('nvidia')
+    return this.visible?.filter(model => this.active(model.id)).map(model => {
+      const base = known.get(model.id)
+      return {
+        ...base === undefined ? {} : {
+          name: base.name, contextWindow: base.contextWindow, maxTokens: base.maxTokens,
+        },
+        ...model,
+      }
+    })
   }
 
   /** Fast cache hit; concurrent fetch callers share the same request. */
@@ -119,8 +128,23 @@ export class NvidiaLiveCatalog {
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
       const declared = Number(response.headers.get('content-length') ?? Number.NaN)
       if (Number.isFinite(declared) && declared > MAX_LISTING_BYTES) throw new Error('listing too large')
-      const body = await response.text()
-      if (Buffer.byteLength(body, 'utf8') > MAX_LISTING_BYTES) throw new Error('listing too large')
+      if (response.body === null) throw new Error('empty NVIDIA listing body')
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let body = ''
+      let bytes = 0
+      try {
+        for (;;) {
+          const { done, value } = await reader.read()
+          if (done) break
+          bytes += value.byteLength
+          if (bytes > MAX_LISTING_BYTES) throw new Error('listing too large')
+          body += decoder.decode(value, { stream: true })
+        }
+        body += decoder.decode()
+      } finally {
+        await reader.cancel().catch(() => { /* best-effort reader cleanup */ })
+      }
       const next = parseNvidiaChatModels(JSON.parse(body) as unknown)
       // Invalid/empty data is not an authoritative catalog deletion.
       if (next.length === 0) throw new Error('empty or invalid NVIDIA chat catalog')
