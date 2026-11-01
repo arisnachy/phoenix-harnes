@@ -45,6 +45,7 @@ internal sealed class PhoenixDesktopWindow : Form
     private bool browserPageReady;
     private string? lastBrowserError;
     private DateTimeOffset? lastBrowserInspectionAt;
+    private string lastBrowserAction = "Sin actividad del navegador";
     private readonly ToolStripTextBox address = new();
     private readonly ToolStripButton backButton = new("←");
     private readonly ToolStripButton forwardButton = new("→");
@@ -510,6 +511,7 @@ internal sealed class PhoenixDesktopWindow : Form
     {
         if (IsDisposed) return;
         browserDebugStatus.Text = message;
+        lastBrowserAction = message;
         DesktopLog.Write("Browser perception: " + message);
     }
 
@@ -709,6 +711,7 @@ internal sealed class PhoenixDesktopWindow : Form
                         debugStripVisible = browserDebugStrip?.Visible == true && !split.Panel2Collapsed,
                         lastNavigationError = lastBrowserError,
                         lastInspectedAt = lastBrowserInspectionAt,
+                        lastAction = lastBrowserAction,
                     },
                     windowsAudio = JsonSerializer.Deserialize<JsonElement>(DesktopAudioCapture.Status()),
                     evidence = "A visible viewer is not proof of a frame. Verify desktop.live-frame or computer screenshots separately."
@@ -860,7 +863,11 @@ internal sealed class PhoenixDesktopWindow : Form
     {
         var core = await RequireBrowserForOriginAsync(command.Origin);
         var raw = await core.ExecuteScriptAsync(BuildBrowserFillScript(command));
-        return DecodeScriptJson(raw);
+        var receipt = DecodeScriptJson(raw);
+        using var result = JsonDocument.Parse(receipt);
+        if (result.RootElement.TryGetProperty("filled", out var filled) && filled.TryGetInt32(out var count))
+            SetBrowserDebugStatus($"Kira · {count} campos actualizados");
+        return receipt;
     }
 
     /// <summary>Build a form update without interpreting markers inside field values.</summary>
@@ -889,7 +896,12 @@ internal sealed class PhoenixDesktopWindow : Form
             .Replace("__ORIGIN__", JsonSerializer.Serialize(command.Origin), StringComparison.Ordinal)
             .Replace("__TEXT__", JsonSerializer.Serialize(command.Text ?? string.Empty), StringComparison.Ordinal);
         var raw = await core.ExecuteScriptAsync(script);
-        return DecodeScriptJson(raw);
+        var receipt = DecodeScriptJson(raw);
+        using var result = JsonDocument.Parse(receipt);
+        if (result.RootElement.TryGetProperty("clicked", out var clicked)
+            && clicked.ValueKind is JsonValueKind.True or JsonValueKind.False)
+            SetBrowserDebugStatus(clicked.GetBoolean() ? "Kira · clic confirmado" : "Kira · botón no encontrado");
+        return receipt;
     }
 
     private async Task<string> LoginBrowserAsync(BrowserCommand command)
@@ -898,7 +910,14 @@ internal sealed class PhoenixDesktopWindow : Form
         if (string.IsNullOrEmpty(command.Account) || string.IsNullOrEmpty(command.Secret))
             throw new InvalidOperationException("Origin-bound login is incomplete.");
         var raw = await core.ExecuteScriptAsync(BuildBrowserLoginScript(command));
-        return DecodeScriptJson(raw);
+        var receipt = DecodeScriptJson(raw);
+        using var result = JsonDocument.Parse(receipt);
+        if (result.RootElement.TryGetProperty("submitted", out var submitted)
+            && submitted.ValueKind is JsonValueKind.True or JsonValueKind.False)
+            SetBrowserDebugStatus(submitted.GetBoolean()
+                ? "Kira · formulario de acceso enviado" : "Kira · acceso pendiente de completar");
+        // Credentials are never added to the visual activity strip or diagnostic logs.
+        return receipt;
     }
 
     /// <summary>Substitute trusted JSON literals once so credential text cannot be interpreted as a template marker.</summary>
@@ -1312,6 +1331,7 @@ internal sealed class PhoenixDesktopWindow : Form
             pageReady = browserPageReady,
             lastNavigationError = lastBrowserError,
             lastInspectedAt = lastBrowserInspectionAt,
+            lastAction = lastBrowserAction,
         });
         phoenixView.CoreWebView2.PostWebMessageAsJson(payload);
     }
