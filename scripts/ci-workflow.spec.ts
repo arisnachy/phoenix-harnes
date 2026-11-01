@@ -113,16 +113,16 @@ describe('CI workflow', () => {
       isRecord(step) && typeof step.run === 'string'
     ))
 
-    // Required PR job: Wine on ubuntu-latest, runs wine-windows-gates.sh.
+    // Required on PRs and main/stable pushes: hosted Wine checks.
     expect(windows['runs-on']).toBe('ubuntu-latest')
     expect(windows.name).toBe('windows node 24 / wine blocking')
-    expect(windows.if).toBe("github.event_name == 'pull_request'")
+    expect(windows.if).toBeUndefined()
     expect(commandSteps.some(step => step.run.includes('wine-windows-gates.sh'))).toBe(true)
 
     // windows-native: portable real-kernel signal on a standard hosted runner.
     expect(windowsNative['runs-on']).toBe('windows-latest')
     expect(windowsNative.name).toBe('windows node 24 / native required')
-    expect(windowsNative.if).toBe("github.event_name == 'pull_request'")
+    expect(windowsNative.if).toBeUndefined()
     expect(windowsNative.env).toMatchObject({
       DSH_GATE_CONCURRENCY: '1',
       DSH_PUBLINT_CONCURRENCY: '2',
@@ -173,22 +173,22 @@ describe('CI workflow', () => {
     // larger runners for 15 minutes in this same group on master.
     expect(workflow.concurrency['cancel-in-progress']).toBe("${{ github.event_name != 'push' }}")
 
-    // The PR-only ci.yml still cancels a superseded run on a new push, so a
-    // fresh head does not stack a second full 9-job run behind a stale one.
-    // Unlike ci-master it has no push carve-out: every PR event supersedes.
+    // The full CI cancels superseded runs on the same PR or protected branch.
+    // New PR commits and newer main/stable pushes do not stack behind stale work.
+    // The master-only drill retains its separate push cancellation exemption.
     expect(prWorkflow.concurrency).toMatchObject({
       'cancel-in-progress': true,
     })
 
-    // The exact event sets are what keep master-only jobs out of the PR check
-    // panel: ci-master triggers only on push(master) + workflow_dispatch and
-    // never on pull_request; ci.yml is exactly pull_request-only. Assert the
-    // full sets so losing the wrong event, or gaining an extra one, fails.
+    // The event sets keep master-only standby drills off the PR check panel;
+    // the required CI runs on PRs and on protected main/stable pushes.
+    // Assert the exact event sets to prevent accidental monitoring gaps.
     if (!isRecord(workflow.on) || !isRecord(prWorkflow.on)) {
       throw new TypeError('both CI workflows must define on')
     }
     expect(Object.keys(workflow.on).sort()).toEqual(['push', 'workflow_dispatch'])
-    expect(Object.keys(prWorkflow.on)).toEqual(['pull_request'])
+    expect(Object.keys(prWorkflow.on).sort()).toEqual(['pull_request', 'push'])
+    expect(prWorkflow.on.push).toMatchObject({ branches: ['main', 'stable'] })
 
     // Neither drill may carry a job-level group: it would not exempt the job
     // from run-scoped cancellation.
@@ -250,10 +250,10 @@ describe('CI workflow', () => {
     }
 
     expect(pythonSdk).toMatchObject({
-      if: "github.event_name == 'pull_request'",
       name: 'python 3.10 / keyless SDK',
       'runs-on': 'ubuntu-latest',
     })
+    expect(pythonSdk.if).toBeUndefined()
     const commands = pythonSdk.steps
       .filter((step): step is Record<string, unknown> & { run: string } => isRecord(step) && typeof step.run === 'string')
       .map(step => step.run)
