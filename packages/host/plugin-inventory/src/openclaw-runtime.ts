@@ -1,47 +1,79 @@
 /**
- * Optional OpenClaw companion health probes.
- * OpenClaw remains a separate process: a successful CLI query does not
- * authorize PHOENIX to access a browser, session, camera or plugin.
- * No raw stdout, config, credentials, paths or account ids cross the Remote.
+ * Optional, bounded OpenClaw CLI probes for PHOENIX's existing Connector card.
+ * Local toolchain first; PATH fallback. A responding CLI never grants
+ * permission to inspect the user's screen, execute plugins or access secrets.
  */
 import { spawn } from 'node:child_process'
+import { existsSync, readFileSync } from 'node:fs'
+import { homedir } from 'node:os'
+import { dirname, join, relative, resolve } from 'node:path'
 import type { OpenClawProbeState, OpenClawRuntimeSnapshot } from './types.ts'
+
+interface CliCommand { readonly binary: string; readonly prefix: readonly string[] }
+
+function managedCli(): CliCommand | undefined {
+  const home = process.env.DSH_HOME ?? join(homedir(), '.dsh')
+  const file = join(home, 'toolchains', 'openclaw', 'node_modules', 'openclaw', 'package.json')
+  if (!existsSync(file)) return undefined
+  try {
+    const data: unknown = JSON.parse(readFileSync(file, 'utf8'))
+    if (data === null || typeof data !== 'object') return undefined
+    const record = data as { bin?: string | { openclaw?: string } }
+    const part = typeof record.bin === 'string' ? record.bin : record.bin?.openclaw
+    if (typeof part !== 'string') return undefined
+    const base = dirname(file)
+    const entry = resolve(base, part)
+    const rel = relative(base, entry)
+    if (rel.startsWith('..') || rel.length === 0 || !existsSync(entry)) return undefined
+    return { binary: process.execPath, prefix: [entry] }
+  } catch {
+    return undefined
+  }
+}
+
+function openClawCli(): CliCommand {
+  const local = managedCli()
+  if (local !== undefined) return local
+  if (process.platform === 'win32') {
+    // All arguments come from fixed literals below, not user input.
+    return { binary: 'cmd.exe', prefix: ['/d', '/s', '/c', 'openclaw.cmd'] }
+  }
+  return { binary: 'openclaw', prefix: [] }
+}
 
 function probe(args: readonly string[], timeoutMs = 5000): Promise<boolean> {
   return new Promise(resolve => {
-    const win = process.platform === 'win32'
-    // Fixed arguments only. No user text or arbitrary commands enter cmd.exe.
-    const command = win ? 'cmd.exe' : 'openclaw'
-    const argv = win ? ['/d', '/s', '/c', 'openclaw.cmd', ...args] : [...args]
+    const cli = openClawCli()
     let finished = false
     let child: ReturnType<typeof spawn>
+    let timer: ReturnType<typeof setTimeout> | undefined
     const complete = (success: boolean): void => {
       if (finished) return
       finished = true
-      clearTimeout(timer)
+      if (timer !== undefined) clearTimeout(timer)
       resolve(success)
     }
     try {
-      child = spawn(command, argv, {
+      child = spawn(cli.binary, [...cli.prefix, ...args], {
         windowsHide: true,
         stdio: 'ignore',
         shell: false,
       })
     } catch {
-      resolve(false)
+      complete(false)
       return
     }
-    const timer = setTimeout(() => { child.kill(); complete(false) }, timeoutMs)
+    timer = setTimeout(() => { child.kill(); complete(false) }, timeoutMs)
     child.on('error', () => { complete(false) })
     child.on('close', code => { complete(code === 0) })
   })
 }
 
-function state(installed: boolean, success: boolean): OpenClawProbeState {
-  return !installed ? 'not-installed' : success ? 'responded' : 'unavailable'
+function state(success: boolean): OpenClawProbeState {
+  return success ? 'responded' : 'unavailable'
 }
 
-/** Bounded, non-interactive runtime detection. Not proof of live plugin execution. */
+/** CLI response readiness only, never proof of active Gateway tools. */
 export async function readOpenClawRuntimeSnapshot(): Promise<OpenClawRuntimeSnapshot> {
   const installed = await probe(['--version'], 4000)
   if (!installed) {
@@ -62,10 +94,10 @@ export async function readOpenClawRuntimeSnapshot(): Promise<OpenClawRuntimeSnap
   ])
   return {
     installed: true,
-    gateway: state(true, gateway),
-    browser: state(true, browser),
-    plugins: state(true, plugins),
-    channels: state(true, channels),
+    gateway: state(gateway),
+    browser: state(browser),
+    plugins: state(plugins),
+    channels: state(channels),
     nativePluginsRoutedToPhoenix: false,
   }
 }
