@@ -72,6 +72,8 @@ export function unfinishedStructuredWorkRecoveryObjective(events: readonly Sessi
  * This inspects durable tool outcomes, never assistant prose or hard-coded
  * refusal phrases. It does not rerun the failed operation: the Goal driver
  * decides a safe alternative after checking whether effects actually occurred.
+ * @param events - Durable session events since the latest human turn.
+ * @returns The original objective if a completed turn still has an unverified tool effect.
  */
 export function unfinishedToolFailureRecoveryObjective(events: readonly SessionEvent[]): string | undefined {
   const index = events.findLastIndex(event =>

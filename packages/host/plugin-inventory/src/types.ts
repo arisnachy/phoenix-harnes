@@ -91,6 +91,7 @@ export interface BusinessLibraryProduct {
   readonly buildStatus: 'not-built' | 'current' | 'stale'
   readonly listingStage: 'not-prepared' | 'assets-missing' | 'review-required' | 'integrity-failed'
 }
+/** Sanitized, bounded read-only inventory of local Business Studio products. */
 export interface BusinessLibrarySnapshot {
   readonly totalCount: number
   readonly truncated: boolean

@@ -199,6 +199,7 @@ export class TelegramInbox {
   isPolling(): boolean {
     return this.phase === 'polling' && Date.now() - this.lastPoll < 50_000
   }
+  /** Return the latest polling failure, if any, without disclosing credentials. */
   error(): string | undefined { return this.failure }
   async isPaired(): Promise<boolean> {
     const creds = vault(this.ctx)

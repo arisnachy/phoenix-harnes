@@ -365,6 +365,8 @@ export async function runMiniBrowserFallback(
  * A named-pipe connection failure that proves no native command reached the
  * Desktop broker. Only these pre-connect failures are safe to retry through
  * another actuator; EPIPE/timeouts remain ambiguous and are never replayed.
+ * @param error - Native connection error to classify before any retry.
+ * @returns Whether the broker was never connected and retry is safe.
  */
 export function desktopControlConnectionWasNeverEstablished(error: unknown): boolean {
   const code = (error as NodeJS.ErrnoException | undefined)?.code

@@ -230,10 +230,9 @@ export class PluginInventoryGateway extends TypertRemoteService {
   }
 
   /**
-   * Read Phoenix Local state and installable catalog without exposing machine paths.
-   * @returns Current sanitized Phoenix Local state and catalog.
+   * Read the Business Studio product catalog without exposing private content.
+   * @returns A bounded, sanitized inventory without filesystem paths or orders.
    */
-  /** Read local products without exposing contents, orders or filesystem paths. */
   @Remote('businessLibrary')
   async businessLibrary(): Promise<BusinessLibrarySnapshot> {
     return readBusinessLibrarySnapshot()
