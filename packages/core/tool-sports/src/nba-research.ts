@@ -15,6 +15,7 @@ type EspnEvent = {
 }
 type Board = { events?: EspnEvent[] }
 type Result = { eventId: string; date: string; opponent: string; margin: number; result: 'W' | 'L' | 'T' }
+/** Evidence-limited recent-form summary for one NBA team. */
 export type NbaSideResearch = {
   teamId: string
   team: string
@@ -26,6 +27,7 @@ export type NbaSideResearch = {
   restHours: number | null
   recentResults: Result[]
 }
+/** Matchup comparison, rest context and missing evidence. */
 export type NbaMatchResearch = {
   eventId: string
   matchup: string
@@ -36,6 +38,7 @@ export type NbaMatchResearch = {
   evidenceStatus: 'limited' | 'insufficient'
   missing: string[]
 }
+/** Bounded NBA slate research from verified ESPN scoreboard observations. */
 export type NbaResearchReport = {
   sport: 'basketball'; league: 'nba'; date: string
   source: string; observedAt: string; lookbackDays: number; daysRetrieved: number
@@ -93,6 +96,14 @@ const nowDay=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santo_Doming
  * Research one NBA slate from ESPN fixtures plus completed game results, using one
  * bounded board request per date, shared across all events (no requests per team).
  * Does not substitute descriptive form for a calibrated win probability.
+ * @param date - Requested NBA slate date.
+ * @param eventId - Optional exact ESPN event identifier.
+ * @param fetcher - Injectable HTTP client.
+ * @param now - Observation timestamp in milliseconds.
+ * @param env - Operator feature configuration.
+ * @param lookbackDays - Bounded recent-form window.
+ * @param maxMatches - Maximum matchups to investigate.
+ * @returns Source-attributed matchup evidence and limitations.
  */
 export async function researchNbaSlate(
   date=nowDay(),eventId?:string,fetcher:typeof fetch=fetch,now=Date.now(),

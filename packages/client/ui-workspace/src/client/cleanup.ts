@@ -4,6 +4,7 @@
  */
 import type { SessionId, SessionListState } from '@phoenix-ai/dsh-client-runtime/client'
 
+/** Explicit user-selected scope for a non-destructive deletion preview. */
 export type SessionCleanupMode = 'selected' | 'before' | 'between' | 'all'
 
 /** Local end-of-day boundary for a date input; invalid/empty dates select nothing. */

@@ -5,6 +5,7 @@
 const site='https://site.api.espn.com/apis/site/v2/sports/{sport}/{league}'
 const core='https://sports.core.api.espn.com/v2/sports/{sport}/leagues/{league}'
 const game=core+'/events/{eventId}/competitions/{competitionId}'
+/** Curated ESPN Site/Core endpoint templates with historical-data limitations. */
 export const espnEndpointGuide=[
   {id:'scoreboard',url:site+'/scoreboard?dates=YYYYMMDD',requires:['sport','league','date'],
     purpose:'Lista de partidos, identificadores eventId y competitionId, estado y cuotas incrustadas si existen',
@@ -70,6 +71,7 @@ export const espnEndpointGuide=[
     use:'Resolver providerId mediante respuesta real y contrastarlo con provider.name en el partido',
     history:'Catálogo de identificadores, no prueba que existan cuotas'},
 ] as const
+/** Read-only ESPN investigation sequences and safeguards for current and historical markets. */
 export const espnWorkflow={
   current:['sports_chat_games', 'sports_chat_odds', 'sports_chat_espn_core(mode=odds)'],
   historical:['sports_chat_espn_historical_odds(sport,league,date,days)',
