@@ -27,6 +27,7 @@ import { isAbsolute, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import process from 'node:process'
 import { gitSafeDirectoryEnvironment } from './phoenix-git-safe-directory.mjs'
+import { guardianBlockedTarget } from './phoenix-guardian-incidents.mjs'
 import { classifyStableUpdate } from './phoenix-update-policy.mjs'
 import { diagnoseStalledPhoenixActivation, recordPhoenixUpdateStep, writePhoenixUpdateState } from './phoenix-update-state.mjs'
 import { pinPhoenixUpdateLiveHelper, validPinnedPhoenixUpdateLiveHelper } from './phoenix-update-live-pin.mjs'
@@ -950,6 +951,11 @@ function promotedTargetStillCurrent(root, target) {
 
 function stageCandidate(root, inspection) {
   const target = inspection.target
+  if (guardianBlockedTarget(target)) {
+    console.error(`[PHOENIX GUARDIAN] quarantined failed stable ${target.slice(0, 12)}; keeping the last-known-good runtime.`)
+    writeState(root, { status: 'paused', phase: 'guardian-quarantine', current: inspection.current, target })
+    return { prepared: false, plan: updatePlan(root, inspection), latestTarget: target }
+  }
   const facts = updateFacts(inspection)
   const plan = updatePlan(root, inspection)
   if (reconcileAlreadyActiveTarget(root, inspection)) {
@@ -1024,6 +1030,7 @@ function rollback(root, previous, failedTarget, cause) {
       previous,
       current: previous,
       failedTarget,
+      detail: cause instanceof Error ? cause.stack ?? cause.message : String(cause),
     })
     console.error('[PHOENIX UPDATE] rollback succeeded; PHOENIX will continue on the last known-good version.')
     return true
@@ -1040,6 +1047,11 @@ function rollback(root, previous, failedTarget, cause) {
 }
 
 function applyUpdate(root, inspection, options = {}) {
+  if (guardianBlockedTarget(inspection.target)) {
+    console.error(`[PHOENIX GUARDIAN] refusing failed stable ${inspection.target.slice(0, 12)}; only a different verified SHA may update.`)
+    writeState(root, { status: 'paused', phase: 'guardian-quarantine', current: inspection.current, target: inspection.target })
+    return false
+  }
   const replacingDivergedRelease = inspection.status === 'diverged'
   if (inspection.status !== 'upgrade' && !canReplaceDiverged(root, inspection)) return false
   if (!canMutateBranch(inspection.branch)) {

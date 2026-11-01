@@ -25,11 +25,13 @@ import { hydratePhoenixEnvironment } from './phoenix-windows-environment.mjs'
 import { ensurePhoenixDesktopShortcut } from './phoenix-windows-shortcut.mjs'
 import { recordPhoenixUpdateStep, writePhoenixUpdateState } from './phoenix-update-state.mjs'
 import { pinPhoenixUpdateLiveHelper, validPinnedPhoenixUpdateLiveHelper } from './phoenix-update-live-pin.mjs'
+import { guardianBlockedTarget, recordGuardianIncident } from './phoenix-guardian-incidents.mjs'
 
 const root = resolve(process.cwd())
 const supervisorSourceRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 Object.assign(process.env, gitSafeDirectoryEnvironment(process.env, [root]))
 let runtimeRoot = root
+let lastKnownGoodRuntimeRoot = root
 const hostArgs = process.argv.slice(2)
 const desktopConsoleVisible = ['1', 'true', 'yes']
   .includes((process.env.PHOENIX_DESKTOP_CONSOLE ?? '').trim().toLowerCase())
@@ -118,6 +120,10 @@ const STAGE_STORAGE_RETENTION_MS = Math.max(
   Math.min(UPDATE_STORAGE_RETENTION_MS, 6 * 60 * 60 * 1000),
 )
 const HOST_STABLE_MS = Math.max(5_000, Number.parseInt(process.env.PHOENIX_HOST_STABLE_MS ?? '15000', 10) || 15_000)
+// A first healthy boot is not sufficient proof that a new Host won't crash
+// moments later. Keep the previous verified runtime until probation expires.
+const HOST_GUARDIAN_PROBATION_MS = Math.max(HOST_STABLE_MS + 1_000,
+  Number.parseInt(process.env.PHOENIX_GUARDIAN_PROBATION_MS ?? '120000', 10) || 120_000)
 const CONFIG_SNAPSHOT_SCHEMA = 1
 const CONFIG_SNAPSHOT_FILE = 'phoenix-config-last-known-good.json'
 const CONFIG_RECOVERY_REPORT_FILE = 'phoenix-config-recovery-report.json'
@@ -761,6 +767,10 @@ function cleanupDetachedLegacyStorage(keep, reportBusy = false) {
 
 function cleanupObsoleteRuntimes(extraKeep = [], { reportBusy = false } = {}) {
   const keep = new Set(extraKeep.filter(Boolean).map(runtimePathKey))
+  // During a handoff, the previous Host has already been stopped, but the new
+  // generation has NOT passed its health checkpoint. Never delete that fallback
+  // even when PHOENIX_UPDATE_RUNTIME_BACKUPS=0 or a storage sweep races activation.
+  if (lastKnownGoodRuntimeRoot !== root) keep.add(runtimePathKey(lastKnownGoodRuntimeRoot))
   const active = readActiveRuntimeRecord()
   if (active?.path !== undefined) keep.add(runtimePathKey(active.path))
   if (runtimeRoot !== root) keep.add(runtimePathKey(runtimeRoot))
@@ -1225,6 +1235,7 @@ function clearActiveRuntime() {
 }
 
 function activatePreparedRuntime(target) {
+  if (guardianBlockedTarget(target)) throw new Error(`Guardian quarantined failed release ${target}; activation denied`)
   // An already-compiled stable candidate may become obsolete while another
   // checkout advances. Never downgrade a newer durable source checkout even
   // when the crash-recovery watcher still holds an older prepared marker.
@@ -2109,6 +2120,10 @@ if (supervisorInstanceLock === null) {
 const initialBootChecksStartedAt = Date.now()
 recoverStaleStagingIndexLock()
 restoreActiveRuntime()
+// A previously verified isolated Host is the real last-known-good release.
+// A restarted supervisor must not silently downgrade its rollback target
+// to the older source checkout while a newer candidate is in probation.
+if (runtimeRoot !== root) lastKnownGoodRuntimeRoot = runtimeRoot
 prepareKokoroFallback()
 // Old runtimes can be gigabytes on Windows/OneDrive. Pruning them (and
 // git worktree metadata) before the first Host spawn used to turn optional
@@ -2176,6 +2191,7 @@ while (true) {
   })
   let healthyCheckpointWritten = false
   let intentionalHandoffRequested = false
+  let probationTimer
   const stableTimer = setTimeout(() => {
     // Do not mark a Host healthy while its supervisor-initiated shutdown is
     // pending (especially when Windows holds the port after termination).
@@ -2184,7 +2200,16 @@ while (true) {
       persistLastKnownGoodConfiguration(launchConfiguration)
       confirmActiveRuntimeHealth()
       healthyCheckpointWritten = true
-      console.error('[PHOENIX RECOVERY] healthy Host checkpoint recorded as last-known-good configuration.')
+      if (runtimePathKey(lastKnownGoodRuntimeRoot) !== runtimePathKey(hostRuntimeRoot)) {
+        console.error('[PHOENIX GUARDIAN] Host passed initial health; retaining previous runtime during probation.')
+        probationTimer = setTimeout(() => {
+          if (host.exitCode !== null || shutdownRequested || intentionalHandoffRequested) return
+          lastKnownGoodRuntimeRoot = hostRuntimeRoot
+          console.error('[PHOENIX GUARDIAN] probation passed; new runtime is now last-known-good.')
+        }, HOST_GUARDIAN_PROBATION_MS)
+        probationTimer.unref?.()
+      }
+      console.error('[PHOENIX RECOVERY] healthy Host checkpoint recorded; previous runtime remains available during probation.')
       // Only the actual target checkout running beyond the health checkpoint
       // completes an update. A request marker or successful build alone does not.
       const updateState = readUpdateState()
@@ -2255,6 +2280,7 @@ while (true) {
   }
 
   clearTimeout(stableTimer)
+  if (probationTimer !== undefined) clearTimeout(probationTimer)
   activeHost = undefined
 
   if (hostEvent.kind === 'safe-update-handoff') cleanupObsoleteRuntimes()
@@ -2452,12 +2478,45 @@ while (true) {
 
   if (runtimeRoot !== root) {
     const failedRuntime = runtimeRoot
-    runtimeRoot = root
-    clearActiveRuntime()
+    const lastGood = lastKnownGoodRuntimeRoot
+    const lastGoodSha = gitValue(lastGood, ['rev-parse', 'HEAD'])
+    const recovered = lastGoodSha !== undefined && runtimeIsHealthy(lastGood, lastGoodSha)
+    if (recovered && runtimePathKey(lastGood) !== runtimePathKey(failedRuntime)) {
+      const failedSha = gitValue(failedRuntime, ['rev-parse', 'HEAD'])
+      if (failedSha !== undefined && failedSha !== lastGoodSha) {
+        const diagnostic = hostErrorTail.trim() || 'Unexpected Host exit during Guardian probation'
+        try {
+          recordGuardianIncident({
+            status: 'rolled-back', phase: 'host-crash', previous: lastGoodSha,
+            failedTarget: failedSha, diagnosis: diagnostic,
+          })
+          const stateFile = updateStatePath()
+          if (stateFile !== undefined) writePhoenixUpdateState(stateFile, {
+            schema: 1, status: 'rolled-back', phase: 'host-crash',
+            previous: lastGoodSha, current: lastGoodSha, failedTarget: failedSha,
+            detail: 'Guardian restored last-known-good after unexpected isolated Host exit.',
+            at: new Date().toISOString(),
+          })
+        } catch (error) {
+          console.error('[PHOENIX GUARDIAN] warning: could not persist Host crash incident: '
+            + (error instanceof Error ? error.message : String(error)))
+        }
+      }
+    }
+    runtimeRoot = recovered ? lastGood : root
+    if (recovered && runtimeRoot !== root) {
+      try { writeActiveRuntime(lastGoodSha, runtimeRoot) }
+      catch (error) {
+        console.error('[PHOENIX GUARDIAN] could not record recovered active runtime: '
+          + (error instanceof Error ? error.message : String(error)))
+      }
+    } else {
+      clearActiveRuntime()
+    }
     cleanupObsoleteRuntimes()
     console.error(
       `[PHOENIX RECOVERY] isolated runtime ${failedRuntime} exited unexpectedly; `
-      + 'retired its active marker and falling back to the source checkout instead of relaunching a broken update.',
+      + 'retired its active marker and falling back to the last-known-good runtime instead of relaunching a broken update.',
     )
     continue
   }
