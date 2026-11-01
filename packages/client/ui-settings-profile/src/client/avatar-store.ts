@@ -198,7 +198,7 @@ export async function createFaceAvatar(image: Blob, zoom = 1): Promise<Blob> {
       try {
         const detected = await new DetectorClass({ fastMode: true, maxDetectedFaces: 4 }).detect(bitmap)
         face = detected.sort((a, b) =>
-          b.boundingBox.width * b.boundingBox.height - a.boundingBox.width * a.boundingBox.height
+          b.boundingBox.width * b.boundingBox.height - a.boundingBox.width * a.boundingBox.height,
         )[0]?.boundingBox
       } catch { /* FaceDetector is experimental; preserve deterministic fallback. */ }
     }

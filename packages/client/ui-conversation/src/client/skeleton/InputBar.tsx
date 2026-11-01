@@ -413,7 +413,10 @@ export function InputBar({
     } finally {
       voiceStartingRef.current = false
     }
-  }, [ensureHarnessVoiceRecognition, locked, machineBusy, nativeCodexVoiceOnly, resumeAfterRepair, sessionId, startVoiceRecognition, voiceEnabled])
+  }, [
+    ensureHarnessVoiceRecognition, locked, machineBusy, nativeCodexVoiceOnly,
+    resumeAfterRepair, sessionId, startVoiceRecognition, voiceEnabled,
+  ])
 
   // Browser recognition is fallback input only. Never compete with an active
   // Codex Live microphone; when Live ends, the published assistant state causes
