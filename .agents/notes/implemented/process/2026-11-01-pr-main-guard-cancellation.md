@@ -24,6 +24,10 @@ The main PR CI and diagnostics already cancel superseded PR runs. This change al
 
 A new PR commit replaces the old run and tests only the current candidate once it executes. The last PR commit must still complete the full guard successfully before merging. Automation authors should group local edits and tests into one published commit to avoid repeated cancellation and CI churn. Existing failures in unrelated static and coverage gates remain actionable and must be repaired separately.
 
+## Additional CI fixture repairs
+
+The headless and ACP built-bin persistence smokes now parse the first nonempty JSONL record from compressed .jsonl.zstd archives. They continue to assert the session header and the existing tool/protocol behavior. Browser HMR discovers the original subtitle from its JSX instead of pinning superseded marketing text, while still verifying a live update without a page reload.
+
 ## Testing
 
 The workflow regression asserts the exact event-gated cancellation expression and the existing guard coverage. GitHub Actions should show superseded PR main-guard runs as cancelled, while main-push runs still execute and enable stable verification.
