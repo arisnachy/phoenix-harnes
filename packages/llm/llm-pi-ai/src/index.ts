@@ -419,7 +419,7 @@ export function apply(ctx: Context, config: Config): void {
   // NVIDIA's hosted model IDs change independently of PHOENIX releases.
   // Poll in the Host and invalidate profile snapshots only when the live list changes.
   void ctx.effect(async () => {
-    if (officialNvidiaRoute()) await nvidiaCatalog.refresh(true)
+    if (officialNvidiaRoute()) void nvidiaCatalog.refresh(true)
     const timer = setInterval(() => {
       if (officialNvidiaRoute()) void nvidiaCatalog.refresh()
     }, NVIDIA_MODEL_REFRESH_MS)
