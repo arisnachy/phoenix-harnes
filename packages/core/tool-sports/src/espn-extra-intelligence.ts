@@ -40,7 +40,9 @@ export const extendedEspnRoutes={
   transactions:{root:'core',path:'/transactions'},
   league_events:{root:'core',path:'/events'},
 } as const
+/** Supported, explicitly enumerated modes for safe ESPN route generation. */
 export type ExtendedEspnMode=keyof typeof extendedEspnRoutes
+/** Validated ESPN extended lookup parameters; identifiers originate in ESPN responses. */
 export type ExtendedEspnInput={
   mode:ExtendedEspnMode;sport:string;league:string;eventId?:string|undefined
   competitionId?:string|undefined;teamId?:string|undefined;athleteId?:string|undefined
@@ -67,6 +69,11 @@ const roots={
   web:'https://site.web.api.espn.com/apis/common/v3/sports/',
   standings:'https://site.api.espn.com/apis/v2/sports/',
 } as const
+/**
+ * Build a fixed-host ESPN URL with league, season, event and team IDs validated.
+ * @param input - ESPN mode and identifiers retrieved from a verified source.
+ * @returns Immutable HTTPS endpoint URL with no arbitrary hosts or paths.
+ */
 export function extendedEspnUrl(input:ExtendedEspnInput):string{
   const def=extendedEspnRoutes[input.mode]
   if(!def)throw Error('Modo ESPN extendido desconocido')
@@ -103,6 +110,13 @@ const compact=(raw:unknown,depth=0):unknown=>{
   }
   return raw
 }
+/**
+ * Read an ESPN route with bounded returned JSON and explicit empty/error states.
+ * @param input - The validated read-only route request.
+ * @param getJSON - Fixed-host transport supplied by the tool layer.
+ * @param now - Timestamp used for provenance and deterministic tests.
+ * @returns Observed endpoint data or an unavailable status, never guessed values.
+ */
 export async function readExtendedEspn(
   input:ExtendedEspnInput,getJSON:<T>(url:string)=>Promise<T>,
   now=Date.now(),
