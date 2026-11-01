@@ -15,7 +15,7 @@ PHOENIX audio perception and speech tools for Kira. The installed base bundle ex
 
 ## Configuration
 
-PHOENIX uses `PHOENIX_VOICE_ENABLED`, `PHOENIX_VOICE_LANGUAGE` (default `es-DO`), and the existing local voice services. Native audio requires the Windows `Phoenix.exe` bridge and user consent for each sample. The optional `PHOENIX_AUDIO_ALLOWED_DIRS` variable contains semicolon-separated trusted directories for local media. The transcriber uses local CPU `faster-whisper` via `uv`, installed on demand.
+PHOENIX uses `PHOENIX_VOICE_ENABLED`, `PHOENIX_VOICE_LANGUAGE` (default `es-DO`), and the existing local voice services. Native audio requires the Windows `Phoenix.exe` bridge and a visible first consent prompt; a user may instead grant a session- and source-specific 15-minute lease. The optional `PHOENIX_AUDIO_ALLOWED_DIRS` variable contains semicolon-separated trusted directories for local media. The transcriber uses local CPU `faster-whisper` via `uv`, installed on demand.
 
 ## Model Experience
 
@@ -37,4 +37,4 @@ Stable tool descriptions and prompt guidance can be reused across turns; live tr
 
 - These tools do not listen continuously, identify every acoustic event, infer who spoke, or bypass protected media.
 - Speaker synthesis does not prove audibility; desktop viewer availability does not prove that a frame was captured.
-- Each Windows audio request requires a human decision in a native permission dialog.
+- A first Windows audio request requires an explicit native decision. A temporary 15-minute source-specific conversation grant avoids repetitive dialogs; microphone and output authorization are separate.

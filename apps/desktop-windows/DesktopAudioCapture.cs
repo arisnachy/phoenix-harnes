@@ -9,8 +9,18 @@ internal static class DesktopAudioCapture
 {
     private static readonly SemaphoreSlim Gate = new(1, 1);
     private static readonly string Folder = Path.Combine(Path.GetTempPath(), "phoenix-audio-captures");
+    // A grant is scoped to one conversation, one audio source, and this desktop process.
+    private static string? grantedSession;
+    private static string? grantedSource;
+    private static DateTimeOffset grantedUntil;
 
-    internal static string Status()
+    private static bool HasGrant(string? sessionId, string source) =>
+        !string.IsNullOrWhiteSpace(sessionId)
+        && string.Equals(grantedSession, sessionId, StringComparison.Ordinal)
+        && string.Equals(grantedSource, source, StringComparison.Ordinal)
+        && DateTimeOffset.UtcNow < grantedUntil;
+
+    internal static string Status(string? sessionId = null)
     {
         try
         {
@@ -34,8 +44,14 @@ internal static class DesktopAudioCapture
                     output = new { available = output is not null, device = output },
                     microphone = new { available = microphone is not null, device = microphone }
                 },
-                requiresConsent = true, listening = Gate.CurrentCount == 0,
-                note = "Dispositivos multimedia predeterminados. Requiere permiso visible para CADA captura."
+                requiresConsent = !HasGrant(sessionId, "output"),
+                microphoneRequiresConsent = !HasGrant(sessionId, "microphone"),
+                sessionGrants = new {
+                    output = HasGrant(sessionId, "output"),
+                    microphone = HasGrant(sessionId, "microphone")
+                },
+                listening = Gate.CurrentCount == 0,
+                note = "Primer permiso nativo explícito; autorización de sesión limitada a 15 minutos y a una sola fuente. No existe escucha permanente."
             });
         }
         catch (Exception ex)
@@ -54,20 +70,40 @@ internal static class DesktopAudioCapture
             throw new InvalidOperationException("AUDIO_CAPTURE_BUSY");
 
         string? path = null;
+        var window = owner as Form;
+        string? originalTitle = null;
         try
         {
-            if (MessageBox.Show(owner,
-                "Kira solicita grabar " + seconds + " segundos de " +
-                (source == "microphone" ? "tu MICROFONO." : "la SALIDA DE WINDOWS.") + "\n\n" +
-                (source == "microphone"
-                    ? "Se capturara audio del entorno cercano, incluidas conversaciones audibles.\n"
-                    : "Puede incluir audio de otras aplicaciones y conversaciones reproducidas.\n") +
-                "Solo se activara la fuente seleccionada. Transcripcion local y borrado posterior.\n\n" +
-                "¿Autorizar esta captura?",
-                "PHOENIX · Oído universal", MessageBoxButtons.YesNo,
-                MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
-                throw new InvalidOperationException("AUDIO_CAPTURE_CONSENT_DENIED");
-
+            if (!HasGrant(sessionId, source))
+            {
+                var consent = MessageBox.Show(owner,
+                    "Kira solicita escuchar " + seconds + " segundos de " +
+                    (source == "microphone" ? "tu MICRÓFONO." : "la SALIDA DE WINDOWS.") + "\n\n" +
+                    (source == "microphone"
+                        ? "Puede incluir conversaciones cercanas.\n"
+                        : "Puede incluir sonido de otras aplicaciones.\n") +
+                    "La transcripción es local y el WAV temporal se elimina.\n\n" +
+                    "SÍ: autorizar esta fuente para esta conversación durante 15 minutos.\n" +
+                    "NO: autorizar solo esta captura.\n" +
+                    "CANCELAR: no grabar. Puedes detener la captura cerrando PHOENIX.",
+                    "PHOENIX · Permiso de oído", MessageBoxButtons.YesNoCancel,
+                    MessageBoxIcon.Warning, MessageBoxDefaultButton.Button3);
+                if (consent == DialogResult.Cancel)
+                    throw new InvalidOperationException("AUDIO_CAPTURE_CONSENT_DENIED");
+                if (consent == DialogResult.Yes)
+                {
+                    grantedSession = sessionId;
+                    grantedSource = source;
+                    grantedUntil = DateTimeOffset.UtcNow.AddMinutes(15);
+                }
+            }
+            // Keep an explicit activity indicator for the full recording period.
+            if (window is not null && !window.IsDisposed)
+            {
+                originalTitle = window.Text;
+                window.Text = "● Kira escuchando " +
+                    (source == "microphone" ? "micrófono" : "salida de Windows") + " · PHOENIX";
+            }
             Directory.CreateDirectory(Folder);
             foreach (var old in Directory.EnumerateFiles(Folder, "audio-*.wav"))
             {
@@ -122,6 +158,11 @@ internal static class DesktopAudioCapture
             if (path is not null) try { File.Delete(path); } catch (IOException) { }
             throw;
         }
-        finally { Gate.Release(); }
+        finally
+        {
+            if (window is not null && !window.IsDisposed && originalTitle is not null)
+                window.Text = originalTitle;
+            Gate.Release();
+        }
     }
 }
