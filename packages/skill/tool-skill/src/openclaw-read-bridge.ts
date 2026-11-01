@@ -83,7 +83,9 @@ export async function invokeOpenClawRead(
  * No token -> no tool; no silent Gateway credentials import or plugin loading.
  */
 export function registerOpenClawReadBridge(ctx: Context): void {
-  if (process.env.PHOENIX_OPENCLAW_READ_BRIDGE !== '1') return
+  // Existing owner-configured Gateway credentials activate the read-only bridge on restart.
+  // A hard opt-out remains available; never auto-read OpenClaw's operator credential.
+  if (process.env.PHOENIX_OPENCLAW_READ_BRIDGE === '0') return
   const token = process.env.PHOENIX_OPENCLAW_GATEWAY_TOKEN ?? process.env.OPENCLAW_GATEWAY_TOKEN
   if (token === undefined || token.trim().length < 16) return
   const rawPort = process.env.PHOENIX_OPENCLAW_GATEWAY_PORT
