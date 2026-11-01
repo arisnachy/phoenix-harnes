@@ -270,6 +270,12 @@ const validateSmartCard = (value: Record<string, unknown>): value is SmartCard =
     && optionalText(footer, MAX_TEXT)
 }
 
+/** Remove provider branding from on-screen labels; source values remain unchanged for internal checks. */
+const sportsDisplayText=(value:string):string=>{
+  const result=value.replace(/\bESPN\b/giu,'').replace(/\bUSA\.1\b/giu,'MLS')
+    .replace(/\s*·\s*·/gu,' · ').replace(/^[\s·:/-]+|[\s·:/-]+$/gu,'').trim()
+  return result||'Resumen deportivo'
+}
 const trustedPortrait = (value: unknown): value is string | undefined => {
   if (value === undefined) return true
   if (typeof value !== 'string' || value.length > 500) return false
@@ -683,40 +689,50 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
     case 'agent_line': return <PhoenixAgentLine {...block.props} />
     case 'sports_espn_dashboard': {
       const p=block.props
-      return <section className={css.sportsCard} data-generative-ui="sports_espn_dashboard"
-        aria-label={p.title}>
+      const preview=p.sections.flatMap(section=>section.items).slice(0,p.view==='event'?3:2)
+      return <section className={css.sportsCard+' '+css.sportsCompactPanel}
+        data-generative-ui="sports_espn_dashboard" aria-label={p.title}>
         <header className={css.sportsHeadline}>
-          <div><span className={css.sportsKicker}>PHOENIX / ESPN INTELLIGENCE · {p.view.toUpperCase()}</span>
-            <h3>{p.title}</h3><p>{p.subtitle}</p></div>
+          <div><span className={css.sportsKicker}>PHOENIX · {p.view==='event'?'PARTIDO':'INTELIGENCIA DEPORTIVA'}</span>
+            <h3>{sportsDisplayText(p.title)}</h3><p>{sportsDisplayText(p.subtitle)}</p></div>
           {p.image&&<SportsPortrait label={p.title} logo={p.image}/>}
         </header>
-        <div className={css.sportsEspnSections}>
-          {p.sections.map((s,i)=><section key={i} className={css.sportsEspnSection}
-            aria-label={s.heading}>
-            <h4>{s.heading}</h4>
-            {s.kind==='metrics'?<dl className={css.sportsEspnMetrics}>
-              {s.items.map((x,n)=><div key={n}>
-                <dt>{x.label}</dt><dd>{x.value??'—'}</dd>
-                {x.detail&&<small>{x.detail}</small>}
-              </div>)}
-            </dl>:<div className={s.kind==='articles'?css.sportsEspnArticles:css.sportsEspnList}>
-              {s.items.map((x,n)=><article key={n} className={css.sportsEspnRow}>
-                {x.image&&<SportsPortrait label={x.label} logo={x.image}/>}
-                <div><strong>{x.label}</strong>
-                  {x.value&&<span>{x.value}</span>}
-                  {x.detail&&<small>{x.detail}</small>}
-                  {x.href&&<a href={x.href} target="_blank" rel="noopener noreferrer" className={css.sportsEspnNewsLink}>Leer noticia en ESPN</a>}
-                  {x.action&&onAction&&<button type="button" className={css.sportsSlateAction}
-                    onClick={()=>{if(x.action)onAction(x.action.prompt,'draft')}}>{x.action.label}</button>}
-                </div>
-              </article>)}
-            </div>}
-          </section>)}
+        <div className={css.sportsEspnPreview}>
+          {preview.map((item,i)=><div key={i} className={css.sportsEspnPreviewRow}>
+            {item.image&&<SportsPortrait label={item.label} logo={item.image}/>}
+            <span><strong>{sportsDisplayText(item.label)}</strong>
+              {item.detail&&<small>{sportsDisplayText(item.detail)}</small>}</span>
+            {item.value&&<b>{sportsDisplayText(item.value)}</b>}
+          </div>)}
         </div>
+        <details className={css.sportsExtra}>
+          <summary>Ver estadísticas y contenido</summary>
+          <div className={css.sportsEspnSections}>
+            {p.sections.map((section,i)=><section key={i} className={css.sportsEspnSection} aria-label={section.heading}>
+              <h4>{sportsDisplayText(section.heading)}</h4>
+              {section.kind==='metrics'?<dl className={css.sportsEspnMetrics}>
+                {section.items.map((item,n)=><div key={n}>
+                  <dt>{sportsDisplayText(item.label)}</dt><dd>{item.value?sportsDisplayText(item.value):'—'}</dd>
+                  {item.detail&&<small>{sportsDisplayText(item.detail)}</small>}
+                </div>)}
+              </dl>:<div className={section.kind==='articles'?css.sportsEspnArticles:css.sportsEspnList}>
+                {section.items.map((item,n)=><article key={n} className={css.sportsEspnRow}>
+                  {item.image&&<SportsPortrait label={item.label} logo={item.image}/>}
+                  <div><strong>{sportsDisplayText(item.label)}</strong>
+                    {item.value&&<span>{sportsDisplayText(item.value)}</span>}
+                    {item.detail&&<small>{sportsDisplayText(item.detail)}</small>}
+                    {item.href&&<a href={item.href} target="_blank" rel="noopener noreferrer" className={css.sportsEspnNewsLink}>Leer noticia</a>}
+                    {item.action&&onAction&&<button type="button" className={css.sportsSlateAction}
+                      onClick={()=>{if(item.action)onAction(item.action.prompt,'draft')}}>{item.action.label}</button>}
+                  </div>
+                </article>)}
+              </div>}
+            </section>)}
+          </div>
+          <p className={css.sportsNote}>{sportsDisplayText(p.note)}</p>
+        </details>
         <footer className={css.sportsSourceBar}>
-          <span>Datos · {p.source}</span>
           <small>Consulta · {new Date(p.checkedAt).toLocaleString('es-DO')}</small>
-          <small>{p.note}</small>
         </footer>
       </section>
     }
@@ -729,7 +745,7 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
           aria-label={p.title}>
           <header className={css.sportsSlateHeader}>
             <div><span className={css.sportsKicker}>PHOENIX / {sportName} · {p.league?.toLocaleUpperCase('es')??'CARTELERA'}</span>
-              <h3>{p.league?`${p.league} · ${p.title}`:p.title}</h3><small>{sportName} · {p.date}</small></div>
+              <h3>{p.league?`${p.league} · ${sportsDisplayText(p.title)}`:sportsDisplayText(p.title)}</h3><small>{sportName} · {p.date}</small></div>
             <span className={css.sportsSlateCount}>{p.events.length} {p.events.length===1?'juego':'juegos'}</span>
           </header>
           <div className={css.sportsSlateGrid}>{p.events.map((e,i)=>{
@@ -744,7 +760,7 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
               <div className={css.sportsSlateMeta}>
                 <strong>{e.when}</strong><span className={css.sportsSlatePhase}>{pending?'Participantes pendientes':phase==='pre'?'No iniciado':phase==='in'?'● En vivo':phase==='post'?'Finalizado':live?.status??e.status??'Estado sin confirmar'}</span>
               </div>
-              {pending?<p className={css.sportsSlateUnknown}>ESPN aún no identifica a ambos participantes. No se muestra marcador, favorito ni análisis como si el cruce estuviera confirmado.</p>
+              {pending?<p className={css.sportsSlateUnknown}>Participantes pendientes de confirmar. No se muestra marcador ni análisis sin un encuentro verificado.</p>
                 :<div className={css.sportsSlateMatch}>
                   <div><SportsPortrait label={away.label} logo={away.logo}/>
                     <span><strong>{away.label}</strong>{away.meta&&<small>{away.meta}</small>}</span>
@@ -755,18 +771,19 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
                   {!hasStarted&&<span className={css.sportsSlateVs}>VS · Sin iniciar</span>}
                 </div>}
               {!pending&&<SportsLiveFacts game={live} meta={meta} sport={p.sport} compact/>}
-              {e.venue&&<small className={css.sportsSlateVenue}>⌖ {e.venue}</small>}
-              {!pending&&e.featured&&<small className={css.sportsSlateFeatured}>{e.featured}</small>}
-              {!pending&&<small className={css.sportsSlateFavorite}>{e.favorite?`★ Favorito analítico · ${e.favorite}`:'☆ Favorito sin verificar · consultar análisis y cuotas'}</small>}
-              {!pending&&<SportsGameCenter sport={p.sport} league={p.providerLeague??p.league}
-                eventId={live?.id??e.eventId} phase={live?.phase??e.phase} game={live}/>}
+              {!pending&&<details className={css.sportsExtra}><summary>Detalles del juego</summary>
+                {e.venue&&<small className={css.sportsSlateVenue}>⌖ {e.venue}</small>}
+                {e.featured&&<small className={css.sportsSlateFeatured}>{e.featured}</small>}
+                <small className={css.sportsSlateFavorite}>{e.favorite?`★ Favorito analítico · ${e.favorite}`:'☆ Favorito sin verificar'}</small>
+                <SportsGameCenter sport={p.sport} league={p.providerLeague??p.league}
+                  eventId={live?.id??e.eventId} phase={live?.phase??e.phase} game={live}/>
+              </details>}
               {!pending&&e.askPrompt&&onAction&&<button className={css.sportsSlateAction}
                 type="button" onClick={()=>{if(e.askPrompt)onAction(e.askPrompt,'draft')}}>
                 Ver análisis del encuentro ›
               </button>}
             </article>})}</div>
-          <footer className={css.sportsSourceBar}><span>Datos · {p.source}</span><SportsLiveStamp meta={meta}/>
-            <small>{p.note??'Solo encuentros verificados; datos sujetos a actualización.'}</small></footer>
+          <footer className={css.sportsSourceBar}><SportsLiveStamp meta={meta}/><small>Actualización variable</small></footer>
         </section>}
       </SportsLiveProvider>
     }
@@ -780,25 +797,25 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
             <header className={css.sportsHeadline}>
               <div><span className={css.sportsKicker}>PHOENIX / {p.sport?.toUpperCase()??'DEPORTES'}</span>
                 {(p.country||p.league)&&<div className={css.sportsCompetition}>{[p.country,p.league].filter(Boolean).join(' · ')}</div>}
-                <h3>{p.title}</h3>{p.subtitle&&<p>{p.subtitle}</p>}</div>
+                <h3>{sportsDisplayText(p.title)}</h3>{p.subtitle&&<p>{sportsDisplayText(p.subtitle)}</p>}</div>
               {(live?.status??p.status)&&<span className={css.sportsStatus}>{live?.status??p.status}</span>}
             </header>
-            <div className={css.sportsVenue}><span>◷ {p.when}</span>
-              <span>⌖ {p.venue||'Sede sin confirmar'}</span>
-              {p.broadcast&&<span>TV · {p.broadcast}</span>}</div>
-            <div className={css.sportsVersus}>
-              <div className={css.sportsTeam}><SportsPortrait label={p.away.label} logo={p.away.logo}/>
-                <strong>{p.away.label}</strong>{p.away.meta&&<small>{p.away.meta}</small>}
+            <small className={css.sportsGameWhen}>◷ {p.when}</small>
+            <div className={css.sportsSlateMatch}>
+              <div><SportsPortrait label={p.away.label} logo={p.away.logo}/>
+                <span><strong>{p.away.label}</strong>{p.away.meta&&<small>{p.away.meta}</small>}</span>
                 {hasStarted&&(live?.awayScore??p.away.score)!==undefined&&<b>{live?.awayScore??p.away.score}</b>}</div>
-              <span className={css.sportsVs}>{hasStarted?'—':'VS · No iniciado'}</span>
-              <div className={css.sportsTeam}><SportsPortrait label={p.home.label} logo={p.home.logo}/>
-                <strong>{p.home.label}</strong>{p.home.meta&&<small>{p.home.meta}</small>}
+              <div><SportsPortrait label={p.home.label} logo={p.home.logo}/>
+                <span><strong>{p.home.label}</strong>{p.home.meta&&<small>{p.home.meta}</small>}</span>
                 {hasStarted&&(live?.homeScore??p.home.score)!==undefined&&<b>{live?.homeScore??p.home.score}</b>}</div>
+              {!hasStarted&&<span className={css.sportsSlateVs}>VS · No iniciado</span>}
             </div>
             <SportsLiveFacts game={live} meta={meta} sport={p.sport} compact/>
             <SportsGameCenter sport={p.sport} league={p.providerLeague??p.league}
               eventId={live?.id??p.eventId} phase={live?.phase??p.phase} game={live}/>
             <details className={css.sportsExtra}><summary>Ver estadísticas y análisis</summary>
+              <div className={css.sportsVenue}><span>⌖ {p.venue||'Sede sin confirmar'}</span>
+                {p.broadcast&&<span>TV · {p.broadcast}</span>}</div>
               {!(live?.periods?.length)&&p.periods?.length?<section className={css.sportsDetailSection} aria-label="Parciales del partido">
                 <h4>Marcador por período</h4><div className={css.sportsTableScroll}><table className={css.sportsTable}>
                   <thead><tr><th>Equipo</th>{p.periods.map((period,i)=><th key={i}>{period.label}</th>)}</tr></thead>
@@ -829,7 +846,7 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
               {p.bullpen?.length?<SportsBullpen bullpen={p.bullpen}/>:null}
             </details>
             <footer className={css.sportsSourceBar}>
-              <span>Datos · {p.source}</span><SportsLiveStamp meta={meta}/>
+              <SportsLiveStamp meta={meta}/>
               {p.note&&<small>{p.note}</small>}
               {p.askPrompt&&onAction&&<button type="button" onClick={() => { if (p.askPrompt) onAction(p.askPrompt, 'draft') }}>
                 Investigar análisis y mercados</button>}
@@ -841,13 +858,13 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
       const p=block.props
       return <section className={css.sportsCard} data-generative-ui="sports_odds_card">
         <header className={css.sportsHeadline}><div><span className={css.sportsKicker}>PHOENIX / CUOTAS OBSERVADAS · CONSULTAR VIGENCIA</span>
-          <h3>{p.title}</h3>{p.subtitle&&<p>{p.subtitle}</p>}</div></header>
+          <h3>{sportsDisplayText(p.title)}</h3>{p.subtitle&&<p>{sportsDisplayText(p.subtitle)}</p>}</div></header>
         <div className={css.sportsTableScroll}><table className={css.sportsTable}>
           <thead><tr><th>Partido</th><th>Mercado</th><th>Selección</th><th>Casa</th><th>Cuota decimal</th></tr></thead>
           <tbody>{p.rows.map((r,i)=><tr key={i}><th>{r.event}</th><td>{r.market}</td>
             <td>{r.selection}{r.point?' · '+r.point:''}</td><td>{r.bookmaker}</td><td><strong>{r.price}</strong></td>
           </tr>)}</tbody></table></div>
-        <footer className={css.sportsSourceBar}><span>Fuente: {p.source}</span><small>{p.note}</small><small>Sin hora de actualización confirmada, un precio es solo referencia de investigación, nunca una cotización operable.</small></footer>
+        <footer className={css.sportsSourceBar}><small>{sportsDisplayText(p.note)}</small><small>Sin hora de actualización confirmada, las cuotas son referencias, no cotizaciones operables.</small></footer>
       </section>
     }
     case 'sports_ticket_card': {
@@ -913,7 +930,7 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
 
         <footer className={css.sportsFoot}>
           <strong>Ticket investigado · Aceptación de la casa sin verificar</strong>
-          <span>Fuente: {p.source}</span>
+          <span>Mercados sujetos a verificación</span>
           <details className={css.sportsTicketDisclaimer}><summary>Fuentes, metodología y advertencias</summary><p>{p.note}</p></details>
           {onAction&&<button type="button" onClick={()=>{ onAction('Kira, muestra los marcadores y jugadas en vivo de los partidos de este ticket, agrupados por deporte y liga. Para cada encuentro usa sports_chat_games y liveOnly si ya comenzó. No supongas resultados ni partidos activos. Encuentros: '+p.legs.map(l=>[l.sport,l.league,l.event].filter(Boolean).join(' / ')).join('; '),'draft') }}>Ver juegos de mi ticket en vivo</button>}
           {onAction&&<button type="button" onClick={()=>{ onAction('Kira, haz seguimiento y liquidación preliminar de las selecciones reales de este ticket. Usa sports_chat_ticket_track con los IDs ESPN y mercados exactos SOLO si fueron capturados y verificados. Verifica reglas del operador y el recibo para diferenciar apuesta aceptada, resultado provisional, anulación y pago. Si faltan IDs/fecha, identifícalos antes de calcular. Selecciones: '+p.legs.map(l=>[l.event,l.selection,l.market,l.bookmaker,l.price].join(' / ')).join('; '),'draft') }}>Verificar si ganó o perdió</button>}
