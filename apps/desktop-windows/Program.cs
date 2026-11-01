@@ -173,6 +173,7 @@ internal static class Program
         var port = ((IPEndPoint)listener.LocalEndpoint).Port;
         using var cancellation = new CancellationTokenSource();
 
+        var servedRequests = 0;
         var serverTask = Task.Run(async () =>
         {
             var body = "<!doctype html><html><head><title>PHOENIX HARDNESS</title></head><body><div id=\"root\">loopback-smoke</div></body></html>";
@@ -190,7 +191,10 @@ internal static class Program
                     using (var stream = client.GetStream())
                     {
                         var request = new byte[8192];
-                        _ = await stream.ReadAsync(request, cancellation.Token);
+                        var received = await stream.ReadAsync(request, cancellation.Token);
+                        if (received == 0) continue;
+                        Interlocked.Increment(ref servedRequests);
+                        DesktopLog.Write($"Loopback WebView smoke: serving HTTP response; requestBytes={received}.");
                         await stream.WriteAsync(headers, cancellation.Token);
                         await stream.WriteAsync(bodyBytes, cancellation.Token);
                         await stream.FlushAsync(cancellation.Token);
@@ -219,7 +223,9 @@ internal static class Program
                 Size = new Size(1100, 760),
             };
             using var poll = new System.Windows.Forms.Timer { Interval = 100 };
-            using var timeout = new System.Windows.Forms.Timer { Interval = 15000 };
+            // Cold WebView2 launch on shared Windows runners can exceed 15 seconds.
+            // Keep a hard failure on missing NavigationCompleted; do not infer success from an HTTP response.
+            using var timeout = new System.Windows.Forms.Timer { Interval = 45000 };
 
             window.Shown += (_, _) =>
             {
@@ -244,7 +250,7 @@ internal static class Program
             {
                 poll.Stop();
                 timeout.Stop();
-                DesktopLog.Write("Loopback WebView smoke timed out before NavigationCompleted success.");
+                DesktopLog.Write($"Loopback WebView smoke timed out before NavigationCompleted success; servedRequests={Volatile.Read(ref servedRequests)}.");
                 window.Dispose();
                 Application.ExitThread();
             };
