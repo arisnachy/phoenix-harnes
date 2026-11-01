@@ -27,3 +27,9 @@ Para evitar duplicaciones, Kira conserva sus propias herramientas y Skills. El p
 El token del Gateway representa privilegios de operador: el puente solo permite dos herramientas de lectura y jamás expone al modelo nombres arbitrarios, comandos, una URL del Gateway o cabeceras. El resultado se trunca y no se devuelve ninguna respuesta de error de autenticación con secretos. Esta incorporación **no autoriza** control del navegador, cámaras, shell, envíos ni trading.
 
 Referencia: https://docs.openclaw.ai/gateway/tools-invoke-http-api
+
+## Skills de OpenClaw detectadas automáticamente
+
+El proveedor de Skills de PHOENIX observa la carpeta compartida `~/.openclaw/skills` (o `OPENCLAW_STATE_DIR/skills` si el usuario configuró otra ubicación). Sus archivos `SKILL.md` se ofrecen mediante el registro **ya existente** de Kira: no hay una nueva tienda, una segunda lista ni copias de archivos. Las Skills PHOENIX instaladas por el usuario conservan prioridad sobre las de OpenClaw, y dos Skills con el mismo nombre se resuelven a una sola entrada.
+
+La importación de instrucciones no convierte binarios, autenticaciones, plugins ni herramientas propietarias de OpenClaw en herramientas ejecutables dentro de PHOENIX. Cada Skill debe utilizar herramientas que Kira tenga realmente disponibles; no se fuerza un Gateway nuevo ni se concede acceso a dispositivos.

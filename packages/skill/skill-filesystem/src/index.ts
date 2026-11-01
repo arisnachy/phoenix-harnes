@@ -38,6 +38,8 @@ const PROJECT_AGENTS_RANK = 200
 const CUSTOM_RANK = 300
 const USER_DSH_RANK = 400
 const USER_AGENTS_RANK = 500
+// Imported OpenClaw-managed skills never shadow PHOENIX's project or user skills.
+const OPENCLAW_MANAGED_RANK = 550
 const DEFAULT_WATCH_STABILITY_THRESHOLD_MS = 200
 const DEFAULT_WATCH_POLL_INTERVAL_MS = 100
 const DEFAULT_WATCH_MAX_PROJECTS = 128
@@ -57,6 +59,8 @@ export interface Config {
   agentsHome?: string
   /** Additional skill roots scanned after project roots and before user roots. */
   customSkillDirs?: string[]
+  /** Optional OpenClaw managed Skills root; defaults to the owner's OpenClaw state directory. */
+  openClawSkillsDir?: string
   /** Whether host-local skill roots are watched for catalog changes. */
   watch?: boolean
   /** Whether Chokidar uses polling instead of native filesystem events. */
@@ -79,6 +83,7 @@ export const Config: Schema<Config> = z.object({
   dshHome: z.string(),
   agentsHome: z.string(),
   customSkillDirs: z.array(z.string()).default([]),
+  openClawSkillsDir: z.string(),
   watch: z.boolean().default(true),
   watchUsePolling: z.boolean().default(false),
   watchStabilityThresholdMs: z.number().default(DEFAULT_WATCH_STABILITY_THRESHOLD_MS),
@@ -149,6 +154,7 @@ export class FileSystemSkillProvider implements SkillProvider {
   private readonly dshHome: string
   private readonly agentsHome: string
   private readonly customSkillDirs: string[]
+  private readonly openClawSkillsDir: string
   private readonly watchManager: SkillWatchManager
   private readonly bundledSkillDir: string | undefined
   private disposal: Promise<void> | undefined
@@ -163,6 +169,9 @@ export class FileSystemSkillProvider implements SkillProvider {
     this.dshHome = resolveDshHome(config.dshHome)
     this.agentsHome = resolve(config.agentsHome ?? process.env.DSH_AGENTS_HOME ?? join(homedir(), '.agents'))
     this.customSkillDirs = (config.customSkillDirs ?? []).map(root => resolve(root))
+    const stateRoot = process.env.OPENCLAW_STATE_DIR ?? (config.dshHome === undefined
+      ? join(homedir(), '.openclaw') : join(dirname(resolve(config.dshHome)), '.openclaw'))
+    this.openClawSkillsDir = resolve(config.openClawSkillsDir ?? join(stateRoot, 'skills'))
     this.watchManager = new SkillWatchManager(ctx, control.invalidate, resolveWatchConfig(config))
     control.signal.addEventListener('abort', () => { void this.dispose() }, { once: true })
     // The environment bundled root is a default root: an isolated provider
@@ -253,6 +262,14 @@ export class FileSystemSkillProvider implements SkillProvider {
         { path: join(this.dshHome, 'skills'), source: 'user-dsh', rank: USER_DSH_RANK, skipSystem: true },
         { path: join(this.agentsHome, 'skills'), source: 'user-agents', rank: USER_AGENTS_RANK },
       )
+    }
+    // Reuse OpenClaw/ClawHub SKILL.md files without copying or registering a second provider.
+    // Skip missing roots so their parent home directory is not watched unnecessarily.
+    if (this.includeDefaultRoots) {
+      const available = await stat(this.openClawSkillsDir).then(info => info.isDirectory(), () => false)
+      if (available) {
+        roots.push({ path: this.openClawSkillsDir, source: 'openclaw', rank: OPENCLAW_MANAGED_RANK })
+      }
     }
     if (this.bundledSkillDir !== undefined) {
       roots.push({ path: this.bundledSkillDir, source: 'bundled', rank: BUNDLED_SKILL_RANK, trustedHost: true })

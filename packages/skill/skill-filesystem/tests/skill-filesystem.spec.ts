@@ -176,6 +176,8 @@ describe('FileSystemSkillProvider', () => {
 
     await writeSkill(join(home, '.agents/skills'), 'same', 'user agents skill')
     await writeSkill(join(home, '.dsh/skills'), 'same', 'user dsh skill')
+    await writeSkill(join(home, '.openclaw/skills'), 'same', 'OpenClaw managed duplicate')
+    await writeSkill(join(home, '.openclaw/skills'), 'openclaw-only', 'OpenClaw managed skill')
     await writeSkill(custom, 'same', 'custom skill')
     await writeSkill(join(project, '.agents/skills'), 'same', 'project agents skill')
     await writeSkill(join(project, '.dsh/skills'), 'same', 'project dsh skill')
@@ -191,9 +193,12 @@ describe('FileSystemSkillProvider', () => {
     expect(skills.map(skill => skill.name)).toEqual([
       'bundled-only',
       'custom-only',
+      'openclaw-only',
       'same',
     ])
     expect(skills.find(skill => skill.name === 'custom-only')?.description).toBe('custom only')
+    expect(skills.find(skill => skill.name === 'openclaw-only')?.source).toBe('openclaw')
+    expect(skills.find(skill => skill.name === 'openclaw-only')?.description).toBe('OpenClaw managed skill')
     expect(skills.find(skill => skill.name === 'same')?.description).toBe('project dsh skill')
     expect(skills.find(skill => skill.name === 'same')?.source).toBe('project-dsh')
     expect(skills.find(skill => skill.name === 'hidden-system')).toBeUndefined()
