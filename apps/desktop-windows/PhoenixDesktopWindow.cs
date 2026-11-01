@@ -1224,8 +1224,7 @@ internal sealed class PhoenixDesktopWindow : Form
         browserView.CoreWebView2.NavigationCompleted += (_, e) =>
         {
             var current = browserView.Source;
-            browserPageReady = e.IsSuccess && current is not null
-                && (current.Scheme == Uri.UriSchemeHttp || current.Scheme == Uri.UriSchemeHttps);
+            browserPageReady = BrowserNavigation.IsInspectablePage(current, e.IsSuccess);
             lastBrowserError = e.IsSuccess ? null : e.WebErrorStatus.ToString();
             SetBrowserDebugStatus(browserPageReady
                 ? "Kira · página lista para inspección"
