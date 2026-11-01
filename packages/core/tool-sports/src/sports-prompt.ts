@@ -44,6 +44,12 @@ export function sportsPromptNeeded(incomingUserText: string | undefined, events:
   // Continuations inherit sports context, even if the user only says "investiga el primero".
   // Reject unrelated new tasks rather than injecting sports guidance in every conversation.
   const earlier = incomingUserText?.trim() ? history : history.slice(1)
-  const hasSportsContext = earlier.some(message=>SPORTS_TOPIC.test(message)||PREDICTION_INTENT.test(message))
-  return hasSportsContext && (SHORT_CONTINUATION.test(current)||TASK_CONTINUATION.test(current))
+  const isFollowup=SHORT_CONTINUATION.test(current)||TASK_CONTINUATION.test(current)
+  if(!isFollowup)return false
+  for(const message of earlier.slice(0,3)){
+    if(SPORTS_TOPIC.test(message)||PREDICTION_INTENT.test(message))return true
+    // A new non-sports topic terminates the previous sports context.
+    if(!SHORT_CONTINUATION.test(message)&&!TASK_CONTINUATION.test(message))return false
+  }
+  return false
 }
