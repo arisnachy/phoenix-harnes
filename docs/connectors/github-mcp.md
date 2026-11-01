@@ -21,7 +21,8 @@ GitHub MCP permite a Kira consultar repositorios, commits, issues, pull requests
    | **Pull requests** | Read-only | Read and write para crear o modificar PR |
    | **Actions** | Read-only si se van a consultar CI y workflows | Ampliar solo para gestionar ejecuciones |
 
-GitHub puede solicitar permisos adicionales para operaciones específicas. No concedas acceso de escritura para tareas que solo consultan información.
+   GitHub puede solicitar permisos adicionales para operaciones específicas. No concedas acceso de escritura para tareas que solo consultan información.
+
 7. Pulsa **Generate token**. Cópialo una vez: GitHub no volverá a mostrar su valor.
 
 ## 2. Conectarlo en PHOENIX
