@@ -8,11 +8,13 @@ export type BinanceRealAuthIssue = 'invalid-key-format' | 'signature-rejected'
   | 'ip-or-permission' | 'access-restricted' | 'clock-skew' | 'rate-limited'
   | 'network-unavailable' | 'provider-unavailable' | 'invalid-response'
 
+/** Credentials for a signed, read-only Binance Spot account check; never expose these values to UI. */
 export interface BinanceRealReadOnlyCredentials {
   readonly apiKey: string
   readonly secret: string
 }
 
+/** Sanitized result of the real-account authentication probe; this never authorizes trading. */
 export interface BinanceRealReadOnlyStatus {
   readonly mode: 'real-readonly'
   readonly configured: boolean
@@ -94,6 +96,9 @@ export class BinanceSpotRealReadOnly {
     }
   }
 
+  /** Check stored credentials against the read-only account endpoint.
+   * @returns Sanitized connectivity and permission status without credentials.
+   */
   async status(): Promise<BinanceRealReadOnlyStatus> {
     const pair = await this.credentials()
     if (!pair?.apiKey || !pair.secret) {

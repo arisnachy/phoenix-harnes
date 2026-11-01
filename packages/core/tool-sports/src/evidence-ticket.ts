@@ -19,6 +19,15 @@ const validDate=(day:string)=>/^\d{4}-\d{2}-\d{2}$/u.test(day)
   &&Number.isFinite(Date.parse(day+'T00:00:00Z'))
   &&new Date(day+'T00:00:00Z').toISOString().slice(0,10)===day
 const percent=(w:number,g:number)=>(w+1)/(g+2)
+/** Research a bounded slate of future events and build an evidence-first, unpriced ticket.
+ * @param count - Requested number of selections, from one to six.
+ * @param date - Target calendar date in ISO format.
+ * @param sportFilter - Optional sport to restrict the league search.
+ * @param fetcher - Injectable HTTP transport for public sports feeds.
+ * @param now - Current epoch time used to exclude started events.
+ * @param env - Environment containing sports-feed permission settings.
+ * @returns Research evidence, verified future events and descriptive selections; never placed bets.
+ */
 export async function evidenceTicket(
   count:number,date=dayNow(),sportFilter?:string,fetcher:typeof fetch=fetch,
   now=Date.now(),env:NodeJS.ProcessEnv=process.env,
