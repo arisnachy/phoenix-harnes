@@ -18,7 +18,9 @@ export const espnCoreModes = {
   predictor:'Indicadores ESPN de predicción (NO cuotas)',
   providers:'Catálogo de proveedores ESPN Core',
 } as const
+/** Supported read-only ESPN Core collections; availability depends on ESPN. */
 export type EspnCoreMode=keyof typeof espnCoreModes
+/** Validated request identifiers, pagination, and market selection for ESPN Core. */
 export type EspnCoreInput={
   mode:EspnCoreMode;sport:string;league:string;eventId?:string|undefined;
   competitionId?:string|undefined;teamId?:string|undefined;
@@ -37,9 +39,14 @@ const safeId=(v:unknown):string=>{
 }
 const sportOK=(v:string)=>/^[a-z][a-z-]{1,35}$/u.test(v)
 const leagueOK=(v:string)=>/^[a-z0-9][a-z0-9._-]{0,45}$/u.test(v)
+/** Fixed HTTPS root for the public ESPN Core API. */
 export const coreRoot='https://sports.core.api.espn.com/v2/sports/'
 const bounded=(v:number|undefined,max:number,fallback:number):number=>Number.isInteger(v)&&v!==undefined&&v>=1&&v<=max?v:fallback
-/** Build a fixed, immutable HTTPS provider URL from validated path segments. */
+/**
+ * Build a fixed, immutable HTTPS provider URL from validated path segments.
+ * @param input - ESPN mode, league, event identifiers, and bounded pagination.
+ * @returns Validated same-host HTTPS endpoint URL.
+ */
 export function espnCoreUrl(input:EspnCoreInput):string{
   const {mode,sport,league}=input
   if(!Object.hasOwn(espnCoreModes,mode))throw Error('Modo ESPN Core no admitido')
@@ -107,7 +114,14 @@ function trustedRef(ref:unknown,sport:string,league:string):string|null{
 }
 const cache=new Map<string,{at:number;data:unknown}>()
 const inFlight=new Map<string,Promise<unknown>>()
-/** Bounded cache and in-flight request sharing; no model calls for repeated snapshots. */
+/**
+ * Read an ESPN Core endpoint with a bounded cache and shared in-flight requests.
+ * @param url - Validated endpoint URL to retrieve.
+ * @param getJSON - Injected JSON fetcher for the upstream API.
+ * @param now - Observation time used to evaluate cache freshness.
+ * @param ttl - Maximum cache age in milliseconds.
+ * @returns Parsed upstream payload without changing its shape.
+ */
 export async function espnCoreRead(url:string,getJSON:<T>(url:string)=>Promise<T>,
   now=Date.now(),ttl=60_000):Promise<unknown>{
   const seen=cache.get(url)
@@ -143,6 +157,7 @@ const trimmed=(value:unknown,max=9500):unknown=>{
   }
   return value
 }
+/** Read-only ESPN Core observation, provenance, and explicit availability state. */
 export type EspnCoreReport={
   mode:EspnCoreMode;source:'ESPN Core API (pública, sin clave)';
   endpoint:string;state:'data'|'empty'|'unavailable';count:number;
@@ -154,6 +169,10 @@ export type EspnCoreReport={
  * Retrieve one bounded Core collection with optional same-host $ref resolution.
  * ESPN sometimes returns only references: expand at most six sequentially to
  * respect upstream and cap token output. Missing child links remain visible.
+ * @param input - Validated ESPN Core query parameters.
+ * @param getJSON - Injected JSON fetcher for ESPN endpoints.
+ * @param options - Reference resolution policy and observation timestamp.
+ * @returns Bounded result with provenance and unavailable/empty distinctions.
  */
 export async function queryEspnCore(input:EspnCoreInput,getJSON:<T>(url:string)=>Promise<T>,
   options:{resolveRefs?:boolean;now?:number}={}):Promise<EspnCoreReport>{
