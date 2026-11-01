@@ -840,14 +840,14 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
                 <div className={css.sportsResearch}><strong>{p.research.favorite}</strong>
                   <p>{p.research.method}</p>
                   <ul>{p.research.evidence.map((line,i)=><li key={i}>{line}</li>)}</ul>
-                  <small>Fuente: {p.research.source}</small></div>
+                  <small>Origen del análisis · {sportsDisplayText(p.research.source)}</small></div>
               </section>}
               {p.lineups?.length?<SportsLineups lineups={p.lineups}/>:null}
               {p.bullpen?.length?<SportsBullpen bullpen={p.bullpen}/>:null}
             </details>
             <footer className={css.sportsSourceBar}>
               <SportsLiveStamp meta={meta}/>
-              {p.note&&<small>{p.note}</small>}
+              {p.note&&<small>{sportsDisplayText(p.note)}</small>}
               {p.askPrompt&&onAction&&<button type="button" onClick={() => { if (p.askPrompt) onAction(p.askPrompt, 'draft') }}>
                 Investigar análisis y mercados</button>}
             </footer>
@@ -881,11 +881,11 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
       return <section className={`${css.sportsCard} ${css.sportsTicketCard}`} data-generative-ui="sports_ticket_card">
         <header className={css.sportsTicketHeading}>
           <div className={css.sportsTicketRibbon}>
-            <span className={css.sportsKicker}>PHOENIX / SPORTS INTELLIGENCE</span>
+            <span className={css.sportsKicker}>PHOENIX / ANÁLISIS DEPORTIVO</span>
             <span className={css.sportsStatus}>{incomplete?'BORRADOR INCOMPLETO':unpriced?'PRONÓSTICOS · SIN COTIZAR':'COTIZACIÓN REAL · SIN ACEPTACIÓN CONFIRMADA'}</span>
           </div>
           <div className={css.sportsTicketIntro}>
-            <div><h3>{p.title}</h3>{p.subtitle&&<p>{p.subtitle}</p>}</div>
+            <div><h3>{sportsDisplayText(p.title)}</h3>{p.subtitle&&<p>{sportsDisplayText(p.subtitle)}</p>}</div>
             <div className={css.sportsTicketCount}><strong>{p.legs.length}<span> / {requested}</span></strong><small>PATAS</small></div>
           </div>
           <div className={css.sportsTicketProgress} role="progressbar" aria-label="Patas verificadas"
@@ -914,7 +914,7 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
                   <strong>{leg.selection}</strong>
                 </div>
                 <small>{[leg.market,leg.player?'Jugador · '+leg.player:undefined,unpriced?undefined:leg.bookmaker].filter(Boolean).join(' · ')}</small>
-                {leg.rationale&&<details className={css.sportsTicketReason}><summary>Ver fundamento</summary><p>{leg.rationale}</p></details>}
+                {leg.rationale&&<details className={css.sportsTicketReason}><summary>Ver fundamento</summary><p>{sportsDisplayText(leg.rationale)}</p></details>}
               </div>
               {unpriced
                 ? <span className={css.sportsTicketVerified} aria-label="Partido verificado">✓ Evento</span>
@@ -931,7 +931,7 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
         <footer className={css.sportsFoot}>
           <strong>Ticket investigado · Aceptación de la casa sin verificar</strong>
           <span>Mercados sujetos a verificación</span>
-          <details className={css.sportsTicketDisclaimer}><summary>Fuentes, metodología y advertencias</summary><p>{p.note}</p></details>
+          <details className={css.sportsTicketDisclaimer}><summary>Metodología y advertencias</summary><p>{sportsDisplayText(p.note)}</p></details>
           {onAction&&<button type="button" onClick={()=>{ onAction('Kira, muestra los marcadores y jugadas en vivo de los partidos de este ticket, agrupados por deporte y liga. Para cada encuentro usa sports_chat_games y liveOnly si ya comenzó. No supongas resultados ni partidos activos. Encuentros: '+p.legs.map(l=>[l.sport,l.league,l.event].filter(Boolean).join(' / ')).join('; '),'draft') }}>Ver juegos de mi ticket en vivo</button>}
           {onAction&&<button type="button" onClick={()=>{ onAction('Kira, haz seguimiento y liquidación preliminar de las selecciones reales de este ticket. Usa sports_chat_ticket_track con los IDs ESPN y mercados exactos SOLO si fueron capturados y verificados. Verifica reglas del operador y el recibo para diferenciar apuesta aceptada, resultado provisional, anulación y pago. Si faltan IDs/fecha, identifícalos antes de calcular. Selecciones: '+p.legs.map(l=>[l.event,l.selection,l.market,l.bookmaker,l.price].join(' / ')).join('; '),'draft') }}>Verificar si ganó o perdió</button>}
           {p.askPrompt&&onAction&&<button type="button" onClick={() => {if(p.askPrompt)onAction(p.askPrompt,'draft')}}>Revisar selecciones</button>}
