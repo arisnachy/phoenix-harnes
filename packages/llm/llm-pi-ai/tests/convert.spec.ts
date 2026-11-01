@@ -837,7 +837,7 @@ describe('mapStopReason / mapUsage', () => {
       kind: 'error',
       failure: {
         code: 'MODEL_UNAVAILABLE',
-        message: expect.stringContaining('Public API Endpoints'),
+        message: expect.stringContaining('minimaxai/minimax-m3.1-flash'),
       },
     })
     const chunks = await collect(toStreamChunks(
@@ -851,6 +851,21 @@ describe('mapStopReason / mapUsage', () => {
       stopReason: 'error', errorMessage,
     }), undefined, undefined, false, true)).toMatchObject({
       kind: 'error', failure: { code: 'MODEL_UNAVAILABLE' },
+    })
+  })
+
+  it('keeps generic NVIDIA 410 errors actionable without assuming a model was deprecated', () => {
+    expect(mapStopReason(assistant({
+      provider: 'nvidia',
+      model: 'nvidia/other-model',
+      stopReason: 'error',
+      errorMessage: '410 status code (no body)',
+    }), undefined, undefined, false, true)).toMatchObject({
+      kind: 'error',
+      failure: {
+        code: 'MODEL_UNAVAILABLE',
+        message: expect.stringContaining('Public API Endpoints'),
+      },
     })
   })
 
