@@ -501,6 +501,24 @@ async function generatedImageBytesFromOpenAiShape(
   throw new Error('image_generation: local image endpoint returned neither b64_json nor url')
 }
 
+async function persistProviderRaster(
+  ctx: Context,
+  data: Buffer,
+  mediaType: ImageMediaType,
+  prefix: string,
+): Promise<{ path: string; attachment: ImageAttachmentRef }> {
+  const generatedRoot = join(homedir(), '.dsh', 'generated_images')
+  await mkdir(generatedRoot, { recursive: true })
+  const path = join(generatedRoot, `${prefix}-${Date.now()}-${randomUUID()}${imageExtension(mediaType)}`)
+  await writeFile(path, data, { flag: 'wx' })
+  const attachment = await servicesOf(ctx).attachments.saveImage({
+    data,
+    mediaType,
+    name: basename(path),
+  })
+  return { path, attachment }
+}
+
 async function generateWithLocalProvider(
   ctx: Context,
   args: ImageGenerationArgs,
@@ -532,23 +550,23 @@ async function generateWithLocalProvider(
   if (endpoint.apiKey !== undefined) headers.Authorization = `Bearer ${endpoint.apiKey}`
   const body = reference === undefined
     ? JSON.stringify({
-        model: endpoint.model,
-        prompt: highQualityPrompt(prompt),
-        n: 1,
-        response_format: 'b64_json',
-        ...(args.size === undefined || args.size === 'auto' ? {} : { size: args.size }),
-      })
+      model: endpoint.model,
+      prompt: highQualityPrompt(prompt),
+      n: 1,
+      response_format: 'b64_json',
+      ...(args.size === undefined || args.size === 'auto' ? {} : { size: args.size }),
+    })
     : (() => {
-        const extension = codexProfileReferenceExtension(reference)
-        const form = new FormData()
-        form.append('model', endpoint.model)
-        form.append('prompt', highQualityPrompt(prompt))
-        form.append('n', '1')
-        form.append('response_format', 'b64_json')
-        if (args.size !== undefined && args.size !== 'auto') form.append('size', args.size)
-        form.append('image', new Blob([Buffer.from(reference.data)], { type: reference.ref.mediaType }), 'profile-original' + extension)
-        return form
-      })()
+      const extension = codexProfileReferenceExtension(reference)
+      const form = new FormData()
+      form.append('model', endpoint.model)
+      form.append('prompt', highQualityPrompt(prompt))
+      form.append('n', '1')
+      form.append('response_format', 'b64_json')
+      if (args.size !== undefined && args.size !== 'auto') form.append('size', args.size)
+      form.append('image', new Blob([Buffer.from(reference.data)], { type: reference.ref.mediaType }), 'profile-original' + extension)
+      return form
+    })()
   const response = await fetch(`${endpoint.baseURL}/images/${reference === undefined ? 'generations' : 'edits'}`, {
     method: 'POST',
     headers,
@@ -568,15 +586,7 @@ async function generateWithLocalProvider(
   if (data.length > MAX_FREE_IMAGE_BYTES) {
     throw new Error(`image_generation: local backend returned ${data.length} bytes, exceeding the ${MAX_FREE_IMAGE_BYTES}-byte safety bound`)
   }
-  const generatedRoot = join(homedir(), '.dsh', 'generated_images')
-  await mkdir(generatedRoot, { recursive: true })
-  const path = join(generatedRoot, `local-${Date.now()}-${randomUUID()}${imageExtension(mediaType)}`)
-  await writeFile(path, data, { flag: 'wx' })
-  const attachment = await servicesOf(ctx).attachments.saveImage({
-    data,
-    mediaType,
-    name: basename(path),
-  })
+  const { path, attachment } = await persistProviderRaster(ctx, data, mediaType, 'local')
   return {
     provider: 'local',
     model: endpoint.model,
@@ -664,15 +674,7 @@ async function generateWithCloudflareProvider(
     throw new Error('image_generation: Cloudflare Workers AI returned an unsupported non-raster payload')
   }
 
-  const generatedRoot = join(homedir(), '.dsh', 'generated_images')
-  await mkdir(generatedRoot, { recursive: true })
-  const path = join(generatedRoot, `cf-${Date.now()}-${randomUUID()}${imageExtension(mediaType)}`)
-  await writeFile(path, data, { flag: 'wx' })
-  const attachment = await servicesOf(ctx).attachments.saveImage({
-    data,
-    mediaType,
-    name: basename(path),
-  })
+  const { path, attachment } = await persistProviderRaster(ctx, data, mediaType, 'cf')
   return {
     provider: 'cloudflare',
     model,
@@ -728,13 +730,16 @@ async function generateWithHuggingFaceProvider(
   if (!response.ok) {
     const diagnostic = (await response.text()).trim().slice(0, 1600)
     const suffix = diagnostic.length === 0 ? '' : `: ${diagnostic}`
-    if (response.status === 401 || response.status === 403) {
-      throw new Error(`image_generation: Hugging Face rejected HF_TOKEN; store a token with Inference Providers permission and retry${suffix}`)
+    switch (response.status) {
+      case 401:
+      case 403:
+        throw new Error(`image_generation: Hugging Face rejected HF_TOKEN; store a token with Inference Providers permission and retry${suffix}`)
+      case 402:
+      case 429:
+        throw new Error(`image_generation: Hugging Face free-tier credits/rate limit are unavailable. No paid OpenAI fallback was attempted${suffix}`)
+      default:
+        throw new Error(`image_generation: Hugging Face image generation failed with HTTP ${response.status}${suffix}`)
     }
-    if (response.status === 402 || response.status === 429) {
-      throw new Error(`image_generation: Hugging Face free-tier credits/rate limit are unavailable. No paid OpenAI fallback was attempted${suffix}`)
-    }
-    throw new Error(`image_generation: Hugging Face image generation failed with HTTP ${response.status}${suffix}`)
   }
 
   const data = Buffer.from(await response.arrayBuffer())
@@ -745,15 +750,7 @@ async function generateWithHuggingFaceProvider(
   const mediaType = imageMediaTypeFromHeader(response.headers.get('content-type')) ?? imageMediaTypeFromBytes(data)
   if (mediaType === undefined) throw new Error('image_generation: Hugging Face returned an unsupported non-raster payload')
 
-  const generatedRoot = join(homedir(), '.dsh', 'generated_images')
-  await mkdir(generatedRoot, { recursive: true })
-  const path = join(generatedRoot, `hf-${Date.now()}-${randomUUID()}${imageExtension(mediaType)}`)
-  await writeFile(path, data, { flag: 'wx' })
-  const attachment = await servicesOf(ctx).attachments.saveImage({
-    data,
-    mediaType,
-    name: basename(path),
-  })
+  const { path, attachment } = await persistProviderRaster(ctx, data, mediaType, 'hf')
   return {
     provider: 'huggingface',
     model,
@@ -955,8 +952,10 @@ export function latestProfileReference(events: readonly { type: string; data: un
     if (typeof event.data !== 'object' || event.data === null) return undefined
     const msg = event.data as { source?: { kind?: string }; content?: readonly ContentBlock[] }
     if (msg.source?.kind !== 'user') continue
-    if (!Array.isArray(msg.content)) return undefined
-    const block = msg.content.find(item =>
+    const content: unknown = msg.content
+    if (!Array.isArray(content)) return undefined
+    const blocks = content as readonly ContentBlock[]
+    const block = blocks.find(item =>
       item.type === 'image' && item.attachment.name === 'referencia-original-del-usuario.webp')
     return block?.type === 'image' ? block.attachment : undefined
   }
@@ -970,8 +969,10 @@ function latestUserText(events: readonly { type: string; data: unknown }[]): str
     if (typeof event.data !== 'object' || event.data === null) return ''
     const msg = event.data as { source?: { kind?: string }; content?: readonly ContentBlock[] }
     if (msg.source?.kind !== 'user') continue
-    if (!Array.isArray(msg.content)) return ''
-    return msg.content.filter(item => item.type === 'text')
+    const content: unknown = msg.content
+    if (!Array.isArray(content)) return ''
+    const blocks = content as readonly ContentBlock[]
+    return blocks.filter(item => item.type === 'text')
       .map(item => item.type === 'text' ? item.text : '').join(' ')
   }
   return ''
@@ -983,8 +984,10 @@ function latestUserText(events: readonly { type: string; data: unknown }[]): str
  */
 export function requestsProfileLikeness(text: string): boolean {
   const normalized = text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/gu, '')
+  const firstPerson = /\b(?:mia|mio|conmigo|de mi (?:cara|rostro|persona|en|como)|yo en|salga yo|aparezca yo|mi cara|mi rostro)\b/u
+  const englishFirstPerson = /\b(?:of me|myself|my face)\b/u
   return /\b(?:foto|imagen|retrato|selfie|photograph|image|portrait)\b/u.test(normalized)
-    && /\b(?:mia|mio|conmigo|de mi (?:cara|rostro|persona|en|como)|yo en|salga yo|aparezca yo|mi cara|mi rostro|of me|myself|my face)\b/u.test(normalized)
+    && (firstPerson.test(normalized) || englishFirstPerson.test(normalized))
 }
 function generationPrompt(
   prompt: string,
