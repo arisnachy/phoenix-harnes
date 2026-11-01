@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import type { Context } from '@phoenix-ai/cordis'
 import type { StoredImageAttachment, ImageMediaType } from '@phoenix-ai/dsh-attachment'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   classifyCodexImageFailure,
   codexImageInvocation,
@@ -12,6 +12,7 @@ import {
   codexDoctorSupportsImageGeneration,
   imageGenerationToolDescription,
   imageGenerationBackendOrder,
+  profileImageBackendOrder,
   latestProfileReference,
   codexProfileReferenceExtension,
   requestsProfileLikeness,
@@ -28,7 +29,10 @@ type CapturedImageTool = {
     readonly signal: AbortSignal
     readonly agent?: {
       readonly options: { readonly provider?: string }
-      readonly session?: { readonly header: { readonly cwd?: string } }
+      readonly session?: {
+        readonly header: { readonly cwd?: string }
+        readonly events?: readonly { readonly type: string; readonly data: unknown }[]
+      }
     }
   }) => Promise<unknown>
   readonly output: {
@@ -193,8 +197,12 @@ describe('Codex image generation bridge', () => {
       await mkdir(dirname(pnpmNative), { recursive: true })
       await writeFile(pnpmNative, 'mock pnpm executable')
       expect(await resolveNativeCodexImageLauncher(pnpmShim, 'win32', 'x64')).toBe(pnpmNative)
-      expect(await resolveNativeCodexImageLauncher(join(root, 'unknown.cmd'), 'win32', 'x64'))
-        .toBe(join(root, 'unknown.cmd'))
+      // Isolate the negative fixture from the native executable created above.
+      // Discovery intentionally searches one parent directory for npm layouts.
+      const unknownShim = join(root, 'empty', 'nested', 'unknown.cmd')
+      await mkdir(dirname(unknownShim), { recursive: true })
+      expect(await resolveNativeCodexImageLauncher(unknownShim, 'win32', 'x64'))
+        .toBe(unknownShim)
     } finally {
       await rm(root, { recursive: true, force: true })
     }
@@ -260,6 +268,151 @@ describe('Codex image generation bridge', () => {
     expect(imageGenerationBackendOrder('free', 'openai-codex')).toEqual(['free'])
     expect(imageGenerationBackendOrder('codex', 'deepseek-official')).toEqual(['codex'])
     expect(freeImageProviderOrder).toEqual(['cloudflare', 'huggingface'])
+  })
+
+  it('routes opted-in likeness through real image input only, never text-only free engines', () => {
+    expect(profileImageBackendOrder(undefined)).toEqual(['codex', 'local'])
+    expect(profileImageBackendOrder('auto')).toEqual(['codex', 'local'])
+    expect(profileImageBackendOrder('codex')).toEqual(['codex'])
+    expect(profileImageBackendOrder('local')).toEqual(['local'])
+    expect(() => profileImageBackendOrder('free')).toThrow('no admiten la fotografía real')
+  })
+
+  it('passes the opted-in profile photo to a loopback image-to-image editor after Codex fails', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'phoenix-profile-edit-'))
+    const previousHome = process.env.CODEX_HOME
+    const previousURL = process.env.PHOENIX_IMAGE_LOCAL_BASE_URL
+    const previousModel = process.env.PHOENIX_IMAGE_LOCAL_MODEL
+    process.env.CODEX_HOME = root
+    process.env.PHOENIX_IMAGE_LOCAL_BASE_URL = 'http://127.0.0.1:9898/v1'
+    process.env.PHOENIX_IMAGE_LOCAL_MODEL = 'image-edit-test'
+    const source = Buffer.from([82, 73, 70, 70, 4, 0, 0, 0, 87, 69, 66, 80])
+    const edited = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 0])
+    const reference = {
+      attachmentId: 'sha256:real-profile',
+      mediaType: 'image/webp',
+      bytes: source.length,
+      width: 768,
+      height: 768,
+      name: 'referencia-original-del-usuario.webp',
+    }
+    const calls: Array<{ path: string; body: FormData; redirect?: RequestRedirect }> = []
+    let simulateRedirect = false
+    let forwardedPrivatePhoto = false
+    const codexLaunches: Array<{ argv: readonly string[]; cwd: string }> = []
+    vi.stubGlobal('fetch', vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+      const body = init?.body
+      if (!(body instanceof FormData)) throw new Error('Photo must be sent as multipart image data')
+      const path = typeof url === 'string' ? url : url instanceof URL ? url.href : url.url
+      calls.push({ path, body, redirect: init?.redirect ?? 'follow' })
+      // Model Node fetch following a malicious 307/308 from the local editor.
+      // With redirect:error the multipart body must never reach that host.
+      if (simulateRedirect) {
+        if (init?.redirect === 'error') throw new TypeError('private photo redirect blocked')
+        forwardedPrivatePhoto = true
+      }
+      return new Response(JSON.stringify({ data: [{ b64_json: edited.toString('base64') }] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    }))
+    let tool: CapturedImageTool | undefined
+    try {
+      const context = {
+        tools: {
+          register(definition: CapturedImageTool) {
+            tool = definition
+            return () => {}
+          },
+        },
+        subprocess: {
+          async resolveExecutable() { return 'codex' },
+          spawn({ argv, cwd }: { argv: readonly string[]; cwd: string }) {
+            const isDoctor = argv.includes('doctor')
+            if (!isDoctor) codexLaunches.push({ argv, cwd })
+            return {
+              done: Promise.resolve({ exitCode: isDoctor ? 0 : 1 }),
+              collected: {
+                stdout: { readFrom: () => ({ text: '' }) },
+                stderr: { readFrom: () => ({ text: isDoctor ? '' : 'image_generation unavailable' }) },
+              },
+            }
+          },
+        },
+        attachments: {
+          async readImage(ref: { attachmentId: string }) {
+            if (ref.attachmentId === reference.attachmentId) return { ref: reference, data: source }
+            return { ref: { ...reference, attachmentId: 'sha256:edited', mediaType: 'image/png' }, data: edited }
+          },
+          async saveImage() {
+            return {
+              attachmentId: 'sha256:edited', mediaType: 'image/png',
+              bytes: edited.length, width: 1024, height: 1024, name: 'edited.png',
+            }
+          },
+        },
+      } as unknown as Context
+      installCodexImageGeneration(context)
+      if (tool === undefined) throw new Error('Tool was not registered')
+      const events = [
+        { type: 'turn/start', data: {} },
+        { type: 'user/message', data: {
+          source: { kind: 'user' },
+          content: [
+            { type: 'image', attachment: reference },
+            { type: 'text', text: 'Dame una imagen mía como comandante de nave, estilo del equipo Kira' },
+          ],
+        } },
+      ]
+      const execution = {
+        signal: new AbortController().signal,
+        agent: { options: { provider: 'openai-codex' }, session: { header: { cwd: root }, events } },
+      }
+      const result = await tool.execute({ prompt: 'Retrátame como comandante, estilo Kira' }, execution)
+      expect(result).toMatchObject({ provider: 'local', model: 'image-edit-test' })
+      expect(codexLaunches).toHaveLength(1)
+      const imageIndex = codexLaunches[0]?.argv.indexOf('--image') ?? -1
+      expect(imageIndex).toBeGreaterThan(0)
+      expect(codexLaunches[0]?.argv[imageIndex + 1]).toBe('profile-original.webp')
+      expect(codexLaunches[0]?.cwd).toContain('phoenix-user-photo-')
+      expect(calls).toHaveLength(1)
+      expect(calls[0]?.path).toBe('http://127.0.0.1:9898/v1/images/edits')
+      expect(calls[0]?.redirect).toBe('error')
+      expect(calls[0]?.body.get('model')).toBe('image-edit-test')
+      expect(calls[0]?.body.get('prompt')).toEqual(expect.stringContaining('Kira team visual direction'))
+      const sent = calls[0]?.body.get('image')
+      expect(sent).toBeInstanceOf(Blob)
+      expect(Buffer.from(await (sent as Blob).arrayBuffer())).toEqual(source)
+      expect((result as { path: string }).path).toContain(join(root, '.artifacts', 'generated-images'))
+      expect(await readFile((result as { path: string }).path)).toEqual(edited)
+
+      // A local editor can redirect to a remote server; never replay the photo.
+      simulateRedirect = true
+      await expect(tool.execute({ prompt: 'Retrátame', backend: 'local' }, execution))
+        .rejects.toThrow('private photo redirect blocked')
+      expect(calls).toHaveLength(2)
+      expect(calls[1]?.redirect).toBe('error')
+      expect(forwardedPrivatePhoto).toBe(false)
+      simulateRedirect = false
+
+      // Reject remote image-to-image endpoints even if separately configured.
+      process.env.PHOENIX_IMAGE_LOCAL_BASE_URL = 'https://remote.example.org/v1'
+      await expect(tool.execute({ prompt: 'Retrátame', backend: 'local' }, execution))
+        .rejects.toThrow('foto privada solo puede enviarse')
+      expect(calls).toHaveLength(2)
+      await expect(tool.execute({ prompt: 'Retrátame', backend: 'free' }, execution))
+        .rejects.toThrow('no admiten la fotografía real')
+      expect(calls).toHaveLength(2)
+    } finally {
+      vi.unstubAllGlobals()
+      if (previousHome === undefined) delete process.env.CODEX_HOME
+      else process.env.CODEX_HOME = previousHome
+      if (previousURL === undefined) delete process.env.PHOENIX_IMAGE_LOCAL_BASE_URL
+      else process.env.PHOENIX_IMAGE_LOCAL_BASE_URL = previousURL
+      if (previousModel === undefined) delete process.env.PHOENIX_IMAGE_LOCAL_MODEL
+      else process.env.PHOENIX_IMAGE_LOCAL_MODEL = previousModel
+      await rm(root, { recursive: true, force: true })
+    }
   })
 
   it('selects only a new or changed generated image and prefers the newest', () => {
@@ -442,7 +595,7 @@ describe('Codex image generation bridge', () => {
           return { ref: attachment, data: Buffer.from([1, 2, 3, 4]) }
         },
       }
-      await expect(materializeGeneratedImageInWorkspace(store as never, image, workspace))
+      await expect(materializeGeneratedImageInWorkspace(store, image, workspace))
         .rejects.toThrow('must not be a symlink')
       expect(imageReads).toBe(0)
     } finally {
