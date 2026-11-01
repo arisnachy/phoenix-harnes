@@ -100,17 +100,17 @@ afterEach(async () => {
 })
 
 describe('Schedule tool protocol', () => {
-  it('registers three exclusive generic tools and disposes them together', async () => {
+  it('registers five exclusive generic tools and disposes them together', async () => {
     const test = await harness()
-    expect(['schedule_create', 'schedule_list', 'schedule_delete'].map(name => test.ctx.tools.get(name)?.name))
-      .toEqual(['schedule_create', 'schedule_list', 'schedule_delete'])
+    expect(['schedule_create', 'schedule_list', 'schedule_delete', 'schedule_pause', 'schedule_resume'].map(name => test.ctx.tools.get(name)?.name))
+      .toEqual(['schedule_create', 'schedule_list', 'schedule_delete', 'schedule_pause', 'schedule_resume'])
     const outputSchema = test.ctx.tools.get('schedule_create')?.output.schema as {
       oneOf?: Array<{ properties?: { code?: { const?: string }; operation?: { enum?: string[] } } }>
     }
     const persistenceError = outputSchema.oneOf?.find(schema =>
       schema.properties?.code?.const === 'persistence_uncertain')
-    expect(persistenceError?.properties?.operation?.enum).toEqual(['create', 'list', 'delete'])
-    for (const name of ['schedule_create', 'schedule_list', 'schedule_delete']) {
+    expect(persistenceError?.properties?.operation?.enum).toEqual(['create', 'list', 'delete', 'pause', 'resume'])
+    for (const name of ['schedule_create', 'schedule_list', 'schedule_delete', 'schedule_pause', 'schedule_resume']) {
       expect(test.ctx.tools.executionMode({ signal, callId: CallId(name), name, arguments: {}, agent: test.agent }))
         .toEqual({ kind: 'exclusive' })
     }
@@ -125,6 +125,8 @@ describe('Schedule tool protocol', () => {
     expect(test.ctx.tools.get('schedule_create')).toBeUndefined()
     expect(test.ctx.tools.get('schedule_list')).toBeUndefined()
     expect(test.ctx.tools.get('schedule_delete')).toBeUndefined()
+    expect(test.ctx.tools.get('schedule_pause')).toBeUndefined()
+    expect(test.ctx.tools.get('schedule_resume')).toBeUndefined()
   })
 
   it('rolls back earlier tool registrations when a later name conflicts', async () => {
@@ -195,6 +197,43 @@ describe('Schedule tool protocol', () => {
 
     expect(value(await execute(test, 'schedule_create', { prompt: 'next', after_seconds: 1 })))
       .toMatchObject({ id: 'schedule-2' })
+  })
+
+  it('pauses, lists, resumes and deletes durable reminders with persistence barriers', async () => {
+    const test = await harness()
+    const created = value(await execute(test, 'schedule_create', { prompt: 'resume later', after_seconds: 30 }))
+    expect(created).toMatchObject({ id: 'schedule-1' })
+    expect(value(await execute(test, 'schedule_pause', { id: 'schedule-1' })))
+      .toMatchObject({ id: 'schedule-1', state: 'paused' })
+    expect(value(await execute(test, 'schedule_list', {})))
+      .toEqual([expect.objectContaining({ id: 'schedule-1', state: 'paused' })])
+    expect(value(await execute(test, 'schedule_pause', { id: 'schedule-1' })))
+      .toEqual({ id: 'schedule-1', changed: false, code: 'schedule_not_found' })
+    vi.setSystemTime(new Date('2026-08-05T12:00:31.000Z'))
+    expect(value(await execute(test, 'schedule_resume', { id: 'schedule-1' })))
+      .toMatchObject({ id: 'schedule-1', state: 'overdue' })
+    expect(value(await execute(test, 'schedule_resume', { id: 'schedule-1' })))
+      .toEqual({ id: 'schedule-1', changed: false, code: 'schedule_not_found' })
+    expect(value(await execute(test, 'schedule_pause', { id: 'schedule-1' })))
+      .toMatchObject({ id: 'schedule-1', state: 'paused' })
+    expect(value(await execute(test, 'schedule_delete', { id: 'schedule-1' })))
+      .toEqual({ id: 'schedule-1', deleted: true })
+    expect(value(await execute(test, 'schedule_list', {}))).toEqual([])
+  })
+
+  it('validates pause and resume identity and contains persistence uncertainty', async () => {
+    const test = await harness()
+    expect(value(await execute(test, 'schedule_pause', { id: '' }))).toMatchObject({ code: 'invalid_rule' })
+    expect(value(await execute(test, 'schedule_resume', { id: ' schedule-1' }))).toMatchObject({ code: 'invalid_rule' })
+    expect(test.flushes.count).toBe(0)
+    expect(value(await execute(test, 'schedule_pause', { id: 'missing' })))
+      .toEqual({ id: 'missing', changed: false, code: 'schedule_not_found' })
+    await execute(test, 'schedule_create', { prompt: 'later', after_seconds: 40 })
+    test.flushes.outcomes.push('resolve', 'reject', 'resolve')
+    expect(value(await execute(test, 'schedule_pause', { id: 'schedule-1' })))
+      .toMatchObject({ code: 'persistence_uncertain', operation: 'pause', id: 'schedule-1' })
+    expect(value(await execute(test, 'schedule_list', {})))
+      .toEqual([expect.objectContaining({ state: 'paused' })])
   })
 
   it('rejects an empty or padded delete id before persistence', async () => {
