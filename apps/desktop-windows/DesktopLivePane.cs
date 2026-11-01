@@ -48,7 +48,9 @@ internal sealed class DesktopLivePane : UserControl
     private uint pinnedProcessId;
     private string? ownerSession;
     private DateTimeOffset ownerLastAction = DateTimeOffset.MinValue;
-    private bool CapturePrimaryScreen => string.Equals(selectedTarget, "screen:primary", StringComparison.OrdinalIgnoreCase);
+    private bool CaptureEntireDesktop => string.Equals(selectedTarget, "screen:all", StringComparison.OrdinalIgnoreCase);
+    private bool CaptureScreen => CaptureEntireDesktop
+        || string.Equals(selectedTarget, "screen:primary", StringComparison.OrdinalIgnoreCase);
 
     internal bool IsPaused { get; private set; }
     internal bool IsDismissed { get; private set; }
@@ -58,15 +60,19 @@ internal sealed class DesktopLivePane : UserControl
     {
         var owned = !string.IsNullOrWhiteSpace(sessionId)
             && string.Equals(sessionId, ownerSession, StringComparison.Ordinal);
-        var primaryScreen = owned && Visible && !IsDismissed && CapturePrimaryScreen ? Screen.PrimaryScreen : null;
-        var selectedWindow = owned && Visible && !IsDismissed && primaryScreen is null
+        var bounds = owned && Visible && !IsDismissed && CaptureScreen
+            ? CaptureEntireDesktop ? SystemInformation.VirtualScreen : Screen.PrimaryScreen?.Bounds ?? Rectangle.Empty
+            : Rectangle.Empty;
+        var screenAvailable = bounds.Width > 0 && bounds.Height > 0
+            && (long)bounds.Width * bounds.Height <= 16_000_000;
+        var selectedWindow = owned && Visible && !IsDismissed && !CaptureScreen
             ? ResolveTargetWindow() : IntPtr.Zero;
-        var ready = primaryScreen is not null || (selectedWindow != IntPtr.Zero && !IsIconic(selectedWindow));
+        var ready = screenAvailable || (selectedWindow != IntPtr.Zero && !IsIconic(selectedWindow));
         return System.Text.Json.JsonSerializer.Serialize(new
         {
             available = ready,
             paused = ready && IsPaused,
-            title = primaryScreen is not null ? "Pantalla principal"
+            title = screenAvailable ? CaptureEntireDesktop ? "Escritorio completo" : "Pantalla principal"
                 : ready ? WindowTitle(selectedWindow) : string.Empty,
             reason = ready ? string.Empty : owned && Visible
                 ? "La ventana vinculada a Desktop Live ya no está disponible; usa computer focus para seleccionar otra."
@@ -141,7 +147,7 @@ internal sealed class DesktopLivePane : UserControl
         // Computer Use already authorizes this conversation. When no app was
         // selected, show the primary display rather than a permanently empty viewer.
         if (string.IsNullOrWhiteSpace(target) && selectedTarget is null)
-            target = "screen:primary";
+            target = "screen:all";
         if (!string.IsNullOrWhiteSpace(target)
             && !string.Equals(selectedTarget, target.Trim(), StringComparison.OrdinalIgnoreCase))
         {
@@ -225,15 +231,10 @@ internal sealed class DesktopLivePane : UserControl
 
     private Bitmap? CaptureNativeWindow(out string explanation)
     {
-        if (CapturePrimaryScreen)
+        if (CaptureScreen)
         {
-            var screen = Screen.PrimaryScreen;
-            if (screen is null)
-            {
-                explanation = "No se detectó pantalla principal";
-                return null;
-            }
-            var bounds = screen.Bounds;
+            var bounds = CaptureEntireDesktop
+                ? SystemInformation.VirtualScreen : Screen.PrimaryScreen?.Bounds ?? Rectangle.Empty;
             if (bounds.Width <= 0 || bounds.Height <= 0
                 || (long)bounds.Width * bounds.Height > 16_000_000)
             {
@@ -245,7 +246,8 @@ internal sealed class DesktopLivePane : UserControl
             {
                 using var graphics = Graphics.FromImage(primaryFrame);
                 graphics.CopyFromScreen(bounds.Location, Point.Empty, bounds.Size, CopyPixelOperation.SourceCopy);
-                explanation = "Pantalla principal (captura visible)";
+                explanation = CaptureEntireDesktop ? "Escritorio completo (captura visible)"
+                    : "Pantalla principal (captura visible)";
                 return primaryFrame;
             }
             catch
