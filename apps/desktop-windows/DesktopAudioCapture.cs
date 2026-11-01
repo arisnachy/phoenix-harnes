@@ -44,7 +44,8 @@ internal static class DesktopAudioCapture
                     output = new { available = output is not null, device = output },
                     microphone = new { available = microphone is not null, device = microphone }
                 },
-                requiresConsent = !HasGrant(sessionId, "output") && !HasGrant(sessionId, "microphone"),
+                requiresConsent = !HasGrant(sessionId, "output"),
+                microphoneRequiresConsent = !HasGrant(sessionId, "microphone"),
                 sessionGrants = new {
                     output = HasGrant(sessionId, "output"),
                     microphone = HasGrant(sessionId, "microphone")
