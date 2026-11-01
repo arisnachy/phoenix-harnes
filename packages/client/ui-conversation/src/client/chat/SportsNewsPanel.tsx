@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import type { CanvasAction } from './GenerativeCanvas.tsx'
 import css from './SportsNewsPanel.module.css'
 
+/** One sourced sports article with an optional verified thumbnail and original link. */
 export type SportsNewsArticle = {
   label:string;value?:string;detail?:string;image?:string;href?:string
   action?:{ label:string;prompt:string }
@@ -103,9 +104,9 @@ export function SportsNewsPanel({title,articles,onAction}:{
     <div className={css.grid}>
       {visible.map((article,i)=><article key={i} className={css.article}>
         <div className={css.media}>
-          {article.image?<img src={article.image} alt="" loading="lazy" decoding="async"
-            referrerPolicy="no-referrer" onError={event=>{event.currentTarget.style.display='none'}}/>:
-            <span aria-hidden="true">PH</span>}
+          <span aria-hidden="true">PH</span>
+          {article.image&&<img src={article.image} alt="" loading="lazy" decoding="async"
+            referrerPolicy="no-referrer" onError={event=>{event.currentTarget.style.display='none'}}/>}
         </div>
         <div className={css.body}>
           <strong>{textFor(article.label,translated)}</strong>
