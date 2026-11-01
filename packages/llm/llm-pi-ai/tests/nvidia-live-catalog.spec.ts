@@ -39,7 +39,13 @@ describe('NVIDIA dynamic catalog', () => {
       .mockResolvedValueOnce(listing('minimaxai/minimax-m3', 'nvidia/nemotron-3-super-120b-a12b'))
       .mockResolvedValueOnce(listing('minimaxai/minimax-m3.1-flash', 'nvidia/nemotron-3-super-120b-a12b'))
     const catalog = new NvidiaLiveCatalog({ fetchImpl, now: () => now, refreshMs: 1_000 })
-    const pinned = { nvidia: { models: [{ id: 'minimaxai/minimax-m3', name: 'Legacy M3' }] } }
+    const pinned = {
+      nvidia: {
+        api: 'openai-completions' as const,
+        baseURL: NVIDIA_BUILD_BASE_URL,
+        models: [{ id: 'minimaxai/minimax-m3', name: 'Legacy M3' }],
+      },
+    }
     expect(catalog.visibleIds()).toBeUndefined()
 
     await catalog.refresh()
