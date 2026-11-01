@@ -1,5 +1,5 @@
-# Git hooks (lefthook). Keep these local checkpoints fast; CI owns the full
-# repository-wide gate matrix.
+# Git hooks (lefthook). Pre-commit stays fast; pre-push checks the complete
+# static contract and lint gates before publishing. Remote CI owns the full matrix.
 # Install: `node scripts/install-lefthook.mjs` (runs automatically via postinstall).
 
 pre-commit:
@@ -51,5 +51,7 @@ pre-merge-commit:
 
 pre-push:
   jobs:
-    - name: typecheck
-      run: pnpm run typecheck
+    # One job guarantees sequential execution and avoids shared build races.
+    # Full remote coverage, snapshots, Windows and real API tests are unchanged.
+    - name: PHOENIX mandatory static and quality preflight
+      run: node scripts/phoenix-ci-prepush.mjs
