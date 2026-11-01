@@ -41,6 +41,12 @@ try {
   Pop-Location
 }
 
+# Optional ClawHub CLI dependency. An offline registry must not block startup.
+$clawHubBootstrap = Join-Path $root 'scripts/phoenix-clawhub-bootstrap.mjs'
+if (($null -eq $code -or $code -eq 0) -and (Test-Path -LiteralPath $clawHubBootstrap)) {
+  try { & node $clawHubBootstrap --ensure } catch { Write-Warning 'ClawHub CLI install deferred.' }
+}
+
 # Optional sports sources install after a successful stable update; do not block
 # PHOENIX because GitHub/OddsPortal/Python may be unavailable temporarily.
 $sportsAuto = Join-Path $root 'scripts\phoenix-sports-source-auto.mjs'
