@@ -280,7 +280,10 @@ export class BinanceTestnetAutomation {
     return this.snapshot()
   }
 
-  /** @returns A defensive read-only copy of recorded TESTNET state. */
+  /**
+   * Return Spot Testnet automation state without sharing mutable references.
+   * @returns A defensive copy of recorded TESTNET state.
+   */
   snapshot(): BinanceTestnetAutomationState {return structuredClone(this.state)}
   private async halt(reason: string, symbol='BTCUSDT'): Promise<void> {
     this.state.enabled=false;this.state.halted=true;this.state.lastError=reason

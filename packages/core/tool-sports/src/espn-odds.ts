@@ -89,6 +89,7 @@ const localTime=(value:string):string=>{
 /** Parse quoted American moneylines from an ESPN event without filling in missing markets.
  * @param event - Raw ESPN event with a competition.
  * @param oddEntries - Embedded or Core API quotes.
+ * @param options - Historical mode and injectable observation clock.
  * @returns Attributed moneyline outcomes with decimal prices.
  */
 export function normalizeEspnMoneylines(event:EEvent,oddEntries:EspnOdds[],
@@ -117,7 +118,13 @@ export function normalizeEspnMoneylines(event:EEvent,oddEntries:EspnOdds[],
   }
   return result
 }
-/** Normalize only markets with explicit price, bookmaker and selection; never infer a spread side. */
+/**
+ * Normalize only markets with explicit price, bookmaker and selection; never infer a spread side.
+ * @param event - ESPN event with competition identifiers.
+ * @param odds - Embedded or Core API market records.
+ * @param options - Historical mode and observation clock.
+ * @returns Quotes with explicit bookmaker, selection and price.
+ */
 export function normalizeEspnMarkets(event:EEvent,odds:EspnOdds[],
   options:{historical?:boolean;now?:number}={}):EspnMarketQuote[]{
   const now=options.now??Date.now()
@@ -195,7 +202,9 @@ export type EspnOddsDiagnostics = {
   eventMatched:boolean
   datesQueried:string[]
 }
+/** Rejected quote with a reason it cannot be treated as a current price. */
 export type EspnOddsObservation=EspnMarketQuote & {reason:'sin_fecha'|'antigua'|'proveedor_sin_nombre'|'fecha_futura'}
+/** Current quotes, excluded observations and provider coverage diagnostics. */
 export type EspnOddsResult={quotes:EspnMarketQuote[];observations:EspnOddsObservation[];diagnostics:EspnOddsDiagnostics}
 const MAX_QUOTE_AGE_MS=60*60*1000 // Match the one-hour live quotation gate in sports_chat_odds.
 const MAX_REQUESTS=28
@@ -270,6 +279,11 @@ async function readOddsJSON(
  * Multi-route keyless ESPN collector: daily scoreboard → Core odds ($ref) →
  * site summary/pickcenter. Never assume a successful HTTP response contains prices.
  * Stops on a bounded request budget and caches only actual network reads.
+ * @param sportKey - Catalog sport key to resolve ESPN routes.
+ * @param requestedMarkets - Market families to filter.
+ * @param getJSON - Injectable provider JSON fetcher.
+ * @param options - Date, event, cache and request-window controls.
+ * @returns Verified quotes, excluded observations and diagnostics.
  */
 export async function fetchPublicEspnOddsDetailed(
   sportKey:string,requestedMarkets:string,getJSON:<T>(url:string)=>Promise<T>,
@@ -432,7 +446,13 @@ export async function fetchPublicEspnOddsDetailed(
   }
   return {quotes:[...quoteMap.values()].slice(0,160),observations:[...observationMap.values()].slice(0,120),diagnostics}
 }
-/** Compatibility facade: preserves the original two-stage API for callers. */
+/**
+ * Compatibility facade: preserves the original two-stage API for callers.
+ * @param sportKey - Catalog sport key.
+ * @param requestedMarkets - Requested market families.
+ * @param getJSON - Injectable JSON fetcher.
+ * @returns Quotes with explicit bookmaker prices.
+ */
 export async function fetchPublicEspnOdds(
   sportKey:string,requestedMarkets:string,getJSON:<T>(url:string)=>Promise<T>,
 ):Promise<EspnMarketQuote[]>{

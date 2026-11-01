@@ -44,7 +44,7 @@ export interface TeamModelProfile {
 /** User-owned Eclipse routing overrides the single deployment subagent profile
  * only when explicitly enabled.
  * @param settings - Optional saved Eclipse settings.
- * @param memberName - Retained for call-site compatibility; specialists do not
+ * @param _memberName - Retained for call-site compatibility; specialists do not
  * receive per-name model overrides.
  * @param fallback - Deployment-default worker model.
  * @param adaptiveEffort - Request-sensitive effort for an omitted hybrid tier.

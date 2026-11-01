@@ -384,6 +384,8 @@ function imageMediaTypeFromBytes(data: Buffer): ImageMediaType | undefined {
 
 /** The attachment store may re-encode WebP uploads into PNG/JPEG after admission.
  * Always use the verified stored raster and its true extension, never the upload filename.
+ * @param photo - Verified image attachment, including its media type and bytes.
+ * @returns The extension matching the validated raster signature.
  */
 export function codexProfileReferenceExtension(photo: StoredImageAttachment): '.png' | '.jpg' | '.webp' {
   if (photo.data.byteLength === 0 || photo.data.byteLength > 8 * 1024 * 1024) {
@@ -886,7 +888,10 @@ export const KIRA_TEAM_STYLE = [
   'This must NOT be a warm amber professional headshot, watercolor, business photograph or paint-over filter.',
 ].join(' ')
 
-/** The profile image must belong to the CURRENT human turn; never reuse historic photographs. */
+/** The profile image must belong to the CURRENT human turn; never reuse historic photographs.
+ * @param events - Chronological session events for the current conversation.
+ * @returns The image reference from the current human turn, if available.
+ */
 export function latestProfileReference(events: readonly { type: string; data: unknown }[]): ImageAttachmentRef | undefined {
   for (let i = events.length - 1; i >= 0; i--) {
     const event = events[i]
@@ -916,6 +921,10 @@ function latestUserText(events: readonly { type: string; data: unknown }[]): str
   }
   return ''
 }
+/** Detect whether the current message requests a portrait resembling the user.
+ * @param text - Current user request, not an earlier conversation message.
+ * @returns Whether a personal likeness reference is required.
+ */
 export function requestsProfileLikeness(text: string): boolean {
   const normalized = text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/gu, '')
   return /\b(?:foto|imagen|retrato|selfie|photograph|image|portrait)\b/u.test(normalized)
@@ -1112,7 +1121,9 @@ interface AvatarHostRpc {
   ): () => Promise<void>
 }
 
-/** Bound, same-origin RPC for a private, user-initiated profile portrait edit. */
+/** Bound, same-origin RPC for a private, user-initiated profile portrait edit.
+ * @param ctx - Host context for registering the authorized local transform endpoint.
+ */
 export function installCodexAvatarTransform(ctx: Context): void {
   const connection = (ctx as unknown as { connection: { rpc: AvatarHostRpc } }).connection
   connection.rpc.handle('/avatar', async (endpoint, payload, signal) => {

@@ -8,10 +8,15 @@ type Boxscore={ teams?:{ home?:BoxTeam;away?:BoxTeam } }
 type SeasonStats={ stats?:Array<{ splits?:Array<{ stat?:Record<string,number|string> }> }> }
 type Roster={ roster?:Array<{ person?:{ id?:number;fullName?:string };position?:{ abbreviation?:string;type?:string } }> }
 
+/** Published MLB player identity and optional season statistics; missing fields stay absent. */
 export type SportsPlayer={ name:string;role?:string;image?:string;stats?:string;id?:number }
+/** Team batting order and whether the official source confirmed all nine hitters. */
 export type SportsLineup={ team:string;confirmed:boolean;players:SportsPlayer[] }
+/** Officially identified probable starter and optional verified pitching statistics. */
 export type SportsPitcher={ team:string;name:string;id?:number;image?:string;stats?:string;probable:boolean }
+/** Bounded roster-derived bullpen sample, with an explicit availability note. */
 export type SportsBullpen={ team:string;pitchers:SportsPlayer[];note:string }
+/** Source-attributed MLB enrichment; notes explain data not yet confirmed by MLB. */
 export type MlbEnrichment={ pitchers:SportsPitcher[];lineups:SportsLineup[];bullpen:SportsBullpen[];notes:string[] }
 const safeId=(id:unknown):number|null=>typeof id==='number'&&Number.isSafeInteger(id)&&id>0&&id<100000000?id:null
 /** ESPN/MLB photos are external assets: operators may opt out of media display. */

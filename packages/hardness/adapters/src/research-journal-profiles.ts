@@ -4,7 +4,9 @@
  */
 import { defineTool, ToolArgsError, type ToolDefinition } from '@phoenix-ai/dsh-tools'
 
+/** Supported journals for provisional editorial requirements. */
 export type JournalName = 'jama' | 'jama-network-open' | 'custom'
+/** Article categories for which provisional manuscript rules may be retrieved. */
 export type JournalArticle = 'original_investigation' | 'research_letter' | 'brief_report'
   | 'systematic_review' | 'narrative_review'
 type Profile = {

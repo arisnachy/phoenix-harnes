@@ -8,6 +8,7 @@ import { SessionId } from '@phoenix-ai/dsh-session'
 import type { Agent } from '@phoenix-ai/dsh-agent'
 import type { TelegramBotSnapshot } from './types.ts'
 
+/** Vault key for the Telegram bot token; never return the token to a client. */
 export const TELEGRAM_BOT_TOKEN_REF = 'PHOENIX_TELEGRAM_BOT_TOKEN'
 const OWNER_REF = 'PHOENIX_TELEGRAM_OWNER_CHAT_ID'
 const OFFSET_REF = 'PHOENIX_TELEGRAM_UPDATE_OFFSET'
@@ -105,7 +106,11 @@ async function botApi(
   return parsed
 }
 
-/** Guard against invalid bot responses instead of mistaking HTTP success for identity proof. */
+/** Guard against invalid bot responses instead of mistaking HTTP success for identity proof.
+ * @param token - Stored bot token to verify against Telegram's getMe response.
+ * @param request - Fetch implementation for the verification request.
+ * @returns The verified bot username, when Telegram supplies a valid one.
+ */
 export async function verifyTelegramBotToken(
   token: string, request: typeof fetch = fetch,
 ): Promise<{ username?: string }> {
@@ -160,6 +165,7 @@ export class TelegramInbox {
       if (controller.signal.aborted) this.phase = 'idle'
     })
   }
+  /** Stop polling and clear the in-memory bot token without deleting saved credentials. */
   stop(): void {
     this.controller?.abort()
     this.token = undefined
@@ -173,7 +179,9 @@ export class TelegramInbox {
     if (prior === undefined) this.start()
     else void prior.finally(() => { if (this.worker === undefined) this.start() })
   }
-  /** A code survives Host restarts but expires after fifteen minutes. */
+  /** A code survives Host restarts but expires after fifteen minutes.
+   * @returns A fresh, expiring pairing code saved in the credential vault.
+   */
   async pairing(): Promise<string> {
     const creds = vault(this.ctx)
     if (creds === undefined || await stored(creds, TELEGRAM_BOT_TOKEN_REF) === undefined) {
@@ -196,10 +204,19 @@ export class TelegramInbox {
     await creds.unset(ref(PAIR_REF))
     return undefined
   }
+  /** Report whether a recent successful poll confirms an active inbox.
+   * @returns True when polling is active and recent.
+   */
   isPolling(): boolean {
     return this.phase === 'polling' && Date.now() - this.lastPoll < 50_000
   }
+  /** Return the latest polling failure, if any, without disclosing credentials.
+   * @returns A sanitized error message, or undefined when none was recorded.
+   */
   error(): string | undefined { return this.failure }
+  /** Read whether an owner chat ID has been paired in the credential vault.
+   * @returns True when the stored owner chat ID is valid.
+   */
   async isPaired(): Promise<boolean> {
     const creds = vault(this.ctx)
     if (creds === undefined) return false
@@ -412,6 +429,10 @@ export class TelegramInbox {
 
 /** Isolated Host lifecycle. Remote Settings and the worker share this instance. */
 const inboxes = new WeakMap<Context, TelegramInbox>()
+/** Get or create the single Telegram inbox associated with a Host context.
+ * @param ctx - Host context used to scope the inbox lifecycle.
+ * @returns The context-owned Telegram inbox instance.
+ */
 export function telegramInbox(ctx: Context): TelegramInbox {
   let inbox = inboxes.get(ctx)
   if (inbox === undefined) {
@@ -420,6 +441,11 @@ export function telegramInbox(ctx: Context): TelegramInbox {
   }
   return inbox
 }
+/** Verify the configured bot and report only secret-free state to Settings.
+ * @param ctx - Host context providing access to credential storage.
+ * @param receiver - Optional existing inbox instance to inspect.
+ * @returns Current configuration, verification and pairing state.
+ */
 export async function readTelegramBotState(ctx: Context, receiver?: TelegramInbox): Promise<TelegramBotSnapshot> {
   const creds = vault(ctx)
   if (creds === undefined) return { configured: false, verified: false, phase: 'credentials-unavailable', inboxActive: false, paired: false }
@@ -437,6 +463,12 @@ export async function readTelegramBotState(ctx: Context, receiver?: TelegramInbo
       ...(reason === undefined ? {} : { reason }) }
   }
 }
+/** Verify and store a bot token, reset stale pairing when it changes, and restart polling.
+ * @param ctx - Host context providing access to credential storage.
+ * @param value - Candidate Telegram bot token, never returned to the caller.
+ * @param receiver - Optional inbox instance to restart.
+ * @returns Secret-free verified bot state after saving.
+ */
 export async function saveTelegramBot(ctx: Context, value: string, receiver?: TelegramInbox): Promise<TelegramBotSnapshot> {
   const creds = vault(ctx)
   if (creds === undefined) throw new Error('Telegram credential storage unavailable')
@@ -452,6 +484,11 @@ export async function saveTelegramBot(ctx: Context, value: string, receiver?: Te
   return { configured: true, verified: true, phase: 'verified', inboxActive: worker.isPolling(),
     paired: previous === token && await worker.isPaired(), ...verified }
 }
+/** Stop the inbox and erase its token, pairing and session references.
+ * @param ctx - Host context providing access to credential storage.
+ * @param receiver - Optional inbox instance to stop.
+ * @returns Secret-free unconfigured bot state.
+ */
 export async function removeTelegramBot(ctx: Context, receiver?: TelegramInbox): Promise<TelegramBotSnapshot> {
   const creds = vault(ctx)
   if (creds === undefined) throw new Error('Telegram credential storage unavailable')

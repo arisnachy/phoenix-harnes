@@ -5,6 +5,7 @@ import type { Context } from '@phoenix-ai/cordis'
 import { credentialRef, type CredentialRef } from '@phoenix-ai/dsh-credentials'
 import type { OddsApiConnectorState } from './types.ts'
 
+/** Credential-vault reference for the official The Odds API provider key. */
 export const THE_ODDS_API_CREDENTIAL = 'THE_ODDS_API_KEY' as const
 const ENDPOINT = 'https://api.the-odds-api.com/v4/sports/'
 const KEY_FORMAT = /^[A-Za-z0-9_-]{16,128}$/u

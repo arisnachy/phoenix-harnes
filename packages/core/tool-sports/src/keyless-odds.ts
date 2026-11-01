@@ -13,6 +13,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 const runFile = promisify(execFile)
+/** Supported sport/market identifiers; not a live quote feed.
+ */
 export const keylessSports = {
   football:['1x2','double_chance','btts','over_under'],
   basketball:['moneyline','1x2','over_under'],
@@ -27,7 +29,11 @@ export const keylessSports = {
   cricket:['home_away'],
 } as const
 
+/** Sport key accepted by the installed local scraper.
+ */
 export type KeylessSport = keyof typeof keylessSports
+/** Timestamped, source-attributed bookmaker observation, not a forecast.
+ */
 export type KeylessQuote = {
   eventId:string;bookmaker:string;market:string;selection:string;point:number|null
   price:number;home:string;away:string;time:string;updatedAt:string
@@ -67,7 +73,14 @@ const getLine=(key:string):number|null=>{
   const match=key.match(/^(?:over_under|over_under_games|over_under_sets|over_under_points)_(\d{1,4})_(\d)_market$/u)
   return match?Number(match[1])+Number(match[2])/10:null
 }
-/** Accept only bookmaker markets with an unambiguous score/selection interpretation. */
+/** Accept only bookmaker markets with an unambiguous score/selection interpretation.
+ * @param input - Raw scraper result, expected to be an array of match records.
+ * @param sportKey - Sport identifier attached to verified quotes.
+ * @param now - Observation time in milliseconds.
+ * @param maxAgeMs - Maximum age of live observations in milliseconds.
+ * @param historical - Whether historical events are eligible.
+ * @returns Validated and deduplicated bookmaker market quotes.
+ */
 export function normalizeOddsHarvester(
   input:unknown,sportKey:string,now=Date.now(),maxAgeMs=3_600_000,
   historical=false,
@@ -135,6 +148,12 @@ export function normalizeOddsHarvester(
 
 /** Safe v0.20.0 historical query. Results are dated past-match observations,
  * never usable as a live ticket price.
+ * @param sport - Supported scraper sport.
+ * @param league - Validated league slug.
+ * @param season - Historical season identifier.
+ * @param market - Supported market.
+ * @param file - Local output path.
+ * @returns Fixed shell-free historical scraper arguments.
  */
 export function oddsHarvesterHistoricArgs(
   sport:KeylessSport,league:string,season:string,market:string,file:string,
@@ -147,6 +166,16 @@ export function oddsHarvesterHistoricArgs(
     '--market',market,'--max-pages','2','--headless','--format','json',
     '--stream-ndjson','--output',file]
 }
+/** Load bounded historical observations through an explicitly enabled local scraper.
+ * @param sport - Supported sport key.
+ * @param league - League slug.
+ * @param season - Historical season identifier.
+ * @param market - Supported market identifier.
+ * @param env - Operator configuration.
+ * @param now - Normalization reference time.
+ * @param runner - Optional injected loader for tests.
+ * @returns Historical records explicitly marked as non-live.
+ */
 export async function keylessHistoricOdds(
   sport:string,league:string,season:string,market:string,
   env:NodeJS.ProcessEnv=process.env,now=Date.now(),
@@ -188,6 +217,10 @@ export async function keylessHistoricOdds(
   const rows=normalizeOddsHarvester(raw,sport,now,3_600_000,true).slice(0,200)
   return{historical:true,source:'OddsHarvester/OddsPortal: archivo por liga y temporada',rows}
 }
+/** Check the operator's explicit opt-in to keyless scraping.
+ * @param env - Environment containing the opt-in flag.
+ * @returns True only when the flag is exactly `1`.
+ */
 export const keylessEnabled=(env:NodeJS.ProcessEnv=process.env):boolean=>
   env.PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED==='1'
 
@@ -202,6 +235,11 @@ const validDate=(day:string)=>/^\d{4}-\d{2}-\d{2}$/u.test(day)
 /** OddsPortal has distinct period tabs: NHL full-including-OT winner is NOT the
  * 3-way regulation 1X2 market. Request exactly the published period rather than
  * silently treating missing odds as a missing provider.
+ * @param sport - Supported scraper sport.
+ * @param market - Supported market.
+ * @param day - Validated ISO calendar date.
+ * @param file - Local output path.
+ * @returns Fixed shell-free upcoming scraper arguments.
  */
 export function oddsHarvesterArgs(sport:KeylessSport,market:string,day:string,file:string):string[]{
   if(!sportOK(sport)||!marketOK(sport,market)||!validDate(day))throw Error('Petición no permitida')
@@ -216,6 +254,9 @@ export function oddsHarvesterArgs(sport:KeylessSport,market:string,day:string,fi
  * OddsHarvester v0.20 emits valid match records as NDJSON before batch completion.
  * Keep those rows if the CLI fails after scraping some matches. If neither
  * streaming stdout nor a finished batch file is valid, surface the real error.
+ * @param stdout - Partial streaming NDJSON output.
+ * @param output - Parsed batch result when available.
+ * @returns Bounded deduplicated valid match records.
  */
 export function recoverScraperRows(stdout:unknown,output:unknown):unknown[]{
   const rows:unknown[]=[]
@@ -238,9 +279,10 @@ export function recoverScraperRows(stdout:unknown,output:unknown):unknown[]{
   }
   return rows
 }
-/** Run a fixed local executable with fixed command shape, no shell, no user URLs. */
-/** Sanitized transport failure: retain exit status and stderr diagnostics without
- * exposing environment variables, authorization headers or a raw shell command.
+/**
+ * Summarize a local scraper failure without exposing secrets or raw commands.
+ * @param error - Unknown process failure, potentially including stderr and exit status.
+ * @returns Bounded and redacted failure diagnostics for the operator.
  */
 export function describeScraperError(error:unknown):string{
   const record=error&&typeof error==='object'?error as Record<string,unknown>:{}
@@ -306,6 +348,13 @@ async function runScraper(sport:KeylessSport,market:string,day:string,env:NodeJS
 /**
  * Reuses one scrape across callers; short TTL avoids re-scraping the same sport/market.
  * No API key needed. A missing installation or blocked source must fail explicitly.
+ * @param sport - Supported sport identifier.
+ * @param market - Supported market identifier.
+ * @param date - ISO date of requested matches.
+ * @param env - Operator configuration and scraping authorization.
+ * @param now - Observation time for cache validation.
+ * @param runner - Injectable scraper runner for deterministic tests.
+ * @returns Fresh validated quotes or an explicit failure.
  */
 export async function keylessOdds(
   sport:string,market:string,date=localDay(),env:NodeJS.ProcessEnv=process.env,

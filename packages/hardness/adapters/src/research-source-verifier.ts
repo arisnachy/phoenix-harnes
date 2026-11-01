@@ -4,6 +4,7 @@
  */
 import { defineTool, ToolArgsError, type ToolDefinition } from '@phoenix-ai/dsh-tools'
 
+/** User-supplied bibliographic identifiers and title for external metadata verification. */
 export type ReferenceCandidate = { key: string; title: string; authors?: string; year?: string; doi?: string; pmid?: string }
 type SourceResult = {
   key: string

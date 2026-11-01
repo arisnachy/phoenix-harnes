@@ -44,7 +44,9 @@ export const secondarySportsSources = [
   },
 ] as const
 
+/** Identifier of a public research directory entry, not an executable odds adapter. */
 export type SecondarySportsSourceId=typeof secondarySportsSources[number]['id']
+/** Verification steps for research-only comparison of attributed market observations. */
 export const secondaryMarketWorkflow = [
   '1. Obtén partido, liga, fecha/hora y eventId/competitionId reales desde ESPN Scoreboard; no traduzcas el ID ESPN al de otra web.',
   '2. Usa sports_chat_odds y sports_chat_espn_core para intentar cuotas de ESPN con casa, mercado, línea y timestamp propios.',
@@ -54,6 +56,7 @@ export const secondaryMarketWorkflow = [
   '6. Si falta fecha de actualización de la casa, etiqueta la cifra «observación para investigación; vigencia no verificada». Si la página refleja línea inicial o histórico, etiqueta «histórico».',
   '7. Una cifra de comparador, aunque tenga hora de actualización, es referencia de terceros y NO cotización ni aceptación en casa. No la conviertas en ticket apostable sin verificar un proveedor autorizado.',
 ] as const
+/** Access, provenance and execution restrictions for secondary market research. */
 export const secondaryMarketPolicy = {
   registryStatus:'reference_only',
   retrievalStatus:'not_attempted',

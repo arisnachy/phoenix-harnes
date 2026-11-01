@@ -36,6 +36,8 @@ export function unfinishedTodoRecoveryObjective(events: readonly SessionEvent[])
  *
  * A genuine user's most recent turn owns the work; historical tasks from an
  * earlier human turn cannot silently re-arm themselves.
+ * @param events - Ordered, durable session events for the current conversation.
+ * @returns The unfinished objective, if structured evidence requires recovery.
  */
 export function unfinishedStructuredWorkRecoveryObjective(events: readonly SessionEvent[]): string | undefined {
   const todo = unfinishedTodoRecoveryObjective(events)
@@ -72,6 +74,8 @@ export function unfinishedStructuredWorkRecoveryObjective(events: readonly Sessi
  * This inspects durable tool outcomes, never assistant prose or hard-coded
  * refusal phrases. It does not rerun the failed operation: the Goal driver
  * decides a safe alternative after checking whether effects actually occurred.
+ * @param events - Durable session events since the latest human turn.
+ * @returns The original objective if a completed turn still has an unverified tool effect.
  */
 export function unfinishedToolFailureRecoveryObjective(events: readonly SessionEvent[]): string | undefined {
   const index = events.findLastIndex(event =>

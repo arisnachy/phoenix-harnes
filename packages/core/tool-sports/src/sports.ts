@@ -6,6 +6,7 @@ import { saveOddsSnapshot } from './odds-snapshots.ts'
 import { belongsToLeague } from './sports-odds-coverage.ts'
 import { enrichMlbMatch } from './mlb-matchup.ts'
 import { researchMlbTrend } from './mlb-research.ts'
+/** Supported league slugs by sport; catalog entries are not live fixture claims. */
 export const sportsCatalog: Readonly<Record<string, readonly string[]>> = {
   soccer: ['eng.1','esp.1','mex.1','usa.1','uefa.champions','fifa.world'],
   basketball: ['nba','wnba','mens-college-basketball'],
@@ -187,6 +188,7 @@ const espnNumericId=(value:unknown):string|undefined=>{
  * @param requestedDate - Optional date in ISO format.
  * @param env - Provider authorization state.
  * @param fetcher - Injectable HTTP client for tests.
+ * @param compactLive - Whether to prefer compact live presentation blocks.
  * @returns Attributed game cards, result count and date.
  */
 export async function chatGames(sport:string,league:string,requestedDate?:string,env:NodeJS.ProcessEnv=process.env,fetcher:typeof fetch=fetch,compactLive=false):Promise<{ summary:string;items:ChatBlock[];source:string;count:number;date:string;espnIdentifiers:EspnGameIdentifiers[] }> {
@@ -318,8 +320,15 @@ export type MarketOutcome = MarketSelection & { price:number;home:string;away:st
 export type OddsSourceAttempt={provider:string;status:'observed'|'empty'|'unconfigured'|'error';
   count:number;detail:string;rawCount?:number;startedOddsEntries?:number;
   undatedOutcomes?:number;expiredOutcomes?:number}
-/** Query independent providers without allowing an empty/failed preferred provider
- * to suppress a healthy fallback. Preserve bookmaker identity and source times.
+/**
+ * Query independent providers without allowing an empty or failed preferred
+ * provider to suppress a healthy fallback; preserve identity and timestamps.
+ * @param sportKey - Supported sportsbook competition identifier.
+ * @param markets - Comma-separated supported market categories.
+ * @param env - Authorization and provider configuration.
+ * @param fetcher - Injectable provider HTTP transport.
+ * @param now - Clock used for staleness checks and attribution.
+ * @returns Attributed odds and independent provider attempt outcomes.
  */
 export async function marketOddsDetailed(
   sportKey:string,markets='h2h',env:NodeJS.ProcessEnv=process.env,
@@ -463,7 +472,14 @@ export async function marketOddsDetailed(
   }
   return{quotes:merged,sources}
 }
-/** Compatibility facade for all existing betting tools. */
+/**
+ * Return attributed available quotes through the compatibility facade.
+ * @param sportKey - Supported sportsbook competition identifier.
+ * @param markets - Requested market categories.
+ * @param env - Authorization and provider configuration.
+ * @param fetcher - Injectable provider HTTP transport.
+ * @returns Provider-attributed market quotes without placing a bet.
+ */
 export async function marketOdds(
   sportKey:string,markets='h2h',env:NodeJS.ProcessEnv=process.env,fetcher:typeof fetch=fetch,
 ):Promise<MarketOutcome[]>{

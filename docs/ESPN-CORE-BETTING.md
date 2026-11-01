@@ -1,8 +1,6 @@
 # ESPN Core pública: inteligencia deportiva y cuotas (PHOENIX)
 
-**Estado:** integradas familias de rutas, no garantía de HTTP 200 en todas las ligas.
-Fuente no oficial: https://gist.github.com/nntrn/ee26cb2a0716de0947a0a4e9a157bc1c
-y https://github.com/pseudo-r/Public-ESPN-API .
+**Estado:** integradas familias de rutas, no garantía de HTTP 200 en todas las ligas. Fuente no oficial: https://gist.github.com/nntrn/ee26cb2a0716de0947a0a4e9a157bc1c y https://github.com/pseudo-r/Public-ESPN-API .
 
 ## Rutas (ESPN Core v2)
 

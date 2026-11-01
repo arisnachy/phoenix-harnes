@@ -65,7 +65,7 @@ async function invoke(bin: string, args: string[], filePath: string, signal: Abo
           return reject(new Error('El extractor no devolvió hallazgos verificables.'))
         }
         fulfill(parsed)
-      } catch (error) { reject(error) }
+      } catch (error) { reject(error instanceof Error ? error : new Error(String(error))) }
     })
     child.stdin.on('error', () => {})
     child.stdin.end(JSON.stringify({ path: filePath }))

@@ -8,12 +8,20 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { keylessEnabled } from './keyless-odds.ts'
 const runFile=promisify(execFile)
+/** Public vote percentages, not calibrated predictive probabilities.
+ */
 export type CommunityOpinion={
   home:string;away:string;sport:string;league:string;market:string;source:'OddsPortal Community'
   observedAt:string;votes:Array<{selection:string;percentage:number}>
   limitation:'votación pública, no probabilidad predictiva'
 }
 const str=(v:unknown,n=110)=>typeof v==='string'?v.trim().slice(0,n):''
+/** Validate scraped community votes, freshness and team identities.
+ * @param input - Untrusted scraped records.
+ * @param now - Reference observation time.
+ * @param maxAgeMs - Maximum allowed observation age.
+ * @returns Bounded, source-labeled community opinions.
+ */
 export function normalizeCommunity(input:unknown,now=Date.now(),maxAgeMs=12*60*60_000):CommunityOpinion[]{
   if(!Array.isArray(input))throw Error('Formato de comunidad no válido')
   const opinions:CommunityOpinion[]=[]
@@ -37,6 +45,12 @@ export function normalizeCommunity(input:unknown,now=Date.now(),maxAgeMs=12*60*6
   }
   return opinions
 }
+/** Retrieve public community sentiment only with local scraper opt-in.
+ * @param sport - Validated sport slug.
+ * @param env - Operator configuration.
+ * @param runner - Optional injected source for deterministic tests.
+ * @returns Community opinions, never win probabilities.
+ */
 export async function communityOpinions(sport:string,env:NodeJS.ProcessEnv=process.env,
   runner?:()=>Promise<unknown>):Promise<CommunityOpinion[]>{
   if(!/^[a-z][a-z-]{2,32}$/u.test(sport))throw Error('Deporte de comunidad inválido')

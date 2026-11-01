@@ -250,7 +250,11 @@ describe('PHOENIX supervised updater runtime isolation', () => {
   it('promotes each green current main SHA to the stable release pointer', () => {
     expect(stableWorkflow).toContain('Keep stable exactly aligned with main')
     expect(stableWorkflow).toContain('"$TARGET_SHA:refs/heads/stable"')
-    expect(stableWorkflow).toContain('--force-with-lease="refs/heads/stable:$stable_sha"')
+    expect(stableWorkflow).toContain('git merge-base --is-ancestor "$stable_sha" "$TARGET_SHA"')
+    expect(stableWorkflow).toContain('git push origin "$TARGET_SHA:refs/heads/stable"')
+    expect(stableWorkflow).toContain('git rev-parse origin/stable')
+    expect(stableWorkflow).not.toContain('--force-with-lease')
+    expect(stableWorkflow).not.toContain('git push --force')
   })
 
   it('shares updater control markers through the common Git directory across worktrees', () => {

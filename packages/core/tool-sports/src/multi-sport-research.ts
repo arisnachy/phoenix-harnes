@@ -15,11 +15,13 @@ type Game = {
   competitions?:Array<{competitors?:Competitor[]}>
 }
 type Scoreboard={events?:Game[]}
+/** Descriptive recent team form from completed games, with nullable missing metrics. */
 export type FormSide = {
   id:string;name:string;completedGames:number;wins:number;losses:number;draws:number
   averageScored:number|null;averageAllowed:number|null;averageMargin:number|null
   restHours:number|null;lastResults:Array<{eventId:string;date:string;opponent:string;scored:number;allowed:number}>
 }
+/** Upcoming ESPN fixture and source-verified form for both teams, not win odds. */
 export type ResearchMatch = {
   eventId:string;date:string;sport:string;league:string;home:FormSide;away:FormSide
   source:'ESPN Site API'; evidence:'descriptive'|'insufficient'

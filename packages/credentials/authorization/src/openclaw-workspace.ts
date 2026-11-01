@@ -68,7 +68,7 @@ function defaultRun(command: string, args: readonly string[], options: CliRunOpt
         env: { ...process.env, ...(options.env ?? {}) },
       })
     } catch (error) {
-      reject(error)
+      reject(error instanceof Error ? error : new Error(String(error)))
       return
     }
 
@@ -76,7 +76,7 @@ function defaultRun(command: string, args: readonly string[], options: CliRunOpt
       if (settled) return
       settled = true
       options.signal?.removeEventListener('abort', onAbort)
-      reject(error)
+      reject(error instanceof Error ? error : new Error(String(error)))
     }
     const onAbort = (): void => {
       child.kill()

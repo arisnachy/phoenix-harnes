@@ -185,7 +185,11 @@ export class BinanceSpotTestnet {
     }
   }
 
-  /** Obtain a Testnet-only executable reference price without private keys. */
+  /**
+   * Obtain a Testnet-only executable reference price without private keys.
+   * @param rawSymbol - Validated trading pair for the Testnet endpoint.
+   * @returns Confirmed Testnet quote price.
+   */
   async quote(rawSymbol: string): Promise<number> {
     const symbol = pair(rawSymbol)
     const response = await this.request(BASE + '/api/v3/ticker/price?symbol=' + symbol, {
@@ -204,6 +208,10 @@ export class BinanceSpotTestnet {
    * Read confirmed OHLCV data from SPOT TESTNET, not production Binance.
    * Testnet's market prices and order books are independent of production.
    * Do not attach API credentials to public candles.
+   * @param rawSymbol - Testnet trading pair.
+   * @param interval - Supported Testnet OHLCV interval.
+   * @param limit - Maximum number of observations requested.
+   * @returns Validated Testnet market candles.
    */
   async candles(rawSymbol: string, interval: '15m', limit = 80): Promise<BinanceCandle[]> {
     const symbol = pair(rawSymbol)
@@ -240,7 +248,11 @@ export class BinanceSpotTestnet {
     })
   }
 
-  /** Read exchange LOT_SIZE rules before every autonomous partial/full SELL. */
+  /**
+   * Read exchange LOT_SIZE rules before every autonomous partial/full SELL.
+   * @param rawSymbol - Trading pair whose exchange constraints are required.
+   * @returns Minimum, maximum, and step sizes from Testnet exchange metadata.
+   */
   async lotSize(rawSymbol: string): Promise<{ readonly minQty: string; readonly maxQty: string; readonly stepSize: string }> {
     const symbol=pair(rawSymbol)
     const response=await this.request(BASE+'/api/v3/exchangeInfo?symbol='+symbol,{
@@ -311,6 +323,8 @@ export class BinanceSpotTestnet {
   /**
    * Reconcile a possibly accepted but unacknowledged TESTNET order by its
    * previously persisted client ID. Never retries by submitting another order.
+   * @param input - Known symbol and durable client order identifier.
+   * @returns The provider's verified receipt for the existing order.
    */
   async orderStatus(input: { readonly symbol: string; readonly clientOrderId: string }): Promise<BinanceTestnetOrderReceipt> {
     const symbol = pair(input.symbol)

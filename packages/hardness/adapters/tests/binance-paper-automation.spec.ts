@@ -65,17 +65,35 @@ describe('Binance Host PAPER automation', () => {
   })
 
   it('panic stop sells every open PAPER position and disables future cycles', async () => {
-    const { worker, paper } = setup()
-    await worker.start({ symbols: ['BTCUSDT'], pollMs: 60_000 })
-    expect((await paper.account()).positions).toHaveLength(1)
+    // This test verifies liquidation, not the independent adaptive entry
+    // strategy. Seed two confirmed ledger fills so a HOLD cannot make it flaky.
+    const feed: BinancePublicMarket = {
+      async price() { return 100 },
+      async prices(symbols) { return Object.fromEntries(symbols.map(symbol => [symbol, 100])) },
+      async candles() {
+        return breakoutHistory().map(candle => ({
+          ...candle, open: 100, close: 100, high: 101, low: 99, volume: 10,
+        }))
+      },
+    }
+    const { worker, paper } = setup(feed)
+    await worker.start({ symbols: ['BTCUSDT', 'ETHUSDT'], pollMs: 60_000 })
+    expect((await paper.account()).positions).toHaveLength(0)
+    await paper.order({ symbol: 'BTCUSDT', side: 'buy', quoteAmountUsdt: 100 })
+    await paper.order({ symbol: 'ETHUSDT', side: 'buy', quoteAmountUsdt: 100 })
+    expect((await paper.account()).positions).toHaveLength(2)
     await worker.stopAndLiquidate()
     const snapshot = await worker.dashboard()
     expect(snapshot.enabled).toBe(false)
     expect(snapshot.account.positions).toHaveLength(0)
-    expect(snapshot.recentTrades.map(item => item.side)).toEqual(['buy', 'sell'])
-    expect(snapshot.recentTrades[1]?.reason).toBe('user-stop-liquidate-paper')
+    expect(snapshot.recentTrades.map(item => item.side)).toEqual(['buy', 'buy', 'sell', 'sell'])
+    expect(snapshot.recentTrades.filter(item => item.side === 'sell').map(item => item.symbol))
+      .toEqual(['BTCUSDT', 'ETHUSDT'])
+    expect(snapshot.recentTrades.filter(item => item.side === 'sell').every(
+      item => item.reason === 'user-stop-liquidate-paper',
+    )).toBe(true)
     await worker.step()
-    expect((await paper.account()).tradeCount).toBe(2)
+    expect((await paper.account()).tradeCount).toBe(4)
   })
 
   it('panic stop never reports liquidation success when public sell quotes fail', async () => {

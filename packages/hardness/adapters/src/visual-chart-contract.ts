@@ -93,7 +93,7 @@ function syntheticCandles(spec: Visual): Visual {
     simulated: true,
     description: 'Datos ficticios · velas OHLC simuladas, no cotizaciones reales',
     candles: opens.map((open, index) => {
-      const close = closes[index]!
+      const close = closes[index] ?? open
       return {
         time: ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'][index],
         open, high: Math.max(open, close) + 2, low: Math.min(open, close) - 2, close,

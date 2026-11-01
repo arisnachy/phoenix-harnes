@@ -157,7 +157,11 @@ function validateCollection(
   if (!Array.isArray(collection) || collection.length === 0) issues.push(issue)
 }
 
-/** Resolve both common table encodings without losing object-shaped row cells. */
+/**
+ * Resolve both common table encodings without losing object-shaped row cells.
+ * @param spec - Declarative visual specification containing table columns and rows.
+ * @returns Normalized table columns and rows, or undefined when no usable table exists.
+ */
 export function projectVisualTable(spec: JsonRecord): {
   readonly columns: readonly string[]
   readonly rows: readonly (readonly unknown[])[]
@@ -195,7 +199,11 @@ export function projectVisualTable(spec: JsonRecord): {
   return { columns, rows }
 }
 
-/** Only meaningful cells count as actual table data; blank placeholders are not results. */
+/**
+ * Only meaningful cells count as actual table data; blank placeholders are not results.
+ * @param spec - Declarative visual specification containing candidate table rows.
+ * @returns Rows with at least one nonempty cell.
+ */
 export function populatedVisualTableRows(spec: JsonRecord): readonly (readonly unknown[])[] {
   const table = projectVisualTable(spec)
   return table?.rows.filter(row => row.some(cell =>

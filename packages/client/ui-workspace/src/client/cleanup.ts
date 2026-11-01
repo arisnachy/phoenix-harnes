@@ -4,6 +4,7 @@
  */
 import type { SessionId, SessionListState } from '@phoenix-ai/dsh-client-runtime/client'
 
+/** Explicit user-selected scope for a non-destructive deletion preview. */
 export type SessionCleanupMode = 'selected' | 'before' | 'between' | 'all'
 
 /** Local end-of-day boundary for a date input; invalid/empty dates select nothing. */
@@ -17,7 +18,15 @@ function dayLimit(value: string, endOfDay: boolean): number | undefined {
   return parsed.getTime()
 }
 
-/** Preview exact session ids, including archived rows, without selecting unknown identities. */
+/**
+ * Preview exact session ids, including archived rows, without selecting unknown identities.
+ * @param list - Host-visible sessions and their indexed metadata.
+ * @param mode - Selection, date range, or all sessions.
+ * @param selected - Session identifiers explicitly selected by the user.
+ * @param before - Inclusive local end date for before and between filters.
+ * @param after - Inclusive local start date for the between filter.
+ * @returns Only existing session identifiers matching the requested preview.
+ */
 export function cleanupCandidateIds(
   list: Pick<SessionListState, 'ids' | 'byId'>,
   mode: SessionCleanupMode,

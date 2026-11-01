@@ -3,6 +3,11 @@ export type RankedSportsCandidate={
   rank:number
   pick:{sport:string;league:string;eventId:string}
 }
+/** Prioritize distinct active sports before selecting more leagues.
+ * @param eligible - Leagues with activity counts.
+ * @param maxLeagues - Maximum leagues to investigate.
+ * @returns Deterministic shortlist with discipline diversity prioritized.
+ */
 export function diversifiedSportsShortlist<T extends {sport:string;league:string;active:number}>(
   eligible:readonly T[],maxLeagues=6,
 ):T[]{
@@ -25,6 +30,12 @@ export function diversifiedSportsShortlist<T extends {sport:string;league:string
   }
   return chosen
 }
+/** Select ranked candidates without falsely satisfying multisport requirements.
+ * @param ranked - Evidence-ranked candidates.
+ * @param count - Requested selection count.
+ * @param multisport - Whether distinct sports are required.
+ * @returns Selected candidates and a truthful diversity-satisfaction flag.
+ */
 export function diversifiedSportsPicks<T extends RankedSportsCandidate>(
   ranked:readonly T[],count:number,multisport:boolean,
 ):{chosen:T[];diversitySatisfied:boolean}{

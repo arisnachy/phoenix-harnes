@@ -37,6 +37,7 @@ const cache=new Map<string,{at:number;quotes:FreeOddsQuote[]}>()
  * @param credential - Private header token; never included in responses or URLs
  * @param fetcher - Injectable, restricted HTTP client
  * @param now - Clock injectable for deterministic tests
+ * @returns Bounded normalized quotes from the configured external provider.
  */
 export async function fetchTheOddsApi(
   sportKey:string,markets:string,credential:string,fetcher:typeof fetch=fetch,now=Date.now(),

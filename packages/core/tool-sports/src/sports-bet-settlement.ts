@@ -16,18 +16,26 @@ const number=(value:unknown):number|null=>{
 const dateOK=(s:string)=>/^\d{4}-\d{2}-\d{2}$/u.test(s)&&
   Number.isFinite(Date.parse(s+'T00:00:00Z'))&&
   new Date(s+'T00:00:00Z').toISOString().slice(0,10)===s
+/** Market families supported by the provisional settlement preview.
+ */
 export type SportsMarketFamily=
   'moneyline'|'h2h'|'1x2'|'run_line'|'spread'|'total'|'team_total'|
   'first_3_total'|'first_5_total'|'first_3_spread'|'first_5_spread'|'player_prop'
+/** Candidate wager leg with bookmaker, market, selection and quoted price.
+ */
 export type SportsBetLeg={
   eventId:string;market:SportsMarketFamily;selection:'home'|'away'|'draw'|'over'|'under'|'yes'|'no';
   price:number;line?:number;team?:'home'|'away';playerId?:string;
   bookmaker:string;reference?:string
 }
+/** Candidate ticket and stake to validate against ESPN evidence.
+ */
 export type SportsSettlementInput={
   sport:string;league:string;date:string;stake:number;legs:SportsBetLeg[];
   ticketReference?:string
 }
+/** Provisional outcome, never a sportsbook-confirmed settlement.
+ */
 export type SportsLegGrade={
   eventId:string;market:SportsMarketFamily;selection:string;bookmaker:string;
   result:'won'|'lost'|'push'|'pending'|'unverifiable';reason:string;
@@ -37,6 +45,9 @@ const supported=new Set<SportsMarketFamily>([
   'moneyline','h2h','1x2','run_line','spread','total','team_total',
   'first_3_total','first_5_total','first_3_spread','first_5_spread','player_prop',
 ])
+/** Reject malformed, cross-bookmaker or unsupported candidate tickets.
+ * @param input - Candidate ticket with market lines, event IDs and stake.
+ */
 export function validateSportsSettlement(input:SportsSettlementInput):void{
   if(!Object.hasOwn(sportsCatalog,input.sport)||!/^[a-z][a-z-]{1,35}$/u.test(input.sport)
     ||!/^[a-z0-9][a-z0-9._-]{0,79}$/u.test(input.league)||!dateOK(input.date))

@@ -99,7 +99,10 @@ function normalizeScene(raw: unknown, fallbackName: string): Scene {
   }
 }
 
-/** An actual 3D *concept model* rather than a 2D image or a claimed CAD reconstruction. */
+/**
+ * Construct an actual 3D concept, not a 2D image or a claimed CAD reconstruction.
+ * @returns Portable scene geometry describing the tropical villa concept.
+ */
 export function tropicalVillaScene(): Scene {
   const nodes: SceneNode[] = []
   const box = (name: string, position: [number,number,number], size: [number,number,number], color: string): void => {
@@ -132,7 +135,10 @@ export function tropicalVillaScene(): Scene {
   return { version: 1, units: 'meters', name: 'Villa tropical · modelo 3D conceptual', background:'#f9f3eb', nodes }
 }
 
-/** Model-facing 3D creation; geometry remains portable to other Phoenix applications. */
+/**
+ * Expose model-facing 3D creation with portable geometric scene output.
+ * @returns A bounded tool definition for creating original interactive scenes.
+ */
 export function createPhoenix3DTool(): ToolDefinition {
   return defineTool({
     name: 'phoenix_3d',

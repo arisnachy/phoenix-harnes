@@ -12,10 +12,12 @@ const numericId=(v:unknown):string|null=>/^\d{1,16}$/u.test(String(v??''))?Strin
 const sportValid=(v:string)=>/^[a-z][a-z-]{1,35}$/u.test(v)
 const leagueValid=(v:string)=>/^[a-z0-9][a-z0-9._-]{0,45}$/u.test(v)
 const maxRequests=42
+/** Past ESPN market observation, never a current executable bookmaker quote. */
 export type HistoricalEspnRow=EspnMarketQuote&{
   historical:true;priceStatus:'historical_unverified';source:'ESPN Scoreboard'|'ESPN Core'|'ESPN Summary';
   quoteTimestampKnown:boolean;eventDate:string
 }
+/** Day-scoped archive report including source gaps and request counts. */
 export type HistoricalEspnReport={
   historical:true;source:'ESPN Site/Core (sin clave, no oficial)';sport:string;league:string;
   requestedStart:string;daysScanned:number;eventCount:number;eventsWithPrices:number;
@@ -52,6 +54,10 @@ const priceEntries=(value:unknown):Dict[]=>{
 }
 /** Bounded historical lookup with no guarantee of full market coverage.
  * Never uses a past line as a current sportsbook offer.
+ * @param options - Sport, league, date and bounded scan window.
+ * @param getJSON - Injectable JSON fetcher for ESPN endpoints.
+ * @param now - Clock used to reject future historical dates.
+ * @returns Archived observations, coverage and warnings.
  */
 export async function fetchEspnHistoricalOdds(
   options:Options,getJSON:<T>(url:string)=>Promise<T>,now=Date.now(),

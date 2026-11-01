@@ -37,7 +37,11 @@ const SCRIPT = [
   '[Console]::Out.Write([Convert]::ToBase64String($result))',
 ].join('\n')
 
-/** Only complete secure web origins are accepted, with loopback HTTP for development. */
+/**
+ * Accept only complete secure web origins, with loopback HTTP for development.
+ * @param raw - URL to normalize to an origin without embedded credentials.
+ * @returns The validated canonical origin.
+ */
 export function loginOrigin(raw: string): string {
   const parsed = new URL(raw)
   if (parsed.username || parsed.password || parsed.origin === 'null') throw new Error('Origen no válido')
@@ -50,7 +54,11 @@ export function loginOrigin(raw: string): string {
  * Show only that a related access exists; NEVER share or replay its secret
  * across origins automatically. The user must approve an explicit copy.
  */
-/** Registered related origins are only discovery hints; no implicit cross-site login. */
+/**
+ * Discover explicitly related login origins without sharing their credentials.
+ * @param origin - Exact origin to look up in the fixed allowlist.
+ * @returns Related origin hints, never implicit login permissions.
+ */
 export function relatedCredentialOrigins(origin: string): readonly string[] {
   // This site's apex, www portal and embedded sports module may each host
   // their own login. An exact allowlist avoids matching lookalike domains.
@@ -65,7 +73,11 @@ export function relatedCredentialOrigins(origin: string): readonly string[] {
   }
   return []
 }
-/** Backward-compatible primary related-site hint; status searches all known origins. */
+/**
+ * Return the backward-compatible primary related-site discovery hint.
+ * @param origin - Exact origin to inspect.
+ * @returns First related origin, if one is configured.
+ */
 export function relatedCredentialOrigin(origin: string): string | undefined {
   return relatedCredentialOrigins(origin)[0]
 }
@@ -384,6 +396,7 @@ async function tabForLogin(tabId: string, origin: string): Promise<BrowserTab> {
 /** Detect a visible login even when a modal appeared without navigation.
  * Includes same-origin iframes; never inspect cross-origin frame secrets.
  * Detection failures are errors, NOT “no login needed”.
+ * @returns A browser expression that detects a visible login form.
  */
 export function loginDetectionExpression(): string {
   return `(() => {
@@ -411,6 +424,7 @@ export function loginDetectionExpression(): string {
   })()`
 }
 
+/** Describes the input metadata needed for an explicitly authorized login form. */
 export interface LoginInputHint {
   key: string
   role: 'account' | 'secret' | 'extra'
@@ -419,6 +433,7 @@ export interface LoginInputHint {
   inputType: 'text' | 'email' | 'tel' | 'password' | 'number'
   required: boolean
 }
+/** Captures the inspected login-gate state without retaining input values. */
 export interface LoginGateState {
   required: boolean
   formVisible: boolean
@@ -430,6 +445,8 @@ export interface LoginGateState {
 }
 /** Inspect a login gate without reading fields, or open exactly one in-page login trigger.
  * Never navigate away, submit an unrelated form, or expose DOM text to the model.
+ * @param action - Inspect the gate or explicitly open its in-page login trigger.
+ * @returns An isolated browser expression for the requested gate action.
  */
 export function loginGateExpression(action: 'inspect' | 'open' = 'inspect'): string {
   const expression = `(() => {
@@ -658,7 +675,9 @@ async function injectLogin(tab: BrowserTab, login: LoginContent): Promise<string
         }
         if (data.id !== 1) return
         if (data.error || data.result?.exceptionDetails) return finish(new Error('El formulario rechazó el inicio de sesión'))
-        finish(undefined, String(data.result?.result?.value ?? 'failed'))
+        const value = data.result?.result?.value
+        finish(undefined, typeof value === 'string' ? value
+          : typeof value === 'number' || typeof value === 'boolean' ? String(value) : 'failed')
       } catch { finish(new Error('Respuesta inválida de Chrome')) }
     })
   })
@@ -690,7 +709,10 @@ async function useLogin(origin: string, tabId: string, manual: boolean,
   return result
 }
 
-/** Stable human-readable failure codes. Never reflect raw secrets or CDP payloads. */
+/** Stable human-readable failure codes. Never reflect raw secrets or CDP payloads.
+ * @param error - Untrusted error to classify without exposing sensitive details.
+ * @returns HTTP status and redacted, stable error response for the caller.
+ */
 export function safeSecureLoginFailure(error: unknown): { code: number; body: { error: string; reason: string } } {
   const message = error instanceof Error ? error.message : ''
   if (/bóveda|vault|no se pudo leer el acceso cifrado|registro de acceso dañado/i.test(message)
@@ -706,7 +728,12 @@ export function safeSecureLoginFailure(error: unknown): { code: number; body: { 
     error: 'No se pudo completar la operación segura. Comprueba los datos y el estado de la bóveda.' } }
 }
 
-/** Route lives on the host, outside every model-facing MCP tool and session log. */
+/**
+ * Register host-only secure login routes outside model-facing tools and logs.
+ * @param ctx - Trusted host context with the loopback web server.
+ * @param vault - Optional credential provider for legacy lookups.
+ * @returns A disposer for the registered secure-login route.
+ */
 export function registerSecureLogin(ctx: Context, vault?: CredentialProvider): () => void {
   return ctx.webServer.register({
     kind: 'prefix',

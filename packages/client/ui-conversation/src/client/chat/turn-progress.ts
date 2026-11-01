@@ -39,7 +39,11 @@ const TOOL_ACTIVITY_MATCHERS: readonly (readonly [TurnActivity, RegExp])[] = [
   ['executing', /\b(bash|shell|terminal|exec|execute|run|command|powershell|spawn|npm|pnpm|node)\b/],
 ]
 
-/** Classify only the tool name; never infer activity from private arguments or output. */
+/**
+ * Classify a tool by name without inspecting private arguments or output.
+ * @param name - public tool name to classify.
+ * @returns a bounded, user-safe activity category.
+ */
 export function toolActivity(name: string): TurnActivity {
   const normalized = name.toLowerCase().replace(/[_.:/-]+/g, ' ').replace(/\s+/g, ' ').trim()
   return TOOL_ACTIVITY_MATCHERS.find(([, pattern]) => pattern.test(normalized))?.[0] ?? 'running-tools'

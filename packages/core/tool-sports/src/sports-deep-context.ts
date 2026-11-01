@@ -11,6 +11,7 @@ const digits=(v:unknown)=>/^\d{1,20}$/u.test(String(v??''))?String(v):''
 const safe=/^[a-z0-9][a-z0-9._-]{0,79}$/u
 const nameKey=(x:string)=>x.normalize('NFD').replace(/[\u0300-\u036f]/gu,'').toLowerCase().replace(/[^a-z0-9]/gu,'')
 const get=(v:unknown,key:string)=>obj(v)[key]
+/** Bounded, attributed roster, news, injury and box-score evidence for one event. */
 export type DeepSportsContext={
   eventId:string;sport:string;league:string;scannedAt:string
   sources:Array<{name:string;status:'verified'|'unavailable';records:number}>
@@ -26,6 +27,13 @@ const sourceNote=(name:string,available:boolean,records:number)=>({
 })
 /** ESPN summary + news + injuries + two verified rosters, plus NHL/MLB official
  * fixture cross-check when supported. No arbitrary URLs or unsourced players.
+ * @param sport - Catalog-approved ESPN sport slug.
+ * @param league - League slug belonging to the selected sport.
+ * @param eventId - Numeric ESPN event identifier.
+ * @param fetcher - Injectable HTTP transport for source verification.
+ * @param now - Observation timestamp in milliseconds.
+ * @param env - Runtime provider configuration.
+ * @returns Bounded, source-attributed research context for the event.
  */
 export async function investigateEventDeep(
   sport:string,league:string,eventId:string,fetcher:typeof fetch=fetch,

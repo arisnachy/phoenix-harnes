@@ -10,6 +10,7 @@ export interface NavigationEvidence {
   readonly visibleTextLength: number
   readonly contentElements: number
 }
+/** Conservative outcome of a browser navigation evidence check. */
 export type NavigationVerdict = 'verified' | 'redirected' | 'empty' | 'loading'
 
 /**

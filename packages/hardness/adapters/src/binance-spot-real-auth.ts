@@ -8,11 +8,13 @@ export type BinanceRealAuthIssue = 'invalid-key-format' | 'signature-rejected'
   | 'ip-or-permission' | 'access-restricted' | 'clock-skew' | 'rate-limited'
   | 'network-unavailable' | 'provider-unavailable' | 'invalid-response'
 
+/** Credentials for a signed, read-only Binance Spot account check; never expose these values to UI. */
 export interface BinanceRealReadOnlyCredentials {
   readonly apiKey: string
   readonly secret: string
 }
 
+/** Sanitized result of the real-account authentication probe; this never authorizes trading. */
 export interface BinanceRealReadOnlyStatus {
   readonly mode: 'real-readonly'
   readonly configured: boolean
@@ -44,7 +46,10 @@ export class BinanceSpotRealReadOnly {
     private readonly clock: () => number = Date.now,
   ) {}
 
-  /** Verify an already stored candidate entirely inside the Host, without exposing it in UI. */
+  /** Verify an already stored candidate entirely inside the Host, without exposing it in UI.
+   * @param value - Credentials supplied only to the new read-only verifier.
+   * @returns A read-only verifier bound to the candidate credentials.
+   */
   forCredentials(value: BinanceRealReadOnlyCredentials): BinanceSpotRealReadOnly {
     return new BinanceSpotRealReadOnly(() => value, this.request, this.clock)
   }
@@ -94,6 +99,9 @@ export class BinanceSpotRealReadOnly {
     }
   }
 
+  /** Check stored credentials against the read-only account endpoint.
+   * @returns Sanitized connectivity and permission status without credentials.
+   */
   async status(): Promise<BinanceRealReadOnlyStatus> {
     const pair = await this.credentials()
     if (!pair?.apiKey || !pair.secret) {

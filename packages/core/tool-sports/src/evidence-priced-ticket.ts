@@ -5,6 +5,7 @@ import { evidenceTicket } from './evidence-ticket.ts'
 import { keylessEnabled,keylessOdds,type KeylessQuote } from './keyless-odds.ts'
 import { marketOdds,pricedTicket,type ChatBlock,type MarketSelection,type MarketOutcome } from './sports.ts'
 
+/** Source-level quote audit, including unavailable and unverified outcomes. */
 export type OddsAuditRow={
   source:string
   status:'disabled'|'not-configured'|'attempted'|'empty'|'observed'|'error'|'not-applicable'
@@ -28,6 +29,19 @@ const leagueSportKey:Record<string,string>={
   'uefa.champions':'soccer_uefa_champs_league','nba':'basketball_nba',
   'wnba':'basketball_wnba','mlb':'baseball_mlb','nfl':'americanfootball_nfl','nhl':'icehockey_nhl',
 }
+/**
+ * Match independently researched fixtures to fresh, same-bookmaker quotes.
+ * @param count - Requested number of independently researched ticket legs.
+ * @param date - Optional local date for fixture selection.
+ * @param sport - Optional sport restriction; omitted for multisport research.
+ * @param stake - Hypothetical stake used for quote presentation, not placement.
+ * @param now - Observation timestamp for price freshness.
+ * @param env - Runtime provider configuration and permissions.
+ * @param fetcher - Injectable HTTP transport.
+ * @param quotesProvider - Optional injected source for independently verified market quotes.
+ * @param marketPreference - Requested winner or double-chance market.
+ * @returns Research and source audit with explicit pricing completeness; never places an order.
+ */
 export async function evidencePricedTicket(
   count:number,date?:string,sport?:string,stake=0,now=Date.now(),
   env:NodeJS.ProcessEnv=process.env,fetcher:typeof fetch=fetch,

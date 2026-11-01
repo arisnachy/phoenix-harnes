@@ -6,7 +6,11 @@
 export type BrowserVaultPresence =
   | { known: false; reason: 'vault-unavailable' | 'no-web-origin' }
   | { known: true; saved: boolean; automatic: boolean; relatedSaved: boolean; relatedOrigin?: string }
-/** Agent-readable instruction derived only from verified Vault metadata. */
+/**
+ * Agent-readable instruction derived only from verified Vault metadata.
+ * @param state - Presence metadata for the currently selected browser tab.
+ * @returns Safe guidance that never reveals stored credentials.
+ */
 export function browserVaultHint(state: BrowserVaultPresence): string {
   if (!state.known) return 'Estado de bóveda desconocido: no afirmes que faltan credenciales; usa Acceso seguro para verificar.'
   if (state.saved) return state.automatic

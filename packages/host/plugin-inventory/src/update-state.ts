@@ -246,10 +246,10 @@ export function parsePhoenixUpdateEvents(content: string, target?: string): read
         ? value.diagnostic.slice(0, MAX_DIAGNOSTIC_CHARS + 100)
           .replace(/\u001b\[[0-9;]*[a-z]/giu, '')
           .replace(/https?:\/\/[^\s/@]+:[^\s/@]+@/giu, 'https://[CREDENTIALS_REMOVED]@')
-          .replace(/\b(?:sk-(?:proj-)?[A-Za-z0-9_-]{12,}|gh[pousr]_[A-Za-z0-9_]{12,}|github_pat_[A-Za-z0-9_]{12,})\b/giu, '[SECRET_REMOVED]')
+          .replace(/\b(?:sk-(?:proj-)?[A-Z0-9_-]{12,}|gh[pousr]_[A-Z0-9_]{12,}|github_pat_[A-Z0-9_]{12,})\b/giu, '[SECRET_REMOVED]')
           .replace(/\bBearer\s+[^\s"']+/giu, 'Bearer [SECRET_REMOVED]')
           .replace(/(\b(?:password|passwd|token|access_token|refresh_token|api[_-]?key|client_secret|authorization|secret|_authToken)\b\s*[:=]\s*)("[^"]*"|'[^']*'|[^\s,;]+)/giu, '$1[SECRET_REMOVED]')
-    .replace(/(\b[A-Za-z0-9_]*(?:TOKEN|API_KEY|PASSWORD|SECRET|AUTH_KEY|PRIVATE_KEY|ACCESS_KEY)\b\s*[:=]\s*)("[^"]*"|'[^']*'|[^\s,;]+)/giu, '$1[SECRET_REMOVED]')
+    .replace(/(\b[A-Z0-9_]*(?:TOKEN|API_KEY|PASSWORD|SECRET|AUTH_KEY|PRIVATE_KEY|ACCESS_KEY)\b\s*[:=]\s*)("[^"]*"|'[^']*'|[^\s,;]+)/giu, '$1[SECRET_REMOVED]')
         : undefined
       events.push({
         step: value.step,
@@ -290,6 +290,10 @@ function readPhoenixUpdateEvents(controlDir: string, target?: string): readonly 
 
 /**
  * Validate streamed command output at the Host boundary and redact again.
+ * @param content - Newline-delimited updater console records to validate.
+ * @param target - Expected update target; records for other targets are rejected.
+ * @param since - Earliest accepted event timestamp, in milliseconds since the epoch.
+ * @returns Bounded, redacted console entries that passed schema and target checks.
  */
 export function parsePhoenixUpdateConsole(
   content: string, target?: string, since = 0,
@@ -308,10 +312,10 @@ export function parsePhoenixUpdateConsole(
       const line = value.line
         .replace(/\u001b\[[0-9;]*[a-z]/giu, '')
         .replace(/https?:\/\/[^\s/@]+:[^\s/@]+@/giu, 'https://[CREDENTIALS_REMOVED]@')
-        .replace(/\b(?:sk-(?:proj-)?[A-Za-z0-9_-]{12,}|gh[pousr]_[A-Za-z0-9_]{12,}|github_pat_[A-Za-z0-9_]{12,})\b/giu, '[SECRET_REMOVED]')
+        .replace(/\b(?:sk-(?:proj-)?[A-Z0-9_-]{12,}|gh[pousr]_[A-Z0-9_]{12,}|github_pat_[A-Z0-9_]{12,})\b/giu, '[SECRET_REMOVED]')
         .replace(/\bBearer\s+[^\s"']+/giu, 'Bearer [SECRET_REMOVED]')
         .replace(/(\b(?:password|passwd|token|access_token|refresh_token|api[_-]?key|client_secret|authorization|secret|_authToken)\b\s*[:=]\s*)("[^"]*"|'[^']*'|[^\s,;]+)/giu, '$1[SECRET_REMOVED]')
-        .replace(/(\b[A-Za-z0-9_]*(?:TOKEN|API_KEY|PASSWORD|SECRET|AUTH_KEY|PRIVATE_KEY|ACCESS_KEY)\b\s*[:=]\s*)("[^"]*"|'[^']*'|[^\s,;]+)/giu, '$1[SECRET_REMOVED]')
+        .replace(/(\b[A-Z0-9_]*(?:TOKEN|API_KEY|PASSWORD|SECRET|AUTH_KEY|PRIVATE_KEY|ACCESS_KEY)\b\s*[:=]\s*)("[^"]*"|'[^']*'|[^\s,;]+)/giu, '$1[SECRET_REMOVED]')
       rows.push({ at: value.at, step: value.step, stream: value.stream, line })
     } catch {
       // Partial JSON line from the detached command.

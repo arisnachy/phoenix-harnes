@@ -15,6 +15,7 @@ export interface SitePageHealth {
   scriptCount: number
 }
 
+/** Classification of the visible first-party page, including partial embedded failures. */
 export type SiteHealthKind =
   | 'partial_or_embedded_block'
   | 'page_reports_blocked'
@@ -23,6 +24,11 @@ export type SiteHealthKind =
   | 'loading'
   | 'content_visible'
 
+/**
+ * Classify a redacted page-health snapshot without inferring that all frames are blocked.
+ * @param p - Current page-health counters and blocked-content markers.
+ * @returns Conservative diagnosis of the visible first-party page.
+ */
 export function classifySiteHealth(p: SitePageHealth): SiteHealthKind {
   if (p.blockedMarker && (p.mainTextLength > 90 || p.crossOriginFrames > 0)) return 'partial_or_embedded_block'
   if (p.blockedMarker) return 'page_reports_blocked'
@@ -32,6 +38,7 @@ export function classifySiteHealth(p: SitePageHealth): SiteHealthKind {
   return 'content_visible'
 }
 
+/** Read-only in-page diagnostic expression; emits bounded counters, not page text. */
 export const siteHealthExpression = `(() => {
   const body = document.body;
   const visible = (body?.innerText || '').slice(0, 15000);
@@ -66,6 +73,11 @@ export const siteHealthExpression = `(() => {
   });
 })()`
 
+/**
+ * Suggest a safe, non-bypassing next inspection step for the observed page state.
+ * @param kind - Classification returned by classifySiteHealth.
+ * @returns Spanish recovery guidance without changing site credentials or sessions.
+ */
 export function nextSiteRecoveryStep(kind: SiteHealthKind): string {
   switch (kind) {
     case 'loading':

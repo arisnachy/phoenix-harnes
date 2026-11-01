@@ -598,7 +598,10 @@ async function logoutManagedChatGpt(
 /** Only a terminal native Codex refresh-credential expiration allows an
  * explicit user-triggered re-login to retire the obsolete official session.
  * Do not log token data, delete arbitrary credential files or treat an offline
- * network or temporary rate-limit error as an expired account. */
+ * network or temporary rate-limit error as an expired account.
+ * @param error - Native Codex authentication failure to classify.
+ * @returns True only for an explicitly expired refresh credential.
+ */
 export function codexRefreshTokenExpired(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error)
   return /(?:refresh[\s_-]*token[^\r\n]{0,120}expired|refresh[\s_-]*token[\s_-]*expired)/iu.test(message)

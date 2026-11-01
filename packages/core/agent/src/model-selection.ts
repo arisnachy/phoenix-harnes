@@ -856,6 +856,12 @@ const AUTO_LARGE_CREATION = /^(?:(?:kira|f[eé]nix)[,\s]+)?(?:haz|hacer|dise[nñ
 // oxlint-disable-next-line @stylistic/max-len -- Bound natural-language construction intent, avoiding a second classification model call.
 const AUTO_LARGE_INTENT = /^[¡!¿?\s]*(?:(?:kira|f[eé]nix)[,\s]+)?(?:quiero|necesito|puedes|podr[ií]as|can\s+you|i\s+(?:want|need))\b.{0,80}\b(?:hacer|hagas|crear|crees|construir|construyas|desarrollar|desarrolles|dise[nñ]ar|dise[nñ]es|implementar|implementes|build|create|develop|design|make)\b.{0,100}\b(?:juego|videojuego|sistema|aplicaci[oó]n|app|plataforma|sitio|web|motor|m[oó]dulo|informe|investigaci[oó]n|libro|c[oó]mic|novela|curso|software|hospital|saas)\b/iu
 
+/**
+ * Detect a short, low-risk request that can bypass the Sol planning pass.
+ * Multi-step, destructive, security-sensitive and ambiguous tasks stay planned.
+ * @param text - Current user request, never assistant-generated continuation.
+ * @returns Whether the request qualifies for the fast conversational route.
+ */
 export function isPhoenixAutoQuickTurn(text: string): boolean {
   const candidate = text.trim()
   if (candidate.length === 0 || candidate.length > 180 || candidate.includes('\n')) return false

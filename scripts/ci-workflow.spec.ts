@@ -58,6 +58,24 @@ describe('CI workflow', () => {
     }
   })
 
+  it('guards stable with real source PR CI evidence and no force push', () => {
+    const workflow = loadWorkflow('.github/workflows/phoenix-stable-update-channel.yml')
+    const publish = workflowJob(workflow, 'publish')
+    if (!Array.isArray(publish.steps)) throw new TypeError('stable publication steps are missing')
+    const proof = publish.steps.find((step: unknown) => isRecord(step)
+      && step.name === 'Verify exact merged PR and all CI including real DeepSeek E2E')
+    expect(proof).toMatchObject({ if: "steps.target.outputs.promote == 'true'" })
+    const commands = publish.steps.filter((step): step is Record<string, unknown> & { run: string } =>
+      isRecord(step) && typeof step.run === 'string').map(step => step.run)
+    const code = commands.join('\n')
+    expect(code).toContain('node scripts/phoenix-promotion-eligibility.mjs')
+    expect(code).toContain('git merge-base --is-ancestor')
+    expect(code).toContain('git push origin "$TARGET_SHA:refs/heads/stable"')
+    expect(code).not.toContain('--force-with-lease=')
+    expect(code).not.toContain('git push --force')
+    expect(code).toContain('git rev-parse origin/stable')
+  })
+
   it('isolates every pnpm action setup destination per runner', () => {
     const files = ['.github/workflows/ci.yml', '.github/workflows/ci-master.yml', '.github/workflows/phoenix-main-guard.yml']
     const setups: Array<{ jobName: string; step: unknown }> = []

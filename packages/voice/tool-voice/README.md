@@ -15,7 +15,33 @@ Uses `PHOENIX_VOICE_ENABLED`, `PHOENIX_VOICE_LANGUAGE` (default `es-DO`), and th
 
 ## Model Experience
 
-When a user asks Kira to speak, the model calls `phoenix_voice_speak` with the requested short phrase. For diagnosis it calls `phoenix_voice_status`. The tool reports the provider's actual acceptance or rejection; Kira must not claim the speakers were audible until the user confirms.
+### Tool schemas
+
+#### What the model sees
+
+The model sees the `phoenix_voice_status` and `phoenix_voice_speak` tool definitions when this plugin is registered. See the [generated tool schema catalog](../../../docs/tool-catalog.md#phoenix-aidsh-tool-voice) for their model-facing definitions. `phoenix_voice_status` reads Host voice availability and queue state without playing audio. `phoenix_voice_speak` requests playback of explicit text through an authorized provider; tool availability alone does not imply a live session or audible output.
+
+#### Token effect
+
+Both tool schemas contribute a fixed input-token cost while visible. No audio content is inserted into the prompt merely by registering these tools.
+
+#### KV Cache effect
+
+The tool definitions are prefix-stable while the registered plugin and tool visibility remain unchanged. Changes to tool visibility may invalidate reuse from the changed definition.
+
+### Tool results
+
+#### What the model sees
+
+After a call, the model receives the Host's actual status or playback receipt, including provider rejection and failure details. Kira must distinguish an accepted playback request from audio confirmed audible by the user.
+
+#### Token effect
+
+Results add variable output tokens only after a tool call; status and playback receipts remain in the session history until compaction.
+
+#### KV Cache effect
+
+Tool results append to the existing conversation history and do not alter previously cached prompt-prefix tokens.
 
 ## Known Limitations and Deferred Work
 

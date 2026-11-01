@@ -6,11 +6,13 @@ import {homedir} from 'node:os'
 import {join,resolve} from 'node:path'
 import {createHash} from 'node:crypto'
 
+/** A single provider-observed offer with its own observation timestamp. */
 export type ObservedOdds={
   eventId:string;bookmaker:string;market:string;selection:string;point?:number|null;
   price:number;home:string;away:string;time:string;timeIso?:string;
   updatedAt:string;source?:string;sportKey?:string
 }
+/** Historical collection of observed offers, never a live quote. */
 export type OddsSnapshot={
   sportKey:string;observedAt:string;historical:true;quotes:ObservedOdds[];source:string
 }
@@ -27,7 +29,14 @@ const useful=(q:ObservedOdds)=>q&&typeof q.eventId==='string'&&q.eventId.length>
   typeof q.home==='string'&&typeof q.away==='string'&&
   Number.isFinite(Date.parse(q.updatedAt))&&
   Number.isFinite(Date.parse(q.timeIso??q.time))
-/** Record only authentic provider-observed offers; never make them current on read. */
+/**
+ * Record authentic provider-observed offers without treating them as live on read.
+ * @param sportKey - Validated sports league key used for local storage.
+ * @param quotes - Provider observations to validate and persist.
+ * @param env - Environment providing the optional snapshot storage configuration.
+ * @param now - UTC observation timestamp in milliseconds.
+ * @returns Whether a snapshot was saved and the number of recorded offers.
+ */
 export async function saveOddsSnapshot(
   sportKey:string,quotes:ObservedOdds[],env:NodeJS.ProcessEnv=process.env,now=Date.now(),
 ):Promise<{saved:boolean;count:number}>{
@@ -49,8 +58,14 @@ export async function saveOddsSnapshot(
   }
   return{saved:true,count:clean.length}
 }
-/** Search local snapshots by the UTC observation date, not event date.
- * All prices returned are historical regardless of how old the match is.
+/**
+ * Search local snapshots by UTC observation date rather than event date.
+ * All returned prices are historical, regardless of the match date.
+ * @param sportKey - Validated sports league key used for local storage.
+ * @param day - UTC observation date in YYYY-MM-DD format.
+ * @param env - Environment providing the optional snapshot storage configuration.
+ * @param limit - Maximum number of historical offers to return.
+ * @returns Historical snapshots, row count, coverage statement and read errors.
  */
 export async function loadOddsSnapshots(
   sportKey:string,day:string,env:NodeJS.ProcessEnv=process.env,limit=150,

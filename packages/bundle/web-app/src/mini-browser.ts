@@ -20,6 +20,8 @@ import { MiniBrowserScopes, validBrowserScopeId } from './mini-browser-scopes.ts
 /**
  * The website header belongs to the containing publisher page, not a child
  * iframe. Map only publisher-verified HTTPS frame URLs, never guess origins.
+ * @param rawUrl - URL to inspect for a verified embedded sportsbook publisher.
+ * @returns The verified publisher's top-level URL, or undefined for other pages.
  */
 export function fullSiteForEmbeddedPage(rawUrl: string): string | undefined {
   try {
@@ -30,7 +32,11 @@ export function fullSiteForEmbeddedPage(rawUrl: string): string | undefined {
   } catch { return undefined }
 }
 
-/** Present the publisher's actual navigation, never a synthetic header over an iframe. */
+/**
+ * Present the publisher's actual navigation, never a synthetic header over an iframe.
+ * @param rawUrl - Requested MiniBrowser destination.
+ * @returns The verified publisher URL when applicable, otherwise the original URL.
+ */
 export function miniBrowserNavigationTarget(rawUrl: string): string {
   return fullSiteForEmbeddedPage(rawUrl) ?? rawUrl
 }

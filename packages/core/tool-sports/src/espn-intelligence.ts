@@ -6,10 +6,12 @@ type View = 'team'|'player'|'event'|'standings'|'news'|'leaders'|'search'
 type Item = { label:string; value?:string; detail?:string; image?:string; href?:string; action?:{label:string;prompt:string} }
 type Section = { heading:string; kind:'metrics'|'list'|'articles'; items:Item[] }
 type Source = { name:string; status:'available'|'unavailable'; records:number }
+/** Validated ESPN exploration request with provider-derived entity identifiers. */
 export type EspnExplorerInput = {
   sport:string; league:string; view:View; teamId?:string; athleteId?:string;
   eventId?:string; season?:number; query?:string
 }
+/** Source-attributed, bounded dashboard with explicit evidence limitations. */
 export type EspnExplorerResult = {
   view:View; title:string; subtitle:string; source:string; checkedAt:string;
   sections:Section[]; sources:Source[]; limitations:string[];
@@ -271,6 +273,11 @@ function searchResults(data:unknown,sport:string,league:string):Item[]{
 }
 /** Explores one ESPN entity with bounded optional evidence and a reusable adaptive UI.
  * Each route is constructed internally; references/redirects never become fetch URLs.
+ * @param input - Sport, league, entity and requested dashboard view.
+ * @param fetcher - Injectable HTTP client for deterministic tests.
+ * @param env - Operator permissions and runtime configuration.
+ * @param now - Observation timestamp in milliseconds.
+ * @returns Source-attributed dashboard with availability and limitations.
  */
 export async function exploreEspn(
   input:EspnExplorerInput,fetcher:typeof fetch=fetch,
