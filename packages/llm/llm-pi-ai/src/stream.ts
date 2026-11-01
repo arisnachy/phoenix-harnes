@@ -164,12 +164,19 @@ export function mapStopReason(
         ? RECOVERABLE_PI_AI_ERROR_CODE
         : classified
       const providerRetryAfterMs = code === 'RATE_LIMIT' ? retryAfterMsFromMessage(text) : undefined
-      const detail = code === 'MODEL_UNAVAILABLE' && /^nvidia(?:-nim)?$/i.test(message.provider)
-        ? `NVIDIA NIM returned HTTP 410 for model "${message.model}".`
-          + ' The model may be retired or this account may lack Public API Endpoints access.'
-          + ' Select a confirmed working model or check NVIDIA access.'
-          + ` Original error: ${text}`
-        : text
+      const nvidiaGone = code === 'MODEL_UNAVAILABLE' && /^nvidia(?:-nim)?$/i.test(message.provider)
+      const retiredTrial = nvidiaGone && message.model === 'minimaxai/minimax-m3'
+      const detail = retiredTrial
+        ? 'NVIDIA discontinued the free endpoint for MiniMax M3. '
+          + 'Select minimaxai/minimax-m3.1-flash (Free Endpoint: Available) in Models. '
+          + 'The original M3 may still be available through a partner endpoint. '
+          + `Original error: ${text}`
+        : nvidiaGone
+          ? `NVIDIA NIM returned HTTP 410 for model "${message.model}".`
+            + ' The model may be retired or this account may lack Public API Endpoints access.'
+            + ' Select a confirmed working model or check NVIDIA access.'
+            + ` Original error: ${text}`
+          : text
       return {
         kind: 'error',
         failure: {
