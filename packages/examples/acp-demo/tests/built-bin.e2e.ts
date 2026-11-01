@@ -187,7 +187,9 @@ describe.skipIf(!existsSync(acpBin))('dsh-acp-demo BUILT bin (node lib/bin.js, n
     }).toBeTypeOf('string')
     const compressed = await readFile(join(sessionsRoot, log!))
     expect(compressed.subarray(0, 4).toString('hex')).toBe('28b52ffd')
-    const persistedRecords = (await decompress(compressed)).toString('utf8').trimEnd().split('\n')
+    // Validate every compressed JSONL record and preserve the multi-record durability assertion.
+    const archive = (await decompress(compressed)).toString('utf8')
+    const persistedRecords = archive.split('\n').filter(line => line.trim().length > 0)
       .map(line => JSON.parse(line) as Record<string, unknown>)
     expect(persistedRecords.length).toBeGreaterThan(1)
     expect(persistedRecords[0]).toMatchObject({ type: 'session', id: sessionId })

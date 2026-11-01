@@ -16,6 +16,10 @@ describe('CI workflow', () => {
     expect(Object.keys(workflow.on).sort()).toEqual(['pull_request', 'push', 'workflow_dispatch'])
     expect(workflow.on.pull_request).toMatchObject({ branches: ['main'] })
     expect(workflow.on.push).toMatchObject({ branches: ['main'] })
+    expect(workflow.concurrency).toMatchObject({
+      group: 'phoenix-main-guard-${{ github.ref }}',
+      'cancel-in-progress': "${{ github.event_name == 'pull_request' }}",
+    })
     const job = workflow.jobs['compiled-main']
     expect(job['runs-on']).toBe('windows-latest')
     if (!Array.isArray(job.steps)) throw new TypeError('compiled-main must define steps')
