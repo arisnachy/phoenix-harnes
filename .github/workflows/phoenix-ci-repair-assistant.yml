@@ -55,16 +55,18 @@ jobs:
         if: always()
         shell: bash
         run: |
-          git diff --binary > ci-repair.patch
-          git status --short > ci-repair-files.txt
+          # Keep audit receipts OUTSIDE the checkout: generated PRs must never
+          # accidentally commit the diagnostic patch or inventory themselves.
+          git diff --binary > "${RUNNER_TEMP}/ci-repair.patch"
+          git status --short > "${RUNNER_TEMP}/ci-repair-files.txt"
       - name: Upload patch receipt
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: phoenix-ci-repair-${{ github.run_id }}
           path: |
-            ci-repair.patch
-            ci-repair-files.txt
+            ${{ runner.temp }}/ci-repair.patch
+            ${{ runner.temp }}/ci-repair-files.txt
           retention-days: 14
       - name: Propose generated changes as a reviewable PR
         uses: peter-evans/create-pull-request@v7
