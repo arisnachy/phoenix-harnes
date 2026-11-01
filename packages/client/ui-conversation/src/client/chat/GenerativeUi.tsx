@@ -705,10 +705,12 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
       const matchSection=p.view==='event'?
         p.sections.find(section=>/Encuentro|participantes|marcador/iu.test(section.heading)):undefined
       const participants=matchSection?.items.filter(item=>item.image).slice(0,2)??[]
-      const insightItems=p.view==='event'?p.sections
-        .filter(section=>section!==matchSection)
-        .flatMap(section=>section.items.map(item=>({...item,
-          label:section.heading+' · '+item.label}))).slice(0,4):[]
+      const insightSections=p.view==='event'?p.sections
+        .filter(section=>section!==matchSection):[]
+      // One signal from each available group: form, stats, markets and outlook.
+      // Avoid a wall of dates or four records from the same source.
+      const insightItems=insightSections.flatMap(section=>section.items.slice(0,1)
+        .map(item=>({...item,label:section.heading+' · '+item.label}))).slice(0,4)
       const preview=p.view==='event'?[...participants,...insightItems].slice(0,6):
         p.sections.flatMap(section=>section.items).slice(0,2)
       return <section className={css.sportsCard+' '+css.sportsCompactPanel}
