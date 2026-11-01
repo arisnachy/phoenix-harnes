@@ -9,6 +9,7 @@ import { GenerativeCanvas, parseCanvasSpec, type CanvasAction, type CanvasSpec }
 import css from './GenerativeUi.module.css'
 import { SportsLiveProvider,SportsLiveFacts,SportsLiveStamp } from './SportsLive.tsx'
 import { SportsGameCenter } from './SportsGameCenter.tsx'
+import { SportsNewsPanel } from './SportsNewsPanel.tsx'
 
 const MAX_UI_BLOCKS = 6
 const MAX_TEXT = 1200
@@ -278,7 +279,9 @@ const sportsDisplayText=(value:string):string=>{
       dateStyle:'medium',timeStyle:'short',timeZone:'America/Santo_Domingo',
     }).format(date)
   }
-  const result=value.replace(/\bESPN\b/giu,'').replace(/\bUSA\.1\b/giu,'MLS')
+  const result=value.replace(/^ESPN\s*[·:]\s*ENG\.1$/iu,'Premier League · Inglaterra')
+    .replace(/\bENG\.1\b/giu,'Premier League')
+    .replace(/\bESPN\b/giu,'').replace(/\bUSA\.1\b/giu,'MLS')
     .replace(/\s*·\s*·/gu,' · ').replace(/^[\s·:/•-]+|[\s·:/•-]+$/gu,'').trim()
   return result||'Resumen deportivo'
 }
@@ -695,6 +698,10 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
     case 'agent_line': return <PhoenixAgentLine {...block.props} />
     case 'sports_espn_dashboard': {
       const p=block.props
+      if(p.view==='news'){
+        const articles=p.sections.flatMap(section=>section.kind==='articles'?section.items:[])
+        return <SportsNewsPanel title={sportsDisplayText(p.title)} articles={articles} onAction={onAction}/>
+      }
       const preview=p.sections.flatMap(section=>section.items).slice(0,p.view==='event'?3:2)
       return <section className={css.sportsCard+' '+css.sportsCompactPanel}
         data-generative-ui="sports_espn_dashboard" aria-label={sportsDisplayText(p.title)}>
