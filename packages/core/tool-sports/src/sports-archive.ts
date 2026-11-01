@@ -6,6 +6,8 @@
 import { readFile, stat } from 'node:fs/promises'
 import { isAbsolute, join } from 'node:path'
 
+/** Dated archive market record, never a live sportsbook quote.
+ */
 export type HistoricalMarket = {
   source:'flancast90/sportsbookreview-scraper'|'ArnavSaraogi/mlb-odds-scraper'
   sport:string;date:string;home:string;away:string;bookmaker:string
@@ -26,6 +28,11 @@ const isoDate=(v:unknown):string=>{
   }
   return ''
 }
+/** Normalize historical closing moneylines from SportsbookReview.
+ * @param value - Untrusted archive rows.
+ * @param sport - Supported sport identifier.
+ * @returns Bounded, source-attributed historical observations.
+ */
 export function normalizeSportsbookReviewArchive(value:unknown,sport:string):HistoricalMarket[]{
   if(!['nba','mlb','nfl','nhl'].includes(sport))throw Error('Historial SBR: deporte no disponible')
   if(!Array.isArray(value))throw Error('Historial SBR: formato inválido')
@@ -41,6 +48,10 @@ export function normalizeSportsbookReviewArchive(value:unknown,sport:string):His
   }
   return rows
 }
+/** Normalize historical MLB bookmaker lines grouped by date.
+ * @param value - Untrusted MLB archive JSON.
+ * @returns Historical moneyline records with source attribution.
+ */
 export function normalizeMlbHistoricalArchive(value:unknown):HistoricalMarket[]{
   if(!value||typeof value!=='object'||Array.isArray(value))throw Error('Historial MLB: formato inválido')
   const rows:HistoricalMarket[]=[]
@@ -70,6 +81,11 @@ export function normalizeMlbHistoricalArchive(value:unknown):HistoricalMarket[]{
   }
   return rows
 }
+/** Read configured local historical archives with size limits and per-source errors.
+ * @param sport - Supported sport.
+ * @param env - Environment specifying the absolute archive directory.
+ * @returns Source availability and historical-only records.
+ */
 export async function loadHistoricalOdds(
   sport:string,env:NodeJS.ProcessEnv=process.env,
 ):Promise<{sources:Array<{name:string;available:boolean;count:number;error?:string}>;

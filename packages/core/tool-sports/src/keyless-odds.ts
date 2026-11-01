@@ -13,6 +13,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 const runFile = promisify(execFile)
+/** Supported sport/market identifiers; not a live quote feed.
+ */
 export const keylessSports = {
   football:['1x2','double_chance','btts','over_under'],
   basketball:['moneyline','1x2','over_under'],
@@ -27,7 +29,11 @@ export const keylessSports = {
   cricket:['home_away'],
 } as const
 
+/** Sport key accepted by the installed local scraper.
+ */
 export type KeylessSport = keyof typeof keylessSports
+/** Timestamped, source-attributed bookmaker observation, not a forecast.
+ */
 export type KeylessQuote = {
   eventId:string;bookmaker:string;market:string;selection:string;point:number|null
   price:number;home:string;away:string;time:string;updatedAt:string
@@ -160,6 +166,16 @@ export function oddsHarvesterHistoricArgs(
     '--market',market,'--max-pages','2','--headless','--format','json',
     '--stream-ndjson','--output',file]
 }
+/** Load bounded historical observations through an explicitly enabled local scraper.
+ * @param sport - Supported sport key.
+ * @param league - League slug.
+ * @param season - Historical season identifier.
+ * @param market - Supported market identifier.
+ * @param env - Operator configuration.
+ * @param now - Normalization reference time.
+ * @param runner - Optional injected loader for tests.
+ * @returns Historical records explicitly marked as non-live.
+ */
 export async function keylessHistoricOdds(
   sport:string,league:string,season:string,market:string,
   env:NodeJS.ProcessEnv=process.env,now=Date.now(),
@@ -201,6 +217,10 @@ export async function keylessHistoricOdds(
   const rows=normalizeOddsHarvester(raw,sport,now,3_600_000,true).slice(0,200)
   return{historical:true,source:'OddsHarvester/OddsPortal: archivo por liga y temporada',rows}
 }
+/** Check the operator's explicit opt-in to keyless scraping.
+ * @param env - Environment containing the opt-in flag.
+ * @returns True only when the flag is exactly `1`.
+ */
 export const keylessEnabled=(env:NodeJS.ProcessEnv=process.env):boolean=>
   env.PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED==='1'
 

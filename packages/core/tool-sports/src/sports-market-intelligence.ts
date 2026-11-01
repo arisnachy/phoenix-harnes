@@ -3,6 +3,8 @@
  * quote does not become a fabricated "highest chance" recommendation.
  */
 import type {MarketOutcome} from './sports.ts'
+/** Same-bookmaker market comparison with explicit price-implied shares.
+ */
 export type MarketComparison={
   event:string;market:string;bookmaker:string;source:string
   selections:Array<{name:string;price:number;point:number|null;
@@ -16,6 +18,12 @@ const MARKET_SET=new Set(['h2h','1x2','double_chance','totals','spreads','btts',
 const key=(row:MarketOutcome)=>[row.sportKey??'',row.eventId,row.bookmaker,
   row.market.toLowerCase(),row.market.toLowerCase()==='spreads'&&typeof row.point==='number'
     ?Math.abs(row.point):row.point??''].join('|')
+/** Compare coherent, fresh, complete markets without claiming predictive advantage.
+ * @param source - Timestamped bookmaker observations.
+ * @param now - Reference time for freshness and event start.
+ * @param maxAgeMs - Maximum allowed quote age.
+ * @returns Comparable markets, rejected count and inference limitations.
+ */
 export function compareBettingMarkets(
   source:readonly MarketOutcome[],now=Date.now(),maxAgeMs=60*60*1000,
 ):{markets:MarketComparison[];rejected:number;warning:string}{
@@ -81,6 +89,8 @@ export function compareBettingMarkets(
   return{markets:comparisons.slice(0,40),rejected,
     warning:'1/cuota es probabilidad implícita del PRECIO, no estimación independiente de victoria. Doble oportunidad, mercados de jugador y apuestas relacionadas pueden solaparse. Sin probabilidades calibradas, lesiones y titulares confirmados NO se puede afirmar ventaja esperada ni que la opción más barata ganará.'}
 }
+/** Discoverable market families by sport, not proof of current offers.
+ */
 export const supportedMarketFamilies=[
   {sport:'Fútbol',markets:['1X2','1X/X2','Ambos marcan','Totales','Hándicap asiático']},
   {sport:'NBA/WNBA',markets:['Moneyline','Hándicap','Total de puntos','Jugador: puntos/rebotes/asistencias si el proveedor lo publica']},

@@ -3,6 +3,8 @@
  */
 export type BettingMarket={sport:string;family:string;examples:string[];
   period:string;requires:string[];risk:string}
+/** Potential market definitions and settlement requirements, not current quotes.
+ */
 export const realMarketCatalog:readonly BettingMarket[]=[
 {sport:'baseball',family:'moneyline',examples:['Ganador del juego','Ganador primeras 5 entradas','Ganador primeras 3 entradas'],
  period:'Final incluido extrainnings, o primeras N entradas según mercado',
@@ -53,6 +55,8 @@ export const realMarketCatalog:readonly BettingMarket[]=[
  period:'Ronda o torneo',requires:['reglas dead heat','cut','participación'],
  risk:'Empates y reducción de campo pueden aplicar dead-heat'},
 ]
+/** Operator-specific rules that must not be transferred across bookmakers.
+ */
 export const sportsbookRuleSources=[
  {operator:'Appuesta (República Dominicana)',url:'https://www.appuesta.do/rules',
    scope:'Explicación extensa de mercados de fútbol, baloncesto y otros; aplica solo a ese operador'},
@@ -69,6 +73,8 @@ export const sportsbookRuleSources=[
  {operator:'Dirección de Casinos y Juegos de Azar RD',url:'https://www.casinos.gob.do/juegos-autorizados/banca-de-apuestas-deportivas/',
    scope:'Marco regulatorio; NO sustituye reglamentos de mercado del operador'},
 ]
+/** Published Juancito Sport settlement rules; the operator confirms final settlement.
+ */
 export const juancitoHouseRules={
   officialDomain:'www.juancitosport.com.do',
   publication:'https://www.juancitosport.com.do/reglas/',
@@ -89,6 +95,11 @@ export const juancitoHouseRules={
   soccer:'90 minutos más descuento, sin prórroga ni penales para 1X2 y totales salvo modalidad expresa',
   asianQuarterLines:'Cuartos 0.25/0.75 se dividen en medias apuestas; NO liquidar como hándicap simple',
 } as const
+/** Filter the market ontology without claiming that offers are currently available.
+ * @param sport - Optional sport filter.
+ * @param family - Optional market-family filter.
+ * @returns Matching definitions, rule sources and risk warning.
+ */
 export function describeBettingMarkets(sport?:string,family?:string){
   const catalog=realMarketCatalog.filter(x=>(!sport||x.sport===sport)&&
     (!family||x.family===family))
