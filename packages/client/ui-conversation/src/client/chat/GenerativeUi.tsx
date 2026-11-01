@@ -272,6 +272,12 @@ const validateSmartCard = (value: Record<string, unknown>): value is SmartCard =
 
 /** Remove provider branding from on-screen labels; source values remain unchanged for internal checks. */
 const sportsDisplayText=(value:string):string=>{
+  if(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?Z$/u.test(value)){
+    const date=new Date(value)
+    if(Number.isFinite(date.getTime()))return new Intl.DateTimeFormat('es-DO',{
+      dateStyle:'medium',timeStyle:'short',timeZone:'America/Santo_Domingo',
+    }).format(date)
+  }
   const result=value.replace(/\bESPN\b/giu,'').replace(/\bUSA\.1\b/giu,'MLS')
     .replace(/\s*·\s*·/gu,' · ').replace(/^[\s·:/•-]+|[\s·:/•-]+$/gu,'').trim()
   return result||'Resumen deportivo'
