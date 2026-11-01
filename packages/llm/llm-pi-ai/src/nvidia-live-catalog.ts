@@ -28,13 +28,19 @@ const MAX_LISTING_BYTES = 1_048_576
  * Those need distinct adapters rather than appearing as chat-completions models.
  * Only reject recognizable non-chat categories; newly named chat models stay
  * eligible without requiring a PHOENIX software update.
+ * @param id - Upstream NVIDIA model identifier.
+ * @returns True if the ID could be served by a chat adapter.
  */
 export function nvidiaChatCandidate(id: string): boolean {
   if (!/^[\w][\w./-]{1,180}$/u.test(id) || !id.includes('/')) return false
   return !/(?:^|[./-])(?:embed|embedding|rerank|retriever|reward|guard|safety|parse|clip|detector|translate|calibration)(?:[./-]|$)/iu.test(id)
 }
 
-/** Normalize NVIDIA's public OpenAI-compatible models listing. */
+/**
+ * Normalize NVIDIA's public OpenAI-compatible models listing.
+ * @param payload - Untrusted public listing payload.
+ * @returns Candidate chat-model profiles in deterministic ID order.
+ */
 export function parseNvidiaChatModels(payload: unknown): PiAiModelProfile[] {
   if (typeof payload !== 'object' || payload === null || !('data' in payload)) return []
   const entries = (payload as { data?: unknown }).data
@@ -72,6 +78,7 @@ export class NvidiaLiveCatalog {
   /** Changes only when dispatch/visible identity changes. */
   revision = 0
 
+  /** @param options - Injectable transport, clock and refresh policy. */
   constructor(options: NvidiaLiveCatalogOptions = {}) {
     this.fetchImpl = options.fetchImpl ?? fetch
     this.now = options.now ?? Date.now
@@ -88,12 +95,12 @@ export class NvidiaLiveCatalog {
     return true
   }
 
-  /** Account-visible candidate ids; undefined until the first successful listing. */
+  /** @returns Visible candidate IDs; undefined until one valid listing succeeds. */
   visibleIds(): readonly string[] | undefined {
     return this.visible?.filter(model => this.active(model.id)).map(model => model.id)
   }
 
-  /** Last successfully discovered models, enriched with installed capacity metadata. */
+  /** @returns Last valid visible profiles enriched with installed capacities. */
   visibleModels(): readonly PiAiModelProfile[] | undefined {
     const known = catalogModels('nvidia')
     return this.visible?.filter(model => this.active(model.id)).map(model => {
@@ -107,7 +114,11 @@ export class NvidiaLiveCatalog {
     })
   }
 
-  /** Fast cache hit; concurrent fetch callers share the same request. */
+  /**
+   * Refresh the public catalog on expiry; concurrent callers share one fetch.
+   * @param force - Bypass the normal refresh cooldown.
+   * @returns The last valid visible model IDs, if available.
+   */
   async refresh(force = false): Promise<readonly string[] | undefined> {
     if (this.inFlight !== undefined) {
       await this.inFlight
@@ -173,6 +184,7 @@ export class NvidiaLiveCatalog {
    * A 410 is a hard negative for this process. Exclude the id from the visible
    * list immediately, refresh the catalog once, then offer a safe alternative.
    */
+  /** @param id - Model rejected by NVIDIA. @param needsImage - Input requires vision. @returns An eligible replacement or none. */
   async markUnavailable(id: string, needsImage = false): Promise<string | undefined> {
     this.blocked.set(id, this.now() + NVIDIA_MODEL_QUARANTINE_MS)
     this.revision += 1
@@ -184,6 +196,9 @@ export class NvidiaLiveCatalog {
    * Preserve a user's selected id while listed; otherwise choose a compatible
    * active candidate. Prefer the same model publisher; a different publisher
    * is a last resort. Never route an image to an unverified text-only model.
+   * @param id - Model requested by the caller.
+   * @param needsImage - Whether input includes an image.
+   * @returns Alternative ID or undefined if current model stays usable.
    */
   preferredModel(id: string, needsImage = false): string | undefined {
     const available = this.visibleIds()
@@ -202,6 +217,8 @@ export class NvidiaLiveCatalog {
    * Merge current NVIDIA ids into runtime dispatch without rewriting saved
    * settings. Explicit pinned preferences survive as dispatch entries but are
    * hidden from the picker when absent from the live catalog.
+   * @param providers - Persisted user configuration, never mutated.
+   * @returns A derived catalog used only by the running adapter.
    */
   overlayProviders(
     providers: Readonly<Record<string, PiAiProviderProfile>>,
