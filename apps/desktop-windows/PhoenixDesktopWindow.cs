@@ -690,7 +690,7 @@ internal sealed class PhoenixDesktopWindow : Form
             case "phoenix.desktop.live-frame":
                 return desktopLive.FrameForSession(command.SessionId);
             case "phoenix.audio.status":
-                return DesktopAudioCapture.Status();
+                return DesktopAudioCapture.Status(command.SessionId);
             case "phoenix.audio.capture":
                 return await DesktopAudioCapture.CaptureAsync(this, command.SessionId!, command.Seconds, command.AudioSource);
             case "phoenix.senses.status":
@@ -713,7 +713,7 @@ internal sealed class PhoenixDesktopWindow : Form
                         lastInspectedAt = lastBrowserInspectionAt,
                         lastAction = lastBrowserAction,
                     },
-                    windowsAudio = JsonSerializer.Deserialize<JsonElement>(DesktopAudioCapture.Status()),
+                    windowsAudio = JsonSerializer.Deserialize<JsonElement>(DesktopAudioCapture.Status(command.SessionId)),
                     evidence = "A visible viewer is not proof of a frame. Verify desktop.live-frame or computer screenshots separately."
                 });
             case "phoenix.browser.inspect":
