@@ -273,7 +273,7 @@ const validateSmartCard = (value: Record<string, unknown>): value is SmartCard =
 /** Remove provider branding from on-screen labels; source values remain unchanged for internal checks. */
 const sportsDisplayText=(value:string):string=>{
   const result=value.replace(/\bESPN\b/giu,'').replace(/\bUSA\.1\b/giu,'MLS')
-    .replace(/\s*·\s*·/gu,' · ').replace(/^[\s·:/-]+|[\s·:/-]+$/gu,'').trim()
+    .replace(/\s*·\s*·/gu,' · ').replace(/^[\s·:/•-]+|[\s·:/•-]+$/gu,'').trim()
   return result||'Resumen deportivo'
 }
 const trustedPortrait = (value: unknown): value is string | undefined => {
@@ -691,11 +691,11 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
       const p=block.props
       const preview=p.sections.flatMap(section=>section.items).slice(0,p.view==='event'?3:2)
       return <section className={css.sportsCard+' '+css.sportsCompactPanel}
-        data-generative-ui="sports_espn_dashboard" aria-label={p.title}>
+        data-generative-ui="sports_espn_dashboard" aria-label={sportsDisplayText(p.title)}>
         <header className={css.sportsHeadline}>
           <div><span className={css.sportsKicker}>PHOENIX · {p.view==='event'?'PARTIDO':'INTELIGENCIA DEPORTIVA'}</span>
             <h3>{sportsDisplayText(p.title)}</h3><p>{sportsDisplayText(p.subtitle)}</p></div>
-          {p.image&&<SportsPortrait label={p.title} logo={p.image}/>}
+          {p.image&&<SportsPortrait label={sportsDisplayText(p.title)} logo={p.image}/>}
         </header>
         <div className={css.sportsEspnPreview}>
           {preview.map((item,i)=><div key={i} className={css.sportsEspnPreviewRow}>
