@@ -94,7 +94,7 @@ export function SportsNewsPanel({title,articles,onAction}:{
   const visible=articles.slice(0,8)
   const texts=visible.flatMap(article=>[article.label,article.detail??''])
   const {translated,unavailable}=useSpanishSportsNews(texts)
-  return <section className={css.news} aria-label="Noticias deportivas">
+  return <section className={css.news} data-generative-ui="sports_espn_dashboard" aria-label="Noticias deportivas">
     <div className={css.header}>
       <div><span className={css.eyebrow}>PHOENIX / INTELIGENCIA DEPORTIVA · NOTICIAS</span>
         <h3>{title}</h3><small>Últimos titulares</small></div>
