@@ -494,3 +494,22 @@
   .sportsSlateMatch>div{gap:5px}
   .sportsCompactPanel .sportsEspnMetrics{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
+
+/* The game detail, slate and intelligent cards use the same surface in the current theme. */
+.sportsSlate,.sportsSlateHeader,.sportsSlateEvent,.sportsCompactPanel,.sportsGameCompact,
+.sportsCard[data-generative-ui="sports_odds_card"],.sportsTicketCard{
+  background:var(--dsw-alias-bg-primary,#fff)
+}
+.sportsSlateEvent,.sportsGameCompact,.sportsCompactPanel{
+  box-shadow:0 2px 10px rgba(20,25,31,.035)
+}
+.sportsSlateEvent:hover{box-shadow:0 3px 11px rgba(20,25,31,.06)}
+.sportsGameCompact .sportsSlateMatch>div>span:nth-child(2),
+.sportsSlateEvent .sportsSlateMatch>div>span:nth-child(2){min-width:0;flex:1}
+.sportsGameCompact .sportsSlateMatch strong,.sportsSlateEvent .sportsSlateMatch strong{
+  display:block;overflow-wrap:anywhere;line-height:1.25
+}
+.sportsGameCompact .sportsSlateMatch b,.sportsSlateEvent .sportsSlateMatch b{
+  margin-left:auto;flex:0 0 auto;font-variant-numeric:tabular-nums
+}
+.sportsSlateEvent .sportsSlateVs{padding-left:31px;margin-top:1px;color:var(--dsw-alias-label-secondary,#777)}
