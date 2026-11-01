@@ -128,6 +128,12 @@ try {
   try {
     Invoke-PhoenixPnpm @('install', '--frozen-lockfile')
     Invoke-PhoenixPnpm @('run', 'build')
+    # Prepare the isolated OpenClaw companion only on a compatible Node runtime.
+    # No Gateway daemon, account authorization or plugin execution is implicit.
+    $openClawBootstrap = Join-Path $resolvedInstallDirectory 'scripts/phoenix-openclaw-bootstrap.mjs'
+    if (Test-Path -LiteralPath $openClawBootstrap) {
+      try { & node $openClawBootstrap --ensure } catch { Write-Warning 'OpenClaw CLI setup deferred.' }
+    }
     # Optional ClawHub registry CLI for community skills and plugin discovery.
     $bootstrap = Join-Path $resolvedInstallDirectory 'scripts/phoenix-clawhub-bootstrap.mjs'
     if (Test-Path -LiteralPath $bootstrap) { & node $bootstrap --ensure }
@@ -252,6 +258,12 @@ try {
   try {
     Invoke-PhoenixPnpm @('install', '--frozen-lockfile')
     Invoke-PhoenixPnpm @('run', 'build')
+    # Prepare the isolated OpenClaw companion only on a compatible Node runtime.
+    # No Gateway daemon, account authorization or plugin execution is implicit.
+    $openClawBootstrap = Join-Path $resolvedInstallDirectory 'scripts/phoenix-openclaw-bootstrap.mjs'
+    if (Test-Path -LiteralPath $openClawBootstrap) {
+      try { & node $openClawBootstrap --ensure } catch { Write-Warning 'OpenClaw CLI setup deferred.' }
+    }
     & node (Join-Path $resolvedInstallDirectory 'apps\cli\lib\bin.js') --version
     if ($LASTEXITCODE -ne 0) { throw 'PHOENIX launcher smoke test failed.' }
     & git update-ref refs/phoenix/recovery/last-good $target
