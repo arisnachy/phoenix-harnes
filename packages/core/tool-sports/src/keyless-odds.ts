@@ -29,16 +29,16 @@ export const keylessSports = {
 
 export type KeylessSport = keyof typeof keylessSports
 export type KeylessQuote = {
-  eventId:string,bookmaker:string,market:string,selection:string,point:number|null
-  price:number,home:string,away:string,time:string,updatedAt:string
+  eventId:string;bookmaker:string;market:string;selection:string;point:number|null
+  price:number;home:string;away:string;time:string;updatedAt:string
   source:string
   sportKey:string
   league?:string
   matchLink?:string
 }
 type ScrapedGame = {
-  match_date?:unknown,scraped_date?:unknown,match_link?:unknown
-  home_team?:unknown,away_team?:unknown,league_name?:unknown
+  match_date?:unknown;scraped_date?:unknown;match_link?:unknown
+  home_team?:unknown;away_team?:unknown;league_name?:unknown
   [key:string]:unknown
 }
 const str=(value:unknown,max=150):string=>typeof value==='string'
@@ -121,10 +121,10 @@ export function normalizeOddsHarvester(
           const identity=[eventId,bookmaker,market,selection,point??''].join('|')
           if(dedupe.has(identity))continue
           dedupe.add(identity)
-          result.push({ eventId,bookmaker,market,selection,point,price:decimal,home,away,
+          result.push({eventId,bookmaker,market,selection,point,price:decimal,home,away,
             time:new Date(kickoff).toISOString(),updatedAt:new Date(observed).toISOString(),
             league:str(game.league_name,120),matchLink:link,
-            source:historical?'OddsHarvester/OddsPortal (histórico, no vigente)':'OddsHarvester/OddsPortal (sin API key)',sportKey })
+            source:historical?'OddsHarvester/OddsPortal (histórico, no vigente)':'OddsHarvester/OddsPortal (sin API key)',sportKey})
           if(result.length>=2500)return result
         }
       }
@@ -151,7 +151,7 @@ export async function keylessHistoricOdds(
   sport:string,league:string,season:string,market:string,
   env:NodeJS.ProcessEnv=process.env,now=Date.now(),
   runner?:()=>Promise<unknown>,
-):Promise<{ historical:true;source:string;rows:KeylessQuote[] }>{
+):Promise<{historical:true;source:string;rows:KeylessQuote[]}>{
   if(!sportOK(sport)||!marketOK(sport,market))throw Error('Deporte histórico no soportado')
   // Validation before spawning; fixed CLI subcommands, no arbitrary site URLs.
   oddsHarvesterHistoricArgs(sport,league,season,market,'odds.json')
@@ -165,12 +165,12 @@ export async function keylessHistoricOdds(
       try{
         const result=await runFile(executable,
           oddsHarvesterHistoricArgs(sport,league,season,market,file),
-          { shell:false,windowsHide:true,timeout:90_000,maxBuffer:4_000_000,
-            env:{ ...process.env,...env } })
+          {shell:false,windowsHide:true,timeout:90_000,maxBuffer:4_000_000,
+            env:{...process.env,...env}})
         stdout=result.stdout
       }catch(error){
-        failure=error;stdout=typeof (error as { stdout?:unknown }).stdout==='string'?
-          (error as { stdout:string }).stdout:''
+        failure=error;stdout=typeof (error as {stdout?:unknown}).stdout==='string'?
+          (error as {stdout:string}).stdout:''
       }
       let output:unknown=null
       try{
@@ -181,17 +181,17 @@ export async function keylessHistoricOdds(
       if(rows.length)return rows
       if(failure)throw Error('OddsHarvester histórico sin resultados: '+
         (failure instanceof Error?failure.message.slice(0,180):'Fallo del proceso'))
-      return Array.isArray(output)?output as unknown[]:[]
-    }finally{await rm(folder,{ recursive:true,force:true })}
+      return Array.isArray(output)?output:[]
+    }finally{await rm(folder,{recursive:true,force:true})}
   }
   const raw=runner?await runner():await load()
   const rows=normalizeOddsHarvester(raw,sport,now,3_600_000,true).slice(0,200)
-  return{ historical:true,source:'OddsHarvester/OddsPortal: archivo por liga y temporada',rows }
+  return{historical:true,source:'OddsHarvester/OddsPortal: archivo por liga y temporada',rows}
 }
 export const keylessEnabled=(env:NodeJS.ProcessEnv=process.env):boolean=>
   env.PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED==='1'
 
-const cache=new Map<string,{ at:number;rows:KeylessQuote[] }>()
+const cache=new Map<string,{at:number;rows:KeylessQuote[]}>()
 const inFlight=new Map<string,Promise<KeylessQuote[]>>()
 const localDay=()=>new Intl.DateTimeFormat('en-CA',{
   timeZone:'America/Santo_Domingo',year:'numeric',month:'2-digit',day:'2-digit',
@@ -225,8 +225,7 @@ export function recoverScraperRows(stdout:unknown,output:unknown):unknown[]{
     const row=value as Record<string,unknown>
     if(typeof row.match_link!=='string'||!row.match_link.startsWith('https://www.oddsportal.com/')
       ||typeof row.home_team!=='string'||typeof row.away_team!=='string')return
-    const safeDate=(value:unknown)=>typeof value==='string'||typeof value==='number'?String(value):''
-    const key=[row.match_link,safeDate(row.scraped_date),safeDate(row.match_date)].join('|')
+    const key=[row.match_link,row.scraped_date??'',row.match_date??''].join('|')
     if(seen.has(key)||rows.length>=500)return
     seen.add(key);rows.push(row)
   }
@@ -239,11 +238,9 @@ export function recoverScraperRows(stdout:unknown,output:unknown):unknown[]{
   }
   return rows
 }
-/**
- * Sanitized scraper failure retaining exit status and stderr diagnostics without
+/** Run a fixed local executable with fixed command shape, no shell, no user URLs. */
+/** Sanitized transport failure: retain exit status and stderr diagnostics without
  * exposing environment variables, authorization headers or a raw shell command.
- * @param error - Unknown error raised by the local scraper process.
- * @returns Redacted, bounded diagnostic text safe for the UI.
  */
 export function describeScraperError(error:unknown):string{
   const record=error&&typeof error==='object'?error as Record<string,unknown>:{}
@@ -266,8 +263,8 @@ export function describeScraperError(error:unknown):string{
     code==='ETIMEDOUT'||killed?'timeout':
       /executable doesn.t exist|playwright.*install|chromium.*not found/iu.test(raw)?
         'missing-playwright-browser':
-        /403|429|access denied|captcha|cloudflare/iu.test(raw)?
-          'site-blocked-or-limited':'scraper-exit-error'
+      /403|429|access denied|captcha|cloudflare/iu.test(raw)?
+        'site-blocked-or-limited':'scraper-exit-error'
   return 'category='+category+'; exitCode='+code+'; signal='+signal+
     '; killed='+String(killed)+'; stderr='+ (diagnostic||'sin detalles de stderr')+
     '; verificar el log local del instalador y una consulta CLI controlada.'
@@ -280,12 +277,12 @@ async function runScraper(sport:KeylessSport,market:string,day:string,env:NodeJS
     let stdout='',failure:unknown=null
     try{
       const execution=await runFile(executable,oddsHarvesterArgs(sport,market,day,file),
-        { shell:false,windowsHide:true,timeout:65_000,maxBuffer:4_000_000,
-          env:{ ...process.env,...env } })
+        {shell:false,windowsHide:true,timeout:65_000,maxBuffer:4_000_000,
+          env:{...process.env,...env}})
       stdout=execution.stdout
     }catch(error){
       failure=error
-      const captured=error as { stdout?:unknown }
+      const captured=error as {stdout?:unknown}
       stdout=typeof captured.stdout==='string'?captured.stdout:''
     }
     let output:unknown=null
@@ -301,9 +298,9 @@ async function runScraper(sport:KeylessSport,market:string,day:string,env:NodeJS
     if(failure){
       throw Error('OddsHarvester falló sin cuotas recuperables: '+describeScraperError(failure))
     }
-    return Array.isArray(output)?output as unknown[]:[]
+    return Array.isArray(output)?output:[]
   }finally{
-    await rm(folder,{ recursive:true,force:true })
+    await rm(folder,{recursive:true,force:true})
   }
 }
 /**
@@ -326,11 +323,12 @@ export async function keylessOdds(
     const raw=await runner(sport,market,date,env)
     const rows=normalizeOddsHarvester(raw,sport,now,3_600_000)
     if(Array.isArray(raw)&&raw.length>0&&rows.length===0)
-      throw Error(`OddsHarvester procesó ${raw.length} partidos, pero no encontró precios elegibles: `+
-        'comprobar fecha de captura, inicio del partido, mercado, casa, período y líneas retiradas.')
+      throw Error('OddsHarvester procesó '+raw.length+
+        ' partidos, pero no encontró precios elegibles: comprobar fecha de captura, '+
+        'inicio del partido, mercado, casa, período y líneas retiradas.')
     if(runner===runScraper){
       if(cache.size>=64)cache.clear()
-      cache.set(key,{ at:now,rows })
+      cache.set(key,{at:now,rows})
     }
     return rows
   })()

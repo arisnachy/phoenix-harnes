@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { AssistantMarkdown } from '../src/client/chat/AssistantMarkdown.tsx'
+import type { ChatViewSlotProps } from '../src/client/contract/slots.ts'
 import { GenerativeCanvas, parseCanvasSpec } from '../src/client/chat/GenerativeCanvas.tsx'
 import { GenerativeUi, parseGenerativeUiBlock, splitGenerativeUiText } from '../src/client/chat/GenerativeUi.tsx'
 
@@ -98,7 +99,7 @@ describe('Phoenix intelligent UI canvas', () => {
       blocks={[{ kind: 'text', text: blockText }]}
       streaming={false}
       renderMessageImages={() => null}
-      t={((key: string) => key)}
+      t={((key: string) => key) as ChatViewSlotProps['t']}
       onUiAction={handle}
     />)
     expect(screen.getByText('He revisado el estado.')).not.toBeNull()

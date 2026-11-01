@@ -59,7 +59,7 @@ describe('isolated Windows Include plugin tsdown entry recovery', () => {
     const files = new Set([includeSource, includeTypes, tsc])
     expect(() => ensureIncludeTsdownEntries(root, {
       exists: path => files.has(path),
-      spawn: (() => ({ status: 0 })),
+      spawn: (() => ({ status: 0 })) as never,
       log: () => {},
     })).toThrow('include entry repair did not emit: lib/types/index.js')
   })
@@ -126,7 +126,7 @@ describe('isolated Windows CLI bin entry recovery', () => {
     const files = new Set([binSource, binTypes, tsc])
     expect(() => ensureCliTsdownEntries(root, {
       exists: path => files.has(path),
-      spawn: (() => ({ status: 0 })),
+      spawn: (() => ({ status: 0 })) as never,
       log: () => {},
     })).toThrow('CLI entry repair did not emit: lib/types/bin.js')
   })
@@ -202,7 +202,7 @@ describe('isolated Windows Cordis tsdown entry recovery', () => {
     const spawn = vi.fn(() => ({ status: 0 }))
     expect(() => ensureCordisTsdownEntries(root, {
       exists: path => files.has(path),
-      spawn: spawn,
+      spawn: spawn as never,
       log: () => {},
     })).toThrow('did not emit: lib/types/index.js')
     expect(spawn).toHaveBeenCalledOnce()
@@ -212,7 +212,7 @@ describe('isolated Windows Cordis tsdown entry recovery', () => {
     const files = new Set([source('index'), tsc])
     expect(() => ensureCordisTsdownEntries(root, {
       exists: path => files.has(path),
-      spawn: (() => ({ status: 2 })),
+      spawn: (() => ({ status: 2 })) as never,
       log: () => {},
     })).toThrow('entry repair exited with 2')
   })

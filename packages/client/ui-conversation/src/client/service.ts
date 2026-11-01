@@ -19,7 +19,7 @@ import type { ComposerAttachment } from './contract/slots.ts'
 import type { QueueAction, QueueItemId } from './contract/queue.ts'
 import type { ComposerBlocks, DraftAttachmentId, SessionInputResolver } from './contract/input.ts'
 import type { InputSubmitMode } from './contract/composer-submission.ts'
-import { savedPhotoForSelfImageRequest } from './portrait-reference.ts'
+import { messageWithProfileReference, savedPhotoForSelfImageRequest } from './portrait-reference.ts'
 
 /**
  * The outward conversation face (`ctx.conversation`): the scope-addressed
@@ -171,7 +171,8 @@ export class ConversationController extends Service implements IConversation {
       files.push(portraitReference)
     }
     const uploaded = await this.serializeAttachments(files)
-    const content = [...uploaded, ...(text === '' ? [] : [{ type: 'text' as const, text }])]
+    const contextualText = messageWithProfileReference(text, portraitReference !== undefined)
+    const content = [...uploaded, ...(contextualText === '' ? [] : [{ type: 'text' as const, text: contextualText }])]
     const result = await session.prompt(content, mode, signal)
     if (!result.ok) return { kind: 'error' }
     this.releaseDraftImages(attachments)
