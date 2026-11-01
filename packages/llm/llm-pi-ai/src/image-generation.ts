@@ -972,8 +972,7 @@ function latestUserText(events: readonly { type: string; data: unknown }[]): str
     const content: unknown = msg.content
     if (!Array.isArray(content)) return ''
     const blocks = content as readonly ContentBlock[]
-    return blocks.filter(item => item.type === 'text')
-      .map(item => item.type === 'text' ? item.text : '').join(' ')
+    return blocks.flatMap(item => item.type === 'text' ? [item.text] : []).join(' ')
   }
   return ''
 }

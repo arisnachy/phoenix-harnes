@@ -197,7 +197,9 @@ describe('Codex image generation bridge', () => {
       await mkdir(dirname(pnpmNative), { recursive: true })
       await writeFile(pnpmNative, 'mock pnpm executable')
       expect(await resolveNativeCodexImageLauncher(pnpmShim, 'win32', 'x64')).toBe(pnpmNative)
-      const unknownShim = join(root, 'empty', 'unknown.cmd')
+      // Isolate the negative fixture from the native executable created above.
+      // Discovery intentionally searches one parent directory for npm layouts.
+      const unknownShim = join(root, 'empty', 'nested', 'unknown.cmd')
       await mkdir(dirname(unknownShim), { recursive: true })
       expect(await resolveNativeCodexImageLauncher(unknownShim, 'win32', 'x64'))
         .toBe(unknownShim)
