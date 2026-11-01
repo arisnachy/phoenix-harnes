@@ -38,6 +38,13 @@ internal sealed class PhoenixDesktopWindow : Form
     private readonly WebView2 browserView = new();
     private readonly DesktopLivePane desktopLive = new();
     private ToolStrip? browserToolbar;
+    private ToolStrip? browserDebugStrip;
+    private readonly ToolStripLabel browserDebugStatus = new("Kira · navegador sin iniciar");
+    private readonly ToolStripButton browserInspectButton = new("Inspeccionar");
+    private readonly ToolStripButton browserDevToolsButton = new("Depurar");
+    private bool browserPageReady;
+    private string? lastBrowserError;
+    private DateTimeOffset? lastBrowserInspectionAt;
     private readonly ToolStripTextBox address = new();
     private readonly ToolStripButton backButton = new("←");
     private readonly ToolStripButton forwardButton = new("→");
@@ -91,8 +98,10 @@ internal sealed class PhoenixDesktopWindow : Form
         startupOverlay.BringToFront();
 
         browserToolbar = BuildBrowserToolbar();
+        browserDebugStrip = BuildBrowserDebugStrip();
         split.Panel2.Controls.Add(browserView);
         split.Panel2.Controls.Add(browserToolbar);
+        split.Panel2.Controls.Add(browserDebugStrip);
         split.Panel2.Controls.Add(desktopLive);
         desktopLive.Dock = DockStyle.Fill;
         desktopLive.Visible = false;
@@ -457,6 +466,53 @@ internal sealed class PhoenixDesktopWindow : Form
         return toolbar;
     }
 
+    private ToolStrip BuildBrowserDebugStrip()
+    {
+        var strip = new ToolStrip
+        {
+            Dock = DockStyle.Bottom,
+            GripStyle = ToolStripGripStyle.Hidden,
+            Stretch = true,
+            BackColor = Color.FromArgb(248, 250, 252),
+            ForeColor = Color.FromArgb(51, 65, 85),
+        };
+        browserDebugStatus.ToolTipText = "Estado real del WebView, no una prueba de que Kira haya visto u oído contenido.";
+        browserInspectButton.ToolTipText = "Inspeccionar esta página y registrar evidencia de su contenido visible.";
+        browserDevToolsButton.ToolTipText = "Abrir las herramientas de desarrollo de Edge para depurar el navegador.";
+        browserInspectButton.Click += async (_, _) =>
+        {
+            try { _ = await InspectBrowserAsync(); }
+            catch (Exception ex)
+            {
+                lastBrowserError = ex.GetType().Name;
+                SetBrowserDebugStatus("Kira · inspección fallida (" + lastBrowserError + ")");
+                DesktopLog.Write("Browser inspection failed", ex);
+            }
+        };
+        browserDevToolsButton.Click += (_, _) =>
+        {
+            if (browserView.CoreWebView2 is null)
+            {
+                SetBrowserDebugStatus("Kira · abre una página antes de depurar");
+                return;
+            }
+            browserView.CoreWebView2.OpenDevToolsWindow();
+            SetBrowserDebugStatus("Kira · herramientas de desarrollo abiertas");
+        };
+        strip.Items.Add(browserDebugStatus);
+        strip.Items.Add(new ToolStripSeparator());
+        strip.Items.Add(browserInspectButton);
+        strip.Items.Add(browserDevToolsButton);
+        return strip;
+    }
+
+    private void SetBrowserDebugStatus(string message)
+    {
+        if (IsDisposed) return;
+        browserDebugStatus.Text = message;
+        DesktopLog.Write("Browser perception: " + message);
+    }
+
     private async Task InitializeAsync()
     {
         if (initialized) return;
@@ -642,6 +698,18 @@ internal sealed class PhoenixDesktopWindow : Form
                     browserPaneVisible = !split.Panel2Collapsed && !desktopLive.Visible,
                     desktopLivePaneVisible = !split.Panel2Collapsed && desktopLive.Visible,
                     desktopLive = JsonSerializer.Deserialize<JsonElement>(desktopLive.StateForSession(command.SessionId)),
+                    browser = new
+                    {
+                        initialized = browserView.CoreWebView2 is not null,
+                        visible = !split.Panel2Collapsed && !desktopLive.Visible,
+                        pageReady = browserPageReady,
+                        origin = browserView.Source is Uri uri && uri.Scheme is "http" or "https"
+                            ? uri.GetLeftPart(UriPartial.Authority) : null,
+                        title = browserView.CoreWebView2?.DocumentTitle,
+                        debugStripVisible = browserDebugStrip?.Visible == true && !split.Panel2Collapsed,
+                        lastNavigationError = lastBrowserError,
+                        lastInspectedAt = lastBrowserInspectionAt,
+                    },
                     windowsAudio = JsonSerializer.Deserialize<JsonElement>(DesktopAudioCapture.Status()),
                     evidence = "A visible viewer is not proof of a frame. Verify desktop.live-frame or computer screenshots separately."
                 });
@@ -762,11 +830,30 @@ internal sealed class PhoenixDesktopWindow : Form
 
     private async Task<string> InspectBrowserAsync()
     {
-        await EnsureBrowserInitializedAsync();
-        var core = browserView.CoreWebView2
-            ?? throw new InvalidOperationException("Embedded browser is unavailable.");
+        // Do not initialize an empty browser and mistake that for a successful observation.
+        var core = browserView.CoreWebView2;
+        if (core is null || !browserPageReady)
+        {
+            SetBrowserDebugStatus("Kira · no hay una página cargada que inspeccionar");
+            return JsonSerializer.Serialize(new { available = false, observed = false,
+                reason = core is null ? "BROWSER_NOT_INITIALIZED" : "BROWSER_PAGE_NOT_READY" });
+        }
         var raw = await core.ExecuteScriptAsync(BrowserInspectScript);
-        return DecodeScriptJson(raw);
+        var result = DecodeScriptJson(raw);
+        using var inspection = JsonDocument.Parse(result);
+        if (inspection.RootElement.ValueKind != JsonValueKind.Object
+            || !inspection.RootElement.TryGetProperty("url", out var pageUrl)
+            || pageUrl.ValueKind != JsonValueKind.String)
+        {
+            SetBrowserDebugStatus("Kira · la página no devolvió una inspección válida");
+            return JsonSerializer.Serialize(new { available = true, observed = false,
+                reason = "BROWSER_INSPECT_INVALID_RESPONSE" });
+        }
+        lastBrowserInspectionAt = DateTimeOffset.UtcNow;
+        var mediaCount = inspection.RootElement.TryGetProperty("media", out var media)
+            && media.ValueKind == JsonValueKind.Array ? media.GetArrayLength() : 0;
+        SetBrowserDebugStatus($"Kira · inspección confirmada · {mediaCount} medios");
+        return result;
     }
 
     private async Task<string> FillBrowserFormAsync(BrowserCommand command)
@@ -881,7 +968,17 @@ internal sealed class PhoenixDesktopWindow : Form
             title: document.title.slice(0, 500),
             text: String(document.body?.innerText || '').slice(0, 12000),
             fields,
-            buttons
+            buttons,
+            media: Array.from(document.querySelectorAll('video,audio')).slice(0, 12).map((el) => ({
+              type: el.tagName.toLowerCase(),
+              paused: !!el.paused,
+              muted: !!el.muted,
+              durationSeconds: Number.isFinite(el.duration) ? Math.round(el.duration) : null,
+              positionSeconds: Number.isFinite(el.currentTime) ? Math.round(el.currentTime) : null,
+              captions: Array.from(el.textTracks || []).slice(0, 10).map(track => ({
+                kind: track.kind, language: track.language, label: track.label
+              }))
+            }))
           });
         })()
         """;
@@ -1117,8 +1214,24 @@ internal sealed class PhoenixDesktopWindow : Form
         var browserEnvironment = await CoreWebView2Environment.CreateAsync(null, browserProfile);
         await browserView.EnsureCoreWebView2Async(browserEnvironment);
         ConfigureWebView(browserView.CoreWebView2, isPhoenixSurface: false);
-        browserView.CoreWebView2.NavigationStarting += (_, e) => address.Text = e.Uri;
-        browserView.CoreWebView2.NavigationCompleted += (_, _) => PublishBrowserState();
+        browserView.CoreWebView2.NavigationStarting += (_, e) =>
+        {
+            address.Text = e.Uri;
+            browserPageReady = false;
+            lastBrowserError = null;
+            SetBrowserDebugStatus("Kira · navegando…");
+        };
+        browserView.CoreWebView2.NavigationCompleted += (_, e) =>
+        {
+            var current = browserView.Source;
+            browserPageReady = e.IsSuccess && current is not null
+                && (current.Scheme == Uri.UriSchemeHttp || current.Scheme == Uri.UriSchemeHttps);
+            lastBrowserError = e.IsSuccess ? null : e.WebErrorStatus.ToString();
+            SetBrowserDebugStatus(browserPageReady
+                ? "Kira · página lista para inspección"
+                : e.IsSuccess ? "Kira · sin página web activa" : "Kira · error " + lastBrowserError);
+            PublishBrowserState();
+        };
         browserView.CoreWebView2.SourceChanged += (_, _) => PublishBrowserState();
         browserView.CoreWebView2.DocumentTitleChanged += (_, _) => PublishBrowserState();
         browserView.CoreWebView2.HistoryChanged += (_, _) => PublishBrowserState();
@@ -1145,6 +1258,7 @@ internal sealed class PhoenixDesktopWindow : Form
         ApplyBrowserSplitLayout();
         browserView.Visible = false;
         if (browserToolbar is not null) browserToolbar.Visible = false;
+        if (browserDebugStrip is not null) browserDebugStrip.Visible = false;
         desktopLive.Open(command.Text, command.SessionId);
         return "Desktop Live visible; la captura se actualiza mientras Kira trabaja.";
     }
@@ -1160,6 +1274,7 @@ internal sealed class PhoenixDesktopWindow : Form
         desktopLive.HideForBrowser();
         browserView.Visible = true;
         if (browserToolbar is not null) browserToolbar.Visible = true;
+        if (browserDebugStrip is not null) browserDebugStrip.Visible = true;
         var opening = visible && split.Panel2Collapsed;
         split.Panel2Collapsed = !visible;
         if (visible)
@@ -1195,6 +1310,9 @@ internal sealed class PhoenixDesktopWindow : Form
             title = browserView.CoreWebView2.DocumentTitle ?? string.Empty,
             canGoBack = browserView.CanGoBack,
             canGoForward = browserView.CanGoForward,
+            pageReady = browserPageReady,
+            lastNavigationError = lastBrowserError,
+            lastInspectedAt = lastBrowserInspectionAt,
         });
         phoenixView.CoreWebView2.PostWebMessageAsJson(payload);
     }
