@@ -106,7 +106,11 @@ async function botApi(
   return parsed
 }
 
-/** Guard against invalid bot responses instead of mistaking HTTP success for identity proof. */
+/** Guard against invalid bot responses instead of mistaking HTTP success for identity proof.
+ * @param token - Stored bot token to verify against Telegram's getMe response.
+ * @param request - Fetch implementation for the verification request.
+ * @returns The verified bot username, when Telegram supplies a valid one.
+ */
 export async function verifyTelegramBotToken(
   token: string, request: typeof fetch = fetch,
 ): Promise<{ username?: string }> {
@@ -175,7 +179,9 @@ export class TelegramInbox {
     if (prior === undefined) this.start()
     else void prior.finally(() => { if (this.worker === undefined) this.start() })
   }
-  /** A code survives Host restarts but expires after fifteen minutes. */
+  /** A code survives Host restarts but expires after fifteen minutes.
+   * @returns A fresh, expiring pairing code saved in the credential vault.
+   */
   async pairing(): Promise<string> {
     const creds = vault(this.ctx)
     if (creds === undefined || await stored(creds, TELEGRAM_BOT_TOKEN_REF) === undefined) {

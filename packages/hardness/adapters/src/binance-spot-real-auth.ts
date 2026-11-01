@@ -46,7 +46,10 @@ export class BinanceSpotRealReadOnly {
     private readonly clock: () => number = Date.now,
   ) {}
 
-  /** Verify an already stored candidate entirely inside the Host, without exposing it in UI. */
+  /** Verify an already stored candidate entirely inside the Host, without exposing it in UI.
+   * @param value - Credentials supplied only to the new read-only verifier.
+   * @returns A read-only verifier bound to the candidate credentials.
+   */
   forCredentials(value: BinanceRealReadOnlyCredentials): BinanceSpotRealReadOnly {
     return new BinanceSpotRealReadOnly(() => value, this.request, this.clock)
   }
