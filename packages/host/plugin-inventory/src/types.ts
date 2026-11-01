@@ -1,3 +1,34 @@
+
+/** ClawHub entries are catalog metadata, never proof a third-party package is executable. */
+export type ClawHubFamily = 'skill' | 'code-plugin' | 'bundle-plugin'
+export interface ClawHubListing {
+  readonly name: string
+  readonly family: ClawHubFamily
+  readonly description: string
+  readonly version: string
+}
+export interface ClawHubQuery {
+  readonly query: string
+  readonly family: ClawHubFamily
+  readonly limit?: number
+}
+export interface ClawHubInstallRequest {
+  readonly name: string
+  readonly family: ClawHubFamily
+}
+export interface ClawHubInstallReceipt {
+  readonly name: string
+  readonly family: ClawHubFamily
+  readonly status: 'installed-skill' | 'installed-in-openclaw'
+  readonly detail: string
+}
+export interface ClawHubState {
+  readonly cli: 'managed' | 'global' | 'missing'
+  readonly openclaw: 'available' | 'missing'
+  readonly skillsDirectory: string
+  readonly pluginExecution: 'openclaw-runtime' | 'not-configured'
+}
+
 /** Secret-free The Odds API v4 credential state projected to trusted clients. */
 export interface OddsApiConnectorState {
   readonly configured: boolean
