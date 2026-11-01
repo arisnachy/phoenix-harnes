@@ -180,37 +180,57 @@ internal static class Program
             var bodyBytes = Encoding.UTF8.GetBytes(body);
             var headers = Encoding.ASCII.GetBytes(
                 $"HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {bodyBytes.Length}\r\nConnection: close\r\n\r\n");
+            var clients = new List<Task>();
+
+            async Task ServeClientAsync(TcpClient client)
+            {
+                using (client)
+                using (var requestTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellation.Token))
+                {
+                    // Chromium may open idle speculative connections before the navigation GET.
+                    // A single serial ReadAsync on such a socket would prevent serving the real GET.
+                    requestTimeout.CancelAfter(TimeSpan.FromSeconds(8));
+                    try
+                    {
+                        using var stream = client.GetStream();
+                        var request = new byte[8192];
+                        var received = await stream.ReadAsync(request, requestTimeout.Token);
+                        if (received == 0) return;
+                        Interlocked.Increment(ref servedRequests);
+                        DesktopLog.Write($"Loopback WebView smoke: serving HTTP response; requestBytes={received}.");
+                        await stream.WriteAsync(headers, requestTimeout.Token);
+                        await stream.WriteAsync(bodyBytes, requestTimeout.Token);
+                        await stream.FlushAsync(requestTimeout.Token);
+                    }
+                    catch (OperationCanceledException) when (!cancellation.IsCancellationRequested)
+                    {
+                        DesktopLog.Write("Loopback WebView smoke: idle HTTP socket exceeded 8-second request deadline.");
+                    }
+                    catch (IOException ex)
+                    {
+                        DesktopLog.Write("Loopback WebView smoke: client HTTP I/O error.", ex);
+                    }
+                }
+            }
 
             while (!cancellation.IsCancellationRequested)
             {
-                TcpClient? client = null;
                 try
                 {
-                    client = await listener.AcceptTcpClientAsync(cancellation.Token);
-                    using (client)
-                    using (var stream = client.GetStream())
-                    {
-                        var request = new byte[8192];
-                        var received = await stream.ReadAsync(request, cancellation.Token);
-                        if (received == 0) continue;
-                        Interlocked.Increment(ref servedRequests);
-                        DesktopLog.Write($"Loopback WebView smoke: serving HTTP response; requestBytes={received}.");
-                        await stream.WriteAsync(headers, cancellation.Token);
-                        await stream.WriteAsync(bodyBytes, cancellation.Token);
-                        await stream.FlushAsync(cancellation.Token);
-                    }
+                    var client = await listener.AcceptTcpClientAsync(cancellation.Token);
+                    clients.Add(ServeClientAsync(client));
                 }
                 catch (OperationCanceledException)
                 {
-                    client?.Dispose();
                     break;
                 }
                 catch (ObjectDisposedException)
                 {
-                    client?.Dispose();
                     break;
                 }
             }
+            try { await Task.WhenAll(clients); }
+            catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { }
         });
 
         var loaded = false;
