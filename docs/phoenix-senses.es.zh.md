@@ -16,6 +16,9 @@ PHOENIX Senses 以真实证据和明确权限连接音频、图像和语音。 �
 
 - Desktop Live、Computer Use 和 MiniBrowser 提供经授权的可视内容。
 - `phoenix_senses_status` 检查查看器和设备状态， 但不能据此声称已看到图像或听到声音。
+- Windows MiniBrowser 底部新增 Kira 调试状态条，包含“Inspeccionar”（检查）和“Depurar”（调试）按钮：检查可见正文、非敏感表单元数据、按钮与音视频状态；调试打开 Edge DevTools。 自动化只能通过经过验证的本地用户管道执行，网页脚本无权调用。
+- `pageReady`、`lastNavigationError`、`lastInspectedAt` 用于区分页面真实加载成功、失败以及实际检查时间；空白页不能算作视觉证据。
+- 如果 YouTube 无字幕，Kira 先尝试已注册的视频工具；若用户在 Windows 中播放视频，可在用户明确批准下通过 WASAPI 录制输出并转写。 仅有 3–12 秒音频不能代表整段视频。
 - 实际视觉必须来自 Desktop Live 或 Computer Use 的真实截图。 浏览器视频沿用既有的授权工具。
 - `phoenix_voice_status` 和 `phoenix_voice_speak` 提供语音输出。 提供方的成功回执并不等于扬声器声音已被听到。
 
