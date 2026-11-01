@@ -31,12 +31,12 @@ jobs:
       - name: Test actual React map layout and behavior
         run: pnpm exec vitest run packages/client/ui-conversation/tests/geo-visual-quality.client.spec.tsx
       - name: Install Chromium for actual screenshots
-        run: pnpm --dir apps/web exec playwright install --with-deps chromium
+        run: pnpm --dir apps/web run qa:chromium:install
       - name: Build the actual GeoMap production bundle (no HMR)
-        run: pnpm --dir apps/web exec vite build --config geo-visual-qa.config.ts
+        run: pnpm --dir apps/web run qa:geo:build
       - name: Start private compiled visual QA fixture
         run: |
-          pnpm --dir apps/web exec vite preview --config geo-visual-qa.config.ts --host 127.0.0.1 --port 5187 > /tmp/phoenix-geo-vite.log 2>&1 &
+          pnpm --dir apps/web run qa:geo:preview > /tmp/phoenix-geo-vite.log 2>&1 &
       - name: Screenshot every viewport and validate PDF downloads
         run: node apps/web/tests/geo-visual.qa.mjs
         env:
