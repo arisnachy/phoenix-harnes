@@ -551,6 +551,9 @@ async function generateWithLocalProvider(
     headers,
     body,
     signal,
+    // Never forward a private profile photograph across HTTP redirects.
+    // Node fetch otherwise replays 307/308 multipart POSTs to arbitrary hosts.
+    redirect: reference === undefined ? 'follow' : 'error',
   })
   if (!response.ok) {
     const diagnostic = (await response.text()).trim().slice(0, 1600)

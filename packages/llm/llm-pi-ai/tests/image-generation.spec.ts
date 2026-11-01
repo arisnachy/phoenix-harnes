@@ -292,12 +292,21 @@ describe('Codex image generation bridge', () => {
       height: 768,
       name: 'referencia-original-del-usuario.webp',
     }
-    const calls: Array<{ path: string; body: FormData }> = []
+    const calls: Array<{ path: string; body: FormData; redirect?: RequestRedirect }> = []
+    let simulateRedirect = false
+    let forwardedPrivatePhoto = false
     const codexLaunches: Array<{ argv: readonly string[]; cwd: string }> = []
     vi.stubGlobal('fetch', vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
       const body = init?.body
       if (!(body instanceof FormData)) throw new Error('Photo must be sent as multipart image data')
-      calls.push({ path: String(url), body })
+      const path = typeof url === 'string' ? url : url instanceof URL ? url.href : url.url
+      calls.push({ path, body, redirect: init?.redirect })
+      // Model Node fetch following a malicious 307/308 from the local editor.
+      // With redirect:error the multipart body must never reach that host.
+      if (simulateRedirect) {
+        if (init?.redirect === 'error') throw new TypeError('private photo redirect blocked')
+        forwardedPrivatePhoto = true
+      }
       return new Response(JSON.stringify({ data: [{ b64_json: edited.toString('base64') }] }), {
         status: 200,
         headers: { 'content-type': 'application/json' },
@@ -364,22 +373,32 @@ describe('Codex image generation bridge', () => {
       expect(codexLaunches[0]?.cwd).toContain('phoenix-user-photo-')
       expect(calls).toHaveLength(1)
       expect(calls[0]?.path).toBe('http://127.0.0.1:9898/v1/images/edits')
+      expect(calls[0]?.redirect).toBe('error')
       expect(calls[0]?.body.get('model')).toBe('image-edit-test')
-      expect(String(calls[0]?.body.get('prompt'))).toContain('Kira team visual direction')
+      expect(calls[0]?.body.get('prompt')).toEqual(expect.stringContaining('Kira team visual direction'))
       const sent = calls[0]?.body.get('image')
       expect(sent).toBeInstanceOf(Blob)
       expect(Buffer.from(await (sent as Blob).arrayBuffer())).toEqual(source)
       expect((result as { path: string }).path).toContain(join(root, '.artifacts', 'generated-images'))
       expect(await readFile((result as { path: string }).path)).toEqual(edited)
 
+      // A local editor can redirect to a remote server; never replay the photo.
+      simulateRedirect = true
+      await expect(tool.execute({ prompt: 'Retrátame', backend: 'local' }, execution))
+        .rejects.toThrow('private photo redirect blocked')
+      expect(calls).toHaveLength(2)
+      expect(calls[1]?.redirect).toBe('error')
+      expect(forwardedPrivatePhoto).toBe(false)
+      simulateRedirect = false
+
       // Reject remote image-to-image endpoints even if separately configured.
       process.env.PHOENIX_IMAGE_LOCAL_BASE_URL = 'https://remote.example.org/v1'
       await expect(tool.execute({ prompt: 'Retrátame', backend: 'local' }, execution))
         .rejects.toThrow('foto privada solo puede enviarse')
-      expect(calls).toHaveLength(1)
+      expect(calls).toHaveLength(2)
       await expect(tool.execute({ prompt: 'Retrátame', backend: 'free' }, execution))
         .rejects.toThrow('no admiten la fotografía real')
-      expect(calls).toHaveLength(1)
+      expect(calls).toHaveLength(2)
     } finally {
       vi.unstubAllGlobals()
       if (previousHome === undefined) delete process.env.CODEX_HOME
@@ -531,7 +550,7 @@ describe('Codex image generation bridge', () => {
           return { ref: attachment, data }
         },
       }
-      const exported = await materializeGeneratedImageInWorkspace(store as never, image, workspace)
+      const exported = await materializeGeneratedImageInWorkspace(store, image, workspace)
       expect(exported.path).toContain(join(workspace, '.artifacts', 'generated-images'))
       expect(exported.path).toMatch(/\.png$/u)
       expect(exported.attachment).toBe(attachment)
@@ -572,7 +591,7 @@ describe('Codex image generation bridge', () => {
           return { ref: attachment, data: Buffer.from([1, 2, 3, 4]) }
         },
       }
-      await expect(materializeGeneratedImageInWorkspace(store as never, image, workspace))
+      await expect(materializeGeneratedImageInWorkspace(store, image, workspace))
         .rejects.toThrow('must not be a symlink')
       expect(imageReads).toBe(0)
     } finally {
