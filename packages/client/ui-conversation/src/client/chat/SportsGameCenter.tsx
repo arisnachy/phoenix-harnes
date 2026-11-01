@@ -66,7 +66,7 @@ export function SportsGameCenter({ sport,league,eventId,phase,game }:{
         const value=await res.json() as unknown
         if(!current.signal.aborted)setState({ url,plays:parseEspnGamePlays(value),at:Date.now(),error:false,loading:false })
       }catch{
-        if(timeoutState.expired||!current.signal.aborted)
+        if(active&&(timeoutState.expired||!current.signal.aborted))
           setState(s=>({ ...s,url,error:true,loading:false }))
       }finally{clearTimeout(timeout);busy=false}
     }

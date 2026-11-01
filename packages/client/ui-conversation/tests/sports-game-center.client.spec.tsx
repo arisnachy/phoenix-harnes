@@ -53,6 +53,29 @@ describe('compact ESPN game center',()=>{
       expect(screen.queryByText(/ESPN no publicó jugadas/)).toBeNull()
     }finally{vi.useRealTimers()}
   })
+  it('ignores a delayed timeout rejection from a closed ESPN request',async()=>{
+    vi.useFakeTimers()
+    try{
+      let rejectFirst:((error:Error)=>void)|undefined
+      let requests=0
+      vi.stubGlobal('fetch',vi.fn(()=>{
+        requests++
+        if(requests===1)return new Promise<Response>((_resolve,reject)=>{rejectFirst=reject})
+        return Promise.resolve(new Response(JSON.stringify({ plays:[{ id:'new',text:'Latest confirmed play' }] }),{ status:200 }))
+      }))
+      render(<SportsGameCenter sport="basketball" league="nba" eventId="40183001" phase="post"/>)
+      fireEvent.click(screen.getByRole('button',{ name:/Seguir partido/ }))
+      expect(requests).toBe(1)
+      fireEvent.click(screen.getByRole('button',{ name:/Cerrar seguimiento/ }))
+      fireEvent.click(screen.getByRole('button',{ name:/Seguir partido/ }))
+      await act(async()=>{await Promise.resolve();await Promise.resolve()})
+      expect(screen.getByText('Latest confirmed play')).toBeTruthy()
+      await act(async()=>{await vi.advanceTimersByTimeAsync(9000)})
+      await act(async()=>{rejectFirst?.(new Error('Late abort'));await Promise.resolve()})
+      expect(screen.queryByText(/ESPN no respondió/)).toBeNull()
+      expect(screen.getByText('Latest confirmed play')).toBeTruthy()
+    }finally{vi.useRealTimers()}
+  })
   it('does not treat MLB gamePk as a confirmed ESPN event ID',()=>{
     render(<SportsGameCenter sport="baseball" league="MLB" eventId="849802" phase="in"/>)
     expect(screen.queryByRole('button',{ name:/Seguir partido/ })).toBeNull()
