@@ -4,10 +4,13 @@
  * do not advertise expected value, a profitable edge or winning tickets.
  */
 export type FinishedGame={scored:number;allowed:number;date:string}
+/** One team and its independently observed completed matches. */
 export type ForecastSide={name:string;lastGames:readonly FinishedGame[]}
+/** Input limited to prior finished games and a future verified event. */
 export type ForecastInput={
   sport:string;phase:string;eventDate:string;home:ForecastSide;away:ForecastSide
 }
+/** Descriptive probabilities, never calibrated wager probabilities. */
 export type ForecastResult={
   status:'exploratory'|'insufficient'|'not-pregame'
   model:'recent-form-poisson-v1'|'recent-margin-logistic-v1'|null
@@ -41,6 +44,9 @@ const logistic=(value:number)=>1/(1+Math.exp(-cap(value,-40,40)))
 /**
  * Returns a deliberately conservative descriptive forecast. No trained model
  * artifacts, calibration curves or sportsbook odds are consumed here.
+ * @param input - Future event and historical team results from trusted feeds.
+ * @param now - Observation time in milliseconds; used to reject started games.
+ * @returns Explicit exploratory or abstention status with provenance warnings.
  */
 export function estimateEvidenceForecast(input:ForecastInput,now=Date.now()):ForecastResult{
   const kickoff=Date.parse(input.eventDate)
