@@ -62,7 +62,7 @@ const whenLocal = (value:string):string=>
  * @param now - Instante de validación; permite pruebas deterministas.
  * @param env - Política de proveedores del operador de Phoenix.
  * @returns Tarjeta nativa y lista de partidos validados; nunca una apuesta real.
-  * @param requestedLegs - Target number of validated selections.
+ * @param requestedLegs - Target number of validated selections.
  * @param allowPartial - Whether an incomplete research card may be returned.
  * @param preloadedBoards - Optional already-fetched ESPN boards shared across selections.
  */
@@ -168,7 +168,7 @@ export async function researchTicket(
  * NBA auto-picks additionally require recent completed games, margins and rest. Neither
  * measure is a calibrated predictive model; unavailable evidence never becomes an NBA pick.
  * Returns a visibly incomplete draft when fewer than the requested legs have evidence.
-  * @param count - Requested number of candidate selections, from one to six.
+ * @param count - Requested number of candidate selections, from one to six.
  * @param requestedDate - Local calendar date used for fixture discovery.
  * @param fetcher - Injectable ESPN HTTP transport.
  * @param now - Observation time in milliseconds.

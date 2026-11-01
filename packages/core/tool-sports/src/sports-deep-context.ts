@@ -26,7 +26,7 @@ const sourceNote=(name:string,available:boolean,records:number)=>({
 })
 /** ESPN summary + news + injuries + two verified rosters, plus NHL/MLB official
  * fixture cross-check when supported. No arbitrary URLs or unsourced players.
-  * @param sport - Catalog-approved ESPN sport slug.
+ * @param sport - Catalog-approved ESPN sport slug.
  * @param league - League slug belonging to the selected sport.
  * @param eventId - Numeric ESPN event identifier.
  * @param fetcher - Injectable HTTP transport for source verification.
