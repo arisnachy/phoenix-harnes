@@ -68,6 +68,27 @@ describe('NVIDIA dynamic catalog', () => {
     expect(pinned.nvidia.models).toEqual([{ id: 'minimaxai/minimax-m3', name: 'Legacy M3' }])
   })
 
+  it('omits modelOverrides instead of assigning undefined with exactOptionalPropertyTypes enabled', async () => {
+    const catalog = new NvidiaLiveCatalog({
+      fetchImpl: vi.fn<typeof fetch>().mockResolvedValue(listing('minimaxai/minimax-m3.1-flash')),
+    })
+    await catalog.refresh()
+    const input = {
+      nvidia: {
+        api: 'openai-completions' as const,
+        modelOverrides: {
+          'minimaxai/minimax-m3.1-flash': { name: 'Custom MiniMax label' },
+        },
+      },
+    }
+    const resolved = catalog.overlayProviders(input)
+    expect(Object.hasOwn(resolved.nvidia, 'modelOverrides')).toBe(false)
+    expect(resolved.nvidia?.models?.find(model => model.id === 'minimaxai/minimax-m3.1-flash')?.name)
+      .toBe('Custom MiniMax label')
+    expect(input.nvidia.modelOverrides['minimaxai/minimax-m3.1-flash'].name)
+      .toBe('Custom MiniMax label')
+  })
+
   it('quarantines a 410 and prefers the same publisher without repeatedly calling retired models', async () => {
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
       listing('minimaxai/minimax-m3', 'minimaxai/minimax-m3.1-flash', 'nvidia/nemotron-3-super-120b-a12b'),
