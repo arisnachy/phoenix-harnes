@@ -1,0 +1,79 @@
+name: PHOENIX CI repair assistant
+
+# Run only from the default main branch. This proposes a reviewed PR; it never
+# pushes directly to main/stable, merges a PR, or weakens any required gate.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: phoenix-ci-repair-assistant
+  cancel-in-progress: false
+
+jobs:
+  prepare-repair:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      DSH_TELEMETRY_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+      - name: Install immutable dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build host contracts for tooling
+        run: pnpm run build:lib:host
+      - name: Refresh generated docs and registries
+        run: |
+          pnpm run prepare:change
+          pnpm run gen-tool-catalog
+          pnpm run gen-cordis-api
+      - name: Apply official lint autofixes
+        run: pnpm run lint:fix:contracts-ready
+      - name: Validate generated patch
+        run: |
+          git diff --check
+          git status --short
+      - name: Preserve candidate patch for audit even if later PR creation is unavailable
+        if: always()
+        shell: bash
+        run: |
+          git diff --binary > ci-repair.patch
+          git status --short > ci-repair-files.txt
+      - name: Upload patch receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phoenix-ci-repair-${{ github.run_id }}
+          path: |
+            ci-repair.patch
+            ci-repair-files.txt
+          retention-days: 14
+      - name: Propose generated changes as a reviewable PR
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: automation/phoenix-ci-generated-repair
+          commit-message: 'chore(ci): synchronize generated artifacts and safe lint fixes'
+          title: 'chore(ci): synchronize generated artifacts and safe lint fixes'
+          body: |
+            Automated proposal from the PHOENIX CI repair assistant.
+
+            Refreshes only existing generated catalogs, documentation graphs,
+            and autofixable lint findings using the repository's own commands.
+            The candidate patch is attached to the initiating workflow run.
+
+            **Not a merge approval:** this PR must pass every existing required
+            test, coverage and snapshot gate. No budgets or baselines were raised.
+            Review any changes to hand-written code before merging.
+          delete-branch: true
