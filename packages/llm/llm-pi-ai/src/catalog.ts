@@ -178,7 +178,31 @@ export function documentedVendorInput(provider: string, modelId: string): Model<
     : undefined
 }
 
+/** NVIDIA's old MiniMax-M3 trial endpoint is deprecated, but partner access may remain.
+ * Offer the documented M3.1 Flash free endpoint without rewriting any user's model choice.
+ * https://build.nvidia.com/minimaxai/minimax-m3.1-flash
+ */
+export const NVIDIA_MINIMAX_M31_FLASH_ID = 'minimaxai/minimax-m3.1-flash'
+
 function normalizeVendorCatalog(provider: string, models: Model<Api>[]): Model<Api>[] {
+  if (provider === 'nvidia') {
+    if (models.some(model => model.id === NVIDIA_MINIMAX_M31_FLASH_ID)) return models
+    // NVIDIA's official chat-completions API; do not clone another model's
+    // private headers, reasoning dialect, or context limits.
+    const flash: Model<Api> = {
+      id: NVIDIA_MINIMAX_M31_FLASH_ID,
+      name: 'MiniMax M3.1 Flash',
+      api: 'openai-completions',
+      provider: 'nvidia',
+      baseUrl: 'https://integrate.api.nvidia.com/v1',
+      reasoning: false,
+      input: ['text', 'image'],
+      cost: NO_COST,
+      contextWindow: 262_144,
+      maxTokens: 65_536,
+    }
+    return [flash, ...models]
+  }
   if (provider === 'openai-codex') {
     return models.map(model => ({
       ...model,
