@@ -197,8 +197,10 @@ describe('Codex image generation bridge', () => {
       await mkdir(dirname(pnpmNative), { recursive: true })
       await writeFile(pnpmNative, 'mock pnpm executable')
       expect(await resolveNativeCodexImageLauncher(pnpmShim, 'win32', 'x64')).toBe(pnpmNative)
-      expect(await resolveNativeCodexImageLauncher(join(root, 'unknown.cmd'), 'win32', 'x64'))
-        .toBe(join(root, 'unknown.cmd'))
+      const unknownShim = join(root, 'empty', 'unknown.cmd')
+      await mkdir(dirname(unknownShim), { recursive: true })
+      expect(await resolveNativeCodexImageLauncher(unknownShim, 'win32', 'x64'))
+        .toBe(unknownShim)
     } finally {
       await rm(root, { recursive: true, force: true })
     }
@@ -300,7 +302,7 @@ describe('Codex image generation bridge', () => {
       const body = init?.body
       if (!(body instanceof FormData)) throw new Error('Photo must be sent as multipart image data')
       const path = typeof url === 'string' ? url : url instanceof URL ? url.href : url.url
-      calls.push({ path, body, redirect: init?.redirect })
+      calls.push({ path, body, redirect: init?.redirect ?? 'follow' })
       // Model Node fetch following a malicious 307/308 from the local editor.
       // With redirect:error the multipart body must never reach that host.
       if (simulateRedirect) {
