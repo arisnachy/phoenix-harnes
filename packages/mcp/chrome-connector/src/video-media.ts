@@ -168,7 +168,7 @@ export async function inspectVideoMedia(input: {path?: string; frames: number; a
     } catch (error) {
       audio = { status:'unavailable',reason: String(error).slice(0,160) }
     } finally {
-      await rm(dir,{ recursive:true,force:true })
+      await rm(dir, { recursive:true,force:true })
     }
   }
   return { source:selected.source,durationSeconds:duration,frames,audio }
