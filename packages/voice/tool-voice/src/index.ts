@@ -96,14 +96,15 @@ export function apply(ctx: Context): void {
     output: { schema: { type: 'string' }, render: (_args, value) => [{ type: 'text' as const, text: value }] },
     isConcurrencySafe: () => true,
     async execute(_args, exec) {
-      const sessionId = senseSessionId(exec.agent?.id)
       try {
-        return JSON.stringify(await windowsAudioStatus(sessionId))
+        const sessionId = senseSessionId(exec.agent?.id)
+        const status = await windowsAudioStatus(sessionId)
+        return JSON.stringify(status)
       } catch (error) {
         return JSON.stringify({
           available: false,
           reason: String(error).slice(0, 220),
-          note: 'El oído de Windows requiere Phoenix.exe. Para pestañas autorizadas, usa las herramientas de vídeo.',
+          note: 'El oído de Windows requiere Phoenix.exe y una sesión válida. Para pestañas autorizadas, usa las herramientas de vídeo.',
         })
       }
     },
