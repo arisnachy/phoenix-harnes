@@ -408,6 +408,27 @@ export async function exploreEspn(
       eventId:input.eventId!,summary:overview,coreOdds:coreQuotes,
       predictor:coreProjection,now,
     })
+    // Fetch season statistics for the actual participants, never inferred
+    // from league averages or from an event with a similar team name.
+    const seasonInfo=row(header.season)
+    const seasonYear=Number(seasonInfo.year??row(row(overview).season).year)
+    const verifiedSeason=Number.isInteger(seasonYear)&&seasonYear>=1900&&seasonYear<=2100
+    const seasonTeams=[home,away].map(side=>({
+      name:teamName(side),teamId:id(row(side.team).id),
+    })).filter(side=>side.name&&side.teamId)
+    if(verifiedSeason&&seasonTeams.length){
+      const statReads=await Promise.allSettled(seasonTeams.map(side=>read(
+        core+'seasons/'+seasonYear+'/types/2/teams/'+side.teamId+'/statistics',
+        fetcher,1_800_000)))
+      const rows=statReads.flatMap((result,i)=>{
+        if(result.status!=='fulfilled')return []
+        const who=seasonTeams[i]
+        if(!who)return []
+        return metrics(result.value,4).map(x=>item(who.name+' · '+x.label,x.value,x.detail))
+      })
+      put(section('Estadísticas de temporada','metrics',rows,8))
+      sources.push(source('Estadísticas por equipo y temporada',rows.length?rows:null,rows.length))
+    }
     // Useful numbers come before date/venue in the collapsed chat card.
     for(const s of insights.sections)put(section(s.heading,s.kind,
       s.items.map(x=>item(x.label,x.value,x.detail))))
