@@ -6,13 +6,11 @@ import type {} from '@phoenix-ai/dsh-client-ui-settings/client'
 // Type-only: supplies the sidebar.footer.action SlotMap declaration.
 import type {} from '@phoenix-ai/dsh-client-ui-sidebar/client'
 import { PluginInventorySettingsTab, type PluginInventorySettingsTabInjected } from './PluginInventorySettingsTab.tsx'
-import { OpenClawRuntimeSettingsTab, type OpenClawRuntimeInjected } from './OpenClawRuntimeSettingsTab.tsx'
 import { BusinessLibrarySettingsTab, type BusinessLibraryInjected } from './BusinessLibrarySettingsTab.tsx'
 import { UpdateFooterAction, type UpdateFooterActionInjected } from './UpdateFooterAction.tsx'
 import { en, es, zh, type PluginInventoryLocaleKey } from './locales.ts'
 
 export type { PluginInventorySettingsTabInjected, PluginInventorySettingsTabProps } from './PluginInventorySettingsTab.tsx'
-export type { OpenClawRuntimeInjected, OpenClawRuntimeSettingsTabProps } from './OpenClawRuntimeSettingsTab.tsx'
 export type { BusinessLibraryInjected, BusinessLibrarySettingsTabProps } from './BusinessLibrarySettingsTab.tsx'
 export type { UpdateFooterActionInjected, UpdateFooterActionProps } from './UpdateFooterAction.tsx'
 export type { PluginInventoryLocaleKey } from './locales.ts'
@@ -43,13 +41,6 @@ export function apply(ctx: ClientContext): void {
     return result.value
   }
   const inventoryInjected = (): PluginInventorySettingsTabInjected => ({ list })
-
-  const readOpenClawRuntime: OpenClawRuntimeInjected['readOpenClawRuntime'] = async () => {
-    const result = await ctx.remote.pluginInventory.openClawRuntimeState()
-    if (!result.ok) throw new Error('openClawRuntimeState failed')
-    return result.value
-  }
-  const openClawInjected = (): OpenClawRuntimeInjected => ({ readOpenClawRuntime })
 
   const readBusinessLibrary: BusinessLibraryInjected['readBusinessLibrary'] = async () => {
     const result = await ctx.remote.pluginInventory.businessLibrary()
@@ -91,15 +82,6 @@ export function apply(ctx: ClientContext): void {
     locale: NS,
     inject: inventoryInjected,
   }, PluginInventorySettingsTab))
-
-  ctx.slots.inject('settings.plugins.tab', () => ctx.slots.register({
-    name: 'settings.plugins.tab',
-    id: 'openclaw',
-    order: 15,
-    label: () => t('ocTab'),
-    locale: NS,
-    inject: openClawInjected,
-  }, OpenClawRuntimeSettingsTab))
 
   ctx.slots.inject('settings.plugins.tab', () => ctx.slots.register({
     name: 'settings.plugins.tab',
