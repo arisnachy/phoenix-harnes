@@ -1,5 +1,6 @@
 /** Private, browser-local user portrait storage. Never sent to model prompts. */
 export type AvatarMode = 'original' | 'styled'
+/** The user's locally persisted original and styled portraits and sharing consent. */
 export interface AvatarSnapshot {
   original?: Blob
   styled?: Blob
@@ -40,7 +41,9 @@ function finish(tx: IDBTransaction): Promise<void> {
     tx.onabort = () => { reject(tx.error ?? new Error('Portrait update aborted')) }
   })
 }
-/** Read persisted portrait variants without retaining a database connection. */
+/** Read persisted portrait variants without retaining a database connection.
+ * @returns The portrait variants, active mode and explicit sharing consent.
+ */
 export async function readAvatar(): Promise<AvatarSnapshot> {
   const database = await db()
   try {
@@ -92,25 +95,40 @@ async function write(values: {
     announce()
   } finally { database.close() }
 }
-/** This keeps the original normalized but separate from any edited variant. */
+/** This keeps the original normalized but separate from any edited variant.
+ * @param image - The validated original portrait blob.
+ */
 export async function storeOriginalAvatar(image: Blob): Promise<void> { await write({ original: image }) }
-/** Preserve a successful AI output as a new variant, never overwrite the source photo. */
+/** Preserve a successful AI output as a new variant, never overwrite the source photo.
+ * @param image - The edited, face-cropped avatar.
+ * @param full - Optional full cinematic composition.
+ */
 export async function storeStyledAvatar(image: Blob, full?: Blob): Promise<void> {
   await write({ styled: image, ...(full === undefined ? {} : { styledFull: full }) })
 }
+/** Activate an available local portrait variant.
+ * @param mode - The desired portrait variant.
+ */
 export async function activateAvatar(mode: AvatarMode): Promise<void> {
   const snapshot = await readAvatar()
   if (mode === 'styled' && snapshot.styled === undefined) throw new Error('No edited portrait was saved')
   if (snapshot.original === undefined) throw new Error('No portrait was saved')
   await write({ mode })
 }
-/** The permission is stored alongside the private photo and cleared with it. */
+/** The permission is stored alongside the private photo and cleared with it.
+ * @param enabled - Whether the original may be attached to self-image requests.
+ */
 export async function setAvatarReferenceEnabled(enabled: boolean): Promise<void> {
   const snapshot = await readAvatar()
   if (enabled && snapshot.original === undefined) throw new Error('Guarda una fotografía antes de activar la referencia.')
   await write({ referenceEnabled: enabled })
 }
+/** Delete every locally stored portrait variant and its sharing permission. */
 export async function deleteAvatar(): Promise<void> { await write({ clear: true }) }
+/** Observe local portrait changes and browser focus.
+ * @param listener - Callback invoked on a portrait update or focus event.
+ * @returns A callback that removes both event listeners.
+ */
 export function subscribeAvatar(listener: () => void): () => void {
   if (typeof window === 'undefined') return () => {}
   window.addEventListener(EVENT, listener)
@@ -126,7 +144,13 @@ function hasRasterSignature(b: Uint8Array): boolean {
     || (b[0] === 82 && b[1] === 73 && b[2] === 70 && b[3] === 70
       && b[8] === 87 && b[9] === 69 && b[10] === 66 && b[11] === 80)
 }
-/** Reject non-raster uploads, then decode, strip metadata and make a square 768px portrait. */
+/** Reject non-raster uploads, then decode, strip metadata and make a square 768px portrait.
+ * @param image - Uploaded raster image.
+ * @param zoom - Crop zoom factor.
+ * @param offsetX - Horizontal crop offset.
+ * @param offsetY - Vertical crop offset.
+ * @returns The normalized WebP portrait.
+ */
 export async function normalizeAvatar(image: Blob, zoom = 1, offsetX = 0, offsetY = 0): Promise<Blob> {
   if (image.size === 0 || image.size > MAX_UPLOAD) throw new Error('Select an image under 8 MB')
   if (!['image/png', 'image/jpeg', 'image/webp'].includes(image.type)) {
@@ -155,7 +179,13 @@ export async function normalizeAvatar(image: Blob, zoom = 1, offsetX = 0, offset
     return output
   } finally { bitmap.close() }
 }
-/** Compute a safe square crop with the eyes/face filling the small circular avatar. */
+/** Compute a safe square crop with the eyes/face filling the small circular avatar.
+ * @param width - Source image width.
+ * @param height - Source image height.
+ * @param face - Optional detected face bounding box.
+ * @param zoom - Requested crop zoom.
+ * @returns Square crop coordinates and side length.
+ */
 export function faceAvatarCrop(
   width: number, height: number,
   face?: { x: number; y: number; width: number; height: number },
@@ -178,6 +208,9 @@ export function faceAvatarCrop(
 
 /** Produce the compact chat avatar from a genuine face crop, never from the full scene.
  * Native face detection is optional; unsupported browsers use an upper-center portrait crop.
+ * @param image - Original or generated raster portrait.
+ * @param zoom - Optional face crop zoom.
+ * @returns The compact WebP avatar.
  */
 export async function createFaceAvatar(image: Blob, zoom = 1): Promise<Blob> {
   if (image.size === 0 || image.size > MAX_RASTER) throw new Error('La imagen supera el límite de 15 MB.')
@@ -220,6 +253,10 @@ export async function createFaceAvatar(image: Blob, zoom = 1): Promise<Blob> {
   } finally { bitmap.close() }
 }
 
+/** Validate a local-only image editor URL without allowing remote uploads.
+ * @param value - User-supplied local editor URL.
+ * @returns The normalized local editor API base URL.
+ */
 export function validatedLocalEditor(value: string): string {
   const url = new URL(value.trim())
   if (url.username || url.password || url.search || url.hash
@@ -233,7 +270,9 @@ export function validatedLocalEditor(value: string): string {
   }
   return url.origin + '/v1'
 }
-/** Check that a configured local editor responds before sending any photo. */
+/** Check that a configured local editor responds before sending any photo.
+ * @param endpoint - Local editor API URL.
+ */
 export async function probeLocalAvatarEditor(endpoint: string): Promise<void> {
   const base = validatedLocalEditor(endpoint)
   try {
@@ -248,6 +287,10 @@ export async function probeLocalAvatarEditor(endpoint: string): Promise<void> {
 }
 /** Actual image-to-image operation, never text-to-image substitution.
  * Requires an explicitly configured local OpenAI-compatible /images/edits service.
+ * @param original - Original portrait supplied with explicit consent.
+ * @param endpoint - Local-only editor API URL.
+ * @param model - Local image-editing model identifier.
+ * @returns The validated and normalized edited image.
  */
 export async function editAvatarLocally(original: Blob, endpoint: string, model = 'local-image-edit'): Promise<Blob> {
   if (!/^[a-zA-Z0-9._/-]{1,120}$/u.test(model)) throw new Error('Invalid local image editing model name')
