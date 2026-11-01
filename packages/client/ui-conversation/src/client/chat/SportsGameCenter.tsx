@@ -40,8 +40,8 @@ const empty:Snapshot={ url:'',plays:[],at:0,error:false,loading:false }
  * @returns A compact opt-in game timeline or null for unsupported identifiers.
  */
 export function SportsGameCenter({ sport,league,eventId,phase,game }:{
-  sport?:string|undefined,league?:string|undefined,eventId?:string|undefined
-  phase?:'pre'|'in'|'post'|undefined,game?:PhoenixLiveGame|undefined
+  sport?:string|undefined;league?:string|undefined;eventId?:string|undefined
+  phase?:'pre'|'in'|'post'|undefined;game?:PhoenixLiveGame|undefined
 }):ReactNode{
   const [open,setOpen]=useState(false),[state,setState]=useState<Snapshot>(empty)
   // MLB Stats gamePk and ESPN eventId differ: only use a confirmed ESPN ID for MLB.
@@ -52,7 +52,7 @@ export function SportsGameCenter({ sport,league,eventId,phase,game }:{
     let active=true,busy=false,controller:AbortController|undefined
     const update=async()=>{
       if(!active||busy||typeof document!=='undefined'&&document.visibilityState==='hidden')return
-      if(typeof navigator!=='undefined'&&!navigator.onLine)return
+      if(!navigator.onLine)return
       busy=true
       controller=new AbortController()
       const current=controller
@@ -64,7 +64,7 @@ export function SportsGameCenter({ sport,league,eventId,phase,game }:{
         if(!res.ok)throw Error('ESPN '+String(res.status))
         if(Number(res.headers.get('content-length')??0)>3_000_000)throw Error('ESPN payload too large')
         const value=await res.json() as unknown
-        if(!current.signal.aborted)setState({ url,plays:parseEspnGamePlays(value),at:Date.now(),error:false,loading:false })
+        if(active&&!current.signal.aborted)setState({ url,plays:parseEspnGamePlays(value),at:Date.now(),error:false,loading:false })
       }catch{
         if(active&&(timedOut||!current.signal.aborted))
           setState(s=>({ ...s,url,error:true,loading:false }))
