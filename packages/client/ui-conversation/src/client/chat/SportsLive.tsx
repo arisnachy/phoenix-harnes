@@ -240,8 +240,8 @@ export function SportsLiveFacts({ game,meta,sport,compact=false }:{
 }
 export function SportsLiveStamp({ meta }:{ meta:PhoenixLiveMeta }):ReactNode{
   if(!meta.enabled)return null
-  if(!meta.updatedAt)return <small className={css.liveStamp}>ESPN · {meta.error?'sin datos en vivo disponibles':'consultando marcadores…'}</small>
-  return <small className={css.liveStamp}>ESPN · {meta.error||meta.stale?'sin conexión reciente · ':''}
+  if(!meta.updatedAt)return <small className={css.liveStamp}>Marcador · {meta.error?'sin datos en vivo disponibles':'consultando…'}</small>
+  return <small className={css.liveStamp}>Actualizado · {meta.error||meta.stale?'sin conexión reciente · ':''}
     {new Date(meta.updatedAt).toLocaleTimeString('es-DO',{ hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false })}
   </small>
 }
