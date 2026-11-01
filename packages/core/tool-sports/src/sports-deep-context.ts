@@ -11,6 +11,7 @@ const digits=(v:unknown)=>/^\d{1,20}$/u.test(String(v??''))?String(v):''
 const safe=/^[a-z0-9][a-z0-9._-]{0,79}$/u
 const nameKey=(x:string)=>x.normalize('NFD').replace(/[\u0300-\u036f]/gu,'').toLowerCase().replace(/[^a-z0-9]/gu,'')
 const get=(v:unknown,key:string)=>obj(v)[key]
+/** Bounded, attributed roster, news, injury and box-score evidence for one event. */
 export type DeepSportsContext={
   eventId:string;sport:string;league:string;scannedAt:string
   sources:Array<{name:string;status:'verified'|'unavailable';records:number}>

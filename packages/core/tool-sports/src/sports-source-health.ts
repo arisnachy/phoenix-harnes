@@ -48,6 +48,7 @@ export function hydrateSportsSources(env:NodeJS.ProcessEnv=process.env):NodeJS.P
   return next
 }
 
+/** Persisted state of the managed sports-source installation; never contains credentials. */
 export type ManagedSportsInstall = {
   configured:boolean
   updatedAt:string|null
@@ -89,6 +90,7 @@ export function managedSportsInstallStatus(env:NodeJS.ProcessEnv=process.env):Ma
         x.name==='OddsHarvester + Playwright'&&x.status==='installed')}
   }catch{return blank}
 }
+/** Outcome of a managed sports-source repair launch, including non-started states. */
 export type SportsRepairLaunch = {
   status:'started'|'running'|'installed'|'retry-cooldown'|'disabled'
     |'missing-installer'|'launch-error'|'error'
@@ -155,6 +157,7 @@ export async function ensureSportsSourcesStarted(
   }
 }
 const run = promisify(execFile)
+/** Per-provider readiness report; readiness does not imply a live bookmaker quote. */
 export type SportsSourceHealth = {
   provider:string
   purpose:'live-odds'|'historical-odds'|'event-data'

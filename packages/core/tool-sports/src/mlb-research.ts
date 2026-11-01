@@ -13,6 +13,7 @@ type Standings = {
   records?: Array<{ teamRecords?: Standing[] }>
 }
 
+/** Evidence-backed season trend with a named favorite or explicit inconclusive result. */
 export type ResearchTrend = {
   favorite: string
   method: string

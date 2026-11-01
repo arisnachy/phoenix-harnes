@@ -34,6 +34,7 @@ type Game={id:string;date:string;state:string;venueId:string;venueName:string;
   latitude:number|null;longitude:number|null;roof:string;home:Side;away:Side}
 type RecordGame={id:string;date:string;opponent:string;scored:number;allowed:number;
   homeAway:string;venueId:string;inningsFor:number[]|null;inningsAgainst:number[]|null}
+/** Validated event identifiers and optional research scope for a cross-sport matchup. */
 export type UniversalMatchupInput={
   sport:string;league:string;eventId:string;date:string;lookbackDays?:number;includeOdds?:boolean
 }
