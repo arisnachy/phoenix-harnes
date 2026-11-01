@@ -218,7 +218,7 @@ export function SportsLiveFacts({ game,meta,sport,compact=false }:{
   const baseball=sport==='baseball'
   return <div className={css.liveFacts} aria-label="Situación del partido en vivo">
     <div className={css.liveHeading}><span className={css.liveDot} aria-hidden="true"/> EN VIVO · {game.status}
-      <small>{meta.error||meta.stale?'Último dato recibido':'ESPN · actualización automática'}</small></div>
+      <small>{meta.error||meta.stale?'Último dato recibido':'Actualización automática'}</small></div>
     {baseball&&<div className={css.liveBaseball}>
       {game.bases?<div className={css.liveDiamond} aria-label="Corredores en las bases">
         <i className={game.bases[1]?css.occupied:''} title="Segunda base"/>
@@ -240,8 +240,8 @@ export function SportsLiveFacts({ game,meta,sport,compact=false }:{
 }
 export function SportsLiveStamp({ meta }:{ meta:PhoenixLiveMeta }):ReactNode{
   if(!meta.enabled)return null
-  if(!meta.updatedAt)return <small className={css.liveStamp}>ESPN · {meta.error?'sin datos en vivo disponibles':'consultando marcadores…'}</small>
-  return <small className={css.liveStamp}>ESPN · {meta.error||meta.stale?'sin conexión reciente · ':''}
+  if(!meta.updatedAt)return <small className={css.liveStamp}>Marcador · {meta.error?'sin datos en vivo disponibles':'consultando…'}</small>
+  return <small className={css.liveStamp}>Actualizado · {meta.error||meta.stale?'sin conexión reciente · ':''}
     {new Date(meta.updatedAt).toLocaleTimeString('es-DO',{ hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false })}
   </small>
 }

@@ -48,9 +48,9 @@ describe('compact ESPN game center',()=>{
       render(<SportsGameCenter sport="basketball" league="nba" eventId="40183001" phase="post"/>)
       fireEvent.click(screen.getByRole('button',{ name:/Seguir partido/ }))
       await act(async()=>{await vi.advanceTimersByTimeAsync(9000)})
-      expect(screen.getByText(/ESPN no respondió/)).toBeTruthy()
+      expect(screen.getByText(/El servicio de resultados no respondió/)).toBeTruthy()
       expect(screen.queryByText(/Consultando cronología/)).toBeNull()
-      expect(screen.queryByText(/ESPN no publicó jugadas/)).toBeNull()
+      expect(screen.queryByText(/No hay jugadas detalladas/)).toBeNull()
     }finally{vi.useRealTimers()}
   })
   it('ignores a delayed timeout rejection from a closed ESPN request',async()=>{
@@ -72,7 +72,7 @@ describe('compact ESPN game center',()=>{
       expect(screen.getByText('Latest confirmed play')).toBeTruthy()
       await act(async()=>{await vi.advanceTimersByTimeAsync(9000)})
       await act(async()=>{rejectFirst?.(new Error('Late abort'));await Promise.resolve()})
-      expect(screen.queryByText(/ESPN no respondió/)).toBeNull()
+      expect(screen.queryByText(/El servicio de resultados no respondió/)).toBeNull()
       expect(screen.getByText('Latest confirmed play')).toBeTruthy()
     }finally{vi.useRealTimers()}
   })
