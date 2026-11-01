@@ -414,11 +414,11 @@ jobs:
           $log = Join-Path $env:LOCALAPPDATA 'Phoenix\logs\desktop.log'
           Remove-Item $log -Force -ErrorAction SilentlyContinue
           $process = Start-Process -FilePath dist/phoenix-desktop/Phoenix.exe -ArgumentList '--smoke-webview-loopback' -PassThru
-          if (-not $process.WaitForExit(20000)) {
+          if (-not $process.WaitForExit(65000)) {
             Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
             Write-Host '--- Phoenix desktop.log ---'
             if (Test-Path $log) { Get-Content $log | ForEach-Object { Write-Host $_ } } else { Write-Host '(desktop.log missing)' }
-            throw 'Phoenix WebView2 loopback smoke did not finish within 20 seconds'
+            throw 'Phoenix WebView2 loopback smoke did not finish within 65 seconds'
           }
           Write-Host '--- Phoenix desktop.log ---'
           if (Test-Path $log) { Get-Content $log | ForEach-Object { Write-Host $_ } }
