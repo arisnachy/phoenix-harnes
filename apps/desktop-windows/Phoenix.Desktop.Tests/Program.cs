@@ -31,6 +31,11 @@ Equal("http://localhost:3080/", BrowserNavigation.NormalizeAddress("localhost:30
 Equal("http://127.0.0.1:3080/", BrowserNavigation.NormalizeAddress("127.0.0.1:3080")?.ToString(), "loopback uses http", failures);
 Equal("https://www.bing.com/search?q=phoenix+embedded+browser", BrowserNavigation.NormalizeAddress("phoenix embedded browser")?.ToString(), "free text becomes search", failures);
 Equal("about:blank", BrowserNavigation.NormalizeAddress("about:blank")?.ToString(), "about blank allowed", failures);
+True(BrowserNavigation.IsInspectablePage(new Uri("https://example.com"), true), "loaded HTTPS page is inspectable", failures);
+True(BrowserNavigation.IsInspectablePage(new Uri("http://localhost:3080"), true), "loaded local page is inspectable", failures);
+False(BrowserNavigation.IsInspectablePage(new Uri("about:blank"), true), "blank page is not evidence", failures);
+False(BrowserNavigation.IsInspectablePage(new Uri("https://example.com"), false), "failed navigation is not evidence", failures);
+False(BrowserNavigation.IsInspectablePage(new Uri("file:///C:/private.txt"), true), "local file cannot be inspected as web page", failures);
 Equal(null, BrowserNavigation.NormalizeAddress("javascript:alert(1)")?.ToString(), "javascript scheme rejected", failures);
 Equal(null, BrowserNavigation.NormalizeAddress("data:text/html,boom")?.ToString(), "data scheme rejected", failures);
 Equal(null, BrowserNavigation.NormalizeAddress("file:///C:/Windows/System32")?.ToString(), "file scheme rejected", failures);
