@@ -110,6 +110,10 @@ export interface PiAiAdapterOptions {
    * exact-model miss. The plugin owns caching/fallback; the adapter only asks.
    */
   refreshModels?: (provider: string, force?: boolean) => Promise<readonly string[] | undefined>
+  /** Account-visible replacement for a model removed from a live catalog. */
+  preferredModel?: (provider: string, model: string, needsImage: boolean) => string | undefined
+  /** Quarantine HTTP 410, refresh, and choose at most one replacement per turn. */
+  onModelUnavailable?: (provider: string, model: string, needsImage: boolean) => Promise<string | undefined>
   /**
    * Authoritative per-model reasoning metadata supplied by a live provider
    * catalog. Codex uses this to preserve effort names added after pi-ai's
@@ -359,8 +363,10 @@ export class PiAiAdapter extends LlmAdapter {
     model: string,
     _signal?: AbortSignal,
   ): Promise<LlmResolvedModelInfo> {
-    const snapshot = await this.snapshotForModel(provider, model)
-    return this.modelInfo(snapshot, provider, model)
+    if (provider === 'nvidia') await this.config.refreshModels?.(provider)
+    const selected = this.config.preferredModel?.(provider, model, false) ?? model
+    const snapshot = await this.snapshotForModel(provider, selected)
+    return this.modelInfo(snapshot, provider, selected)
   }
 
   private modelInfo(
@@ -394,11 +400,13 @@ export class PiAiAdapter extends LlmAdapter {
   }
 
   override async prepareCall(provider: string, model: string, _signal?: AbortSignal): Promise<PreparedAdapterCall> {
-    const snapshot = await this.snapshotForModel(provider, model)
-    const liveReasoning = this.config.reasoningForModel?.(provider, model)
+    if (provider === 'nvidia') await this.config.refreshModels?.(provider)
+    const selected = this.config.preferredModel?.(provider, model, false) ?? model
+    const snapshot = await this.snapshotForModel(provider, selected)
+    const liveReasoning = this.config.reasoningForModel?.(provider, selected)
     return {
-      model: this.modelInfo(snapshot, provider, model, liveReasoning),
-      stream: options => this.streamWithSnapshot(options, snapshot, liveReasoning),
+      model: this.modelInfo(snapshot, provider, selected, liveReasoning),
+      stream: options => this.streamWithSnapshot({ ...options, model: selected }, snapshot, liveReasoning),
     }
   }
 
@@ -412,9 +420,26 @@ export class PiAiAdapter extends LlmAdapter {
     snapshot: PiAiSnapshot,
     liveReasoning: LlmModelReasoningInfo | undefined,
     recoveredSchema = false,
+    recoveredModel = false,
   ): AsyncIterable<StreamChunk> {
     if (options.stop !== undefined) {
       throw new LlmError('llm-pi-ai does not support GenerateOptions.stop', 'UNSUPPORTED_OPTION')
+    }
+    // A live NVIDIA catalog may retire a model between two turns. Redirect
+    // before any provider I/O, never after producing content or tool calls.
+    if (!recoveredModel) {
+      const needsImage = options.messages.some(message => contentHasImage(message.content))
+      const selected = this.config.preferredModel?.(options.provider, options.model, needsImage)
+      if (selected !== undefined && selected !== options.model) {
+        yield* this.streamWithSnapshot(
+          { ...options, model: selected },
+          this.current(),
+          this.config.reasoningForModel?.(options.provider, selected),
+          recoveredSchema,
+          true,
+        )
+        return
+      }
     }
     // One capture per stream call, taken before any await: the profile, the
     // model descriptor, and the collection all come from the same immutable
@@ -570,6 +595,7 @@ export class PiAiAdapter extends LlmAdapter {
         isNonCodexRecoveryModel(options.provider, options.model),
       )[Symbol.asyncIterator]()
       let exhausted = false
+      let pendingUsage: StreamChunk | undefined
       try {
         while (true) {
           const result = await watchdog.next(iterator)
@@ -577,7 +603,39 @@ export class PiAiAdapter extends LlmAdapter {
           if (timeout !== undefined) throw timeout
           if (result.done) {
             exhausted = true
+            if (pendingUsage !== undefined) yield pendingUsage
             return
+          }
+          // pi-ai sends usage immediately before terminal finish. Hold only
+          // this metadata while inspecting a 410 so a recovered turn cannot
+          // emit duplicate token usage or a stale error finish.
+          if (result.value.type === 'usage') {
+            pendingUsage = result.value
+            continue
+          }
+          if (!emittedChunk && !recoveredModel
+            && result.value.type === 'finish'
+            && result.value.reason.kind === 'error'
+            && result.value.reason.failure.code === 'MODEL_UNAVAILABLE') {
+            const needsImage = options.messages.some(message => contentHasImage(message.content))
+            const replacement = await this.config.onModelUnavailable?.(
+              options.provider, options.model, needsImage,
+            )
+            if (replacement !== undefined && replacement !== options.model) {
+              yield* this.streamWithSnapshot(
+                { ...options, model: replacement },
+                this.current(),
+                this.config.reasoningForModel?.(options.provider, replacement),
+                recoveredSchema,
+                true,
+              )
+              return
+            }
+          }
+          if (pendingUsage !== undefined) {
+            emittedChunk = true
+            yield pendingUsage
+            pendingUsage = undefined
           }
           emittedChunk = true
           yield result.value
