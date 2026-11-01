@@ -167,10 +167,10 @@ export function mapStopReason(
       const nvidiaGone = code === 'MODEL_UNAVAILABLE' && /^nvidia(?:-nim)?$/i.test(message.provider)
       const retiredTrial = nvidiaGone && message.model === 'minimaxai/minimax-m3'
       const detail = retiredTrial
-        ? 'NVIDIA discontinued the free endpoint for MiniMax M3. '
-          + 'Select minimaxai/minimax-m3.1-flash (Free Endpoint: Available) in Models. '
-          + 'The original M3 may still be available through a partner endpoint. '
-          + `Original error: ${text}`
+        ? 'NVIDIA dejó de ofrecer el endpoint gratuito de MiniMax-M3 (HTTP 410). '
+          + 'Selecciona minimaxai/minimax-m3.1-flash en Modelos; NVIDIA indica que su endpoint gratuito está disponible. '
+          + 'El M3 original puede seguir accesible mediante proveedores asociados. '
+          + `Error original: ${text}`
         : nvidiaGone
           ? `NVIDIA NIM returned HTTP 410 for model "${message.model}".`
             + ' The model may be retired or this account may lack Public API Endpoints access.'
