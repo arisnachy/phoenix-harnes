@@ -621,8 +621,8 @@ const ticketSportEmblem=(groupHeading:string):string=>{
   if(sport.includes('tenis')||sport.includes('tennis'))return '🎾'
   return '🏆'
 }
-const SportsPortrait = ({ label,logo,variant }:{ label:string;logo?:string|undefined;variant?:'player' }) => (
-  <span className={variant==='player'?`${css.sportsPortrait} ${css.sportsPortraitPlayer}`:css.sportsPortrait}>
+const SportsPortrait = ({ label,logo }:{ label:string;logo?:string|undefined }) => (
+  <span className={css.sportsPortrait}>
     <span>{label.slice(0,2).toUpperCase()}</span>
     {logo && <img src={logo} alt={label} loading="lazy" referrerPolicy="no-referrer"
       onError={(event)=>{event.currentTarget.style.display='none'}}/>}
@@ -643,7 +643,7 @@ const SportsLineups = ({ lineups }:{ lineups:SportsLineup[] }) => {
       <thead><tr><th scope="col">Bateador</th><th scope="col">Pos.</th><th scope="col">Temporada</th></tr></thead>
       <tbody>{lineup.players.map((p,i)=><tr key={p.id??i}>
         <th scope="row"><span className={css.sportsPlayerName}>
-          {p.image&&<SportsPortrait label={p.name} logo={p.image} variant="player"/>}
+          {p.image&&<SportsPortrait label={p.name} logo={p.image}/>}
           {i+1}. {p.name}</span></th><td>{p.role??'—'}</td>
         <td>{p.stats??'Pendiente'}</td>
       </tr>)}</tbody></table></div>:<p className={css.sportsNote}>MLB todavía no publicó la alineación oficial.</p>}
@@ -655,7 +655,7 @@ const SportsBullpen = ({ bullpen }:{ bullpen:SportsBullpen[] }) => (
     <div className={css.sportsBulpenGrid}>{bullpen.map((b,i)=><div key={i} className={css.sportsBullpenTeam}>
       <strong>{b.team}</strong>{b.pitchers.length?b.pitchers.map((p,j)=>
         <div className={css.sportsPitcherRow} key={p.id??j}>
-          <SportsPortrait label={p.name} logo={p.image} variant="player"/>
+          <SportsPortrait label={p.name} logo={p.image}/>
           <span><b>{p.name}</b><small>{p.stats??'Estadísticas no disponibles'}</small></span>
         </div>):<p className={css.sportsNote}>Sin datos de bullpen verificables.</p>}
       <p className={css.sportsNote}>{b.note}</p>
@@ -708,7 +708,7 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
         <header className={css.sportsHeadline}>
           <div><span className={css.sportsKicker}>PHOENIX · {p.view==='event'?'PARTIDO':'INTELIGENCIA DEPORTIVA'}</span>
             <h3>{sportsDisplayText(p.title)}</h3><p>{sportsDisplayText(p.subtitle)}</p></div>
-          {p.image&&<SportsPortrait label={sportsDisplayText(p.title)} logo={p.image} {...(p.view==='player'?{variant:'player' as const}:{})}/>}
+          {p.image&&<SportsPortrait label={sportsDisplayText(p.title)} logo={p.image}/>}
         </header>
         <div className={css.sportsEspnPreview}>
           {preview.map((item,i)=><div key={i} className={css.sportsEspnPreviewRow}>
@@ -839,7 +839,7 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
                 <h4>Abridores probables</h4>
                 <div className={css.sportsStarters}>{p.pitchers.map((pitcher,i)=>
                   <div key={pitcher.id??i} className={css.sportsStarter}>
-                    <SportsPortrait label={pitcher.name} logo={pitcher.image} variant="player"/>
+                    <SportsPortrait label={pitcher.name} logo={pitcher.image}/>
                     <div><span>{pitcher.team}</span><strong>{pitcher.name}</strong>
                       <small>{pitcher.stats??'Estadísticas de temporada no disponibles'}</small></div>
                   </div>)}</div>
@@ -922,7 +922,7 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
                   {(leg.homeLogo||leg.awayLogo||leg.homeTeam||leg.awayTeam||leg.image)&&<span className={css.sportsTicketLogos}>
                     {(leg.awayTeam||leg.awayLogo)&&<SportsPortrait label={leg.awayTeam??'Visitante'} logo={leg.awayLogo}/>}
                     {(leg.homeTeam||leg.homeLogo)&&<SportsPortrait label={leg.homeTeam??'Local'} logo={leg.homeLogo}/>}
-                    {leg.image&&<SportsPortrait label={leg.player??leg.selection} logo={leg.image} variant="player"/>}
+                    {leg.image&&<SportsPortrait label={leg.player??leg.selection} logo={leg.image}/>}
                   </span>}
                   <strong>{leg.selection}</strong>
                 </div>
