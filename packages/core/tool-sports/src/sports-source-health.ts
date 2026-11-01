@@ -10,7 +10,9 @@ import { homedir } from 'node:os'
 import { isAbsolute, join, resolve, sep } from 'node:path'
 import { keylessEnabled } from './keyless-odds.ts'
 
-/** Rehydrate only locally verified, nonsecret paths from the managed install. */
+/** Rehydrate only locally verified, nonsecret paths from the managed install.  * @param env - Runtime environment; defaults to the current process environment.
+ * @returns A copy of the environment enriched only with verified local source paths.
+ */
 export function hydrateSportsSources(env:NodeJS.ProcessEnv=process.env):NodeJS.ProcessEnv {
   const next={...env}
   const root=resolve(env.PHOENIX_SPORTS_SOURCE_HOME?.trim()||join(homedir(),'.phoenix','sports-sources'))
@@ -55,6 +57,8 @@ export type ManagedSportsInstall = {
 /** Read install progress without executing a scraper, network requests or
  * exposing API credentials. The installer only marks Playwright installed
  * after verifying an actual Chromium executable.
+  * @param env - Runtime environment containing the managed installer location.
+ * @returns Installer progress derived from its persisted manifest, or a not-started status.
  */
 export function managedSportsInstallStatus(env:NodeJS.ProcessEnv=process.env):ManagedSportsInstall {
   const root=resolve(env.PHOENIX_SPORTS_SOURCE_HOME?.trim()||
@@ -92,6 +96,10 @@ export type SportsRepairLaunch = {
 }
 /** A prepared runtime can omit development scripts. Check the original
  * install checkout before searching the runtime and finally cwd.
+  * @param env - Runtime paths used to locate the installed launcher.
+ * @param candidates - Optional ordered list of checkout roots to inspect.
+ * @param fileExists - File existence probe, injectable for tests.
+ * @returns The first verified launcher root and script, or null when absent.
  */
 export function locateSportsAutoLauncher(
   env:NodeJS.ProcessEnv=process.env,
@@ -111,6 +119,9 @@ export function locateSportsAutoLauncher(
 /** A source-health request must not report "disabled" forever when the
  * supervisor did not install dependencies. Start the existing detached,
  * bounded installer; never download inside a model-facing tool call.
+  * @param env - Runtime environment and installation policy.
+ * @param force - Whether to request an installer retry despite cooldown.
+ * @returns The detached installer launch status without scraping during the request.
  */
 export async function ensureSportsSourcesStarted(
   env:NodeJS.ProcessEnv=process.env,
@@ -154,6 +165,10 @@ const exists = async(file:string):Promise<boolean>=>{
 /**
  * Pure configuration truth + bounded local binary probe, no site requests.
  * Ready-to-run does not imply OddsPortal access or an active price.
+  * @param env - Runtime environment and provider configuration.
+ * @param probe - Injectable bounded executable availability probe.
+ * @param fileExists - Injectable asynchronous file existence check.
+ * @returns Provider readiness diagnostics without asserting that live prices exist.
  */
 export async function sportsSourcesHealth(
   env:NodeJS.ProcessEnv=process.env,
