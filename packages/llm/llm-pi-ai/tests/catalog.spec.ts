@@ -547,6 +547,28 @@ describe('catalog routes with per-model configuration', () => {
     expect(server.requests).toHaveLength(0)
   })
 
+  it('exposes the current NVIDIA MiniMax Flash free endpoint without silently substituting old M3', () => {
+    const current = catalogModels('nvidia').get('minimaxai/minimax-m3.1-flash')
+    expect(current).toMatchObject({
+      id: 'minimaxai/minimax-m3.1-flash',
+      provider: 'nvidia',
+      api: 'openai-completions',
+      baseUrl: 'https://integrate.api.nvidia.com/v1',
+      contextWindow: 262_144,
+      maxTokens: 65_536,
+      input: ['text', 'image'],
+    })
+
+    const provider = resolveProfiles({ nvidia: {} }).get('nvidia')?.piProvider
+    expect(provider?.getModels().some(model => model.id === 'minimaxai/minimax-m3.1-flash')).toBe(true)
+
+    // An explicit list is the user's choice: never redirect old M3 to M3.1.
+    const selected = resolveProfiles({
+      nvidia: { models: [{ id: 'minimaxai/minimax-m3' }] },
+    }).get('nvidia')?.piProvider.getModels()
+    expect(selected?.map(model => model.id)).toEqual(['minimaxai/minimax-m3'])
+  })
+
   it('preserves catalog-only model metadata the profile cannot express', () => {
     // Some catalog models carry provider-required request headers; overriding a
     // capacity must not drop them, because configuration has no way to restate
