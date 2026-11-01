@@ -30,7 +30,8 @@ export function apply(ctx: Context): void {
     text: 'If the user explicitly asks you to speak, test audio, or say a phrase out loud, call phoenix_voice_speak with short natural text in the configured language. '
       + 'Use phoenix_voice_status for diagnostics. Host TTS needs no microphone or active Codex call; an existing authorized Codex Live call has priority. '
       + 'Never claim that the speaker was audible or that microphone audio was heard based solely on a successful synthesis receipt. '
-      + 'When asked to hear Windows audio or the microphone, use phoenix_audio_status and phoenix_audio_listen (source output or microphone), not phoenix_voice_speak. The Windows host must be open and the user approves every 3-12 second clip in a native dialog. Never activate a microphone implicitly or listen continuously. If unavailable, try already-authorized browser tab or video_media_inspect; never invent hearing. '
+      + 'When asked to hear Windows audio or the microphone, use phoenix_audio_status and phoenix_audio_listen (source output or microphone), not phoenix_voice_speak. The Windows host must be open and the user approves every 3-12 second clip in a native dialog. Never activate a microphone implicitly or listen continuously. '
+      + 'When asked to analyze YouTube or browser video, first attempt video_media_inspect and youtube_video_listen if registered, then inspect the embedded browser using its authenticated channel to verify the page and media state. If speech is unavailable but the user is playing the video in Windows, independently check phoenix_audio_status and offer phoenix_audio_listen with source output and visible consent. A short captured clip never proves knowledge of the whole video. Ask to share a tab only when the native or authorized alternatives really cannot obtain the needed evidence. Never invent frames, speech, or transcription. '
       + 'For an explicitly user-approved audio or video file in PHOENIX_AUDIO_ALLOWED_DIRS, call phoenix_audio_file_listen; never browse the disk to find audio or bypass a blocked directory. '
       + 'When asked what Kira can perceive or what viewer is open, call phoenix_senses_status; it distinguishes actual Windows viewer state, local audio hardware and voice providers. If the user asks to SEE the desktop use an actual computer screenshot, not the senses status alone; for shared browser tabs use existing MiniBrowser capture. '
       + 'Do not search the web for local speech, simulate tool invocations, or tell the user there is no speech tool before checking these tools.',
@@ -161,7 +162,7 @@ export function apply(ctx: Context): void {
       const realtime = await ctx.voice.conversationRealtimeStatus().catch(() => undefined)
       return JSON.stringify({
         vision: { desktop, note: 'La existencia de un visor no confirma fotogramas. Usar computer o desktop.live-frame para mirar de verdad.' },
-        hearing: { audio, browserTab: 'Requiere pestaña compartida con audio por el usuario; usar video_media_inspect / youtube_video_listen.' },
+        hearing: { audio, browserTab: { verified: false, note: 'Revisar video_media_inspect / youtube_video_listen si estan registrados. Si se reproduce en Windows, usar phoenix_audio_listen con source output y permiso visible; no requiere compartir pestaña. Audio capturado solo si existe recibo verificado.' } },
         speech: { enabled: voice.enabled, provider: voice.ttsProvider ?? null, speaking: voice.speaking,
           liveAvailable: realtime?.available ?? false, note: 'Proveedor aceptado no garantiza que el usuario escuche.' },
         physicalSensors: 'excluidos por decisión del usuario',
