@@ -127,7 +127,7 @@ export async function resolveVideoDecoder(): Promise<string> {
  * @param input - Approved source, frame limit and audio seconds to inspect.
  * @returns Real JPEG frames and a bounded local speech transcription.
  */
-export async function inspectVideoMedia(input: {path?: string; frames: number; audioSeconds: number}): Promise<VideoMediaEvidence> {
+export async function inspectVideoMedia(input: { path?: string; frames: number; audioSeconds: number }): Promise<VideoMediaEvidence> {
   const selected = await videoMediaInput(input.path)
   const decoder = await resolveVideoDecoder()
   const info = await execute(decoder, ['-hide_banner', '-i', selected.path], 15_000, 50000)
