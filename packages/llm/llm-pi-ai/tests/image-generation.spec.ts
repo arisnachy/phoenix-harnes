@@ -293,6 +293,7 @@ describe('Codex image generation bridge', () => {
       name: 'referencia-original-del-usuario.webp',
     }
     const calls: Array<{ path: string; body: FormData }> = []
+    const codexLaunches: Array<{ argv: readonly string[]; cwd: string }> = []
     vi.stubGlobal('fetch', vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
       const body = init?.body
       if (!(body instanceof FormData)) throw new Error('Photo must be sent as multipart image data')
@@ -313,8 +314,9 @@ describe('Codex image generation bridge', () => {
         },
         subprocess: {
           async resolveExecutable() { return 'codex' },
-          spawn({ argv }: { argv: readonly string[] }) {
+          spawn({ argv, cwd }: { argv: readonly string[]; cwd: string }) {
             const isDoctor = argv.includes('doctor')
+            if (!isDoctor) codexLaunches.push({ argv, cwd })
             return {
               done: Promise.resolve({ exitCode: isDoctor ? 0 : 1 }),
               collected: {
@@ -355,6 +357,11 @@ describe('Codex image generation bridge', () => {
       }
       const result = await tool.execute({ prompt: 'Retrátame como comandante, estilo Kira' }, execution)
       expect(result).toMatchObject({ provider: 'local', model: 'image-edit-test' })
+      expect(codexLaunches).toHaveLength(1)
+      const imageIndex = codexLaunches[0]?.argv.indexOf('--image') ?? -1
+      expect(imageIndex).toBeGreaterThan(0)
+      expect(codexLaunches[0]?.argv[imageIndex + 1]).toBe('profile-original.webp')
+      expect(codexLaunches[0]?.cwd).toContain('phoenix-user-photo-')
       expect(calls).toHaveLength(1)
       expect(calls[0]?.path).toBe('http://127.0.0.1:9898/v1/images/edits')
       expect(calls[0]?.body.get('model')).toBe('image-edit-test')

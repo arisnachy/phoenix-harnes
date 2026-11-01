@@ -882,6 +882,7 @@ async function runCodex(
   argvTail: readonly string[],
   stdin: string | undefined,
   signal: AbortSignal,
+  cwd = process.cwd(),
 ): Promise<ProcessResult> {
   const subprocess = servicesOf(ctx).subprocess
   const home = codexHome()
@@ -893,7 +894,7 @@ async function runCodex(
   const nativeOrShim = await resolveNativeCodexImageLauncher(executable)
   const handle = subprocess.spawn({
     argv: codexImageInvocation(nativeOrShim, argvTail),
-    cwd: process.cwd(),
+    cwd,
     stdio: {
       stdin: stdin === undefined ? 'ignore' : { data: stdin },
       stdout: { maxBytes: 512 * 1024 },
@@ -990,8 +991,8 @@ function generationPrompt(
     `Requested background guidance: ${background}.`,
     `Image request: ${highQualityPrompt(prompt)}`,
     ...(referencePath === undefined ? [] : [
-      `MANDATORY source photograph: ${referencePath}`,
-      'Read and visually inspect this exact input photograph, then supply it as the image reference to the built-in image_gen tool.',
+      `MANDATORY source photograph is ATTACHED VISUALLY via Codex --image: ${basename(referencePath)}`,
+      'Use the already attached photograph as input to the built-in image_gen tool, preserving facial identity.',
       'This is IMAGE-TO-IMAGE. Include the source pixels as input to image_gen, preserving actual likeness; never invent a different face.',
       'Transform the wardrobe, pose and entire setting. Do not apply a simple paint filter to the original headshot.',
       'If you cannot read the source or provide it to the image tool, STOP; never fabricate a matching face.',
@@ -1111,6 +1112,7 @@ async function generateWithCodexProvider(
       'image_generation',
       '-s',
       'read-only',
+      ...(referencePath === undefined ? [] : ['--image', basename(referencePath)]),
       '-',
     ], generationPrompt(
       prompt,
@@ -1118,7 +1120,7 @@ async function generateWithCodexProvider(
       args.quality ?? 'auto',
       args.background ?? 'auto',
       referencePath,
-    ), signal)
+    ), signal, referencePath === undefined ? process.cwd() : dirname(referencePath))
   } catch (error) {
     signal.throwIfAborted()
     throw new Error(`image_generation: Codex CLI/image worker is not available: ${error instanceof Error ? error.message : String(error)}`)
