@@ -37,6 +37,8 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Verify local pre-push checkpoint fails closed
         run: node --test scripts/phoenix-ci-prepush.test.mjs
+      - name: Verify exact-SHA stable release eligibility fails closed
+        run: node --test scripts/phoenix-promotion-eligibility.test.mjs
       - name: Run static gates
         env:
           DSH_ARCHIVE_BASE_REF: ${{ github.event.pull_request.base.sha }}

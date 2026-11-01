@@ -10,6 +10,7 @@ on:
 permissions:
   contents: write
   actions: read
+  pull-requests: read
 
 concurrency:
   group: phoenix-stable-update-channel
@@ -60,6 +61,15 @@ jobs:
           echo "sha=$target" >> "$GITHUB_OUTPUT"
           echo "promote=true" >> "$GITHUB_OUTPUT"
 
+      - name: Verify exact merged PR and all CI including real DeepSeek E2E
+        if: steps.target.outputs.promote == 'true'
+        env:
+          TARGET_SHA: ${{ steps.target.outputs.sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node --test scripts/phoenix-promotion-eligibility.test.mjs
+          node scripts/phoenix-promotion-eligibility.mjs
+
       - name: Keep stable exactly aligned with main
         if: steps.target.outputs.promote == 'true'
         shell: bash
@@ -79,8 +89,14 @@ jobs:
           fi
           git cat-file -e "$TARGET_SHA^{commit}"
           git merge-base --is-ancestor "$stable_sha" "$TARGET_SHA"
-          git push origin "$TARGET_SHA:refs/heads/stable" \
-            --force-with-lease="refs/heads/stable:$stable_sha"
+          # Git enforces fast-forward atomically; no force or force-with-lease.
+          git push origin "$TARGET_SHA:refs/heads/stable"
+          git fetch origin main stable --quiet
+          if [[ "$(git rev-parse origin/main)" != "$TARGET_SHA" ||
+                "$(git rev-parse origin/stable)" != "$TARGET_SHA" ]]; then
+            echo "Main/stable SHAs diverged after publication; release is not verified." >&2
+            exit 1
+          fi
 
       - name: Verify updater contract
         if: steps.target.outputs.promote == 'true'
