@@ -29,7 +29,7 @@ const MAX_LISTING_BYTES = 1_048_576
  */
 export function nvidiaChatCandidate(id: string): boolean {
   if (!/^[\w][\w./-]{1,180}$/u.test(id) || !id.includes('/')) return false
-  return !/(?:^|[\-./])(?:embed|embedding|rerank|retriever|reward|guard|safety|parse|clip|detector|translate|calibration)(?:[\-./]|$)/iu.test(id)
+  return !/(?:^|[./-])(?:embed|embedding|rerank|retriever|reward|guard|safety|parse|clip|detector|translate|calibration)(?:[./-]|$)/iu.test(id)
 }
 
 /** Normalize NVIDIA's public OpenAI-compatible models listing. */
