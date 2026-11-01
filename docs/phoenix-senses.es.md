@@ -16,6 +16,9 @@ PHOENIX Senses conecta audio, imagen y voz con evidencias y permisos explícitos
 
 - Desktop Live, Computer Use y MiniBrowser ofrecen vistas autorizadas.
 - `phoenix_senses_status` comprueba los visores y dispositivos disponibles, pero no supone haber capturado una imagen ni haber escuchado sonido.
+- El MiniBrowser de Windows incluye una franja inferior **Kira · estado**, **Inspeccionar** y **Depurar**. La primera acción obtiene texto visible, campos no secretos, botones y metadatos de videos/audio. La segunda abre DevTools de Edge para diagnóstico visual. El agente usa la tubería local autenticada; los scripts de páginas web no pueden llamar a la automatización.
+- `pageReady`, `lastNavigationError` y `lastInspectedAt` distinguen carga exitosa, error y observación real. Una página `about:blank` nunca cuenta como observación.
+- Ante un video de YouTube sin subtítulos disponibles, Kira debe probar sus herramientas de video y, si el usuario reproduce el video en Windows, puede solicitar una captura WASAPI de salida **con aprobación visible**. La transcripción de un clip de 3–12 segundos nunca equivale al contenido completo del video.
 - La visión real requiere un fotograma o captura del propio Desktop Live o Computer. El video de navegador depende de las herramientas existentes.
 - `phoenix_voice_status` y `phoenix_voice_speak` mantienen la salida de voz. Un acuse del proveedor no demuestra que se haya escuchado por altavoces.
 
