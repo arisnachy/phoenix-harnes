@@ -218,7 +218,7 @@ export function SportsLiveFacts({ game,meta,sport,compact=false }:{
   const baseball=sport==='baseball'
   return <div className={css.liveFacts} aria-label="Situación del partido en vivo">
     <div className={css.liveHeading}><span className={css.liveDot} aria-hidden="true"/> EN VIVO · {game.status}
-      <small>{meta.error||meta.stale?'Último dato recibido':'ESPN · actualización automática'}</small></div>
+      <small>{meta.error||meta.stale?'Último dato recibido':'Actualización automática'}</small></div>
     {baseball&&<div className={css.liveBaseball}>
       {game.bases?<div className={css.liveDiamond} aria-label="Corredores en las bases">
         <i className={game.bases[1]?css.occupied:''} title="Segunda base"/>
