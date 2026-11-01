@@ -89,4 +89,34 @@ describe('phoenix_canvas tool', () => {
       artifact: { executable: false },
     })
   })
+  it('routes a website with bundled imagery to an HTML artifact, not a geographic map', async () => {
+    const tool = createPhoenixCanvasTool()
+    const args = {
+      title: 'Sitio web de Kira',
+      html: '<img src="hero.png" alt="Kira"><link rel="stylesheet" href="site.css">',
+      files: {
+        'hero.png': { base64: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4//8/AwAI/AL+e6I6JwAAAABJRU5ErkJggg==', mime: 'image/png' },
+        'site.css': 'body { max-width: 1200px }',
+      },
+    }
+    const value = await tool.execute(args, execution()) as { artifactId: string; title: string }
+    expect(tool.output.presentationMeta?.(args, value as never)).toMatchObject({
+      artifact: {
+        mime: PHOENIX_CANVAS_MIME,
+        data: { entry: 'index.html', files: { 'index.html': args.html, ...args.files } },
+      },
+    })
+    expect(tool.description).toContain('NEVER phoenix_geo_map')
+    expect(tool.description).toContain('exec-*.png')
+  })
+
+  it('does not publish a website that refers to a detached generated image filename', async () => {
+    const conclude = vi.fn()
+    await expect(createPhoenixCanvasTool().execute({
+      title: 'Kira',
+      html: '<img src="exec-image.png" alt="Portada">',
+    }, execution(conclude))).rejects.toThrow('imágenes locales sin datos')
+    expect(conclude).not.toHaveBeenCalled()
+  })
+
 })

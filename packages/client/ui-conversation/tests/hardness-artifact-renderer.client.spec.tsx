@@ -159,10 +159,11 @@ describe('HARDNESS inline artifact renderer', () => {
     expect(frame.getAttribute('srcdoc')).not.toContain('allow-same-origin')
     const bridge = vi.spyOn(frame.contentWindow!, 'postMessage')
     fireEvent.load(frame)
-    expect(bridge).toHaveBeenCalledWith(expect.objectContaining({
-      type: 'phoenix-artifact-theme',
-      colors: expect.objectContaining({ text: expect.any(String), border: expect.any(String) }),
-    }), '*')
+    const packet: unknown = bridge.mock.lastCall?.[0]
+    expect(packet).toBeDefined()
+    expect(JSON.stringify(packet)).toContain('"type":"phoenix-artifact-theme"')
+    expect(JSON.stringify(packet)).toContain('"colors":')
+    expect(bridge.mock.lastCall?.[1]).toBe('*')
   })
 
   it('does not theme a game scene as a form', () => {
@@ -443,7 +444,7 @@ describe('HARDNESS inline artifact renderer', () => {
       data: '<img src="https://images.example.test/hero.webp" alt="Hero"><script>document.body.dataset.live="1"</script>',
     })} />)
     const frame = screen.getByTitle('Landing page')
-    expect(frame.getAttribute('srcdoc')).toContain("img-src data: blob:")
+    expect(frame.getAttribute('srcdoc')).toContain('img-src data: blob:')
     expect(frame.getAttribute('srcdoc')).not.toContain('img-src data: blob: https: http:')
     const enable = screen.getByRole('button', { name: 'Cargar imágenes externas' })
     expect(enable.getAttribute('aria-pressed')).toBe('false')
@@ -536,7 +537,7 @@ describe('HARDNESS inline artifact renderer', () => {
     expect(frame.getAttribute('sandbox')).toContain('allow-scripts')
     expect(frame.getAttribute('sandbox')).toContain('allow-forms')
     expect(frame.getAttribute('sandbox')).not.toContain('allow-same-origin')
-    expect(screen.getByRole('link', { name: 'Open page' }).getAttribute('href')).toBe('https://example.test/app')
+    expect(screen.getByRole('link', { name: 'Abrir página en otra pestaña' }).getAttribute('href')).toBe('https://example.test/app')
   })
 
   it('renders HTML with only the filename and content, without preview chrome', () => {

@@ -301,6 +301,45 @@
   min-width: 0;
 }
 
+.pageAddress {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--dsw-alias-border-subtle, #e2dcd5);
+  border-radius: 12px;
+  background: var(--dsw-alias-surface-primary, #faf8f5);
+  font-size: 12px;
+}
+
+.pageAddress label {
+  display: flex;
+  min-width: min(230px, 100%);
+  flex: 1 1 280px;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pageAddress input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 30px;
+  padding: 5px 8px;
+  border: 1px solid var(--dsw-alias-border-subtle, #e2dcd5);
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: 11px ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
+.pageAddress small {
+  width: 100%;
+  color: var(--dsw-alias-label-secondary, #847970);
+  line-height: 1.4;
+}
+
 .remoteImageToggle {
   display: inline-flex;
   align-items: center;
