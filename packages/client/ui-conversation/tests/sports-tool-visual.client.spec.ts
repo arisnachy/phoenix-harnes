@@ -103,6 +103,21 @@ describe('native sports chat presentation fallback',()=>{
     ] }
     expect(sportsCardsFromToolResult(code).map(x=>x.component)).toEqual(['sports_game_card','comparison'])
   })
+  it('ignores malformed nested tool calls and non-text payloads safely',()=>{
+    const valid=JSON.stringify({ uiBlocks:[sportsGame] })
+    const malformed={
+      kind:'tool-result',call:{ name:'Code' },subCalls:[
+        null,false,'arbitrary text',23,
+        { kind:'tool-result',call:{ name:'sports_chat_games' },
+          subCalls:[null,'not a call'],
+          content:[null,{ type:'image',text:valid },{ type:'text',text:{ untrusted:true } },
+            { type:'text',text:valid }] },
+      ],
+    }
+    expect(sportsCardsFromToolResult(malformed)).toEqual([sportsGame])
+    expect(sportsCardsFromToolResult({ ...malformed,subCalls:[{ kind:'tool-result',
+      call:{ name:'sports_chat_games' },content:[{ type:'text',text:123 }] }] })).toEqual([])
+  })
   it('does not generate misleading NO BET cards when no market price is returned',()=>{
     const empty=tool('sports_chat_odds',{ total:0,outcomes:[],source:'ESPN' })
     expect(sportsCardsFromToolResult(empty)).toEqual([])

@@ -8,12 +8,12 @@
  */
 import { parseGenerativeUiBlock, splitGenerativeUiText, type GenerativeUiBlock } from './GenerativeUi.tsx'
 
-type ResultBlock = {
-  kind?: unknown
-  call?: { name?: string } | null
-  content?: readonly { type?: string; text?: string }[]
-  isError?: boolean
-  subCalls?: readonly ResultBlock[]
+/** Narrow untrusted tool payloads without treating arbitrary JSON as typed data. */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+function unknownArray(value: unknown): readonly unknown[] {
+  return Array.isArray(value) ? (value as unknown[]) : []
 }
 const ALLOWED_NAMES = new Set([
   'sports_chat_games','sports_chat_espn_explore','sports_chat_odds','sports_chat_ticket','sports_chat_ticket_research',
@@ -40,8 +40,8 @@ function verifiedCard(value: unknown): GenerativeUiBlock | null {
  * @returns Cards with schema validation, no executable content.
  */
 export function sportsCardsFromToolResult(root: unknown): GenerativeUiBlock[] {
-  if(root===null||typeof root!=='object')return []
-  const stack:[ResultBlock,number][]=[[root,0]]
+  if(!isRecord(root))return []
+  const stack:[unknown,number][]=[[root,0]]
   const cards:GenerativeUiBlock[]=[]
   let visited=0
   while(stack.length&&visited<MAX_NODES&&cards.length<MAX_SPORTS_CARDS){
@@ -49,20 +49,22 @@ export function sportsCardsFromToolResult(root: unknown): GenerativeUiBlock[] {
     if(!next)break
     const [tool,depth]=next
     visited++
-    if(depth<10&&Array.isArray(tool.subCalls)){
-      for(const child of [...tool.subCalls].slice(0,24).reverse()){
-        if(child&&typeof child==='object')stack.push([child,depth+1])
+    if(!isRecord(tool))continue
+    if(depth<10){
+      for(const child of unknownArray(tool.subCalls).slice(0,24).reverse()){
+        if(isRecord(child))stack.push([child,depth+1])
       }
     }
     if(tool.kind!=='tool-result')continue
     // MCP bridges can prefix the canonical tool name. Accept only known
     // namespaces and the same strict first-party allowlist, never arbitrary JSON.
-    const called=tool.call?.name??''
+    const called=isRecord(tool.call)&&typeof tool.call.name==='string'?tool.call.name:''
     const canonical=called.startsWith('mcp__') ? called.split('__').at(-1)??'' : called
     if(!ALLOWED_NAMES.has(canonical))continue
     if(tool.isError)continue
-    const data=Array.isArray(tool.content)?tool.content:[]
-    const text=data.filter(b=>b.type==='text'&&typeof b.text==='string').map(b=>b.text).join('')
+    const data=unknownArray(tool.content)
+    const text=data.flatMap(block=>
+      isRecord(block)&&block.type==='text'&&typeof block.text==='string'?[block.text]:[]).join('')
     if(text.length>MAX_TEXT_BYTES||text.length<2)continue
     let parsed:unknown
     try{parsed=JSON.parse(text)}catch{continue}
