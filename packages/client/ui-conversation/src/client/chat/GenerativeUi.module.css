@@ -513,3 +513,6 @@
   margin-left:auto;flex:0 0 auto;font-variant-numeric:tabular-nums
 }
 .sportsSlateEvent .sportsSlateVs{padding-left:31px;margin-top:1px;color:var(--dsw-alias-label-secondary,#777)}
+
+/* Player headshots retain their face-first crop in compact cards. */
+.sportsPortraitPlayer img{object-fit:cover;object-position:center top}
