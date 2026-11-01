@@ -281,7 +281,7 @@ export function apply(ctx: Context, config: Config): void {
       if (provider === 'nvidia') {
         const configured = current().providers?.nvidia
         if (configured === undefined || (configured.baseURL !== undefined
-          && configured.baseURL.replace(/\\/+$/u, '') !== NVIDIA_BUILD_BASE_URL)) return Promise.resolve(undefined)
+          && configured.baseURL.replace(/[/]+$/u, '') !== NVIDIA_BUILD_BASE_URL)) return Promise.resolve(undefined)
         return nvidiaCatalog.refresh(force)
       }
       return codexCatalog.refresh(provider, current().providers?.[provider], force)
@@ -338,7 +338,7 @@ export function apply(ctx: Context, config: Config): void {
   }
   ctx.llm.registerModelDiscovery(NS, async (request) => {
     if (request.provider === 'nvidia'
-      && (request.baseURL === undefined || request.baseURL.replace(/\\/+$/u, '') === NVIDIA_BUILD_BASE_URL)) {
+      && (request.baseURL === undefined || request.baseURL.replace(/[/]+$/u, '') === NVIDIA_BUILD_BASE_URL)) {
       await nvidiaCatalog.refresh(true)
       const live = nvidiaCatalog.visibleModels()
       if (live !== undefined) {
