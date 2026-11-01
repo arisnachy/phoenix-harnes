@@ -128,6 +128,9 @@ try {
   try {
     Invoke-PhoenixPnpm @('install', '--frozen-lockfile')
     Invoke-PhoenixPnpm @('run', 'build')
+    # Optional ClawHub registry CLI for community skills and plugin discovery.
+    $bootstrap = Join-Path $resolvedInstallDirectory 'scripts/phoenix-clawhub-bootstrap.mjs'
+    if (Test-Path -LiteralPath $bootstrap) { & node $bootstrap --ensure }
     & node (Join-Path $resolvedInstallDirectory 'apps\cli\lib\bin.js') --version
     if ($LASTEXITCODE -ne 0) { throw 'PHOENIX launcher smoke test failed.' }
     & git update-ref refs/phoenix/recovery/last-good $target
