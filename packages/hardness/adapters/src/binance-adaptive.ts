@@ -230,15 +230,15 @@ export async function runBinanceAdaptiveCycle(
     const sorted = [...signals].sort((a, b) => b.score - a.score || a.symbol.localeCompare(b.symbol))
     // Enforce registered exit plans using fresh broker marks even when
     // today's watchlist no longer contains an existing open position.
-    const exits = account.positions.flatMap(position => {
+    const exits = account.positions.flatMap((position) => {
       const plan = position.exitPlan
       const mark = position.marketPriceUsdt
       if (plan === undefined) return []
       const crossed = binanceKnownAssetRisk(position.symbol) ? 'binance-asset-risk'
         : mark <= plan.stopLossPrice ? 'paper-stop-loss'
-        : mark >= plan.tp2Price ? 'paper-tp2'
-          : !plan.tp1Taken && mark >= plan.tp1Price ? 'paper-tp1'
-            : undefined
+          : mark >= plan.tp2Price ? 'paper-tp2'
+            : !plan.tp1Taken && mark >= plan.tp1Price ? 'paper-tp1'
+              : undefined
       return crossed === undefined ? [] : [{
         position, reason: crossed,
         quantity: crossed === 'paper-tp1' ? position.quantity * plan.tp1Fraction : position.quantity,
@@ -258,7 +258,7 @@ export async function runBinanceAdaptiveCycle(
     const executionFor = (
       decision: 'buy' | 'sell' | 'hold',
       trade?: BinancePaperTrade,
-    ): BinanceSignalExecution[] => sorted.map(signal => {
+    ): BinanceSignalExecution[] => sorted.map((signal) => {
       if (trade?.symbol === signal.symbol) return {
         symbol: signal.symbol, status: 'executed' as const,
         explanation: trade.side === 'buy'

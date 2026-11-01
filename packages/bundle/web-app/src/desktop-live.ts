@@ -81,7 +81,7 @@ function queryPipe(pipe: string, message: string): Promise<string> {
       if (error !== undefined) reject(error)
       else resolve(response ?? '')
     }
-    const deadline = setTimeout(() => finish(new Error('Tiempo agotado consultando Desktop Live.')), TIMEOUT_MS)
+    const deadline = setTimeout(() =>{  finish(new Error('Tiempo agotado consultando Desktop Live.')) }, TIMEOUT_MS)
     socket.once('connect', () => socket.write(message + '\n'))
     socket.on('data', (part: string) => {
       received += part
@@ -92,7 +92,7 @@ function queryPipe(pipe: string, message: string): Promise<string> {
       const end = received.indexOf('\n')
       if (end >= 0) finish(undefined, received.slice(0, end).trim())
     })
-    socket.once('error', (error: Error) => finish(error))
+    socket.once('error', (error: Error) =>{  finish(error) })
     socket.once('close', () => { if (!settled) finish(new Error('Canal Desktop Live cerrado.')) })
   })
 }

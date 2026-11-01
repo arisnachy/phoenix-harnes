@@ -66,15 +66,15 @@ function normalizeScene(raw: unknown, fallbackName: string): Scene {
       const value=inputMaterial as Record<string,unknown>
       const props=['metallic','roughness','opacity','transmission','clearcoat'] as const
       if (props.some(key=>value[key]!==undefined&&
-        (typeof value[key]!=='number'||!Number.isFinite(value[key])||(value[key] as number)<0||(value[key] as number)>1))
+        (typeof value[key]!=='number'||!Number.isFinite(value[key])||(value[key])<0||(value[key])>1))
         ||['baseColor','emissive'].some(key=>value[key]!==undefined&&
-          (typeof value[key]!=='string'||!hex.test(value[key] as string)))) {
+          (typeof value[key]!=='string'||!hex.test(value[key])))) {
         throw new ToolArgsError([`Objeto 3D ${index + 1}: parámetros PBR inválidos.`])
       }
       material={
-        ...(typeof value.preset==='string'?{preset:value.preset.slice(0,40)}:{}),
-        ...(typeof value.baseColor==='string'?{baseColor:value.baseColor}:{}),
-        ...(typeof value.emissive==='string'?{emissive:value.emissive}:{}),
+        ...(typeof value.preset==='string'?{ preset:value.preset.slice(0,40) }:{}),
+        ...(typeof value.baseColor==='string'?{ baseColor:value.baseColor }:{}),
+        ...(typeof value.emissive==='string'?{ emissive:value.emissive }:{}),
         ...Object.fromEntries(props.filter(key=>typeof value[key]==='number').map(key=>[key,value[key]])),
       }
     }
@@ -83,7 +83,7 @@ function normalizeScene(raw: unknown, fallbackName: string): Scene {
       position: [node.position[0]!, node.position[1]!, node.position[2]!],
       size: [node.size[0]!, node.size[1]!, node.size[2]!],
       color: node.color,
-      ...(material===undefined?{}:{material}),
+      ...(material===undefined?{}:{ material }),
       ...(typeof node.name === 'string' && node.name.length <= 100 ? { name: node.name } : {}),
       ...(node.rotation === undefined ? {} : { rotation: [node.rotation[0]!, node.rotation[1]!, node.rotation[2]!] }),
     }
@@ -94,8 +94,8 @@ function normalizeScene(raw: unknown, fallbackName: string): Scene {
     name: typeof data.name === 'string' && data.name.trim() !== '' ? data.name.slice(0, 140) : fallbackName,
     background: typeof data.background === 'string' && hex.test(data.background) ? data.background : '#f7f2eb',
     nodes,
-    ...(data.environment==='studio'||data.environment==='sunset'||data.environment==='daylight'?{environment:data.environment}:{}),
-    ...(data.camera==='perspective'||data.camera==='isometric'||data.camera==='front'||data.camera==='top'?{camera:data.camera}:{}),
+    ...(data.environment==='studio'||data.environment==='sunset'||data.environment==='daylight'?{ environment:data.environment }:{}),
+    ...(data.camera==='perspective'||data.camera==='isometric'||data.camera==='front'||data.camera==='top'?{ camera:data.camera }:{}),
   }
 }
 
@@ -147,7 +147,7 @@ export function createPhoenix3DTool(): ToolDefinition {
     },
     output: {
       schema: { type:'object', additionalProperties:false, properties: {
-        artifactId:{type:'string',required:true},title:{type:'string',required:true},scene:{type:'json',required:true},
+        artifactId:{ type:'string',required:true },title:{ type:'string',required:true },scene:{ type:'json',required:true },
       } },
       render: (_args, result) => [{ type:'text', text:`Modelo 3D interactivo listo: ${result.title}. Arrastra para girarlo y usa la rueda para acercarlo.` }],
       presentationMeta: (_args, result) => ({ artifact: {

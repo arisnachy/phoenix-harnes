@@ -154,7 +154,7 @@ export function TradingMarketChart({ symbols, trades, initialInterval = '1h' }: 
       <div><strong>{symbol.replace(/USDT$/u, '/USDT')}</strong>
         <small>Spot · Binance público · OHLCV verificado</small></div>
       <div className={css.marketControls}>
-        <select aria-label="Seleccionar par" value={symbol} onChange={event => { setSelectedSymbol(event.target.value) }}>
+        <select aria-label="Seleccionar par" value={symbol} onChange={(event) => { setSelectedSymbol(event.target.value) }}>
           {symbols.map(item => <option key={item} value={item}>{item.replace(/USDT$/u, '/USDT')}</option>)}
         </select>
         <div className={css.marketPeriods} role="group" aria-label="Temporalidad">
@@ -174,13 +174,13 @@ export function TradingMarketChart({ symbols, trades, initialInterval = '1h' }: 
       ? <p className={css.marketEmpty}>El gráfico se mostrará cuando lleguen velas reales. No se generan precios artificiales.</p>
       : <svg className={css.marketSvg} viewBox={`0 0 ${FRAME_WIDTH} ${FRAME_HEIGHT}`}
         role="img" aria-label={`Velas ${symbol} en ${interval}, medias móviles 7, 25 y 99, volumen y operaciones PAPER`}
-        onMouseMove={event => {
+        onMouseMove={(event) => {
           const rect = event.currentTarget.getBoundingClientRect()
           const index = Math.floor(((event.clientX - rect.left) / rect.width * FRAME_WIDTH - LEFT) / plot.step)
           setSelected(Math.min(candles.length - 1, Math.max(0, index)))
         }}
         onMouseLeave={() => { setSelected(undefined) }}>
-        {[0, 1, 2, 3, 4].map(tick => {
+        {[0, 1, 2, 3, 4].map((tick) => {
           const level = plot.max - (plot.max - plot.min) * tick / 4
           const py = plot.y(level)
           return <g key={tick}><line className={css.marketGrid} x1={LEFT} x2={RIGHT} y1={py} y2={py}/>
@@ -207,7 +207,7 @@ export function TradingMarketChart({ symbols, trades, initialInterval = '1h' }: 
         {plot.ma7 && <path d={plot.ma7} fill="none" stroke="#e3ac1b" strokeWidth="2"/>}
         {plot.ma25 && <path d={plot.ma25} fill="none" stroke="#d9469b" strokeWidth="2"/>}
         {plot.ma99 && <path d={plot.ma99} fill="none" stroke="#9270d2" strokeWidth="2"/>}
-        {trades.filter(trade => trade.symbol === symbol).map(trade => {
+        {trades.filter(trade => trade.symbol === symbol).map((trade) => {
           const stamp = Date.parse(trade.executedAt)
           const i = candles.findIndex(bar => stamp >= bar.openTime && stamp <= bar.closeTime)
           const candle = candles[i]
@@ -216,9 +216,9 @@ export function TradingMarketChart({ symbols, trades, initialInterval = '1h' }: 
           return <g key={trade.id}><circle cx={plot.x(i)}
             cy={buy ? plot.y(candle.low) + 14 : plot.y(candle.high) - 14}
             r="9" fill={buy ? '#168d70' : '#cf4457'} stroke="#fff" strokeWidth="2"/>
-            <text x={plot.x(i)} y={(buy ? plot.y(candle.low) + 14 : plot.y(candle.high) - 14) + 3}
-              textAnchor="middle" fill="#fff" fontSize="9" fontWeight="bold">{buy ? 'B' : 'S'}</text>
-            <title>Orden PAPER {buy ? 'comprada' : 'vendida'} · {new Date(stamp).toLocaleString('es-DO')}</title></g>
+          <text x={plot.x(i)} y={(buy ? plot.y(candle.low) + 14 : plot.y(candle.high) - 14) + 3}
+            textAnchor="middle" fill="#fff" fontSize="9" fontWeight="bold">{buy ? 'B' : 'S'}</text>
+          <title>Orden PAPER {buy ? 'comprada' : 'vendida'} · {new Date(stamp).toLocaleString('es-DO')}</title></g>
         })}
         {selected !== undefined && active !== undefined && <g>
           <line x1={plot.x(selected)} x2={plot.x(selected)} y1={PRICE_TOP} y2={VOLUME_BOTTOM}

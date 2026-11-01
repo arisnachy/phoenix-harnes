@@ -184,7 +184,7 @@ export function projectVisualTable(spec: JsonRecord): {
     if (Array.isArray(entry)) return columns.map((_, index) => entry[index])
     if (!isRecord(entry)) return columns.map(() => undefined)
     const keys = Object.keys(entry)
-    return columns.map(column => {
+    return columns.map((column) => {
       if (Object.hasOwn(entry, column)) return entry[column]
       const normalizedColumn = normalize(column)
       const accepted = [normalizedColumn, ...(aliases[normalizedColumn] ?? [])]

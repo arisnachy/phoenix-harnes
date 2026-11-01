@@ -118,9 +118,9 @@ export class OpenClawConnectorBridge {
       ...(connected && login !== undefined ? { account: login } : {}),
       phase: !skill ? 'missing-skill'
         : !runtimeAvailable ? 'missing-runtime'
-        : !authVerified ? 'auth-required'
-        : !apiVerified ? 'api-unavailable'
-        : 'ready',
+          : !authVerified ? 'auth-required'
+            : !apiVerified ? 'api-unavailable'
+              : 'ready',
     }
   }
 

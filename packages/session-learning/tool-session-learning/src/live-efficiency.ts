@@ -45,7 +45,7 @@ function failedResult(data: Record<string, unknown>): boolean {
   if (data.error !== undefined) return true
   const message = record(data.message)
   if (message?.isError === true) return true
-  return Array.isArray(message?.content) && message.content.some(part => {
+  return Array.isArray(message?.content) && message.content.some((part) => {
     const item = record(part)
     return item?.isError === true
   })

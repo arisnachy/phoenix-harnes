@@ -27,7 +27,7 @@ describe('Official Binance Spot Testnet isolation', () => {
       expect(url.searchParams.get('interval')).toBe('15m')
       expect(init.headers).toBeUndefined()
       expect(init.redirect).toBe('error')
-      return new Response(JSON.stringify(rows), {status:200})
+      return new Response(JSON.stringify(rows), { status:200 })
     })
     const client = new BinanceSpotTestnet(() => undefined, transport as never)
     const bars = await client.candles('BTCUSDT', '15m', 80)
@@ -37,17 +37,17 @@ describe('Official Binance Spot Testnet isolation', () => {
   })
 
   it('keeps funded Testnet assets when the account contains more than 100 zero balances', async () => {
-    const balances = Array.from({length: 130}, (_, index) => ({
+    const balances = Array.from({ length: 130 }, (_, index) => ({
       asset: 'EMPTY' + index, free:'0.000', locked:'0.000',
     }))
-    balances.push({asset:'USDT',free:'1000.000',locked:'0.000'})
-    balances.push({asset:'BTC',free:'0.500',locked:'0.000'})
+    balances.push({ asset:'USDT',free:'1000.000',locked:'0.000' })
+    balances.push({ asset:'BTC',free:'0.500',locked:'0.000' })
     const client = new BinanceSpotTestnet(credentials, async () => new Response(
-      JSON.stringify({canTrade:true,balances}), {status:200}))
+      JSON.stringify({ canTrade:true,balances }), { status:200 }))
     const status = await client.status()
     expect(status.balances).toEqual([
-      {asset:'USDT',free:'1000.000',locked:'0.000'},
-      {asset:'BTC',free:'0.500',locked:'0.000'},
+      { asset:'USDT',free:'1000.000',locked:'0.000' },
+      { asset:'BTC',free:'0.500',locked:'0.000' },
     ])
   })
 

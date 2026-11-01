@@ -36,7 +36,7 @@ export async function investigatePregame(
   const limited=events.slice(0,6).filter(e=>
     CODE.test(e.sport)&&CODE.test(e.league)&&EVENT_ID.test(e.eventId))
   const leagues=[...new Map(limited.map(e=>[leagueKey(e),e])).values()]
-  const injuryReports=await Promise.allSettled(leagues.map(async e=>{
+  const injuryReports=await Promise.allSettled(leagues.map(async (e)=>{
     const data=await getFeed<unknown>(
       'https://site.api.espn.com/apis/site/v2/sports/'+e.sport+'/'+e.league+'/injuries',fetcher)
     // Accept only recognized array-bearing reports. An empty object, HTML
@@ -45,9 +45,9 @@ export async function investigatePregame(
   }))
   const available=new Map<string,boolean>(leagues.map((e,i)=>{
     const check=injuryReports[i]
-    return [leagueKey(e),check?.status==='fulfilled'&&check.value===true] as const
+    return [leagueKey(e),check?.status==='fulfilled'&&check.value] as const
   }))
-  const summaries=await Promise.allSettled(limited.map(async e=>{
+  const summaries=await Promise.allSettled(limited.map(async (e)=>{
     const data=await getFeed<unknown>(
       'https://site.api.espn.com/apis/site/v2/sports/'+e.sport+'/'+e.league+
       '/summary?event='+e.eventId,fetcher)
@@ -59,7 +59,7 @@ export async function investigatePregame(
   }))
   return new Map<string,PregameAssessment>(limited.map((e,i)=>{
     const check=summaries[i]
-    const summaryVerified=check?.status==='fulfilled'&&check.value===true
+    const summaryVerified=check?.status==='fulfilled'&&check.value
     const injuryReportVerified=available.get(leagueKey(e))===true
     return [leagueKey(e)+'|'+e.eventId,{
       summaryVerified,injuryReportVerified,

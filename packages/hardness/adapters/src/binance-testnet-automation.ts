@@ -56,7 +56,7 @@ export type BinanceTestnetAutomationState = {
   lastScanAt?: string
   lastDecision: string
   lastError?: string
-  lastSignals: Array<{symbol: string; score: number; strategy: string; action: string; reason: string}>
+  lastSignals: Array<{ symbol: string; score: number; strategy: string; action: string; reason: string }>
   failureCount: number
   dailyOrders: number
   day: string
@@ -83,7 +83,7 @@ const validSymbols = (symbols: readonly string[]): string[] => {
 const orderId = (symbol: string, side: string, reason: string, bar: number): string =>
   'px'+createHash('sha256').update(symbol+'/'+side+'/'+reason+'/'+bar).digest('hex').slice(0,30)
 const finite = (x: number): boolean => Number.isFinite(x) && x>0
-function sellQuantity(qty: number, rule: {stepSize:string;minQty:string;maxQty:string}): number {
+function sellQuantity(qty: number, rule: { stepSize:string;minQty:string;maxQty:string }): number {
   const step=Number(rule.stepSize),min=Number(rule.minQty),max=Number(rule.maxQty)
   if(!finite(step)||!finite(min)||!finite(max)||!finite(qty))return 0
   const decimals=Math.min(8,(rule.stepSize.split('.')[1]??'').length)
@@ -102,7 +102,7 @@ export class BinanceTestnetAutomation {
   private loaded=false
   private timer: ReturnType<typeof setInterval>|undefined
   private active: Promise<void>|undefined
-  private sink: ((event:{kind:'fill'|'risk-halt';detail:string;symbol:string})=>void)|undefined
+  private sink: ((event:{ kind:'fill'|'risk-halt';detail:string;symbol:string })=>void)|undefined
 
   constructor(
     private readonly file: string,
@@ -111,15 +111,18 @@ export class BinanceTestnetAutomation {
     private readonly market?: Pick<BinancePublicMarket, 'candles'>,
   ) {}
 
-  /** @param sink - Host callback for confirmed testnet fills and safety halts. */
+  /**
+   * Register a best-effort host notification callback for confirmed Testnet events.
+   * @param sink - Callback for confirmed fills and safety halts.
+   */
   setAttentionSink(sink: typeof this.sink): void { this.sink=sink }
   private notify(kind: 'fill'|'risk-halt', detail: string, symbol: string): void {
-    try{this.sink?.({kind,detail,symbol})}catch{/* notifications never affect trading */}
+    try{this.sink?.({ kind,detail,symbol })}catch{/* notifications never affect trading */}
   }
   private async save(): Promise<void> {
-    await mkdir(dirname(this.file),{recursive:true,mode:0o700})
+    await mkdir(dirname(this.file),{ recursive:true,mode:0o700 })
     const temp=this.file+'.'+randomUUID()+'.tmp'
-    await writeFile(temp,JSON.stringify(this.state)+'\n',{mode:0o600,encoding:'utf8'})
+    await writeFile(temp,JSON.stringify(this.state)+'\n',{ mode:0o600,encoding:'utf8' })
     await rename(temp,this.file)
   }
   /** Restore persisted TESTNET permission and ledger, failing closed on corruption. */
@@ -141,7 +144,7 @@ export class BinanceTestnetAutomation {
       if(this.state.enabled&&!this.state.halted){this.schedule();void this.step()}
     }catch(error){
       if((error as NodeJS.ErrnoException).code==='ENOENT')return
-      this.state={...fresh(),halted:true,lastError:'corrupt-testnet-ledger-needs-review'}
+      this.state={ ...fresh(),halted:true,lastError:'corrupt-testnet-ledger-needs-review' }
     }
   }
   private schedule(): void {
@@ -172,7 +175,10 @@ export class BinanceTestnetAutomation {
     await this.step()
     return this.snapshot()
   }
-  /** @returns Saved TESTNET state after halting future scheduled entries. */
+  /**
+   * Persistently stop future Testnet entries and drain the current cycle.
+   * @returns Saved TESTNET state after halting future scheduled entries.
+   */
   async stop(): Promise<BinanceTestnetAutomationState> {
     await this.restore()
     this.state.enabled=false
@@ -280,7 +286,10 @@ export class BinanceTestnetAutomation {
     return this.snapshot()
   }
 
-  /** @returns A defensive read-only copy of recorded TESTNET state. */
+  /**
+   * Return the current Testnet ledger without exposing its mutable backing state.
+   * @returns A defensive copy of recorded TESTNET state.
+   */
   snapshot(): BinanceTestnetAutomationState {return structuredClone(this.state)}
   private async halt(reason: string, symbol='BTCUSDT'): Promise<void> {
     this.state.enabled=false;this.state.halted=true;this.state.lastError=reason
@@ -359,7 +368,7 @@ export class BinanceTestnetAutomation {
       throw new Error('invalid-testnet-order-intent')
     const receipt=await this.testnet.order({
       symbol:intent.symbol,side:intent.side,clientOrderId:intent.clientOrderId,
-      ...(intent.side==='BUY' ? {quoteUsdt:intent.quoteUsdt!} : {quantity:intent.quantity!}),
+      ...(intent.side==='BUY' ? { quoteUsdt:intent.quoteUsdt! } : { quantity:intent.quantity! }),
     })
     await this.settle(receipt)
   }
@@ -395,7 +404,7 @@ export class BinanceTestnetAutomation {
         const price=await this.testnet.quote(position.symbol)
         const reason=binanceKnownAssetRisk(position.symbol)?'binance-asset-risk':
           price<=position.stop?'stop-loss':
-          price>=position.tp2?'tp2':!position.tp1Done&&price>=position.tp1?'tp1':undefined
+            price>=position.tp2?'tp2':!position.tp1Done&&price>=position.tp1?'tp1':undefined
         if(!reason)continue
         const limits=await this.testnet.lotSize(position.symbol)
         const available=Number(account.balances?.find(b=>b.asset===position.symbol.slice(0,-4))?.free??0)
@@ -423,8 +432,8 @@ export class BinanceTestnetAutomation {
       const barsBySymbol=new Map<string,number>()
       for(const symbol of this.state.symbols){
         if (binanceKnownAssetRisk(symbol)) {
-          signals.push({symbol,regime:'range',strategy:'none',action:'hold',score:0,
-            lastClose:0,reason:'Binance risk-tag or delisting guard'})
+          signals.push({ symbol,regime:'range',strategy:'none',action:'hold',score:0,
+            lastClose:0,reason:'Binance risk-tag or delisting guard' })
           continue
         }
         try{
@@ -434,8 +443,8 @@ export class BinanceTestnetAutomation {
           if(closed)barsBySymbol.set(symbol,closed.closeTime)
           signals.push(evaluateBinanceAdaptiveSignal(symbol,candles,900_000,now))
         }catch{
-          signals.push({symbol,regime:'range',strategy:'none',action:'hold',score:0,
-            lastClose:0,reason:'Market candles unavailable'})
+          signals.push({ symbol,regime:'range',strategy:'none',action:'hold',score:0,
+            lastClose:0,reason:'Market candles unavailable' })
         }
       }
       this.state.lastSignals=signals.map(s=>({
@@ -500,7 +509,7 @@ export class BinanceTestnetAutomation {
   }
 }
 
-const byPath=new Map<string,{engine:BinanceTestnetAutomation;refs:number}>()
+const byPath=new Map<string,{ engine:BinanceTestnetAutomation;refs:number }>()
 /**
  * Obtain a reference-counted TESTNET worker bound to a durable ledger path.
  * @param file - Filesystem path used to persist virtual strategy state.
@@ -514,15 +523,15 @@ export function acquireBinanceTestnetAutomation(file:string,testnet:BinanceSpotT
   const key=resolve(file)
   let entry=byPath.get(key)
   if(!entry){
-    entry={engine:new BinanceTestnetAutomation(key,testnet),refs:0}
+    entry={ engine:new BinanceTestnetAutomation(key,testnet),refs:0 }
     byPath.set(key,entry)
   }
   entry.refs++
   const current=entry
-  return {engine:current.engine,release(){
+  return { engine:current.engine,release(){
     current.refs--
     if(current.refs===0&&byPath.get(key)===current){
       byPath.delete(key);void current.engine.dispose()
     }
-  }}
+  } }
 }

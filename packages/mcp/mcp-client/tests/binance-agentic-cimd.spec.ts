@@ -15,12 +15,12 @@ const official={
 describe('PHOENIX Binance Agentic OAuth CIMD (no dynamic client registration)',()=>{
   it('selects its own public client identity only for the pinned official Binance server',()=>{
     expect(binanceAgenticCimdClientId(official)).toBe(PHOENIX_BINANCE_AGENTIC_CIMD_ID)
-    expect(binanceAgenticCimdClientId({...official,url:'https://impostor.example/mcp'})).toBeUndefined()
-    expect(binanceAgenticCimdClientId({...official,serverName:'other-agent'})).toBeUndefined()
-    expect(binanceAgenticCimdClientId({...official,oauth:false})).toBeUndefined()
-    expect(binanceAgenticCimdClientId({...official,oauthClientIdRef:'CUSTOM_CLIENT'})).toBeUndefined()
-    expect(binanceAgenticCimdClientId({...official,oauthClientSecretRef:'CUSTOM_SECRET'})).toBeUndefined()
-    expect(binanceAgenticCimdClientId({...official,transport:'stdio'})).toBeUndefined()
+    expect(binanceAgenticCimdClientId({ ...official,url:'https://impostor.example/mcp' })).toBeUndefined()
+    expect(binanceAgenticCimdClientId({ ...official,serverName:'other-agent' })).toBeUndefined()
+    expect(binanceAgenticCimdClientId({ ...official,oauth:false })).toBeUndefined()
+    expect(binanceAgenticCimdClientId({ ...official,oauthClientIdRef:'CUSTOM_CLIENT' })).toBeUndefined()
+    expect(binanceAgenticCimdClientId({ ...official,oauthClientSecretRef:'CUSTOM_SECRET' })).toBeUndefined()
+    expect(binanceAgenticCimdClientId({ ...official,transport:'stdio' })).toBeUndefined()
     expect(PHOENIX_BINANCE_AGENTIC_CIMD_ID).not.toContain('chatgpt.com')
     expect(PHOENIX_BINANCE_AGENTIC_CIMD_ID).not.toContain('codex')
     expect(PHOENIX_BINANCE_AGENTIC_CIMD_ID).toMatch(/^https:\/\/cdn\.jsdelivr\.net\//u)

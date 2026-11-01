@@ -149,8 +149,8 @@ describe('Codex tool-schema compatibility', () => {
     expect(scoped.tools?.map(tool => tool.name)).toEqual(['computer', 'mcp__windows-desktop__inspect'])
     expect(request.tools?.length).toBe(4)
     expect(scopeCodexToolsForPaint({ ...request,
-      messages: [message('abre Paint y publica un anuncio en redes sociales')], }).tools).toEqual(tools)
-    expect(scopeCodexToolsForPaint({ ...request, messages: [message('abre Instagram')], }).tools).toEqual(tools)
+      messages: [message('abre Paint y publica un anuncio en redes sociales')] }).tools).toEqual(tools)
+    expect(scopeCodexToolsForPaint({ ...request, messages: [message('abre Instagram')] }).tools).toEqual(tools)
   })
 
   it('recovers an invalid social campaign schema without removing other functions', () => {

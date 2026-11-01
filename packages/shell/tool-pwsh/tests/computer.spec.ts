@@ -146,7 +146,7 @@ describe('Integrated browser without Phoenix Desktop', () => {
     expect(isMiniBrowserReceipt(received)).toBe(true)
     expect(isMiniBrowserReceipt('hwnd=0x420024 active=true')).toBe(false)
     expect(calls[0]?.url).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/phoenix-mini-browser\/action$/u)
-    expect(JSON.parse(calls[0]!.body!)).toEqual({ type: 'open', sessionId: 'session-1', url: 'https://example.org' })
+    expect(JSON.parse(calls[0]!.body)).toEqual({ type: 'open', sessionId: 'session-1', url: 'https://example.org' })
     expect(JSON.stringify(calls)).not.toContain('secret')
   })
 

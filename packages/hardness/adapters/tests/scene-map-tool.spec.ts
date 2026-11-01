@@ -21,31 +21,31 @@ function context(concludeTurn:()=>void=()=>{}):ToolRunContext {
 describe('native fictional map publication via tool result',()=>{
   it('publishes a real renderable MIME artifact, not a prose claim',async()=>{
     const tool=createPhoenixSceneMapTool()
-    const args={title:'Isla Bruma',demo:true}
+    const args={ title:'Isla Bruma',demo:true }
     const conclude=vi.fn()
     const r=await tool.execute(args,context(conclude)) as {
-      artifactId:string;title:string;map:{component:string;version:number;props:{places:unknown[];routes:unknown[]}}
+      artifactId:string;title:string;map:{ component:string;version:number;props:{ places:unknown[];routes:unknown[] } }
       publication:string
     }
     expect(r.artifactId).toBe('phoenix-scene-map:map-isla-1')
-    expect(r.map).toMatchObject({component:'scene_map',version:1})
+    expect(r.map).toMatchObject({ component:'scene_map',version:1 })
     expect(r.map.props.places).toHaveLength(5)
     expect(r.map.props.routes).toHaveLength(4)
     expect(conclude).not.toHaveBeenCalled()
     const artifact=tool.output.presentationMeta?.(args,r as never)
-    expect(artifact).toMatchObject({artifact:{id:'phoenix-scene-map:map-isla-1',
+    expect(artifact).toMatchObject({ artifact:{ id:'phoenix-scene-map:map-isla-1',
       mime:PHOENIX_SCENE_MAP_MIME,executable:false,
-      data:{component:'scene_map',version:1}}})
+      data:{ component:'scene_map',version:1 } } })
     expect(r.publication).toBe('artifact_emitted_not_client_render_verified')
   })
   it('validates custom islands and routes without fabricating extra locations',async()=>{
     const tool=createPhoenixSceneMapTool()
-    const a={title:'Reino Costero',map:{theme:'treasure',places:[
-      {id:'p',name:'Puerto',kind:'port',x:24,y:55,description:'Pueblo de pescadores'},
-      {id:'b',name:'Bosque',kind:'forest',x:60,y:52,description:'Bosque encantado'},
-    ],routes:[{from:'p',to:'b',label:'Camino local'}]}}
+    const a={ title:'Reino Costero',map:{ theme:'treasure',places:[
+      { id:'p',name:'Puerto',kind:'port',x:24,y:55,description:'Pueblo de pescadores' },
+      { id:'b',name:'Bosque',kind:'forest',x:60,y:52,description:'Bosque encantado' },
+    ],routes:[{ from:'p',to:'b',label:'Camino local' }] } }
     const done=vi.fn()
-    const r=await tool.execute({...a,continueAfterDisplay:true},context(done)) as {map:{props:{places:unknown[];routes:unknown[]}}}
+    const r=await tool.execute({ ...a,continueAfterDisplay:true },context(done)) as { map:{ props:{ places:unknown[];routes:unknown[] } } }
     expect(r.map.props.places).toHaveLength(2)
     expect(r.map.props.routes).toHaveLength(1)
     expect(done).not.toHaveBeenCalled()
@@ -54,16 +54,16 @@ describe('native fictional map publication via tool result',()=>{
     const tool=createPhoenixSceneMapTool()
     const done=vi.fn()
     for(const invalidMap of [
-      {places:[]},
-      {places:[{id:'a',name:'A',x:25,y:25,kind:'city',description:'Zona A'},
-        {id:'b',name:'B',x:27,y:38,kind:'forest',description:'Zona B'}],script:'alert(1)'},
-      {places:[{id:'a',name:'A',x:25,y:25,kind:'city',description:'Zona A'},
-        {id:'a',name:'B',x:27,y:38,kind:'forest',description:'Zona B'}]},
-      {places:[{id:'a',name:'A',x:25,y:25,kind:'city',description:'Zona A'},
-        {id:'b',name:'B',x:27,y:38,kind:'forest',description:'Zona B'}],
-        routes:[{from:'a',to:'external'}]},
+      { places:[] },
+      { places:[{ id:'a',name:'A',x:25,y:25,kind:'city',description:'Zona A' },
+        { id:'b',name:'B',x:27,y:38,kind:'forest',description:'Zona B' }],script:'alert(1)' },
+      { places:[{ id:'a',name:'A',x:25,y:25,kind:'city',description:'Zona A' },
+        { id:'a',name:'B',x:27,y:38,kind:'forest',description:'Zona B' }] },
+      { places:[{ id:'a',name:'A',x:25,y:25,kind:'city',description:'Zona A' },
+        { id:'b',name:'B',x:27,y:38,kind:'forest',description:'Zona B' }],
+      routes:[{ from:'a',to:'external' }] },
     ]){
-      await expect(tool.execute({title:'Mapa fallido',map:invalidMap},context(done))).rejects.toThrow()
+      await expect(tool.execute({ title:'Mapa fallido',map:invalidMap },context(done))).rejects.toThrow()
     }
     expect(done).not.toHaveBeenCalled()
   })
@@ -71,6 +71,6 @@ describe('native fictional map publication via tool result',()=>{
     const m=demoIslandMap('Isla Bruma')
     expect(m.props.places.every(p=>p.x>=5&&p.x<=95)).toBe(true)
     expect(JSON.stringify(m)).not.toMatch(/https?:\/\/|fetch\(|navigator|geocode|latitud|longitud/i)
-    expect(admitPhoenixSceneMap({id:m.props.id,theme:m.props.theme,subtitle:m.props.subtitle,description:m.props.description,places:m.props.places,routes:m.props.routes},'Isla Bruma')).toEqual(m)
+    expect(admitPhoenixSceneMap({ id:m.props.id,theme:m.props.theme,subtitle:m.props.subtitle,description:m.props.description,places:m.props.places,routes:m.props.routes },'Isla Bruma')).toEqual(m)
   })
 })

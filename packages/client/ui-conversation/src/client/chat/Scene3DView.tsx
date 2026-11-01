@@ -71,20 +71,20 @@ export function parseScene3D(value: unknown): Scene3D | undefined {
     if(sourceMaterial!==undefined) {
       const numeric=['metallic','roughness','opacity','transmission','clearcoat'] as const
       if(numeric.some(key=>sourceMaterial[key]!==undefined&&
-        (typeof sourceMaterial[key]!=='number'||!Number.isFinite(sourceMaterial[key])||(sourceMaterial[key] as number)<0||(sourceMaterial[key] as number)>1))
+        (typeof sourceMaterial[key]!=='number'||!Number.isFinite(sourceMaterial[key])||(sourceMaterial[key])<0||(sourceMaterial[key])>1))
         || ['baseColor','emissive'].some(key=>sourceMaterial[key]!==undefined&&
-          (typeof sourceMaterial[key]!=='string'||!colorPattern.test(sourceMaterial[key] as string)))) return undefined
+          (typeof sourceMaterial[key]!=='string'||!colorPattern.test(sourceMaterial[key])))) return undefined
       const textureProps=['baseColorTexture','normalTexture','occlusionTexture','metallicRoughnessTexture'] as const
       const embedded=/^data:image\/(?:png|jpeg);base64,[a-z0-9+/]+={0,2}$/iu
       if(textureProps.some(key=>sourceMaterial[key]!==undefined&&
-        (typeof sourceMaterial[key]!=='string'||(sourceMaterial[key] as string).length>1_500_000||
-          !embedded.test(sourceMaterial[key] as string))))return undefined
+        (typeof sourceMaterial[key]!=='string'||(sourceMaterial[key]).length>1_500_000||
+          !embedded.test(sourceMaterial[key]))))return undefined
       material={
         ...Object.fromEntries(textureProps.filter(key=>typeof sourceMaterial[key]==='string')
           .map(key=>[key,sourceMaterial[key]])),
-        ...(typeof sourceMaterial.preset==='string'?{preset:sourceMaterial.preset.slice(0,40)}:{}),
-        ...(typeof sourceMaterial.baseColor==='string'?{baseColor:sourceMaterial.baseColor}:{}),
-        ...(typeof sourceMaterial.emissive==='string'?{emissive:sourceMaterial.emissive}:{}),
+        ...(typeof sourceMaterial.preset==='string'?{ preset:sourceMaterial.preset.slice(0,40) }:{}),
+        ...(typeof sourceMaterial.baseColor==='string'?{ baseColor:sourceMaterial.baseColor }:{}),
+        ...(typeof sourceMaterial.emissive==='string'?{ emissive:sourceMaterial.emissive }:{}),
         ...Object.fromEntries(numeric.filter(key=>typeof sourceMaterial[key]==='number')
           .map(key=>[key,sourceMaterial[key]])),
       }
@@ -95,10 +95,10 @@ export function parseScene3D(value: unknown): Scene3D | undefined {
       size: item.size,
       color: item.color,
       ...(typeof item.name === 'string' ? { name: item.name.slice(0,100) } : {}),
-      ...(item.rotation === undefined ? {} : { rotation: item.rotation as [number, number, number] }),
-      ...(item.type==='mesh'?{vertices:vertices as number[]}:{}),
-      ...(material===undefined?{}:{material}),
-      ...(item.hidden===true?{hidden:true}:{}),
+      ...(item.rotation === undefined ? {} : { rotation: item.rotation }),
+      ...(item.type==='mesh'?{ vertices:vertices as number[] }:{}),
+      ...(material===undefined?{}:{ material }),
+      ...(item.hidden===true?{ hidden:true }:{}),
     })
   }
   return {
@@ -106,8 +106,8 @@ export function parseScene3D(value: unknown): Scene3D | undefined {
     name: typeof value.name === 'string' ? value.name.slice(0,140) : 'Escena 3D',
     background: typeof value.background === 'string' && colorPattern.test(value.background) ? value.background : '#f7f2eb',
     nodes,
-    ...(value.environment==='studio'||value.environment==='sunset'||value.environment==='daylight'?{environment:value.environment}:{}),
-    ...(value.camera==='perspective'||value.camera==='isometric'||value.camera==='front'||value.camera==='top'?{camera:value.camera}:{}),
+    ...(value.environment==='studio'||value.environment==='sunset'||value.environment==='daylight'?{ environment:value.environment }:{}),
+    ...(value.camera==='perspective'||value.camera==='isometric'||value.camera==='front'||value.camera==='top'?{ camera:value.camera }:{}),
   }
 }
 
@@ -133,44 +133,44 @@ function mesh(node: Scene3DNode): Face[] {
       ])
     }
   } else {
-  const quad=(a: Vec3,b: Vec3,c:Vec3,d:Vec3)=>{faces.push([a,b,c,d])}
-  if (node.type === 'box') {
-    const v:Vec3[]=[[-.5,-.5,-.5],[.5,-.5,-.5],[.5,.5,-.5],[-.5,.5,-.5],
-      [-.5,-.5,.5],[.5,-.5,.5],[.5,.5,.5],[-.5,.5,.5]]
-    for (const ids of [[4,5,6,7],[1,0,3,2],[0,4,7,3],[5,1,2,6],[3,7,6,2],[0,1,5,4]]) {
-      quad(v[ids[0]!]!,v[ids[1]!]!,v[ids[2]!]!,v[ids[3]!]!)
-    }
-  } else {
-    const slices=12, rings=node.type==='sphere'?8:1
-    for(let j=0;j<rings;j++){
-      for(let i=0;i<slices;i++){
-        const a=2*Math.PI*i/slices,b=2*Math.PI*(i+1)/slices
-        let lo:Vec3,hi:Vec3,lo2:Vec3,hi2:Vec3
-        if(node.type==='sphere'){
-          const lat1=-Math.PI/2+j*Math.PI/rings,lat2=-Math.PI/2+(j+1)*Math.PI/rings
-          const sphere=(lat:number,lon:number):Vec3=>[Math.cos(lat)*Math.cos(lon)*.5,Math.sin(lat)*.5,Math.cos(lat)*Math.sin(lon)*.5]
-          lo=sphere(lat1,a);hi=sphere(lat2,a);lo2=sphere(lat1,b);hi2=sphere(lat2,b)
-        } else {
-          const bottom=.5
-          const top=node.type==='cone'?0:.5
-          lo=[Math.cos(a)*bottom,-.5,Math.sin(a)*bottom]
-          lo2=[Math.cos(b)*bottom,-.5,Math.sin(b)*bottom]
-          hi=[Math.cos(a)*top,.5,Math.sin(a)*top]
-          hi2=[Math.cos(b)*top,.5,Math.sin(b)*top]
-        }
-        quad(lo,lo2,hi2,hi)
-        if(node.type!=='sphere'){
-          faces.push([[0,.5,0],hi,hi2])
-          faces.push([[0,-.5,0],lo2,lo])
+    const quad=(a: Vec3,b: Vec3,c:Vec3,d:Vec3)=>{faces.push([a,b,c,d])}
+    if (node.type === 'box') {
+      const v:Vec3[]=[[-.5,-.5,-.5],[.5,-.5,-.5],[.5,.5,-.5],[-.5,.5,-.5],
+        [-.5,-.5,.5],[.5,-.5,.5],[.5,.5,.5],[-.5,.5,.5]]
+      for (const ids of [[4,5,6,7],[1,0,3,2],[0,4,7,3],[5,1,2,6],[3,7,6,2],[0,1,5,4]]) {
+        quad(v[ids[0]!]!,v[ids[1]!]!,v[ids[2]!]!,v[ids[3]!]!)
+      }
+    } else {
+      const slices=12, rings=node.type==='sphere'?8:1
+      for(let j=0;j<rings;j++){
+        for(let i=0;i<slices;i++){
+          const a=2*Math.PI*i/slices,b=2*Math.PI*(i+1)/slices
+          let lo:Vec3,hi:Vec3,lo2:Vec3,hi2:Vec3
+          if(node.type==='sphere'){
+            const lat1=-Math.PI/2+j*Math.PI/rings,lat2=-Math.PI/2+(j+1)*Math.PI/rings
+            const sphere=(lat:number,lon:number):Vec3=>[Math.cos(lat)*Math.cos(lon)*.5,Math.sin(lat)*.5,Math.cos(lat)*Math.sin(lon)*.5]
+            lo=sphere(lat1,a);hi=sphere(lat2,a);lo2=sphere(lat1,b);hi2=sphere(lat2,b)
+          } else {
+            const bottom=.5
+            const top=node.type==='cone'?0:.5
+            lo=[Math.cos(a)*bottom,-.5,Math.sin(a)*bottom]
+            lo2=[Math.cos(b)*bottom,-.5,Math.sin(b)*bottom]
+            hi=[Math.cos(a)*top,.5,Math.sin(a)*top]
+            hi2=[Math.cos(b)*top,.5,Math.sin(b)*top]
+          }
+          quad(lo,lo2,hi2,hi)
+          if(node.type!=='sphere'){
+            faces.push([[0,.5,0],hi,hi2])
+            faces.push([[0,-.5,0],lo2,lo])
+          }
         }
       }
     }
   }
-  }
   return faces.map(vertices => ({
     vertices: vertices.map(point => transform(point,node)), color:node.material?.baseColor??node.color,
     alpha: node.material?.opacity??(/cristal|acristalad|glass|window/iu.test(node.name ?? '') ? .77 : 1),
-    ...(node.material===undefined?{}:{material:node.material}),
+    ...(node.material===undefined?{}:{ material:node.material }),
   }))
 }
 const cross=(a:Vec3,b:Vec3):Vec3=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]]
@@ -190,7 +190,7 @@ function shade(value:string, factor:number):string {
   const channels=[1,3,5].map(i=>Math.min(255,Math.max(0,Math.round(parseInt(value.slice(i,i+2),16)*factor))))
   return `rgb(${channels.join(',')})`
 }
-function sceneBounds(scene:Scene3D): {center:Vec3; radius:number} {
+function sceneBounds(scene:Scene3D): { center:Vec3; radius:number } {
   const mins:Vec3=[Infinity,Infinity,Infinity], maxs:Vec3=[-Infinity,-Infinity,-Infinity]
   for(const node of scene.nodes){
     if(node.hidden===true)continue
@@ -207,13 +207,13 @@ function sceneBounds(scene:Scene3D): {center:Vec3; radius:number} {
       }
     }
   }
-  if(!Number.isFinite(mins[0]!))return {center:[0,0,0],radius:2}
+  if(!Number.isFinite(mins[0]))return { center:[0,0,0],radius:2 }
   const center:Vec3=[(mins[0]+maxs[0])/2,(mins[1]+maxs[1])/2,(mins[2]+maxs[2])/2]
-  return {center,radius:Math.max(2,Math.hypot(maxs[0]-mins[0],maxs[1]-mins[1],maxs[2]-mins[2])*.62)}
+  return { center,radius:Math.max(2,Math.hypot(maxs[0]-mins[0],maxs[1]-mins[1],maxs[2]-mins[2])*.62) }
 }
 
 function paint(canvas:HTMLCanvasElement,scene:Scene3D,faces:readonly Face[],
-  bounds:{center:Vec3;radius:number},yaw:number,pitch:number,zoom:number,pan:[number,number]):void{
+  bounds:{ center:Vec3;radius:number },yaw:number,pitch:number,zoom:number,pan:[number,number]):void{
   const ctx=canvas.getContext('2d')
   if(ctx===null)return
   const rect=canvas.getBoundingClientRect()
@@ -246,10 +246,10 @@ function paint(canvas:HTMLCanvasElement,scene:Scene3D,faces:readonly Face[],
     const d=project([bounds.center[0]+bounds.radius,ground,bounds.center[2]+i*bounds.radius/10])
     ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);ctx.moveTo(c[0],c[1]);ctx.lineTo(d[0],d[1]);ctx.stroke()
   }
-  const projected:Projected[]=faces.map(face=>{
+  const projected:Projected[]=faces.map((face)=>{
     const v=face.vertices.map(project)
-    return {points:v.map(p=>[p[0],p[1]]),depth:v.reduce((sum,p)=>sum+p[2],0)/v.length,
-      color:face.color,alpha:face.alpha,light:lighting(face.vertices,face.material,scene.environment)}
+    return { points:v.map(p=>[p[0],p[1]]),depth:v.reduce((sum,p)=>sum+p[2],0)/v.length,
+      color:face.color,alpha:face.alpha,light:lighting(face.vertices,face.material,scene.environment) }
   })
   projected.sort((a,b)=>a.depth-b.depth)
   for(const face of projected){
@@ -279,8 +279,8 @@ export function Scene3DView({ spec, expanded = false }: { readonly spec: unknown
     if(next?.camera==='isometric'){angle.current.yaw=-.785;angle.current.pitch=.615}
   },[spec])
   const canvas=useRef<HTMLCanvasElement>(null)
-  const drag=useRef<{x:number;y:number;button:number}|null>(null)
-  const angle=useRef({yaw:-.65,pitch:.38,zoom:1,pan:[0,0] as [number,number]})
+  const drag=useRef<{ x:number;y:number;button:number }|null>(null)
+  const angle=useRef({ yaw:-.65,pitch:.38,zoom:1,pan:[0,0] as [number,number] })
   const [autoRotate,setAutoRotate]=useState(false)
   const redraw=useRef<()=>void>(()=>{})
   const [problem,setProblem]=useState('')
@@ -298,8 +298,8 @@ export function Scene3DView({ spec, expanded = false }: { readonly spec: unknown
       setProblem('Este navegador no permite dibujar el modelo 3D.')
       return
     }
-    const draw=()=>paint(element,scene,meshes,bounds,angle.current.yaw,
-      angle.current.pitch,angle.current.zoom,angle.current.pan)
+    const draw=()=>{ paint(element,scene,meshes,bounds,angle.current.yaw,
+      angle.current.pitch,angle.current.zoom,angle.current.pan) }
     redraw.current=draw
     draw()
     const observer=typeof ResizeObserver==='undefined'?undefined:new ResizeObserver(draw)
@@ -319,12 +319,12 @@ export function Scene3DView({ spec, expanded = false }: { readonly spec: unknown
     })
   }
   const save=(extension:string,content:string|Uint8Array,type:string):void=>{
-    const blob=new Blob([content as BlobPart],{type})
+    const blob=new Blob([content as BlobPart],{ type })
     const url=URL.createObjectURL(blob)
     const anchor=document.createElement('a')
     anchor.href=url;anchor.download=(scene.name||'phoenix-3d').replace(/[^a-z0-9_-]+/giu,'-')+extension
     anchor.click()
-    setTimeout(()=>URL.revokeObjectURL(url),1000)
+    setTimeout(()=>{ URL.revokeObjectURL(url) },1000)
   }
   const importFile=async(file:File):Promise<void>=>{
     if(file.size>12_000_000)throw Error('Máximo 12 MB por modelo.')
@@ -340,44 +340,44 @@ export function Scene3DView({ spec, expanded = false }: { readonly spec: unknown
   }
   const preset=(name:'glass'|'wood'|'concrete'|'metal'|'water'|'foliage'):void=>{
     const presets:Record<typeof name,Scene3DMaterial>={
-      glass:{preset:'glass',baseColor:'#b5d8d6',roughness:.08,metallic:0,opacity:.55,transmission:.85},
-      wood:{preset:'wood',baseColor:'#a67a4b',roughness:.82,metallic:0},
-      concrete:{preset:'concrete',baseColor:'#d6d0c8',roughness:.9,metallic:0},
-      metal:{preset:'metal',baseColor:'#aeb8be',roughness:.22,metallic:.95,clearcoat:.55},
-      water:{preset:'water',baseColor:'#41b9b8',roughness:.08,metallic:0,opacity:.76,transmission:.35},
-      foliage:{preset:'foliage',baseColor:'#54875b',roughness:.96,metallic:0},
+      glass:{ preset:'glass',baseColor:'#b5d8d6',roughness:.08,metallic:0,opacity:.55,transmission:.85 },
+      wood:{ preset:'wood',baseColor:'#a67a4b',roughness:.82,metallic:0 },
+      concrete:{ preset:'concrete',baseColor:'#d6d0c8',roughness:.9,metallic:0 },
+      metal:{ preset:'metal',baseColor:'#aeb8be',roughness:.22,metallic:.95,clearcoat:.55 },
+      water:{ preset:'water',baseColor:'#41b9b8',roughness:.08,metallic:0,opacity:.76,transmission:.35 },
+      foliage:{ preset:'foliage',baseColor:'#54875b',roughness:.96,metallic:0 },
     }
     const material=presets[name]
-    edit(node=>({...node,color:material.baseColor??node.color,material}))
+    edit(node=>({ ...node,color:material.baseColor??node.color,material }))
   }
   return <section className={css.root} data-phoenix-scene3d="interactive" data-scene-node-count={scene.nodes.length}>
     <div className={css.toolbar}>
       <span className={css.tag}>3D interactivo · {scene.nodes.length} piezas</span>
       <div className={css.actions}>
-        <button type="button" onClick={()=>update(()=>{angle.current.zoom=Math.min(6,angle.current.zoom*1.25)})}
+        <button type="button" onClick={()=>{ update(()=>{angle.current.zoom=Math.min(6,angle.current.zoom*1.25)}) }}
           aria-label="Acercar modelo 3D">+</button>
-        <button type="button" onClick={()=>update(()=>{angle.current.zoom=Math.max(.2,angle.current.zoom/1.25)})}
+        <button type="button" onClick={()=>{ update(()=>{angle.current.zoom=Math.max(.2,angle.current.zoom/1.25)}) }}
           aria-label="Alejar modelo 3D">−</button>
-        <button type="button" onClick={()=>update(()=>{angle.current={yaw:-.65,pitch:.38,zoom:1,pan:[0,0]}})}>Restablecer</button>
-        <button type="button" aria-pressed={autoRotate} onClick={()=>setAutoRotate(value=>!value)}>
+        <button type="button" onClick={()=>{ update(()=>{angle.current={ yaw:-.65,pitch:.38,zoom:1,pan:[0,0] }}) }}>Restablecer</button>
+        <button type="button" aria-pressed={autoRotate} onClick={()=>{ setAutoRotate(value=>!value) }}>
           {autoRotate?'Pausar':'Girar'}</button>
-        <button type="button" onClick={()=>update(()=>{angle.current.yaw=0;angle.current.pitch=0;angle.current.pan=[0,0]})}>Frente</button>
-        <button type="button" onClick={()=>update(()=>{angle.current.yaw=0;angle.current.pitch=1.48;angle.current.pan=[0,0]})}>Planta</button>
-        <button type="button" onClick={()=>update(()=>{angle.current.yaw=-.785;angle.current.pitch=.615})}>Isométrica</button>
+        <button type="button" onClick={()=>{ update(()=>{angle.current.yaw=0;angle.current.pitch=0;angle.current.pan=[0,0]}) }}>Frente</button>
+        <button type="button" onClick={()=>{ update(()=>{angle.current.yaw=0;angle.current.pitch=1.48;angle.current.pan=[0,0]}) }}>Planta</button>
+        <button type="button" onClick={()=>{ update(()=>{angle.current.yaw=-.785;angle.current.pitch=.615}) }}>Isométrica</button>
         <label className={css.cameraControl}>Luz <select aria-label="Iluminación del modelo 3D" value={scene.environment??'studio'}
-          onChange={event=>setScene(current=>current===undefined?current:{...current,environment:event.target.value as 'studio'|'sunset'|'daylight'})}>
+          onChange={(event)=>{ setScene(current=>current===undefined?current:{ ...current,environment:event.target.value as 'studio'|'sunset'|'daylight' }) }}>
           <option value="studio">Estudio</option><option value="sunset">Atardecer</option><option value="daylight">Día</option>
         </select></label>
-        <button type="button" aria-pressed={editOpen} onClick={()=>setEditOpen(value=>!value)}>Editar</button>
+        <button type="button" aria-pressed={editOpen} onClick={()=>{ setEditOpen(value=>!value) }}>Editar</button>
       </div>
     </div>
     <canvas ref={canvas} className={expanded?css.canvasLarge:css.canvas} aria-label={`Modelo tridimensional manipulable: ${scene.name}`}
-      onPointerDown={event=>{event.currentTarget.setPointerCapture(event.pointerId);
-        drag.current={x:event.clientX,y:event.clientY,button:event.button}}}
-      onPointerMove={event=>{
+      onPointerDown={(event)=>{event.currentTarget.setPointerCapture(event.pointerId)
+        drag.current={ x:event.clientX,y:event.clientY,button:event.button }}}
+      onPointerMove={(event)=>{
         const point=drag.current;if(point===null)return
         const dx=event.clientX-point.x,dy=event.clientY-point.y
-        drag.current={...point,x:event.clientX,y:event.clientY}
+        drag.current={ ...point,x:event.clientX,y:event.clientY }
         update(()=>{
           if(point.button===2||event.shiftKey){
             angle.current.pan[0]+=dx;angle.current.pan[1]+=dy
@@ -387,47 +387,47 @@ export function Scene3DView({ spec, expanded = false }: { readonly spec: unknown
           }
         })
       }}
-      onPointerUp={event=>{drag.current=null;if(event.currentTarget.hasPointerCapture(event.pointerId))
+      onPointerUp={(event)=>{drag.current=null;if(event.currentTarget.hasPointerCapture(event.pointerId))
         event.currentTarget.releasePointerCapture(event.pointerId)}}
       onPointerCancel={()=>{drag.current=null}}
-      onContextMenu={event=>event.preventDefault()}
-      onWheel={event=>{event.preventDefault();update(()=>{angle.current.zoom=Math.max(.2,Math.min(6,angle.current.zoom*(event.deltaY>0?.91:1.1)))})}}
+      onContextMenu={(event)=>{ event.preventDefault() }}
+      onWheel={(event)=>{event.preventDefault();update(()=>{angle.current.zoom=Math.max(.2,Math.min(6,angle.current.zoom*(event.deltaY>0?.91:1.1)))})}}
     />
-    <div className={css.actions} style={{padding:'0 12px 8px',justifyContent:'flex-end'}}>
-      <button type="button" onClick={()=>save('.scene3d.json',JSON.stringify(scene,null,2),'application/json')}>JSON</button>
+    <div className={css.actions} style={{ padding:'0 12px 8px',justifyContent:'flex-end' }}>
+      <button type="button" onClick={()=>{ save('.scene3d.json',JSON.stringify(scene,null,2),'application/json') }}>JSON</button>
       <button type="button" onClick={()=>{try{save('.gltf',exportSceneGLTF(scene),'model/gltf+json')}catch(error){setProblem(String(error))}}}>Exportar glTF</button>
       <button type="button" onClick={()=>{try{save('.glb',exportSceneGLB(scene),'model/gltf-binary')}catch(error){setProblem(String(error))}}}>Exportar GLB</button>
       <button type="button" onClick={()=>picker.current?.click()}>Importar 3D</button>
       <input ref={picker} className={css.hiddenInput} type="file" accept=".glb,.gltf,.json,.scene3d.json"
-        aria-label="Importar modelo GLB glTF o JSON" onChange={event=>{
+        aria-label="Importar modelo GLB glTF o JSON" onChange={(event)=>{
           const file=event.currentTarget.files?.[0];event.currentTarget.value=''
-          if(file!==undefined)void importFile(file).catch(error=>setProblem(error instanceof Error?error.message:'No se pudo importar el modelo.'))
+          if(file!==undefined)void importFile(file).catch((error)=>{ setProblem(error instanceof Error?error.message:'No se pudo importar el modelo.') })
         }}/>
     </div>
     {editOpen&&selectedNode!==undefined&&<div className={css.editor}>
-      <label>Pieza <select aria-label="Seleccionar pieza 3D" value={selected} onChange={e=>setSelected(Number(e.target.value))}>
+      <label>Pieza <select aria-label="Seleccionar pieza 3D" value={selected} onChange={(e)=>{ setSelected(Number(e.target.value)) }}>
         {scene.nodes.map((node,i)=><option key={i} value={i}>{node.name??node.type} · {i+1}</option>)}
       </select></label>
       <label>Color <input aria-label="Color de pieza" type="color" value={selectedNode.color}
-        onChange={e=>edit(node=>({...node,color:e.target.value,material:{...node.material,baseColor:e.target.value}}))}/></label>
+        onChange={(e)=>{ edit(node=>({ ...node,color:e.target.value,material:{ ...node.material,baseColor:e.target.value } })) }}/></label>
       <div className={css.actions}>
         {(['glass','wood','concrete','metal','water','foliage'] as const).map(name=>
-          <button key={name} type="button" onClick={()=>preset(name)}>{name}</button>)}
+          <button key={name} type="button" onClick={()=>{ preset(name) }}>{name}</button>)}
       </div>
       <div className={css.actions}>
-        {(['x','y','z'] as const).map((axis,i)=><button key={axis} type="button" onClick={()=>
-          edit(node=>({...node,position:node.position.map((v,j)=>j===i?Math.round((v+.5)*2)/2:v) as [number,number,number]}))}>
+        {(['x','y','z'] as const).map((axis,i)=><button key={axis} type="button" onClick={()=>{
+          edit(node=>({ ...node,position:node.position.map((v,j)=>j===i?Math.round((v+.5)*2)/2:v) as [number,number,number] })) }}>
           Mover {axis.toUpperCase()} +0.5</button>)}
-        <button type="button" onClick={()=>edit(node=>({...node,rotation:[
+        <button type="button" onClick={()=>{ edit(node=>({ ...node,rotation:[
           node.rotation?.[0]??0,((node.rotation?.[1]??0)+15)%360,node.rotation?.[2]??0,
-        ]}))}>Girar pieza 15°</button>
-        <button type="button" onClick={()=>edit(node=>({...node,hidden:node.hidden!==true}))}>
+        ] })) }}>Girar pieza 15°</button>
+        <button type="button" onClick={()=>{ edit(node=>({ ...node,hidden:node.hidden!==true })) }}>
           {selectedNode.hidden?'Mostrar':'Ocultar'}</button>
-        <button type="button" disabled={scene.nodes.length>=150} onClick={()=>setScene(current=>
-          current===undefined||current.nodes.length>=150?current:{...current,nodes:[...current.nodes,{
+        <button type="button" disabled={scene.nodes.length>=150} onClick={()=>{ setScene(current=>
+          current===undefined||current.nodes.length>=150?current:{ ...current,nodes:[...current.nodes,{
             ...selectedNode,name:(selectedNode.name??'Pieza')+' copia',
             position:[selectedNode.position[0]+1,selectedNode.position[1],selectedNode.position[2]],
-          }]})}>Duplicar</button>
+          }] }) }}>Duplicar</button>
       </div>
       <p>Edición básica · traslación con ajuste de 0,5 m · parámetros PBR exportables.</p>
     </div>}

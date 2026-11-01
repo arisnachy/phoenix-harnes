@@ -768,11 +768,13 @@ function WorkspaceLibraryModal({
   const sessionsFor = (ids: readonly SessionId[]): SessionId[] => ids.filter(id =>
     byId[id] !== undefined && !archived.has(id)
     && (search === '' || labelOf(id).toLocaleLowerCase().includes(search)))
-  const visibleWorkspaces = workspaces.map(workspace => {
+  const visibleWorkspaces = workspaces.map((workspace) => {
     const nameMatches = workspace.title.toLocaleLowerCase().includes(search)
     return {
       workspace,
-      sessions: nameMatches ? workspace.sessionIds.filter(id => byId[id] !== undefined && !archived.has(id)) : sessionsFor(workspace.sessionIds),
+      sessions: nameMatches
+        ? workspace.sessionIds.filter(id => byId[id] !== undefined && !archived.has(id))
+        : sessionsFor(workspace.sessionIds),
       nameMatches,
     }
   }).filter(({ nameMatches, sessions }) => nameMatches || sessions.length > 0)
@@ -795,7 +797,7 @@ function WorkspaceLibraryModal({
               type="search"
               autoFocus
               value={query}
-              onChange={event => { setQuery(event.currentTarget.value) }}
+              onChange={(event) => { setQuery(event.currentTarget.value) }}
               placeholder={t('library.search')}
               aria-label={t('library.search')}
             />
@@ -1537,7 +1539,7 @@ export function WorkspaceBrowser({
           <select
             id="phoenix-cleanup-mode" disabled={cleanupRunning}
             value={cleanupMode}
-            onChange={e => {
+            onChange={(e) => {
               setCleanupMode(e.target.value as SessionCleanupMode)
               resetCleanupResult()
             }}
@@ -1553,7 +1555,7 @@ export function WorkspaceBrowser({
               <input
                 type="date" disabled={cleanupRunning}
                 value={cleanupBefore}
-                onChange={e => { setCleanupBefore(e.target.value); resetCleanupResult() }}
+                onChange={(e) => { setCleanupBefore(e.target.value); resetCleanupResult() }}
               />
             </label>
           )}
@@ -1563,13 +1565,13 @@ export function WorkspaceBrowser({
               <input
                 type="date" disabled={cleanupRunning}
                 value={cleanupAfter}
-                onChange={e => { setCleanupAfter(e.target.value); resetCleanupResult() }}
+                onChange={(e) => { setCleanupAfter(e.target.value); resetCleanupResult() }}
               />
             </label>
           )}
           {cleanupMode === 'selected' && (
             <div className={css.cleanupChoices} role="group" aria-label={t('cleanup.selected')}>
-              {cleanupSessions.ids.map(id => {
+              {cleanupSessions.ids.map((id) => {
                 const item = cleanupSessions.byId[id]
                 if (item === undefined) return null
                 return (
@@ -1577,7 +1579,7 @@ export function WorkspaceBrowser({
                     <input
                       type="checkbox" disabled={cleanupRunning}
                       checked={cleanupSelected.includes(id)}
-                      onChange={e => {
+                      onChange={(e) => {
                         setCleanupSelected(previous => e.target.checked
                           ? [...previous, id] : previous.filter(value => value !== id))
                         resetCleanupResult()
@@ -1598,7 +1600,7 @@ export function WorkspaceBrowser({
               <input
                 type="text" disabled={cleanupRunning}
                 value={cleanupConfirm} autoComplete="off"
-                onChange={e => { setCleanupConfirm(e.target.value) }}
+                onChange={(e) => { setCleanupConfirm(e.target.value) }}
               />
             </label>
           )}

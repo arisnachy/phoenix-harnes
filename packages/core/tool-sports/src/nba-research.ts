@@ -63,7 +63,7 @@ const resultFor = (event: EspnEvent, id: string, before: number): Result | null 
   if(event.status?.type?.state!=='post')return null
   const gameAt = Date.parse(event.date ?? '')
   if (!Number.isFinite(gameAt)||gameAt>=before)return null
-  const {home,away}=sides(event)
+  const { home,away }=sides(event)
   const isHome=teamId(home)===id
   const isAway=teamId(away)===id
   if(!isHome&&!isAway)return null
@@ -76,19 +76,19 @@ const resultFor = (event: EspnEvent, id: string, before: number): Result | null 
 }
 const summarize=(team:EspnTeam,history:EspnEvent[],before:number):NbaSideResearch=>{
   const id=teamId(team)
-  const results=history.flatMap(e=>{
+  const results=history.flatMap((e)=>{
     const r=resultFor(e,id,before)
     return r?[r]:[]
   }).sort((a,b)=>Date.parse(b.date)-Date.parse(a.date)).slice(0,10)
   const wins=results.filter(r=>r.result==='W').length
   const losses=results.filter(r=>r.result==='L').length
   const last=results[0]
-  return {teamId:id,team:teamName(team),seasonRecord:team.records?.find(x=>/^\d+-\d+$/u.test(x.summary??''))?.summary??null,
+  return { teamId:id,team:teamName(team),seasonRecord:team.records?.find(x=>/^\d+-\d+$/u.test(x.summary??''))?.summary??null,
     gamesObserved:results.length,recentWins:wins,recentLosses:losses,
     recentAverageMargin:results.length ? Number((results.reduce((a,b)=>a+b.margin,0)/results.length).toFixed(2)):null,
-    restHours:last?Number(((before-Date.parse(last.date))/3_600_000).toFixed(1)):null,recentResults:results}
+    restHours:last?Number(((before-Date.parse(last.date))/3_600_000).toFixed(1)):null,recentResults:results }
 }
-const nowDay=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santo_Domingo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date())
+const nowDay=()=>new Intl.DateTimeFormat('en-CA',{ timeZone:'America/Santo_Domingo',year:'numeric',month:'2-digit',day:'2-digit' }).format(new Date())
 /**
  * Research one NBA slate from ESPN fixtures plus completed game results, using one
  * bounded board request per date, shared across all events (no requests per team).
@@ -110,7 +110,7 @@ export async function researchNbaSlate(
     return board
   }
   const board=await getBoard(date)
-  const pending=board.events?.filter(e=>{
+  const pending=board.events?.filter((e)=>{
     const kickoff=Date.parse(e.date??'')
     return Number.isFinite(kickoff)&&kickoff>now
       && (e.status?.type?.state===undefined||e.status?.type?.state==='pre')
@@ -118,13 +118,13 @@ export async function researchNbaSlate(
   }).slice(0,maxMatches)??[]
   if(!pending.length)throw Error('No hay partidos NBA futuros verificables con esos filtros')
   const starting=new Date(date+'T12:00:00Z').getTime()
-  const days=Array.from({length:lookbackDays},(_,i)=>isoDay(new Date(starting-(i+1)*86_400_000)))
+  const days=Array.from({ length:lookbackDays },(_,i)=>isoDay(new Date(starting-(i+1)*86_400_000)))
   // A failed archive date cannot be interpreted as a zero-win day.
   const archives=await Promise.allSettled(days.map(getBoard))
   const completed=archives.flatMap(job=>job.status==='fulfilled'?job.value.events??[]:[])
   const daysRetrieved=archives.filter(job=>job.status==='fulfilled').length
-  const matches:NbaMatchResearch[]=pending.flatMap(event=>{
-    const {home,away}=sides(event)
+  const matches:NbaMatchResearch[]=pending.flatMap((event)=>{
+    const { home,away }=sides(event)
     if(!home||!away||!teamId(home)||!teamId(away)||!teamName(home)||!teamName(away))return []
     const kickoff=Date.parse(event.date??'')
     const homeReport=summarize(home,completed,kickoff)
@@ -136,13 +136,13 @@ export async function researchNbaSlate(
       'Eficiencia avanzada y emparejamientos tácticos sin contrastar',
       'Cuotas por casa y valor esperado sin contrastar',
     ]
-    const summary: NbaMatchResearch = {eventId:String(event.id),matchup:teamName(away)+' vs '+teamName(home),kickoff:event.date??'',
+    const summary: NbaMatchResearch = { eventId:String(event.id),matchup:teamName(away)+' vs '+teamName(home),kickoff:event.date??'',
       home:homeReport,away:awayReport,sampleAdequate:enough,
-      evidenceStatus:enough?'limited':'insufficient',missing}
+      evidenceStatus:enough?'limited':'insufficient',missing }
     return [summary]
   })
   if(!matches.length)throw Error('ESPN no identificó correctamente a los equipos de los próximos partidos')
-  return {sport:'basketball',league:'nba',date,source:'ESPN Site API · scoreboards históricos',
+  return { sport:'basketball',league:'nba',date,source:'ESPN Site API · scoreboards históricos',
     observedAt:new Date(now).toISOString(),lookbackDays,daysRetrieved,matches,
-    note:'Los márgenes y descansos se derivan solo de marcadores completos. Son tendencias descriptivas, no predicciones. Antes de recomendar una apuesta Kira debe comprobar lesiones oficiales, alineaciones, eficiencia, mercados, frescura y correlación. No atribuir jugadores sin corroborar su equipo actual.'}
+    note:'Los márgenes y descansos se derivan solo de marcadores completos. Son tendencias descriptivas, no predicciones. Antes de recomendar una apuesta Kira debe comprobar lesiones oficiales, alineaciones, eficiencia, mercados, frescura y correlación. No atribuir jugadores sin corroborar su equipo actual.' }
 }

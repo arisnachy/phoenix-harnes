@@ -39,7 +39,7 @@ describe('managed MCP preboot migration', () => {
       insert: Array<{ inject?: string[]; config: Record<string, unknown>; source?: Record<string, unknown> }>
     }>)[0]!.insert
     expect(rows).toHaveLength(5)
-    rows.forEach(row => { expect(row.inject).toEqual(inject) })
+    rows.forEach((row) => { expect(row.inject).toEqual(inject) })
     expect(rows[0]!.config.headers).toEqual({ Authorization: 'REDACTED-LOCAL-TEST' })
     expect(rows[0]!.source).toEqual({ kind: 'curated', connectorId: 'notion' })
     const first = readFileSync(file, 'utf8')

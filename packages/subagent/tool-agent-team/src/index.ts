@@ -75,7 +75,7 @@ export function resolveEclipseTeammateProfile(
 export function eclipseTeamPlanSummary(events: readonly { readonly type: string; readonly data: unknown }[]): string | undefined {
   const start = events.findLastIndex(event => event.type === 'turn/start')
   const messages = events.slice(start + 1).filter(event => event.type === 'assistant/message')
-  const texts = messages.map(event => {
+  const texts = messages.map((event) => {
     const data = event.data as { readonly message?: { readonly content?: readonly { readonly text?: string }[] } }
     return data.message?.content?.map(part => part.text ?? '').filter(Boolean).join(' ') ?? ''
   })

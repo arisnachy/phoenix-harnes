@@ -1,9 +1,9 @@
 // Adapted from https://github.com/hemasurya106/react-generative-ui (v0.4.6, MIT)
-import React from 'react';
+import React from 'react'
 // Phoenix validates declarative props before this upstream visual component renders.
 // Zod-only metadata was omitted so this React 18 adaptation needs no new npm dependency.
 
-export type TimelineProps = { title?: string; items: Array<{ date: string; title: string; description?: string }> };
+export type TimelineProps = { title?: string; items: Array<{ date: string; title: string; description?: string }> }
 
 export const Timeline: React.FC<TimelineProps> = ({
   title,
@@ -61,5 +61,5 @@ export const Timeline: React.FC<TimelineProps> = ({
         ))}
       </div>
     </div>
-  );
-};
+  )
+}

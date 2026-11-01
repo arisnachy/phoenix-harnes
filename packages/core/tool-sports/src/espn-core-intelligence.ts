@@ -20,15 +20,15 @@ export const espnCoreModes = {
 } as const
 export type EspnCoreMode=keyof typeof espnCoreModes
 export type EspnCoreInput={
-  mode:EspnCoreMode;sport:string;league:string;eventId?:string|undefined;
-  competitionId?:string|undefined;teamId?:string|undefined;
-  providerId?:string|undefined;season?:number|undefined;
-  seasonType?:number|undefined;movementType?:number|undefined;
+  mode:EspnCoreMode;sport:string;league:string;eventId?:string|undefined
+  competitionId?:string|undefined;teamId?:string|undefined
+  providerId?:string|undefined;season?:number|undefined
+  seasonType?:number|undefined;movementType?:number|undefined
   limit?:number|undefined;page?:number|undefined
 }
 type Data=Record<string,unknown>
 const record=(v:unknown):v is Data=>v!==null&&typeof v==='object'&&!Array.isArray(v)
-const arr=(v:unknown):Data[]=>Array.isArray(v)?v.filter(record) as Data[]:[]
+const arr=(v:unknown):Data[]=>Array.isArray(v)?v.filter(record):[]
 const text=(v:unknown,max=160)=>typeof v==='string'?v.slice(0,max):typeof v==='number'&&Number.isFinite(v)?String(v):''
 const safeId=(v:unknown):string=>{
   const s=text(v,30)
@@ -41,7 +41,7 @@ export const coreRoot='https://sports.core.api.espn.com/v2/sports/'
 const bounded=(v:number|undefined,max:number,fallback:number):number=>Number.isInteger(v)&&v!==undefined&&v>=1&&v<=max?v:fallback
 /** Build a fixed, immutable HTTPS provider URL from validated path segments. */
 export function espnCoreUrl(input:EspnCoreInput):string{
-  const {mode,sport,league}=input
+  const { mode,sport,league }=input
   if(!Object.hasOwn(espnCoreModes,mode))throw Error('Modo ESPN Core no admitido')
   if(!sportOK(sport)||!leagueOK(league))throw Error('Deporte o liga ESPN inválidos')
   const base=coreRoot+sport+'/leagues/'+league
@@ -105,7 +105,7 @@ function trustedRef(ref:unknown,sport:string,league:string):string|null{
     return u.toString()
   }catch{return null}
 }
-const cache=new Map<string,{at:number;data:unknown}>()
+const cache=new Map<string,{ at:number;data:unknown }>()
 const inFlight=new Map<string,Promise<unknown>>()
 /** Bounded cache and in-flight request sharing; no model calls for repeated snapshots. */
 export async function espnCoreRead(url:string,getJSON:<T>(url:string)=>Promise<T>,
@@ -117,7 +117,7 @@ export async function espnCoreRead(url:string,getJSON:<T>(url:string)=>Promise<T
   const running=(async()=>{
     const value=await getJSON<unknown>(url)
     if(cache.size>120)cache.clear()
-    cache.set(url,{at:Date.now(),data:value})
+    cache.set(url,{ at:Date.now(),data:value })
     return value
   })()
   inFlight.set(url,running)
@@ -144,10 +144,10 @@ const trimmed=(value:unknown,max=9500):unknown=>{
   return value
 }
 export type EspnCoreReport={
-  mode:EspnCoreMode;source:'ESPN Core API (pública, sin clave)';
-  endpoint:string;state:'data'|'empty'|'unavailable';count:number;
-  page?:Data|undefined;observedAt:string;items:unknown[];
-  details?:unknown|undefined;refCount:number;resolvedRefs:number;
+  mode:EspnCoreMode;source:'ESPN Core API (pública, sin clave)'
+  endpoint:string;state:'data'|'empty'|'unavailable';count:number
+  page?:Data|undefined;observedAt:string;items:unknown[]
+  details?:unknown|undefined;refCount:number;resolvedRefs:number
   warning:string;error?:string|undefined
 }
 /**
@@ -156,7 +156,7 @@ export type EspnCoreReport={
  * respect upstream and cap token output. Missing child links remain visible.
  */
 export async function queryEspnCore(input:EspnCoreInput,getJSON:<T>(url:string)=>Promise<T>,
-  options:{resolveRefs?:boolean;now?:number}={}):Promise<EspnCoreReport>{
+  options:{ resolveRefs?:boolean;now?:number }={}):Promise<EspnCoreReport>{
   const endpoint=espnCoreUrl(input)
   const at=options.now??Date.now()
   const base={
@@ -166,7 +166,7 @@ export async function queryEspnCore(input:EspnCoreInput,getJSON:<T>(url:string)=
   }
   try{
     const raw=await espnCoreRead(endpoint,getJSON,at)
-    if(!record(raw)&&!Array.isArray(raw))return {...base,state:'empty',count:0,items:[],refCount:0,resolvedRefs:0}
+    if(!record(raw)&&!Array.isArray(raw))return { ...base,state:'empty',count:0,items:[],refCount:0,resolvedRefs:0 }
     const root=record(raw)?raw:{}
     const original=Array.isArray(raw)?arr(raw):arr(root.items)
     const refs=original.filter(v=>trustedRef(v.$ref,input.sport,input.league)!==null)
@@ -178,16 +178,16 @@ export async function queryEspnCore(input:EspnCoreInput,getJSON:<T>(url:string)=
         try{
           const resolved=await espnCoreRead(ref,getJSON,at)
           results.push(trimmed(resolved,1700));resolvedRefs++
-        }catch{results.push({$ref:ref,unavailable:true})}
+        }catch{results.push({ $ref:ref,unavailable:true })}
       }else results.push(trimmed(item,900))
     }
     const details=original.length===0?trimmed(raw,5200):undefined
     const count=typeof root.count==='number'&&root.count>=0?root.count:original.length||((record(raw)&&Object.keys(raw).length>0)?1:0)
-    return {...base,state:count>0?'data':'empty',count,
+    return { ...base,state:count>0?'data':'empty',count,
       items:results,details,refCount:refs.length,resolvedRefs,
-      ...(record(root.pageInfo)?{page:trimmed(root.pageInfo,350) as Data}:{})}
+      ...(record(root.pageInfo)?{ page:trimmed(root.pageInfo,350) as Data }:{}) }
   }catch(error){
-    return {...base,state:'unavailable',count:0,items:[],refCount:0,resolvedRefs:0,
-      error:error instanceof Error?error.message.slice(0,220):'Error desconocido del proveedor'}
+    return { ...base,state:'unavailable',count:0,items:[],refCount:0,resolvedRefs:0,
+      error:error instanceof Error?error.message.slice(0,220):'Error desconocido del proveedor' }
   }
 }

@@ -49,7 +49,7 @@ describe('API Remote Agent resolver lifecycle deletion barrier', () => {
     vi.spyOn(ctx.agents, 'resume').mockResolvedValue(handle)
     const owned: typeof handle[] = []
     const resolver = createApiRemoteAgentResolver(ctx, {
-      onOwnedHandle: owner => { owned.push(owner as typeof handle) },
+      onOwnedHandle: (owner) => { owned.push(owner as typeof handle) },
       isDeletingSession: candidate => deleting && candidate === id,
     })
     expect(await resolver(id)).toMatchObject({ agent: { id } })

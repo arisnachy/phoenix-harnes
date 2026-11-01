@@ -94,7 +94,7 @@ export function SecureAsk({ target, onClose, onSaved }: {
           origin: target.origin, tabId: target.tabId,
         })
         if (status.authenticated === true) { onSaved(); return }
-        if (status.required === false) {
+        if (!status.required) {
           setFeedback('Credenciales guardadas. El formulario desapareció, pero el sitio aún no confirmó una sesión autenticada.')
           return
         }
@@ -237,7 +237,7 @@ export function SecureAsk({ target, onClose, onSaved }: {
         <div className={css.headerActions}>
           <span className={css.privatePill}>Privado</span>
           <button type="button" className={css.iconButton} aria-label={collapsed ? 'Expandir acceso seguro' : 'Contraer acceso seguro'}
-            onClick={() => setCollapsed(value => !value)}>{collapsed ? '＋' : '−'}</button>
+            onClick={() =>{  setCollapsed(value => !value) }}>{collapsed ? '＋' : '−'}</button>
           <button type="button" className={css.iconButton} aria-label="Cerrar acceso seguro" onClick={onClose}>×</button>
         </div>
       </header>
@@ -276,7 +276,7 @@ export function SecureAsk({ target, onClose, onSaved }: {
           <button type="button" disabled={busy} onClick={() => { void useSaved() }}>Usar acceso guardado</button>
           {!selectedProfile?.automatic && <button type="button" disabled={busy}
             onClick={() => { void rememberSaved() }}>No volver a preguntar en este sitio</button>}
-          <button type="button" disabled={busy || !fieldsObserved} onClick={() => setEditing(value => !value)}>
+          <button type="button" disabled={busy || !fieldsObserved} onClick={() =>{  setEditing(value => !value) }}>
             {editing ? 'Ocultar formulario' : 'Cambiar o completar credenciales'}
           </button>
         </div>}
@@ -287,12 +287,12 @@ export function SecureAsk({ target, onClose, onSaved }: {
           {accountField && <label>{accountField.label}
             <input value={account} disabled={busy} autoComplete="off" spellCheck={false}
               type={accountField.inputType === 'email' ? 'email' : accountField.inputType === 'tel' ? 'tel' : 'text'}
-              onChange={event => setAccount(event.currentTarget.value)}
+              onChange={(event) =>{  setAccount(event.currentTarget.value) }}
               placeholder={accountField.placeholder} />
           </label>}
           {secretField && <label>{secretField.label}
             <input type="password" value={secret} disabled={busy} autoComplete="new-password"
-              onChange={event => setSecret(event.currentTarget.value)}
+              onChange={(event) =>{  setSecret(event.currentTarget.value) }}
               placeholder={secretField.placeholder} />
           </label>}
           {extraFields.map(field => <label key={field.key}>{field.label}
@@ -307,7 +307,7 @@ export function SecureAsk({ target, onClose, onSaved }: {
             }} />
           </label>)}
           <label className={css.option}><input type="checkbox" checked={automatic} disabled={busy}
-            onChange={event => setAutomatic(event.currentTarget.checked)} />
+            onChange={(event) =>{  setAutomatic(event.currentTarget.checked) }} />
             Recordar y permitir inicio automático en futuras visitas</label>
           <div className={css.actions}>
             <button type="submit" disabled={busy || !canSave}>Guardar y continuar</button>

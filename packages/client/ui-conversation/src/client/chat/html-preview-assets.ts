@@ -80,7 +80,7 @@ export function inlineBundledImages(entry: string, html: string, files: AssetMap
     return uri === undefined ? original : attribute + '=' + quote + uri + quote
   })
   output = output.replace(/\b(srcset)\s*=\s*(["'])(.*?)\2/giu, (_original: string, attribute: string, quote: string, raw: string) => {
-    const candidates = raw.split(',').map(candidate => {
+    const candidates = raw.split(',').map((candidate) => {
       const matched = /^(\s*)(\S+)(\s+.*)?$/u.exec(candidate)
       if (matched === null) return candidate
       const uri = resolve(matched[2] ?? '')
@@ -95,7 +95,7 @@ export function inlineBundledImages(entry: string, html: string, files: AssetMap
   if (!includeStylesheets) return output
   // Inline only actual CSS files shipped with this same artifact, preserving
   // their own relative image paths. Remote stylesheets remain blocked.
-  return output.replace(/<link\b[^>]*>/giu, original => {
+  return output.replace(/<link\b[^>]*>/giu, (original) => {
     if (!/\brel\s*=\s*(["'])stylesheet\1/iu.test(original)) return original
     const match = /\bhref\s*=\s*(["'])(.*?)\1/iu.exec(original)
     const reference = match?.[2]

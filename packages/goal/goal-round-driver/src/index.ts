@@ -362,9 +362,9 @@ export function apply(ctx: Context): void {
         ? `no new operational evidence for ${work.stagnantRounds} rounds; change tool or method`
         : latestJudge(state, goal) === undefined
           ? 'continue the active mission with a bounded strategy'
-        : progress.stagnantRounds > 0
-          ? `verification stalled for ${progress.stagnantRounds} gate round(s); rotate strategy`
-          : `verification evidence is still increasing (${progress.verifiedCriteria} criteria, ${progress.passedChecks} checks); keep the productive strategy`,
+          : progress.stagnantRounds > 0
+            ? `verification stalled for ${progress.stagnantRounds} gate round(s); rotate strategy`
+            : `verification evidence is still increasing (${progress.verifiedCriteria} criteria, ${progress.passedChecks} checks); keep the productive strategy`,
     })
     const content = renderGoalRoundPrompt(goal, round, latestJudge(state, goal), strategy,
       work.stagnantRounds)

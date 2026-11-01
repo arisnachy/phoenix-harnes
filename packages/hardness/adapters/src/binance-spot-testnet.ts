@@ -185,7 +185,11 @@ export class BinanceSpotTestnet {
     }
   }
 
-  /** Obtain a Testnet-only executable reference price without private keys. */
+  /**
+   * Obtain a Testnet-only reference price without private keys.
+   * @param rawSymbol - Validated USDT Spot Testnet trading pair.
+   * @returns Positive price reported by the Testnet ticker.
+   */
   async quote(rawSymbol: string): Promise<number> {
     const symbol = pair(rawSymbol)
     const response = await this.request(BASE + '/api/v3/ticker/price?symbol=' + symbol, {
@@ -204,6 +208,10 @@ export class BinanceSpotTestnet {
    * Read confirmed OHLCV data from SPOT TESTNET, not production Binance.
    * Testnet's market prices and order books are independent of production.
    * Do not attach API credentials to public candles.
+   * @param rawSymbol - USDT trading pair to query on Spot Testnet.
+   * @param interval - Supported 15-minute candle interval.
+   * @param limit - Requested bounded candle count, from 60 to 100.
+   * @returns Validated Testnet OHLCV candles.
    */
   async candles(rawSymbol: string, interval: '15m', limit = 80): Promise<BinanceCandle[]> {
     const symbol = pair(rawSymbol)
@@ -240,7 +248,11 @@ export class BinanceSpotTestnet {
     })
   }
 
-  /** Read exchange LOT_SIZE rules before every autonomous partial/full SELL. */
+  /**
+   * Read exchange LOT_SIZE rules before any partial or full Testnet sale.
+   * @param rawSymbol - Validated USDT trading pair.
+   * @returns Minimum, maximum, and quantity step size from Testnet exchange rules.
+   */
   async lotSize(rawSymbol: string): Promise<{ readonly minQty: string; readonly maxQty: string; readonly stepSize: string }> {
     const symbol=pair(rawSymbol)
     const response=await this.request(BASE+'/api/v3/exchangeInfo?symbol='+symbol,{
@@ -260,7 +272,7 @@ export class BinanceSpotTestnet {
       || typeof filter.maxQty!=='string' || ![filter.stepSize,filter.minQty,filter.maxQty].every(x=>Number(x)>0)) {
       throw new TestnetVerificationError('invalid-response')
     }
-    return {stepSize:filter.stepSize,minQty:filter.minQty,maxQty:filter.maxQty}
+    return { stepSize:filter.stepSize,minQty:filter.minQty,maxQty:filter.maxQty }
   }
 
   /**
@@ -311,6 +323,8 @@ export class BinanceSpotTestnet {
   /**
    * Reconcile a possibly accepted but unacknowledged TESTNET order by its
    * previously persisted client ID. Never retries by submitting another order.
+   * @param input - Trading pair and previously persisted client order ID.
+   * @returns Exchange-reported order status, which may not represent a fill.
    */
   async orderStatus(input: { readonly symbol: string; readonly clientOrderId: string }): Promise<BinanceTestnetOrderReceipt> {
     const symbol = pair(input.symbol)

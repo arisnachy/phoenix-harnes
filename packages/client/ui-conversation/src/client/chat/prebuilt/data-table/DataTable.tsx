@@ -1,9 +1,9 @@
 // Adapted from https://github.com/hemasurya106/react-generative-ui (v0.4.6, MIT)
-import React from 'react';
+import React from 'react'
 // Phoenix validates declarative props before this upstream visual component renders.
 // Zod-only metadata was omitted so this React 18 adaptation needs no new npm dependency.
 
-export type DataTableProps = { title?: string; headers: string[]; rows: Array<Record<string, unknown>>; cellRenderer?: (value: unknown) => React.ReactNode };
+export type DataTableProps = { title?: string; headers: string[]; rows: Array<Record<string, unknown>>; cellRenderer?: (value: unknown) => React.ReactNode }
 
 export const DataTable: React.FC<DataTableProps> = ({
   title,
@@ -49,17 +49,17 @@ export const DataTable: React.FC<DataTableProps> = ({
           {rows.map((row, rowIndex) => (
             <tr key={rowIndex} style={{ borderBottom: rowIndex === rows.length - 1 ? 'none' : '1px solid #e5e7eb' }}>
               {headers.map((h, colIndex) => {
-                const cellValue = row[h] !== undefined ? row[h] : row[h.toLowerCase()];
+                const cellValue = row[h] !== undefined ? row[h] : row[h.toLowerCase()]
                 return (
                   <td key={colIndex} style={{ padding: '0.75rem 1.25rem', color: 'var(--dsw-alias-label-primary,inherit)' }}>
                     {cellRenderer ? cellRenderer(cellValue) : (typeof cellValue === 'boolean' ? (cellValue ? 'Yes' : 'No') : String(cellValue ?? ''))}
                   </td>
-                );
+                )
               })}
             </tr>
           ))}
         </tbody>
       </table>
     </div>
-  );
-};
+  )
+}

@@ -289,30 +289,30 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     : oauthClientIdRef === undefined
       ? undefined
       : async () => {
-      if (credentials === undefined) {
-        throw Object.assign(new Error(`mcp-client(${config.serverName}): credential service unavailable`), { status: 401 })
+        if (credentials === undefined) {
+          throw Object.assign(new Error(`mcp-client(${config.serverName}): credential service unavailable`), { status: 401 })
+        }
+        const clientId = (await credentials.resolve(oauthClientIdRef))?.value
+        if (clientId === undefined) {
+          throw Object.assign(
+            new Error(`mcp-client(${config.serverName}): credential reference "${String(oauthClientIdRef)}" is not configured`),
+            { status: 401 },
+          )
+        }
+        const clientSecret = oauthClientSecretRef === undefined
+          ? undefined
+          : (await credentials.resolve(oauthClientSecretRef))?.value
+        if (oauthClientSecretRef !== undefined && clientSecret === undefined) {
+          throw Object.assign(
+            new Error(`mcp-client(${config.serverName}): credential reference "${String(oauthClientSecretRef)}" is not configured`),
+            { status: 401 },
+          )
+        }
+        return {
+          client_id: clientId,
+          ...(clientSecret === undefined ? {} : { client_secret: clientSecret }),
+        }
       }
-      const clientId = (await credentials.resolve(oauthClientIdRef))?.value
-      if (clientId === undefined) {
-        throw Object.assign(
-          new Error(`mcp-client(${config.serverName}): credential reference "${String(oauthClientIdRef)}" is not configured`),
-          { status: 401 },
-        )
-      }
-      const clientSecret = oauthClientSecretRef === undefined
-        ? undefined
-        : (await credentials.resolve(oauthClientSecretRef))?.value
-      if (oauthClientSecretRef !== undefined && clientSecret === undefined) {
-        throw Object.assign(
-          new Error(`mcp-client(${config.serverName}): credential reference "${String(oauthClientSecretRef)}" is not configured`),
-          { status: 401 },
-        )
-      }
-      return {
-        client_id: clientId,
-        ...(clientSecret === undefined ? {} : { client_secret: clientSecret }),
-      }
-    }
 
   if (config.transport === 'streamable-http' && config.oauth !== false
     && authorization !== undefined && credentials !== undefined) {

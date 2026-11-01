@@ -1,9 +1,9 @@
 // Adapted from https://github.com/hemasurya106/react-generative-ui (v0.4.6, MIT)
-import React from 'react';
+import React from 'react'
 // Phoenix validates declarative props before this upstream visual component renders.
 // Zod-only metadata was omitted so this React 18 adaptation needs no new npm dependency.
 
-export type AlertBoxProps = { type: 'info' | 'success' | 'warning' | 'error'; title?: string; message: string };
+export type AlertBoxProps = { type: 'info' | 'success' | 'warning' | 'error'; title?: string; message: string }
 
 const ALERTS_CONFIG = {
   info: {
@@ -30,14 +30,14 @@ const ALERTS_CONFIG = {
     border: 'rgba(239,68,68,.17)',
     icon: '❌',
   },
-};
+}
 
 export const AlertBox: React.FC<AlertBoxProps> = ({
   type,
   title,
   message,
 }) => {
-  const config = ALERTS_CONFIG[type] || ALERTS_CONFIG.info;
+  const config = ALERTS_CONFIG[type] || ALERTS_CONFIG.info
 
   return (
     <div style={{
@@ -58,5 +58,5 @@ export const AlertBox: React.FC<AlertBoxProps> = ({
         <span style={{ fontSize: '0.875rem', lineHeight: 1.5, opacity: 0.9 }}>{message}</span>
       </div>
     </div>
-  );
-};
+  )
+}

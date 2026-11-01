@@ -20,7 +20,7 @@ function control(overrides: Partial<AssistantMailControl> = {}): AssistantMailCo
       messages: [{ messageId: 'message-1', from: 'owner@example.com', subject: 'Tarea', preview: 'Informe', taskState: 'replied' }],
     })),
     listMailJobs: overrides.listMailJobs ?? (async () => [{ id: 'job-1', from: 'owner@example.com', subject: 'Tarea', state: 'replied' }]),
-    manageMail: overrides.manageMail ?? (async (input) => ({ action: input.action, ok: true })),
+    manageMail: overrides.manageMail ?? (async input => ({ action: input.action, ok: true })),
     status: overrides.status ?? (async () => ({
       state: 'ready',
       inboxId: 'kira-real@agentmail.to',

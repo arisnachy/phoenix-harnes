@@ -62,8 +62,8 @@ describe('MiniBrowser in Phoenix conversation', () => {
     const calls = installBrowserMock(blank)
     const view = render(<MiniBrowser sessionId="research-fetch-1" requested
       sourceUrl="https://hai.stanford.edu/ai-index" />)
-    await waitFor(() => expect(calls.filter(call => call.type === 'open'))
-      .toHaveLength(1))
+    await waitFor(() =>{  expect(calls.filter(call => call.type === 'open'))
+      .toHaveLength(1) })
     expect(calls.filter(call => call.type === 'open')[0]).toMatchObject({
       type: 'open', url: 'https://hai.stanford.edu/ai-index',
     })
@@ -73,8 +73,8 @@ describe('MiniBrowser in Phoenix conversation', () => {
     expect(calls.filter(call => call.type === 'open')).toHaveLength(1)
     view.rerender(<MiniBrowser sessionId="research-fetch-1" requested
       sourceUrl="https://pubmed.ncbi.nlm.nih.gov/" />)
-    await waitFor(() => expect(calls.filter(call => call.type === 'open'))
-      .toHaveLength(2))
+    await waitFor(() =>{  expect(calls.filter(call => call.type === 'open'))
+      .toHaveLength(2) })
     expect(calls.filter(call => call.type === 'open')[1]?.url)
       .toBe('https://pubmed.ncbi.nlm.nih.gov/')
   })
@@ -110,15 +110,15 @@ describe('MiniBrowser in Phoenix conversation', () => {
     const initial = vi.fn()
     const updated = vi.fn()
     const view = render(<MiniBrowser sessionId="saved-pending" requested onSecureLoginRequest={initial} />)
-    await waitFor(() => expect(used).toBe(1))
+    await waitFor(() =>{  expect(used).toBe(1) })
     view.rerender(<MiniBrowser sessionId="saved-pending" requested onSecureLoginRequest={updated} />)
     await act(async () => {
       resolveUse?.(new Response(JSON.stringify({ status: 'login-form-not-found' }), { status: 200 }))
       await pending
     })
-    await waitFor(() => expect(updated).toHaveBeenCalledWith(expect.objectContaining({
+    await waitFor(() =>{  expect(updated).toHaveBeenCalledWith(expect.objectContaining({
       saved: true, diagnostic: expect.stringContaining('No se completó el inicio automático'),
-    })))
+    })) })
     expect(used).toBe(1)
   })
 
@@ -171,7 +171,7 @@ describe('MiniBrowser in Phoenix conversation', () => {
     Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn(() => 'blob:auto-login-test') })
     Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() })
     render(<MiniBrowser sessionId="test-chat" requested onSecureLoginRequest={request} />)
-    await waitFor(() => expect(uses).toBe(1))
+    await waitFor(() =>{  expect(uses).toBe(1) })
     expect(request).not.toHaveBeenCalledWith(expect.objectContaining({
       origin: 'https://example.org', saved: true,
     }))
@@ -200,7 +200,7 @@ describe('MiniBrowser in Phoenix conversation', () => {
     Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn(() => 'blob:open-login') })
     Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() })
     render(<MiniBrowser sessionId="test-chat" requested onSecureLoginRequest={request} />)
-    await waitFor(() => expect(opened).toBe(1))
+    await waitFor(() =>{  expect(opened).toBe(1) })
     expect(request).not.toHaveBeenCalledWith(expect.objectContaining({ saved: false, origin: 'https://example.org' }))
   })
 
@@ -260,9 +260,9 @@ describe('MiniBrowser in Phoenix conversation', () => {
     render(<MiniBrowser sessionId="test-chat" requested onSecureLoginRequest={request} />)
     const button = await screen.findByRole('button', { name: 'Abrir acceso seguro' })
     fireEvent.click(button)
-    await waitFor(() => expect(request).toHaveBeenCalledWith(expect.objectContaining({
+    await waitFor(() =>{  expect(request).toHaveBeenCalledWith(expect.objectContaining({
       origin: 'https://example.org', tabId: 'shared-tab', formObserved: false,
-    })))
+    })) })
   })
   it('cancels the state request when the browser card is deactivated', async () => {
     let stateSignal: AbortSignal | undefined
@@ -873,7 +873,7 @@ describe('MiniBrowser in Phoenix conversation', () => {
     Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn(() => 'blob:saved-auto') })
     Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() })
     render(<MiniBrowser sessionId="saved-auto" requested onSecureLoginRequest={request} onSavedAccessNotice={notice} />)
-    await waitFor(() => expect(submitted).toBe(1))
+    await waitFor(() =>{  expect(submitted).toBe(1) })
     expect(notice).toHaveBeenCalledWith({ origin: 'https://example.org', phase: 'using' })
     expect(request).not.toHaveBeenCalledWith(expect.objectContaining({ saved: false }))
   })
@@ -898,15 +898,15 @@ describe('MiniBrowser in Phoenix conversation', () => {
     Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn(() => 'blob:saved-manual') })
     Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() })
     render(<MiniBrowser sessionId="saved-manual" requested onSecureLoginRequest={request} onSavedAccessNotice={notice} />)
-    await waitFor(() => expect(notice).toHaveBeenCalledWith({
+    await waitFor(() =>{  expect(notice).toHaveBeenCalledWith({
       origin: 'https://example.org', phase: 'available',
-    }))
+    }) })
     expect(request).toHaveBeenCalledWith(expect.objectContaining({ saved: true, automatic: false }))
     expect(submitted).toBe(0)
     fireEvent.click(await screen.findByRole('button', { name: 'Abrir acceso seguro' }))
-    await waitFor(() => expect(request).toHaveBeenCalledWith(expect.objectContaining({
+    await waitFor(() =>{  expect(request).toHaveBeenCalledWith(expect.objectContaining({
       saved: true, explicit: true,
-    })))
+    })) })
   })
 
   it('ignores a manual Secure Ask response after its parent invalidates the request', async () => {
@@ -938,9 +938,9 @@ describe('MiniBrowser in Phoenix conversation', () => {
     Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() })
     const view = render(<MiniBrowser sessionId="manual-cancelled" requested
       secureLoginRequestEpoch={0} onSecureLoginRequest={request} />)
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Abrir acceso seguro' })).toBeTruthy())
+    await waitFor(() =>{  expect(screen.getByRole('button', { name: 'Abrir acceso seguro' })).toBeTruthy() })
     fireEvent.click(screen.getByRole('button', { name: 'Abrir acceso seguro' }))
-    await waitFor(() => expect(detectCalls).toBe(2))
+    await waitFor(() =>{  expect(detectCalls).toBe(2) })
     view.rerender(<MiniBrowser sessionId="manual-cancelled" requested
       secureLoginRequestEpoch={1} onSecureLoginRequest={request} />)
     await act(async () => {
@@ -981,11 +981,11 @@ describe('MiniBrowser in Phoenix conversation', () => {
     Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn(() => 'blob:manual-latest') })
     Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() })
     render(<MiniBrowser sessionId="manual-latest" requested onSecureLoginRequest={request} />)
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Abrir acceso seguro' })).toBeTruthy())
+    await waitFor(() =>{  expect(screen.getByRole('button', { name: 'Abrir acceso seguro' })).toBeTruthy() })
     fireEvent.click(screen.getByRole('button', { name: 'Abrir acceso seguro' }))
-    await waitFor(() => expect(detectCalls).toBe(2))
+    await waitFor(() =>{  expect(detectCalls).toBe(2) })
     fireEvent.click(screen.getByRole('button', { name: 'Abrir acceso seguro' }))
-    await waitFor(() => expect(detectCalls).toBe(3))
+    await waitFor(() =>{  expect(detectCalls).toBe(3) })
     await act(async () => {
       resolveFirst?.(new Response(JSON.stringify({ required: true, formVisible: true, fields }), { status: 200 }))
       await firstManual
@@ -995,7 +995,7 @@ describe('MiniBrowser in Phoenix conversation', () => {
       resolveSecond?.(new Response(JSON.stringify({ required: true, formVisible: true, fields }), { status: 200 }))
       await secondManual
     })
-    await waitFor(() => expect(request).toHaveBeenCalledWith(expect.objectContaining({ explicit: true })))
+    await waitFor(() =>{  expect(request).toHaveBeenCalledWith(expect.objectContaining({ explicit: true })) })
   })
 
 
@@ -1017,9 +1017,9 @@ describe('MiniBrowser in Phoenix conversation', () => {
     Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn(() => 'blob:vault-unavailable') })
     Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() })
     render(<MiniBrowser sessionId="vault-down" requested onSecureLoginRequest={request} onSavedAccessNotice={notice} />)
-    await waitFor(() => expect(notice).toHaveBeenCalledWith({
+    await waitFor(() =>{  expect(notice).toHaveBeenCalledWith({
       origin: 'https://example.org', phase: 'vault-unavailable',
-    }))
+    }) })
     expect(request).not.toHaveBeenCalledWith(expect.objectContaining({ saved: false }))
   })
 
@@ -1034,7 +1034,7 @@ describe('MiniBrowser in Phoenix conversation', () => {
     Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn(() => 'blob:publisher-shell') })
     Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() })
     render(<MiniBrowser sessionId="test-chat" requested />)
-    await waitFor(() => expect(screen.getByRole('tab', { name: 'Deportes' })).toBeTruthy())
+    await waitFor(() =>{  expect(screen.getByRole('tab', { name: 'Deportes' })).toBeTruthy() })
     expect(screen.queryByRole('button', { name: 'Ver sitio completo y menú' })).toBeNull()
   })
 })

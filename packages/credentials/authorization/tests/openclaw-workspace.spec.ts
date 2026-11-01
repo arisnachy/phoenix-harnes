@@ -25,7 +25,7 @@ function session(overrides: Partial<AuthorizationSession> = {}): AuthorizationSe
     notify: vi.fn(),
     prompt: vi.fn(async () => ''),
     ...overrides,
-  } as unknown as AuthorizationSession
+  }
 }
 
 describe('OpenClaw Workspace authorization bridge', () => {

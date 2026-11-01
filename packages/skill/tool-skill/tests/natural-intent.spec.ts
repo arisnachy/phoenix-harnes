@@ -15,7 +15,7 @@ describe('natural requests for playable game creation', () => {
     'haz un juego de carreras ' + 'con muchos detalles '.repeat(300),
     'make a game about space',
     'build a video game like Tetris',
-  ])('selects Game Studio for %s', request => {
+  ])('selects Game Studio for %s', (request) => {
     expect(naturalCreationSkill(request)).toBe('game-development')
   })
 
@@ -28,7 +28,7 @@ describe('natural requests for playable game creation', () => {
     'escribe un libro sobre videojuegos',
     '¿Puedes explicarme cómo hacer un juego?',
     '¿Un juego tipo Contra es dificil de desarrollar?',
-  ])('leaves unrelated requests alone: %s', request => {
+  ])('leaves unrelated requests alone: %s', (request) => {
     expect(naturalCreationSkill(request)).toBeUndefined()
   })
 })

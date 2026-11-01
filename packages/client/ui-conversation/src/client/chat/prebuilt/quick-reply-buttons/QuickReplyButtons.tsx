@@ -1,5 +1,5 @@
 // Adapted from https://github.com/hemasurya106/react-generative-ui (v0.4.6, MIT)
-import React from 'react';
+import React from 'react'
 // Phoenix validates declarative props before this upstream visual component renders.
 // Zod-only metadata was omitted so this React 18 adaptation needs no new npm dependency.
 
@@ -14,8 +14,8 @@ import React from 'react';
  * );
  * ```
  */
-export interface QuickReplyButtonsProps { buttons: Array<{ label: string; id: string }>;
-  onSelect?: (id: string) => void;
+export interface QuickReplyButtonsProps { buttons: Array<{ label: string; id: string }>
+  onSelect?: (id: string) => void
 }
 
 export const QuickReplyButtons: React.FC<QuickReplyButtonsProps> = ({
@@ -30,7 +30,7 @@ export const QuickReplyButtons: React.FC<QuickReplyButtonsProps> = ({
       gap: '0.5rem',
       margin: 0,
     }}>
-      {buttons.map((btn) => (
+      {buttons.map(btn => (
         <button
           key={btn.id}
           onClick={() => onSelect?.(btn.id)}
@@ -48,17 +48,17 @@ export const QuickReplyButtons: React.FC<QuickReplyButtonsProps> = ({
             outline: 'none',
           }}
           onMouseEnter={(e) => {
-            e.currentTarget.style.backgroundColor = 'var(--dsw-alias-interactive-bg-hover,rgba(120,120,120,.08))';
-            e.currentTarget.style.borderColor = 'var(--dsw-alias-border-subtle,rgba(120,120,120,.4))';
+            e.currentTarget.style.backgroundColor = 'var(--dsw-alias-interactive-bg-hover,rgba(120,120,120,.08))'
+            e.currentTarget.style.borderColor = 'var(--dsw-alias-border-subtle,rgba(120,120,120,.4))'
           }}
           onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = 'var(--dsw-alias-surface-primary,transparent)';
-            e.currentTarget.style.borderColor = 'var(--dsw-alias-border-subtle,rgba(120,120,120,.28))';
+            e.currentTarget.style.backgroundColor = 'var(--dsw-alias-surface-primary,transparent)'
+            e.currentTarget.style.borderColor = 'var(--dsw-alias-border-subtle,rgba(120,120,120,.28))'
           }}
         >
           {btn.label}
         </button>
       ))}
     </div>
-  );
-};
+  )
+}

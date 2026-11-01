@@ -100,7 +100,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/core/agent-default-model/src/index.ts:41`](../packages/core/agent-default-model/src/index.ts)
+Source: [`packages/core/agent-default-model/src/index.ts:137`](../packages/core/agent-default-model/src/index.ts)
 
 <a id="phoenix-aidsh-agent-instructions"></a>
 
@@ -148,6 +148,10 @@ export interface Config {
   maxParallelToolCalls?: number
   /** Maximum model/tool iterations in one turn; omission defaults to 64. */
   maxStepsPerTurn?: number
+  /** Output-limit continuations per human request (0 disables); default 3. */
+  autoContinueMaxSegments?: number
+  /** Provider route IDs eligible for automatic output-limit continuation. */
+  autoContinueProviders?: string[]
   /** Agents created or resumed at plugin startup. */
   agents: (AgentOptions & {
     /** Stable config label used in logs and as the fresh combined-id prefix. */
@@ -164,7 +168,7 @@ export interface Config {
 
 Depends on: [`AgentOptions`](subsystems/core.md) · [`SessionId`](subsystems/core.md)
 
-Source: [`packages/core/agent-loop/src/index.ts:266`](../packages/core/agent-loop/src/index.ts)
+Source: [`packages/core/agent-loop/src/index.ts:281`](../packages/core/agent-loop/src/index.ts)
 
 <a id="phoenix-aidsh-agent-presets"></a>
 
@@ -239,6 +243,10 @@ export interface Config {
   maxParallelToolCalls?: AgentLoopConfig['maxParallelToolCalls']
   /** Maximum model/tool steps in one turn before explicit continuation is required. */
   maxStepsPerTurn?: AgentLoopConfig['maxStepsPerTurn']
+  /** Number of automatic output-limit continuations allowed per human request. */
+  autoContinueMaxSegments?: AgentLoopConfig['autoContinueMaxSegments']
+  /** Provider route IDs eligible for automatic output-limit continuation. */
+  autoContinueProviders?: AgentLoopConfig['autoContinueProviders']
   /** Whether the system prompt includes the fixed Harness identity (default true). */
   includeHarnessIdentity?: SystemPromptConfig['includeHarnessIdentity']
   /** Whether model history includes dynamic runtime-context snapshots (default true). */
@@ -789,7 +797,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/hardness/adapters/src/index.ts:188`](../packages/hardness/adapters/src/index.ts)
+Source: [`packages/hardness/adapters/src/index.ts:205`](../packages/hardness/adapters/src/index.ts)
 
 <a id="phoenix-aidsh-headless"></a>
 
@@ -1392,7 +1400,7 @@ export type PiAiThinkingFormat = NonNullable<OpenAICompletionsCompat['thinkingFo
 
 Depends on: `Api` (`@earendil-works/pi-ai`) · `CacheRetention` (`@earendil-works/pi-ai`) · `Model` (`@earendil-works/pi-ai`) · `ModelThinkingLevel` (`@earendil-works/pi-ai`) · `OpenAICompletionsCompat` (`@earendil-works/pi-ai`) · [`RetryPolicyConfig`](../packages/llm/llm/src/index.ts) · `ThinkingBudgets` (`@earendil-works/pi-ai`) · `Transport` (`@earendil-works/pi-ai`)
 
-Source: [`packages/llm/llm-pi-ai/src/config.ts:263`](../packages/llm/llm-pi-ai/src/config.ts)
+Source: [`packages/llm/llm-pi-ai/src/config.ts:283`](../packages/llm/llm-pi-ai/src/config.ts)
 
 <a id="phoenix-aidsh-llm-replay"></a>
 
@@ -1618,7 +1626,7 @@ export interface ReconnectConfig {
 }
 ```
 
-Source: [`packages/mcp/mcp-client/src/index.ts:151`](../packages/mcp/mcp-client/src/index.ts)
+Source: [`packages/mcp/mcp-client/src/index.ts:152`](../packages/mcp/mcp-client/src/index.ts)
 
 <a id="phoenix-aidsh-message-feedback"></a>
 
@@ -2761,7 +2769,7 @@ export interface TeamModelProfile {
 }
 ```
 
-Source: [`packages/subagent/tool-agent-team/src/index.ts:41`](../packages/subagent/tool-agent-team/src/index.ts)
+Source: [`packages/subagent/tool-agent-team/src/index.ts:87`](../packages/subagent/tool-agent-team/src/index.ts)
 
 <a id="phoenix-aidsh-tool-bash"></a>
 
@@ -3096,7 +3104,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/skill/tool-skill/src/index.ts:67`](../packages/skill/tool-skill/src/index.ts)
+Source: [`packages/skill/tool-skill/src/index.ts:68`](../packages/skill/tool-skill/src/index.ts)
 
 <a id="phoenix-aidsh-tool-str-replace-editor"></a>
 
@@ -3288,7 +3296,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/web/tool-web/src/index.ts:43`](../packages/web/tool-web/src/index.ts)
+Source: [`packages/web/tool-web/src/index.ts:45`](../packages/web/tool-web/src/index.ts)
 
 <a id="phoenix-aidsh-tool-workflow"></a>
 
@@ -3337,9 +3345,9 @@ export interface Config {
    */
   maxParallelSubCalls?: number
   /**
-   * Number of visible `mcp__*` tools at which native presentation switches to
-   * deferred discovery. Native tools remain in the prompt; MCP schemas are
-   * returned by `tool_search` and become visible only for the calling agent.
+   * Number of MCP tools at which an agent receives deferred discovery.
+   * Native tools remain available; the Code Mode SDK shows tool_search
+   * before full MCP signatures, which are admitted per agent on demand.
    * Must be a positive integer.
    */
   mcpToolLazyThreshold?: number
@@ -3349,7 +3357,7 @@ export interface Config {
 export type ToolPresentationMode = 'native' | 'code' | 'both'
 ```
 
-Source: [`packages/core/tools/src/index.ts:794`](../packages/core/tools/src/index.ts)
+Source: [`packages/core/tools/src/index.ts:797`](../packages/core/tools/src/index.ts)
 
 <a id="phoenix-aidsh-typert-loader"></a>
 
@@ -3528,7 +3536,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/bundle/web-app/src/index.ts:43`](../packages/bundle/web-app/src/index.ts)
+Source: [`packages/bundle/web-app/src/index.ts:44`](../packages/bundle/web-app/src/index.ts)
 
 <a id="phoenix-aidsh-web-fetch-http"></a>
 
@@ -3797,7 +3805,9 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 - `@phoenix-ai/dsh-tool-google-workspace` — requires `tools` · `googleApi` ([`packages/credentials/tool-google-workspace/src/index.ts`](../packages/credentials/tool-google-workspace/src/index.ts))
 - `@phoenix-ai/dsh-tool-home-gateway` — requires `tools` · `home` · `systemPrompt` ([`packages/home/tool-home-gateway/src/index.ts`](../packages/home/tool-home-gateway/src/index.ts))
 - `@phoenix-ai/dsh-tool-living` — requires `living` · `tools` · `systemPrompt` ([`packages/core/tool-living/src/index.ts`](../packages/core/tool-living/src/index.ts))
+- `@phoenix-ai/dsh-tool-sports` — requires `tools` · `systemPrompt` ([`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts))
 - `@phoenix-ai/dsh-tool-subagent-control` — requires `tools` · `subagents` ([`packages/subagent/tool-subagent-control/src/index.ts`](../packages/subagent/tool-subagent-control/src/index.ts))
+- `@phoenix-ai/dsh-tool-voice` — requires `tools` · `voice` · `systemPrompt` ([`packages/voice/tool-voice/src/index.ts`](../packages/voice/tool-voice/src/index.ts))
 - `@phoenix-ai/dsh-user-profile` — requires `settings` · `systemPrompt` ([`packages/profile/user-profile/src/index.ts`](../packages/profile/user-profile/src/index.ts))
 - `@phoenix-ai/dsh-workspace` — requires `storageDomain` · `sessionPersistence` ([`packages/workspace/workspace/src/index.ts`](../packages/workspace/workspace/src/index.ts))
 

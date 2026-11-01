@@ -26,9 +26,9 @@ type TestnetAutoState = {
   lastDecision: string
   lastError?: string
   realizedPnlUsdt: number
-  journal: Array<{clientOrderId:string;side:'BUY'|'SELL';symbol:string;quantity:number;reason:string;at:string}>
-  positions: Record<string,{symbol:string;quantity:number;entryPrice:number;stop:number;tp1:number;tp2:number;strategy:string}>
-  pending?: {symbol:string;side:'BUY'|'SELL'}
+  journal: Array<{ clientOrderId:string;side:'BUY'|'SELL';symbol:string;quantity:number;reason:string;at:string }>
+  positions: Record<string,{ symbol:string;quantity:number;entryPrice:number;stop:number;tp1:number;tp2:number;strategy:string }>
+  pending?: { symbol:string;side:'BUY'|'SELL' }
 }
 type McpState = {
   configured: boolean
@@ -149,7 +149,7 @@ export function TradingDashboard({ initial }: Props) {
     const abort = new AbortController()
     void fetch('/phoenix-trading/paper/testnet-status', {
       method: 'GET', credentials: 'same-origin', cache: 'no-store', signal: abort.signal,
-    }).then(async response => {
+    }).then(async (response) => {
       if (!response.ok) return
       const value = await response.json() as TestnetState
       if (!abort.signal.aborted && value.mode === 'testnet'
@@ -221,7 +221,7 @@ export function TradingDashboard({ initial }: Props) {
         setConnectionIssue(value.nextAction ?? 'No se pudo guardar la clave en la bóveda. Revisa su disponibilidad.')
         return
       }
-      if (value.mode !== 'testnet' || value.configured !== true || value.saved !== true) {
+      if (value.mode !== 'testnet' || ! value.configured || value.saved !== true) {
         setConnectionIssue('No se confirmó la lectura de las claves desde la bóveda; no se considera guardado.')
         return
       }
@@ -333,7 +333,7 @@ export function TradingDashboard({ initial }: Props) {
           {running
             ? <button type="button" className={css.danger} disabled={controlBusy} onClick={() => { void control('stop') }}>Detener</button>
             : <button type="button" className={css.primary} disabled={controlBusy}
-                onClick={() => { void control('start') }}>Iniciar PAPER</button>}
+              onClick={() => { void control('start') }}>Iniciar PAPER</button>}
           {(running || account.positions.length > 0) && (
             <button type="button" className={css.danger} disabled={controlBusy}
               onClick={() => { void control('stop-liquidate') }}>
@@ -364,13 +364,13 @@ export function TradingDashboard({ initial }: Props) {
         <input type="text" spellCheck={false} aria-label="Lista de mercados PAPER"
           disabled={running || controlBusy}
           value={watchlistDraft ?? settings.symbols.join(', ')}
-          onChange={event => { setWatchlistDraft(event.currentTarget.value) }}
+          onChange={(event) => { setWatchlistDraft(event.currentTarget.value) }}
           placeholder="BTCUSDT, ETHUSDT, SOLUSDT, BNBUSDT" />
       </label>
       <label className={css.autoDiscovery}>
         <input type="checkbox" checked={running ? settings.autoDiscover : autoDiscoverDraft}
           disabled={running || controlBusy}
-          onChange={event => { setAutoDiscoverDraft(event.currentTarget.checked) }} />
+          onChange={(event) => { setAutoDiscoverDraft(event.currentTarget.checked) }} />
         <span>Al iniciar: revisar hasta 1.000 pares Spot USDT líquidos y rotar 12 por ciclo.
           Se excluyen activos conocidos con etiqueta Monitoring o retiro anunciado, pares suspendidos y tokens apalancados.
           La cobertura de anuncios de riesgo no es exhaustiva. Solo PAPER.</span>
@@ -444,9 +444,9 @@ export function TradingDashboard({ initial }: Props) {
           <strong>Guardar claves exclusivas de Spot Testnet</strong>
           <small>Solo se envían directamente al Host para verificar la cuenta ficticia y guardarlas en su bóveda. Nunca uses claves reales.</small>
           <input type="password" aria-label="Clave API de Spot Testnet" autoComplete="off"
-            placeholder="Testnet API key" value={testingKey} onChange={event => { setTestingKey(event.currentTarget.value) }} />
+            placeholder="Testnet API key" value={testingKey} onChange={(event) => { setTestingKey(event.currentTarget.value) }} />
           <input type="password" aria-label="Secreto API de Spot Testnet" autoComplete="off"
-            placeholder="Testnet API secret" value={testingSecret} onChange={event => { setTestingSecret(event.currentTarget.value) }} />
+            placeholder="Testnet API secret" value={testingSecret} onChange={(event) => { setTestingSecret(event.currentTarget.value) }} />
           <button type="button" disabled={connectionBusy} onClick={() => { void saveTestnetCredentials() }}>Verificar y guardar Testnet</button>
         </div>}
         {connectionIssue && <p role="alert" className={css.connectionError}>{connectionIssue}</p>}
@@ -461,7 +461,7 @@ export function TradingDashboard({ initial }: Props) {
           <h4>Radar de estrategias</h4>
           {state.signals.length === 0 ? <p className={css.empty}>Todavía no hay un análisis confirmado en esta sesión.</p>
             : <div className={css.rows}>
-              {state.signals.map(signal => {
+              {state.signals.map((signal) => {
                 const evidence = state.execution?.find(item => item.symbol === signal.symbol)
                 // A technical BUY is NOT an exchange order or a PAPER fill.
                 const status = !running ? 'paused' : evidence?.status ?? 'scan-only'
@@ -495,7 +495,7 @@ export function TradingDashboard({ initial }: Props) {
           {account.positions.length === 0
             ? <p className={css.empty}>Sin posiciones abiertas. Esperando una señal de entrada validada.</p>
             : <div className={css.positionCards}>
-              {account.positions.map(position => {
+              {account.positions.map((position) => {
                 const plan = position.exitPlan
                 const lastPrice = position.marketPriceUsdt
                 const pnl = position.unrealizedPnlUsdt
@@ -522,21 +522,21 @@ export function TradingDashboard({ initial }: Props) {
                   {plan === undefined
                     ? <p className={css.exitMissing}>Sin plan de salida verificado. No se muestran TP/SL ficticios.</p>
                     : <div className={css.exitLevels}>
-                        <div className={css.exitLevel} data-level="stop">
-                          <span>SL · {targetReturn(plan.stopLossPrice, plan.entryPriceUsdt)}</span><strong>{quote(plan.stopLossPrice)}</strong>
-                          <small>{lastPrice === undefined ? 'Sin cotización' : lastPrice <= plan.stopLossPrice ? 'Nivel alcanzado · pendiente de ciclo' : 'Vigilando'}</small>
-                        </div>
-                        <div className={css.exitLevel} data-level="tp1">
-                          <span>TP1 · {targetReturn(plan.tp1Price, plan.entryPriceUsdt)} · venta {amount(plan.tp1Fraction * 100, 0)}%</span>
-                          <strong>{quote(plan.tp1Price)}</strong>
-                          <small>{plan.tp1Taken ? 'Parcial ejecutado'
-                            : lastPrice !== undefined && lastPrice >= plan.tp1Price ? 'Nivel alcanzado · pendiente de ciclo' : 'Pendiente'}</small>
-                        </div>
-                        <div className={css.exitLevel} data-level="tp2">
-                          <span>TP2 · {targetReturn(plan.tp2Price, plan.entryPriceUsdt)} · salida final</span><strong>{quote(plan.tp2Price)}</strong>
-                          <small>{lastPrice !== undefined && lastPrice >= plan.tp2Price ? 'Nivel alcanzado · pendiente de ciclo' : 'Pendiente'}</small>
-                        </div>
-                      </div>}
+                      <div className={css.exitLevel} data-level="stop">
+                        <span>SL · {targetReturn(plan.stopLossPrice, plan.entryPriceUsdt)}</span><strong>{quote(plan.stopLossPrice)}</strong>
+                        <small>{lastPrice === undefined ? 'Sin cotización' : lastPrice <= plan.stopLossPrice ? 'Nivel alcanzado · pendiente de ciclo' : 'Vigilando'}</small>
+                      </div>
+                      <div className={css.exitLevel} data-level="tp1">
+                        <span>TP1 · {targetReturn(plan.tp1Price, plan.entryPriceUsdt)} · venta {amount(plan.tp1Fraction * 100, 0)}%</span>
+                        <strong>{quote(plan.tp1Price)}</strong>
+                        <small>{plan.tp1Taken ? 'Parcial ejecutado'
+                          : lastPrice !== undefined && lastPrice >= plan.tp1Price ? 'Nivel alcanzado · pendiente de ciclo' : 'Pendiente'}</small>
+                      </div>
+                      <div className={css.exitLevel} data-level="tp2">
+                        <span>TP2 · {targetReturn(plan.tp2Price, plan.entryPriceUsdt)} · salida final</span><strong>{quote(plan.tp2Price)}</strong>
+                        <small>{lastPrice !== undefined && lastPrice >= plan.tp2Price ? 'Nivel alcanzado · pendiente de ciclo' : 'Pendiente'}</small>
+                      </div>
+                    </div>}
                   {plan !== undefined && <p className={css.positionFootnote}>
                     Estrategia: {strategyLabel(strategy)} ({strategy}) · {plan.origin === 'legacy-adopted'
                       ? 'Plan adoptado para una posición histórica'
@@ -557,9 +557,9 @@ export function TradingDashboard({ initial }: Props) {
                 <span data-signal={trade.side}>{trade.side === 'buy' ? 'COMPRA' : 'VENTA'}</span>
                 <div><strong>{trade.symbol}</strong><small>{trade.strategyId ?? 'Manual'} · {clock(trade.executedAt)}</small></div>
                 <div className={css.right}>
-                    <strong>{amount(trade.grossUsdt)} USDT</strong>
-                    <small>Precio {amount(trade.price, 7)}</small>
-                  </div>
+                  <strong>{amount(trade.grossUsdt)} USDT</strong>
+                  <small>Precio {amount(trade.price, 7)}</small>
+                </div>
               </div>
             ))}
           </div>}

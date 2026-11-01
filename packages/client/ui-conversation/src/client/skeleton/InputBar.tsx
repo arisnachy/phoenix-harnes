@@ -293,7 +293,7 @@ export function InputBar({
     voiceRepairAbortRef.current = controller
     setVoiceRepairing(true)
     setCodexVoiceFailure('Phoenix está recuperando Codex Live automáticamente…')
-    void waitForCodexLiveRepair(controller.signal).then(async outcome => {
+    void waitForCodexLiveRepair(controller.signal).then(async (outcome) => {
       if (controller.signal.aborted || voiceRepairAbortRef.current !== controller) return
       if (outcome === 'ready') {
         voiceStartingRef.current = true
@@ -413,7 +413,10 @@ export function InputBar({
     } finally {
       voiceStartingRef.current = false
     }
-  }, [ensureHarnessVoiceRecognition, locked, machineBusy, nativeCodexVoiceOnly, resumeAfterRepair, sessionId, startVoiceRecognition, voiceEnabled])
+  }, [
+    ensureHarnessVoiceRecognition, locked, machineBusy, nativeCodexVoiceOnly,
+    resumeAfterRepair, sessionId, startVoiceRecognition, voiceEnabled,
+  ])
 
   // Browser recognition is fallback input only. Never compete with an active
   // Codex Live microphone; when Live ends, the published assistant state causes
@@ -1138,14 +1141,14 @@ export function InputBar({
                 title={voiceRepairing
                   ? 'Codex Live: comprobando disponibilidad'
                   : codexRealtimeRequiresLogin(codexVoiceFailure)
-                  ? 'Codex Live: inicia sesión de nuevo'
-                  : 'Codex Live no disponible. Abre Detalles para conocer el motivo.'}
+                    ? 'Codex Live: inicia sesión de nuevo'
+                    : 'Codex Live no disponible. Abre Detalles para conocer el motivo.'}
               >
                 {voiceRepairing
                   ? <>Recuperando Codex Live… · <button type="button" className={css.voiceReconnectAction} onClick={() => { void toggleVoice() }}>Cancelar</button></>
                   : codexRealtimeRequiresLogin(codexVoiceFailure)
-                  ? <>Codex desconectado · <button type="button" className={css.voiceReconnectAction} onClick={openCodexReconnection}>Reconectar</button></>
-                  : <>Codex Live sin conexión</>}
+                    ? <>Codex desconectado · <button type="button" className={css.voiceReconnectAction} onClick={openCodexReconnection}>Reconectar</button></>
+                    : <>Codex Live sin conexión</>}
               </span>
             )}
             {codexVoiceFailure !== null && !voiceRepairing
@@ -1193,8 +1196,8 @@ export function InputBar({
                 label={voiceRepairing
                   ? 'Cancelar la recuperación automática de Codex Live'
                   : codexVoiceFailure !== null
-                  ? 'Codex Live no disponible. Usa la voz alternativa autorizada.'
-                  : voiceEnabled ? t('input.voice.stop') : t('input.voice.start')}
+                    ? 'Codex Live no disponible. Usa la voz alternativa autorizada.'
+                    : voiceEnabled ? t('input.voice.stop') : t('input.voice.start')}
                 side="top"
                 delayMs={500}
               >

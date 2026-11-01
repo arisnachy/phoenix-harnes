@@ -33,7 +33,7 @@ This table connects model-visible tool names to the plugin package and service s
 | `@phoenix-ai/dsh-schedule` | `schedule_create`, `schedule_delete`, `schedule_list` | `ctx.tools`, `ctx.sessions`, `Session persistence`, `a future live root Agent` | `tool/call`, `schedule/change create or delete`, `tool/result` | - | Registered only inside live root Agent scopes created after the opt-in Schedule plugin loads. Version 1 accepts after_seconds, explicit absolute at, and bounded fixed-rate every_seconds, and discloses session-local delivery; management reads and mutations require the shared Session persistence barrier. |
 | `@phoenix-ai/dsh-tool-business` | `business_plan_mission` | `ctx.tools`, `ctx.systemPrompt`, `ctx.mcpConnectors (optional at execution)` | `tool/call`, `tool/result` | - | Read-only intent and live MCP capability planning. Tool names and connection status never confer publication rights. |
 | `@phoenix-ai/dsh-tool-living` | `living_act`, `living_forget_creation`, `living_get_connector_kit`, `living_inspect_creation`, `living_list_creations`, `living_read_state`, `living_register_creation`, `living_verify_creation` | `ctx.tools`, `ctx.living`, `ctx.systemPrompt` | `tool/call`, `durable living creation manifest`, `live creation state/actions/events through ctx.living`, `tool/result` | - | Universal domain-neutral control surface: arbitrary future creation kinds describe their own state, actions, events, resources, actors, and target integration level; verification refuses delivery below that target. |
-| `@phoenix-ai/dsh-tool-sports` | `sports_chat_catalog`, `sports_chat_discover`, `sports_chat_games`, `sports_chat_mlb_pitchers`, `sports_chat_odds`, `sports_chat_ticket`, `sports_chat_ticket_research` | `ctx.tools`, `ctx.systemPrompt` | `tool/call`, `tool/result` | - | Read-only sports market and game context with inline chat cards. Tickets simulate returns, never transact or promise wins. |
+| `@phoenix-ai/dsh-tool-sports` | `sports_chat_bet_rules`, `sports_chat_catalog`, `sports_chat_community_opinions`, `sports_chat_deep_research`, `sports_chat_discover`, `sports_chat_espn_core`, `sports_chat_espn_core_catalog`, `sports_chat_espn_explore`, `sports_chat_espn_historical_odds`, `sports_chat_games`, `sports_chat_historical_odds`, `sports_chat_market_intelligence`, `sports_chat_market_source_catalog`, `sports_chat_matchup_factors`, `sports_chat_mlb_pitchers`, `sports_chat_nba_research`, `sports_chat_odds`, `sports_chat_odds_keyless`, `sports_chat_odds_scan`, `sports_chat_research`, `sports_chat_sources_health`, `sports_chat_sources_repair`, `sports_chat_ticket`, `sports_chat_ticket_evidence_auto`, `sports_chat_ticket_evidence_priced_auto`, `sports_chat_ticket_research`, `sports_chat_ticket_research_auto`, `sports_chat_ticket_track` | `ctx.tools`, `ctx.systemPrompt` | `tool/call`, `tool/result` | - | Read-only sports market and game context with inline chat cards. Tickets simulate returns, never transact or promise wins. |
 | `@phoenix-ai/dsh-tool-lsp` | `lsp` | `ctx.tools`, `ctx.lsp`, `ctx.systemPrompt` | `tool/call`, `tool/result` | - | The lsp tool keeps provider selection and language-server subprocesses behind ctx.lsp, so its model-visible schema stays stable across providers. Requires a registered provider (e.g. `@phoenix-ai/dsh-lsp-stdio`) at runtime; without one, a query returns the structured `LSP_UNAVAILABLE` error rather than changing the schema. |
 | `@phoenix-ai/dsh-tool-ralph` | `ralph` | `ctx.tools`, `ctx.workflowEngine`, `ctx.subagents`, `ctx.systemPrompt`, `a calling Agent (exec.agent parents every fresh round)` | `tool/call`, `tool/result`, `workflow and child session events during execution` | - | A fixed foreground workflow starts one fresh structured child per round; the model selects only the immutable objective and an optional round cap. |
 | `@phoenix-ai/dsh-tool-skill` | `skill` | `ctx.tools`, `ctx.agents`, `ctx.skills` | `tool/call`, `tool/result`, `user/message replacement catalogs via agent.inject()` | - | - |
@@ -46,7 +46,8 @@ This table connects model-visible tool names to the plugin package and service s
 | `@phoenix-ai/dsh-tool-agent-team` | `followup_task`, `interrupt_agent`, `list_agents`, `send_message`, `spawn_teammate`, `team_chat_answer`, `team_chat_react`, `team_chat_read`, `team_chat_reply_to_peer`, `team_react`, `team_task_create`, `team_task_get`, `team_task_list`, `team_task_update`, `wait_agent` | `ctx.tools`, `ctx.systemPrompt`, `ctx.agentTeams`, `an exact live Team member Agent` | `tool/call`, `team/member`, `team/message/queued`, `team/message/delivered`, `team/task`, `tool/result` | - | The Team tools are scoped to implicit Team Leads and durable teammates. The shipped dsh-base bundle keeps the package disabled; the documented Agent Teams profile patch enables it while disabling the legacy continuable-child control names. |
 | `@phoenix-ai/dsh-tool-todo` | `todo_write` | `ctx.tools`, `owning Agent session` | `tool/call`, `todo/write`, `tool/result` | - | todo_write is session-owned state; UIs render the latest todo/write event as a checklist. `allowParallelInProgress` is required with no default, so the catalog states its choice: `true`, whose description invites several `in_progress` items. A deployment choosing `false` receives the same tool with a description asking for exactly one active task. |
 | `@phoenix-ai/dsh-tool-workflow` | `workflow` | `ctx.tools`, `ctx.workflowEngine`, `ctx.systemPrompt`, `a calling Agent (exec.agent parents the script children)` | `tool/call`, `tool/result` | - | - |
-| `@phoenix-ai/dsh-tool-web` | `research_scholar`, `research_search`, `research_sources`, `web_fetch`, `web_search` | `ctx.tools`, `ctx.web`, `ctx.systemPrompt` | `tool/call`, `tool/result` | - | web_search and web_fetch keep provider selection behind ctx.web so model-visible schemas stay stable across backend swaps. |
+| `@phoenix-ai/dsh-tool-voice` | `phoenix_voice_speak`, `phoenix_voice_status` | `ctx.tools`, `ctx.systemPrompt`, `ctx.voice` | `tool/call`, `Host speech synthesis or Codex Live output acceptance`, `tool/result` | - | Speech is an explicit user-requested output side channel. A provider receipt is not proof that speakers were audible; this catalog boot never plays audio. |
+| `@phoenix-ai/dsh-tool-web` | `research_health_series`, `research_scholar`, `research_search`, `research_sources`, `web_fetch`, `web_search` | `ctx.tools`, `ctx.web`, `ctx.systemPrompt` | `tool/call`, `tool/result` | - | web_search and web_fetch keep provider selection behind ctx.web so model-visible schemas stay stable across backend swaps. |
 
 <a id="phoenix-aidsh-tool-ask-user"></a>
 
@@ -2206,6 +2207,32 @@ Universal domain-neutral control surface: arbitrary future creation kinds descri
 
 ## `@phoenix-ai/dsh-tool-sports`
 
+### `sports_chat_bet_rules`
+
+Consulta catálogo extenso de mercados por disciplina y reglas relevantes de liquidación de casas verificables: run line -1.5/2.5, altas/bajas por 3/5/9 innings, props de jugadores, 1X2, hándicap, over/under, tickets/parlays, push, void y overtime. No atribuye reglas de otra casa a Juancito.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "sport": {
+      "type": "string",
+      "description": "Filtrar disciplina: baseball, basketball, soccer, americanfootball, hockey, tennis, mma, cricket, golf."
+    },
+    "family": {
+      "type": "string",
+      "description": "Familia de mercado opcional: totals, moneyline, run_line, player_props, etc."
+    },
+    "bookmaker": {
+      "type": "string",
+      "description": "Casa consultada, solo para advertir que debe leerse su propio reglamento actual."
+    }
+  }
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
 ### `sports_chat_catalog`
 
 Lista disciplinas y ligas documentadas. No crea menú ni abre otra pantalla.
@@ -2214,6 +2241,58 @@ Lista disciplinas y ligas documentadas. No crea menú ni abre otra pantalla.
 {
   "type": "object",
   "properties": {}
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_community_opinions`
+
+Consulta opiniones y votaciones públicas de pronosticadores desde OddsPortal mediante OddsHarvester; nunca son probabilidades calculadas ni recomendación independiente.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "sport": {
+      "type": "string",
+      "description": "Deporte OddsHarvester: football, tennis, basketball, baseball, etc."
+    }
+  },
+  "required": [
+    "sport"
+  ]
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_deep_research`
+
+Investiga un partido ESPN confirmado: noticias relacionadas, partes médicos, plantillas, estadísticas verificadas de jugadores y confirmación independiente MLB/NHL. Nunca inventa titulares ni probabilidades.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "sport": {
+      "type": "string",
+      "description": "Deporte ESPN, p. ej. hockey, basketball, soccer, football o baseball."
+    },
+    "league": {
+      "type": "string",
+      "description": "Liga ESPN comprobada, p. ej. nhl, nba, eng.1 o mlb."
+    },
+    "eventId": {
+      "type": "string",
+      "description": "ID exacto del evento obtenido de la cartelera ESPN."
+    }
+  },
+  "required": [
+    "sport",
+    "league",
+    "eventId"
+  ]
 }
 ```
 
@@ -2240,9 +2319,183 @@ Descubre competiciones adicionales directamente en el catálogo público ESPN, s
 
 Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
 
+### `sports_chat_espn_core`
+
+Lee de ESPN Core público SIN API key: odds por partido/proveedor, movimiento, enfrentamientos, ATS, futures, past-performances, odds-records, probabilities, predictor y providers. Resuelve pocas referencias y devuelve el JSON relevante limitado, con estado real de acceso.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "mode": {
+      "type": "string",
+      "description": "odds | provider | movement | head_to_heads | ats | futures | past_performances | odds_records | probabilities | predictor | providers"
+    },
+    "sport": {
+      "type": "string",
+      "description": "Slug de deporte ESPN: football, basketball, baseball, hockey, soccer..."
+    },
+    "league": {
+      "type": "string",
+      "description": "Liga ESPN: nfl, nba, mlb, nhl, usa.1, eng.1..."
+    },
+    "eventId": {
+      "type": "string",
+      "description": "ID real de partido ESPN para odds, provider, movement, head_to_heads, probabilities, predictor"
+    },
+    "competitionId": {
+      "type": "string",
+      "description": "ID competition real, por defecto eventId (ESPN a menudo usa ambos iguales)"
+    },
+    "teamId": {
+      "type": "string",
+      "description": "ID ESPN de equipo para ats, odds_records y past_performances"
+    },
+    "providerId": {
+      "type": "string",
+      "description": "ID ESPN de proveedor (obtener con mode=providers), obligatorio para provider/movement/head_to_heads/past_performances"
+    },
+    "season": {
+      "type": "integer",
+      "description": "Temporada 1900..2100, requerida para ats, odds_records y futures"
+    },
+    "seasonType": {
+      "type": "integer",
+      "description": "0..4; ATS por defecto 2 (regular), odds_records por defecto 0"
+    },
+    "movementType": {
+      "type": "integer",
+      "description": "Solo mode=movement: 0 moneyline, 1 spread según endpoints comunitarios. Por defecto 0"
+    },
+    "limit": {
+      "type": "integer",
+      "description": "1..100, por defecto 25. Hasta 12 muestras y 6 referencias resueltas"
+    },
+    "page": {
+      "type": "integer",
+      "description": "Página ESPN 1..1000, por defecto 1"
+    },
+    "resolveRefs": {
+      "type": "boolean",
+      "description": "Resolver hasta 6 referencias Core del mismo deporte y liga, por defecto true"
+    }
+  },
+  "required": [
+    "mode",
+    "sport",
+    "league"
+  ]
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_espn_core_catalog`
+
+Lista las 11 familias de endpoints Core ESPN para cuotas, historial, ATS, futuros, movimientos de mercado, pronósticos y proveedores. No se realiza red ni se gasta cuota.
+
+```json
+{
+  "type": "object",
+  "properties": {}
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_espn_explore`
+
+ESPN universal: perfiles de equipos/jugadores, estadísticas por temporada, registros partido a partido, splits, clasificaciones, noticias, líderes, encuentros y búsqueda. Devuelve un panel dinámico seguro con logos, fotos y fuentes, dentro del chat. IDs deben provenir de ESPN.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "sport": {
+      "type": "string",
+      "description": "Disciplina ESPN, como basketball, soccer, hockey, baseball o football."
+    },
+    "league": {
+      "type": "string",
+      "description": "Slug ESPN real: nba, nhl, eng.1, mlb, nfl, etc."
+    },
+    "view": {
+      "type": "string",
+      "description": "team | player | event | standings | news | leaders | search"
+    },
+    "teamId": {
+      "type": "string",
+      "description": "ID numérico confirmado de equipo para view=team."
+    },
+    "athleteId": {
+      "type": "string",
+      "description": "ID numérico confirmado de deportista para view=player."
+    },
+    "eventId": {
+      "type": "string",
+      "description": "ID numérico confirmado de partido para view=event."
+    },
+    "season": {
+      "type": "integer",
+      "description": "Año de temporada, cuando se solicita uno."
+    },
+    "query": {
+      "type": "string",
+      "description": "Texto a buscar en ESPN, solo para view=search."
+    }
+  },
+  "required": [
+    "sport",
+    "league",
+    "view"
+  ]
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_espn_historical_odds`
+
+Recupera precios HISTÓRICOS ESPN de una fecha: scoreboard diario, Core odds por encuentro y summary/pickcenter, siguiendo pocas $ref seguras. Útil para retrospectiva/backtest, NUNCA para tickets actuales.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "sport": {
+      "type": "string",
+      "description": "Deporte ESPN: baseball, basketball, football, hockey, soccer, etc."
+    },
+    "league": {
+      "type": "string",
+      "description": "Liga ESPN: mlb, nba, nfl, nhl, eng.1, etc."
+    },
+    "date": {
+      "type": "string",
+      "description": "Día anterior AAAA-MM-DD"
+    },
+    "days": {
+      "type": "integer",
+      "description": "Número de días consecutivos, 1..3, por defecto 1"
+    },
+    "eventsPerDay": {
+      "type": "integer",
+      "description": "Encuentros estudiados por día, 1..8 (por defecto 6)"
+    }
+  },
+  "required": [
+    "sport",
+    "league",
+    "date"
+  ]
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
 ### `sports_chat_games`
 
-Eventos reales en el chat: liga, horario, estadio, equipos y estadísticas verificables. Devuelve tarjetas renderizables.
+Cartelera compacta, tarjetas por partido y marcadores en vivo con actualizaciones automáticas sin tokens. Usa liveOnly=true para eventos que están jugando.
 
 ```json
 {
@@ -2259,11 +2512,151 @@ Eventos reales en el chat: liga, horario, estadio, equipos y estadísticas verif
     "date": {
       "type": "string",
       "description": "Fecha AAAA-MM-DD, opcional: hoy en Santo Domingo."
+    },
+    "team": {
+      "type": "string",
+      "description": "Nombre del equipo buscado; opcional para consulta individual."
+    },
+    "opponent": {
+      "type": "string",
+      "description": "Segundo equipo si se busca un cruce concreto."
+    },
+    "eventId": {
+      "type": "string",
+      "description": "ID de evento exacto obtenido de ESPN o MLB; opcional."
+    },
+    "liveOnly": {
+      "type": "boolean",
+      "description": "Mostrar solamente partidos en juego ahora. La tarjeta seguirá actualizándose desde ESPN."
     }
   },
   "required": [
     "sport",
     "league"
+  ]
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_historical_odds`
+
+Históricos por fecha: archivos gratuitos SBR/MLB y observaciones auténticas que PHOENIX capturó de proveedores desde su instalación. Nunca cuotas actuales.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "sport": {
+      "type": "string",
+      "description": "nba, mlb, nfl, nhl para los archivos públicos; otros deportes requieren observaciones locales."
+    },
+    "sportKey": {
+      "type": "string",
+      "description": "Clave de mercado para snapshots: basketball_nba, baseball_mlb, americanfootball_nfl, soccer_epl, etc."
+    },
+    "date": {
+      "type": "string",
+      "description": "Fecha histórica AAAA-MM-DD. Para snapshots es la fecha UTC de OBSERVACIÓN, no fecha del encuentro."
+    },
+    "limit": {
+      "type": "integer",
+      "description": "Límite de filas (máximo 500), por defecto 100"
+    },
+    "leagueSlug": {
+      "type": "string",
+      "description": "Liga OddsHarvester histórica (ej. england-premier-league), opcional."
+    },
+    "season": {
+      "type": "string",
+      "description": "Temporada de OddsHarvester, por ejemplo 2024-2025 o 2025."
+    },
+    "market": {
+      "type": "string",
+      "description": "Mercado histórico, ej. 1x2, moneyline u over_under."
+    }
+  }
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_market_intelligence`
+
+Compara mercados reales vigentes por bookmaker: ganador, doble oportunidad, totales, ambos marcan y handicap cuando la fuente los publicó. Solo calcula probabilidad IMPLÍCITA del precio, nunca probabilidad de acierto propia.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "sportKey": {
+      "type": "string",
+      "description": "Clave de mercado: soccer_epl, icehockey_nhl, basketball_nba, baseball_mlb, etc."
+    },
+    "date": {
+      "type": "string",
+      "description": "Fecha YYYY-MM-DD en Santo Domingo para scraping local, por defecto hoy."
+    }
+  },
+  "required": [
+    "sportKey"
+  ]
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_market_source_catalog`
+
+Catálogo SIN RED de ScoresAndOdds, Covers, VegasInsider y OddsPortal para comparar líneas, movimientos y contexto con ESPN. Retorna URL, capacidades, límites y flujo de comprobación; no asegura conexión ni permisos de extracción.
+
+```json
+{
+  "type": "object",
+  "properties": {}
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_matchup_factors`
+
+Investigación universal de ventaja deportiva por evento ESPN confirmado: forma de ambos equipos, H2H, descansos, localía/estadio, contexto de noticias/lesiones y cuotas reconciliadas. En MLB desglosa referencias de carreras en 3, 5, 9 innings y consulta abridores probables y sus últimas salidas. Ninguna cifra es probabilidad calibrada; clima no verificado permanece pendiente.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "sport": {
+      "type": "string",
+      "description": "Disciplina ESPN: baseball, basketball, soccer, football, hockey, tennis, etc."
+    },
+    "league": {
+      "type": "string",
+      "description": "Slug real de liga del catálogo ESPN."
+    },
+    "eventId": {
+      "type": "string",
+      "description": "ID real ESPN obtenido de sports_chat_games."
+    },
+    "date": {
+      "type": "string",
+      "description": "Día de cartelera del evento, AAAA-MM-DD."
+    },
+    "lookbackDays": {
+      "type": "integer",
+      "description": "Ventana histórica de 3 a 28 días, por defecto 14."
+    },
+    "includeOdds": {
+      "type": "boolean",
+      "description": "Consulta mercados actuales por proveedor si existe; por defecto true."
+    }
+  },
+  "required": [
+    "sport",
+    "league",
+    "eventId",
+    "date"
   ]
 }
 ```
@@ -2296,9 +2689,35 @@ Analiza rotación y bullpen de MLB por equipo, ERA, WHIP, entradas y ponches con
 
 Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
 
+### `sports_chat_nba_research`
+
+Investiga la forma NBA con marcadores FINALIZADOS de las últimas fechas: últimos resultados, márgenes de puntos, descanso, calidad de muestra y evidencia ausente. No infiere lesiones, cuotas ni probabilidades.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "date": {
+      "type": "string",
+      "description": "Fecha del partido en Santo Domingo, AAAA-MM-DD; defecto hoy."
+    },
+    "eventId": {
+      "type": "string",
+      "description": "ID real ESPN NBA; si se omite investiga hasta seis encuentros futuros."
+    },
+    "lookbackDays": {
+      "type": "integer",
+      "description": "Histórico diario, 1-21 días; por defecto 14. Una consulta por fecha compartida entre los encuentros."
+    }
+  }
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
 ### `sports_chat_odds`
 
-Busca cuotas públicas ESPN sin clave o The Odds API si está configurada; puede devolver vacío cuando ESPN no publica precios.
+Consulta por defecto cuotas ESPN Scoreboard, Core y Summary/Pickcenter sin clave. Usa eventId ESPN y date para un partido exacto. sourcePolicy=all compara voluntariamente otros proveedores; sus IDs no se mezclan.
 
 ```json
 {
@@ -2311,6 +2730,18 @@ Busca cuotas públicas ESPN sin clave o The Odds API si está configurada; puede
     "markets": {
       "type": "string",
       "description": "h2h, totals o spreads. Por defecto h2h."
+    },
+    "eventId": {
+      "type": "string",
+      "description": "ID ESPN real de un encuentro futuro; restringe la búsqueda a ese evento."
+    },
+    "date": {
+      "type": "string",
+      "description": "Fecha AAAA-MM-DD del partido, obtenida del scoreboard."
+    },
+    "sourcePolicy": {
+      "type": "string",
+      "description": "espn (por defecto) o all (comparación multifuente solo sin eventId ni fecha)."
     }
   },
   "required": [
@@ -2321,9 +2752,129 @@ Busca cuotas públicas ESPN sin clave o The Odds API si está configurada; puede
 
 Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
 
+### `sports_chat_odds_keyless`
+
+Cuotas multideporte sin API key desde OddsHarvester local autorizado: 11 deportes, mercados de prepartido, precios por casa con fuente y antigüedad. No promete acceso ilimitado.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "sport": {
+      "type": "string",
+      "description": "football, basketball, baseball, american-football, tennis, ice-hockey, rugby-league, rugby-union, handball, volleyball o cricket."
+    },
+    "market": {
+      "type": "string",
+      "description": "Mercado compatible con deporte: 1x2, double_chance, btts, moneyline, home_away, match_winner, over_under, total_games_over_under, total_sets_over_under o total_points_over_under."
+    },
+    "date": {
+      "type": "string",
+      "description": "Día AAAA-MM-DD en Santo Domingo; predeterminado hoy."
+    }
+  },
+  "required": [
+    "sport",
+    "market"
+  ]
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_odds_scan`
+
+Comprueba sistemáticamente los 11 deportes de OddsHarvester sin omitir tenis, soccer, baseball, basketball NBA/WNBA, rugby, volleyball, cricket y handball. Rondas de cuatro deportes, paginación por offset 0, 4 y 8. No inventa precios ni asigna ligas sin evidencia.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "sport": {
+      "type": "string",
+      "description": "Disciplina opcional (football, basketball, baseball, american-football, ice-hockey, tennis, handball, volleyball, rugby-league, rugby-union, cricket). Vacío recorre las 11."
+    },
+    "offset": {
+      "type": "integer",
+      "description": "Índice inicial: 0, 4 u 8 al revisar todos."
+    },
+    "limit": {
+      "type": "integer",
+      "description": "Máximo cuatro deportes por ronda; por defecto 4."
+    },
+    "date": {
+      "type": "string",
+      "description": "Fecha AAAA-MM-DD de los partidos, por defecto hoy en República Dominicana."
+    }
+  }
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_research`
+
+Analiza TODOS los deportes del catálogo ESPN por liga: marcadores terminados, victorias/derrotas/empates, medias anotadas/recibidas, descanso y falta de evidencias. No transforma forma en probabilidad.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "sport": {
+      "type": "string",
+      "description": "soccer, basketball, baseball, football, hockey, etc."
+    },
+    "league": {
+      "type": "string",
+      "description": "ID real ESPN del catálogo: nba, mlb, eng.1, usa.1, nfl, nhl, etc."
+    },
+    "date": {
+      "type": "string",
+      "description": "Fecha AAAA-MM-DD; por defecto hoy."
+    },
+    "lookbackDays": {
+      "type": "integer",
+      "description": "Días históricos por liga, 1 a 28; por defecto 14."
+    }
+  },
+  "required": [
+    "sport",
+    "league"
+  ]
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_sources_health`
+
+Audita los proveedores deportivos. Si faltan, inicia su instalación administrada opcional sin bloquear el chat; retorna estado y logs, sin exponer credenciales ni prometer cuotas.
+
+```json
+{
+  "type": "object",
+  "properties": {}
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_sources_repair`
+
+Reparar de forma autónoma y sin bloquear el chat los tres proveedores deportivos opcionales: OddsHarvester/Chromium y dos repositorios históricos. Devuelve el estado del lanzador y archivo de errores. No promete cuotas.
+
+```json
+{
+  "type": "object",
+  "properties": {}
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
 ### `sports_chat_ticket`
 
-Genera un ticket visual SIMULADO con selecciones verificadas nuevamente en cuotas reales. No ejecuta apuestas.
+Prepara un ticket con cuotas comerciales verificadas y calculadora de retorno real, pendiente de aceptación de la banca; NO coloca apuestas sin integración y confirmación.
 
 ```json
 {
@@ -2377,7 +2928,7 @@ Genera un ticket visual SIMULADO con selecciones verificadas nuevamente en cuota
     },
     "stake": {
       "type": "number",
-      "description": "Importe ficticio para simular el retorno; no es una operación financiera."
+      "description": "Importe que el usuario desea consultar en RD$, solo para calcular retorno; no transfiere dinero."
     }
   },
   "required": [
@@ -2385,6 +2936,74 @@ Genera un ticket visual SIMULADO con selecciones verificadas nuevamente en cuota
   ]
 }
 ```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_ticket_evidence_auto`
+
+Ticket multideporte de 1 a 6 patas, obtenido de marcadores finales verificables de varias ligas (no solo récords). Selecciones independientes por partido; sin probabilidades calibradas ni precios inventados. Incompleto si no hay suficientes.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "count": {
+      "type": "integer",
+      "description": "Número exacto solicitado: 5 o 6, entre 1 y 6."
+    },
+    "date": {
+      "type": "string",
+      "description": "Fecha AAAA-MM-DD, por defecto hoy."
+    },
+    "sport": {
+      "type": "string",
+      "description": "Limitar a soccer, basketball, baseball, football, hockey o tennis; omitir para multideporte."
+    }
+  },
+  "required": [
+    "count"
+  ]
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_ticket_evidence_priced_auto`
+
+Investiga 5 o 6 eventos con historial más amplio y contextualización prepartido, consulta OddsHarvester habilitado para precios reales; combina SOLO cuotas vigentes de una misma casa. No inventa cuotas, lesiones ni probabilidades.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "count": {
+      "type": "integer",
+      "description": "Patas deseadas: 5 o 6 (admite 1 a 6)."
+    },
+    "date": {
+      "type": "string",
+      "description": "Fecha AAAA-MM-DD; por defecto hoy."
+    },
+    "sport": {
+      "type": "string",
+      "description": "Limita a soccer, baseball, basketball, football, hockey o tennis; omite para varios deportes."
+    },
+    "stake": {
+      "type": "number",
+      "description": "Monto de simulación; 0 por defecto. No compra apuestas."
+    },
+    "marketPreference": {
+      "type": "string",
+      "description": "winner: ganador directo; double_chance: 1X/X2 para encuentros de fútbol con cuota verificable."
+    }
+  },
+  "required": [
+    "count"
+  ]
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
 
 ### `sports_chat_ticket_research`
 
@@ -2397,6 +3016,10 @@ GENERA UN TICKET VISUAL REALMENTE RENDERIZABLE de pronósticos para encuentros f
     "date": {
       "type": "string",
       "description": "Fecha de los eventos AAAA-MM-DD; por defecto hoy en Santo Domingo."
+    },
+    "requestedLegs": {
+      "type": "integer",
+      "description": "Cantidad exacta de patas solicitada por el usuario: 5 cuando pide 5; de 1 a 6."
     },
     "legs": {
       "type": "array",
@@ -2436,12 +3059,123 @@ GENERA UN TICKET VISUAL REALMENTE RENDERIZABLE de pronósticos para encuentros f
     }
   },
   "required": [
+    "requestedLegs",
     "legs"
   ]
 }
 ```
 
 Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_ticket_research_auto`
+
+PRESELECCIÓN HEURÍSTICA: para NBA exige además resultados completos, margen y descanso, pero NO es probabilidad calibrada ni análisis de lesiones o cuotas; para otros deportes usa récords descriptivos. Respeta el número de patas y marca faltantes.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "count": {
+      "type": "integer",
+      "description": "Número de patas que pidió el usuario: de 1 a 6; por ejemplo 5 si pidió un ticket de 5 patas."
+    },
+    "date": {
+      "type": "string",
+      "description": "Fecha de los partidos AAAA-MM-DD; por defecto hoy en Santo Domingo."
+    }
+  },
+  "required": [
+    "count"
+  ]
+}
+```
+
+Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
+
+### `sports_chat_ticket_track`
+
+Seguimiento de un ticket con eventos ESPN reales y mercados explícitos, devuelve estado provisional por pata, push, potencial retorno y riesgo de anulación. No acredita aceptación ni pago de la banca; cotejar siempre con su recibo.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "sport": {
+      "type": "string",
+      "description": "Deporte ESPN de los eventos, p. ej. baseball."
+    },
+    "league": {
+      "type": "string",
+      "description": "Liga ESPN, p. ej. mlb."
+    },
+    "date": {
+      "type": "string",
+      "description": "Fecha del evento AAAA-MM-DD."
+    },
+    "stake": {
+      "type": "number",
+      "description": "Monto efectivamente indicado por el usuario; no transfiere fondos."
+    },
+    "ticketReference": {
+      "type": "string",
+      "description": "Folio registrado por la banca según el usuario (no verificado mediante API de operador)."
+    },
+    "legs": {
+      "type": "array",
+      "description": "Selecciones de la misma casa. IDs ESPN de cada encuentro, cuotas exactas, mercado, línea y equipo/jugador.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "eventId": {
+            "type": "string"
+          },
+          "bookmaker": {
+            "type": "string"
+          },
+          "market": {
+            "type": "string",
+            "description": "moneyline | h2h | 1x2 | run_line | spread | total | team_total | first_3_total | first_5_total | first_3_spread | first_5_spread | player_prop"
+          },
+          "selection": {
+            "type": "string",
+            "description": "home | away | draw | over | under | yes | no"
+          },
+          "price": {
+            "type": "number"
+          },
+          "line": {
+            "type": "number",
+            "description": "Línea firmada (ej. -1.5), valor de total o prop; necesaria en totales y spreads."
+          },
+          "team": {
+            "type": "string",
+            "description": "home | away para total del equipo"
+          },
+          "playerId": {
+            "type": "string",
+            "description": "ID oficial de jugador para props"
+          }
+        },
+        "required": [
+          "eventId",
+          "bookmaker",
+          "market",
+          "selection",
+          "price"
+        ]
+      }
+    }
+  },
+  "required": [
+    "sport",
+    "league",
+    "date",
+    "stake",
+    "legs"
+  ]
+}
+```
 
 Source: [`packages/core/tool-sports/src/index.ts`](../packages/core/tool-sports/src/index.ts)
 
@@ -2622,6 +3356,24 @@ Search Phoenix cognitive memory with bounded provenance, layers, project, tempor
         "prospective",
         "associative",
         "temporal"
+      ]
+    },
+    "kind": {
+      "type": "string",
+      "description": "Exact memory category. Use decision for Kira previous predictions and selections.",
+      "enum": [
+        "decision",
+        "fact",
+        "preference",
+        "lesson",
+        "skill",
+        "pending",
+        "mission",
+        "error",
+        "success",
+        "conversation",
+        "event",
+        "interaction"
       ]
     },
     "from": {
@@ -3769,13 +4521,90 @@ Límites: se aplican topes de concurrencia y de agentes totales; no hay acceso a
 
 Source: [`packages/workflow/tool-workflow/src/index.ts`](../packages/workflow/tool-workflow/src/index.ts)
 
+<a id="phoenix-aidsh-tool-voice"></a>
+
+## `@phoenix-ai/dsh-tool-voice`
+
+### `phoenix_voice_speak`
+
+REPRODUCIR AUDIO AHORA. Kira debe llamar esta herramienta cuando el usuario le diga habla, di algo, lee en voz alta, quiero escucharte, prueba tu voz o ¿me escuchas bien?; usa Codex Live si hay sesión autorizada y activa; si no, sintetiza audio real usando voz local de PHOENIX en el idioma seleccionado. Responde con el proveedor y resultado verificables. No requiere micrófono. No usar para narrar cada paso ni simular reproducción.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "text": {
+      "type": "string",
+      "description": "Frase corta, natural y pronunciable en el idioma configurado, máximo 300 caracteres. No incluir identificadores ni secretos."
+    },
+    "language": {
+      "type": "string",
+      "description": "Idioma BCP-47 de la interfaz, por ejemplo es-DO. Omitir para usar PHOENIX_VOICE_LANGUAGE (es-DO)."
+    }
+  },
+  "required": [
+    "text"
+  ]
+}
+```
+
+Source: [`packages/voice/tool-voice/src/index.ts`](../packages/voice/tool-voice/src/index.ts)
+
+### `phoenix_voice_status`
+
+Comprueba la voz de Kira y sus motores reales: habilitación, proveedor local, cola, voz Codex Live disponible y motivo de desconexión. No activa micrófono ni reproduce audio. Usa antes de una prueba cuando sea necesario diagnosticar.
+
+```json
+{
+  "type": "object",
+  "properties": {}
+}
+```
+
+Source: [`packages/voice/tool-voice/src/index.ts`](../packages/voice/tool-voice/src/index.ts)
+
+Speech is an explicit user-requested output side channel. A provider receipt is not proof that speakers were audible; this catalog boot never plays audio.
+
 <a id="phoenix-aidsh-tool-web"></a>
 
 ## `@phoenix-ai/dsh-tool-web`
 
+### `research_health_series`
+
+Obtiene series OFICIALES del Banco Mundial API v2 sin clave, con años null, unidades, procedencia y advertencias. Indicadores permitidos: mortalidad infantil SP.DYN.IMRT.IN, menores de 5 SH.DYN.MORT, cobertura UHC SH_UHC_SCI, gasto en salud PIB SH.XPD.CHEX.GD.ZS, gasto de bolsillo SH.XPD.OOPC.CH.ZS y médicos por 1000 SH.MED.PHYS.ZS. País DOM y años 2015–2025 por defecto. Comparar años y metodologías; no interpolar 2025 ni inferir causalidad sobre APS.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "indicator": {
+      "type": "string",
+      "description": "Uno de HEALTH_INDICATORS; códigos World Bank autorizados."
+    },
+    "country": {
+      "type": "string",
+      "description": "ISO2 o ISO3, por defecto DOM"
+    },
+    "start_year": {
+      "type": "integer",
+      "description": "Primer año; por defecto 2015"
+    },
+    "end_year": {
+      "type": "integer",
+      "description": "Último año; por defecto 2025"
+    }
+  },
+  "required": [
+    "indicator"
+  ]
+}
+```
+
+Source: [`packages/web/tool-web/src/index.ts`](../packages/web/tool-web/src/index.ts)
+
 ### `research_scholar`
 
-Busca metadatos científicos REALES mediante la API pública oficial Europe PMC: PubMed, PubMed Central, artículos, preprints y otras fuentes indexadas. Devuelve autor, título, año, revista, DOI/PMID/PMCID, URL original, resumen cuando exista y fecha de consulta. Úsala antes de redactar informes biomédicos o al verificar referencias; NO implica que el artículo tenga revisión por pares, texto completo disponible o evidencia clínica sólida. Búsqueda de máximo 10 registros, sin claves API inventadas. La herramienta devuelve estado unavailable si el proveedor falla.
+Consulta metadatos REALES de Europe PMC (PubMed/PMC y otros índices). Devuelve DOI/PMID, autores, título, revista, fecha y URL. Busca por SUBTEMA, diseño y período; recupera hasta 30 por lote y usa cursor_mark=nextCursorMark de la respuesta para continuar hasta alcanzar cobertura bibliográfica suficiente de tesis. Deduplica globalmente entre lotes por DOI/PMID. NO confundir metadatos con evidencia clínica verificada o texto completo. Sin API key; unavailable si el proveedor falla.
 
 ```json
 {
@@ -3787,7 +4616,11 @@ Busca metadatos científicos REALES mediante la API pública oficial Europe PMC:
     },
     "limit": {
       "type": "integer",
-      "description": "Resultados 1 a 10, por defecto 5."
+      "description": "Resultados 1 a 30 por lote, por defecto 5."
+    },
+    "cursor_mark": {
+      "type": "string",
+      "description": "Cursor devuelto como nextCursorMark por el lote anterior; permite paginar sin perder fuentes."
     }
   },
   "required": [
@@ -3800,7 +4633,7 @@ Source: [`packages/web/tool-web/src/index.ts`](../packages/web/tool-web/src/inde
 
 ### `research_search`
 
-Run bounded multidisciplinary live web research with domain-aware source-scoped queries, deduplication and partial failure recovery. Returns source leads and provenance, not directly verified API data.
+Búsqueda interdisciplinaria de evidencia por lotes de dos instituciones. Para APS/salud pública RD utiliza domain=public_health y batch=0,1,2,3 hasta cubrir OPS, Banco Mundial, ONE, MSP, SNS, SISALRIL y OMS. Filtra indicios irrelevantes y muestra los lotes restantes; no certifica fuentes. Para tesis complementa con research_scholar paginado y phoenix_research_verify_sources; nunca tomes 15 registros como tope global.
 
 ```json
 {
@@ -3811,7 +4644,11 @@ Run bounded multidisciplinary live web research with domain-aware source-scoped 
     },
     "domain": {
       "type": "string",
-      "description": "Optional source domain. Call research_sources to list valid values."
+      "description": "Optional research domain; APS and health systems use public_health."
+    },
+    "batch": {
+      "type": "integer",
+      "description": "Zero-based source batch; continue 0,1,... totalBatches-1."
     }
   },
   "required": [

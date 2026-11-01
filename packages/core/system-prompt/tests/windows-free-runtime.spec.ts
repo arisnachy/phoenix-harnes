@@ -64,7 +64,7 @@ describe('automatic Windows capability context', () => {
       const changed = vi.fn()
       const read = startWindowsCapabilityDiscovery(changed, {
         platform: 'win32', supervised: true, exists: () => true,
-        execute: (_binary, _args, _options, callback) => callback(error, stdout),
+        execute: (_binary, _args, _options, callback) =>{  callback(error, stdout) },
       })
       expect(read()).toBe('')
       expect(changed).not.toHaveBeenCalled()

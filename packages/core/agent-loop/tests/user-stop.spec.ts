@@ -13,7 +13,7 @@ describe('explicit human stop intent', () => {
     'Kira cancela la tarea', 'no sigas', 'Kira deja de trabajar',
     'stop', 'please stop', 'stop this test', 'cancel it',
     'basta', 'Párate ahora',
-  ])('matches %s as a control command', text => {
+  ])('matches %s as a control command', (text) => {
     expect(isExplicitUserStop(user(text))).toBe(true)
   })
 
@@ -27,7 +27,7 @@ describe('explicit human stop intent', () => {
     'La prueba se detuvo antes',
     'Stop the task and start another one',
     'Kira, por favor llena el formulario para la prueba',
-  ])('does not swallow ordinary instructions: %s', text => {
+  ])('does not swallow ordinary instructions: %s', (text) => {
     expect(isExplicitUserStop(user(text))).toBe(false)
   })
 

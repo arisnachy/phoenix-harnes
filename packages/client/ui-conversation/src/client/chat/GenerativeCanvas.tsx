@@ -207,7 +207,7 @@ function collectFilters(nodes: readonly CanvasNode[], values: Values): TableFilt
   const result: TableFilter[] = []
   const visit = (node: CanvasNode): void => {
     if (node.type === 'group') node.children.forEach(visit)
-    else if (node.type === 'tabs') node.tabs.forEach(tab => tab.children.forEach(visit))
+    else if (node.type === 'tabs') node.tabs.forEach((tab) =>{  tab.children.forEach(visit) })
     else if (node.type === 'input' && /search|buscar|find|filtrar/i.test(node.id + ' ' + node.label)) {
       const term = String(values[node.id] ?? '').trim()
       if (term) result.push({ kind: 'search', term })
@@ -221,7 +221,7 @@ function collectFilters(nodes: readonly CanvasNode[], values: Values): TableFilt
 }
 
 function matchesTable(row: readonly string[], columns: readonly string[], filters: readonly TableFilter[]): boolean {
-  return filters.every(filter => {
+  return filters.every((filter) => {
     if (filter.kind === 'search') return row.some(cell => matchText(cell).includes(matchText(filter.term)))
     const columnIndex = columns.findIndex(column => matchText(column) === matchText(filter.label))
     // Unrelated selects (e.g. display options) must never hide table rows.
@@ -229,19 +229,19 @@ function matchesTable(row: readonly string[], columns: readonly string[], filter
   })
 }
 
-const isFilterButton = (node: Extract<CanvasNode,{type:'button'}>): boolean =>
+const isFilterButton = (node: Extract<CanvasNode,{ type:'button' }>): boolean =>
   node.action === 'filter' || /^(aplicar filtros|apply filters|filtrar|filter)$/i.test(node.label.trim())
 function hasFilterButton(nodes: readonly CanvasNode[]): boolean {
   return nodes.some(node => node.type === 'button' ? isFilterButton(node)
     : node.type === 'group' ? hasFilterButton(node.children)
-    : node.type === 'tabs' ? node.tabs.some(tab => hasFilterButton(tab.children))
-    : false)
+      : node.type === 'tabs' ? node.tabs.some(tab => hasFilterButton(tab.children))
+        : false)
 }
 function initialValues(nodes: CanvasNode[]): Values {
   const values: Values = {}
   const walk = (node: CanvasNode): void => {
     if (node.type === 'group') node.children.forEach(walk)
-    else if (node.type === 'tabs') node.tabs.forEach(tab => tab.children.forEach(walk))
+    else if (node.type === 'tabs') node.tabs.forEach((tab) =>{  tab.children.forEach(walk) })
     else if (node.type === 'input') values[node.id] = node.value ?? ''
     else if (node.type === 'select') values[node.id] = node.value ?? node.options[0]?.value ?? ''
     else if (node.type === 'toggle') values[node.id] = node.value ?? false
@@ -266,7 +266,7 @@ function expandPrompt(prompt: string, values: Values): string {
 }
 
 function Tabs({ tabs, values, setValue, onAction, onFilter, filters }: {
-  tabs: Extract<CanvasNode,{type:'tabs'}>['tabs']
+  tabs: Extract<CanvasNode,{ type:'tabs' }>['tabs']
   values: Values
   setValue: RendererProps['setValue']
   onAction?: CanvasAction | undefined
@@ -279,7 +279,7 @@ function Tabs({ tabs, values, setValue, onAction, onFilter, filters }: {
       <div className={css.tabStrip} role="tablist">
         {tabs.map((tab, i) => (
           <button key={i} type="button" role="tab" aria-selected={active === i}
-            className={active === i ? css.selected : ''} onClick={() => setActive(i)}>{tab.label}</button>
+            className={active === i ? css.selected : ''} onClick={() =>{  setActive(i) }}>{tab.label}</button>
         ))}
       </div>
       <div role="tabpanel" className={css.column}>
@@ -299,7 +299,7 @@ function Node({ node, values, setValue, onAction, onFilter, filters }: RendererP
       if (allButtons && onAction !== undefined) {
         return <QuickReplyButtons buttons={node.children.map((child, index) => ({
           label: child.type === 'button' ? child.label : '', id: String(index),
-        }))} onSelect={id => {
+        }))} onSelect={(id) => {
           const item = node.children[Number(id)]
           if (item?.type !== 'button') return
           if (isFilterButton(item)) { onFilter(); return }
@@ -323,7 +323,7 @@ function Node({ node, values, setValue, onAction, onFilter, filters }: RendererP
     case 'alert':
       return <AlertBox type={node.status === 'positive' ? 'success'
         : node.status === 'negative' ? 'error'
-        : node.status === 'warning' ? 'warning' : 'info'} {...(node.title === undefined ? {} : { title: node.title })} message={node.message} />
+          : node.status === 'warning' ? 'warning' : 'info'} {...(node.title === undefined ? {} : { title: node.title })} message={node.message} />
     case 'timeline': return <Timeline {...(node.title === undefined ? {} : { title: node.title })} items={node.items} />
     case 'progress': {
       const max = node.max ?? 100
@@ -350,25 +350,28 @@ function Node({ node, values, setValue, onAction, onFilter, filters }: RendererP
     case 'input':
       return <label className={css.field}>{node.label}<input type="text" maxLength={500}
         placeholder={node.placeholder} value={String(values[node.id] ?? '')}
-        onChange={event => setValue(node.id,event.target.value)} /></label>
+        onChange={(event) =>{  setValue(node.id,event.target.value) }} /></label>
     case 'select':
       return <label className={css.field}>{node.label}<select value={String(values[node.id] ?? '')}
-        onChange={event => setValue(node.id,event.target.value)}>{node.options.map(o =>
-        <option key={o.value} value={o.value}>{o.label}</option>)}</select></label>
+        onChange={(event) =>{  setValue(node.id,event.target.value) }}>{node.options.map(o =>
+          <option key={o.value} value={o.value}>{o.label}</option>)}</select></label>
     case 'toggle':
       return <label className={css.toggle}><input type="checkbox" checked={Boolean(values[node.id])}
-        onChange={event => setValue(node.id,event.target.checked)} />{node.label}</label>
+        onChange={(event) =>{  setValue(node.id,event.target.checked) }} />{node.label}</label>
     case 'slider':
       return <label className={css.field}>{node.label}: {String(values[node.id] ?? node.min)}
         <input type="range" min={node.min} max={node.max} step={node.step ?? 1}
           value={Number(values[node.id] ?? node.min)}
-          onChange={event => setValue(node.id,Number(event.target.value))} /></label>
+          onChange={(event) =>{  setValue(node.id,Number(event.target.value)) }} /></label>
     case 'button': {
       const localFilter = isFilterButton(node)
       return <button type="button" className={css.action}
         disabled={!localFilter && onAction === undefined}
         title={!localFilter && onAction === undefined ? 'Acción no disponible en esta conversación' : undefined}
-        onClick={() => localFilter ? onFilter() : onAction?.(expandPrompt(node.prompt, values), node.action === 'submit' ? 'submit' : 'draft')}>
+        onClick={() => {
+          if (localFilter) onFilter()
+          else onAction?.(expandPrompt(node.prompt, values), node.action === 'submit' ? 'submit' : 'draft')
+        }}>
         {node.label}
       </button>
     }
@@ -380,9 +383,9 @@ function Node({ node, values, setValue, onAction, onFilter, filters }: RendererP
 export function GenerativeCanvas({ spec, onAction }: { spec: CanvasSpec; onAction?: CanvasAction | undefined }): ReactNode {
   const [values, setValues] = useState<Values>(() => initialValues(spec.props.children))
   const [applied, setApplied] = useState<Values>(() => initialValues(spec.props.children))
-  const setValue = (key: string, value: string | number | boolean): void =>
-    setValues(current => ({ ...current, [key]: value }))
-  const onFilter = (): void => setApplied({ ...values })
+  const setValue = (key: string, value: string | number | boolean): void =>{
+    setValues(current => ({ ...current, [key]: value })) }
+  const onFilter = (): void =>{  setApplied({ ...values }) }
   const filters = collectFilters(spec.props.children, hasFilterButton(spec.props.children) ? applied : values)
   return <section className={css.canvas} data-generative-ui="ui_canvas">
     <header><h3>{spec.props.title}</h3>{spec.props.subtitle && <p>{spec.props.subtitle}</p>}</header>

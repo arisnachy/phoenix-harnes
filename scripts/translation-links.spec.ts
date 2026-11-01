@@ -5,12 +5,14 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
+  hasLanguageSwitcher,
   normalizeTranslationMarkdownLinks,
   rewriteTranslationLinkLocales,
   translationLinkLocaleViolations,
   type TranslationLinkContext,
 } from './translation-links.ts'
 import { removeFixtureSafely } from './test-fixture-cleanup.ts'
+import { parseTranslationMarkdown } from './translation-pairing.ts'
 
 const roots: string[] = []
 
@@ -140,6 +142,20 @@ describe('translation link locale validation', () => {
       linkContext(root, 'docs/guide.zh.md'),
       ['guide.md'],
     )).toEqual([])
+  })
+
+  it('accepts Spanish/Chinese switchers while checking body links in their own locale', () => {
+    const root = fixture()
+    const spanish = '# Guía\n\nEspañol | [中文](guide.zh.md)\n\n[Referencia](reference.zh.md)\n'
+    const chinese = '# 指南\n\n[Español](guide.md) | 中文\n\n[正文](reference.md)\n'
+    expect(hasLanguageSwitcher(parseTranslationMarkdown(spanish), spanish, ['guide.zh.md'])).toBe(true)
+    expect(hasLanguageSwitcher(parseTranslationMarkdown(chinese), chinese, ['guide.md'])).toBe(true)
+    expect(translationLinkLocaleViolations(
+      spanish, linkContext(root, 'docs/guide.md'), ['guide.zh.md'],
+    )).toMatchObject([{ url: 'reference.zh.md', expectedUrl: 'reference.md' }])
+    expect(translationLinkLocaleViolations(
+      chinese, linkContext(root, 'docs/guide.zh.md'), ['guide.md'],
+    )).toMatchObject([{ url: 'reference.md', expectedUrl: 'reference.zh.md' }])
   })
 
   it('does not exempt an ordinary body link to the counterpart', () => {

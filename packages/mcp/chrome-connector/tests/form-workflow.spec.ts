@@ -31,7 +31,7 @@ describe('one-call form workflow', () => {
     const result = await runBrowserFormWorkflow({
       phases: [
         [{ operation: 'fill', name: 'name', value: 'Kira' },
-         { operation: 'fill', name: 'subject', value: 'Maths' }],
+          { operation: 'fill', name: 'subject', value: 'Maths' }],
         [{ operation: 'click', selector: '#survey button.suggestion', text: 'Maths' }],
       ],
       checks: [

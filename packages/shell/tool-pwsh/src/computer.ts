@@ -117,7 +117,7 @@ interface AttachmentWriter {
 export function attachmentWriter(ctx: Context): AttachmentWriter | undefined {
   // Cordis service getters require injection. get() is the supported late-bound
   // optional dependency lookup, and returns undefined when not mounted.
-  return ctx.get('attachments') as AttachmentWriter | undefined
+  return ctx.get('attachments')
 }
 
 

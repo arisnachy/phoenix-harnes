@@ -124,9 +124,9 @@ describe('Binance chat viewer HTTP integration', () => {
   })
 
   it('surfaces Binance agent allowlist rejection 3346001 separately from transport errors',async()=>{
-    const {origin}=await serverWithTrading({agentOs:{async binanceAgentOsState(){
-      return {configured:true,status:'failed' as const,reasonCode:'connection-failed' as const,toolNames:[]}
-    }}})
+    const { origin }=await serverWithTrading({ agentOs:{ async binanceAgentOsState(){
+      return { configured:true,status:'failed' as const,reasonCode:'connection-failed' as const,toolNames:[] }
+    } } })
     const response=await fetch(origin+'/phoenix-trading/paper/mcp-status')
     const status=await response.json() as Record<string,unknown>
     expect(status).toMatchObject({
@@ -209,10 +209,10 @@ describe('Binance chat viewer HTTP integration', () => {
     const { origin } = await serverWithTrading({
       testnet: new BinanceSpotTestnet(),
       credentials: {} as never,
-      testnetAuto: {snapshot() {
-        return { enabled: false, pending: {clientOrderId: 'px-pending'},
-          positions: {BTCUSDT:{quantity:0.4}} }
-      }} as never,
+      testnetAuto: { snapshot() {
+        return { enabled: false, pending: { clientOrderId: 'px-pending' },
+          positions: { BTCUSDT:{ quantity:0.4 } } }
+      } } as never,
     })
     const result = await fetch(origin + '/phoenix-trading/paper/testnet-connect', {
       method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' },
@@ -232,35 +232,35 @@ describe('Binance chat viewer HTTP integration', () => {
     const vault={
       async set(ref:string,value:string){vaultValues.set(ref,value)},
       async unset(ref:string){vaultValues.delete(ref)},
-      async resolve(ref:string){const value=vaultValues.get(ref);return value?{value,source:'file'}:undefined},
-      async describe(){return {writable:true,configured:true}},
+      async resolve(ref:string){const value=vaultValues.get(ref);return value?{ value,source:'file' }:undefined},
+      async describe(){return { writable:true,configured:true }},
     }
     let accessible=false
     const real=new BinanceSpotRealReadOnly(()=>undefined,async(input,init)=>{
       expect(String(input)).toContain('https://api.binance.com/api/v3/account')
       expect(init?.method).toBe('GET')
-      expect(init?.headers).toMatchObject({'X-MBX-APIKEY':'REAL_HMAC_KEY_1234567890'})
+      expect(init?.headers).toMatchObject({ 'X-MBX-APIKEY':'REAL_HMAC_KEY_1234567890' })
       return accessible
-        ? new Response(JSON.stringify({balances:[]}),{status:200})
-        : new Response(JSON.stringify({code:-2015}),{status:401})
+        ? new Response(JSON.stringify({ balances:[] }),{ status:200 })
+        : new Response(JSON.stringify({ code:-2015 }),{ status:401 })
     })
-    const {origin}=await serverWithTrading({real,credentials:vault as never})
+    const { origin }=await serverWithTrading({ real,credentials:vault })
     const url=origin+'/phoenix-trading/paper/real-migrate'
-    const wrongOrigin=await fetch(url,{method:'POST',
-      headers:{Origin:'https://attacker.example','Content-Type':'application/json'},body:'{}'})
+    const wrongOrigin=await fetch(url,{ method:'POST',
+      headers:{ Origin:'https://attacker.example','Content-Type':'application/json' },body:'{}' })
     expect(wrongOrigin.status).toBe(403)
-    const failed=await fetch(url,{method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},body:'{}'})
-    expect(await failed.json()).toMatchObject({migrated:false,connected:false,issue:'ip-or-permission'})
+    const failed=await fetch(url,{ method:'POST',headers:{ Origin:origin,'Content-Type':'application/json' },body:'{}' })
+    expect(await failed.json()).toMatchObject({ migrated:false,connected:false,issue:'ip-or-permission' })
     expect(vaultValues.has('PHOENIX_BINANCE_REAL_API_SECRET')).toBe(false)
     accessible=true
-    const success=await fetch(url,{method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},body:'{}'})
+    const success=await fetch(url,{ method:'POST',headers:{ Origin:origin,'Content-Type':'application/json' },body:'{}' })
     const body=await success.text()
-    expect(JSON.parse(body)).toMatchObject({migrated:true,connected:true,tradingAuthorized:false})
+    expect(JSON.parse(body)).toMatchObject({ migrated:true,connected:true,tradingAuthorized:false })
     expect(body).not.toContain('REAL_HMAC_SECRET_1234567890')
     expect(vaultValues.get('PHOENIX_BINANCE_REAL_API_SECRET')).toBe('REAL_HMAC_SECRET_1234567890')
     expect(vaultValues.get('PHOENIX_BINANCE_TESTNET_API_SECRET')).toBe('REAL_HMAC_SECRET_1234567890')
-    const forbidden=await fetch(url,{method:'POST',
-      headers:{Origin:origin,'Content-Type':'application/json'},body:JSON.stringify({trade:true})})
+    const forbidden=await fetch(url,{ method:'POST',
+      headers:{ Origin:origin,'Content-Type':'application/json' },body:JSON.stringify({ trade:true }) })
     expect(forbidden.status).toBe(400)
   })
 
@@ -269,28 +269,28 @@ describe('Binance chat viewer HTTP integration', () => {
     const vault={
       async set(ref:string,value:string){saved.set(ref,value)},
       async unset(ref:string){saved.delete(ref)},
-      async resolve(ref:string){const value=saved.get(ref);return value?{value,source:'file'}:undefined},
-      async describe(){return {writable:true,configured:false}},
+      async resolve(ref:string){const value=saved.get(ref);return value?{ value,source:'file' }:undefined},
+      async describe(){return { writable:true,configured:false }},
     }
     const requests:string[]=[]
     const real=new BinanceSpotRealReadOnly(async()=>{
       const apiKey=saved.get('PHOENIX_BINANCE_REAL_API_KEY')
       const secret=saved.get('PHOENIX_BINANCE_REAL_API_SECRET')
-      return apiKey&&secret?{apiKey,secret}:undefined
+      return apiKey&&secret?{ apiKey,secret }:undefined
     },async(input,init)=>{
       requests.push(String(input))
       expect(init?.method).toBe('GET')
       expect(String(input)).toContain('https://api.binance.com/api/v3/account')
       expect(String(input)).not.toContain('testnet.binance.vision')
-      return new Response(JSON.stringify({canTrade:true,balances:[]}),{status:200})
+      return new Response(JSON.stringify({ canTrade:true,balances:[] }),{ status:200 })
     })
-    const {origin}=await serverWithTrading({real,credentials:vault as never})
+    const { origin }=await serverWithTrading({ real,credentials:vault })
     const url=origin+'/phoenix-trading/paper/real-connect'
-    const blocked=await fetch(url,{method:'POST',headers:{Origin:'https://evil.example','Content-Type':'application/json'},
-      body:JSON.stringify({apiKey:'REAL_HMAC_KEY_1234567890',secret:'REAL_HMAC_SECRET_1234567890'})})
+    const blocked=await fetch(url,{ method:'POST',headers:{ Origin:'https://evil.example','Content-Type':'application/json' },
+      body:JSON.stringify({ apiKey:'REAL_HMAC_KEY_1234567890',secret:'REAL_HMAC_SECRET_1234567890' }) })
     expect(blocked.status).toBe(403)
-    const good=await fetch(url,{method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},
-      body:JSON.stringify({apiKey:'REAL_HMAC_KEY_1234567890',secret:'REAL_HMAC_SECRET_1234567890'})})
+    const good=await fetch(url,{ method:'POST',headers:{ Origin:origin,'Content-Type':'application/json' },
+      body:JSON.stringify({ apiKey:'REAL_HMAC_KEY_1234567890',secret:'REAL_HMAC_SECRET_1234567890' }) })
     expect(good.status).toBe(200)
     const result=await good.text()
     expect(JSON.parse(result)).toMatchObject({
@@ -300,27 +300,27 @@ describe('Binance chat viewer HTTP integration', () => {
     expect(saved.get('PHOENIX_BINANCE_REAL_API_KEY')).toBe('REAL_HMAC_KEY_1234567890')
     expect(saved.has('PHOENIX_BINANCE_TESTNET_API_KEY')).toBe(false)
     const check=await fetch(origin+'/phoenix-trading/paper/real-status')
-    expect(await check.json()).toMatchObject({connected:true,tradingAuthorized:false})
+    expect(await check.json()).toMatchObject({ connected:true,tradingAuthorized:false })
     expect(requests).toHaveLength(2)
     expect((await fetch(url)).status).toBe(405)
   })
 
   it('repairs a broken official Agentic MCP using the Host without granting Trade scope',async()=>{
     let repaired=false
-    const {origin}=await serverWithTrading({agentOs:{
-      async repairBinanceAgentOs(){repaired=true;return {status:'installed',connector:{
+    const { origin }=await serverWithTrading({ agentOs:{
+      async repairBinanceAgentOs(){repaired=true;return { status:'installed',connector:{
         entryId:'binance-agent-os',serverName:'binance-agent-os',url:'https://agent.binance.com/mcp/agentic',
-      }}},
-      async binanceAgentOsState(){return {configured:true,status:repaired?'auth-required' as const:'failed' as const,
-        reasonCode:repaired?'authorization-required' as const:'connection-failed' as const,toolNames:[]}},
-    }})
+      } }},
+      async binanceAgentOsState(){return { configured:true,status:repaired?'auth-required' as const:'failed' as const,
+        reasonCode:repaired?'authorization-required' as const:'connection-failed' as const,toolNames:[] }},
+    } })
     const url=origin+'/phoenix-trading/paper/mcp-repair'
-    const refused=await fetch(url,{method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},
-      body:JSON.stringify({trade:true})})
+    const refused=await fetch(url,{ method:'POST',headers:{ Origin:origin,'Content-Type':'application/json' },
+      body:JSON.stringify({ trade:true }) })
     expect(refused.status).toBe(400)
-    const done=await fetch(url,{method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},body:'{}'})
+    const done=await fetch(url,{ method:'POST',headers:{ Origin:origin,'Content-Type':'application/json' },body:'{}' })
     expect(done.status).toBe(200)
-    expect(await done.json()).toMatchObject({repaired:true,accountVerified:false,tradeScopeVerified:false})
+    expect(await done.json()).toMatchObject({ repaired:true,accountVerified:false,tradeScopeVerified:false })
     const status=await fetch(origin+'/phoenix-trading/paper/mcp-status')
     expect(await status.json()).toMatchObject({
       status:'auth-required',reasonCode:'authorization-required',connected:false,
@@ -349,7 +349,7 @@ describe('Binance chat viewer HTTP integration', () => {
       const secret = secretValues.get('PHOENIX_BINANCE_TESTNET_API_SECRET')
       return key && secret ? { apiKey: key, secret } : undefined
     }, request)
-    const { origin } = await serverWithTrading({ testnet, credentials: credentials as never })
+    const { origin } = await serverWithTrading({ testnet, credentials: credentials })
     const url = origin + '/phoenix-trading/paper/testnet-connect'
     const wrongOrigin = await fetch(url, {
       method: 'POST', headers: { Origin: 'https://attacker.example', 'Content-Type': 'application/json' },
@@ -394,7 +394,7 @@ describe('Binance chat viewer HTTP integration', () => {
         ? new Response(JSON.stringify({ canTrade: true, balances: [] }), { status: 200 })
         : new Response(JSON.stringify({ code: -1003, msg: 'Rate limited' }), { status: 429 })
     })
-    const { origin } = await serverWithTrading({ testnet, credentials: vault as never })
+    const { origin } = await serverWithTrading({ testnet, credentials: vault })
     const savedReply = await fetch(origin + '/phoenix-trading/paper/testnet-connect', {
       method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' },
       body: JSON.stringify({ apiKey: 'TESTNET_KEY_1234567890', secret: 'TESTNET_SECRET_1234567890' }),
@@ -451,7 +451,7 @@ describe('Binance chat viewer HTTP integration', () => {
       async describe() { return { configured: true, writable: true } },
     }
     const testnet = new BinanceSpotTestnet(async () => undefined)
-    const { origin } = await serverWithTrading({ testnet, credentials: vault as never })
+    const { origin } = await serverWithTrading({ testnet, credentials: vault })
     const response = await fetch(origin + '/phoenix-trading/paper/testnet-connect', {
       method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' },
       body: JSON.stringify({ apiKey: 'TESTNET_KEY_1234567890', secret: 'TESTNET_SECRET_1234567890' }),

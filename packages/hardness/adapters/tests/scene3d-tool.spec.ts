@@ -13,9 +13,9 @@ describe('phoenix_3d actual geometry tool',()=>{
   it('creates a real 3D villa concept without invoking image generation',async()=>{
     const tool=createPhoenix3DTool()
     const done=vi.fn()
-    const args={title:'Villa tropical giratoria',demo:true}
+    const args={ title:'Villa tropical giratoria',demo:true }
     const value=await tool.execute(args,execution(done)) as {
-      artifactId:string;title:string;scene:{version:number;units:string;nodes:unknown[]}
+      artifactId:string;title:string;scene:{ version:number;units:string;nodes:unknown[] }
     }
     expect(value.artifactId).toBe('phoenix-3d:scene-1')
     expect(value.scene.version).toBe(1)
@@ -24,26 +24,26 @@ describe('phoenix_3d actual geometry tool',()=>{
     expect(value.scene.nodes).not.toContain('image/png')
     expect(done).toHaveBeenCalledOnce()
     expect(tool.output.presentationMeta?.(args,value as never)).toMatchObject({
-      artifact:{id:value.artifactId,mime:PHOENIX_SCENE3D_MIME,executable:false,
-        data:{nodes:expect.any(Array),version:1}},
+      artifact:{ id:value.artifactId,mime:PHOENIX_SCENE3D_MIME,executable:false,
+        data:{ nodes:expect.any(Array),version:1 } },
     })
   })
   it('accepts original portable geometry and rejects malformed or malicious scene entries',async()=>{
     const tool=createPhoenix3DTool()
-    const scene={name:'Casa',nodes:[{type:'box',position:[0,2,0],size:[5,4,6],
-      rotation:[0,30,0],color:'#dbc4a0'}]}
-    const result=await tool.execute({title:'Casa',scene},execution()) as {
-      scene:{nodes:Array<{type:string;position:number[]}>}
+    const scene={ name:'Casa',nodes:[{ type:'box',position:[0,2,0],size:[5,4,6],
+      rotation:[0,30,0],color:'#dbc4a0' }] }
+    const result=await tool.execute({ title:'Casa',scene },execution()) as {
+      scene:{ nodes:Array<{ type:string;position:number[] }> }
     }
     expect(result.scene.nodes).toHaveLength(1)
     expect(result.scene.nodes[0]?.position).toEqual([0,2,0])
     for(const invalid of [
-      {nodes:[]},
-      {nodes:[{type:'html',position:[0,0,0],size:[1,1,1],color:'#ffffff'}]},
-      {nodes:[{type:'box',position:[NaN,0,0],size:[1,1,1],color:'#ffffff'}]},
-      {nodes:[{type:'box',position:[0,0,0],size:[1,1,1],color:'url(https://example.com)'}]},
+      { nodes:[] },
+      { nodes:[{ type:'html',position:[0,0,0],size:[1,1,1],color:'#ffffff' }] },
+      { nodes:[{ type:'box',position:[NaN,0,0],size:[1,1,1],color:'#ffffff' }] },
+      { nodes:[{ type:'box',position:[0,0,0],size:[1,1,1],color:'url(https://example.com)' }] },
     ]){
-      await expect(tool.execute({title:'Invalido',scene:invalid},execution())).rejects.toThrow()
+      await expect(tool.execute({ title:'Invalido',scene:invalid },execution())).rejects.toThrow()
     }
   })
   it('keeps subsequent app-building work only on explicit request',async()=>{

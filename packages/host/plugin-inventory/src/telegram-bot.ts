@@ -94,7 +94,7 @@ async function botApi(
     throw new Error('telegram-invalid-response')
   }
   const parsed = payload as TelegramApiResponse
-  if (parsed.ok !== true) {
+  if (!parsed.ok) {
     if (parsed.error_code === 409) {
       throw new Error(typeof parsed.description === 'string' && /webhook/i.test(parsed.description)
         ? 'telegram-webhook-active' : 'telegram-polling-conflict')
@@ -207,7 +207,7 @@ export class TelegramInbox {
   }
   private async sleep(signal: AbortSignal, duration: number): Promise<void> {
     if (signal.aborted) return
-    await new Promise<void>(resolve => {
+    await new Promise<void>((resolve) => {
       const timer = setTimeout(() => { signal.removeEventListener('abort', done); resolve() }, duration)
       const done = (): void => { clearTimeout(timer); signal.removeEventListener('abort', done); resolve() }
       signal.addEventListener('abort', done, { once: true })

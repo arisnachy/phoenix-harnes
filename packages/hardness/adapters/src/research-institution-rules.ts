@@ -25,7 +25,7 @@ export async function validateInstitutionRulePath(provided: string): Promise<str
   }
   const path = await realpath(provided)
   const roots = await Promise.all([homedir(), process.cwd()].map(async root => await realpath(root)))
-  if (!roots.some(root => {
+  if (!roots.some((root) => {
     const rel = relative(root, path)
     return rel === '' || (rel !== '..' && !rel.startsWith('..\\') && !rel.startsWith('../') && !isAbsolute(rel))
   })) throw new ToolArgsError(['El reglamento debe estar en tu carpeta de usuario o espacio de trabajo.'])
@@ -47,7 +47,7 @@ function findScript(): string {
   return script
 }
 async function invoke(bin: string, args: string[], filePath: string, signal: AbortSignal):
-  Promise<Record<string, unknown>> {
+Promise<Record<string, unknown>> {
   return await new Promise((fulfill, reject) => {
     let stdout = ''
     let stderr = ''
@@ -57,12 +57,12 @@ async function invoke(bin: string, args: string[], filePath: string, signal: Abo
     child.stdout.on('data', (chunk: string) => { stdout += chunk; if (stdout.length > 150000) child.kill() })
     child.stderr.on('data', (chunk: string) => { stderr = (stderr + chunk).slice(-1400) })
     child.on('error', reject)
-    child.on('close', code => {
-      if (code !== 0) return reject(new Error('El extractor no pudo leer el documento: ' + stderr))
+    child.on('close', (code) => {
+      if (code !== 0) {  reject(new Error('El extractor no pudo leer el documento: ' + stderr)); return }
       try {
         const parsed = JSON.parse(stdout.trim()) as Record<string, unknown>
         if (parsed.state !== 'RULES_FOR_REVIEW' || !Array.isArray(parsed.candidates)) {
-          return reject(new Error('El extractor no devolvió hallazgos verificables.'))
+          reject(new Error('El extractor no devolvió hallazgos verificables.')); return
         }
         fulfill(parsed)
       } catch (error) { reject(error) }

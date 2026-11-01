@@ -254,14 +254,14 @@ export function SpreadsheetSurface({ spec }: { readonly spec: SpreadsheetSpec })
     event.currentTarget.value = ''
     if (!file) return
     if (file.size > 2_000_000) { setError('El CSV supera el límite de 2 MB.'); return }
-    void file.text().then(content => {
+    void file.text().then((content) => {
       const parsed = parseSheetCsv(content, spec.props.columns.length)
       if (!parsed) { setError('CSV inválido o columnas incompatibles.'); return }
       const body = parsed[0]?.every((cell, index) => cell === spec.props.columns[index])
         ? parsed.slice(1) : parsed
       if (body.length > 200) { setError('El límite es de 200 filas.'); return }
       change(body)
-    }).catch(() => setError('No se pudo leer el archivo.'))
+    }).catch(() =>{  setError('No se pudo leer el archivo.') })
   }
   return <section className={css.surface} data-generative-ui="spreadsheet">
     <header className={css.heading}><PhoenixUiIcon name="table" />
@@ -277,16 +277,16 @@ export function SpreadsheetSurface({ spec }: { readonly spec: SpreadsheetSpec })
               <input aria-label={columnLetter(c) + String(r + 2)}
                 value={active === address || !cell.startsWith('=') ? cell : String(computed[r]?.[c] ?? '')}
                 title={cell.startsWith('=') ? cell : undefined}
-                onFocus={() => setActive(address)} onBlur={() => setActive('')}
-                onChange={event => update(r, c, event.currentTarget.value)} />
+                onFocus={() =>{  setActive(address) }} onBlur={() =>{  setActive('') }}
+                onChange={(event) =>{  update(r, c, event.currentTarget.value) }} />
             </td>
           })}</tr>)}</tbody>
       </table>
     </div>
     {error && <p role="alert" className={css.error}>{error}</p>}
     <div className={css.actions}>
-      <button type="button" disabled={rows.length >= 200} onClick={() =>
-        change([...rows.map(row => [...row]), spec.props.columns.map(() => '')])}>
+      <button type="button" disabled={rows.length >= 200} onClick={() =>{
+        change([...rows.map(row => [...row]), spec.props.columns.map(() => '')]) }}>
         <PhoenixUiIcon name="plus" size={15} /> Fila
       </button>
       <button type="button" disabled={undo.length === 0} onClick={() => {

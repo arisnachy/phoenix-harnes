@@ -20,18 +20,18 @@ export type SportsMarketFamily=
   'moneyline'|'h2h'|'1x2'|'run_line'|'spread'|'total'|'team_total'|
   'first_3_total'|'first_5_total'|'first_3_spread'|'first_5_spread'|'player_prop'
 export type SportsBetLeg={
-  eventId:string;market:SportsMarketFamily;selection:'home'|'away'|'draw'|'over'|'under'|'yes'|'no';
-  price:number;line?:number;team?:'home'|'away';playerId?:string;
+  eventId:string;market:SportsMarketFamily;selection:'home'|'away'|'draw'|'over'|'under'|'yes'|'no'
+  price:number;line?:number;team?:'home'|'away';playerId?:string
   bookmaker:string;reference?:string
 }
 export type SportsSettlementInput={
-  sport:string;league:string;date:string;stake:number;legs:SportsBetLeg[];
+  sport:string;league:string;date:string;stake:number;legs:SportsBetLeg[]
   ticketReference?:string
 }
 export type SportsLegGrade={
-  eventId:string;market:SportsMarketFamily;selection:string;bookmaker:string;
-  result:'won'|'lost'|'push'|'pending'|'unverifiable';reason:string;
-  eventState:string;score:string|null;source:'ESPN Site API';
+  eventId:string;market:SportsMarketFamily;selection:string;bookmaker:string
+  result:'won'|'lost'|'push'|'pending'|'unverifiable';reason:string
+  eventState:string;score:string|null;source:'ESPN Site API'
 }
 const supported=new Set<SportsMarketFamily>([
   'moneyline','h2h','1x2','run_line','spread','total','team_total',
@@ -64,7 +64,7 @@ export function validateSportsSettlement(input:SportsSettlementInput):void{
     }else if(!side||leg.selection==='draw'&&leg.market!=='1x2')
       throw Error('Mercado de ganador o hándicap requiere local, visitante o empate 1X2')
     if(['run_line','spread','total','team_total','first_3_total','first_5_total',
-       'first_3_spread','first_5_spread','player_prop'].includes(leg.market)&&
+      'first_3_spread','first_5_spread','player_prop'].includes(leg.market)&&
        (typeof leg.line!=='number'||!Number.isFinite(leg.line)||
         Math.abs(leg.line)>10000))
       throw Error('Línea de mercado ausente o inválida')
@@ -77,7 +77,7 @@ export function validateSportsSettlement(input:SportsSettlementInput):void{
   }
 }
 type Game={
-  id:string;state:string;home:number|null;away:number|null;
+  id:string;state:string;home:number|null;away:number|null
   homeInnings:(number|null)[];awayInnings:(number|null)[]
 }
 function innings(data:unknown):(number|null)[]{
@@ -104,7 +104,7 @@ function gradeLeg(leg:SportsBetLeg,game:Game|undefined,isBaseballSport:boolean):
     score:game?.home!==null&&game?.home!==undefined&&game.away!==null?
       game.away+'-'+game.home:null,
   }
-  const unknown=(result:'pending'|'unverifiable',reason:string)=>({...common,result,reason})
+  const unknown=(result:'pending'|'unverifiable',reason:string)=>({ ...common,result,reason })
   if(!game)return unknown('unverifiable','El evento no aparece en la cartelera consultada')
   if(game.state!=='post')return unknown('pending','Partido no finalizado oficialmente')
   if(leg.market==='player_prop')return unknown('unverifiable',
@@ -158,7 +158,7 @@ function gradeLeg(leg:SportsBetLeg,game:Game|undefined,isBaseballSport:boolean):
     result=compare(total,leg.line??0)
     if(leg.selection==='under')result=result==='won'?'lost':result==='lost'?'won':'push'
   }
-  return {...common,result,reason:'Resultado preliminar calculado desde marcador oficial; falta liquidación y posibles anulaciones de la casa'}
+  return { ...common,result,reason:'Resultado preliminar calculado desde marcador oficial; falta liquidación y posibles anulaciones de la casa' }
 }
 /** Return a provisional grading of observed results and theoretical payout, not a settled receipt.
  * Only a sportsbook's accepted receipt and ledger can confirm placement/payout.
@@ -174,7 +174,7 @@ export async function checkSportsTicket(
     throw Error('Liga sin verificación en ESPN')
   const url='https://site.api.espn.com/apis/site/v2/sports/'+input.sport+'/'+input.league+
     '/scoreboard?dates='+input.date.replaceAll('-','')
-  const data=await getFeed<{events?:unknown[]}>(url,fetcher)
+  const data=await getFeed<{ events?:unknown[] }>(url,fetcher)
   if(!Array.isArray(data.events))throw Error('ESPN no devolvió una cartelera verificable')
   const games=new Map(data.events.map(extractGame).filter((g):g is Game=>g!==null).map(g=>[g.id,g]))
   const grades=input.legs.map(leg=>gradeLeg(leg,games.get(leg.eventId),input.sport==='baseball'))

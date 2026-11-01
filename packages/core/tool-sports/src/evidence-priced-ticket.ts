@@ -12,16 +12,16 @@ export type OddsAuditRow={
   note:string
 }
 const audited=(source:string,status:OddsAuditRow['status'],offers:number,note:string):OddsAuditRow=>
-  ({source,status,offers,note})
+  ({ source,status,offers,note })
 const normalize=(name:string)=>name.normalize('NFD').replace(/[\u0300-\u036f]/gu,'')
   .toLowerCase().replace(/[^a-z0-9]/gu,'')
-const routing:Record<string,{sport:string;market:string;oddsSportKey:string}>={
-  soccer:{sport:'football',market:'1x2',oddsSportKey:'soccer_epl'},
-  basketball:{sport:'basketball',market:'moneyline',oddsSportKey:'basketball_nba'},
-  baseball:{sport:'baseball',market:'moneyline',oddsSportKey:'baseball_mlb'},
-  football:{sport:'american-football',market:'moneyline',oddsSportKey:'americanfootball_nfl'},
-  hockey:{sport:'ice-hockey',market:'home_away',oddsSportKey:'icehockey_nhl'},
-  tennis:{sport:'tennis',market:'match_winner',oddsSportKey:'tennis_atp'},
+const routing:Record<string,{ sport:string;market:string;oddsSportKey:string }>={
+  soccer:{ sport:'football',market:'1x2',oddsSportKey:'soccer_epl' },
+  basketball:{ sport:'basketball',market:'moneyline',oddsSportKey:'basketball_nba' },
+  baseball:{ sport:'baseball',market:'moneyline',oddsSportKey:'baseball_mlb' },
+  football:{ sport:'american-football',market:'moneyline',oddsSportKey:'americanfootball_nfl' },
+  hockey:{ sport:'ice-hockey',market:'home_away',oddsSportKey:'icehockey_nhl' },
+  tennis:{ sport:'tennis',market:'match_winner',oddsSportKey:'tennis_atp' },
 }
 const leagueSportKey:Record<string,string>={
   'eng.1':'soccer_epl','esp.1':'soccer_spain_la_liga','usa.1':'soccer_usa_mls',
@@ -33,10 +33,10 @@ export async function evidencePricedTicket(
   env:NodeJS.ProcessEnv=process.env,fetcher:typeof fetch=fetch,
   quotesProvider?:(sport:string,market:string,day:string,env:NodeJS.ProcessEnv,now:number)=>Promise<KeylessQuote[]>,
   marketPreference:'winner'|'double_chance'='winner',
-):Promise<{card:ChatBlock;priced:boolean;placed:false;complete:boolean;
-  verifiedEvents:number;quotedLegs:number;missingQuotes:number;
-  sourceAudit:OddsAuditRow[];approvedLegs:number;multisportSatisfied:boolean;
-  explanation:string}>{
+):Promise<{ card:ChatBlock;priced:boolean;placed:false;complete:boolean
+  verifiedEvents:number;quotedLegs:number;missingQuotes:number
+  sourceAudit:OddsAuditRow[];approvedLegs:number;multisportSatisfied:boolean
+  explanation:string }>{
   const research=await evidenceTicket(count,date,sport,fetcher,now,env)
   const quoteAccess=[
     keylessEnabled(env)?'OddsHarvester habilitado (sujeto al acceso del sitio)':
@@ -45,10 +45,10 @@ export async function evidencePricedTicket(
     env.THEODDSAPI_API_KEY?.trim()?'TheOddsAPI configurada':'TheOddsAPI sin clave',
     'ESPN: cuotas solo cuando el proveedor publique mercados con fecha',
   ].join(' · ')
-  const researchCard:ChatBlock={...research.card,props:{...research.card.props,
+  const researchCard:ChatBlock={ ...research.card,props:{ ...research.card.props,
     note:(String(research.card.props.note??'')+' Estado de fuentes de cuotas: '+quoteAccess+
       '. Los repositorios GitHub SportsbookReview/MLB son solo históricos.').slice(0,1000),
-  }}
+  } }
   const initialSources:OddsAuditRow[]=[
     audited('OddsHarvester',keylessEnabled(env)?'attempted':'disabled',0,
       keylessEnabled(env)?'El scraping local necesita CLI y acceso real al sitio.':
@@ -62,25 +62,25 @@ export async function evidencePricedTicket(
     audited('SportsbookReview/MLB GitHub históricos','not-applicable',0,
       'NO se consultan como cuota en vivo ni permiten generar combinadas actuales.'),
   ]
-  const base={card:researchCard,priced:false as boolean,placed:false as const,
+  const base={ card:researchCard,priced:false as boolean,placed:false as const,
     complete:research.complete,verifiedEvents:research.verifiedEvents,
     quotedLegs:0,missingQuotes:count,sourceAudit:initialSources,
     multisportSatisfied:research.multisportSatisfied,approvedLegs:0,
     explanation:'Preselección ESPN, cuotas todavía NO verificadas: '+quoteAccess+
-      '. Los archivos históricos no ofrecen precios para apostar hoy.'}
+      '. Los archivos históricos no ofrecen precios para apostar hoy.' }
   // Even an incomplete 4/5 slate must audit the four real events for quotes;
   // otherwise 'no prices available' falsely implies the sources were checked.
-  const day=date??new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santo_Domingo',
-    year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(now))
+  const day=date??new Intl.DateTimeFormat('en-CA',{ timeZone:'America/Santo_Domingo',
+    year:'numeric',month:'2-digit',day:'2-digit' }).format(new Date(now))
   const categories=[...new Set(research.events.map(e=>e.sport))]
-  const sources=await Promise.allSettled(categories.map(async category=>{
+  const sources=await Promise.allSettled(categories.map(async (category)=>{
     const route=routing[category]
-    if(!route)return {category,quotes:[] as KeylessQuote[]}
+    if(!route)return { category,quotes:[] as KeylessQuote[] }
     const market=category==='soccer'&&marketPreference==='double_chance'
       ?'double_chance':route.market
     const quotes=quotesProvider?await quotesProvider(route.sport,market,day,env,now):
       keylessEnabled(env)?await keylessOdds(route.sport,market,day,env,now):[]
-    return {category,quotes}
+    return { category,quotes }
   }))
   const keyless=sources.flatMap(s=>s.status==='fulfilled'?s.value.quotes:[])
   // Use the existing public ESPN and optional authenticated Odds API adapters
@@ -88,12 +88,12 @@ export async function evidencePricedTicket(
   // Explicit double-chance selections are only supplied by a verified 1X/X2
   // market; do not relabel a winner moneyline as double chance.
   const leagues=[...new Map(research.events.map(e=>[e.league,e])).values()]
-  const additional=quotesProvider?[]:await Promise.allSettled(leagues.map(async event=>{
+  const additional=quotesProvider?[]:await Promise.allSettled(leagues.map(async (event)=>{
     if(event.sport==='soccer'&&marketPreference==='double_chance')return [] as KeylessQuote[]
     const sportKey=leagueSportKey[event.league]??routing[event.sport]?.oddsSportKey
     if(!sportKey)return [] as KeylessQuote[]
     const lines=await marketOdds(sportKey,'h2h',env,fetcher)
-    return lines.flatMap(q=>{
+    return lines.flatMap((q)=>{
       const time=q.timeIso??''
       const updated=Date.parse(q.updatedAt)
       if(!Number.isFinite(Date.parse(time))||!Number.isFinite(updated)
@@ -112,11 +112,11 @@ export async function evidencePricedTicket(
     })
   }))
   const all=[...keyless,...additional.flatMap(s=>s.status==='fulfilled'?s.value:[])]
-  const groups:KeylessQuote[][]=research.events.map(event=>{
+  const groups:KeylessQuote[][]=research.events.map((event)=>{
     const kickoff=Date.parse(event.kickoff)
     const doubleChance=event.sport==='soccer'&&marketPreference==='double_chance'
     const expectedMarket=doubleChance?'double_chance':event.sport==='soccer'?'1x2':'h2h'
-    return all.filter(q=>{
+    return all.filter((q)=>{
       const updated=Date.parse(q.updatedAt),quoteKickoff=Date.parse(q.time)
       return Number.isFinite(kickoff)&&Number.isFinite(updated)&&Number.isFinite(quoteKickoff)
         &&Math.abs(kickoff-quoteKickoff)<=3_600_000
@@ -134,8 +134,8 @@ export async function evidencePricedTicket(
   const quotedLegs=groups.filter(g=>g.length>0).length
   const attributed=(source:string)=>source.toLowerCase().includes('oddsharvester')?'OddsHarvester':
     source==='The Odds API'?'The Odds API v4':
-    source==='TheOddsAPI'?'TheOddsAPI':
-    source.toLowerCase().includes('espn')?'ESPN Site/Core':source
+      source==='TheOddsAPI'?'TheOddsAPI':
+        source.toLowerCase().includes('espn')?'ESPN Site/Core':source
   const observed=new Map<string,number>(),matched=new Map<string,number>()
   for(const q of all)observed.set(attributed(q.source),(observed.get(attributed(q.source))??0)+1)
   for(const group of groups)for(const q of group)
@@ -145,56 +145,56 @@ export async function evidencePricedTicket(
   const fallbackEligible=!quotesProvider&&leagues.some(e=>
     !(e.sport==='soccer'&&marketPreference==='double_chance'))
   const fallbackFailures=additional.filter(s=>s.status==='rejected').length
-  const sourceAudit:OddsAuditRow[]=initialSources.map(row=>{
+  const sourceAudit:OddsAuditRow[]=initialSources.map((row)=>{
     const offers=observed.get(row.source)??0
     const evidence=matched.get(row.source)??0
-    if(offers)return{...row,status:'observed',offers,
+    if(offers)return{ ...row,status:'observed',offers,
       note:'Se observaron '+offers+' precios publicados; '+evidence+
-        ' coinciden con selecciones investigadas (no son garantías).'}
-    if(row.source==='OddsHarvester'&&actualKeyless)return{...row,
+        ' coinciden con selecciones investigadas (no son garantías).' }
+    if(row.source==='OddsHarvester'&&actualKeyless)return{ ...row,
       status:keylessFailures?'error':'empty',offers:0,
       note:keylessFailures?'El scraper no pudo consultar los mercados; revisar CLI y acceso.':
-        'Consulta realizada sin precios válidos disponibles.'}
+        'Consulta realizada sin precios válidos disponibles.' }
     if(fallbackEligible&&row.source==='The Odds API v4'&&env.THE_ODDS_API_KEY?.trim())
-      return{...row,status:fallbackFailures?'error':'empty',note:
-        'Ruta de cuotas v4 seleccionada; no se obtuvo precio coincidente y reciente.'}
+      return{ ...row,status:fallbackFailures?'error':'empty',note:
+        'Ruta de cuotas v4 seleccionada; no se obtuvo precio coincidente y reciente.' }
     if(fallbackEligible&&row.source==='TheOddsAPI'&&!env.THE_ODDS_API_KEY?.trim()
-      &&env.THEODDSAPI_API_KEY?.trim())return{...row,
-      status:fallbackFailures?'error':'empty',note:'Proveedor secundario sin precios válidos cotejables.'}
+      &&env.THEODDSAPI_API_KEY?.trim())return{ ...row,
+      status:fallbackFailures?'error':'empty',note:'Proveedor secundario sin precios válidos cotejables.' }
     if(fallbackEligible&&row.source==='ESPN Site/Core'&&!env.THE_ODDS_API_KEY?.trim()
-      &&!env.THEODDSAPI_API_KEY?.trim()&&!keylessEnabled(env))return{...row,
-      status:fallbackFailures?'error':'empty',note:'ESPN consultado para precios; ninguno verificable.'}
-    return{...row,status:row.status==='attempted'?'not-applicable':row.status,
-      note:row.note+' Sin cotizaciones confirmadas en este flujo.'}
+      &&!env.THEODDSAPI_API_KEY?.trim()&&!keylessEnabled(env))return{ ...row,
+      status:fallbackFailures?'error':'empty',note:'ESPN consultado para precios; ninguno verificable.' }
+    return{ ...row,status:row.status==='attempted'?'not-applicable':row.status,
+      note:row.note+' Sin cotizaciones confirmadas en este flujo.' }
   })
   const auditSummary=' Cuotas cotejadas: '+quotedLegs+'/'+count+
     ' selecciones; proveedores: '+sourceAudit.map(x=>x.source+' '+x.status+
     ' ('+x.offers+' observaciones)').join('; ')+'.'
-  const auditCard:ChatBlock={...researchCard,props:{...researchCard.props,
+  const auditCard:ChatBlock={ ...researchCard,props:{ ...researchCard.props,
     note:(auditSummary+' '+String(researchCard.props.note??'')).slice(0,1000),
-  }}
-  const checked={...base,card:auditCard,sourceAudit,quotedLegs,
-    missingQuotes:count-quotedLegs}
-  if(!research.complete)return{...checked,
+  } }
+  const checked={ ...base,card:auditCard,sourceAudit,quotedLegs,
+    missingQuotes:count-quotedLegs }
+  if(!research.complete)return{ ...checked,
     explanation:'Borrador INCOMPLETO: '+research.verifiedEvents+'/'+count+
       ' partidos con tendencia histórica documentada, '+
       quotedLegs+' con precio cotejado. '+
       (research.multisportSatisfied?'':'No cumple diversidad de deportes. ')+
-      'No se cotiza una combinada incompleta.'}
-  if(quotedLegs!==count)return{...checked,
+      'No se cotiza una combinada incompleta.' }
+  if(quotedLegs!==count)return{ ...checked,
     explanation:'Fuentes auditadas: '+quotedLegs+'/'+count+
-      ' selecciones tienen precios verificables. No se fabrica la combinada restante.'}
+      ' selecciones tienen precios verificables. No se fabrica la combinada restante.' }
   // A realistic combined price requires the SAME bookmaker to offer all legs.
   const common=groups.reduce<Set<string>>((set,rows,index)=>{
     const names=new Set(rows.map(q=>q.bookmaker))
     return index===0?names:new Set([...set].filter(book=>names.has(book)))
   },new Set())
-  if(!common.size)return{...checked,quotedLegs,missingQuotes:0,
-    explanation:'Los precios corresponden a distintas casas sin un operador común; no se multiplican como si existiera una combinada disponible.'}
-  const best=[...common].map(book=>{
+  if(!common.size)return{ ...checked,quotedLegs,missingQuotes:0,
+    explanation:'Los precios corresponden a distintas casas sin un operador común; no se multiplican como si existiera una combinada disponible.' }
+  const best=[...common].map((book)=>{
     const choices=groups.map(rows=>rows.filter(q=>q.bookmaker===book)
       .sort((a,b)=>b.price-a.price)[0]).filter((q):q is KeylessQuote=>q!==undefined)
-    return{book,choices,combined:choices.reduce((acc,q)=>acc*q.price,1)}
+    return{ book,choices,combined:choices.reduce((acc,q)=>acc*q.price,1) }
   }).filter(x=>x.choices.length===count).sort((a,b)=>b.combined-a.combined)[0]
   if(!best)return checked
   const marketQuotes:MarketOutcome[]=best.choices.map((q,index)=>({
@@ -216,28 +216,28 @@ export async function evidencePricedTicket(
       ?estimate as Record<string,unknown>:{}
     const pricedRow=row&&typeof row==='object'&&!Array.isArray(row)
       ?row as Record<string,unknown>:{}
-    return {...pricedRow,
+    return { ...pricedRow,
       ...Object.fromEntries(['homeTeam','awayTeam','homeLogo','awayLogo','sport',
         'league','country','rationale','when'].filter(k=>typeof prior[k]==='string')
         .map(k=>[k,prior[k]])),
-      ...(quote?{price:String(quote.price),bookmaker:quote.bookmaker,
-        ...(quote.market==='double_chance'?{selection:quote.selection==='1X'
+      ...(quote?{ price:String(quote.price),bookmaker:quote.bookmaker,
+        ...(quote.market==='double_chance'?{ selection:quote.selection==='1X'
           ?'1X · Local o empate':'X2 · Visita o empate',
-          market:'Doble oportunidad (1X/X2)',
-          rationale:(String(prior.rationale??'').slice(0,420)+
-            ' · Cobertura del empate; cuota verificada, riesgo vigente.').slice(0,480)}:{})}:{})}
+        market:'Doble oportunidad (1X/X2)',
+        rationale:(String(prior.rationale??'').slice(0,420)+
+            ' · Cobertura del empate; cuota verificada, riesgo vigente.').slice(0,480) }:{}) }:{}) }
   })
-  const card:ChatBlock={...priced.card,props:{
+  const card:ChatBlock={ ...priced.card,props:{
     ...priced.card.props,legs,requestedLegs:count,
     subtitle:'Cuotas verificadas · '+best.book+' · análisis de forma con datos ESPN',
     note:'COTIZACIÓN VERIFICADA, NO APUESTA ACEPTADA POR LA CASA. '+(marketPreference==='double_chance'
       ?'Fútbol: la doble oportunidad cubre empate (1X/X2), NO asegura ganar. ':'')+
       'Formas y descanso históricos NO son probabilidades calibradas. Lesiones, alineaciones y disponibilidad exacta en la banca pendientes; cuotas variables. '+priced.warning,
     askPrompt:'Kira, comprueba lesiones, titulares, estadísticas específicas, correlación y vigencia de las '+count+' cuotas antes de recomendar este ticket.',
-  }}
-  return{card,priced:true,placed:false,complete:true,verifiedEvents:research.verifiedEvents,
+  } }
+  return{ card,priced:true,placed:false,complete:true,verifiedEvents:research.verifiedEvents,
     quotedLegs:count,missingQuotes:0,sourceAudit,approvedLegs:count,
     multisportSatisfied:research.multisportSatisfied,
     explanation:'Las '+count+' selecciones tienen cuota vigente y la misma casa '+best.book+
-      '. El boleto conserva logos, análisis y riesgos por partido; NO es un modelo de acierto calibrado. Validar lesiones, titulares, restricciones y precios antes de apostar.'}
+      '. El boleto conserva logos, análisis y riesgos por partido; NO es un modelo de acierto calibrado. Validar lesiones, titulares, restricciones y precios antes de apostar.' }
 }

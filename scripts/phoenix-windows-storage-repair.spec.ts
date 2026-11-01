@@ -11,7 +11,7 @@ describe('PHOENIX offline Windows runtime recovery', () => {
   it('always parses as valid PowerShell on Windows (not only matching text)', () => {
     if (process.platform !== 'win32') return
     const literalPath = path.replace(/'/g, "''")
-    const command = `$tokens=$null; $errors=$null; ` +
+    const command = '$tokens=$null; $errors=$null; ' +
       `[void][System.Management.Automation.Language.Parser]::ParseFile('${literalPath}',[ref]$tokens,[ref]$errors); ` +
       'if ($errors.Count -ne 0) { $errors | Out-String | Write-Error; exit 1 }'
     const encoded = Buffer.from(command, 'utf16le').toString('base64')

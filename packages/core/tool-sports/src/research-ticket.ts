@@ -13,8 +13,8 @@ export type ResearchTicketLeg = {
 
 type EspnTeam = {
   homeAway?:string
-  team?:{ displayName?:string;name?:string;logo?:string;logos?:Array<{href?:string}> }
-  records?:Array<{summary?:string}>
+  team?:{ displayName?:string;name?:string;logo?:string;logos?:Array<{ href?:string }> }
+  records?:Array<{ summary?:string }>
 }
 type EspnEvent = {
   id?:string|number
@@ -140,7 +140,7 @@ export async function researchTicket(
       league:info?.league??league,
       ...(info?.country?{ country:info.country }:{}),
       market:sport==='soccer'?'1X2 · Pronóstico':'Ganador · Pronóstico',
-      ...(homeLogo?{homeLogo}:{}),...(awayLogo?{awayLogo}:{}),
+      ...(homeLogo?{ homeLogo }:{}),...(awayLogo?{ awayLogo }:{}),
       ...(reason?{ rationale:reason }:{}),
     })
   }
@@ -183,17 +183,17 @@ export async function autoResearchTicket(
     ['baseball','mlb'],['basketball','wnba'],
   ] as const
   const boards=new Map<string,EspnBoard>()
-  const candidates:Array<{leg:ResearchTicketLeg;edge:number}>=[]
+  const candidates:Array<{ leg:ResearchTicketLeg;edge:number }>=[]
   const jobs=await Promise.allSettled(leagues.map(async([sport,league])=>{
     const url='https://site.api.espn.com/apis/site/v2/sports/'+sport+'/'+league+
       '/scoreboard?dates='+requestedDate.replaceAll('-','')
     const board=await getFeed<EspnBoard>(url,fetcher)
     if(!Array.isArray(board.events))throw Error('ESPN no confirmó la cartelera de '+league)
-    return {sport,league,board}
+    return { sport,league,board }
   }))
   for(const job of jobs){
     if(job.status!=='fulfilled')continue
-    const {sport,league,board}=job.value
+    const { sport,league,board }=job.value
     boards.set(sport+'|'+league,board)
     for(const event of board.events??[]){
       const kickoff=new Date(event.date??'')
@@ -203,13 +203,13 @@ export async function autoResearchTicket(
       const home=teams?.find(team=>team.homeAway==='home')
       const away=teams?.find(team=>team.homeAway==='away')
       if(!home?.team?.displayName&&!home?.team?.name || !away?.team?.displayName&&!away?.team?.name)continue
-      const record=(team:EspnTeam):{wins:number;losses:number;name:string}|null=>{
+      const record=(team:EspnTeam):{ wins:number;losses:number;name:string }|null=>{
         const match=team.records?.map(x=>x.summary??'')
           .find(x=>/^\d{1,3}-\d{1,3}$/u.test(x))?.match(/^(\d+)-(\d+)$/u)
         if(!match)return null
         const wins=Number(match[1]),losses=Number(match[2])
         if(wins+losses<1)return null
-        return {wins,losses,name:clean(team.team?.displayName??team.team?.name??'',75)}
+        return { wins,losses,name:clean(team.team?.displayName??team.team?.name??'',75) }
       }
       const h=record(home),a=record(away)
       if(!h||!a)continue
@@ -239,7 +239,7 @@ export async function autoResearchTicket(
       nbaEvidence=new Map(report.matches.map(m=>[m.eventId,m]))
     }catch{ /* Missing history must NOT turn into a record-only NBA recommendation. */ }
   }
-  const researched=candidates.flatMap(candidate=>{
+  const researched=candidates.flatMap((candidate)=>{
     if(candidate.leg.sport!=='basketball'||candidate.leg.league!=='nba')return [candidate]
     const game=nbaEvidence.get(candidate.leg.eventId)
     if(!game?.sampleAdequate)return []
@@ -254,11 +254,11 @@ export async function autoResearchTicket(
     const other=difference>0?game.away:game.home
     return [{
       edge:Math.min(Math.abs(difference)/25,0.95),
-      leg:{...candidate.leg,pick:difference>0?'home' as const:'away' as const,
+      leg:{ ...candidate.leg,pick:difference>0?'home' as const:'away' as const,
         rationale:clean('Forma verificada (últimos '+favorite.gamesObserved+' juegos): '+favorite.team+
           ' margen '+favorite.recentAverageMargin+' frente a '+other.team+' '+
           other.recentAverageMargin+'; descanso previo '+favorite.restHours+'h. '+
-          'Lesiones, eficiencia y cuotas pendientes; tendencia, no probabilidad.',240)},
+          'Lesiones, eficiencia y cuotas pendientes; tendencia, no probabilidad.',240) },
     }]
   })
   researched.sort((a,b)=>b.edge-a.edge||a.leg.eventId.localeCompare(b.leg.eventId))

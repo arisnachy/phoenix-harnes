@@ -53,12 +53,12 @@ export function Geo3DView({ layers, onSelect }: Props) {
       <div className={css.instruction}>Mapa 3D temático · Arrastrar para girar · La altura indica valor, no relieve</div>
       <svg className={css.scene} viewBox="0 0 1000 500" role="img"
         aria-label="Mapa 3D geográfico de geometrías verificadas y extrusión temática"
-        onPointerDown={event => {
+        onPointerDown={(event) => {
           if (event.button !== 0) return
           drag.current = { x: event.clientX, y: event.clientY, yaw, pitch }
           event.currentTarget.setPointerCapture(event.pointerId)
         }}
-        onPointerMove={event => {
+        onPointerMove={(event) => {
           if (!drag.current) return
           setYaw(drag.current.yaw + (event.clientX - drag.current.x) * 0.4)
           setPitch(Math.max(15,Math.min(78,drag.current.pitch + (event.clientY - drag.current.y) * 0.3)))
@@ -70,7 +70,7 @@ export function Geo3DView({ layers, onSelect }: Props) {
         </linearGradient></defs>
         <rect width="1000" height="500" fill="#f2f5f5"/>
         <polygon points={points} fill={'url(#' + gradientId + ')'} stroke="#b9c5c2" strokeWidth="3"/>
-        {[.25,.5,.75].flatMap(q => {
+        {[.25,.5,.75].flatMap((q) => {
           const y = geometry.minY+(geometry.maxY-geometry.minY)*q
           const x = geometry.minX+(geometry.maxX-geometry.minX)*q
           return [
@@ -91,7 +91,7 @@ export function Geo3DView({ layers, onSelect }: Props) {
           }
           const rank = (kind:string):number => kind==='polygon'?0:kind==='line'?1:2
           return rank(a.layer.kind)-rank(b.layer.kind) || depth(b)-depth(a)
-        }).map(({layer,feature}) => {
+        }).map(({ layer,feature }) => {
           const first = feature.coordinates[0]
           if (!first) return null
           const value = Math.max(0,feature.value ?? 0)
@@ -102,7 +102,7 @@ export function Geo3DView({ layers, onSelect }: Props) {
           const key=layer.id+':'+feature.id
           if (layer.kind === 'polygon') return (
             <g key={key} className={css.shape} role="button" tabIndex={0} aria-label={'Seleccionar ' + feature.label}
-              onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onSelect?.(layer,feature) } }}
+              onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onSelect?.(layer,feature) } }}
               onClick={() => onSelect?.(layer,feature)}>
               {base.map((p,i) => {
                 const next=base[(i+1)%base.length],t=top[i],u=top[(i+1)%top.length]
@@ -120,7 +120,7 @@ export function Geo3DView({ layers, onSelect }: Props) {
           }
           const lower=render3D(first,0),upper=render3D(first,height)
           return <g key={key} className={css.shape} role="button" tabIndex={0} aria-label={'Seleccionar '+feature.label}
-            onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onSelect?.(layer,feature) } }}
+            onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onSelect?.(layer,feature) } }}
             onClick={() => onSelect?.(layer,feature)}>
             <line x1={lower[0]} y1={lower[1]} x2={upper[0]} y2={upper[1]} stroke={c} strokeWidth="9" opacity=".75"/>
             <circle cx={upper[0]} cy={upper[1]} r="9" stroke="white" strokeWidth="2" fill={c}/>
@@ -129,8 +129,8 @@ export function Geo3DView({ layers, onSelect }: Props) {
         })}
       </svg>
       <div className={css.controls}>
-        <button type="button" onClick={() => setScale(s => Math.min(2.2,s*1.18))}>Acercar</button>
-        <button type="button" onClick={() => setScale(s => Math.max(.45,s/1.18))}>Alejar</button>
+        <button type="button" onClick={() =>{  setScale(s => Math.min(2.2,s*1.18)) }}>Acercar</button>
+        <button type="button" onClick={() =>{  setScale(s => Math.max(.45,s/1.18)) }}>Alejar</button>
         <button type="button" onClick={() => { setYaw(40);setPitch(52);setScale(1) }}>Restablecer cámara</button>
       </div>
     </div>
