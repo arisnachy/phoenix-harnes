@@ -8,8 +8,8 @@ describe('OpenClaw update integration', () => {
   const updater = readFileSync(resolve(root, 'update-phoenix.ps1'), 'utf8')
   const bootstrap = readFileSync(resolve(root, 'scripts/phoenix-openclaw-bootstrap.mjs'), 'utf8')
 
-  it('installs the optional companion from both Windows install branches and the updater', () => {
-    expect(installer.split('phoenix-openclaw-bootstrap.mjs').length - 1).toBe(2)
+  it('installs the optional companion from the canonical Windows installer and the updater', () => {
+    expect(installer.split('phoenix-openclaw-bootstrap.mjs').length - 1).toBe(1)
     expect(updater).toContain('phoenix-openclaw-bootstrap.mjs')
     expect(updater).toContain('--ensure')
   })
