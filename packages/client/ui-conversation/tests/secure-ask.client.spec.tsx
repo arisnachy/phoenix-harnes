@@ -15,7 +15,7 @@ describe('Secure Ask human-only browser sidebar', () => {
     const calls: Array<{ path: string; data: Record<string, unknown> }> = []
     const onSaved = vi.fn()
     vi.stubGlobal('fetch', vi.fn(async (path: string, options?: RequestInit) => {
-      const data = JSON.parse(String(options?.body ?? '{}')) as Record<string, unknown>
+      const data = JSON.parse(typeof options?.body === 'string' ? options.body : '{}') as Record<string, unknown>
       calls.push({ path, data })
       const body = path.endsWith('/remember')
         ? { saved: true, automatic: true, profile: 'personal', profiles: [
@@ -45,7 +45,7 @@ describe('Secure Ask human-only browser sidebar', () => {
   it('saves a newly entered password with explicit no-repeat authorization', async () => {
     const calls: Array<{ path: string; data: Record<string, unknown> }> = []
     vi.stubGlobal('fetch', vi.fn(async (path: string, options?: RequestInit) => {
-      const data = JSON.parse(String(options?.body ?? '{}')) as Record<string, unknown>
+      const data = JSON.parse(typeof options?.body === 'string' ? options.body : '{}') as Record<string, unknown>
       calls.push({ path, data })
       return new Response(JSON.stringify(path.endsWith('/save')
         ? { saved: true, automatic: true, profiles: [
@@ -134,7 +134,7 @@ describe('Secure Ask human-only browser sidebar', () => {
       ] }} onSaved={vi.fn()} onClose={vi.fn()} />)
     fireEvent.change(screen.getByPlaceholderText('Afiliación'), { target: { value: 'member-123' } })
     fireEvent.change(screen.getByPlaceholderText('Escribe tu PIN'), { target: { value: 'not-logged-to-chat' } })
-    expect((screen.getByRole('button', { name: 'Guardar y continuar' }) as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.getByRole('button', { name: 'Guardar y continuar' }).disabled).toBe(true)
     fireEvent.change(screen.getByPlaceholderText('Empresa'), { target: { value: 'xyz' } })
     fireEvent.click(screen.getByRole('button', { name: 'Guardar y continuar' }))
     await waitFor(() => {
@@ -146,7 +146,7 @@ describe('Secure Ask human-only browser sidebar', () => {
   it('keeps personal and Kira identities independently selectable', async () => {
     const calls: Array<{ path: string; data: Record<string, unknown> }> = []
     vi.stubGlobal('fetch', vi.fn(async (path: string, options?: RequestInit) => {
-      const data = JSON.parse(String(options?.body ?? '{}')) as Record<string, unknown>
+      const data = JSON.parse(typeof options?.body === 'string' ? options.body : '{}') as Record<string, unknown>
       calls.push({ path, data })
       const profiles = [
         { id: 'personal', saved: true, automatic: true, source: 'dpapi' },
@@ -185,7 +185,7 @@ describe('Secure Ask human-only browser sidebar', () => {
   it('allows adding Kira credentials without replacing an existing personal account', async () => {
     const calls: Array<{ path: string; data: Record<string, unknown> }> = []
     vi.stubGlobal('fetch', vi.fn(async (path: string, options?: RequestInit) => {
-      const data = JSON.parse(String(options?.body ?? '{}')) as Record<string, unknown>
+      const data = JSON.parse(typeof options?.body === 'string' ? options.body : '{}') as Record<string, unknown>
       calls.push({ path, data })
       const profiles = [
         { id: 'personal', saved: true, automatic: true, source: 'dpapi' },
@@ -256,7 +256,7 @@ describe('Secure Ask human-only browser sidebar', () => {
     const calls: Array<{ path: string; args: Record<string, unknown> }> = []
     const onSaved = vi.fn()
     vi.stubGlobal('fetch', vi.fn(async (path: string, options?: RequestInit) => {
-      const args = JSON.parse(String(options?.body || '{}')) as Record<string, unknown>
+      const args = JSON.parse(typeof options?.body === 'string' ? options.body : '{}') as Record<string, unknown>
       calls.push({ path, args })
       return new Response(JSON.stringify(path.endsWith('/adopt-related')
         ? { saved: true, automatic: true, profile: 'personal', profiles: [
@@ -290,7 +290,7 @@ describe('Secure Ask human-only browser sidebar', () => {
   it('reuses related credentials manually only after explicit consent', async () => {
     const calls: Array<{ path: string; args: Record<string, unknown> }> = []
     vi.stubGlobal('fetch', vi.fn(async (path: string, options?: RequestInit) => {
-      const args = JSON.parse(String(options?.body || '{}')) as Record<string, unknown>
+      const args = JSON.parse(typeof options?.body === 'string' ? options.body : '{}') as Record<string, unknown>
       calls.push({ path, args })
       return new Response(JSON.stringify(path.endsWith('/adopt-related')
         ? { saved: true, automatic: false, profile: 'personal', profiles: [
@@ -346,8 +346,8 @@ describe('Secure Ask human-only browser sidebar', () => {
     await waitFor(() => {
       expect(screen.getByText(/No se confirmó el guardado/)).toBeTruthy()
     })
-    expect((screen.getByPlaceholderText('Usuario real') as HTMLInputElement).value).toBe('retry-user')
-    expect((screen.getByPlaceholderText('Contraseña real') as HTMLInputElement).value).toBe('retry-secret')
+    expect(screen.getByPlaceholderText('Usuario real').value).toBe('retry-user')
+    expect(screen.getByPlaceholderText('Contraseña real').value).toBe('retry-secret')
   })
 
   it('keeps the compact card collapsible', () => {
