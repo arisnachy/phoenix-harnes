@@ -229,6 +229,9 @@ export class NvidiaLiveCatalog {
     // mix public NVIDIA Build IDs into a private, self-hosted endpoint.
     if (profile.baseURL !== undefined
       && profile.baseURL.replace(/[/]+$/u, '') !== NVIDIA_BUILD_BASE_URL) return providers
+    // A derived models list cannot coexist with modelOverrides. Omit the
+    // property entirely: exactOptionalPropertyTypes rejects an explicit undefined.
+    const { modelOverrides, ...profileWithoutOverrides } = profile
     const pinned = profile.models ?? []
     const entries = new Map<string, PiAiModelProfile>()
     for (const model of pinned) entries.set(model.id, model)
@@ -243,20 +246,19 @@ export class NvidiaLiveCatalog {
     }
     // A derived list cannot use modelOverrides as well as explicit models;
     // apply each override to the matching entry above instead.
-    const overrides = profile.modelOverrides ?? {}
+    const overrides = modelOverrides ?? {}
     for (const [id, entry] of entries) {
       if (overrides[id] !== undefined) entries.set(id, { ...entry, ...overrides[id] })
     }
     return {
       ...providers,
       nvidia: {
-        ...profile,
+        ...profileWithoutOverrides,
         // Unknown fresh IDs disclose no capacity. Use conservative values
         // while preserving the SDK's richer metadata for known models.
         defaultContextWindow: profile.defaultContextWindow ?? 32_768,
         defaultMaxTokens: profile.defaultMaxTokens ?? 4_096,
         models: [...entries.values()],
-        modelOverrides: undefined,
       },
     }
   }
