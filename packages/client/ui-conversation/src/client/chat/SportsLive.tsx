@@ -37,6 +37,18 @@ export function espnLiveUrl(sport?:string,league?:string,date?:string):string|nu
   if(new Date(date+'T00:00:00Z').toISOString().slice(0,10)!==date)return null
   return 'https://site.api.espn.com/apis/site/v2/sports/'+sport+'/'+slug+'/scoreboard?dates='+date.replaceAll('-','')
 }
+/**
+ * Validate host, sport, league and event ID before requesting an ESPN game summary.
+ * @param sport - Valid ESPN sport slug.
+ * @param league - Known league name or validated ESPN slug.
+ * @param eventId - Numeric ESPN event identifier.
+ * @returns Pinned ESPN summary URL or null for unsafe inputs.
+ */
+export function espnLiveSummaryUrl(sport?:string,league?:string,eventId?:string):string|null{
+  if(!eventId||!/^\d{1,18}$/u.test(eventId))return null
+  const board=espnLiveUrl(sport,league,'2026-01-01')
+  return board?board.replace('/scoreboard?dates=20260101','/summary?event='+eventId):null
+}
 function fieldText(data:Obj,...keys:string[]):string{
   for(const k of keys){const v=str(data[k]);if(v)return v}return ''
 }
@@ -122,10 +134,10 @@ function enrichSummary(item:PhoenixLiveGame,data:unknown):PhoenixLiveGame{
 }
 const memo=new Map<string,{ at:number;value:PhoenixLiveGame[];pending?:Promise<PhoenixLiveGame[]> }>()
 async function fetchJson(url:string):Promise<unknown>{
-  const controller=new AbortController(),timer=setTimeout(()=>{ controller.abort() },8000)
+  const controller=new AbortController(),timer=setTimeout(()=>{controller.abort()},8000)
   try{
     const res=await fetch(url,{ signal:controller.signal,headers:{ accept:'application/json' },cache:'no-store' })
-    if(!res.ok)throw new Error('ESPN '+res.status)
+    if(!res.ok)throw new Error('ESPN '+String(res.status))
     const length=Number(res.headers.get('content-length')??0)
     if(length>3_000_000)throw Error('ESPN payload too large')
     return await res.json() as unknown
@@ -163,9 +175,9 @@ export function SportsLiveProvider({ sport,league,date,children }:{
   const [state,setState]=useState<{ url:string;games:PhoenixLiveGame[];at:number;error:boolean }>({ url:'',games:[],at:0,error:false })
   useEffect(()=>{
     if(!url)return
-    let active=true, busy=false,lastAttempt=0
+    const lifecycle={ active:true };let busy=false,lastAttempt=0
     const update=async()=>{
-      if(!active||busy||typeof document!=='undefined'&&document.visibilityState==='hidden')return
+      if(!lifecycle.active||busy||typeof document!=='undefined'&&document.visibilityState==='hidden')return
       if(typeof navigator!=='undefined'&&!navigator.onLine)return
       const cached=memo.get(url)?.value??[]
       const running=cached.some(g=>g.phase==='in')
@@ -175,8 +187,8 @@ export function SportsLiveProvider({ sport,league,date,children }:{
       const interval=running?20_000:60_000
       if(Date.now()-lastAttempt<interval)return
       lastAttempt=Date.now();busy=true
-      try{const result=await liveFeed(url);if(active)setState({ url,games:result,at:Date.now(),error:false })}
-      catch{if(active)setState(old=>({ ...old,error:true }))}
+      try{const result=await liveFeed(url);if(lifecycle.active)setState({ url,games:result,at:Date.now(),error:false })}
+      catch{if(lifecycle.active)setState(old=>({ ...old,error:true }))}
       finally{busy=false}
     }
     void update()
@@ -184,7 +196,7 @@ export function SportsLiveProvider({ sport,league,date,children }:{
     const visible=()=>{if(document.visibilityState==='visible'){lastAttempt=0;void update()}}
     document.addEventListener('visibilitychange',visible)
     window.addEventListener('online',visible)
-    return ()=>{active=false;clearInterval(timer);document.removeEventListener('visibilitychange',visible);window.removeEventListener('online',visible)}
+    return ()=>{lifecycle.active=false;clearInterval(timer);document.removeEventListener('visibilitychange',visible);window.removeEventListener('online',visible)}
     // Only restart when the requested sport/league/date changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   },[url])
@@ -193,16 +205,24 @@ export function SportsLiveProvider({ sport,league,date,children }:{
   return children(get,{ updatedAt:state.url===url?state.at:0,error:state.url===url&&state.error,
     enabled:Boolean(url),stale:state.url!==url||!state.at||Date.now()-state.at>95_000 })
 }
-export function SportsLiveFacts({ game,meta,sport }:{ game?:PhoenixLiveGame|undefined;meta:PhoenixLiveMeta;sport?:string|undefined }):ReactNode{
+export function SportsLiveFacts({ game,meta,sport,compact=false }:{
+  game?:PhoenixLiveGame|undefined;meta:PhoenixLiveMeta;sport?:string|undefined;compact?:boolean
+}):ReactNode{
   if(!game||game.phase!=='in')return null
+  if(compact)return <div className={css.liveMini} aria-label="Situación del partido en vivo">
+    <span className={css.liveDot} aria-hidden="true"/>
+    <strong>EN VIVO · {game.status}</strong>
+    {game.lastPlay&&<span className={css.liveMiniPlay}>{game.lastPlay}</span>}
+    {(meta.error||meta.stale)&&<small>Último dato recibido</small>}
+  </div>
   const baseball=sport==='baseball'
   return <div className={css.liveFacts} aria-label="Situación del partido en vivo">
     <div className={css.liveHeading}><span className={css.liveDot} aria-hidden="true"/> EN VIVO · {game.status}
-      <small>{meta.error||meta.stale?'Último dato recibido':'ESPN · actualización automática'}</small></div>
+      <small>{meta.error||meta.stale?'Último dato recibido':'Actualización automática'}</small></div>
     {baseball&&<div className={css.liveBaseball}>
       {game.bases?<div className={css.liveDiamond} aria-label="Corredores en las bases">
-        <i className={game.bases?.[1]?css.occupied:''} title="Segunda base"/>
-        <i className={game.bases?.[2]?css.occupied:''} title="Tercera base"/>
+        <i className={game.bases[1]?css.occupied:''} title="Segunda base"/>
+        <i className={game.bases[2]?css.occupied:''} title="Tercera base"/>
         <i className={game.bases[0]?css.occupied:''} title="Primera base"/>
       </div>:<span className={css.liveStamp}>Bases sin datos</span>}
       <div className={css.liveCounts}><strong>{game.outs===undefined?'—':game.outs} outs</strong>
@@ -220,8 +240,8 @@ export function SportsLiveFacts({ game,meta,sport }:{ game?:PhoenixLiveGame|unde
 }
 export function SportsLiveStamp({ meta }:{ meta:PhoenixLiveMeta }):ReactNode{
   if(!meta.enabled)return null
-  if(!meta.updatedAt)return <small className={css.liveStamp}>ESPN · {meta.error?'sin datos en vivo disponibles':'consultando marcadores…'}</small>
-  return <small className={css.liveStamp}>ESPN · {meta.error||meta.stale?'sin conexión reciente · ':''}
+  if(!meta.updatedAt)return <small className={css.liveStamp}>Marcador · {meta.error?'sin datos en vivo disponibles':'consultando…'}</small>
+  return <small className={css.liveStamp}>Actualizado · {meta.error||meta.stale?'sin conexión reciente · ':''}
     {new Date(meta.updatedAt).toLocaleTimeString('es-DO',{ hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false })}
   </small>
 }

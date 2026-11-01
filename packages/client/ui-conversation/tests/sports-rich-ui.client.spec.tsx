@@ -38,6 +38,7 @@ describe('Phoenix Sports rich native cards',()=>{
     const card=parseGenerativeUiBlock(rich)
     if(!card)throw Error('Fixture rejected')
     render(<GenerativeUi block={card}/>)
+    fireEvent.click(screen.getByText('Ver estadísticas y análisis'))
     expect(screen.getByRole('heading',{ name:'Abridores probables' })).toBeTruthy()
     expect(screen.getByRole('heading',{ name:'Alineaciones' })).toBeTruthy()
     expect(screen.getByRole('heading',{ name:'Bullpen y cuerpo de lanzadores' })).toBeTruthy()
@@ -158,8 +159,8 @@ describe('No fake tickets when strict research finds zero eligible matches',()=>
 })
 describe('Five-leg Phoenix ticket completion and compact progress',()=>{
   const makeLeg=(i:number)=>({
-    event:'Away '+i+' vs Home '+i,
-    selection:'Home '+i,
+    event:`Away ${i} vs Home ${i}`,
+    selection:`Home ${i}`,
     price:'Por verificar',
     bookmaker:'Sin casa confirmada',
     sport:'Baloncesto',
@@ -283,7 +284,7 @@ describe('Universal chat: compact sports schedules do not replace single-game ca
     const actions:string[]=[]
     render(<GenerativeUi block={card} onAction={text=>actions.push(text)}/>)
     expect(screen.getByText('PHOENIX / TENIS · WTA')).toBeTruthy()
-    expect(screen.getByText(/ESPN aún no identifica a ambos participantes/)).toBeTruthy()
+    expect(screen.getByText(/Participantes pendientes de confirmar/)).toBeTruthy()
     expect(screen.queryByText('Sin confirmar')).toBeNull()
     expect(screen.queryByText('Finalizado')).toBeNull()
     expect(screen.getAllByRole('button',{ name:'Ver análisis del encuentro ›' })).toHaveLength(1)
@@ -330,12 +331,27 @@ describe('ESPN universal adaptive panels',()=>{
     expect(card).not.toBeNull()
     if(!card)throw Error('ESPN template rejected')
     render(<GenerativeUi block={card}/>)
+    fireEvent.click(screen.getByText('Ver estadísticas y contenido'))
     expect(screen.getByRole('region',{ name:'Perfil' })).toBeTruthy()
     expect(screen.getByRole('region',{ name:'Últimos partidos' })).toBeTruthy()
-    expect(screen.getByText('PTS: 28')).toBeTruthy()
+    expect(screen.getAllByText('PTS: 28').length).toBeGreaterThan(0)
     expect(screen.getByText('Headline')).toBeTruthy()
-    expect(screen.getByRole('link',{ name:'Leer noticia en ESPN' }).getAttribute('href')).toContain('espn.com')
+    expect(screen.getByRole('link',{ name:'Leer noticia' }).getAttribute('href')).toContain('espn.com')
     expect(screen.getByAltText('Jugador real')).toBeTruthy()
+  })
+
+  it('keeps the intelligent event preview short and removes provider branding from visible text',()=>{
+    const event={ ...template,props:{ ...template.props,view:'event',title:'ESPN · USA.1',
+      subtitle:'Encuentro',note:'Datos de ESPN sujetos a disponibilidad' } }
+    const card=parseGenerativeUiBlock(event)
+    if(!card)throw Error('Event fixture rejected')
+    const { container }=render(<GenerativeUi block={card}/>)
+    expect(screen.getByText('MLS')).toBeTruthy()
+    expect(screen.getByText('Ver estadísticas y contenido')).toBeTruthy()
+    expect(container.querySelector('[data-generative-ui="sports_espn_dashboard"]')).toBeTruthy()
+    expect(screen.queryByText(/\bESPN\b/iu)).toBeNull()
+    fireEvent.click(screen.getByText('Ver estadísticas y contenido'))
+    expect(screen.queryByText(/\bESPN\b/iu)).toBeNull()
   })
   it('rejects hostile photos, scripts, excessive sections and undeclared data',()=>{
     const base=template.props
@@ -347,6 +363,30 @@ describe('ESPN universal adaptive panels',()=>{
       sections:[{ heading:'X',kind:'list',items:[{ label:'A',html:'<img onerror=evil />' }] }] } })).toBeNull()
     expect(parseGenerativeUiBlock({ ...template,props:{ ...base,
       sections:Array.from({ length:9 },()=>base.sections[0]) } })).toBeNull()
+  })
+})
+
+describe('Phoenix sports newsroom uses the shared intelligent UI contract',()=>{
+  it('renders image-first article tiles, Spanish labels and a provider-neutral league title',()=>{
+    const news={ component:'sports_espn_dashboard',version:1,props:{
+      view:'news',title:'ESPN · ENG.1',subtitle:'Noticias',
+      source:'ESPN Common v3',checkedAt:'2026-11-01T13:40:00Z',
+      note:'Titulares de origen verificado',
+      sections:[{heading:'Últimos titulares',kind:'articles',items:[
+        {label:'Liverpool host Arsenal',value:'2026-11-01T13:41:41Z',
+          detail:'Liverpool welcome Arsenal to Anfield.',
+          image:'https://a.espncdn.com/news-photo.png',
+          href:'https://www.espn.com/soccer/story/_/id/42/article'},
+      ]}],
+    } }
+    const block=parseGenerativeUiBlock(news)
+    if(!block)throw Error('Valid news panel rejected')
+    const {container}=render(<GenerativeUi block={block}/>)
+    expect(screen.getByText('Premier League · Inglaterra')).toBeTruthy()
+    expect(screen.getByText('Leer noticia')).toBeTruthy()
+    expect(container.querySelector('img')?.getAttribute('src')).toContain('a.espncdn.com')
+    expect(container.querySelector('[data-generative-ui="sports_espn_dashboard"]')).toBeTruthy()
+    expect(container.textContent).not.toContain('ESPN INTELLIGENCE')
   })
 })
 
@@ -364,6 +404,7 @@ describe('ESPN contextual navigation',()=>{
     if(!card)throw Error('Invalid contextual fixture')
     let prompt=''
     render(<GenerativeUi block={card} onAction={(text)=>{prompt=text}}/>)
+    fireEvent.click(screen.getByText('Ver estadísticas y contenido'))
     fireEvent.click(screen.getByRole('button',{ name:'Estadísticas del jugador' }))
     expect(prompt).toContain('athleteId=991')
   })

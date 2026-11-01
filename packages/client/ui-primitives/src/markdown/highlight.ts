@@ -6,7 +6,7 @@
  * dark blocks), never here — the repo's tokens-only styling rule.
  *
  * Only the three markdown-fence and `run_code` grammars (TypeScript, shell,
- * JSON) load into the singleton at boot — the set every session renders. The
+ * JSON) load into the singleton on the first code request. The
  * read card's wider extension set (the file-extension language hints the read
  * tool's `langFromPath` emits — `packages/fs/tool-fs`: python, rust, yaml,
  * markup, …) is imported lazily and registered the first time such a language
@@ -31,7 +31,7 @@ import type { CSSProperties } from 'react'
 type LangModule = { default: typeof langTs }
 
 /**
- * Grammars the singleton loads at boot; each entry's own `name` is the id
+ * Grammars the singleton loads on first use; each entry's own `name` is the id
  * `codeToTokens`/`codeToHtml` resolve. The JS-family aliases (js/jsx/ts/tsx)
  * resolve to the TypeScript grammar rather than a separate one: it tokenizes
  * plain TS/JS exactly, and JSX/TSX approximately (shiki's TS grammar is not the
@@ -179,7 +179,7 @@ function createHighlighter(): HighlighterCore {
   return instance
 }
 
-/** The synchronous highlighter (one instance per document); pre-warmed below, lazy as the fallback. */
+/** The synchronously created highlighter (one instance per document), built on first real code content. */
 function highlighter(): HighlighterCore {
   singleton ??= createHighlighter()
   return singleton
@@ -227,7 +227,7 @@ export function grammarLoadCount(): number {
  */
 function ensureGrammar(resolved: string): boolean {
   const load = LAZY_GRAMMARS.get(resolved)
-  // A boot grammar (already registered) has no lazy loader; it is always ready.
+  // Bundled grammars need no async import; highlighter() registers them on first use.
   if (load === undefined) return true
   if (highlighter().getLoadedLanguages().includes(resolved)) return true
   if (!requested.has(resolved)) {
@@ -240,15 +240,6 @@ function ensureGrammar(resolved: string): boolean {
   }
   return false
 }
-
-// Engine + grammar construction costs a long task (~120-175ms); building it
-// during the first finalized fence's render would jank exactly when a stream
-// completes. Warm the singleton in a deferred task at module load (= plugin
-// boot) instead; the lazy path above stays as the correctness fallback for a
-// fence that renders before the timer fires. `unref` (Node-only) keeps a
-// non-browser import from pinning the event loop.
-const warmupTimer = setTimeout(() => { highlighter() }, 0)
-;(warmupTimer as { unref?: () => void }).unref?.()
 
 /**
  * Highlight `code` into shiki's HTML (a single `<pre class="shiki">` tree)

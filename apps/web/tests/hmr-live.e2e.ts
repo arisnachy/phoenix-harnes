@@ -78,14 +78,16 @@ it('hot-reloads a real client-plugin source edit without refreshing the page', a
     .map(path => join(REPO_ROOT, path))
   const originalClientBundles = await Promise.all(clientBundlePaths.map(async path => [path, await readFile(path)] as const))
   const originalSource = await readFile(sourcePath)
-  const oldText = '¿En qué podemos trabajar hoy?'
-  const sourceNeedle = `<p className={css.subtitle}>${oldText}</p>`
+  // Read the original visible subtitle from the source, not a stale copy string.
+  const sourceNeedle = /<p className=\{css\.subtitle\}>([^<]+)<\/p>/u
+  const match = sourceNeedle.exec(originalSource.toString())
+  if (match?.[1] === undefined) throw new Error('HMR source lacks its subtitle JSX element')
+  const oldText = match[1]
   const newText = `HMR UPDATED ${'x'.repeat(80)}`
   const updatedSource = originalSource.toString().replace(
     sourceNeedle,
     `<p className={css.subtitle}>${newText}</p>`,
   )
-  if (updatedSource === originalSource.toString()) throw new Error(`HMR source lacks ${JSON.stringify(sourceNeedle)}`)
 
   const subprocessCtx = new Context()
   let subprocessFiber: Fiber | undefined
