@@ -1,29 +1,14 @@
 # Phoenix Geo Intelligence — contrato de UI integrada (v1)
 
-**Estado:** base cartográfica nativa UI v1. No implica geocodificación, enrutamiento ni análisis espacial de servidor.
-Forma parte de Phoenix Universal Mission Engine; no es una aplicación separada.
+**Estado:** base cartográfica nativa UI v1. No implica geocodificación, enrutamiento ni análisis espacial de servidor. Forma parte de Phoenix Universal Mission Engine; no es una aplicación separada.
 
 ## Entrega cartográfica nativa con herramienta real
 
-El motor contiene el visor React `GeoMap`, pero un mapa NO se publica simplemente
-porque la respuesta de Kira afirme que existe. Para geografías reales, Kira
-llama a `phoenix_geo_map` con `title`, `map.source` y capas WGS84 verificadas.
-El resultado proyecta un artefacto persistente con MIME
-`application/vnd.phoenix.geo+json` dentro del chat; utiliza el mismo visor
-que los bloques `generative-ui`. El recibo `artifactId` confirma emisión
-del contrato, **no** un clic ni una captura de pantalla del cliente.
+El motor contiene el visor React `GeoMap`, pero un mapa NO se publica simplemente porque la respuesta de Kira afirme que existe. Para geografías reales, Kira llama a `phoenix_geo_map` con `title`, `map.source` y capas WGS84 verificadas. El resultado proyecta un artefacto persistente con MIME `application/vnd.phoenix.geo+json` dentro del chat; utiliza el mismo visor que los bloques `generative-ui`. El recibo `artifactId` confirma emisión del contrato, **no** un clic ni una captura de pantalla del cliente.
 
-No usar `phoenix_scene_map` para República Dominicana o mapas reales.
-Si una investigación no ofrece coordenadas verificables ni estadísticas
-territoriales comparables, Kira debe declarar esa limitación y no inventar
-puntos, polígonos, tasas provinciales o clasificaciones. En particular,
-resultados de una muestra local de hipertensión no representan automáticamente
-el conjunto de una provincia.
+No usar `phoenix_scene_map` para República Dominicana o mapas reales. Si una investigación no ofrece coordenadas verificables ni estadísticas territoriales comparables, Kira debe declarar esa limitación y no inventar puntos, polígonos, tasas provinciales o clasificaciones. En particular, resultados de una muestra local de hipertensión no representan automáticamente el conjunto de una provincia.
 
-El aviso de falta de mapa en el chat distingue un posible artefacto separado
-de la falta de un bloque dentro del propio mensaje. Su botón solicita
-`phoenix_geo_map` para geografía real y `phoenix_scene_map` únicamente
-para mundos ficticios.
+El aviso de falta de mapa en el chat distingue un posible artefacto separado de la falta de un bloque dentro del propio mensaje. Su botón solicita `phoenix_geo_map` para geografía real y `phoenix_scene_map` únicamente para mundos ficticios.
 
 ## Generación desde Kira
 
@@ -86,8 +71,4 @@ pnpm geo --input datos.geojson --output mapa.geo-map.json --source "Registro ofi
 pnpm test:geo
 ```
 
-El CSV también acepta encabezados en inglés. Polaridad opcional:
-`higher-better` (cifras altas verdes), `higher-worse` (cifras altas rojas), `neutral` (sin interpretar la métrica).
-Nunca asumir que alta incidencia = buen rendimiento; la dirección es una decisión explícita del estudio.
-Usar el JSON como archivo entregable y el Markdown como metodología de un informe científico.
-Los cálculos actuales son descriptivos; la distancia por carretera, isócronas y análisis epidemiológico ajustado por población todavía requieren módulos específicos.
+El CSV también acepta encabezados en inglés. Polaridad opcional: `higher-better` (cifras altas verdes), `higher-worse` (cifras altas rojas), `neutral` (sin interpretar la métrica). Nunca asumir que alta incidencia = buen rendimiento; la dirección es una decisión explícita del estudio. Usar el JSON como archivo entregable y el Markdown como metodología de un informe científico. Los cálculos actuales son descriptivos; la distancia por carretera, isócronas y análisis epidemiológico ajustado por población todavía requieren módulos específicos.

@@ -56,25 +56,9 @@ Configured agents start automatically. A model call requires both `provider` and
 
 ### Phoenix Auto-Continue (short-output providers)
 
-A genuine `max-tokens` finish on a selected model route causes Phoenix to
-preserve the truncated assistant segment and inject an identified, logged
-continuation at the next step. The follow-up reuses prior context and verified
-tool results; discarded partial tool calls are never assumed executed.
-`openrouter`, `deepseek`, and `qwen` routes are enabled by default, covering
-DeepSeek and Qwen models served through OpenRouter. OpenAI Codex routes and model
-IDs are explicitly excluded, even if accessed through OpenRouter. Other large
-or non-truncated responses are unaffected.
+A genuine `max-tokens` finish on a selected model route causes Phoenix to preserve the truncated assistant segment and inject an identified, logged continuation at the next step. The follow-up reuses prior context and verified tool results; discarded partial tool calls are never assumed executed. `openrouter`, `deepseek`, and `qwen` routes are enabled by default, covering DeepSeek and Qwen models served through OpenRouter. OpenAI Codex routes and model IDs are explicitly excluded, even if accessed through OpenRouter. Other large or non-truncated responses are unaffected.
 
-`agent-loop` settings expose `autoContinueProviders` (exact route IDs) and
-`autoContinueMaxSegments` (0–8, default 3). A zero budget disables the
-feature. The number of logged continuations since the latest human message
-enforces the cap across internal turn checkpoints and restarts; identical
-successive text segments stop early. An interrupted user steer or explicit
-cancel retains the usual inbox/abort semantics. A successful automatic
-continuation closes with `completed`, while an unrecovered truncation retains
-`max-tokens`. This behavior lives at the agent step boundary because it must
-observe the durable finish event and enqueue the next step before the turn
-closes.
+`agent-loop` settings expose `autoContinueProviders` (exact route IDs) and `autoContinueMaxSegments` (0–8, default 3). A zero budget disables the feature. The number of logged continuations since the latest human message enforces the cap across internal turn checkpoints and restarts; identical successive text segments stop early. An interrupted user steer or explicit cancel retains the usual inbox/abort semantics. A successful automatic continuation closes with `completed`, while an unrecovered truncation retains `max-tokens`. This behavior lives at the agent step boundary because it must observe the durable finish event and enqueue the next step before the turn closes.
 
 ### Internal concrete driver
 

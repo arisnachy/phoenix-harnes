@@ -85,30 +85,13 @@ The dict shape makes duplicate routes unrepresentable, and the pre-release array
 
 ## Generic non-Codex provider error recovery
 
-For a pi-ai request that returns an otherwise unclassified `PI_AI_ERROR`,
-non-Codex routes expose the distinct `PI_AI_TRANSIENT_ERROR` retry code.
-The installed `llm-retry` plugin retries it with normal, bounded backoff
-(two retries by default), keeping the same verified session and tool-error
-context. The native `openai`, `openai-codex`, and `chatgpt-web` routes, as
-well as OpenAI/Codex model IDs behind OpenRouter, retain their existing error
-behavior. Known invalid requests, authentication, and quota failures are
-never reclassified as transient. An explicitly configured `retryPolicy`
-overrides the retry-code defaults, including opting out with `maxRetries: 0`.
-Retry exhaustion remains an honest failure, not a fabricated completed task.
+For a pi-ai request that returns an otherwise unclassified `PI_AI_ERROR`, non-Codex routes expose the distinct `PI_AI_TRANSIENT_ERROR` retry code. The installed `llm-retry` plugin retries it with normal, bounded backoff (two retries by default), keeping the same verified session and tool-error context. The native `openai`, `openai-codex`, and `chatgpt-web` routes, as well as OpenAI/Codex model IDs behind OpenRouter, retain their existing error behavior. Known invalid requests, authentication, and quota failures are never reclassified as transient. An explicitly configured `retryPolicy` overrides the retry-code defaults, including opting out with `maxRetries: 0`. Retry exhaustion remains an honest failure, not a fabricated completed task.
 
-Research publication continues to require real `report.references` with
-HTTPS URLs and citation keys. Invalid `phoenix_research_publish` arguments
-are a tool validation error, not a reason to bypass the publication gate;
-the model receives guidance to research sources before trying again.
+Research publication continues to require real `report.references` with HTTPS URLs and citation keys. Invalid `phoenix_research_publish` arguments are a tool validation error, not a reason to bypass the publication gate; the model receives guidance to research sources before trying again.
 
 ## OpenRouter output-limit recovery
 
-An OpenRouter `length` stop is treated as an output-limit finish instead
-of inferring context overflow merely because the provider returned fewer tokens
-than the model's declared maximum. Actual context-window overflows remain
-errors. When the agent-loop's Phoenix Auto-Continue policy selects this route,
-it can then resume safely with preserved text and a bounded number of calls.
-This does not change OpenAI Codex's native route.
+An OpenRouter `length` stop is treated as an output-limit finish instead of inferring context overflow merely because the provider returned fewer tokens than the model's declared maximum. Actual context-window overflows remain errors. When the agent-loop's Phoenix Auto-Continue policy selects this route, it can then resume safely with preserved text and a bounded number of calls. This does not change OpenAI Codex's native route.
 
 ## Catalog resolution
 

@@ -1,9 +1,6 @@
 # Phoenix Intentive Dock — Especificación de producto v1.0
 
-**Estado:** propuesta funcional y técnica para Kira y Phoenix. **No equivale a una implementación.**
-**Fecha:** 2026-10-14
-**Área:** UI / Kira / UME / programador de tareas / conectores
-**Objetivo:** aprovechar de manera optativa el espacio libre de la barra superior para información breve, contextual y útil, sin dejar un panel permanentemente visible.
+**Estado:** propuesta funcional y técnica para Kira y Phoenix. **No equivale a una implementación.** **Fecha:** 2026-10-14 **Área:** UI / Kira / UME / programador de tareas / conectores **Objetivo:** aprovechar de manera optativa el espacio libre de la barra superior para información breve, contextual y útil, sin dejar un panel permanentemente visible.
 
 ## Decisión de producto
 
@@ -51,25 +48,16 @@
 | 29 | custom-alert | Alertas condicionales | Evento elegido: dato, cambio, publicación o umbral |
 | 30 | focus-routine | Rutinas y enfoque | Cronómetro, descansos y sesiones programadas |
 
-**Prioridad P0 (MVP):** sports-daily, sports-live, daily-agenda, appointment-reminder, kira-mission, weather-now, custom-alert.
-**Prioridad P1:** sports-schedule, news-digest, priority-tasks, artifact-ready, github-status, phoenix-health, birthdays, deadline-countdown, priority-inbox.
-**Prioridad P2:** módulos restantes, habilitados solo tras integrar fuentes reales.
+**Prioridad P0 (MVP):** sports-daily, sports-live, daily-agenda, appointment-reminder, kira-mission, weather-now, custom-alert. **Prioridad P1:** sports-schedule, news-digest, priority-tasks, artifact-ready, github-status, phoenix-health, birthdays, deadline-countdown, priority-inbox. **Prioridad P2:** módulos restantes, habilitados solo tras integrar fuentes reales.
 
 ## Ejemplos conversacionales
 
-- Usuario: «Yo sigo a Dodgers, Lakers y Real Madrid».
-  Kira: «¿Quieres un resumen con los resultados de tus equipos favoritos cada mañana? Puedo enseñártelo un rato arriba sin dejar la barra ocupada todo el día».
-  Opciones: **Sí** / **Elegir hora** / **No gracias**. Si dice sí pero falta hora, preguntar la hora y confirmar zona horaria. No programar hasta tener consentimiento y datos suficientes.
-- Usuario: «¿Cómo van los Dodgers?».
-  Kira entrega primero el resultado con fuente; luego: «¿Quieres que mantenga el marcador arriba durante el partido?» **Mostrar** / **No**.
-- Usuario: «Tengo una cita el jueves a las 10».
-  Kira pide fecha concreta si hay ambigüedad, confirma cita y propone: «¿Te recuerdo una hora antes?» **Recordar** / **Calendario** / **No**.
-- Usuario: «Kira, actualiza Phoenix».
-  Kira realiza la tarea como corresponda; solo sugiere: «¿Quieres que te muestre el estado del trabajo en la barra mientras tanto?».
-- Usuario: «¿Cómo estará el clima este fin de semana?».
-  Kira responde con pronóstico; opcionalmente pregunta: «¿Quieres un pequeño resumen arriba o una alerta si cambia de manera importante?».
-- Usuario: «No me propongas más Dock deportivos».
-  Registrar preferencia y dejar de sugerir ese tipo sin afectar los Dock existentes que el usuario mantenga.
+- Usuario: «Yo sigo a Dodgers, Lakers y Real Madrid». Kira: «¿Quieres un resumen con los resultados de tus equipos favoritos cada mañana? Puedo enseñártelo un rato arriba sin dejar la barra ocupada todo el día». Opciones: **Sí** / **Elegir hora** / **No gracias**. Si dice sí pero falta hora, preguntar la hora y confirmar zona horaria. No programar hasta tener consentimiento y datos suficientes.
+- Usuario: «¿Cómo van los Dodgers?». Kira entrega primero el resultado con fuente; luego: «¿Quieres que mantenga el marcador arriba durante el partido?» **Mostrar** / **No**.
+- Usuario: «Tengo una cita el jueves a las 10». Kira pide fecha concreta si hay ambigüedad, confirma cita y propone: «¿Te recuerdo una hora antes?» **Recordar** / **Calendario** / **No**.
+- Usuario: «Kira, actualiza Phoenix». Kira realiza la tarea como corresponda; solo sugiere: «¿Quieres que te muestre el estado del trabajo en la barra mientras tanto?».
+- Usuario: «¿Cómo estará el clima este fin de semana?». Kira responde con pronóstico; opcionalmente pregunta: «¿Quieres un pequeño resumen arriba o una alerta si cambia de manera importante?».
+- Usuario: «No me propongas más Dock deportivos». Registrar preferencia y dejar de sugerir ese tipo sin afectar los Dock existentes que el usuario mantenga.
 
 ## Protocolo de sugerencia y consentimiento
 
@@ -167,10 +155,6 @@ Eventos orientativos: `dock.suggestion.created`, `dock.suggestion.accepted`, `do
 
 ## Encargo para Kira y el equipo
 
-**Kira (coordinación):** inventariar la UI actual, eventos, sistema de recordatorios y conectores; elegir reutilización antes que nuevas dependencias; planificar e integrar por fases P0/P1/P2.
-**Sol (planificación, Codex cuando aplique):** identificar archivos, flujo de consentimiento y scheduler persistente; dividir en hitos medibles.
-**Especialistas del equipo:** implementar una sola fuente real por módulo, componentes ligeros, almacenamiento y permisos; trabajar con el límite de agentes que tenga la configuración vigente.
-**Verificación:** pruebas de «no mostrar» por defecto, aceptación/rechazo, actualización, caducidad, accesibilidad, reconexión y rendimiento.
-**Cierre:** detención universal tras validar, reporte RESULTADO / EVIDENCIA / RIESGO / ESTADO. No prometer una activación, automatización o entrega que no haya ocurrido realmente.
+**Kira (coordinación):** inventariar la UI actual, eventos, sistema de recordatorios y conectores; elegir reutilización antes que nuevas dependencias; planificar e integrar por fases P0/P1/P2. **Sol (planificación, Codex cuando aplique):** identificar archivos, flujo de consentimiento y scheduler persistente; dividir en hitos medibles. **Especialistas del equipo:** implementar una sola fuente real por módulo, componentes ligeros, almacenamiento y permisos; trabajar con el límite de agentes que tenga la configuración vigente. **Verificación:** pruebas de «no mostrar» por defecto, aceptación/rechazo, actualización, caducidad, accesibilidad, reconexión y rendimiento. **Cierre:** detención universal tras validar, reporte RESULTADO / EVIDENCIA / RIESGO / ESTADO. No prometer una activación, automatización o entrega que no haya ocurrido realmente.
 
 Esta especificación es un **handoff de diseño**. Implementarla requiere cambios en código y pruebas separados.
