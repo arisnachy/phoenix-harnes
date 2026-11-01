@@ -82,8 +82,10 @@ describe('NVIDIA dynamic catalog', () => {
       },
     }
     const resolved = catalog.overlayProviders(input)
-    expect(Object.hasOwn(resolved.nvidia, 'modelOverrides')).toBe(false)
-    expect(resolved.nvidia?.models?.find(model => model.id === 'minimaxai/minimax-m3.1-flash')?.name)
+    const nvidia = resolved.nvidia
+    if (nvidia === undefined) throw new Error('NVIDIA provider missing after live catalog overlay')
+    expect(Object.hasOwn(nvidia, 'modelOverrides')).toBe(false)
+    expect(nvidia.models?.find(model => model.id === 'minimaxai/minimax-m3.1-flash')?.name)
       .toBe('Custom MiniMax label')
     expect(input.nvidia.modelOverrides['minimaxai/minimax-m3.1-flash'].name)
       .toBe('Custom MiniMax label')
