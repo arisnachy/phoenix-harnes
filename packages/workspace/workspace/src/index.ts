@@ -125,12 +125,12 @@ export class WorkspaceRegistry extends Service {
 
     await this.recoverPendingMutation()
     this.validateStoredState(this.state)
-    if (!this.state.initialized) {
+    if (!this.state.initialized || this.table.size > 0) {
       const headers = await this.ctx.sessionPersistence.list()
       await this.replaceHeaderIndex(headers)
-      await this.bootstrap(headers)
-    } else if (this.table.size > 0) {
-      await this.replaceHeaderIndex(await this.ctx.sessionPersistence.list())
+      const hostCwd = await realpathNormalize(process.cwd())
+      await this.pruneImplicitHostCwdWorkspace(headers, hostCwd)
+      if (!this.requireState().initialized) await this.bootstrap(headers, hostCwd)
     }
 
     await this.indexLiveSessions()
@@ -444,13 +444,66 @@ export class WorkspaceRegistry extends Service {
     })
   }
 
-  private async bootstrap(headers: readonly SessionHeader[]): Promise<void> {
+  /**
+   * Remove the one legacy Workspace shape that old history bootstrap could
+   * synthesize for the Host process cwd. Unscoped CLI/TUI/headless sessions
+   * are born at that cwd, so treating their history as an explicit Workspace
+   * creates a folder row the user never added (commonly the checkout basename,
+   * e.g. "phoenix").
+   *
+   * The cleanup is intentionally conservative. A legacy bootstrap record is
+   * recognized only when its default basename title and creation timestamp
+   * match one of its persisted session headers exactly — bootstrap stamped
+   * records from the newest header instant. Explicit Workspace creation stamps
+   * its own wall-clock instant, so an intentionally registered Host cwd is kept.
+   *
+   * The Workspace record alone is removed; session logs are untouched and
+   * continue to project as ungrouped sessions.
+   * @param headers - persisted session headers used for the startup index.
+   * @param hostCwd - canonical Host process cwd.
+   */
+  private async pruneImplicitHostCwdWorkspace(
+    headers: readonly SessionHeader[],
+    hostCwd: string,
+  ): Promise<void> {
+    const createdAtBySession = new Map(headers.map(header => [header.id, header.createdAt]))
+    const table = this.requireTable()
+    for (const [id, record] of table.entries()) {
+      if (record.path !== hostCwd || record.title !== basename(record.path) || record.sessionIds.length === 0) {
+        continue
+      }
+      const createdAt = Date.parse(record.createdAt)
+      if (!Number.isFinite(createdAt)) continue
+      const hasBootstrapSignature = record.sessionIds.some(
+        sessionId => createdAtBySession.get(sessionId) === createdAt,
+      )
+      if (!hasBootstrapSignature) continue
+
+      const state = this.requireState()
+      const nextState: WorkspaceDomainState = {
+        initialized: state.initialized,
+        workspaceIds: state.workspaceIds.filter(workspaceId => workspaceId !== id),
+        archivedSessionIds: state.archivedSessionIds,
+      }
+      await this.setState({
+        ...nextState,
+        pendingMutation: { operation: 'delete', workspaceId: id },
+      })
+      await table.delete(id)
+      await this.setState(nextState)
+      this.ctx.logger.info(
+        `removed legacy implicit Host-cwd workspace '${id}' at '${record.path}'; sessions remain ungrouped`,
+      )
+    }
+  }
+
+  private async bootstrap(headers: readonly SessionHeader[], hostCwd: string): Promise<void> {
     const table = this.requireTable()
     const state = this.requireState()
     const groupsByPath = new Map<string, SessionHeader[]>()
     for (const header of headers) {
       const path = this.sessionPaths.get(header.id)
-      if (path === undefined) continue
+      if (path === undefined || path === hostCwd) continue
       const group = groupsByPath.get(path)
       if (group === undefined) groupsByPath.set(path, [header])
       else group.push(header)
