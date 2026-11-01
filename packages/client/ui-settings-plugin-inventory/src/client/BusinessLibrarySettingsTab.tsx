@@ -56,13 +56,15 @@ export function BusinessLibrarySettingsTab({ readBusinessLibrary, t }:BusinessLi
       <p className={css.count}>{state.data.totalCount} {t('businessProducts')}
         {state.data.truncated ? ` · ${t('businessTruncated')}` : ''}</p>
       <div className={css.filters}>
-        <input type="search" value={search} onChange={(e)=>{setSearch(e.target.value)}} placeholder={t('businessSearch')} aria-label={t('businessSearch')}/>
+        <input type="search" value={search} onChange={(e)=>{setSearch(e.target.value)}}
+          placeholder={t('businessSearch')} aria-label={t('businessSearch')}/>
         <select value={kind} onChange={(e)=>{setKind(e.target.value)}} aria-label={t('businessFilter')}>
           <option value="all">{t('businessAll')}</option>
           <option value="book">{t('businessTypeBook')}</option><option value="course">{t('businessTypeCourse')}</option>
           <option value="software">{t('businessTypeSoftware')}</option><option value="game">{t('businessTypeGame')}</option>
           <option value="design">{t('businessTypeDesign')}</option><option value="research">{t('businessTypeResearch')}</option>
-          <option value="video">{t('businessTypeVideo')}</option><option value="audio">{t('businessTypeAudio')}</option><option value="service">{t('businessTypeService')}</option><option value="other">{t('businessTypeOther')}</option>
+          <option value="video">{t('businessTypeVideo')}</option><option value="audio">{t('businessTypeAudio')}</option>
+          <option value="service">{t('businessTypeService')}</option><option value="other">{t('businessTypeOther')}</option>
         </select>
       </div>
       {products.length===0 && <p className={css.empty}>{t('businessEmpty')}</p>}
@@ -72,7 +74,8 @@ export function BusinessLibrarySettingsTab({ readBusinessLibrary, t }:BusinessLi
           <h4>{product.title}</h4>
           <p>{product.chapterCount} capítulos · {product.fileCount} archivos · {product.listingCount} fichas</p>
           {product.targetWords!==null && <p>
-            {product.writtenWords.toLocaleString()} / {product.targetWords.toLocaleString()} palabras · {product.plannedChapters} capítulos previstos
+            {product.writtenWords.toLocaleString()} / {product.targetWords.toLocaleString()} palabras ·
+            {product.plannedChapters} capítulos previstos
           </p>}
           <p>{t(listingKeys[product.listingStage])}</p>
           <small>{product.updatedAt ? new Date(product.updatedAt).toLocaleDateString() : '—'}</small>
