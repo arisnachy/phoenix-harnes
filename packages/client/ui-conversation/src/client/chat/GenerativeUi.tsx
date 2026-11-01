@@ -702,7 +702,15 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
         const articles=p.sections.flatMap(section=>section.kind==='articles'?section.items:[])
         return <SportsNewsPanel title={sportsDisplayText(p.title)} articles={articles} onAction={onAction}/>
       }
-      const preview=p.sections.flatMap(section=>section.items).slice(0,p.view==='event'?3:2)
+      const matchSection=p.view==='event'?
+        p.sections.find(section=>/Encuentro|participantes|marcador/iu.test(section.heading)):undefined
+      const participants=matchSection?.items.filter(item=>item.image).slice(0,2)??[]
+      const insightItems=p.view==='event'?p.sections
+        .filter(section=>section!==matchSection)
+        .flatMap(section=>section.items.map(item=>({...item,
+          label:section.heading+' · '+item.label}))).slice(0,4):[]
+      const preview=p.view==='event'?[...participants,...insightItems].slice(0,6):
+        p.sections.flatMap(section=>section.items).slice(0,2)
       return <section className={css.sportsCard+' '+css.sportsCompactPanel}
         data-generative-ui="sports_espn_dashboard" aria-label={sportsDisplayText(p.title)}>
         <header className={css.sportsHeadline}>
@@ -715,7 +723,8 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
             {item.image&&<SportsPortrait label={item.label} logo={item.image}/>}
             <span><strong>{sportsDisplayText(item.label)}</strong>
               {item.detail&&<small>{sportsDisplayText(item.detail)}</small>}</span>
-            {item.value&&<b>{sportsDisplayText(item.value)}</b>}
+            {item.value&&<b>{p.view==='event'&&item.value==='home'?'Local':
+              p.view==='event'&&item.value==='away'?'Visitante':sportsDisplayText(item.value)}</b>}
           </div>)}
         </div>
         <details className={css.sportsExtra}>
