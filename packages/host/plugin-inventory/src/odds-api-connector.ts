@@ -47,24 +47,35 @@ export async function verifyTheOddsApiKey(
   if (!KEY_FORMAT.test(apiKey)) return { status: 'invalid-key', verified: false }
   const url = new URL(ENDPOINT)
   url.searchParams.set('apiKey', apiKey)
+  // Bound both the initial fetch and response body, even if transport ignores abort.
+  const controller = new AbortController()
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      controller.abort()
+      reject(new Error('odds-api-verification-timeout'))
+    }, 8_000)
+  })
   try {
-    const response = await request(url.toString(), {
+    const response = await Promise.race([request(url.toString(), {
       method: 'GET',
       cache: 'no-store',
       redirect: 'error',
-      signal: AbortSignal.timeout(10_000),
+      signal: controller.signal,
       headers: { accept: 'application/json' },
-    })
+    }), deadline])
     const quota = safeQuota(response)
     if (response.status === 401 || response.status === 403) return { status: 'invalid-key', verified: false, ...quota }
     if (response.status === 429) return { status: 'rate-limited', verified: false, ...quota }
     if (!response.ok) return { status: 'unreachable', verified: false, ...quota }
-    const body: unknown = await response.json()
+    const body: unknown = await Promise.race([response.json(), deadline])
     if (!Array.isArray(body)) return { status: 'unreachable', verified: false, ...quota }
     return { status: 'ready', verified: true, ...quota }
   } catch {
     // Never expose a network error object: it may contain the URL with apiKey.
     return { status: 'unreachable', verified: false }
+  } finally {
+    clearTimeout(timer)
   }
 }
 
