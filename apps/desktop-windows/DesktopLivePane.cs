@@ -233,19 +233,19 @@ internal sealed class DesktopLivePane : UserControl
     {
         if (CaptureScreen)
         {
-            var bounds = CaptureEntireDesktop
+            var screenBounds = CaptureEntireDesktop
                 ? SystemInformation.VirtualScreen : Screen.PrimaryScreen?.Bounds ?? Rectangle.Empty;
-            if (bounds.Width <= 0 || bounds.Height <= 0
-                || (long)bounds.Width * bounds.Height > 16_000_000)
+            if (screenBounds.Width <= 0 || screenBounds.Height <= 0
+                || (long)screenBounds.Width * screenBounds.Height > 16_000_000)
             {
                 explanation = "Resolución de pantalla no compatible";
                 return null;
             }
-            var primaryFrame = new Bitmap(bounds.Width, bounds.Height);
+            var primaryFrame = new Bitmap(screenBounds.Width, screenBounds.Height);
             try
             {
                 using var graphics = Graphics.FromImage(primaryFrame);
-                graphics.CopyFromScreen(bounds.Location, Point.Empty, bounds.Size, CopyPixelOperation.SourceCopy);
+                graphics.CopyFromScreen(screenBounds.Location, Point.Empty, screenBounds.Size, CopyPixelOperation.SourceCopy);
                 explanation = CaptureEntireDesktop ? "Escritorio completo (captura visible)"
                     : "Pantalla principal (captura visible)";
                 return primaryFrame;
