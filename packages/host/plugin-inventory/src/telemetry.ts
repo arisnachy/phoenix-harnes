@@ -10,7 +10,7 @@ const RECORD_LIMIT = 600
 const FILE_BYTES_LIMIT = 1_000_000
 const FLUSH_DELAY_MS = 2_000
 const METRICS = [
-  'systemChars', 'schemaChars', 'historyChars', 'humanChars', 'assistantChars',
+  'systemChars', 'codeSdkChars', 'schemaChars', 'historyChars', 'humanChars', 'assistantChars',
   'toolResultChars', 'runtimeContextChars', 'otherHistoryChars',
   'messageCount', 'toolCount', 'approximateInputTokens',
 ] as const

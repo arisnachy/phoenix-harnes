@@ -25,6 +25,7 @@ type Contribution = {
 
 const COMPONENT_KEYS = [
   ['telemetry.system', 'systemChars'],
+  ['telemetry.sdk', 'codeSdkChars'],
   ['telemetry.tools', 'schemaChars'],
   ['telemetry.human', 'humanChars'],
   ['telemetry.assistant', 'assistantChars'],
@@ -95,13 +96,19 @@ export function TokenTelemetrySection({
   const outputTokens = completed.reduce((sum, record) => sum + (record.outputTokens ?? 0), 0)
   const cacheReported = completed.filter(record => record.cacheReadTokens !== undefined)
   const cacheTokens = cacheReported.reduce((sum, record) => sum + (record.cacheReadTokens ?? 0), 0)
-  const prefixSamples = selected.filter(record => record.reusedSystemPrefixChars !== undefined)
+  // The first zero for each provider/model may be a cold-start baseline, not a failed cache.
+  const prefixSamples = selected.filter(record => record.reusedSystemPrefixChars !== undefined
+    && (record.reusedSystemPrefixChars > 0 || selected.some(earlier =>
+      earlier.at < record.at && earlier.provider === record.provider
+      && earlier.model === record.model)))
   const systemChars = prefixSamples.reduce((sum, record) => sum + record.systemChars, 0)
   const reusedPrefixChars = prefixSamples.reduce((sum, record) => sum + (record.reusedSystemPrefixChars ?? 0), 0)
   const prefixReusePercent = systemChars > 0 ? number(reusedPrefixChars / systemChars * 100) : undefined
   const reasoningTokens = completed.reduce((sum, record) => sum + (record.reasoningTokens ?? 0), 0)
   const contributions: Contribution[] = COMPONENT_KEYS.map(([key, property]) => ({
-    key, size: selected.reduce((sum, record) => sum + record[property], 0),
+    key, size: selected.reduce((sum, record) => sum + (key === 'telemetry.system'
+      ? Math.max(0, record.systemChars - (record.codeSdkChars ?? 0))
+      : (record[property] ?? 0)), 0),
   })).sort((a, b) => b.size - a.size)
   const totalChars = contributions.reduce((sum, item) => sum + item.size, 0)
   const models = useMemo(() => {

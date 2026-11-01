@@ -36,6 +36,7 @@ jobs:
       - name: Confirm token telemetry collection and interactive Settings behavior
         run: >-
           pnpm exec vitest run
+          packages/core/agent-loop/tests/token-audit.spec.ts
           packages/core/agent-loop/tests/cache-prefix.spec.ts
           packages/host/plugin-inventory/tests/telemetry.spec.ts
           packages/client/ui-settings-general/tests/token-telemetry.client.spec.tsx

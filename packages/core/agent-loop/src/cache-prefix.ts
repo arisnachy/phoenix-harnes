@@ -5,6 +5,11 @@
  */
 import { createHash } from 'node:crypto'
 
+export interface PrefixComparison {
+  readonly comparable: boolean
+  readonly reusedChars: number
+}
+
 interface SegmentSignature {
   readonly hash: string
   readonly end: number
@@ -23,6 +28,11 @@ export class SystemPrefixObserver {
    * @returns Number of leading characters known to match the prior request.
    */
   observe(provider: string, model: string, system: string): number {
+    return this.observeDetails(provider, model, system).reusedChars
+  }
+
+  /** Compare with a prior model route, explicitly marking cold starts. */
+  observeDetails(provider: string, model: string, system: string): PrefixComparison {
     const key = JSON.stringify([provider, model])
     const parts = system.split('\n\n')
     const signatures: SegmentSignature[] = []
@@ -47,6 +57,6 @@ export class SystemPrefixObserver {
       const oldest = this.previous.keys().next().value
       if (oldest !== undefined) this.previous.delete(oldest)
     }
-    return reused
+    return { comparable: prior !== undefined, reusedChars: reused }
   }
 }

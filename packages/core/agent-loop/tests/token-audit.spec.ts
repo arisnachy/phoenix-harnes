@@ -32,4 +32,15 @@ describe('privacy-safe token input audit', () => {
     expect(inventory.approximateInputTokens).toBeGreaterThan(0)
     expect(JSON.stringify(inventory)).not.toContain(secret)
   })
+  it('attributes generated Code SDK inside system separately without losing total input size', () => {
+    const prefix = 'Stable Phoenix policies'
+    const sdk = '## Writing code for run_code\n\nfull tools SDK'
+    const system = prefix + '\n\n' + sdk
+    const report = tokenInputInventory(system, [], [])
+    expect(report.systemChars).toBe(system.length)
+    expect(report.codeSdkChars).toBe(sdk.length)
+    expect(report.systemChars - report.codeSdkChars).toBe(prefix.length + 2)
+    expect(report.approximateInputTokens).toBe(Math.ceil(system.length / 4))
+    expect(tokenInputInventory(prefix, [], []).codeSdkChars).toBe(0)
+  })
 })
