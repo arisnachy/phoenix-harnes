@@ -43,7 +43,7 @@ describe('compact ESPN game center',()=>{
     vi.useFakeTimers()
     try{
       vi.stubGlobal('fetch',vi.fn((_url:unknown,init:RequestInit)=>new Promise<Response>((_resolve,reject)=>{
-        init.signal?.addEventListener('abort',()=>reject(new DOMException('Aborted','AbortError')),{ once:true })
+        init.signal?.addEventListener('abort',()=>{reject(new DOMException('Aborted','AbortError'))},{ once:true })
       })))
       render(<SportsGameCenter sport="basketball" league="nba" eventId="40183001" phase="post"/>)
       fireEvent.click(screen.getByRole('button',{ name:/Seguir partido/ }))
