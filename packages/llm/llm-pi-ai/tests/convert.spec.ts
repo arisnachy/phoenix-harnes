@@ -823,6 +823,37 @@ describe('mapStopReason / mapUsage', () => {
     })
   })
 
+  it.each([
+    '410 status code (no body)',
+    'HTTP 410 Gone: model has reached its end of life',
+  ])('does not retry NVIDIA Gone responses: %s', async (errorMessage) => {
+    const gone = assistant({
+      provider: 'nvidia',
+      model: 'meta/llama-3.3-70b-instruct',
+      stopReason: 'error',
+      errorMessage,
+    })
+    expect(mapStopReason(gone, undefined, undefined, false, true)).toMatchObject({
+      kind: 'error',
+      failure: {
+        code: 'MODEL_UNAVAILABLE',
+        message: expect.stringContaining('Public API Endpoints'),
+      },
+    })
+    const chunks = await collect(toStreamChunks(
+      feed({ type: 'error', reason: 'error', error: gone }),
+      undefined, undefined, false, true,
+    ))
+    expect(chunks.findLast(chunk => chunk.type === 'finish')).toMatchObject({
+      reason: { kind: 'error', failure: { code: 'MODEL_UNAVAILABLE' } },
+    })
+    expect(mapStopReason(assistant({
+      stopReason: 'error', errorMessage,
+    }), undefined, undefined, false, true)).toMatchObject({
+      kind: 'error', failure: { code: 'MODEL_UNAVAILABLE' },
+    })
+  })
+
   it('defaults the error message when pi-ai omits it', () => {
     expect(mapStopReason(assistant({ stopReason: 'error' })))
       .toEqual({ kind: 'error', failure: { message: 'pi-ai stream error', code: 'PI_AI_ERROR' } })
