@@ -12,7 +12,8 @@ permissions:
 
 concurrency:
   group: phoenix-main-guard-${{ github.ref }}
-  cancel-in-progress: false
+  # A newer PR SHA invalidates obsolete pre-merge checks; main pushes must finish.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   compiled-main:
