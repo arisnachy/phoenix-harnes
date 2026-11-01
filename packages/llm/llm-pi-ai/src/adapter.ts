@@ -658,6 +658,25 @@ export class PiAiAdapter extends LlmAdapter {
         throw new LlmError('pi-ai request aborted by caller', 'ABORTED', { cause: error })
       }
       const detail = errorChain(error)
+      // Some SDKs throw transport errors instead of emitting terminal error
+      // events. Treat a bare NVIDIA 410 the same way: one safe replacement
+      // attempt before any streamed content, never an unbounded retry.
+      if (!emittedChunk && !recoveredModel && /\\b410\\b/u.test(detail)) {
+        const needsImage = options.messages.some(message => contentHasImage(message.content))
+        const replacement = await this.config.onModelUnavailable?.(
+          options.provider, options.model, needsImage,
+        )
+        if (replacement !== undefined && replacement !== options.model) {
+          yield* this.streamWithSnapshot(
+            { ...options, model: replacement },
+            this.current(),
+            this.config.reasoningForModel?.(options.provider, replacement),
+            recoveredSchema,
+            true,
+          )
+          return
+        }
+      }
       // Codex can reject one broken *tool definition* before generating any
       // response, even after normalization (e.g. a deferred MCP catalog). That
       // is not a failed social campaign action. Quarantine only its exact
