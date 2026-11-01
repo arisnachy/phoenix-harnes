@@ -9,6 +9,7 @@
     "icacls",
     "musl-gcc",
     "powershell.exe",
+    "psql",
     "python3",
     "sandbox-exec",
     "tar",
