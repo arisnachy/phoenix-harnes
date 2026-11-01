@@ -22,6 +22,7 @@ import {
 import { searchOfficialMcpRegistry } from './mcp-registry.ts'
 import { readBusinessLibrarySnapshot } from './business-library.ts'
 import { OpenClawConnectorBridge } from './openclaw-connectors.ts'
+import { readOpenClawRuntimeSnapshot } from './openclaw-runtime.ts'
 import { TokenTelemetryCollector } from './telemetry.ts'
 import { readTelegramBotState, saveTelegramBot, removeTelegramBot, TelegramInbox } from './telegram-bot.ts'
 import { theOddsApiConnectorState, configureTheOddsApiConnector, disconnectTheOddsApiConnector } from './odds-api-connector.ts'
@@ -54,6 +55,7 @@ import type {
   McpRegistrySearchRequest,
   McpRegistrySearchSnapshot,
   OpenClawConnectorSnapshot,
+  OpenClawRuntimeSnapshot,
   PhoenixLocalEndpointReceipt,
   PhoenixLocalModeRequest,
   PhoenixLocalModelRequest,
@@ -262,6 +264,12 @@ export class PluginInventoryGateway extends TypertRemoteService {
    * @param request - sanitized registry search query and result bound.
    * @returns normalized public registry search snapshot.
    */
+  /** Optional external OpenClaw command readiness; never executes plugins or captures a screen. */
+  @Remote('openClawRuntimeState')
+  async openClawRuntimeState(): Promise<OpenClawRuntimeSnapshot> {
+    return readOpenClawRuntimeSnapshot()
+  }
+
   @Remote('searchMcpRegistry')
   async searchMcpRegistry(request: McpRegistrySearchRequest): Promise<McpRegistrySearchSnapshot> {
     return searchOfficialMcpRegistry(request)

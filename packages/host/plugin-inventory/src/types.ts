@@ -459,5 +459,17 @@ export interface OpenClawConnectorSnapshot {
   readonly connectors: readonly OpenClawConnectorEntry[]
 }
 
+
+/** CLI readiness is not proof of live runtime state or granted capabilities. */
+export type OpenClawProbeState = 'not-installed' | 'responded' | 'unavailable'
+export interface OpenClawRuntimeSnapshot {
+  readonly installed: boolean
+  readonly gateway: OpenClawProbeState
+  readonly browser: OpenClawProbeState
+  readonly plugins: OpenClawProbeState
+  readonly channels: OpenClawProbeState
+  readonly nativePluginsRoutedToPhoenix: false
+}
+
 /** Public X connector identity accepted by the Host remote boundary. */
 export type XMcpIdentity = 'user' | 'phoenix'
