@@ -1,5 +1,12 @@
 /** Copy for the dedicated Settings → Connectors surface. */
 export const connectorEn = {
+  ocDetected: 'External CLI detected · not routed to Kira',
+  ocMissing: 'OpenClaw not installed',
+  ocGateway: 'Gateway', ocBrowser: 'Browser', ocPlugins: 'Plugins', ocChannels: 'Channels',
+  ocResponded: 'CLI responded', ocUnavailable: 'Unavailable',
+  ocNote: 'Status only: a responding CLI does not authorize tools. OpenClaw Skills use the existing Skills registry; native plugins remain in their own runtime.',
+  ocRefresh: 'Refresh detection',
+  ocWaiting: 'Checking external runtime…',
   modelProviders: 'Model providers',
   modelProviderHint: 'Uses your existing model-provider authorization. Sign in once; Phoenix keeps this connection across restarts.',
   nav: 'Connectors',
@@ -102,6 +109,13 @@ export type ConnectorKey = keyof typeof connectorEn
 
 /** Spanish copy for the dedicated Settings → Connectors surface. */
 export const connectorEs: { [Key in ConnectorKey]: string } = {
+  ocDetected: 'CLI detectada · todavía no conectada con Kira',
+  ocMissing: 'OpenClaw no está instalado',
+  ocGateway: 'Gateway', ocBrowser: 'Navegador', ocPlugins: 'Plugins', ocChannels: 'Canales',
+  ocResponded: 'CLI respondió', ocUnavailable: 'No disponible',
+  ocNote: 'Solo diagnóstico: detectar una CLI no autoriza herramientas. Las Skills de OpenClaw usan el registro existente; los plugins nativos siguen en su runtime.',
+  ocRefresh: 'Actualizar diagnóstico',
+  ocWaiting: 'Comprobando runtime externo…',
   modelProviders: 'Proveedores de modelos',
   modelProviderHint: 'Usa la autorización de tu proveedor de modelos. Conecta una vez; Phoenix conserva la conexión al reiniciar.',
   nav: 'Conectores',
@@ -201,6 +215,13 @@ export const connectorEs: { [Key in ConnectorKey]: string } = {
 
 /** Simplified Chinese copy for the dedicated Settings → Connectors surface. */
 export const connectorZh: { [Key in ConnectorKey]: string } = {
+  ocDetected: '已检测外部 CLI · 尚未路由到 Kira',
+  ocMissing: '未安装 OpenClaw',
+  ocGateway: 'Gateway', ocBrowser: '浏览器', ocPlugins: '插件', ocChannels: '渠道',
+  ocResponded: 'CLI 已响应', ocUnavailable: '不可用',
+  ocNote: '仅作诊断：CLI 响应不代表已授权工具。OpenClaw Skills 使用现有 Skills 注册表，原生插件由其运行时承载。',
+  ocRefresh: '刷新检测',
+  ocWaiting: '正在检查外部运行时…',
   modelProviders: '模型服务商',
   modelProviderHint: '复用模型服务商的授权；连接一次，Phoenix 在重启后保留连接。',
   nav: '连接器', title: 'MCP 连接器',
