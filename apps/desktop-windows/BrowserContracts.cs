@@ -35,6 +35,13 @@ public static class BrowserNavigation
         return new Uri($"https://www.bing.com/search?q={query}");
     }
 
+    /// <summary>Only a successfully navigated HTTP(S) document can be inspected as real page evidence.</summary>
+    public static bool IsInspectablePage(Uri? address, bool navigationSucceeded)
+    {
+        return navigationSucceeded && address is not null && address.IsAbsoluteUri
+            && AllowedSchemes.Contains(address.Scheme);
+    }
+
     /// <summary>
     /// Canonicalize one origin that may receive an unattended credential.
     /// Remote origins require HTTPS; plaintext HTTP is accepted only for loopback.
