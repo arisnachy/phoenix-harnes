@@ -42,9 +42,9 @@ export const extendedEspnRoutes={
 } as const
 export type ExtendedEspnMode=keyof typeof extendedEspnRoutes
 export type ExtendedEspnInput={
-  mode:ExtendedEspnMode;sport:string;league:string;eventId?:string
-  competitionId?:string;teamId?:string;athleteId?:string
-  season?:number;seasonType?:number;week?:number;limit?:number
+  mode:ExtendedEspnMode;sport:string;league:string;eventId?:string|undefined
+  competitionId?:string|undefined;teamId?:string|undefined;athleteId?:string|undefined
+  season?:number|undefined;seasonType?:number|undefined;week?:number|undefined;limit?:number|undefined
 }
 const digits=(raw:unknown,key:string):string=>{
   const value=String(raw??'')
