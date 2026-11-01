@@ -14,7 +14,7 @@ The shared sports renderer presents individual games and intelligence panels in 
 
 Provider identities continue to exist in validated response data, network endpoints, and internal actions, but the conversational presentation uses neutral sports labels, time stamps, and status messages. This does not change a provider's data accuracy, licensing requirements, or provenance recorded in the data payload.
 
-The odds and ticket cards use tighter spacing without removing the warnings that distinguish research from an accepted wager.
+The odds and ticket cards use tighter spacing without removing the warnings that distinguish research from an accepted wager. The sports news view uses the same white theme surface, two-column image-first article tiles, a readable local timestamp, and provider-neutral link labels. English source headlines and summaries are translated to Spanish only through a browser's already-installed on-device translation model. If this model is unavailable, the original verified text remains visible and the user may explicitly ask Kira to translate it; the client does not make undocumented remote translation requests.
 
 ## Alternatives considered
 
