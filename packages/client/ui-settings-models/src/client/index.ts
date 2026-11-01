@@ -171,6 +171,7 @@ type PluginInventoryMcpRegistryRemote = {
       source?: { kind: 'registry'; name: string; version?: string } | { kind: 'curated'; connectorId: string }
     }
   }>>
+  openClawRuntimeState(): Promise<PluginInventoryRemoteResult<import('@phoenix-ai/dsh-api-remotes/client').OpenClawRuntimeSnapshot>>
   openClawConnectorState(): Promise<PluginInventoryRemoteResult<{
     connectors: Array<{
       id: 'google-workspace' | 'github'
@@ -300,6 +301,10 @@ function mcpRegistryClient(ctx: ClientContext): McpRegistryClient {
     openClawState: async () => unwrapPluginInventory(
       'openClawConnectorState',
       await remote().openClawConnectorState(),
+    ),
+    openClawRuntimeState: async () => unwrapPluginInventory(
+      'openClawRuntimeState',
+      await remote().openClawRuntimeState(),
     ),
   }
 }
