@@ -179,6 +179,12 @@ export function queueCodexLiveRepair(
 /** Read the existing updater's progress without starting npm or exposing credentials. */
 export type CodexLiveRepairPhase = 'idle' | 'checking' | 'updating' | 'waiting-upstream' | 'ready' | 'blocked' | 'disabled'
 
+/**
+ * Determine the current Codex CLI live-repair phase from bounded local markers.
+ * @param home - Phoenix home containing the managed Codex CLI state.
+ * @param now - Current epoch time in milliseconds, injectable for tests.
+ * @returns The validated repair phase, or idle when markers are absent or invalid.
+ */
 export function codexLiveRepairPhase(home: string, now = Date.now()): CodexLiveRepairPhase {
   const root = join(resolve(home), 'codex-cli')
   const requestPath = join(root, 'live-repair-request.json')
@@ -244,6 +250,7 @@ export function findManagedCodexRealtimeBin(dshHome: string): string | undefined
  * @param managed - Validated managed Node CLI, when present.
  * @param platform - Runtime platform, injectable for tests.
  * @param comSpec - Windows command interpreter.
+ * @param sqliteHome - Optional canonical SQLite home used by Codex.
  * @returns Command and argument vector for the Codex app-server.
  */
 export function codexRealtimeLaunchCommand(
@@ -288,7 +295,8 @@ export function codexRealtimeLaunchCommand(
  * Codex's migration/backfill lock could then exceed the 30s initialize RPC
  * budget while the standard Codex account connection was already healthy.
  * Separate voice threads/sessions remain isolated by their RPC identity.
- * @param parent Process environment, injectable for regression tests.
+ * @param parent - Process environment, injectable for regression tests.
+ * @returns A sanitized Codex app-server environment with a consistent account home.
  */
 export function codexRealtimeEnvironment(parent: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
   const env = { ...parent }
