@@ -6,13 +6,15 @@ import { homedir } from 'node:os'
 import { join,resolve } from 'node:path'
 import { createHash } from 'node:crypto'
 
+/** One sportsbook offer observed from a real provider at a recorded time. */
 export type ObservedOdds={
-  eventId:string;bookmaker:string;market:string;selection:string;point?:number|null
-  price:number;home:string;away:string;time:string;timeIso?:string
-  updatedAt:string;source?:string;sportKey?:string
+  eventId:string,bookmaker:string,market:string,selection:string,point?:number|null
+  price:number,home:string,away:string,time:string,timeIso?:string
+  updatedAt:string,source?:string,sportKey?:string
 }
+/** Dated offers kept for historical analysis, never represented as live prices. */
 export type OddsSnapshot={
-  sportKey:string;observedAt:string;historical:true;quotes:ObservedOdds[];source:string
+  sportKey:string,observedAt:string,historical:true,quotes:ObservedOdds[],source:string
 }
 const sportValid=(s:string)=>/^[a-z0-9_]{3,80}$/u.test(s)
 const dayValid=(d:string)=>/^\d{4}-\d{2}-\d{2}$/u.test(d)&&
@@ -20,14 +22,21 @@ const dayValid=(d:string)=>/^\d{4}-\d{2}-\d{2}$/u.test(d)&&
   new Date(d+'T00:00:00Z').toISOString().slice(0,10)===d
 const home=(env:NodeJS.ProcessEnv)=>
   resolve(env.PHOENIX_SPORTS_SOURCE_HOME?.trim()||join(homedir(),'.phoenix','sports-sources'))
-const useful=(q:ObservedOdds)=>q&&typeof q.eventId==='string'&&q.eventId.length>0&&
+const useful=(q:ObservedOdds|null|undefined):q is ObservedOdds=>
+  q!==null&&q!==undefined&&typeof q.eventId==='string'&&q.eventId.length>0&&
   typeof q.bookmaker==='string'&&q.bookmaker.length>0&&
   typeof q.market==='string'&&typeof q.selection==='string'&&
   Number.isFinite(q.price)&&q.price>1&&q.price<1000&&
   typeof q.home==='string'&&typeof q.away==='string'&&
   Number.isFinite(Date.parse(q.updatedAt))&&
   Number.isFinite(Date.parse(q.timeIso??q.time))
-/** Record only authentic provider-observed offers; never make them current on read. */
+/** Record authentic provider-observed offers without promoting them to live quotes.
+ * @param sportKey Validated sport identifier.
+ * @param quotes Offers received from the provider.
+ * @param env Runtime configuration for the archive directory and opt-out.
+ * @param now Millisecond timestamp for the observation.
+ * @returns Whether an archive file was written and the number of offers saved.
+ */
 export async function saveOddsSnapshot(
   sportKey:string,quotes:ObservedOdds[],env:NodeJS.ProcessEnv=process.env,now=Date.now(),
 ):Promise<{ saved:boolean;count:number }>{
@@ -49,8 +58,13 @@ export async function saveOddsSnapshot(
   }
   return{ saved:true,count:clean.length }
 }
-/** Search local snapshots by the UTC observation date, not event date.
- * All prices returned are historical regardless of how old the match is.
+/** Search snapshots by UTC observation date rather than event date.
+ * Every returned price remains historical regardless of the match date.
+ * @param sportKey Validated sport identifier.
+ * @param day UTC observation day in YYYY-MM-DD format.
+ * @param env Runtime configuration for the archive directory.
+ * @param limit Maximum number of quotes to return.
+ * @returns Historical observations, row count, coverage, and read errors.
  */
 export async function loadOddsSnapshots(
   sportKey:string,day:string,env:NodeJS.ProcessEnv=process.env,limit=150,
@@ -87,7 +101,8 @@ export async function loadOddsSnapshots(
         historical:true,source:'PHOENIX · observación histórica',quotes })
     }catch(error){errors.push((error instanceof Error?error.message:'Lectura fallida').slice(0,100))}
   }
+  const first=snapshots.at(0),last=snapshots.at(-1)
   return{ snapshots,rows:snapshots.reduce((n,s)=>n+s.quotes.length,0),
-    coverage:snapshots.length?snapshots.at(-1)!.observedAt+' — '+snapshots[0]!.observedAt:
+    coverage:first&&last?last.observedAt+' — '+first.observedAt:
       'No hay ofertas verificables guardadas para esa fecha',errors }
 }
