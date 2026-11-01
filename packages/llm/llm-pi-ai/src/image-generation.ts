@@ -192,6 +192,7 @@ export const imageGenerationToolDescription =
   + 'For game work, use it for production sprites, character sheets, tiles, backgrounds, portraits, textures, and other raster assets when appropriate; prefer transparent backgrounds for sprite/character assets when supported, then inspect the generated local path with read_image before shipping or importing it. '
   + 'Normally use backend=auto. Auto is independent of the active text-model provider: it tries the locally authenticated OpenAI Codex/ChatGPT built-in image generator first, then a configured local image endpoint with no hosted quota, then configured allocation-backed providers: Cloudflare Workers AI first and Hugging Face free credits second. '
   + 'Do not claim that only an external connector such as Higgsfield is available until image_generation itself has actually been attempted. Do not silently switch to a separately billed OpenAI API. '
+  + 'When the user explicitly opted in to use their original profile photograph, auto attempts genuine image-to-image via Codex, then a configured local loopback /images/edits endpoint. Never use text-only free providers to invent the user\'s face. '
   + 'If a real raster backend is unavailable, fail loudly instead of fabricating a vector/HTML substitute. '
   + 'For a webpage, landing page, dashboard, report, or similar visual deliverable, generate type-appropriate imagery when it materially improves the requested result and wire the generated attachment into the final artifact when the format permits it; keep data charts and tables on structured visualization surfaces rather than inventing them as image content. '
   + 'For ordinary real-world subjects, prefer natural, professional, coherent imagery and do not turn objects into living characters or mascots unless the user asks for that. '
@@ -317,6 +318,26 @@ const MAX_FREE_IMAGE_BYTES = 32 * 1024 * 1024
 
 /** Hosted zero-upfront-cost providers, in the order PHOENIX tries them. */
 export const freeImageProviderOrder = ['cloudflare', 'huggingface'] as const
+
+/**
+ * Private likeness references require a genuine image-editing endpoint.
+ * Text-to-image providers cannot preserve a photographed person's face.
+ * @param requested - The requested backend, or auto for Codex then local edits.
+ * @returns Backends capable of receiving the actual photograph as image input.
+ */
+export function profileImageBackendOrder(
+  requested: ImageGenerationBackend | undefined,
+): readonly ('codex' | 'local')[] {
+  if (requested === 'free') {
+    throw new Error(
+      'image_generation: los proveedores gratuitos configurados solo generan desde texto; '
+      + 'no admiten la fotografía real como referencia. Configura un editor local '
+      + '/images/edits o Codex con image_gen habilitado.',
+    )
+  }
+  if (requested === 'codex' || requested === 'local') return [requested]
+  return ['codex', 'local']
+}
 
 /**
  * Resolve the backend attempt order without coupling image generation to the text route.
@@ -482,25 +503,53 @@ async function generateWithLocalProvider(
   args: ImageGenerationArgs,
   prompt: string,
   signal: AbortSignal,
+  reference?: StoredImageAttachment,
 ): Promise<ImageGenerationValue> {
   const endpoint = localImageEndpoint()
   if (endpoint === undefined) {
     throw new Error(
-      'image_generation: local image backend is not configured; set PHOENIX_IMAGE_LOCAL_BASE_URL and optionally PHOENIX_IMAGE_LOCAL_MODEL',
+      'image_generation: local backend is not configured; set PHOENIX_IMAGE_LOCAL_BASE_URL '
+      + 'and optionally PHOENIX_IMAGE_LOCAL_MODEL. For profile photos the local editor '
+      + 'must implement /images/edits.',
     )
   }
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  // A private profile photo may only reach a loopback image editor. The ordinary
+  // text-to-image route can continue to use a configured remote backend.
+  if (reference !== undefined) {
+    const url = new URL(endpoint.baseURL)
+    if (url.protocol !== 'http:' || !['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)
+      || url.username || url.password || url.search || url.hash) {
+      throw new Error(
+        'image_generation: la foto privada solo puede enviarse a un editor local HTTP '
+        + '(localhost/127.0.0.1); no se enviará a un servidor externo.',
+      )
+    }
+  }
+  const headers: Record<string, string> = reference === undefined ? { 'Content-Type': 'application/json' } : {}
   if (endpoint.apiKey !== undefined) headers.Authorization = `Bearer ${endpoint.apiKey}`
-  const response = await fetch(`${endpoint.baseURL}/images/generations`, {
+  const body = reference === undefined
+    ? JSON.stringify({
+        model: endpoint.model,
+        prompt: highQualityPrompt(prompt),
+        n: 1,
+        response_format: 'b64_json',
+        ...(args.size === undefined || args.size === 'auto' ? {} : { size: args.size }),
+      })
+    : (() => {
+        const extension = codexProfileReferenceExtension(reference)
+        const form = new FormData()
+        form.append('model', endpoint.model)
+        form.append('prompt', highQualityPrompt(prompt))
+        form.append('n', '1')
+        form.append('response_format', 'b64_json')
+        if (args.size !== undefined && args.size !== 'auto') form.append('size', args.size)
+        form.append('image', new Blob([Buffer.from(reference.data)], { type: reference.ref.mediaType }), 'profile-original' + extension)
+        return form
+      })()
+  const response = await fetch(`${endpoint.baseURL}/images/${reference === undefined ? 'generations' : 'edits'}`, {
     method: 'POST',
     headers,
-    body: JSON.stringify({
-      model: endpoint.model,
-      prompt: highQualityPrompt(prompt),
-      n: 1,
-      response_format: 'b64_json',
-      ...(args.size === undefined || args.size === 'auto' ? {} : { size: args.size }),
-    }),
+    body,
     signal,
   })
   if (!response.ok) {
@@ -1270,17 +1319,25 @@ export function installCodexImageGeneration(ctx: Context): void {
       if (requestsProfileLikeness(requestText) && reference === undefined) {
         throw new Error('Para hacer una imagen tuya, activa la referencia de foto en Perfil y vuelve a pedirla.')
       }
-      const requestedBackend = reference === undefined ? (args.backend ?? 'auto') : 'codex'
+      const requestedBackend = args.backend ?? 'auto'
+      // Validate private reference and routing before invoking any paid or remote
+      // provider. The same verified normalized bytes are used for all attempts.
+      const backends = reference === undefined
+        ? imageGenerationBackendOrder(requestedBackend, exec.agent?.options.provider)
+        : profileImageBackendOrder(requestedBackend)
+      const photo = reference === undefined
+        ? undefined
+        : await servicesOf(ctx).attachments.readImage(reference, exec.signal)
+      if (photo !== undefined) codexProfileReferenceExtension(photo)
       const wantsKira = /\b(?:tipo|estilo|como)\s+(?:(?:de|del|al)\s+)?(?:equipo\s+)?kira\b/iu.test(
         requestText.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/gu, ''),
       ) || /\b(?:tipo|estilo)\s+(?:(?:de|del|al)\s+)?(?:equipo\s+)?kira\b/iu.test(prompt)
       const styledPrompt = wantsKira ? prompt + '\n' + KIRA_TEAM_STYLE : prompt
       const failures: string[] = []
-      for (const backend of imageGenerationBackendOrder(requestedBackend, exec.agent?.options.provider)) {
+      for (const backend of backends) {
         let image: ImageGenerationValue
         try {
-          if (backend === 'codex' && reference !== undefined) {
-            const photo = await servicesOf(ctx).attachments.readImage(reference, exec.signal)
+          if (backend === 'codex' && photo !== undefined) {
             const extension = codexProfileReferenceExtension(photo)
             const dir = await mkdtemp(join(tmpdir(), 'phoenix-user-photo-'))
             try {
@@ -1291,7 +1348,7 @@ export function installCodexImageGeneration(ctx: Context): void {
               await rm(dir, { recursive: true, force: true })
             }
           } else if (backend === 'codex') image = await generateWithCodexProvider(ctx, args, styledPrompt, exec.signal)
-          else if (backend === 'local') image = await generateWithLocalProvider(ctx, args, styledPrompt, exec.signal)
+          else if (backend === 'local') image = await generateWithLocalProvider(ctx, args, styledPrompt, exec.signal, photo)
           else image = await generateWithFreeProvider(ctx, args, styledPrompt, exec.signal)
         } catch (error) {
           exec.signal.throwIfAborted()
@@ -1306,7 +1363,9 @@ export function installCodexImageGeneration(ctx: Context): void {
         )
       }
       throw new Error(
-        `image_generation: no real raster backend succeeded. ${failures.join(' | ')}`,
+        'image_generation: no real raster backend succeeded'
+        + (photo === undefined ? '' : ' for the verified profile photograph')
+        + '. ' + failures.join(' | '),
       )
     },
   })
