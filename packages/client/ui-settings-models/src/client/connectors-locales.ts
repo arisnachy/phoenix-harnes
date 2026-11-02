@@ -1,5 +1,6 @@
 /** Copy for the dedicated Settings → Connectors surface. */
 export const connectorEn = {
+  storeGatewayBrowserOnly: "Browser authorization is available. This Gateway keeps its shared token private, so Kira tools require a separate supported credential link.",
   storeRuntimeReady: "OpenClaw runtime detected",
   storeMyPlugins: "Installed OpenClaw plugins",
   storePluginLoaded: "Recorded as loaded (check live Gateway)",
@@ -196,6 +197,7 @@ export type ConnectorKey = keyof typeof connectorEn
 
 /** Spanish copy for the dedicated Settings → Connectors surface. */
 export const connectorEs: { [Key in ConnectorKey]: string } = {
+  storeGatewayBrowserOnly: "Puedes autorizar la cuenta en el navegador. Este Gateway oculta su token compartido; para que Kira use herramientas falta una conexión de credenciales compatible.",
   storeRuntimeReady: "Runtime de OpenClaw detectado",
   storeMyPlugins: "Mis plugins de OpenClaw",
   storePluginLoaded: "Registrado como cargado (verificar Gateway)",
@@ -389,6 +391,7 @@ export const connectorEs: { [Key in ConnectorKey]: string } = {
 
 /** Simplified Chinese copy for the dedicated Settings → Connectors surface. */
 export const connectorZh: { [Key in ConnectorKey]: string } = {
+  storeGatewayBrowserOnly: "可以通过浏览器授权账号。该 Gateway 不会暴露共享令牌，Kira 工具仍需兼容的凭证连接。",
   storeRuntimeReady: "已检测到 OpenClaw 运行时",
   storeMyPlugins: "已安装的 OpenClaw 插件",
   storePluginLoaded: "记录为已加载（需核对实时 Gateway）",

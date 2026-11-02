@@ -122,7 +122,7 @@ export function ClawHubConnectorStore({ registry, t, connectedIds }: ClawHubConn
       value => {
         setGatewayCredential(value)
         setAuthorizationUrl(value.authorizationUrl ?? null)
-        setNotice(t('storeGatewayTokenSaved'))
+        setNotice(t(value.configured ? 'storeGatewayTokenSaved' : 'storeGatewayBrowserOnly'))
         setRoutingRefresh(n => n + 1)
       },
       () => { setAuthorizationUrl(null); setNotice(t('storeGatewayTokenError')) },
