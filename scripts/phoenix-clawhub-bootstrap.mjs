@@ -8,7 +8,7 @@
  * a staged version passes an actual launch check.
  */
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, writeFileSync, openSync, closeSync, unlinkSync, renameSync, rmSync, readdirSync, realpathSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync, openSync, closeSync, unlinkSync, renameSync, rmSync, statSync } from 'node:fs'
 import { dirname, join, resolve, relative, delimiter } from 'node:path'
 import { homedir } from 'node:os'
 
@@ -127,9 +127,16 @@ mkdirSync(toolchains, { recursive: true })
 let lock
 try { lock = openSync(lockFile, 'wx') }
 catch {
-  // Another PHOENIX install/update is already preparing ClawHub.
-  log('ClawHub preparation already in progress')
-  process.exit(0)
+  // Recover a stale crash lock, but do not disrupt a running installation.
+  let stale = false
+  try { stale = Date.now() - statSync(lockFile).mtimeMs > 6 * 60 * 1000 } catch {}
+  if (stale) {
+    try { unlinkSync(lockFile); lock = openSync(lockFile, 'wx') } catch {}
+  }
+  if (lock === undefined) {
+    log('ClawHub preparation is already in progress')
+    process.exit(0)
+  }
 }
 try {
   const local = cliEntry(manifest)

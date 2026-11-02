@@ -142,7 +142,7 @@ try {
     # Reuse the same ClawHub CLI bootstrap as the managed updater.
     $clawHubBootstrap = Join-Path $resolvedInstallDirectory 'scripts/phoenix-clawhub-bootstrap.mjs'
     if (Test-Path -LiteralPath $clawHubBootstrap) {
-      try { & node $clawHubBootstrap --ensure } catch { Write-Warning 'ClawHub CLI setup deferred.' }
+      try { & node $clawHubBootstrap --ensure --update } catch { Write-Warning 'ClawHub CLI setup deferred.' }
     }
     & node (Join-Path $resolvedInstallDirectory 'apps\cli\lib\bin.js') --version
     if ($LASTEXITCODE -ne 0) { throw 'PHOENIX launcher smoke test failed.' }
