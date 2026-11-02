@@ -137,18 +137,23 @@ export async function readOpenClawRouting(): Promise<OpenClawRoutingSnapshot> {
   try { list = await run(['plugins', 'list', '--json']) }
   catch { return { gatewayCredentialConfigured, tools: [], inspectionAvailable: false } }
   const plugins = entries(list).map(obj).filter(p => ID.test(str(p.id))
-    && p.enabled === true && p.status !== 'disabled' && p.status !== 'error').slice(0, 10)
+    && p.enabled !== false && (p.enabled === true || p.status === 'enabled' || p.status === 'loaded')
+    && p.status !== 'error').slice(0, 10)
   const tools: OpenClawRoutedTool[] = []
-  for (const plugin of plugins) {
-    const pluginId = str(plugin.id)
-    let report: unknown
-    try { report = await run(['plugins', 'inspect', pluginId, '--runtime', '--json']) }
-    catch { continue }
-    const runtime = normalizedRuntimeTools(report)
-    for (const name of runtime.tools) tools.push({
-      pluginId, name, enabled: true, imported: runtime.imported,
-      approved: runtime.imported && allowed.has(pluginId + ':' + name),
-    })
+  // Bound simultaneous CLI inspection, avoiding a long sequential Settings stall.
+  for (let index = 0; index < plugins.length; index += 3) {
+    const group = await Promise.all(plugins.slice(index, index + 3).map(async plugin => {
+      const pluginId = str(plugin.id)
+      let report: unknown
+      try { report = await run(['plugins', 'inspect', pluginId, '--runtime', '--json']) }
+      catch { return [] as OpenClawRoutedTool[] }
+      const runtime = normalizedRuntimeTools(report)
+      return runtime.tools.map(name => ({
+        pluginId, name, enabled: true, imported: runtime.imported,
+        approved: runtime.imported && allowed.has(pluginId + ':' + name),
+      }))
+    }))
+    for (const batch of group) tools.push(...batch)
   }
   return { gatewayCredentialConfigured, tools, inspectionAvailable: true }
 }
