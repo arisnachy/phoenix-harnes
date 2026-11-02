@@ -225,10 +225,8 @@ describe('Eclipse model settings', () => {
     const coordinator = screen.getByLabelText(en.eclipseRole_coordinator)
     fireEvent.change(coordinator, { target: { value: JSON.stringify(['openai-codex', 'gpt-6.1-terra']) } })
     expect(mode).toHaveProperty('value', 'automatic')
-    fireEvent.change(screen.getByLabelText(en.eclipseReasoning).id === 'eclipse-effort-coordinator'
-      ? screen.getByLabelText(en.eclipseReasoning)
-      : document.querySelector('#eclipse-effort-coordinator') as HTMLSelectElement,
-    { target: { value: 'low' } })
+    fireEvent.change(document.querySelector('#eclipse-effort-coordinator') as HTMLSelectElement,
+      { target: { value: 'low' } })
     expect(mode).toHaveProperty('value', 'automatic')
     fireEvent.click(screen.getByRole('button', { name: en.eclipseSave }))
     await waitFor(() => expect(mutate).toHaveBeenCalledOnce())
