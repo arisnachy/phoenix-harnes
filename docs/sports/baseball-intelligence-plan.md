@@ -1,59 +1,160 @@
-# PHOENIX Baseball Intelligence — plan maestro por disciplina
+# PHOENIX · MLB Research Intelligence — plan maestro basado en investigación
 
-**Fase actual:** diseño técnico y primera base matemática exploratoria. **No es un predictor calibrado ni un ticket ganador.**
+**Estado:** especificación de implementación. **Disciplina inaugural:** béisbol MLB. **No es un predictor desplegado ni promete apuestas ganadoras.** La ampliación posterior a KBO, NPB, LIDOM, LMB y otros deportes reutilizará el contrato de investigaciones, sin trasladar los criterios MLB a esas ligas.
 
-## Objetivo
+## 0. Decisión de diseño: la investigación manda, Kira razona
 
-Kira coordina una investigación reproducible como la de un analista de béisbol: cartelera global → filtros por equipos → evaluación individual de todo el roster → confrontaciones vs abridor y cada relevista → simulación turno por turno → probabilidades por mercado → cruce con cuotas de la casa → selección conjunta de tickets de 5–6 patas.
+No construir una fórmula universal, un ranking fijo por victoria/margen ni un motor matemático que tome decisiones antes de mirar el juego. **Primero se recopila y contrasta evidencia del partido real; después Kira, como analista, elabora la hipótesis, identifica los mercados pertinentes y explica su decisión con fuentes y datos fechados.** La investigación no consiste en rellenar campos decorativos después de elegir un favorito.
 
-El sistema debe admitir MLB, KBO, NPB, LIDOM, LMB y otras ligas **según cobertura verificada de cada fuente**, con reglas, tamaños de muestra y modelos calibrados por liga. La arquitectura será mundial, pero la validación comienza por MLB.
+La simulación solicitada será en principio una **exploración razonada de escenarios** (abridor dominante, salida temprana, bullpen cansado, lineup incompleto, viento favorable) sustentada en evidencia verificable; jamás se fabricará una probabilidad numérica por el hecho de que la LLM pueda escribirla. La estimación cuantitativa y el backtesting podrán añadirse *después* como instrumentos de contraste auditables, subordinados a los datos reales. Un conteo de expertos, una ventaja narrativa o un porcentaje de resultados pasados no demuestran por sí mismos probabilidad predictiva ni valor esperado positivo.
 
-## Expediente por partido — 14 investigaciones sucesivas
+**Flujo obligatorio:** calendario MLB → cribado de todos los encuentros → expedientes de candidatos → enfrentamiento roster×pitchers → escenarios de juego y mercados → cruce de cuota específica de la misma casa → deliberación independiente → propuesta de patas → seguimiento y aprendizaje.
 
-1. **Cartelera:** descubrir todos los encuentros futuros, ligas, temporadas, sedes, fechas, estatus, lanzadores anunciados y reglas específicas de cada competición. Nunca transformar partidos comenzados en candidatos prepartido.
-2. **Primer filtro de equipos:** récord, forma últimos 5/10/20, carreras a favor/en contra, calidad del rival, rachas, series, descanso, días consecutivos, localía y rendimiento fuera de casa. Filtrar antes de investigar en profundidad.
-3. **Estadios:** dimensiones de jardines, altitud, orientación, superficie, techo, factores por temporada para HR/hits/carreras, historial de local/visitante en ese parque, fiabilidad y ajuste por adversarios.
-4. **Clima:** viento en dirección relativa al campo, temperatura, humedad, lluvia, cambios previstos durante el juego, riesgo de interrupción y techo abierto/cerrado. No usar el viento exterior como efecto directo si el techo está cerrado.
-5. **Lanzador abridor:** oficial/probable, mano, ERA, FIP/xFIP, WHIP, K%, BB%, K/9, HR/9, roletazos, repertorio y velocidad, últimas cinco aperturas, lanzamientos, descanso, splits contra zurdos/derechos, fortalezas frente a tipo de bateador y contexto del parque.
-6. **Bullpen:** disponibles y lesionados, relevistas principales/cerradores, K%, BB%, ERA/FIP, splits de mano, lanzamientos y apariciones últimos 1–3 días, fatiga, funciones de los relevistas y escenarios de cambios durante las entradas.
-7. **Roster y titulares:** vincular cada jugador con ID actual de equipo, cambios de plantilla y estado de alineación confirmado/probable. Para los 9 bateadores, suplentes y posibles emergentes: PA, AVG, OBP, SLG, OPS, wOBA/wRC+ o equivalentes disponibles, ISO, BB%, K%, BABIP, contacto, hard-hit/barrel, robos, últimos 7/15/30 juegos, splits por mano, estadio, localía y adversario.
-8. **Matriz completa bateador × pitchers:** comparar **cada bateador vs abridor rival** y **cada bateador vs cada relevista que podría enfrentar**. Incluir BvP, historial de pitcheos, repertorio, zonas, velocidad, tasas de swing/whiff/contacto, afinidad vs lanzamiento cuando fuentes lo permitan. Controlar muestras pequeñas con regularización/shrinkage y mostrar intervalos; 5 turnos históricos no justifican un pronóstico fuerte. Construir una matriz por tramo del juego porque cambian pitchers y orden al bate.
-9. **Defensa y bases:** receptor, defensa por posiciones, outs de campo, errores, framing si está disponible, dobles matanzas, robos, velocidad, suplencias, estrategia y manager. No extrapolar estadísticas MLB avanzadas inexistentes en otras ligas.
-10. **Noticias, lesiones y expertos:** verificación oficial de lesiones, estrellas confirmadas, alineaciones, cambios de pitcher, viajes; referencias públicas ESPN/Covers/VegasInsider/OddsPortal y otras con fecha y fuente. Separar predicción propia, opinión de experto y precio implícito de mercado; un enlace de catálogo NO demuestra investigación real.
-11. **Simulación integral inning-by-inning:** derivar probabilidades de resultado de cada aparición al plato (ponche, BB/HBP, out en juego, sencillo, doble, triple, HR y otros según fuente), condicionadas por bateador, pitcher, estadio, clima y defensa. Simular bases, outs, carreras, orden al bate, avance/robos/dobles jugadas, cambios del abridor por fatiga/pitch count, bullpen, emergentes, entradas 1–9 y extra innings conforme a reglas de la liga; no jugar la baja de la novena si el local ya va delante. Usar Monte Carlo con semilla reproducible, incertidumbre de parámetros y control del error de muestreo. **Los resultados de un mismo recorrido simulado deben alimentar simultáneamente total, diferencia, F3/F5, ponches de pitchers, hits/HR/bases totales de bateadores y demás props**, para preservar correlación.
-12. **Predicción y validación:** producir distribuciones de carreras y diferencia para F3/F5/FT, probabilidad de ganador/empate según regla, totales, run line ±1.5/2.5, K de pitcher y props verificables. Walk-forward por liga, temporada y mercado; Brier, log-loss, ECE, calibración por bandas, intervalos, MAE de carreras, baseline y comparación con cuotas históricas observadas en su momento. No usar datos de después del primer lanzamiento.
-13. **Cuotas y liquidación exacta:** emparejar fuente, casa, evento, selección, jugador, línea, período, cuotas, timestamp y reglas. Comparar precio y modelo mediante P(ganar), P(push), P(perder) y EV. Ej.: con media de **9 carreras** y línea **8**, el over **no está aprobado automáticamente**: hay probabilidad de 8 carreras (push, sujeto a casa), 9+ (ganar) y 0–7 (perder). No atribuir vigencia a históricos ni usar líneas de cuarto sin liquidación parcial implementada.
-14. **Auditoría y aprendizaje:** guardar inputs prepartido, versión del modelo, resultados simulados, probabilidades, cotizaciones, razones de selección y disponibilidad; después evaluar la liquidación oficial. Identificar errores del roster, abridor, bullpen, estadio, clima, incertidumbre y pricing. Solo promover nuevos modelos cuando mejoren fuera de muestra.
+## 1. Fuentes y trazabilidad (antes de elegir un partido)
 
-## Contrato de resultados para especialistas de todos los deportes
+Fuentes oficiales primarias: **MLB Stats API** para schedule, gamePk, probablePitcher, team roster, boxscore, live feed, estadísticas de temporada y partido, gamelogs/últimas salidas, standings, sede y estatus; **MLB News / equipos** para anuncios oficiales, partes médicos, lineups y cambios; **ESPN Site/Core/Summary** como fuente secundaria de contexto, rankings, noticias y pronósticos publicados. Los endpoints se deben **probar de verdad** por recurso; un 200 sin los campos requeridos significa cobertura insuficiente, no confirmación. Para clima, proveedor autorizado de meteorología con coordenadas verificadas del estadio y condiciones por hora; registrar si techo está cerrado/abierto/desconocido. Para métricas avanzadas, incorporar solo fuentes con acceso permitido y metadatos consistentes; no inventar xFIP, wRC+, xwOBA, framing, etc. si faltan. Para expertos: ESPN PickCenter, Covers, VegasInsider y artículos públicos accesibles de autores identificables; mantener fuentes/citas separadas de pronóstico propio, nunca atribuir predicción externa a PHOENIX.
 
-Cada selección debe producir **OpportunityV1**:
-- Identificación: `sport, league, eventId, scheduledAt, teamIds, playerIds?, sourceIds`.
-- Evidencia: `modelVersion, ruleSetVersion, observations, dataCoverage, sampleSize, confidenceInterval, calibrated, validationPeriod`.
-- Mercado: `bookmaker, quoteId, marketFamily, period, line, selection, decimalOdds, updatedAt, observedAt`.
-- Predicción: `pWin, pPush, pLoss, expectedNetReturnPerUnit, uncertainty, risks, simulationId`.
-- Correlación: `sharedRiskKeys` (mismo partido/equipo/pitcher/serie/clima), `eligibleForTicket`, `ineligibleReasons`.
+Cuotas: ESPN cuando las publica con casa, selección, línea y timestamp, The Odds API v4 / TheOddsAPI con autorización del usuario, OddsHarvester cuando esté instalado y accesible según permisos. Las bases históricas sirven para analizar, **no** para cotizar apuestas actuales. No utilizar reglas de un sportsbook como si fueran de otro; verificar vigencia y términos de la casa exacta.
 
-Los especialistas de fútbol, NBA, NFL, NHL y tenis reutilizarán **este contrato**, no la fórmula de carreras del béisbol. El código que selecciona tickets no debe volver a usar una heurística independiente de la probabilidad especializada.
+**Registro de evidencia por campo:** \`sourceName, sourceUrl/endpoint, retrievedAt, effectiveAt, league, season, eventId, teamId, playerId?, metric, value, units, period, sampleSize, verifiedState, limitations\`. Estados: \`verified | provisional | missing | stale | contradictory\`. Guardar fallo de red, 404, respuesta vacía, IDs incompatibles y tiempo de observación. Sin evidencia = explícitamente «pendiente»; no se inventa ni se reemplaza con nombres de otra temporada.
 
-## Optimizador de combinadas de 5 y 6 patas
+## 2. Investigación humana obligatoria en 16 etapas MLB
 
-1. Fusionar oportunidades elegibles de todas las disciplinas con cuotas verificadas y reglas conocidas; distinguir cada casa.
-2. Estimar **probabilidad conjunta** a partir de escenarios/correlaciones, no multiplicar ciegamente P individuales. Los mercados del mismo juego requieren cuota especial aceptada por el operador; no crear SGP sintética.
-3. Ofrecer **frontera de Pareto** entre probabilidad de acertar el ticket, EV, riesgo y posible ganancia; comparar 5 contra 6 patas en vez de suponer que más patas son mejores. Más retorno bruto no equivale a mayor probabilidad ni mayor EV.
-4. Exigir la **misma casa** que realmente cotiza el ticket y comprobar cada mercado, momento, reglas, push/void y restricciones comerciales.
-5. No forzar 5/6 piernas cuando faltan modelos validados o precios vigentes: comunicar borrador incompleto y motivos. No colocar apuestas ni afirmar ganancias garantizadas.
+### Etapa 1 — Cartelera real, selección de jornada
+- Consultar todos los juegos MLB por fecha y huso horario del estadio, con \`gamePk\` auténtico; hora local de República Dominicana para mostrar.
+- Anotar local, visitante, estadio, doble cartelera, estado pregame, probable pitcher por lado, partido de serie, estatus de suspensión.
+- Separar equipos/series en temporada regular, spring training, playoffs; nunca compartir parámetros o estadísticas indiferenciadas.
+- No pasar un juego iniciado/terminado como prepartido. No confundir gamePk de MLB con eventId de ESPN.
 
-## Entregas incrementales
+### Etapa 2 — Filtro rápido de ambos equipos
+- Temporada: ganados/perdidos, rachas, posición, carreras anotadas/permitidas, diferencial.
+- Últimos 5/10/20 juegos, dificultad de rivales y desgaste de calendario.
+- Desempeño **local y visitante por separado**, incluyendo temporada, rachas y viajes.
+- Últimos enfrentamientos entre ambos; indicar temporadas, alineaciones distintas y muestra pequeña.
+- Debe devolver: «investigar a fondo», «insuficiente» o «descartar por datos/mercados» con motivo; **no** declarar apuesta.
 
-- **M0 — Primera base disponible en esta rama:** `src/baseball-market-probability.ts` calcula un baseline Poisson para total, total de equipo y run line F3/F5/FT, con pushes de línea entera, EV neto y prohibición expresa de promoverse a ticket (`calibrated=false`, `eligibleForTicket=false`). Pruebas unitarias en `tests/baseball-market-probability.test.mjs`.
-- **M1 — Datos/identidad:** calendario global por liga, MLB como primer adaptador completo; roster, ID de cada atleta, pitcher, bullpen, parque, clima y fuentes con sello temporal. Prueba de expediente de un partido MLB con faltantes explícitos.
-- **M2 — Matchups individuales:** matriz 9 bateadores × abridor + 9 × relevistas; splits, repertorio, recencia, estabilidad estadística, lesiones y lineups; pruebas de IDs, temporada y muestra.
-- **M3 — Simulación:** base/out/inning state machine, PAs, cambios de pitcher, lineups y extras/reglas de cada liga, escenarios correlacionados, seeding y error Monte Carlo; fixtures de juegos reales.
-- **M4 — Calibración y mercado:** validación walk-forward y comparación mercado vs predicción para líneas exactas, pushes, F3/F5/FT, run lines, ponches/hits y props disponibles; promoción exclusivamente si supera métricas.
-- **M5 — Combinadas globales:** `OpportunityV1` de béisbol y otros especialistas, optimización multicriterio, dependencias, 5/6 patas reales, estado incompleto cuando aplique.
-- **M6 — UI compacta en español:** cartelera → shortlist → expediente por partido → comparación bateador/pitcher/bullpen → simulación → mercados → ticket, con fuente, fecha, incertidumbre y explicaciones. Recalcular si cambian las alineaciones o el pitcher.
+### Etapa 3 — Estadio y condiciones ambientales
+- Sede exacta, superficie, dimensiones/asimetrías de jardines, altitud, roof, factores de parque para carreras/hits/HR, regímenes por zurdo/derecho si está disponible.
+- Rendimiento del local y visitante **en ese parque**, ajustado descriptivamente por rivales y pequeñas muestras; tendencias de home runs allí.
+- Temperatura, humedad, probabilidad de lluvia, presión, viento **velocidad + dirección respecto a los jardines/home plate** a la hora del partido y durante las entradas. Clima exterior no implica viento de juego con techo cerrado.
+- Retraso/cancelación y efecto sobre límites de innings o abridores, según reglamento.
 
-### Guardarraíles de ingeniería
+### Etapa 4 — Abridor de cada equipo: identidad y forma
+- Confirmado vs probable vs desconocido; mano, días de descanso, límites de lanzamientos, lesión reciente, rol de opener/bullpen game.
+- W-L (contexto, no criterio central), ERA, WHIP, IP, starts, K, K/9, K%, BB%, BB/9, HR/9, FIP, xFIP, GB%, repertorio, velocidad, tendencias si disponibles.
+- Últimas **5 aperturas individuales** con rival, fecha, innings, lanzamientos, K, BB, hits, carreras, home runs, eficiencia y cambios de velocidad.
+- Splits local/visitante, vs bateadores derechos/izquierdos, vs rival actual (BvP con tamaño de muestra), vs este estadio.
+- ¿Cuánto tiempo se espera que permanezca? Si no está confirmado, marcar los mercados dependientes como sensibles a cambios.
 
-Sin manipular tasas para que salgan recomendaciones, sin cuotas inventadas, sin acceder a datos no autorizados, sin pronósticos de jugadores sin ID de roster confirmado, sin mezclar periodos y sin promesa de ticket ganador. La primera pieza **no utiliza datos reales ni está integrada al flujo productivo**: es exclusivamente el cálculo base para integrar cuando el simulador especializado quede validado.
+### Etapa 5 — Bullpen por **todos los relevistas pertinentes**
+- Roster activo, lesionados, 40-man vs disponibles hoy, cerrador, setup, relevistas largos, zurdos/derechos, opener y sustitutos.
+- Por pitcher: ERA, WHIP, FIP, K%, BB%, HR/9, entradas, últimos 7/14/30 días, uso y número de pitches en últimos 1–3 días, back-to-back, disponibilidad.
+- Bullpen total y **proyectado para este encuentro**; no tratar todo jugador en roster como relevista dispuesto a lanzar.
+- Analizar bullpen del equipo A contra alineación B **bateador por bateador**; y viceversa. Registrar quién tiene mayor probabilidad *cualitativa* de ser utilizado según contexto, sin fingir estrategia confirmada.
+
+### Etapa 6 — Roster completo y alineación de cada club
+- Verificar roster con IDs MLB actuales y temporada correcta; distinguir IL, bajas, suspensiones, call-ups, trades, catcher, suplentes, pinch-hitters, pinch-runners, cambios del día.
+- Identificar **nueve titulares y orden al bate** solo cuando MLB lo haya publicado; antes, manejar alineación probable etiquetada.
+- Por bateador: PA, AB, H, 1B/2B/3B/HR, AVG, OBP, SLG, OPS, RBI, BB, SO/K%, BB%, ISO, wOBA/wRC+, hard-hit/barrels, velocidad/sprint, robos, desempeño reciente 5/10/15/30, splits vs lanzadores zurdos/derechos, rendimiento como local/visitante y en estadio.
+- Cada métrica requiere fuente, ventana temporal, recencia y muestra. No confundir porcentaje de juegos con probabilidad de una aparición al plato.
+
+### Etapa 7 — **Matriz bateador × abridor** (9×1 por club)
+- Para cada uno de los nueve bateadores de un equipo, confrontar abridor contrario: historial directo PA/AB/H/HR/K/BB, dirección del swing, platoon advantage, repertorio de pitches, zona, frecuencia de ponches, perfil de contacto, vulnerabilidad a velocidad/breaking/offspeed.
+- Columna «evidencia real», «muestra», «ventaja/desventaja razonada», «qué falta», y «riesgo de muestra pequeña».
+- Analizar al receptor, suplentes y emergentes cuando sean relevantes. Ninguna coincidencia aproximada por nombre sustituye playerId.
+
+### Etapa 8 — **Matriz bateador × bullpen rival** (9×N)
+- Para cada bateador y **cada relevista relevante** del otro equipo: platoon, split, tasas K/BB/HR, contacto, fatiga, repertorio/velocity y enfrentamiento directo si existe.
+- Representar por fases del juego (entrada 4–6, 7–8 y 9+); el relevista de referencia depende de escenario, no se supone titular.
+- Resaltar diferencias: lineup que castiga al abridor pero pierde ventaja ante relevistas frescos; starter dominante seguido de bullpen agotado; bullpen rival fuerte contra zurdos.
+- Guardar visualización matriz compacta expandible en la tarjeta del partido, no 50 tarjetas intrusivas.
+
+### Etapa 9 — Defensa, catcher, corrido de bases y managers
+- Eficiencia defensiva, errores, rango, receptor, framing cuando exista, robos, outs en bases, velocidad y estrategia, posiciones debilitadas.
+- Analizar sustituciones y cambios de lineup en función del pitcher; no suponer decisiones particulares sin evidencia de patrones.
+
+### Etapa 10 — Noticias, estrellas y confirmación médica
+- Consultar informes de equipos, IL, noticias y medios deportivos recientes; comprobar estrellas activas y **si jugarán hoy**.
+- Para estrellas clave: cómo vienen rindiendo (últimos juegos, bateo vs mano rival), señales de regreso o restricción, y consecuencias de su ausencia.
+- Noticias de viajes, descanso, cambios de entrenador, cambios de pitcher, roof/clima, suspensiones.
+- Verificación cruzada por ID y tiempo. Diferenciar rumor, probable, confirmado y «no reportado»; ausencia en feed no equivale a salud confirmada.
+
+### Etapa 11 — Expertos y pronósticos ajenos
+- Investigar ESPN/PickCenter, Covers, VegasInsider y analistas públicos cuando haya acceso efectivo; obtener autor, fecha y argumentos y el mercado/line exactos.
+- Comparar pronósticos a favor/en contra y registrar **desacuerdo** con evidencia propia; explicar sesgo de consenso y conflictos.
+- Nunca transformar consenso de expertos ni cuotas implícitas en probabilidad propia; no copiar argumentos sin fuente.
+
+### Etapa 12 — **Simulación razonada del partido** antes de la apuesta
+- Crear el relato analítico por fases: entradas 1–3 (tope de lineup vs starter), 4–5 (segunda/tercera vuelta y fatiga), 6–7 (salida de starters, matchups con middle relievers), 8–9 (setup/closer, pinch-hitters y estrategia).
+- Analizar escenarios explícitos: starter A domina, starter sale antes, bullpen fatigado, estrellas ausentes, viento hacia jardines, cero viento/techo cerrado, partido cerrado vs amplio.
+- En cada escenario anotar impacto **sustentado y explicado** sobre carreras, ponches, hits, HR y posibilidad de remontada. Construir la lectura de *primeras 3, primeras 5 y juego completo* a partir del mismo expediente.
+- La **primera implementación será simulación de escenarios en lenguaje claro**, no un motor Poisson/Monte Carlo fijado que decida quién gana. Si hay simulación numérica futura, tendrá entrada versionada, supuestos verificables, evaluación cronológica y límites de interpretación antes de usarse.
+- No fingir narración de jugadas reales futuras ni porcentajes precisos de ocurrencia.
+
+### Etapa 13 — Buscar mercados en vez de asumir moneyline
+- Investigar cuotas **reales** de la misma casa para ML (si reglamento incluye extras), run line ±1.5/±2.5, totales del juego, team totals, F3/F5, props de pitcher K/outs/IP, bateador hits/HR/bases totales, cuando estén publicados.
+- Matriz «hipótesis de investigación → mercado candidato → dato a favor → dato en contra → cuota → condición de liquidación → estado».
+- Ejemplo: casa ofrece **total 8 carreras**; hipótesis central apunta a ~9, **no declarar automáticamente Over 8**. Examinar escenarios 7 o menos (pierde), exactamente 8 (push si así lo establece el reglamento), 9+ (gana), precio y muestras. Línea 8.5 no tiene push de ocho. Si house ofrece 8.0 asiático/alternativo, comprobar las reglas.
+- Revisar innings jugados, lluvia/suspensión, cambio de pitcher listado, F5 empate/push, overtime, completitud y límites de cobro según casa. Si no está la cuota precisa, producir hipótesis **sin cotizar**.
+
+### Etapa 14 — Conclusión de Kira respaldada y contradictoria
+- Dictamen por partido: «oportunidad para revisar», «sin ventaja suficientemente documentada» o «descartar».
+- Para cada mercado seleccionado: **evidencias a favor y en contra**, actores críticos, escenarios que invalidarían la tesis, datos faltantes, hora última comprobación y motivo de elegir ese mercado *en lugar de otros*.
+- La inferencia final la hace el **modelo de lenguaje con una rúbrica explícita y verificable**, no una fórmula de ranking fija 0.55/0.40/0.05. Sin porcentajes inventados; probabilidades cuantitativas solo si proceden de un método evaluado y calibrado. Kira debe poder abstenerse.
+
+### Etapa 15 — Ticket interdeportes de 5–6 patas (después de MLB)
+- Entregar cada candidato MLB como \`ResearchedOpportunityV1\` con evidencia, fuente, mercado, casa y precio; hacer lo mismo más adelante con soccer/NBA/NFL/NHL/tenis, **cada deporte investigado con sus propios pasos**.
+- El coordinador reúne solo selecciones vigentes de la **misma casa que pueda cotizar todas las patas**, verifica reglas y mercado exacto, evita dos selecciones incompatibles y correlaciones obvias (mismo evento, pitcher, lineup, clima, series y equipos). No simular una same-game parlay que la casa no acepte.
+- Comparar conjuntos de 5 y 6 por plausibilidad de éxito, retorno comercial, incertidumbre y dependencia; **mayor ganancia posible y mayor probabilidad no se pueden maximizar simultáneamente en general**.
+- No inventar «ticket de alta probabilidad» por acumular opiniones. Sin 5/6 fundamentos y cuotas de calidad, entregar borrador con faltantes; no maquillar la cobertura.
+
+### Etapa 16 — Auditoría retrospectiva y aprendizaje
+- Guardar expediente original sellado ANTES del juego, tesis y predicciones por mercado, fuente/edad de líneas, bajas confirmadas entonces y decisión.
+- Al terminar, importar resultado oficial y settlement según casa, cotejar qué **hechos** cambiaron: abridor reemplazado, velocidad, lineup, bullpen, viento, lesión, opinión experta, línea móvil, falta de datos.
+- Evaluar acierto por tipo de mercado, cobertura de fuentes, sesgos y rentabilidad en un historial independiente, descontando pushes/void y reglas.
+- Usar hallazgos para mejorar el **procedimiento de investigación** y la rúbrica; no reescribir retrospectivamente datos para hacer que el modelo «parezca acertar».
+
+## 3. Producto: expediente MLB compacto dentro del chat de PHOENIX
+
+**Vista inicial:** cartelera y filtro. **Expediente por partido:** (1) 2 equipos y contexto; (2) abridores comparados y últimas salidas; (3) lineup de 9+ y estrellas; (4) matriz roster × abridor; (5) matriz roster × bullpen; (6) estadio y viento; (7) lesiones y noticias; (8) opiniones ESPN/Covers y discrepancias; (9) escenarios F3/F5/FT; (10) tabla exacta mercados/casas; (11) conclusión, riesgos y decisión. Cada sección puede expandirse; mostrar estado de dato faltante, frescura y fuente. Tema claro y componentes deportivos existentes; no abrir múltiples pantallas ni emitir JSON en chat.
+
+**Regla de actualización:** ante lineup confirmado, cambio de probable starter, reporte de IL, techo o clima, o cambio sustantivo de cuota, invalidar dependencias correspondientes, **rehacer solo la parte afectada** y guardar versión del expediente. Persistencia reutilizable por \`league|season|gamePk|observedAt\` con TTL por tipo de evidencia (roster, noticias, lineup y cotizaciones distintos).
+
+## 4. Contrato compartido para futuros especialistas
+
+\`ResearchedOpportunityV1\`:
+- \`sport, league, eventId, kickoff, teamIds, playerIds, bookmaker, marketFamily, period, selection, line, decimalOdds, quoteUpdatedAt, observedAt, sportsbookRules\`.
+- \`researchSummary, favorableEvidence[], contradictoryEvidence[], sourceReferences[], missingEvidence[], scenarioAnalysis[], injuryStatus, lineupStatus, weatherStatus, researchUpdatedAt\`.
+- \`qualityGates: { fixtureVerified, marketVerified, priceFresh, playerIdsVerified, rulesVerified, enoughPrimaryEvidence, contradictionsReviewed }\`.
+- \`recommendation: investigate | candidate | abstain\`; \`reasoning\`, \`whatWouldChangeMyMind[]\`, \`correlationKeys[]\`.
+- \`probability?: number\` **solo con fuente/método validado y explícito**; no campo obligatorio, no autocompletado por LLM. \`eligibleForTicket\` requiere todas las gates fundamentales, no solo una descripción persuasiva.
+
+## 5. Implementación por entregas observables
+
+**M0 — Plan MLB research-first:** retirar el baseline Poisson como motor de decisión; conservar solo el contrato y pruebas de investigación. (Este PR).
+
+**M1 — MLB Schedule + Evidencia:** ruta \`sports_chat_mlb_daily_research\`, schedule/standings/partidos reciente local-visitante y MLB IDs; fuentes con fechas y errores. Pruebas de 2 equipos y doble cartelera.
+
+**M2 — Dossier de roster real:** roster activo + boxscore lineups + cada bateador y pitcher (starter y relevistas), recientes 5/10/15/30, mano y splits; pruebas de 9 bateadores correctos, suplentes, jugador traspasado y lineup no confirmado.
+
+**M3 — Matriz cruzada y profundidad:** \`sports_chat_mlb_matchups\`, cada bateador vs abridor y vs bullpen plausible, historial BvP, recencia, repertorio y muestras; pruebas de matrículas/IDs, data unavailable, mapeo correcto entre equipos.
+
+**M4 — Parque, clima y actualidad:** altitud, orientación de viento, roof, travel, descanso, noticias, IL/estrellas, analistas externos atribuibles, cambios de pitchers; pruebas de fuentes discordantes y techo cerrado.
+
+**M5 — Investigación por escenarios y mercados:** \`sports_chat_mlb_case_review\`: escenarios inning-by-inning narrativos y contrastados; comparación mercado y cuota de la misma casa, F3/F5/FT, hits/K/run lines; pruebas de over 8 vs 8.5, pushes, quotedAt, reglas y abortar selección por evidencia insuficiente. No publicar probabilidades ficticias.
+
+**M6 — Especialista interoperable:** resultados \`ResearchedOpportunityV1\` auditables, cache versionada, APIs adaptables a futuros especialistas, y agregador de 5/6 patas sin garantía de victoria.
+
+**M7 — Evaluación histórica:** replay de expedientes con solo información existente antes de kickoff, cobertura real, desempeño de recomendaciones y causas de error. Un evaluador cuantitativo solo se incorporará si añade valor demostrado sin sustituir la investigación.
+
+## 6. Criterios de aceptación
+
+- Desde «Investiga los partidos de hoy» Kira presenta toda la cartelera MLB disponible, filtra sin inventar datos, selecciona y abre **un** expediente completo por encuentro.
+- Identifica dos rosters y nueve bateadores oficiales cuando estén publicados; muestra si no. Confronta todos los nueve contra **abridor rival y bullpen plausible**, incluyendo estado, fuente y ausencia de muestras.
+- Verifica estadio local y visitante, viento relativo al terreno/techo, rendimiento local/visitante, lesiones, estrellas, últimos partidos, splits/ponches de pitchers y opiniones externas atribuibles cuando estén accesibles.
+- Presenta escenarios completos de juego, selección de mercado sustentada y cotejo de precios frescos bajo reglas de casa. Distingue línea entera 8 (push si corresponde) y media línea 8.5.
+- No describe un informe con 2 partidas superficiales como «análisis completo», ni predice con certeza, ni arma 5/6 patas de la nada.
+- Pruebas de identidad, tiempo, fuentes fallidas, equipo incorrecto, pitchers cambiados, roster obsoleto, abstención y mercado no liquidable antes de promover a producción.
+
+### Nota de estado
+Este documento especifica la construcción del especialista y **no afirma que los siete hitos estén implementados**. Los módulos existentes \`mlb-matchup.ts\`, \`mlb.ts\`, \`mlb-research.ts\`, \`sports.ts\` son bloques reutilizables, pero aún no forman el expediente integrado ni realizan las matrices completas.
