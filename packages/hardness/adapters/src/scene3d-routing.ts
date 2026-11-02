@@ -30,6 +30,8 @@ export const PHOENIX_3D_ROUTING_PROTOCOL =
   'For a still photograph, poster, concept render or moodboard use image generation; for graphs use phoenix_visualize; '+
   'for normal forms, dashboards and web UI use phoenix_canvas or UI tools. Never add 3D to ordinary apps merely because it looks impressive. '+
   'For architecture/product/room/vehicle apps, propose or create a 3D viewer when interaction conveys spatial value. '+
+  'For organic 3D use triangular mesh geometry or identifiable anatomical parts, not a single cube. '+
+  'For pelicans use phoenix_3d preset:pelican with visible beak, pouch, wings and head. '+
   'Use scene material presets, camera and environment. GLB/glTF import and export controls exist in the 3D viewer; '+
   'GLB is real geometry with core PBR metadata, but do not promise photo-to-CAD or photorealistic PBR from the lightweight preview. '+
   'Confirm quality through working artifact and real model, avoid repeated rendering or review loops.'
