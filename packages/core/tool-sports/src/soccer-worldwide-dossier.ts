@@ -180,7 +180,7 @@ function view(d:Omit<SoccerDossier,'uiBlock'>):SoccerDossier['uiBlock']{
   add('Cuotas y sus riesgos',d.markets.slice(0,12).map(q=>({
     label:q.bookmaker+' · '+q.market+' '+q.selection,
     value:q.decimalOdds.toFixed(2)+(q.point===null?'':' · línea '+q.point),
-    detail:q.contradictoryFacts[0]})))
+    detail:q.contradictoryFacts[0]??'Sin contradicción documentada'})))
   add('Información pendiente',d.missingEvidence.slice(0,16).map(s=>({label:s,value:'Sin verificar'})))
   return{component:'sports_espn_dashboard',version:1,props:{view:'event',
     title:'PHOENIX Soccer · '+d.fixture.away.name+' vs '+d.fixture.home.name,
