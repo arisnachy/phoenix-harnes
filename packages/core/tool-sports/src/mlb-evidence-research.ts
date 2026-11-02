@@ -26,7 +26,6 @@ const iso=(t:number)=>new Date(t).toISOString()
 const normalize=(s:string)=>s.normalize('NFD').replace(/[\u0300-\u036f]/gu,'')
   .toLowerCase().replace(/[^a-z0-9]/gu,'')
 const trimNum=(n:number|null)=>n===null?'—':String(n)
-const selected=(v:unknown)=>Array.isArray(v)?v:[]
 const scoreOf=(team:Obj):number|null=>numeric(team.score)
 const allowedMetric=(v:unknown)=>v===null||v===undefined||v===''?null:word(v,22)
 export type MlbSource={endpoint:string;observedAt:string;status:'verified'|'empty'|'error';detail?:string}
@@ -336,6 +335,19 @@ export async function researchMlbCase(
       lineupConfirmed:lineupStatus[side]==='confirmed'&&order.includes(p.id)}))
   })
   // Batters in the official lineup first; all other active athletes remain in dossier.
+  // MLB's people endpoint can resolve handedness by authoritative person ID.
+  const personInfo=new Map<number,{bat:string;pitch:string}>()
+  const distinct=[...new Set(people.map(p=>p.id))]
+  const chunks:Array<number[]>=[]
+  for(let i=0;i<distinct.length;i+=30)chunks.push(distinct.slice(i,i+30))
+  const descriptions=await boundedMap(chunks,2,part=>measured<unknown>(
+    'https://statsapi.mlb.com/api/v1/people?personIds='+part.join(','),
+    fetcher,sources,now))
+  for(const result of descriptions)for(const raw of arr(obj(result).people)){
+    const person=obj(raw),pid=id(person.id)
+    if(pid)personInfo.set(pid,{bat:word(obj(person.batSide).code)||'no verificado',
+      pitch:word(obj(person.pitchHand).code)||'no verificado'})
+  }
   const profiles=await boundedMap(people,7,async(p):Promise<MlbAthlete>=>{
     const group=p.role==='pitcher'?'pitching':'hitting'
     const urls=[
@@ -346,11 +358,12 @@ export async function researchMlbCase(
     ]
     const [seasonResponse,recentResponse]=await Promise.all(urls.map(url=>
       measured<RawStats>(url,fetcher,sources,now)))
-    const first=(r:RawStats|null)=>obj(r?.stats?.[0]?.splits?.[0]?.stat)
+    const first=(r:RawStats|null|undefined)=>obj(r?.stats?.[0]?.splits?.[0]?.stat)
     const seasonStats=fields(first(seasonResponse),p.role==='pitcher'?pitchingFields:battingFields)
     const lastFive=fields(first(recentResponse),p.role==='pitcher'?pitchingFields:battingFields)
     return{id:p.id,name:p.name,teamId:p.teamId,role:p.role,position:p.position,
-      batSide:'no verificado',pitchHand:'no verificado',
+      batSide:personInfo.get(p.id)?.bat??'no verificado',
+      pitchHand:personInfo.get(p.id)?.pitch??'no verificado',
       lineupOrder:p.lineupOrder,lineupConfirmed:p.lineupConfirmed,
       season:seasonStats,lastFive,
       evidence:Object.keys(seasonStats).length&&Object.keys(lastFive).length?'observed':
@@ -370,6 +383,19 @@ export async function researchMlbCase(
     .slice(0,lineupStatus[side]==='confirmed'?9:18)
   const matchups=[...rosterMatchups(batters('home'),starters.away,bullpen.away),
     ...rosterMatchups(batters('away'),starters.home,bullpen.home)]
+  // Public journalism is supplementary: news mentioning a club is NOT a
+  // confirmed medical report, starting lineup, or expert pick.
+  const newsFeed=await measured<unknown>(
+    'https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/news?limit=40',
+    fetcher,sources,now)
+  const clubNames=[fixture.home.name,fixture.away.name]
+    .flatMap(name=>[normalize(name),normalize(name.split(' ').slice(-1)[0]??'')])
+    .filter(name=>name.length>=5)
+  const news=arr(obj(newsFeed).articles).flatMap(raw=>{
+    const a=obj(raw),headline=word(a.headline,200),description=word(a.description,320)
+    if(!headline||!clubNames.some(name=>normalize(headline+' '+description).includes(name)))return []
+    return[{headline,published:word(a.published,60),source:'ESPN MLB News · titular público, no lesión confirmada'}]
+  }).slice(0,12)
   const missingEvidence=[
     ...(lineupStatus.home==='unconfirmed'?['Alineación local todavía no confirmada']:[]),
     ...(lineupStatus.away==='unconfirmed'?['Alineación visitante todavía no confirmada']:[]),
@@ -382,6 +408,7 @@ export async function researchMlbCase(
     'Historial bateador vs pitcher, splits de mano y repertorio pendientes',
   ]
   if(!profiles.length)missingEvidence.push('Rosters activos no disponibles')
+  if(!news.length)missingEvidence.push('Noticias específicas de ambos equipos no verificadas')
   if(!quotes.length)missingEvidence.push('Cuotas reales no suministradas al expediente')
   const odds=verifiedOdds(fixture,quotes,now)
   if(quotes.length&&!odds.length)missingEvidence.push('Ninguna cuota coincide con ambos equipos, fecha y vigencia')
@@ -400,7 +427,7 @@ export async function researchMlbCase(
     missingEvidence,marketResearchReady:odds.length>0,priced:false}
   const dossier:Omit<MlbCase,'uiBlock'>={fixture,checkedAt:iso(now),season,sources,
     teamForm,rosters:rosterMap,starters,bullpen,lineupStatus,matchups,
-    venue:site,weather,news:[],odds,scenarioAnalysis:scenarios,missingEvidence,opportunity}
+    venue:site,weather,news,odds,scenarioAnalysis:scenarios,missingEvidence,opportunity}
   return{...dossier,uiBlock:makePanel(dossier)}
 }
 /** Date-scoped, no implicit future fixtures: return a verifiable board or exact-game dossier. */
