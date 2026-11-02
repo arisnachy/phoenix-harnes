@@ -18,6 +18,16 @@ function tool(name:string,result:unknown,{ failed=false }:{ failed?:boolean }={}
     isError:failed,subCalls:[] }
 }
 describe('native sports chat presentation fallback',()=>{
+  it('renders verified forecast and matchup investigation cards without model-authored markup',()=>{
+    const card={component:'sports_espn_dashboard',version:1,props:{
+      view:'event',title:'Clippers vs Warriors',subtitle:'NBA',
+      source:'Datos deportivos',checkedAt:'2026-11-01T23:42:00Z',note:'Exploratorio',
+      sections:[{heading:'Estimación orientativa',kind:'metrics',
+        items:[{label:'Local',value:'44%'}]}],
+    }}
+    expect(sportsCardsFromToolResult(tool('sports_chat_predict',{uiBlock:card}))).toEqual([card])
+    expect(sportsCardsFromToolResult(tool('sports_chat_matchup_factors',{uiBlock:card}))).toEqual([card])
+  })
   it('renders a game from a real structured sports tool without assistant UI fences',()=>{
     expect(sportsCardsFromToolResult(tool('sports_chat_games',{ uiBlocks:[sportsGame],count:1 }))).toEqual([sportsGame])
   })
