@@ -25,11 +25,14 @@ export type HockeyEvidenceSource={url:string;status:'verified'|'missing'|'error'
   error?:string}
 export type HockeyMarket={bookmaker:string;market:string;selection:string;point:number|null;
   odds:number;updatedAt:string;verifiedEvent:true;approved:false;reason:string}
+export type HockeyTeamForm={games:number;wins:number;losses:number;
+  homeGames:number;awayGames:number;restHours:number|null;
+  last10:Array<{date:string;opponent:string;goalsFor:number;goalsAgainst:number}>}
 export type HockeyDossier={fixture:HockeyFixture;checkedAt:string;sources:HockeyEvidenceSource[];
   players:{home:HockeyPlayer[];away:HockeyPlayer[]};
   goalieCandidates:{home:HockeyPlayer[];away:HockeyPlayer[]};
   possibleMatchups:Array<{attackerId:string;attacker:string;againstGoalies:string[];source:'roster-only'}>;
-  standings:{home:string;away:string};markets:HockeyMarket[];
+  standings:{home:string;away:string};form:{home:HockeyTeamForm|null;away:HockeyTeamForm|null};markets:HockeyMarket[];
   scenarios:string[];missingEvidence:string[];
   opportunity:{sport:'hockey';league:'nhl';eventId:string;
     decision:'investigate'|'abstain';eligibleForTicket:false;calibratedProbability:false};
@@ -106,6 +109,36 @@ function observedStats(v:unknown):Record<string,string>{
   }
   return result
 }
+
+function formFromSchedule(data:unknown,game:HockeyFixture,teamAbbr:string):HockeyTeamForm|null{
+  if(!data)return null
+  const cutoff=Date.parse(game.date)
+  const found=arr(o(data).games).flatMap(v=>{
+    const r=o(v),date=txt(r.startTimeUTC??r.gameDate,45)
+    const timestamp=Date.parse(date.length===10?date+'T12:00:00Z':date)
+    if(!Number.isFinite(timestamp)||timestamp>=cutoff||
+      !['OFF','FINAL'].includes(txt(r.gameState,15)))return []
+    const home=o(r.homeTeam),away=o(r.awayTeam)
+    const isHome=abbr(home.abbrev)===teamAbbr
+    const isAway=abbr(away.abbrev)===teamAbbr
+    if(!isHome&&!isAway)return []
+    const scored=Number(isHome?home.score:away.score)
+    const conceded=Number(isHome?away.score:home.score)
+    if(!Number.isSafeInteger(scored)||!Number.isSafeInteger(conceded))return []
+    return[{date,stamp:timestamp,isHome,
+      opponent:isHome?abbr(away.abbrev):abbr(home.abbrev),
+      goalsFor:scored,goalsAgainst:conceded}]
+  }).sort((a,b)=>b.stamp-a.stamp).slice(0,10)
+  if(!found.length)return null
+  const last=found[0]
+  return{games:found.length,wins:found.filter(x=>x.goalsFor>x.goalsAgainst).length,
+    losses:found.filter(x=>x.goalsFor<x.goalsAgainst).length,
+    homeGames:found.filter(x=>x.isHome).length,
+    awayGames:found.filter(x=>!x.isHome).length,
+    restHours:last?Math.max(0,(cutoff-last.stamp)/3_600_000):null,
+    last10:found.map(x=>({date:x.date,opponent:x.opponent,
+      goalsFor:x.goalsFor,goalsAgainst:x.goalsAgainst}))}
+}
 const standingRecord=(x:unknown)=>{
   const p=o(x),w=p.wins,l=p.losses,ot=p.otLosses
   return typeof w==='number'&&typeof l==='number'?
@@ -137,6 +170,13 @@ function dashboard(d:Omit<HockeyDossier,'uiBlock'>):HockeyDossier['uiBlock']{
         'Estadísticas no disponibles'})))
   add('Tabla NHL',[{label:d.fixture.home.name,value:d.standings.home},
     {label:d.fixture.away.name,value:d.standings.away}])
+  add('Últimos partidos y descanso',(['home','away'] as const).map(side=>{
+    const form=d.form[side],name=d.fixture[side].name
+    return{label:name,value:form?form.wins+'V '+form.losses+'D en '+form.games+' juegos':
+      'Historial sin verificar',detail:form?'Local '+form.homeGames+' · Visitante '+
+      form.awayGames+' · descanso '+(form.restHours===null?'sin datos':
+        form.restHours.toFixed(1)+' horas'):'Calendario del club no disponible'}
+  }))
   add('Skaters y rendimiento',[
     ...d.players.home.filter(p=>p.role!=='goalie').slice(0,11),
     ...d.players.away.filter(p=>p.role!=='goalie').slice(0,11)].map(p=>({
@@ -169,10 +209,12 @@ export async function investigateNhl(date:string,gameId:string,fetcher:typeof fe
   if(!['FUT','PRE'].includes(fixture.state)||Date.parse(fixture.date)<=now)
     throw Error('El expediente pregame necesita juego futuro sin iniciar')
   const sources=slate.sources,base='https://api-web.nhle.com/v1/'
-  const [h,a,standings]=await Promise.all([
+  const [h,a,standings,homeSchedule,awaySchedule]=await Promise.all([
     source<unknown>(base+'roster/'+fixture.home.abbrev+'/current',fetcher,sources,now),
     source<unknown>(base+'roster/'+fixture.away.abbrev+'/current',fetcher,sources,now),
     source<unknown>(base+'standings/'+date,fetcher,sources,now),
+    source<unknown>(base+'club-schedule-season/'+fixture.home.abbrev+'/now',fetcher,sources,now),
+    source<unknown>(base+'club-schedule-season/'+fixture.away.abbrev+'/now',fetcher,sources,now),
   ])
   const players={home:teamRoster(h,fixture.home.abbrev),
     away:teamRoster(a,fixture.away.abbrev)}
@@ -199,6 +241,8 @@ export async function investigateNhl(date:string,gameId:string,fetcher:typeof fe
   const find=(code:string)=>rows.find(x=>localized(x.teamAbbrev)===code)
   const viewStandings={home:standingRecord(find(fixture.home.abbrev)),
     away:standingRecord(find(fixture.away.abbrev))}
+  const form={home:formFromSchedule(homeSchedule,fixture,fixture.home.abbrev),
+    away:formFromSchedule(awaySchedule,fixture,fixture.away.abbrev)}
   const possibleMatchups=[
     ...players.home.filter(p=>p.role==='forward').slice(0,10).map(p=>({
       attackerId:p.id,attacker:p.name,againstGoalies:goalies.away.map(x=>x.name),
@@ -212,7 +256,7 @@ export async function investigateNhl(date:string,gameId:string,fetcher:typeof fe
     '5v5 xG, calidad de tiros, GSAx y cara a cara reales sin fuente autorizada',
     'Power play y penalty kill por unidad no verificados',
     'Lesiones, scratches y suspensiones sin reporte oficial reciente',
-    'Fatiga de cada portero, viajes y descansos sin historial de cargas completo',
+    'Fatiga individual de porteros, desplazamientos y carga de turnos sin fuente completa',
     'Liquidación 60 min, OT y shootout depende de las reglas de cada casa',
     ...(!h||!a?['Uno o ambos rosters oficiales no disponibles']:[])]
   const scenarios=[
@@ -223,7 +267,7 @@ export async function investigateNhl(date:string,gameId:string,fetcher:typeof fe
   const ready=players.home.length>=10&&players.away.length>=10&&
     goalies.home.length>0&&goalies.away.length>0
   const dossier:Omit<HockeyDossier,'uiBlock'>={fixture,checkedAt:new Date(now).toISOString(),
-    sources,players,goalieCandidates:goalies,possibleMatchups,standings:viewStandings,
+    sources,players,goalieCandidates:goalies,possibleMatchups,standings:viewStandings,form,
     markets,scenarios,missingEvidence,
     opportunity:{sport:'hockey',league:'nhl',eventId:fixture.id,
       decision:ready?'investigate':'abstain',eligibleForTicket:false,
