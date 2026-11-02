@@ -8,6 +8,7 @@ on:
       - 'packages/hardness/adapters/src/scene3d-pelican.ts'
       - 'packages/client/ui-conversation/src/client/chat/scene3d-primitives.ts'
       - 'packages/client/ui-conversation/src/client/chat/scene3d-animation.ts'
+      - 'packages/client/ui-conversation/src/client/chat/scene3d-webgl.ts'
       - 'packages/hardness/adapters/src/index.ts'
       - 'packages/hardness/adapters/tests/scene3d-tool.spec.ts'
       - 'packages/hardness/adapters/tests/adapters.spec.ts'
