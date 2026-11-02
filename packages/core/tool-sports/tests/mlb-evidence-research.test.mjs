@@ -148,6 +148,7 @@ test('research review explains totals integer-line pushes and blocks ticket with
   assert.equal(review.probabilitiesEstimated,false)
   assert.equal(review.eligibleForTicket,false)
   assert.equal(review.reviewedMarkets.length,1)
+  assert.equal(review.reviewedMarkets[0].status,'blocked')
   assert.ok(review.reviewedMarkets[0].researchQuestions.some(t=>t.includes('exactamente 8')))
   assert.ok(review.reviewedMarkets[0].contradictoryEvidence.some(t=>t.includes('reglas')))
   assert.equal(review.evidenceGates.lineupsConfirmed,false)
@@ -191,4 +192,18 @@ test('nine boxscore slots with an unknown athlete do not confirm a lineup',async
   assert.equal(d.rosters.home.filter(p=>p.lineupConfirmed).length,0)
   assert.ok(d.missingEvidence.some(x=>x.includes('Alineación local')))
   assert.equal(reviewMlbResearch(d).evidenceGates.lineupsConfirmed,false)
+})
+
+
+test('complete research roster still abstains without real sportsbook offers',async()=>{
+  const mock=fakeNetwork({fullLineup:true})
+  const d=await researchMlbCase(date,812345,mock.fetcher,at)
+  const review=reviewMlbResearch(d)
+  assert.equal(review.evidenceGates.bothRostersVerified,true)
+  assert.equal(review.evidenceGates.realOffersVerified,false)
+  assert.equal(review.eligibility,'research-only')
+  assert.equal(review.decision,'abstain')
+  assert.equal(review.reviewedMarkets.length,0)
+  assert.equal(review.eligibleForTicket,false)
+  assert.ok(review.missingEvidence.some(x=>x.includes('Ofertas reales vigentes')))
 })
