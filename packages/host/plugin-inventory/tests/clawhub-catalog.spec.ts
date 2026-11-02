@@ -15,6 +15,15 @@ describe('ClawHub public registry catalog', () => {
     expect(items[0]).toMatchObject({ official: true, version: '2.0.0' })
   })
 
+  it('retains one canonical ClawHub identity across providers', () => {
+    const data = { items: [
+      { slug: 'github', ownerHandle: 'openclaw', displayName: 'GitHub' },
+      { slug: 'github', ownerHandle: 'openclaw', displayName: 'GitHub duplicate' },
+    ] }
+    expect(normalizeClawHubCatalog(data, { family: 'skill' }).map(item => item.name))
+      .toEqual(['@openclaw/github'])
+  })
+
   it('deduplicates identical listing identities without treating the catalog as installed tools', () => {
     const data = { items: [
       { name: '@openclaw/example', isOfficial: true },
