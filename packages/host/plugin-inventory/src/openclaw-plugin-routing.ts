@@ -141,8 +141,8 @@ export async function readOpenClawRouting(): Promise<OpenClawRoutingSnapshot> {
     && p.status !== 'error').slice(0, 10)
   const tools: OpenClawRoutedTool[] = []
   // Bound simultaneous CLI inspection, avoiding a long sequential Settings stall.
-  for (let index = 0; index < plugins.length; index += 3) {
-    const group = await Promise.all(plugins.slice(index, index + 3).map(async plugin => {
+  for (let index = 0; index < plugins.length; index += 5) {
+    const group = await Promise.all(plugins.slice(index, index + 5).map(async plugin => {
       const pluginId = str(plugin.id)
       let report: unknown
       try { report = await run(['plugins', 'inspect', pluginId, '--runtime', '--json']) }
