@@ -2,6 +2,7 @@
 import { getFeed, hasSportsPermission, sportsCatalog, discoverEspnLeagues } from './sports.ts'
 import { queryEspnCore } from './espn-core-intelligence.ts'
 import { sportsEventInsights } from './sports-event-intelligence.ts'
+import {collectDirectEspnStats,type DirectTeam} from './sports-direct-stats.ts'
 
 type Row = Record<string, unknown>
 type View = 'team'|'player'|'event'|'standings'|'news'|'leaders'|'search'
@@ -92,6 +93,20 @@ async function read(url:string,fetcher:typeof fetch,ttlMs:number):Promise<unknow
     throw error
   }
 }
+/** Summarize actual player metrics already fetched from ESPN; never create a
+ * button that sends a new LLM prompt to retrieve basic API statistics.
+ * @param teams - Evidence whose athlete IDs came from verified rosters.
+ * @returns Compact, bounded rows with season/game/split provenance.
+ */
+function directPlayerRows(teams:readonly DirectTeam[]):Item[]{
+  return teams.flatMap(team=>team.athletes.map(player=>{
+    const text=[...player.stats.slice(0,4).map(s=>s.name+': '+s.value),
+      ...player.lastGames.slice(0,2).map(s=>s.name+': '+s.value)]
+    return item(player.name,player.position+' · '+(text.join(' · ')||'Estadísticas no publicadas'),
+      'Equipo '+team.name+' · '+player.verifiedSources.join(', '),
+      player.headshot)
+  })).filter((x):x is Item=>x!==null)
+}
 const source=(name:string,data:unknown,records=nonempty(data)?1:0):Source=>({
   name,status:records>0?'available':'unavailable',records
 })
@@ -151,7 +166,7 @@ function stories(data:unknown):Item[]{
     return base&&url?{...base,href:url}:base
   }).filter((x):x is Item=>x!==null)
 }
-function roster(data:unknown,sport:string,league:string):Item[]{
+function roster(data:unknown):Item[]{
   const groups=array(row(data).athletes),individuals=groups.flatMap(g=>{
     const r=row(g);return array(r.items).length?array(r.items):[g]
   })
@@ -161,10 +176,7 @@ function roster(data:unknown,sport:string,league:string):Item[]{
       row(x.position).displayName??row(x.position).abbreviation,
       x.jersey?('#'+txt(x.jersey,8)):'',
       x.headshot)
-    const athleteId=id(x.id)
-    return base&&athleteId?{...base,action:{label:'Estadísticas del jugador',
-      prompt:'Kira, consulta sports_chat_espn_explore con view=player, sport='+sport+
-        ', league='+league+', athleteId='+athleteId+'. Muestra su ficha, estadísticas, gamelog y splits.'}}:base
+    return base
   }).filter((x):x is Item=>x!==null)
 }
 
@@ -340,16 +352,24 @@ export async function exploreEspn(
       ...metrics(data.get('Estadísticas del equipo'),10),
       ...metrics(data.get('Récord del equipo'),8),
     ]))
-    put(section('Plantilla verificada','list',roster(data.get('Plantilla'),sport,league),24))
+    // Read stats/gamelogs/splits directly, not through buttons that ask Kira
+    // to issue another prompt. No athlete is accepted outside this team roster.
+    const teamId=id(input.teamId)
+    const details=await collectDirectEspnStats(sport,league,[{id:teamId,name:title}],
+      fetcher,now,20)
+    const verified=details.teams[0]
+    put(section('Plantilla verificada','list',roster(data.get('Plantilla')),30))
+    put(section('Estadísticas individuales consultadas','list',
+      directPlayerRows(details.teams),24))
+    sources.push(source('Estadísticas directas por atleta (Web v3)',
+      verified?.athletes.filter(a=>a.stats.length||a.lastGames.length),
+      verified?.athletes.filter(a=>a.stats.length||a.lastGames.length).length??0))
     put(section('Disponibilidad reportada en plantilla','list',rosterInjuries(data.get('Plantilla'))))
     const schedule=row(data.get('Calendario del equipo'))
     put(section('Próximos encuentros y resultados','list',
       array(schedule.events).slice(0,16).map(g=>{const e=row(g)
         const base=item(e.shortName??e.name,e.date,row(row(e.status).type).description)
-        const eventId=id(e.id)
-        return base&&eventId?{...base,action:{label:'Detalle del encuentro',
-          prompt:'Kira, consulta sports_chat_espn_explore con view=event, sport='+sport+
-            ', league='+league+', eventId='+eventId+'. Muestra estadísticas y hechos comprobados.'}}:base})))
+        return base})))
     put(section('Noticias del equipo','articles',stories(data.get('Noticias del equipo'))))
     const tx=data.get('Movimientos del equipo')
     put(section('Movimientos oficiales','list',array(row(tx).transactions).slice(0,12).map(m=>{
@@ -431,6 +451,16 @@ export async function exploreEspn(
       })
       put(section('Estadísticas de temporada','metrics',rows,8))
       sources.push(source('Estadísticas por equipo y temporada',rows.length?rows:null,rows.length))
+    }
+    // Build two teams' direct statistical evidence in the current event
+    // investigation. Not deferred to another chatbot prompt/tool click.
+    if(seasonTeams.length===2){
+      const details=await collectDirectEspnStats(sport,league,
+        seasonTeams.map(t=>({id:t.teamId,name:t.name})),fetcher,now,10)
+      const players=directPlayerRows(details.teams)
+      put(section('Jugadores · estadísticas directas','list',players,24))
+      sources.push(source('Jugadores Web v3 consultados',players.length?players:null,
+        details.teams.flatMap(t=>t.athletes).filter(a=>a.stats.length||a.lastGames.length).length))
     }
     // Useful numbers come before date/venue in the collapsed chat card.
     for(const s of insights.sections)put(section(s.heading,s.kind,
