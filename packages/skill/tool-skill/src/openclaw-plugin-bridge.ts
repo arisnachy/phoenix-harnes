@@ -175,7 +175,7 @@ export function registerOpenClawPluginTools(ctx: Context): void {
       }, additionalProperties: false },
       render: (_args, value) => [{ type: 'text' as const, text: value.approved_tools_json }],
     },
-    execute() { return { approved_tools_json: JSON.stringify(readApprovedOpenClawPluginTools()) } },
+    async execute() { return { approved_tools_json: JSON.stringify(readApprovedOpenClawPluginTools()) } },
     presentCall: () => ({ card: 'generic', kind: 'read', title: 'Available OpenClaw plugin tools' }),
   }))
   ctx.tools.register(defineTool({
@@ -203,6 +203,6 @@ export function registerOpenClawPluginTools(ctx: Context): void {
       )
     },
     presentCall: args => ({ card: 'generic', kind: 'write',
-      title: `OpenClaw plugin: ${args.tool_name}`, rawInput: args.arguments_json }),
+      title: `OpenClaw plugin: ${args.tool_name}` }),
   }))
 }
