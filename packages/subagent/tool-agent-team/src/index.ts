@@ -162,7 +162,7 @@ export const Config: z<Config> = z.object({
 })
 
 /** Model-facing collaboration guidance shared by Lead and teammates. */
-const POLICY = 'Agent Teams is real shared work. Kira is the single visible coordinator identity. For complex work the selected Sol/planner model creates a concise plan, then Kira runs it on Luna Max and delegates bounded specialist scopes using Luna Max. Kira owns verification and communication. Specialists do not switch to Sol when Kira requests strategic help. Prefer one specialist, add more only for independent parallel work, and cap live teammates at three. Never fabricate tools, peer dialogue, completion, or separate personas for planning and execution. Save and reuse the current plan and compact relevant evidence rather than duplicating whole histories. A new strategic blocker, design conflict or explicit corrective request can trigger another focused planner review, without a numerical consultation quota; never repeat the same unsuccessful consultation without new evidence. Simple tasks remain with Kira on Luna Max, without unnecessary planning or delegation.'
+const POLICY = 'Agent Teams is real shared work. Kira is the single visible coordinator identity. For complex work the selected Sol/planner model creates a concise plan, then Kira runs it on Luna Max and delegates bounded specialist scopes using Luna Max. Kira owns verification and communication. Specialists do not switch to Sol when Kira requests strategic help. Prefer one specialist, add more only for independent parallel work, and cap live teammates at three. Never fabricate tools, peer dialogue, completion, or separate personas for planning and execution. Save and reuse the current plan and compact relevant evidence rather than duplicating whole histories. A new strategic blocker, design conflict or explicit corrective request can trigger another focused planner review, without a numerical consultation quota; never repeat the same unsuccessful consultation without new evidence. Simple tasks remain with Kira on Luna Max, without unnecessary planning or delegation. FÉNIX is a deterministic quality gate: do not call Terra for routine results, and do not transfer Kira\'s coordination to Terra. When a specialist reports a real contradictory or failed outcome with a delivered message id, Kira may call fenix_consult once for that turn. Reuse the consultant\'s evidence; do not call FÉNIX just to say a review happened.'
 
 const ACTIVE_WAIT_STATUSES: ReadonlySet<TeamMemberView['status']> = new Set(['running', 'provisioning'])
 type WaitBudget = { teamSeq: number; expired: number }
@@ -453,6 +453,89 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
         return `${POLICY}\n\nYour Team role is ${membership.role}; your Team name is ${membership.name}; Team id is ${membership.id}.\nYour social voice: ${socialStyle}\n\n${teamLanguageInstruction(membership.root.session.events)}`
       },
     }))
+
+    // FÉNIX is a bounded consultation capability, not a permanent coordinator.
+    // The gate inspects real Team evidence without spending a model request.
+    let fenixBusy = false
+    if (agent.session.header.origin !== 'subagent') {
+      register(scoped.tools.register(defineTool({
+        name: 'fenix_consult',
+        description: 'FÉNIX quality consultation: request at most one independent Terra review per turn, only after a REAL Team message reports a concrete contradiction, failed verification, missing requirement or integration risk. Kira stays on Luna Max. Do not use for routine progress, ordinary success or second opinions without evidence.',
+        parameters: {
+          evidence_id: { type: 'string', required: true,
+            description: 'Exact id of a delivered specialist Team message that reports a genuine unresolved problem in this turn.' },
+          question: { type: 'string', required: true,
+            description: 'One narrow decision for Terra to review, maximum 500 characters. No full histories or new planning.' },
+        },
+        output: jsonOutput(SPAWN_VALUE_SCHEMA),
+        async execute(args, exec) {
+          const lead = callingAgent(exec.agent, 'fenix_consult')
+          exec.signal.throwIfAborted()
+          if (ctx.agentTeams.membership(lead).role !== 'lead') {
+            throw new TeamError('Only Kira may consult FÉNIX.', 'TEAM_MEMBER_LIMIT')
+          }
+          const preference = latestModelSelectionPreference(lead.session)?.selection
+          const authority = ctx.get('agentDefaultModel') as {
+            currentEclipseProfile?: () => EclipseRoutingSettings | undefined
+          } | undefined
+          const profile = authority?.currentEclipseProfile?.()
+          const terra = profile?.coordinator
+          if (!isPhoenixCodexAutoSelection(preference) || profile?.mode !== 'automatic'
+            || terra?.provider !== 'openai-codex'
+            || !/^gpt-\d+(?:\.\d+)?-terra(?:$|-)/iu.test(terra.model)) {
+            throw new TeamError('FÉNIX requires Eclipse Automatic with a configured Codex Terra consultant.', 'TEAM_MEMBER_LIMIT')
+          }
+          const evidence = fenixConsultableEvidence(lead.session.events, args.evidence_id)
+          if (evidence === undefined) {
+            throw new TeamError('No qualifying new Team risk evidence. Keep Luna Max and continue without a consultation.', 'TEAM_MEMBER_LIMIT')
+          }
+          if (args.question.trim().length < 10 || args.question.length > 500) {
+            throw new Error('FÉNIX question must contain 10 to 500 characters.')
+          }
+          const turnEvent = lead.session.events.findLast(event => event.type === 'turn/start')
+          const turn = (turnEvent?.data as { turn?: number } | undefined)?.turn
+          if (turn === undefined) throw new Error('FÉNIX requires an active turn.')
+          if (fenixBusy || lead.session.events.some(event => event.type === 'team/fenix-consult'
+            && event.data.turn === turn)) {
+            throw new TeamError('FÉNIX has already consulted on this turn; reuse the existing result.', 'TEAM_MEMBER_LIMIT')
+          }
+          const occupied = ctx.agentTeams.listMembers(lead)
+            .filter(member => member.role === 'teammate'
+              && member.status !== 'inactive' && member.status !== 'failed')
+          if (occupied.length >= Math.min(3, profile.maxTeammates ?? 3)) {
+            throw new TeamError('No free specialist slot for FÉNIX; finish or reuse active work first.', 'TEAM_MEMBER_LIMIT')
+          }
+          fenixBusy = true
+          try {
+            const teammateName = `fenix-terra-${turn}`
+            const prompt = [
+              'Actúa como consultora temporal FÉNIX para Kira, quien seguirá ejecutando con Luna Max.',
+              'No planifiques de nuevo ni intentes modificar archivos, repositorios, conexiones o decisiones.',
+              'Evalúa solo la evidencia y la pregunta indicada; responde con máximo 5 líneas: discrepancia,',
+              'impacto, recomendación mínima, criterio de verificación y grado de incertidumbre.',
+              'Comunica una sola revisión real con send_message target=lead purpose=review y termina.',
+              `Evidencia: ${evidence}`,
+              `Pregunta: ${args.question.trim()}`,
+            ].join('\n')
+            const member = await ctx.agentTeams.spawnTeammate(lead, {
+              name: teammateName,
+              description: 'FÉNIX: revisión puntual de calidad por Terra',
+              prompt: [{ type: 'text', text: prompt }],
+              context: 'fresh',
+              provider: config.freshProvider,
+              agentOptions: {
+                provider: 'openai-codex', model: terra.model,
+                ...terra.reasoningEffort === undefined
+                  ? {} : { reasoningEffort: terra.reasoningEffort as NonNullable<AgentOptions['reasoningEffort']> },
+              },
+              signal: exec.signal,
+            })
+            lead.session.append('team/fenix-consult', { turn, evidenceId: args.evidence_id, teammateName })
+            return member
+          } finally { fenixBusy = false }
+        },
+      })))
+    }
 
     register(scoped.tools.register(defineTool({
       name: 'spawn_teammate',
