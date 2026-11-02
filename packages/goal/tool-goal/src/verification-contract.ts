@@ -65,6 +65,8 @@ function universalRiskCriteria(): VerificationCriterion[] {
 
   add('RISK-AMBIGUITY',
     'Actively search for ambiguous interpretations, representations, normalization rules, implicit conventions, or multiple plausible meanings that could change the result. Exercise the ambiguity or document the chosen rule with evidence.')
+  add('RISK-SCOPE-ASSUMPTIONS',
+    'Separate hard requirements from inferred restrictions, preferences, and implementation choices. For every inference that could change feasibility, correctness, cost, or the recommendation, challenge it with a concrete alternative or disclose the unverified assumption.')
   add('RISK-LIMITATIONS',
     'Before claiming that no known limitations remain, generate plausible failure classes beyond the happy path and either test them, bound them explicitly as out of scope with evidence, or report them as known limitations.')
   add('RISK-REPORT-INTEGRITY',
@@ -78,6 +80,26 @@ function edgeCriteria(objective: string, softwareLike: boolean): VerificationCri
   const criteria: VerificationCriterion[] = []
   const seen = new Set<string>()
   const add = (id: string, criterion: string): void =>{  pushCriterion(criteria, seen, criterion, 'edge', id) }
+
+  if (/\b(?:plan(?:ning|ificar)?|schedule|calendar|calendario|programaci[oó]n|allocate|allocation|asignaci[oó]n|capacity|capacidad|cohort|cohorte|grupo|group|constraints?|restricci[oó]n|decision|decisi[oó]n|feasib(?:le|ility)|factib(?:le|ilidad)|viab(?:le|ilidad)|imposib(?:le|ilidad)|infeasib(?:le|ility)|optimi[sz]|m[ií]nim[oa]|m[aá]xim[oa]|trade-off)\b/iu.test(text)) {
+    add('EDGE-SOLUTION-SPACE',
+      'For any multi-option plan or feasibility claim, separate explicit constraints from assumptions, compare materially different candidates, and seek a counterexample. Claims of minimum, uniqueness, impossibility, or infeasibility require reproducible search, a justified bound, or independent oracle; otherwise disclose that proof is missing.')
+  }
+
+  if (/\b(?:costs?|costos?|costes?|budgets?|presupuestos?|prices?|precios?|amounts?|montos?|totals?|sumas?|sums?|porcentajes?|percentages?|profit|beneficio|returns?|retornos?|revenue|ingresos?)\b|\d+\s*%/iu.test(text)) {
+    add('EDGE-QUANTITIES',
+      'Recompute important totals, units, rates, reserves, and numerical differences independently from source inputs. Detect inconsistent quotations, disclose the selected authoritative assumption, and reconcile executive summaries with detailed calculations.')
+  }
+
+  if (/\b(?:research|investiga(?:r|ci[oó]n)|sources?|fuentes?|citations?|citas?|news|noticias?|evidence|evidencia|reports?|informes?|referencias?|references?)\b/iu.test(text)) {
+    add('EDGE-PROVENANCE',
+      'Trace material claims to actual accessible sources or provided documents, separate observations from inferences, check freshness where time matters, and mark unverifiable claims as unknown instead of inventing support.')
+  }
+
+  if (/\b(?:docx|word|pdf|pptx|slides?|diapositivas?|spreadsheets?|excel|archivos?|files?|artifacts?|artefactos?|entregables?|presentaci[oó]n|documents?|documentos?)\b/iu.test(text)) {
+    add('EDGE-DELIVERABLE',
+      'Read back the actual requested output file or deliverable and verify existence, format, completeness, consistency, and applicable layout or page constraints. A description or saved-file acknowledgement is not proof of a usable deliverable.')
+  }
 
   if (softwareLike) {
     add('EDGE-EMPTY', 'Exercise empty input or zero-cardinality state at the real user-facing boundary when that state is representable.')
