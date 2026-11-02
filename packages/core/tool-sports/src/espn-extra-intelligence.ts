@@ -126,6 +126,45 @@ const compact=(raw:unknown,depth=0):unknown=>{
   }
   return raw
 }
+/** Resolve a bounded number of first-party ESPN references, without leaving
+ * the selected sport/league or allowing user-supplied hosts and paths.
+ * @param snapshot - One ESPN result which may contain a list of references.
+ * @param endpoint - Canonical host + sport + league bound to this request.
+ * @param getJSON - Read-only provider transport.
+ * @returns Reference values with unavailable flags when the source fails.
+ */
+async function resolveExtendedRefs(snapshot:unknown,endpoint:string,
+  getJSON:<T>(url:string)=>Promise<T>):Promise<{data:unknown;resolvedRefs:number;refCount:number}>{
+  const root=snapshot!==null&&typeof snapshot==='object'&&!Array.isArray(snapshot)?
+    snapshot as Record<string,unknown>:{}
+  const candidates=Array.isArray(root.items)?root.items:Array.isArray(snapshot)?snapshot:null
+  if(!candidates)return {data:snapshot,resolvedRefs:0,refCount:0}
+  const parent=new URL(endpoint)
+  const base=parent.pathname.match(/^(.+?\/sports\/[^/]+\/(?:leagues\/)?[^/]+)(?:\/|$)/u)?.[1]+'/'
+  let resolvedRefs=0,refCount=0
+  const allowed=(raw:unknown):string|null=>{
+    if(typeof raw!=='string'||raw.length>600)return null
+    try{
+      const u=new URL(raw)
+      return u.protocol==='https:'&&u.hostname===parent.hostname&&
+        u.pathname.startsWith(base)&&!u.username&&!u.password?u.toString():null
+    }catch{return null}
+  }
+  const out:unknown[]=[]
+  for(const candidate of candidates.slice(0,12)){
+    const item=candidate!==null&&typeof candidate==='object'&&!Array.isArray(candidate)?
+      candidate as Record<string,unknown>:{}
+    if(typeof item.$ref!=='string'){out.push(candidate);continue}
+    refCount++
+    const ref=allowed(item.$ref)
+    if(!ref||resolvedRefs>=6){out.push({$ref:item.$ref,unresolved:true});continue}
+    try{
+      const read=await getJSON<unknown>(ref)
+      out.push(read);resolvedRefs++
+    }catch{out.push({$ref:ref,unavailable:true})}
+  }
+  return {data:out,resolvedRefs,refCount}
+}
 /**
  * Read an ESPN route with bounded returned JSON and explicit empty/error states.
  * @param input - The validated read-only route request.
@@ -147,8 +186,10 @@ export async function readExtendedEspn(
       ?data as Record<string,unknown>:{}
     const items=Array.isArray(obj.items)?obj.items:null
     const rows=items?.length??(Array.isArray(data)?data.length:Object.keys(obj).length?1:0)
+    const resolved=await resolveExtendedRefs(items??data,endpoint,getJSON)
     return {...base,status:rows>0?'data':'empty',count:typeof obj.count==='number'?obj.count:rows,
-      snapshot:compact(items??data)}
+      refCount:resolved.refCount,resolvedRefs:resolved.resolvedRefs,
+      snapshot:compact(resolved.data)}
   }catch(error){
     return {...base,status:'unavailable',count:0,snapshot:null,
       error:error instanceof Error?error.message.slice(0,200):'Error desconocido'}
