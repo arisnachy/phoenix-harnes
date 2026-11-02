@@ -194,9 +194,14 @@ test('fails closed at the runtime storage hard cap instead of deleting protected
   let reclamationAttempts = 0
   const assertCapacity = runInNewContext(source.slice(start, end) + '\nassertRuntimeStorageCapacity', {
     existsSync: () => false,
+    runtimeRoot: '/runtime/current',
     runtimeDirectoriesForCleanup: () => ['/runtime/last-good', '/runtime/current'],
     MAX_RUNTIME_DIRECTORIES: 2,
-    cleanupObsoleteRuntimes: () => {},
+    cleanupObsoleteRuntimes: (protectedRuntimes, options) => {
+      assert.equal(protectedRuntimes.length, 1)
+      assert.equal(protectedRuntimes[0], '/runtime/current')
+      assert.equal(options.reportBusy, true)
+    },
     reclaimInactiveBackupForCapacity: () => { reclamationAttempts += 1 },
   })
   assert.throws(() => assertCapacity('/runtime/candidate'), /runtime storage safety limit reached/u)
