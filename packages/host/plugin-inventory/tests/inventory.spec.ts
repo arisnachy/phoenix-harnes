@@ -7,6 +7,7 @@ import { Context, type Plugin } from '@phoenix-ai/cordis'
 import Loader from '@phoenix-ai/cordis-plugin-loader'
 import { remoteMethods } from '@phoenix-ai/dsh-typert-protocol'
 import PluginInventoryGateway from '../src/index.ts'
+import { PluginEnablementStore } from '../src/plugin-enablement.ts'
 
 const contexts: Context[] = []
 const tempRoots: string[] = []
@@ -38,6 +39,10 @@ async function harness(): Promise<{
   ctx.loader.builtins.pending = pendingPlugin
   await ctx.plugin(PluginInventoryGateway)
   const inventory = ctx.get('pluginInventory') as PluginInventoryGateway
+  const preferencesRoot = mkdtempSync(join(tmpdir(), 'phoenix-plugin-enablement-'))
+  tempRoots.push(preferencesRoot)
+  ;(inventory as unknown as { pluginPreferences: PluginEnablementStore }).pluginPreferences =
+    new PluginEnablementStore(join(preferencesRoot, 'settings', 'plugin-enablement.json'))
   return { ctx, inventory }
 }
 
@@ -140,6 +145,30 @@ describe('PluginInventoryGateway', () => {
     })
     await expect(inventory.setPluginEnabled({ entryId: control as never, enabled: false }))
       .rejects.toThrow('control-plane')
+  })
+
+  it('persists user choices outside the Loader and reapplies them after config reset', async () => {
+    const { ctx, inventory } = await harness()
+    const id = await ctx.loader.create({ name: 'cordis:active', disabled: true })
+    await inventory.setPluginEnabled({ entryId: id as never, enabled: true })
+    const preferences = (inventory as unknown as { pluginPreferences: PluginEnablementStore }).pluginPreferences
+    const saved = await preferences.list()
+    expect(saved).toEqual([{ entryId: id, moduleName: 'cordis:active', enabled: true }])
+    await ctx.loader.update(id, { disabled: true })
+    expect(inventory.list().entries.find(entry => entry.entryId === id)?.enabled).toBe(false)
+    ;(inventory as unknown as { schedulePluginRestore(): void }).schedulePluginRestore()
+    await vi.waitFor(() => {
+      expect(inventory.list().entries.find(entry => entry.entryId === id)?.enabled).toBe(true)
+    }, { timeout: 3000 })
+  })
+
+  it('does not persist an activation rejected by the real Loader', async () => {
+    const { ctx, inventory } = await harness()
+    const id = await ctx.loader.create({ name: 'cordis:plugin-not-found', disabled: true })
+    await expect(inventory.setPluginEnabled({ entryId: id as never, enabled: true })).rejects.toThrow()
+    const preferences = (inventory as unknown as { pluginPreferences: PluginEnablementStore }).pluginPreferences
+    expect(await preferences.list()).toEqual([])
+    expect(inventory.list().entries.find(entry => entry.entryId === id)?.enabled).toBe(false)
   })
 
   it('reports partial activation and uses the existing pinned MCP pack installer', async () => {

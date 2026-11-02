@@ -25,6 +25,7 @@ import { OpenClawConnectorBridge } from './openclaw-connectors.ts'
 import { readOpenClawRuntimeSnapshot } from './openclaw-runtime.ts'
 import { readOpenClawRouting, setOpenClawRoutingPermission } from './openclaw-plugin-routing.ts'
 import { readClawHubCatalog } from './clawhub-catalog.ts'
+import { PluginEnablementStore } from './plugin-enablement.ts'
 import { clawHubInstall, clawHubState, prepareClawHubCli } from './clawhub-marketplace.ts'
 import { TokenTelemetryCollector } from './telemetry.ts'
 import { readTelegramBotState, saveTelegramBot, removeTelegramBot, TelegramInbox } from './telegram-bot.ts'
@@ -155,6 +156,9 @@ export class PluginInventoryGateway extends TypertRemoteService {
   private readonly openClawConnectors: OpenClawConnectorBridge
   private readonly telegram: TelegramInbox
   private readonly telemetry: TokenTelemetryCollector
+  private readonly pluginPreferences = new PluginEnablementStore()
+  private restoreTimer: ReturnType<typeof setTimeout> | undefined
+  private restoreQueue: Promise<void> = Promise.resolve()
 
   constructor(ctx: Context) {
     super(ctx, 'pluginInventory')
@@ -168,6 +172,15 @@ export class PluginInventoryGateway extends TypertRemoteService {
     this.telegram = new TelegramInbox(ctx)
     this.telegram.start()
     ctx.effect(() => () => { this.telegram.stop() }, 'telegram inbound message receiver')
+    // Keep user selections outside staged source trees: an updater replaces
+    // those files, while the DSH_HOME override remains valid after reboot.
+    ctx.on('loader/entry-init', () => { this.schedulePluginRestore() })
+    ctx.effect(() => {
+      this.schedulePluginRestore()
+      return () => {
+        if (this.restoreTimer !== undefined) clearTimeout(this.restoreTimer)
+      }
+    }, 'durable plugin enablement restoration')
     void ctx.effect(async () => {
       try {
         await this.managedMcp.retireJev()
@@ -230,6 +243,38 @@ export class PluginInventoryGateway extends TypertRemoteService {
     }, 'phoenix-local loopback proxy')
   }
 
+  /** Coalesce cold-boot and newly included Loader rows before applying saved choices. */
+  private schedulePluginRestore(): void {
+    if (this.restoreTimer !== undefined) clearTimeout(this.restoreTimer)
+    this.restoreTimer = setTimeout(() => {
+      this.restoreTimer = undefined
+      const run = async (): Promise<void> => {
+        const choices = await this.pluginPreferences.list()
+        for (const choice of choices) {
+          let entry
+          try { entry = this.ctx.loader.resolve(choice.entryId) }
+          catch { continue /* The optional plugin is absent from this profile. */ }
+          if (entry.options.group || entry.options.name !== choice.moduleName) continue
+          if (!choice.enabled && PROTECTED_PLUGIN_MODULES.has(entry.options.name)) continue
+          // Preserve conditional configuration decisions rather than replacing
+          // a !!js rule with a permanent boolean.
+          if (entry.options.disabled !== undefined && typeof entry.options.disabled !== 'boolean') continue
+          if (entry.options.disabled === !choice.enabled) continue
+          try {
+            await this.ctx.loader.update(entry.id, { disabled: !choice.enabled })
+          } catch {
+            this.ctx.logger.warn(`cannot restore plugin enablement for ${choice.entryId}; configuration retained`)
+          }
+        }
+      }
+      this.restoreQueue = this.restoreQueue.then(run, run).catch((error: unknown) => {
+        this.ctx.logger.warn('plugin enablement preferences could not be restored')
+        this.ctx.logger.warn(error)
+      })
+    }, 400)
+    this.restoreTimer.unref?.()
+  }
+
   /**
    * Read the Loader directly on every call. Cordis's internal plugin/status
    * events already maintain Entry.fiber and Fiber.state, so a second cache
@@ -267,8 +312,36 @@ export class PluginInventoryGateway extends TypertRemoteService {
     if (!request.enabled && PROTECTED_PLUGIN_MODULES.has(entry.options.name)) {
       throw new Error('This Phoenix control-plane plugin cannot be disabled here')
     }
-    await this.ctx.loader.update(entry.id, { disabled: !request.enabled })
+    // Conditional !!js switches belong to the source configuration. A plain
+    // boolean user override must not destroy that policy expression.
+    const oldDisabled = entry.options.disabled
+    if (oldDisabled !== undefined && oldDisabled !== null && typeof oldDisabled !== 'boolean') {
+      throw new Error('This plugin uses a conditional configuration; edit its source policy')
+    }
+    if (entry.disabled !== !request.enabled) {
+      await this.ctx.loader.update(entry.id, { disabled: !request.enabled })
+    }
     const updated = this.ctx.loader.resolve(entry.id)
+    if (updated.disabled !== !request.enabled) {
+      // A disabled parent can block an otherwise enabled child.
+      if (updated.options.disabled !== oldDisabled) {
+        await this.ctx.loader.update(entry.id, { disabled: oldDisabled ?? null })
+      }
+      throw new Error('The plugin is disabled by a parent group or an environment policy')
+    }
+    try {
+      // A successful live change must also be durable; never report success
+      // when the next PHOENIX update would silently erase the preference.
+      await this.pluginPreferences.save({
+        entryId: entry.id, moduleName: entry.options.name, enabled: request.enabled,
+      })
+    } catch (error) {
+      if (updated.options.disabled !== oldDisabled) {
+        try { await this.ctx.loader.update(entry.id, { disabled: oldDisabled ?? null }) }
+        catch { /* Preserve the persistence error as the actionable failure. */ }
+      }
+      throw new Error('Plugin changed in memory but its preference could not be saved; change reverted', { cause: error })
+    }
     return {
       entryId: pluginEntryId(updated.id),
       moduleName: updated.options.name,
@@ -296,9 +369,8 @@ export class PluginInventoryGateway extends TypertRemoteService {
         continue
       }
       try {
-        await this.ctx.loader.update(entry.id, { disabled: false })
-        if (this.ctx.loader.resolve(entry.id).disabled) skipped.push(id)
-        else activated.push(id)
+        await this.setPluginEnabled({ entryId: id, enabled: true })
+        activated.push(id)
       } catch {
         failed.push(id)
       }
