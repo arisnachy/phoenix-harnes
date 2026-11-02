@@ -468,23 +468,32 @@ export async function researchMlbCase(
   const batters=(side:'home'|'away')=>rosterMap[side].filter(p=>p.role==='batter')
     .sort((a,b)=>(a.lineupOrder??99)-(b.lineupOrder??99)||a.name.localeCompare(b.name))
     .slice(0,lineupStatus[side]==='confirmed'?9:18)
-  // A single vsPlayer season query per selected hitter can expose BvP splits
-  // against multiple opponents; never infer an opposition ID from the order.
+  // MLB vsPlayer requires an explicit opposingPlayerId. Batch the observed
+  // opposing hitters per pitcher via people hydration; never attribute an
+  // unqualified split to a pitcher just because they share the same fixture.
   const bvp=new Map<string,Record<string,string>>()
-  const focus=[...batters('home').slice(0,9),...batters('away').slice(0,9)]
-  await boundedMap(focus,4,async batter=>{
-    const data=await measured<RawStats>('https://statsapi.mlb.com/api/v1/people/'+
-      batter.id+'/stats?stats=vsPlayer&group=hitting&season='+season,
-      fetcher,sources,now)
-    for(const raw of arr(data?.stats?.[0]?.splits)){
-      const split=obj(raw)
-      const opponentId=id(obj(split.player).id??obj(split.opponent).id)
-      const knownPitcher=[...bullpen.home,...bullpen.away,starters.home,starters.away]
-        .some(p=>p?.id===opponentId)
-      if(!opponentId||!knownPitcher)continue
-      const stats=fields(obj(split.stat),battingFields)
-      if(!Object.keys(stats).length)continue
-      bvp.set(batter.id+':'+opponentId,stats)
+  const opponentPitchers=[...bullpen.home,...bullpen.away,
+    ...[starters.home,starters.away].filter((p):p is MlbAthlete=>p!==null)]
+  await boundedMap(opponentPitchers,4,async pitcher=>{
+    const opposingBatters=pitcher.teamId===fixture.home.id?
+      batters('away').slice(0,9):batters('home').slice(0,9)
+    if(!opposingBatters.length)return
+    const batterIds=new Set(opposingBatters.map(p=>p.id))
+    const hydrate='stats(group=[hitting],type=[vsPlayer],opposingPlayerId='+
+      pitcher.id+',season='+season+',sportId=1)'
+    const url='https://statsapi.mlb.com/api/v1/people?personIds='+
+      opposingBatters.map(p=>p.id).join(',')+'&hydrate='+encodeURIComponent(hydrate)
+    const response=await measured<unknown>(url,fetcher,sources,now)
+    for(const raw of arr(obj(response).people)){
+      const person=obj(raw),batterId=id(person.id)
+      if(!batterId||!batterIds.has(batterId))continue
+      for(const statGroup of arr(person.stats)){
+        for(const split of arr(obj(statGroup).splits)){
+          const values=fields(obj(obj(split).stat),battingFields)
+          if(!Object.keys(values).length)continue
+          bvp.set(batterId+':'+pitcher.id,values)
+        }
+      }
     }
   })
   const matchups=[...rosterMatchups(batters('home'),starters.away,bullpen.away,bvp),
