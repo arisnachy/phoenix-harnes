@@ -23,6 +23,8 @@ import { searchOfficialMcpRegistry } from './mcp-registry.ts'
 import { readBusinessLibrarySnapshot } from './business-library.ts'
 import { OpenClawConnectorBridge } from './openclaw-connectors.ts'
 import { readOpenClawRuntimeSnapshot } from './openclaw-runtime.ts'
+import { readClawHubCatalog } from './clawhub-catalog.ts'
+import { clawHubInstall, clawHubState } from './clawhub-marketplace.ts'
 import { TokenTelemetryCollector } from './telemetry.ts'
 import { readTelegramBotState, saveTelegramBot, removeTelegramBot, TelegramInbox } from './telegram-bot.ts'
 import { theOddsApiConnectorState, configureTheOddsApiConnector, disconnectTheOddsApiConnector } from './odds-api-connector.ts'
@@ -56,6 +58,7 @@ import type {
   McpRegistrySearchSnapshot,
   OpenClawConnectorSnapshot,
   OpenClawRuntimeSnapshot,
+  ClawHubCatalogRequest, ClawHubCatalogSnapshot, ClawHubInstallRequest, ClawHubInstallReceipt, ClawHubState,
   PhoenixLocalEndpointReceipt,
   PhoenixLocalModeRequest,
   PhoenixLocalModelRequest,
@@ -268,6 +271,24 @@ export class PluginInventoryGateway extends TypertRemoteService {
   @Remote('openClawRuntimeState')
   async openClawRuntimeState(): Promise<OpenClawRuntimeSnapshot> {
     return readOpenClawRuntimeSnapshot()
+  }
+
+  /** The official ClawHub registry is browseable even when OpenClaw Gateway is offline. */
+  @Remote('clawHubCatalog')
+  async clawHubCatalog(request: ClawHubCatalogRequest): Promise<ClawHubCatalogSnapshot> {
+    return readClawHubCatalog(request)
+  }
+
+  @Remote('clawHubState')
+  async clawHubState(): Promise<ClawHubState> {
+    return clawHubState()
+  }
+
+  /** Only an explicitly clicked skill installation; plugins are never auto-executed. */
+  @Remote('clawHubInstallSkill')
+  async clawHubInstallSkill(request: ClawHubInstallRequest): Promise<ClawHubInstallReceipt> {
+    if (request.family !== 'skill') throw new Error('Native ClawHub plugins require runtime review')
+    return clawHubInstall(request)
   }
 
   @Remote('searchMcpRegistry')
