@@ -300,7 +300,7 @@ export async function chatGames(sport:string,league:string,requestedDate?:string
         phase:e.status?.type?.state==='in'?'in':e.status?.type?.state==='post'?'post':'pre',
         ...(e.id !== undefined && String(e.id).trim() !== '' ? { eventId: String(e.id) } : {}),
         periods, highlights,
-        ...(scheduleConflict?{note:'ESPN sigue indicando programado después del inicio previsto. Estado no verificado: no usar como partido futuro ni ofrecer cuotas prepartido.'}:
+        ...(scheduleConflict?{note:'ESPN sigue indicando programado después del inicio previsto. Estado no verificado: no usar como partido futuro ni ofrecer cuotas prepartido. '+(sport==='basketball'&&league==='nba'?'Jugadores destacados omitidos hasta verificar su pertenencia a las plantillas vigentes.':'')}:
           sport==='basketball'&&league==='nba'?{note:'Jugadores destacados omitidos hasta verificar su pertenencia a las plantillas vigentes.'}:{}),
         ...(comp?.broadcasts?.length?{ broadcast:comp.broadcasts.flatMap(x=>x.names??[]).slice(0,3).join(', ') }:{}),
         askPrompt:'Kira, amplía el análisis verificado del evento '+title(e.id,50)+' de '+league+'. Incluye métricas específicas de '+sport+' con sus fuentes.',
