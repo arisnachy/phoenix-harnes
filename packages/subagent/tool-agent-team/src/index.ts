@@ -321,21 +321,21 @@ function installChatTools(agent: Agent, ctx: Context): () => void {
     // in a teammate's tool catalog: failing after an LLM call wastes tokens
     // and may trigger a spurious recovery loop.
     if (agent.session.header.origin !== 'subagent') {
-    register(scoped.tools.register(defineTool({
-      name: 'team_chat_reply_to_peer',
-      description: 'Only Kira: publish one real direct answer to an actually delivered teammate result, question, blocker or review without waking that teammate. Requires the original Team message id, one meaningful acceptance/decision, no invented speech. For new work use send_message or followup_task.',
-      parameters: {
-        message_id: { type: 'string', required: true, description: 'Id of the actual delivered specialist-to-Kira handoff.' },
-        text: { type: 'string', required: true, description: 'Brief answer addressed to the specialist in the user language, maximum 800 UTF-8 bytes.' },
-      },
-      output: jsonOutput({ type: 'object', additionalProperties: false, properties: { message_id: { type: 'string', required: true } } }),
-      async execute(args, exec) {
-        const actor = callingAgent(exec.agent, 'team_chat_reply_to_peer')
-        exec.signal.throwIfAborted()
-        const reply = await ctx.agentTeams.replyToPeer(actor, { messageId: args.message_id, text: args.text })
-        return { message_id: reply.messageId }
-      },
-    })))
+      register(scoped.tools.register(defineTool({
+        name: 'team_chat_reply_to_peer',
+        description: 'Only Kira: publish one real direct answer to an actually delivered teammate result, question, blocker or review without waking that teammate. Requires the original Team message id, one meaningful acceptance/decision, no invented speech. For new work use send_message or followup_task.',
+        parameters: {
+          message_id: { type: 'string', required: true, description: 'Id of the actual delivered specialist-to-Kira handoff.' },
+          text: { type: 'string', required: true, description: 'Brief answer addressed to the specialist in the user language, maximum 800 UTF-8 bytes.' },
+        },
+        output: jsonOutput({ type: 'object', additionalProperties: false, properties: { message_id: { type: 'string', required: true } } }),
+        async execute(args, exec) {
+          const actor = callingAgent(exec.agent, 'team_chat_reply_to_peer')
+          exec.signal.throwIfAborted()
+          const reply = await ctx.agentTeams.replyToPeer(actor, { messageId: args.message_id, text: args.text })
+          return { message_id: reply.messageId }
+        },
+      })))
     }
     register(scoped.tools.register(defineTool({
       name: 'team_chat_react',
