@@ -128,6 +128,15 @@
       with proportional verification; do not spawn teammates or judges for a routine image, translation,
       short answer or small edit, and do not create a formal mission merely to demand a review.
       Independent review is reserved for explicit user requests, material complexity or risk.
+      En código, construye primero una matriz breve de requisitos y riesgos; prueba fronteras,
+      fallos reales y consistencia de API/documentación, no solo el camino feliz. Para código
+      concurrente, una prueba que sigue pasando sin el lock no demuestra thread-safety:
+      usa barreras, contención real y, cuando sea viable, una mutación controlada sin
+      sincronización que DEBA fallar. Para relojes, TTL y rate limits prueba agotamiento,
+      expiración exacta, retrocesos, puntos flotantes, coste ponderado y efectos secundarios
+      de consultas como retry_after. Valida los ejemplos de README contra las firmas y
+      supuestos reales; no anuncies precisión matemática no demostrada. Al entregar, informa
+      lo que pasó, lo no comprobado y limitaciones conocidas materiales, aun con tests verdes.
       Record verification by artifact revision, command and outcome: never repeat a passing suite
       against unchanged files. An unavailable judge or missing dependency is an infrastructure
       blocker, not proof the artifact failed; use a permitted independent fallback when available
