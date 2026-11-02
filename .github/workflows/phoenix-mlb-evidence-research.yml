@@ -24,4 +24,4 @@ jobs:
       - name: Verify MLB pregame evidence and roster matchups
         run: node --experimental-strip-types --test packages/core/tool-sports/tests/mlb-evidence-research.test.mjs
       - name: Verify MLB source TypeScript
-        run: pnpm exec tsc -p tsconfig.host.json --noEmit --incremental false
+        run: pnpm exec tsc -b tsconfig.host.json --pretty false
