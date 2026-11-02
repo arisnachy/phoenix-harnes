@@ -56,6 +56,11 @@ function entries(v: unknown): unknown[] {
   }
   return []
 }
+/** Display external installations, not OpenClaw's built-in model/channel plugins. */
+export function externalOpenClawPluginInventory(report: unknown): Record<string, unknown>[] {
+  return entries(report).map(obj).filter(plugin =>
+    ID.test(str(plugin.id)) && plugin.origin !== 'bundled').slice(0, 200)
+}
 function names(v: unknown): string[] {
   const result: string[] = []
   for (const item of Array.isArray(v) ? v : []) {
@@ -148,7 +153,7 @@ export async function readOpenClawRouting(): Promise<OpenClawRoutingSnapshot> {
   let list: unknown
   try { list = await run(['plugins', 'list', '--json']) }
   catch { return { gatewayCredentialConfigured, tools: [], plugins: [], inspectionAvailable: false } }
-  const inventory = entries(list).map(obj).filter(plugin => ID.test(str(plugin.id))).slice(0, 200)
+  const inventory = externalOpenClawPluginInventory(list)
   const installed: OpenClawInstalledPlugin[] = inventory.map(plugin => {
     const status = str(plugin.status)
     const state: OpenClawInstalledPlugin['status'] =
