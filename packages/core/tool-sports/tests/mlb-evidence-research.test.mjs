@@ -19,7 +19,8 @@ const roster=(side,fullLineup=false)=>({roster:[
     position:{type:'Infielder',abbreviation:'IF'}})):[]),
 ]})
 function fakeNetwork({missingRoster=false,oldGame=false,fullLineup=false,
-  unrelatedGame=false,unknownLineupId=false,pitcherLogs=false,bvpHydration=false}={}){
+  unrelatedGame=false,unknownLineupId=false,pitcherLogs=false,bvpHydration=false,
+  futureGameResult=false,futurePitcherLog=false,wrongVenue=false}={}){
   const calls=[]
   const fetcher=async(input)=>{
     const url=String(input)
@@ -34,6 +35,9 @@ function fakeNetwork({missingRoster=false,oldGame=false,fullLineup=false,
         status:{abstractGameState:'Final'},teams:{
           home:{team:{id:teamId},score:6},
           away:{team:{id:teamId===101?200:201},score:2}}},
+        ...(futureGameResult?[{gamePk:710001,gameDate:'2026-07-01T23:00:00Z',
+          status:{abstractGameState:'Final'},teams:{home:{team:{id:teamId},score:20},
+            away:{team:{id:779},score:0}}}]:[]),
         ...(unrelatedGame?[{gamePk:710000,gameDate:'2026-06-28T22:00:00Z',
           status:{abstractGameState:'Final'},teams:{home:{team:{id:777},score:8},
             away:{team:{id:778},score:1}}}]:[])]}]}
@@ -41,7 +45,8 @@ function fakeNetwork({missingRoster=false,oldGame=false,fullLineup=false,
       data={teams:{home:{battingOrder:fullLineup?[unknownLineupId?999999:1103,1104,...Array.from({length:7},(_,i)=>1301+i)]:[]},
         away:{battingOrder:fullLineup?[2203,2204,...Array.from({length:7},(_,i)=>2301+i)]:[]}}}
     }else if(u.pathname.endsWith('/venues')){
-      data={venues:[{name:'Test Ballpark',location:{defaultCoordinates:{latitude:40.1,longitude:-74.2}}}]}
+      data={venues:[{id:wrongVenue?999:205,name:wrongVenue?'Other Park':'Test Ballpark',
+        location:{defaultCoordinates:{latitude:40.1,longitude:-74.2}}}]}
     }else if(u.pathname.includes('/roster')){
       if(u.searchParams.get('rosterType')==='injured'){data={roster:[]}}
       else if(missingRoster)return new Response('unavailable',{status:503})
@@ -59,6 +64,9 @@ function fakeNetwork({missingRoster=false,oldGame=false,fullLineup=false,
       if(pitcherLogs&&u.searchParams.get('stats')==='gameLog'){
         const starter=[1101,2201].includes(Number(u.pathname.split('/').at(-2)))
         data={stats:[{splits:[
+          ...(futurePitcherLog?[{date:'2026-07-01',opponent:{id:999},
+            stat:{gamesStarted:starter?1:0,inningsPitched:'9.0',
+              numberOfPitches:130,earnedRuns:0,strikeOuts:20}}]:[]),
           {date:'2026-06-29',opponent:{id:777},stat:{gamesStarted:starter?1:0,
             inningsPitched:'5.2',numberOfPitches:88,earnedRuns:2,strikeOuts:7,baseOnBalls:2}},
           {date:'2026-06-15',opponent:{id:778},stat:{gamesStarted:starter?1:0,
@@ -247,4 +255,41 @@ test('BvP evidence is tied to the explicit opposing pitcher MLB ID',async()=>{
   assert.equal(d.matchups.find(m=>m.batterId===1103&&m.pitcherId===2202).bvp,null)
   assert.ok(mock.calls.some(url=>decodeURIComponent(url).includes('opposingPlayerId=2201')))
   assert.ok(!mock.calls.some(url=>url.includes('stats=vsPlayer&group=hitting')))
+})
+
+
+test('research snapshot excludes future results and same-day undated pitching logs',async()=>{
+  const mock=fakeNetwork({futureGameResult:true,pitcherLogs:true,futurePitcherLog:true})
+  const d=await researchMlbCase(date,812345,mock.fetcher,at)
+  assert.equal(d.teamForm.home.games,1)
+  assert.equal(d.teamForm.home.runsFor,6)
+  assert.equal(d.starters.home.recentStarts.length,2)
+  assert.ok(d.starters.home.recentStarts.every(g=>g.date<'2026-07-01'))
+  assert.equal(d.bullpen.home[0].reliefUsage72h.length,1)
+  assert.ok(mock.calls.some(url=>url.includes('/standings?')&&
+    url.includes('date=2026-06-30')))
+})
+
+test('a venue mismatch cannot attach foreign park weather to the MLB fixture',async()=>{
+  const mock=fakeNetwork({wrongVenue:true})
+  const d=await researchMlbCase(date,812345,mock.fetcher,at)
+  assert.equal(d.venue.name,'Test Ballpark')
+  assert.equal(d.venue.latitude,null)
+  assert.equal(d.venue.longitude,null)
+  assert.equal(d.weather,null)
+  assert.ok(d.missingEvidence.includes('Clima horario no disponible'))
+  assert.ok(!mock.calls.some(url=>url.includes('api.open-meteo.com')))
+})
+
+test('market research rejects nonfinite lines and quotes without a named market',async()=>{
+  const mock=fakeNetwork()
+  const quote={eventId:'book-4',bookmaker:'Verified House',market:'totals',
+    selection:'Over',point:8,price:1.91,home:'Home Giants',away:'Away Bears',
+    time:fixture.gameDate,timeIso:fixture.gameDate,updatedAt:'2026-07-01T11:55:00Z'}
+  const d=await researchMlbCase(date,812345,mock.fetcher,at,{},[
+    {...quote,point:Number.NaN},{...quote,point:Number.POSITIVE_INFINITY},
+    {...quote,market:''},{...quote,selection:''},quote,
+  ])
+  assert.equal(d.odds.length,1)
+  assert.equal(d.odds[0].point,8)
 })
