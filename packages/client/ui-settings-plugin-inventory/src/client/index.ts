@@ -40,7 +40,18 @@ export function apply(ctx: ClientContext): void {
     }
     return result.value
   }
-  const inventoryInjected = (): PluginInventorySettingsTabInjected => ({ list })
+  const setPluginEnabled: NonNullable<PluginInventorySettingsTabInjected['setPluginEnabled']> = async request => {
+    const result = await ctx.remote.pluginInventory.setPluginEnabled(request)
+    if (!result.ok) throw new Error('Plugin enablement failed')
+    return result.value
+  }
+  const activateAvailablePlugins: NonNullable<PluginInventorySettingsTabInjected['activateAvailablePlugins']> = async () => {
+    const result = await ctx.remote.pluginInventory.activateAvailablePlugins()
+    if (!result.ok) throw new Error('Bulk plugin activation failed')
+    return result.value
+  }
+  const inventoryInjected = (): PluginInventorySettingsTabInjected =>
+    ({ list, setPluginEnabled, activateAvailablePlugins })
 
   const readBusinessLibrary: BusinessLibraryInjected['readBusinessLibrary'] = async () => {
     const result = await ctx.remote.pluginInventory.businessLibrary()
