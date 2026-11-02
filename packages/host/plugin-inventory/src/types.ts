@@ -29,6 +29,29 @@ export interface ClawHubState {
   readonly pluginExecution: 'openclaw-runtime' | 'not-configured'
 }
 
+
+/** Search results from the public ClawHub registry; not installed/active tools. */
+export interface ClawHubCatalogRequest {
+  readonly family: ClawHubFamily
+  readonly query?: string
+  readonly officialOnly?: boolean
+  readonly limit?: number
+}
+export interface ClawHubCatalogItem {
+  readonly name: string
+  readonly displayName: string
+  readonly description: string
+  readonly version: string
+  readonly family: ClawHubFamily
+  readonly official: boolean
+  readonly installed: boolean
+}
+export interface ClawHubCatalogSnapshot {
+  readonly source: 'clawhub'
+  readonly family: ClawHubFamily
+  readonly items: readonly ClawHubCatalogItem[]
+}
+
 /** Secret-free The Odds API v4 credential state projected to trusted clients. */
 export interface OddsApiConnectorState {
   readonly configured: boolean
