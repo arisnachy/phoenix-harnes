@@ -31,6 +31,11 @@ Equal("http://localhost:3080/", BrowserNavigation.NormalizeAddress("localhost:30
 Equal("http://127.0.0.1:3080/", BrowserNavigation.NormalizeAddress("127.0.0.1:3080")?.ToString(), "loopback uses http", failures);
 Equal("https://www.bing.com/search?q=phoenix+embedded+browser", BrowserNavigation.NormalizeAddress("phoenix embedded browser")?.ToString(), "free text becomes search", failures);
 Equal("about:blank", BrowserNavigation.NormalizeAddress("about:blank")?.ToString(), "about blank allowed", failures);
+True(BrowserNavigation.IsInspectablePage(new Uri("https://example.com"), true), "loaded HTTPS page is inspectable", failures);
+True(BrowserNavigation.IsInspectablePage(new Uri("http://localhost:3080"), true), "loaded local page is inspectable", failures);
+False(BrowserNavigation.IsInspectablePage(new Uri("about:blank"), true), "blank page is not evidence", failures);
+False(BrowserNavigation.IsInspectablePage(new Uri("https://example.com"), false), "failed navigation is not evidence", failures);
+False(BrowserNavigation.IsInspectablePage(new Uri("file:///C:/private.txt"), true), "local file cannot be inspected as web page", failures);
 Equal(null, BrowserNavigation.NormalizeAddress("javascript:alert(1)")?.ToString(), "javascript scheme rejected", failures);
 Equal(null, BrowserNavigation.NormalizeAddress("data:text/html,boom")?.ToString(), "data scheme rejected", failures);
 Equal(null, BrowserNavigation.NormalizeAddress("file:///C:/Windows/System32")?.ToString(), "file scheme rejected", failures);
@@ -51,6 +56,31 @@ Equal(null, close.Url, "close command has no url", failures);
 True(BrowserCommand.TryParse("{\"type\":\"phoenix.app.logout\"}", out var logout), "native logout command parses", failures);
 Equal("phoenix.app.logout", logout.Type, "native logout command type", failures);
 Equal(null, logout.Url, "native logout command has no url", failures);
+
+False(BrowserCommand.TryParse("{\"type\":\"phoenix.audio.capture\",\"sessionId\":\"turn-1\"}", out _),
+    "web surface cannot start Windows audio capture", failures);
+True(BrowserCommand.TryParse("{\"type\":\"phoenix.audio.status\",\"sessionId\":\"turn-1\"}",
+    out var audioState, allowAutomation: true), "native pipe can inspect audio capability", failures);
+Equal("turn-1", audioState.SessionId, "audio status retains session", failures);
+True(BrowserCommand.TryParse("{\"type\":\"phoenix.audio.capture\",\"sessionId\":\"turn-1\",\"seconds\":8}",
+    out var audioCapture, allowAutomation: true), "native pipe accepts bounded audio", failures);
+EqualInt(8, audioCapture.Seconds, "native audio clip bounded", failures);
+False(BrowserCommand.TryParse("{\"type\":\"phoenix.audio.capture\",\"sessionId\":\"turn-1\",\"seconds\":60}",
+    out _, allowAutomation: true), "unbounded audio rejected", failures);
+False(BrowserCommand.TryParse("{\"type\":\"phoenix.audio.capture\",\"sessionId\":\"../other\"}",
+    out _, allowAutomation: true), "foreign session rejected", failures);
+
+
+True(BrowserCommand.TryParse("{\"type\":\"phoenix.audio.capture\",\"sessionId\":\"turn-1\",\"seconds\":6,\"source\":\"microphone\"}",
+    out var audioMic, allowAutomation: true), "microphone capture requires native command", failures);
+Equal("microphone", audioMic.AudioSource, "microphone source retained", failures);
+False(BrowserCommand.TryParse("{\"type\":\"phoenix.audio.capture\",\"sessionId\":\"turn-1\",\"source\":\"all\"}",
+    out _, allowAutomation: true), "arbitrary audio source rejected", failures);
+False(BrowserCommand.TryParse("{\"type\":\"phoenix.senses.status\",\"sessionId\":\"turn-1\"}",
+    out _), "web bridge cannot query sense inventory", failures);
+True(BrowserCommand.TryParse("{\"type\":\"phoenix.senses.status\",\"sessionId\":\"turn-1\"}",
+    out var senses, allowAutomation: true), "native pipe supports viewer inventory", failures);
+Equal("turn-1", senses.SessionId, "sense inventory retains session", failures);
 
 False(BrowserCommand.TryParse("{not-json}", out _), "malformed json rejected", failures);
 False(BrowserCommand.TryParse("{\"type\":\"phoenix.browser.open\",\"url\":\"javascript:alert(1)\"}", out _), "unsafe open command rejected", failures);

@@ -8,7 +8,7 @@ ChatGPT Web 生命周期也由 Host 持有。`pluginInventory/chatGptWebState`�
 
 Host 还负责那些无法安全使用通用 registry 安装器的固定厂商 MCP 组合。官方 X 组合会安装无需凭据的 `https://docs.x.com/mcp`，以及 X 官方 `@xdevplatform/xurl` stdio 桥接器以连接 `https://api.x.com/mcp`。桥接器配置只保存 `X_CLIENT_ID` 与 `X_CLIENT_SECRET` 的凭据引用；实际值留在 Phoenix 凭据提供方中，并且只在启动对应 xurl 世代时注入子进程。模型只能通过需要用户批准的连接器工具激活该组合，激活动作本身不会执行任何 X 账户操作。
 
-Loader 清单每次调用都直接读取 `ctx.loader.entries()`，跳过结构性的 group 行，并返回 Loader 条目 id、模块标识、有效启用状态与当前根 Fiber 阶段。阶段为 `pending`、`loading`、`active`、`failed` 或 `unloading`；条目没有存活的根 Fiber 时则为 `null`。Loader 仍是插件生命周期的唯一权威，本包不拥有清单缓存或插件修改路径。
+Loader 清单每次调用都直接读取 `ctx.loader.entries()`，跳过结构性的 group 行，并返回 Loader 条目 id、模块标识、有效启用状态与当前根 Fiber 阶段。阶段为 `pending`、`loading`、`active`、`failed` 或 `unloading`；条目没有存活的根 Fiber 时则为 `null`。Loader 仍是插件生命周期的唯一权威。受信任的 Settings 可以通过 `pluginInventory/setPluginEnabled` 修改精确的现有条目，或通过 `pluginInventory/activateAvailablePlugins` 批量尝试激活并安装预设的 MCP 组合。用户选择以原子方式保存至 `$DSH_HOME/settings/plugin-enablement.json`，在 Host 启动及重新加载条目后恢复；待解决依赖并不等于服务已就绪。这些开关不会自动批准未知 ClawHub 包、OAuth 权限或可执行程序。
 
 更新器状态位于 checkout 的 Git 目录中，不在 `$DSH_HOME`。Host 只按 checkout 根目录缓存解析出的 Git 控制目录；根目录的 `.git` 标记身份或指针内容变化、或标记消失时会使路径查找失效，而每次快照读取都会重新读取更新器 JSON。更新器会原子地替换这个 JSON 文档，Host 也会重试短暂的读取竞争。Host 桥只接受文档规定的更新状态词汇，限制自由文本字段长度，只接受完整的 40 字符 commit id，并且绝不允许浏览器提供激活 target。重启请求会绑定到分离 stable 更新器已经写入的精确 `ready` target，随后 Host 只会在该请求持久写入后安排自身退出。Host 退出之后，激活、rollback 与重新启动都由更新器进程负责。
 

@@ -68,6 +68,7 @@ import type { PiAiProviderProfile, ResolvedPiAiProviderProfile } from './config.
 import { discoverModels } from './discovery.ts'
 import { installCodexAvatarTransform, installCodexImageGeneration } from './image-generation.ts'
 import { registerPiAiFlows } from './login.ts'
+import { NvidiaLiveCatalog, NVIDIA_BUILD_BASE_URL, NVIDIA_MODEL_REFRESH_MS } from './nvidia-live-catalog.ts'
 import {
   OPENCODE_FREE_PROVIDER,
   createOpenCodeFreeCatalog,
@@ -211,10 +212,17 @@ export function apply(ctx: Context, config: Config): void {
   const openCodeCatalog = createOpenCodeFreeCatalog()
   let openCodeCatalogRevision = 0
   const codexCatalog = new CodexLiveCatalog({ logger: ctx.logger })
+  const nvidiaCatalog = new NvidiaLiveCatalog({ logger: ctx.logger })
+  const officialNvidiaRoute = (): boolean => {
+    const route = current().providers?.nvidia
+    return route !== undefined
+      && (route.baseURL === undefined || route.baseURL.replace(/[/]+$/u, '') === NVIDIA_BUILD_BASE_URL)
+  }
   let current: () => Config = () => config
   let lastRaw: Config | undefined
   let lastCatalogRevision = -1
   let lastCodexCatalogRevision = -1
+  let lastNvidiaCatalogRevision = -1
   let memoized: ReadonlyMap<string, ResolvedPiAiProviderProfile> | undefined
 
   /**
@@ -227,10 +235,11 @@ export function apply(ctx: Context, config: Config): void {
       raw === lastRaw
       && lastCatalogRevision === openCodeCatalogRevision
       && lastCodexCatalogRevision === codexCatalog.revision
+      && lastNvidiaCatalogRevision === nvidiaCatalog.revision
       && memoized !== undefined
     ) return memoized
 
-    const providers = codexCatalog.overlayProviders(raw.providers ?? {})
+    const providers = nvidiaCatalog.overlayProviders(codexCatalog.overlayProviders(raw.providers ?? {}))
     const next = resolveProfiles({
       ...providers,
       [PHOENIX_LOCAL_PROVIDER]: phoenixLocalProfile(),
@@ -239,6 +248,7 @@ export function apply(ctx: Context, config: Config): void {
     lastRaw = raw
     lastCatalogRevision = openCodeCatalogRevision
     lastCodexCatalogRevision = codexCatalog.revision
+    lastNvidiaCatalogRevision = nvidiaCatalog.revision
     memoized = next
     return next
   }
@@ -272,8 +282,25 @@ export function apply(ctx: Context, config: Config): void {
     profiles,
     resolveApiKey,
     auth,
-    refreshModels: (provider, force) =>
-      codexCatalog.refresh(provider, current().providers?.[provider], force),
+    refreshModels: (provider, force) => {
+      if (provider === 'nvidia') {
+        if (!officialNvidiaRoute()) return Promise.resolve(undefined)
+        return nvidiaCatalog.refresh(force)
+      }
+      return codexCatalog.refresh(provider, current().providers?.[provider], force)
+    },
+    preferredModel: (provider, model, needsImage) =>
+      provider === 'nvidia' && officialNvidiaRoute()
+        ? nvidiaCatalog.preferredModel(model, needsImage)
+        : undefined,
+    onModelUnavailable: async (provider, model, needsImage) => {
+      if (provider !== 'nvidia' || !officialNvidiaRoute()) return undefined
+      const alternative = await nvidiaCatalog.markUnavailable(model, needsImage)
+      if (alternative !== undefined) {
+        ctx.logger.warn(`nvidia: model "${model}" returned HTTP 410; switching this turn to "${alternative}"`)
+      }
+      return alternative
+    },
     reasoningForModel: (provider, model) => {
       if (provider !== CODEX_PROVIDER) return undefined
       const configured = current().providers?.[provider]?.models?.find(candidate => candidate.id === model)
@@ -314,7 +341,22 @@ export function apply(ctx: Context, config: Config): void {
     if (profile === undefined) return undefined
     return resolveApiKey(provider, profile)
   }
-  ctx.llm.registerModelDiscovery(NS, request => discoverModels(request, () => storedApiKey(request.provider)))
+  ctx.llm.registerModelDiscovery(NS, async (request) => {
+    if (request.provider === 'nvidia'
+      && (request.baseURL === undefined || request.baseURL.replace(/[/]+$/u, '') === NVIDIA_BUILD_BASE_URL)) {
+      await nvidiaCatalog.refresh(true)
+      const live = nvidiaCatalog.visibleModels()
+      if (live !== undefined) {
+        return live.map(model => ({
+          id: model.id,
+          name: model.name ?? model.id,
+          ...model.contextWindow === undefined ? {} : { contextWindow: model.contextWindow },
+          ...model.maxTokens === undefined ? {} : { maxTokens: model.maxTokens },
+        }))
+      }
+    }
+    return discoverModels(request, () => storedApiKey(request.provider))
+  })
 
   let registration: AdapterRegistrationHandle | undefined
   let registeredFacts: unknown
@@ -373,6 +415,17 @@ export function apply(ctx: Context, config: Config): void {
       })
     }
   }, 'OpenCode free model bridge')
+
+  // NVIDIA's hosted model IDs change independently of PHOENIX releases.
+  // Poll in the Host and invalidate profile snapshots only when the live list changes.
+  void ctx.effect(async () => {
+    if (officialNvidiaRoute()) void nvidiaCatalog.refresh(true)
+    const timer = setInterval(() => {
+      if (officialNvidiaRoute()) void nvidiaCatalog.refresh()
+    }, NVIDIA_MODEL_REFRESH_MS)
+    timer.unref()
+    return () => { clearInterval(timer) }
+  }, 'NVIDIA live model catalog')
 
   installSettingsSection(ctx, NS, Config, config, {
     validate: assertServiceable,

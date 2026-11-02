@@ -76,22 +76,22 @@ export function SportsGameCenter({ sport,league,eventId,phase,game }:{
   },[open,url,phase])
   if(!url)return null
   const valid=state.url===url,plays=valid?state.plays:[]
-  return <section className={css.center} aria-label="Seguimiento ESPN del partido">
+  return <section className={css.center} aria-label="Seguimiento del partido">
     <button type="button" className={css.toggle} aria-expanded={open}
       onClick={()=>{setOpen(!open)}}> {open?'Cerrar seguimiento':'Seguir partido · Jugadas'} <span aria-hidden="true">{open?'▴':'▾'}</span></button>
     {open&&<div className={css.panel}>
-      <div className={css.heading}><strong>Jugadas · ESPN</strong><small>{
+      <div className={css.heading}><strong>Jugadas del encuentro</strong><small>{
         valid&&state.at>0?'Recibido '+new Date(state.at).toLocaleTimeString('es-DO',{ hour:'2-digit',minute:'2-digit' }):
           'Sin actualización confirmada'}</small></div>
-      {valid&&state.error&&<p role="status">ESPN no respondió; se muestran los últimos datos recibidos.</p>}
+      {valid&&state.error&&<p role="status">El servicio de resultados no respondió; se muestran los últimos datos recibidos.</p>}
       {(!valid||state.loading&&!state.at)&&<p role="status">Consultando cronología…</p>}
-      {valid&&!state.loading&&!state.error&&!plays.length&&<p>ESPN no publicó jugadas detalladas para este encuentro.</p>}
+      {valid&&!state.loading&&!state.error&&!plays.length&&<p>No hay jugadas detalladas disponibles para este encuentro.</p>}
       {plays.length>0&&<ol className={css.plays}>{plays.map(play=><li key={play.id}>
         <span className={css.minute}>{[play.period,play.clock].filter(Boolean).join(' · ')||'—'}</span>
         <span className={css.description}>{play.text}
           {(play.team||play.score)&&<small>{[play.team,play.score].filter(Boolean).join(' · ')}</small>}</span>
       </li>)}</ol>}
-      <small className={css.disclaimer}>Datos de ESPN sujetos a retrasos y cobertura por liga. Sin video.</small>
+      <small className={css.disclaimer}>Jugadas sujetas a retrasos según la liga. Sin video.</small>
     </div>}
   </section>
 }

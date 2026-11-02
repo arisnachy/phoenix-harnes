@@ -30,9 +30,11 @@ describe('headless-agent keyless smoke', () => {
         if (relativePath === undefined) return
         const compressed = await readFile(join(cwd, relativePath))
         expect(compressed.subarray(0, 4).toString('hex')).toBe('28b52ffd')
-        // Persistence is JSONL: validate every record, then inspect the session header.
-        const persistedRecords = (await decompress(compressed)).toString().trimEnd().split(/\r?\n/u)
+        // JSONL archive: reject empty archives and validate every record, not only the header.
+        const serialized = (await decompress(compressed)).toString()
+        const persistedRecords = serialized.split(/\r?\n/u).filter(line => line.trim().length > 0)
           .map(line => JSON.parse(line) as Record<string, unknown>)
+        if (persistedRecords.length === 0) throw new Error('Persisted session archive is empty')
         persistedHeader = persistedRecords[0]
       },
     })

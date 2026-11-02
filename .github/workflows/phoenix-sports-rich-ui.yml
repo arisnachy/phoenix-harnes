@@ -48,6 +48,10 @@ jobs:
           node --experimental-strip-types --test packages/core/tool-sports/tests/sports-market-intelligence.test.mjs
           node --experimental-strip-types --test packages/core/tool-sports/tests/sports-deep-context.test.mjs
           node --experimental-strip-types --test packages/core/tool-sports/tests/universal-matchup-factors.test.mjs
+          node --experimental-strip-types --test packages/core/tool-sports/tests/sports-forecast.test.mjs
+          node --experimental-strip-types --test packages/core/tool-sports/tests/sports-calibration.test.mjs
+          node --experimental-strip-types --test packages/core/tool-sports/tests/sports-editorial-discovery.test.mjs
+          node --experimental-strip-types --test packages/core/tool-sports/tests/espn-extra-intelligence.test.mjs
           node --experimental-strip-types --test packages/core/tool-sports/tests/espn-intelligence.test.mjs
           node --experimental-strip-types --test packages/core/tool-sports/tests/espn-odds-multiroute.test.mjs
           node --experimental-strip-types --test packages/core/tool-sports/tests/espn-core-intelligence.test.mjs

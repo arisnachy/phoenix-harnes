@@ -1,3 +1,64 @@
+
+/** ClawHub entries are catalog metadata, never proof a third-party package is executable. */
+export type ClawHubFamily = 'skill' | 'code-plugin' | 'bundle-plugin'
+export interface ClawHubListing {
+  readonly name: string
+  readonly family: ClawHubFamily
+  readonly description: string
+  readonly version: string
+}
+export interface ClawHubQuery {
+  readonly query: string
+  readonly family: ClawHubFamily
+  readonly limit?: number
+}
+export interface ClawHubInstallRequest {
+  readonly name: string
+  readonly family: ClawHubFamily
+}
+export interface ClawHubInstallReceipt {
+  readonly name: string
+  readonly family: ClawHubFamily
+  readonly status: 'installed-skill' | 'installed-in-openclaw'
+  readonly detail: string
+}
+export interface ClawHubState {
+  readonly cli: 'managed' | 'global' | 'missing'
+  readonly openclaw: 'available' | 'missing'
+  readonly skillsDirectory: string
+  readonly pluginExecution: 'openclaw-runtime' | 'not-configured'
+  /** Actual verified local CLI readiness, not just a package.json on disk. */
+  readonly cliStatus: 'ready' | 'installing' | 'missing' | 'install-failed' | 'incompatible-node'
+  readonly cliVersion?: string
+  readonly latestCliVersion?: string
+  readonly lastCheckedAt?: number
+  /** Safe enum; raw npm output and credential material are never exposed. */
+  readonly failureReason?: 'npm-cli-not-found' | 'registry-unreachable' | 'npm-install-or-cli-health-check-failed'
+}
+
+
+/** Search results from the public ClawHub registry; not installed/active tools. */
+export interface ClawHubCatalogRequest {
+  readonly family: ClawHubFamily
+  readonly query?: string
+  readonly officialOnly?: boolean
+  readonly limit?: number
+}
+export interface ClawHubCatalogItem {
+  readonly name: string
+  readonly displayName: string
+  readonly description: string
+  readonly version: string
+  readonly family: ClawHubFamily
+  readonly official: boolean
+  readonly installed: boolean
+}
+export interface ClawHubCatalogSnapshot {
+  readonly source: 'clawhub'
+  readonly family: ClawHubFamily
+  readonly items: readonly ClawHubCatalogItem[]
+}
+
 /** Secret-free The Odds API v4 credential state projected to trusted clients. */
 export interface OddsApiConnectorState {
   readonly configured: boolean
@@ -74,6 +135,22 @@ export interface PluginInventoryEntry {
 /** Point-in-time inventory returned by the plugin inventory Remote. */
 export interface PluginInventorySnapshot {
   readonly entries: readonly PluginInventoryEntry[]
+}
+
+/** Exact existing Loader entry request from trusted Settings. */
+export interface PluginEnableRequest {
+  readonly entryId: PluginEntryId
+  readonly enabled: boolean
+}
+
+/** Results of activating configured plugins and the pinned curated MCP pack. */
+export interface PluginBulkActivationReceipt {
+  readonly activated: readonly PluginEntryId[]
+  readonly skipped: readonly PluginEntryId[]
+  readonly failed: readonly PluginEntryId[]
+  readonly curatedInstalled: number
+  readonly curatedExisting: number
+  readonly curatedFailed: readonly CuratedMcpConnectorId[]
 }
 
 /** Secret-free Business Engine product projection. No local paths or order identifiers. */
@@ -426,6 +503,49 @@ export interface OpenClawConnectorEntry {
 /** Current OpenClaw connector readiness projected to Settings. */
 export interface OpenClawConnectorSnapshot {
   readonly connectors: readonly OpenClawConnectorEntry[]
+}
+
+
+/** CLI readiness is not proof of live runtime state or granted capabilities. */
+export type OpenClawProbeState = 'not-installed' | 'responded' | 'unavailable'
+export interface OpenClawRuntimeSnapshot {
+  /** Runtime compatibility of PHOENIX's Host Node, not the Gateway Node. */
+  readonly hostNodeSupported: boolean
+  readonly installed: boolean
+  readonly gateway: OpenClawProbeState
+  readonly browser: OpenClawProbeState
+  readonly plugins: OpenClawProbeState
+  readonly channels: OpenClawProbeState
+  readonly nativePluginsRoutedToPhoenix: false
+}
+
+/** OpenClaw tools can only be routed after the owner approves the exact registered identity. */
+export interface OpenClawRoutedTool {
+  readonly pluginId: string
+  readonly name: string
+  readonly enabled: boolean
+  readonly imported: boolean
+  readonly approved: boolean
+}
+export interface OpenClawRoutingSnapshot {
+  readonly gatewayCredentialConfigured: boolean
+  readonly tools: readonly OpenClawRoutedTool[]
+  readonly inspectionAvailable: boolean
+}
+export interface OpenClawGatewayCredentialState {
+  readonly configured: boolean
+  readonly source: 'vault' | 'environment' | 'none'
+  /** Short-lived local pairing link; only sent to the trusted Settings UI. */
+  readonly authorizationUrl?: string
+}
+export interface OpenClawGatewayCredentialRequest {
+  readonly token?: string
+  readonly auto?: boolean
+}
+export interface OpenClawRoutingRequest {
+  readonly pluginId: string
+  readonly toolName: string
+  readonly approved: boolean
 }
 
 /** Public X connector identity accepted by the Host remote boundary. */

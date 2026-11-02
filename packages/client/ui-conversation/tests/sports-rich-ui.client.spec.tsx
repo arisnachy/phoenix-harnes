@@ -284,7 +284,7 @@ describe('Universal chat: compact sports schedules do not replace single-game ca
     const actions:string[]=[]
     render(<GenerativeUi block={card} onAction={text=>actions.push(text)}/>)
     expect(screen.getByText('PHOENIX / TENIS · WTA')).toBeTruthy()
-    expect(screen.getByText(/ESPN aún no identifica a ambos participantes/)).toBeTruthy()
+    expect(screen.getByText(/Participantes pendientes de confirmar/)).toBeTruthy()
     expect(screen.queryByText('Sin confirmar')).toBeNull()
     expect(screen.queryByText('Finalizado')).toBeNull()
     expect(screen.getAllByRole('button',{ name:'Ver análisis del encuentro ›' })).toHaveLength(1)
@@ -331,12 +331,75 @@ describe('ESPN universal adaptive panels',()=>{
     expect(card).not.toBeNull()
     if(!card)throw Error('ESPN template rejected')
     render(<GenerativeUi block={card}/>)
+    fireEvent.click(screen.getByText('Ver estadísticas y contenido'))
     expect(screen.getByRole('region',{ name:'Perfil' })).toBeTruthy()
     expect(screen.getByRole('region',{ name:'Últimos partidos' })).toBeTruthy()
-    expect(screen.getByText('PTS: 28')).toBeTruthy()
+    expect(screen.getAllByText('PTS: 28').length).toBeGreaterThan(0)
     expect(screen.getByText('Headline')).toBeTruthy()
-    expect(screen.getByRole('link',{ name:'Leer noticia en ESPN' }).getAttribute('href')).toContain('espn.com')
+    expect(screen.getByRole('link',{ name:'Leer noticia' }).getAttribute('href')).toContain('espn.com')
     expect(screen.getByAltText('Jugador real')).toBeTruthy()
+  })
+
+  it('keeps the intelligent event preview short and removes provider branding from visible text',()=>{
+    const event={ ...template,props:{ ...template.props,view:'event',title:'ESPN · USA.1',
+      subtitle:'Encuentro',note:'Datos de ESPN sujetos a disponibilidad' } }
+    const card=parseGenerativeUiBlock(event)
+    if(!card)throw Error('Event fixture rejected')
+    const { container }=render(<GenerativeUi block={card}/>)
+    expect(screen.getByText('MLS')).toBeTruthy()
+    expect(screen.getByText('Ver estadísticas y contenido')).toBeTruthy()
+    expect(container.querySelector('[data-generative-ui="sports_espn_dashboard"]')).toBeTruthy()
+    expect(screen.queryByText(/\bESPN\b/iu)).toBeNull()
+    fireEvent.click(screen.getByText('Ver estadísticas y contenido'))
+    expect(screen.queryByText(/\bESPN\b/iu)).toBeNull()
+  })
+  it('previews participants, observed team performance, market prices and source-neutral projection without expanding',()=>{
+    const dashboard={component:'sports_espn_dashboard',version:1,props:{
+      view:'event',title:'Clippers vs Warriors',subtitle:'NBA · Encuentro',
+      source:'ESPN Core',checkedAt:'2026-11-01T23:43:00Z',
+      note:'Cifras observadas · estimaciones no calibradas',
+      sections:[
+        {heading:'Estadísticas de temporada',kind:'metrics',items:[{label:'Warriors · Rebotes',value:'45.2'}]},
+        {heading:'Rendimiento de los equipos',kind:'metrics',items:[{label:'GS · Récord',value:'5-2'}]},
+        {heading:'Cuotas y mercados',kind:'metrics',items:[{label:'Local · h2h',value:'1.95',detail:'Vigencia sin confirmar'}]},
+        {heading:'Proyección de referencia',kind:'metrics',items:[{label:'Local',value:'55.0%',detail:'No es cuota'}]},
+        {heading:'Encuentro y participantes',kind:'list',items:[
+          {label:'Warriors',value:'home',image:'https://a.espncdn.com/warriors.png'},
+          {label:'Clippers',value:'away',image:'https://a.espncdn.com/clippers.png'},
+        ]},
+      ],
+    }}
+    const block=parseGenerativeUiBlock(dashboard)
+    if(!block)throw Error('Sports dossier rejected')
+    const {container}=render(<GenerativeUi block={block}/>)
+    expect(container.textContent).toContain('Warriors')
+    expect(container.textContent).toContain('Clippers')
+    expect(container.textContent).toContain('45.2')
+    expect(container.textContent).toContain('1.95')
+    expect(container.textContent).toContain('55.0%')
+    expect(container.textContent).toContain('Local')
+    expect(container.textContent).not.toContain('ESPN Core')
+    expect(container.querySelector('[data-generative-ui="sports_espn_dashboard"]')).toBeTruthy()
+  })
+  it('displays both team win probabilities in the collapsed smart card',()=>{
+    const block=parseGenerativeUiBlock({component:'sports_espn_dashboard',version:1,props:{
+      view:'event',title:'Thunder vs Cavaliers',subtitle:'NBA',
+      source:'PHOENIX',checkedAt:'2026-11-02T01:00:00Z',
+      note:'Estimación exploratoria; no calibrada',
+      sections:[
+        {heading:'Estimación orientativa',kind:'metrics',items:[
+          {label:'Cavaliers',value:'56.1%',detail:'No calibrada'},
+          {label:'Thunder',value:'43.9%',detail:'No calibrada'}]},
+        {heading:'Forma reciente',kind:'metrics',items:[{label:'CLE',value:'4V 2D'}]},
+        {heading:'Cuotas y mercados',kind:'metrics',items:[{label:'local',value:'1.95'}]},
+      ],
+    }})
+    if(!block)throw Error('Expected valid sports dashboard')
+    const {container}=render(<GenerativeUi block={block}/>)
+    expect(screen.getByText('Prob. ganar · Cavaliers')).toBeTruthy()
+    expect(screen.getByText('Prob. ganar · Thunder')).toBeTruthy()
+    expect(container.textContent).toContain('56.1%')
+    expect(container.textContent).toContain('43.9%')
   })
   it('rejects hostile photos, scripts, excessive sections and undeclared data',()=>{
     const base=template.props
@@ -348,6 +411,30 @@ describe('ESPN universal adaptive panels',()=>{
       sections:[{ heading:'X',kind:'list',items:[{ label:'A',html:'<img onerror=evil />' }] }] } })).toBeNull()
     expect(parseGenerativeUiBlock({ ...template,props:{ ...base,
       sections:Array.from({ length:9 },()=>base.sections[0]) } })).toBeNull()
+  })
+})
+
+describe('Phoenix sports newsroom uses the shared intelligent UI contract',()=>{
+  it('renders image-first article tiles, Spanish labels and a provider-neutral league title',()=>{
+    const news={ component:'sports_espn_dashboard',version:1,props:{
+      view:'news',title:'ESPN · ENG.1',subtitle:'Noticias',
+      source:'ESPN Common v3',checkedAt:'2026-11-01T13:40:00Z',
+      note:'Titulares de origen verificado',
+      sections:[{heading:'Últimos titulares',kind:'articles',items:[
+        {label:'Liverpool host Arsenal',value:'2026-11-01T13:41:41Z',
+          detail:'Liverpool welcome Arsenal to Anfield.',
+          image:'https://a.espncdn.com/news-photo.png',
+          href:'https://www.espn.com/soccer/story/_/id/42/article'},
+      ]}],
+    } }
+    const block=parseGenerativeUiBlock(news)
+    if(!block)throw Error('Valid news panel rejected')
+    const {container}=render(<GenerativeUi block={block}/>)
+    expect(screen.getByText('Premier League · Inglaterra')).toBeTruthy()
+    expect(screen.getByText('Leer noticia')).toBeTruthy()
+    expect(container.querySelector('img')?.getAttribute('src')).toContain('a.espncdn.com')
+    expect(container.querySelector('[data-generative-ui="sports_espn_dashboard"]')).toBeTruthy()
+    expect(container.textContent).not.toContain('ESPN INTELLIGENCE')
   })
 })
 
@@ -365,6 +452,7 @@ describe('ESPN contextual navigation',()=>{
     if(!card)throw Error('Invalid contextual fixture')
     let prompt=''
     render(<GenerativeUi block={card} onAction={(text)=>{prompt=text}}/>)
+    fireEvent.click(screen.getByText('Ver estadísticas y contenido'))
     fireEvent.click(screen.getByRole('button',{ name:'Estadísticas del jugador' }))
     expect(prompt).toContain('athleteId=991')
   })

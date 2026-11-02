@@ -171,7 +171,7 @@ describe('goal tool registration and presentation', () => {
         .toEqual({ kind: 'exclusive' })
     }
     const section = (await ctx.systemPrompt.assemble()).sections.find(item => item.name === 'tool:goal')
-    expect(section?.text).toContain('infer goal intent')
+    expect(section?.text).toContain('explicit human request to activate Goal')
     expect(section?.text).toContain('at least 5 consecutive goal rounds')
 
     await fiber.dispose()
@@ -240,9 +240,9 @@ describe('goal tool registration and presentation', () => {
 })
 
 describe('goal tool execution authority', () => {
-  it('lets a root model infer create intent from its accepted human turn', async () => {
+  it('permits a Goal only after explicit human activation', async () => {
     const { ctx, root } = await harness({ requireJudge: false })
-    openTurn(root, { kind: 'user' }, '请持续工作直到这个功能完成')
+    openTurn(root, { kind: 'user' }, 'Activa Goal y continúa hasta terminar el trabajo')
     const result = await execute(ctx, 'create_goal', {
       objective: 'Finish the feature', max_goal_rounds: 9,
     }, root.agent)
@@ -251,6 +251,20 @@ describe('goal tool execution authority', () => {
     })
     expect(resultJson(result)['activation']).toBe('armed')
     expect(ctx.goals.get(root.agent)?.objective).toBe('Finish the feature')
+  })
+
+  it('denies implicit Goal activation for ordinary tasks or explicit refusal', async () => {
+    const { ctx, root } = await harness({ requireJudge: false })
+    const ordinary = openTurn(root, { kind: 'user' }, 'Implementa un módulo Python con pruebas pytest y README')
+    const denied = await execute(ctx, 'create_goal', { objective: 'Do the module' }, root.agent)
+    expect(denied.error?.info?.code).toBe('GOAL_EXPLICIT_OPT_IN_REQUIRED')
+    expect(ctx.goals.get(root.agent)).toBeUndefined()
+    closeTurn(root, ordinary)
+
+    openTurn(root, { kind: 'user' }, 'No actives Goal; resuelve directamente con Luna')
+    const rejected = await execute(ctx, 'create_goal', { objective: 'Do the module' }, root.agent)
+    expect(rejected.error?.info?.code).toBe('GOAL_EXPLICIT_OPT_IN_REQUIRED')
+    expect(ctx.goals.get(root.agent)).toBeUndefined()
   })
 
   it('rejects agentless, driverless, non-human, and live-child creation', async () => {
@@ -392,7 +406,7 @@ describe('goal tool state transitions', () => {
 
   it('reads null, then edits, pauses, and resumes by exact revision in one human turn', async () => {
     const { ctx, root } = await harness()
-    openTurn(root, { kind: 'user' })
+    openTurn(root, { kind: 'user' }, 'Crea un Goal para mantener esta tarea como objetivo persistente')
     expect(resultJson(await execute(ctx, 'get_goal', {}, root.agent))).toEqual({ goal: null })
     let goal = resultGoal(await execute(ctx, 'create_goal', { objective: 'old' }, root.agent))
     goal = resultGoal(await execute(ctx, 'update_goal', {
@@ -496,7 +510,7 @@ describe('goal tool state transitions', () => {
 
   it('returns structured domain and conditional-argument failures', async () => {
     const { ctx, root } = await harness()
-    openTurn(root, { kind: 'user' })
+    openTurn(root, { kind: 'user' }, 'Create Goal for the verified work')
     const invalidCreate = await execute(ctx, 'create_goal', { objective: ' ' }, root.agent)
     expect(invalidCreate.error?.info?.code).toBe('GOAL_INVALID_OBJECTIVE')
     const created = ctx.goals.create(root.agent, { objective: 'valid' })

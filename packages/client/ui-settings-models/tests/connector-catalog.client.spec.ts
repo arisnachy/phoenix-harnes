@@ -36,6 +36,19 @@ describe('connector catalog', () => {
     expect(byId.get('canva')?.registryName).toBe('com.canva.mcp/mcp')
   })
 
+  it('keeps OpenClaw as one connector and routes imported Skills through the existing registry', () => {
+    const openClaw = CONNECTOR_CATALOG.filter(connector => connector.id === 'openclaw')
+    expect(openClaw).toHaveLength(1)
+    expect(openClaw[0]).toMatchObject({ mode: 'native', provenance: 'native' })
+    const google = CONNECTOR_CATALOG.filter(connector => connector.openClawConnectorId === 'google-workspace')
+    const github = CONNECTOR_CATALOG.filter(connector => connector.openClawConnectorId === 'github')
+    expect(google.map(connector => connector.id)).toEqual(['google-workspace'])
+    expect(github.map(connector => connector.id)).toEqual(['github'])
+    expect(new Set(CONNECTOR_CATALOG.filter(connector => connector.registryName !== undefined)
+      .map(connector => connector.registryName)).size)
+      .toBe(CONNECTOR_CATALOG.filter(connector => connector.registryName !== undefined).length)
+  })
+
   it('exposes direct X install and native Social Engine without confusing three X identities', () => {
     const map = new Map(CONNECTOR_CATALOG.map(item => [item.id, item]))
     expect(map.get('x')?.curatedMcp).toBe(true)

@@ -104,6 +104,64 @@ describe('PluginInventorySettingsTab', () => {
     expect(screen.queryByText(en.unobserved)).toBeNull()
   })
 
+  it('offers individual status selectors and a real bulk install action', async () => {
+    const list = vi.fn<PluginInventorySettingsTabInjected['list']>(async () => SNAPSHOT)
+    const setPluginEnabled = vi.fn<NonNullable<PluginInventorySettingsTabInjected['setPluginEnabled']>>()
+      .mockResolvedValue({ entryId: 'disabled-entry' as never, moduleName: 'test', enabled: true, fiberPhase: 'active' })
+    const activateAvailablePlugins = vi.fn<NonNullable<PluginInventorySettingsTabInjected['activateAvailablePlugins']>>()
+      .mockResolvedValue({
+        activated: ['disabled-entry' as never], skipped: [], failed: [],
+        curatedInstalled: 1, curatedExisting: 0, curatedFailed: [],
+      })
+    render(<PluginInventorySettingsTab {...props(list)}
+      setPluginEnabled={setPluginEnabled} activateAvailablePlugins={activateAvailablePlugins} />)
+    const selector = await screen.findByRole('combobox', { name: /directory-picker-native/ })
+    fireEvent.change(selector, { target: { value: 'on' } })
+    await waitFor(() => { expect(setPluginEnabled).toHaveBeenCalledWith({
+      entryId: 'disabled-entry', enabled: true,
+    }) })
+    fireEvent.click(screen.getByRole('button', { name: en.bulkAction }))
+    await waitFor(() => { expect(activateAvailablePlugins).toHaveBeenCalledOnce() })
+    expect(await screen.findByText(/plugins enabled/)).toBeTruthy()
+  })
+
+  it('holds the requested selector value until the Host confirms it', async () => {
+    const pending = Promise.withResolvers<Awaited<ReturnType<NonNullable<PluginInventorySettingsTabInjected['setPluginEnabled']>>>>()
+    const list = vi.fn<PluginInventorySettingsTabInjected['list']>()
+      .mockResolvedValueOnce(SNAPSHOT)
+      .mockResolvedValue({
+        entries: SNAPSHOT.entries.map(entry => entry.entryId === 'disabled-entry'
+          ? { ...entry, enabled: true, fiberPhase: 'active' }
+          : entry),
+      })
+    const toggle = vi.fn<NonNullable<PluginInventorySettingsTabInjected['setPluginEnabled']>>()
+      .mockImplementation(() => pending.promise)
+    render(<PluginInventorySettingsTab {...props(list)} setPluginEnabled={toggle} />)
+    const selector = await screen.findByRole('combobox', { name: /directory-picker-native/ }) as HTMLSelectElement
+    expect(selector.value).toBe('off')
+    fireEvent.change(selector, { target: { value: 'on' } })
+    expect(selector.value).toBe('on')
+    expect(selector.disabled).toBe(true)
+    await act(async () => {
+      pending.resolve({ entryId: 'disabled-entry' as never,
+        moduleName: '@phoenix-ai/dsh-host-directory-picker-native', enabled: true, fiberPhase: 'active' })
+    })
+    await waitFor(() => { expect(selector.value).toBe('on') })
+    expect(screen.getByText(en.pluginChanged)).toBeTruthy()
+  })
+
+  it('shows the rejected entry and reason rather than silently reverting', async () => {
+    const toggle = vi.fn<NonNullable<PluginInventorySettingsTabInjected['setPluginEnabled']>>()
+      .mockRejectedValue(new Error('Parent configuration is disabled'))
+    render(<PluginInventorySettingsTab {...props(async () => SNAPSHOT)} setPluginEnabled={toggle} />)
+    const selector = await screen.findByRole('combobox', { name: /directory-picker-native/ }) as HTMLSelectElement
+    fireEvent.change(selector, { target: { value: 'on' } })
+    await waitFor(() => {
+      expect(screen.getByRole('status').textContent).toContain('Parent configuration is disabled')
+      expect(selector.value).toBe('off')
+    })
+  })
+
   it('filters by module name or Loader entry id', async () => {
     render(<PluginInventorySettingsTab {...props(async () => SNAPSHOT)} />)
     const search = await screen.findByRole('searchbox', { name: en.search })

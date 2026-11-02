@@ -29,6 +29,25 @@ const isEntry = process.platform === 'win32'
   : invokedPath === entryPath
 if (isEntry) {
   const launch = phoenixWebLaunch(process.platform, process.argv.slice(2))
+  // Source checkouts launched through "pnpm phoenix" also get the optional
+  // companion preparation used by managed Windows installs. Never delay the
+  // Phoenix UI or run Gateway onboarding during startup.
+  if (process.env.PHOENIX_COMPANION_BOOTSTRAP !== '0') {
+    for (const script of ['phoenix-clawhub-bootstrap.mjs', 'phoenix-openclaw-bootstrap.mjs']) {
+      try {
+        const task = spawn(process.execPath, [
+          join(launch.cwd, 'scripts', script), '--ensure', '--quiet',
+          ...(script === 'phoenix-clawhub-bootstrap.mjs' ? ['--update'] : []),
+        ], {
+          cwd: launch.cwd, env: process.env, stdio: 'ignore', windowsHide: true, detached: true,
+        })
+        task.on('error', () => {})
+        task.unref()
+      } catch {
+        // Companion setup is noncritical. The existing Connections/Skills remain available.
+      }
+    }
+  }
   const child = spawn(process.execPath, launch.args, {
     cwd: launch.cwd,
     env: process.env,

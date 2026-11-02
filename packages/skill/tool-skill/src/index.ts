@@ -9,6 +9,8 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { readFile } from 'node:fs/promises'
 import { naturalCreationSkill } from './natural-intent.js'
+import { registerOpenClawReadBridge } from './openclaw-read-bridge.js'
+import { registerOpenClawPluginTools } from './openclaw-plugin-bridge.js'
 import type { Context } from '@phoenix-ai/cordis'
 import z from '@phoenix-ai/schemastery'
 import type { Agent, PreStepDecision } from '@phoenix-ai/dsh-agent'
@@ -88,6 +90,8 @@ export const Config: z<Config> = z.object({
  * same-name shadow therefore removes both the schema and its call guidance.
  */
 export function apply(ctx: Context, config: Config = {}): void {
+  registerOpenClawReadBridge(ctx)
+  registerOpenClawPluginTools(ctx)
   const catalogDescriptionMaxLength = config.catalogDescriptionMaxLength ?? DEFAULT_CATALOG_DESCRIPTION_MAX_LENGTH
   const locale = config.locale ?? 'es'
   const englishOverlayRoot = config.englishOverlayRoot ?? join(homedir(), '.agents', 'skills-en')

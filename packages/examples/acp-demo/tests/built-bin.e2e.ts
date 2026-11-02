@@ -187,9 +187,11 @@ describe.skipIf(!existsSync(acpBin))('dsh-acp-demo BUILT bin (node lib/bin.js, n
     }).toBeTypeOf('string')
     const compressed = await readFile(join(sessionsRoot, log!))
     expect(compressed.subarray(0, 4).toString('hex')).toBe('28b52ffd')
-    // Session persistence is newline-delimited JSON; validate every entry, not one JSON document.
-    const persistedRecords = (await decompress(compressed)).toString().trimEnd().split(/\r?\n/u)
+    // JSONL archive: validate every nonempty record and inspect the session header.
+    const archive = (await decompress(compressed)).toString()
+    const persistedRecords = archive.split(/\r?\n/u).filter(line => line.trim().length > 0)
       .map(line => JSON.parse(line) as Record<string, unknown>)
+    expect(persistedRecords.length).toBeGreaterThan(0)
     expect(persistedRecords[0]).toMatchObject({ type: 'session', id: sessionId })
     expect(stderr.join('')).not.toContain('without inject')
     // stdout purity: every emitted line is a JSON-RPC frame, no logger leak.

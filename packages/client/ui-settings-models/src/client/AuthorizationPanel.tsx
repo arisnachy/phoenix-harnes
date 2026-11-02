@@ -4,10 +4,11 @@ import { TheOddsApiConnectorSetup,type TheOddsApiClient,type TheOddsApiSnapshot 
 import { BinanceConnectorSetup } from './BinanceConnectorSetup.tsx'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import type { ChatGptWebSnapshot, IApiClient } from '@phoenix-ai/dsh-api-remotes/client'
+import type { ChatGptWebSnapshot, IApiClient, OpenClawRuntimeSnapshot, ClawHubCatalogItem, ClawHubCatalogSnapshot } from '@phoenix-ai/dsh-api-remotes/client'
 import type { en } from './locales.ts'
 import type { ConnectorKey } from './connectors-locales.ts'
 import { CONNECTOR_CATALOG } from './connector-catalog.ts'
+import { ClawHubConnectorStore } from './ClawHubConnectorStore.tsx'
 import type { ConnectorDefinition } from './connector-catalog.ts'
 import { AuthorizationAttemptProgress, useAuthorizationAttempt } from './authorization-attempt.tsx'
 import connectorStyles from './CodexConnectors.module.css'
@@ -170,6 +171,16 @@ export interface McpRegistryClient {
   }>
   /** Reuse already-authenticated OpenClaw connector routes when present. */
   openClawState?(): Promise<OpenClawConnectorSnapshot>
+  openClawRuntimeState?(): Promise<OpenClawRuntimeSnapshot>
+  openClawPluginTools?(): Promise<import('@phoenix-ai/dsh-api-remotes/client').OpenClawRoutingSnapshot>
+  openClawGatewayCredential?(): Promise<import('@phoenix-ai/dsh-api-remotes/client').OpenClawGatewayCredentialState>
+  configureOpenClawGatewayCredential?(request: import('@phoenix-ai/dsh-api-remotes/client').OpenClawGatewayCredentialRequest): Promise<import('@phoenix-ai/dsh-api-remotes/client').OpenClawGatewayCredentialState>
+  setOpenClawPluginTool?(request: import('@phoenix-ai/dsh-api-remotes/client').OpenClawRoutingRequest): Promise<import('@phoenix-ai/dsh-api-remotes/client').OpenClawRoutingSnapshot>
+  clawHubCatalog?(request: import('@phoenix-ai/dsh-api-remotes/client').ClawHubCatalogRequest): Promise<ClawHubCatalogSnapshot>
+  clawHubState?(): Promise<import('@phoenix-ai/dsh-api-remotes/client').ClawHubState>
+  prepareClawHubCli?(): Promise<import('@phoenix-ai/dsh-api-remotes/client').ClawHubState>
+  clawHubInstallSkill?(request: import('@phoenix-ai/dsh-api-remotes/client').ClawHubInstallRequest): Promise<import('@phoenix-ai/dsh-api-remotes/client').ClawHubInstallReceipt>
+  clawHubInstallPackage?(request: import('@phoenix-ai/dsh-api-remotes/client').ClawHubInstallRequest): Promise<import('@phoenix-ai/dsh-api-remotes/client').ClawHubInstallReceipt>
   /** Read Jev setup/runtime state without exposing its secret. Optional for older hosts. */
   jevState?(): Promise<JevMcpSnapshot>
   /** Store a Jev key in Phoenix credentials and activate the pinned MCP endpoint. Optional for older hosts. */
@@ -553,7 +564,7 @@ function accountGrantConnectsCatalogEntry(account: Entry | undefined): boolean {
   return scopedConnectors === undefined || scopedConnectors.length === 0
 }
 
-function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw, telegram, oddsApi, oddsApiSnapshot, onOddsApiStatus, connected, reauthorizeCodex, t, authorizationProgress,
+function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw, openClawRuntime, onRefreshOpenClaw, clawHubFeatured, telegram, oddsApi, oddsApiSnapshot, onOddsApiStatus, connected, reauthorizeCodex, t, authorizationProgress,
   onAuthorize, onDisconnect, onConfigure, onInstallCurated, onFindOfficial, onFindRegistry, onReconnect, onRepair, onRemove, onChanged,
   pending, installingCurated, reconnecting,
   repairing, removing }: {
@@ -563,6 +574,9 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
   mcpRuntime?: McpConnectorRuntimeView | undefined
   managed?: ManagedMcpConnectorView | undefined
   openClaw?: OpenClawConnectorView | undefined
+  openClawRuntime?: OpenClawRuntimeSnapshot | undefined
+  onRefreshOpenClaw?: (() => void) | undefined
+  clawHubFeatured?: readonly ClawHubCatalogItem[] | null | undefined
   telegram?: TelegramBotClient | undefined
   oddsApi?: TheOddsApiClient | undefined
   oddsApiSnapshot?: TheOddsApiSnapshot | undefined
@@ -615,6 +629,13 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
             : managed !== undefined
               ? { text: t('runtimeMissingStatus'), className: connectorStyles['connectorStatusInfo'] ?? '' }
               : undefined
+  const companionStatus = definition.id === 'openclaw'
+    ? {
+        text: openClawRuntime === undefined ? t('ocWaiting')
+          : openClawRuntime.installed ? t('ocDetected') : t('ocMissing'),
+        className: connectorStyles['connectorStatusWarn'] ?? '',
+      }
+    : undefined
   const openClawStatus = openClaw?.connected === true
     ? { text: t('openClawConnectedStatus'), className: connectorStyles['connectorStatusReady'] ?? '' }
     : undefined
@@ -629,7 +650,7 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
     : undefined)
     ?? (reauthorizeCodex ? { text: t('reconnectRequiredStatus'), className: connectorStyles['connectorStatusWarn'] ?? '' } : undefined)
     ?? (managed !== undefined || mcpRuntime !== undefined ? mcpStatus : undefined)
-    ?? openClawStatus ?? mcpStatus ?? liveStatus ?? (connectedByAccount
+    ?? companionStatus ?? openClawStatus ?? mcpStatus ?? liveStatus ?? (connectedByAccount
     ? { text: t('connectedStatus'), className: connectorStyles['connectorStatusReady'] ?? '' }
     : definition.id === 'binance'
       ? { text: t('binancePaperReadyStatus'), className: connectorStyles['connectorStatusWarn'] ?? '' }
@@ -695,6 +716,43 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
         </div>
       </div>
       <p className={connectorStyles['connectorDescription']}>{definition.description}</p>
+      {definition.id === 'openclaw' ? (
+        <div className={styles['advancedHint']}>
+          <p>{t('ocNote')}</p>
+          {openClawRuntime?.hostNodeSupported === false ? <p>{t('ocNodeMismatch')}</p> : null}
+          {openClawRuntime === undefined ? <p>{t('ocWaiting')}</p> : (
+            <p>
+              {([
+                ['ocGateway', openClawRuntime.gateway],
+                ['ocBrowser', openClawRuntime.browser],
+                ['ocPlugins', openClawRuntime.plugins],
+                ['ocChannels', openClawRuntime.channels],
+              ] as const).map(([label, phase]) => (
+                <span key={label} style={{ display: 'inline-block', marginRight: 12 }}>
+                  {t(label)}: {phase === 'responded' ? t('ocResponded')
+                    : phase === 'not-installed' ? t('ocMissing') : t('ocUnavailable')}
+                </span>
+              ))}
+            </p>
+          )}
+          <div style={{ marginTop: 10, display: 'grid', gap: 6 }}>
+            <strong>{t('ocClawHubFeatured')}</strong>
+            {clawHubFeatured === undefined ? <p>{t('ocWaiting')}</p>
+              : clawHubFeatured === null ? <p>{t('ocClawHubUnavailable')}</p>
+                : clawHubFeatured.length === 0 ? <p>{t('ocClawHubNone')}</p>
+                  : <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      {clawHubFeatured.map(item => (
+                        <span key={item.name} className={connectorStyles['connectorCategory']}
+                          title={item.description}>{item.displayName}</span>
+                      ))}
+                    </div>}
+            <p>{t('ocClawHubMore')}</p>
+          </div>
+          {onRefreshOpenClaw === undefined ? null : (
+            <button className={hubStyles['compactButton']} type="button" onClick={onRefreshOpenClaw}>{t('ocRefresh')}</button>
+          )}
+        </div>
+      ) : null}
       {definition.id === 'binance' ? <BinanceConnectorSetup onChanged={onChanged}
         {...authorizationAccount?.methods.some(method => method.id === 'oauth')
           ? { onAuthorizeMcp: () => { onAuthorize(authorizationAccount, 'oauth') } } : {}} /> : null}
@@ -1223,6 +1281,9 @@ export function ConnectorsSettingsSection({ api,
   const [registryFailure, setRegistryFailure] = useState(false)
   const [mcpHub, setMcpHub] = useState<McpConnectorHubSnapshot>({ runtime: [], managed: [] })
   const [openClaw, setOpenClaw] = useState<OpenClawConnectorSnapshot>({ connectors: [] })
+  const [openClawRuntime, setOpenClawRuntime] = useState<OpenClawRuntimeSnapshot | undefined>()
+  const [clawHubFeatured, setClawHubFeatured] = useState<readonly ClawHubCatalogItem[] | null | undefined>()
+  const [runtimeRefresh, setRuntimeRefresh] = useState(0)
   const [jevState, setJevState] = useState<JevMcpSnapshot | undefined>()
   const [jevSetupOpen, setJevSetupOpen] = useState(false)
   const [jevApiKey, setJevApiKey] = useState('')
@@ -1383,6 +1444,28 @@ export function ConnectorsSettingsSection({ api,
   }, [mcpRegistry, refresh])
 
   useEffect(() => {
+    const probe = mcpRegistry?.openClawRuntimeState?.bind(mcpRegistry)
+    if (probe === undefined) return
+    let stale = false
+    void probe().then(
+      value => { if (!stale) setOpenClawRuntime(value) },
+      () => { if (!stale) setOpenClawRuntime(undefined) },
+    )
+    return () => { stale = true }
+  }, [mcpRegistry, runtimeRefresh])
+
+  useEffect(() => {
+    const browse = mcpRegistry?.clawHubCatalog?.bind(mcpRegistry)
+    if (browse === undefined) return
+    let stale = false
+    void browse({ family: 'code-plugin', officialOnly: true, limit: 4 }).then(
+      snapshot => { if (!stale) setClawHubFeatured(snapshot.items) },
+      () => { if (!stale) setClawHubFeatured(null) },
+    )
+    return () => { stale = true }
+  }, [mcpRegistry, runtimeRefresh])
+
+  useEffect(() => {
     const readJevState = mcpRegistry?.jevState?.bind(mcpRegistry)
     if (readJevState === undefined) return
     let stale = false
@@ -1498,6 +1581,10 @@ export function ConnectorsSettingsSection({ api,
         : live?.callable === true || accountConnected)
     return { definition, live, account, mcpRuntime, managed, openClaw: openClawRoute, connected }
   }), [catalogDefinitions, entries, liveConnectors, mcpHub, openClaw, oddsApiSnapshot])
+
+  // An exact registry identity already in the curated catalog is one connector.
+  const novelRegistryCandidates = (registrySnapshot?.candidates ?? []).filter(candidate =>
+    !CONNECTOR_CATALOG.some(definition => definition.registryName === candidate.name))
 
   const visibleRows = catalogRows.filter(({ definition, connected }) => {
     if (filter === 'connected' && !connected) return false
@@ -2060,6 +2147,8 @@ export function ConnectorsSettingsSection({ api,
 
       {catalogFailure === undefined ? null : <p className={styles['error']}>{catalogFailure}</p>}
 
+      <ClawHubConnectorStore registry={mcpRegistry} t={connectorT}
+        connectedIds={catalogRows.filter(row => row.connected).map(row => row.definition.id)} />
       <section className={hubStyles['block']} aria-label={connectorT('catalog')}>
         <div className={hubStyles['heading']}>
           <h3>{connectorT('catalog')}</h3>
@@ -2094,6 +2183,9 @@ export function ConnectorsSettingsSection({ api,
                   mcpRuntime={row.mcpRuntime}
                   managed={row.managed}
                   openClaw={row.openClaw}
+                  openClawRuntime={row.definition.id === 'openclaw' ? openClawRuntime : undefined}
+                  clawHubFeatured={row.definition.id === 'openclaw' ? clawHubFeatured : undefined}
+                  onRefreshOpenClaw={row.definition.id === 'openclaw' ? () => { setRuntimeRefresh(n => n + 1) } : undefined}
                   telegram={telegram}
                   oddsApi={oddsApi}
                   oddsApiSnapshot={oddsApiSnapshot}
@@ -2268,12 +2360,12 @@ export function ConnectorsSettingsSection({ api,
           </div>
           {registryBusy ? <p className={styles['advancedHint']}>{connectorT('registrySearching')}</p> : null}
           {registryFailure ? <p className={styles['error']}>{connectorT('registryUnavailable')}</p> : null}
-          {!registryBusy && !registryFailure && registrySnapshot !== undefined && registrySnapshot.candidates.length === 0
+          {!registryBusy && !registryFailure && registrySnapshot !== undefined && novelRegistryCandidates.length === 0
             ? <p className={styles['advancedHint']}>{connectorT('registryNoMatches')}</p>
             : null}
-          {registrySnapshot === undefined || registrySnapshot.candidates.length === 0 ? null : (
+          {registrySnapshot === undefined || novelRegistryCandidates.length === 0 ? null : (
             <div className={connectorStyles['connectorGrid']}>
-              {registrySnapshot.candidates.map((candidate) => {
+              {novelRegistryCandidates.map((candidate) => {
                 const managed = mcpHub.managed.find(connector =>
                   (connector.source?.kind === 'registry' && connector.source.name === candidate.name)
                   || (candidate.remoteUrl !== undefined && connector.url === candidate.remoteUrl))

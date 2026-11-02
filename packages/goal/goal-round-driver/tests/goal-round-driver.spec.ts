@@ -964,6 +964,20 @@ describe('same-session goal driving', () => {
     expect(requestText(test.adapter.requests[0]!)).toContain('goal context')
   })
 
+  it('does not activate persistent Goal merely because an ordinary task remains unfinished', async () => {
+    const test = await harness([textResponse('I will finish the module and tests next.')])
+    test.agent.followup(createUserMessage({
+      content: [{ type: 'text', text: 'Implement the module and its tests normally, without Goal.' }],
+      source: { kind: 'user' },
+    }))
+    await test.agent.whenIdle()
+    await new Promise<void>(resolve => { setImmediate(resolve) })
+
+    expect(test.adapter.requests).toHaveLength(1)
+    expect(test.ctx.goals.get(test.agent)).toBeUndefined()
+    expect(test.agent.session.events.filter(event => event.type === 'goal/continuation')).toHaveLength(0)
+  })
+
   it('does not invent goal state when ordinary queued work is cancelled', async () => {
     const test = await harness([])
     test.agent.followup(createUserMessage({ content: [{ type: 'text', text: 'cancel ordinary work' }], source: { kind: 'user' } }))
