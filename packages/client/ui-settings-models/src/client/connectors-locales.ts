@@ -1,5 +1,11 @@
 /** Copy for the dedicated Settings → Connectors surface. */
 export const connectorEn = {
+  storePluginLoaded: "Loaded in OpenClaw",
+  storePluginNeedsRuntime: "Enabled, waiting for runtime",
+  storePluginFailed: "OpenClaw reported a loading error",
+  storePluginDisabled: "Installed, disabled",
+  storePluginEnable: "Enable plugin in OpenClaw",
+  storePluginDisable: "Disable plugin in OpenClaw",
   storeInstalledStatus: "Installed locally",
   storeShowMore: "Show more ClawHub results",
   storeInstallIsNotActivation: "A downloaded skill or plugin is not automatically active for Kira. Verify and authorize its capabilities below.",
@@ -188,6 +194,12 @@ export type ConnectorKey = keyof typeof connectorEn
 
 /** Spanish copy for the dedicated Settings → Connectors surface. */
 export const connectorEs: { [Key in ConnectorKey]: string } = {
+  storePluginLoaded: "Cargado en OpenClaw",
+  storePluginNeedsRuntime: "Habilitado, pendiente del runtime",
+  storePluginFailed: "Error de carga en OpenClaw",
+  storePluginDisabled: "Instalado, deshabilitado",
+  storePluginEnable: "Activar plugin en OpenClaw",
+  storePluginDisable: "Desactivar plugin en OpenClaw",
   storeInstalledStatus: "Instalado localmente",
   storeShowMore: "Mostrar más resultados",
   storeInstallIsNotActivation: "Instalar una Skill o plugin no significa que Kira pueda usarlo. Verifica su estado y autoriza sus capacidades abajo.",
@@ -373,6 +385,12 @@ export const connectorEs: { [Key in ConnectorKey]: string } = {
 
 /** Simplified Chinese copy for the dedicated Settings → Connectors surface. */
 export const connectorZh: { [Key in ConnectorKey]: string } = {
+  storePluginLoaded: "已在 OpenClaw 加载",
+  storePluginNeedsRuntime: "已启用，等待运行时",
+  storePluginFailed: "OpenClaw 报告加载失败",
+  storePluginDisabled: "已安装，未启用",
+  storePluginEnable: "在 OpenClaw 中启用",
+  storePluginDisable: "在 OpenClaw 中禁用",
   storeInstalledStatus: "已在本地安装",
   storeShowMore: "显示更多 ClawHub 结果",
   storeInstallIsNotActivation: "安装技能或插件并不代表 Kira 可以使用。请验证状态并授权相应能力。",

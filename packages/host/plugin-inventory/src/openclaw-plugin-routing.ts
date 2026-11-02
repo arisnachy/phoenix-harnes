@@ -14,10 +14,21 @@ export interface OpenClawRoutedTool {
   readonly imported: boolean
   readonly approved: boolean
 }
+export interface OpenClawInstalledPlugin {
+  readonly id: string
+  readonly enabled: boolean
+  readonly loaded: boolean
+  readonly status: 'loaded' | 'enabled' | 'disabled' | 'error' | 'unknown'
+}
 export interface OpenClawRoutingSnapshot {
   readonly gatewayCredentialConfigured: boolean
   readonly tools: readonly OpenClawRoutedTool[]
+  readonly plugins: readonly OpenClawInstalledPlugin[]
   readonly inspectionAvailable: boolean
+}
+export interface OpenClawPluginActivationRequest {
+  readonly pluginId: string
+  readonly enabled: boolean
 }
 export interface OpenClawRoutingRequest {
   readonly pluginId: string
@@ -88,7 +99,7 @@ function cli(): { bin: string; args: string[] } {
     ? { bin: 'cmd.exe', args: ['/d', '/s', '/c', 'openclaw.cmd'] }
     : { bin: 'openclaw', args: [] }
 }
-function run(args: readonly string[], timeout = 9000): Promise<unknown> {
+function run(args: readonly string[], timeout = 9000, json = true): Promise<unknown> {
   return new Promise((resolveResult, reject) => {
     const target = cli()
     const child = spawn(target.bin, [...target.args, ...args], {
@@ -109,6 +120,7 @@ function run(args: readonly string[], timeout = 9000): Promise<unknown> {
     child.on('error', () => { done(undefined, true) })
     child.on('close', code => {
       if (code !== 0) { done(undefined, true); return }
+      if (!json) { done(output, false); return }
       try { done(JSON.parse(output) as unknown, false) }
       catch { done(undefined, true) }
     })
@@ -135,10 +147,24 @@ export async function readOpenClawRouting(): Promise<OpenClawRoutingSnapshot> {
   )
   let list: unknown
   try { list = await run(['plugins', 'list', '--json']) }
-  catch { return { gatewayCredentialConfigured, tools: [], inspectionAvailable: false } }
-  const plugins = entries(list).map(obj).filter(p => ID.test(str(p.id))
-    && p.enabled !== false && (p.enabled === true || p.status === 'enabled' || p.status === 'loaded')
-    && p.status !== 'error').slice(0, 10)
+  catch { return { gatewayCredentialConfigured, tools: [], plugins: [], inspectionAvailable: false } }
+  const inventory = entries(list).map(obj).filter(plugin => ID.test(str(plugin.id))).slice(0, 200)
+  const installed: OpenClawInstalledPlugin[] = inventory.map(plugin => {
+    const status = str(plugin.status)
+    const state: OpenClawInstalledPlugin['status'] =
+      status === 'loaded' || status === 'enabled' || status === 'disabled' || status === 'error'
+        ? status : 'unknown'
+    return {
+      id: str(plugin.id),
+      status: state,
+      enabled: plugin.enabled !== false && (plugin.enabled === true
+        || status === 'enabled' || status === 'loaded'),
+      loaded: status === 'loaded',
+    }
+  })
+  const plugins = inventory.filter(plugin => plugin.enabled !== false
+    && (plugin.enabled === true || plugin.status === 'enabled' || plugin.status === 'loaded')
+    && plugin.status !== 'error')
   const tools: OpenClawRoutedTool[] = []
   // Bound simultaneous CLI inspection, avoiding a long sequential Settings stall.
   for (let index = 0; index < plugins.length; index += 5) {
@@ -155,7 +181,7 @@ export async function readOpenClawRouting(): Promise<OpenClawRoutingSnapshot> {
     }))
     for (const batch of group) tools.push(...batch)
   }
-  return { gatewayCredentialConfigured, tools, inspectionAvailable: true }
+  return { gatewayCredentialConfigured, tools, plugins: installed, inspectionAvailable: true }
 }
 /** Explicit owner action; no arbitrary tool names may be added by the model. */
 export async function setOpenClawRoutingPermission(
@@ -182,4 +208,25 @@ export async function setOpenClawRoutingPermission(
   writeFileSync(tmp, JSON.stringify({ version: 1, allowed: ordered }, null, 2), { mode: 0o600 })
   renameSync(tmp, policyFile)
   return readOpenClawRouting()
+}
+
+/**
+ * Explicit owner action to activate an already-installed OpenClaw plugin.
+ * A plugin enabled in OpenClaw is NOT automatically approved for Kira.
+ */
+export async function setOpenClawPluginEnabled(
+  request: OpenClawPluginActivationRequest,
+): Promise<OpenClawRoutingSnapshot> {
+  if (!ID.test(request.pluginId)) throw new Error('Invalid installed plugin identity')
+  const current = await readOpenClawRouting()
+  if (!current.inspectionAvailable || !current.plugins.some(item => item.id === request.pluginId)) {
+    throw new Error('Plugin is not installed in this OpenClaw runtime')
+  }
+  await run(['plugins', request.enabled ? 'enable' : 'disable', request.pluginId], 15_000, false)
+  const updated = await readOpenClawRouting()
+  const item = updated.plugins.find(plugin => plugin.id === request.pluginId)
+  if (item === undefined || item.enabled !== request.enabled) {
+    throw new Error('OpenClaw did not confirm the requested plugin state')
+  }
+  return updated
 }

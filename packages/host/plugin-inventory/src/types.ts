@@ -527,10 +527,21 @@ export interface OpenClawRoutedTool {
   readonly imported: boolean
   readonly approved: boolean
 }
+export interface OpenClawInstalledPlugin {
+  readonly id: string
+  readonly enabled: boolean
+  readonly loaded: boolean
+  readonly status: 'loaded' | 'enabled' | 'disabled' | 'error' | 'unknown'
+}
 export interface OpenClawRoutingSnapshot {
   readonly gatewayCredentialConfigured: boolean
   readonly tools: readonly OpenClawRoutedTool[]
+  readonly plugins: readonly OpenClawInstalledPlugin[]
   readonly inspectionAvailable: boolean
+}
+export interface OpenClawPluginActivationRequest {
+  readonly pluginId: string
+  readonly enabled: boolean
 }
 export interface OpenClawGatewayCredentialState {
   readonly configured: boolean
