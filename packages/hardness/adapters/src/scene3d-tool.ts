@@ -1,4 +1,5 @@
 import { defineTool, ToolArgsError, type JsonValue, type ToolDefinition } from '@phoenix-ai/dsh-tools'
+import { pelicanScene } from './scene3d-pelican.ts'
 
 /** Versioned, portable, data-only 3D scene: no scripts, URLs, or external resources. */
 export const PHOENIX_SCENE3D_MIME = 'application/vnd.phoenix.scene3d+json'
@@ -23,7 +24,7 @@ interface SceneNode {
     readonly clearcoat?: number
   }
 }
-interface Scene {
+export interface Scene {
   readonly version: 1
   readonly units: 'meters'
   readonly name: string
@@ -157,16 +158,36 @@ export function tropicalVillaScene(): Scene {
   return { version: 1, units: 'meters', name: 'Villa tropical · modelo 3D conceptual', background:'#f9f3eb', nodes }
 }
 
+/** Detailed triangular meshes can represent an organic object in a single node. */
+function detailedMesh(scene: Scene): boolean {
+  return scene.nodes.some(node => node.type === 'mesh' && (node.vertices?.length ?? 0) >= 900)
+}
+function requestedPelican(text: string): boolean {
+  return /pel[ií]can(?:o|a|os|as)?/iu.test(text)
+}
+function recognizablePelican(scene: Scene): boolean {
+  if (detailedMesh(scene)) return true
+  const names = scene.nodes.map(node => node.name?.toLowerCase() ?? '').join(' ')
+  return scene.nodes.length >= 10 && /pico|beak/iu.test(names)
+    && /bolsa|pouch|gular/iu.test(names) && /ala|wing/iu.test(names)
+    && /cabeza|head/iu.test(names)
+}
+function trivialOrganicScene(scene: Scene): boolean {
+  return !detailedMesh(scene) && (scene.nodes.length < 6 || scene.nodes.every(node => node.type === 'box'))
+}
+
 /** Model-facing 3D creation; geometry remains portable to other Phoenix applications. */
 export function createPhoenix3DTool(): ToolDefinition {
   return defineTool({
     name: 'phoenix_3d',
-    description: 'Create a REAL INTERACTIVE THREE-DIMENSIONAL SCENE and show it inside Phoenix chat. For requests such as modelo 3D, casa 3D, diseño 3D, rotar, orbit, zoom, manipulable, modelo para una app, use THIS tool, not image_generation or phoenix_visualize. Output is 3D geometry (not PNG): the user can drag to rotate, use the wheel or +/- to zoom, reset the camera, and download a portable versioned JSON model reusable in Phoenix apps. For a quick fictional tropical villa concept use demo:true and no scene (local zero-model-cost geometry). For original designs provide scene:{environment:"sunset"|"studio"|"daylight",camera:"isometric"|"front"|"top"|"perspective",nodes:[{type:"box"|"sphere"|"cylinder"|"cone",name?,position:[x,y,z],size:[x,y,z],rotation?:[degreesX,degreesY,degreesZ],color:"#rrggbb",material?:{preset?:"glass"|"wood"|"concrete"|"metal"|"water"|"foliage",baseColor?:"#rrggbb",metallic?:number,roughness?:number,opacity?:number,transmission?:number,clearcoat?:number,emissive?:"#rrggbb"}}],name?,background?}. Coordinates and sizes are meters; y is vertical. Approximate reference photos as clearly labeled 3D concepts: do NOT claim exact photo-to-CAD reconstruction, survey measurements, exact photorealistic reconstruction; the viewer provides GLB/glTF import-export with glTF PBR material parameters and editable geometry, not CAD/BIM. Up to 150 nodes. No external scripts, URLs, image substitution or fake interactive buttons. A self-contained scene finishes the requested presentation; continueAfterDisplay only for additional explicitly requested work.',
+    description: 'Create a REAL INTERACTIVE THREE-DIMENSIONAL SCENE and show it inside Phoenix chat. For requests such as modelo 3D, casa 3D, diseño 3D, rotar, orbit, zoom, manipulable, modelo para una app, use THIS tool, not image_generation or phoenix_visualize. Output is 3D geometry (not PNG): the user can drag to rotate, use the wheel or +/- to zoom, reset the camera, and download a portable versioned JSON model reusable in Phoenix apps. For a quick fictional tropical villa concept use demo:true and no scene. For a pelican use preset:pelican and no scene to build a recognizable bird with a long beak, throat pouch, wings, head, eyes and webbed feet. Simplistic pelican scenes are repaired automatically. For other animals create a detailed triangular mesh or several recognizable named anatomical parts. For original designs provide scene:{environment:"sunset"|"studio"|"daylight",camera:"isometric"|"front"|"top"|"perspective",nodes:[{type:"box"|"sphere"|"cylinder"|"cone"|"mesh",name?,position:[x,y,z],size:[x,y,z],vertices?:[x0,y0,z0,x1,y1,z1,x2,y2,z2,...],rotation?:[degreesX,degreesY,degreesZ],color:"#rrggbb",material?:{preset?:"glass"|"wood"|"concrete"|"metal"|"water"|"foliage",baseColor?:"#rrggbb",metallic?:number,roughness?:number,opacity?:number,transmission?:number,clearcoat?:number,emissive?:"#rrggbb"}}],name?,background?}. Coordinates and sizes are meters; y is vertical. Approximate reference photos as clearly labeled 3D concepts: do NOT claim exact photo-to-CAD reconstruction, survey measurements, exact photorealistic reconstruction; the viewer provides GLB/glTF import-export with glTF PBR material parameters and editable geometry, not CAD/BIM. Up to 150 nodes and 60,000 mesh vertices total. Never present a cube as an animal. No external scripts, URLs, image substitution or fake interactive buttons. A self-contained scene finishes the requested presentation; continueAfterDisplay only for additional explicitly requested work.',
     parameters: {
       title: { type: 'string', required: true, description: 'Human-readable title of the real 3D model.' },
       demo: { type: 'boolean', description: 'True generates a complete tropical villa concept scene in 3D without another model call.' },
+      preset: { type: 'string', description: 'Procedural subject: pelican (anatomical bird model).' },
+      subject: { type: 'string', description: 'Subject requested by the user, for geometric fidelity checks.' },
       scene: { type: 'object', additionalProperties: true,
-        description: 'Serializable geometric scene. Required unless demo:true. nodes array with box/sphere/cylinder/cone, metric position/size and hex color.' },
+        description: 'Serializable scene. Required unless demo:true or preset:pelican. Nodes support box/sphere/cylinder/cone/mesh, metric position/size and hex color; mesh vertices are xyz triangle triples.' },
       continueAfterDisplay: { type: 'boolean',
         description: 'False by default: presentation finishes turn, interactive controls are local. True only if further separate work is requested.' },
     },
@@ -183,8 +204,18 @@ export function createPhoenix3DTool(): ToolDefinition {
     execute(args, exec) {
       const title = args.title.trim()
       if (title.length === 0 || title.length > 140) throw new ToolArgsError(['Se requiere un título de 1 a 140 caracteres.'])
-      const scene = args.demo === true && args.scene === undefined
-        ? tropicalVillaScene() : normalizeScene(args.scene, title)
+      const pelican = args.preset === 'pelican'
+        || requestedPelican(title + ' ' + (typeof args.subject === 'string' ? args.subject : ''))
+      const supplied = args.scene === undefined ? undefined : normalizeScene(args.scene, title)
+      const scene = args.preset === 'pelican' || (pelican && (supplied === undefined || !recognizablePelican(supplied)))
+        ? pelicanScene()
+        : args.demo === true && supplied === undefined
+          ? tropicalVillaScene() : supplied ?? normalizeScene(undefined, title)
+      const organic = typeof args.subject === 'string'
+        && /animal|bird|ave|p[aá]jaro|organico|orgánico|elefante|gato|perro|rostro|human/iu.test(args.subject)
+      if (!pelican && organic && trivialOrganicScene(scene)) {
+        throw new ToolArgsError(['Modelo orgánico insuficiente: usa una malla o varias partes anatómicas, nunca solo una caja.'])
+      }
       if (args.continueAfterDisplay !== true) exec.concludeTurn()
       return Promise.resolve({ artifactId:`phoenix-3d:${String(exec.callId)}`, title, scene: scene as unknown as JsonValue })
     },
