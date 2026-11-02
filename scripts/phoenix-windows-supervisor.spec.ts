@@ -551,6 +551,60 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(source).toContain('inactive runtime backups kept')
   })
 
+  it('executes hard-cap reclamation without deleting the last-known-good runtime during probation', () => {
+    const start = source.indexOf('function reclaimInactiveBackupForCapacity(')
+    const end = source.indexOf('\nfunction cleanupFailedPreparedRuntime(', start)
+    expect(start).toBeGreaterThanOrEqual(0)
+    expect(end).toBeGreaterThan(start)
+    const body = source.slice(start, end)
+    const directories = ['/runtime/last-good', '/runtime/stale', '/runtime/current']
+    const removed: string[] = []
+    runInNewContext(body + "\nreclaimInactiveBackupForCapacity('/runtime/candidate')", {
+      root: '/checkout',
+      runtimeRoot: '/runtime/current',
+      lastKnownGoodRuntimeRoot: '/runtime/last-good',
+      runtimePathKey: (path: string) => path,
+      readActiveRuntimeRecord: () => ({ path: '/runtime/current' }),
+      process: { env: {} },
+      registeredWorktreePaths: () => new Set<string>(),
+      runtimeDirectoriesForCleanup: () => directories,
+      runtimeProtectedByOwningCheckout: () => false,
+      managedDirectoryMtimeMs: (path: string) => path === '/runtime/last-good' ? 1 : 2,
+      MAX_RUNTIME_DIRECTORIES: 3,
+      removeManagedWorktree: (path: string) => {
+        removed.push(path)
+        directories.splice(directories.indexOf(path), 1)
+        return true
+      },
+      console: { error: () => undefined },
+    })
+    expect(removed).toEqual(['/runtime/stale'])
+    expect(directories).toContain('/runtime/last-good')
+  })
+
+  it('executes failed-candidate cleanup without deleting the last-known-good rollback runtime', () => {
+    const start = source.indexOf('function cleanupFailedPreparedRuntime(')
+    const end = source.indexOf('\nfunction assertRuntimeStorageCapacity(', start)
+    expect(start).toBeGreaterThanOrEqual(0)
+    expect(end).toBeGreaterThan(start)
+    const body = source.slice(start, end)
+    const removed: string[] = []
+    runInNewContext(body + "\ncleanupFailedPreparedRuntime('last-good-sha')", {
+      root: '/checkout',
+      runtimeRoot: '/runtime/current',
+      lastKnownGoodRuntimeRoot: '/runtime/last-good',
+      persistentRuntime: () => '/runtime/last-good',
+      runtimePathKey: (path: string) => path,
+      readActiveRuntimeRecord: () => ({ path: '/runtime/current' }),
+      existsSync: () => true,
+      runtimeProtectedByOwningCheckout: () => false,
+      registeredWorktreePaths: () => new Set<string>(),
+      removeManagedWorktree: (path: string) => { removed.push(path); return true },
+      console: { error: () => undefined },
+    })
+    expect(removed).toEqual([])
+  })
+
   it('keeps this checkout persistent updater stage and protects live preparations', () => {
     expect(source).toContain('function stageDirectoriesForCleanup()')
     expect(source).toContain('function stageProtectedByOwningCheckout(path)')

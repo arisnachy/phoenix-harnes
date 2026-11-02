@@ -850,7 +850,7 @@ function cleanupObsoleteRuntimes(extraKeep = [], { reportBusy = false } = {}) {
 // backup (oldest first). The running runtime, active marker, runtime held by
 // a different checkout, and the intended candidate remain protected.
 function reclaimInactiveBackupForCapacity(nextRuntime) {
-  const keep = new Set([runtimeRoot, nextRuntime, root].map(runtimePathKey))
+  const keep = new Set([runtimeRoot, nextRuntime, root, lastKnownGoodRuntimeRoot].map(runtimePathKey))
   const active = readActiveRuntimeRecord()
   if (active?.path) keep.add(runtimePathKey(active.path))
   const inherited = process.env.PHOENIX_RUNTIME_ROOT?.trim()
@@ -880,6 +880,7 @@ function cleanupFailedPreparedRuntime(target) {
   if (!existsSync(candidate)
     || key === runtimePathKey(runtimeRoot)
     || key === runtimePathKey(root)
+    || key === runtimePathKey(lastKnownGoodRuntimeRoot)
     || (active?.path !== undefined && key === runtimePathKey(active.path))
     || runtimeProtectedByOwningCheckout(candidate)) return
   if (removeManagedWorktree(candidate, registeredWorktreePaths(), true)) {
