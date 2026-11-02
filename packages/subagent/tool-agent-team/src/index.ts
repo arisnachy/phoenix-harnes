@@ -106,7 +106,7 @@ export function fenixConsultableEvidence(
   if (evidence.length < 20) return undefined
   // Explicitly successful outcomes are not negative evidence. Require an
   // auditable risk signal; never call a model just to classify a message.
-  if (/(?:sin\s+(?:errores|fallos|problemas)|no\s+(?:hay|hubo)\s+(?:errores|fallos)|no\s+(?:errors|issues)|all\s+tests?\s+pass)/iu.test(evidence)) return undefined
+  if (/(?:sin\s+(?:errores|fallos|problemas)|no\s+(?:hay|hubo|existen?)\s+(?:errores|fallos|problemas)|ning[uú]n\s+(?:error|fallo|problema)|no\s+(?:errors|issues)|all\s+tests?\s+pass|(?:issue|bug)\s+(?:is\s+)?resolved|(?:error|fallo)\s+(?:ya\s+)?(?:corregido|resuelto))/iu.test(evidence)) return undefined
   if (!/(?:contradic|incompatib|discrepan|conflict|inconsisten|mismatch|fall[aoó]|failed|failure|error|bug|blocked|bloquead|incomplet|missing|faltan?|omisi[oó]n|riesgo|risk|regresi[oó]n|regression|no\s+cumple|does\s+not\s+meet)/iu.test(evidence)) return undefined
   return evidence.slice(0, 900)
 }
@@ -506,8 +506,11 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
             throw new TeamError('No free specialist slot for FÉNIX; finish or reuse active work first.', 'TEAM_MEMBER_LIMIT')
           }
           fenixBusy = true
+          const teammateName = `fenix-terra-${turn}`
+          // Record the ATTEMPT before the provider handoff so a connection
+          // failure cannot trigger wasteful repeat consultations on one turn.
           try {
-            const teammateName = `fenix-terra-${turn}`
+            lead.session.append('team/fenix-consult', { turn, evidenceId: args.evidence_id, teammateName })
             const prompt = [
               'Actúa como consultora temporal FÉNIX para Kira, quien seguirá ejecutando con Luna Max.',
               'No planifiques de nuevo ni intentes modificar archivos, repositorios, conexiones o decisiones.',
@@ -524,13 +527,12 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
               context: 'fresh',
               provider: config.freshProvider,
               agentOptions: {
-                provider: 'openai-codex', model: terra.model,
+                provider: 'openai-codex', model: terra.model, maxTokens: 2048,
                 ...terra.reasoningEffort === undefined
                   ? {} : { reasoningEffort: terra.reasoningEffort as NonNullable<AgentOptions['reasoningEffort']> },
               },
               signal: exec.signal,
             })
-            lead.session.append('team/fenix-consult', { turn, evidenceId: args.evidence_id, teammateName })
             return member
           } finally { fenixBusy = false }
         },
