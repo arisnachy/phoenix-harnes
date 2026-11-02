@@ -95,6 +95,23 @@ export function parseEditorialIndex(xml:string,source:EditorialSource,now=Date.n
   }
   return hits
 }
+/** Match indexed headlines to meaningful matchup tokens; avoid unrelated
+ * general sports stories that happen to use one city or a short league code.
+ * @param title - Syndicated headline.
+ * @param query - Verified opponent names supplied by the match audit.
+ * @returns True when the article discusses at least two relevant long terms.
+ */
+function relevantHeadline(title:string,query:string):boolean{
+  const normalize=(text:string)=>text.normalize('NFD')
+    .replace(/[\u0300-\u036f]/gu,'').toLowerCase()
+  const stop=new Set(['basketball','football','soccer','hockey','baseball','versus',
+    'los','the','and','nba','nhl','nfl','mlb','vs','new'])
+  const words=[...new Set(normalize(query).match(/[a-z]{4,}/gu)??[])]
+    .filter(word=>!stop.has(word))
+  if(words.length<2)return true // Do not suppress short user discovery queries.
+  const headline=normalize(title)
+  return words.filter(word=>headline.includes(word)).length>=2
+}
 const CACHE_MS=10*60_000
 const cache=new Map<string,{at:number;xml:string}>()
 /** Discover public metadata while keeping provider errors and provenance separate.
@@ -112,7 +129,9 @@ export async function discoverEditorialResearch(
   const responses=await Promise.allSettled(names.map(async source=>{
     const url=editorialIndexUrl(source,query)
     const cached=cache.get(url)
-    if(cached&&now>=cached.at&&now-cached.at<CACHE_MS)return parseEditorialIndex(cached.xml,source,now)
+    if(cached&&now>=cached.at&&now-cached.at<CACHE_MS)
+      return parseEditorialIndex(cached.xml,source,now)
+        .filter(hit=>relevantHeadline(hit.headline,query))
     const response=await fetcher(url,{headers:{Accept:'application/rss+xml, application/xml'},
       signal:AbortSignal.timeout(10_000),redirect:'error'})
     if(!response.ok)throw Error('RSS HTTP '+response.status)
@@ -123,6 +142,7 @@ export async function discoverEditorialResearch(
     if(cache.size>=80)cache.clear()
     cache.set(url,{at:now,xml})
     return parseEditorialIndex(xml,source,now)
+      .filter(hit=>relevantHeadline(hit.headline,query))
   }))
   const diagnostics:EditorialDiscovery['diagnostics']=[]
   const hits:EditorialHit[]=[]
