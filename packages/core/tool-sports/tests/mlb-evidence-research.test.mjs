@@ -19,7 +19,7 @@ const roster=(side,fullLineup=false)=>({roster:[
     position:{type:'Infielder',abbreviation:'IF'}})):[]),
 ]})
 function fakeNetwork({missingRoster=false,oldGame=false,fullLineup=false,
-  unrelatedGame=false,unknownLineupId=false}={}){
+  unrelatedGame=false,unknownLineupId=false,pitcherLogs=false}={}){
   const calls=[]
   const fetcher=async(input)=>{
     const url=String(input)
@@ -51,7 +51,15 @@ function fakeNetwork({missingRoster=false,oldGame=false,fullLineup=false,
         id:Number(k),batSide:{code:'R'},pitchHand:{code:'L'}}))}
     }else if(u.pathname.includes('/people/')&&u.pathname.endsWith('/stats')){
       const pitching=u.searchParams.get('group')==='pitching'
-      data={stats:[{splits:[{stat:pitching?{
+      if(pitcherLogs&&u.searchParams.get('stats')==='gameLog'){
+        const starter=[1101,2201].includes(Number(u.pathname.split('/').at(-2)))
+        data={stats:[{splits:[
+          {date:'2026-06-29',opponent:{id:777},stat:{gamesStarted:starter?1:0,
+            inningsPitched:'5.2',numberOfPitches:88,earnedRuns:2,strikeOuts:7,baseOnBalls:2}},
+          {date:'2026-06-15',opponent:{id:778},stat:{gamesStarted:starter?1:0,
+            inningsPitched:'6.0',numberOfPitches:92,earnedRuns:1,strikeOuts:8,baseOnBalls:1}},
+        ]}]}
+      }else data={stats:[{splits:[{stat:pitching?{
         era:'3.20',whip:'1.08',strikeOuts:130,gamesStarted:10,wins:6,losses:2
       }:{avg:'.301',ops:'.902',hits:80,homeRuns:14,strikeOuts:35}}]}]}
     }else if(u.hostname==='api.open-meteo.com'){
@@ -206,4 +214,20 @@ test('complete research roster still abstains without real sportsbook offers',as
   assert.equal(review.reviewedMarkets.length,0)
   assert.equal(review.eligibleForTicket,false)
   assert.ok(review.missingEvidence.some(x=>x.includes('Ofertas reales vigentes')))
+})
+
+
+test('dated game logs distinguish the last starts from three calendar days of relief work',async()=>{
+  const mock=fakeNetwork({pitcherLogs:true})
+  const d=await researchMlbCase(date,812345,mock.fetcher,at)
+  assert.equal(d.starters.home.recentStarts.length,2)
+  assert.equal(d.starters.home.recentStarts[0].date,'2026-06-29')
+  assert.equal(d.starters.home.recentStarts[0].opponentId,777)
+  assert.equal(d.starters.home.recentStarts[0].pitches,'88')
+  assert.equal(d.starters.home.recentStarts[0].strikeouts,'7')
+  assert.equal(d.bullpen.home[0].recentStarts.length,0)
+  assert.equal(d.bullpen.home[0].reliefUsage72h.length,1)
+  assert.equal(d.bullpen.home[0].reliefUsage72h[0].date,'2026-06-29')
+  assert.ok(d.uiBlock.props.sections.some(x=>x.heading.includes('Abridores')&&
+    x.items.some(y=>y.detail.includes('salidas fechadas'))))
 })
