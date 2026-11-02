@@ -4,18 +4,22 @@
  * unlock paid picks, obtain betting lines, or imply the indexed story is true.
  * All discovered mentions are secondary opinions requiring independent checks.
  */
+/** Exact allowlist of independent sports editorial publishers. */
 export const editorialDomains={
   covers:'covers.com',
   vegasinsider:'vegasinsider.com',
   scoresandodds:'scoresandodds.com',
   oddsportal:'oddsportal.com',
 } as const
+/** One trusted publisher-key discriminator for RSS-only discovery. */
 export type EditorialSource=keyof typeof editorialDomains
+/** One attributed, dated RSS headline, not a confirmed betting pick. */
 export type EditorialHit={
   source:EditorialSource;headline:string;publishedAt:string|null
   discoveryUrl:string;publisher:string;observedAt:string
   status:'indexed-headline-only';quoteUpdatedAt:null
 }
+/** Verified index coverage and failures for each requested source. */
 export type EditorialDiscovery={
   status:'observed'|'unavailable'|'empty';checkedAt:string
   lookup:'syndicated-index-not-direct-site';hits:EditorialHit[]
