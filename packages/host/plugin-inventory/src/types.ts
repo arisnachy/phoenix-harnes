@@ -532,6 +532,11 @@ export interface OpenClawRoutingSnapshot {
   readonly tools: readonly OpenClawRoutedTool[]
   readonly inspectionAvailable: boolean
 }
+export interface OpenClawGatewayCredentialState {
+  readonly configured: boolean
+  readonly source: 'vault' | 'environment' | 'none'
+}
+export interface OpenClawGatewayCredentialRequest { readonly token: string }
 export interface OpenClawRoutingRequest {
   readonly pluginId: string
   readonly toolName: string

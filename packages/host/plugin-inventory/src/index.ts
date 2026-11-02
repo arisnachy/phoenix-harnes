@@ -60,6 +60,7 @@ import type {
   OpenClawConnectorSnapshot,
   OpenClawRuntimeSnapshot,
   OpenClawRoutingSnapshot, OpenClawRoutingRequest,
+  OpenClawGatewayCredentialState, OpenClawGatewayCredentialRequest,
   ClawHubCatalogRequest, ClawHubCatalogSnapshot, ClawHubInstallRequest, ClawHubInstallReceipt, ClawHubState,
   PhoenixLocalEndpointReceipt,
   PhoenixLocalModeRequest,
@@ -385,9 +386,45 @@ export class PluginInventoryGateway extends TypertRemoteService {
   }
 
   /** Inspect the actual OpenClaw plugin runtime; no tool execution or account data. */
+  /** Gateway operator token is stored only in the trusted credential vault. */
+  @Remote('openClawGatewayCredential')
+  async openClawGatewayCredential(): Promise<OpenClawGatewayCredentialState> {
+    const service = (this.ctx.get as (key: string) => unknown)('credentials') as {
+      resolve(ref: CredentialRef): Promise<{ value: string } | undefined>
+    } | undefined
+    let configuredInVault = false
+    try {
+      configuredInVault = Boolean((await service?.resolve(credentialRef('PHOENIX_OPENCLAW_GATEWAY_TOKEN')))?.value)
+    } catch { /* vault may be temporarily unavailable */ }
+    return configuredInVault ? { configured: true, source: 'vault' }
+      : Boolean(process.env.PHOENIX_OPENCLAW_GATEWAY_TOKEN ?? process.env.OPENCLAW_GATEWAY_TOKEN)
+        ? { configured: true, source: 'environment' }
+        : { configured: false, source: 'none' }
+  }
+
+  /** Explicit owner-supplied operator token; it never crosses the model prompt. */
+  @Remote('configureOpenClawGatewayCredential')
+  async configureOpenClawGatewayCredential(
+    request: OpenClawGatewayCredentialRequest,
+  ): Promise<OpenClawGatewayCredentialState> {
+    if (typeof request.token !== 'string' || request.token.length < 16
+      || request.token.length > 2048 || /[\u0000-\u0020\u007f]/u.test(request.token)) {
+      throw new Error('Invalid OpenClaw Gateway credential')
+    }
+    const service = (this.ctx.get as (key: string) => unknown)('credentials') as {
+      set(ref: CredentialRef, value: string): Promise<void>
+    } | undefined
+    if (service === undefined) throw new Error('PHOENIX credential vault is unavailable')
+    await service.set(credentialRef('PHOENIX_OPENCLAW_GATEWAY_TOKEN'), request.token)
+    return { configured: true, source: 'vault' }
+  }
+
   @Remote('openClawPluginTools')
   async openClawPluginTools(): Promise<OpenClawRoutingSnapshot> {
-    return readOpenClawRouting()
+    const [snapshot, credential] = await Promise.all([
+      readOpenClawRouting(), this.openClawGatewayCredential(),
+    ])
+    return { ...snapshot, gatewayCredentialConfigured: credential.configured }
   }
 
   /** Owner-approved single-tool routing, stored outside the model's reach. */
