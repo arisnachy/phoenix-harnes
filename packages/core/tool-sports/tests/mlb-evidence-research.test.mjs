@@ -48,7 +48,7 @@ function fakeNetwork({missingRoster=false,oldGame=false,fullLineup=false,
       else data=roster(u.pathname.includes('/101/')?'home':'away',fullLineup)
     }else if(u.pathname==='/api/v1/people'){
       const hydration=u.searchParams.get('hydrate')??''
-      const pitcher=Number(hydration.match(/opposingPlayerId=(\\d+)/)?.[1])
+      const pitcher=Number(hydration.match(/opposingPlayerId=([0-9]+)/)?.[1])
       data={people:[...u.searchParams.get('personIds').split(',')].map(k=>({
         id:Number(k),batSide:{code:'R'},pitchHand:{code:'L'},
         stats:bvpHydration&&Number(k)===1103&&pitcher===2201?
