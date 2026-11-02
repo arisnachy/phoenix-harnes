@@ -282,7 +282,7 @@ export function createPhoenix3DTool(): ToolDefinition {
         || requestedPelican(title + ' ' + (typeof args.subject === 'string' ? args.subject : ''))
       const supplied = args.scene === undefined ? undefined : normalizeScene(args.scene, title)
       // A standalone bird may use the demo; a compound request must retain its other objects.
-      const isolatedPelican = /^(?:un\\s+|una\\s+|modelo\\s+(?:de\\s+)?|crea\\s+(?:un\\s+)?)?pel[ií]can(?:o|a)?(?:\\s+(?:en\\s+)?(?:3d|tridimensional|giratorio))?$/iu.test(title)
+      const isolatedPelican = /^(?:un\s+|una\s+|modelo\s+(?:de\s+)?|crea\s+(?:un\s+)?)?pel[ií]can(?:o|a)?(?:\s+(?:en\s+)?(?:3d|tridimensional|giratorio))?$/iu.test(title)
       const alone = isolatedPelican && (!Array.isArray(args.requiredObjects) || args.requiredObjects.length <= 1)
       const scene = (alone && args.preset === 'pelican' && supplied === undefined)
         || (pelican && alone && (supplied === undefined || (supplied.nodes.length === 1 && !recognizablePelican(supplied))))
