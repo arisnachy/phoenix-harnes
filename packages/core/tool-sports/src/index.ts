@@ -8,6 +8,8 @@ import { getMlbPitcherReport } from './mlb.ts'
 import { researchTicket, autoResearchTicket, type ResearchTicketLeg } from './research-ticket.ts'
 import { sportsPromptNeeded } from './sports-prompt.ts'
 import { researchNbaSlate } from './nba-research.ts'
+import {basketballSlate,type BasketballLeague} from './basketball-research-core.ts'
+import {researchBasketballCase} from './basketball-evidence-dossier.ts'
 
 import { keylessOdds, keylessSports, keylessHistoricOdds } from './keyless-odds.ts'
 import { loadHistoricalOdds } from './sports-archive.ts'
@@ -44,6 +46,7 @@ export const inject = ['tools','systemPrompt']
 const sportsEnv=(ctx:Context):Promise<NodeJS.ProcessEnv>=>
   sportsEnvWithVaultKey(ctx,hydrateSportsSources(process.env))
 const GUIDANCE = [
+  'NBA/WNBA RESEARCH INTELLIGENCE: sports_chat_basketball_intelligence_slate para cartelera; sports_chat_nba_intelligence o sports_chat_wnba_intelligence para dossier por eventId real. NBA son 48 min, WNBA 40 min. Solo cinco titulares con ID explícito son confirmados. Investiga jugadores y enfrentamientos, lesiones y precios por casa, nunca inventes odds, datos de WNBA offseason ni probabilidades. Los expedientes no equivalen a selecciones aprobadas. ',
   'ESCÁNER GLOBAL DE CUOTAS: si el usuario pregunta por acceso real a las cuotas deportivas o pide revisar TODOS los deportes, no te limites a NBA, NFL y NHL. sports_chat_odds_scan presenta los 11 deportes realmente admitidos por OddsHarvester; examina sus 3 páginas consecutivas offset=0,4,8, limit=4, incluso si una falla, y devuelve estado INDIVIDUAL por deporte, cuota, casa, liga, hora, motivo del fallo y fuentes pendientes. Incluye fútbol/soccer, tenis ATP/WTA, béisbol/MLB, baloncesto NBA/WNBA, fútbol americano NFL, hockey NHL, handball, voleibol, ambos rugby y cricket. WNBA es una liga de basketball, NO un deporte distinto. Una consulta de baloncesto sin liga verificada jamás justifica etiquetar su cuota como NBA o WNBA. Las ligas sin evidencia suficiente se muestran sin liga verificada, no se fuerzan. Para mercados de ligas específicas consulta además sports_chat_odds con basketball_wnba, basketball_nba, baseball_mlb, americanfootball_nfl, icehockey_nhl y soccer; para tenis usa odds_keyless, o tennis_atp/tennis_wta solo cuando el nombre de la liga sea explícito. El inventario no garantiza mercados presentes. Cuando el error de OddsHarvester contenga category, exitCode y stderr informa esos campos y no trunques la causa interna. ',
   'THE ODDS API v4 · CONECTOR: la clave del proveedor api.the-odds-api.com se configura de forma segura en Ajustes > Conectores > The Odds API y el Host la verifica mediante el catálogo gratuito /v4/sports. No pedir claves en el chat ni confundir con TheOddsAPI (api.theoddsapi.com, credencial distinta). El motor sports_chat_odds con sourcePolicy=all y sin eventId/fecha puede usar la clave guardada para obtener precios con casa, hora de actualización y cuota remanente. La clave se resuelve del vault en CADA operación, incluida la creación de tickets cotizados; cambiarla no requiere reiniciar Kira. El proveedor limita créditos según el plan; NO prometer cuotas ilimitadas ni históricos gratuitos. El endpoint de verificación de la clave es de coste cero, no consulta cuotas apostables. ',
   'ODDS REALES Y HISTORIALES: sports_chat_odds ahora consulta varias fuentes independientes y devuelve estado observado/vacío/error/no configurado por proveedor. No declares sin cuotas hasta evaluar sources y buscar fecha y mercados reales por liga. OddsHarvester v0.20.0 permite transmitir filas NDJSON para recuperar partidos cotizados incluso si otras páginas del scraping fallan; distingue precios recuperados de scraping completamente exitoso. sports_chat_historical_odds acepta fecha y clave de deporte para leer archivos públicos locales y los snapshots de cotizaciones realmente vistos por PHOENIX. Los históricos NO son precios actuales, y el archivo local solo cubre desde que se capturaron observaciones: no inventar historial ausente. The Odds API v4 y TheOddsAPI requieren sus respectivas claves; la disponibilidad histórica completa suele ser de planes pagados. No prometas que las cotizaciones son de Juancito si el bookmaker indicado es otro. ',
@@ -1162,4 +1165,71 @@ export function apply(ctx: Context): void {
     },
     presentCall:()=>({ card:'generic',title:'Crear ticket visual de análisis',kind:'read' as const }),
   }))
+  ctx.tools.register(defineTool({
+    name:'sports_chat_basketball_intelligence_slate',
+    description:'Cartelera verificable NBA o WNBA por fecha, con IDs, sedes, estatus y ausencia de juegos en offseason; sin favoritos preseleccionados.',
+    parameters:{
+      league:{type:'string',required:true,description:'nba o wnba.'},
+      date:{type:'string',required:true,description:'Fecha AAAA-MM-DD del calendario.'},
+    },
+    output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+    isConcurrencySafe:()=>true,
+    async execute(args){
+      if(args.league!=='nba'&&args.league!=='wnba')throw Error('Liga NBA/WNBA inválida')
+      const report=await basketballSlate(args.league,args.date,fetch,Date.now(),await sportsEnv(ctx))
+      const uiBlock={component:'sports_espn_dashboard',version:1,props:{
+        view:'event',title:'PHOENIX · '+args.league.toUpperCase()+' · '+args.date,
+        subtitle:report.games.length+' partidos identificados',source:'ESPN público',
+        checkedAt:new Date().toISOString(),
+        sections:[{heading:'Encuentros verificados',kind:'list',items:report.games.slice(0,25).map(g=>({
+          label:g.away.name+' vs '+g.home.name,value:g.start+' · '+g.status,
+          detail:'eventId '+g.eventId+' · '+g.venue}))}],
+        note:report.offseason?'ESPN no publicó juegos para la fecha; no se crean enfrentamientos.':
+          'La cartelera no constituye una recomendación de apuesta. Usa el eventId para abrir el expediente.'}}
+      return JSON.stringify({...report,uiBlock,instruction:'Para profundizar llama sports_chat_nba_intelligence o sports_chat_wnba_intelligence con eventId exacto.'})
+    },
+    presentCall:()=>({card:'generic',title:'Consultar cartelera de NBA y WNBA',kind:'read' as const}),
+  }))
+  const registerBasketballIntelligence=(league:BasketballLeague)=>{
+    ctx.tools.register(defineTool({
+      name:league==='nba'?'sports_chat_nba_intelligence':'sports_chat_wnba_intelligence',
+      description:'Expediente NBA/WNBA basado en partido real: forma, roster, cinco titulares, estadísticas individuales, matchups defensivos, lesiones, noticias, escenarios Q1-Q4, mercados de casas y contradicciones.',
+      parameters:{
+        date:{type:'string',required:true,description:'Fecha AAAA-MM-DD de juego futuro.'},
+        eventId:{type:'string',required:true,description:'ID ESPN del encuentro en la liga seleccionada.'},
+        maxPlayers:{type:'integer',description:'Atletas investigados por club, de 1 a 20; defecto 15.'},
+        matchupOffset:{type:'integer',description:'Página de duelos, desde índice 0.'},
+        includeOdds:{type:'boolean',description:'Consultar cuotas reales actuales de la liga, por defecto sí.'},
+      },
+      output:{schema:{type:'string'},render:(_a,v)=>[{type:'text' as const,text:v}]},
+      isConcurrencySafe:()=>true,
+      async execute(args){
+        const now=Date.now(),env=await sportsEnv(ctx)
+        let quotes:Awaited<ReturnType<typeof marketOddsDetailed>>['quotes']=[]
+        let oddsSources:Awaited<ReturnType<typeof marketOddsDetailed>>['sources']=[]
+        if(args.includeOdds!==false){
+          try{
+            const odds=await marketOddsDetailed(
+              league==='nba'?'basketball_nba':'basketball_wnba','h2h,spreads,totals',env,fetch,now)
+            quotes=odds.quotes;oddsSources=odds.sources
+          }catch{/* Un proveedor sin respuesta NO autoriza inventar cuotas. */}
+        }
+        const dossier=await researchBasketballCase(league,args.date,args.eventId,fetch,now,env,
+          quotes,args.maxPlayers??15)
+        const offset=Math.max(0,Math.min(300,Math.floor(args.matchupOffset??0)))
+        return JSON.stringify({...dossier,sources:undefined,
+          matchups:dossier.matchups.slice(offset,offset+15),
+          matchupTotal:dossier.matchups.length,
+          matchupNextOffset:offset+15<dossier.matchups.length?offset+15:null,
+          sourceStatus:{ok:dossier.sources.filter(x=>x.status==='verified').length,
+            failed:dossier.sources.filter(x=>x.status==='error')},
+          oddsSources,
+          instruction:'Kira revisa argumentos a favor y en contra y datos faltantes por mercado. No asumir lineup por roster ni lesión confirmada por silencio. La duración NBA 48 y WNBA 40 cambia ritmo; no inventar EV ni pronóstico de ganador.'})
+      },
+      presentCall:()=>({card:'generic',title:'Investigar '+league.toUpperCase()+' en profundidad',kind:'read' as const}),
+    }))
+  }
+  registerBasketballIntelligence('nba')
+  registerBasketballIntelligence('wnba')
+
 }
