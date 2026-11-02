@@ -1,4 +1,5 @@
 import type { Scene3D, Scene3DNode } from './Scene3DView.tsx'
+import { torusTriangles } from './scene3d-primitives.ts'
 
 /** Self-contained glTF 2.0 import/export. No CDN, executable scripts or external URI requests. */
 const MAX_BYTES=12_000_000
@@ -26,6 +27,7 @@ const subtract=(a:V3,b:V3):V3=>vector(a[0]-b[0],a[1]-b[1],a[2]-b[2])
 const cross=(a:V3,b:V3):V3=>vector(a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0])
 function primitiveTriangles(node:Node):number[]{
   if(node.type==='mesh')return Array.from(node.vertices??[])
+  if(node.type==='torus')return torusTriangles()
   const coords:number[]=[]
   const tri=(a:V3,b:V3,c:V3)=>coords.push(...a,...b,...c)
   const quad=(a:V3,b:V3,c:V3,d:V3)=>{tri(a,b,c);tri(a,c,d)}
@@ -144,6 +146,34 @@ function buildDocument(scene:Scene3D):{json:R;binary:Uint8Array}{
     nodes.push(tr)
   }
   if(nodes.length===0)throw Error('No hay piezas visibles para exportar.')
+  // glTF animation channels target the same named transform nodes, not baked snapshots.
+  const clipAnimations:R[]=[]
+  const animationAccessor=(values:readonly number[],components:number,type:'SCALAR'|'VEC3'|'VEC4'):number=>{
+    const floats=new Float32Array(values)
+    const view=append(new Uint8Array(floats.buffer))
+    const index=accessors.length
+    accessors.push({bufferView:view,componentType:5126,count:values.length/components,type})
+    return index
+  }
+  if(scene.animations!==undefined){
+    for(const clip of scene.animations){
+      const samplers:R[]=[],channels:R[]=[]
+      for(const track of clip.tracks){
+        const target=nodes.findIndex(node=>node.name===track.node)
+        if(target<0)throw Error('Pista de animación sin nodo visible: '+track.node)
+        const input=animationAccessor(track.keys.map(key=>key.time),1,'SCALAR')
+        const values=track.keys.flatMap(key=>track.property==='rotation'
+          ?quaternion(key.value):[...key.value])
+        const output=animationAccessor(values,track.property==='rotation'?4:3,
+          track.property==='rotation'?'VEC4':'VEC3')
+        const sampler=samplers.push({input,output,interpolation:'LINEAR'})-1
+        const path=track.property==='position'?'translation'
+          :track.property==='size'?'scale':'rotation'
+        channels.push({sampler,target:{node:target,path}})
+      }
+      clipAnimations.push({name:clip.name,channels,samplers,extras:{duration:clip.duration,loop:clip.loop}})
+    }
+  }
   // Camera and light are interoperable glTF scene nodes, not only Phoenix UI state.
   const camIndex=nodes.length
   const cameraName=scene.camera??'perspective'
@@ -162,6 +192,7 @@ function buildDocument(scene:Scene3D):{json:R;binary:Uint8Array}{
   const json:R={asset:{version:'2.0',generator:'Phoenix 3D'},
     scene:0,scenes:[{name:scene.name,nodes:nodes.map((_,i)=>i)}],
     nodes,meshes,materials,images,textures,accessors,bufferViews:views,buffers:[{byteLength:binary.length}],
+    ...(clipAnimations.length>0?{animations:clipAnimations}:{}),
     cameras:[{name:'Phoenix Camera',type:'perspective',perspective:{yfov:Math.PI/3,znear:.1,zfar:3000}}],
     extensions:{KHR_lights_punctual:{lights:[{name:'Main Light',type:'directional',
       color:scene.environment==='sunset'?[1,.74,.52]:[1,1,1],

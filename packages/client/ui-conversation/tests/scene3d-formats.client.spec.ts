@@ -70,6 +70,31 @@ describe('Phoenix 3D standard GLB/glTF models',()=>{
     expect(json.materials[0].normalTexture.index).toBeTypeOf('number')
     expect(json.materials[0].occlusionTexture.index).toBeTypeOf('number')
   })
+  it('exports wheels and arbitrary animation channels to real glTF/GLB geometry',()=>{
+    const animated=parseScene3D({
+      version:1,units:'meters',name:'Bicicleta animada',background:'#fbf7f1',
+      nodes:[{type:'torus',name:'Rueda delantera',objectId:'bicycle',
+        position:[1,1,0],size:[1.2,.12,1.2],rotation:[90,0,0],color:'#222222'}],
+      animations:[{name:'Rodar',duration:2,loop:true,tracks:[{
+        node:'Rueda delantera',property:'rotation',keys:[
+          {time:0,value:[90,0,0]},{time:1,value:[90,0,180]},{time:2,value:[90,0,360]},
+        ],
+      }]}],
+    })
+    expect(animated).toBeDefined()
+    const json=JSON.parse(exportSceneGLTF(animated!))
+    expect(json.meshes).toHaveLength(1)
+    expect(json.accessors[0].count).toBeGreaterThan(500)
+    expect(json.animations).toHaveLength(1)
+    expect(json.animations[0].channels[0].target).toEqual({node:0,path:'rotation'})
+    expect(json.animations[0].samplers[0].interpolation).toBe('LINEAR')
+    expect(json.accessors[json.animations[0].samplers[0].output].type).toBe('VEC4')
+    const glb=exportSceneGLB(animated!)
+    expect(new DataView(glb.buffer).getUint32(0,true)).toBe(0x46546c67)
+    const roundTrip=importSceneGLTF(glb)
+    expect(roundTrip.nodes[0]?.type).toBe('mesh')
+    expect(roundTrip.nodes[0]?.vertices?.length).toBeGreaterThan(1000)
+  })
   it('rejects malformed GLB headers, unsupported external buffers and poisoned geometry',()=>{
     expect(()=>importSceneGLTF(new Uint8Array(20))).toThrow()
     expect(()=>importSceneGLTF(JSON.stringify({asset:{version:'2.0'},buffers:[{uri:'https://bad.example/a.bin'}]}))).toThrow()
