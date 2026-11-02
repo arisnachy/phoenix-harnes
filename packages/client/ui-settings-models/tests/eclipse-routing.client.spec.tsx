@@ -211,6 +211,34 @@ describe('Eclipse model settings', () => {
     expect(JSON.stringify(mutate.mock.calls[0]?.[0])).not.toContain('maxPlannerCalls')
   })
 
+  it('keeps Automatic mode when Terra Low is selected for occasional coordination', async () => {
+    const controller = controllerWith({ mode: 'automatic' })
+    const mutate = vi.fn(async (_request: Record<string, unknown>) => ({
+      result: { ok: true as const, value: {} as never },
+    }))
+    const terra = { provider: 'openai-codex', model: 'gpt-6.1-terra', name: 'GPT-6.1 Terra',
+      reasoningEfforts: ['low', 'medium', 'high'] }
+    render(<EclipseRoutingPanel controller={controller as never}
+      api={{ settings: { mutate } } as never}
+      loadCatalog={async () => [...catalog, terra]} t={t} />)
+    const mode = await screen.findByLabelText(en.eclipseMode)
+    const coordinator = screen.getByLabelText(en.eclipseRole_coordinator)
+    fireEvent.change(coordinator, { target: { value: JSON.stringify(['openai-codex', 'gpt-6.1-terra']) } })
+    expect(mode).toHaveProperty('value', 'automatic')
+    fireEvent.change(screen.getByLabelText(en.eclipseReasoning).id === 'eclipse-effort-coordinator'
+      ? screen.getByLabelText(en.eclipseReasoning)
+      : document.querySelector('#eclipse-effort-coordinator') as HTMLSelectElement,
+    { target: { value: 'low' } })
+    expect(mode).toHaveProperty('value', 'automatic')
+    fireEvent.click(screen.getByRole('button', { name: en.eclipseSave }))
+    await waitFor(() => expect(mutate).toHaveBeenCalledOnce())
+    expect(mutate.mock.calls[0]?.[0]).toMatchObject({ ops: expect.arrayContaining([
+      { op: 'set', path: ['mode'], value: 'automatic' },
+      { op: 'set', path: ['coordinator'],
+        value: { provider: 'openai-codex', model: 'gpt-6.1-terra', reasoningEffort: 'low' } },
+    ]) })
+  })
+
   it('surfaces a failed save instead of claiming the settings were stored', async () => {
     const controller = controllerWith({ mode: 'automatic' })
     const mutate = vi.fn(async () => ({ result: {
