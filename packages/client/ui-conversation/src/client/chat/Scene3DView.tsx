@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import css from './Scene3DView.module.css'
 import { exportSceneGLB, exportSceneGLTF, importSceneGLTF } from './scene3d-formats.ts'
+import { torusTriangles } from './scene3d-primitives.ts'
 
 export interface Scene3DMaterial {
   readonly preset?: string
@@ -19,8 +20,9 @@ export interface Scene3DMaterial {
 }
 /** Primitive objects and imported triangular meshes share one portable scene. */
 export interface Scene3DNode {
-  readonly type: 'box' | 'sphere' | 'cylinder' | 'cone' | 'mesh'
+  readonly type: 'box' | 'sphere' | 'cylinder' | 'cone' | 'mesh' | 'torus'
   readonly name?: string
+  readonly objectId?: string
   readonly position: readonly [number,number,number]
   readonly size: readonly [number,number,number]
   readonly rotation?: readonly [number,number,number]
@@ -57,7 +59,7 @@ export function parseScene3D(value: unknown): Scene3D | undefined {
   const nodes: Scene3DNode[] = []
   let vertexCount=0
   for (const item of value.nodes as unknown[]) {
-    if (!record(item) || !['box','sphere','cylinder','cone','mesh'].includes(String(item.type))
+    if (!record(item) || !['box','sphere','cylinder','cone','mesh','torus'].includes(String(item.type))
       || !vec(item.position,-300,300) || !vec(item.size,.001,300)
       || (item.rotation !== undefined && !vec(item.rotation,-360,360))
       || typeof item.color !== 'string' || !colorPattern.test(item.color)) return undefined
@@ -95,6 +97,7 @@ export function parseScene3D(value: unknown): Scene3D | undefined {
       size: item.size,
       color: item.color,
       ...(typeof item.name === 'string' ? { name: item.name.slice(0,100) } : {}),
+      ...(typeof item.objectId === 'string' && /^[a-z0-9_-]{1,64}$/iu.test(item.objectId) ? { objectId: item.objectId } : {}),
       ...(item.rotation === undefined ? {} : { rotation: item.rotation as [number, number, number] }),
       ...(item.type==='mesh'?{vertices:vertices as number[]}:{}),
       ...(material===undefined?{}:{material}),
@@ -113,18 +116,27 @@ export function parseScene3D(value: unknown): Scene3D | undefined {
 
 const deg = Math.PI / 180
 function transform(vertex: Vec3, node: Scene3DNode): Vec3 {
-  let [x,y,z] = vertex
+  let [x,y,z]: Vec3 = [vertex[0]*node.size[0],vertex[1]*node.size[1],vertex[2]*node.size[2]]
   const [rx,ry,rz] = node.rotation ?? [0,0,0] as const
   const ax = rx * deg, ay = ry * deg, az = rz * deg
   ;[y,z] = [y*Math.cos(ax)-z*Math.sin(ax),y*Math.sin(ax)+z*Math.cos(ax)]
   ;[x,z] = [x*Math.cos(ay)+z*Math.sin(ay),-x*Math.sin(ay)+z*Math.cos(ay)]
   ;[x,y] = [x*Math.cos(az)-y*Math.sin(az),x*Math.sin(az)+y*Math.cos(az)]
-  return [x*node.size[0]+node.position[0], y*node.size[1]+node.position[1], z*node.size[2]+node.position[2]]
+  return [x+node.position[0], y+node.position[1], z+node.position[2]]
 }
 function mesh(node: Scene3DNode): Face[] {
   if(node.hidden===true)return []
   const faces: Vec3[][] = []
-  if(node.type==='mesh'&&node.vertices!==undefined){
+  if(node.type==='torus'){
+    const vertices = torusTriangles()
+    for(let i=0;i<vertices.length;i+=9){
+      faces.push([
+        [vertices[i]!,vertices[i+1]!,vertices[i+2]!],
+        [vertices[i+3]!,vertices[i+4]!,vertices[i+5]!],
+        [vertices[i+6]!,vertices[i+7]!,vertices[i+8]!],
+      ])
+    }
+  } else if(node.type==='mesh'&&node.vertices!==undefined){
     for(let i=0;i<node.vertices.length;i+=9){
       faces.push([
         [node.vertices[i]!,node.vertices[i+1]!,node.vertices[i+2]!],
@@ -194,9 +206,10 @@ function sceneBounds(scene:Scene3D): {center:Vec3; radius:number} {
   const mins:Vec3=[Infinity,Infinity,Infinity], maxs:Vec3=[-Infinity,-Infinity,-Infinity]
   for(const node of scene.nodes){
     if(node.hidden===true)continue
-    if(node.type==='mesh'&&node.vertices!==undefined){
-      for(let i=0;i<node.vertices.length;i+=3){
-        const p=transform([node.vertices[i]!,node.vertices[i+1]!,node.vertices[i+2]!],node)
+    if(node.type==='mesh'||node.type==='torus'){
+      const vertices = node.type==='torus'?torusTriangles():node.vertices??[]
+      for(let i=0;i<vertices.length;i+=3){
+        const p=transform([vertices[i]!,vertices[i+1]!,vertices[i+2]!],node)
         for(let axis=0;axis<3;axis++){mins[axis]=Math.min(mins[axis]!,p[axis]!);maxs[axis]=Math.max(maxs[axis]!,p[axis]!)}
       }
     }else{
