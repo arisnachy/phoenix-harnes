@@ -45,8 +45,8 @@ export function normalizeClawHubCatalog(
     if (!/^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/iu.test(id)) continue
     const canonical = id.toLowerCase()
     if (seen.has(canonical)) continue
-    const official = raw.official === true || raw.isOfficial === true
-      || raw.trust === 'official' || raw.badges === 'official'
+    const official = raw.isOfficial === true || pkg.isOfficial === true || raw.channel === 'official'
+      || raw.official === true
     if (request.officialOnly === true && !official) continue
     seen.add(canonical)
     const skillName = slug || id.split('/').at(-1) || id
@@ -80,7 +80,7 @@ export async function readClawHubCatalog(request: ClawHubCatalogRequest): Promis
     pathname = query ? '/api/v1/packages/search' : '/api/v1/packages'
     params.set('family', request.family)
     if (query) params.set('q', query)
-    if (request.officialOnly) params.set('official', 'true')
+    if (request.officialOnly) params.set('isOfficial', 'true')
   }
   const url = BASE + pathname + '?' + params.toString()
   let response: Response
