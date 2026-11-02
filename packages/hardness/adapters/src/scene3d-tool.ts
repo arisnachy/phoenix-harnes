@@ -211,8 +211,8 @@ export function createPhoenix3DTool(): ToolDefinition {
         ? pelicanScene()
         : args.demo === true && supplied === undefined
           ? tropicalVillaScene() : supplied ?? normalizeScene(undefined, title)
-      const organic = typeof args.subject === 'string'
-        && /animal|bird|ave|p[aá]jaro|organico|orgánico|elefante|gato|perro|rostro|human/iu.test(args.subject)
+      const subject = title + ' ' + (typeof args.subject === 'string' ? args.subject : '')
+      const organic = /\b(?:animal|bird|ave|p[aá]jaro|organico|orgánico|elefante|gato|perro|rostro|human(?:o|a)?|dog|cat|horse|dinosaurio|tortuga|delf[ií]n)\b/iu.test(subject)
       if (!pelican && organic && trivialOrganicScene(scene)) {
         throw new ToolArgsError(['Modelo orgánico insuficiente: usa una malla o varias partes anatómicas, nunca solo una caja.'])
       }
