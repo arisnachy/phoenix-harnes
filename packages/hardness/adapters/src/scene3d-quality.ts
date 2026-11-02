@@ -69,7 +69,9 @@ export function auditScene3DQuality(
   if (domain === 'vehicle' && !scene.nodes.some(node => node.type === 'torus' || node.type === 'mesh')) {
     warnings.push('Sin piezas curvas o mallas detalladas para vehículos.')
   }
-  if (!scene.environment) warnings.push('No se especificó iluminación/entorno.')
+  if (!scene.environment && (domain === 'architecture' || domain === 'environment')) {
+    warnings.push('No se especificó iluminación/entorno para una escena ambiental.')
+  }
   if (level !== 'preview') {
     blockers.push(level === 'studio'
       ? 'Un preview nativo no certifica calidad Studio: requiere generación y revisión real en Blender.'
