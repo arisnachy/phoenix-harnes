@@ -176,6 +176,7 @@ export interface McpRegistryClient {
   clawHubState?(): Promise<import('@phoenix-ai/dsh-api-remotes/client').ClawHubState>
   prepareClawHubCli?(): Promise<import('@phoenix-ai/dsh-api-remotes/client').ClawHubState>
   clawHubInstallSkill?(request: import('@phoenix-ai/dsh-api-remotes/client').ClawHubInstallRequest): Promise<import('@phoenix-ai/dsh-api-remotes/client').ClawHubInstallReceipt>
+  clawHubInstallPackage?(request: import('@phoenix-ai/dsh-api-remotes/client').ClawHubInstallRequest): Promise<import('@phoenix-ai/dsh-api-remotes/client').ClawHubInstallReceipt>
   /** Read Jev setup/runtime state without exposing its secret. Optional for older hosts. */
   jevState?(): Promise<JevMcpSnapshot>
   /** Store a Jev key in Phoenix credentials and activate the pinned MCP endpoint. Optional for older hosts. */

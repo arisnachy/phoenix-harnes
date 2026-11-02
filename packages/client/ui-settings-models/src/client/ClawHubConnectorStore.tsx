@@ -32,9 +32,11 @@ export function ClawHubConnectorStore({ registry, t, connectedIds }: ClawHubConn
   const [busy, setBusy] = useState<string | null>(null)
   const [notice, setNotice] = useState('')
   const [preparing, setPreparing] = useState(false)
+  const [installedPlugins, setInstalledPlugins] = useState<readonly string[]>([])
   const browse = registry?.clawHubCatalog
   const readState = registry?.clawHubState
   const installSkill = registry?.clawHubInstallSkill
+  const installPackage = registry?.clawHubInstallPackage
   const prepareCli = registry?.prepareClawHubCli
 
   useEffect(() => {
@@ -66,6 +68,20 @@ export function ClawHubConnectorStore({ registry, t, connectedIds }: ClawHubConn
     void installSkill({ name: item.name, family: 'skill' }).then(
       () => { setNotice(t('storeInstalled')); setReload(n => n + 1) },
       () => { setNotice(t('storeInstallFailed')) },
+    ).finally(() => { setBusy(null) })
+  }
+
+  const installNative = (item: ClawHubCatalogItem): void => {
+    if (item.family === 'skill' || busy !== null || installPackage === undefined
+      || runtime?.openclaw !== 'available') return
+    setBusy(item.name)
+    setNotice('')
+    void installPackage({ name: item.name, family: item.family }).then(
+      () => {
+        setInstalledPlugins(current => current.includes(item.name) ? current : [...current, item.name])
+        setNotice(t('storeNativeInstalled'))
+      },
+      () => { setNotice(t('storeNativeInstallError')) },
     ).finally(() => { setBusy(null) })
   }
 
@@ -138,7 +154,34 @@ export function ClawHubConnectorStore({ registry, t, connectedIds }: ClawHubConn
                   onClick={() => { install(item) }}>
                   {busy === item.name ? t('storeInstalling') : t('storeInstall')}
                 </button>
-              ) : <small>{t('storeRequiresRuntime')}</small>}
+              ) : (
+                <div className={css.toolbar}>
+                  <button className={css.compactButton} type="button"
+                    disabled={busy !== null || installPackage === undefined
+                      || runtime?.openclaw !== 'available' || installedPlugins.includes(item.name)}
+                    onClick={() => { installNative(item) }}>
+                    {installedPlugins.includes(item.name) ? t('storeNativeInstalledStatus')
+                      : busy === item.name ? t('storeInstalling') : t('storeNativeInstall')}
+                  </button>
+                  {runtime?.openclaw !== 'available' ? (
+                    <small>{t('storeRuntimeNotReady')}</small>
+                  ) : null}
+                  <details>
+                    <summary>{t('storeAuthGuide')}</summary>
+                    <p className={css.safetyNote}>{t('storeAuthExplanation')}</p>
+                    <code>{'openclaw plugins list --json'}</code>
+                    <p className={css.safetyNote}>{t('storeAuthConfigStep')}</p>
+                    <code>{'openclaw configure --section plugins'}</code>
+                    <p className={css.safetyNote}>{t('storeAuthEnableStep')}</p>
+                    <code>{'openclaw plugins enable <id>'}</code>
+                    <p className={css.safetyNote}>{t('storeAuthVerifyStep')}</p>
+                    <code>{'openclaw plugins inspect <id> --runtime --json'}</code>
+                    <p><a href="https://docs.openclaw.ai/plugins" target="_blank" rel="noreferrer">
+                      {t('storeAuthDocs')}
+                    </a></p>
+                  </details>
+                </div>
+              )}
             </article>
           ))}
         </div>
