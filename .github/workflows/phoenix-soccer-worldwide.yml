@@ -1,0 +1,29 @@
+name: PHOENIX Soccer worldwide intelligence
+on:
+  pull_request:
+    paths:
+      - 'packages/core/tool-sports/src/soccer-worldwide-*.ts'
+      - 'packages/core/tool-sports/tests/soccer-worldwide-intelligence.test.mjs'
+      - 'packages/core/tool-sports/src/index.ts'
+      - 'packages/core/tool-sports/src/soccer-90min-settlement.ts'
+      - 'packages/core/tool-sports/tests/soccer-90min-settlement.test.mjs'
+      - '.github/workflows/phoenix-soccer-worldwide.yml'
+  workflow_dispatch:
+jobs:
+  soccer-research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Verify global fixtures, roster identity and market review
+        run: node --experimental-strip-types --test packages/core/tool-sports/tests/soccer-worldwide-intelligence.test.mjs packages/core/tool-sports/tests/soccer-90min-settlement.test.mjs
+      - name: Verify host TypeScript build
+        run: pnpm exec tsc -b tsconfig.host.json --pretty false
