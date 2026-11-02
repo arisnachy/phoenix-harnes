@@ -56,7 +56,7 @@ export function resolveEclipseTeammateProfile(
   fallback: TeamModelProfile | undefined,
   adaptiveEffort?: string,
 ): TeamModelProfile | undefined {
-  if (settings === undefined) return fallback
+  if (settings?.mode === undefined) return fallback
   // Automatic Eclipse spends Medium on ordinary delegated work and High on
   // complex/critical work. An explicitly named Max teammate retains Max.
   if (settings.mode === 'automatic') {
