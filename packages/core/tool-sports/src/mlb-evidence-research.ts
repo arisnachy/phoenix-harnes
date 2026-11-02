@@ -36,10 +36,12 @@ export type MlbForm={games:number;wins:number;losses:number;runsFor:number;runsA
   lastResults:Array<{date:string;opponentId:number;scored:number;allowed:number;side:'home'|'away'}>}
 export type MlbAthlete={id:number;name:string;teamId:number;role:'batter'|'pitcher';batSide:string;
   pitchHand:string;lineupOrder:number|null;lineupConfirmed:boolean;position:string;
-  season:Record<string,string>;lastFive:Record<string,string>;evidence:'observed'|'partial'|'missing'}
+  season:Record<string,string>;lastFive:Record<string,string>;
+  reliefUsage72h:Array<{date:string;innings:string;pitches:string}>;
+  evidence:'observed'|'partial'|'missing'}
 export type MlbMatchup={batterId:number;batter:string;pitcherId:number;pitcher:string;
   pitcherRole:'probable-starter'|'active-bullpen';batterSide:string;pitcherHand:string;
-  observations:string[];missing:string[];assessment:'requires-review'}
+  observations:string[];bvp:Record<string,string>|null;missing:string[];assessment:'requires-review'}
 export type MlbWeather={time:string;temperatureC:number|null;humidityPercent:number|null;
   precipitationPercent:number|null;windSpeedKmh:number|null;windDirectionDegrees:number|null;
   rooftop:'unknown';windRelativeToField:'unknown'}
@@ -157,10 +159,15 @@ const hitSummary=(s:Record<string,string>)=>[
 const pitcherSummary=(s:Record<string,string>)=>[
   'ERA '+(s.era??'—'),'WHIP '+(s.whip??'—'),'IP '+(s.inningsPitched??'—'),
   'K '+(s.strikeOuts??'—'),'W-L '+(s.wins??'—')+'-'+(s.losses??'—')].join(' · ')
-function rosterMatchups(batters:MlbAthlete[],starter:MlbAthlete|null,relief:MlbAthlete[]):MlbMatchup[]{
+function rosterMatchups(batters:MlbAthlete[],starter:MlbAthlete|null,relief:MlbAthlete[],
+  bvp:Map<string,Record<string,string>>):MlbMatchup[]{
   const pitchers=[...(starter?[starter]:[]),...relief]
   return batters.flatMap(b=>pitchers.map(p=>{
+    const matchupStats=bvp.get(b.id+':'+p.id)??null
     const observations=[
+      ...(matchupStats?['BvP registrado: AB '+(matchupStats.atBats??'—')+
+        ', H '+(matchupStats.hits??'—')+', K '+(matchupStats.strikeOuts??'—')+
+        ', HR '+(matchupStats.homeRuns??'—')]:[]),
       ...(b.season.ops?['Bateador OPS temporada '+b.season.ops]:[]),
       ...(b.season.strikeOuts?['Bateador K temporada '+b.season.strikeOuts]:[]),
       ...(p.season.era?['Pitcher ERA temporada '+p.season.era]:[]),
@@ -170,8 +177,8 @@ function rosterMatchups(batters:MlbAthlete[],starter:MlbAthlete|null,relief:MlbA
     return{batterId:b.id,batter:b.name,pitcherId:p.id,pitcher:p.name,
       pitcherRole:starter?.id===p.id?'probable-starter':'active-bullpen',
       batterSide:b.batSide,pitcherHand:p.pitchHand,
-      observations,missing:[
-        'Enfrentamiento BvP específico no comprobado',
+      observations,bvp:matchupStats,missing:[
+        ...(matchupStats?[]:['Enfrentamiento BvP específico no comprobado']),
         'Repertorio, tipos de pitcheo y splits vs mano no comprobados',
         ...(b.lineupConfirmed?[]:['Bateador no confirmado en alineación']),
         ...(starter?.id===p.id?[]:['Aparición del relevista no confirmada']),
@@ -230,7 +237,10 @@ function makePanel(result:Omit<MlbCase,'uiBlock'>):MlbCase['uiBlock']{
       detail:hitSummary(p.season)+' · últimos 5: '+hitSummary(p.lastFive)}))))
   add('Bullpen: disponibilidad por confirmar',(['away','home'] as const).flatMap(side=>
     result.bullpen[side].map(p=>({label:result.fixture[side].name+' · '+p.name,
-      value:pitcherSummary(p.season),detail:'Roster activo; fatiga y aparición requieren verificación'}))))
+      value:pitcherSummary(p.season),detail:p.reliefUsage72h.length?
+        'Últimas 72h: '+p.reliefUsage72h.map(g=>g.date.slice(5)+' '+g.pitches+' pitcheos').join('; ')+
+          ' · disponibilidad NO confirmada':
+        'Sin apariciones verificables últimas 72h; disponibilidad NO confirmada'}))))
   add('Bajas registradas por MLB',result.injuries.map(p=>({
     label:p.team+' · '+p.name,value:'En roster de lesionados según MLB',
     detail:'Confirmar fecha, disponibilidad y posible activación antes del partido'})))
@@ -238,7 +248,7 @@ function makePanel(result:Omit<MlbCase,'uiBlock'>):MlbCase['uiBlock']{
     label:p.headline,value:p.source,detail:p.published||'Fecha no publicada'})))
   add('Matriz roster contra abridores y bullpen',result.matchups.slice(0,30).map(m=>({
     label:m.batter+' vs '+m.pitcher,value:m.pitcherRole==='probable-starter'?'Abridor probable':'Bullpen posible',
-    detail:[...m.observations.slice(0,2),...m.missing.slice(0,1)].join(' · ')})))
+    detail:[...m.observations.slice(0,3),...m.missing.slice(0,1)].join(' · ')})))
   add('Parque y clima',[{label:result.venue.name,
     value:result.weather?'Viento '+trimNum(result.weather.windSpeedKmh)+' km/h · '+
       'temperatura '+trimNum(result.weather.temperatureC)+' °C':'Meteorología no confirmada',
@@ -370,6 +380,18 @@ export async function researchMlbCase(
     ]
     const [seasonResponse,recentResponse]=await Promise.all(urls.map(url=>
       measured<RawStats>(url,fetcher,sources,now)))
+    // Report actual workload without declaring that an active reliever is ready.
+    const gameLog=p.role==='pitcher'?await measured<RawStats>(
+      'https://statsapi.mlb.com/api/v1/people/'+p.id+
+        '/stats?stats=gameLog&group=pitching&season='+season,fetcher,sources,now):null
+    const cutoff=Date.parse(fixture.date)-3*86_400_000
+    const recentAppearances=arr(gameLog?.stats?.[0]?.splits)
+      .flatMap(raw=>{
+        const e=obj(raw),time=Date.parse(word(e.date)),st=obj(e.stat)
+        if(!Number.isFinite(time)||time>=Date.parse(fixture.date)||time<cutoff)return []
+        return[{date:word(e.date,20),innings:word(st.inningsPitched,20)||'—',
+          pitches:word(st.numberOfPitches,20)||'—'}]
+      }).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,5)
     const first=(r:RawStats|null|undefined)=>obj(r?.stats?.[0]?.splits?.[0]?.stat)
     const seasonStats=fields(first(seasonResponse),p.role==='pitcher'?pitchingFields:battingFields)
     const lastFive=fields(first(recentResponse),p.role==='pitcher'?pitchingFields:battingFields)
@@ -377,7 +399,7 @@ export async function researchMlbCase(
       batSide:personInfo.get(p.id)?.bat??'no verificado',
       pitchHand:personInfo.get(p.id)?.pitch??'no verificado',
       lineupOrder:p.lineupOrder,lineupConfirmed:p.lineupConfirmed,
-      season:seasonStats,lastFive,
+      season:seasonStats,lastFive,reliefUsage72h:recentAppearances,
       evidence:Object.keys(seasonStats).length&&Object.keys(lastFive).length?'observed':
         Object.keys(seasonStats).length||Object.keys(lastFive).length?'partial':'missing'}
   })
@@ -393,8 +415,27 @@ export async function researchMlbCase(
   const batters=(side:'home'|'away')=>rosterMap[side].filter(p=>p.role==='batter')
     .sort((a,b)=>(a.lineupOrder??99)-(b.lineupOrder??99)||a.name.localeCompare(b.name))
     .slice(0,lineupStatus[side]==='confirmed'?9:18)
-  const matchups=[...rosterMatchups(batters('home'),starters.away,bullpen.away),
-    ...rosterMatchups(batters('away'),starters.home,bullpen.home)]
+  // A single vsPlayer season query per selected hitter can expose BvP splits
+  // against multiple opponents; never infer an opposition ID from the order.
+  const bvp=new Map<string,Record<string,string>>()
+  const focus=[...batters('home').slice(0,9),...batters('away').slice(0,9)]
+  await boundedMap(focus,4,async batter=>{
+    const data=await measured<RawStats>('https://statsapi.mlb.com/api/v1/people/'+
+      batter.id+'/stats?stats=vsPlayer&group=hitting&season='+season,
+      fetcher,sources,now)
+    for(const raw of arr(data?.stats?.[0]?.splits)){
+      const split=obj(raw)
+      const opponentId=id(obj(split.player).id??obj(split.opponent).id)
+      const knownPitcher=[...bullpen.home,...bullpen.away,starters.home,starters.away]
+        .some(p=>p?.id===opponentId)
+      if(!opponentId||!knownPitcher)continue
+      const stats=fields(obj(split.stat),battingFields)
+      if(!Object.keys(stats).length)continue
+      bvp.set(batter.id+':'+opponentId,stats)
+    }
+  })
+  const matchups=[...rosterMatchups(batters('home'),starters.away,bullpen.away,bvp),
+    ...rosterMatchups(batters('away'),starters.home,bullpen.home,bvp)]
   // Public journalism is supplementary: news mentioning a club is NOT a
   // confirmed medical report, starting lineup, or expert pick.
   const newsFeed=await measured<unknown>(
@@ -415,9 +456,9 @@ export async function researchMlbCase(
     ...(!starters.away?['Abridor visitante no verificado']:[]),
     ...(!weather?['Clima horario no disponible']:[]),
     'Orientación del terreno, techo abierto/cerrado y efecto del viento no verificados',
-    'Fatiga y disponibilidad de cada relevista pendientes de últimas 72 horas',
+    'Fatiga y disponibilidad definitivas de relevistas requieren confirmación; las últimas 72h son contexto, no permiso de jugar',
     'Lesiones, estrellas, noticias y opiniones de expertos sin verificación específica',
-    'Historial bateador vs pitcher, splits de mano y repertorio pendientes',
+    'Enfrentamientos BvP no publicados, splits de mano y repertorio siguen pendientes por jugador',
   ]
   if(!rawRosters.home.length||!rawRosters.away.length)
     missingEvidence.push('Rosters activos incompletos o no disponibles')
@@ -437,7 +478,7 @@ export async function researchMlbCase(
       'la evidencia disponible no prueba cuántas entradas completarán.',
     'Entradas seis y siete: bullpen local con '+bullpen.home.length+' pitchers activos identificados; '+
       'bullpen visitante con '+bullpen.away.length+
-      '. Apariciones y fatiga deben verificarse por separado.',
+      '. Uso individual 72h documentado cuando existe, disponibilidad final sin confirmar.',
     'Entradas ocho y nueve: estudiar cerradores, emergentes, defensa y ventaja local; '+
       'si el local ya gana, puede no batear la baja de la novena.',
     'Escenario alternativo: '+(weather?'viento '+trimNum(weather.windSpeedKmh)+
