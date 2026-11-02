@@ -192,7 +192,7 @@ function normalizeScene(raw: unknown, fallbackName: string): Scene {
     name: typeof data.name === 'string' && data.name.trim() !== '' ? data.name.slice(0, 140) : fallbackName,
     background: typeof data.background === 'string' && hex.test(data.background) ? data.background : '#f7f2eb',
     nodes,
-    ...(data.animations === undefined ? {} : { animations:normalizeAnimations(data.animations,nodes) }),
+    ...(data.animations === undefined ? {} : { animations:normalizeAnimations(data.animations,nodes)! }),
     ...(data.environment==='studio'||data.environment==='sunset'||data.environment==='daylight'?{environment:data.environment}:{}),
     ...(data.camera==='perspective'||data.camera==='isometric'||data.camera==='front'||data.camera==='top'?{camera:data.camera}:{}),
   }
