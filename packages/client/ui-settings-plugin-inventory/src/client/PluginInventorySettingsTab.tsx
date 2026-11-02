@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useState, type ReactNode } from 'react'
-import type { PluginInventorySnapshot } from '@phoenix-ai/dsh-api-remotes/client'
+import type { PluginBulkActivationReceipt, PluginEnableRequest, PluginInventorySnapshot } from '@phoenix-ai/dsh-api-remotes/client'
 import {
   IconChevronDownOutline14,
   IconSearchOutline16,
@@ -7,12 +7,15 @@ import {
 import type { InjectFace, PropsLocale, PropsRuntime } from '@phoenix-ai/dsh-client-ui-slots'
 import type { PluginInventoryLocaleKey } from './locales.ts'
 import css from './PluginInventorySettingsTab.module.css'
-import { ClawHubMarketplace, type ClawHubMarketplaceInjected } from './ClawHubMarketplace.tsx'
 
 /** Registration-side Remote face used by the section. */
-export interface PluginInventorySettingsTabInjected extends Partial<ClawHubMarketplaceInjected> {
+export interface PluginInventorySettingsTabInjected {
   /** Read a current Host inventory snapshot. */
   list: () => Promise<PluginInventorySnapshot>
+  /** Update a configured plugin through the real Host Loader. */
+  setPluginEnabled?: (request: PluginEnableRequest) => Promise<PluginInventoryEntry>
+  /** Activate configured plugins and install the trusted curated MCP pack. */
+  activateAvailablePlugins?: () => Promise<PluginBulkActivationReceipt>
 }
 
 type PluginInventoryEntry = PluginInventorySnapshot['entries'][number]
@@ -61,13 +64,15 @@ function matches(entry: PluginInventoryEntry, normalizedQuery: string): boolean 
     .some(value => value.toLocaleLowerCase().includes(normalizedQuery))
 }
 
-/** Render the read-only current Loader inventory. */
-export function PluginInventorySettingsTab({ list, t, browseClawHub, readClawHubState, installClawHubSkill }: PluginInventorySettingsTabProps): ReactNode {
+/** Render actionable Loader state without confusing installed plugins with catalog entries. */
+export function PluginInventorySettingsTab({ list, setPluginEnabled, activateAvailablePlugins, t }: PluginInventorySettingsTabProps): ReactNode {
   const catalogId = useId()
   const [request, setRequest] = useState(0)
   const [query, setQuery] = useState('')
   const [expanded, setExpanded] = useState<PluginInventoryEntry['entryId'] | null>(null)
   const [state, setState] = useState<ViewState>({ status: 'loading' })
+  const [busy, setBusy] = useState<string | null>(null)
+  const [notice, setNotice] = useState('')
 
   useEffect(() => {
     let current = true
@@ -97,6 +102,29 @@ export function PluginInventorySettingsTab({ list, t, browseClawHub, readClawHub
     setRequest(value => value + 1)
   }
 
+  const changePlugin = (entry: PluginInventoryEntry, enabled: boolean): void => {
+    if (setPluginEnabled === undefined || busy !== null) return
+    setBusy(entry.entryId)
+    setNotice('')
+    void setPluginEnabled({ entryId: entry.entryId, enabled }).then(
+      () => { setNotice(t('pluginChanged')); retry() },
+      () => { setNotice(t('pluginChangeFailed')); retry() },
+    ).finally(() => { setBusy(null) })
+  }
+
+  const activateAll = (): void => {
+    if (activateAvailablePlugins === undefined || busy !== null) return
+    setBusy('all')
+    setNotice('')
+    void activateAvailablePlugins().then(
+      result => {
+        setNotice(`${t('bulkComplete')}: ${result.activated.length} ${t('bulkActivated')}, ${result.curatedInstalled} ${t('bulkInstalled')}, ${result.skipped.length + result.failed.length + result.curatedFailed.length} ${t('bulkNeedsAttention')}.`)
+        retry()
+      },
+      () => { setNotice(t('bulkFailed')); retry() },
+    ).finally(() => { setBusy(null) })
+  }
+
   return (
     <div className={css.section} aria-busy={state.status === 'loading'}>
       {state.status === 'loading' ? <p className={css.status}>{t('loading')}</p> : null}
@@ -106,9 +134,6 @@ export function PluginInventorySettingsTab({ list, t, browseClawHub, readClawHub
           <button type="button" onClick={retry}>{t('retry')}</button>
         </div>
       ) : null}
-      {browseClawHub === undefined || readClawHubState === undefined || installClawHubSkill === undefined
-        ? null : <ClawHubMarketplace browseClawHub={browseClawHub}
-            readClawHubState={readClawHubState} installClawHubSkill={installClawHubSkill} t={t} />}
       {state.status === 'ready' ? (
         <div className={css.catalog}>
           <label className={css.search}>
@@ -125,7 +150,15 @@ export function PluginInventorySettingsTab({ list, t, browseClawHub, readClawHub
           <div className={css.catalogHeading}>
             <h3>{t('catalog')}</h3>
             <span data-plugin-count={filteredEntries.length}>{filteredEntries.length}</span>
+            {activateAvailablePlugins === undefined ? null : (
+              <button type="button" className={css.bulkButton}
+                disabled={busy !== null} onClick={activateAll}>
+                {busy === 'all' ? t('bulkBusy') : t('bulkAction')}
+              </button>
+            )}
           </div>
+          {activateAvailablePlugins === undefined ? null : <p className={css.status}>{t('bulkExplanation')}</p>}
+          {notice ? <p role="status" className={css.status}>{notice}</p> : null}
           {state.snapshot.entries.length === 0 ? <p className={css.status}>{t('empty')}</p> : null}
           {state.snapshot.entries.length > 0 && filteredEntries.length === 0
             ? <p className={css.status}>{t('emptySearch')}</p>
@@ -145,6 +178,7 @@ export function PluginInventorySettingsTab({ list, t, browseClawHub, readClawHub
                     data-plugin-entry={entry.entryId}
                     data-open={open ? 'true' : undefined}
                   >
+                    <div className={css.cardHeader}>
                     <button
                       className={css.cardContent}
                       type="button"
@@ -166,12 +200,25 @@ export function PluginInventorySettingsTab({ list, t, browseClawHub, readClawHub
                             title={status}
                           />
                         ) : null}
-                        <span className={css.configTag} data-enabled={entry.enabled ? 'true' : 'false'}>
-                          {configuration}
-                        </span>
+                        {setPluginEnabled === undefined ? (
+                          <span className={css.configTag} data-enabled={entry.enabled ? 'true' : 'false'}>
+                            {configuration}
+                          </span>
+                        ) : null}
                         <IconChevronDownOutline14 className={css.chevron} size={12} aria-hidden="true" />
                       </span>
                     </button>
+                    {setPluginEnabled === undefined ? null : (
+                      <select className={css.pluginSelector}
+                        aria-label={`${t('pluginControl')}: ${title} (${entry.entryId})`}
+                        value={entry.enabled ? 'on' : 'off'}
+                        disabled={busy !== null || (entry.enabled && entry.moduleName.includes('plugin-inventory'))}
+                        onChange={event => { changePlugin(entry, event.currentTarget.value === 'on') }}>
+                        <option value="on">{t('enabledTag')}</option>
+                        <option value="off">{t('disabledTag')}</option>
+                      </select>
+                    )}
+                    </div>
                     {open ? (
                       <div className={css.cardDetails} id={detailId}>
                         <code className={css.entryValue} data-loader-entry>{entry.entryId}</code>

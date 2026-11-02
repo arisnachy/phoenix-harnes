@@ -24,7 +24,7 @@ import { readBusinessLibrarySnapshot } from './business-library.ts'
 import { OpenClawConnectorBridge } from './openclaw-connectors.ts'
 import { readOpenClawRuntimeSnapshot } from './openclaw-runtime.ts'
 import { readClawHubCatalog } from './clawhub-catalog.ts'
-import { clawHubInstall, clawHubState } from './clawhub-marketplace.ts'
+import { clawHubInstall, clawHubState, prepareClawHubCli } from './clawhub-marketplace.ts'
 import { TokenTelemetryCollector } from './telemetry.ts'
 import { readTelegramBotState, saveTelegramBot, removeTelegramBot, TelegramInbox } from './telegram-bot.ts'
 import { theOddsApiConnectorState, configureTheOddsApiConnector, disconnectTheOddsApiConnector } from './odds-api-connector.ts'
@@ -74,6 +74,8 @@ import type {
   PluginFiberPhase,
   PluginInventoryEntry,
   PluginInventorySnapshot,
+  PluginEnableRequest,
+  PluginBulkActivationReceipt,
 } from './types.ts'
 
 export type * from './types.ts'
@@ -125,6 +127,18 @@ function publicLocalSnapshot(snapshot: LocalModelRuntimeSnapshot): PhoenixLocalM
     })),
   }
 }
+
+/** Loader, updater, and Settings modules must not disable their own control plane. */
+const PROTECTED_PLUGIN_MODULES = new Set([
+  '@phoenix-ai/dsh-host-plugin-inventory',
+  '@phoenix-ai/dsh-host-webserver',
+  '@phoenix-ai/dsh-api-remotes',
+  '@phoenix-ai/dsh-client-ui-settings-plugin-inventory',
+  '@phoenix-ai/dsh-client-ui-settings',
+  '@phoenix-ai/dsh-client-runtime',
+  '@phoenix-ai/cordis-plugin-loader',
+  '@phoenix-ai/cordis-plugin-include',
+])
 
 /** Remote service exposing trusted Host diagnostics, updater controls, and Phoenix Local lifecycle. */
 export class PluginInventoryGateway extends TypertRemoteService {
@@ -235,6 +249,69 @@ export class PluginInventoryGateway extends TypertRemoteService {
   }
 
   /**
+   * Change an existing non-group Loader entry, persisting through its tree.
+   * @param request - Exact existing entry id and requested state.
+   * @returns Actual effective entry state after the Loader applies the change.
+   */
+  @Remote('setPluginEnabled')
+  async setPluginEnabled(request: PluginEnableRequest): Promise<PluginInventoryEntry> {
+    if (typeof request?.entryId !== 'string' || request.entryId.trim().length === 0
+      || typeof request.enabled !== 'boolean') {
+      throw new Error('Invalid plugin enablement request')
+    }
+    const entry = this.ctx.loader.resolve(request.entryId)
+    if (entry.options.group) throw new Error('A plugin group cannot be switched individually')
+    if (!request.enabled && PROTECTED_PLUGIN_MODULES.has(entry.options.name)) {
+      throw new Error('This Phoenix control-plane plugin cannot be disabled here')
+    }
+    await this.ctx.loader.update(entry.id, { disabled: !request.enabled })
+    const updated = this.ctx.loader.resolve(entry.id)
+    return {
+      entryId: pluginEntryId(updated.id),
+      moduleName: updated.options.name,
+      enabled: !updated.disabled,
+      fiberPhase: updated.fiber === undefined ? null : FIBER_PHASE[updated.fiber.state],
+    }
+  }
+
+  /**
+   * Activate already configured entries, then install the trusted curated MCP
+   * pack. Arbitrary ClawHub code and credentials are never installed or granted.
+   * @returns Individual Loader results and curated MCP install summary.
+   */
+  @Remote('activateAvailablePlugins')
+  async activateAvailablePlugins(): Promise<PluginBulkActivationReceipt> {
+    const activated: PluginEntryId[] = []
+    const skipped: PluginEntryId[] = []
+    const failed: PluginEntryId[] = []
+    const targets = [...this.ctx.loader.entries()].filter(entry => !entry.options.group && entry.disabled)
+    for (const entry of targets) {
+      const id = pluginEntryId(entry.id)
+      // Conditional expressions and disabled parents must not be overwritten.
+      if (entry.options.disabled !== true) {
+        skipped.push(id)
+        continue
+      }
+      try {
+        await this.ctx.loader.update(entry.id, { disabled: false })
+        if (this.ctx.loader.resolve(entry.id).disabled) skipped.push(id)
+        else activated.push(id)
+      } catch {
+        failed.push(id)
+      }
+    }
+    const curated = await this.managedMcp.ensureCoreMcpPack({ installMissing: true })
+    return {
+      activated,
+      skipped,
+      failed,
+      curatedInstalled: curated.installed.length,
+      curatedExisting: curated.alreadyInstalled.length,
+      curatedFailed: curated.failed.map(result => result.connectorId),
+    }
+  }
+
+  /**
    * Read Phoenix Local state and installable catalog without exposing machine paths.
    * @returns Current sanitized Phoenix Local state and catalog.
    */
@@ -283,11 +360,25 @@ export class PluginInventoryGateway extends TypertRemoteService {
   async clawHubState(): Promise<ClawHubState> {
     return clawHubState()
   }
+  /** Repair/update the ClawHub CLI in the user's PHOENIX toolchain on explicit click. */
+  @Remote('prepareClawHubCli')
+  async prepareClawHubCli(): Promise<ClawHubState> {
+    return prepareClawHubCli()
+  }
 
   /** Only an explicitly clicked skill installation; plugins are never auto-executed. */
   @Remote('clawHubInstallSkill')
   async clawHubInstallSkill(request: ClawHubInstallRequest): Promise<ClawHubInstallReceipt> {
     if (request.family !== 'skill') throw new Error('Native ClawHub plugins require runtime review')
+    return clawHubInstall(request)
+  }
+
+  /** Explicitly install an OpenClaw-native ClawHub plugin disabled, pending configuration. */
+  @Remote('clawHubInstallPackage')
+  async clawHubInstallPackage(request: ClawHubInstallRequest): Promise<ClawHubInstallReceipt> {
+    if (request.family !== 'code-plugin' && request.family !== 'bundle-plugin') {
+      throw new Error('Select a native plugin package for this operation')
+    }
     return clawHubInstall(request)
   }
 

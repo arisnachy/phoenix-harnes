@@ -55,7 +55,7 @@ describe('connectors settings section', () => {
       begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(),
     } as unknown as IApiClient['authorization']
     const openClawRuntimeState = vi.fn(async () => ({
-      installed: true, gateway: 'responded' as const, browser: 'unavailable' as const,
+      installed: true, hostNodeSupported: true, gateway: 'responded' as const, browser: 'unavailable' as const,
       plugins: 'responded' as const, channels: 'unavailable' as const,
       nativePluginsRoutedToPhoenix: false as const,
     }))

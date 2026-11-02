@@ -7,7 +7,6 @@ import type {} from '@phoenix-ai/dsh-client-ui-settings/client'
 import type {} from '@phoenix-ai/dsh-client-ui-sidebar/client'
 import { PluginInventorySettingsTab, type PluginInventorySettingsTabInjected } from './PluginInventorySettingsTab.tsx'
 import { BusinessLibrarySettingsTab, type BusinessLibraryInjected } from './BusinessLibrarySettingsTab.tsx'
-import type { ClawHubMarketplaceInjected } from './ClawHubMarketplace.tsx'
 import { UpdateFooterAction, type UpdateFooterActionInjected } from './UpdateFooterAction.tsx'
 import { en, es, zh, type PluginInventoryLocaleKey } from './locales.ts'
 
@@ -41,23 +40,18 @@ export function apply(ctx: ClientContext): void {
     }
     return result.value
   }
-  const browseClawHub: ClawHubMarketplaceInjected['browseClawHub'] = async request => {
-    const result = await ctx.remote.pluginInventory.clawHubCatalog(request)
-    if (!result.ok) throw new Error('ClawHub catalog request failed')
+  const setPluginEnabled: NonNullable<PluginInventorySettingsTabInjected['setPluginEnabled']> = async request => {
+    const result = await ctx.remote.pluginInventory.setPluginEnabled(request)
+    if (!result.ok) throw new Error('Plugin enablement failed')
     return result.value
   }
-  const readClawHubState: ClawHubMarketplaceInjected['readClawHubState'] = async () => {
-    const result = await ctx.remote.pluginInventory.clawHubState()
-    if (!result.ok) throw new Error('ClawHub CLI status unavailable')
-    return result.value
-  }
-  const installClawHubSkill: ClawHubMarketplaceInjected['installClawHubSkill'] = async request => {
-    const result = await ctx.remote.pluginInventory.clawHubInstallSkill(request)
-    if (!result.ok) throw new Error('ClawHub skill installation failed')
+  const activateAvailablePlugins: NonNullable<PluginInventorySettingsTabInjected['activateAvailablePlugins']> = async () => {
+    const result = await ctx.remote.pluginInventory.activateAvailablePlugins()
+    if (!result.ok) throw new Error('Bulk plugin activation failed')
     return result.value
   }
   const inventoryInjected = (): PluginInventorySettingsTabInjected =>
-    ({ list, browseClawHub, readClawHubState, installClawHubSkill })
+    ({ list, setPluginEnabled, activateAvailablePlugins })
 
   const readBusinessLibrary: BusinessLibraryInjected['readBusinessLibrary'] = async () => {
     const result = await ctx.remote.pluginInventory.businessLibrary()

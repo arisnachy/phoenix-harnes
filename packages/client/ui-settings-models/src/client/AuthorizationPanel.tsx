@@ -8,6 +8,7 @@ import type { ChatGptWebSnapshot, IApiClient, OpenClawRuntimeSnapshot, ClawHubCa
 import type { en } from './locales.ts'
 import type { ConnectorKey } from './connectors-locales.ts'
 import { CONNECTOR_CATALOG } from './connector-catalog.ts'
+import { ClawHubConnectorStore } from './ClawHubConnectorStore.tsx'
 import type { ConnectorDefinition } from './connector-catalog.ts'
 import { AuthorizationAttemptProgress, useAuthorizationAttempt } from './authorization-attempt.tsx'
 import connectorStyles from './CodexConnectors.module.css'
@@ -171,7 +172,11 @@ export interface McpRegistryClient {
   /** Reuse already-authenticated OpenClaw connector routes when present. */
   openClawState?(): Promise<OpenClawConnectorSnapshot>
   openClawRuntimeState?(): Promise<OpenClawRuntimeSnapshot>
-  clawHubCatalog?(request: { family: 'code-plugin'; officialOnly: true; limit: number }): Promise<ClawHubCatalogSnapshot>
+  clawHubCatalog?(request: import('@phoenix-ai/dsh-api-remotes/client').ClawHubCatalogRequest): Promise<ClawHubCatalogSnapshot>
+  clawHubState?(): Promise<import('@phoenix-ai/dsh-api-remotes/client').ClawHubState>
+  prepareClawHubCli?(): Promise<import('@phoenix-ai/dsh-api-remotes/client').ClawHubState>
+  clawHubInstallSkill?(request: import('@phoenix-ai/dsh-api-remotes/client').ClawHubInstallRequest): Promise<import('@phoenix-ai/dsh-api-remotes/client').ClawHubInstallReceipt>
+  clawHubInstallPackage?(request: import('@phoenix-ai/dsh-api-remotes/client').ClawHubInstallRequest): Promise<import('@phoenix-ai/dsh-api-remotes/client').ClawHubInstallReceipt>
   /** Read Jev setup/runtime state without exposing its secret. Optional for older hosts. */
   jevState?(): Promise<JevMcpSnapshot>
   /** Store a Jev key in Phoenix credentials and activate the pinned MCP endpoint. Optional for older hosts. */
@@ -710,6 +715,7 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
       {definition.id === 'openclaw' ? (
         <div className={styles['advancedHint']}>
           <p>{t('ocNote')}</p>
+          {openClawRuntime?.hostNodeSupported === false ? <p>{t('ocNodeMismatch')}</p> : null}
           {openClawRuntime === undefined ? <p>{t('ocWaiting')}</p> : (
             <p>
               {([
@@ -2137,6 +2143,8 @@ export function ConnectorsSettingsSection({ api,
 
       {catalogFailure === undefined ? null : <p className={styles['error']}>{catalogFailure}</p>}
 
+      <ClawHubConnectorStore registry={mcpRegistry} t={connectorT}
+        connectedIds={catalogRows.filter(row => row.connected).map(row => row.definition.id)} />
       <section className={hubStyles['block']} aria-label={connectorT('catalog')}>
         <div className={hubStyles['heading']}>
           <h3>{connectorT('catalog')}</h3>

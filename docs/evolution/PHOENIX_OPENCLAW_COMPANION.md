@@ -33,3 +33,13 @@ Referencia: https://docs.openclaw.ai/gateway/tools-invoke-http-api
 El proveedor de Skills de PHOENIX observa la carpeta compartida `~/.openclaw/skills` (o `OPENCLAW_STATE_DIR/skills` si el usuario configuró otra ubicación). Sus archivos `SKILL.md` se ofrecen mediante el registro **ya existente** de Kira: no hay una nueva tienda, una segunda lista ni copias de archivos. Las Skills PHOENIX instaladas por el usuario conservan prioridad sobre las de OpenClaw, y dos Skills con el mismo nombre se resuelven a una sola entrada.
 
 La importación de instrucciones no convierte binarios, autenticaciones, plugins ni herramientas propietarias de OpenClaw en herramientas ejecutables dentro de PHOENIX. Cada Skill debe utilizar herramientas que Kira tenga realmente disponibles; no se fuerza un Gateway nuevo ni se concede acceso a dispositivos.
+
+## Mantenimiento automático de ClawHub CLI
+
+La CLI independiente **ClawHub** (no el Gateway OpenClaw) admite Node 22.13+ y se prepara automáticamente mediante `scripts/phoenix-clawhub-bootstrap.mjs --ensure --update` en los tres flujos de PHOENIX: instalación, actualización y arranque `pnpm phoenix`. La consulta de nueva versión está limitada a una vez cada seis horas; el usuario puede solicitar reparación explícita desde **Settings → Conectores → Tienda ClawHub**. No se solicita ni se instala un Gateway para explorar e instalar Skills.
+
+El instalador valida la CLI ejecutándola, consulta `npm view clawhub version`, instala en una carpeta de preparación y solo sustituye la CLI anterior después de comprobar el arranque. Si el proceso falla conserva la versión anterior. Un lock evita instalaciones simultáneas; las cerraduras de procesos interrumpidos se recuperan después de seis minutos.
+
+El diagnóstico persiste en el directorio de usuario `DSH_HOME/toolchains/clawhub-status.json`: estado, versión, última comprobación y motivo controlado de fallo, sin credenciales ni salida npm. Los fallos de red o npm no bloquean el arranque de PHOENIX. La tienda sigue siendo navegable mediante su API pública si la CLI no está disponible, pero las instalaciones quedan deshabilitadas hasta recuperar el ejecutable.
+
+Los plugins nativos no se activan sin revisión ni permisos. ClawHub CLI ≠ OpenClaw Gateway; este último requiere Node y configuración independientes.

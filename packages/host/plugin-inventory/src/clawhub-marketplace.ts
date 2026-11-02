@@ -1,30 +1,25 @@
 import { spawn } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join, relative, resolve } from 'node:path'
 
 /** Optional, locally managed ClawHub registry CLI. Never load marketplace code in PHOENIX's Host process. */
 const dshHome = process.env.DSH_HOME || join(homedir(), '.dsh')
 const packageRoot = join(dshHome, 'toolchains', 'clawhub', 'node_modules', 'clawhub')
 const packageJson = join(packageRoot, 'package.json')
+const statusPath = join(dshHome, 'toolchains', 'clawhub-status.json')
 const PACKAGE_ID = /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*(?:@[a-zA-Z0-9][a-zA-Z0-9._+-]*)?$/u
 const SEARCH = /^[\p{L}\p{N} ._\/-]{1,80}$/u
-export type ClawHubFamily = 'skill' | 'code-plugin' | 'bundle-plugin'
-export interface ClawHubListing {
-  name: string
-  family: ClawHubFamily
-  description: string
-  version: string
-}
-export interface ClawHubState {
-  cli: 'managed' | 'global' | 'missing'
-  openclaw: 'available' | 'missing'
-  skillsDirectory: string
-  pluginExecution: 'openclaw-runtime' | 'not-configured'
-}
-export interface ClawHubQuery { query: string; family: ClawHubFamily; limit?: number }
-export interface ClawHubInstallRequest { name: string; family: ClawHubFamily }
-export interface ClawHubInstallReceipt { name: string; family: ClawHubFamily; status: 'installed-skill' | 'installed-in-openclaw'; detail: string }
+// A single contract must serve the implementation and @Remote return types.
+// Re-exporting preserves imports from this module without duplicating shapes.
+import type {
+  ClawHubListing, ClawHubQuery, ClawHubInstallRequest,
+  ClawHubInstallReceipt, ClawHubState,
+} from './types.ts'
+export type {
+  ClawHubFamily, ClawHubListing, ClawHubQuery, ClawHubInstallRequest,
+  ClawHubInstallReceipt, ClawHubState,
+} from './types.ts'
 
 function managedCli(): string | undefined {
   try {
@@ -86,8 +81,36 @@ async function available(binary: string): Promise<boolean> {
 
 /** Metadata-only readiness: a CLI on disk does NOT mean a plugin is active for Kira. */
 export async function clawHubState(): Promise<ClawHubState> {
-  const managed = managedCli() !== undefined
+  const localEntry = managedCli()
+  const managed = localEntry !== undefined
+    && (await run(process.execPath, [localEntry, '--version'], 7_000).then(x => x.status === 0, () => false)
+      || await run(process.execPath, [localEntry, '--help'], 7_000).then(x => x.status === 0, () => false))
   const global = !managed && await available(process.platform === 'win32' ? 'clawhub.cmd' : 'clawhub')
+  const metadata: unknown = (() => {
+    try { return JSON.parse(readFileSync(statusPath, 'utf8')) as unknown } catch { return null }
+  })()
+  const status = metadata !== null && typeof metadata === 'object'
+    ? metadata as Record<string, unknown> : {}
+  const ready = managed || global
+  const reportedState = status.state
+  const cliStatus = ready ? 'ready'
+    : reportedState === 'installing' && typeof status.checkedAt === 'number'
+      && Date.now() - status.checkedAt < 180_000 ? 'installing'
+    : reportedState === 'incompatible-node' ? 'incompatible-node'
+    : reportedState === 'install-failed' ? 'install-failed'
+    : 'missing'
+  const reason = status.reason
+  const failureReason = reason === 'npm-cli-not-found' || reason === 'registry-unreachable'
+    || reason === 'npm-install-or-cli-health-check-failed' ? reason : undefined
+  let version: string | undefined
+  if (managed) {
+    try {
+      const pkg = JSON.parse(readFileSync(packageJson, 'utf8')) as { version?: string }
+      version = pkg.version
+    } catch { /* do not surface invalid package metadata */ }
+  } else if (global && typeof status.version === 'string') {
+    version = status.version
+  }
   const openclawManifest = join(dshHome, 'toolchains', 'openclaw', 'node_modules', 'openclaw', 'package.json')
   let managedOpenClaw: string | undefined
   try {
@@ -106,6 +129,11 @@ export async function clawHubState(): Promise<ClawHubState> {
     openclaw: openclaw ? 'available' : 'missing',
     skillsDirectory: join(dshHome, 'skills'),
     pluginExecution: openclaw ? 'openclaw-runtime' : 'not-configured',
+    cliStatus,
+    ...(version === undefined ? {} : { cliVersion: version }),
+    ...(typeof status.latestVersion === 'string' ? { latestCliVersion: status.latestVersion } : {}),
+    ...(typeof status.checkedAt === 'number' ? { lastCheckedAt: status.checkedAt } : {}),
+    ...(failureReason === undefined ? {} : { failureReason }),
   }
 }
 
@@ -130,6 +158,23 @@ export async function clawHubExplore(request: ClawHubQuery): Promise<readonly Cl
   }).filter(item => PACKAGE_ID.test(item.name))
 }
 
+/** Prefer the optional isolated PHOENIX OpenClaw CLI over a PATH executable. */
+function managedOpenClawCli(): string | undefined {
+  const file = join(dshHome, 'toolchains', 'openclaw', 'node_modules', 'openclaw', 'package.json')
+  try {
+    const data: unknown = JSON.parse(readFileSync(file, 'utf8'))
+    if (data === null || typeof data !== 'object') return undefined
+    const bin = (data as { bin?: string | { openclaw?: string } }).bin
+    const rel = typeof bin === 'string' ? bin : bin?.openclaw
+    if (typeof rel !== 'string' || rel.startsWith('/') || rel.includes('\\')) return undefined
+    const root = dirname(file)
+    const entry = resolve(root, rel)
+    const fromRoot = relative(root, entry)
+    return fromRoot !== '' && fromRoot !== '..' && !fromRoot.startsWith('../')
+      && !fromRoot.startsWith('..\\') && existsSync(entry) ? entry : undefined
+  } catch { return undefined }
+}
+
 /** Install only a recognized package locator into the user skill root or an existing OpenClaw runtime. */
 export async function clawHubInstall(request: ClawHubInstallRequest): Promise<ClawHubInstallReceipt> {
   if (!PACKAGE_ID.test(request.name) || request.name.length > 128) throw new Error('Invalid ClawHub package identifier')
@@ -139,14 +184,55 @@ export async function clawHubInstall(request: ClawHubInstallRequest): Promise<Cl
     if (response.status !== 0) throw new Error('Skill installation failed; no verified installation receipt')
     return { name: request.name, family: request.family, status: 'installed-skill', detail: 'Installed to PHOENIX skills. Review its instructions before invoking.' }
   }
-  if (!(await available(process.platform === 'win32' ? 'openclaw.cmd' : 'openclaw'))) {
-    throw new Error('OpenClaw runtime is required for native plugins. ClawHub CLI alone cannot execute plugins.')
+  const managedEntry = managedOpenClawCli()
+  const command = managedEntry !== undefined ? process.execPath
+    : process.platform === 'win32' ? 'openclaw.cmd' : 'openclaw'
+  const prefix = managedEntry === undefined ? [] : [managedEntry]
+  const ready = await run(command, [...prefix, '--version'], 8_000)
+    .then(result => result.status === 0, () => false)
+  if (!ready) {
+    throw new Error('OpenClaw runtime is not executable; ClawHub CLI alone cannot install native plugins.')
   }
-  const response = await run(process.platform === 'win32' ? 'openclaw.cmd' : 'openclaw',
-    ['plugins', 'install', 'clawhub:' + request.name, '--no-enable'], 120_000)
+  // Installing native code is always a direct user action. Keep it disabled
+  // until required configuration, capability consent and policy are reviewed.
+  const response = await run(command,
+    [...prefix, 'plugins', 'install', 'clawhub:' + request.name, '--no-enable'], 120_000)
   if (response.status !== 0) throw new Error('OpenClaw plugin installation failed; inspect the runtime before retrying')
   return {
     name: request.name, family: request.family, status: 'installed-in-openclaw',
     detail: 'Installed disabled in OpenClaw. Activation and PHOENIX tool routing still require a compatible runtime bridge.',
   }
+}
+
+// Browser-initiated repair uses the same idempotent, rollback-safe bootstrap as
+// the PHOENIX updater. No arbitrary executable or package name comes from UI.
+let prepareInFlight: Promise<ClawHubState> | undefined
+export function prepareClawHubCli(): Promise<ClawHubState> {
+  if (prepareInFlight !== undefined) return prepareInFlight
+  prepareInFlight = (async () => {
+    let root = resolve(process.cwd())
+    let script: string | undefined
+    for (let depth = 0; depth < 9; depth++) {
+      const candidate = join(root, 'scripts', 'phoenix-clawhub-bootstrap.mjs')
+      if (existsSync(candidate)) { script = candidate; break }
+      const parent = dirname(root)
+      if (parent === root) break
+      root = parent
+    }
+    if (script === undefined) throw new Error('PHOENIX ClawHub installer not found in this checkout')
+    await new Promise<void>((resolvePromise, reject) => {
+      const child = spawn(process.execPath, [script, '--ensure', '--update', '--force'], {
+        windowsHide: true, stdio: 'ignore', shell: false,
+      })
+      const timeout = setTimeout(() => { child.kill(); reject(new Error('ClawHub preparation timed out')) }, 170_000)
+      child.once('error', () => { clearTimeout(timeout); reject(new Error('ClawHub installer could not start')) })
+      child.once('close', code => {
+        clearTimeout(timeout)
+        if (code === 0) resolvePromise()
+        else reject(new Error('ClawHub installer returned an error'))
+      })
+    })
+    return clawHubState()
+  })().finally(() => { prepareInFlight = undefined })
+  return prepareInFlight
 }

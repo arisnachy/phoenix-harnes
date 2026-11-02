@@ -35,7 +35,10 @@ if (isEntry) {
   if (process.env.PHOENIX_COMPANION_BOOTSTRAP !== '0') {
     for (const script of ['phoenix-clawhub-bootstrap.mjs', 'phoenix-openclaw-bootstrap.mjs']) {
       try {
-        const task = spawn(process.execPath, [join(launch.cwd, 'scripts', script), '--ensure', '--quiet'], {
+        const task = spawn(process.execPath, [
+          join(launch.cwd, 'scripts', script), '--ensure', '--quiet',
+          ...(script === 'phoenix-clawhub-bootstrap.mjs' ? ['--update'] : []),
+        ], {
           cwd: launch.cwd, env: process.env, stdio: 'ignore', windowsHide: true, detached: true,
         })
         task.on('error', () => {})

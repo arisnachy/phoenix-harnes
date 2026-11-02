@@ -44,7 +44,7 @@ try {
 # Optional ClawHub CLI dependency. An offline registry must not block startup.
 $clawHubBootstrap = Join-Path $root 'scripts/phoenix-clawhub-bootstrap.mjs'
 if (($null -eq $code -or $code -eq 0) -and (Test-Path -LiteralPath $clawHubBootstrap)) {
-  try { & node $clawHubBootstrap --ensure } catch { Write-Warning 'ClawHub CLI install deferred.' }
+  try { & node $clawHubBootstrap --ensure --update } catch { Write-Warning 'ClawHub CLI install deferred.' }
 }
 
 # Companion CLI is best-effort: never change the PHOENIX runtime if Node is incompatible
