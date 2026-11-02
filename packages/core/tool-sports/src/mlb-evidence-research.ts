@@ -51,6 +51,7 @@ export type MlbOpportunity={eventId:string;sport:'baseball';league:'mlb';source:
 export type MlbCase={
   fixture:MlbFixture;checkedAt:string;season:number;
   sources:MlbSource[];teamForm:Record<'home'|'away',MlbForm|null>;
+  seasonRecord:Record<'home'|'away',{wins:number;losses:number}|null>;
   rosters:Record<'home'|'away',MlbAthlete[]>;starters:Record<'home'|'away',MlbAthlete|null>;
   bullpen:Record<'home'|'away',MlbAthlete[]>;lineupStatus:Record<'home'|'away','confirmed'|'unconfirmed'>;
   matchups:MlbMatchup[];venue:{name:string;latitude:number|null;longitude:number|null;roof:'unknown'};
@@ -218,6 +219,13 @@ function makePanel(result:Omit<MlbCase,'uiBlock'>):MlbCase['uiBlock']{
     if(items.length)sections.push({heading,kind:'list',items:items.slice(0,40)})
   }
   const home=result.fixture.home,away=result.fixture.away
+  add('Clasificación de temporada',(['away','home'] as const).map(side=>({
+    label:result.fixture[side].name,
+    value:result.seasonRecord[side]?
+      result.seasonRecord[side]!.wins+' victorias / '+result.seasonRecord[side]!.losses+' derrotas':
+      'Récord de temporada no verificado',
+    detail:'MLB standings a fecha previa al encuentro; no confundir con últimos 20 juegos',
+  })))
   add('Forma y localía',(['away','home'] as const).map(side=>{
     const team=result.fixture[side],f=result.teamForm[side]
     return {label:team.name,value:f?f.wins+'V '+f.losses+'D · carreras '+f.runsFor+'-'+f.runsAgainst:'Sin historial verificado',
@@ -330,6 +338,16 @@ export async function researchMlbCase(
     const meteo=await measured<unknown>(url,fetcher,sources,now)
     weather=weatherAt(meteo,fixture.date)
   }
+  const standings=await measured<unknown>('https://statsapi.mlb.com/api/v1/standings?leagueId=103,104'+
+    '&season='+season+'&date='+lastDate(date,1),fetcher,sources,now)
+  const standingsRows=arr(obj(standings).records)
+    .flatMap(group=>arr(obj(group).teamRecords))
+  const record=(teamId:number)=>{
+    const item=standingsRows.map(obj).find(x=>id(obj(x.team).id)===teamId)
+    const wins=numeric(item?.wins),losses=numeric(item?.losses)
+    return wins!==null&&losses!==null&&wins>=0&&losses>=0?{wins,losses}:null
+  }
+  const seasonRecord={home:record(fixture.home.id),away:record(fixture.away.id)}
   const teamForm={home:homeSchedule?form(arr(obj(homeSchedule).dates).flatMap(x=>arr(obj(x).games)),
     fixture.home.id,Date.parse(fixture.date)):null,
     away:awaySchedule?form(arr(obj(awaySchedule).dates).flatMap(x=>arr(obj(x).games)),
@@ -465,6 +483,7 @@ export async function researchMlbCase(
     'Lesiones, estrellas, noticias y opiniones de expertos sin verificación específica',
     'Enfrentamientos BvP no publicados, splits de mano y repertorio siguen pendientes por jugador',
   ]
+  if(!seasonRecord.home||!seasonRecord.away)missingEvidence.push('Récord de temporada sin comprobación oficial')
   if(!rawRosters.home.length||!rawRosters.away.length)
     missingEvidence.push('Rosters activos incompletos o no disponibles')
   if(!profiles.length)missingEvidence.push('Estadísticas individuales no disponibles')
@@ -502,7 +521,7 @@ export async function researchMlbCase(
     evidenceCount:profiles.filter(p=>p.evidence==='observed').length,
     missingEvidence,marketResearchReady:odds.length>0,priced:false}
   const dossier:Omit<MlbCase,'uiBlock'>={fixture,checkedAt:iso(now),season,sources,
-    teamForm,rosters:rosterMap,starters,bullpen,lineupStatus,matchups,
+    teamForm,seasonRecord,rosters:rosterMap,starters,bullpen,lineupStatus,matchups,
     venue:site,weather,injuries,news,odds,scenarioAnalysis:scenarios,missingEvidence,opportunity}
   return{...dossier,uiBlock:makePanel(dossier)}
 }
