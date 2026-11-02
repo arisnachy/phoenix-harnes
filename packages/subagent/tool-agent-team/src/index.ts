@@ -57,19 +57,13 @@ export function resolveEclipseTeammateProfile(
   adaptiveEffort?: string,
 ): TeamModelProfile | undefined {
   if (settings?.mode === undefined) return fallback
-  // Automatic Eclipse spends Medium on ordinary delegated work and High on
-  // complex/critical work. An explicitly named Max teammate retains Max.
+  // In Automatic mode Luna is Kira's Max execution tier, never a
+  // silently downgraded Medium/High worker. Non-Luna named profiles are kept.
+  // Hybrid/Manual continue to honor explicit model and effort selections.
   if (settings.mode === 'automatic') {
-    const route = settings.subagent
-    if (route !== undefined && (route.provider !== 'openai-codex' || route.model === PHOENIX_CODEX_AUTO_MODEL))
-      return fallback
-    const chosen = route ?? fallback
-    if (chosen === undefined || adaptiveEffort === undefined) return chosen
-    const effort = adaptiveEffort === 'max' || adaptiveEffort === 'xhigh' ? 'high' : 'medium'
-    return {
-      ...chosen,
-      reasoningEffort: route?.reasoningEffort ?? effort,
-    }
+    return fallback?.provider === 'openai-codex'
+      && /^gpt-\d+(?:\.\d+)?-luna(?:$|-)/iu.test(fallback.model)
+      ? { ...fallback, reasoningEffort: 'max' } : fallback
   }
   const route = settings.subagent
   if (route === undefined) {
